@@ -135,7 +135,19 @@ EvoMaster/
 ## 🚀 Quick Start
 
 ### Use your API key
-Open the config file at `configs/[playground name]` and fill in the corresponding blank. For example, if you want to run minimal_multi_agent with Deepseek-V3.2, open `configs/minimal_kaggle/deepseek-v3.2-example.yaml` and modify:
+
+**Recommended: environment variables (auto-loaded)**  
+Copy `.env.template` to `.env`, fill in your keys, and use `${VAR}` in config YAML:
+
+```bash
+cp .env.template .env
+# Edit .env: set OPENAI_API_KEY, OPENAI_BASE_URL, etc.
+```
+
+In `configs/*/config.yaml` you can write `api_key: "${OPENAI_API_KEY}"` and `base_url: "${OPENAI_BASE_URL}"`; the app loads `.env` on startup and substitutes these when loading config.
+
+**Or edit config directly**  
+Open the config file at `configs/[playground name]` and set `api_key` / `base_url`. For example, for Deepseek-V3.2 in `configs/minimal_kaggle/deepseek-v3.2-example.yaml`:
 ```bash
   local_sglang:
     provider: "deepseek"
@@ -143,7 +155,7 @@ Open the config file at `configs/[playground name]` and fill in the correspondin
     api_key: "dummy"
     base_url: "http://192.168.2.110:18889/v1"
 ```
-You can also use the `openai` config if your API supports OpenAI's format. Remember to modify the llm configuration of the following Agent at the same time
+You can also use the `openai` config if your API supports OpenAI's format. Remember to modify the llm configuration of the following Agent at the same time.
 
 ### Basic Usage
 

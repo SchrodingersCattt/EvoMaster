@@ -1,10 +1,13 @@
 """EvoMaster 配置管理
 
 提供统一的配置加载和管理功能，所有配置类都继承自 BaseConfig。
+支持从 .env 加载环境变量，并在配置值中解析 ${VAR_NAME} 为环境变量。
 """
 
 from __future__ import annotations
 
+import os
+import re
 from abc import ABC
 from pathlib import Path
 from typing import Any
@@ -12,6 +15,9 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
+from dotenv import load_dotenv
+_project_root = Path(__file__).parent.parent
+load_dotenv(_project_root / ".env")
 
 # ============================================
 # 基础配置类
@@ -157,6 +163,23 @@ class EvoMasterConfig(BaseConfig):
     debug: bool = Field(default=False, description="是否启用调试模式")
 
 
+_ENV_PATTERN = re.compile(r"\$\{([^}:]+)(?::-([^}]*))?\}")
+
+def _substitute_env(obj: Any) -> Any:
+    """递归将配置中的 ${VAR_NAME} 替换为 os.environ 中的值；${VAR:-default} 在 VAR 未设置或为空时用 default。"""
+    if isinstance(obj, str):
+        def repl(m: re.Match) -> str:
+            key = m.group(1)
+            default = m.group(2) if m.lastindex >= 2 else ""
+            return os.environ.get(key, default) or default
+        return _ENV_PATTERN.sub(repl, obj)
+    if isinstance(obj, dict):
+        return {k: _substitute_env(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_substitute_env(v) for v in obj]
+    return obj
+
+
 # ============================================
 # 配置管理器
 # ============================================
@@ -201,6 +224,9 @@ class ConfigManager:
 
         with open(config_path, "r", encoding="utf-8") as f:
             config_dict = yaml.safe_load(f)
+
+        # 将配置中的 ${VAR_NAME} 替换为环境变量
+        config_dict = _substitute_env(config_dict)
 
         # 构造配置对象
         self._config = EvoMasterConfig(**config_dict)

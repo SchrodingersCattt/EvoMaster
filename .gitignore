@@ -119,7 +119,7 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
-# Environments
+# Environments (virtualenv; do not ignore evomaster/env source package)
 .env
 .venv
 env/
@@ -127,6 +127,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+# 保留 evomaster 源码中的 env 包（执行环境 Local/Docker）
+!evomaster/env/
+!evomaster/env/**
 
 # Spyder project settings
 .spyderproject
