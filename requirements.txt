@@ -3,6 +3,7 @@
 # 配置和数据验证
 pydantic
 PyYAML
+python-dotenv
 
 # LLM API 客户端
 openai
