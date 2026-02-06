@@ -12,6 +12,8 @@ dependencies = [
     "google-genai",
     "mcp",
     "flask",
+    "fastapi",
+    "uvicorn[standard]",
 ]
 
 [build-system]

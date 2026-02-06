@@ -197,7 +197,7 @@ def parse_task_file(task_file_path: Path):
 
 
 def run_single_task(agent_name: str, config_path: Path, run_dir: Path,
-                    task_id: str, task_description: str):
+                    task_id: str, task_description: str, event_sink=None):
     """运行单个任务（在主进程中）
 
     注意：这个函数在主进程中运行，不是在独立进程中。
@@ -209,6 +209,7 @@ def run_single_task(agent_name: str, config_path: Path, run_dir: Path,
         run_dir: 运行目录
         task_id: 任务 ID
         task_description: 任务描述
+        event_sink: 可选。若提供（queue/callback/list），则向其中推送运行事件，供 UI 展示
 
     Returns:
         任务结果字典
@@ -222,8 +223,8 @@ def run_single_task(agent_name: str, config_path: Path, run_dir: Path,
         # 设置 run_dir 和 task_id（会创建独立的 workspace）
         playground.set_run_dir(run_dir, task_id=task_id)
 
-        # 运行任务
-        result = playground.run(task_description=task_description)
+        # 运行任务（传入 event_sink 以便 UI 接收事件）
+        result = playground.run(task_description=task_description, event_sink=event_sink)
         result["task_id"] = task_id
 
         logger.info(f"✅ Task {task_id} completed: {result['status']}")

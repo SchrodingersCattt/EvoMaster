@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EvoMaster 任务控制台</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4f;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --success: #3fb950;
+      --fail: #f85149;
+      --running: #58a6ff;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", "PingFang SC", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 24px;
+      line-height: 1.5;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin: 0 0 24px 0;
+      color: var(--text);
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .panel h2 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin: 0 0 12px 0;
+      color: var(--muted);
+    }
+    label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 0.85rem; }
+    input[type="text"], select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    textarea { min-height: 100px; resize: vertical; }
+    button {
+      padding: 10px 20px;
+      background: var(--running);
+      color: var(--bg);
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { opacity: 0.9; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .modules {
+      display: grid;
+      gap: 12px;
+    }
+    .module {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .module .icon {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+    .module .icon.pending { background: var(--border); color: var(--muted); }
+    .module .icon.running { background: var(--running); color: var(--bg); }
+    .module .icon.success { background: var(--success); color: var(--bg); }
+    .module .icon.failed { background: var(--fail); color: var(--bg); }
+    .module .body { flex: 1; min-width: 0; }
+    .module .title { font-weight: 600; margin-bottom: 4px; }
+    .module .msg { font-size: 0.9rem; color: var(--muted); }
+    .module .detail { font-size: 0.8rem; color: var(--muted); margin-top: 6px; }
+    .result-panel { margin-top: 20px; }
+    .result-panel pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      overflow: auto;
+      font-size: 0.85rem;
+      margin: 0;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    .status-badge.completed { background: var(--success); color: var(--bg); }
+    .status-badge.failed { background: var(--fail); color: var(--bg); }
+    .flex { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <h1>EvoMaster 任务控制台</h1>
+
+  <div class="panel">
+    <h2>任务输入</h2>
+    <div style="margin-bottom: 14px;">
+      <label>Agent</label>
+      <select id="agent">
+        <option value="minimal">minimal</option>
+      </select>
+    </div>
+    <div style="margin-bottom: 14px;">
+      <label>任务指令（Task）</label>
+      <textarea id="task" placeholder="输入本次要执行的任务描述…"></textarea>
+    </div>
+    <div class="flex">
+      <button id="runBtn">启动运行</button>
+      <span id="runStatus" class="muted"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>执行模块（当前在做什么）</h2>
+    <div class="modules" id="modules">
+      <div class="module" data-phase="config">
+        <div class="icon pending">—</div>
+        <div class="body">
+          <div class="title">配置加载</div>
+          <div class="msg">等待运行</div>
+        </div>
+      </div>
+      <div class="module" data-phase="session">
+        <div class="icon pending">—</div>
+        <div class="body">
+          <div class="title">Session 初始化</div>
+          <div class="msg">等待运行</div>
+        </div>
+      </div>
+      <div class="module" data-phase="tools">
+        <div class="icon pending">—</div>
+        <div class="body">
+          <div class="title">工具 / MCP</div>
+          <div class="msg">等待运行</div>
+        </div>
+      </div>
+      <div class="module" data-phase="agent">
+        <div class="icon pending">—</div>
+        <div class="body">
+          <div class="title">Agent 创建</div>
+          <div class="msg">等待运行</div>
+        </div>
+      </div>
+      <div class="module" data-phase="exp_start">
+        <div class="icon pending">—</div>
+        <div class="body">
+          <div class="title">实验执行</div>
+          <div class="msg">等待运行</div>
+        </div>
+      </div>
+      <div class="module" data-phase="exp_step">
+        <div class="icon pending">—</div>
+        <div class="body">
+          <div class="title">任务步骤</div>
+          <div class="msg">等待运行</div>
+        </div>
+      </div>
+      <div class="module" data-phase="exp_end">
+        <div class="icon pending">—</div>
+        <div class="body">
+          <div class="title">实验结束</div>
+          <div class="msg">等待运行</div>
+        </div>
+      </div>
+      <div class="module" data-phase="error">
+        <div class="icon pending">—</div>
+        <div class="body">
+          <div class="title">错误</div>
+          <div class="msg">无</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel result-panel" id="resultPanel" style="display: none;">
+    <h2>运行结果</h2>
+    <div id="resultSummary"></div>
+    <pre id="resultDetail"></pre>
+  </div>
+
+  <script>
+    const agentSelect = document.getElementById('agent');
+    const taskInput = document.getElementById('task');
+    const runBtn = document.getElementById('runBtn');
+    const runStatus = document.getElementById('runStatus');
+    const modulesEl = document.getElementById('modules');
+    const resultPanel = document.getElementById('resultPanel');
+    const resultSummary = document.getElementById('resultSummary');
+    const resultDetail = document.getElementById('resultDetail');
+
+    const phaseLabels = {
+      config: '配置加载',
+      session: 'Session 初始化',
+      tools: '工具 / MCP',
+      agent: 'Agent 创建',
+      exp_start: '实验执行',
+      exp_step: '任务步骤',
+      exp_end: '实验结束',
+      error: '错误'
+    };
+
+    function setModuleState(phase, status, message, detail) {
+      const el = modulesEl.querySelector(`[data-phase="${phase}"]`);
+      if (!el) return;
+      const icon = el.querySelector('.icon');
+      const msg = el.querySelector('.msg');
+      const detailEl = el.querySelector('.detail');
+      icon.className = 'icon ' + status;
+      if (status === 'pending') icon.textContent = '—';
+      else if (status === 'running') icon.textContent = '⋯';
+      else if (status === 'success') icon.textContent = '✓';
+      else icon.textContent = '✕';
+      msg.textContent = message || phaseLabels[phase] || phase;
+      if (detailEl) {
+        detailEl.textContent = detail ? (typeof detail === 'string' ? detail : JSON.stringify(detail, null, 2)) : '';
+        detailEl.style.display = detail ? 'block' : 'none';
+      }
+    }
+
+    function resetModules() {
+      ['config','session','tools','agent','exp_start','exp_step','exp_end','error'].forEach(p => {
+        setModuleState(p, 'pending', '等待运行', null);
+      });
+      resultPanel.style.display = 'none';
+    }
+
+    function loadAgents() {
+      fetch('/api/agents').then(r => r.json()).then(data => {
+        agentSelect.innerHTML = (data.agents || []).map(a => 
+          `<option value="${a}">${a}</option>`
+        ).join('');
+      }).catch(() => {});
+    }
+    loadAgents();
+
+    runBtn.addEventListener('click', async () => {
+      const task = taskInput.value.trim();
+      if (!task) {
+        runStatus.textContent = '请先输入任务指令';
+        return;
+      }
+      resetModules();
+      runBtn.disabled = true;
+      runStatus.textContent = '提交中…';
+
+      let runId;
+      try {
+        const res = await fetch('/api/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ task, agent: agentSelect.value })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }));
+          throw new Error(err.detail || '提交失败');
+        }
+        const data = await res.json();
+        runId = data.run_id;
+        runStatus.textContent = '运行中，请查看下方模块状态…';
+      } catch (e) {
+        runStatus.textContent = '提交失败: ' + e.message;
+        setModuleState('error', 'failed', e.message, null);
+        runBtn.disabled = false;
+        return;
+      }
+
+      const es = new EventSource(`/api/runs/${runId}/stream`);
+      es.onmessage = (ev) => {
+        try {
+          const d = JSON.parse(ev.data);
+          if (d.heartbeat) return;
+          if (d.phase === 'done') {
+            es.close();
+            runBtn.disabled = false;
+            runStatus.textContent = '运行结束';
+            const detail = d.detail || {};
+            resultPanel.style.display = 'block';
+            resultSummary.innerHTML = `
+              <span class="status-badge ${detail.status === 'completed' ? 'completed' : 'failed'}">${detail.status || 'unknown'}</span>
+              <span>步数: ${detail.steps != null ? detail.steps : '-'}</span>
+              ${detail.run_dir ? `<span>目录: ${detail.run_dir}</span>` : ''}
+            `;
+            resultDetail.textContent = JSON.stringify(detail, null, 2);
+            return;
+          }
+          if (d.phase === 'error') {
+            setModuleState('error', 'failed', d.message, d.detail);
+            runBtn.disabled = false;
+            runStatus.textContent = '运行出错';
+            resultPanel.style.display = 'block';
+            resultSummary.innerHTML = '<span class="status-badge failed">failed</span>';
+            resultDetail.textContent = d.message + '\n' + (d.detail ? JSON.stringify(d.detail, null, 2) : '');
+            es.close();
+            return;
+          }
+          const status = d.status === 'success' ? 'success' : d.status === 'failed' ? 'failed' : 'running';
+          setModuleState(d.phase, status, d.message, d.detail);
+        } catch (_) {}
+      };
+      es.onerror = () => {
+        if (!runBtn.disabled) return;
+        es.close();
+        runBtn.disabled = false;
+        runStatus.textContent = '连接断开';
+      };
+    });
+  </script>
+</body>
+</html>

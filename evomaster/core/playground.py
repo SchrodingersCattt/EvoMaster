@@ -9,6 +9,7 @@ import sys
 import shutil
 from pathlib import Path
 from datetime import datetime
+from typing import Any
 
 from evomaster.config import ConfigManager
 from evomaster.utils import LLMConfig, create_llm
@@ -17,6 +18,7 @@ from evomaster.agent.session import LocalSession, LocalSessionConfig, DockerSess
 from evomaster.skills import SkillRegistry
 
 from .exp import BaseExp
+from .events import RunEvent, emit, PHASE_CONFIG, PHASE_SESSION, PHASE_TOOLS, PHASE_AGENT, PHASE_EXP_START, PHASE_EXP_END, PHASE_ERROR, STATUS_RUNNING, STATUS_SUCCESS, STATUS_FAILED
 
 
 class BasePlayground:
@@ -64,6 +66,7 @@ class BasePlayground:
         # Run 目录管理
         self.run_dir = None
         self.log_file_handler = None
+        self._event_sink = None  # 可选：UI 传入的队列/回调，用于推送运行事件
 
         # 组件存储
         self.session = None
@@ -407,13 +410,18 @@ class BasePlayground:
         子类可以覆盖此方法添加额外逻辑。
         """
         self.logger.info("Setting up playground...")
+        sink = getattr(self, "_event_sink", None)
 
         # 1. 准备 LLM 配置
+        emit(sink, RunEvent(PHASE_CONFIG, "加载配置与 LLM 配置", STATUS_RUNNING))
         llm_config_dict = self._setup_llm_config()
         self._llm_config_dict = llm_config_dict  # 保存供子类使用
+        emit(sink, RunEvent(PHASE_CONFIG, "配置加载完成", STATUS_SUCCESS))
 
         # 2. 创建 Session（如果尚未创建）
+        emit(sink, RunEvent(PHASE_SESSION, "初始化 Session（本地/Docker）", STATUS_RUNNING))
         self._setup_session()
+        emit(sink, RunEvent(PHASE_SESSION, "Session 已创建并打开", STATUS_SUCCESS))
 
         # 3. 加载 Skills（如果启用）- 在多 agent 和单 agent 模式下都需要
         skill_registry = None
@@ -429,9 +437,12 @@ class BasePlayground:
             self.logger.info(f"Loaded {len(skill_registry.get_all_skills())} skills")
 
         # 4. 创建工具注册表并初始化 MCP 工具（传入 skill_registry）
+        emit(sink, RunEvent(PHASE_TOOLS, "注册工具与 MCP", STATUS_RUNNING))
         self._setup_tools(skill_registry)
+        emit(sink, RunEvent(PHASE_TOOLS, "工具/MCP 已就绪", STATUS_SUCCESS))
 
         # 5. 创建 Agent(s)
+        emit(sink, RunEvent(PHASE_AGENT, "创建 Agent", STATUS_RUNNING))
         agents_config = getattr(self.config, 'agents', None)
         if agents_config:
             # 多 agent 模式
@@ -490,6 +501,7 @@ class BasePlayground:
             )
             
             self.logger.info("Single-agent playground setup complete")
+        emit(sink, RunEvent(PHASE_AGENT, "Agent 已创建", STATUS_SUCCESS))
 
     def _setup_mcp_tools(self):
         """初始化 MCP 工具
@@ -691,16 +703,18 @@ class BasePlayground:
         
         return trajectory_file
 
-    def run(self, task_description: str, output_file: str | None = None) -> dict:
+    def run(self, task_description: str, output_file: str | None = None, event_sink: Any = None) -> dict:
         """运行工作流
 
         Args:
             task_description: 任务描述
             output_file: 结果保存文件（可选，如果设置了 run_dir 则自动保存到 trajectories/）
+            event_sink: 可选。若提供（queue/callback/list），则向其中推送 RunEvent，供 UI 展示
 
         Returns:
             运行结果
         """
+        self._event_sink = event_sink
         try:
             self.setup()
 
@@ -710,12 +724,18 @@ class BasePlayground:
             # 创建并运行实验
             exp = self._create_exp()
 
+            emit(self._event_sink, RunEvent(PHASE_EXP_START, "开始执行实验（Agent 推理与工具调用）", STATUS_RUNNING))
             self.logger.info("Running experiment...")
-            result = exp.run(task_description)
+            result = exp.run(task_description, event_sink=self._event_sink)
+            emit(self._event_sink, RunEvent(PHASE_EXP_END, "实验执行完成", STATUS_SUCCESS, result))
 
             return result
 
+        except Exception as e:
+            emit(self._event_sink, RunEvent(PHASE_ERROR, str(e), STATUS_FAILED, {"error": str(e)}))
+            raise
         finally:
+            self._event_sink = None
             self.cleanup()
 
     def cleanup(self) -> None:

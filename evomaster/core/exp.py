@@ -9,6 +9,8 @@ from pathlib import Path
 from evomaster.utils.types import TaskInstance
 from typing import Any
 
+from .events import RunEvent, emit, PHASE_EXP_STEP, STATUS_RUNNING, STATUS_SUCCESS
+
 
 class BaseExp:
     """实验基类
@@ -51,12 +53,13 @@ class BaseExp:
         """
         self.run_dir = Path(run_dir)
 
-    def run(self, task_description: str, task_id: str = "exp_001") -> dict:
+    def run(self, task_description: str, task_id: str = "exp_001", event_sink: Any = None) -> dict:
         """运行一次实验
 
         Args:
             task_description: 任务描述
             task_id: 任务 ID
+            event_sink: 可选。若提供，则推送运行事件供 UI 展示
 
         Returns:
             运行结果字典
@@ -68,6 +71,7 @@ class BaseExp:
             description=task_description,
         )
 
+        emit(event_sink, RunEvent(PHASE_EXP_STEP, f"执行任务 {task_id}（Agent 推理中）", STATUS_RUNNING))
         # 运行 Agent
         self.logger.debug(f"Running task: {task_id}")
         trajectory = self.agent.run(task)
@@ -81,11 +85,13 @@ class BaseExp:
         }
         self.results.append(result)
 
-        return {
+        out = {
             "trajectory": trajectory,
             "status": trajectory.status,
             "steps": len(trajectory.steps),
         }
+        emit(event_sink, RunEvent(PHASE_EXP_STEP, f"任务完成：{out['status']}，共 {out['steps']} 步", STATUS_SUCCESS, {"status": out["status"], "steps": out["steps"]}))
+        return out
 
     def save_results(self, output_file: str):
         """保存实验结果
