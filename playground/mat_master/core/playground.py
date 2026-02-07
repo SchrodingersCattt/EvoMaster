@@ -13,6 +13,7 @@ from pathlib import Path
 
 from evomaster.core import BasePlayground, register_playground
 
+from ..memory import MemoryService, get_memory_tools
 from .agent import MatMasterAgent
 from .exp import WorkerExp
 from .registry import MatMasterSkillRegistry
@@ -50,12 +51,27 @@ class MatMasterPlayground(BasePlayground):
         self.logger = logging.getLogger(self.__class__.__name__)
         self._skill_registry = None
         self._run_mode = None  # CLI --mode overrides config when set
+        self.memory_service = MemoryService(run_dir=None)
 
     def set_mode(self, mode: str) -> None:
         """Set experiment mode from CLI (e.g. single, pi, resilient_calc, skill_evolution)."""
         self._run_mode = (mode or "").strip().lower() or None
         if self._run_mode:
             self.logger.info("Mat Master mode set from CLI: %s", self._run_mode)
+
+    def set_run_dir(self, run_dir, task_id=None):
+        """Override: keep memory_service.run_dir in sync so memory.json persists in run dir."""
+        super().set_run_dir(run_dir, task_id=task_id)
+        self.memory_service.run_dir = Path(run_dir) if run_dir else None
+
+    def _setup_tools(self, skill_registry=None) -> None:
+        """Override: call base then register memory tools (mem_save, mem_recall)."""
+        super()._setup_tools(skill_registry)
+        if self.run_dir is not None:
+            self.memory_service.run_dir = Path(self.run_dir)
+        memory_tools = get_memory_tools(self.memory_service)
+        self.tools.register_many(memory_tools)
+        self.logger.info("Registered %d memory tools", len(memory_tools))
 
     def setup(self) -> None:
         """Override: build MatMasterSkillRegistry and pass to tools/agents."""
@@ -69,6 +85,7 @@ class MatMasterPlayground(BasePlayground):
         config_dict = self.config.model_dump()
         skills_config = config_dict.get("skills", {})
         mat_master_config = config_dict.get("mat_master") or {}
+        mat_skills_root = _project_root() / "playground" / "mat_master" / "skills"
         skill_registry = None
 
         if skills_config.get("enabled", False):
@@ -85,7 +102,6 @@ class MatMasterPlayground(BasePlayground):
             dynamic_rel = skill_evolution.get("dynamic_skills_root")
             if dynamic_rel:
                 dynamic_root = _project_root() / dynamic_rel
-            mat_skills_root = _project_root() / "playground" / "mat_master" / "skills"
             skill_registry = MatMasterSkillRegistry(
                 core_registry,
                 dynamic_root=dynamic_root,
@@ -97,7 +113,20 @@ class MatMasterPlayground(BasePlayground):
                 mat_skills_root,
             )
         else:
-            skill_registry = None
+            # Always load local mat_master skills (log_diagnostics, ask_human) even when skills.enabled is False
+            from evomaster.skills import SkillRegistry
+
+            empty_root = Path(__file__).resolve().parent.parent / "memory"
+            core_registry = SkillRegistry(empty_root)
+            skill_registry = MatMasterSkillRegistry(
+                core_registry,
+                dynamic_root=None,
+                mat_skills_root=mat_skills_root,
+            )
+            self.logger.info(
+                "MatMasterSkillRegistry (local only, mat_skills_root=%s)",
+                mat_skills_root,
+            )
 
         self._skill_registry = skill_registry
         self._setup_tools(skill_registry)

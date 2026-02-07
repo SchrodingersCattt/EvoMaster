@@ -22,6 +22,7 @@ from .service import (
     memory_retrieve,
     memory_write,
 )
+from .service import MemoryService, get_memory_tools
 from .store import store_tool_result_in_memory
 from .utils import get_memory_writer_instruction
 
@@ -30,8 +31,10 @@ __all__ = [
     "MEMORY_TOOLS_STORE_RESULTS",
     "MEMORY_WRITER_AGENT_NAME",
     "MemoryWriterSchema",
+    "MemoryService",
     "format_short_term_memory",
     "get_memory_block_for_prompt",
+    "get_memory_tools",
     "get_memory_writer_instruction",
     "memory_list",
     "memory_retrieve",
