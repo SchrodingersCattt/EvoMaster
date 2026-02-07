@@ -50,7 +50,7 @@ llm:
 agents:
   general:
     llm: "litellm"
-    max_turns: 50
+    max_turns: 200
     enable_tools: true
 
     context:

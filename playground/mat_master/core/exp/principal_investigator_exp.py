@@ -1,18 +1,22 @@
 """PrincipalInvestigatorExp: strategy layer (mode='pi').
 
 Maintains project_state.json (persistent memory), runs Hypothesis -> Experiment -> Analysis
-loop, and dispatches sub-tasks to WorkerExp.
+loop, and dispatches sub-tasks by type: CALC -> ResilientCalcExp, EVO -> SkillEvolutionExp,
+default -> WorkerExp.
 """
 
 import json
 import logging
+import re
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Tuple
 
 from evomaster.core.exp import BaseExp
 from evomaster.utils.types import TaskInstance
 
+from .resilient_calc_exp import ResilientCalcExp
+from .skill_evolution_exp import SkillEvolutionExp
 from .worker_exp import WorkerExp
 
 
@@ -80,6 +84,31 @@ class PrincipalInvestigatorExp(BaseExp):
                 return (msg.content or "").strip()
         return ""
 
+    def _parse_decision(self, decision: str) -> Tuple[str, str]:
+        """Parse agent output into sub_type and task description.
+
+        Expects format: '<TYPE> | <Task Description>' or '[TYPE] | ...' or plain description.
+        TYPE: CALC -> calc, EVO -> evo, else -> default (worker).
+        """
+        text = (decision or "").strip()
+        first_line = text.split("\n")[0].strip()
+        # Match "CALC | ..." or "[CALC] | ..." or "CALC | ..."
+        calc_match = re.match(r"^(?:\[?CALC\]?)\s*\|\s*(.+)$", first_line, re.IGNORECASE)
+        if calc_match:
+            return "calc", calc_match.group(1).strip()
+        evo_match = re.match(r"^(?:\[?EVO\]?)\s*\|\s*(.+)$", first_line, re.IGNORECASE)
+        if evo_match:
+            return "evo", evo_match.group(1).strip()
+        return "default", text
+
+    def _create_sub_exp(self, sub_type: str):
+        """Create sub-experiment by type: calc -> ResilientCalcExp, evo -> SkillEvolutionExp, default -> WorkerExp."""
+        if sub_type == "calc":
+            return ResilientCalcExp(self.agent, self.config)
+        if sub_type == "evo":
+            return SkillEvolutionExp(self.agent, self.config)
+        return WorkerExp(self.agent, self.config)
+
     def run(self, task_description: str, task_id: str = "pi_task") -> dict[str, Any]:
         run_dir = Path(self.run_dir) if self.run_dir else Path(".")
         workspaces = run_dir / "workspaces" / task_id
@@ -94,7 +123,10 @@ class PrincipalInvestigatorExp(BaseExp):
             plan_prompt = (
                 f"Project Goal: {task_description}\n"
                 f"Current State: {json.dumps(state, ensure_ascii=False)}\n"
-                "Task: Analyze the state and propose the NEXT single concrete sub-task description.\n"
+                "Task: Analyze the state and propose the NEXT single concrete sub-task.\n"
+                "Reply with exactly one line in the form: <TYPE> | <Task Description>\n"
+                "TYPE must be one of: CALC (calculation job, e.g. VASP/LAMMPS), EVO (evolve a new skill/tool), or omit TYPE for a generic task (default worker).\n"
+                "Examples: 'CALC | Run VASP relaxation for structure X' | 'EVO | Add a script to parse OUTCAR' | 'Optimize POSCAR'\n"
                 "If the goal is achieved, reply with 'TERMINATE'."
             )
             plan_task = TaskInstance(
@@ -109,16 +141,18 @@ class PrincipalInvestigatorExp(BaseExp):
                 self.logger.info("[PI] Goal achieved or Agent decided to stop.")
                 break
 
-            sub_task_desc = decision or f"Sub-task step {i}"
-            self.logger.info("[PI] Dispatching sub-task: %s", sub_task_desc[:80])
+            sub_type, sub_task_desc = self._parse_decision(decision)
+            if not sub_task_desc:
+                sub_task_desc = f"Sub-task step {i}"
+            self.logger.info("[PI] Dispatching sub-task [%s]: %s", sub_type, sub_task_desc[:80])
 
-            worker = WorkerExp(self.agent, self.config)
+            sub_exp = self._create_sub_exp(sub_type)
             step_dir = workspaces / f"step_{i}"
             step_dir.mkdir(parents=True, exist_ok=True)
-            worker.set_run_dir(step_dir)
+            sub_exp.set_run_dir(step_dir)
 
             try:
-                result = worker.run(sub_task_desc, task_id=f"{task_id}_step_{i}")
+                result = sub_exp.run(sub_task_desc, task_id=f"{task_id}_step_{i}")
                 state["history"].append({
                     "step": i,
                     "task": sub_task_desc[:200],
