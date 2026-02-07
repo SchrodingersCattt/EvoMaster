@@ -87,16 +87,20 @@ class PrincipalInvestigatorExp(BaseExp):
     def _parse_decision(self, decision: str) -> Tuple[str, str]:
         """Parse agent output into sub_type and task description.
 
-        Expects format: '<TYPE> | <Task Description>' or '[TYPE] | ...' or plain description.
+        Accepts: 'TYPE | Task', '[TYPE] | Task', 'TYPE: Task', 'TYPE : Task', or plain description.
         TYPE: CALC -> calc, EVO -> evo, else -> default (worker).
         """
         text = (decision or "").strip()
         first_line = text.split("\n")[0].strip()
-        # Match "CALC | ..." or "[CALC] | ..." or "CALC | ..."
-        calc_match = re.match(r"^(?:\[?CALC\]?)\s*\|\s*(.+)$", first_line, re.IGNORECASE)
+        # Pipe or colon: "CALC | ..." / "[CALC] | ..." / "CALC: ..."
+        calc_match = re.match(
+            r"^(?:\[?CALC\]?)\s*[:\|]\s*(.+)$", first_line, re.IGNORECASE | re.DOTALL
+        )
         if calc_match:
             return "calc", calc_match.group(1).strip()
-        evo_match = re.match(r"^(?:\[?EVO\]?)\s*\|\s*(.+)$", first_line, re.IGNORECASE)
+        evo_match = re.match(
+            r"^(?:\[?EVO\]?)\s*[:\|]\s*(.+)$", first_line, re.IGNORECASE | re.DOTALL
+        )
         if evo_match:
             return "evo", evo_match.group(1).strip()
         return "default", text

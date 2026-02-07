@@ -57,7 +57,7 @@ async def memory_write(
             ) as r:
                 r.raise_for_status()
     except Exception as e:
-        logger.warning("memory_write failed: %s", e)
+        logger.warning("memory_write failed: %s (memory service unavailable; agent continues without persisting this write)", e)
 
 
 async def memory_retrieve(
@@ -96,7 +96,9 @@ async def memory_retrieve(
             for d in docs
         ]
     except Exception as e:
-        logger.debug("memory_retrieve failed: %s", e)
+        logger.warning(
+            "memory_retrieve failed: %s (memory service unavailable; agent continues without session memory)", e
+        )
         return []
 
 

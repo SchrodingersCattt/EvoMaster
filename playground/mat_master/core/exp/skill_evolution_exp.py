@@ -75,5 +75,8 @@ class SkillEvolutionExp(BaseExp):
         return {"status": "failed", "reason": "register_failed"}
 
     def _run_sandbox_tests(self, skill_path: Path) -> bool:
-        """Run tests for the new skill in a sandbox (subprocess or temp dir). Stub."""
-        return True
+        """Run tests for the new skill in a sandbox (subprocess or temp dir). Override with real test runner."""
+        raise NotImplementedError(
+            "Sandbox tests not implemented. Implement _run_sandbox_tests to run the skill's tests (e.g. pytest/subprocess) "
+            "and return True only if all pass; otherwise broken skills would be registered."
+        )
