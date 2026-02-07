@@ -94,6 +94,13 @@ def parse_args():
         help="并行执行多个任务（仅在使用 --task-file 时有效）"
     )
 
+    parser.add_argument(
+        "--mode",
+        choices=["single", "pi", "resilient_calc", "skill_evolution"],
+        default=None,
+        help="Mat Master 实验模式（仅 agent=mat_master 时有效）：single | pi | resilient_calc | skill_evolution"
+    )
+
     return parser.parse_args()
 
 
@@ -197,7 +204,7 @@ def parse_task_file(task_file_path: Path):
 
 
 def run_single_task(agent_name: str, config_path: Path, run_dir: Path,
-                    task_id: str, task_description: str):
+                    task_id: str, task_description: str, mode: str | None = None):
     """运行单个任务（在主进程中）
 
     注意：这个函数在主进程中运行，不是在独立进程中。
@@ -209,6 +216,7 @@ def run_single_task(agent_name: str, config_path: Path, run_dir: Path,
         run_dir: 运行目录
         task_id: 任务 ID
         task_description: 任务描述
+        mode: 可选，Mat Master 实验模式（仅 agent=mat_master 时生效）
 
     Returns:
         任务结果字典
@@ -218,6 +226,10 @@ def run_single_task(agent_name: str, config_path: Path, run_dir: Path,
     try:
         # 加载 Playground
         playground = get_playground_class(agent_name, config_path=config_path)
+
+        # Mat Master: 命令行 --mode 覆盖 config
+        if agent_name == "mat_master" and mode and getattr(playground, "set_mode", None):
+            playground.set_mode(mode)
 
         # 设置 run_dir 和 task_id（会创建独立的 workspace）
         playground.set_run_dir(run_dir, task_id=task_id)
@@ -240,7 +252,7 @@ def run_single_task(agent_name: str, config_path: Path, run_dir: Path,
 
 
 def run_tasks_sequential(agent_name: str, config_path: Path, run_dir: Path,
-                         tasks: list):
+                         tasks: list, mode: str | None = None):
     """串行运行多个任务
 
     Args:
@@ -248,6 +260,7 @@ def run_tasks_sequential(agent_name: str, config_path: Path, run_dir: Path,
         config_path: 配置文件路径
         run_dir: 运行目录
         tasks: 任务列表
+        mode: 可选，Mat Master 实验模式
 
     Returns:
         所有任务的结果列表
@@ -259,14 +272,15 @@ def run_tasks_sequential(agent_name: str, config_path: Path, run_dir: Path,
             config_path,
             run_dir,
             task["id"],
-            task["description"]
+            task["description"],
+            mode=mode,
         )
         results.append(result)
     return results
 
 
 def run_tasks_parallel(agent_name: str, config_path: Path, run_dir: Path,
-                       tasks: list, max_workers: int = 4):
+                       tasks: list, max_workers: int = 4, mode: str | None = None):
     """并行运行多个任务
 
     使用 ProcessPoolExecutor 并行执行任务。
@@ -277,6 +291,7 @@ def run_tasks_parallel(agent_name: str, config_path: Path, run_dir: Path,
         run_dir: 运行目录
         tasks: 任务列表
         max_workers: 最大并行进程数
+        mode: 可选，Mat Master 实验模式
 
     Returns:
         所有任务的结果列表
@@ -295,7 +310,8 @@ def run_tasks_parallel(agent_name: str, config_path: Path, run_dir: Path,
                 config_path,
                 run_dir,
                 task["id"],
-                task["description"]
+                task["description"],
+                mode,
             ): task
             for task in tasks
         }
@@ -416,22 +432,25 @@ def main():
     logger.info(f"Config: {config_path}")
     logger.info(f"Run Directory: {run_dir}")
     logger.info(f"Tasks: {len(tasks)}")
+    if getattr(args, "mode", None) and args.agent == "mat_master":
+        logger.info(f"Mat Master mode: {args.mode}")
     if len(tasks) > 1:
-        mode = "并行" if args.parallel else "串行"
-        logger.info(f"执行模式: {mode}")
+        exec_mode = "并行" if args.parallel else "串行"
+        logger.info(f"执行模式: {exec_mode}")
     logger.info("=" * 60)
 
     # 5. 运行任务
+    mat_mode = getattr(args, "mode", None) if args.agent == "mat_master" else None
     try:
         if len(tasks) > 1 and args.parallel:
             # 并行模式
             logger.info("🔄 并行执行任务...")
-            results = run_tasks_parallel(args.agent, config_path, run_dir, tasks)
+            results = run_tasks_parallel(args.agent, config_path, run_dir, tasks, mode=mat_mode)
         else:
             # 串行模式（包括单任务）
             if len(tasks) > 1:
                 logger.info("🔄 串行执行任务...")
-            results = run_tasks_sequential(args.agent, config_path, run_dir, tasks)
+            results = run_tasks_sequential(args.agent, config_path, run_dir, tasks, mode=mat_mode)
 
         # 6. 输出结果
         logger.info("=" * 60)
