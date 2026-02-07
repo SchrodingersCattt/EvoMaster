@@ -22,14 +22,15 @@ logger = logging.getLogger(__name__)
 MAX_STORED_RESULT_CHARS = 12000
 MAX_ARGS_CHARS = 800
 
-# MCP tools are registered as mat_<server>_<original_name>
-_CANONICAL_TOOL_NAME_RE = re.compile(r"^mat_[a-z0-9_]+_(.+)$")
+# MCP tools are registered as mat_<server>_<original_name> (server name may be any case)
+_CANONICAL_TOOL_NAME_RE = re.compile(r"^mat_[a-z0-9_]+_(.+)$", re.IGNORECASE)
 
 
 def _canonical_tool_name(registered_name: str) -> str:
-    """Return original tool name; if registered_name is mat_xxx_toolname, return toolname."""
-    m = _CANONICAL_TOOL_NAME_RE.match(registered_name)
-    return m.group(1) if m else registered_name
+    """Return original tool name; if registered_name is mat_xxx_toolname, return toolname (stripped)."""
+    name = (registered_name or "").strip()
+    m = _CANONICAL_TOOL_NAME_RE.match(name)
+    return m.group(1).strip() if m else name
 
 
 def _format_tool_result_summary(

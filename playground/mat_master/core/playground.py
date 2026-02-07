@@ -309,6 +309,11 @@ class MatMasterPlayground(BasePlayground):
                 self.logger.info(f"[MCP] Replaced {PLACEHOLDER} -> {ws_root}")
             else:
                 self.logger.debug(f"[MCP] run_dir is None, skip placeholder replace: {PLACEHOLDER}")
+                if PLACEHOLDER in json.dumps(mcp_servers_config):
+                    self.logger.warning(
+                        "[MCP] run_dir is None but config contains %s; MCP servers may fail or write to wrong paths.",
+                        PLACEHOLDER,
+                    )
         except Exception as e:
             self.logger.warning(f"[MCP] Failed to replace placeholder paths: {e}")
 

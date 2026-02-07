@@ -60,6 +60,17 @@ class ResilientCalcExp(BaseExp):
                 self.logger.info("Calculation succeeded.")
                 return {"job_id": job_id, "status": status, "results": self._get_results(job_id)}
 
+            if status == "Unknown":
+                self.logger.error(
+                    "_check_job_status returned 'Unknown'; implement job status polling (e.g. via MCP tool output)."
+                )
+                return {
+                    "status": "failed",
+                    "job_id": job_id,
+                    "retries": retries,
+                    "message": "Job status unknown. Implement _check_job_status to return Done/Failed/Error.",
+                }
+
             if status in ("Failed", "Error", "Cancelled"):
                 self.logger.warning("Job %s failed. Diagnosing...", job_id)
                 error_code = self._diagnose_error(job_id)
@@ -88,12 +99,18 @@ class ResilientCalcExp(BaseExp):
         }
 
     def _check_job_status(self, job_id: str) -> str:
-        """Query job status (e.g. via MCP tool). Stub: override or wire real tool."""
-        return "Unknown"
+        """Query job status (e.g. via MCP tool). Override or wire real tool."""
+        raise NotImplementedError(
+            "Job status polling not implemented. Implement _check_job_status to return Done/Success/Finished, "
+            "Failed/Error/Cancelled, or Unknown (e.g. by parsing MCP tool output)."
+        )
 
     def _diagnose_error(self, job_id: str) -> str:
-        """Call LogDiagnosticsSkill to get error code. Stub: wire to extract_error script."""
-        return "unknown_error"
+        """Call LogDiagnosticsSkill to get error code. Override or wire to extract_error script."""
+        raise NotImplementedError(
+            "Error diagnosis not implemented. Implement _diagnose_error to return an error code "
+            "matching config resilient_calc.error_handlers (e.g. via LogDiagnosticsSkill)."
+        )
 
     def _apply_fix_and_resubmit(self, failed_job_id: str, actions: list[dict]) -> str | None:
         """Ask agent to apply fix actions and resubmit; return new job_id or None."""
@@ -107,9 +124,14 @@ class ResilientCalcExp(BaseExp):
         return self._extract_job_id(trajectory)
 
     def _extract_job_id(self, trajectory) -> str | None:
-        """Extract job id from trajectory (e.g. from last tool output). Placeholder."""
-        return None
+        """Extract job id from trajectory (e.g. from assistant_message or tool_outputs). Override with real parsing."""
+        raise NotImplementedError(
+            "Extract job_id from trajectory not implemented. Implement _extract_job_id by parsing "
+            "assistant_message content or tool_outputs (e.g. from MCP submit-job tool response); return None for sync tasks."
+        )
 
     def _get_results(self, job_id: str) -> Any:
-        """Fetch results for job. Placeholder."""
-        return None
+        """Fetch results for job. Override with real implementation."""
+        raise NotImplementedError(
+            "Fetch job results not implemented. Implement _get_results to return calculation results for the given job_id."
+        )
