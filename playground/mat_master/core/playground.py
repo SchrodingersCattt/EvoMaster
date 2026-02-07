@@ -3,8 +3,7 @@
 材料科学 / 计算材料方向的 EvoMaster agent，接入 Mat 的 MCP 工具
 （Structure Generator、Science Navigator、Document Parser、DPA Calculator）。
 使用 MatMasterAgent：支持 functions.finish 归一化、仅 task_completed==true 时结束。
-mat_master 在此复写 _setup_mcp_tools，在初始化 MCP 前设置 tool_include_only（仅注册指定工具），
-不修改基类 core/playground.py。
+mat_master 在此复写 _setup_mcp_tools、setup、_create_exp，不修改基类 core/playground.py。
 """
 
 import asyncio
@@ -15,6 +14,13 @@ from pathlib import Path
 from evomaster.core import BasePlayground, register_playground
 
 from .agent import MatMasterAgent
+from .exp import WorkerExp
+from .registry import MatMasterSkillRegistry
+
+
+def _project_root() -> Path:
+    """Project root (EvoMaster repo)."""
+    return Path(__file__).resolve().parent.parent.parent.parent
 
 
 @register_playground("mat_master")
@@ -24,6 +30,7 @@ class MatMasterPlayground(BasePlayground):
     材料科学向的 playground，使用 Mat 的 MCP 服务（结构生成、科学导航、
     文档解析、DPA 计算），支持 LiteLLM 与 Azure 的 LLM 配置格式。
     使用 MatMasterAgent：异步任务未完成时不会因 partial 结束，需 task_completed=true 才结束。
+    支持 mat_master.mode: single | pi | resilient_calc | skill_evolution。
 
     使用方式：
         python run.py --agent mat_master --task "材料相关任务"
@@ -37,10 +44,135 @@ class MatMasterPlayground(BasePlayground):
             config_path: 配置文件完整路径（如果提供，会覆盖 config_dir）
         """
         if config_path is None and config_dir is None:
-            config_dir = Path(__file__).parent.parent.parent.parent / "configs" / "mat_master"
+            config_dir = _project_root() / "configs" / "mat_master"
 
         super().__init__(config_dir=config_dir, config_path=config_path)
         self.logger = logging.getLogger(self.__class__.__name__)
+        self._skill_registry = None
+        self._run_mode = None  # CLI --mode overrides config when set
+
+    def set_mode(self, mode: str) -> None:
+        """Set experiment mode from CLI (e.g. single, pi, resilient_calc, skill_evolution)."""
+        self._run_mode = (mode or "").strip().lower() or None
+        if self._run_mode:
+            self.logger.info("Mat Master mode set from CLI: %s", self._run_mode)
+
+    def setup(self) -> None:
+        """Override: build MatMasterSkillRegistry and pass to tools/agents."""
+        self.logger.info("Setting up Mat Master playground...")
+
+        llm_config_dict = self._setup_llm_config()
+        self._llm_config_dict = llm_config_dict
+
+        self._setup_session()
+
+        config_dict = self.config.model_dump()
+        skills_config = config_dict.get("skills", {})
+        mat_master_config = config_dict.get("mat_master") or {}
+        skill_registry = None
+
+        if skills_config.get("enabled", False):
+            from evomaster.skills import SkillRegistry
+
+            skills_root = Path(skills_config.get("skills_root", "evomaster/skills"))
+            if not skills_root.is_absolute():
+                skills_root = _project_root() / skills_root
+            core_registry = SkillRegistry(skills_root)
+            self.logger.info("Loaded %d core skills", len(core_registry.get_all_skills()))
+
+            dynamic_root = None
+            skill_evolution = mat_master_config.get("skill_evolution") or {}
+            dynamic_rel = skill_evolution.get("dynamic_skills_root")
+            if dynamic_rel:
+                dynamic_root = _project_root() / dynamic_rel
+            mat_skills_root = _project_root() / "playground" / "mat_master" / "skills"
+            skill_registry = MatMasterSkillRegistry(
+                core_registry,
+                dynamic_root=dynamic_root,
+                mat_skills_root=mat_skills_root,
+            )
+            self.logger.info(
+                "MatMasterSkillRegistry ready (dynamic_root=%s, mat_skills_root=%s)",
+                dynamic_root,
+                mat_skills_root,
+            )
+        else:
+            skill_registry = None
+
+        self._skill_registry = skill_registry
+        self._setup_tools(skill_registry)
+
+        agents_config = getattr(self.config, "agents", None)
+        if agents_config and isinstance(agents_config, dict) and agents_config:
+            for agent_name, agent_config in agents_config.items():
+                enable_tools = agent_config.get("enable_tools", True)
+                self.agent = self._create_agent(
+                    name=agent_name,
+                    agent_config=agent_config,
+                    enable_tools=enable_tools,
+                    llm_config_dict=llm_config_dict,
+                    skill_registry=skill_registry,
+                )
+                self.logger.info("%s Agent created", agent_name.capitalize())
+            self.logger.info("Multi-agent playground setup complete")
+        else:
+            agent_config_dict = getattr(self.config, "agent", None)
+            if not agent_config_dict:
+                raise ValueError(
+                    "No agent configuration found. "
+                    "Please add either 'agent' or 'agents' section to config.yaml"
+                )
+            system_prompt_file = getattr(self.config, "system_prompt_file", None)
+            user_prompt_file = getattr(self.config, "user_prompt_file", None)
+            if system_prompt_file:
+                agent_config_dict = dict(agent_config_dict) if not isinstance(agent_config_dict, dict) else agent_config_dict.copy()
+                agent_config_dict["system_prompt_file"] = system_prompt_file
+            if user_prompt_file:
+                if not isinstance(agent_config_dict, dict):
+                    agent_config_dict = dict(agent_config_dict) if hasattr(agent_config_dict, "copy") else {}
+                else:
+                    agent_config_dict = agent_config_dict.copy()
+                agent_config_dict["user_prompt_file"] = user_prompt_file
+            enable_tools = agent_config_dict.get("enable_tools", True)
+            self.agent = self._create_agent(
+                name="default",
+                agent_config=agent_config_dict,
+                enable_tools=enable_tools,
+                llm_config_dict=llm_config_dict,
+                skill_registry=skill_registry,
+            )
+            self.logger.info("Single-agent playground setup complete")
+
+    def _create_exp(self):
+        """Return Exp by CLI --mode (or config mat_master.mode): single | pi | resilient_calc | skill_evolution."""
+        mode = "single"
+        if getattr(self, "_run_mode", None):
+            mode = self._run_mode
+        else:
+            try:
+                config_dict = self.config.model_dump()
+                mat_master = config_dict.get("mat_master") or {}
+                mode = mat_master.get("mode", "single")
+            except Exception:
+                mat_master = getattr(self.config, "mat_master", None)
+                if isinstance(mat_master, dict):
+                    mode = mat_master.get("mode", "single")
+
+        if mode == "pi":
+            from .exp.principal_investigator_exp import PrincipalInvestigatorExp
+            exp = PrincipalInvestigatorExp(self.agent, self.config)
+        elif mode == "resilient_calc":
+            from .exp.resilient_calc_exp import ResilientCalcExp
+            exp = ResilientCalcExp(self.agent, self.config)
+        elif mode == "skill_evolution":
+            from .exp.skill_evolution_exp import SkillEvolutionExp
+            exp = SkillEvolutionExp(self.agent, self.config)
+        else:
+            exp = WorkerExp(self.agent, self.config)
+
+        if self.run_dir:
+            exp.set_run_dir(self.run_dir)
+        return exp
 
     def _create_agent(
         self,
