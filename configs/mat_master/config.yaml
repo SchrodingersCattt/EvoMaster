@@ -63,11 +63,20 @@ agents:
     user_prompt_file: "prompts/user_prompt.txt"
 
 # ============================================
-# Mat Master 实验模式（PI / Resilient / Evolution）
+# Mat Master：Mode 通过命令行 --mode 切换（direct | planner），不在此配置
 # ============================================
-# mode: single (default) | pi | resilient_calc | skill_evolution
 mat_master:
-  mode: "single"
+  # 规划模式配置（仅 --mode planner 时使用）
+  planner:
+    max_steps: 20
+    state_file: "research_state.json"
+  # 专项能力开关（DirectSolver 路由时据此决定是否走 CALC/EVO）
+  capabilities:
+    resilient_calc:
+      enabled: true
+    skill_evolution:
+      enabled: true
+  # 鲁棒计算能力配置（被 ResilientCalcExp 使用）
   resilient_calc:
     max_retries: 3
     poll_interval_seconds: 60
@@ -80,8 +89,7 @@ mat_master:
       time_limit_exceeded:
         - action: "resubmit"
           params: {"walltime": "48h", "continuation": true}
-  pi:
-    project_state_file: "project_state.json"
+  # 技能进化能力配置（被 SkillEvolutionExp 使用）
   skill_evolution:
     dynamic_skills_root: "playground/mat_master/skills/dynamic"
     sandbox: "subprocess"

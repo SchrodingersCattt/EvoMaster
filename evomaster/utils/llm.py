@@ -348,7 +348,17 @@ class OpenAILLM(BaseLLM):
         # 调用 API
         response = self.client.chat.completions.create(**request_params)
 
-        # 解析响应
+        # 解析响应（防护：API 可能返回 None 或空 choices，例如内容过滤、限流或兼容接口异常）
+        if not response.choices or len(response.choices) == 0:
+            err_msg = (
+                "LLM API returned no choices (response.choices is None or empty). "
+                "Possible causes: content filtering, rate limit, or provider-specific empty response."
+            )
+            if hasattr(response, "model") and response.model:
+                err_msg += f" Model: {response.model}"
+            self.logger.warning(err_msg)
+            raise ValueError(err_msg)
+
         choice = response.choices[0]
         message = choice.message
 
@@ -463,7 +473,12 @@ class DeepSeekLLM(BaseLLM):
         # 调用 Completion API
         response = self.client.completions.create(**request_params)
 
-        # 解析响应
+        # 解析响应（防护：API 可能返回 None 或空 choices）
+        if not response.choices or len(response.choices) == 0:
+            err_msg = "LLM API returned no choices (response.choices is None or empty)."
+            self.logger.warning(err_msg)
+            raise ValueError(err_msg)
+
         choice = response.choices[0]
 
         return LLMResponse(
@@ -522,7 +537,12 @@ class DeepSeekLLM(BaseLLM):
         # 调用 API
         response = self.client.chat.completions.create(**request_params)
 
-        # 解析响应
+        # 解析响应（防护：API 可能返回 None 或空 choices）
+        if not response.choices or len(response.choices) == 0:
+            err_msg = "LLM API returned no choices (response.choices is None or empty)."
+            self.logger.warning(err_msg)
+            raise ValueError(err_msg)
+
         choice = response.choices[0]
         message = choice.message
 
