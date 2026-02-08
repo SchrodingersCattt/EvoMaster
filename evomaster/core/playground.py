@@ -195,6 +195,12 @@ class BasePlayground:
             root_logger.removeHandler(self.log_file_handler)
             self.log_file_handler.close()
             self.log_file_handler = None
+        if getattr(self, "_log_file_stream", None) is not None:
+            try:
+                self._log_file_stream.close()
+            except Exception:
+                pass
+            self._log_file_stream = None
 
         # 确定日志文件路径
         log_file = None
@@ -216,8 +222,9 @@ class BasePlayground:
             # 确保日志目录存在
             log_file.parent.mkdir(parents=True, exist_ok=True)
 
-            # 创建文件处理器（覆盖模式）
-            self.log_file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+            # 行缓冲写入，便于 tail 实时读取（控制台流式输出）
+            self._log_file_stream = open(log_file, "w", encoding="utf-8", buffering=1)
+            self.log_file_handler = logging.StreamHandler(self._log_file_stream)
             self.log_file_handler.setLevel(getattr(logging, self.config.logging.level))
             self.log_file_handler.setFormatter(logging.Formatter(self.config.logging.format))
 
