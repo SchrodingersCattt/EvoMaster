@@ -40,7 +40,12 @@ function cardClass(source: string): string {
 
 function renderContent(entry: LogEntry): React.ReactNode {
   if (entry.type === "thought" && typeof entry.content === "string") {
-    return <div className="text-sm whitespace-pre-wrap">{entry.content}</div>;
+    const text = entry.content.trim();
+    return (
+      <div className="text-sm whitespace-pre-wrap">
+        {text || <span className="text-gray-500 italic">(无文本输出)</span>}
+      </div>
+    );
   }
   if (entry.type === "tool_call" && entry.content && typeof entry.content === "object") {
     return (
