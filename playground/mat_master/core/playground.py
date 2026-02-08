@@ -15,8 +15,8 @@ from evomaster.core import BasePlayground, register_playground
 
 from ..memory import MemoryService, get_memory_tools
 from .agent import MatMasterAgent
-from .exp import WorkerExp
 from .registry import MatMasterSkillRegistry
+from .solvers import DirectSolver, ResearchPlanner
 
 
 def _project_root() -> Path:
@@ -31,7 +31,7 @@ class MatMasterPlayground(BasePlayground):
     材料科学向的 playground，使用 Mat 的 MCP 服务（结构生成、科学导航、
     文档解析、DPA 计算），支持 LiteLLM 与 Azure 的 LLM 配置格式。
     使用 MatMasterAgent：异步任务未完成时不会因 partial 结束，需 task_completed=true 才结束。
-    支持 mat_master.mode: single | pi | resilient_calc | skill_evolution。
+    工作流模式通过 --mode 切换：direct（即时）| planner（规划执行）。
 
     使用方式：
         python run.py --agent mat_master --task "材料相关任务"
@@ -54,10 +54,11 @@ class MatMasterPlayground(BasePlayground):
         self.memory_service = MemoryService(run_dir=None)
 
     def set_mode(self, mode: str) -> None:
-        """Set experiment mode from CLI (e.g. single, pi, resilient_calc, skill_evolution)."""
-        self._run_mode = (mode or "").strip().lower() or None
+        """Set workflow mode from CLI: direct | planner (use --mode to switch)."""
+        raw = (mode or "").strip().lower() or None
+        self._run_mode = raw
         if self._run_mode:
-            self.logger.info("Mat Master mode set from CLI: %s", self._run_mode)
+            self.logger.info("Mat Master mode (from --mode): %s", self._run_mode)
 
     def set_run_dir(self, run_dir, task_id=None):
         """Override: keep memory_service.run_dir in sync so memory.json persists in run dir."""
@@ -173,35 +174,30 @@ class MatMasterPlayground(BasePlayground):
             self.logger.info("Single-agent playground setup complete")
 
     def _create_exp(self):
-        """Return Exp by CLI --mode (or config mat_master.mode): single | pi | resilient_calc | skill_evolution."""
-        mode = "single"
-        if getattr(self, "_run_mode", None):
-            mode = self._run_mode
+        """Return solver by --mode: direct (DirectSolver) | planner (ResearchPlanner). Default direct."""
+        mode = getattr(self, "_run_mode", None) or "direct"
+        if mode == "planner":
+            exp = ResearchPlanner(self.agent, self.config)
         else:
-            try:
-                config_dict = self.config.model_dump()
-                mat_master = config_dict.get("mat_master") or {}
-                mode = mat_master.get("mode", "single")
-            except Exception:
-                mat_master = getattr(self.config, "mat_master", None)
-                if isinstance(mat_master, dict):
-                    mode = mat_master.get("mode", "single")
-
-        if mode == "pi":
-            from .exp.principal_investigator_exp import PrincipalInvestigatorExp
-            exp = PrincipalInvestigatorExp(self.agent, self.config)
-        elif mode == "resilient_calc":
-            from .exp.resilient_calc_exp import ResilientCalcExp
-            exp = ResilientCalcExp(self.agent, self.config)
-        elif mode == "skill_evolution":
-            from .exp.skill_evolution_exp import SkillEvolutionExp
-            exp = SkillEvolutionExp(self.agent, self.config)
-        else:
-            exp = WorkerExp(self.agent, self.config)
+            exp = DirectSolver(self.agent, self.config)
 
         if self.run_dir:
             exp.set_run_dir(self.run_dir)
         return exp
+
+    def run(self, task_description: str, output_file: str | None = None) -> dict:
+        """Override: pass task_id to exp.run() when set (e.g. batch mode)."""
+        try:
+            self.setup()
+            self._setup_trajectory_file(output_file)
+            exp = self._create_exp()
+            self.logger.info("Running experiment...")
+            task_id = getattr(self, "task_id", None)
+            if task_id:
+                return exp.run(task_description, task_id=task_id)
+            return exp.run(task_description)
+        finally:
+            self.cleanup()
 
     def _create_agent(
         self,

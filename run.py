@@ -96,9 +96,9 @@ def parse_args():
 
     parser.add_argument(
         "--mode",
-        choices=["single", "pi", "resilient_calc", "skill_evolution"],
+        choices=["direct", "planner"],
         default=None,
-        help="Mat Master 实验模式（仅 agent=mat_master 时有效）：single | pi | resilient_calc | skill_evolution"
+        help="Mat Master 工作流模式（仅 agent=mat_master 时有效）：direct | planner，用 --mode 切换"
     )
 
     return parser.parse_args()
