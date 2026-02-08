@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import FileTree from "./FileTree";
-import LogPanel from "./LogPanel";
 import StatusPanel from "./StatusPanel";
 import ConversationPanel from "./ConversationPanel";
 
@@ -52,7 +51,6 @@ export default function LogStream({
   const [filePath, setFilePath] = useState("");
   const [reconnectTrigger, setReconnectTrigger] = useState(0);
   const [sessionFilesLogsKey, setSessionFilesLogsKey] = useState(0);
-  const [liveLogLines, setLiveLogLines] = useState<string[]>([]);
 
   const isReadOnly = readOnly || (externalLogs !== undefined && externalLogs.length > 0);
 
@@ -99,10 +97,7 @@ export default function LogStream({
           } else {
             setPlannerAsk(null);
           }
-          if (msg.type === "log_line" && typeof msg.content === "string") {
-            if (sid === currentSessionIdRef.current) setLiveLogLines((prev) => [...prev, msg.content as string]);
-          }
-        if (msg.type === "finish" || msg.type === "error" || msg.type === "cancelled") {
+          if (msg.type === "finish" || msg.type === "error" || msg.type === "cancelled") {
             if (sid === runningSessionIdRef.current) setRunningSessionId(null);
             setRunning(false);
             if (sid === currentSessionIdRef.current) setSessionFilesLogsKey((k) => k + 1);
@@ -138,7 +133,6 @@ export default function LogStream({
     if (isRunning) return;
     setRunning(true);
     setRunningSessionId(cur);
-    setLiveLogLines([]);
     setInput("");
     ws.send(JSON.stringify({ content, mode, session_id: cur }));
   }, [input, running, mode, currentSessionId]);
@@ -186,7 +180,6 @@ export default function LogStream({
   useEffect(() => {
     if (isReadOnly || externalLogs !== undefined) return;
     loadSessionHistory(currentSessionId);
-    setLiveLogLines([]);
   }, [currentSessionId, isReadOnly, externalLogs, loadSessionHistory]);
 
   return (
@@ -317,20 +310,13 @@ export default function LogStream({
       )}
 
       <div className="grid grid-cols-[minmax(240px,1fr)_minmax(280px,1.2fr)_minmax(280px,1.2fr)] gap-4 flex-1 min-h-0">
-        <div className="flex flex-col gap-3 min-h-0 overflow-hidden">
-          <LogPanel
-            key={`${currentSessionId}-${sessionFilesLogsKey}`}
-            sessionId={isReadOnly ? null : currentSessionId}
-            liveLogLines={liveLogLines}
-          />
-          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            <FileTree
+        <div className="flex flex-col min-h-0 overflow-hidden">
+          <FileTree
               key={`${currentSessionId}-${sessionFilesLogsKey}`}
               sessionId={isReadOnly ? null : currentSessionId}
               filePath={filePath}
               onFilePathChange={setFilePath}
             />
-          </div>
         </div>
 
         <div className="flex flex-col min-h-0">

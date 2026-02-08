@@ -8,7 +8,6 @@ import importlib
 import queue
 import sys
 import threading
-import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -137,41 +136,6 @@ def list_session_files(session_id: str, path: str = ""):
     return {"run_id": RUN_ID_WEB, "path": path or ".", "entries": entries}
 
 
-@app.get("/api/sessions/{session_id}/logs")
-def list_session_logs(session_id: str, task_id: str | None = None):
-    """List log files for this session, or return content when task_id is given."""
-    data = SESSIONS.get(session_id)
-    task_ids = (data or {}).get("task_ids") or []
-    run_path = _runs_dir() / RUN_ID_WEB
-    if not run_path.is_dir():
-        if task_id:
-            raise HTTPException(status_code=404, detail="Log not found")
-        return {"logs": []}
-    logs_dir = run_path / "logs"
-    if not logs_dir.is_dir():
-        if task_id:
-            raise HTTPException(status_code=404, detail="Log not found")
-        return {"logs": []}
-    if task_id:
-        if task_id not in task_ids:
-            raise HTTPException(status_code=404, detail="Log not found")
-        log_file = logs_dir / f"{task_id}.log"
-        if not log_file.is_file():
-            raise HTTPException(status_code=404, detail="Log not found")
-        try:
-            text = log_file.read_text(encoding="utf-8", errors="replace")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-        return {"task_id": task_id, "content": text}
-    # List only this session's logs (by task_ids), newest first
-    logs_list = []
-    for tid in reversed(task_ids):
-        f = logs_dir / f"{tid}.log"
-        if f.is_file():
-            logs_list.append({"task_id": tid, "path": str(f)})
-    return {"logs": logs_list}
-
-
 @app.get("/api/share/{session_id}")
 def get_share_data(session_id: str):
     """Return session history for read-only share view."""
@@ -221,36 +185,6 @@ def list_runs():
     return {"runs": runs_list}
 
 
-@app.get("/api/runs/{run_id}/logs")
-def list_run_logs(run_id: str, task_id: str | None = None):
-    """List log files for a run, or return content of one log when task_id is given."""
-    runs = _runs_dir()
-    run_path = runs / run_id
-    if not run_path.is_dir():
-        raise HTTPException(status_code=404, detail="Run not found")
-    logs_dir = run_path / "logs"
-    if not logs_dir.is_dir():
-        if task_id:
-            raise HTTPException(status_code=404, detail="Log not found")
-        return {"logs": []}
-
-    if task_id:
-        log_file = logs_dir / f"{task_id}.log"
-        if not log_file.is_file():
-            raise HTTPException(status_code=404, detail="Log not found")
-        try:
-            text = log_file.read_text(encoding="utf-8", errors="replace")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-        return {"task_id": task_id, "content": text}
-
-    logs_list = []
-    for f in sorted(logs_dir.iterdir(), key=lambda x: x.name, reverse=True):
-        if f.is_file() and f.suffix == ".log":
-            logs_list.append({"task_id": f.stem, "path": str(f)})
-    return {"logs": logs_list}
-
-
 @app.get("/api/runs/{run_id}/files")
 def list_run_files(run_id: str, path: str = "", task_id: str | None = None):
     """List files under a run's workspace. path is optional subdir; task_id pins to that workspace."""
@@ -273,48 +207,6 @@ def list_run_files(run_id: str, path: str = "", task_id: str | None = None):
             "dir": p.is_dir(),
         })
     return {"run_id": run_id, "path": path or ".", "entries": entries}
-
-
-def _tail_log_thread(
-    log_path: Path,
-    session_id: str,
-    send_cb,
-    loop: asyncio.AbstractEventLoop,
-    stop_event: threading.Event,
-    run_done: threading.Event,
-) -> None:
-    """Tail log file and push each line as log_line over WebSocket."""
-    for _ in range(100):
-        if log_path.exists():
-            break
-        time.sleep(0.1)
-    if not log_path.exists():
-        return
-    try:
-        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
-            while not stop_event.is_set() and not run_done.is_set():
-                line = f.readline()
-                if line:
-                    payload = {"source": "System", "type": "log_line", "content": line.rstrip("\n\r"), "session_id": session_id}
-                    future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
-                    try:
-                        future.result(timeout=2)
-                    except Exception:
-                        pass
-                else:
-                    time.sleep(0.05)
-            while True:
-                line = f.readline()
-                if not line:
-                    break
-                payload = {"source": "System", "type": "log_line", "content": line.rstrip("\n\r"), "session_id": session_id}
-                future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
-                try:
-                    future.result(timeout=2)
-                except Exception:
-                    pass
-    except Exception:
-        pass
 
 
 def _planner_ask_and_wait(
@@ -355,7 +247,8 @@ def _run_agent_sync(
         payload = {"source": source, "type": event_type, "content": content, "session_id": session_id}
         if session_id not in SESSIONS:
             SESSIONS[session_id] = {"history": [], "task_ids": [], "last_task_id": None}
-        SESSIONS[session_id]["history"].append(payload)
+        if event_type != "log_line":
+            SESSIONS[session_id]["history"].append(payload)
         future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
         try:
             future.result(timeout=5)
@@ -377,13 +270,6 @@ def _run_agent_sync(
         pg.setup()
 
         run_done = threading.Event()
-        log_path = run_dir / "logs" / f"{task_id}.log"
-        tail_thread = threading.Thread(
-            target=_tail_log_thread,
-            args=(log_path, session_id, send_cb, loop, stop_event, run_done),
-            daemon=True,
-        )
-        tail_thread.start()
 
         mode = (mode or "direct").strip().lower() or "direct"
         pg.set_mode(mode)
