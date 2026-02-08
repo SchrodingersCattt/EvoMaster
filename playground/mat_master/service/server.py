@@ -439,6 +439,7 @@ def _run_agent_sync(
         pg.agent = agent
         exp = pg._create_exp()
         exp.set_run_dir(run_dir)
+        event_callback("MatMaster", "exp_run", exp.__class__.__name__)
 
         exp.run(task_description=user_prompt, task_id=task_id)
         if stop_event.is_set():
