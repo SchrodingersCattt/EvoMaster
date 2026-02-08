@@ -14,10 +14,12 @@ export default function FileTree({
   sessionId,
   filePath,
   onFilePathChange,
+  compact = false,
 }: {
   sessionId: string | null;
   filePath: string;
   onFilePathChange: (path: string) => void;
+  compact?: boolean;
 }) {
   const [entries, setEntries] = useState<FileEntry[]>([]);
 
@@ -47,15 +49,15 @@ export default function FileTree({
   }, [filePath, onFilePathChange]);
 
   return (
-    <div className="border border-gray-300 rounded-lg p-3 bg-[#f3f4f6] flex flex-col h-full min-h-0">
-      <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">当前会话文件</h2>
-      <div className="text-xs text-gray-600 mb-1 break-all">
+    <div className={compact ? "flex flex-col min-h-0" : "border border-zinc-200 dark:border-zinc-700 rounded-md p-3 bg-zinc-50 dark:bg-zinc-900/50 flex flex-col h-full min-h-0"}>
+      {!compact && <h2 className="text-sm font-semibold mb-2 text-zinc-800 dark:text-zinc-200">当前会话文件</h2>}
+      <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1 break-all">
         {filePath ? filePath : "根目录"}
       </div>
       <div className="flex-1 overflow-y-auto text-sm min-h-0">
         {filePath && (
           <div
-            className="py-1 text-[#1e40af] cursor-pointer"
+            className="py-1 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 cursor-pointer"
             onClick={goUp}
           >
             ..
@@ -64,7 +66,7 @@ export default function FileTree({
         {entries.map((e) => (
           <div
             key={e.path || e.name}
-            className={`py-1 ${e.dir ? "text-[#1e40af] cursor-pointer" : "text-[#1f2937]"}`}
+            className={`py-1 ${e.dir ? "text-zinc-600 dark:text-zinc-400 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100" : "text-zinc-700 dark:text-zinc-300"}`}
             onClick={() => e.dir && openDir(e)}
           >
             {e.dir ? `${e.name}/` : e.name}
