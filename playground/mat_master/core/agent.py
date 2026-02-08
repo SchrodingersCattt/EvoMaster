@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from evomaster.agent.agent import Agent
-from evomaster.utils.types import StepRecord, ToolMessage
+from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
 
 
 class MatMasterAgent(Agent):
@@ -45,6 +45,14 @@ You can use the 'use_skill' tool to:
 """
         return prompt
 
+    def _on_assistant_message(self, msg: AssistantMessage) -> None:
+        """Optional hook after assistant message is added. Override in subclasses (e.g. streaming)."""
+        pass
+
+    def _on_tool_message(self, msg: ToolMessage) -> None:
+        """Optional hook after each tool message is added. Override in subclasses (e.g. streaming)."""
+        pass
+
     def _step(self) -> bool:
         """Override: for finish tool, execute it and only set should_finish when task_completed==true."""
         self._step_count += 1
@@ -52,6 +60,7 @@ You can use the 'use_skill' tool to:
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
         assistant_message = self.llm.query(dialog_for_query)
         self.current_dialog.add_message(assistant_message)
+        self._on_assistant_message(assistant_message)
         step_record = StepRecord(
             step_id=self._step_count,
             assistant_message=assistant_message,
@@ -102,6 +111,7 @@ You can use the 'use_skill' tool to:
                 meta={"info": info},
             )
             self.current_dialog.add_message(tool_message)
+            self._on_tool_message(tool_message)
             step_record.tool_responses.append(tool_message)
 
         self.trajectory.add_step(step_record)

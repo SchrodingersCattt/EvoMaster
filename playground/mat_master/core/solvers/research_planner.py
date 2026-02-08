@@ -151,7 +151,7 @@ def _extract_json_from_content(content: str) -> str | None:
 class ResearchPlanner(BaseExp):
     """Plan-execute under CRP: flight plan (JSON DEG) → validate → optional pre-flight confirm → execute steps via DirectSolver."""
 
-    def __init__(self, agent, config):
+    def __init__(self, agent, config, input_fn=None):
         super().__init__(agent, config)
         self.logger = logging.getLogger("MatMaster.Planner")
         mat = _get_mat_master_config(config)
@@ -159,6 +159,7 @@ class ResearchPlanner(BaseExp):
         self.state_file = planner_cfg.get("state_file", "research_state.json")
         self.max_steps = planner_cfg.get("max_steps", 20)
         self.human_check = planner_cfg.get("human_check_step", True)
+        self._input_fn = input_fn  # optional; if set, used instead of stdin in _ask_human (e.g. for WebSocket UI)
 
     def _run_dir_path(self) -> Path:
         return Path(self.run_dir) if self.run_dir else Path(".")
@@ -314,6 +315,8 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         return self._validate_plan_safety(plan)
 
     def _ask_human(self, prompt: str) -> str:
+        if self._input_fn is not None:
+            return (self._input_fn(prompt) or "").strip()
         print(f"\033[93m[Planner] {prompt}\033[0m")
         return sys.stdin.readline().strip()
 
