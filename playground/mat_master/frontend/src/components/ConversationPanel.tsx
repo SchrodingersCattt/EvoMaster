@@ -39,6 +39,13 @@ function renderEntry(entry: LogEntry): React.ReactNode {
   return renderContentValue(entry.content);
 }
 
+function isEnvRelatedToolResult(entry: LogEntry): boolean {
+  if (entry.type !== "tool_result" || !entry.content || typeof entry.content !== "object") return false;
+  const c = entry.content as { name?: string; result?: string; command?: string; args?: string };
+  const s = [c.name, c.result, c.command, typeof c.args === "string" ? c.args : ""].filter(Boolean).join(" ").toLowerCase();
+  return s.includes("env");
+}
+
 export default function ConversationPanel({
   entries,
   scrollRef,
@@ -46,16 +53,19 @@ export default function ConversationPanel({
   entries: LogEntry[];
   scrollRef?: React.RefObject<HTMLDivElement | null>;
 }) {
+  const filtered = entries.filter(
+    (e) => e.source !== "System" && e.type !== "log_line" && !isEnvRelatedToolResult(e)
+  );
   return (
     <div
       ref={scrollRef}
       className="flex flex-col gap-3 overflow-y-auto flex-1 min-h-0 border border-gray-300 rounded-lg p-3 bg-white"
     >
       <h2 className="text-sm font-semibold mb-1 text-[#1e293b] flex-shrink-0">对话</h2>
-      {entries.length === 0 ? (
+      {filtered.length === 0 ? (
         <div className="text-xs text-gray-500 flex-1">暂无消息</div>
       ) : (
-        entries.map((log, i) => (
+        filtered.map((log, i) => (
           <div key={i} className={cardClass(log.source)}>
             <div className="text-xs font-bold mb-1 opacity-70">{log.source}</div>
             {renderEntry(log)}

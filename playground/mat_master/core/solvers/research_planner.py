@@ -500,6 +500,8 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
             self.logger.info("[Planner] Step %s (goal): %s", step_id, intent[:80])
             step_dir = workspaces / f"step_{step_id}"
             step_dir.mkdir(parents=True, exist_ok=True)
+            steps_list = plan.get("steps", [])
+            self._emit("Planner", "status_stages", {"total": len(steps_list), "current": step_id, "step_id": step_id, "intent": intent[:120] if intent else ""})
 
             # Branch A: skill_evolution (Evo-Fallback autonomy)
             if tool_name == "skill_evolution":
@@ -521,8 +523,11 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
                     evo_result = evo_exp.run(intent, task_id=f"{task_id}_step_{step_id}_evo")
                     if evo_result.get("status") == "completed":
                         print("\033[92m[Autonomy] New skill created. Proceeding.\033[0m")
+                        skill_path = evo_result.get("skill_path", "")
+                        if skill_path:
+                            self._emit("Planner", "status_skill_produced", str(skill_path))
                         step["status"] = "done"
-                        state["history"].append({"step": step_id, "tool_name": tool_name, "intent": intent[:200], "result_summary": str(evo_result.get("skill_path", evo_result))[:200]})
+                        state["history"].append({"step": step_id, "tool_name": tool_name, "intent": intent[:200], "result_summary": str(skill_path or evo_result)[:200]})
                         self._save_state(task_id, state)
                     else:
                         print("\033[93m[Autonomy] Evolution failed. Triggering fallback.\033[0m")
