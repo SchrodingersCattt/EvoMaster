@@ -63,9 +63,23 @@ class MatMasterPlayground(BasePlayground):
             self.logger.info("Mat Master mode (from --mode): %s", self._run_mode)
 
     def set_run_dir(self, run_dir, task_id=None):
-        """Override: keep memory_service.run_dir in sync so memory.json persists in run dir."""
+        """Override: keep memory_service.run_dir in sync; sync session workspace to run_dir/workspaces/task_id so downloads and tool outputs go under the current session."""
         super().set_run_dir(run_dir, task_id=task_id)
         self.memory_service.run_dir = Path(run_dir) if run_dir else None
+        # When reusing cached pg, session was created at startup with a different workspace.
+        # Point it to this run's workspace so downloads and tool outputs go to workspaces/<task_id>.
+        if self.session is not None and run_dir is not None:
+            run_path = Path(run_dir).resolve()
+            if task_id:
+                ws_path = run_path / "workspaces" / task_id
+            else:
+                ws_path = run_path / "workspace"
+            ws_str = str(ws_path)
+            if hasattr(self.session.config, "workspace_path"):
+                self.session.config.workspace_path = ws_str
+            if hasattr(self.session.config, "working_dir"):
+                self.session.config.working_dir = ws_str
+            self.logger.debug("Session workspace updated to: %s", ws_str)
 
     def _setup_tools(self, skill_registry=None) -> None:
         """Override: call base then register memory tools (mem_save, mem_recall) and peek_file."""
