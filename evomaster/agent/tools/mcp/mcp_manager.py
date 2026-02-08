@@ -124,35 +124,44 @@ class MCPToolManager:
 
         async def runner():
             from .mcp_connection import create_connection
+
             try:
-                async with create_connection(transport=transport, **connection_kwargs) as conn:
-                    # ✅ enter 在 runner task 内完成
-                    self.connections[name] = conn
+                import httpx
+                _retry_exc = (httpx.ReadError, httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout)
+            except ImportError:
+                _retry_exc = (OSError, asyncio.TimeoutError)
 
-                    tools_info = await conn.list_tools()
-                    self.logger.info(f"Found {len(tools_info)} tools from MCP server '{name}'")
+            for attempt in range(1, 4):
+                try:
+                    async with create_connection(transport=transport, **connection_kwargs) as conn:
+                        self.connections[name] = conn
 
-                    self._build_tools(name, conn, tools_info)
+                        tools_info = await conn.list_tools()
+                        self.logger.info(f"Found {len(tools_info)} tools from MCP server '{name}'")
 
-                    # 如果已经注册到 ToolRegistry，立即注册新工具
-                    if self._registered_registry:
-                        for tool in self.tools_by_server[name].values():
-                            self._registered_registry.register(tool)
+                        self._build_tools(name, conn, tools_info)
 
+                        if self._registered_registry:
+                            for tool in self.tools_by_server[name].values():
+                                self._registered_registry.register(tool)
+
+                        ready_evt.set()
+                        await stop_evt.wait()
+                    break
+                except _retry_exc as e:
+                    if attempt < 3:
+                        self.logger.warning(
+                            "MCP server '%s' connection failed (attempt %s/3), retrying in 2s: %s",
+                            name, attempt, e,
+                        )
+                        await asyncio.sleep(2)
+                    else:
+                        self.logger.error("MCP server '%s' failed after 3 attempts: %s", name, e)
+                        ready_evt.set()
+                        raise
+                except BaseException:
                     ready_evt.set()
-
-                    # ✅ 挂起，直到 remove_server 发 stop
-                    await stop_evt.wait()
-
-            except Exception as e:
-                # 如果 runner 启动失败，保证 ready_evt 被 set，避免外面一直 await
-                self.logger.error(f"MCP server runner failed for '{name}': {e}")
-                ready_evt.set()
-                raise
-            finally:
-                # 退出 async with 后连接已经关了
-                # 这里不要在 finally 里删除 dict（交给 remove_server 统一清）
-                pass
+                    raise
 
         # ✅ 必须保证 runner task 在 self.loop 里创建
         if asyncio.get_running_loop() is not self.loop:
