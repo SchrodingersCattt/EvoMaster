@@ -1,6 +1,7 @@
 "use client";
 
 import type { LogEntry } from "./LogStream";
+import { renderContent as renderContentValue } from "./ContentRenderer";
 
 function cardClass(source: string): string {
   const base = "border p-3 rounded-lg ";
@@ -22,50 +23,20 @@ function cardClass(source: string): string {
   }
 }
 
-function renderContent(entry: LogEntry): React.ReactNode {
-  if (entry.type === "thought" && typeof entry.content === "string") {
-    const text = entry.content.trim();
-    const isLongOrJson = text.length > 400 || /^\s*[\{\[]/.test(text);
-    if (!text) return <div className="text-sm text-gray-500 italic">(无文本输出)</div>;
-    if (isLongOrJson) {
-      return (
-        <pre className="text-xs whitespace-pre-wrap bg-gray-100 p-2 rounded overflow-x-auto max-h-60 overflow-y-auto text-[#1f2937]">
-          {text}
-        </pre>
-      );
-    }
-    return <div className="text-sm whitespace-pre-wrap">{text}</div>;
-  }
-  if (entry.type === "query" || (entry.source === "User" && typeof entry.content === "string")) {
-    return <div className="text-sm whitespace-pre-wrap">{String(entry.content)}</div>;
-  }
+function renderEntry(entry: LogEntry): React.ReactNode {
   if (entry.type === "planner_reply" && typeof entry.content === "string") {
     return <div className="text-sm">Planner 回复: {entry.content}</div>;
-  }
-  if (entry.type === "tool_call" && entry.content && typeof entry.content === "object") {
-    return (
-      <pre className="text-xs bg-gray-200 p-2 rounded overflow-x-auto text-[#1f2937]">
-        {JSON.stringify(entry.content, null, 2)}
-      </pre>
-    );
   }
   if (entry.type === "tool_result" && entry.content && typeof entry.content === "object") {
     const c = entry.content as { name?: string; result?: string };
     return (
       <div className="text-xs space-y-1">
         {c.name && <div className="font-medium">{c.name}</div>}
-        <pre className="bg-gray-200 p-2 rounded overflow-x-auto max-h-40 overflow-y-auto text-[#1f2937]">
-          {typeof c.result === "string" ? c.result : JSON.stringify(c)}
-        </pre>
+        {renderContentValue(typeof c.result === "string" ? c.result : c, { maxPreHeight: "max-h-40" })}
       </div>
     );
   }
-  if (typeof entry.content === "string") {
-    return <div className="text-sm">{entry.content}</div>;
-  }
-  return (
-    <pre className="text-xs overflow-x-auto">{JSON.stringify(entry.content, null, 2)}</pre>
-  );
+  return renderContentValue(entry.content);
 }
 
 export default function ConversationPanel({
@@ -87,7 +58,7 @@ export default function ConversationPanel({
         entries.map((log, i) => (
           <div key={i} className={cardClass(log.source)}>
             <div className="text-xs font-bold mb-1 opacity-70">{log.source}</div>
-            {renderContent(log)}
+            {renderEntry(log)}
           </div>
         ))
       )}

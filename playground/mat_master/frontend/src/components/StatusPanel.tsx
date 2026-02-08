@@ -1,6 +1,7 @@
 "use client";
 
 import type { LogEntry } from "./LogStream";
+import { renderContent } from "./ContentRenderer";
 
 function statusCardClass(source: string): string {
   const base = "border p-3 rounded-lg ";
@@ -14,34 +15,17 @@ function statusCardClass(source: string): string {
   }
 }
 
-function renderContent(entry: LogEntry): React.ReactNode {
-  if (entry.type === "thought" && typeof entry.content === "string") {
-    const text = entry.content.trim();
-    if (!text) return <div className="text-sm text-gray-500 italic">(无文本)</div>;
-    return <div className="text-sm whitespace-pre-wrap">{text}</div>;
-  }
-  if (entry.type === "tool_call" && entry.content && typeof entry.content === "object") {
-    return (
-      <pre className="text-xs bg-gray-200 p-2 rounded overflow-x-auto max-h-40 overflow-y-auto text-[#1f2937]">
-        {JSON.stringify(entry.content, null, 2)}
-      </pre>
-    );
-  }
+function renderEntry(entry: LogEntry): React.ReactNode {
   if (entry.type === "tool_result" && entry.content && typeof entry.content === "object") {
     const c = entry.content as { name?: string; result?: string };
     return (
       <div className="text-xs space-y-1">
         {c.name && <div className="font-medium">{c.name}</div>}
-        <pre className="bg-gray-200 p-2 rounded overflow-x-auto max-h-40 overflow-y-auto text-[#1f2937]">
-          {typeof c.result === "string" ? c.result : JSON.stringify(c)}
-        </pre>
+        {renderContent(typeof c.result === "string" ? c.result : c, { maxPreHeight: "max-h-40" })}
       </div>
     );
   }
-  if (typeof entry.content === "string") {
-    return <div className="text-sm">{entry.content}</div>;
-  }
-  return <pre className="text-xs overflow-x-auto">{JSON.stringify(entry.content, null, 2)}</pre>;
+  return renderContent(entry.content, { maxPreHeight: "max-h-40" });
 }
 
 export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
@@ -56,7 +40,7 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
           filtered.map((log, i) => (
             <div key={i} className={statusCardClass(log.source)}>
               <div className="text-xs font-bold mb-1 opacity-70">{log.source}</div>
-              {renderContent(log)}
+              {renderEntry(log)}
             </div>
           ))
         )}
