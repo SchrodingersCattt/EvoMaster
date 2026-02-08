@@ -42,6 +42,8 @@ export default function LogStream({
   const [selectedRun, setSelectedRun] = useState("mat_master_web");
   const [filePath, setFilePath] = useState("");
   const [files, setFiles] = useState<FileEntry[]>([]);
+  const [logList, setLogList] = useState<{ task_id: string; path: string }[]>([]);
+  const [selectedLogTaskId, setSelectedLogTaskId] = useState<string | null>(null);
 
   const isReadOnly = readOnly || (externalLogs !== undefined && externalLogs.length > 0);
 
@@ -68,6 +70,20 @@ export default function LogStream({
   useEffect(() => {
     if (!isReadOnly && status === "connected") loadRuns();
   }, [isReadOnly, status, loadRuns]);
+
+  const loadLogList = useCallback((runId: string) => {
+    fetch(`${API_BASE}/api/runs/${encodeURIComponent(runId)}/logs`)
+      .then((r) => (r.ok ? r.json() : { logs: [] }))
+      .then((d: { logs: { task_id: string; path: string }[] }) => {
+        setLogList(d.logs || []);
+        setSelectedLogTaskId(d.logs?.length ? d.logs[0].task_id ?? null : null);
+      })
+      .catch(() => setLogList([]));
+  }, []);
+
+  useEffect(() => {
+    if (selectedRun) loadLogList(selectedRun);
+  }, [selectedRun, loadLogList]);
 
   useEffect(() => {
     if (conversationRef.current) {
@@ -224,7 +240,12 @@ export default function LogStream({
 
       <div className="grid grid-cols-[minmax(240px,1fr)_minmax(280px,1.2fr)_minmax(280px,1.2fr)] gap-4 flex-1 min-h-0">
         <div className="flex flex-col gap-3 min-h-0">
-          <LogPanel />
+          <LogPanel
+            runId={selectedRun}
+            taskId={selectedLogTaskId}
+            logList={logList}
+            onTaskIdChange={setSelectedLogTaskId}
+          />
           <div className="flex-1 min-h-[200px]">
             <FileTree
               selectedRunId={selectedRun}
