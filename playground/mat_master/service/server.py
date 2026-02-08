@@ -8,6 +8,7 @@ import importlib
 import queue
 import sys
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -77,7 +78,7 @@ def info():
 async def start_task(req: ChatRequest):
     """Optional: signal ready and return session id."""
     if SESSION_ID_DEMO not in SESSIONS:
-        SESSIONS[SESSION_ID_DEMO] = {"history": []}
+        SESSIONS[SESSION_ID_DEMO] = {"history": [], "task_ids": [], "last_task_id": None}
     return {"status": "ready", "session_id": SESSION_ID_DEMO}
 
 
@@ -96,6 +97,81 @@ def get_session_history(session_id: str):
     return data.get("history", [])
 
 
+RUN_ID_WEB = "mat_master_web"
+
+
+@app.get("/api/sessions/{session_id}/run_info")
+def get_session_run_info(session_id: str):
+    """Return run_id and task_ids for this session (for files/logs tied to current session)."""
+    data = SESSIONS.get(session_id)
+    if not data:
+        return {"run_id": RUN_ID_WEB, "last_task_id": None, "task_ids": []}
+    task_ids = data.get("task_ids") or []
+    last_task_id = data.get("last_task_id")
+    return {"run_id": RUN_ID_WEB, "last_task_id": last_task_id, "task_ids": task_ids}
+
+
+@app.get("/api/sessions/{session_id}/files")
+def list_session_files(session_id: str, path: str = ""):
+    """List files under this session's workspace (current task)."""
+    data = SESSIONS.get(session_id)
+    task_id = (data or {}).get("last_task_id") if data else None
+    base = _get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
+    if not base or not base.is_dir():
+        return {"run_id": RUN_ID_WEB, "path": path or ".", "entries": []}
+    target = (base / path).resolve() if path else base
+    if not target.is_dir():
+        raise HTTPException(status_code=404, detail="Path not found")
+    try:
+        target.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Path outside workspace")
+    entries = []
+    for p in sorted(target.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+        rel = p.relative_to(base)
+        entries.append({
+            "name": p.name,
+            "path": str(rel).replace("\\", "/"),
+            "dir": p.is_dir(),
+        })
+    return {"run_id": RUN_ID_WEB, "path": path or ".", "entries": entries}
+
+
+@app.get("/api/sessions/{session_id}/logs")
+def list_session_logs(session_id: str, task_id: str | None = None):
+    """List log files for this session, or return content when task_id is given."""
+    data = SESSIONS.get(session_id)
+    task_ids = (data or {}).get("task_ids") or []
+    run_path = _runs_dir() / RUN_ID_WEB
+    if not run_path.is_dir():
+        if task_id:
+            raise HTTPException(status_code=404, detail="Log not found")
+        return {"logs": []}
+    logs_dir = run_path / "logs"
+    if not logs_dir.is_dir():
+        if task_id:
+            raise HTTPException(status_code=404, detail="Log not found")
+        return {"logs": []}
+    if task_id:
+        if task_id not in task_ids:
+            raise HTTPException(status_code=404, detail="Log not found")
+        log_file = logs_dir / f"{task_id}.log"
+        if not log_file.is_file():
+            raise HTTPException(status_code=404, detail="Log not found")
+        try:
+            text = log_file.read_text(encoding="utf-8", errors="replace")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        return {"task_id": task_id, "content": text}
+    # List only this session's logs (by task_ids), newest first
+    logs_list = []
+    for tid in reversed(task_ids):
+        f = logs_dir / f"{tid}.log"
+        if f.is_file():
+            logs_list.append({"task_id": tid, "path": str(f)})
+    return {"logs": logs_list}
+
+
 @app.get("/api/share/{session_id}")
 def get_share_data(session_id: str):
     """Return session history for read-only share view."""
@@ -109,13 +185,17 @@ def _runs_dir() -> Path:
     return _project_root / "runs"
 
 
-def _get_run_workspace_path(run_id: str) -> Path | None:
-    """Resolve run_id to workspace directory (same layout as run.py: runs/<run_id>/workspace or workspaces/<task>)."""
+def _get_run_workspace_path(run_id: str, task_id: str | None = None) -> Path | None:
+    """Resolve run_id (and optional task_id) to workspace directory."""
     runs = _runs_dir()
     run_path = runs / run_id
     if not run_path.is_dir():
         return None
-    # Prefer run_dir/workspace, else run_dir/workspaces/task_0 or first task
+    if task_id:
+        ws = run_path / "workspaces" / task_id
+        if ws.is_dir():
+            return ws
+        return None
     ws = run_path / "workspace"
     if ws.is_dir():
         return ws
@@ -123,7 +203,7 @@ def _get_run_workspace_path(run_id: str) -> Path | None:
     if workspaces.is_dir():
         subs = [p for p in workspaces.iterdir() if p.is_dir()]
         if subs:
-            return subs[0]
+            return max(subs, key=lambda p: p.stat().st_mtime)
     return run_path
 
 
@@ -172,9 +252,9 @@ def list_run_logs(run_id: str, task_id: str | None = None):
 
 
 @app.get("/api/runs/{run_id}/files")
-def list_run_files(run_id: str, path: str = ""):
-    """List files under a run's workspace. path is optional subdir (relative)."""
-    base = _get_run_workspace_path(run_id)
+def list_run_files(run_id: str, path: str = "", task_id: str | None = None):
+    """List files under a run's workspace. path is optional subdir; task_id pins to that workspace."""
+    base = _get_run_workspace_path(run_id, task_id=task_id)
     if not base or not base.is_dir():
         raise HTTPException(status_code=404, detail="Run not found")
     target = (base / path).resolve() if path else base
@@ -193,6 +273,48 @@ def list_run_files(run_id: str, path: str = ""):
             "dir": p.is_dir(),
         })
     return {"run_id": run_id, "path": path or ".", "entries": entries}
+
+
+def _tail_log_thread(
+    log_path: Path,
+    session_id: str,
+    send_cb,
+    loop: asyncio.AbstractEventLoop,
+    stop_event: threading.Event,
+    run_done: threading.Event,
+) -> None:
+    """Tail log file and push each line as log_line over WebSocket."""
+    for _ in range(100):
+        if log_path.exists():
+            break
+        time.sleep(0.1)
+    if not log_path.exists():
+        return
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+            while not stop_event.is_set() and not run_done.is_set():
+                line = f.readline()
+                if line:
+                    payload = {"source": "System", "type": "log_line", "content": line.rstrip("\n\r"), "session_id": session_id}
+                    future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
+                    try:
+                        future.result(timeout=2)
+                    except Exception:
+                        pass
+                else:
+                    time.sleep(0.05)
+            while True:
+                line = f.readline()
+                if not line:
+                    break
+                payload = {"source": "System", "type": "log_line", "content": line.rstrip("\n\r"), "session_id": session_id}
+                future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
+                try:
+                    future.result(timeout=2)
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 def _planner_ask_and_wait(
@@ -222,15 +344,17 @@ def _run_agent_sync(
     stop_event: threading.Event,
     mode: str = "direct",
     planner_reply_queue: queue.Queue | None = None,
+    task_id: str | None = None,
 ):
-    """Run MatMaster in a thread (direct or planner exp); send_cb streams events."""
+    """Run MatMaster in a thread (direct or planner exp); send_cb streams events. task_id is set by caller."""
     import logging
     logging.basicConfig(level=logging.INFO)
+    run_done: threading.Event | None = None
 
     def event_callback(source: str, event_type: str, content) -> None:
         payload = {"source": source, "type": event_type, "content": content, "session_id": session_id}
         if session_id not in SESSIONS:
-            SESSIONS[session_id] = {"history": []}
+            SESSIONS[session_id] = {"history": [], "task_ids": [], "last_task_id": None}
         SESSIONS[session_id]["history"].append(payload)
         future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
         try:
@@ -247,10 +371,19 @@ def _run_agent_sync(
             raise FileNotFoundError(f"Config not found: {config_path}")
         pg = get_playground_class("mat_master", config_path=config_path)
 
-        run_dir = _project_root / "runs" / "mat_master_web"
-        task_id = "ws_" + uuid.uuid4().hex[:8]
+        run_dir = _project_root / "runs" / RUN_ID_WEB
+        task_id = task_id or ("ws_" + uuid.uuid4().hex[:8])
         pg.set_run_dir(run_dir, task_id=task_id)
         pg.setup()
+
+        run_done = threading.Event()
+        log_path = run_dir / "logs" / f"{task_id}.log"
+        tail_thread = threading.Thread(
+            target=_tail_log_thread,
+            args=(log_path, session_id, send_cb, loop, stop_event, run_done),
+            daemon=True,
+        )
+        tail_thread.start()
 
         mode = (mode or "direct").strip().lower() or "direct"
         pg.set_mode(mode)
@@ -316,6 +449,8 @@ def _run_agent_sync(
         event_callback("System", "error", str(e))
         raise
     finally:
+        if run_done is not None:
+            run_done.set()
         _run_stop_events.pop(session_id, None)
 
 
@@ -338,7 +473,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     planner_reply_queue.put(content)
                     sid = data.get("session_id") or SESSION_ID_DEMO
                     if sid not in SESSIONS:
-                        SESSIONS[sid] = {"history": []}
+                        SESSIONS[sid] = {"history": [], "task_ids": [], "last_task_id": None}
                     payload = {"source": "User", "type": "planner_reply", "content": content, "session_id": sid}
                     SESSIONS[sid]["history"].append(payload)
                     await send_json(payload)
@@ -377,7 +512,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
             session_id = data.get("session_id") or str(uuid.uuid4())
             if session_id not in SESSIONS:
-                SESSIONS[session_id] = {"history": []}
+                SESSIONS[session_id] = {"history": [], "task_ids": [], "last_task_id": None}
+            task_id = "ws_" + uuid.uuid4().hex[:8]
+            SESSIONS[session_id].setdefault("task_ids", []).append(task_id)
+            SESSIONS[session_id]["last_task_id"] = task_id
             user_msg = {"source": "User", "type": "query", "content": user_prompt, "mode": mode, "session_id": session_id}
             SESSIONS[session_id]["history"].append(user_msg)
             await send_json(user_msg)
@@ -398,6 +536,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 stop_ev,
                 mode,
                 planner_reply_queue,
+                task_id,
             )
     except asyncio.CancelledError:
         pass

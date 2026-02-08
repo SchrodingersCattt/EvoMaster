@@ -1,32 +1,37 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+const API_BASE =
+  typeof window !== "undefined"
+    ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000")
+    : "";
 
 export type RunItem = { id: string; label: string };
 export type FileEntry = { name: string; path: string; dir: boolean };
 
 export default function FileTree({
-  selectedRunId,
-  onRunIdChange,
-  runIds,
-  onLoadRuns,
+  sessionId,
   filePath,
   onFilePathChange,
-  entries,
-  onLoadEntries,
 }: {
-  selectedRunId: string;
-  onRunIdChange: (id: string) => void;
-  runIds: RunItem[];
-  onLoadRuns: () => void;
+  sessionId: string | null;
   filePath: string;
   onFilePathChange: (path: string) => void;
-  entries: FileEntry[];
-  onLoadEntries: (runId: string, path: string) => void;
 }) {
+  const [entries, setEntries] = useState<FileEntry[]>([]);
+
   useEffect(() => {
-    onLoadEntries(selectedRunId, filePath);
-  }, [selectedRunId, filePath, onLoadEntries]);
+    if (!sessionId) {
+      setEntries([]);
+      return;
+    }
+    const url = `${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/files${filePath ? `?path=${encodeURIComponent(filePath)}` : ""}`;
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : { entries: [] }))
+      .then((d: { entries: FileEntry[] }) => setEntries(d.entries || []))
+      .catch(() => setEntries([]));
+  }, [sessionId, filePath]);
 
   const openDir = useCallback(
     (entry: FileEntry) => {
@@ -43,20 +48,9 @@ export default function FileTree({
 
   return (
     <div className="border border-gray-300 rounded-lg p-3 bg-[#f3f4f6] flex flex-col h-full min-h-0">
-      <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">Runs / 文件</h2>
-      <select
-        value={selectedRunId}
-        onChange={(e) => onRunIdChange(e.target.value)}
-        className="w-full rounded border border-gray-300 px-2 py-1 text-sm mb-2 bg-white text-[#1f2937]"
-      >
-        {runIds.map((r) => (
-          <option key={r.id} value={r.id}>
-            {r.label}
-          </option>
-        ))}
-      </select>
+      <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">当前会话文件</h2>
       <div className="text-xs text-gray-600 mb-1 truncate">
-        {selectedRunId}{filePath ? ` / ${filePath}` : ""}
+        {filePath ? filePath : "根目录"}
       </div>
       <div className="flex-1 overflow-y-auto text-sm min-h-0">
         {filePath && (
