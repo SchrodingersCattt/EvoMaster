@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import FileTree, { type FileEntry, type RunItem } from "./FileTree";
+import LogPanel from "./LogPanel";
+import StatusPanel from "./StatusPanel";
+import ConversationPanel from "./ConversationPanel";
 
 const WS_URL =
   typeof window !== "undefined"
@@ -17,71 +21,6 @@ export type LogEntry = {
   content: unknown;
 };
 
-type RunItem = { id: string; label: string };
-type FileEntry = { name: string; path: string; dir: boolean };
-
-function cardClass(source: string): string {
-  const base = "border p-3 rounded-lg ";
-  switch (source) {
-    case "MatMaster":
-      return base + "border-[#1e40af] bg-[#eff6ff]";
-    case "Planner":
-      return base + "border-[#1e3a8a] bg-[#eff6ff]";
-    case "Coder":
-      return base + "border-[#1e40af] bg-[#eff6ff]";
-    case "ToolExecutor":
-      return base + "border-[#b91c1c] bg-[#fef2f2]";
-    case "System":
-      return base + "border-gray-400 bg-gray-100/80";
-    default:
-      return base + "border-gray-400 bg-gray-50/80";
-  }
-}
-
-function renderContent(entry: LogEntry): React.ReactNode {
-  if (entry.type === "thought" && typeof entry.content === "string") {
-    const text = entry.content.trim();
-    const isLongOrJson = text.length > 400 || /^\s*[\{\[]/.test(text);
-    if (!text) {
-      return <div className="text-sm"><span className="text-gray-500 italic">(无文本输出)</span></div>;
-    }
-    if (isLongOrJson) {
-      return (
-        <pre className="text-xs whitespace-pre-wrap bg-gray-100 p-2 rounded overflow-x-auto max-h-60 overflow-y-auto text-[#1f2937]">
-          {text}
-        </pre>
-      );
-    }
-    return <div className="text-sm whitespace-pre-wrap">{text}</div>;
-  }
-  if (entry.type === "tool_call" && entry.content && typeof entry.content === "object") {
-    return (
-      <pre className="text-xs bg-gray-200 p-2 rounded overflow-x-auto text-[#1f2937]">
-        {JSON.stringify(entry.content, null, 2)}
-      </pre>
-    );
-  }
-  if (entry.type === "tool_result" && entry.content && typeof entry.content === "object") {
-    const c = entry.content as { name?: string; result?: string };
-    return (
-      <div className="text-xs space-y-1">
-        {c.name && <div className="font-medium">{c.name}</div>}
-        <pre className="bg-gray-200 p-2 rounded overflow-x-auto max-h-40 overflow-y-auto text-[#1f2937]">
-          {typeof c.result === "string" ? c.result : JSON.stringify(c)}
-        </pre>
-      </div>
-    );
-  }
-  if (typeof entry.content === "string") {
-    return <div className="text-sm">{entry.content}</div>;
-  }
-  return (
-    <pre className="text-xs overflow-x-auto">
-      {JSON.stringify(entry.content, null, 2)}
-    </pre>
-  );
-}
-
 export default function LogStream({
   logs: externalLogs,
   readOnly = false,
@@ -94,9 +33,47 @@ export default function LogStream({
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "closed">("idle");
   const [running, setRunning] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const conversationRef = useRef<HTMLDivElement>(null);
+
+  const [mode, setMode] = useState<"direct" | "planner">("direct");
+  const [plannerAsk, setPlannerAsk] = useState<string | null>(null);
+  const [plannerInput, setPlannerInput] = useState("");
+  const [runs, setRuns] = useState<RunItem[]>([{ id: "mat_master_web", label: "mat_master_web" }]);
+  const [selectedRun, setSelectedRun] = useState("mat_master_web");
+  const [filePath, setFilePath] = useState("");
+  const [files, setFiles] = useState<FileEntry[]>([]);
 
   const isReadOnly = readOnly || (externalLogs !== undefined && externalLogs.length > 0);
+
+  const loadRuns = useCallback(() => {
+    fetch(`${API_BASE}/api/runs`)
+      .then((r) => r.json())
+      .then((d: { runs: RunItem[] }) => {
+        setRuns(d.runs);
+        if (d.runs.length && !d.runs.find((r) => r.id === selectedRun)) {
+          setSelectedRun(d.runs[0].id);
+        }
+      })
+      .catch(() => {});
+  }, [selectedRun]);
+
+  const loadFiles = useCallback((runId: string, path: string) => {
+    const url = `${API_BASE}/api/runs/${encodeURIComponent(runId)}/files${path ? `?path=${encodeURIComponent(path)}` : ""}`;
+    fetch(url)
+      .then((r) => r.json())
+      .then((d: { entries: FileEntry[] }) => setFiles(d.entries))
+      .catch(() => setFiles([]));
+  }, []);
+
+  useEffect(() => {
+    if (!isReadOnly && status === "connected") loadRuns();
+  }, [isReadOnly, status, loadRuns]);
+
+  useEffect(() => {
+    if (conversationRef.current) {
+      conversationRef.current.scrollTop = conversationRef.current.scrollHeight;
+    }
+  }, [logs]);
 
   useEffect(() => {
     if (isReadOnly || externalLogs !== undefined) {
@@ -137,12 +114,6 @@ export default function LogStream({
     };
   }, [isReadOnly, externalLogs]);
 
-  useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
-    }
-  }, [logs]);
-
   const send = useCallback(() => {
     const content = input.trim();
     if (!content || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || running) return;
@@ -157,67 +128,15 @@ export default function LogStream({
     }
   }, [running]);
 
-  const sendPlannerReply = useCallback(
-    (content: string) => {
-      if (wsRef.current?.readyState !== WebSocket.OPEN) return;
-      wsRef.current.send(JSON.stringify({ type: "planner_reply", content: (content || "").trim() || "abort" }));
-      setPlannerAsk(null);
-      setPlannerInput("");
-    },
-    []
-  );
-
-  const [mode, setMode] = useState<"direct" | "planner">("direct");
-  const [plannerAsk, setPlannerAsk] = useState<string | null>(null);
-  const [plannerInput, setPlannerInput] = useState("");
-  const [runs, setRuns] = useState<RunItem[]>([{ id: "dev", label: "dev (current)" }]);
-  const [selectedRun, setSelectedRun] = useState("dev");
-  const [filePath, setFilePath] = useState("");
-  const [files, setFiles] = useState<FileEntry[]>([]);
-
-  const loadRuns = useCallback(() => {
-    fetch(`${API_BASE}/api/runs`)
-      .then((r) => r.json())
-      .then((d: { runs: RunItem[] }) => {
-        setRuns(d.runs);
-        if (d.runs.length && !d.runs.find((r) => r.id === selectedRun)) {
-          setSelectedRun(d.runs[0].id);
-        }
-      })
-      .catch(() => {});
-  }, [selectedRun]);
-
-  const loadFiles = useCallback(
-    (runId: string, path: string) => {
-      const url = `${API_BASE}/api/runs/${encodeURIComponent(runId)}/files${path ? `?path=${encodeURIComponent(path)}` : ""}`;
-      fetch(url)
-        .then((r) => r.json())
-        .then((d: { entries: FileEntry[] }) => setFiles(d.entries))
-        .catch(() => setFiles([]));
-    },
-    []
-  );
-
-  useEffect(() => {
-    if (!isReadOnly && status === "connected") loadRuns();
-  }, [isReadOnly, status, loadRuns]);
-
-  useEffect(() => {
-    loadFiles(selectedRun, filePath);
-  }, [selectedRun, filePath, loadFiles]);
-
-  const openDir = (entry: FileEntry) => {
-    if (entry.dir) setFilePath(entry.path || entry.name);
-  };
-
-  const goUp = () => {
-    const parts = filePath.split(/[/\\]/).filter(Boolean);
-    parts.pop();
-    setFilePath(parts.join("/"));
-  };
+  const sendPlannerReply = useCallback((content: string) => {
+    if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ type: "planner_reply", content: (content || "").trim() || "abort" }));
+    setPlannerAsk(null);
+    setPlannerInput("");
+  }, []);
 
   return (
-    <div className="flex flex-col h-full max-h-[85vh] gap-3 p-4">
+    <div className="flex flex-col h-full min-h-[85vh] gap-3 p-4">
       {!isReadOnly && plannerAsk !== null && (
         <div className="flex-shrink-0 p-3 rounded-lg border border-[#1e40af] bg-[#eff6ff]">
           <div className="text-sm font-medium text-[#1e293b] mb-2">Planner 需确认</div>
@@ -257,6 +176,7 @@ export default function LogStream({
           </div>
         </div>
       )}
+
       {!isReadOnly && (
         <div className="flex gap-2 items-center flex-shrink-0 flex-wrap">
           <span className="text-sm text-gray-600">Mode</span>
@@ -294,68 +214,38 @@ export default function LogStream({
           >
             终止
           </button>
+          <span className="text-xs text-gray-600">
+            {status === "connecting" && "连接中..."}
+            {status === "connected" && "已连接"}
+            {status === "closed" && "连接已断开"}
+          </span>
         </div>
       )}
 
-      {!isReadOnly && (
-        <div className="text-xs text-gray-600 flex-shrink-0">
-          {status === "connecting" && "连接中..."}
-          {status === "connected" && "已连接"}
-          {status === "closed" && "连接已断开"}
-        </div>
-      )}
-
-      <div className="flex gap-4 flex-1 min-h-0">
-        <div
-          ref={containerRef}
-          className="flex flex-col gap-3 overflow-y-auto flex-1 min-w-0"
-        >
-          {logs.map((log, i) => (
-            <div key={i} className={cardClass(log.source)}>
-              <div className="text-xs font-bold mb-1 opacity-70">{log.source}</div>
-              {renderContent(log)}
-            </div>
-          ))}
-        </div>
-
-        {!isReadOnly && (
-          <div className="w-72 flex-shrink-0 border border-gray-300 rounded-lg p-3 bg-[#f3f4f6] flex flex-col">
-            <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">Runs / 文件</h2>
-            <select
-              value={selectedRun}
-              onChange={(e) => setSelectedRun(e.target.value)}
-              className="w-full rounded border border-gray-300 px-2 py-1 text-sm mb-2 bg-white text-[#1f2937]"
-            >
-              {runs.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-            <div className="text-xs text-gray-600 mb-1 truncate">
-              {selectedRun}{filePath ? ` / ${filePath}` : ""}
-            </div>
-            <div className="flex-1 overflow-y-auto text-sm">
-              {filePath && (
-                <div
-                  className="py-1 text-[#1e40af] cursor-pointer"
-                  onClick={goUp}
-                >
-                  ..
-                </div>
-              )}
-              {files.map((e) => (
-                <div
-                  key={e.path || e.name}
-                  className={`py-1 ${e.dir ? "text-[#1e40af] cursor-pointer" : "text-[#1f2937]"}`}
-                  onClick={() => e.dir && openDir(e)}
-                >
-                  {e.dir ? `${e.name}/` : e.name}
-                </div>
-              ))}
-            </div>
+      <div className="grid grid-cols-[minmax(240px,1fr)_minmax(280px,1.2fr)_minmax(280px,1.2fr)] gap-4 flex-1 min-h-0">
+        <div className="flex flex-col gap-3 min-h-0">
+          <LogPanel />
+          <div className="flex-1 min-h-[200px]">
+            <FileTree
+              selectedRunId={selectedRun}
+              onRunIdChange={setSelectedRun}
+              runIds={runs}
+              onLoadRuns={loadRuns}
+              filePath={filePath}
+              onFilePathChange={setFilePath}
+              entries={files}
+              onLoadEntries={loadFiles}
+            />
           </div>
-        )}
+        </div>
+
+        <div className="flex flex-col min-h-0">
+          <StatusPanel entries={logs} />
+        </div>
+
+        <div className="flex flex-col min-h-0">
+          <ConversationPanel entries={logs} scrollRef={conversationRef} />
+        </div>
       </div>
     </div>
   );
