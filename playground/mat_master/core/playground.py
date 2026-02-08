@@ -180,7 +180,8 @@ class MatMasterPlayground(BasePlayground):
         """Return solver by --mode: direct (DirectSolver) | planner (ResearchPlanner). Default direct."""
         mode = getattr(self, "_run_mode", None) or "direct"
         if mode == "planner":
-            exp = ResearchPlanner(self.agent, self.config)
+            input_fn = getattr(self, "_planner_input_fn", None)
+            exp = ResearchPlanner(self.agent, self.config, input_fn=input_fn)
         else:
             exp = DirectSolver(self.agent, self.config)
 
