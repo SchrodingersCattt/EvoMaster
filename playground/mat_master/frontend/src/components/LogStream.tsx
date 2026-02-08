@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import FileTree, { type FileEntry, type RunItem } from "./FileTree";
+import FileTree from "./FileTree";
 import LogPanel from "./LogPanel";
 import StatusPanel from "./StatusPanel";
 import ConversationPanel from "./ConversationPanel";
@@ -36,58 +36,25 @@ export default function LogStream({
   const [runningSessionId, setRunningSessionId] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef("");
 
   const [sessionIds, setSessionIds] = useState<string[]>(["demo_session"]);
   const [currentSessionId, setCurrentSessionId] = useState("demo_session");
+  const currentSessionIdRef = useRef(currentSessionId);
+  const runningSessionIdRef = useRef(runningSessionId);
+  currentSessionIdRef.current = currentSessionId;
+  runningSessionIdRef.current = runningSessionId;
+  inputRef.current = input;
+
   const [mode, setMode] = useState<"direct" | "planner">("direct");
   const [plannerAsk, setPlannerAsk] = useState<string | null>(null);
   const [plannerInput, setPlannerInput] = useState("");
-  const [runs, setRuns] = useState<RunItem[]>([{ id: "mat_master_web", label: "mat_master_web" }]);
-  const [selectedRun, setSelectedRun] = useState("mat_master_web");
   const [filePath, setFilePath] = useState("");
-  const [files, setFiles] = useState<FileEntry[]>([]);
-  const [logList, setLogList] = useState<{ task_id: string; path: string }[]>([]);
-  const [selectedLogTaskId, setSelectedLogTaskId] = useState<string | null>(null);
+  const [reconnectTrigger, setReconnectTrigger] = useState(0);
+  const [sessionFilesLogsKey, setSessionFilesLogsKey] = useState(0);
+  const [liveLogLines, setLiveLogLines] = useState<string[]>([]);
 
   const isReadOnly = readOnly || (externalLogs !== undefined && externalLogs.length > 0);
-
-  const loadRuns = useCallback(() => {
-    fetch(`${API_BASE}/api/runs`)
-      .then((r) => r.json())
-      .then((d: { runs: RunItem[] }) => {
-        setRuns(d.runs);
-        if (d.runs.length && !d.runs.find((r) => r.id === selectedRun)) {
-          setSelectedRun(d.runs[0].id);
-        }
-      })
-      .catch(() => {});
-  }, [selectedRun]);
-
-  const loadFiles = useCallback((runId: string, path: string) => {
-    const url = `${API_BASE}/api/runs/${encodeURIComponent(runId)}/files${path ? `?path=${encodeURIComponent(path)}` : ""}`;
-    fetch(url)
-      .then((r) => r.json())
-      .then((d: { entries: FileEntry[] }) => setFiles(d.entries))
-      .catch(() => setFiles([]));
-  }, []);
-
-  useEffect(() => {
-    if (!isReadOnly && status === "connected") loadRuns();
-  }, [isReadOnly, status, loadRuns]);
-
-  const loadLogList = useCallback((runId: string) => {
-    fetch(`${API_BASE}/api/runs/${encodeURIComponent(runId)}/logs`)
-      .then((r) => (r.ok ? r.json() : { logs: [] }))
-      .then((d: { logs: { task_id: string; path: string }[] }) => {
-        setLogList(d.logs || []);
-        setSelectedLogTaskId(d.logs?.length ? d.logs[0].task_id ?? null : null);
-      })
-      .catch(() => setLogList([]));
-  }, []);
-
-  useEffect(() => {
-    if (selectedRun) loadLogList(selectedRun);
-  }, [selectedRun, loadLogList]);
 
   useEffect(() => {
     if (conversationRef.current) {
@@ -100,52 +67,79 @@ export default function LogStream({
       setLogs(externalLogs ?? []);
       return;
     }
-    setStatus("connecting");
-    const ws = new WebSocket(WS_URL);
-    wsRef.current = ws;
-
-    ws.onopen = () => setStatus("connected");
-    ws.onclose = () => {
-      setStatus("closed");
-      wsRef.current = null;
-    };
-    ws.onerror = () => setStatus("closed");
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data) as LogEntry;
-        const sid = msg.session_id;
-        setLogs((prev) => {
-          if (sid !== undefined && sid !== currentSessionId) return prev;
-          return [...prev, msg];
-        });
-        if (msg.type === "planner_ask") {
-          setPlannerAsk(typeof msg.content === "string" ? msg.content : "");
-          setPlannerInput("");
-        } else {
-          setPlannerAsk(null);
-        }
+    let cancelled = false;
+    const connect = () => {
+      setStatus("connecting");
+      const ws = new WebSocket(WS_URL);
+      wsRef.current = ws;
+      ws.onopen = () => {
+        if (!cancelled) setStatus("connected");
+      };
+      ws.onclose = () => {
+        wsRef.current = null;
+        if (!cancelled) setStatus("closed");
+      };
+      ws.onerror = () => {
+        wsRef.current = null;
+        if (!cancelled) setStatus("closed");
+      };
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data) as LogEntry;
+          const sid = msg.session_id;
+          const cur = currentSessionIdRef.current;
+          setLogs((prev) => {
+            if (sid !== undefined && sid !== cur) return prev;
+            return [...prev, msg];
+          });
+          if (msg.type === "planner_ask") {
+            setPlannerAsk(typeof msg.content === "string" ? msg.content : "");
+            setPlannerInput("");
+          } else {
+            setPlannerAsk(null);
+          }
+          if (msg.type === "log_line" && typeof msg.content === "string") {
+            if (sid === currentSessionIdRef.current) setLiveLogLines((prev) => [...prev, msg.content as string]);
+          }
         if (msg.type === "finish" || msg.type === "error" || msg.type === "cancelled") {
-          if (sid === runningSessionId) setRunningSessionId(null);
-          setRunning(false);
+            if (sid === runningSessionIdRef.current) setRunningSessionId(null);
+            setRunning(false);
+            if (sid === currentSessionIdRef.current) setSessionFilesLogsKey((k) => k + 1);
+          }
+        } catch {
+          // ignore
         }
-      } catch {
-        // ignore
-      }
+      };
+      return ws;
     };
-
+    const ws = connect();
     return () => {
-      ws.close();
+      cancelled = true;
+      if (ws && ws.readyState === WebSocket.OPEN) ws.close();
       wsRef.current = null;
     };
-  }, [isReadOnly, externalLogs, currentSessionId, runningSessionId]);
+  }, [isReadOnly, externalLogs, reconnectTrigger]);
+
+  // Auto-reconnect when closed (e.g. backend restarted)
+  useEffect(() => {
+    if (isReadOnly || externalLogs !== undefined || status !== "closed") return;
+    const t = setTimeout(() => setReconnectTrigger((k) => k + 1), 2000);
+    return () => clearTimeout(t);
+  }, [isReadOnly, externalLogs, status]);
 
   const send = useCallback(() => {
-    const content = input.trim();
-    if (!content || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || running) return;
+    const content = (inputRef.current || input).trim();
+    if (!content) return;
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const cur = currentSessionIdRef.current;
+    const isRunning = running && runningSessionIdRef.current === cur;
+    if (isRunning) return;
     setRunning(true);
-    setRunningSessionId(currentSessionId);
-    wsRef.current.send(JSON.stringify({ content, mode, session_id: currentSessionId }));
+    setRunningSessionId(cur);
+    setLiveLogLines([]);
     setInput("");
+    ws.send(JSON.stringify({ content, mode, session_id: cur }));
   }, [input, running, mode, currentSessionId]);
 
   const cancel = useCallback(() => {
@@ -182,7 +176,7 @@ export default function LogStream({
         .then((r) => (r.ok ? r.json() : { sessions: [] }))
         .then((d: { sessions: { id: string }[] }) => {
           const fromApi = (d.sessions || []).map((s) => s.id);
-          if (fromApi.length > 0) setSessionIds((prev) => [...new Set([...prev, ...fromApi])]);
+          if (fromApi.length > 0) setSessionIds((prev) => Array.from(new Set([...prev, ...fromApi])));
         })
         .catch(() => {});
     }
@@ -191,10 +185,11 @@ export default function LogStream({
   useEffect(() => {
     if (isReadOnly || externalLogs !== undefined) return;
     loadSessionHistory(currentSessionId);
+    setLiveLogLines([]);
   }, [currentSessionId, isReadOnly, externalLogs, loadSessionHistory]);
 
   return (
-    <div className="flex flex-col h-full min-h-[85vh] gap-3 p-4">
+    <div className="flex flex-col h-full min-h-0 gap-3 p-4 overflow-hidden">
       {!isReadOnly && plannerAsk !== null && (
         <div className="flex-shrink-0 p-3 rounded-lg border border-[#1e40af] bg-[#eff6ff]">
           <div className="text-sm font-medium text-[#1e293b] mb-2">Planner 需确认</div>
@@ -271,14 +266,24 @@ export default function LogStream({
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send()}
-            placeholder="输入任务描述..."
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); send(); } }}
+            placeholder="在此输入任务描述，按 Enter 或点击发送"
             className="flex-1 min-w-[200px] border border-gray-300 rounded px-3 py-2 bg-white text-[#1f2937]"
             disabled={status !== "connected" || (running && currentSessionId === runningSessionId)}
+            aria-label="任务描述"
           />
           <button
             type="button"
-            onClick={send}
+            onClick={(e) => { e.preventDefault(); send(); }}
+            title={
+              status !== "connected"
+                ? "请等待连接"
+                : running && currentSessionId === runningSessionId
+                  ? "当前会话运行中"
+                  : !input.trim()
+                    ? "请输入内容"
+                    : "发送"
+            }
             disabled={status !== "connected" || (running && currentSessionId === runningSessionId) || !input.trim()}
             className="px-4 py-2 rounded bg-[#1e40af] text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -292,32 +297,37 @@ export default function LogStream({
           >
             终止
           </button>
-          <span className="text-xs text-gray-600">
-            {status === "connecting" && "连接中..."}
+          <span
+            className={`text-xs font-medium px-2 py-0.5 rounded ${
+              status === "connected"
+                ? "bg-green-100 text-green-800"
+                : status === "connecting"
+                  ? "bg-amber-100 text-amber-800"
+                  : "bg-red-100 text-red-800"
+            }`}
+            title={status === "closed" ? "2 秒后自动重连" : undefined}
+          >
+            {status === "connecting" && "连接中…"}
             {status === "connected" && "已连接"}
-            {status === "closed" && "连接已断开"}
+            {status === "closed" && "已断开（重连中）"}
+            {status === "idle" && "—"}
           </span>
         </div>
       )}
 
       <div className="grid grid-cols-[minmax(240px,1fr)_minmax(280px,1.2fr)_minmax(280px,1.2fr)] gap-4 flex-1 min-h-0">
-        <div className="flex flex-col gap-3 min-h-0">
+        <div className="flex flex-col gap-3 min-h-0 overflow-hidden">
           <LogPanel
-            runId={selectedRun}
-            taskId={selectedLogTaskId}
-            logList={logList}
-            onTaskIdChange={setSelectedLogTaskId}
+            key={`${currentSessionId}-${sessionFilesLogsKey}`}
+            sessionId={isReadOnly ? null : currentSessionId}
+            liveLogLines={liveLogLines}
           />
-          <div className="flex-1 min-h-[200px]">
+          <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <FileTree
-              selectedRunId={selectedRun}
-              onRunIdChange={setSelectedRun}
-              runIds={runs}
-              onLoadRuns={loadRuns}
+              key={`${currentSessionId}-${sessionFilesLogsKey}`}
+              sessionId={isReadOnly ? null : currentSessionId}
               filePath={filePath}
               onFilePathChange={setFilePath}
-              entries={files}
-              onLoadEntries={loadFiles}
             />
           </div>
         </div>

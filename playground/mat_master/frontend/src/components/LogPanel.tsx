@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const API_BASE =
   typeof window !== "undefined"
@@ -22,23 +22,38 @@ function parseLogContent(content: string): LogLine[] {
 }
 
 export default function LogPanel({
-  runId,
-  taskId,
-  logList,
-  onTaskIdChange,
+  sessionId,
+  liveLogLines = [],
 }: {
-  runId: string;
-  taskId: string | null;
-  logList: { task_id: string; path: string }[];
-  onTaskIdChange?: (taskId: string) => void;
+  sessionId: string | null;
+  liveLogLines?: string[];
 }) {
   const [content, setContent] = useState("");
   const [activeTab, setActiveTab] = useState<"all" | "INFO" | "ERROR">("all");
   const [loading, setLoading] = useState(false);
+  const [logList, setLogList] = useState<{ task_id: string; path: string }[]>([]);
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const loadLog = useCallback((rid: string, tid: string) => {
+  useEffect(() => {
+    if (!sessionId) {
+      setLogList([]);
+      setTaskId(null);
+      setContent("");
+      return;
+    }
+    fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/logs`)
+      .then((r) => (r.ok ? r.json() : { logs: [] }))
+      .then((d: { logs: { task_id: string; path: string }[] }) => {
+        setLogList(d.logs || []);
+        setTaskId(d.logs?.length ? d.logs[0].task_id ?? null : null);
+      })
+      .catch(() => setLogList([]));
+  }, [sessionId]);
+
+  const loadLog = useCallback((sid: string, tid: string) => {
     setLoading(true);
-    const url = `${API_BASE}/api/runs/${encodeURIComponent(rid)}/logs?task_id=${encodeURIComponent(tid)}`;
+    const url = `${API_BASE}/api/sessions/${encodeURIComponent(sid)}/logs?task_id=${encodeURIComponent(tid)}`;
     fetch(url)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Not found"))))
       .then((d: { content?: string }) => setContent(d.content ?? ""))
@@ -46,15 +61,20 @@ export default function LogPanel({
       .finally(() => setLoading(false));
   }, []);
 
+  const isCurrentTask = logList.length > 0 && taskId === logList[0].task_id;
   useEffect(() => {
-    if (!runId || !taskId) {
-      setContent("");
+    if (!sessionId || !taskId || isCurrentTask) {
+      if (!isCurrentTask) setContent("");
       return;
     }
-    loadLog(runId, taskId);
-  }, [runId, taskId, loadLog]);
+    loadLog(sessionId, taskId);
+  }, [sessionId, taskId, isCurrentTask, loadLog]);
 
-  const parsed = parseLogContent(content);
+  const displayContent = isCurrentTask ? liveLogLines.join("\n") : content;
+  const parsed = parseLogContent(displayContent);
+  useEffect(() => {
+    if (isCurrentTask && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [isCurrentTask, liveLogLines.length]);
   const infoLines = parsed.filter((l) => l.level === "INFO");
   const errorLines = parsed.filter((l) => l.level === "ERROR");
   const displayLines =
@@ -62,16 +82,18 @@ export default function LogPanel({
 
   return (
     <div className="border border-gray-300 rounded-lg p-3 bg-[#f3f4f6] flex flex-col min-h-[200px] flex-1 min-h-0">
-      <h2 className="text-sm font-semibold mb-2 text-[#1e293b] flex-shrink-0">日志</h2>
+      <h2 className="text-sm font-semibold mb-2 text-[#1e293b] flex-shrink-0">
+        控制台 {isCurrentTask && liveLogLines.length > 0 ? "(实时)" : ""}
+      </h2>
       {logList.length > 0 && (
         <select
           className="w-full rounded border border-gray-300 px-2 py-1 text-xs mb-2 bg-white text-[#1f2937] flex-shrink-0"
           value={taskId || logList[0]?.task_id || ""}
           onChange={(e) => {
             const tid = e.target.value;
-            if (tid) {
-              onTaskIdChange?.(tid);
-              loadLog(runId, tid);
+            if (tid && sessionId) {
+              setTaskId(tid);
+              loadLog(sessionId, tid);
             }
           }}
         >
@@ -105,12 +127,15 @@ export default function LogPanel({
           ERROR ({errorLines.length})
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto min-h-0 font-mono text-xs bg-[#1f2937] text-gray-200 p-2 rounded">
-        {loading ? (
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto min-h-0 font-mono text-xs bg-[#1f2937] text-gray-200 p-2 rounded"
+      >
+        {loading && !isCurrentTask ? (
           <div className="text-gray-500">加载中...</div>
         ) : displayLines.length === 0 ? (
           <div className="text-gray-500">
-            {content ? "无匹配行" : "选择 Run 和 task 后加载"}
+            {displayContent ? "无匹配行" : "当前会话暂无日志"}
           </div>
         ) : (
           displayLines.map((line, i) => (
