@@ -20,3 +20,4 @@ Agent 可能传入 `/workspace/Fe_bcc.cif`。本 adaptor 将 `/workspace/` 映�
 - **运行环境**：与执行 `python run.py` 的进程相同。ConfigManager 在加载配置时从**项目根目录**查找并加载 `.env`，故 OSS/Bohrium 相关变量需写在**项目根目录的 .env** 中（或在该进程的 shell 里 export）。
 - 环境变量：`OSS_ENDPOINT`、`OSS_BUCKET_NAME`、`OSS_ACCESS_KEY_ID`、`OSS_ACCESS_KEY_SECRET`（本地文件上传到 OSS 时必填）；Bohrium 鉴权见上。
 - `pip install oss2`（已列入主依赖）。
+- **Mat Master 本地脚本（结构构建、CIF 处理等）**：建议安装可选依赖 `pip install -e ".[calculation]"`，会安装 ase、pymatgen，便于 agent 在沙箱内运行 ASE/Pymatgen 脚本。
