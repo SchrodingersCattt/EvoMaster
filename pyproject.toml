@@ -19,8 +19,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Reserved for other calculation-related extras; oss2 is now main dep for mat_master
-calculation = []
+# Mat Master scientific computing: local structure building, CIF/POSCAR handling (ASE, Pymatgen).
+# Install with: pip install -e ".[calculation]"
+calculation = [
+    "ase>=3.22",
+    "pymatgen>=2024.1",
+]
 
 [build-system]
 requires = ["hatchling"]
