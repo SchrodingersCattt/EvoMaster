@@ -181,7 +181,8 @@ class MatMasterPlayground(BasePlayground):
         mode = getattr(self, "_run_mode", None) or "direct"
         if mode == "planner":
             input_fn = getattr(self, "_planner_input_fn", None)
-            exp = ResearchPlanner(self.agent, self.config, input_fn=input_fn)
+            output_callback = getattr(self, "_planner_output_callback", None)
+            exp = ResearchPlanner(self.agent, self.config, input_fn=input_fn, output_callback=output_callback)
         else:
             exp = DirectSolver(self.agent, self.config)
 

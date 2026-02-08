@@ -400,6 +400,8 @@ def _run_agent_sync(
             pg._planner_input_fn = lambda prompt: _planner_ask_and_wait(
                 prompt, send_cb, loop, planner_reply_queue
             )
+        # Planner 的 LLM 输出（方案 JSON、Plan Report、步骤列表）通过 event_callback 推送到前端
+        pg._planner_output_callback = event_callback
 
         base = pg.agent
         config_dict = pg.config.model_dump()

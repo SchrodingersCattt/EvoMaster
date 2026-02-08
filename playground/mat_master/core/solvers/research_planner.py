@@ -10,7 +10,7 @@ import logging
 import shutil
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from evomaster.core.exp import BaseExp
 from evomaster.utils.types import Dialog, SystemMessage, UserMessage
@@ -151,7 +151,7 @@ def _extract_json_from_content(content: str) -> str | None:
 class ResearchPlanner(BaseExp):
     """Plan-execute under CRP: flight plan (JSON DEG) → validate → optional pre-flight confirm → execute steps via DirectSolver."""
 
-    def __init__(self, agent, config, input_fn=None):
+    def __init__(self, agent, config, input_fn=None, output_callback=None):
         super().__init__(agent, config)
         self.logger = logging.getLogger("MatMaster.Planner")
         mat = _get_mat_master_config(config)
@@ -160,6 +160,11 @@ class ResearchPlanner(BaseExp):
         self.max_steps = planner_cfg.get("max_steps", 20)
         self.human_check = planner_cfg.get("human_check_step", True)
         self._input_fn = input_fn  # optional; if set, used instead of stdin in _ask_human (e.g. for WebSocket UI)
+        self._output_callback: Callable[[str, str, Any], None] | None = output_callback  # (source, type, content) → frontend
+
+    def _emit(self, source: str, event_type: str, content: Any) -> None:
+        if self._output_callback:
+            self._output_callback(source, event_type, content)
 
     def _run_dir_path(self) -> Path:
         return Path(self.run_dir) if self.run_dir else Path(".")
@@ -270,6 +275,8 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         )
         try:
             reply = self.agent.llm.query(dialog)
+            # 将 Planner LLM 原始输出推送到前端
+            self._emit("Planner", "thought", reply.content or "")
             raw = _extract_json_from_content(reply.content or "")
             if not raw:
                 return {"status": "REFUSED", "refusal_reason": "Planner output contained no valid JSON."}
@@ -298,6 +305,7 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         )
         try:
             reply = self.agent.llm.query(dialog)
+            self._emit("Planner", "thought", reply.content or "")
             raw = _extract_json_from_content(reply.content or "")
             if not raw:
                 return {**current_plan, "status": "REFUSED", "refusal_reason": "Revision output contained no valid JSON."}
@@ -320,8 +328,43 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         print(f"\033[93m[Planner] {prompt}\033[0m")
         return sys.stdin.readline().strip()
 
+    def _plan_report_text(self, plan: dict[str, Any]) -> str:
+        """Build plain-text plan report (no ANSI) for frontend."""
+        report = plan.get("plan_report") or {}
+        if not report:
+            return ""
+        lines = []
+        summary = report.get("summary") or ""
+        if summary:
+            lines.append("[Plan Report] Summary:")
+            lines.append(f"  {summary}")
+        cost_block = report.get("cost_assessment") or {}
+        overall = cost_block.get("overall", "")
+        per_step = cost_block.get("per_step") or []
+        notes = cost_block.get("notes") or ""
+        if overall or per_step or notes:
+            lines.append("[Plan Report] Cost assessment:")
+            if overall:
+                lines.append(f"  Overall: {overall}")
+            for ps in per_step:
+                lines.append(f"  Step {ps.get('step_id')}: {ps.get('cost')} — {ps.get('reason', '')}")
+            if notes:
+                lines.append(f"  Notes: {notes}")
+        risks = report.get("risks") or []
+        if risks:
+            lines.append("[Plan Report] Risks & mitigation:")
+            for r in risks:
+                lines.append(f"  Step {r.get('step_id')}: {r.get('risk')}")
+                lines.append(f"    → {r.get('mitigation', '')}")
+        alts = report.get("alternatives") or []
+        if alts:
+            lines.append("[Plan Report] Alternatives / fallbacks:")
+            for a in alts:
+                lines.append(f"  • {a}")
+        return "\n".join(lines) if lines else ""
+
     def _print_plan_report(self, plan: dict[str, Any]) -> None:
-        """Print detailed plan report (cost, risks, alternatives) to console."""
+        """Print detailed plan report (cost, risks, alternatives) to console and emit to frontend."""
         report = plan.get("plan_report") or {}
         if not report:
             return
@@ -353,6 +396,9 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
             for a in alts:
                 print(f"  • {a}")
         print()
+        text = self._plan_report_text(plan)
+        if text:
+            self._emit("Planner", "thought", text)
 
     def _execute_fallback(self, step: dict[str, Any], solver: DirectSolver, workspaces: Path) -> bool:
         """Run fallback_strategy for this step; returns True if fallback ran successfully."""
@@ -396,13 +442,19 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         if self.human_check:
             while True:
                 fid = plan.get("fidelity_level", "")
-                print(f"\033[92m[Planner] {plan.get('strategy_name')}\033[0m" + (f" (fidelity: {fid})" if fid else ""))
+                header = f"[Planner] {plan.get('strategy_name', '')}" + (f" (fidelity: {fid})" if fid else "")
+                print(f"\033[92m{header}\033[0m")
                 print("-" * 50)
+                step_lines = [header, "-" * 50]
                 for s in plan.get("steps", []):
                     cost = f"[{s.get('compute_cost', '?')}]"
                     stype = f" ({s.get('step_type', 'normal')})" if s.get("step_type") == "skill_evolution" else ""
-                    print(f"  {s.get('step_id')}. {cost:10}{stype} {s.get('intent')}")
+                    line = f"  {s.get('step_id')}. {cost:10}{stype} {s.get('intent')}"
+                    print(line)
+                    step_lines.append(line)
+                step_lines.append("-" * 50)
                 print("-" * 50)
+                self._emit("Planner", "thought", "\n".join(step_lines))
                 ans = self._ask_human("Type 'go' to execute, 'abort' to quit, or describe changes to revise the plan.")
                 ans_lower = ans.strip().lower()
                 if ans_lower == "go":
@@ -418,6 +470,17 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
                 if plan.get("status") == "REFUSED":
                     self.logger.warning("[CRP] Revised plan refused: %s", plan.get("refusal_reason"))
                     return {"status": "failed", "reason": plan.get("refusal_reason"), "state": state}
+        else:
+            # human_check 关闭时也把步骤列表推送到前端
+            fid = plan.get("fidelity_level", "")
+            header = f"[Planner] {plan.get('strategy_name', '')}" + (f" (fidelity: {fid})" if fid else "")
+            step_lines = [header, "-" * 50]
+            for s in plan.get("steps", []):
+                cost = f"[{s.get('compute_cost', '?')}]"
+                stype = f" ({s.get('step_type', 'normal')})" if s.get("step_type") == "skill_evolution" else ""
+                step_lines.append(f"  {s.get('step_id')}. {cost:10}{stype} {s.get('intent')}")
+            step_lines.append("-" * 50)
+            self._emit("Planner", "thought", "\n".join(step_lines))
 
         solver = DirectSolver(self.agent, self.config)
         if self.run_dir is not None:

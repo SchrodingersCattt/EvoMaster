@@ -41,11 +41,18 @@ function cardClass(source: string): string {
 function renderContent(entry: LogEntry): React.ReactNode {
   if (entry.type === "thought" && typeof entry.content === "string") {
     const text = entry.content.trim();
-    return (
-      <div className="text-sm whitespace-pre-wrap">
-        {text || <span className="text-gray-500 italic">(无文本输出)</span>}
-      </div>
-    );
+    const isLongOrJson = text.length > 400 || /^\s*[\{\[]/.test(text);
+    if (!text) {
+      return <div className="text-sm"><span className="text-gray-500 italic">(无文本输出)</span></div>;
+    }
+    if (isLongOrJson) {
+      return (
+        <pre className="text-xs whitespace-pre-wrap bg-gray-100 p-2 rounded overflow-x-auto max-h-60 overflow-y-auto text-[#1f2937]">
+          {text}
+        </pre>
+      );
+    }
+    return <div className="text-sm whitespace-pre-wrap">{text}</div>;
   }
   if (entry.type === "tool_call" && entry.content && typeof entry.content === "object") {
     return (
