@@ -517,6 +517,7 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
                         self._save_state(task_id, state)
                     continue
                 print("\033[95m[Autonomy] Missing capability; initiating Skill Evolution...\033[0m")
+                self._emit("Planner", "exp_run", "SkillEvolutionExp")
                 evo_exp = SkillEvolutionExp(self.agent, self.config)
                 evo_exp.set_run_dir(step_dir)
                 try:
@@ -554,6 +555,7 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
                 continue
 
             # Branch B: goal-oriented execution (executor chooses how to achieve)
+            self._emit("Planner", "exp_run", "DirectSolver")
             step_prompt = f"Achieve: {intent}. If that fails: {fallback}"
             try:
                 solver.set_run_dir(step_dir)

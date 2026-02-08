@@ -71,6 +71,13 @@ class StreamingMatMasterAgent(MatMasterAgent):
                     "tool_call",
                     {"name": tc.function.name, "args": tc.function.arguments},
                 )
+                if tc.function.name == "use_skill":
+                    try:
+                        args = json.loads(tc.function.arguments or "{}")
+                        if isinstance(args, dict) and args.get("skill_name"):
+                            self._emit("ToolExecutor", "skill_hit", args.get("skill_name"))
+                    except (json.JSONDecodeError, TypeError):
+                        pass
 
     def _on_tool_message(self, msg: ToolMessage) -> None:
         content_preview = (
