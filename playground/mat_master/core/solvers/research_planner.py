@@ -17,6 +17,13 @@ from evomaster.utils.types import Dialog, SystemMessage, UserMessage
 
 from .direct_solver import DirectSolver, _get_available_tool_names
 
+try:
+    from ..exp import SkillEvolutionExp
+    _HAS_EVOLUTION = True
+except ImportError:
+    SkillEvolutionExp = None
+    _HAS_EVOLUTION = False
+
 # === CRP: immutable protocol (no config override) ===
 INTERNAL_CRP_CONTEXT = {
     "Protocol_Name": "MatMaster_CRP_v1.0",
@@ -53,7 +60,7 @@ def _is_deg_plan(plan: Any) -> bool:
 
 
 def _normalize_step(step: dict[str, Any]) -> dict[str, Any]:
-    """Map execution_graph schema to internal steps schema."""
+    """Map execution_graph schema to internal steps schema (goal-oriented)."""
     intensity = (step.get("compute_intensity") or step.get("compute_cost") or "MEDIUM").upper()
     if intensity == "LOW":
         cost = "Low"
@@ -61,10 +68,15 @@ def _normalize_step(step: dict[str, Any]) -> dict[str, Any]:
         cost = "High"
     else:
         cost = "Medium"
+    step_type = (step.get("step_type") or "normal").lower()
+    if step_type not in ("normal", "skill_evolution"):
+        step_type = "skill_evolution" if step.get("tool_name") == "skill_evolution" else "normal"
+    intent = step.get("goal") or step.get("scientific_intent") or step.get("intent", "")
     return {
         "step_id": step.get("step_id"),
-        "tool_name": step.get("tool_name", ""),
-        "intent": step.get("scientific_intent") or step.get("intent", ""),
+        "step_type": step_type,
+        "tool_name": "skill_evolution" if step_type == "skill_evolution" else "",  # only for executor branch
+        "intent": intent,
         "compute_cost": cost,
         "requires_human_confirm": step.get("requires_confirmation", step.get("requires_human_confirm", False)),
         "fallback_logic": step.get("fallback_strategy") or step.get("fallback_logic", "None"),
@@ -82,21 +94,21 @@ def _normalize_plan(plan: dict[str, Any], max_steps: int = 999) -> dict[str, Any
 
 
 def _plan_to_external_schema(plan: dict[str, Any]) -> dict[str, Any]:
-    """Convert internal plan (steps) to prompt schema (execution_graph) for revision/display."""
+    """Convert internal plan (steps) to prompt schema (execution_graph) for revision."""
     steps = plan.get("steps", [])
     intensity_map = {"Low": "LOW", "Medium": "MEDIUM", "High": "HIGH"}
     execution_graph = [
         {
             "step_id": s.get("step_id"),
-            "tool_name": s.get("tool_name", ""),
-            "scientific_intent": s.get("intent", ""),
+            "step_type": s.get("step_type", "normal"),
+            "goal": s.get("intent", ""),
             "compute_intensity": intensity_map.get(s.get("compute_cost"), "MEDIUM"),
             "requires_confirmation": s.get("requires_human_confirm", False),
             "fallback_strategy": s.get("fallback_logic", "None"),
         }
         for s in steps
     ]
-    return {
+    out = {
         "plan_id": plan.get("plan_id"),
         "status": plan.get("status"),
         "refusal_reason": plan.get("refusal_reason"),
@@ -104,6 +116,9 @@ def _plan_to_external_schema(plan: dict[str, Any]) -> dict[str, Any]:
         "fidelity_level": plan.get("fidelity_level", "Production"),
         "execution_graph": execution_graph,
     }
+    if plan.get("plan_report"):
+        out["plan_report"] = plan["plan_report"]
+    return out
 
 
 def _extract_json_from_content(content: str) -> str | None:
@@ -210,7 +225,7 @@ class ResearchPlanner(BaseExp):
 {tools_str}
 
 # INSTRUCTION
-Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the research plan in strict JSON format (plan_id, status, strategy_name, fidelity_level, execution_graph). No other text."""
+Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the research plan in strict JSON format: plan_id, status, strategy_name, fidelity_level, execution_graph (each step has goal and step_type, no tool_name), and plan_report (summary, cost_assessment, risks, alternatives). No other text."""
 
     def _load_system_prompt(self) -> str:
         """Load planner_system_prompt.txt and append embedded CRP JSON."""
@@ -225,12 +240,12 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         return f"{raw}\n\n# EMBEDDED SYSTEM PROTOCOL (IMMUTABLE)\n{crp_str}"
 
     def _validate_plan_safety(self, plan: dict[str, Any]) -> dict[str, Any]:
-        """Protocol watchdog: block any step mentioning Block_List software."""
+        """Protocol watchdog: block any step whose goal implies Block_List software."""
         if plan.get("status") == "REFUSED":
             return plan
         block = INTERNAL_CRP_CONTEXT["License_Registry"]["Block_List"]
         for step in plan.get("steps", []):
-            text = (step.get("tool_name", "") + " " + step.get("intent", "")).lower()
+            text = (step.get("intent", "") or step.get("goal", "") or "").lower()
             for sw in block:
                 if sw.lower() in text:
                     msg = f"CRP violation: blocked software '{sw}' in step {step.get('step_id')}."
@@ -302,6 +317,56 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         print(f"\033[93m[Planner] {prompt}\033[0m")
         return sys.stdin.readline().strip()
 
+    def _print_plan_report(self, plan: dict[str, Any]) -> None:
+        """Print detailed plan report (cost, risks, alternatives) to console."""
+        report = plan.get("plan_report") or {}
+        if not report:
+            return
+        summary = report.get("summary") or ""
+        if summary:
+            print("\033[96m[Plan Report] Summary:\033[0m")
+            print(f"  {summary}")
+        cost_block = report.get("cost_assessment") or {}
+        overall = cost_block.get("overall", "")
+        per_step = cost_block.get("per_step") or []
+        notes = cost_block.get("notes") or ""
+        if overall or per_step or notes:
+            print("\033[96m[Plan Report] Cost assessment:\033[0m")
+            if overall:
+                print(f"  Overall: {overall}")
+            for ps in per_step:
+                print(f"  Step {ps.get('step_id')}: {ps.get('cost')} — {ps.get('reason', '')}")
+            if notes:
+                print(f"  Notes: {notes}")
+        risks = report.get("risks") or []
+        if risks:
+            print("\033[96m[Plan Report] Risks & mitigation:\033[0m")
+            for r in risks:
+                print(f"  Step {r.get('step_id')}: {r.get('risk')}")
+                print(f"    → {r.get('mitigation', '')}")
+        alts = report.get("alternatives") or []
+        if alts:
+            print("\033[96m[Plan Report] Alternatives / fallbacks:\033[0m")
+            for a in alts:
+                print(f"  • {a}")
+        print()
+
+    def _execute_fallback(self, step: dict[str, Any], solver: DirectSolver, workspaces: Path) -> bool:
+        """Run fallback_strategy for this step; returns True if fallback ran successfully."""
+        fallback = step.get("fallback_logic") or step.get("fallback_strategy") or ""
+        if not fallback or fallback.strip().lower() == "none":
+            return False
+        step_id = step.get("step_id", 0)
+        step_dir = workspaces / f"step_{step_id}"
+        step_dir.mkdir(parents=True, exist_ok=True)
+        solver.set_run_dir(step_dir)
+        try:
+            solver.run(f"Execute fallback: {fallback}", task_id=f"fallback_{step_id}")
+            return True
+        except Exception as e:
+            self.logger.warning("Fallback failed for step %s: %s", step_id, e)
+            return False
+
     def run(self, task_description: str, task_id: str = "planner_task") -> dict[str, Any]:
         run_dir = self._run_dir_path()
         workspaces = run_dir / "workspaces" / task_id
@@ -321,6 +386,9 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
             self.logger.warning("[CRP] Mission refused: %s", reason)
             return {"status": "failed", "reason": reason, "state": state}
 
+        # Detailed plan report (cost, risks, alternatives)
+        self._print_plan_report(plan)
+
         # Pre-flight: loop until user types 'go' or 'abort'; otherwise treat input as revision feedback
         if self.human_check:
             while True:
@@ -329,7 +397,8 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
                 print("-" * 50)
                 for s in plan.get("steps", []):
                     cost = f"[{s.get('compute_cost', '?')}]"
-                    print(f"  {s.get('step_id')}. {cost:10} {s.get('tool_name')} -> {s.get('intent')}")
+                    stype = f" ({s.get('step_type', 'normal')})" if s.get("step_type") == "skill_evolution" else ""
+                    print(f"  {s.get('step_id')}. {cost:10}{stype} {s.get('intent')}")
                 print("-" * 50)
                 ans = self._ask_human("Type 'go' to execute, 'abort' to quit, or describe changes to revise the plan.")
                 ans_lower = ans.strip().lower()
@@ -362,18 +431,76 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
                 ans = self._ask_human(f"Step {step_id} is HIGH COST. Proceed? (y/n)")
                 if ans.strip().lower() != "y":
                     continue
-            self.logger.info("[Planner] Step %s: %s", step_id, tool_name)
+            self.logger.info("[Planner] Step %s (goal): %s", step_id, intent[:80])
             step_dir = workspaces / f"step_{step_id}"
             step_dir.mkdir(parents=True, exist_ok=True)
-            solver.set_run_dir(step_dir)
-            step_prompt = f"Use tool '{tool_name}' to: {intent}. Fallback: {fallback}"
+
+            # Branch A: skill_evolution (Evo-Fallback autonomy)
+            if tool_name == "skill_evolution":
+                if not _HAS_EVOLUTION:
+                    self.logger.warning("[Planner] skill_evolution requested but SkillEvolutionExp not available.")
+                    print("\033[91m[Planner] Skill Evolution not available. Attempting fallback.\033[0m")
+                    if self._execute_fallback(step, solver, workspaces):
+                        step["status"] = "done"
+                        state["history"].append({"step": step_id, "tool_name": tool_name, "intent": intent[:200], "result_summary": "fallback_after_evo_unavailable"})
+                        self._save_state(task_id, state)
+                    else:
+                        state["history"].append({"step": step_id, "error": "skill_evolution_unavailable_no_fallback"})
+                        self._save_state(task_id, state)
+                    continue
+                print("\033[95m[Autonomy] Missing capability; initiating Skill Evolution...\033[0m")
+                evo_exp = SkillEvolutionExp(self.agent, self.config)
+                evo_exp.set_run_dir(step_dir)
+                try:
+                    evo_result = evo_exp.run(intent, task_id=f"{task_id}_step_{step_id}_evo")
+                    if evo_result.get("status") == "completed":
+                        print("\033[92m[Autonomy] New skill created. Proceeding.\033[0m")
+                        step["status"] = "done"
+                        state["history"].append({"step": step_id, "tool_name": tool_name, "intent": intent[:200], "result_summary": str(evo_result.get("skill_path", evo_result))[:200]})
+                        self._save_state(task_id, state)
+                    else:
+                        print("\033[93m[Autonomy] Evolution failed. Triggering fallback.\033[0m")
+                        if self._execute_fallback(step, solver, workspaces):
+                            step["status"] = "done"
+                            state["history"].append({"step": step_id, "tool_name": tool_name, "intent": intent[:200], "result_summary": "fallback_after_evo_failed"})
+                            self._save_state(task_id, state)
+                        else:
+                            state["history"].append({"step": step_id, "error": "evo_failed_no_fallback", "detail": str(evo_result)})
+                            self._save_state(task_id, state)
+                            if self._ask_human("Abort mission? (y/n)").strip().lower() == "y":
+                                break
+                except Exception as e:
+                    self.logger.error("[Planner] Skill evolution step %s failed: %s", step_id, e)
+                    if self._execute_fallback(step, solver, workspaces):
+                        step["status"] = "done"
+                        state["history"].append({"step": step_id, "tool_name": tool_name, "result_summary": "fallback_after_evo_exception"})
+                        self._save_state(task_id, state)
+                    else:
+                        state["history"].append({"step": step_id, "error": str(e)})
+                        self._save_state(task_id, state)
+                        if self._ask_human("Abort mission? (y/n)").strip().lower() == "y":
+                            break
+                continue
+
+            # Branch B: goal-oriented execution (executor chooses how to achieve)
+            step_prompt = f"Achieve: {intent}. If that fails: {fallback}"
             try:
+                solver.set_run_dir(step_dir)
                 result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
                 step["status"] = "done"
                 state["history"].append({"step": step_id, "tool_name": tool_name, "intent": intent[:200], "result_summary": str(result)[:200]})
                 self._save_state(task_id, state)
             except Exception as e:
                 self.logger.error("[Planner] Step %s failed: %s", step_id, e)
-                state["history"].append({"step": step_id, "error": str(e)})
-                self._save_state(task_id, state)
+                print("\033[93m[Planner] Step failed. Attempting fallback...\033[0m")
+                if self._execute_fallback(step, solver, workspaces):
+                    step["status"] = "done"
+                    state["history"].append({"step": step_id, "tool_name": tool_name, "intent": intent[:200], "result_summary": "completed_via_fallback"})
+                    self._save_state(task_id, state)
+                else:
+                    state["history"].append({"step": step_id, "error": str(e)})
+                    self._save_state(task_id, state)
+                    print("\033[91m[Planner] Step and fallback failed.\033[0m")
+                    if self._ask_human("Abort mission? (y/n)").strip().lower() == "y":
+                        break
         return {"status": "completed", "plan": plan, "state": state}
