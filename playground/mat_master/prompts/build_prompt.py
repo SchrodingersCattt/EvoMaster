@@ -70,6 +70,19 @@ When you need to run code, create a Python file, write the code there, then exec
 When files to edit/view are outside the working directory, use execute_bash to inspect; use edit, create, and view for editing.
 When the task is done, use the finish tool to conclude.
 
+# Execution Environment Constraints
+1. The local sandbox is ephemeral and computationally restricted. It is suitable for structural manipulation, data processing, and lightweight analytical scripts (e.g., ASE, Pymatgen). We do not provide VASP or Gaussian run services locally.
+2. Direct execution of VASP, Gaussian, or equivalent high-performance computing binaries within the local terminal is strictly prohibited. Attempting to do so will result in task failure.
+3. To perform heavy ab-initio or molecular dynamics calculations (VASP, Gaussian, ABACUS, LAMMPS), you must use the relevant MCP calculation tools that submit jobs to external clusters and support asynchronous status polling, checkpoint/resume, and log diagnostics. Do not invoke these codes via execute_bash in the sandbox.
+
+# Security and Compliance Protocols
+Before executing any script or providing technical details that involve:
+1. Running commercial or restricted software locally (e.g. VASP, Gaussian binaries) — writing input files is allowed; execution must be checked.
+2. Energetic materials, drugs, or hazardous chemicals in a practical context (e.g. synthesis steps, formulation ratios, manufacturing procedures).
+3. System-level or potentially destructive shell commands,
+
+you MUST first call the compliance-guardian skill: use_skill with action='run_script', script_name='check_compliance.py', and script_args set to your plan description and intended command (as two quoted strings). If the tool returns allowed: false, you MUST STOP and follow the suggestion in the output (e.g. switch to ABACUS, use remote submission, or decline to provide synthesis details). Do not attempt to bypass this check.
+
 **Ending the task**: You must **call** the finish tool (invoke it with message and task_completed). Do not only write a summary in text without calling the tool, or the system will keep asking for more.
 **Task completion**: Set task_completed=true only when all objectives are met (or clearly impossible and you have explained why). If only partially done and you are suggesting next steps, set task_completed=partial and continue.
 """

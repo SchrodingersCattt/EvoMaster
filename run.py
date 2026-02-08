@@ -361,10 +361,9 @@ def auto_import_playgrounds():
             logger.debug(f"Imported {module_name}")
             imported_count += 1
         except ImportError as e:
-            # 如果没有 core/playground.py，跳过（agent 可能使用默认 BasePlayground）
-            logger.debug(f"No custom playground for '{agent_dir.name}': {e}")
+            # 如果没有 core/playground.py 或依赖缺失，跳过
+            logger.warning("Playground '%s' failed to import (missing deps or no core.playground): %s", agent_dir.name, e)
         except Exception as e:
-            # 其他错误（语法错误等）应该警告
             logger.warning(f"Failed to import {module_name}: {e}")
 
     logger.debug(f"Auto-imported {imported_count} playground modules")

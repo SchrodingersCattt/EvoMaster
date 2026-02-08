@@ -5,6 +5,7 @@ description = "The Universal Infrastructure for Building Evolving Autonomous Sci
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "aiohttp",
     "pydantic",
     "PyYAML",
     "openai",

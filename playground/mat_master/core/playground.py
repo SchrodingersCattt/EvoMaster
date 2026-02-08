@@ -11,6 +11,7 @@ import json
 import logging
 from pathlib import Path
 
+import yaml
 from evomaster.core import BasePlayground, register_playground
 
 from ..memory import MemoryService, get_memory_tools
@@ -260,7 +261,19 @@ class MatMasterPlayground(BasePlayground):
         """
         from evomaster.agent.tools import MCPToolManager
 
-        mcp_config = getattr(self.config, "mcp", None)
+        # 从当前使用的 config 文件直接读 mcp，确保 tool_include_only 一定来自 YAML
+        yaml_path = self.config_dir / (getattr(self.config_manager, "config_file", None) or "config.yaml")
+        mcp_config = None
+        if yaml_path.exists():
+            try:
+                with open(yaml_path, "r", encoding="utf-8") as f:
+                    raw = yaml.safe_load(f)
+                if isinstance(raw, dict):
+                    mcp_config = raw.get("mcp")
+            except Exception as e:
+                self.logger.debug("Read mcp from YAML: %s", e)
+        if not mcp_config or not isinstance(mcp_config, dict):
+            mcp_config = (self.config.model_dump() or {}).get("mcp")
         if not mcp_config or not isinstance(mcp_config, dict):
             if not mcp_config:
                 self.logger.debug("MCP not configured, skipping")
@@ -338,7 +351,14 @@ class MatMasterPlayground(BasePlayground):
                 k: list(v) if isinstance(v, (list, tuple)) else []
                 for k, v in include_only.items()
             }
-            self.logger.info("MCP tool_include_only set for servers: %s", list(manager.tool_include_only.keys()))
+            self.logger.info(
+                "MCP tool_include_only set for servers: %s (per-server allowlist applied)",
+                list(manager.tool_include_only.keys()),
+            )
+        else:
+            self.logger.info(
+                "MCP tool_include_only not set or empty; all tools from each server will be registered"
+            )
 
         async def init_mcp_servers():
             for server_config in servers:
