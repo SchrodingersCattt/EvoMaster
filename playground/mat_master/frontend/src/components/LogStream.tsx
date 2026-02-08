@@ -19,6 +19,7 @@ export type LogEntry = {
   source: string;
   type: string;
   content: unknown;
+  session_id?: string;
 };
 
 export default function LogStream({
@@ -32,9 +33,12 @@ export default function LogStream({
   const [input, setInput] = useState("");
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "closed">("idle");
   const [running, setRunning] = useState(false);
+  const [runningSessionId, setRunningSessionId] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
 
+  const [sessionIds, setSessionIds] = useState<string[]>(["demo_session"]);
+  const [currentSessionId, setCurrentSessionId] = useState("demo_session");
   const [mode, setMode] = useState<"direct" | "planner">("direct");
   const [plannerAsk, setPlannerAsk] = useState<string | null>(null);
   const [plannerInput, setPlannerInput] = useState("");
@@ -109,7 +113,11 @@ export default function LogStream({
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data) as LogEntry;
-        setLogs((prev) => [...prev, msg]);
+        const sid = msg.session_id;
+        setLogs((prev) => {
+          if (sid !== undefined && sid !== currentSessionId) return prev;
+          return [...prev, msg];
+        });
         if (msg.type === "planner_ask") {
           setPlannerAsk(typeof msg.content === "string" ? msg.content : "");
           setPlannerInput("");
@@ -117,6 +125,7 @@ export default function LogStream({
           setPlannerAsk(null);
         }
         if (msg.type === "finish" || msg.type === "error" || msg.type === "cancelled") {
+          if (sid === runningSessionId) setRunningSessionId(null);
           setRunning(false);
         }
       } catch {
@@ -128,28 +137,61 @@ export default function LogStream({
       ws.close();
       wsRef.current = null;
     };
-  }, [isReadOnly, externalLogs]);
+  }, [isReadOnly, externalLogs, currentSessionId, runningSessionId]);
 
   const send = useCallback(() => {
     const content = input.trim();
     if (!content || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN || running) return;
     setRunning(true);
-    wsRef.current.send(JSON.stringify({ content, mode }));
+    setRunningSessionId(currentSessionId);
+    wsRef.current.send(JSON.stringify({ content, mode, session_id: currentSessionId }));
     setInput("");
-  }, [input, running, mode]);
+  }, [input, running, mode, currentSessionId]);
 
   const cancel = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN && running) {
-      wsRef.current.send(JSON.stringify({ type: "cancel" }));
+      wsRef.current.send(JSON.stringify({ type: "cancel", session_id: runningSessionId || currentSessionId }));
     }
-  }, [running]);
+  }, [running, runningSessionId, currentSessionId]);
 
   const sendPlannerReply = useCallback((content: string) => {
     if (wsRef.current?.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify({ type: "planner_reply", content: (content || "").trim() || "abort" }));
+    wsRef.current.send(JSON.stringify({ type: "planner_reply", content: (content || "").trim() || "abort", session_id: currentSessionId }));
     setPlannerAsk(null);
     setPlannerInput("");
+  }, [currentSessionId]);
+
+  const loadSessionHistory = useCallback((sid: string) => {
+    fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sid)}/history`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((h: LogEntry[]) => setLogs(h))
+      .catch(() => setLogs([]));
   }, []);
+
+  const addNewSession = useCallback(() => {
+    const newId = "s_" + Math.random().toString(36).slice(2, 10);
+    setSessionIds((prev) => [...prev, newId]);
+    setCurrentSessionId(newId);
+    setLogs([]);
+  }, []);
+
+  useEffect(() => {
+    if (isReadOnly || externalLogs !== undefined) return;
+    if (status === "connected") {
+      fetch(`${API_BASE}/api/sessions`)
+        .then((r) => (r.ok ? r.json() : { sessions: [] }))
+        .then((d: { sessions: { id: string }[] }) => {
+          const fromApi = (d.sessions || []).map((s) => s.id);
+          if (fromApi.length > 0) setSessionIds((prev) => [...new Set([...prev, ...fromApi])]);
+        })
+        .catch(() => {});
+    }
+  }, [status, isReadOnly, externalLogs]);
+
+  useEffect(() => {
+    if (isReadOnly || externalLogs !== undefined) return;
+    loadSessionHistory(currentSessionId);
+  }, [currentSessionId, isReadOnly, externalLogs, loadSessionHistory]);
 
   return (
     <div className="flex flex-col h-full min-h-[85vh] gap-3 p-4">
@@ -195,11 +237,31 @@ export default function LogStream({
 
       {!isReadOnly && (
         <div className="flex gap-2 items-center flex-shrink-0 flex-wrap">
+          <span className="text-sm text-gray-600">Session</span>
+          <select
+            value={currentSessionId}
+            onChange={(e) => setCurrentSessionId(e.target.value)}
+            className="rounded border border-gray-300 px-2 py-1.5 text-sm bg-white text-[#1f2937] min-w-[120px]"
+          >
+            {sessionIds.map((id) => (
+              <option key={id} value={id}>
+                {id}
+                {id === runningSessionId ? " (运行中)" : ""}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={addNewSession}
+            className="px-2 py-1.5 rounded border border-gray-300 text-sm bg-white text-[#1f2937]"
+          >
+            新建
+          </button>
           <span className="text-sm text-gray-600">Mode</span>
           <select
             value={mode}
             onChange={(e) => setMode(e.target.value as "direct" | "planner")}
-            disabled={running}
+            disabled={running && currentSessionId === runningSessionId}
             className="rounded border border-gray-300 px-2 py-1.5 text-sm bg-white text-[#1f2937]"
           >
             <option value="direct">Direct</option>
@@ -212,12 +274,12 @@ export default function LogStream({
             onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder="输入任务描述..."
             className="flex-1 min-w-[200px] border border-gray-300 rounded px-3 py-2 bg-white text-[#1f2937]"
-            disabled={status !== "connected" || running}
+            disabled={status !== "connected" || (running && currentSessionId === runningSessionId)}
           />
           <button
             type="button"
             onClick={send}
-            disabled={status !== "connected" || running || !input.trim()}
+            disabled={status !== "connected" || (running && currentSessionId === runningSessionId) || !input.trim()}
             className="px-4 py-2 rounded bg-[#1e40af] text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {running ? "运行中..." : "发送"}
@@ -225,7 +287,7 @@ export default function LogStream({
           <button
             type="button"
             onClick={cancel}
-            disabled={!running || status !== "connected"}
+            disabled={!running || status !== "connected" || currentSessionId !== runningSessionId}
             className="px-4 py-2 rounded bg-[#b91c1c] text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             终止
