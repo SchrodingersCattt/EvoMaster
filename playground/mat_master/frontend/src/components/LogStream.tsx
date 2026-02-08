@@ -90,6 +90,7 @@ export default function LogStream({
           const cur = currentSessionIdRef.current;
           setLogs((prev) => {
             if (sid !== undefined && sid !== cur) return prev;
+            if (msg.type === "log_line" || msg.source === "System") return prev;
             return [...prev, msg];
           });
           if (msg.type === "planner_ask") {
