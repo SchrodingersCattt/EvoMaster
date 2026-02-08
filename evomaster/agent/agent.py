@@ -126,17 +126,20 @@ class BaseAgent(ABC):
         # Agent名称（用于标识不同的agent）
         self._agent_name: str | None = None
 
-    def run(self, task: TaskInstance):
+    def run(self, task: TaskInstance, stop_event: threading.Event | None = None):
         """执行任务
 
         Args:
             task: 任务实例
+            stop_event: 可选。若设置且 is_set()，则在本轮 step 后退出并标记为 cancelled。
+                        也可通过实例属性 self._stop_event 注入（供 exp.run() 等调用方使用）。
 
         Returns:
             执行轨迹
         """
         from evomaster.utils.types import Trajectory
 
+        stop_event = stop_event or getattr(self, "_stop_event", None)
         self.logger.info(f"Starting task: {task.task_id}")
 
         # 初始化
@@ -145,6 +148,11 @@ class BaseAgent(ABC):
         try:
             # 执行循环
             for turn in range(self.config.max_turns):
+                if stop_event and stop_event.is_set():
+                    self.logger.info("Task cancelled by user.")
+                    self.trajectory.finish("cancelled", {"reason": "stop_event"})
+                    break
+
                 # 清晰显示当前步骤
                 self.logger.info("=" * 80)
                 self.logger.info(f"📍 Step [{turn + 1}/{self.config.max_turns}]")
@@ -158,10 +166,13 @@ class BaseAgent(ABC):
                     self.trajectory.finish("completed")
                     break
             else:
-                self.logger.warning("=" * 80)
-                self.logger.warning("⚠️  Reached max turns limit")
-                self.logger.warning("=" * 80)
-                self.trajectory.finish("failed", {"reason": "max_turns_exceeded"})
+                if stop_event and stop_event.is_set():
+                    self.trajectory.finish("cancelled", {"reason": "stop_event"})
+                else:
+                    self.logger.warning("=" * 80)
+                    self.logger.warning("⚠️  Reached max turns limit")
+                    self.logger.warning("=" * 80)
+                    self.trajectory.finish("failed", {"reason": "max_turns_exceeded"})
 
         except Exception as e:
             self.logger.error("=" * 80)
