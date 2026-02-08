@@ -14,7 +14,6 @@ from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 # Ensure project root is on path (service is at playground/mat_master/service)
@@ -48,202 +47,16 @@ class ChatRequest(BaseModel):
     workspace: str = "./workspace"
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
 def root():
-    """Minimal dashboard (no need to run Next.js). Full UI: http://localhost:3000 when frontend is running."""
-    return _DASHBOARD_HTML
-
-
-_DASHBOARD_HTML = """<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MatMaster</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 0 auto; padding: 1rem; background: #e5e7eb; color: #1f2937; }
-    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #1e293b; }
-    .bar { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; flex-wrap: wrap; }
-    .bar input { flex: 1; min-width: 200px; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; background: #f9fafb; color: #1f2937; }
-    .bar button { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; }
-    .bar .btn-send { background: #1e40af; color: #fff; }
-    .bar .btn-cancel { background: #b91c1c; color: #fff; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .status { font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem; }
-    .grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-    .logs { display: flex; flex-direction: column; gap: 0.75rem; max-height: 55vh; overflow-y: auto; }
-    .log { border: 1px solid #d1d5db; border-radius: 8px; padding: 0.75rem 1rem; background: #f3f4f6; }
-    .log.MatMaster { border-color: #1e40af; background: #eff6ff; }
-    .log.Planner { border-color: #1e3a8a; background: #eff6ff; }
-    .log.Coder { border-color: #1e40af; background: #eff6ff; }
-    .log.ToolExecutor { border-color: #b91c1c; background: #fef2f2; }
-    .log.System { border-color: #9ca3af; background: #f9fafb; }
-    .log .src { font-size: 0.75rem; font-weight: 600; margin-bottom: 0.25rem; opacity: 0.9; }
-    .log pre { margin: 0; font-size: 0.8125rem; white-space: pre-wrap; word-break: break-word; }
-    .panel { background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 8px; padding: 0.75rem; }
-    .panel h2 { font-size: 0.9375rem; margin: 0 0 0.5rem 0; color: #1e293b; }
-    .panel select { width: 100%; padding: 0.35rem; margin-bottom: 0.5rem; background: #fff; color: #1f2937; border: 1px solid #d1d5db; border-radius: 4px; }
-    .file-list { max-height: 40vh; overflow-y: auto; font-size: 0.8125rem; }
-    .file-list div { padding: 0.25rem 0.5rem; cursor: pointer; border-radius: 4px; }
-    .file-list div:hover { background: #e5e7eb; }
-    .file-list .dir { color: #1e40af; }
-    .file-list .bread { margin-bottom: 0.5rem; color: #6b7280; font-size: 0.75rem; }
-    .mode-label { font-size: 0.875rem; color: #6b7280; }
-    .mode-select { padding: 0.35rem 0.5rem; border-radius: 6px; background: #f9fafb; color: #1f2937; border: 1px solid #d1d5db; }
-    .planner-ask { margin: 0.75rem 0; padding: 1rem; border: 1px solid #1e40af; border-radius: 8px; background: #eff6ff; }
-    .planner-ask .prompt { margin-bottom: 0.75rem; font-size: 0.9375rem; color: #1f2937; }
-    .planner-ask .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-    .planner-ask input { flex: 1; min-width: 120px; padding: 0.4rem 0.6rem; border-radius: 6px; background: #fff; border: 1px solid #d1d5db; color: #1f2937; }
-    .planner-ask button { padding: 0.4rem 0.75rem; border-radius: 6px; border: none; cursor: pointer; }
-    .planner-ask .btn-go { background: #1e40af; color: #fff; }
-    .planner-ask .btn-abort { background: #b91c1c; color: #fff; }
-  </style>
-</head>
-<body>
-  <h1>MatMaster</h1>
-  <p class="status" id="status">连接中…</p>
-  <div id="plannerAsk" class="planner-ask" style="display:none;">
-    <div class="prompt" id="plannerPrompt"></div>
-    <div class="actions">
-      <input id="plannerInput" placeholder="输入 go 执行 / abort 放弃 / 或输入修改意见" />
-      <button type="button" class="btn-go" id="plannerGo">Go</button>
-      <button type="button" class="btn-abort" id="plannerAbort">Abort</button>
-    </div>
-  </div>
-  <div class="bar">
-    <label class="mode-label">Mode</label>
-    <select id="modeSelect" class="mode-select">
-      <option value="direct">Direct</option>
-      <option value="planner">Planner</option>
-    </select>
-    <input id="input" placeholder="输入任务描述…" />
-    <button id="btn" class="btn-send" disabled>发送</button>
-    <button id="btnCancel" class="btn-cancel" disabled>终止</button>
-  </div>
-  <div class="grid">
-    <div>
-      <div class="logs" id="logs"></div>
-    </div>
-    <div class="panel">
-      <h2>Runs / 文件</h2>
-      <select id="runSelect"><option value="dev">dev (current)</option></select>
-      <div class="file-list bread" id="bread"></div>
-      <div class="file-list" id="fileList"></div>
-    </div>
-  </div>
-  <script>
-    const host = location.host;
-    const api = location.origin;
-    const wsUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + host + '/ws/chat';
-    const input = document.getElementById('input');
-    const btn = document.getElementById('btn');
-    const btnCancel = document.getElementById('btnCancel');
-    const logs = document.getElementById('logs');
-    const status = document.getElementById('status');
-    const runSelect = document.getElementById('runSelect');
-    const bread = document.getElementById('bread');
-    const fileList = document.getElementById('fileList');
-    const modeSelect = document.getElementById('modeSelect');
-    let ws = null;
-    let running = false;
-    function addLog(msg) {
-      const el = document.createElement('div');
-      el.className = 'log ' + (msg.source || '');
-      var text = typeof msg.content === 'object' ? JSON.stringify(msg.content, null, 2) : (msg.content != null ? String(msg.content) : '');
-      if (msg.type === 'thought' && text.trim() === '') text = '(无文本输出)';
-      el.innerHTML = '<div class="src">' + (msg.source || '') + '</div><pre>' + text.replace(/</g, '&lt;') + '</pre>';
-      logs.appendChild(el);
-      logs.scrollTop = logs.scrollHeight;
+    """API only. Use http://localhost:3000 for the dashboard."""
+    return {
+        "service": "MatMaster Web Service",
+        "message": "API only. Dashboard at http://localhost:3000",
+        "docs": "/docs",
+        "openapi": "/openapi.json",
+        "ws_chat": "/ws/chat",
     }
-    function connect() {
-      ws = new WebSocket(wsUrl);
-      ws.onopen = function() { status.textContent = '已连接'; btn.disabled = false; loadRuns(); };
-      ws.onclose = function() { status.textContent = '已断开'; btn.disabled = true; btnCancel.disabled = true; };
-      ws.onmessage = function(ev) {
-        try {
-          var msg = JSON.parse(ev.data);
-          addLog(msg);
-          if (msg.type === 'planner_ask') {
-            document.getElementById('plannerPrompt').textContent = msg.content || '';
-            document.getElementById('plannerAsk').style.display = 'block';
-            document.getElementById('plannerInput').value = '';
-          } else {
-            document.getElementById('plannerAsk').style.display = 'none';
-          }
-          if (msg.type === 'finish' || msg.type === 'error' || msg.type === 'cancelled') running = false;
-          btn.disabled = !ws || ws.readyState !== 1 || running;
-          btnCancel.disabled = !running;
-        } catch(e) {}
-      };
-    }
-    btn.onclick = function() {
-      var content = (input.value || '').trim();
-      if (!content || !ws || ws.readyState !== 1 || running) return;
-      running = true;
-      btn.disabled = true;
-      btnCancel.disabled = false;
-      ws.send(JSON.stringify({ content: content, mode: modeSelect.value }));
-      input.value = '';
-    };
-    btnCancel.onclick = function() {
-      if (!ws || ws.readyState !== 1 || !running) return;
-      ws.send(JSON.stringify({ type: 'cancel' }));
-    };
-    function sendPlannerReply(txt) {
-      if (!ws || ws.readyState !== 1) return;
-      ws.send(JSON.stringify({ type: 'planner_reply', content: (txt || '').trim() || 'abort' }));
-      document.getElementById('plannerAsk').style.display = 'none';
-    }
-    document.getElementById('plannerGo').onclick = function() { sendPlannerReply('go'); };
-    document.getElementById('plannerAbort').onclick = function() { sendPlannerReply('abort'); };
-    document.getElementById('plannerInput').onkeydown = function(e) {
-      if (e.key === 'Enter') sendPlannerReply(document.getElementById('plannerInput').value);
-    };
-    input.onkeydown = function(e) { if (e.key === 'Enter') btn.click(); };
-
-    function loadRuns() {
-      fetch(api + '/api/runs').then(r => r.json()).then(function(d) {
-        runSelect.innerHTML = d.runs.map(function(r) { return '<option value="' + r.id + '">' + r.label + '</option>'; }).join('');
-        loadFiles(runSelect.value, '');
-      }).catch(function() {});
-    }
-    var currentPath = '';
-    function loadFiles(runId, path) {
-      currentPath = path;
-      var url = api + '/api/runs/' + encodeURIComponent(runId) + '/files' + (path ? '?path=' + encodeURIComponent(path) : '');
-      fetch(url).then(r => r.json()).then(function(d) {
-        bread.textContent = (runId === 'dev' ? 'dev' : runId) + (path ? ' / ' + path : '');
-        fileList.innerHTML = '';
-        if (path) {
-          var up = document.createElement('div');
-          up.className = 'dir';
-          up.textContent = '..';
-          up.onclick = function() {
-            var parts = path.split(/[/\\\\]/).filter(Boolean);
-            parts.pop();
-            loadFiles(runId, parts.join('/'));
-          };
-          fileList.appendChild(up);
-        }
-        d.entries.forEach(function(e) {
-          var div = document.createElement('div');
-          div.className = e.dir ? 'dir' : '';
-          div.textContent = e.dir ? e.name + '/' : e.name;
-          div.onclick = function() {
-            if (e.dir) loadFiles(runId, e.path || e.name);
-          };
-          fileList.appendChild(div);
-        });
-      }).catch(function() { fileList.innerHTML = '<div>加载失败</div>'; });
-    }
-    runSelect.onchange = function() { loadFiles(runSelect.value, ''); };
-    connect();
-  </script>
-</body>
-</html>
-"""
 
 
 @app.get("/info")
