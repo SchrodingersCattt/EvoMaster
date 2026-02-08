@@ -32,7 +32,7 @@ function renderEntry(entry: LogEntry): React.ReactNode {
     return (
       <div className="text-xs space-y-1">
         {c.name && <div className="font-medium">{c.name}</div>}
-        {renderContentValue(typeof c.result === "string" ? c.result : c, { maxPreHeight: "max-h-40" })}
+        {renderContentValue(typeof c.result === "string" ? c.result : c)}
       </div>
     );
   }
@@ -59,19 +59,21 @@ export default function ConversationPanel({
   return (
     <div
       ref={scrollRef}
-      className="flex flex-col gap-3 overflow-y-auto flex-1 min-h-0 border border-gray-300 rounded-lg p-3 bg-white"
+      className="flex flex-col h-full min-h-0 border border-gray-300 rounded-lg p-3 bg-white"
     >
       <h2 className="text-sm font-semibold mb-1 text-[#1e293b] flex-shrink-0">对话</h2>
+      <div className="flex flex-col gap-3 overflow-y-auto flex-1 min-h-0">
       {filtered.length === 0 ? (
-        <div className="text-xs text-gray-500 flex-1">暂无消息</div>
+        <div className="text-xs text-gray-500">暂无消息</div>
       ) : (
         filtered.map((log, i) => (
-          <div key={i} className={cardClass(log.source)}>
+          <div key={i} className={cardClass(log.source) + " whitespace-pre-wrap break-words"}>
             <div className="text-xs font-bold mb-1 opacity-70">{log.source}</div>
             {renderEntry(log)}
           </div>
         ))
       )}
+      </div>
     </div>
   );
 }
