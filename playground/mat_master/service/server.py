@@ -151,8 +151,9 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
     function addLog(msg) {
       const el = document.createElement('div');
       el.className = 'log ' + (msg.source || '');
-      el.innerHTML = '<div class="src">' + (msg.source || '') + '</div>' +
-        (typeof msg.content === 'object' ? '<pre>' + JSON.stringify(msg.content, null, 2) + '</pre>' : '<pre>' + (msg.content || '').replace(/</g, '&lt;') + '</pre>');
+      var text = typeof msg.content === 'object' ? JSON.stringify(msg.content, null, 2) : (msg.content != null ? String(msg.content) : '');
+      if (msg.type === 'thought' && text.trim() === '') text = '(无文本输出)';
+      el.innerHTML = '<div class="src">' + (msg.source || '') + '</div><pre>' + text.replace(/</g, '&lt;') + '</pre>';
       logs.appendChild(el);
       logs.scrollTop = logs.scrollHeight;
     }
