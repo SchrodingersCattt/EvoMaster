@@ -154,12 +154,24 @@ def get_session_run_info(session_id: str):
 
 @app.get("/api/sessions/{session_id}/files")
 def list_session_files(session_id: str, path: str = ""):
-    """List files under this session's workspace (current task)."""
+    """List files under this session's workspace.
+
+    Always uses runs/mat_master_web/workspaces/<key>/ (never the single run_dir/workspace):
+    - If the session has a last run: key = last_task_id (e.g. ws_abc123).
+    - If no run yet: key = session_id (e.g. demo_session), folder created on first access.
+    """
+    runs = _runs_dir()
+    run_path = runs / RUN_ID_WEB
+    if not run_path.is_dir():
+        return {"run_id": RUN_ID_WEB, "path": path or ".", "entries": [], "workspace_root": None, "task_id": None}
     data = SESSIONS.get(session_id)
     task_id = (data or {}).get("last_task_id") if data else None
+    if task_id is None:
+        task_id = session_id
+        (run_path / "workspaces" / task_id).mkdir(parents=True, exist_ok=True)
     base = _get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
     if not base or not base.is_dir():
-        return {"run_id": RUN_ID_WEB, "path": path or ".", "entries": []}
+        return {"run_id": RUN_ID_WEB, "path": path or ".", "entries": [], "workspace_root": None, "task_id": task_id}
     target = (base / path).resolve() if path else base
     if not target.is_dir():
         raise HTTPException(status_code=404, detail="Path not found")
@@ -175,7 +187,13 @@ def list_session_files(session_id: str, path: str = ""):
             "path": str(rel).replace("\\", "/"),
             "dir": p.is_dir(),
         })
-    return {"run_id": RUN_ID_WEB, "path": path or ".", "entries": entries}
+    return {
+        "run_id": RUN_ID_WEB,
+        "path": path or ".",
+        "entries": entries,
+        "workspace_root": str(base) if base else None,
+        "task_id": task_id,
+    }
 
 
 @app.get("/api/share/{session_id}")
@@ -495,6 +513,7 @@ async def websocket_endpoint(websocket: WebSocket):
 if __name__ == "__main__":
     import os
     import uvicorn
+    # host="0.0.0.0" so backend is reachable from other machines (server deployment)
     # Windows 上 reload 会 spawn 子进程，易触发 DuplicateHandle PermissionError，默认关闭
     force_reload = os.environ.get("RELOAD", "").lower() in ("1", "true", "yes")
     use_reload = force_reload or (sys.platform != "win32")
