@@ -24,17 +24,17 @@ function cardClass(source: string): string {
   const base = "border p-3 rounded-lg ";
   switch (source) {
     case "MatMaster":
-      return base + "border-blue-500 bg-blue-50/30 dark:bg-blue-950/30";
+      return base + "border-[#1e40af] bg-[#eff6ff]";
     case "Planner":
-      return base + "border-purple-500 bg-purple-50/30 dark:bg-purple-950/30";
+      return base + "border-[#1e3a8a] bg-[#eff6ff]";
     case "Coder":
-      return base + "border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/30";
+      return base + "border-[#1e40af] bg-[#eff6ff]";
     case "ToolExecutor":
-      return base + "border-amber-500 bg-amber-50/30 dark:bg-amber-950/30";
+      return base + "border-[#b91c1c] bg-[#fef2f2]";
     case "System":
-      return base + "border-gray-400 bg-gray-100/50 dark:bg-gray-800/50";
+      return base + "border-gray-400 bg-gray-100/80";
     default:
-      return base + "border-gray-500 bg-gray-50/30 dark:bg-gray-900/30";
+      return base + "border-gray-400 bg-gray-50/80";
   }
 }
 
@@ -44,7 +44,7 @@ function renderContent(entry: LogEntry): React.ReactNode {
   }
   if (entry.type === "tool_call" && entry.content && typeof entry.content === "object") {
     return (
-      <pre className="text-xs bg-black/10 dark:bg-white/10 p-2 rounded overflow-x-auto">
+      <pre className="text-xs bg-gray-200 p-2 rounded overflow-x-auto text-[#1f2937]">
         {JSON.stringify(entry.content, null, 2)}
       </pre>
     );
@@ -54,7 +54,7 @@ function renderContent(entry: LogEntry): React.ReactNode {
     return (
       <div className="text-xs space-y-1">
         {c.name && <div className="font-medium">{c.name}</div>}
-        <pre className="bg-black/10 dark:bg-white/10 p-2 rounded overflow-x-auto max-h-40 overflow-y-auto">
+        <pre className="bg-gray-200 p-2 rounded overflow-x-auto max-h-40 overflow-y-auto text-[#1f2937]">
           {typeof c.result === "string" ? c.result : JSON.stringify(c)}
         </pre>
       </div>
@@ -207,9 +207,9 @@ export default function LogStream({
   return (
     <div className="flex flex-col h-full max-h-[85vh] gap-3 p-4">
       {!isReadOnly && plannerAsk !== null && (
-        <div className="flex-shrink-0 p-3 rounded-lg border border-purple-500 bg-purple-50/20 dark:bg-purple-950/30">
-          <div className="text-sm font-medium text-purple-700 dark:text-purple-300 mb-2">Planner 需确认</div>
-          <div className="text-sm mb-2 whitespace-pre-wrap">{plannerAsk}</div>
+        <div className="flex-shrink-0 p-3 rounded-lg border border-[#1e40af] bg-[#eff6ff]">
+          <div className="text-sm font-medium text-[#1e293b] mb-2">Planner 需确认</div>
+          <div className="text-sm mb-2 whitespace-pre-wrap text-[#1f2937]">{plannerAsk}</div>
           <div className="flex gap-2 items-center flex-wrap">
             <input
               type="text"
@@ -217,19 +217,19 @@ export default function LogStream({
               onChange={(e) => setPlannerInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendPlannerReply(plannerInput || "go")}
               placeholder="输入 go / abort 或修改意见"
-              className="flex-1 min-w-[160px] rounded border px-2 py-1.5 text-sm bg-white dark:bg-gray-800"
+              className="flex-1 min-w-[160px] rounded border border-gray-300 px-2 py-1.5 text-sm bg-white text-[#1f2937]"
             />
             <button
               type="button"
               onClick={() => sendPlannerReply("go")}
-              className="px-3 py-1.5 rounded bg-emerald-600 text-white text-sm"
+              className="px-3 py-1.5 rounded bg-[#1e40af] text-white text-sm"
             >
               Go
             </button>
             <button
               type="button"
               onClick={() => sendPlannerReply("abort")}
-              className="px-3 py-1.5 rounded bg-red-600 text-white text-sm"
+              className="px-3 py-1.5 rounded bg-[#b91c1c] text-white text-sm"
             >
               Abort
             </button>
@@ -237,7 +237,7 @@ export default function LogStream({
               <button
                 type="button"
                 onClick={() => sendPlannerReply(plannerInput)}
-                className="px-3 py-1.5 rounded bg-gray-600 text-white text-sm"
+                className="px-3 py-1.5 rounded bg-gray-500 text-white text-sm"
               >
                 发送修改意见
               </button>
@@ -247,12 +247,12 @@ export default function LogStream({
       )}
       {!isReadOnly && (
         <div className="flex gap-2 items-center flex-shrink-0 flex-wrap">
-          <span className="text-sm text-gray-500 dark:text-gray-400">Mode</span>
+          <span className="text-sm text-gray-600">Mode</span>
           <select
             value={mode}
             onChange={(e) => setMode(e.target.value as "direct" | "planner")}
             disabled={running}
-            className="rounded border px-2 py-1.5 text-sm bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+            className="rounded border border-gray-300 px-2 py-1.5 text-sm bg-white text-[#1f2937]"
           >
             <option value="direct">Direct</option>
             <option value="planner">Planner</option>
@@ -263,14 +263,14 @@ export default function LogStream({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && send()}
             placeholder="输入任务描述..."
-            className="flex-1 min-w-[200px] border rounded px-3 py-2 bg-white dark:bg-gray-900"
+            className="flex-1 min-w-[200px] border border-gray-300 rounded px-3 py-2 bg-white text-[#1f2937]"
             disabled={status !== "connected" || running}
           />
           <button
             type="button"
             onClick={send}
             disabled={status !== "connected" || running || !input.trim()}
-            className="px-4 py-2 rounded bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded bg-[#1e40af] text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {running ? "运行中..." : "发送"}
           </button>
@@ -278,7 +278,7 @@ export default function LogStream({
             type="button"
             onClick={cancel}
             disabled={!running || status !== "connected"}
-            className="px-4 py-2 rounded bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded bg-[#b91c1c] text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             终止
           </button>
@@ -286,7 +286,7 @@ export default function LogStream({
       )}
 
       {!isReadOnly && (
-        <div className="text-xs text-gray-500 flex-shrink-0">
+        <div className="text-xs text-gray-600 flex-shrink-0">
           {status === "connecting" && "连接中..."}
           {status === "connected" && "已连接"}
           {status === "closed" && "连接已断开"}
@@ -307,12 +307,12 @@ export default function LogStream({
         </div>
 
         {!isReadOnly && (
-          <div className="w-72 flex-shrink-0 border rounded-lg p-3 bg-gray-100 dark:bg-gray-900 flex flex-col">
-            <h2 className="text-sm font-semibold mb-2">Runs / 文件</h2>
+          <div className="w-72 flex-shrink-0 border border-gray-300 rounded-lg p-3 bg-[#f3f4f6] flex flex-col">
+            <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">Runs / 文件</h2>
             <select
               value={selectedRun}
               onChange={(e) => setSelectedRun(e.target.value)}
-              className="w-full rounded border px-2 py-1 text-sm mb-2 bg-white dark:bg-gray-800"
+              className="w-full rounded border border-gray-300 px-2 py-1 text-sm mb-2 bg-white text-[#1f2937]"
             >
               {runs.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -320,13 +320,13 @@ export default function LogStream({
                 </option>
               ))}
             </select>
-            <div className="text-xs text-gray-500 mb-1 truncate">
+            <div className="text-xs text-gray-600 mb-1 truncate">
               {selectedRun}{filePath ? ` / ${filePath}` : ""}
             </div>
             <div className="flex-1 overflow-y-auto text-sm">
               {filePath && (
                 <div
-                  className="py-1 text-blue-600 dark:text-blue-400 cursor-pointer"
+                  className="py-1 text-[#1e40af] cursor-pointer"
                   onClick={goUp}
                 >
                   ..
@@ -335,7 +335,7 @@ export default function LogStream({
               {files.map((e) => (
                 <div
                   key={e.path || e.name}
-                  className={`py-1 ${e.dir ? "text-blue-600 dark:text-blue-400 cursor-pointer" : ""}`}
+                  className={`py-1 ${e.dir ? "text-[#1e40af] cursor-pointer" : "text-[#1f2937]"}`}
                   onClick={() => e.dir && openDir(e)}
                 >
                   {e.dir ? `${e.name}/` : e.name}
