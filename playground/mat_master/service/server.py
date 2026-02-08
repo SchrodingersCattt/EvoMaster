@@ -313,6 +313,36 @@ def list_runs():
     return {"runs": runs_list}
 
 
+@app.get("/api/runs/{run_id}/logs")
+def list_run_logs(run_id: str, task_id: str | None = None):
+    """List log files for a run, or return content of one log when task_id is given."""
+    runs = _runs_dir()
+    run_path = runs / run_id
+    if not run_path.is_dir():
+        raise HTTPException(status_code=404, detail="Run not found")
+    logs_dir = run_path / "logs"
+    if not logs_dir.is_dir():
+        if task_id:
+            raise HTTPException(status_code=404, detail="Log not found")
+        return {"logs": []}
+
+    if task_id:
+        log_file = logs_dir / f"{task_id}.log"
+        if not log_file.is_file():
+            raise HTTPException(status_code=404, detail="Log not found")
+        try:
+            text = log_file.read_text(encoding="utf-8", errors="replace")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+        return {"task_id": task_id, "content": text}
+
+    logs_list = []
+    for f in sorted(logs_dir.iterdir(), key=lambda x: x.name, reverse=True):
+        if f.is_file() and f.suffix == ".log":
+            logs_list.append({"task_id": f.stem, "path": str(f)})
+    return {"logs": logs_list}
+
+
 @app.get("/api/runs/{run_id}/files")
 def list_run_files(run_id: str, path: str = ""):
     """List files under a run's workspace. path is optional subdir (relative)."""
