@@ -1,14 +1,18 @@
 """
 MatMaster web service: FastAPI + WebSocket for streaming agent runs.
 Run from project root or playground/mat_master/service with PYTHONPATH including project root.
+
+Tools (MCP, skills, etc.) are loaded once at startup so the first user message does not wait.
 """
 
 import asyncio
 import importlib
+import logging
 import queue
 import sys
 import threading
 import uuid
+from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -26,7 +30,48 @@ importlib.import_module("playground.mat_master.core.playground")
 
 from evomaster.utils.types import TaskInstance
 
-app = FastAPI(title="MatMaster Web Service")
+logger = logging.getLogger(__name__)
+
+# Pre-initialized playground (tools loaded at startup). Reused per run with set_run_dir(task_id).
+# Single worker so only one run at a time and run_dir is correct.
+_cached_pg = None
+_playground_init_done = threading.Event()
+_executor = ThreadPoolExecutor(max_workers=1)
+
+
+def _init_playground_sync() -> None:
+    """Load playground once: config, LLM, session, MCP tools, skills, agent. Run at startup."""
+    global _cached_pg
+    try:
+        from evomaster.core import get_playground_class
+
+        config_path = _project_root / "configs" / "mat_master" / "config.yaml"
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config not found: {config_path}")
+        pg = get_playground_class("mat_master", config_path=config_path)
+        run_dir = _project_root / "runs" / RUN_ID_WEB
+        run_dir.mkdir(parents=True, exist_ok=True)
+        pg.set_run_dir(run_dir)
+        pg.setup()
+        _cached_pg = pg
+        logger.info("Playground (tools, MCP, agent) initialized at startup.")
+    except Exception as e:
+        logger.exception("Playground init at startup failed: %s", e)
+        _cached_pg = None
+    finally:
+        _playground_init_done.set()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: load tools in a thread so server is ready only after tools are loaded."""
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(None, _init_playground_sync)
+    yield
+    # shutdown: nothing to tear down for now
+
+
+app = FastAPI(title="MatMaster Web Service", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,7 +82,7 @@ app.add_middleware(
 
 SESSIONS: dict[str, dict] = {}
 SESSION_ID_DEMO = "demo_session"
-_executor = ThreadPoolExecutor(max_workers=2)
+RUN_ID_WEB = "mat_master_web"
 # Per-session cancel: session_id -> Event, read by agent thread
 _run_stop_events: dict[str, threading.Event] = {}
 
@@ -94,9 +139,6 @@ def get_session_history(session_id: str):
     if not data:
         return []
     return data.get("history", [])
-
-
-RUN_ID_WEB = "mat_master_web"
 
 
 @app.get("/api/sessions/{session_id}/run_info")
@@ -256,18 +298,22 @@ def _run_agent_sync(
             pass
 
     try:
-        from evomaster.core import get_playground_class
-
-        # 与 run.py 一致：config_path 和 run_dir 布局
-        config_path = _project_root / "configs" / "mat_master" / "config.yaml"
-        if not config_path.exists():
-            raise FileNotFoundError(f"Config not found: {config_path}")
-        pg = get_playground_class("mat_master", config_path=config_path)
-
+        _playground_init_done.wait(timeout=300)
         run_dir = _project_root / "runs" / RUN_ID_WEB
         task_id = task_id or ("ws_" + uuid.uuid4().hex[:8])
-        pg.set_run_dir(run_dir, task_id=task_id)
-        pg.setup()
+
+        if _cached_pg is not None:
+            pg = _cached_pg
+            pg.set_run_dir(run_dir, task_id=task_id)
+        else:
+            from evomaster.core import get_playground_class
+
+            config_path = _project_root / "configs" / "mat_master" / "config.yaml"
+            if not config_path.exists():
+                raise FileNotFoundError(f"Config not found: {config_path}")
+            pg = get_playground_class("mat_master", config_path=config_path)
+            pg.set_run_dir(run_dir, task_id=task_id)
+            pg.setup()
 
         run_done = threading.Event()
 
