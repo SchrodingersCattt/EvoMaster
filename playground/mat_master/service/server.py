@@ -472,7 +472,13 @@ async def websocket_endpoint(websocket: WebSocket):
             while True:
                 data = await websocket.receive_json()
                 if data.get("type") == "planner_reply":
-                    planner_reply_queue.put(data.get("content", ""))
+                    content = data.get("content", "")
+                    planner_reply_queue.put(content)
+                    if SESSION_ID_DEMO not in SESSIONS:
+                        SESSIONS[SESSION_ID_DEMO] = {"history": []}
+                    payload = {"source": "User", "type": "planner_reply", "content": content}
+                    SESSIONS[SESSION_ID_DEMO]["history"].append(payload)
+                    await send_json(payload)
                 else:
                     await command_queue.put(data)
         except Exception:
@@ -504,6 +510,12 @@ async def websocket_endpoint(websocket: WebSocket):
             mode = (data.get("mode") or "direct").strip().lower() or "direct"
             if mode not in ("direct", "planner"):
                 mode = "direct"
+
+            if SESSION_ID_DEMO not in SESSIONS:
+                SESSIONS[SESSION_ID_DEMO] = {"history": []}
+            user_msg = {"source": "User", "type": "query", "content": user_prompt, "mode": mode}
+            SESSIONS[SESSION_ID_DEMO]["history"].append(user_msg)
+            await send_json(user_msg)
 
             await send_json(
                 {"source": "System", "type": "status", "content": f"Initializing ({mode})..."}
