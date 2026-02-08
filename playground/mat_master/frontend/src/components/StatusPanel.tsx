@@ -31,7 +31,7 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
   return (
     <div className="border border-gray-300 rounded-lg p-3 bg-[#f9fafb] flex flex-col h-full min-h-0">
       <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">状态记录</h2>
-      <div className="flex flex-col gap-2 overflow-y-auto flex-1 min-h-0 text-xs">
+      <div className="flex flex-col gap-2 overflow-y-auto overflow-x-hidden flex-1 min-h-0 text-xs break-words">
         {expRuns.length > 0 && (
           <>
             <div className="font-medium text-[#1e293b]" title="mode 为 direct/planner；此处为实际运行的 Exp 类名，如 DirectSolver、ResearchPlanner、SkillEvolutionExp">
@@ -82,7 +82,7 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
               </div>
             )}
             {lastStages?.intent && (
-              <div className="text-gray-600 truncate" title={lastStages.intent}>
+              <div className="text-gray-600 whitespace-pre-wrap break-words">
                 当前: {lastStages.intent}
               </div>
             )}
@@ -90,7 +90,7 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
               <div className="font-medium text-green-700 mt-1">新生成 Skills</div>
             )}
             {statusSkill.map((e, i) => (
-              <div key={i} className="text-green-600 truncate" title={String(e.content)}>
+              <div key={i} className="text-green-600 whitespace-pre-wrap break-words">
                 • {String(e.content)}
               </div>
             ))}

@@ -49,7 +49,7 @@ export default function FileTree({
   return (
     <div className="border border-gray-300 rounded-lg p-3 bg-[#f3f4f6] flex flex-col h-full min-h-0">
       <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">当前会话文件</h2>
-      <div className="text-xs text-gray-600 mb-1 truncate">
+      <div className="text-xs text-gray-600 mb-1 break-all">
         {filePath ? filePath : "根目录"}
       </div>
       <div className="flex-1 overflow-y-auto text-sm min-h-0">

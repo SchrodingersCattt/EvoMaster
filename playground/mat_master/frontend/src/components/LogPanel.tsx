@@ -129,7 +129,7 @@ export default function LogPanel({
       </div>
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto min-h-0 font-mono text-xs bg-[#1f2937] text-gray-200 p-2 rounded"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-auto font-mono text-xs bg-[#1f2937] text-gray-200 p-2 rounded whitespace-pre-wrap break-all"
       >
         {loading && !isCurrentTask ? (
           <div className="text-gray-500">加载中...</div>
