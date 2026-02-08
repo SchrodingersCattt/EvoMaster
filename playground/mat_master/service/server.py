@@ -4,9 +4,11 @@ Run from project root or playground/mat_master/service with PYTHONPATH including
 """
 
 import asyncio
+import importlib
 import queue
 import sys
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -19,6 +21,9 @@ from pydantic import BaseModel
 _project_root = Path(__file__).resolve().parent.parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
+
+# Register mat_master playground (same as run.py auto_import_playgrounds), so get_playground_class returns MatMasterPlayground
+importlib.import_module("playground.mat_master.core.playground")
 
 from evomaster.utils.types import TaskInstance
 
@@ -57,43 +62,43 @@ _DASHBOARD_HTML = """<!DOCTYPE html>
   <title>MatMaster</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 0 auto; padding: 1rem; background: #0f172a; color: #e2e8f0; }
-    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+    body { font-family: system-ui, sans-serif; max-width: 1200px; margin: 0 auto; padding: 1rem; background: #e5e7eb; color: #1f2937; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #1e293b; }
     .bar { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; align-items: center; flex-wrap: wrap; }
-    .bar input { flex: 1; min-width: 200px; padding: 0.5rem 0.75rem; border: 1px solid #475569; border-radius: 6px; background: #1e293b; color: #e2e8f0; }
+    .bar input { flex: 1; min-width: 200px; padding: 0.5rem 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; background: #f9fafb; color: #1f2937; }
     .bar button { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; }
-    .bar .btn-send { background: #3b82f6; color: #fff; }
-    .bar .btn-cancel { background: #dc2626; color: #fff; }
+    .bar .btn-send { background: #1e40af; color: #fff; }
+    .bar .btn-cancel { background: #b91c1c; color: #fff; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    .status { font-size: 0.875rem; color: #94a3b8; margin-bottom: 0.5rem; }
+    .status { font-size: 0.875rem; color: #6b7280; margin-bottom: 0.5rem; }
     .grid { display: grid; grid-template-columns: 1fr 320px; gap: 1rem; }
     @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
     .logs { display: flex; flex-direction: column; gap: 0.75rem; max-height: 55vh; overflow-y: auto; }
-    .log { border: 1px solid #334155; border-radius: 8px; padding: 0.75rem 1rem; background: #1e293b; }
-    .log.MatMaster { border-color: #3b82f6; }
-    .log.Planner { border-color: #a855f7; }
-    .log.Coder { border-color: #10b981; }
-    .log.ToolExecutor { border-color: #f59e0b; }
-    .log.System { border-color: #64748b; }
+    .log { border: 1px solid #d1d5db; border-radius: 8px; padding: 0.75rem 1rem; background: #f3f4f6; }
+    .log.MatMaster { border-color: #1e40af; background: #eff6ff; }
+    .log.Planner { border-color: #1e3a8a; background: #eff6ff; }
+    .log.Coder { border-color: #1e40af; background: #eff6ff; }
+    .log.ToolExecutor { border-color: #b91c1c; background: #fef2f2; }
+    .log.System { border-color: #9ca3af; background: #f9fafb; }
     .log .src { font-size: 0.75rem; font-weight: 600; margin-bottom: 0.25rem; opacity: 0.9; }
     .log pre { margin: 0; font-size: 0.8125rem; white-space: pre-wrap; word-break: break-word; }
-    .panel { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 0.75rem; }
-    .panel h2 { font-size: 0.9375rem; margin: 0 0 0.5rem 0; }
-    .panel select { width: 100%; padding: 0.35rem; margin-bottom: 0.5rem; background: #0f172a; color: #e2e8f0; border: 1px solid #475569; border-radius: 4px; }
+    .panel { background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 8px; padding: 0.75rem; }
+    .panel h2 { font-size: 0.9375rem; margin: 0 0 0.5rem 0; color: #1e293b; }
+    .panel select { width: 100%; padding: 0.35rem; margin-bottom: 0.5rem; background: #fff; color: #1f2937; border: 1px solid #d1d5db; border-radius: 4px; }
     .file-list { max-height: 40vh; overflow-y: auto; font-size: 0.8125rem; }
     .file-list div { padding: 0.25rem 0.5rem; cursor: pointer; border-radius: 4px; }
-    .file-list div:hover { background: #334155; }
-    .file-list .dir { color: #93c5fd; }
-    .file-list .bread { margin-bottom: 0.5rem; color: #94a3b8; font-size: 0.75rem; }
-    .mode-label { font-size: 0.875rem; color: #94a3b8; }
-    .mode-select { padding: 0.35rem 0.5rem; border-radius: 6px; background: #1e293b; color: #e2e8f0; border: 1px solid #475569; }
-    .planner-ask { margin: 0.75rem 0; padding: 1rem; border: 1px solid #a855f7; border-radius: 8px; background: #1e293b; }
-    .planner-ask .prompt { margin-bottom: 0.75rem; font-size: 0.9375rem; }
+    .file-list div:hover { background: #e5e7eb; }
+    .file-list .dir { color: #1e40af; }
+    .file-list .bread { margin-bottom: 0.5rem; color: #6b7280; font-size: 0.75rem; }
+    .mode-label { font-size: 0.875rem; color: #6b7280; }
+    .mode-select { padding: 0.35rem 0.5rem; border-radius: 6px; background: #f9fafb; color: #1f2937; border: 1px solid #d1d5db; }
+    .planner-ask { margin: 0.75rem 0; padding: 1rem; border: 1px solid #1e40af; border-radius: 8px; background: #eff6ff; }
+    .planner-ask .prompt { margin-bottom: 0.75rem; font-size: 0.9375rem; color: #1f2937; }
     .planner-ask .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-    .planner-ask input { flex: 1; min-width: 120px; padding: 0.4rem 0.6rem; border-radius: 6px; background: #0f172a; border: 1px solid #475569; color: #e2e8f0; }
+    .planner-ask input { flex: 1; min-width: 120px; padding: 0.4rem 0.6rem; border-radius: 6px; background: #fff; border: 1px solid #d1d5db; color: #1f2937; }
     .planner-ask button { padding: 0.4rem 0.75rem; border-radius: 6px; border: none; cursor: pointer; }
-    .planner-ask .btn-go { background: #10b981; color: #fff; }
-    .planner-ask .btn-abort { background: #dc2626; color: #fff; }
+    .planner-ask .btn-go { background: #1e40af; color: #fff; }
+    .planner-ask .btn-abort { background: #b91c1c; color: #fff; }
   </style>
 </head>
 <body>
@@ -276,9 +281,7 @@ def _runs_dir() -> Path:
 
 
 def _get_run_workspace_path(run_id: str) -> Path | None:
-    """Resolve run_id to workspace directory. Returns None if invalid."""
-    if run_id == "dev":
-        return _project_root / "playground" / "mat_master" / "workspace"
+    """Resolve run_id to workspace directory (same layout as run.py: runs/<run_id>/workspace or workspaces/<task>)."""
     runs = _runs_dir()
     run_path = runs / run_id
     if not run_path.is_dir():
@@ -297,14 +300,15 @@ def _get_run_workspace_path(run_id: str) -> Path | None:
 
 @app.get("/api/runs")
 def list_runs():
-    """List run directories (mat_master_* under runs/ plus 'dev' workspace)."""
+    """List run directories (mat_master_* under runs/, same as run.py)."""
     runs_list: list[dict] = []
-    runs_list.append({"id": "dev", "label": "dev (current workspace)"})
     rd = _runs_dir()
     if rd.is_dir():
         for p in sorted(rd.iterdir(), key=lambda x: x.name, reverse=True):
             if p.is_dir() and p.name.startswith("mat_master_"):
                 runs_list.append({"id": p.name, "label": p.name})
+    if not runs_list:
+        runs_list.append({"id": "mat_master_web", "label": "mat_master_web (created on first run)"})
     return {"runs": runs_list}
 
 
@@ -375,12 +379,17 @@ def _run_agent_sync(
             pass
 
     try:
-        from playground.mat_master.core.playground import MatMasterPlayground
+        from evomaster.core import get_playground_class
 
-        config_dir = _project_root / "configs" / "mat_master"
-        pg = MatMasterPlayground(config_dir=config_dir)
-        run_dir = _project_root / "playground" / "mat_master"
-        pg.set_run_dir(run_dir)
+        # 与 run.py 一致：config_path 和 run_dir 布局
+        config_path = _project_root / "configs" / "mat_master" / "config.yaml"
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config not found: {config_path}")
+        pg = get_playground_class("mat_master", config_path=config_path)
+
+        run_dir = _project_root / "runs" / "mat_master_web"
+        task_id = "ws_" + uuid.uuid4().hex[:8]
+        pg.set_run_dir(run_dir, task_id=task_id)
         pg.setup()
 
         mode = (mode or "direct").strip().lower() or "direct"
@@ -434,10 +443,9 @@ def _run_agent_sync(
 
         pg.agent = agent
         exp = pg._create_exp()
-        if run_dir:
-            exp.set_run_dir(run_dir)
+        exp.set_run_dir(run_dir)
 
-        exp.run(task_description=user_prompt, task_id="ws_task")
+        exp.run(task_description=user_prompt, task_id=task_id)
         if stop_event.is_set():
             event_callback("System", "cancelled", "Task cancelled by user.")
     except Exception as e:
@@ -536,10 +544,14 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 if __name__ == "__main__":
+    import os
     import uvicorn
+    # Windows 上 reload 会 spawn 子进程，易触发 DuplicateHandle PermissionError，默认关闭
+    force_reload = os.environ.get("RELOAD", "").lower() in ("1", "true", "yes")
+    use_reload = force_reload or (sys.platform != "win32")
     uvicorn.run(
         "server:app",
         host="0.0.0.0",
         port=8000,
-        reload=True,
+        reload=use_reload,
     )
