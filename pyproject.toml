@@ -16,6 +16,10 @@ dependencies = [
     "python-dotenv",
     # Calculation path adaptor (mat_master) needs OSS upload for local file -> URL
     "oss2",
+    # MatMaster web service (FastAPI + WebSocket)
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.22.0",
+    "websockets>=11.0",
 ]
 
 [project.optional-dependencies]
