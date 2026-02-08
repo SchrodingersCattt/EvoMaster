@@ -182,6 +182,9 @@ class EvoMasterConfig(BaseConfig):
         description="LLM 输出显示配置"
     )
 
+    # MCP 配置（config_file、enabled、tool_include_only 等；mat_master 用 tool_include_only 做按服务器工具过滤）
+    mcp: dict[str, Any] = Field(default_factory=dict, description="MCP 配置")
+
     # 其他配置
     project_root: str = Field(default=".", description="项目根目录")
     workspace: str = Field(default="./workspace", description="工作目录")

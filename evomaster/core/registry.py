@@ -78,8 +78,11 @@ def get_playground_class(agent_name: str, config_dir: Optional[Path] = None, con
         logger.info(f"Using custom Playground: {agent_name} -> {playground_class.__name__}")
         return playground_class(config_dir=config_dir, config_path=config_path)
     else:
-        # 回退到 BasePlayground
-        logger.info(f"Using BasePlayground for agent '{agent_name}' (no custom implementation registered)")
+        # 回退到 BasePlayground（通常说明该 agent 的 playground 模块导入失败，如依赖缺失）
+        logger.warning(
+            "Using BasePlayground for agent '%s' (custom playground not registered; check import errors above)",
+            agent_name,
+        )
         return BasePlayground(config_dir=config_dir, config_path=config_path)
 
 
