@@ -75,7 +75,12 @@ class StreamingMatMasterAgent(MatMasterAgent):
                     try:
                         args = json.loads(tc.function.arguments or "{}")
                         if isinstance(args, dict) and args.get("skill_name"):
-                            self._emit("ToolExecutor", "skill_hit", args.get("skill_name"))
+                            name = args.get("skill_name")
+                            # 只把“真实技能”记为 skill_hit，排除工具名（如 mat_sn_*、mat_sg_* 等）
+                            registry = getattr(self, "skill_registry", None)
+                            if registry is not None and getattr(registry, "get_skill", None):
+                                if registry.get_skill(name) is not None:
+                                    self._emit("ToolExecutor", "skill_hit", name)
                     except (json.JSONDecodeError, TypeError):
                         pass
 
