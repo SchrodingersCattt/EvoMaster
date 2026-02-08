@@ -19,6 +19,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!playground/mat_master/frontend/src/lib/
 lib64/
 parts/
 sdist/
