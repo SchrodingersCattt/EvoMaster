@@ -10,23 +10,7 @@ cd "$ROOT"
 echo "Starting MatMaster (one-click)..."
 echo "Project root: $ROOT"
 
-# === 1. Activate virtual environment (if present) ===
-if [ -f "$ROOT/.venv/bin/activate" ]; then
-  echo "Activating virtual environment..."
-  source "$ROOT/.venv/bin/activate"
-elif [ -f "$ROOT/venv/bin/activate" ]; then
-  echo "Activating venv..."
-  source "$ROOT/venv/bin/activate"
-else
-  echo "No .venv/venv found, using system python"
-fi
 
-# Install Python deps (avoid ModuleNotFoundError)
-if [ -f "$ROOT/requirements.txt" ]; then
-  pip install -q -r "$ROOT/requirements.txt"
-fi
-
-# === 2. Backend: FastAPI on 0.0.0.0:8000 ===
 echo "Starting backend (FastAPI) on 0.0.0.0:8000..."
 cd "$ROOT/playground/mat_master/service"
 python server.py &
