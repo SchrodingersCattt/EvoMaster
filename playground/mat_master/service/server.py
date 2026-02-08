@@ -39,8 +39,8 @@ app.add_middleware(
 SESSIONS: dict[str, dict] = {}
 SESSION_ID_DEMO = "demo_session"
 _executor = ThreadPoolExecutor(max_workers=2)
-# Per-connection cancel: set by WS "cancel", read by agent thread
-_current_stop_event: threading.Event | None = None
+# Per-session cancel: session_id -> Event, read by agent thread
+_run_stop_events: dict[str, threading.Event] = {}
 
 
 class ChatRequest(BaseModel):
@@ -268,6 +268,21 @@ async def start_task(req: ChatRequest):
     return {"status": "ready", "session_id": SESSION_ID_DEMO}
 
 
+@app.get("/api/sessions")
+def list_sessions():
+    """List session ids (for session picker)."""
+    return {"sessions": [{"id": sid, "history_length": len(data.get("history", []))} for sid, data in SESSIONS.items()]}
+
+
+@app.get("/api/sessions/{session_id}/history")
+def get_session_history(session_id: str):
+    """Return session history (for loading when switching session)."""
+    data = SESSIONS.get(session_id)
+    if not data:
+        return []
+    return data.get("history", [])
+
+
 @app.get("/api/share/{session_id}")
 def get_share_data(session_id: str):
     """Return session history for read-only share view."""
@@ -387,6 +402,7 @@ def _planner_ask_and_wait(
 
 
 def _run_agent_sync(
+    session_id: str,
     user_prompt: str,
     send_cb,
     loop: asyncio.AbstractEventLoop,
@@ -399,10 +415,10 @@ def _run_agent_sync(
     logging.basicConfig(level=logging.INFO)
 
     def event_callback(source: str, event_type: str, content) -> None:
-        payload = {"source": source, "type": event_type, "content": content}
-        if SESSION_ID_DEMO not in SESSIONS:
-            SESSIONS[SESSION_ID_DEMO] = {"history": []}
-        SESSIONS[SESSION_ID_DEMO]["history"].append(payload)
+        payload = {"source": source, "type": event_type, "content": content, "session_id": session_id}
+        if session_id not in SESSIONS:
+            SESSIONS[session_id] = {"history": []}
+        SESSIONS[session_id]["history"].append(payload)
         future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
         try:
             future.result(timeout=5)
@@ -481,14 +497,17 @@ def _run_agent_sync(
         exp.run(task_description=user_prompt, task_id=task_id)
         if stop_event.is_set():
             event_callback("System", "cancelled", "Task cancelled by user.")
+        else:
+            event_callback("System", "finish", "Done")
     except Exception as e:
         event_callback("System", "error", str(e))
         raise
+    finally:
+        _run_stop_events.pop(session_id, None)
 
 
 @app.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
-    global _current_stop_event
     await websocket.accept()
     loop = asyncio.get_event_loop()
     command_queue: asyncio.Queue = asyncio.Queue()
@@ -504,10 +523,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 if data.get("type") == "planner_reply":
                     content = data.get("content", "")
                     planner_reply_queue.put(content)
-                    if SESSION_ID_DEMO not in SESSIONS:
-                        SESSIONS[SESSION_ID_DEMO] = {"history": []}
-                    payload = {"source": "User", "type": "planner_reply", "content": content}
-                    SESSIONS[SESSION_ID_DEMO]["history"].append(payload)
+                    sid = data.get("session_id") or SESSION_ID_DEMO
+                    if sid not in SESSIONS:
+                        SESSIONS[sid] = {"history": []}
+                    payload = {"source": "User", "type": "planner_reply", "content": content, "session_id": sid}
+                    SESSIONS[sid]["history"].append(payload)
                     await send_json(payload)
                 else:
                     await command_queue.put(data)
@@ -523,17 +543,18 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await command_queue.get()
 
             if data.get("type") == "cancel":
-                if _current_stop_event:
-                    _current_stop_event.set()
+                sid = data.get("session_id")
+                if sid and sid in _run_stop_events:
+                    _run_stop_events[sid].set()
                 await send_json(
-                    {"source": "System", "type": "status", "content": "Cancelling..."}
+                    {"source": "System", "type": "status", "content": "Cancelling...", "session_id": sid}
                 )
                 continue
 
             user_prompt = (data.get("content") or "").strip()
             if not user_prompt:
                 await send_json(
-                    {"source": "System", "type": "status", "content": "Empty prompt ignored."}
+                    {"source": "System", "type": "status", "content": "Empty prompt ignored.", "session_id": data.get("session_id")}
                 )
                 continue
 
@@ -541,31 +562,29 @@ async def websocket_endpoint(websocket: WebSocket):
             if mode not in ("direct", "planner"):
                 mode = "direct"
 
-            if SESSION_ID_DEMO not in SESSIONS:
-                SESSIONS[SESSION_ID_DEMO] = {"history": []}
-            user_msg = {"source": "User", "type": "query", "content": user_prompt, "mode": mode}
-            SESSIONS[SESSION_ID_DEMO]["history"].append(user_msg)
+            session_id = data.get("session_id") or str(uuid.uuid4())
+            if session_id not in SESSIONS:
+                SESSIONS[session_id] = {"history": []}
+            user_msg = {"source": "User", "type": "query", "content": user_prompt, "mode": mode, "session_id": session_id}
+            SESSIONS[session_id]["history"].append(user_msg)
             await send_json(user_msg)
 
             await send_json(
-                {"source": "System", "type": "status", "content": f"Initializing ({mode})..."}
+                {"source": "System", "type": "status", "content": f"Initializing ({mode})...", "session_id": session_id}
             )
 
-            _current_stop_event = threading.Event()
-            await asyncio.get_event_loop().run_in_executor(
+            stop_ev = threading.Event()
+            _run_stop_events[session_id] = stop_ev
+            asyncio.get_event_loop().run_in_executor(
                 _executor,
                 _run_agent_sync,
+                session_id,
                 user_prompt,
                 send_json,
                 loop,
-                _current_stop_event,
+                stop_ev,
                 mode,
                 planner_reply_queue,
-            )
-            _current_stop_event = None
-
-            await send_json(
-                {"source": "System", "type": "finish", "content": "Done"}
             )
     except asyncio.CancelledError:
         pass
@@ -579,7 +598,7 @@ async def websocket_endpoint(websocket: WebSocket):
         except Exception:
             pass
     finally:
-        _current_stop_event = None
+        pass
         if reader_task is not None:
             reader_task.cancel()
             try:
