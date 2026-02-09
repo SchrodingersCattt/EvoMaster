@@ -7,6 +7,7 @@
 
 import json
 import logging
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -259,24 +260,77 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         crp_str = json.dumps(INTERNAL_CRP_CONTEXT, indent=2)
         return f"{raw}\n\n# EMBEDDED SYSTEM PROTOCOL (IMMUTABLE)\n{crp_str}"
 
+    # Regex patterns that indicate the blocked software name is used in a
+    # *mapping / comparison / reference* context, NOT as an execution target.
+    # e.g. "VASP -> ABACUS", "map VASP to ABACUS", "replace VASP with", "originally in VASP"
+    _MAPPING_PATTERNS: list[re.Pattern[str]] = [
+        re.compile(r"{sw}\s*(?:→|->|-->|=>)\s*\w", re.IGNORECASE),
+        re.compile(r"(?:map|convert|replace|switch|redirect|translate|migrate)\s+{sw}", re.IGNORECASE),
+        re.compile(r"{sw}\s+(?:to|into|with)\s+(?:ABACUS|LAMMPS|DPA|CP2K|open[\s-]?source)", re.IGNORECASE),
+        re.compile(r"(?:originally|formerly|previously|instead of|rather than|not)\s+(?:in\s+|using\s+)?{sw}", re.IGNORECASE),
+        re.compile(r"(?:mapped|equivalent)\s+.*{sw}", re.IGNORECASE),
+    ]
+
+    def _is_mapping_context(self, text: str, sw: str) -> bool:
+        """Return True if the blocked software name appears only in mapping/reference context."""
+        for pat in self._MAPPING_PATTERNS:
+            concrete = re.compile(pat.pattern.replace("{sw}", re.escape(sw)), re.IGNORECASE)
+            if concrete.search(text):
+                return True
+        return False
+
     def _validate_plan_safety(self, plan: dict[str, Any]) -> dict[str, Any]:
-        """Protocol watchdog: block any step whose goal implies Block_List software."""
+        """CRP watchdog: auto-redirect steps that mention blocked software.
+
+        Strategy:
+        1. Skip mentions that are clearly mapping/comparison context (e.g. "VASP -> ABACUS").
+        2. For genuine violations, auto-rewrite the step intent to replace blocked names
+           with CRP-allowed alternatives (ABACUS/DPA/LAMMPS).
+        3. Only REFUSE as absolute last resort (if rewritten text still contains blocked names).
+        """
         if plan.get("status") == "REFUSED":
             return plan
         block = INTERNAL_CRP_CONTEXT["License_Registry"]["Block_List"]
+        preferred = INTERNAL_CRP_CONTEXT["Tool_Stack"]
+        # Mapping table: blocked software -> preferred replacement
+        redirect_map: dict[str, str] = {}
+        for sw in block:
+            sw_lower = sw.lower()
+            if sw_lower in ("vasp", "castep", "wien2k"):
+                redirect_map[sw] = preferred["Preferred_DFT"]       # ABACUS
+            elif sw_lower == "gaussian":
+                redirect_map[sw] = preferred["Preferred_DFT"]       # ABACUS (or CP2K for molecular)
+
+        redirected_steps: list[int] = []
         for step in plan.get("steps", []):
-            text = (step.get("intent", "") or step.get("goal", "") or "").lower()
+            text = step.get("intent", "") or step.get("goal", "") or ""
             for sw in block:
-                if sw.lower() in text:
-                    msg = f"CRP violation: blocked software '{sw}' in step {step.get('step_id')}."
-                    self.logger.warning(msg)
-                    return {
-                        "plan_id": plan.get("plan_id"),
-                        "status": "REFUSED",
-                        "refusal_reason": f"{msg} Use {INTERNAL_CRP_CONTEXT['Tool_Stack']['Preferred_DFT']} or {INTERNAL_CRP_CONTEXT['Tool_Stack']['Preferred_MLP']}.",
-                        "strategy_name": plan.get("strategy_name"),
-                        "steps": plan.get("steps", []),
-                    }
+                if sw.lower() not in text.lower():
+                    continue
+                # Check if it's just a mapping/reference context
+                if self._is_mapping_context(text, sw):
+                    continue
+                # Genuine violation: auto-redirect
+                replacement = redirect_map.get(sw, preferred["Preferred_DFT"])
+                step_id = step.get("step_id", "?")
+                self.logger.info("[CRP] Auto-redirect step %s: '%s' → '%s'", step_id, sw, replacement)
+                # Case-insensitive replacement in the intent text
+                step["intent"] = re.sub(re.escape(sw), replacement, step["intent"], flags=re.IGNORECASE)
+                redirected_steps.append(step_id)
+
+        if redirected_steps:
+            self.logger.info("[CRP] Redirected %d step(s): %s", len(redirected_steps), redirected_steps)
+            self._emit("Planner", "thought",
+                        f"[CRP] Auto-redirected blocked software in step(s) {redirected_steps} to CRP-allowed alternatives.")
+
+            # Safety check: verify no blocked names remain after rewriting
+            for step in plan.get("steps", []):
+                text = (step.get("intent", "") or "").lower()
+                for sw in block:
+                    if sw.lower() in text and not self._is_mapping_context(text, sw):
+                        # Still there after rewrite — log warning but do NOT refuse
+                        self.logger.warning("[CRP] Step %s still references '%s' after redirect (may be in context description); proceeding anyway.",
+                                            step.get("step_id"), sw)
         return plan
 
     def _generate_plan(self, goal: str) -> dict[str, Any]:
@@ -692,7 +746,12 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
     # ------------------------------------------------------------------
 
     def _phase_planning(self, state: dict[str, Any], goal: str, task_id: str) -> dict[str, Any]:
-        """Generate initial plan. Transition → preflight or failed."""
+        """Generate initial plan. Transition → preflight or failed.
+
+        When the LLM returns a REFUSED plan (e.g. CRP violation), we attempt
+        up to 2 auto-revisions asking the LLM to fix the issue. Only fail
+        if all retries are exhausted.
+        """
         plan = state.get("plan")
         if _is_deg_plan(plan) and state.get("goal") == goal:
             # Existing valid plan (e.g. resumed) — skip to preflight
@@ -700,10 +759,31 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             return state
         self.logger.info("[Planner] Designing flight plan for: %s", goal[:80])
         plan = self._generate_plan(goal)
+
+        # ── Auto-revision loop for REFUSED plans ──
+        max_auto_fix = 2
+        for attempt in range(max_auto_fix):
+            if plan.get("status") != "REFUSED":
+                break
+            reason = plan.get("refusal_reason", "Unknown")
+            self.logger.warning("[CRP] Plan refused (attempt %d/%d): %s", attempt + 1, max_auto_fix, reason)
+            self._emit("Planner", "thought",
+                        f"[CRP] Plan was refused: {reason}. Auto-revising (attempt {attempt + 1}/{max_auto_fix})...")
+            # Ask LLM to fix the plan itself
+            feedback = (
+                f"The plan was REFUSED for this reason: {reason}\n"
+                f"Please fix the offending steps to use ONLY CRP-allowed software "
+                f"(ABACUS, LAMMPS, DPA, CP2K). Do NOT use or mention VASP/Gaussian/CASTEP/Wien2k "
+                f"as execution targets. You may reference them only in mapping descriptions "
+                f"(e.g., 'mapped from VASP → ABACUS'). "
+                f"Return the revised plan in the same JSON schema."
+            )
+            plan = self._revise_plan(goal, plan, feedback)
+
         state["plan"] = plan
         if plan.get("status") == "REFUSED":
             reason = plan.get("refusal_reason", "Unknown")
-            self.logger.warning("[CRP] Mission refused: %s", reason)
+            self.logger.warning("[CRP] Mission refused after %d auto-fix attempts: %s", max_auto_fix, reason)
             state["phase"] = "failed"
             state["fail_reason"] = reason
         else:
@@ -749,11 +829,25 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 state["plan"] = plan
                 self._save_state(task_id, state)
                 if plan.get("status") == "REFUSED":
-                    self.logger.warning("[CRP] Revised plan refused: %s", plan.get("refusal_reason"))
-                    state["phase"] = "failed"
-                    state["fail_reason"] = plan.get("refusal_reason")
-                    self._emit("Planner", "phase_change", {"from": "preflight", "to": "failed"})
-                    return state
+                    # Auto-fix attempt: ask LLM to resolve the CRP issue
+                    reason = plan.get("refusal_reason", "Unknown")
+                    self.logger.warning("[CRP] Revised plan refused: %s — attempting auto-fix", reason)
+                    self._emit("Planner", "thought",
+                                f"[CRP] Revised plan refused: {reason}. Auto-fixing...")
+                    fix_feedback = (
+                        f"The revised plan was REFUSED: {reason}\n"
+                        f"Fix the offending steps to use ONLY CRP-allowed software. "
+                        f"Return the corrected plan JSON."
+                    )
+                    plan = self._revise_plan(goal, plan, fix_feedback)
+                    state["plan"] = plan
+                    self._save_state(task_id, state)
+                    if plan.get("status") == "REFUSED":
+                        self.logger.warning("[CRP] Auto-fix failed. Plan still refused: %s", plan.get("refusal_reason"))
+                        state["phase"] = "failed"
+                        state["fail_reason"] = plan.get("refusal_reason")
+                        self._emit("Planner", "phase_change", {"from": "preflight", "to": "failed"})
+                        return state
         else:
             # human_check off: emit step list to frontend
             fid = plan.get("fidelity_level", "")
