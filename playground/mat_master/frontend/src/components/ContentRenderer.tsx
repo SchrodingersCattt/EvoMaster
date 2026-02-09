@@ -39,6 +39,19 @@ function MarkdownContent({ text }: { text: string }) {
           remarkPlugins={[remarkGfm, remarkMath]}
           rehypePlugins={[rehypeKatex, rehypeHighlight]}
           components={{
+            a({ href, children, ...props }) {
+              return (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-800 dark:text-blue-400 hover:underline"
+                  {...props}
+                >
+                  {children}
+                </a>
+              );
+            },
             code({ className, children, ...props }) {
               return (
                 <code className={className ?? "bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded font-mono text-xs"} {...props}>
