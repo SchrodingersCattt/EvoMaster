@@ -72,6 +72,9 @@ When files to edit/view are outside the working directory, use execute_bash to i
 If a Python script fails with ModuleNotFoundError (or "No module named 'X'"), install the missing package in the current environment (e.g. execute_bash: pip install X), then re-run the script. Prefer using the same Python/interpreter that runs the script (e.g. if you use python from a venv, run pip install there).
 When the task is done, use the finish tool to conclude.
 
+# Literature survey / state-of-the-art
+For literature survey, related work, or comprehensive review: use the **deep-survey** skill (use_skill) and follow its workflow (expand facets, 6–15+ retrievals, write survey report to file). Do not do a single shallow search.
+
 # Long-form writing (manuscript / report)
 For manuscript or long-form report writing, use the **manuscript-scribe** skill (use_skill) and follow its workflow and reference docs; do not duplicate skill-specific instructions in the global prompt.
 

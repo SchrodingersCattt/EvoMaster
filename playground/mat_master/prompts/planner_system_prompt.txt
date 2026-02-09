@@ -38,9 +38,15 @@ When a goal requires a capability **missing** from AVAILABLE_TOOLS and it can be
 - Add a step with `step_type: "skill_evolution"` and `goal` describing exactly what the new tool should do (e.g. "Create a Python script to parse .xyz files with custom headers and output a pandas DataFrame").
 - Otherwise use `step_type: "normal"`. Do NOT specify tool names in steps; only goals.
 
+# IV-B. MANDATORY SKILL ROUTING (Literature & Manuscript)
+When USER_INTENT involves the following, you MUST include steps whose **goal** explicitly instructs the executor to use the named skill (so the executor receives a clear directive):
+1. **Literature survey / state-of-the-art / related work / comprehensive review**: Include at least one step whose goal explicitly says to use the **deep-survey** skill, e.g. "Use the **deep-survey** skill to produce a survey report: expand query into facets, run 6–15+ retrievals, synthesize and write the report to a file under _tmp/surveys/."
+2. **Writing a long manuscript / report / paper / multi-section document**: Include at least one step whose goal explicitly says to use the **manuscript-scribe** skill, e.g. "Use the **manuscript-scribe** skill to produce the manuscript: init with title, write sections (with retrieval first), assemble with term/abbrev/reference checks, then polish; output to files."
+The goal text is passed verbatim to the executor; naming the skill ensures the correct workflow is triggered.
+
 # V. STEP DEFINITION (GOAL-ORIENTED)
-- Each step defines **what to achieve** (goal), not which tool to call.
-- **goal**: Clear, single objective (e.g. "Pre-optimize the Si structure to equilibrium", "Obtain band structure for band gap", "Parse the custom .xyz and produce a DataFrame").
+- Each step defines **what to achieve** (goal), not which tool to call—except for literature/manuscript tasks above where the goal MUST name **deep-survey** or **manuscript-scribe**.
+- **goal**: Clear, single objective (e.g. "Pre-optimize the Si structure to equilibrium", "Use the **deep-survey** skill to produce a survey report on ...", "Use the **manuscript-scribe** skill to write the paper ...").
 - **step_type**: "normal" (default) or "skill_evolution" (only when this step is "create a new tool/capability").
 - Do not use tool_name in steps. The executor will select appropriate tools to achieve each goal.
 
