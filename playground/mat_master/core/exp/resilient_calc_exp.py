@@ -55,11 +55,42 @@ class ResilientCalcExp(BaseExp):
         self.error_handlers = self.calc_config.get("error_handlers") or {}
         self._task_id = None  # set from run() for workspace resolution
 
+    def _collect_result_urls_from_trajectory(self, trajectory) -> dict[str, Any]:
+        """Extract result payload (output_files, result_urls, urls, etc.) from tool responses in trajectory."""
+        result = {}
+        if not trajectory or not getattr(trajectory, "steps", None):
+            return result
+        for step in trajectory.steps:
+            for tr in getattr(step, "tool_responses", []) or []:
+                content = getattr(tr, "content", None) or ""
+                if not content:
+                    continue
+                try:
+                    data = json.loads(content) if isinstance(content, str) else content
+                    if not isinstance(data, dict):
+                        continue
+                    for key in ("output_files", "result_urls", "artifacts", "urls", "output_urls"):
+                        val = data.get(key)
+                        if not val:
+                            continue
+                        if isinstance(val, str):
+                            val = [val]
+                        if isinstance(val, list) and val:
+                            result.setdefault(key, []).extend(val)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return result
+
     def run(self, task_description: str, task_id: str = "calc_task") -> dict[str, Any]:
         self._task_id = task_id
         self.logger.info("[Resilient] Starting calculation: %s", task_description[:80])
         task = TaskInstance(task_id=task_id, task_type="discovery", description=task_description)
         trajectory = self.agent.run(task)
+
+        # Trigger OSS download when trajectory contains result URLs (e.g. from MCP submit/get_result)
+        result_from_trajectory = self._collect_result_urls_from_trajectory(trajectory)
+        if result_from_trajectory:
+            self._download_result_oss_to_workspace(result_from_trajectory)
 
         job_id = self._extract_job_id(trajectory)
         if not job_id:
@@ -76,7 +107,9 @@ class ResilientCalcExp(BaseExp):
 
             if status in ("Done", "Success", "Finished"):
                 self.logger.info("Calculation succeeded.")
-                return {"job_id": job_id, "status": status, "results": self._get_results(job_id)}
+                result = self._get_results(job_id)
+                result = self._download_result_oss_to_workspace(result)
+                return {"job_id": job_id, "status": status, "results": result}
 
             if status == "Unknown":
                 self.logger.error(
@@ -166,23 +199,37 @@ class ResilientCalcExp(BaseExp):
                     pass
         return None
 
+    # Subdir under workspace for OSS result downloads (keeps workspace root tidy)
+    DOWNLOAD_SUBDIR = "calculation_results"
+
     def _get_workspace_root(self) -> Path | None:
-        """Resolve workspace root for downloading OSS results (run_dir/workspaces/task_id or run_dir/workspace)."""
+        """Resolve workspace root; create run_dir/workspaces/task_id or run_dir/workspace if missing."""
         if not self.run_dir:
             return None
         run_path = Path(self.run_dir).resolve()
         if self._task_id:
             ws = run_path / "workspaces" / self._task_id
-            if ws.exists():
-                return ws
-        return run_path / "workspace" if (run_path / "workspace").exists() else run_path
+            ws.mkdir(parents=True, exist_ok=True)
+            return ws
+        ws = run_path / "workspace"
+        ws.mkdir(parents=True, exist_ok=True)
+        return ws
 
-    def _download_result_oss_to_workspace(self, result: dict[str, Any]) -> dict[str, Any]:
-        """If result contains OSS/HTTP URLs (output_files, result_urls, artifacts, etc.), download to workspace."""
-        if not download_oss_to_local:
-            return result
+    def _get_download_dir(self) -> Path | None:
+        """Workspace subdir for OSS downloads; created on demand."""
         workspace = self._get_workspace_root()
         if not workspace:
+            return None
+        download_dir = workspace / self.DOWNLOAD_SUBDIR
+        download_dir.mkdir(parents=True, exist_ok=True)
+        return download_dir
+
+    def _download_result_oss_to_workspace(self, result: dict[str, Any]) -> dict[str, Any]:
+        """If result contains OSS/HTTP URLs (output_files, result_urls, artifacts, etc.), download to workspace subdir."""
+        if not download_oss_to_local:
+            return result
+        download_dir = self._get_download_dir()
+        if not download_dir:
             return result
         out = dict(result)
         downloaded: list[str] = []
@@ -202,7 +249,7 @@ class ResilientCalcExp(BaseExp):
                     seg = (url.split("?")[0].rstrip("/") or "").split("/")[-1] or "file"
                     seg = re.sub(r"[^\w.\-]", "_", seg) or "file"
                     rel = f"result_{key}_{i}_{seg}"
-                    path = download_oss_to_local(url, workspace, dest_relative_path=rel)
+                    path = download_oss_to_local(url, download_dir, dest_relative_path=rel)
                     local_paths.append(str(path))
                     downloaded.append(str(path))
                 except Exception as e:
@@ -211,11 +258,9 @@ class ResilientCalcExp(BaseExp):
                 out[f"{key}_local"] = local_paths
         if downloaded:
             out["downloaded"] = downloaded
+            self.logger.info("Downloaded %d result file(s) to %s", len(downloaded), download_dir)
         return out
 
     def _get_results(self, job_id: str) -> Any:
-        """Fetch results for job; result files from OSS are downloaded to workspace."""
-        # TODO: obtain result from MCP get_job_result(job_id) or from trajectory when agent fetches result
-        result = {}
-        result = self._download_result_oss_to_workspace(result)
-        return result
+        """Fetch results for job. Override or extend to call MCP get_job_result(job_id); URLs are then downloaded via _download_result_oss_to_workspace."""
+        return {}

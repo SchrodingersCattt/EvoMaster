@@ -78,6 +78,13 @@ When the task is to write or demo an input file for LAMMPS, MSST, VASP, ABACUS, 
 2. Direct execution of VASP, Gaussian, or equivalent high-performance computing binaries within the local terminal is strictly prohibited. Attempting to do so will result in task failure.
 3. To perform heavy ab-initio or molecular dynamics calculations (VASP, Gaussian, ABACUS, LAMMPS), you must use the relevant MCP calculation tools that submit jobs to external clusters and support asynchronous status polling, checkpoint/resume, and log diagnostics. Do not invoke these codes via execute_bash in the sandbox.
 
+# Async calculation workflow (mandatory use of skills)
+When the user asks to submit or run a calculation job (ABACUS, LAMMPS, or any remote/MCP calculation):
+1. Before submitting: you MUST call use_skill with skill_name=compliance-guardian, action=run_script, script_name=check_compliance.py, and script_args set to your plan description and the intended run/submit command. If allowed is false, stop and follow the suggestion.
+2. When writing input files (INCAR, INPUT, in.lammps, etc.): you MUST first call use_skill with skill_name=input-manual-helper, action=run_script, script_name=list_manuals.py; then use the manual path from the output to write correct inputs.
+3. When a job has failed or the user asks to diagnose: you MUST call use_skill with skill_name=log-diagnostics, action=run_script, script_name=extract_error.py, and script_args set to the path of the job log file (e.g. OUTCAR, stderr, or log.lammps). Use the returned error code to decide next steps; do not paste full log content into context.
+4. When result files are returned as OSS/HTTP URLs (e.g. from MCP job result): download them into the current workspace so the user can view or post-process; the system will place them under the workspace. Prefer using the provided download or result-fetch flow so files appear under the working directory.
+
 # Security and Compliance Protocols
 Before executing any script or providing technical details that involve:
 1. Running commercial or restricted software locally (e.g. VASP, Gaussian binaries) — writing input files is allowed; execution must be checked.
