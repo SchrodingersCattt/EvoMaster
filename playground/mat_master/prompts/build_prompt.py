@@ -70,6 +70,9 @@ When files to edit/view are outside the working directory, use execute_bash to i
 If a Python script fails with ModuleNotFoundError (or "No module named 'X'"), install the missing package in the current environment (e.g. execute_bash: pip install X), then re-run the script. Prefer using the same Python/interpreter that runs the script (e.g. if you use python from a venv, run pip install there).
 When the task is done, use the finish tool to conclude.
 
+# Manuscript / long-form writing
+When the task is to write or draft a paper section (Introduction, Methods, Results, etc.) or a report: you MUST perform information retrieval at a level of detail that matches the section (e.g. background → broader literature; methods → procedure-focused search). If the prompt does not specify sources or the user has not provided source files, you MUST expand and search the literature yourself (e.g. mat_sn_search-papers-normal, mat_sn_scholar-search, mat_sn_web-search) and use the results as the basis for cited content. Do not write sections from memory or unsupported claims when no materials were given.
+
 # Input file tasks (LAMMPS, MSST, VASP, ABACUS, etc.)
 When the task is to write or demo an input file for LAMMPS, MSST, VASP, ABACUS, Gaussian, CP2K, QE, or similar: you MUST first call use_skill with skill_name=input-manual-helper, action=run_script, script_name=list_manuals.py; then use peek_file on the manual path from the output; then write the file. Do not rely only on web search.
 
