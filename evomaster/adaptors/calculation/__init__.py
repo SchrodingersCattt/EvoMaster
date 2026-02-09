@@ -3,7 +3,7 @@
 # and downloads OSS result files to workspace.
 
 from .path_adaptor import CalculationPathAdaptor, get_calculation_path_adaptor
-from .oss_upload import upload_file_to_oss, download_oss_to_local
+from .oss_io import upload_file_to_oss, download_oss_to_local
 
 __all__ = [
     "CalculationPathAdaptor",
