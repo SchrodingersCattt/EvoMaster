@@ -1,6 +1,8 @@
 """Path adaptor: Bohrium HTTPS storage and executor/sync logic for calculation MCP tools.
 
-Align with _tmp/MatMaster. Storage 与 executor 鉴权统一通过 evomaster.env.bohrium 读取。
+All calculation-related MCP tools must receive OSS (or HTTP) links for path arguments.
+If the caller passes a local path, the adaptor uploads the file to OSS and passes
+the resulting URL. Align with _tmp/MatMaster. Storage 与 executor 鉴权统一通过 evomaster.env.bohrium 读取。
 """
 
 import logging
