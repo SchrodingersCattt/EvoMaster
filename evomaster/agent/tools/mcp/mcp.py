@@ -170,10 +170,10 @@ class MCPTool(BaseTool):
 
             # 3) 如果 loop 在运行（比如你把 loop 放到后台线程 run_forever），用线程安全提交
             fut = asyncio.run_coroutine_threadsafe(coro, loop)
-            return fut.result(timeout=60)
+            return fut.result(timeout=15)
 
         except concurrent.futures.TimeoutError:
-            raise ToolError("MCP tool call timed out after 60 seconds")
+            raise ToolError("MCP tool call timed out after 15 seconds")
         except Exception as e:
             raise ToolError(f"Failed to call MCP tool: {str(e)}")
 

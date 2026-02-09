@@ -8,6 +8,7 @@ Tools (MCP, skills, etc.) are loaded once at startup so the first user message d
 import asyncio
 import importlib
 import logging
+import mimetypes
 import queue
 import sys
 import threading
@@ -18,6 +19,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 # Ensure project root is on path (service is at playground/mat_master/service)
@@ -194,6 +196,39 @@ def list_session_files(session_id: str, path: str = ""):
         "workspace_root": str(base) if base else None,
         "task_id": task_id,
     }
+
+
+@app.get("/api/sessions/{session_id}/files/content")
+def get_session_file_content(session_id: str, path: str):
+    """Serve file content for display or download. path is required (relative path within workspace)."""
+    if not path or not path.strip():
+        raise HTTPException(status_code=400, detail="path is required")
+    runs = _runs_dir()
+    run_path = runs / RUN_ID_WEB
+    if not run_path.is_dir():
+        raise HTTPException(status_code=404, detail="Run not found")
+    data = SESSIONS.get(session_id)
+    task_id = (data or {}).get("last_task_id") if data else None
+    if task_id is None:
+        task_id = session_id
+    base = _get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
+    if not base or not base.is_dir():
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    target = (base / path.strip()).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Path outside workspace")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    if target.is_dir():
+        raise HTTPException(status_code=400, detail="Path is a directory")
+    media_type, _ = mimetypes.guess_type(str(target), strict=False)
+    return FileResponse(
+        path=str(target),
+        media_type=media_type or "application/octet-stream",
+        filename=target.name,
+    )
 
 
 @app.get("/api/share/{session_id}")

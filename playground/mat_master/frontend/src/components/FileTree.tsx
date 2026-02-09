@@ -17,11 +17,13 @@ export default function FileTree({
   sessionId,
   filePath,
   onFilePathChange,
+  onFileSelect,
   compact = false,
 }: {
   sessionId: string | null;
   filePath: string;
   onFilePathChange: (path: string) => void;
+  onFileSelect?: (entry: FileEntry) => void;
   compact?: boolean;
 }) {
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -113,8 +115,11 @@ export default function FileTree({
         {entries.map((e) => (
           <div
             key={e.path || e.name}
-            className={`py-1 ${e.dir ? "text-zinc-600 dark:text-zinc-400 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100" : "text-zinc-700 dark:text-zinc-300"}`}
-            onClick={() => e.dir && openDir(e)}
+            className={`py-1 ${e.dir ? "text-zinc-600 dark:text-zinc-400 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100" : "text-zinc-700 dark:text-zinc-300 cursor-pointer hover:text-zinc-900 dark:hover:text-zinc-100"}`}
+            onClick={() => {
+              if (e.dir) openDir(e);
+              else onFileSelect?.(e);
+            }}
           >
             {e.dir ? `${e.name}/` : e.name}
           </div>
