@@ -66,10 +66,15 @@ class StreamingMatMasterAgent(MatMasterAgent):
                     if thought_text:
                         self._emit(agent_name, "thought", thought_text)
                 source = _source_for_tool(tc.function.name)
+                args_raw = tc.function.arguments or ""
+                try:
+                    args_payload = json.loads(args_raw) if args_raw.strip() else {}
+                except (json.JSONDecodeError, TypeError):
+                    args_payload = args_raw
                 self._emit(
                     source,
                     "tool_call",
-                    {"name": tc.function.name, "args": tc.function.arguments},
+                    {"name": tc.function.name, "args": args_payload},
                 )
                 if tc.function.name == "use_skill":
                     try:
