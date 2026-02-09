@@ -7,17 +7,61 @@ import type { LogEntry } from "./LogStream";
 import { renderContent } from "./ContentRenderer";
 import { isEnvRelatedEntry } from "@/lib/logEntryUtils";
 
+function ToolCard({
+  title,
+  statusLabel,
+  children,
+}: {
+  title: string;
+  statusLabel: "Call" | "Result";
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 overflow-hidden">
+      <div className="px-2.5 py-1.5 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between gap-2">
+        <span className="font-medium text-zinc-600 dark:text-zinc-300 text-xs truncate">
+          🛠️ {title}
+        </span>
+        <span
+          className={cn(
+            "text-xs shrink-0 px-1.5 py-0.5 rounded",
+            statusLabel === "Call"
+              ? "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200"
+              : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200"
+          )}
+        >
+          {statusLabel}
+        </span>
+      </div>
+      <div className="max-h-60 overflow-y-auto p-2 font-mono text-xs text-zinc-700 dark:text-zinc-300">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function renderEntry(entry: LogEntry): React.ReactNode {
   if (entry.type === "planner_reply" && typeof entry.content === "string") {
     return <div className="text-sm">Planner: {entry.content}</div>;
   }
+  if (entry.type === "tool_call" && entry.content && typeof entry.content === "object") {
+    const c = entry.content as { name?: string; args?: unknown };
+    const name = c.name ?? "tool";
+    const args = c.args;
+    return (
+      <ToolCard title={name} statusLabel="Call">
+        {renderContent(args)}
+      </ToolCard>
+    );
+  }
   if (entry.type === "tool_result" && entry.content && typeof entry.content === "object") {
     const c = entry.content as { name?: string; result?: string };
+    const name = c.name ?? "result";
+    const result = c.result;
     return (
-      <div className="text-xs space-y-1">
-        {c.name && <div className="font-medium text-zinc-500 dark:text-zinc-400">{c.name}</div>}
-        {renderContent(typeof c.result === "string" ? c.result : c)}
-      </div>
+      <ToolCard title={name} statusLabel="Result">
+        {renderContent(result)}
+      </ToolCard>
     );
   }
   return renderContent(entry.content);
