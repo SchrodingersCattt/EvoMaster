@@ -15,15 +15,25 @@ The "Ghostwriter" for MatMaster. Output is always to **files**; chat is only for
 - Call MCP retrieval tools (**mat_sn_search-papers-normal**, **mat_sn_scholar-search**, **mat_sn_web-search**) with queries derived from the section/title. Run at least a few searches (e.g. topic + "review", topic + "methods") before drafting.
 - If the user did not provide source files or references, you **must** search the literature yourself and use the results as the basis for cited content. Do not write sections from memory only.
 
-Then proceed to the three-step flow below.
+Then proceed with **search → summarize → append** and the three-step flow below.
+
+## Search → summarize → append to temp file (recommended per-section flow)
+
+After **each** search (or batch of searches) for a section:
+
+1. **Agent LLM summarizes**: In the same or next turn, you (the agent) summarize the retrieved content in your own words, with citations `[n](URL)`.
+2. **Append to a temp file**: Call `append_chunk.py --path "_tmp/section_<Name>.md" --content "..."` (or `--content_file`) to append that summary to a temporary file. Repeat for each search cycle so the temp file grows (intro, methods, etc.).
+3. When the temp file for a section is complete, either pass it to `write_section.py --section "<Name>" --content_file "_tmp/section_<Name>.md" --draft draft.md`, or copy/merge into `sections/<Name>.md` for assembly.
+
+So: **one search → agent LLM summary → append to temp file**; then concatenate into the long document (see below).
 
 ## Three-step flow: chunked writing → assemble → polish
 
-1. **Chunked writing**: Draft each section in chunks. Use `write_section.py` to create a section, then call it again with **`--append`** to add more paragraphs. Repeat until each section (Introduction, Methods, Results, Discussion) is complete. Optionally use `init_manuscript.py` first to create the outline or `sections/` directory.
-2. **Assemble**: Run `assemble_manuscript.py` to merge section files (or the single draft) into one document and run the three checks (terms, abbreviations, references). Fix any reported issues.
-3. **Polish**: Run `polish_text.py` on the assembled file for each section that needs it (e.g. `--target_section Introduction`, then Methods, Results, Discussion). This step smooths language and removes redundancy; run after assembly so the full context is in one file.
+1. **Chunked writing**: Draft each section in chunks. Either (a) use the temp-file flow above (append_chunk → then write_section from that file), or (b) use `write_section.py` to create a section and call it again with **`--append`** to add more paragraphs. Optionally use `init_manuscript.py` first to create the outline or `sections/` directory.
+2. **Assemble**: Run `assemble_manuscript.py` to merge section files (or the single draft) into **one long document** and run the three checks (terms, abbreviations, references). Fix any reported issues.
+3. **Polish (LLM point-by-point)**: After assembly, run `polish_text.py --file <assembled> --target_section <Name> --use_llm` for each section. With `--use_llm`, the script calls an LLM to revise the section point-by-point (grammar, redundancy, formality); env: LITELLM_PROXY_API_BASE, LITELLM_PROXY_API_KEY or OPENAI_API_BASE, OPENAI_API_KEY. Without `--use_llm`, only regex-based cleanup is applied.
 
-Do not skip the assemble step: writing is chunked, then concatenated, then polished.
+Do not skip the assemble step: writing is chunked (or built in temp files), then concatenated into one long document, then polished with LLM.
 
 ## Chunked writing (how to get substantial sections)
 
@@ -82,17 +92,22 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
   4. **Check 3 – References**: Extract all [n] from body and from References section; ensure 1:1 correspondence; with `--validate`, check that each reference URL is reachable (HTTP HEAD).
 * **Output**: Writes the assembled manuscript to `--output` and prints a short report; optionally writes `--report report.json`.
 
+### `append_chunk.py`
+
+* **Usage**: `python append_chunk.py --path "_tmp/section_Introduction.md" --content "Summarized paragraph..."` or `--content_file notes.txt`
+* **Logic**: Appends the given content to the file (creates parent dirs and file if missing). Use after each "search → agent LLM summarize" cycle so the temp file accumulates; then use that file as `--content_file` for `write_section.py` or as input to assemble.
+
 ### `polish_text.py`
 
-* **Usage**: `python polish_text.py --file "draft.md" --target_section "Introduction"`
-* **Logic**: Reads the section, applies academic-English smoothing (removes redundant "In this paper", "We show that"), and overwrites the section.
+* **Usage**: `python polish_text.py --file "draft.md" --target_section "Introduction"` (regex-only) or `--file "draft.md" --target_section "Introduction" --use_llm` (LLM point-by-point revision).
+* **Logic**: Reads the section. Without `--use_llm`: applies regex-based smoothing (removes "In this paper", "We show that"). With `--use_llm`: calls an OpenAI-compatible LLM to revise the section point-by-point (grammar, redundancy, formality) and overwrites the section; requires API key in env.
 
 ## When to use
 
 * "Write the Introduction based on these bullet points." → `write_section.py` with content from user or file; include citations with links.
 * "Draft the Methods section describing our VASP settings." → `write_section.py` (with VASP inputs as context); add references for methods.
 * "Assemble the sections and check references." → `assemble_manuscript.py --sections_dir sections/ --output draft.md --validate`
-* "The Results section is too colloquial." → `polish_text.py`.
+* "The Results section is too colloquial." → `polish_text.py --use_llm`.
 * "Start a new paper draft titled X." → `init_manuscript.py` (optionally with `--sections_dir`).
 
 ## Best practice
@@ -102,7 +117,7 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 
 ## Tool (via use_skill)
 
-- **run_script** with **script_name**: `init_manuscript.py`, `write_section.py`, `assemble_manuscript.py`, or `polish_text.py`; **script_args** as in Usage above.
+- **run_script** with **script_name**: `init_manuscript.py`, `write_section.py`, `append_chunk.py`, `assemble_manuscript.py`, or `polish_text.py`; **script_args** as in Usage above.
 
 ## Rules
 
@@ -112,3 +127,4 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 * Citations: **text + hyperlink** to original source; References section must match in-text [n] exactly (see reference/citation_and_references.md).
 * Always write long content to **files**; one section per call for `write_section.py`.
 * Before finalizing, run `assemble_manuscript.py` with `--validate` and address term, abbreviation, and reference checks.
+* Preferred long-form flow: after each search, summarize with the agent LLM and append to a temp file (`append_chunk.py`); then build sections from those files, assemble into one document, and run `polish_text.py --use_llm` for point-by-point revision.
