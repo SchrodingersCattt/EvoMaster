@@ -1,0 +1,38 @@
+[project]
+name = "evomaster"
+version = "0.1.0"
+description = "The Universal Infrastructure for Building Evolving Autonomous Scientific Research Agents"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "aiohttp",
+    "pydantic",
+    "PyYAML",
+    "openai",
+    "anthropic",
+    "google-genai",
+    "mcp",
+    "flask",
+    "python-dotenv",
+    # Calculation path adaptor (mat_master) needs OSS upload for local file -> URL
+    "oss2",
+    # MatMaster web service (FastAPI + WebSocket)
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.22.0",
+    "websockets>=11.0",
+]
+
+[project.optional-dependencies]
+# Mat Master scientific computing: local structure building, CIF/POSCAR handling (ASE, Pymatgen).
+# Install with: pip install -e ".[calculation]"
+calculation = [
+    "ase>=3.22",
+    "pymatgen>=2024.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["evomaster"]
