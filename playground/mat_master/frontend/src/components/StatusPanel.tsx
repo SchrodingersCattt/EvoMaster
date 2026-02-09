@@ -1,13 +1,7 @@
 "use client";
 
 import type { LogEntry } from "./LogStream";
-
-function isEnvRelatedToolResult(entry: LogEntry): boolean {
-  if (entry.type !== "tool_result" || !entry.content || typeof entry.content !== "object") return false;
-  const c = entry.content as { name?: string; result?: string; command?: string; args?: string };
-  const s = [c.name, c.result, c.command, typeof c.args === "string" ? c.args : ""].filter(Boolean).join(" ").toLowerCase();
-  return s.includes("env");
-}
+import { isEnvRelatedEntry } from "@/lib/logEntryUtils";
 
 function inferToolSuccess(entry: LogEntry): boolean {
   if (entry.type !== "tool_result" || !entry.content || typeof entry.content !== "object") return true;
@@ -19,7 +13,7 @@ function inferToolSuccess(entry: LogEntry): boolean {
 
 export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
   const toolResults = entries.filter(
-    (e) => e.source === "ToolExecutor" && e.type === "tool_result" && !isEnvRelatedToolResult(e)
+    (e) => e.source === "ToolExecutor" && e.type === "tool_result" && !isEnvRelatedEntry(e)
   );
   const statusStages = entries.filter((e) => e.type === "status_stages");
   const statusSkill = entries.filter((e) => e.type === "status_skill_produced");

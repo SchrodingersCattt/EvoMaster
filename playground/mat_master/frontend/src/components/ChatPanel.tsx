@@ -5,17 +5,7 @@ import { SendIcon, SquareIcon, Loader2Icon } from "./icons";
 import { cn } from "@/lib/utils";
 import type { LogEntry } from "./LogStream";
 import { renderContent } from "./ContentRenderer";
-
-function isEnvRelatedToolResult(entry: LogEntry): boolean {
-  if (entry.type !== "tool_result" || !entry.content || typeof entry.content !== "object")
-    return false;
-  const c = entry.content as { name?: string; result?: string; command?: string; args?: string };
-  const s = [c.name, c.result, c.command, typeof c.args === "string" ? c.args : ""]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return s.includes("env");
-}
+import { isEnvRelatedEntry } from "@/lib/logEntryUtils";
 
 function renderEntry(entry: LogEntry): React.ReactNode {
   if (entry.type === "planner_reply" && typeof entry.content === "string") {
@@ -146,7 +136,7 @@ export default function ChatPanel({
     (e) =>
       e.source !== "System" &&
       e.type !== "log_line" &&
-      !isEnvRelatedToolResult(e)
+      !isEnvRelatedEntry(e)
   );
   const isRunning = running && currentSessionId === runningSessionId;
   const canSend = status === "connected" && !isRunning;

@@ -5,7 +5,7 @@ Used for tools like get_structure_info so structure/file metadata is retrievable
 for later plans and parameter decisions. EvoMaster: call store_tool_result_in_memory
 after each tool execution when session_id is available (e.g. run_dir or task_id).
 
-Tool names may be prefixed by MCP server (e.g. mat_optimade_fetch_structures_with_filter);
+Tool names may be prefixed by MCP server;
 we strip the first "mat_*_" segment and check the remainder against MEMORY_TOOLS_STORE_RESULTS.
 """
 
@@ -57,7 +57,7 @@ async def store_tool_result_in_memory(
     base_url: Optional[str] = None,
 ) -> None:
     """If tool is in MEMORY_TOOLS_STORE_RESULTS, write a summary to the memory service.
-    tool_name can be registered name (e.g. mat_optimade_fetch_structures_with_filter) or original name.
+    tool_name can be registered name or original name.
     """
     canonical = _canonical_tool_name(tool_name)
     if canonical not in MEMORY_TOOLS_STORE_RESULTS:

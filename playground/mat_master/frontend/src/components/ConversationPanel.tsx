@@ -2,6 +2,7 @@
 
 import type { LogEntry } from "./LogStream";
 import { renderContent as renderContentValue } from "./ContentRenderer";
+import { isEnvRelatedEntry } from "@/lib/logEntryUtils";
 
 function cardClass(source: string): string {
   const base = "border p-3 rounded-lg ";
@@ -39,12 +40,6 @@ function renderEntry(entry: LogEntry): React.ReactNode {
   return renderContentValue(entry.content);
 }
 
-function isEnvRelatedToolResult(entry: LogEntry): boolean {
-  if (entry.type !== "tool_result" || !entry.content || typeof entry.content !== "object") return false;
-  const c = entry.content as { name?: string; result?: string; command?: string; args?: string };
-  const s = [c.name, c.result, c.command, typeof c.args === "string" ? c.args : ""].filter(Boolean).join(" ").toLowerCase();
-  return s.includes("env");
-}
 
 export default function ConversationPanel({
   entries,
@@ -54,7 +49,7 @@ export default function ConversationPanel({
   scrollRef?: React.RefObject<HTMLDivElement | null>;
 }) {
   const filtered = entries.filter(
-    (e) => e.source !== "System" && e.type !== "log_line" && !isEnvRelatedToolResult(e)
+    (e) => e.source !== "System" && e.type !== "log_line" && !isEnvRelatedEntry(e)
   );
   return (
     <div
