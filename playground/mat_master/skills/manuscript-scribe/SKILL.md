@@ -55,6 +55,15 @@ So substantial length comes from **multiple** write_section calls (create + appe
 - **Gather material**: For each section, if the user did not provide source files or the prompt lacks content, **run literature/search** (see above) at the appropriate level of detail; then draft from the retrieved material and cite it.
 - **Citation**: Each section must follow the citation and reference rules below; assemble_manuscript validates them in step 2.
 
+## Concept explanation and conceptual rigor (mandatory)
+
+Academic writing must not skip definitions or leave formulas unexplained.
+
+- **Definitions**: Give a **solid, precise definition** for every key concept at first use. Do not assume the reader knows the term.
+- **Formulas**: When you include an equation, **explain every physical quantity/symbol** (e.g. "where *E* is the energy, *k* is the Boltzmann constant"). Do not leave symbols unexplained.
+- **Concept relationships**: State **how concepts relate**—dependence, contrast, hierarchy, or causal link. Do not list concepts in isolation.
+- **Examples (optional)**: Where helpful, illustrate with concrete examples from retrieval (specific material, method, or result).
+
 ## Citation and references (mandatory)
 
 - **In text**: Every cited claim must have the reference **immediately after** the relevant text. Use a **hyperlink**: `[n]` must link to the original source URL or to the References section entry (e.g. `[1](#ref-1)`). Example:  

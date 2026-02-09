@@ -29,8 +29,9 @@ When routing to **serious writing** (this skill), do **not** do a single shallow
    * For each facet, plan **2–4 query variants** (keywords, synonyms, or alternate language; e.g. "X review", "X mechanism").
    * **Minimum**: enough queries so that total **retrieval tool calls** are at least **6–15** (e.g. 3–5 facets × 2–3 searches per facet). For deep surveys, use more rounds.
 2. **Execute loop (repeated retrieval)**:
-   * **For each facet and each query variant**: Call MCP retrieval tools (`mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `mat_sn_web-search`, etc.) **repeatedly**—do not stop after one or two searches.
-   * After each search: filter for relevance; keep only hits clearly related to that facet and user intent.
+   * **For each facet and each query variant**: Call MCP retrieval tools (`mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `mat_sn_web-search`, etc.) **repeatedly**—do not stop after one or two searches. Prefer **English** for search queries when possible.
+   * After each search: filter for relevance; keep only hits clearly related to that facet and user intent. Before writing, consider each source’s quality (authority, relevance, recency).
+   * **Web search returns snippets only**: When using web search results, **parse/fetch full page content** (e.g. mat_doc_* extract from webpage) for relevant URLs before using in the report; do not rely on snippets alone.
    * **Download**: For high-relevance papers, fetch full text where possible (e.g. structure-manager `fetch_web_structure.py` for known URLs, or MCP document extraction).
    * **Read**: Use RAG skill (`rag/scripts/search.py`) or PDF/document tools to extract key findings (Method, Result, Metrics). Optionally use `summarize_paper.py` for section-focused extraction.
 3. **Write the report (LLM)**: Using the retrieval results in context, **you (the LLM)** write each section into the survey file: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References. Use **manuscript-scribe** `write_section` (with `--content_file` for long sections) or **str_replace_editor** to replace each (TBD) with full content. The script only creates the outline; all substantive content is written by you from the search results.
@@ -49,6 +50,8 @@ Reports must follow **../_common/reference/citation_and_output_format.md** (cita
 * **Citation sentence format** (follow Science Navigator style): when citing a paper, use the pattern **In [year], [first author] et al. [found that / reported that ...] by [method]; key findings include [...]. [n](url)**. For comparison: **Compare with [first author] et al., who [support/contradict] [...]. [n](url)**. Do not cite by title only; include year, first author, and what was done/found.
 
 **Length**: The report must be a **full-length review**, not a short summary. Develop every section fully from the retrieval results. Do not deliver a 1–2 page brief when the user asked for a 综述/调研.
+
+**Concept explanation and conceptual rigor (mandatory)**: Do not skip definitions or conceptual links. (1) **Definitions**: Give a solid, precise definition for every key concept before or when using it. (2) **Formulas**: If you include an equation, **explain every physical quantity/symbol** (e.g. "where *E* is …, *k* is …"). (3) **Concept relationships**: State how concepts relate—dependence, contrast, hierarchy—do not list concepts in isolation. (4) **Examples (optional)**: Where helpful, illustrate with concrete examples from retrieval (e.g. a specific material, method, or result). These requirements are essential for academic survey quality; lack of definitions or unexplained symbols is not acceptable.
 
 ## Scripts
 
@@ -77,7 +80,7 @@ Compiles collected findings into the final structured Markdown report (Executive
 * "Give me a comprehensive review on..." → `run_survey.py`
 * "Survey the latest progress in X" → `run_survey.py`
 * "Summarize methods for Y" (long-form to file) → `run_survey.py` (topic: Y methods)
-* "What are the common failures in VASP relaxation?" (short answer) → Use MCP search + answer in chat; do **not** use this skill unless the user asks for a written report.
+* "What are the common failures in VASP relaxation?" (short answer) → Use MCP search + answer in chat; do **not** use this skill unless the user asks for a written report. When you do answer from search (any output): every cited source must have a URL—use [n](url) in text and list References with URL after the discussion.
 
 ## Tool (via use_skill)
 
@@ -89,6 +92,7 @@ Compiles collected findings into the final structured Markdown report (Executive
 * **Substantial length**: Write a **full-length review**, not a brief. Executive Summary ≥2–3 paragraphs; State of the Art with multiple subsections and detailed discussion (many paragraphs/bullets); Key Methodologies and Gap Analysis fully developed. Do not deliver a very short (e.g. 1–2 page) report.
 * **Full-length retention**: For every section, write the full body to a file first (e.g. create/edit `_tmp/surveys/section_<Name>.md`), then call write_section with `--content_file` that path. Never pass long section text in `--content` (it gets truncated). This ensures the full-length report is retained in the survey file.
 * **Delivery**: When the report is complete, **first output the full final report** in your reply (message text) so the user sees it in the chat/frontend; then ensure it is saved to the survey .md file and call finish. Do not only write to file and say "Saved to path".
+* **Concept rigor**: Every key concept must have a **solid definition**; every **formula** must have **every symbol explained**; state **how concepts relate** to each other; optionally use **examples** from retrieval. Do not leave definitions or formula variables unexplained.
 * **Expand facets, repeated retrieval**: For serious writing (this skill), **expand the query into multiple facets** and **repeatedly call** retrieval tools (paper search, web search)—**at least 6–15 retrieval calls** across facets; never a single shallow search. See reference/search_facets_and_rounds.md.
 * Prefer academic sources (peer-reviewed papers, scholar results) for literature/review tasks; treat web-only hits as supplementary.
 * After each search, filter by relevance; do not pass irrelevant URLs to extraction.

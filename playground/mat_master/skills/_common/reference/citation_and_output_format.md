@@ -13,9 +13,10 @@ Single source of truth for literature/survey reports and manuscripts. Used by **
 
 ## Citation (mandatory format)
 
+- **Every reference MUST have a URL.** No exception. In text use `[n](url)`; in References list [n], full citation, and **URL**. Applies to survey, manuscript, and technical Q&A (including deep-survey simple/short output).
 - Every cited source must use a **hyperlink**: `[n]` as a link to the original source URL (or to the References section entry, e.g. `#ref-n`).
 - One reference per link. Multiple refs = multiple consecutive links, e.g. `[1](url1)` `[2](url2)`.
-- **Wrong**: [2,3], [2, 3], [2–3], [2; 3], or any comma/semicolon/dash inside one bracket.
+- **Wrong**: [2,3], [2, 3], [2–3], [2; 3], or any comma/semicolon/dash inside one bracket. **Wrong**: citing without URL or listing a reference without URL.
 
 ## Literature citation sentence template (survey / state-of-the-art)
 
@@ -38,6 +39,15 @@ You may omit the full title and journal name in the sentence; give them in the R
 - The **References** section must list **exactly** the same [n] as in the text, in numerical order.
 - Each entry: [n], full citation (Authors, Title, *Journal*, Year), and **original source URL**.
 - Every [n] in the body must have exactly one [n] in References; no extra or missing entries.
+
+## Concept explanation and conceptual rigor (all outputs)
+
+Apply to **technical Q&A** and **academic writing** (survey, manuscript); for writing skills these requirements are **mandatory**.
+
+- **Definitions**: Give a **solid, precise definition** for every key concept before using it. Do not assume the reader knows the term; ground definitions in sources when possible.
+- **Formulas**: When you include a formula or equation, **explain every physical quantity/symbol** (variable, constant, subscript). Do not leave symbols unexplained. Example: "where *E* is the energy, *k* is the Boltzmann constant, *T* is temperature."
+- **Concept relationships**: Explicitly state **how concepts relate**—dependence, contrast, hierarchy, or causal link. Do not list concepts in isolation; connect them (e.g. "X is related to Y because …"; "Unlike A, B …").
+- **Examples (optional but encouraged)**: When answering or writing, illustrate with **concrete examples** from search results (e.g. a specific material, method, or numerical result). For academic writing, include examples where they clarify the concept or support the argument.
 
 ## Terminology and abbreviations (manuscripts)
 

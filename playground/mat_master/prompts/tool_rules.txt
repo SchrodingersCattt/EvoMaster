@@ -1,7 +1,14 @@
 # Tool usage rules (fix once, apply every run)
 
+## Web search and retrieval
+- Web search returns **snippets only**. When answering from web results, **parse/fetch full content** first (e.g. mat_doc_* extract from webpage, or other parsing); do not answer from snippets alone.
+- **Retrieval: prefer English** query terms when using mat_sn_*; before answering, consider each source’s quality (authority, relevance, recency).
+
 ## Routing: technical Q&A vs writing (do not over-use writing skills)
 - If the user is only asking a **technical question** (e.g. what is X, how does Y work, 某技术问题怎么办) and does **not** ask for a report/综述/调研/写一篇/输出到文件: do **not** use deep-survey or manuscript-scribe. Do **1–2** mat_sn or mat_sn_web-search calls, answer in chat from the results, then call finish. Use writing skills only when the user clearly wants a **file** (综述、调研报告、论文、长文).
+- **Technical answers**: Must include detailed concept explanation (solid definitions); if formulas are used, explain every physical quantity; state concept relationships; optionally give examples from search results. If you cite any source, use [n](url) in text and list References (each with URL) after the answer.
+- **Every reference must have a URL**: In text use [n](url); References section (or list) must include the URL for each [n]. Applies to technical answers, deep-survey (including short output), and manuscript. No reference without URL.
+- **Academic writing (survey/manuscript)**: Concept rigor is **mandatory**—definitions for key concepts, every symbol in formulas explained, how concepts relate to each other; optionally examples from retrieval. Do not leave concepts undefined or symbols unexplained.
 
 ## use_skill run_script
 - Always pass all required script arguments. Missing args cause exit code 2 and waste tokens.
