@@ -552,9 +552,10 @@ if __name__ == "__main__":
     # Windows 上 reload 会 spawn 子进程，易触发 DuplicateHandle PermissionError，默认关闭
     force_reload = os.environ.get("RELOAD", "").lower() in ("1", "true", "yes")
     use_reload = force_reload or (sys.platform != "win32")
+    backend_port = int(os.environ.get("BACKEND_PORT", "50001"))
     uvicorn.run(
         "server:app",
         host="0.0.0.0",
-        port=50001,
+        port=backend_port,
         reload=use_reload,
     )
