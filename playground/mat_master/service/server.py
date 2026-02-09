@@ -9,6 +9,8 @@ import asyncio
 import importlib
 import logging
 import mimetypes
+import os
+import yaml
 import queue
 import sys
 import threading
@@ -180,18 +182,10 @@ def list_session_files(session_id: str, path: str = ""):
     - If the session has a last run: key = last_task_id (e.g. ws_abc123).
     - If no run yet: key = session_id (e.g. demo_session), folder created on first access.
     """
-    runs = _runs_dir()
-    run_path = runs / RUN_ID_WEB
-    if not run_path.is_dir():
+    try:
+        base, task_id = _resolve_session_workspace(session_id, create=True)
+    except HTTPException:
         return {"run_id": RUN_ID_WEB, "path": path or ".", "entries": [], "workspace_root": None, "task_id": None}
-    data = SESSIONS.get(session_id)
-    task_id = (data or {}).get("last_task_id") if data else None
-    if task_id is None:
-        task_id = session_id
-        (run_path / "workspaces" / task_id).mkdir(parents=True, exist_ok=True)
-    base = _get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
-    if not base or not base.is_dir():
-        return {"run_id": RUN_ID_WEB, "path": path or ".", "entries": [], "workspace_root": None, "task_id": task_id}
     target = (base / path).resolve() if path else base
     if not target.is_dir():
         raise HTTPException(status_code=404, detail="Path not found")
@@ -221,17 +215,7 @@ def get_session_file_content(session_id: str, path: str):
     """Serve file content for display or download. path is required (relative path within workspace)."""
     if not path or not path.strip():
         raise HTTPException(status_code=400, detail="path is required")
-    runs = _runs_dir()
-    run_path = runs / RUN_ID_WEB
-    if not run_path.is_dir():
-        raise HTTPException(status_code=404, detail="Run not found")
-    data = SESSIONS.get(session_id)
-    task_id = (data or {}).get("last_task_id") if data else None
-    if task_id is None:
-        task_id = session_id
-    base = _get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
-    if not base or not base.is_dir():
-        raise HTTPException(status_code=404, detail="Workspace not found")
+    base, _ = _resolve_session_workspace(session_id, create=False)
     target = (base / path.strip()).resolve()
     try:
         target.relative_to(base)
@@ -320,6 +304,24 @@ def _runs_dir() -> Path:
     return _project_root / "runs"
 
 
+def _workspace_root_override() -> Path | None:
+    raw = (os.environ.get("MAT_MASTER_WORKSPACE_ROOT") or "").strip()
+    if not raw:
+        try:
+            config_path = _project_root / "configs" / "mat_master" / "config.yaml"
+            if config_path.is_file():
+                data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+                raw = (data.get("mat_master") or {}).get("workspace_root") or ""
+        except Exception:
+            raw = ""
+    if not raw:
+        return None
+    p = Path(raw).expanduser()
+    if not p.is_absolute():
+        p = (_project_root / p).resolve()
+    return p
+
+
 def _list_workspace_ids() -> list[str]:
     """List all workspace folder names under runs/mat_master_web/workspaces/ (disk-only, so restart后也能回溯历史)."""
     run_path = _runs_dir() / RUN_ID_WEB
@@ -362,6 +364,13 @@ def _get_run_workspace_path(run_id: str, task_id: str | None = None) -> Path | N
 
 def _resolve_session_workspace(session_id: str, create: bool = True) -> tuple[Path, str]:
     """Resolve session workspace dir and task_id, optionally creating it."""
+    override = _workspace_root_override()
+    if override is not None:
+        if create:
+            override.mkdir(parents=True, exist_ok=True)
+        if not override.is_dir():
+            raise HTTPException(status_code=404, detail="Workspace root not found")
+        return override, "external"
     run_path = _runs_dir() / RUN_ID_WEB
     if not run_path.is_dir():
         raise HTTPException(status_code=404, detail="Run not found")
@@ -613,8 +622,10 @@ async def websocket_endpoint(websocket: WebSocket):
             session_id = data.get("session_id") or str(uuid.uuid4())
             if session_id not in SESSIONS:
                 SESSIONS[session_id] = {"history": [], "task_ids": [], "last_task_id": None}
-            task_id = "ws_" + uuid.uuid4().hex[:8]
-            SESSIONS[session_id].setdefault("task_ids", []).append(task_id)
+            # Keep a stable workspace per session so uploads are visible before first run.
+            task_id = SESSIONS[session_id].get("last_task_id") or session_id
+            if task_id not in SESSIONS[session_id].setdefault("task_ids", []):
+                SESSIONS[session_id]["task_ids"].append(task_id)
             SESSIONS[session_id]["last_task_id"] = task_id
             user_msg = {"source": "User", "type": "query", "content": user_prompt, "mode": mode, "session_id": session_id}
             SESSIONS[session_id]["history"].append(user_msg)
