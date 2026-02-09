@@ -5,7 +5,7 @@
 - manuscript-scribe init_manuscript.py: required --title. Example: script_name=init_manuscript.py, script_args="--title \"My Paper\""
 - manuscript-scribe assemble_manuscript.py: required --output and one of --draft or --sections_dir. Example: script_args="--draft draft_manuscript.md --output final.md"
 - manuscript-scribe write_section.py: For long sections (lists, multiple refs, 2+ paragraphs), use --content_file: write content to a file first (str_replace_editor or execute_bash), then script_args="--section \"SectionName\" --content_file path/to/file.md --draft draft_manuscript.md". Do not pass long text in --content; it can be truncated.
-- deep-survey: run_survey.py only creates the outline + plan. You (LLM) must run 6–15+ mat_sn retrievals (mat_sn_search-papers-enhanced, mat_sn_web-search) with different question/words, then write all sections. Do not write the full report after only one or two successful mat_sn calls; if the last search returned few papers or total retrievals are still low, run more with different keywords before writing. Do not deliver a survey file that still has (TBD). Survey/review output MUST include a **References** section; each cited work must have its **URL** (from search results: use doi as https://doi.org/<DOI>, or the paper url field). Use [n](url) in the body and list [n] + full citation + URL in References. If the user asks for links/URLs/链接, do not omit them.
+- deep-survey: run_survey.py only creates the outline + plan. You (LLM) must run 6–15+ mat_sn retrievals (mat_sn_search-papers-enhanced, mat_sn_web-search) with different question/words, then write all sections. Do not write the full report after only one or two successful mat_sn calls; if the last search returned few papers or total retrievals are still low, run more with different keywords before writing. Do not deliver a survey file that still has (TBD). Survey/review output MUST include a **References** section; each cited work must have its **URL** (from search results: use doi as https://doi.org/<DOI>, or the paper url field). Use [n](url) in the body and list [n] + full citation + URL in References. If the user asks for links/URLs/链接, do not omit them. The report must be **full-length** (Executive Summary ≥2–3 paragraphs; State of the Art with multiple subsections and detailed discussion; do not deliver a 1–2 page brief). For long sections use --content_file.
 - Optional: init_manuscript add --template generic|Nature|grant or --sections_dir sections/
 
 ## use_skill get_reference
@@ -18,9 +18,12 @@
 - Use the working directory path stated above in this prompt; append the file name to it (e.g. <working_dir>/intro.txt or <working_dir>\intro.txt on Windows).
 - Do not use a relative path or a logical path like /workspace/intro.txt unless that equals the stated working directory.
 
+## 综述 / 调研报告：必须先执行 deep-survey
+- For **综述** (review), **调研报告** (survey report), or **研究进展/文献综述** (state-of-the-art): you MUST first run the **deep-survey** skill (run_survey.py, then 6–15+ mat_sn retrievals, then write all sections). Do not deliver a survey/review by only using manuscript-scribe or writing from memory; the report must come from deep-survey with enough retrievals.
+
 ## Manuscript writing: retrieval before writing
 - Before calling manuscript-scribe write_section or init_manuscript, run literature search (mat_sn_search-papers-normal, mat_sn_scholar-search, mat_sn_web-search) for the section topic unless the user already provided source files.
-- Do not write sections from memory only; ground content in retrieved material and cite it.
+- Do not write sections from memory only; ground content in retrieved material and cite it. When citing papers use: In [year], [first author] et al. [did what / found that ...]; [n](url).
 
 ## Final document: show in chat then save
 - For survey/manuscript/report deliverables: first **output the complete final document** in your reply (so the frontend shows it to the user), then ensure it is saved to the .md file and call finish. Do not only say "Saved to …" without outputting the document content in your message.
