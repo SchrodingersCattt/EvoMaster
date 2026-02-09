@@ -66,6 +66,11 @@ class MatMasterPlayground(BasePlayground):
     def set_run_dir(self, run_dir, task_id=None):
         """Override: keep memory_service.run_dir in sync; sync session workspace to run_dir/workspaces/task_id so downloads and tool outputs go under the current session."""
         super().set_run_dir(run_dir, task_id=task_id)
+        # Ensure root logger level allows file handler to receive INFO (evo only adds handler, root default is WARNING)
+        if run_dir and getattr(self, "log_file_handler", None) is not None:
+            root = logging.getLogger()
+            level = getattr(logging, getattr(self.config.logging, "level", "INFO"), logging.INFO)
+            root.setLevel(level)
         self.memory_service.run_dir = Path(run_dir) if run_dir else None
         # When reusing cached pg, session was created at startup with a different workspace.
         # Point it to this run's workspace so downloads and tool outputs go to workspaces/<task_id>.
