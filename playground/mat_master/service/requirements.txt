@@ -1,0 +1,4 @@
+# MatMaster web service (run from project root with evomaster installed)
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+websockets>=11.0

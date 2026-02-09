@@ -1,0 +1,8 @@
+Complete the current task using the tools above.
+
+Task ID: {task_id}
+Task type: {task_type}
+Description: {description}
+
+Additional info:
+{input_data}

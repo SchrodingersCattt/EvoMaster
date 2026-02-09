@@ -1,0 +1,102 @@
+"use client";
+
+import type { LogEntry } from "./LogStream";
+import { isEnvRelatedEntry } from "@/lib/logEntryUtils";
+
+function inferToolSuccess(entry: LogEntry): boolean {
+  if (entry.type !== "tool_result" || !entry.content || typeof entry.content !== "object") return true;
+  const c = entry.content as { result?: string };
+  const r = typeof c.result === "string" ? c.result : "";
+  if (/error|failed|exception|exit code: [1-9]|non-zero exit/i.test(r)) return false;
+  return true;
+}
+
+export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
+  const toolResults = entries.filter(
+    (e) => e.source === "ToolExecutor" && e.type === "tool_result" && !isEnvRelatedEntry(e)
+  );
+  const statusStages = entries.filter((e) => e.type === "status_stages");
+  const statusSkill = entries.filter((e) => e.type === "status_skill_produced");
+  const skillHits = entries.filter((e) => e.type === "skill_hit").map((e) => String(e.content ?? ""));
+  const expRuns = entries.filter((e) => e.type === "exp_run").map((e) => String(e.content ?? ""));
+  const lastStages = statusStages.length > 0 ? (statusStages[statusStages.length - 1].content as { total?: number; current?: number; step_id?: number; intent?: string }) : null;
+  const mode = statusStages.length > 0 || entries.some((e) => e.source === "Planner") ? "planner" : "direct";
+
+  return (
+    <div className="border border-gray-300 rounded-lg p-3 bg-[#f9fafb] flex flex-col h-full min-h-0">
+      <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">状态记录</h2>
+      <div className="flex flex-col gap-2 overflow-y-auto overflow-x-hidden flex-1 min-h-0 text-xs break-words">
+        {expRuns.length > 0 && (
+          <>
+            <div className="font-medium text-[#1e293b]" title="mode 为 direct/planner；此处为实际运行的 Exp 类名，如 DirectSolver、ResearchPlanner、SkillEvolutionExp">
+              执行过的 Exp
+            </div>
+            <ul className="space-y-0.5 list-disc list-inside text-gray-700">
+              {expRuns.map((name, i) => (
+                <li key={i}>{name}</li>
+              ))}
+            </ul>
+          </>
+        )}
+        {skillHits.length > 0 && (
+          <>
+            <div className="font-medium text-[#1e293b]">Hit 到的 Skills</div>
+            <ul className="space-y-0.5 list-disc list-inside text-gray-700">
+              {skillHits.map((name, i) => (
+                <li key={i}>{name}</li>
+              ))}
+            </ul>
+          </>
+        )}
+        {mode === "direct" && (
+          <>
+            <div className="font-medium text-[#1e293b]">Direct 模式 · 工具调用</div>
+            {toolResults.length === 0 ? (
+              <div className="text-gray-500">暂无</div>
+            ) : (
+              <ul className="space-y-1 list-disc list-inside">
+                {toolResults.map((e, i) => {
+                  const c = e.content as { name?: string };
+                  const ok = inferToolSuccess(e);
+                  return (
+                    <li key={i} className={ok ? "text-gray-700" : "text-amber-700"}>
+                      {c?.name ?? "—"} {ok ? "✓" : "✗"}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </>
+        )}
+        {mode === "planner" && (
+          <>
+            {lastStages && (
+              <div className="font-medium text-[#1e293b]">
+                Planner · 共 {lastStages.total ?? "?"} 步，当前第 {lastStages.current ?? "?"} 步
+              </div>
+            )}
+            {lastStages?.intent && (
+              <div className="text-gray-600 whitespace-pre-wrap break-words">
+                当前: {lastStages.intent}
+              </div>
+            )}
+            {statusSkill.length > 0 && (
+              <div className="font-medium text-green-700 mt-1">新生成 Skills</div>
+            )}
+            {statusSkill.map((e, i) => (
+              <div key={i} className="text-green-600 whitespace-pre-wrap break-words">
+                • {String(e.content)}
+              </div>
+            ))}
+            {mode === "planner" && !lastStages && statusSkill.length === 0 && (
+              <div className="text-gray-500">规划中或等待执行…</div>
+            )}
+          </>
+        )}
+        {mode !== "direct" && mode !== "planner" && expRuns.length === 0 && skillHits.length === 0 && (
+          <div className="text-gray-500">暂无</div>
+        )}
+      </div>
+    </div>
+  );
+}
