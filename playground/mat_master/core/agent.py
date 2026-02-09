@@ -22,7 +22,7 @@ class MatMasterAgent(Agent):
     """
 
     def _get_system_prompt(self) -> str:
-        """Use generated system prompt (tool list + date), then append working directory and skills."""
+        """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills."""
         from ..prompts.build_prompt import build_mat_master_system_prompt
 
         current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -32,6 +32,11 @@ class MatMasterAgent(Agent):
         working_dir_abs = str(Path(working_dir).absolute())
         working_dir_info = f"\n\nYou must perform all operations in this working directory; do not change directory. All file operations and commands must be run under: {working_dir_abs}"
         prompt = base + working_dir_info
+
+        # Inject tool rules (fix once, apply every run) so repeated tool errors are avoided
+        _tool_rules_path = Path(__file__).resolve().parent.parent / "prompts" / "tool_rules.txt"
+        if _tool_rules_path.exists():
+            prompt += "\n\n" + _tool_rules_path.read_text(encoding="utf-8").strip()
 
         if self.skill_registry is not None:
             skills_info = self.skill_registry.get_meta_info_context()

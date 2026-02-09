@@ -8,6 +8,15 @@ skill_type: operator
 
 The "Ghostwriter" for MatMaster. Output is always to **files**; chat is only for instructions and progress.
 
+## Step 0: Information retrieval (mandatory before any writing)
+
+**Do not** call init_manuscript or write_section until you have run literature search for the topic. Writing **must** be grounded in retrieval:
+
+- Call MCP retrieval tools (**mat_sn_search-papers-normal**, **mat_sn_scholar-search**, **mat_sn_web-search**) with queries derived from the section/title. Run at least a few searches (e.g. topic + "review", topic + "methods") before drafting.
+- If the user did not provide source files or references, you **must** search the literature yourself and use the results as the basis for cited content. Do not write sections from memory only.
+
+Then proceed to the three-step flow below.
+
 ## Three-step flow: chunked writing → assemble → polish
 
 1. **Chunked writing**: Draft each section in chunks. Use `write_section.py` to create a section, then call it again with **`--append`** to add more paragraphs. Repeat until each section (Introduction, Methods, Results, Discussion) is complete. Optionally use `init_manuscript.py` first to create the outline or `sections/` directory.
@@ -15,10 +24,6 @@ The "Ghostwriter" for MatMaster. Output is always to **files**; chat is only for
 3. **Polish**: Run `polish_text.py` on the assembled file for each section that needs it (e.g. `--target_section Introduction`, then Methods, Results, Discussion). This step smooths language and removes redundancy; run after assembly so the full context is in one file.
 
 Do not skip the assemble step: writing is chunked, then concatenated, then polished.
-
-## Information retrieval (mandatory before writing)
-
-Writing sections **must** be grounded in information retrieval at a **level of detail** that matches the task (intro/background → broader search; methods/results → method- and data-focused search). **If the prompt does not specify sources or the user does not provide files**, you **must expand and search the literature yourself**: call MCP retrieval tools (e.g. `mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `mat_sn_web-search`) with queries derived from the section topic, then use the results as the basis for cited, factual content. Do not write sections from memory or unsupported claims when no materials were given.
 
 ## Chunked writing (how to get substantial sections)
 
@@ -43,14 +48,16 @@ So substantial length comes from **multiple** write_section calls (create + appe
 - **References section**: Must list **exactly** the same numbers as in the text, in order. Each entry must include the index [n], full citation (Authors, Title, *Journal*, Year), and the **original source URL**. No extra or missing entries.
 - **Consistency**: At assembly time, the script checks that every in-text [n] has a matching [n] in References and that reference URLs are valid.
 
-Full format details: **reference/citation_and_references.md**.
+Full format details: use_skill get_reference with reference_name="citation_and_references.md" (not the skill name).
 
 ## Scripts
 
 ### `init_manuscript.py`
 
+* **Required**: `--title` (no default). Always pass it to avoid script error.
 * **Usage**: `python init_manuscript.py --title "My Paper" --template "Nature"`  
-  `python init_manuscript.py --title "My Paper" --template "generic" --sections_dir sections/`
+  Or with section files: `python init_manuscript.py --title "My Paper" --template "generic" --sections_dir sections/`
+* **use_skill example**: script_name=init_manuscript.py, script_args="--title \"My Paper\""
 * **Effect**: Creates a draft outline (Abstract, Introduction, Methods, Results, Discussion, References). With `--sections_dir`, creates empty section files under `sections/` so each section can be written and then assembled.
 
 ### `write_section.py` (workhorse)
@@ -99,7 +106,8 @@ Full format details: **reference/citation_and_references.md**.
 
 ## Rules
 
-* **Information retrieval**: Before writing a section, ensure you have enough source material. If the prompt or user did not provide files or references, **proactively run literature/search** (MCP paper and web search) at the appropriate level of detail; then write from the retrieved content with proper citations.
+* **Retrieval first**: Before any init_manuscript or write_section call, run literature search (mat_sn_* paper and web search) for the topic; do not write from memory only.
+* **Required args**: init_manuscript.py always needs --title; pass it in script_args (e.g. script_args="--title \"My Paper\"").
 * **Chunked writing**: Use multiple `write_section.py` calls per section (first call creates, further calls use `--append`) or build the full section in a file then pass with `--content_file`; the script does not expand short text.
 * Citations: **text + hyperlink** to original source; References section must match in-text [n] exactly (see reference/citation_and_references.md).
 * Always write long content to **files**; one section per call for `write_section.py`.
