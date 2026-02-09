@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 # Remote tool name -> list of argument names that are input file paths (upload to OSS, pass URL).
 # Tools in LOCAL_PATH_TOOLS accept local paths; path args are only normalized (workspace-relative -> absolute), no OSS upload.
-LOCAL_PATH_TOOLS: Set[str] = {"extract_material_data_from_pdf"}
+LOCAL_PATH_TOOLS: Set[str] = {}
 
 CALCULATION_PATH_ARGS: Dict[str, List[str]] = {
     "get_structure_info": ["structure_path"],
