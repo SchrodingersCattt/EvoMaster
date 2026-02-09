@@ -17,6 +17,15 @@ Single source of truth for literature/survey reports and manuscripts. Used by **
 - One reference per link. Multiple refs = multiple consecutive links, e.g. `[1](url1)` `[2](url2)`.
 - **Wrong**: [2,3], [2, 3], [2–3], [2; 3], or any comma/semicolon/dash inside one bracket.
 
+## Literature citation sentence template (survey / state-of-the-art)
+
+When citing a paper in the body, use this pattern (aligned with Science Navigator output):
+
+- **Single paper**: In [year], [first author] et al. [found that / reported that / showed that] [summary of findings; include quantitative results if available] by [method]. [Key findings include ...]. [n](url)
+- **Comparison**: Compare with [first author] et al., who [support/contradict/expand] [with reference to data or mechanism]. [n](url)
+
+You may omit the full title and journal name in the sentence; give them in the References section. Use "et al." after the first author; state the year and what was done/found, then attach the link.
+
 ## By question type (survey reports)
 
 - **What/definition**: Precise, fact-based; limit statements to what search results support.

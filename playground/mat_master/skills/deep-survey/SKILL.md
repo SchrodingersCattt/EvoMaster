@@ -39,11 +39,14 @@ When routing to **serious writing** (this skill), do **not** do a single shallow
 
 Reports must follow **../_common/reference/citation_and_output_format.md** (citation format, plain text/Markdown, units, abbreviations). The artifact file should contain:
 
-* **Executive Summary**
-* **Key Methodologies** (table format)
-* **State of the Art** (results comparison)
-* **Gap Analysis** (what is missing?)
+* **Executive Summary** — at least **2–3 paragraphs**; do not reduce to one short paragraph.
+* **Key Methodologies** — table plus optional narrative; enough rows to cover the main methods (not just 3–4 lines).
+* **State of the Art** — **multiple subsections** (e.g. by material, theme, or timeline); **detailed discussion** with several paragraphs or many bullets per theme; cite multiple papers per subsection. Do not deliver 1–2 sentences per topic.
+* **Gap Analysis** — at least several elaborated points (2–4 sentences each), not one-line bullets only.
 * **References** (mandatory): each cited work must list **URL** (from search: use doi as `https://doi.org/<DOI>` or the paper’s url field). Use `[n](url)` in the body; in References list [n], full citation, and URL. If the user asks for links/URLs/链接, do not omit them.
+* **Citation sentence format** (follow Science Navigator style): when citing a paper, use the pattern **In [year], [first author] et al. [found that / reported that ...] by [method]; key findings include [...]. [n](url)**. For comparison: **Compare with [first author] et al., who [support/contradict] [...]. [n](url)**. Do not cite by title only; include year, first author, and what was done/found.
+
+**Length**: The report must be a **full-length review**, not a short summary. Develop every section fully from the retrieval results. Do not deliver a 1–2 page brief when the user asked for a 综述/调研.
 
 ## Scripts
 
@@ -81,6 +84,7 @@ Compiles collected findings into the final structured Markdown report (Executive
 ## Rules
 
 * **LLM writes content**: The script only creates the outline. **You** must write Executive Summary, Key Methodologies, State of the Art, Gap Analysis, and References (using write_section or str_replace_editor) from the retrieval results. Do not deliver a file that still contains (TBD).
+* **Substantial length**: Write a **full-length review**, not a brief. Executive Summary ≥2–3 paragraphs; State of the Art with multiple subsections and detailed discussion (many paragraphs/bullets); Key Methodologies and Gap Analysis fully developed. Use --content_file for long sections to avoid truncation. Do not deliver a very short (e.g. 1–2 page) report.
 * **Delivery**: When the report is complete, **first output the full final report** in your reply (message text) so the user sees it in the chat/frontend; then ensure it is saved to the survey .md file and call finish. Do not only write to file and say "Saved to path".
 * **Expand facets, repeated retrieval**: For serious writing (this skill), **expand the query into multiple facets** and **repeatedly call** retrieval tools (paper search, web search)—**at least 6–15 retrieval calls** across facets; never a single shallow search. See reference/search_facets_and_rounds.md.
 * Prefer academic sources (peer-reviewed papers, scholar results) for literature/review tasks; treat web-only hits as supplementary.
