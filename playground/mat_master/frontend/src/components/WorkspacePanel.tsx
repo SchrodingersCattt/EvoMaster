@@ -10,6 +10,7 @@ import {
   CircleDotIcon,
   CircleCheckIcon,
   CircleXIcon,
+  RefreshCwIcon,
 } from "./icons";
 import { cn } from "@/lib/utils";
 import FileTree from "./FileTree";
@@ -322,10 +323,35 @@ export default function WorkspacePanel({
   const mode =
     statusStages.length > 0 || entries.some((e) => e.source === "Planner") ? "planner" : "direct";
 
+  // Dynamic closed-loop planning events
+  const phaseChanges = entries.filter((e) => e.type === "phase_change");
+  const replanEvents = entries.filter((e) => e.type === "replan_triggered");
+  const planRevisions = entries.filter((e) => e.type === "plan_revised");
+  const lastPhase = phaseChanges.length > 0
+    ? (phaseChanges[phaseChanges.length - 1].content as { from?: string; to?: string })?.to ?? ""
+    : "";
+  const lastReplan = replanEvents.length > 0
+    ? (replanEvents[replanEvents.length - 1].content as { reason?: string; after_step?: number })
+    : null;
+  const replanCount = planRevisions.length;
+
+  const phaseLabels: Record<string, { label: string; color: string }> = {
+    planning: { label: "Planning", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" },
+    preflight: { label: "Pre-flight", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" },
+    executing: { label: "Executing", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" },
+    replanning: { label: "Replanning", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400" },
+    completed: { label: "Completed", color: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" },
+    failed: { label: "Failed", color: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" },
+    aborted: { label: "Aborted", color: "bg-gray-100 text-gray-700 dark:bg-gray-900/40 dark:text-gray-400" },
+  };
+
   const timelineEntries = entries.filter(
     (e) =>
       (e.source === "Planner" && e.type === "planner_reply") ||
-      (e.source === "ToolExecutor" && e.type === "tool_result" && !isEnvRelatedEntry(e))
+      (e.source === "ToolExecutor" && e.type === "tool_result" && !isEnvRelatedEntry(e)) ||
+      e.type === "phase_change" ||
+      e.type === "replan_triggered" ||
+      e.type === "plan_revised"
   );
 
   return (
@@ -437,6 +463,20 @@ export default function WorkspacePanel({
             )}
             {mode === "planner" && (
               <>
+                {/* Phase badge + replan count */}
+                {lastPhase && (
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${phaseLabels[lastPhase]?.color ?? "bg-gray-100 text-gray-700"}`}>
+                      {phaseLabels[lastPhase]?.label ?? lastPhase}
+                    </span>
+                    {replanCount > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400">
+                        <RefreshCwIcon size={10} className="shrink-0" />
+                        Replan ×{replanCount}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {lastStages && (
                   <div className="font-medium text-zinc-700 dark:text-zinc-300">
                     Planner · Step {lastStages.current ?? "?"} / {lastStages.total ?? "?"}
@@ -444,6 +484,21 @@ export default function WorkspacePanel({
                 )}
                 {lastStages?.intent && (
                   <p className="whitespace-pre-wrap break-words">{lastStages.intent}</p>
+                )}
+                {/* Replan trigger reason */}
+                {lastReplan && lastPhase === "replanning" && (
+                  <div className="mt-1 p-2 rounded-md bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400 uppercase tracking-wider">
+                      <RefreshCwIcon size={12} className="shrink-0" />
+                      Replan triggered
+                    </div>
+                    <p className="text-purple-600 dark:text-purple-300 mt-1">
+                      {lastReplan.reason ?? "—"}
+                      {lastReplan.after_step != null && (
+                        <span className="text-purple-500"> (after step {lastReplan.after_step})</span>
+                      )}
+                    </p>
+                  </div>
                 )}
                 {statusSkill.length > 0 && (
                   <div className="font-medium text-emerald-600 dark:text-emerald-400">
@@ -455,7 +510,7 @@ export default function WorkspacePanel({
                     • {String(e.content)}
                   </div>
                 ))}
-                {!lastStages && statusSkill.length === 0 && (
+                {!lastStages && statusSkill.length === 0 && !lastPhase && (
                   <p className="text-zinc-500">Planning or waiting…</p>
                 )}
               </>
@@ -476,6 +531,54 @@ export default function WorkspacePanel({
                   const isTool =
                     entry.source === "ToolExecutor" && entry.type === "tool_result";
                   const ok = isTool ? inferToolSuccess(entry) : true;
+                  const isPhaseChange = entry.type === "phase_change";
+                  const isReplanTriggered = entry.type === "replan_triggered";
+                  const isPlanRevised = entry.type === "plan_revised";
+                  const isMetaEvent = isPhaseChange || isReplanTriggered || isPlanRevised;
+
+                  if (isMetaEvent) {
+                    const content = entry.content as Record<string, unknown>;
+                    let label = "";
+                    let color = "text-zinc-500 dark:text-zinc-400";
+                    let icon = <CircleDotIcon size={14} className="text-zinc-400" />;
+
+                    if (isPhaseChange) {
+                      const to = String(content?.to ?? "");
+                      const phaseInfo = phaseLabels[to];
+                      label = `${String(content?.from ?? "?")} → ${phaseInfo?.label ?? to}`;
+                      if (to === "replanning") {
+                        color = "text-purple-600 dark:text-purple-400";
+                        icon = <RefreshCwIcon size={14} className="text-purple-500" />;
+                      } else if (to === "completed") {
+                        icon = <CircleCheckIcon size={14} className="text-emerald-500" />;
+                        color = "text-emerald-600 dark:text-emerald-400";
+                      } else if (to === "failed") {
+                        icon = <CircleXIcon size={14} className="text-red-500" />;
+                        color = "text-red-600 dark:text-red-400";
+                      }
+                    } else if (isReplanTriggered) {
+                      label = `Replan: ${String(content?.reason ?? "unknown")}`;
+                      color = "text-purple-600 dark:text-purple-400";
+                      icon = <RefreshCwIcon size={14} className="text-purple-500" />;
+                    } else if (isPlanRevised) {
+                      const cnt = Number(content?.replan_count ?? 0);
+                      const oldN = Number(content?.old_step_count ?? 0);
+                      const newN = Number(content?.new_step_count ?? 0);
+                      label = `Plan revised #${cnt} (${oldN} → ${newN} steps)`;
+                      color = "text-purple-600 dark:text-purple-400";
+                      icon = <RefreshCwIcon size={14} className="text-purple-500" />;
+                    }
+
+                    return (
+                      <li key={i} className="flex gap-2 py-1.5 border-b border-zinc-100 dark:border-zinc-800 last:border-0">
+                        <span className="shrink-0 mt-0.5">{icon}</span>
+                        <div className={cn("min-w-0 flex-1 text-[11px] italic", color)}>
+                          {label}
+                        </div>
+                      </li>
+                    );
+                  }
+
                   return (
                     <li key={i} className="flex gap-2 py-2 border-b border-zinc-100 dark:border-zinc-800 last:border-0">
                       <span className="shrink-0 mt-0.5">
