@@ -27,7 +27,7 @@
    - Windows: 先在后端目录运行 `python server.py`，再在 frontend 目录运行 `npm run dev`；或使用 `playground/mat_master/start_dev.bat` 仅启动后端。
 
 - Dashboard: http://localhost:3000  
-- API: http://localhost:8000  
+- API: http://localhost:50001  
 - 分享页: http://localhost:3000/share/demo_session
 
 ## 沙箱

@@ -112,7 +112,7 @@ def info():
         "dashboard": "http://localhost:3000",
         "docs": "/docs",
         "openapi": "/openapi.json",
-        "ws_chat": "ws://localhost:8000/ws/chat",
+        "ws_chat": "ws://localhost:50001/ws/chat",
         "api_start": "/api/start",
         "api_share": "/api/share/{session_id}",
     }
@@ -520,6 +520,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "server:app",
         host="0.0.0.0",
-        port=8000,
+        port=50001,
         reload=use_reload,
     )
