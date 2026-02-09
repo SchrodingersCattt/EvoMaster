@@ -1,0 +1,36 @@
+# Citation and Output Format (Shared)
+
+Single source of truth for literature/survey reports and manuscripts. Used by **deep-survey** and **manuscript-scribe**.
+
+## General
+
+- Output in **plain text** or **Markdown**; start directly with substantive content (no "Sure...", "Okay...", "I will now analyze...").
+- Every factual claim must be supported by tool/source results; do not add unsupported superlatives or invented facts.
+- Numbers and units: add a space (e.g. 10 cm, 5 kg). No extra space between Chinese and English characters.
+- Italic for physical quantities: *E*, *T*, *k*. Bold for vectors and compound codes: **F**, **E**, compound **1**.
+- Define all abbreviations at first use and use them consistently.
+- Journal/article names: italic only, e.g. *Journal of Chemical Physics*; do not use 《》 for titles.
+
+## Citation (mandatory format)
+
+- Every cited source must use a **hyperlink**: `[n]` as a link to the original source URL (or to the References section entry, e.g. `#ref-n`).
+- One reference per link. Multiple refs = multiple consecutive links, e.g. `[1](url1)` `[2](url2)`.
+- **Wrong**: [2,3], [2, 3], [2–3], [2; 3], or any comma/semicolon/dash inside one bracket.
+
+## By question type (survey reports)
+
+- **是什么 (what/definition)**: Precise, fact-based; limit statements to what search results support.
+- **为什么 (why/mechanism)**: Layered—definitions from sources, then mechanistic statements; cite each sentence.
+- **如何 (how/procedure)**: Step-by-step with a citation per step; reproduce code/commands verbatim in code blocks.
+- **研究进展 (research progress)**: Executive summary then structured analysis; cite with the link format above.
+
+## References section (manuscripts)
+
+- The **References** section must list **exactly** the same [n] as in the text, in numerical order.
+- Each entry: [n], full citation (Authors, Title, *Journal*, Year), and **original source URL**.
+- Every [n] in the body must have exactly one [n] in References; no extra or missing entries.
+
+## Terminology and abbreviations (manuscripts)
+
+- **Technical terms**: Define at first use (e.g. in Introduction or Methods).
+- **Abbreviations**: Define once as "Full Name (ABBR)" or "ABBR (Full Name)"; do not redefine in a later section.
