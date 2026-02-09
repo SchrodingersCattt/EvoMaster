@@ -1,0 +1,260 @@
+# Mat Master Playground 配置文件
+# 材料科学向 agent，支持 LiteLLM 与 Azure，接入 Mat MCP（Structure Generator、Science Navigator、Document Parser、DPA）
+# 鉴权从 .env 读取：LITELLM_PROXY_*、AZURE_*、DEEPSEEK_API_KEY 等，配置中使用 ${变量名} 引用
+
+# ============================================
+# LLM 配置（必须支持 litellm 与 azure 格式）
+# ============================================
+# 均使用 provider: "openai"（OpenAI 兼容接口），通过 base_url + model 区分
+# .env 需提供：LITELLM_PROXY_API_BASE, LITELLM_PROXY_API_KEY, AZURE_API_BASE, AZURE_API_KEY
+llm:
+  litellm:
+    provider: "openai"
+    model: "gemini-3-flash-preview"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    # temperature: 0.7
+    # max_tokens: 16384
+    timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
+  azure:
+    provider: "openai"
+    model: "gpt-4o"
+    api_key: "${AZURE_API_KEY}"
+    base_url: "${AZURE_API_BASE}"
+    temperature: 0.7
+    max_tokens: 16384
+    timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
+  # 可选：DeepSeek，.env 提供 DEEPSEEK_API_KEY
+  deepseek:
+    provider: "deepseek"
+    model: "deepseek-chat"
+    api_key: "${DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com"
+    temperature: 0.7
+    max_tokens: 16384
+    timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
+  default: "litellm"
+
+# ============================================
+# 多智能体配置（单 agent）
+# ============================================
+agents:
+  general:
+    llm: "litellm"
+    max_turns: 200
+    enable_tools: true
+
+    context:
+      max_tokens: 128000
+      truncation_strategy: "latest_half"
+      preserve_system_messages: true
+      preserve_recent_turns: 5
+
+    system_prompt_file: "prompts/system_prompt.txt"
+    user_prompt_file: "prompts/user_prompt.txt"
+
+# ============================================
+# Mat Master：Mode 通过命令行 --mode 切换（direct | planner），不在此配置
+# ============================================
+mat_master:
+  # 规划模式配置（仅 --mode planner 时使用）
+  planner:
+    max_steps: 20
+    state_file: "research_state.json"
+  # 专项能力开关（DirectSolver 路由时据此决定是否走 CALC/EVO）
+  capabilities:
+    resilient_calc:
+      enabled: true
+    skill_evolution:
+      enabled: true
+  # 鲁棒计算能力配置（被 ResilientCalcExp 使用）
+  resilient_calc:
+    max_retries: 3
+    poll_interval_seconds: 60
+    error_handlers:
+      scf_diverged:
+        - action: "update_input"
+          params: {"ALGO": "Normal", "AMIX": 0.2}
+        - action: "update_input"
+          params: {"ISMEAR": 0}
+      time_limit_exceeded:
+        - action: "resubmit"
+          params: {"walltime": "48h", "continuation": true}
+  # 技能进化能力配置（被 SkillEvolutionExp 使用）
+  skill_evolution:
+    dynamic_skills_root: "playground/mat_master/skills/dynamic"
+    sandbox: "subprocess"
+
+# ============================================
+# MCP 配置（仅 mat_master 专用）
+# ============================================
+# path_adaptor: calculation 表示对 calculation 类 MCP 做路径解析与 executor/storage 注入（对齐 _tmp/MatMaster）
+# calculation_servers: 仅对这些服务器启用 path adaptor
+# calculation_executors: 每服务器可配置 executor（镜像/机型）与 sync_tools；同步任务传 executor=null，否则传 Bohrium executor（鉴权从 .env BOHRIUM_* 注入）
+# 结构数据库检索: mat_bohrium_db(fetch_bohrium_crystals), mat_optimade(fetch_structures_with_*), mat_openlam(fetch_openlam_*), mat_mofdb(fetch_mofs_sql)
+# ABACUS 计算: mat_abacus
+mcp:
+  config_file: "mcp_config.json"
+  enabled: true
+  path_adaptor: "calculation"
+  calculation_servers: ["mat_sg", "mat_dpa", "mat_doc", "mat_abacus"]
+  # Per-server tool filter: only register these tools (original names). Omitted servers register all tools.
+  tool_include_only:
+    mat_sn: ["web-search", "search-papers-enhanced"]
+  # Per-server executor (image/machine_type) and sync_tools. Sync tools → executor None; others → Bohrium executor with env auth.
+  calculation_executors:
+    mat_sg:
+      executor:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/dpa-calculator:5a6b85f0"
+            platform: "ali"
+            machine_type: "c8_m32_1 * NVIDIA 4090"
+            app_key: "agent"
+        resources:
+          envs: {}
+      sync_tools:
+        - add_hydrogens
+        - generate_ordered_replicas
+        - remove_solvents
+        - build_bulk_structure_by_template
+        - build_bulk_structure_by_wyckoff
+        - make_supercell_structure
+        - make_defect_structure
+        - make_doped_structure
+        - make_amorphous_structure
+        - build_molecule_structures_from_smiles
+        - add_cell_for_molecules
+        - build_surface_slab
+        - build_surface_adsorbate
+        - build_surface_interface
+        - get_structure_info
+        - get_molecule_info
+    mat_dpa:
+      executor:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/dpa-calculator:a86b37cc"
+            platform: "ali"
+            machine_type: "c16_m64_1 * NVIDIA 4090"
+            app_key: "agent"
+        resources:
+          envs: {}
+      sync_tools: []
+    mat_doc:
+      executor: null
+      sync_tools: []
+    mat_abacus:
+      executor:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/dp/native/prod-22618/abacusagenttools-matmaster-new-tool:v0.2.3"
+            platform: "ali"
+            machine_type: "c32_m128_cpu"
+            app_key: "agent"
+        resources:
+          envs: {}
+      sync_tools:
+        - abacus_prepare
+        - abacus_modify_input
+        - abacus_modify_stru
+        - abacus_collect_data
+
+# ============================================
+# Skills（约束 Mat 工具调用方式，注入 meta 到上下文）
+# ============================================
+skills:
+  enabled: true
+  skills_root: evomaster/skills
+
+# ============================================
+# Session 配置
+# ============================================
+session:
+  type: "local"
+
+  local:
+    working_dir: "./playground/mat_master/workspace"
+    timeout: 60
+    gpu_devices: null
+    cpu_devices: null
+    symlinks: {}
+
+  docker:
+    image: "evomaster/base:latest"
+    container_name: null
+    use_existing_container: null
+    working_dir: "/workspace"
+    memory_limit: "64g"
+    cpu_limit: 16.0
+    gpu_devices: "0"
+    network_mode: "host"
+    volumes: {"./playground/mat_master/workspace": "/workspace"}
+    env_vars: {}
+    auto_remove: false
+    timeout: 300
+
+# ============================================
+# Env 配置
+# ============================================
+env:
+  cluster:
+    debug_pool:
+      type: "cpu"
+      max_concurrent: 1
+    train_pool:
+      type: "cpu"
+      max_concurrent: 1
+
+  docker:
+    base_image: "python:3.11-slim"
+    registry: "docker.io"
+    pull_policy: "if_not_present"
+
+  scheduler:
+    type: "local"
+    queue_timeout: 300
+    retry_failed: false
+    max_retries: 1
+
+# ============================================
+# 系统提示词配置（顶层）
+# ============================================
+system_prompt_file: "prompts/system_prompt.txt"
+
+# ============================================
+# LLM 输出与日志
+# ============================================
+llm_output:
+  show_in_console: true
+  log_to_file: true
+
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: null
+  console: true
+  log_path: "./logs/evomaster.log"
+
+project_root: "."
+workspace: "./workspace"
+results_dir: "./results"
+debug: false
