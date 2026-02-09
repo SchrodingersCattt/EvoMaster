@@ -1,7 +1,7 @@
 import LogStream from "@/components/LogStream";
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:50001";
 
 async function getHistory(sessionId: string): Promise<LogEntry[] | null> {
   try {

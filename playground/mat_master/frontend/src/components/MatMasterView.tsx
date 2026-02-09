@@ -8,11 +8,11 @@ import ChatPanel from "./ChatPanel";
 
 const WS_URL =
   typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000/ws/chat")
+    ? (process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:50001/ws/chat")
     : "";
 const API_BASE =
   typeof window !== "undefined"
-    ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000")
+    ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:50001")
     : "";
 
 export type LogEntry = {
