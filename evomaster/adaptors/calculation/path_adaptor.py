@@ -7,7 +7,7 @@ the resulting URL. Align with _tmp/MatMaster. Storage 与 executor 鉴权统一�
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set  # noqa: F401 - Set used for LOCAL_PATH_TOOLS
 from urllib.parse import urlparse
 
 from evomaster.env import get_bohrium_storage_config, inject_bohrium_executor
@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 # Remote tool name -> list of argument names that are input file paths (upload to OSS, pass URL).
+# Tools in LOCAL_PATH_TOOLS accept local paths; path args are only normalized (workspace-relative -> absolute), no OSS upload.
+LOCAL_PATH_TOOLS: Set[str] = {"extract_material_data_from_pdf"}
+
 CALCULATION_PATH_ARGS: Dict[str, List[str]] = {
     "get_structure_info": ["structure_path"],
     "get_molecule_info": ["molecule_path"],
@@ -41,7 +44,6 @@ CALCULATION_PATH_ARGS: Dict[str, List[str]] = {
     "run_molecular_dynamics": ["initial_structure"],
     "calculate_elastic_constants": ["input_structure"],
     "run_neb": ["initial_structure", "final_structure"],
-    "extract_material_data_from_pdf": ["pdf_path"],
     "extract_info_from_webpage": [],
 }
 
@@ -121,6 +123,18 @@ def _workspace_path_to_local(value: str, workspace_root: Path) -> Path:
     return path
 
 
+def _resolve_one_local(value: str, workspace_root: Path) -> str:
+    """Resolve workspace-relative or local path to absolute path; do not upload to OSS (for local-friendly tools like PDF extract)."""
+    if not _is_local_path(value):
+        return value
+    path = _workspace_path_to_local(value, workspace_root)
+    if not path.exists():
+        raise FileNotFoundError(f"Path argument file not found: {path}.")
+    if not path.is_file():
+        raise ValueError(f"Path argument is not a file: {path}.")
+    return str(path.resolve())
+
+
 def _resolve_one(value: str, workspace_root: Path) -> str:
     """If value is a local path, upload to OSS and return the OSS URL. Path args must be OSS links for remote MCP."""
     if not _is_local_path(value):
@@ -181,15 +195,17 @@ class CalculationPathAdaptor:
         if not path_arg_names or not workspace_path:
             return out
 
+        use_local_path = remote_name in LOCAL_PATH_TOOLS
+        resolve_fn = _resolve_one_local if use_local_path else _resolve_one
         workspace_root = Path(workspace_path).resolve()
         for key in sorted(path_arg_names):
             if key not in out:
                 continue
             val = out[key]
             if isinstance(val, list):
-                out[key] = [_resolve_one(str(v), workspace_root) for v in val]
+                out[key] = [resolve_fn(str(v), workspace_root) for v in val]
             else:
-                out[key] = _resolve_one(str(val), workspace_root)
+                out[key] = resolve_fn(str(val), workspace_root)
         return out
 
 
