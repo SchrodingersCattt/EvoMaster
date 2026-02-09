@@ -14,8 +14,74 @@ import {
 import { cn } from "@/lib/utils";
 import FileTree from "./FileTree";
 import type { LogEntry } from "./LogStream";
+import type { FileEntry } from "./FileTree";
 import { renderContent } from "./ContentRenderer";
 import { isEnvRelatedEntry } from "@/lib/logEntryUtils";
+
+const API_BASE =
+  typeof window !== "undefined"
+    ? (process.env.NEXT_PUBLIC_API_URL || "http://localhost:50001")
+    : "";
+
+const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".ico"]);
+
+function isImagePath(path: string): boolean {
+  const clean = path.replace(/\?.*$/, "").toLowerCase();
+  const i = clean.lastIndexOf(".");
+  return i >= 0 && IMAGE_EXT.has(clean.slice(i));
+}
+
+function FileViewer({
+  sessionId,
+  filePath,
+  fileName,
+  onClose,
+}: {
+  sessionId: string;
+  filePath: string;
+  fileName: string;
+  onClose: () => void;
+}) {
+  const contentUrl = `${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/files/content?path=${encodeURIComponent(filePath)}`;
+  const showImage = isImagePath(filePath);
+
+  return (
+    <div className="border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden bg-zinc-50 dark:bg-zinc-900/50">
+      <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-b border-zinc-200 dark:border-zinc-800">
+        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 truncate min-w-0" title={fileName}>
+          {fileName}
+        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          <a
+            href={contentUrl}
+            download={fileName}
+            className="text-xs px-2 py-1 rounded bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300"
+          >
+            下载
+          </a>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs px-2 py-1 rounded bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300"
+          >
+            关闭
+          </button>
+        </div>
+      </div>
+      <div className="p-2 max-h-[280px] overflow-auto">
+        {showImage ? (
+          <img
+            src={contentUrl}
+            alt={fileName}
+            className="max-w-full h-auto max-h-[260px] object-contain"
+          />
+        ) : (
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">请使用上方「下载」按钮保存文件。</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function inferToolSuccess(entry: LogEntry): boolean {
   if (entry.type !== "tool_result" || !entry.content || typeof entry.content !== "object")
@@ -91,6 +157,8 @@ export default function WorkspacePanel({
   sessionFilesLogsKey?: number;
   readOnly?: boolean;
 }) {
+  const [selectedFile, setSelectedFile] = useState<{ path: string; name: string } | null>(null);
+
   const toolResults = entries.filter(
     (e) =>
       e.source === "ToolExecutor" &&
@@ -127,14 +195,25 @@ export default function WorkspacePanel({
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
         {!readOnly && sessionId && (
           <AccordionSection title="Files" icon={FileCodeIcon} defaultOpen={true}>
-            <div className="p-2 max-h-[240px] overflow-y-auto">
-              <FileTree
-                key={`${sessionId}-${sessionFilesLogsKey}`}
-                sessionId={sessionId}
-                filePath={filePath}
-                onFilePathChange={onFilePathChange}
-                compact
-              />
+            <div className="p-2 space-y-2">
+              {selectedFile && (
+                <FileViewer
+                  sessionId={sessionId}
+                  filePath={selectedFile.path}
+                  fileName={selectedFile.name}
+                  onClose={() => setSelectedFile(null)}
+                />
+              )}
+              <div className={cn("overflow-y-auto", selectedFile ? "max-h-[160px]" : "max-h-[240px]")}>
+                <FileTree
+                  key={`${sessionId}-${sessionFilesLogsKey}`}
+                  sessionId={sessionId}
+                  filePath={filePath}
+                  onFilePathChange={onFilePathChange}
+                  onFileSelect={(e) => setSelectedFile({ path: e.path || e.name, name: e.name })}
+                  compact
+                />
+              </div>
             </div>
           </AccordionSection>
         )}

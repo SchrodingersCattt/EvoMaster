@@ -22,7 +22,7 @@
     },
     "mat_struct_db": {
       "transport": "sse",
-      "url": "http://chvz1424099.bohrium.tech:50002/sse",
+      "url": "http://chvz1424099.bohrium.tech:50001/sse",
       "headers": {}
     },
     "mat_abacus": {
