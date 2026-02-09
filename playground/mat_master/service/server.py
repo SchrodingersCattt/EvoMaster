@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -92,6 +92,11 @@ _run_stop_events: dict[str, threading.Event] = {}
 class ChatRequest(BaseModel):
     prompt: str
     workspace: str = "./workspace"
+
+
+class RenameRequest(BaseModel):
+    path: str
+    new_name: str
 
 
 @app.get("/")
@@ -244,6 +249,64 @@ def get_session_file_content(session_id: str, path: str):
     )
 
 
+@app.post("/api/sessions/{session_id}/files/upload")
+async def upload_session_file(session_id: str, file: UploadFile = File(...), path: str = Form("")):
+    """Upload a file into the session workspace under the given relative path."""
+    base, _ = _resolve_session_workspace(session_id, create=True)
+    target_dir = (base / path).resolve() if path else base
+    try:
+        target_dir.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Path outside workspace")
+    if not target_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Target directory not found")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    dest = (target_dir / file.filename).resolve()
+    try:
+        dest.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Path outside workspace")
+    if dest.exists():
+        raise HTTPException(status_code=409, detail="File already exists")
+    with dest.open("wb") as f:
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            f.write(chunk)
+    return {"status": "ok", "path": str(dest.relative_to(base)).replace("\\", "/")}
+
+
+@app.put("/api/sessions/{session_id}/files/rename")
+def rename_session_file(session_id: str, req: RenameRequest):
+    """Rename a file or directory within the session workspace."""
+    if not req.path or not req.path.strip():
+        raise HTTPException(status_code=400, detail="path is required")
+    if not req.new_name or not req.new_name.strip():
+        raise HTTPException(status_code=400, detail="new_name is required")
+    base, _ = _resolve_session_workspace(session_id, create=False)
+    target = (base / req.path.strip()).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Path outside workspace")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Path not found")
+    new_name = Path(req.new_name.strip()).name
+    if not new_name or new_name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid new_name")
+    dest = target.with_name(new_name).resolve()
+    try:
+        dest.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Path outside workspace")
+    if dest.exists():
+        raise HTTPException(status_code=409, detail="Target already exists")
+    target.rename(dest)
+    return {"status": "ok", "path": str(dest.relative_to(base)).replace("\\", "/")}
+
+
 @app.get("/api/share/{session_id}")
 def get_share_data(session_id: str):
     """Return session history for read-only share view."""
@@ -295,6 +358,23 @@ def _get_run_workspace_path(run_id: str, task_id: str | None = None) -> Path | N
         if subs:
             return max(subs, key=lambda p: p.stat().st_mtime)
     return run_path
+
+
+def _resolve_session_workspace(session_id: str, create: bool = True) -> tuple[Path, str]:
+    """Resolve session workspace dir and task_id, optionally creating it."""
+    run_path = _runs_dir() / RUN_ID_WEB
+    if not run_path.is_dir():
+        raise HTTPException(status_code=404, detail="Run not found")
+    data = SESSIONS.get(session_id)
+    task_id = (data or {}).get("last_task_id") if data else None
+    if task_id is None:
+        task_id = session_id
+        if create:
+            (run_path / "workspaces" / task_id).mkdir(parents=True, exist_ok=True)
+    base = _get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
+    if not base or not base.is_dir():
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return base, task_id
 
 
 @app.get("/api/runs")
