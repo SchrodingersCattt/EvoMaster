@@ -66,6 +66,9 @@ agents:
 # Mat Master：Mode 通过命令行 --mode 切换（direct | planner），不在此配置
 # ============================================
 mat_master:
+  # 可选：指定 workspace 根目录（与 MAT_MASTER_WORKSPACE_ROOT 相同）
+  # 设置后前端文件树与 agent 的工作目录都指向此路径
+  # workspace_root: "./"
   # 规划模式配置（仅 --mode planner 时使用）
   planner:
     max_steps: 20

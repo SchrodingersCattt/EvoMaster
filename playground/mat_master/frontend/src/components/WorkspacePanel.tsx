@@ -24,6 +24,7 @@ const API_BASE =
     : "";
 
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".ico"]);
+const PDF_EXT = new Set([".pdf"]);
 const MARKDOWN_EXT = new Set([".md", ".markdown"]);
 const TEXT_EXT = new Set([
   ".txt",
@@ -83,6 +84,10 @@ function isTextPath(path: string): boolean {
   return MARKDOWN_EXT.has(ext) || TEXT_EXT.has(ext);
 }
 
+function isPdfPath(path: string): boolean {
+  return PDF_EXT.has(getFileExt(path));
+}
+
 function FileViewer({
   sessionId,
   filePath,
@@ -96,13 +101,14 @@ function FileViewer({
 }) {
   const contentUrl = `${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/files/content?path=${encodeURIComponent(filePath)}`;
   const showImage = isImagePath(filePath);
+  const showPdf = isPdfPath(filePath);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
-    if (showImage) {
+    if (showImage || showPdf) {
       setTextContent(null);
       setTextError(null);
       return;
@@ -166,6 +172,12 @@ function FileViewer({
             src={contentUrl}
             alt={fileName}
             className="max-w-full h-auto max-h-[260px] object-contain"
+          />
+        ) : showPdf ? (
+          <iframe
+            src={contentUrl}
+            title={fileName}
+            className="w-full h-[260px] bg-white dark:bg-zinc-900"
           />
         ) : textLoading ? (
           <p className="text-xs text-zinc-500 dark:text-zinc-400">加载中...</p>
