@@ -1,16 +1,26 @@
 """ResilientCalcExp: tactical resilience layer (mode='resilient_calc').
 
 Submit -> Monitor -> Diagnose -> Fix -> Retry. Reads error_handlers from
-config.mat_master.resilient_calc. Uses LogDiagnosticsSkill for diagnosis.
+config.mat_master.resilient_calc. Uses calculation skills (e.g. LogDiagnosticsSkill)
+when wired; log monitoring is reserved and currently silent.
+All calculation inputs must be OSS links (local paths go through path_adaptor upload);
+result files from OSS are downloaded to workspace.
 """
 
 import json
 import logging
+import re
 import time
+from pathlib import Path
 from typing import Any
 
 from evomaster.core.exp import BaseExp
 from evomaster.utils.types import TaskInstance
+
+try:
+    from evomaster.adaptors.calculation import download_oss_to_local
+except ImportError:
+    download_oss_to_local = None
 
 
 def _get_mat_master_config(config) -> dict:
@@ -28,8 +38,11 @@ class ResilientCalcExp(BaseExp):
     """Resilient calculation mode: tactical layer.
 
     Handles long-running calc jobs: submit, then monitor; on failure,
-    diagnose via LogDiagnosticsSkill, apply config-driven fix actions,
-    resubmit. Retries until success or max_retries.
+    diagnose (log monitoring reserved, currently silent), apply config-driven
+    fix actions, resubmit. Retries until success or max_retries.
+    Calculation skills are used by the agent (skill_registry); path_adaptor
+    ensures inputs are OSS links (local paths uploaded); result OSS files
+    are downloaded to workspace.
     """
 
     def __init__(self, agent, config):
@@ -40,8 +53,10 @@ class ResilientCalcExp(BaseExp):
         self.max_retries = self.calc_config.get("max_retries", 3)
         self.poll_interval = self.calc_config.get("poll_interval_seconds", 30)
         self.error_handlers = self.calc_config.get("error_handlers") or {}
+        self._task_id = None  # set from run() for workspace resolution
 
     def run(self, task_description: str, task_id: str = "calc_task") -> dict[str, Any]:
+        self._task_id = task_id
         self.logger.info("[Resilient] Starting calculation: %s", task_description[:80])
         task = TaskInstance(task_id=task_id, task_type="discovery", description=task_description)
         trajectory = self.agent.run(task)
@@ -50,6 +65,9 @@ class ResilientCalcExp(BaseExp):
         if not job_id:
             self.logger.warning("No Job ID found; treating as synchronous task.")
             return {"trajectory": trajectory, "status": trajectory.status, "steps": len(trajectory.steps)}
+
+        # Log monitoring: reserved for future implementation; silent for now.
+        self._start_log_monitor_silent(job_id)
 
         retries = 0
         while retries < self.max_retries:
@@ -98,19 +116,19 @@ class ResilientCalcExp(BaseExp):
             "message": f"Calculation failed after {retries} retries.",
         }
 
+    def _start_log_monitor_silent(self, job_id: str) -> None:
+        """Reserved for log monitoring. Not implemented; silent (no-op)."""
+        pass
+
     def _check_job_status(self, job_id: str) -> str:
-        """Query job status (e.g. via MCP tool). Override or wire real tool."""
-        raise NotImplementedError(
-            "Job status polling not implemented. Implement _check_job_status to return Done/Success/Finished, "
-            "Failed/Error/Cancelled, or Unknown (e.g. by parsing MCP tool output)."
-        )
+        """Query job status (e.g. via MCP tool). Reserved: returns Unknown until wired to real polling."""
+        # TODO: wire to MCP job-status tool and return Done/Success/Finished | Failed/Error/Cancelled | Unknown
+        return "Unknown"
 
     def _diagnose_error(self, job_id: str) -> str:
-        """Call LogDiagnosticsSkill to get error code. Override or wire to extract_error script."""
-        raise NotImplementedError(
-            "Error diagnosis not implemented. Implement _diagnose_error to return an error code "
-            "matching config resilient_calc.error_handlers (e.g. via LogDiagnosticsSkill)."
-        )
+        """Return error code for error_handlers lookup. Log monitoring reserved; silent (returns 'unknown')."""
+        # TODO: wire to LogDiagnosticsSkill / extract_error when log monitoring is implemented
+        return "unknown"
 
     def _apply_fix_and_resubmit(self, failed_job_id: str, actions: list[dict]) -> str | None:
         """Ask agent to apply fix actions and resubmit; return new job_id or None."""
@@ -148,8 +166,56 @@ class ResilientCalcExp(BaseExp):
                     pass
         return None
 
+    def _get_workspace_root(self) -> Path | None:
+        """Resolve workspace root for downloading OSS results (run_dir/workspaces/task_id or run_dir/workspace)."""
+        if not self.run_dir:
+            return None
+        run_path = Path(self.run_dir).resolve()
+        if self._task_id:
+            ws = run_path / "workspaces" / self._task_id
+            if ws.exists():
+                return ws
+        return run_path / "workspace" if (run_path / "workspace").exists() else run_path
+
+    def _download_result_oss_to_workspace(self, result: dict[str, Any]) -> dict[str, Any]:
+        """If result contains OSS/HTTP URLs (output_files, result_urls, artifacts, etc.), download to workspace."""
+        if not download_oss_to_local:
+            return result
+        workspace = self._get_workspace_root()
+        if not workspace:
+            return result
+        out = dict(result)
+        downloaded: list[str] = []
+        for key in ("output_files", "result_urls", "artifacts", "urls", "output_urls"):
+            urls = out.get(key)
+            if not urls:
+                continue
+            if isinstance(urls, str):
+                urls = [urls]
+            if not isinstance(urls, list):
+                continue
+            local_paths = []
+            for i, url in enumerate(urls):
+                if not isinstance(url, str) or not (url.startswith("http://") or url.startswith("https://")):
+                    continue
+                try:
+                    seg = (url.split("?")[0].rstrip("/") or "").split("/")[-1] or "file"
+                    seg = re.sub(r"[^\w.\-]", "_", seg) or "file"
+                    rel = f"result_{key}_{i}_{seg}"
+                    path = download_oss_to_local(url, workspace, dest_relative_path=rel)
+                    local_paths.append(str(path))
+                    downloaded.append(str(path))
+                except Exception as e:
+                    self.logger.warning("Failed to download result URL %s: %s", url, e)
+            if local_paths:
+                out[f"{key}_local"] = local_paths
+        if downloaded:
+            out["downloaded"] = downloaded
+        return out
+
     def _get_results(self, job_id: str) -> Any:
-        """Fetch results for job. Override with real implementation."""
-        raise NotImplementedError(
-            "Fetch job results not implemented. Implement _get_results to return calculation results for the given job_id."
-        )
+        """Fetch results for job; result files from OSS are downloaded to workspace."""
+        # TODO: obtain result from MCP get_job_result(job_id) or from trajectory when agent fetches result
+        result = {}
+        result = self._download_result_oss_to_workspace(result)
+        return result

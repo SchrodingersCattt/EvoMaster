@@ -18,6 +18,7 @@ from ..memory import MemoryService, get_memory_tools
 from ..tools import get_peek_file_tool
 from .agent import MatMasterAgent
 from .registry import MatMasterSkillRegistry
+from .exp import ResilientCalcExp
 from .solvers import DirectSolver, ResearchPlanner
 
 
@@ -191,12 +192,14 @@ class MatMasterPlayground(BasePlayground):
             self.logger.info("Single-agent playground setup complete")
 
     def _create_exp(self):
-        """Return solver by --mode: direct (DirectSolver) | planner (ResearchPlanner). Default direct."""
+        """Return solver by --mode: direct | planner | resilient_calc. Async/calculation tasks use resilient_calc."""
         mode = getattr(self, "_run_mode", None) or "direct"
         if mode == "planner":
             input_fn = getattr(self, "_planner_input_fn", None)
             output_callback = getattr(self, "_planner_output_callback", None)
             exp = ResearchPlanner(self.agent, self.config, input_fn=input_fn, output_callback=output_callback)
+        elif mode == "resilient_calc":
+            exp = ResilientCalcExp(self.agent, self.config)
         else:
             exp = DirectSolver(self.agent, self.config)
 
