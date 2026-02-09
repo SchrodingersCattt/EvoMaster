@@ -9,60 +9,96 @@ import { isEnvRelatedEntry } from "@/lib/logEntryUtils";
 
 function ToolCard({
   title,
-  statusLabel,
-  children,
+  content,
+  isResult = false,
 }: {
   title: string;
-  statusLabel: "Call" | "Result";
-  children: React.ReactNode;
+  content: unknown;
+  isResult?: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 overflow-hidden">
-      <div className="px-2.5 py-1.5 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between gap-2">
-        <span className="font-medium text-zinc-600 dark:text-zinc-300 text-xs truncate">
-          🛠️ {title}
+    <div className="my-2 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden shadow-sm">
+      {/* Header */}
+      <div className="flex items-center px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800">
+        <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500 dark:text-zinc-400">
+          {isResult ? "Output" : "Call"}
         </span>
-        <span
-          className={cn(
-            "text-xs shrink-0 px-1.5 py-0.5 rounded",
-            statusLabel === "Call"
-              ? "bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200"
-              : "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200"
-          )}
-        >
-          {statusLabel}
+        <span className="ml-2 text-xs font-mono text-zinc-700 dark:text-zinc-300 truncate">
+          {title}
         </span>
       </div>
-      <div className="max-h-60 overflow-y-auto p-2 font-mono text-xs text-zinc-700 dark:text-zinc-300">
-        {children}
+
+      {/* Body with Custom Scrollbar */}
+      <div
+        className={cn(
+          "max-h-60 overflow-y-auto p-3 text-xs font-mono",
+          "scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-600 scrollbar-track-transparent",
+          "[&::-webkit-scrollbar]:w-1.5",
+          "[&::-webkit-scrollbar-track]:bg-transparent",
+          "[&::-webkit-scrollbar-thumb]:bg-zinc-300/50 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600/50",
+          "[&::-webkit-scrollbar-thumb]:rounded-full",
+          "[&::-webkit-scrollbar-thumb]:hover:bg-zinc-400 dark:[&::-webkit-scrollbar-thumb]:hover:bg-zinc-500"
+        )}
+      >
+        {renderContent(content)}
       </div>
     </div>
   );
+}
+
+function parseToolPayload(content: unknown): { name: string; args?: unknown } | null {
+  if (content == null) return null;
+  if (typeof content === "string") {
+    try {
+      const parsed = JSON.parse(content) as { name?: string; args?: unknown };
+      return { name: parsed?.name ?? "tool", args: parsed?.args };
+    } catch {
+      return { name: "tool", args: content };
+    }
+  }
+  if (typeof content === "object") {
+    const c = content as { name?: string; args?: unknown };
+    return { name: c?.name ?? "tool", args: c?.args };
+  }
+  return null;
+}
+
+function parseToolResultPayload(content: unknown): { name: string; result?: unknown } | null {
+  if (content == null) return null;
+  if (typeof content === "string") {
+    try {
+      const parsed = JSON.parse(content) as { name?: string; result?: unknown };
+      return { name: parsed?.name ?? "result", result: parsed?.result };
+    } catch {
+      return { name: "result", result: content };
+    }
+  }
+  if (typeof content === "object") {
+    const c = content as { name?: string; result?: unknown };
+    return { name: c?.name ?? "result", result: c?.result };
+  }
+  return null;
 }
 
 function renderEntry(entry: LogEntry): React.ReactNode {
   if (entry.type === "planner_reply" && typeof entry.content === "string") {
     return <div className="text-sm">Planner: {entry.content}</div>;
   }
-  if (entry.type === "tool_call" && entry.content && typeof entry.content === "object") {
-    const c = entry.content as { name?: string; args?: unknown };
-    const name = c.name ?? "tool";
-    const args = c.args;
-    return (
-      <ToolCard title={name} statusLabel="Call">
-        {renderContent(args)}
-      </ToolCard>
-    );
+  if (entry.type === "tool_call") {
+    const payload = parseToolPayload(entry.content);
+    if (payload) {
+      return (
+        <ToolCard title={payload.name} content={payload.args} isResult={false} />
+      );
+    }
   }
-  if (entry.type === "tool_result" && entry.content && typeof entry.content === "object") {
-    const c = entry.content as { name?: string; result?: string };
-    const name = c.name ?? "result";
-    const result = c.result;
-    return (
-      <ToolCard title={name} statusLabel="Result">
-        {renderContent(result)}
-      </ToolCard>
-    );
+  if (entry.type === "tool_result") {
+    const payload = parseToolResultPayload(entry.content);
+    if (payload) {
+      return (
+        <ToolCard title={payload.name} content={payload.result} isResult={true} />
+      );
+    }
   }
   return renderContent(entry.content);
 }
