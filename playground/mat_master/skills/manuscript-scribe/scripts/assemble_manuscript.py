@@ -262,7 +262,7 @@ def main() -> None:
         print("Use either --sections_dir or --draft, not both.", file=sys.stderr)
         sys.exit(1)
     if not args.sections_dir and not args.draft:
-        print("Provide --sections_dir or --draft.", file=sys.stderr)
+        print("Provide --sections_dir or --draft. Example: --draft draft_manuscript.md --output final.md", file=sys.stderr)
         sys.exit(1)
 
     if args.sections_dir:

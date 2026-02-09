@@ -33,7 +33,7 @@ When routing to **serious writing** (this skill), do **not** do a single shallow
    * After each search: filter for relevance; keep only hits clearly related to that facet and user intent.
    * **Download**: For high-relevance papers, fetch full text where possible (e.g. structure-manager `fetch_web_structure.py` for known URLs, or MCP document extraction).
    * **Read**: Use RAG skill (`rag/scripts/search.py`) or PDF/document tools to extract key findings (Method, Result, Metrics). Optionally use `summarize_paper.py` for section-focused extraction.
-3. **Synthesize**: Run `write_survey_report.py` (or append via `run_survey.py`) to compile findings into a structured file under `_tmp/surveys/survey_TOPIC.md`.
+3. **Write the report (LLM)**: Using the retrieval results in context, **you (the LLM)** write each section into the survey file: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References. Use **manuscript-scribe** `write_section` (with `--content_file` for long sections) or **str_replace_editor** to replace each (TBD) with full content. The script only creates the outline; all substantive content is written by you from the search results.
 
 ## Output format (artifact)
 
@@ -43,22 +43,16 @@ Reports must follow **../_common/reference/citation_and_output_format.md** (cita
 * **Key Methodologies** (table format)
 * **State of the Art** (results comparison)
 * **Gap Analysis** (what is missing?)
-* **References** (BibTeX or link list with `<a href="URL" target="_blank">[n]</a>`)
+* **References** (mandatory): each cited work must list **URL** (from search: use doi as `https://doi.org/<DOI>` or the paper’s url field). Use `[n](url)` in the body; in References list [n], full citation, and URL. If the user asks for links/URLs/链接, do not omit them.
 
 ## Scripts
 
 ### `run_survey.py`
 
-Orchestrates the search–read–write loop.
+Creates the survey **outline** (section headers + TBD) and a search plan. **You (the LLM)** fill all content: after running 6–15+ retrieval calls, use `write_section` or `str_replace_editor` to write Executive Summary, Key Methodologies, State of the Art, Gap Analysis, and References from the retrieval results. No Python report generation—content is LLM-written.
 
-* **Usage**: `python run_survey.py --topic "DPA-2 for Alloys" --depth "deep" --output "survey_dpa.md"`
-* **Logic** (agent must do the retrieval; script coordinates output):
-  1. **Before or alongside this script**: Agent expands topic into facets (see reference/search_facets_and_rounds.md) and runs **many** retrieval calls (paper + web search) per facet—**at least 6–15** total calls for a serious survey, not 1–2.
-  2. Agent runs paper/search (via MCP) repeatedly; selects and filters results; optionally downloads full text and uses RAG/summarize_paper.
-  3. Script (or agent) appends findings section-by-section to the output file (e.g. `_tmp/surveys/survey_dpa.md`).
-  4. Return: "Survey completed. Saved to &lt;path&gt;."
-* **Output path**: Prefer `_tmp/surveys/survey_<sanitized_topic>.md`.
-* **Optional**: Run with `--write_plan` to generate `_tmp/surveys/<topic>_plan.md` (facets + example query checklist). Use it as a reminder to run **many** retrieval calls; the plan does not replace actually calling the tools repeatedly.
+* **Usage**: `python run_survey.py --topic "DPA-2 for Alloys" --depth deep --output survey_dpa.md` (or `--title` as alias for `--topic`).
+* **Then**: Run retrieval (mat_sn_*), then write each section into the survey file with manuscript-scribe or str_replace_editor. Do not leave (TBD) in the delivered file.
 
 ### `summarize_paper.py`
 
@@ -86,6 +80,8 @@ Compiles collected findings into the final structured Markdown report (Executive
 
 ## Rules
 
+* **LLM writes content**: The script only creates the outline. **You** must write Executive Summary, Key Methodologies, State of the Art, Gap Analysis, and References (using write_section or str_replace_editor) from the retrieval results. Do not deliver a file that still contains (TBD).
+* **Delivery**: When the report is complete, **first output the full final report** in your reply (message text) so the user sees it in the chat/frontend; then ensure it is saved to the survey .md file and call finish. Do not only write to file and say "Saved to path".
 * **Expand facets, repeated retrieval**: For serious writing (this skill), **expand the query into multiple facets** and **repeatedly call** retrieval tools (paper search, web search)—**at least 6–15 retrieval calls** across facets; never a single shallow search. See reference/search_facets_and_rounds.md.
 * Prefer academic sources (peer-reviewed papers, scholar results) for literature/review tasks; treat web-only hits as supplementary.
 * After each search, filter by relevance; do not pass irrelevant URLs to extraction.
