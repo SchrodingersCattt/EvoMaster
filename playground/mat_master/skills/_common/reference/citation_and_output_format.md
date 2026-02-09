@@ -19,10 +19,10 @@ Single source of truth for literature/survey reports and manuscripts. Used by **
 
 ## By question type (survey reports)
 
-- **是什么 (what/definition)**: Precise, fact-based; limit statements to what search results support.
-- **为什么 (why/mechanism)**: Layered—definitions from sources, then mechanistic statements; cite each sentence.
-- **如何 (how/procedure)**: Step-by-step with a citation per step; reproduce code/commands verbatim in code blocks.
-- **研究进展 (research progress)**: Executive summary then structured analysis; cite with the link format above.
+- **What/definition**: Precise, fact-based; limit statements to what search results support.
+- **Why/mechanism**: Layered—definitions from sources, then mechanistic statements; cite each sentence.
+- **How/procedure**: Step-by-step with a citation per step; reproduce code/commands verbatim in code blocks.
+- **Research progress / state of the art**: Executive summary then structured analysis; cite with the link format above.
 
 ## References section (manuscripts)
 
