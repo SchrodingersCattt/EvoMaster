@@ -9,9 +9,20 @@ import asyncio
 import concurrent.futures
 import json
 import logging
+import os
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from ..base import BaseTool, ToolError
+
+# 外部服务（web-search、论文检索、结构库等）常需更长时间，默认 60 秒；可通过环境变量 MCP_TOOL_CALL_TIMEOUT 覆盖
+DEFAULT_MCP_TOOL_CALL_TIMEOUT = 60
+
+
+def _mcp_call_timeout() -> int:
+    try:
+        return int(os.environ.get("MCP_TOOL_CALL_TIMEOUT", DEFAULT_MCP_TOOL_CALL_TIMEOUT))
+    except ValueError:
+        return DEFAULT_MCP_TOOL_CALL_TIMEOUT
 
 if TYPE_CHECKING:
     from evomaster.agent.session import BaseSession
@@ -50,6 +61,7 @@ class MCPTool(BaseTool):
         tool_description: str,
         input_schema: dict,
         remote_tool_name: str | None = None,
+        call_timeout: int | None = None,
     ):
         """初始化 MCP 工具
 
@@ -58,6 +70,7 @@ class MCPTool(BaseTool):
             tool_name: 工具名称（已添加服务器前缀）
             tool_description: 工具描述
             input_schema: 输入参数 schema（JSON Schema 格式）
+            call_timeout: 单次调用的超时秒数，默认从环境变量 MCP_TOOL_CALL_TIMEOUT 或 60 读取
         """
         super().__init__()
 
@@ -67,6 +80,7 @@ class MCPTool(BaseTool):
         self._tool_description = tool_description
         self._input_schema = input_schema
         self._remote_tool_name = remote_tool_name
+        self._call_timeout = call_timeout if call_timeout is not None else _mcp_call_timeout()
         # ✅ MCP 专用 event loop（由 MCPToolManager 或 Playground 注入）
         self._mcp_loop = None
 
@@ -169,11 +183,13 @@ class MCPTool(BaseTool):
                 return loop.run_until_complete(coro)
 
             # 3) 如果 loop 在运行（比如你把 loop 放到后台线程 run_forever），用线程安全提交
+            timeout = getattr(self, "_call_timeout", DEFAULT_MCP_TOOL_CALL_TIMEOUT)
             fut = asyncio.run_coroutine_threadsafe(coro, loop)
-            return fut.result(timeout=15)
+            return fut.result(timeout=timeout)
 
         except concurrent.futures.TimeoutError:
-            raise ToolError("MCP tool call timed out after 15 seconds")
+            timeout = getattr(self, "_call_timeout", DEFAULT_MCP_TOOL_CALL_TIMEOUT)
+            raise ToolError(f"MCP tool call timed out after {timeout} seconds")
         except Exception as e:
             raise ToolError(f"Failed to call MCP tool: {str(e)}")
 
