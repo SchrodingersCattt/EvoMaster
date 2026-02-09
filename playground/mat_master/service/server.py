@@ -130,8 +130,17 @@ async def start_task(req: ChatRequest):
 
 @app.get("/api/sessions")
 def list_sessions():
-    """List session ids (for session picker)."""
-    return {"sessions": [{"id": sid, "history_length": len(data.get("history", []))} for sid, data in SESSIONS.items()]}
+    """List session ids (in-memory + 本地 workspaces 目录下的所有文件夹，重启后仍可回溯历史)."""
+    disk_ids = _list_workspace_ids()
+    in_memory = list(SESSIONS.keys())
+    disk_only = [wid for wid in disk_ids if wid not in SESSIONS]
+    all_ids = in_memory + disk_only
+    sessions = []
+    for sid in all_ids:
+        data = SESSIONS.get(sid)
+        history_length = len(data.get("history", [])) if data else 0
+        sessions.append({"id": sid, "history_length": history_length})
+    return {"sessions": sessions}
 
 
 @app.get("/api/sessions/{session_id}/history")
@@ -145,13 +154,17 @@ def get_session_history(session_id: str):
 
 @app.get("/api/sessions/{session_id}/run_info")
 def get_session_run_info(session_id: str):
-    """Return run_id and task_ids for this session (for files/logs tied to current session)."""
+    """Return run_id and task_ids for this session (内存无则用磁盘 workspace 目录对应 task_id，便于回溯历史)."""
     data = SESSIONS.get(session_id)
-    if not data:
-        return {"run_id": RUN_ID_WEB, "last_task_id": None, "task_ids": []}
-    task_ids = data.get("task_ids") or []
-    last_task_id = data.get("last_task_id")
-    return {"run_id": RUN_ID_WEB, "last_task_id": last_task_id, "task_ids": task_ids}
+    if data:
+        task_ids = data.get("task_ids") or []
+        last_task_id = data.get("last_task_id")
+        return {"run_id": RUN_ID_WEB, "last_task_id": last_task_id, "task_ids": task_ids}
+    # 重启后仅存在磁盘的 workspace：用 session_id 作为 task_id 指向 workspaces/<session_id>
+    base = _get_run_workspace_path(RUN_ID_WEB, task_id=session_id)
+    if base and base.is_dir():
+        return {"run_id": RUN_ID_WEB, "last_task_id": session_id, "task_ids": [session_id]}
+    return {"run_id": RUN_ID_WEB, "last_task_id": None, "task_ids": []}
 
 
 @app.get("/api/sessions/{session_id}/files")
@@ -242,6 +255,24 @@ def get_share_data(session_id: str):
 
 def _runs_dir() -> Path:
     return _project_root / "runs"
+
+
+def _list_workspace_ids() -> list[str]:
+    """List all workspace folder names under runs/mat_master_web/workspaces/ (disk-only, so restart后也能回溯历史)."""
+    run_path = _runs_dir() / RUN_ID_WEB
+    workspaces_dir = run_path / "workspaces"
+    if not workspaces_dir.is_dir():
+        return []
+    pairs = []
+    for p in workspaces_dir.iterdir():
+        if p.is_dir():
+            try:
+                mtime = p.stat().st_mtime
+            except OSError:
+                mtime = 0
+            pairs.append((p.name, mtime))
+    pairs.sort(key=lambda x: x[1], reverse=True)
+    return [name for name, _ in pairs]
 
 
 def _get_run_workspace_path(run_id: str, task_id: str | None = None) -> Path | None:
