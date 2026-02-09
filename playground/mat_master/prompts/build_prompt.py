@@ -89,6 +89,7 @@ Workflow:
 When you need to run code, create a Python file, write the code there, then execute it in the terminal; do not paste long Python snippets in the terminal.
 When files to edit/view are outside the working directory, use execute_bash to inspect; use edit, create, and view for editing.
 If a Python script fails with ModuleNotFoundError (or "No module named 'X'"), install the missing package in the current environment (e.g. execute_bash: pip install X), then re-run the script. Prefer using the same Python/interpreter that runs the script (e.g. if you use python from a venv, run pip install there).
+**When a tool fails repeatedly with the same error**: Do not retry the same call unchanged. Try a different approach (e.g. different tool, different parameters, or use_skill with correct script_args format). You can use mem_save to record the error and your next strategy so you avoid repeating the same failure.
 When the task is done, use the finish tool to conclude.
 
 # Routing: technical Q&A vs written report (important)
