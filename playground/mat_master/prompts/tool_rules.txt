@@ -1,0 +1,20 @@
+# Tool usage rules (fix once, apply every run)
+
+## use_skill run_script
+- Always pass all required script arguments. Missing args cause exit code 2 and waste tokens.
+- manuscript-scribe init_manuscript.py: required --title. Example: script_name=init_manuscript.py, script_args="--title \"My Paper\""
+- Optional: add --template generic|Nature|grant or --sections_dir sections/
+
+## use_skill get_reference
+- reference_name is the document filename (or path under the skill), not the skill name.
+- Example: for manuscript-scribe use reference_name="citation_and_references.md" (not "manuscript-scribe").
+- The loader looks under the skill's reference/ or references/ folder.
+
+## edit / view / str_replace_editor (path parameter)
+- The path parameter must be an absolute path to the file.
+- Use the working directory path stated above in this prompt; append the file name to it (e.g. <working_dir>/intro.txt or <working_dir>\intro.txt on Windows).
+- Do not use a relative path or a logical path like /workspace/intro.txt unless that equals the stated working directory.
+
+## Manuscript writing: retrieval before writing
+- Before calling manuscript-scribe write_section or init_manuscript, run literature search (mat_sn_search-papers-normal, mat_sn_scholar-search, mat_sn_web-search) for the section topic unless the user already provided source files.
+- Do not write sections from memory only; ground content in retrieved material and cite it.
