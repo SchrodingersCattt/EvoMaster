@@ -18,8 +18,6 @@ TOOL_GROUPS = [
     ("mat_doc", "Document Parser", "Extract information from web pages or documents; tools like mat_doc_*"),
     ("mat_dpa", "DPA Calculator", "DPA-related calculations; tools like mat_dpa_*"),
     ("mat_bohrium_db", "Bohrium crystal DB", "fetch_bohrium_crystals etc.; tools like mat_bohrium_db_*"),
-    ("mat_optimade", "OPTIMADE structure search", "fetch_structures_with_filter / _spg / _bandgap; tools like mat_optimade_*"),
-    ("mat_openlam", "OpenLAM structures", "fetch_openlam_structures; tools like mat_openlam_*"),
     ("mat_mofdb", "MOF database", "fetch_mofs_sql; tools like mat_mofdb_*"),
     ("mat_abacus", "ABACUS first-principles", "Structure relaxation, SCF, bands, phonons, elasticity, etc.; tools like mat_abacus_*"),
 ]
