@@ -10,22 +10,35 @@ set -e
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
+# Windows (Git Bash / MINGW) 上 50001 易触发 WinError 10013，后端改用 8000
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || -n "$MSYSTEM" ]]; then
+  IS_WIN=1
+else
+  IS_WIN=
+fi
+if [[ -n "$IS_WIN" && -z "${BACKEND_PORT+x}" ]]; then
+  export BACKEND_PORT="${BACKEND_PORT:-8000}"
+fi
+
 # 端口（支持环境变量 BACKEND_PORT、FRONTEND_PORT 覆盖）
 BACKEND_PORT="${BACKEND_PORT:-50001}"
 FRONTEND_PORT="${FRONTEND_PORT:-50003}"
 
-# === 0. 启动前释放端口，避免 Address already in use ===
-for port in "$BACKEND_PORT" "$FRONTEND_PORT"; do
-  if fuser "$port/tcp" >/dev/null 2>&1; then
-    echo "Releasing port $port..."
-    fuser -k "$port/tcp" 2>/dev/null || true
-    sleep 1
-  fi
-done
+# === 0. 启动前释放端口（仅 Linux 有 fuser）===
+if command -v fuser >/dev/null 2>&1; then
+  for port in "$BACKEND_PORT" "$FRONTEND_PORT"; do
+    if fuser "$port/tcp" >/dev/null 2>&1; then
+      echo "Releasing port $port..."
+      fuser -k "$port/tcp" 2>/dev/null || true
+      sleep 1
+    fi
+  done
+fi
 
 # === 1. 获取 IP / 公网域名 (用于提示与前端 API 地址) ===
-SERVER_IP=$(hostname -I | awk '{print $1}')
-if [ -z "$SERVER_IP" ]; then SERVER_IP="YOUR_SERVER_IP"; fi
+# hostname -I 仅 Linux 支持；Windows/Git Bash 用 127.0.0.1
+SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+if [ -z "$SERVER_IP" ]; then SERVER_IP="127.0.0.1"; fi
 # 公网地址由环境变量 PUBLIC_HOST 控制；未设置时用本机 IP
 PUBLIC_HOST="${PUBLIC_HOST:-$SERVER_IP}"
 

@@ -64,6 +64,10 @@ function MarkdownContent({ text }: { text: string }) {
   }
 }
 
+export function renderMarkdown(text: string): React.ReactNode {
+  return <MarkdownContent text={text} />;
+}
+
 export function renderContent(content: unknown): React.ReactNode {
   if (content === null || content === undefined) {
     return <span className="text-zinc-500 italic">(空)</span>;

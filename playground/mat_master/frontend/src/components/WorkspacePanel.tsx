@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import FileTree from "./FileTree";
 import type { LogEntry } from "./LogStream";
 import type { FileEntry } from "./FileTree";
-import { renderContent } from "./ContentRenderer";
+import { renderContent, renderMarkdown } from "./ContentRenderer";
 import { isEnvRelatedEntry } from "@/lib/logEntryUtils";
 
 const API_BASE =
@@ -24,11 +24,63 @@ const API_BASE =
     : "";
 
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".ico"]);
+const MARKDOWN_EXT = new Set([".md", ".markdown"]);
+const TEXT_EXT = new Set([
+  ".txt",
+  ".log",
+  ".csv",
+  ".tsv",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".ini",
+  ".env",
+  ".py",
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".html",
+  ".css",
+  ".mdx",
+  ".sql",
+  ".java",
+  ".go",
+  ".rs",
+  ".sh",
+  ".bash",
+  ".ps1",
+  ".rb",
+  ".php",
+  ".c",
+  ".cc",
+  ".cpp",
+  ".h",
+  ".hpp",
+  ".xml",
+  ".proto",
+]);
 
 function isImagePath(path: string): boolean {
   const clean = path.replace(/\?.*$/, "").toLowerCase();
   const i = clean.lastIndexOf(".");
   return i >= 0 && IMAGE_EXT.has(clean.slice(i));
+}
+
+function getFileExt(path: string): string {
+  const clean = path.replace(/\?.*$/, "").toLowerCase();
+  const i = clean.lastIndexOf(".");
+  return i >= 0 ? clean.slice(i) : "";
+}
+
+function isMarkdownPath(path: string): boolean {
+  return MARKDOWN_EXT.has(getFileExt(path));
+}
+
+function isTextPath(path: string): boolean {
+  const ext = getFileExt(path);
+  return MARKDOWN_EXT.has(ext) || TEXT_EXT.has(ext);
 }
 
 function FileViewer({
@@ -44,6 +96,46 @@ function FileViewer({
 }) {
   const contentUrl = `${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/files/content?path=${encodeURIComponent(filePath)}`;
   const showImage = isImagePath(filePath);
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [textLoading, setTextLoading] = useState(false);
+  const [textError, setTextError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    if (showImage) {
+      setTextContent(null);
+      setTextError(null);
+      return;
+    }
+    if (!isTextPath(filePath)) {
+      setTextContent(null);
+      setTextError(null);
+      return;
+    }
+    let active = true;
+    setTextLoading(true);
+    setTextError(null);
+    fetch(contentUrl)
+      .then((r) => {
+        if (!r.ok) throw new Error("fetch failed");
+        return r.text();
+      })
+      .then((text) => {
+        if (active) setTextContent(text);
+      })
+      .catch((err) => {
+        if (active) {
+          setTextContent(null);
+          setTextError(err instanceof Error ? err.message : "预览失败");
+        }
+      })
+      .finally(() => {
+        if (active) setTextLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [contentUrl, filePath, sessionId, showImage]);
 
   return (
     <div className="border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden bg-zinc-50 dark:bg-zinc-900/50">
@@ -68,13 +160,19 @@ function FileViewer({
           </button>
         </div>
       </div>
-      <div className="p-2 max-h-[280px] overflow-auto">
+      <div className="p-2 h-[280px] overflow-auto">
         {showImage ? (
           <img
             src={contentUrl}
             alt={fileName}
             className="max-w-full h-auto max-h-[260px] object-contain"
           />
+        ) : textLoading ? (
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">加载中...</p>
+        ) : textContent !== null ? (
+          isMarkdownPath(filePath) ? renderMarkdown(textContent) : renderContent(textContent)
+        ) : textError ? (
+          <p className="text-xs text-amber-600 dark:text-amber-400">{textError}</p>
         ) : (
           <p className="text-xs text-zinc-500 dark:text-zinc-400">请使用上方「下载」按钮保存文件。</p>
         )}
@@ -158,6 +256,37 @@ export default function WorkspacePanel({
   readOnly?: boolean;
 }) {
   const [selectedFile, setSelectedFile] = useState<{ path: string; name: string } | null>(null);
+  const [fileTreeRefresh, setFileTreeRefresh] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadFiles = async (files: FileList | null) => {
+    if (!sessionId || !files || files.length === 0) return;
+    setUploading(true);
+    setUploadError(null);
+    try {
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file);
+        form.append("path", filePath || "");
+        const res = await fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/files/upload`, {
+          method: "POST",
+          body: form,
+        });
+        if (!res.ok) {
+          const msg = await res.text();
+          throw new Error(msg || "上传失败");
+        }
+      }
+      setFileTreeRefresh((t) => t + 1);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : "上传失败");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const toolResults = entries.filter(
     (e) =>
@@ -196,6 +325,28 @@ export default function WorkspacePanel({
         {!readOnly && sessionId && (
           <AccordionSection title="Files" icon={FileCodeIcon} defaultOpen={true}>
             <div className="p-2 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-xs px-2 py-1 rounded bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300"
+                  disabled={uploading}
+                >
+                  上传文件
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  multiple
+                  onChange={(e) => uploadFiles(e.target.files)}
+                />
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                  目标: {filePath ? filePath : "根目录"}
+                </span>
+                {uploading && <span className="text-xs text-zinc-500">上传中...</span>}
+              </div>
+              {uploadError && <p className="text-xs text-amber-600 dark:text-amber-400">{uploadError}</p>}
               {selectedFile && (
                 <FileViewer
                   sessionId={sessionId}
@@ -206,12 +357,13 @@ export default function WorkspacePanel({
               )}
               <div className={cn("overflow-y-auto", selectedFile ? "max-h-[160px]" : "max-h-[240px]")}>
                 <FileTree
-                  key={`${sessionId}-${sessionFilesLogsKey}`}
+                  key={`${sessionId}-${sessionFilesLogsKey}-${fileTreeRefresh}`}
                   sessionId={sessionId}
                   filePath={filePath}
                   onFilePathChange={onFilePathChange}
                   onFileSelect={(e) => setSelectedFile({ path: e.path || e.name, name: e.name })}
                   compact
+                  refreshSignal={fileTreeRefresh}
                 />
               </div>
             </div>

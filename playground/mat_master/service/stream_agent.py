@@ -17,9 +17,6 @@ TOOL_SOURCE_MAP = {
     "run_python": "Coder",
 }
 
-RESULT_PREVIEW_LEN = 500
-
-
 def _source_for_tool(tool_name: str) -> str:
     return TOOL_SOURCE_MAP.get(tool_name, "MatMaster")
 
@@ -66,10 +63,15 @@ class StreamingMatMasterAgent(MatMasterAgent):
                     if thought_text:
                         self._emit(agent_name, "thought", thought_text)
                 source = _source_for_tool(tc.function.name)
+                args_raw = tc.function.arguments or ""
+                try:
+                    args_payload = json.loads(args_raw) if args_raw.strip() else {}
+                except (json.JSONDecodeError, TypeError):
+                    args_payload = args_raw
                 self._emit(
                     source,
                     "tool_call",
-                    {"name": tc.function.name, "args": tc.function.arguments},
+                    {"name": tc.function.name, "args": args_payload},
                 )
                 if tc.function.name == "use_skill":
                     try:
@@ -85,13 +87,8 @@ class StreamingMatMasterAgent(MatMasterAgent):
                         pass
 
     def _on_tool_message(self, msg: ToolMessage) -> None:
-        content_preview = (
-            (msg.content[:RESULT_PREVIEW_LEN] + "...")
-            if msg.content and len(msg.content) > RESULT_PREVIEW_LEN
-            else (msg.content or "")
-        )
         self._emit(
             "ToolExecutor",
             "tool_result",
-            {"id": msg.tool_call_id, "name": msg.name, "result": content_preview},
+            {"id": msg.tool_call_id, "name": msg.name, "result": msg.content or ""},
         )
