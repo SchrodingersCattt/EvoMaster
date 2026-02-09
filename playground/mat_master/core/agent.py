@@ -22,11 +22,11 @@ class MatMasterAgent(Agent):
     """
 
     def _get_system_prompt(self) -> str:
-        """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills."""
+        """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills.
+        Date and OS/Shell are appended last so they appear at the end of the prompt (and in log tail)."""
         from ..prompts.build_prompt import build_mat_master_system_prompt
 
-        current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        base = build_mat_master_system_prompt(current_date=current_date)
+        base, current_date, os_type, shell_type = build_mat_master_system_prompt()
 
         working_dir = self.session.config.workspace_path
         working_dir_abs = str(Path(working_dir).absolute())
@@ -55,6 +55,8 @@ You can use the 'use_skill' tool to:
 2. Get reference documentation: action='get_reference'
 3. Run scripts from Operator skills: action='run_script'
 """
+        # Append date and OS/Shell last so they appear in the log tail (LLM logs truncate to head+tail)
+        prompt += f"\nToday's date: {current_date} (OS: {os_type}, Shell: {shell_type})"
         return prompt
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
