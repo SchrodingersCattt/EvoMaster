@@ -1,4 +1,4 @@
-"""Upload local files to Aliyun OSS for calculation MCP tools; download OSS results to workspace.
+"""OSS I/O: upload local files to Aliyun OSS for calculation MCP tools; download OSS results to workspace.
 
 Upload uses oss2 when available; env: OSS_ENDPOINT, OSS_BUCKET_NAME, credentials
 (via EnvironmentVariableCredentialsProvider).

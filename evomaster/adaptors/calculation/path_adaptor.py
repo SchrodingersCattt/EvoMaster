@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 
 from evomaster.env import get_bohrium_storage_config, inject_bohrium_executor
 
-from .oss_upload import upload_file_to_oss
+from .oss_io import upload_file_to_oss
 
 logger = logging.getLogger(__name__)
 
