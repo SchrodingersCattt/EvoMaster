@@ -35,6 +35,8 @@ When routing to **serious writing** (this skill), do **not** do a single shallow
    * **Read**: Use RAG skill (`rag/scripts/search.py`) or PDF/document tools to extract key findings (Method, Result, Metrics). Optionally use `summarize_paper.py` for section-focused extraction.
 3. **Write the report (LLM)**: Using the retrieval results in context, **you (the LLM)** write each section into the survey file: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References. Use **manuscript-scribe** `write_section` (with `--content_file` for long sections) or **str_replace_editor** to replace each (TBD) with full content. The script only creates the outline; all substantive content is written by you from the search results.
 
+**Full-length retention**: To avoid truncation, **always** write each section’s full text to a file first (e.g. create or str_replace_editor to `_tmp/surveys/section_Executive_Summary.md`, `section_State_of_the_Art.md`, etc.), then call `write_section` with `--content_file <path>`. Do **not** pass long section body via `--content` (it may be truncated). This keeps the full-length report in both the section files and the final survey file.
+
 ## Output format (artifact)
 
 Reports must follow **../_common/reference/citation_and_output_format.md** (citation format, plain text/Markdown, units, abbreviations). The artifact file should contain:
@@ -84,7 +86,8 @@ Compiles collected findings into the final structured Markdown report (Executive
 ## Rules
 
 * **LLM writes content**: The script only creates the outline. **You** must write Executive Summary, Key Methodologies, State of the Art, Gap Analysis, and References (using write_section or str_replace_editor) from the retrieval results. Do not deliver a file that still contains (TBD).
-* **Substantial length**: Write a **full-length review**, not a brief. Executive Summary ≥2–3 paragraphs; State of the Art with multiple subsections and detailed discussion (many paragraphs/bullets); Key Methodologies and Gap Analysis fully developed. Use --content_file for long sections to avoid truncation. Do not deliver a very short (e.g. 1–2 page) report.
+* **Substantial length**: Write a **full-length review**, not a brief. Executive Summary ≥2–3 paragraphs; State of the Art with multiple subsections and detailed discussion (many paragraphs/bullets); Key Methodologies and Gap Analysis fully developed. Do not deliver a very short (e.g. 1–2 page) report.
+* **Full-length retention**: For every section, write the full body to a file first (e.g. create/edit `_tmp/surveys/section_<Name>.md`), then call write_section with `--content_file` that path. Never pass long section text in `--content` (it gets truncated). This ensures the full-length report is retained in the survey file.
 * **Delivery**: When the report is complete, **first output the full final report** in your reply (message text) so the user sees it in the chat/frontend; then ensure it is saved to the survey .md file and call finish. Do not only write to file and say "Saved to path".
 * **Expand facets, repeated retrieval**: For serious writing (this skill), **expand the query into multiple facets** and **repeatedly call** retrieval tools (paper search, web search)—**at least 6–15 retrieval calls** across facets; never a single shallow search. See reference/search_facets_and_rounds.md.
 * Prefer academic sources (peer-reviewed papers, scholar results) for literature/review tasks; treat web-only hits as supplementary.

@@ -8,6 +8,8 @@ skill_type: operator
 
 The "Ghostwriter" for MatMaster. Output is always to **files**; chat is only for instructions and progress.
 
+**When NOT to use**: If the user is only asking a technical question (e.g. "what is X?", "how does Y work?") and does **not** ask for a paper/report/写一篇/输出到文件, do **not** invoke this skill. Use 1–2 mat_sn or web searches, answer in chat, and finish. Use manuscript-scribe only when the deliverable is clearly a **file** (paper, report, section to file).
+
 ## Step 0: Information retrieval (mandatory before any writing)
 
 **Do not** call init_manuscript or write_section until you have run literature search for the topic. Writing **must** be grounded in retrieval:
