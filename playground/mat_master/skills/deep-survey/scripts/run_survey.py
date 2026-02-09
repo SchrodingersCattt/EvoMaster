@@ -79,7 +79,7 @@ def main() -> None:
             plan_lines.append(f"### {i}. {facet}")
             plan_lines.append("")
             plan_lines.append("- [ ] Query variant 1 (e.g. topic + facet keyword)")
-            plan_lines.append("- [ ] Query variant 2 (synonym / 中文)")
+            plan_lines.append("- [ ] Query variant 2 (synonym or alternate language)")
             plan_lines.append("- [ ] Query variant 3 (e.g. \"X review\" or \"X mechanism\")")
             plan_lines.append("")
         plan_lines.append("## Tools to call repeatedly")

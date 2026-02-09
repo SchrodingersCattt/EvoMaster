@@ -6,24 +6,35 @@ skill_type: operator
 
 # Manuscript Scribe Skill
 
-The "Ghostwriter" for MatMaster. It manages **per-section drafts** (each section written separately), then **assembles** them into one manuscript and runs **three consistency checks**. Output is always to **files**; chat is only for instructions and progress (e.g. "Methods written to sections/Methods.md. Run assemble_manuscript next.").
+The "Ghostwriter" for MatMaster. Output is always to **files**; chat is only for instructions and progress.
+
+## Three-step flow: chunked writing → assemble → polish
+
+1. **Chunked writing**: Draft each section in chunks. Use `write_section.py` to create a section, then call it again with **`--append`** to add more paragraphs. Repeat until each section (Introduction, Methods, Results, Discussion) is complete. Optionally use `init_manuscript.py` first to create the outline or `sections/` directory.
+2. **Assemble**: Run `assemble_manuscript.py` to merge section files (or the single draft) into one document and run the three checks (terms, abbreviations, references). Fix any reported issues.
+3. **Polish**: Run `polish_text.py` on the assembled file for each section that needs it (e.g. `--target_section Introduction`, then Methods, Results, Discussion). This step smooths language and removes redundancy; run after assembly so the full context is in one file.
+
+Do not skip the assemble step: writing is chunked, then concatenated, then polished.
 
 ## Information retrieval (mandatory before writing)
 
 Writing sections **must** be grounded in information retrieval at a **level of detail** that matches the task (intro/background → broader search; methods/results → method- and data-focused search). **If the prompt does not specify sources or the user does not provide files**, you **must expand and search the literature yourself**: call MCP retrieval tools (e.g. `mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `mat_sn_web-search`) with queries derived from the section topic, then use the results as the basis for cited, factual content. Do not write sections from memory or unsupported claims when no materials were given.
 
-## Workflow (section-by-section then assemble)
+## Chunked writing (how to get substantial sections)
 
-Do **not** generate the whole paper in one turn. Use this process:
+The script `write_section.py` does **not** expand short text; it writes exactly what you pass. To get substantial sections without generating the whole section in one long turn:
 
-1. **Initialize**: Create outline and optionally a `sections/` directory (`init_manuscript.py`).
-2. **Gather material**: For each section, if the user did not provide enough source files or the prompt lacks content, **run literature/search** (see above) at the appropriate level of detail; then draft from the retrieved material and cite it.
-3. **Draft each section**: Write **one section at a time** to a section file (e.g. `sections/Introduction.md`, `sections/Methods.md`) or into a single draft file using `write_section.py`. Each section must follow **citation and reference rules** (see below).
-4. **Assemble and validate**: Run `assemble_manuscript.py` to concatenate sections and run the **three checks**:
-   - **Technical terms**: Are all domain terms defined at first use?
-   - **Abbreviations**: Are all abbreviations defined exactly once (no duplicate definitions)?
-   - **References**: Are all in-text citations present in the References section, and do all reference links point to valid original sources?
-5. **Refine**: Use `polish_text.py` on specific sections if needed.
+1. **First call** for a section: create it with the first paragraph(s), e.g. `write_section.py --section "Introduction" --content_file "intro_p1.txt" --output sections/Introduction.md` (or `--draft draft.md`).
+2. **Later calls** for the same section: use **`--append`** to add more paragraphs or chunks, e.g. `write_section.py --section "Introduction" --append --content "Next paragraph..." --draft draft.md`. Repeat for each new chunk (e.g. 3–5 paragraphs per section).
+3. You can also build the section in a **temporary file** (e.g. with create/edit, appending paragraph by paragraph), then pass that file once with `--content_file`.
+
+So substantial length comes from **multiple** write_section calls (create + append) or from building a full section file before calling the script once. Do not rely on a single call with one short paragraph.
+
+## Detail (before and during step 1)
+
+- **Initialize** (optional): Create outline or `sections/` with `init_manuscript.py`.
+- **Gather material**: For each section, if the user did not provide source files or the prompt lacks content, **run literature/search** (see above) at the appropriate level of detail; then draft from the retrieved material and cite it.
+- **Citation**: Each section must follow the citation and reference rules below; assemble_manuscript validates them in step 2.
 
 ## Citation and references (mandatory)
 
@@ -44,12 +55,13 @@ Full format details: **reference/citation_and_references.md**.
 
 ### `write_section.py` (workhorse)
 
-* **Usage**: `python write_section.py --section "Methods" --content_file "methods_notes.txt" --tone "formal" --draft "draft_manuscript.md"`  
-  Or write to a section file: `python write_section.py --section "Introduction" --content_file "intro_bullets.txt" --output "sections/Introduction.md"`
+* **Usage**:  
+  Create or replace: `python write_section.py --section "Methods" --content_file "methods_notes.txt" --draft draft_manuscript.md`  
+  Append to section: `python write_section.py --section "Introduction" --append --content "Next paragraph..." --draft draft_manuscript.md`
 * **Logic**:
-  * Takes raw notes or data (file or inline). Generates polished, **citation-backed** prose: every claim that needs a source must have `[n](URL)` or `[n](#ref-n)` and a corresponding entry in References.
-  * Writes **one section only** (avoids token limits). When writing to a section file, the References for that section can be collected and merged at assemble time.
-  * Output: either update a single `--draft` or write to `--output sections/SectionName.md`.
+  * Writes the given content into the section (no expansion; script writes exactly what you pass). Use **`--append`** to add more paragraphs to an existing section so you can build it in chunks (multiple calls) instead of one long generation.
+  * Citation-backed prose: every claim that needs a source must have `[n](URL)` or `[n](#ref-n)` and a corresponding entry in References.
+  * Output: update `--draft` or write to `--output sections/SectionName.md`.
 
 ### `assemble_manuscript.py` (concatenate + review)
 
@@ -88,6 +100,7 @@ Full format details: **reference/citation_and_references.md**.
 ## Rules
 
 * **Information retrieval**: Before writing a section, ensure you have enough source material. If the prompt or user did not provide files or references, **proactively run literature/search** (MCP paper and web search) at the appropriate level of detail; then write from the retrieved content with proper citations.
+* **Chunked writing**: Use multiple `write_section.py` calls per section (first call creates, further calls use `--append`) or build the full section in a file then pass with `--content_file`; the script does not expand short text.
 * Citations: **text + hyperlink** to original source; References section must match in-text [n] exactly (see reference/citation_and_references.md).
 * Always write long content to **files**; one section per call for `write_section.py`.
 * Before finalizing, run `assemble_manuscript.py` with `--validate` and address term, abbreviation, and reference checks.

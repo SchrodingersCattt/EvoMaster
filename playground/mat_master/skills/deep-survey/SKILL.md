@@ -12,11 +12,11 @@ A systematic researcher that generates **detailed review reports saved as Markdo
 
 | User intent | Use | Do not use |
 |-------------|-----|------------|
-| "Give me a comprehensive review on X" / "写一份关于 X 的综述" | **deep-survey** (`run_survey.py`) | — |
+| "Give me a comprehensive review on X" | **deep-survey** (`run_survey.py`) | — |
 | "Survey the latest progress in Perovskite stability" | **deep-survey** | — |
 | "Summarize methods for calculating melting points" (output to file) | **deep-survey** | — |
 | "What are the common failures in VASP relaxation?" (answer in chat) | MCP paper/search tools, short answer | deep-survey |
-| "查一下 X 的定义" / "Quick: what is X?" | MCP web/search, short answer | deep-survey |
+| "Quick: what is X?" / one-off definition lookup | MCP web/search, short answer | deep-survey |
 
 **Rule**: If the expected output is a **file** (e.g. `survey_TOPIC.md`) or a long-form report, use this skill. If the expected output is a **short reply in chat**, use MCP search tools and answer directly.
 
@@ -26,7 +26,7 @@ When routing to **serious writing** (this skill), do **not** do a single shallow
 
 1. **Plan (expand facets)**:
    * Analyze the topic and break it into **3–5 facets** (e.g. definition, mechanism, methods, reviews, caveats; see reference).
-   * For each facet, plan **2–4 query variants** (keywords, synonyms, Chinese/English, "X review", "X mechanism").
+   * For each facet, plan **2–4 query variants** (keywords, synonyms, or alternate language; e.g. "X review", "X mechanism").
    * **Minimum**: enough queries so that total **retrieval tool calls** are at least **6–15** (e.g. 3–5 facets × 2–3 searches per facet). For deep surveys, use more rounds.
 2. **Execute loop (repeated retrieval)**:
    * **For each facet and each query variant**: Call MCP retrieval tools (`mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `mat_sn_web-search`, etc.) **repeatedly**—do not stop after one or two searches.
@@ -87,6 +87,6 @@ Compiles collected findings into the final structured Markdown report (Executive
 ## Rules
 
 * **Expand facets, repeated retrieval**: For serious writing (this skill), **expand the query into multiple facets** and **repeatedly call** retrieval tools (paper search, web search)—**at least 6–15 retrieval calls** across facets; never a single shallow search. See reference/search_facets_and_rounds.md.
-* Prefer academic sources (peer-reviewed papers, scholar results) for 研究进展/文献; treat web-only hits as supplementary.
+* Prefer academic sources (peer-reviewed papers, scholar results) for literature/review tasks; treat web-only hits as supplementary.
 * After each search, filter by relevance; do not pass irrelevant URLs to extraction.
 * Always write the report to a **file**; do not attempt to stream the full review in chat (token limit). In chat, report: "Survey completed. Saved to &lt;path&gt;. Please open the file."

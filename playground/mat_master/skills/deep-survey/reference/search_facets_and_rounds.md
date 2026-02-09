@@ -43,8 +43,8 @@ From the user's topic or question, derive **multiple search facets** (aspects). 
 
 ## 3. Tool usage by facet
 
-- **Definition / tutorials**: Prefer `mat_sn_web-search` (e.g. "X definition", "X tutorial", "X 教程").
-- **Mechanism / methods / reviews**: Prefer `mat_sn_search-papers-normal`, `mat_sn_scholar-search`, or `mat_sn_pubmed-search` with queries like "X mechanism", "X 机理", "X review", "X 综述".
+- **Definition / tutorials**: Prefer `mat_sn_web-search` (e.g. "X definition", "X tutorial").
+- **Mechanism / methods / reviews**: Prefer `mat_sn_search-papers-normal`, `mat_sn_scholar-search`, or `mat_sn_pubmed-search` with queries like "X mechanism", "X review".
 - **Single URL deep-dive**: When a result URL is clearly relevant, use `mat_doc_extract_info_from_webpage` (or equivalent) to pull main text. Do not extract every URL—only those that clearly match the facet or user intent.
 
 Use **multiple query variants** (Chinese/English, synonyms) per facet when the first round is thin.
