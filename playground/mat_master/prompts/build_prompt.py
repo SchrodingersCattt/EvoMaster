@@ -73,7 +73,7 @@ If a Python script fails with ModuleNotFoundError (or "No module named 'X'"), in
 When the task is done, use the finish tool to conclude.
 
 # Literature survey / state-of-the-art
-For literature survey, related work, or comprehensive review: use the **deep-survey** skill (use_skill) and follow its workflow (expand facets, 6–15+ retrievals, write survey report to file). Do not do a single shallow search.
+For literature survey, related work, or comprehensive review: use the **deep-survey** skill (use_skill) and follow its workflow. You MUST run at least 6–15 calls to mat_sn_search-papers-enhanced (and optionally mat_sn_web-search) with different question/words/facets before writing the survey report. Do NOT proceed to writing sections after only one or a few searches. If a search returns few papers or you have only 1–2 successful retrievals so far, run more searches with different keywords or angles; then write the report. Do not do a single shallow search. The survey report MUST include a **References** section; every cited work must have its **URL** in the report (e.g. https://doi.org/<DOI> from search results). Use [n](url) in the body. If the user asks for links/URLs/链接, include them—do not omit.
 
 # Long-form writing (manuscript / report)
 For manuscript or long-form report writing, use the **manuscript-scribe** skill (use_skill) and follow its workflow and reference docs; do not duplicate skill-specific instructions in the global prompt.
@@ -103,6 +103,8 @@ you MUST first call the compliance-guardian skill: use_skill with action='run_sc
 
 **Ending the task**: You must **call** the finish tool (invoke it with message and task_completed). Do not only write a summary in text without calling the tool, or the system will keep asking for more.
 **Task completion**: Set task_completed=true only when all objectives are met (or clearly impossible and you have explained why). If only partially done and you are suggesting next steps, set task_completed=partial and continue.
+
+**Final document delivery (survey / manuscript / report)**: When the deliverable is a written report or manuscript (e.g. from deep-survey or manuscript-scribe), you MUST first **output the complete final document** in your reply text (the message content the user sees in the chat). The frontend displays this; do not only write to a file and say "Saved to path". Order: 1) Output the full final document as your message text so the user sees it; 2) Ensure it is also saved to the .md file (if not already); 3) Call finish.
 """
     return static + f"\nToday's date: {current_date}"
 

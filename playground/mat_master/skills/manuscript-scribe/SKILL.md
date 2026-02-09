@@ -35,6 +35,8 @@ So: **one search → agent LLM summary → append to temp file**; then concatena
 
 Do not skip the assemble step: writing is chunked (or built in temp files), then concatenated into one long document, then polished with LLM.
 
+**Delivery**: When the final manuscript is assembled and polished, **first output the complete final document** in your reply (message text) so the user sees it in the chat/frontend; then call finish. The .md file should already be written; your reply makes the document visible to the user. Do not only say "Saved to path" without outputting the document.
+
 ## Chunked writing (how to get substantial sections)
 
 The script `write_section.py` does **not** expand short text; it writes exactly what you pass. To get substantial sections without generating the whole section in one long turn:
@@ -74,9 +76,11 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 
 * **Usage**:  
   Create or replace: `python write_section.py --section "Methods" --content_file "methods_notes.txt" --draft draft_manuscript.md`  
-  Append to section: `python write_section.py --section "Introduction" --append --content "Next paragraph..." --draft draft_manuscript.md`
+  Append to section: `python write_section.py --section "Introduction" --append --content "Next paragraph..." --draft draft_manuscript.md`  
+  **For long sections** (bullets, multiple refs, 2+ paragraphs): always use **--content_file**; write content to a file first, then pass that path to avoid truncation of `--content` in tool args.
 * **Logic**:
   * Writes the given content into the section (no expansion; script writes exactly what you pass). Use **`--append`** to add more paragraphs to an existing section so you can build it in chunks (multiple calls) instead of one long generation.
+  * **Prefer --content_file for long content**: Inline --content is prone to truncation when passed via use_skill; for References, Summary, or any section with lists/long text, write to a temp file and use --content_file.
   * Citation-backed prose: every claim that needs a source must have `[n](URL)` or `[n](#ref-n)` and a corresponding entry in References.
   * Output: update `--draft` or write to `--output sections/SectionName.md`.
 
@@ -122,7 +126,8 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 ## Rules
 
 * **Retrieval first**: Before any init_manuscript or write_section call, run literature search (mat_sn_* paper and web search) for the topic; do not write from memory only.
-* **Required args**: init_manuscript.py always needs --title; pass it in script_args (e.g. script_args="--title \"My Paper\"").
+* **Required args**: init_manuscript.py always needs --title; pass it in script_args (e.g. script_args="--title \"My Paper\""). assemble_manuscript.py always needs **--output** and one of **--draft** or **--sections_dir** (e.g. script_args="--draft draft_manuscript.md --output final.md").
+* **Long section content (critical)**: Section content passed via **--content** in script_args can be truncated by the tool layer (e.g. ~500–1000 chars). For any section longer than a short paragraph (lists, multiple refs, 2+ paragraphs), **write the content to a file first** (e.g. with str_replace_editor or execute_bash), then call `write_section.py --section "SectionName" --content_file path/to/section.md --draft draft_manuscript.md`. Do not rely on long --content strings for Summary, State-of-the-Art, or References.
 * **Chunked writing**: Use multiple `write_section.py` calls per section (first call creates, further calls use `--append`) or build the full section in a file then pass with `--content_file`; the script does not expand short text.
 * Citations: **text + hyperlink** to original source; References section must match in-text [n] exactly (see reference/citation_and_references.md).
 * Always write long content to **files**; one section per call for `write_section.py`.

@@ -1,23 +1,17 @@
 """
-Orchestrate a deep literature survey: plan queries, collect metadata, optionally fetch full text,
-and append findings to a Markdown report. Paper search is done via MCP tools (repeatedly);
-this script can emit a search plan and coordinates file output.
-
-For serious writing, the agent MUST expand the topic into facets and call retrieval tools
-repeatedly (see reference/search_facets_and_rounds.md)—at least 6–15 retrieval calls, not 1–2.
+Create a survey outline and optional search plan. All report content is written by the LLM:
+agent runs 6–15+ retrieval calls (mat_sn_*), then uses write_section / str_replace_editor to fill
+Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References.
 
 Usage:
-  python run_survey.py --topic "DPA-2 for Alloys" --depth "deep" --output "survey_dpa.md"
-  python run_survey.py --topic "Perovskite stability" --depth "deep" --write_plan
-
-Output: Creates or appends to _tmp/surveys/<output>; optionally writes a search-plan checklist.
+  python run_survey.py --topic "DPA-2 for Alloys" --depth deep --output survey_dpa.md
+  python run_survey.py --title "My Survey" --output survey.md
 """
 
 import argparse
 import re
 from pathlib import Path
 
-# Standard facets to expand from topic (see reference/search_facets_and_rounds.md)
 DEFAULT_FACETS = [
     "Definition",
     "Mechanism",
@@ -38,66 +32,50 @@ def _project_tmp() -> Path:
 
 
 def sanitize_topic(topic: str) -> str:
-    """Sanitize topic for use in filenames."""
-    return re.sub(r"[^\w\s-]", "", topic).strip().replace(" ", "_")[:80]
+    if topic is None:
+        return "survey"
+    s = str(topic).strip()
+    s = re.sub(r"[^\w\s\-]", "", s, flags=re.UNICODE)
+    s = s.strip().replace(" ", "_")[:80]
+    return s or "survey"
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description="Run a deep literature survey and write a report to a Markdown file."
-    )
-    ap.add_argument("--topic", required=True, help="Survey topic (e.g. 'DPA-2 for Alloys')")
-    ap.add_argument("--depth", default="deep", choices=["quick", "deep"], help="Survey depth")
-    ap.add_argument(
-        "--output",
-        default=None,
-        help="Output filename (default: survey_<sanitized_topic>.md)",
-    )
-    ap.add_argument(
-        "--write_plan",
-        action="store_true",
-        help="Write a search-plan checklist (facets + example queries) to _tmp/surveys/<topic>_plan.md",
-    )
+    ap = argparse.ArgumentParser(description="Create survey outline and search plan; LLM fills content.")
+    ap.add_argument("--topic", default=None, help="Survey topic")
+    ap.add_argument("--title", dest="topic_alias", default=None, help="Alias for --topic")
+    ap.add_argument("--depth", default="deep", choices=["quick", "deep"])
+    ap.add_argument("--output", default=None)
+    ap.add_argument("--write_plan", action="store_true")
     args = ap.parse_args()
+
+    topic = args.topic or args.topic_alias
+    if not topic:
+        ap.error("required: --topic or --title")
+    topic = str(topic).strip()
 
     base = _project_tmp() / "surveys"
     base.mkdir(parents=True, exist_ok=True)
-    out_name = args.output or f"survey_{sanitize_topic(args.topic)}.md"
+    out_name = args.output or f"survey_{sanitize_topic(topic)}.md"
     out_path = base / out_name
 
-    if args.write_plan:
-        plan_path = base / f"{sanitize_topic(args.topic)}_plan.md"
-        plan_lines = [
-            f"# Search plan: {args.topic}",
-            "",
-            "**Rule**: Repeatedly call retrieval tools (paper + web search) for each facet. Minimum ~6–15 total calls.",
-            "",
-            "## Facets and example queries (run multiple searches per facet)",
-            "",
-        ]
-        for i, facet in enumerate(DEFAULT_FACETS, 1):
-            plan_lines.append(f"### {i}. {facet}")
-            plan_lines.append("")
-            plan_lines.append("- [ ] Query variant 1 (e.g. topic + facet keyword)")
-            plan_lines.append("- [ ] Query variant 2 (synonym or alternate language)")
-            plan_lines.append("- [ ] Query variant 3 (e.g. \"X review\" or \"X mechanism\")")
-            plan_lines.append("")
-        plan_lines.append("## Tools to call repeatedly")
-        plan_lines.append("")
-        plan_lines.append("- `mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `mat_sn_search-papers-enhanced`")
-        plan_lines.append("- `mat_sn_web-search` (definitions, tutorials)")
-        plan_lines.append("- After each search: filter relevance, then continue to next query/facet.")
-        plan_path.write_text("\n".join(plan_lines), encoding="utf-8")
-        print(f"Search plan written to {plan_path}. Run retrieval for each facet before synthesizing.")
+    write_plan = args.write_plan or (args.depth == "deep")
+    if write_plan:
+        plan_path = base / f"{sanitize_topic(topic)}_plan.md"
+        plan_path.write_text(
+            f"# Search plan: {topic}\n\n"
+            "Run 6–15+ retrieval calls (mat_sn_search-papers-enhanced, mat_sn_web-search). "
+            "Then use manuscript-scribe write_section or str_replace_editor to write Executive Summary, "
+            "Key Methodologies, State of the Art, Gap Analysis, and References from the retrieval results.\n\n"
+            + "\n".join(f"## {f}" for f in DEFAULT_FACETS),
+            encoding="utf-8",
+        )
+        print(f"Search plan: {plan_path}")
 
-    # Placeholder: real implementation would call MCP/search, RAG, then write sections.
-    # Here we create the file with a minimal outline so the skill is usable end-to-end.
-    outline = f"""# Survey: {args.topic}
-
-*Generated by deep-survey (depth={args.depth}). Replace this with run_survey logic that calls paper search, filters, and appends sections.*
+    outline = f"""# Survey: {topic}
 
 ## Executive Summary
-(TBD)
+(TBD — LLM writes from retrieval results)
 
 ## Key Methodologies
 (TBD)
@@ -112,7 +90,7 @@ def main() -> None:
 (TBD)
 """
     out_path.write_text(outline, encoding="utf-8")
-    print(f"Survey completed. Saved to {out_path}.")
+    print(f"Survey outline: {out_path}. Fill sections with write_section / str_replace_editor from retrieval results.")
 
 
 if __name__ == "__main__":
