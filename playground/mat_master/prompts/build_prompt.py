@@ -3,11 +3,13 @@ Mat Master prompt generation.
 
 System and user prompts are built by functions so tool list and rules stay in one place.
 - Tool list: maintain TOOL_GROUPS; add new MCP entries here when you onboard a server.
-- Current date is appended at the end of the system prompt for cache-friendly prefix caching.
+- Current date (with OS/shell info) is appended at the end for cache-friendly prefix caching.
 """
 
 from __future__ import annotations
 
+import os
+import platform
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -32,15 +34,28 @@ def _format_tool_groups(groups: list[tuple[str, str, str]]) -> str:
 
 def build_mat_master_system_prompt(
     current_date: Optional[str] = None,
+    os_type: Optional[str] = None,
+    shell_type: Optional[str] = None,
     tool_groups: Optional[list[tuple[str, str, str]]] = None,
-) -> str:
+) -> tuple[str, str, str, str]:
     """Build the Mat Master system prompt.
 
+    Returns (static_prompt, current_date, os_type, shell_type). Caller should append
+    "Today's date: {date} (OS: {os_type}, Shell: {shell_type})" at the very end of the
+    full system prompt so it appears in log tail.
+
     - current_date: e.g. '2026-02-07'; if not set, uses today (UTC).
-    - tool_groups: default TOOL_GROUPS. For prompt caching, only the last line (date) changes per day.
+    - tool_groups: default TOOL_GROUPS. For prompt caching, only the last line changes per day.
+    - os_type: runtime OS type (e.g. Windows, Linux).
+    - shell_type: runtime shell type (e.g. bash, zsh, cmd).
     """
     if current_date is None:
         current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if os_type is None:
+        os_type = platform.system() or "unknown"
+    if shell_type is None:
+        shell_path = os.environ.get("SHELL") or os.environ.get("COMSPEC") or os.environ.get("ComSpec")
+        shell_type = os.path.basename(shell_path).lower() if shell_path else "unknown"
     groups = tool_groups if tool_groups is not None else TOOL_GROUPS
     tool_block = _format_tool_groups(groups)
 
@@ -120,7 +135,7 @@ you MUST first call the compliance-guardian skill: use_skill with action='run_sc
 
 **Final document delivery (survey / manuscript / report)**: When the deliverable is a written report or manuscript (e.g. from deep-survey or manuscript-scribe), you MUST first **output the complete final document** in your reply text (the message content the user sees in the chat). The frontend displays this; do not only write to a file and say "Saved to path". Order: 1) Output the full final document as your message text so the user sees it; 2) Ensure it is also saved to the .md file (if not already); 3) Call finish.
 """
-    return static + f"\nToday's date: {current_date}"
+    return static, current_date, os_type, shell_type
 
 
 def build_mat_master_user_prompt(
