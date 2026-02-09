@@ -1,0 +1,39 @@
+# Tool usage rules (fix once, apply every run)
+
+## Web search and retrieval
+- Web search returns **snippets only**. When answering from web results, **parse/fetch full content** first (e.g. mat_doc_* extract from webpage, or other parsing); do not answer from snippets alone.
+- **Retrieval: prefer English** query terms when using mat_sn_*; before answering, consider each source’s quality (authority, relevance, recency).
+
+## Routing: technical Q&A vs writing (do not over-use writing skills)
+- If the user is only asking a **technical question** (e.g. what is X, how does Y work, 某技术问题怎么办) and does **not** ask for a report/综述/调研/写一篇/输出到文件: do **not** use deep-survey or manuscript-scribe. Do **1–2** mat_sn or mat_sn_web-search calls, answer in chat from the results, then call finish. Use writing skills only when the user clearly wants a **file** (综述、调研报告、论文、长文).
+- **Technical answers**: Must include detailed concept explanation (solid definitions); if formulas are used, explain every physical quantity; state concept relationships; optionally give examples from search results. If you cite any source, use [n](url) in text and list References (each with URL) after the answer.
+- **Every reference must have a URL**: In text use [n](url); References section (or list) must include the URL for each [n]. Applies to technical answers, deep-survey (including short output), and manuscript. No reference without URL.
+- **Academic writing (survey/manuscript)**: Concept rigor is **mandatory**—definitions for key concepts, every symbol in formulas explained, how concepts relate to each other; optionally examples from retrieval. Do not leave concepts undefined or symbols unexplained.
+
+## use_skill run_script
+- Always pass all required script arguments. Missing args cause exit code 2 and waste tokens.
+- manuscript-scribe init_manuscript.py: required --title. Example: script_name=init_manuscript.py, script_args="--title \"My Paper\""
+- manuscript-scribe assemble_manuscript.py: required --output and one of --draft or --sections_dir. Example: script_args="--draft draft_manuscript.md --output final.md"
+- manuscript-scribe write_section.py: For long sections (lists, multiple refs, 2+ paragraphs), use --content_file: write content to a file first (str_replace_editor or execute_bash), then script_args="--section \"SectionName\" --content_file path/to/file.md --draft draft_manuscript.md". Do not pass long text in --content; it can be truncated.
+- deep-survey: run_survey.py only creates the outline + plan. You (LLM) must run 6–15+ mat_sn retrievals (mat_sn_search-papers-enhanced, mat_sn_web-search) with different question/words, then write all sections. Do not write the full report after only one or two successful mat_sn calls; if the last search returned few papers or total retrievals are still low, run more with different keywords before writing. Do not deliver a survey file that still has (TBD). Survey/review output MUST include a **References** section; each cited work must have its **URL** (from search results: use doi as https://doi.org/<DOI>, or the paper url field). Use [n](url) in the body and list [n] + full citation + URL in References. If the user asks for links/URLs/链接, do not omit them. The report must be **full-length** (Executive Summary ≥2–3 paragraphs; State of the Art with multiple subsections and detailed discussion; do not deliver a 1–2 page brief). **Full-length retention**: write each section body to a file first (e.g. _tmp/surveys/section_<Name>.md), then call write_section with --content_file that path; do not pass long text in --content (it truncates).
+- Optional: init_manuscript add --template generic|Nature|grant or --sections_dir sections/
+
+## use_skill get_reference
+- reference_name is the document filename (or path under the skill), not the skill name.
+- Example: for manuscript-scribe use reference_name="citation_and_references.md" (not "manuscript-scribe").
+- The loader looks under the skill's reference/ or references/ folder.
+
+## edit / view / str_replace_editor (path parameter)
+- The path parameter must be an absolute path to the file.
+- Use the working directory path stated above in this prompt; append the file name to it (e.g. <working_dir>/intro.txt or <working_dir>\intro.txt on Windows).
+- Do not use a relative path or a logical path like /workspace/intro.txt unless that equals the stated working directory.
+
+## 综述 / 调研报告：必须先执行 deep-survey
+- For **综述** (review), **调研报告** (survey report), or **研究进展/文献综述** (state-of-the-art): you MUST first run the **deep-survey** skill (run_survey.py, then 6–15+ mat_sn retrievals, then write all sections). Do not deliver a survey/review by only using manuscript-scribe or writing from memory; the report must come from deep-survey with enough retrievals.
+
+## Manuscript writing: retrieval before writing
+- Before calling manuscript-scribe write_section or init_manuscript, run literature search (mat_sn_search-papers-normal, mat_sn_scholar-search, mat_sn_web-search) for the section topic unless the user already provided source files.
+- Do not write sections from memory only; ground content in retrieved material and cite it. When citing papers use: In [year], [first author] et al. [did what / found that ...]; [n](url).
+
+## Final document: show in chat then save
+- For survey/manuscript/report deliverables: first **output the complete final document** in your reply (so the frontend shows it to the user), then ensure it is saved to the .md file and call finish. Do not only say "Saved to …" without outputting the document content in your message.

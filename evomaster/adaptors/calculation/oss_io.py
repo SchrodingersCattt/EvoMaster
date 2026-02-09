@@ -1,14 +1,17 @@
-"""Upload local files to Aliyun OSS for calculation MCP tools.
+"""OSS I/O: upload local files to Aliyun OSS for calculation MCP tools; download OSS results to workspace.
 
-Uses oss2 when available; env: OSS_ENDPOINT, OSS_BUCKET_NAME, credentials
+Upload uses oss2 when available; env: OSS_ENDPOINT, OSS_BUCKET_NAME, credentials
 (via EnvironmentVariableCredentialsProvider).
+Download uses stdlib urllib so no extra deps for result fetching.
 """
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Optional
+from urllib.request import urlopen, Request
 
 logger = logging.getLogger(__name__)
 
@@ -64,3 +67,44 @@ def upload_file_to_oss(
     url = f"https://{bucket_name}.{host}/{oss_key}"
     logger.debug("Uploaded %s -> %s", path, url)
     return url
+
+
+def _is_oss_or_http_url(value: str) -> bool:
+    if not value or not isinstance(value, str):
+        return False
+    v = value.strip().lower()
+    return v.startswith("https://") or v.startswith("http://")
+
+
+def download_oss_to_local(
+    oss_url: str,
+    workspace_root: Path,
+    dest_relative_path: Optional[str] = None,
+) -> Path:
+    """Download a file from OSS (or any HTTP(S) URL) to workspace. Returns path to saved file."""
+    if not _is_oss_or_http_url(oss_url):
+        raise ValueError(f"Not an OSS/HTTP URL: {oss_url}")
+    workspace_root = Path(workspace_root).resolve()
+    workspace_root.mkdir(parents=True, exist_ok=True)
+
+    if dest_relative_path:
+        dest = (workspace_root / dest_relative_path).resolve()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        # Infer filename from URL path (last segment)
+        from urllib.parse import urlparse, unquote
+        parsed = urlparse(oss_url)
+        path = unquote(parsed.path or "")
+        name = path.split("/")[-1] or "downloaded_file"
+        # Sanitize
+        name = re.sub(r"[^\w.\-]", "_", name)
+        if not name:
+            name = "downloaded_file"
+        dest = workspace_root / name
+
+    req = Request(oss_url, headers={"User-Agent": "EvoMaster-Calculation/1.0"})
+    with urlopen(req, timeout=120) as resp:
+        data = resp.read()
+    dest.write_bytes(data)
+    logger.debug("Downloaded %s -> %s", oss_url, dest)
+    return dest

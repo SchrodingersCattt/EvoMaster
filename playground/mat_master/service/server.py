@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -94,6 +94,11 @@ class ChatRequest(BaseModel):
     workspace: str = "./workspace"
 
 
+class RenameRequest(BaseModel):
+    path: str
+    new_name: str
+
+
 @app.get("/")
 def root():
     """API only. Use http://localhost:3000 for the dashboard."""
@@ -130,8 +135,17 @@ async def start_task(req: ChatRequest):
 
 @app.get("/api/sessions")
 def list_sessions():
-    """List session ids (for session picker)."""
-    return {"sessions": [{"id": sid, "history_length": len(data.get("history", []))} for sid, data in SESSIONS.items()]}
+    """List session ids (in-memory + 本地 workspaces 目录下的所有文件夹，重启后仍可回溯历史)."""
+    disk_ids = _list_workspace_ids()
+    in_memory = list(SESSIONS.keys())
+    disk_only = [wid for wid in disk_ids if wid not in SESSIONS]
+    all_ids = in_memory + disk_only
+    sessions = []
+    for sid in all_ids:
+        data = SESSIONS.get(sid)
+        history_length = len(data.get("history", [])) if data else 0
+        sessions.append({"id": sid, "history_length": history_length})
+    return {"sessions": sessions}
 
 
 @app.get("/api/sessions/{session_id}/history")
@@ -145,13 +159,17 @@ def get_session_history(session_id: str):
 
 @app.get("/api/sessions/{session_id}/run_info")
 def get_session_run_info(session_id: str):
-    """Return run_id and task_ids for this session (for files/logs tied to current session)."""
+    """Return run_id and task_ids for this session (内存无则用磁盘 workspace 目录对应 task_id，便于回溯历史)."""
     data = SESSIONS.get(session_id)
-    if not data:
-        return {"run_id": RUN_ID_WEB, "last_task_id": None, "task_ids": []}
-    task_ids = data.get("task_ids") or []
-    last_task_id = data.get("last_task_id")
-    return {"run_id": RUN_ID_WEB, "last_task_id": last_task_id, "task_ids": task_ids}
+    if data:
+        task_ids = data.get("task_ids") or []
+        last_task_id = data.get("last_task_id")
+        return {"run_id": RUN_ID_WEB, "last_task_id": last_task_id, "task_ids": task_ids}
+    # 重启后仅存在磁盘的 workspace：用 session_id 作为 task_id 指向 workspaces/<session_id>
+    base = _get_run_workspace_path(RUN_ID_WEB, task_id=session_id)
+    if base and base.is_dir():
+        return {"run_id": RUN_ID_WEB, "last_task_id": session_id, "task_ids": [session_id]}
+    return {"run_id": RUN_ID_WEB, "last_task_id": None, "task_ids": []}
 
 
 @app.get("/api/sessions/{session_id}/files")
@@ -231,6 +249,64 @@ def get_session_file_content(session_id: str, path: str):
     )
 
 
+@app.post("/api/sessions/{session_id}/files/upload")
+async def upload_session_file(session_id: str, file: UploadFile = File(...), path: str = Form("")):
+    """Upload a file into the session workspace under the given relative path."""
+    base, _ = _resolve_session_workspace(session_id, create=True)
+    target_dir = (base / path).resolve() if path else base
+    try:
+        target_dir.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Path outside workspace")
+    if not target_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Target directory not found")
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+    dest = (target_dir / file.filename).resolve()
+    try:
+        dest.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Path outside workspace")
+    if dest.exists():
+        raise HTTPException(status_code=409, detail="File already exists")
+    with dest.open("wb") as f:
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            f.write(chunk)
+    return {"status": "ok", "path": str(dest.relative_to(base)).replace("\\", "/")}
+
+
+@app.put("/api/sessions/{session_id}/files/rename")
+def rename_session_file(session_id: str, req: RenameRequest):
+    """Rename a file or directory within the session workspace."""
+    if not req.path or not req.path.strip():
+        raise HTTPException(status_code=400, detail="path is required")
+    if not req.new_name or not req.new_name.strip():
+        raise HTTPException(status_code=400, detail="new_name is required")
+    base, _ = _resolve_session_workspace(session_id, create=False)
+    target = (base / req.path.strip()).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Path outside workspace")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Path not found")
+    new_name = Path(req.new_name.strip()).name
+    if not new_name or new_name in {".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid new_name")
+    dest = target.with_name(new_name).resolve()
+    try:
+        dest.relative_to(base)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Path outside workspace")
+    if dest.exists():
+        raise HTTPException(status_code=409, detail="Target already exists")
+    target.rename(dest)
+    return {"status": "ok", "path": str(dest.relative_to(base)).replace("\\", "/")}
+
+
 @app.get("/api/share/{session_id}")
 def get_share_data(session_id: str):
     """Return session history for read-only share view."""
@@ -242,6 +318,24 @@ def get_share_data(session_id: str):
 
 def _runs_dir() -> Path:
     return _project_root / "runs"
+
+
+def _list_workspace_ids() -> list[str]:
+    """List all workspace folder names under runs/mat_master_web/workspaces/ (disk-only, so restart后也能回溯历史)."""
+    run_path = _runs_dir() / RUN_ID_WEB
+    workspaces_dir = run_path / "workspaces"
+    if not workspaces_dir.is_dir():
+        return []
+    pairs = []
+    for p in workspaces_dir.iterdir():
+        if p.is_dir():
+            try:
+                mtime = p.stat().st_mtime
+            except OSError:
+                mtime = 0
+            pairs.append((p.name, mtime))
+    pairs.sort(key=lambda x: x[1], reverse=True)
+    return [name for name, _ in pairs]
 
 
 def _get_run_workspace_path(run_id: str, task_id: str | None = None) -> Path | None:
@@ -264,6 +358,23 @@ def _get_run_workspace_path(run_id: str, task_id: str | None = None) -> Path | N
         if subs:
             return max(subs, key=lambda p: p.stat().st_mtime)
     return run_path
+
+
+def _resolve_session_workspace(session_id: str, create: bool = True) -> tuple[Path, str]:
+    """Resolve session workspace dir and task_id, optionally creating it."""
+    run_path = _runs_dir() / RUN_ID_WEB
+    if not run_path.is_dir():
+        raise HTTPException(status_code=404, detail="Run not found")
+    data = SESSIONS.get(session_id)
+    task_id = (data or {}).get("last_task_id") if data else None
+    if task_id is None:
+        task_id = session_id
+        if create:
+            (run_path / "workspaces" / task_id).mkdir(parents=True, exist_ok=True)
+    base = _get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
+    if not base or not base.is_dir():
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    return base, task_id
 
 
 @app.get("/api/runs")
@@ -373,6 +484,9 @@ def _run_agent_sync(
         mode = (mode or "direct").strip().lower() or "direct"
         pg.set_mode(mode)
 
+        if mode == "resilient_calc":
+            # Async calculation tasks: use ResilientCalcExp (calculation skills + path_adaptor OSS; results downloaded).
+            pass
         if mode == "planner" and planner_reply_queue is not None:
             pg._planner_input_fn = lambda prompt: _planner_ask_and_wait(
                 prompt, send_cb, loop, planner_reply_queue
@@ -493,7 +607,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
 
             mode = (data.get("mode") or "direct").strip().lower() or "direct"
-            if mode not in ("direct", "planner"):
+            if mode not in ("direct", "planner", "resilient_calc"):
                 mode = "direct"
 
             session_id = data.get("session_id") or str(uuid.uuid4())
@@ -552,9 +666,10 @@ if __name__ == "__main__":
     # Windows 上 reload 会 spawn 子进程，易触发 DuplicateHandle PermissionError，默认关闭
     force_reload = os.environ.get("RELOAD", "").lower() in ("1", "true", "yes")
     use_reload = force_reload or (sys.platform != "win32")
+    backend_port = int(os.environ.get("BACKEND_PORT", "50001"))
     uvicorn.run(
         "server:app",
         host="0.0.0.0",
-        port=50001,
+        port=backend_port,
         reload=use_reload,
     )

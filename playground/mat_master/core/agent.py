@@ -22,7 +22,7 @@ class MatMasterAgent(Agent):
     """
 
     def _get_system_prompt(self) -> str:
-        """Use generated system prompt (tool list + date), then append working directory and skills."""
+        """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills."""
         from ..prompts.build_prompt import build_mat_master_system_prompt
 
         current_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -32,6 +32,18 @@ class MatMasterAgent(Agent):
         working_dir_abs = str(Path(working_dir).absolute())
         working_dir_info = f"\n\nYou must perform all operations in this working directory; do not change directory. All file operations and commands must be run under: {working_dir_abs}"
         prompt = base + working_dir_info
+
+        # Inject tool rules (fix once, apply every run) so repeated tool errors are avoided
+        _tool_rules_path = Path(__file__).resolve().parent.parent / "prompts" / "tool_rules.txt"
+        if _tool_rules_path.exists():
+            prompt += "\n\n" + _tool_rules_path.read_text(encoding="utf-8").strip()
+
+        # Mandatory citation and output format for survey/manuscript — agent MUST follow this
+        _citation_format_path = Path(__file__).resolve().parent.parent / "skills" / "_common" / "reference" / "citation_and_output_format.md"
+        if _citation_format_path.exists():
+            prompt += "\n\n# Citation and output format (mandatory for literature surveys and manuscripts)\n\n"
+            prompt += _citation_format_path.read_text(encoding="utf-8").strip()
+            prompt += "\n\nYou MUST follow the above format when writing survey reports or manuscript sections: use [n](url) for every citation, include a References section with URL for each [n], and obey General / Citation / References section / Terminology rules."
 
         if self.skill_registry is not None:
             skills_info = self.skill_registry.get_meta_info_context()
@@ -90,6 +102,22 @@ You can use the 'use_skill' tool to:
                     pass
 
             observation, info = self._execute_tool(tool_call)
+
+            # Remind agent to do multiple retrievals for survey: append after mat_sn paper search
+            if tool_call.function.name == "mat_sn_search-papers-enhanced" and info.get("error") is None:
+                n_papers = ""
+                try:
+                    obj = json.loads(observation)
+                    if isinstance(obj, dict) and "data" in obj and isinstance(obj["data"], list):
+                        n_papers = str(len(obj["data"]))
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                call_count = info.get("call_count", "?")
+                reminder = (
+                    f"\n\n[Survey reminder: 本次返回 {n_papers or '?'} 篇（第 {call_count} 次检索）。"
+                    "综述/调研需至少 6–15 次检索；若结果偏少或检索次数不足，请换 question/words 继续调用 mat_sn_search-papers-enhanced 或 mat_sn_web-search。]"
+                )
+                observation = observation + reminder
 
             MAX_TOOL_OUTPUT = 30000
             if len(observation) > MAX_TOOL_OUTPUT:
