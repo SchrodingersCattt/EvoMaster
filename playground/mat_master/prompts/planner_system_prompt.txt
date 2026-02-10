@@ -63,7 +63,7 @@ When USER_INTENT is to **reproduce, replicate, or follow** the methodology of an
 - In general, do not specify tool names in goals. The executor will select appropriate tools. **Exceptions** where you SHOULD name tools in the goal text (to ensure correct routing):
   - **deep-survey** / **manuscript-scribe** skills: as described in IV-B.
   - **PDF / document parsing**: when a step involves reading a PDF or paper, the goal MUST mention "mat_doc tools" or "mat_doc_extract_material_data_from_pdf" so the executor calls the MCP document parser instead of trying to read raw PDF bytes. Example: "Parse the PDF at <path> using mat_doc tools to extract structures and parameters."
-  - **MCP calculation submission**: when a step requires submitting a calculation job (ABACUS, LAMMPS, DPA), the goal may mention "mat_abacus_*" or "mat_dpa_*" to hint at using remote submission rather than local execution.
+  - **MCP calculation submission**: when a step requires submitting a calculation job (ABACUS, LAMMPS, CP2K, QE, ABINIT, ORCA, DPA), the goal may mention "mat_abacus_*", "mat_dpa_*", or "mat_binary_calc_*" (for LAMMPS/CP2K/ABINIT/QE/ORCA) to hint at using remote submission rather than local execution.
 
 # V-B. CONDITIONAL BRANCHES & DEPENDENCIES (OPTIONAL)
 Steps may optionally include:
