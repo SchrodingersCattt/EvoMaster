@@ -347,6 +347,7 @@ class BaseAgent(ABC):
             error_msg = f"Tool execution error: {str(e)}"
             self.logger.error(f"Tool execution failed: {e}", exc_info=True)
             self._log_tool_end(tool_name, error_msg, {"error": str(e)})
+            # Note: errors are only returned as observation (ToolMessage in dialog); there is no automatic mem_save of tool errors.
             return error_msg, {"error": str(e)}
 
     def _log_tool_start(self, tool_name: str, tool_args: str) -> None:

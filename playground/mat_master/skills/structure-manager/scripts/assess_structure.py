@@ -33,16 +33,39 @@ def _get_radius(symbol: str) -> float:
 
 
 def _load_structure(filepath: Path):
-    """Load with pymatgen or ase."""
+    """Load with pymatgen or ase.
+
+    For .xyz files (molecules without a lattice), try pymatgen Molecule first,
+    then fall back to ASE.  For periodic structures (.cif, POSCAR, etc.) use
+    pymatgen Structure.
+    """
+    suffix = filepath.suffix.lower()
+
+    # --- .xyz / molecular formats: use Molecule (no lattice) ---
+    if suffix in (".xyz",):
+        try:
+            from pymatgen.core import Molecule
+            mol = Molecule.from_file(str(filepath))
+            return mol, "pymatgen_molecule"
+        except Exception:
+            pass
+        try:
+            from ase.io import read
+            return read(str(filepath)), "ase"
+        except Exception:
+            pass
+        return None, None
+
+    # --- periodic structures ---
     try:
         from pymatgen.core import Structure
         return Structure.from_file(str(filepath)), "pymatgen"
-    except ImportError:
+    except (ImportError, ValueError):
         pass
     try:
         from ase.io import read
         return read(str(filepath)), "ase"
-    except ImportError:
+    except (ImportError, Exception):
         pass
     return None, None
 
@@ -197,7 +220,29 @@ def main() -> None:
         out = {"is_valid": False, "dimensionality": "Unknown", "formula": "", "warnings": ["pymatgen or ase required to read structure"]}
         print(json.dumps(out))
         sys.exit(1)
-    if backend == "pymatgen":
+    if backend == "pymatgen_molecule":
+        # Molecule (no lattice) — dimensionality is 0D by definition
+        formula = obj.composition.reduced_formula
+        dim = "0D Molecule"
+        dim_warns = []
+        # Simple sanity: check pairwise distances (no PBC)
+        import numpy as np
+        coords = np.array([s.coords for s in obj])
+        symbols = [s.specie.symbol for s in obj]
+        sane_warns = []
+        sane = True
+        n = len(coords)
+        for i in range(n):
+            for j in range(i + 1, n):
+                d = np.linalg.norm(coords[i] - coords[j])
+                threshold = 0.7 * (_get_radius(symbols[i]) + _get_radius(symbols[j]))
+                if d < threshold:
+                    sane_warns.append(
+                        f"Short contact {symbols[i]}{i}-{symbols[j]}{j}: "
+                        f"{d:.3f} A < 0.7*(r_i+r_j)={threshold:.3f} A"
+                    )
+                    sane = False
+    elif backend == "pymatgen":
         formula = obj.formula
         dim, dim_warns = _dimensionality_pymatgen(obj)
         sane, sane_warns = _min_distance_and_sanity(obj, backend)

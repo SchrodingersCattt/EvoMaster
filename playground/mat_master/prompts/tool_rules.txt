@@ -10,6 +10,64 @@
 - **Every reference must have a URL**: In text use [n](url); References section (or list) must include the URL for each [n]. Applies to technical answers, deep-survey (including short output), and manuscript. No reference without URL.
 - **Academic writing (survey/manuscript)**: Concept rigor is **mandatory**—definitions for key concepts, every symbol in formulas explained, how concepts relate to each other; optionally examples from retrieval. Do not leave concepts undefined or symbols unexplained.
 
+## PDF parsing: always use MCP tools first
+- For **any PDF file**, you MUST call mat_doc_extract_material_data_from_pdf (sync) or mat_doc_submit_extract_material_data_from_pdf + mat_doc_get_job_results (async) **before** trying any other method (view, peek_file, Python libraries). mat_doc tools are purpose-built for PDF and return structured extraction. Only fall back to other methods if mat_doc tools explicitly fail.
+
+## structure-manager skill (download & validate structures)
+- **Download from URL**: When you have a direct link to a CIF/POSCAR/XYZ, use use_skill with skill_name=structure-manager, script_name=fetch_web_structure.py, script_args="--url <URL>". Do not use wget/curl/requests for structure files.
+- **Validation**: After obtaining any new structure (from URL, MCP, or user upload), use use_skill with skill_name=structure-manager, script_name=assess_structure.py, script_args="--file <path>". This checks dimensionality, sanity, and formula.
+- **Database search** and **structure building** (SMILES, prototypes) use MCP tools (mat_sg_*, mat_bohrium_db_*), NOT structure-manager.
+
+## input-manual-helper (input file writing & validation — MANDATORY loop)
+- When writing any software input file (INCAR, INPUT, in.lammps, cp2k.inp, pw.in, input.json, etc.), follow the full workflow:
+  1. `list_manuals.py` — discover available manuals
+  2. **For CP2K**: `get_reference` with `reference_name='cp2k/<type>.inp'` to load a reference template. Available: `scf_energy`, `band_structure`, `geo_opt`, `cell_opt`, `md_nvt`. **ALWAYS start from the template — do NOT write CP2K from scratch.**
+  3. `peek_manual.py --software X --tree` — overview of sections and param counts
+  4. `peek_manual.py --software X --section "SECTION"` — get details for each needed section. **Use --sections "S1,S2,S3" (comma-separated) to batch-query multiple sections in ONE call.**
+  5. Write the input file by **adapting the template** with parameter info from steps 3-4
+  6. `validate_input.py --input_file <path> --software X` — validate against manual
+  7. If errors: fix and re-validate (up to 3 times). Do NOT finish until validation passes.
+- **Do NOT** use peek_file on manual JSONs (multi-MB files flood context). Use peek_manual.py instead.
+- **Do NOT** skip validation — every written input file MUST be validated.
+- **Performance**: Use `--sections "S1,S2,S3"` to query multiple sections in one call. Use `--section SEC --tree` to see a subtree. Use `--section SEC --search KW` to search within a section.
+- **Do NOT** combine `--tree` and `--section` without intent — `--section SEC --tree` shows the subtree of SEC (not the full tree).
+- **Anti-loop rule (CRITICAL)**: If peek_manual.py returns "No params matching" or "No params found for section" for a search term, that parameter/section does NOT exist in the manual. Do NOT retry the same or similar search more than **2 times**. After 2 failed attempts for the same concept:
+  1. STOP searching for it.
+  2. The manual does not cover this parameter — it may be a subsection (not a named parameter), or it may use a different name.
+  3. Use your **domain knowledge** of the software to write the correct syntax directly.
+  4. Proceed to the next step (write the file or search for something else entirely different).
+- **CP2K keyword vs subsection — CRITICAL**:
+  - CP2K has two kinds of identifiers: **keywords** (single-line `KEY value`) and **subsections** (blocks `&SECTION ... &END SECTION`). Mixing them up causes instant ABORT.
+  - **Keywords** (single line, NO `&` prefix): `ADDED_MOS 30`, `EPS_SCF 1.0E-6`, `CUTOFF 400`, `SCF_GUESS ATOMIC`, `NPOINTS 20`, `SPECIAL_POINT GAMMA 0.0 0.0 0.0`, `METHOD GPW`, `SCHEME MONKHORST-PACK 4 4 4`, `MAX_DIIS 7`, `MAX_SCF 50`.
+  - **Subsections** (block with `&` prefix): `&SCF ... &END SCF`, `&SMEAR ... &END SMEAR`, `&XC_FUNCTIONAL PBE ... &END XC_FUNCTIONAL`, `&KPOINT_SET ... &END KPOINT_SET`, `&OT ... &END OT`, `&OUTER_SCF ... &END OUTER_SCF`, `&MIXING ... &END MIXING`, `&DIAGONALIZATION ... &END DIAGONALIZATION`.
+  - `ADDED_MOS` is a **keyword** → write `ADDED_MOS 30` inside `&SCF`. NEVER write `&ADDED_MOS 30 &END ADDED_MOS`.
+  - `MAX_DIIS` is a **keyword** → write `MAX_DIIS 7` inside `&SCF`. NEVER write `&DIIS ... &END DIIS` — **there is NO `&DIIS` subsection in CP2K**.
+  - `SMEAR` is a **subsection** → write `&SMEAR ON ... &END SMEAR`.
+  - `OT` is a **subsection** → write `&OT ... &END OT` inside `&SCF` for orbital transformation method.
+  - `DIAGONALIZATION` is a **subsection** → write `&DIAGONALIZATION ... &END DIAGONALIZATION` inside `&SCF`.
+  - When in doubt, check the manual with `peek_manual.py --search KEYWORD`. If it returns a result with `syntax_template: "KEY [value]"`, it's a keyword. If it returns nothing, it may be a subsection.
+- **Common CP2K gotchas**:
+  - **`&DIIS` does NOT exist**: There is no `&DIIS` subsection in CP2K. DIIS is the default SCF convergence method controlled by keywords: `MAX_DIIS 7`, `EPS_DIIS 0.1` directly inside `&SCF`. Do NOT create a `&DIIS ... &END DIIS` block.
+  - BANDSTRUCTURE k-points: The keyword for defining special k-points in `&KPOINT_SET` is **`SPECIAL_POINT`**, NOT `SPECIAL_KPOINT`. Correct syntax: `SPECIAL_POINT GAMMA 0.0 0.0 0.0`. The keyword `SPECIAL_KPOINT` does NOT exist in CP2K — never use it.
+  - `NPOINTS` (number of points between special k-points) also lives in `&KPOINT_SET`.
+  - BANDSTRUCTURE lives under `&FORCE_EVAL / &PROPERTIES / &BANDSTRUCTURE` (or `&DFT / &PRINT / &BAND_STRUCTURE` in older versions).
+- **Gaussian input file format — CRITICAL**:
+  - Gaussian `.gjf`/`.com` format: `%` link0 commands → `#` route line → blank → title → blank → charge multiplicity → coordinates → blank → [additional input sections] → blank
+  - **`gen` vs `genecp`**: If ANY atom uses an ECP (e.g. SDD, LANL2DZ for transition metals), you MUST use `genecp` (or `gen pseudo=read`) in the route, NOT just `gen`. Using `gen` alone causes Gaussian to skip the ECP section → crash.
+  - **Section ordering with `genecp` + `CPHF=RdFreq`**: coordinates → blank → basis set spec → blank → ECP spec → blank → frequency value → blank. Getting the order wrong = crash.
+  - **Diffuse functions for NLO/polarizability**: Hyperpolarizability (β, γ), polarizability (α), and any NLO property calculation REQUIRES diffuse functions. Use `6-311++G(d,p)` or `aug-cc-pVDZ` at minimum. Plain `6-311G(d,p)` is WRONG for NLO — results will be physically meaningless.
+  - **Polar keyword variants**:
+    - `Polar` = static α and β only
+    - `Polar=DCSHG` = frequency-dependent β(-2ω;ω,ω) (second harmonic generation, e.g. at 1064nm)
+    - `Polar=OptRot` = optical rotation
+    - `Polar=Gamma` = second hyperpolarizability γ
+    - For "含频第一超极化率 at 1064nm" → use `Polar=DCSHG CPHF=RdFreq`, then put `1064nm` as additional input after coordinates/basis.
+  - **Frequency input**: With `CPHF=RdFreq`, specify frequency AFTER all basis/ECP sections. Format: `1064nm` or `0.04282542` (in Hartree). One frequency per line.
+  - **Transition metal complexes**: SMILES-based structure generation does NOT produce correct coordination geometry for complexes like [Fe(CN)₅NO]²⁻. Use literature coordinates or optimize geometry first with a cheaper method.
+  - **Complete Gaussian route example** (NLO with ECP): `#p PBE1PBE/genecp Polar=DCSHG CPHF=RdFreq`
+- Example: script_name=peek_manual.py, script_args="--software CP2K --sections FORCE_EVAL/DFT/SCF,FORCE_EVAL/DFT/XC,FORCE_EVAL/SUBSYS"
+- Example: script_name=validate_input.py, script_args="--input_file /workspace/INCAR --software VASP"
+
 ## use_skill run_script
 - Always pass all required script arguments. Missing args cause exit code 2 and waste tokens.
 - manuscript-scribe init_manuscript.py: required --title. Example: script_name=init_manuscript.py, script_args="--title \"My Paper\""
