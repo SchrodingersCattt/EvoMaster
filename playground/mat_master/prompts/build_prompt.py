@@ -22,6 +22,7 @@ TOOL_GROUPS = [
     ("mat_bohrium_db", "Bohrium crystal DB", "fetch_bohrium_crystals etc.; tools like mat_bohrium_db_*"),
     ("mat_mofdb", "MOF database", "fetch_mofs_sql; tools like mat_mofdb_*"),
     ("mat_abacus", "ABACUS first-principles", "Structure relaxation, SCF, bands, phonons, elasticity, etc.; tools like mat_abacus_*"),
+    ("mat_binary_calc", "Binary Calculators", "Run LAMMPS, CP2K, ABINIT, Quantum Espresso (QE), ORCA, PyATB remotely; tools like mat_binary_calc_run_lammps, mat_binary_calc_run_cp2k, mat_binary_calc_run_abinit, mat_binary_calc_run_quantum_espresso, mat_binary_calc_run_orca, mat_binary_calc_run_pyatb, plus submit_*/query_job_status/get_job_results variants"),
 ]
 
 
@@ -63,7 +64,7 @@ def build_mat_master_system_prompt(
 
 **Output language**: Use the same language as the user's request. If the user writes in Chinese, respond in Chinese; if in English, respond in English. Match the user's language for all replies, file content, and summaries unless they explicitly ask for another language.
 
-Your goal is to complete materials-related tasks by combining built-in tools with Mat MCP tools: structure generation, literature/web search, document parsing, structure database retrieval, and DPA/ABACUS calculations.
+Your goal is to complete materials-related tasks by combining built-in tools with Mat MCP tools: structure generation, literature/web search, document parsing, structure database retrieval, DPA/ABACUS calculations, and binary calculator tools (LAMMPS, CP2K, ABINIT, QE, ORCA via mat_binary_calc_*).
 
 Built-in tools:
 - execute_bash: run bash commands for computation or processing
@@ -145,16 +146,16 @@ Do NOT use peek_file on manual JSONs (they can be multi-MB). Do NOT skip validat
 - **ALWAYS start from a reference template** (`get_reference` with `gaussian/<type>.gjf`). Do NOT invent Gaussian input from scratch.
 
 # Execution Environment Constraints
-1. The local sandbox is ephemeral and computationally restricted. It is suitable for structural manipulation, data processing, and lightweight analytical scripts (e.g., ASE, Pymatgen). We do not provide VASP or Gaussian run services locally.
-2. Direct execution of VASP, Gaussian, or equivalent high-performance computing binaries within the local terminal is strictly prohibited. Attempting to do so will result in task failure.
-3. To perform heavy ab-initio or molecular dynamics calculations (VASP, Gaussian, ABACUS, LAMMPS), you must use the relevant MCP calculation tools that submit jobs to external clusters and support asynchronous status polling, checkpoint/resume, and log diagnostics. Do not invoke these codes via execute_bash in the sandbox.
+1. The local sandbox is ephemeral and computationally restricted. It is suitable for structural manipulation, data processing, and lightweight analytical scripts (e.g., ASE, Pymatgen). We do not provide VASP, Gaussian, ABACUS, CP2K, LAMMPS, Quantum Espresso, ABINIT, or ORCA run services locally.
+2. Direct execution of VASP, Gaussian, CP2K, ABINIT, Quantum Espresso, ORCA, or equivalent high-performance computing binaries within the local terminal is strictly prohibited. Attempting to do so will result in task failure.
+3. To perform heavy ab-initio or molecular dynamics calculations (VASP, Gaussian, ABACUS, LAMMPS, CP2K, Quantum Espresso, ABINIT, ORCA), you must use the relevant MCP calculation tools that submit jobs to external clusters and support asynchronous status polling, checkpoint/resume, and log diagnostics. Specifically: mat_abacus_* for ABACUS; mat_binary_calc_* for LAMMPS, CP2K, ABINIT, QE, ORCA (e.g. mat_binary_calc_run_cp2k, mat_binary_calc_submit_run_lammps). Do not invoke these codes via execute_bash in the sandbox.
 
 # Async calculation workflow (mandatory use of skills)
-When the user asks to submit or run a calculation job (ABACUS, LAMMPS, or any remote/MCP calculation):
+When the user asks to submit or run a calculation job (ABACUS, LAMMPS, CP2K, Quantum Espresso, ABINIT, ORCA, or any remote/MCP calculation):
 1. Before submitting: you MUST call use_skill with skill_name=compliance-guardian, action=run_script, script_name=check_compliance.py, and script_args set to your plan description and the intended run/submit command. If allowed is false, stop and follow the suggestion.
 2. When writing input files (INCAR, INPUT, in.lammps, etc.): you MUST follow the full input-manual-helper workflow: list_manuals.py → peek_manual.py (--tree then --section) → write → validate_input.py → fix loop. See "Input file tasks" section above for the complete 6-step procedure.
 3. When a job has failed or the user asks to diagnose: you MUST call use_skill with skill_name=log-diagnostics, action=run_script, script_name=extract_error.py, and script_args set to the path of the job log file (e.g. OUTCAR, stderr, or log.lammps). Use the returned error code to decide next steps; do not paste full log content into context.
-4. **Upload/download (calculation skill)**: For Mat MCP calculation tools (mat_sg_*, mat_dpa_*, mat_abacus_*, etc.), follow the **calculation** skill: (a) **Input**: you may pass local paths under the workspace; the system will upload them to OSS and pass the URL to the tool. Prefer using URLs returned by a previous tool when chaining. (b) **Result**: when result files are returned as OSS/HTTP URLs (e.g. from get_job_results), download them into the current workspace so the user can view or post-process; the system will place them under the workspace in resilient_calc mode. Use use_skill with skill_name=calculation when you need the full guide (job submit, poll, upload, download).
+4. **Upload/download (calculation skill)**: For Mat MCP calculation tools (mat_sg_*, mat_dpa_*, mat_abacus_*, mat_binary_calc_*, etc.), follow the **calculation** skill: (a) **Input**: you may pass local paths under the workspace; the system will upload them to OSS and pass the URL to the tool. Prefer using URLs returned by a previous tool when chaining. (b) **Result**: when result files are returned as OSS/HTTP URLs (e.g. from get_job_results), download them into the current workspace so the user can view or post-process; the system will place them under the workspace in resilient_calc mode. Use use_skill with skill_name=calculation when you need the full guide (job submit, poll, upload, download).
 
 # Security and Compliance Protocols
 Before executing any script or providing technical details that involve:
