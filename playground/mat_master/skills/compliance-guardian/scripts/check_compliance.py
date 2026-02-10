@@ -123,7 +123,26 @@ def check_semantic_safety(plan: str) -> tuple[bool, str, str]:
     return True, "", ""
 
 
+def _fix_argv() -> None:
+    """Fix argv when the caller wraps all arguments in a single quoted token.
+
+    The SkillTool layer uses shlex.split + shlex.quote to pass script_args.
+    When the LLM wraps the whole string in quotes, all arguments collapse into
+    one sys.argv entry.  Detect and re-split so positional args parse correctly.
+    """
+    import shlex as _shlex
+    if len(sys.argv) == 2 and " " in sys.argv[1] and not sys.argv[1].strip().startswith("{"):
+        try:
+            parts = _shlex.split(sys.argv[1])
+            if len(parts) > 1:
+                sys.argv[1:] = parts
+        except ValueError:
+            pass
+
+
 def main() -> None:
+    _fix_argv()
+
     if len(sys.argv) < 2:
         _audit_denied("Invalid arguments", "Provide plan_description and intended_command.", "", "")
         out = {"allowed": False, "reason": "Invalid arguments", "suggestion": "Provide plan_description and intended_command (or one JSON object)."}
@@ -136,13 +155,17 @@ def main() -> None:
     if len(sys.argv) == 2 and sys.argv[1].strip().startswith("{"):
         try:
             obj = json.loads(sys.argv[1])
-            plan = obj.get("plan", "")
-            command = obj.get("command", "")
+            plan = obj.get("plan", "") or ""
+            command = obj.get("command", "") or ""
         except json.JSONDecodeError:
             plan = sys.argv[1]
     else:
         plan = sys.argv[1] if len(sys.argv) > 1 else ""
         command = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else ""
+
+    # Defensive: ensure plan/command are always str (never None)
+    plan = plan or ""
+    command = command or ""
 
     # 1) Hard rules
     allowed, reason, suggestion = check_hard_rules(plan, command)
