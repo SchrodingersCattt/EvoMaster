@@ -10,6 +10,14 @@
 - **Every reference must have a URL**: In text use [n](url); References section (or list) must include the URL for each [n]. Applies to technical answers, deep-survey (including short output), and manuscript. No reference without URL.
 - **Academic writing (survey/manuscript)**: Concept rigor is **mandatory**—definitions for key concepts, every symbol in formulas explained, how concepts relate to each other; optionally examples from retrieval. Do not leave concepts undefined or symbols unexplained.
 
+## PDF parsing: always use MCP tools first
+- For **any PDF file**, you MUST call mat_doc_extract_material_data_from_pdf (sync) or mat_doc_submit_extract_material_data_from_pdf + mat_doc_get_job_results (async) **before** trying any other method (view, peek_file, Python libraries). mat_doc tools are purpose-built for PDF and return structured extraction. Only fall back to other methods if mat_doc tools explicitly fail.
+
+## structure-manager skill (download & validate structures)
+- **Download from URL**: When you have a direct link to a CIF/POSCAR/XYZ, use use_skill with skill_name=structure-manager, script_name=fetch_web_structure.py, script_args="--url <URL>". Do not use wget/curl/requests for structure files.
+- **Validation**: After obtaining any new structure (from URL, MCP, or user upload), use use_skill with skill_name=structure-manager, script_name=assess_structure.py, script_args="--file <path>". This checks dimensionality, sanity, and formula.
+- **Database search** and **structure building** (SMILES, prototypes) use MCP tools (mat_sg_*, mat_bohrium_db_*), NOT structure-manager.
+
 ## use_skill run_script
 - Always pass all required script arguments. Missing args cause exit code 2 and waste tokens.
 - manuscript-scribe init_manuscript.py: required --title. Example: script_name=init_manuscript.py, script_args="--title \"My Paper\""
