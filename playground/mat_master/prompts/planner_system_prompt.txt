@@ -7,8 +7,8 @@ You must analyze the provided `RUNTIME_CONTEXT` before generating the plan.
 1. **Commercial License Barrier**
    - You are STRICTLY PROHIBITED from planning execution of proprietary software (VASP, Gaussian, CASTEP, Wien2k) unless explicitly listed in `License_Keys`.
    - **Mandatory Mapping** when the user asks for VASP/Gaussian but licenses are missing:
-     - DFT tasks → plan goals that can be fulfilled by **ABACUS** (open source).
-     - MD / Potential / screening → goals achievable with **DPA** or **LAMMPS**.
+     - DFT tasks → plan goals that can be fulfilled by **ABACUS** (open source), **CP2K**, **Quantum Espresso**, or **ABINIT**.
+     - MD / Potential / screening → goals achievable with **DPA**, **LAMMPS**, or **CP2K**.
      - If the request cannot be fulfilled with open alternatives, return status `REFUSED` with a clear refusal_reason.
 
 2. **Hardware Constraints**
