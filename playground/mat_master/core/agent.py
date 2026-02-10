@@ -19,9 +19,12 @@ from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
 # How many recent tool calls to track for loop detection
 _LOOP_WINDOW = 30
 # How many times the same call must appear in the window to trigger loop-break
-# (2 = block on the 3rd identical call — the 1st call is genuine, the 2nd is
-#  already wasteful since output won't change, the 3rd is definitely a loop)
-_LOOP_THRESHOLD = 2
+# (1 = block on the 2nd identical call — the 1st call is the only genuine one;
+#  a 2nd identical call to a deterministic tool is always wasteful.)
+_LOOP_THRESHOLD = 1
+# Maximum number of peek_manual search/section queries per run.
+# Prevents the LLM from endlessly searching the manual with different keywords.
+_PEEK_MANUAL_MAX_CALLS = 12
 
 
 class MatMasterAgent(Agent):
@@ -37,6 +40,8 @@ class MatMasterAgent(Agent):
         self._recent_tool_fps: deque[str] = deque(maxlen=_LOOP_WINDOW)
         # Secondary window: normalised semantic fingerprints (catches near-dupes)
         self._recent_sem_fps: deque[str] = deque(maxlen=_LOOP_WINDOW)
+        # Global counter for peek_manual calls (search/section/sections queries)
+        self._peek_manual_call_count: int = 0
 
     @staticmethod
     def _tool_fingerprint(tool_call) -> str:
@@ -102,8 +107,24 @@ class MatMasterAgent(Agent):
             canonical = args_str
         return f"{name}|{canonical}"
 
+    def _is_peek_manual_call(self, tool_call) -> bool:
+        """Return True if this is a use_skill call that runs peek_manual.py."""
+        name = tool_call.function.name
+        if name != "use_skill":
+            return False
+        args_str = tool_call.function.arguments or ""
+        try:
+            args = json.loads(args_str) if args_str else {}
+        except (json.JSONDecodeError, TypeError):
+            args = {}
+        return "peek_manual" in args.get("script_name", "")
+
     def _is_loop(self, tool_call) -> bool:
-        """Return True if this exact or semantically-equivalent call appeared >= _LOOP_THRESHOLD times."""
+        """Return True if this exact or semantically-equivalent call appeared >= _LOOP_THRESHOLD times,
+        or if the global peek_manual budget is exhausted."""
+        # Global budget for peek_manual queries
+        if self._is_peek_manual_call(tool_call) and self._peek_manual_call_count >= _PEEK_MANUAL_MAX_CALLS:
+            return True
         fp = self._tool_fingerprint(tool_call)
         if self._recent_tool_fps.count(fp) >= _LOOP_THRESHOLD:
             return True
@@ -117,6 +138,8 @@ class MatMasterAgent(Agent):
         """Record a tool call fingerprint in the sliding window."""
         self._recent_tool_fps.append(self._tool_fingerprint(tool_call))
         self._recent_sem_fps.append(self._semantic_fingerprint(tool_call))
+        if self._is_peek_manual_call(tool_call):
+            self._peek_manual_call_count += 1
 
     def _get_system_prompt(self) -> str:
         """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills.
@@ -248,20 +271,42 @@ You can use the 'use_skill' tool to:
             loop_blocked: list[tuple[Any, str]] = []  # (tool_call, warning_msg)
             for tc in regular_calls:
                 if self._is_loop(tc):
-                    self.logger.warning(
-                        "LOOP DETECTED: tool '%s' with same args called %d+ times, skipping.",
-                        tc.function.name, _LOOP_THRESHOLD,
+                    # Distinguish between budget exhaustion and exact-duplicate loop
+                    is_budget = (
+                        self._is_peek_manual_call(tc)
+                        and self._peek_manual_call_count >= _PEEK_MANUAL_MAX_CALLS
                     )
-                    loop_blocked.append((tc, (
-                        f"⚠️ LOOP DETECTED: You have called '{tc.function.name}' with the exact same arguments "
-                        f"{_LOOP_THRESHOLD}+ times already and received the same result each time. "
-                        "This call was SKIPPED to prevent an infinite loop.\n\n"
-                        "ACTION REQUIRED: Do NOT call this tool again with the same arguments. Instead:\n"
-                        "1. If the parameter/section you are looking for is not in the manual, it does NOT exist. "
-                        "Use your domain knowledge to write the correct syntax directly.\n"
-                        "2. Try a completely DIFFERENT approach or search keyword.\n"
-                        "3. If you have enough information already, proceed to write the input file NOW."
-                    )))
+                    if is_budget:
+                        self.logger.warning(
+                            "BUDGET EXHAUSTED: peek_manual called %d times (max %d), skipping.",
+                            self._peek_manual_call_count, _PEEK_MANUAL_MAX_CALLS,
+                        )
+                        msg = (
+                            f"⚠️ MANUAL QUERY BUDGET EXHAUSTED: You have already called peek_manual.py "
+                            f"{self._peek_manual_call_count} times (limit: {_PEEK_MANUAL_MAX_CALLS}). "
+                            "ALL further manual queries are BLOCKED.\n\n"
+                            "ACTION REQUIRED: STOP searching the manual. You have enough information. "
+                            "Use your CP2K domain knowledge to write the input file directly NOW.\n"
+                            "Many CP2K subsections (XC_FUNCTIONAL/PBE, HF, SCREENING, OT, etc.) are "
+                            "valid CP2K syntax but simply not indexed in our reference JSON. "
+                            "Proceed with the input file you have and submit the calculation."
+                        )
+                    else:
+                        self.logger.warning(
+                            "LOOP DETECTED: tool '%s' with same args called %d+ times, skipping.",
+                            tc.function.name, _LOOP_THRESHOLD,
+                        )
+                        msg = (
+                            f"⚠️ LOOP DETECTED: You have called '{tc.function.name}' with the exact same arguments "
+                            f"{_LOOP_THRESHOLD}+ times already and received the same result each time. "
+                            "This call was SKIPPED to prevent an infinite loop.\n\n"
+                            "ACTION REQUIRED: Do NOT call this tool again with the same arguments. Instead:\n"
+                            "1. If the parameter/section you are looking for is not in the manual, it does NOT exist. "
+                            "Use your domain knowledge to write the correct syntax directly.\n"
+                            "2. Try a completely DIFFERENT approach or search keyword.\n"
+                            "3. If you have enough information already, proceed to write the input file NOW."
+                        )
+                    loop_blocked.append((tc, msg))
                 else:
                     exec_calls.append(tc)
                 self._record_tool_call(tc)
