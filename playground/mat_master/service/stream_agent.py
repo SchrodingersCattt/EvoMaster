@@ -71,7 +71,7 @@ class StreamingMatMasterAgent(MatMasterAgent):
                 self._emit(
                     source,
                     "tool_call",
-                    {"name": tc.function.name, "args": args_payload},
+                    {"id": tc.id, "name": tc.function.name, "args": args_payload},
                 )
                 if tc.function.name == "use_skill":
                     try:
