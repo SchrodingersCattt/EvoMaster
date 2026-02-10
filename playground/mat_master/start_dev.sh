@@ -22,7 +22,7 @@ fi
 
 # 端口（支持环境变量 BACKEND_PORT、FRONTEND_PORT 覆盖）
 BACKEND_PORT="${BACKEND_PORT:-50001}"
-FRONTEND_PORT="${FRONTEND_PORT:-50003}"
+FRONTEND_PORT="${FRONTEND_PORT:-50004}"
 
 # === 0. 启动前释放端口，避免 Address already in use ===
 echo "Releasing ports $BACKEND_PORT, $FRONTEND_PORT (if in use)..."

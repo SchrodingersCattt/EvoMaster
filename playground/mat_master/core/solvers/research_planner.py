@@ -1,5 +1,6 @@
-"""ResearchPlanner: deterministic flight-plan execution under CRP (Computational Resource Protocol).
+"""ResearchPlanner: pre-check → deterministic flight-plan execution under CRP (Computational Resource Protocol).
 
+- Pre-check phase: assesses task readiness, runs prerequisites (PDF parsing, info gathering) before planning.
 - Loads industrial-grade system prompt from prompts/planner_system_prompt.txt.
 - Injects hard-coded CRP (license firewall, tool stack); validates plan JSON; enforces human-in-the-loop for high-cost steps.
 - Persists state to research_state.json; supports resume.
@@ -39,6 +40,37 @@ INTERNAL_CRP_CONTEXT = {
         "Preferred_MD": "LAMMPS",
     },
 }
+
+
+PRE_CHECK_SYSTEM = """You are a pre-planning readiness assessor for a Computational Research Planner.
+
+Your job is to analyze the user's task and workspace to determine whether the planner has enough information to create a good execution plan right now, or whether preliminary work is needed first.
+
+ASSESSMENT CRITERIA:
+1. **Uploaded files**: Are there PDFs, papers, or data files referenced or present in the workspace that must be parsed/read BEFORE a plan can be made? (e.g. "reproduce this paper" requires parsing the PDF first to know what methods, parameters, and structures are involved.)
+2. **Task clarity**: Is the task description specific enough to decompose into concrete steps? Or is it too vague (e.g. "do some calculations" with no target material or property)?
+3. **Required context**: Does the planner need to know specific structures, parameters, methods, or properties from external sources (papers, databases) before it can plan?
+
+OUTPUT FORMAT:
+Return a strictly valid JSON object with these keys:
+{
+    "ready_to_plan": true | false,
+    "prerequisites": [
+        {
+            "type": "parse_pdf" | "parse_files" | "search_info" | "clarify_task",
+            "description": "What needs to be done and why",
+            "target": "file path or search query if applicable"
+        }
+    ],
+    "reasoning": "Brief explanation of your assessment"
+}
+
+RULES:
+- If the task is straightforward (e.g. "calculate band gap of Si", "search for X structures") and no files need pre-processing: set ready_to_plan=true, prerequisites=[].
+- If there are PDF/paper files that the user asks to reproduce/analyze/read, or if the task says "按照文献/根据论文": set ready_to_plan=false and include parse_pdf prerequisites.
+- If the task mentions files to process but doesn't specify which files exist, check the workspace file listing.
+- Be conservative: when in doubt about whether pre-processing is needed, recommend it.
+- Do NOT generate the plan itself. Only assess readiness."""
 
 
 def _get_mat_master_config(config) -> dict:
@@ -157,7 +189,7 @@ def _extract_json_from_content(content: str) -> str | None:
 
 
 class ResearchPlanner(BaseExp):
-    """Plan-execute under CRP: flight plan (JSON DEG) → validate → optional pre-flight confirm → execute steps via DirectSolver."""
+    """Pre-check → Plan → PreFlight → Execute under CRP: readiness assessment → flight plan (JSON DEG) → validate → optional confirm → execute steps via DirectSolver."""
 
     def __init__(self, agent, config, input_fn=None, output_callback=None):
         super().__init__(agent, config)
@@ -198,7 +230,7 @@ class ResearchPlanner(BaseExp):
                     return json.load(f)
             except Exception as e:
                 self.logger.warning("Failed to load state: %s", e)
-        return {"goal": "", "plan": None, "history": [], "phase": "planning", "replan_count": 0, "execution_window": 0}
+        return {"goal": "", "plan": None, "history": [], "phase": "pre_check", "replan_count": 0, "execution_window": 0, "pre_check_context": ""}
 
     def _save_state(self, task_id: str, state: dict[str, Any]) -> None:
         path = self._state_path(task_id)
@@ -493,14 +525,16 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         state = self._load_state(task_id)
         state.setdefault("goal", task_description)
         state.setdefault("history", [])
-        state.setdefault("phase", "planning")
+        state.setdefault("phase", "pre_check")
         state.setdefault("replan_count", 0)
         state.setdefault("execution_window", 0)
-        # If goal changed, reset to planning phase
+        state.setdefault("pre_check_context", "")
+        # If goal changed, reset to pre_check phase
         if state.get("goal") != task_description:
             state["goal"] = task_description
-            state["phase"] = "planning"
+            state["phase"] = "pre_check"
             state["replan_count"] = 0
+            state["pre_check_context"] = ""
         return state
 
     def _is_goal_achieved(self, state: dict[str, Any]) -> bool:
@@ -745,6 +779,154 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
     # Phase methods for the state machine
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Pre-check phase: assess readiness before planning
+    # ------------------------------------------------------------------
+
+    def _scan_workspace_files(self) -> list[str]:
+        """List files in the workspace (non-recursive top-level + common subdirs) for pre-check context."""
+        workspace = self._run_dir_path()
+        files: list[str] = []
+        try:
+            for p in workspace.iterdir():
+                if p.name.startswith(".") or p.name == "__pycache__":
+                    continue
+                if p.is_file():
+                    files.append(str(p.relative_to(workspace)))
+                elif p.is_dir():
+                    # One level deep for common subdirs
+                    for child in p.iterdir():
+                        if child.is_file():
+                            files.append(str(child.relative_to(workspace)))
+        except Exception as e:
+            self.logger.debug("Workspace scan failed (non-critical): %s", e)
+        return files[:100]  # cap to avoid huge lists
+
+    def _assess_readiness(self, task_description: str) -> dict[str, Any]:
+        """Use LLM to assess whether the task is ready to plan or needs prerequisite work."""
+        workspace_files = self._scan_workspace_files()
+        files_str = "\n".join(f"  - {f}" for f in workspace_files) if workspace_files else "  (empty workspace)"
+
+        user_content = f"""TASK DESCRIPTION:
+{task_description}
+
+WORKSPACE FILES:
+{files_str}
+
+Assess whether this task can be planned immediately or needs preliminary work. Output JSON only."""
+
+        dialog = Dialog(
+            messages=[
+                SystemMessage(content=PRE_CHECK_SYSTEM),
+                UserMessage(content=user_content),
+            ],
+            tools=[],
+        )
+        try:
+            reply = self.agent.llm.query(dialog)
+            self._emit("Planner", "thought", f"[Pre-check] {reply.content or ''}")
+            raw = _extract_json_from_content(reply.content or "")
+            if raw:
+                return json.loads(raw)
+        except Exception as e:
+            self.logger.warning("[Pre-check] Assessment failed, proceeding to plan: %s", e)
+        # Default: ready to plan
+        return {"ready_to_plan": True, "prerequisites": [], "reasoning": "Assessment failed; proceeding directly."}
+
+    def _execute_prerequisites(self, prerequisites: list[dict[str, Any]], task_description: str,
+                                task_id: str) -> str:
+        """Run prerequisite tasks via DirectSolver and collect extracted context."""
+        if not prerequisites:
+            return ""
+
+        workspaces = self._run_dir_path() / "workspaces" / task_id
+        pre_check_dir = workspaces / "pre_check"
+        pre_check_dir.mkdir(parents=True, exist_ok=True)
+
+        solver = DirectSolver(self.agent, self.config)
+        solver.set_run_dir(pre_check_dir)
+
+        collected_context: list[str] = []
+        for i, prereq in enumerate(prerequisites):
+            prereq_type = prereq.get("type", "unknown")
+            description = prereq.get("description", "")
+            target = prereq.get("target", "")
+
+            self.logger.info("[Pre-check] Running prerequisite %d/%d: [%s] %s",
+                             i + 1, len(prerequisites), prereq_type, description[:80])
+            self._emit("Planner", "thought",
+                        f"[Pre-check] Prerequisite {i + 1}/{len(prerequisites)}: {description}")
+            self._emit("Planner", "exp_run", "DirectSolver (pre-check)")
+
+            # Build a focused prompt for the prerequisite task
+            if prereq_type == "parse_pdf":
+                prompt = (
+                    f"Parse the following PDF file and extract all relevant information for planning a research task. "
+                    f"Use mat_doc_extract_material_data_from_pdf or mat_doc_submit_extract_material_data_from_pdf + "
+                    f"mat_doc_get_job_results (MCP tools) as the primary method. "
+                    f"Extract: crystal structures, computational methods, software used, key parameters "
+                    f"(k-mesh, cutoff, functional, pseudopotentials), target properties/results. "
+                    f"File: {target}. "
+                    f"After extraction, summarize all findings clearly."
+                )
+            elif prereq_type == "parse_files":
+                prompt = (
+                    f"Read and parse the following files to extract information needed for planning: {target}. "
+                    f"For PDFs, use mat_doc MCP tools first. Summarize key findings."
+                )
+            elif prereq_type == "search_info":
+                prompt = (
+                    f"Search for the following information needed before planning: {description}. "
+                    f"Target: {target}. Use mat_sn tools for literature search if needed. Summarize findings concisely."
+                )
+            else:
+                prompt = f"Complete this prerequisite task: {description}. Target: {target}."
+
+            try:
+                result = solver.run(prompt, task_id=f"{task_id}_precheck_{i}")
+                summary = str(result.get("result_summary", result))[:2000] if isinstance(result, dict) else str(result)[:2000]
+                collected_context.append(f"[Prerequisite {i + 1}: {prereq_type}] {description}\nResult: {summary}")
+            except Exception as e:
+                self.logger.warning("[Pre-check] Prerequisite %d failed: %s", i + 1, e)
+                collected_context.append(f"[Prerequisite {i + 1}: {prereq_type}] FAILED: {e}")
+
+        return "\n\n".join(collected_context)
+
+    def _phase_pre_check(self, state: dict[str, Any], goal: str, task_id: str) -> dict[str, Any]:
+        """Assess readiness before planning. Run prerequisites if needed. Transition → planning."""
+        self.logger.info("[Planner] Pre-check: assessing readiness for: %s", goal[:80])
+        self._emit("Planner", "phase_change", {"from": "init", "to": "pre_check"})
+
+        assessment = self._assess_readiness(goal)
+        prerequisites = assessment.get("prerequisites") or []
+        reasoning = assessment.get("reasoning", "")
+
+        if assessment.get("ready_to_plan") and not prerequisites:
+            self.logger.info("[Pre-check] Ready to plan: %s", reasoning)
+            self._emit("Planner", "thought", f"[Pre-check] Ready to plan. {reasoning}")
+            state["phase"] = "planning"
+            self._emit("Planner", "phase_change", {"from": "pre_check", "to": "planning"})
+            return state
+
+        # Not ready — run prerequisites
+        self.logger.info("[Pre-check] Prerequisites needed (%d): %s", len(prerequisites), reasoning)
+        self._emit("Planner", "thought",
+                    f"[Pre-check] Not ready to plan yet. {reasoning}\n"
+                    f"Running {len(prerequisites)} prerequisite(s) first...")
+
+        pre_check_context = self._execute_prerequisites(prerequisites, goal, task_id)
+        state["pre_check_context"] = pre_check_context
+
+        self.logger.info("[Pre-check] Prerequisites completed. Proceeding to planning.")
+        self._emit("Planner", "thought", "[Pre-check] Prerequisites completed. Now generating plan with enriched context.")
+        state["phase"] = "planning"
+        self._emit("Planner", "phase_change", {"from": "pre_check", "to": "planning"})
+        return state
+
+    # ------------------------------------------------------------------
+    # Planning phase
+    # ------------------------------------------------------------------
+
     def _phase_planning(self, state: dict[str, Any], goal: str, task_id: str) -> dict[str, Any]:
         """Generate initial plan. Transition → preflight or failed.
 
@@ -757,8 +939,19 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             # Existing valid plan (e.g. resumed) — skip to preflight
             state["phase"] = "preflight"
             return state
+
+        # Enrich goal with pre-check context if available
+        enriched_goal = goal
+        pre_check_context = state.get("pre_check_context", "")
+        if pre_check_context:
+            enriched_goal = (
+                f"{goal}\n\n"
+                f"# PRE-CHECK RESULTS (extracted context — use this to make a more precise plan)\n"
+                f"{pre_check_context}"
+            )
+
         self.logger.info("[Planner] Designing flight plan for: %s", goal[:80])
-        plan = self._generate_plan(goal)
+        plan = self._generate_plan(enriched_goal)
 
         # ── Auto-revision loop for REFUSED plans ──
         max_auto_fix = 2
@@ -1014,7 +1207,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
     # ------------------------------------------------------------------
 
     def run(self, task_description: str, task_id: str = "planner_task") -> dict[str, Any]:
-        """State-machine driven execution: Planning → PreFlight → Executing ⇄ Replanning → Completed."""
+        """State-machine driven execution: PreCheck → Planning → PreFlight → Executing ⇄ Replanning → Completed."""
         # Initialize state (loads persisted state or creates fresh)
         state = self._initialize_state(task_description, task_id)
 
@@ -1029,7 +1222,10 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
         while state["phase"] not in ("completed", "failed", "aborted"):
             phase = state["phase"]
 
-            if phase == "planning":
+            if phase == "pre_check":
+                state = self._phase_pre_check(state, task_description, task_id)
+
+            elif phase == "planning":
                 state = self._phase_planning(state, task_description, task_id)
 
             elif phase == "preflight":
