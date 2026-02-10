@@ -457,9 +457,12 @@ def _run_agent_sync(
     import logging
     logging.basicConfig(level=logging.INFO)
     run_done: threading.Event | None = None
+    _msg_seq = 0  # auto-incrementing message id per run
 
     def event_callback(source: str, event_type: str, content) -> None:
-        payload = {"source": source, "type": event_type, "content": content, "session_id": session_id}
+        nonlocal _msg_seq
+        _msg_seq += 1
+        payload = {"msg_id": _msg_seq, "source": source, "type": event_type, "content": content, "session_id": session_id}
         if session_id not in SESSIONS:
             SESSIONS[session_id] = {"history": [], "task_ids": [], "last_task_id": None}
         if event_type != "log_line":

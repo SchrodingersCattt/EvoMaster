@@ -257,7 +257,7 @@ export default function ChatPanel({
           ) : (
             filtered.map((log, i) => (
               <MessageBubble
-                key={i}
+                key={log.msg_id ?? i}
                 entry={log}
                 isUser={log.source === "User"}
               />
