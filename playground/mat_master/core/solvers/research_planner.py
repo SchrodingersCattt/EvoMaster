@@ -11,6 +11,7 @@ import logging
 import re
 import shutil
 import sys
+import threading
 from pathlib import Path
 from typing import Any, Callable
 
@@ -200,7 +201,7 @@ class ResearchPlanner(BaseExp):
         self.max_steps = planner_cfg.get("max_steps", 20)
         self.human_check = planner_cfg.get("human_check_step", True)
         # Dynamic closed-loop planning config
-        self.max_replans = planner_cfg.get("max_replans", 3)
+        self.max_replans = planner_cfg.get("max_replans", 5)
         self.window_size = planner_cfg.get("window_size", 1)
         self.auto_replan = planner_cfg.get("auto_replan", True)
         self.replan_on_failure = planner_cfg.get("replan_on_failure", True)
@@ -427,6 +428,35 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
             return (self._input_fn(prompt) or "").strip()
         print(f"\033[93m[Planner] {prompt}\033[0m")
         return sys.stdin.readline().strip()
+
+    def _ask_human_with_timeout(self, prompt: str, timeout: int = 120, default: str = "skip") -> str:
+        """Ask the human a question with a timeout. Returns *default* if no answer within *timeout* seconds.
+
+        This is used for retry-exhaustion scenarios where the default behaviour
+        is to NOT append / skip, so that the workflow is not blocked indefinitely.
+        """
+        self._emit("Planner", "thought",
+                    f"[Ask Human] (timeout {timeout}s, default='{default}'): {prompt}")
+        result_container: list[str] = []
+
+        def _ask():
+            try:
+                ans = self._ask_human(prompt + f"\n(Auto-'{default}' in {timeout}s if no response)")
+                result_container.append(ans)
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_ask, daemon=True)
+        t.start()
+        t.join(timeout=timeout)
+
+        if result_container:
+            ans = result_container[0].strip()
+            if ans:
+                return ans
+        self.logger.info("[Planner] ask_human timed out (%ds), using default='%s'", timeout, default)
+        self._emit("Planner", "thought", f"[Ask Human] No response within {timeout}s — defaulting to '{default}'.")
+        return default
 
     def _plan_report_text(self, plan: dict[str, Any]) -> str:
         """Build plain-text plan report (no ANSI) for frontend."""
@@ -1116,12 +1146,36 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 self._emit("Planner", "phase_change", {"from": "executing", "to": "replanning"})
                 return state
 
-            # Handle unrecoverable failure when auto_replan is off
-            if step_result["status"] == "failed" and not self.auto_replan:
-                ans = self._ask_human("Step failed and auto-replan is off. Abort mission? (y/n)")
-                if ans.strip().lower() == "y":
+            # Handle unrecoverable failure: ask human for guidance
+            if step_result["status"] == "failed" and not should_replan:
+                step_id = step_result.get("step_id", "?")
+                summary = step_result.get("result_summary", "unknown error")[:200]
+                ans = self._ask_human_with_timeout(
+                    f"Step {step_id} failed: {summary}\n"
+                    f"Options:\n"
+                    f"  'skip'    — skip this step and continue with the next\n"
+                    f"  'retry'   — provide modified suggestions for retrying\n"
+                    f"  'abort'   — abort the mission\n"
+                    f"  Or describe modifications/suggestions.\n"
+                    f"(Default: 'skip' — skip this step and continue)",
+                    timeout=120,
+                    default="skip",
+                )
+                ans_lower = ans.strip().lower()
+                if ans_lower == "abort":
                     state["phase"] = "aborted"
                     self._emit("Planner", "phase_change", {"from": "executing", "to": "aborted"})
+                    return state
+                elif ans_lower in ("skip", ""):
+                    self.logger.info("[Planner] Human chose to skip failed step %s", step_id)
+                    # step is already marked as "failed", execution continues
+                elif ans_lower == "retry" or (ans_lower not in ("skip", "abort", "") and len(ans) > 2):
+                    # User gave suggestions — trigger a replan with their feedback
+                    feedback = ans if ans_lower != "retry" else "Please retry the failed step with a different approach."
+                    state["phase"] = "replanning"
+                    state["replan_reason"] = f"Human feedback after step {step_id} failure: {feedback}"
+                    self._emit("Planner", "replan_triggered", {"reason": state["replan_reason"], "after_step": step_id})
+                    self._emit("Planner", "phase_change", {"from": "executing", "to": "replanning"})
                     return state
 
             # Handle conditional branching
@@ -1203,6 +1257,98 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         return state
 
     # ------------------------------------------------------------------
+    # Execution summary: honest reporting of all results and failures
+    # ------------------------------------------------------------------
+
+    def _build_execution_summary(self, state: dict[str, Any]) -> dict[str, Any]:
+        """Build a comprehensive execution summary that honestly reports:
+        - All failed steps with error details
+        - All approximations and simplifications made during execution
+        - All original, unprocessed results from each step
+        - Replan history and reasons
+
+        This summary is intended for the final report and must be truthful.
+        """
+        plan = state.get("plan") or {}
+        steps = plan.get("steps", [])
+        history = state.get("history", [])
+
+        # Categorize steps
+        completed_steps = []
+        failed_steps = []
+        skipped_steps = []
+        for s in steps:
+            status = s.get("status", "pending")
+            step_info = {
+                "step_id": s.get("step_id"),
+                "intent": s.get("intent", ""),
+                "compute_cost": s.get("compute_cost", ""),
+                "status": status,
+            }
+            if status == "done":
+                completed_steps.append(step_info)
+            elif status == "failed":
+                failed_steps.append(step_info)
+            else:
+                skipped_steps.append(step_info)
+
+        # Collect detailed results from history (item by item)
+        step_results_detail = []
+        approximations_and_simplifications = []
+        for entry in history:
+            detail = {
+                "step_id": entry.get("step", "?"),
+                "intent": entry.get("intent", ""),
+                "tool_name": entry.get("tool_name", ""),
+            }
+            if entry.get("error"):
+                detail["status"] = "FAILED"
+                detail["error"] = entry["error"]
+            else:
+                detail["status"] = "OK"
+                detail["result_summary"] = entry.get("result_summary", "")
+            if entry.get("new_skill_registered"):
+                detail["new_skill_registered"] = True
+                detail["skill_path"] = entry.get("skill_path", "")
+            step_results_detail.append(detail)
+
+            # Detect approximations: fallback usage, CRP redirections, coarse settings
+            result_text = (entry.get("result_summary", "") or "").lower()
+            if "fallback" in result_text:
+                approximations_and_simplifications.append(
+                    f"Step {entry.get('step', '?')}: Executed via fallback strategy (original approach failed)."
+                )
+            if "coarse" in result_text or "screening" in result_text:
+                approximations_and_simplifications.append(
+                    f"Step {entry.get('step', '?')}: Used coarse/screening-level settings (not production quality)."
+                )
+
+        # Replan history
+        replan_info = {
+            "replan_count": state.get("replan_count", 0),
+            "max_replans": self.max_replans,
+        }
+
+        summary = {
+            "overall_status": state.get("phase", "unknown"),
+            "total_steps": len(steps),
+            "completed_count": len(completed_steps),
+            "failed_count": len(failed_steps),
+            "skipped_count": len(skipped_steps),
+            "completed_steps": completed_steps,
+            "failed_steps": failed_steps,
+            "skipped_steps": skipped_steps,
+            "step_results_detail": step_results_detail,
+            "approximations_and_simplifications": approximations_and_simplifications,
+            "replan_info": replan_info,
+            "fail_reason": state.get("fail_reason", ""),
+        }
+
+        # Emit summary to frontend
+        self._emit("Planner", "execution_summary", summary)
+        return summary
+
+    # ------------------------------------------------------------------
     # Main entry point: state-machine driven run()
     # ------------------------------------------------------------------
 
@@ -1236,8 +1382,37 @@ Assess whether this task can be planned immediately or needs preliminary work. O
 
             elif phase == "replanning":
                 if state.get("replan_count", 0) >= self.max_replans:
-                    self.logger.warning("[Planner] Max replan limit (%d) reached, forcing continue", self.max_replans)
-                    state["phase"] = "executing"
+                    self.logger.warning("[Planner] Max replan limit (%d) reached", self.max_replans)
+                    self._emit("Planner", "thought",
+                               f"[Planner] Replan limit ({self.max_replans}) reached. Asking human for guidance...")
+                    ans = self._ask_human_with_timeout(
+                        f"Replan limit ({self.max_replans}) reached. Options:\n"
+                        f"  'continue' — force continue with current plan\n"
+                        f"  'retry'    — allow one more replan attempt\n"
+                        f"  'abort'    — abort the mission\n"
+                        f"  Or describe changes/suggestions for the remaining plan.\n"
+                        f"(Default: 'continue' — skip replanning, proceed with current plan)",
+                        timeout=120,
+                        default="continue",
+                    )
+                    ans_lower = ans.strip().lower()
+                    if ans_lower in ("skip", "continue", ""):
+                        self.logger.info("[Planner] Human chose to continue with current plan")
+                        state["phase"] = "executing"
+                    elif ans_lower == "abort":
+                        state["phase"] = "aborted"
+                        self._emit("Planner", "phase_change", {"from": "replanning", "to": "aborted"})
+                    elif ans_lower == "retry":
+                        # Grant one extra replan attempt
+                        self.logger.info("[Planner] Human granted one extra replan")
+                        state["replan_count"] = self.max_replans - 1  # allow one more
+                        state = self._phase_replanning(state, task_description, task_id)
+                    else:
+                        # User gave custom feedback — use it as a revision prompt
+                        self.logger.info("[Planner] Human gave revision feedback: %s", ans[:100])
+                        state["replan_reason"] = f"Human feedback: {ans}"
+                        state["replan_count"] = self.max_replans - 1  # allow one more
+                        state = self._phase_replanning(state, task_description, task_id)
                 else:
                     state = self._phase_replanning(state, task_description, task_id)
 
@@ -1253,8 +1428,13 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                          sum(1 for s in state.get("plan", {}).get("steps", []) if s.get("status") == "done"))
         self._solver = None  # cleanup
 
+        # Build comprehensive execution summary
+        execution_summary = self._build_execution_summary(state)
+        state["execution_summary"] = execution_summary
+
         # Build return dict compatible with old API
-        result: dict[str, Any] = {"status": state["phase"], "plan": state.get("plan"), "state": state}
+        result: dict[str, Any] = {"status": state["phase"], "plan": state.get("plan"), "state": state,
+                                   "execution_summary": execution_summary}
         if state.get("fail_reason"):
             result["reason"] = state["fail_reason"]
         return result
