@@ -335,6 +335,12 @@ class MatMasterPlayground(BasePlayground):
         config_path = Path(config_file)
         if not config_path.is_absolute():
             config_path = self.config_manager.config_dir / config_path
+
+        # 环境感知：根据 SERVICE_ENV 切换 MCP 配置文件（test → mcp_config.test.json）
+        if mcp_config.get("path_adaptor") == "calculation":
+            from evomaster.adaptors.calculation import resolve_mcp_config_path
+            config_path = resolve_mcp_config_path(config_path)
+
         if not config_path.exists():
             self.logger.warning(f"MCP config file not found: {config_path}")
             return None
