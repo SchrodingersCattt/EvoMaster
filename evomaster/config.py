@@ -235,10 +235,10 @@ class ConfigManager:
             for parent in [self.config_dir] + list(self.config_dir.parents):
                 env_file = parent / ".env"
                 if env_file.exists():
-                    load_dotenv(env_file)
+                    load_dotenv(env_file, override=True)
                     break
             else:
-                load_dotenv()  # 回退到 cwd 及父目录
+                load_dotenv(override=True)  # 回退到 cwd 及父目录
 
         config_path = self.config_dir / self.config_file
 
