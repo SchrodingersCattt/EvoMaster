@@ -31,11 +31,13 @@
 - **Do NOT** skip validation — every written input file MUST be validated.
 - **Performance**: Use `--sections "S1,S2,S3"` to query multiple sections in one call. Use `--section SEC --tree` to see a subtree. Use `--section SEC --search KW` to search within a section.
 - **Do NOT** combine `--tree` and `--section` without intent — `--section SEC --tree` shows the subtree of SEC (not the full tree).
+- **TOTAL QUERY BUDGET (CRITICAL)**: You have a HARD LIMIT of **12 peek_manual.py calls per task**. Plan your queries carefully! Use batch queries (`--sections "S1,S2,S3"`) to get more info per call. After your budget is spent, ALL further manual queries will be BLOCKED automatically.
 - **Anti-loop rule (CRITICAL)**: If peek_manual.py returns "No params matching" or "No params found for section" for a search term, that parameter/section does NOT exist in the manual. Do NOT retry the same or similar search more than **2 times**. After 2 failed attempts for the same concept:
   1. STOP searching for it.
   2. The manual does not cover this parameter — it may be a subsection (not a named parameter), or it may use a different name.
   3. Use your **domain knowledge** of the software to write the correct syntax directly.
   4. Proceed to the next step (write the file or search for something else entirely different).
+- **Efficiency rule**: For CP2K, after calling `--tree` and querying 3–5 sections via `--sections`, you likely have enough info. STOP searching and START writing. Many valid CP2K subsections (XC_FUNCTIONAL/PBE, HF, SCREENING, OT, MIXING, etc.) are standard syntax not indexed as named parameters — use domain knowledge for those.
 - **CP2K keyword vs subsection — CRITICAL**:
   - CP2K has two kinds of identifiers: **keywords** (single-line `KEY value`) and **subsections** (blocks `&SECTION ... &END SECTION`). Mixing them up causes instant ABORT.
   - **Keywords** (single line, NO `&` prefix): `ADDED_MOS 30`, `EPS_SCF 1.0E-6`, `CUTOFF 400`, `SCF_GUESS ATOMIC`, `NPOINTS 20`, `SPECIAL_POINT GAMMA 0.0 0.0 0.0`, `METHOD GPW`, `SCHEME MONKHORST-PACK 4 4 4`, `MAX_DIIS 7`, `MAX_SCF 50`.
