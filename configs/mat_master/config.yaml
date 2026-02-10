@@ -99,7 +99,7 @@ mcp:
   config_file: "mcp_config.json"
   enabled: true
   path_adaptor: "calculation"
-  calculation_servers: ["mat_sg", "mat_dpa", "mat_doc", "mat_abacus", "mat_binary_calc"]
+  calculation_servers: ["mat_sg", "mat_dpa", "mat_doc", "mat_abacus", "mat_binary_calc", "mat_struct_db"]
   # Per-server tool filter: only register these tools (original names). Omitted servers register all tools.
   tool_include_only:
     mat_sn: ["web-search", "search-papers-enhanced"]
