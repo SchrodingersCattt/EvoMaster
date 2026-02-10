@@ -22,18 +22,34 @@ fi
 
 # 端口（支持环境变量 BACKEND_PORT、FRONTEND_PORT 覆盖）
 BACKEND_PORT="${BACKEND_PORT:-50001}"
-FRONTEND_PORT="${FRONTEND_PORT:-50003}"
+FRONTEND_PORT="${FRONTEND_PORT:-50004}"
 
-# === 0. 启动前释放端口（仅 Linux 有 fuser）===
-if command -v fuser >/dev/null 2>&1; then
-  for port in "$BACKEND_PORT" "$FRONTEND_PORT"; do
-    if fuser "$port/tcp" >/dev/null 2>&1; then
-      echo "Releasing port $port..."
-      fuser -k "$port/tcp" 2>/dev/null || true
-      sleep 1
+# === 0. 启动前释放端口，避免 Address already in use ===
+echo "Releasing ports $BACKEND_PORT, $FRONTEND_PORT (if in use)..."
+release_port() {
+  local port=$1
+  local released=
+  if command -v fuser >/dev/null 2>&1 && fuser "$port/tcp" >/dev/null 2>&1; then
+    fuser -k "$port/tcp" 2>/dev/null || true
+    released=1
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    local pids
+    pids=$(lsof -ti:"$port" 2>/dev/null) || true
+    if [ -n "$pids" ]; then
+      echo "$pids" | xargs kill -9 2>/dev/null || true
+      released=1
     fi
-  done
-fi
+  fi
+  if [ -n "$released" ]; then
+    echo "  -> Released port $port"
+  else
+    echo "  -> Port $port was free"
+  fi
+}
+release_port "$BACKEND_PORT"
+release_port "$FRONTEND_PORT"
+sleep 2
 
 # === 1. 获取 IP / 公网域名 (用于提示与前端 API 地址) ===
 # hostname -I 仅 Linux 支持；Windows/Git Bash 用 127.0.0.1

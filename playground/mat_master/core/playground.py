@@ -9,6 +9,7 @@ mat_master 在此复写 _setup_mcp_tools、setup、_create_exp，不修改基类
 import asyncio
 import json
 import logging
+import os
 from pathlib import Path
 
 import yaml
@@ -76,7 +77,11 @@ class MatMasterPlayground(BasePlayground):
         # Point it to this run's workspace so downloads and tool outputs go to workspaces/<task_id>.
         if self.session is not None and run_dir is not None:
             run_path = Path(run_dir).resolve()
-            if task_id:
+            ws_override = self._get_workspace_root_override()
+            if ws_override is not None:
+                ws_path = ws_override
+                ws_path.mkdir(parents=True, exist_ok=True)
+            elif task_id:
                 ws_path = run_path / "workspaces" / task_id
             else:
                 ws_path = run_path / "workspace"
@@ -86,6 +91,22 @@ class MatMasterPlayground(BasePlayground):
             if hasattr(self.session.config, "working_dir"):
                 self.session.config.working_dir = ws_str
             self.logger.debug("Session workspace updated to: %s", ws_str)
+
+    def _get_workspace_root_override(self) -> Path | None:
+        raw = (os.environ.get("MAT_MASTER_WORKSPACE_ROOT") or "").strip()
+        if not raw:
+            try:
+                config_dict = self.config.model_dump()
+            except Exception:
+                config_dict = {}
+            raw = (config_dict.get("mat_master") or {}).get("workspace_root") or ""
+        raw = raw.strip()
+        if not raw:
+            return None
+        p = Path(raw).expanduser()
+        if not p.is_absolute():
+            p = (_project_root() / p).resolve()
+        return p
 
     def _setup_tools(self, skill_registry=None) -> None:
         """Override: call base then register memory tools (mem_save, mem_recall) and peek_file."""

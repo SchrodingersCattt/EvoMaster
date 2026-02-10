@@ -142,5 +142,6 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 * **Chunked writing**: Use multiple `write_section.py` calls per section (first call creates, further calls use `--append`) or build the full section in a file then pass with `--content_file`; the script does not expand short text.
 * Citations: **text + hyperlink** to original source; References section must match in-text [n] exactly (see reference/citation_and_references.md).
 * Always write long content to **files**; one section per call for `write_section.py`.
+* **User uploads (mandatory)**: If the user uploads files or provides documents in the workspace, you MUST **fully parse/read every such file** before writing any section. Do **not** start writing until all uploaded/workspace PDFs (and other docs) have been completely read. For PDFs, use MCP document tools (mat_doc_*) for full-text extraction; do not skip or only skim.
 * Before finalizing, run `assemble_manuscript.py` with `--validate` and address term, abbreviation, and reference checks.
 * Preferred long-form flow: after each search, summarize with the agent LLM and append to a temp file (`append_chunk.py`); then build sections from those files, assemble into one document, and run `polish_text.py --use_llm` for point-by-point revision.

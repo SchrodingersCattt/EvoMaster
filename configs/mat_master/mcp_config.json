@@ -29,6 +29,11 @@
       "transport": "sse",
       "url": "http://toyl1410396.bohrium.tech:50001/sse",
       "headers": {}
+    },
+    "mat_binary_calc": {
+      "transport": "http",
+      "url": "http://gjao1318755.bohrium.tech:50002/mcp",
+      "headers": {}
     }
   }
 }

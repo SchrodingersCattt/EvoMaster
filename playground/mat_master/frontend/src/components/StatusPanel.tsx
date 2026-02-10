@@ -11,6 +11,16 @@ function inferToolSuccess(entry: LogEntry): boolean {
   return true;
 }
 
+const PHASE_LABELS: Record<string, { label: string; color: string }> = {
+  planning: { label: "规划中", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400" },
+  preflight: { label: "预检确认", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" },
+  executing: { label: "执行中", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400" },
+  replanning: { label: "重新规划", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400" },
+  completed: { label: "已完成", color: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" },
+  failed: { label: "失败", color: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" },
+  aborted: { label: "已中止", color: "bg-gray-100 text-gray-700 dark:bg-gray-900/40 dark:text-gray-400" },
+};
+
 export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
   const toolResults = entries.filter(
     (e) => e.source === "ToolExecutor" && e.type === "tool_result" && !isEnvRelatedEntry(e)
@@ -22,10 +32,36 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
   const lastStages = statusStages.length > 0 ? (statusStages[statusStages.length - 1].content as { total?: number; current?: number; step_id?: number; intent?: string }) : null;
   const mode = statusStages.length > 0 || entries.some((e) => e.source === "Planner") ? "planner" : "direct";
 
+  // Dynamic closed-loop planning events
+  const phaseChanges = entries.filter((e) => e.type === "phase_change");
+  const replanEvents = entries.filter((e) => e.type === "replan_triggered");
+  const planRevisions = entries.filter((e) => e.type === "plan_revised");
+  const lastPhase = phaseChanges.length > 0
+    ? (phaseChanges[phaseChanges.length - 1].content as { from?: string; to?: string })?.to ?? ""
+    : "";
+  const lastReplan = replanEvents.length > 0
+    ? (replanEvents[replanEvents.length - 1].content as { reason?: string; after_step?: number })
+    : null;
+  const replanCount = planRevisions.length;
+
   return (
     <div className="border border-gray-300 rounded-lg p-3 bg-[#f9fafb] flex flex-col h-full min-h-0">
       <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">状态记录</h2>
       <div className="flex flex-col gap-2 overflow-y-auto overflow-x-hidden flex-1 min-h-0 text-xs break-words">
+        {/* Phase badge for planner mode */}
+        {mode === "planner" && lastPhase && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${PHASE_LABELS[lastPhase]?.color ?? "bg-gray-100 text-gray-700"}`}>
+              {PHASE_LABELS[lastPhase]?.label ?? lastPhase}
+            </span>
+            {replanCount > 0 && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400">
+                Replan ×{replanCount}
+              </span>
+            )}
+          </div>
+        )}
+
         {expRuns.length > 0 && (
           <>
             <div className="font-medium text-[#1e293b]" title="mode 为 direct/planner；此处为实际运行的 Exp 类名，如 DirectSolver、ResearchPlanner、SkillEvolutionExp">
@@ -80,6 +116,18 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
                 当前: {lastStages.intent}
               </div>
             )}
+            {/* Replan trigger reason */}
+            {lastReplan && lastPhase === "replanning" && (
+              <div className="mt-1 p-1.5 rounded bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800">
+                <div className="font-medium text-purple-700 dark:text-purple-400">重新规划原因</div>
+                <div className="text-purple-600 dark:text-purple-300 mt-0.5">
+                  {lastReplan.reason ?? "—"}
+                  {lastReplan.after_step != null && (
+                    <span className="text-purple-500"> (Step {lastReplan.after_step} 之后)</span>
+                  )}
+                </div>
+              </div>
+            )}
             {statusSkill.length > 0 && (
               <div className="font-medium text-green-700 mt-1">新生成 Skills</div>
             )}
@@ -88,7 +136,7 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
                 • {String(e.content)}
               </div>
             ))}
-            {mode === "planner" && !lastStages && statusSkill.length === 0 && (
+            {mode === "planner" && !lastStages && statusSkill.length === 0 && !lastPhase && (
               <div className="text-gray-500">规划中或等待执行…</div>
             )}
           </>

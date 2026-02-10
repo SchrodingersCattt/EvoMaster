@@ -221,8 +221,24 @@ export default function ChatPanel({
   const isRunning = running && currentSessionId === runningSessionId;
   const canSend = status === "connected" && !isRunning;
 
+  // Smart auto-scroll: only scroll to bottom after updates if user was already near bottom.
+  const NEAR_BOTTOM_THRESHOLD_PX = 50;
+  const isNearBottomRef = useRef(true);
+
   useEffect(() => {
-    if (scrollRef?.current) {
+    const el = scrollRef?.current;
+    if (!el) return;
+    const updateNearBottom = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      isNearBottomRef.current =
+        scrollTop + clientHeight >= scrollHeight - NEAR_BOTTOM_THRESHOLD_PX;
+    };
+    el.addEventListener("scroll", updateNearBottom, { passive: true });
+    return () => el.removeEventListener("scroll", updateNearBottom);
+  }, [scrollRef]);
+
+  useEffect(() => {
+    if (scrollRef?.current && isNearBottomRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [filtered.length, scrollRef]);

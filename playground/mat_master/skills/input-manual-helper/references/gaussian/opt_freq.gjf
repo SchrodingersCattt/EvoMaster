@@ -1,0 +1,14 @@
+%mem=8GB
+%nprocshared=8
+%chk=opt_freq.chk
+#p B3LYP/6-311+G(d,p) Opt Freq
+
+Geometry optimization followed by frequency calculation
+
+0 1
+C         0.00000000    0.00000000    0.00000000
+O         1.16000000    0.00000000    0.00000000
+H        -0.58800000    0.94300000    0.00000000
+H        -0.58800000   -0.94300000    0.00000000
+
+

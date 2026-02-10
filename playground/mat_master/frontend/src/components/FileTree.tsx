@@ -87,21 +87,35 @@ export default function FileTree({
   const getEntryPath = useCallback((entry: FileEntry) => entry.path || entry.name, []);
 
   const handleDownload = useCallback(
-    (entry: FileEntry) => {
+    async (entry: FileEntry) => {
       if (!sessionId || entry.dir) {
         setContextMenu(null);
         return;
       }
       const path = getEntryPath(entry);
       const url = `${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/files/content?path=${encodeURIComponent(path)}`;
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = entry.name;
-      link.rel = "noopener";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      setContextMenu(null);
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          const msg = await res.text();
+          throw new Error(msg || `HTTP ${res.status}`);
+        }
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = objectUrl;
+        link.download = entry.name;
+        link.rel = "noopener";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "未知错误";
+        alert(`下载失败: ${msg}`);
+      } finally {
+        setContextMenu(null);
+      }
     },
     [getEntryPath, sessionId]
   );

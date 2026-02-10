@@ -1,0 +1,95 @@
+! CP2K template: Band structure calculation (metal, FCC example)
+! Adapt: PROJECT, basis/potential, CUTOFF, k-path, structure, ADDED_MOS count
+! NOTE: ADDED_MOS is a KEYWORD (single line), NOT a subsection block.
+! NOTE: SPECIAL_POINT is the correct keyword, NOT SPECIAL_KPOINT.
+&GLOBAL
+  PROJECT my_band
+  RUN_TYPE ENERGY
+  PRINT_LEVEL MEDIUM
+&END GLOBAL
+
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+    BASIS_SET_FILE_NAME BASIS_MOLOPT
+    POTENTIAL_FILE_NAME GTH_POTENTIALS
+    &MGRID
+      CUTOFF 400
+      REL_CUTOFF 50
+    &END MGRID
+    &QS
+      METHOD GPW
+      EPS_DEFAULT 1.0E-12
+    &END QS
+    &SCF
+      SCF_GUESS ATOMIC
+      EPS_SCF 1.0E-6
+      MAX_SCF 100
+      ADDED_MOS 30
+      &SMEAR ON
+        METHOD FERMI_DIRAC
+        ELECTRONIC_TEMPERATURE [K] 300
+      &END SMEAR
+      MAX_DIIS 7
+      &MIXING
+        METHOD BROYDEN_MIXING
+        ALPHA 0.3
+      &END MIXING
+    &END SCF
+    &XC
+      &XC_FUNCTIONAL PBE
+      &END XC_FUNCTIONAL
+    &END XC
+    &KPOINTS
+      SCHEME MONKHORST-PACK 8 8 8
+    &END KPOINTS
+  &END DFT
+  &PROPERTIES
+    &BANDSTRUCTURE
+      ! Define k-path segments: each KPOINT_SET is one segment
+      ! SPECIAL_POINT <label> <kx> <ky> <kz>  (fractional, reciprocal space)
+      &KPOINT_SET
+        NPOINTS 20
+        SPECIAL_POINT GAMMA 0.0 0.0 0.0
+        SPECIAL_POINT X     0.5 0.0 0.5
+      &END KPOINT_SET
+      &KPOINT_SET
+        NPOINTS 20
+        SPECIAL_POINT X     0.5 0.0 0.5
+        SPECIAL_POINT W     0.5 0.25 0.75
+      &END KPOINT_SET
+      &KPOINT_SET
+        NPOINTS 20
+        SPECIAL_POINT W     0.5 0.25 0.75
+        SPECIAL_POINT K     0.375 0.375 0.75
+      &END KPOINT_SET
+      &KPOINT_SET
+        NPOINTS 20
+        SPECIAL_POINT K     0.375 0.375 0.75
+        SPECIAL_POINT GAMMA 0.0 0.0 0.0
+      &END KPOINT_SET
+      &KPOINT_SET
+        NPOINTS 20
+        SPECIAL_POINT GAMMA 0.0 0.0 0.0
+        SPECIAL_POINT L     0.5 0.5 0.5
+      &END KPOINT_SET
+    &END BANDSTRUCTURE
+  &END PROPERTIES
+  &SUBSYS
+    &CELL
+      ABC 3.61 3.61 3.61
+      ALPHA_BETA_GAMMA 90 90 90
+    &END CELL
+    &COORD
+      ! Replace with actual coordinates
+      Cu  0.000  0.000  0.000
+      Cu  0.000  1.805  1.805
+      Cu  1.805  0.000  1.805
+      Cu  1.805  1.805  0.000
+    &END COORD
+    &KIND Cu
+      BASIS_SET DZVP-MOLOPT-SR-GTH
+      POTENTIAL GTH-PBE-q11
+    &END KIND
+  &END SUBSYS
+&END FORCE_EVAL
