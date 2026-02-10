@@ -511,7 +511,30 @@ def cmd_sections_batch(software: str, params: list[dict], sections_csv: str) -> 
     print("=" * 72)
 
 
+def _fix_argv() -> None:
+    """Fix argv when the caller wraps the entire argument string in quotes.
+
+    The SkillTool layer uses ``shlex.split`` + ``shlex.quote`` to pass
+    ``script_args`` to the subprocess.  When the LLM wraps the whole string in
+    quotes (e.g. ``"--software CP2K --sections X"``), ``shlex.split`` treats it
+    as a single token, so ``argparse`` receives **one** giant argument instead
+    of individual flags.  Detect this and re-split.
+    """
+    import shlex as _shlex
+    # Typical symptom: only one non-script arg that starts with "--" and
+    # contains spaces (all flags collapsed into a single string).
+    if len(sys.argv) == 2 and " " in sys.argv[1] and sys.argv[1].lstrip().startswith("--"):
+        try:
+            new_args = _shlex.split(sys.argv[1])
+            if len(new_args) > 1:
+                sys.argv[1:] = new_args
+        except ValueError:
+            pass
+
+
 def main() -> None:
+    _fix_argv()
+
     parser = argparse.ArgumentParser(
         description="Smart manual reader for input-manual-helper skill."
     )
