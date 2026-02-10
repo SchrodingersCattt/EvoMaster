@@ -108,7 +108,7 @@ mcp:
   config_file: "mcp_config.json"
   enabled: true
   path_adaptor: "calculation"
-  calculation_servers: ["mat_sg", "mat_dpa", "mat_doc", "mat_abacus"]
+  calculation_servers: ["mat_sg", "mat_dpa", "mat_doc", "mat_abacus", "mat_binary_calc"]
   # Per-server tool filter: only register these tools (original names). Omitted servers register all tools.
   tool_include_only:
     mat_sn: ["web-search", "search-papers-enhanced"]
@@ -179,6 +179,59 @@ mcp:
         - abacus_modify_input
         - abacus_modify_stru
         - abacus_collect_data
+    # Binary Calc: 同一 MCP server 下不同工具使用不同镜像/机型，通过 executor_map 按工具名分发
+    mat_binary_calc:
+      executor: null
+      executor_map:
+        run_lammps:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/lammps-agent:03810da8"
+              platform: "ali"
+              machine_type: "c8_m126_1 * NVIDIA 5090"
+              app_key: "agent"
+          resources:
+            envs: {}
+        run_cp2k:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/cp2k:2024.1"
+              platform: "ali"
+              machine_type: "c32_m64_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
+        run_abinit:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/abinit:9.10.3"
+              platform: "ali"
+              machine_type: "c32_m64_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
+        run_quantum_espresso:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/quantum-espresso:7.1"
+              platform: "ali"
+              machine_type: "c32_m64_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
+      sync_tools: []
 
 # ============================================
 # Skills（约束 Mat 工具调用方式，注入 meta 到上下文）
