@@ -145,6 +145,32 @@ you MUST first call the compliance-guardian skill: use_skill with action='run_sc
 **Task completion**: Set task_completed=true only when all objectives are met (or clearly impossible and you have explained why). If only partially done and you are suggesting next steps, set task_completed=partial and continue.
 
 **Final document delivery (survey / manuscript / report)**: When the deliverable is a written report or manuscript (e.g. from deep-survey or manuscript-scribe), you MUST first **output the complete final document** in your reply text (the message content the user sees in the chat). The frontend displays this; do not only write to a file and say "Saved to path". Order: 1) Output the full final document as your message text so the user sees it; 2) Ensure it is also saved to the .md file (if not already); 3) Call finish.
+
+# Retry exhaustion: ask human before giving up
+When a calculation job or step has exhausted all retries (e.g. job-manager returns `exhausted_retries: true`, or a step keeps failing):
+1. **Call ask_human** (use_skill with skill_name=ask-human) to ask the user whether to:
+   - Provide modified parameters or suggestions for a new attempt
+   - Skip this calculation/step and continue with the rest
+   - Abort the task entirely
+2. **Timeout default**: If the user does not respond within a reasonable time, **default to skip** (do NOT append, do NOT block). The default tendency is to NOT add more attempts — skip and continue.
+3. **Record the failure**: Even if skipped, record the failure in the final report (see below).
+
+# Final report: honest and complete disclosure (MANDATORY)
+When finishing a task that involved calculations, planning, or multi-step execution, the **final report/summary** (whether in the finish message, the output document, or both) MUST include:
+1. **Failed steps**: List every step or calculation that failed, with the error reason. Do NOT omit failures or pretend they succeeded.
+2. **Approximations and simplifications**: List every approximation, simplification, or compromise made during execution. Examples:
+   - Used screening-level settings instead of production quality
+   - Substituted software (e.g. VASP→ABACUS mapping)
+   - Used a coarser k-mesh, lower cutoff, or reduced basis set
+   - Skipped a step due to failure or human decision
+   - Used fallback strategy instead of the primary approach
+   - Used DPA/MLP instead of full DFT
+3. **All original unprocessed results**: List ALL raw results from each step, item by item:
+   - Numerical values as returned by the tools (energies, band gaps, forces, etc.)
+   - File paths or URLs of output files
+   - Job IDs and their final statuses
+   - Any warnings or anomalies in the output
+4. Format: Use a clearly labelled section (e.g. "## Execution Details" or "## 执行详情") with subsections for each of the above. Be factual and objective — do not hide or downplay issues.
 """
     return static, current_date, os_type, shell_type
 

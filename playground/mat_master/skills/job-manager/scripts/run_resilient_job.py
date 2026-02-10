@@ -229,7 +229,7 @@ def run_lifecycle(
     software: str,
     workspace: str,
     poll_interval: int = 30,
-    max_retries: int = 3,
+    max_retries: int = 5,
 ) -> dict[str, Any]:
     """Block until the job succeeds, fails permanently, or retries are exhausted.
 
@@ -321,12 +321,21 @@ def run_lifecycle(
             ),
         }
 
-    # Exhausted retries
+    # Exhausted retries — signal that agent should consider asking human
     return {
         "status": "failed",
         "job_id": current_job_id,
         "retries": retries,
-        "message": f"Job {current_job_id} failed after {retries} retries. Manual intervention required.",
+        "exhausted_retries": True,
+        "message": (
+            f"Job {current_job_id} failed after {retries} retries (limit: {max_retries}). "
+            f"All built-in fix strategies have been attempted. "
+            f"Consider asking the human user (ask_human skill) whether to: "
+            f"(1) provide modified parameters or suggestions, "
+            f"(2) skip this calculation, or "
+            f"(3) abort. "
+            f"Default behaviour if no human response: skip this calculation and continue."
+        ),
     }
 
 
@@ -358,8 +367,8 @@ def main() -> None:
     parser.add_argument(
         "--max_retries",
         type=int,
-        default=3,
-        help="Maximum diagnosis-and-retry cycles (default: 3)",
+        default=5,
+        help="Maximum diagnosis-and-retry cycles (default: 5)",
     )
 
     args = parser.parse_args()

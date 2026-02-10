@@ -95,5 +95,19 @@
 - Before calling manuscript-scribe write_section or init_manuscript, run literature search (mat_sn_search-papers-normal, mat_sn_scholar-search, mat_sn_web-search) for the section topic unless the user already provided source files.
 - Do not write sections from memory only; ground content in retrieved material and cite it. When citing papers use: In [year], [first author] et al. [did what / found that ...]; [n](url).
 
+## Retry exhaustion: ask human before giving up (MANDATORY)
+- When **job-manager** returns `exhausted_retries: true` or a step/calculation fails after all built-in retries:
+  1. Call **ask_human** (use_skill with skill_name=ask-human) with a clear question: describe the failure, list what was tried, and ask whether to (a) provide modified parameters/suggestions, (b) skip this step, or (c) abort.
+  2. **Timeout default = skip**: If no human response, default to **skip** (do NOT append more retries, do NOT block). The default tendency is to NOT add more attempts.
+  3. If the human provides modified parameters or suggestions, apply them and retry once. If that also fails, skip and continue.
+  4. **Always record** the failure and human decision (or timeout) for the final report.
+
+## Final report: honest disclosure (MANDATORY for any multi-step or calculation task)
+- The final report/summary MUST include these sections (use clear headings):
+  1. **Failed steps / calculations**: Every failure with error reason. Do NOT omit or hide.
+  2. **Approximations and simplifications**: Every compromise made (software substitution, coarser settings, fallback strategies used, steps skipped, screening vs production, MLP vs DFT, etc.).
+  3. **All original unprocessed results**: List each step's raw output item by item — numerical values, file paths/URLs, job IDs, warnings, anomalies.
+- Be factual and objective; do not downplay failures or exaggerate successes.
+
 ## Final document: show in chat then save
 - For survey/manuscript/report deliverables: first **output the complete final document** in your reply (so the frontend shows it to the user), then ensure it is saved to the .md file and call finish. Do not only say "Saved to …" without outputting the document content in your message.
