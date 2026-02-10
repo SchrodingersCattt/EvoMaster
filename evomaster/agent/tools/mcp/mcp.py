@@ -94,6 +94,7 @@ class MCPTool(BaseTool):
         # 元数据标记（由 MCPToolManager 设置）
         self._is_mcp_tool = True
         self._mcp_server = None  # 服务器名称
+        self._mcp_manager = None  # MCPToolManager 实例（用于断线重连）
 
         # 统计信息
         self._call_count = 0
@@ -181,33 +182,90 @@ class MCPTool(BaseTool):
         ✅ 关键：禁止 asyncio.run() 产生临时 loop，必须把协程丢到“同一个长期 loop”里执行，
         否则会出现 anyio/mcp stream 卡死、ClosedResourceError、cancel scope 错位等问题。
         """
-        # 1) 必须有一个被注入的 MCP loop
-        loop = getattr(self, '_mcp_loop', None)
-        if loop is None:
-            raise ToolError(
-                'MCP loop not injected into MCPTool. '
-                'Please set mcp_tool._mcp_loop = <persistent_event_loop> when creating tools.'
-            )
-        if loop.is_closed():
-            raise ToolError('MCP loop is closed; cannot call MCP tool')
+        max_attempts = 2  # 原始调用 + 重连后重试
 
-        coro = self.mcp_connection.call_tool(self._remote_tool_name, args)
+        for attempt in range(max_attempts):
+            # 1) 必须有一个被注入的 MCP loop
+            loop = getattr(self, '_mcp_loop', None)
+            if loop is None:
+                raise ToolError(
+                    'MCP loop not injected into MCPTool. '
+                    'Please set mcp_tool._mcp_loop = <persistent_event_loop> when creating tools.'
+                )
+            if loop.is_closed():
+                raise ToolError('MCP loop is closed; cannot call MCP tool')
+
+            coro = self.mcp_connection.call_tool(self._remote_tool_name, args)
+
+            try:
+                # 2) 如果这个 loop 当前没有在运行（最常见：同步 Agent 场景），直接 run_until_complete
+                if not loop.is_running():
+                    return loop.run_until_complete(coro)
+
+                # 3) 如果 loop 在运行（比如你把 loop 放到后台线程 run_forever），用线程安全提交
+                timeout = getattr(self, '_call_timeout', DEFAULT_MCP_TOOL_CALL_TIMEOUT)
+                fut = asyncio.run_coroutine_threadsafe(coro, loop)
+                return fut.result(timeout=timeout)
+
+            except concurrent.futures.TimeoutError:
+                timeout = getattr(self, '_call_timeout', DEFAULT_MCP_TOOL_CALL_TIMEOUT)
+                raise ToolError(f"MCP tool call timed out after {timeout} seconds")
+            except Exception as e:
+                # 检查是否是 session 过期/断开错误，尝试重连后重试
+                if attempt < max_attempts - 1 and self._is_session_error(e):
+                    self.logger.warning(
+                        "MCP session error for '%s', requesting reconnect (attempt %d/%d): %s",
+                        self._tool_name, attempt + 1, max_attempts, e,
+                    )
+                    if self._try_reconnect():
+                        continue  # 重连成功，用新 connection 重试
+                raise ToolError(f"Failed to call MCP tool: {str(e)}")
+
+        raise ToolError(f"MCP tool call failed after {max_attempts} attempts")
+
+    # ------------------------------------------------------------------
+    # Session 断线重连辅助
+    # ------------------------------------------------------------------
+
+    def _is_session_error(self, exc: Exception) -> bool:
+        """判断异常是否表示 MCP session 过期/连接断开。"""
+        err_name = type(exc).__name__
+        err_msg = str(exc).lower()
+        session_indicators = (
+            'closedresourceerror', 'brokenresourceerror',
+            'closedresource', 'brokenresource',
+        )
+        combined = (err_name + ' ' + err_msg).lower()
+        return any(ind in combined for ind in session_indicators)
+
+    def _try_reconnect(self, timeout: float = 30.0) -> bool:
+        """通过 MCPToolManager 触发重连并等待完成。
+
+        Returns:
+            True — 重连成功（self.mcp_connection 已被 manager 原地更新）。
+            False — 无法重连或超时。
+        """
+        manager = getattr(self, '_mcp_manager', None)
+        server_name = getattr(self, '_mcp_server', None)
+        if not manager or not server_name:
+            return False
 
         try:
-            # 2) 如果这个 loop 当前没有在运行（最常见：同步 Agent 场景），直接 run_until_complete
-            if not loop.is_running():
-                return loop.run_until_complete(coro)
-
-            # 3) 如果 loop 在运行（比如你把 loop 放到后台线程 run_forever），用线程安全提交
-            timeout = getattr(self, '_call_timeout', DEFAULT_MCP_TOOL_CALL_TIMEOUT)
-            fut = asyncio.run_coroutine_threadsafe(coro, loop)
-            return fut.result(timeout=timeout)
-
-        except concurrent.futures.TimeoutError:
-            timeout = getattr(self, '_call_timeout', DEFAULT_MCP_TOOL_CALL_TIMEOUT)
-            raise ToolError(f"MCP tool call timed out after {timeout} seconds")
+            done_event = manager.request_reconnect(server_name)
+            success = done_event.wait(timeout=timeout)
+            if success:
+                self.logger.info(
+                    "MCP server '%s' reconnected, retrying tool '%s'",
+                    server_name, self._tool_name,
+                )
+            else:
+                self.logger.warning(
+                    "MCP reconnection timed out for server '%s'", server_name,
+                )
+            return success
         except Exception as e:
-            raise ToolError(f"Failed to call MCP tool: {str(e)}")
+            self.logger.warning("Reconnect attempt failed for '%s': %s", server_name, e)
+            return False
 
     def _format_mcp_result(self, result: Any) -> str:
         """格式化 MCP 工具返回结果
