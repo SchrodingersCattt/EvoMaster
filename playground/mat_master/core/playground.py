@@ -19,7 +19,6 @@ from ..memory import MemoryService, get_memory_tools
 from ..tools import get_peek_file_tool
 from .agent import MatMasterAgent
 from .registry import MatMasterSkillRegistry
-from .exp import ResilientCalcExp
 from .solvers import DirectSolver, ResearchPlanner
 
 
@@ -36,6 +35,8 @@ class MatMasterPlayground(BasePlayground):
     文档解析、DPA 计算），支持 LiteLLM 与 Azure 的 LLM 配置格式。
     使用 MatMasterAgent：异步任务未完成时不会因 partial 结束，需 task_completed=true 才结束。
     工作流模式通过 --mode 切换：direct（即时）| planner（规划执行）。
+    异步计算的弹性监控（submit→poll→diagnose→retry）由 job-manager skill 处理，
+    不再作为独立的 Exp 模式。
 
     使用方式：
         python run.py --agent mat_master --task "材料相关任务"
@@ -218,14 +219,17 @@ class MatMasterPlayground(BasePlayground):
             self.logger.info("Single-agent playground setup complete")
 
     def _create_exp(self):
-        """Return solver by --mode: direct | planner | resilient_calc. Async/calculation tasks use resilient_calc."""
+        """Return solver by --mode: direct | planner.
+
+        Resilient calculation logic (submit/monitor/diagnose/retry) is now handled
+        by the job-manager skill, not a top-level Exp. The agent invokes it naturally
+        via use_skill within either Direct or Planner mode.
+        """
         mode = getattr(self, "_run_mode", None) or "direct"
         if mode == "planner":
             input_fn = getattr(self, "_planner_input_fn", None)
             output_callback = getattr(self, "_planner_output_callback", None)
             exp = ResearchPlanner(self.agent, self.config, input_fn=input_fn, output_callback=output_callback)
-        elif mode == "resilient_calc":
-            exp = ResilientCalcExp(self.agent, self.config)
         else:
             exp = DirectSolver(self.agent, self.config)
 
