@@ -8,7 +8,6 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import json
-import logging
 import os
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -20,9 +19,12 @@ DEFAULT_MCP_TOOL_CALL_TIMEOUT = 60
 
 def _mcp_call_timeout() -> int:
     try:
-        return int(os.environ.get("MCP_TOOL_CALL_TIMEOUT", DEFAULT_MCP_TOOL_CALL_TIMEOUT))
+        return int(
+            os.environ.get('MCP_TOOL_CALL_TIMEOUT', DEFAULT_MCP_TOOL_CALL_TIMEOUT)
+        )
     except ValueError:
         return DEFAULT_MCP_TOOL_CALL_TIMEOUT
+
 
 if TYPE_CHECKING:
     from evomaster.agent.session import BaseSession
@@ -51,7 +53,7 @@ class MCPTool(BaseTool):
     """
 
     # 类属性（BaseTool 需要）
-    name: ClassVar[str] = "mcp_tool"  # 会被实例属性覆盖
+    name: ClassVar[str] = 'mcp_tool'  # 会被实例属性覆盖
     params_class: ClassVar[type] = None  # MCP 工具不使用 params_class
 
     def __init__(
@@ -80,7 +82,9 @@ class MCPTool(BaseTool):
         self._tool_description = tool_description
         self._input_schema = input_schema
         self._remote_tool_name = remote_tool_name
-        self._call_timeout = call_timeout if call_timeout is not None else _mcp_call_timeout()
+        self._call_timeout = (
+            call_timeout if call_timeout is not None else _mcp_call_timeout()
+        )
         # ✅ MCP 专用 event loop（由 MCPToolManager 或 Playground 注入）
         self._mcp_loop = None
 
@@ -96,9 +100,7 @@ class MCPTool(BaseTool):
         self._last_error = None
 
     def execute(
-        self,
-        session: BaseSession,
-        args_json: str
+        self, session: BaseSession, args_json: str
     ) -> tuple[str, dict[str, Any]]:
         """执行 MCP 工具
 
@@ -117,19 +119,33 @@ class MCPTool(BaseTool):
             self.logger.debug(f"Executing MCP tool {self._tool_name} with args: {args}")
 
             # 2. Path adaptor (calculation): path args must be OSS links; local paths → upload then pass URL
-            path_adaptor = getattr(self, "_path_adaptor", None)
+            path_adaptor = getattr(self, '_path_adaptor', None)
             if path_adaptor is not None:
                 workspace_path = (
-                    getattr(getattr(session, "config", None), "workspace_path", None)
+                    getattr(getattr(session, 'config', None), 'workspace_path', None)
                     if session
                     else None
-                ) or ""
+                ) or ''
+
+                # 尝试从 session 获取 Bohrium 凭证（如果存在）
+                bohrium_creds = getattr(session, '_bohrium_credentials', None)
+                access_key = None
+                project_id = None
+                user_id = None
+                if bohrium_creds:
+                    access_key = bohrium_creds.get('access_key')
+                    project_id = bohrium_creds.get('project_id')
+                    user_id = bohrium_creds.get('user_id')
+
                 args = path_adaptor.resolve_args(
                     workspace_path,
                     args,
                     self._tool_name,
-                    self._mcp_server or "",
-                    input_schema=getattr(self, "_input_schema", None),
+                    self._mcp_server or '',
+                    input_schema=getattr(self, '_input_schema', None),
+                    access_key=access_key,
+                    project_id=project_id,
+                    user_id=user_id,
                 )
 
             # 3. 调用 MCP 工具（异步转同步）
@@ -143,10 +159,10 @@ class MCPTool(BaseTool):
             self._last_error = None
 
             info = {
-                "mcp_tool": self._tool_name,
-                "mcp_server": self._mcp_server,
-                "success": True,
-                "call_count": self._call_count,
+                'mcp_tool': self._tool_name,
+                'mcp_server': self._mcp_server,
+                'success': True,
+                'call_count': self._call_count,
             }
 
             return observation, info
@@ -166,14 +182,14 @@ class MCPTool(BaseTool):
         否则会出现 anyio/mcp stream 卡死、ClosedResourceError、cancel scope 错位等问题。
         """
         # 1) 必须有一个被注入的 MCP loop
-        loop = getattr(self, "_mcp_loop", None)
+        loop = getattr(self, '_mcp_loop', None)
         if loop is None:
             raise ToolError(
-                "MCP loop not injected into MCPTool. "
-                "Please set mcp_tool._mcp_loop = <persistent_event_loop> when creating tools."
+                'MCP loop not injected into MCPTool. '
+                'Please set mcp_tool._mcp_loop = <persistent_event_loop> when creating tools.'
             )
         if loop.is_closed():
-            raise ToolError("MCP loop is closed; cannot call MCP tool")
+            raise ToolError('MCP loop is closed; cannot call MCP tool')
 
         coro = self.mcp_connection.call_tool(self._remote_tool_name, args)
 
@@ -183,12 +199,12 @@ class MCPTool(BaseTool):
                 return loop.run_until_complete(coro)
 
             # 3) 如果 loop 在运行（比如你把 loop 放到后台线程 run_forever），用线程安全提交
-            timeout = getattr(self, "_call_timeout", DEFAULT_MCP_TOOL_CALL_TIMEOUT)
+            timeout = getattr(self, '_call_timeout', DEFAULT_MCP_TOOL_CALL_TIMEOUT)
             fut = asyncio.run_coroutine_threadsafe(coro, loop)
             return fut.result(timeout=timeout)
 
         except concurrent.futures.TimeoutError:
-            timeout = getattr(self, "_call_timeout", DEFAULT_MCP_TOOL_CALL_TIMEOUT)
+            timeout = getattr(self, '_call_timeout', DEFAULT_MCP_TOOL_CALL_TIMEOUT)
             raise ToolError(f"MCP tool call timed out after {timeout} seconds")
         except Exception as e:
             raise ToolError(f"Failed to call MCP tool: {str(e)}")
@@ -223,11 +239,11 @@ class MCPTool(BaseTool):
                         parts.append(json.dumps(item, indent=2))
                 else:
                     parts.append(str(item))
-            return "\n".join(parts) if parts else ""
+            return '\n'.join(parts) if parts else ''
         elif isinstance(result, str):
             return result
         elif result is None:
-            return ""
+            return ''
         else:
             # 其他类型，转为 JSON
             return json.dumps(result, indent=2, default=str)
@@ -243,13 +259,13 @@ class MCPTool(BaseTool):
         from evomaster.utils.types import FunctionSpec, ToolSpec
 
         return ToolSpec(
-            type="function",
+            type='function',
             function=FunctionSpec(
                 name=self._tool_name,
                 description=self._tool_description,
                 parameters=self._input_schema,
                 strict=None,
-            )
+            ),
         )
 
     def get_stats(self) -> dict[str, Any]:
@@ -259,8 +275,8 @@ class MCPTool(BaseTool):
             统计信息字典
         """
         return {
-            "tool_name": self._tool_name,
-            "mcp_server": self._mcp_server,
-            "call_count": self._call_count,
-            "last_error": self._last_error,
+            'tool_name': self._tool_name,
+            'mcp_server': self._mcp_server,
+            'call_count': self._call_count,
+            'last_error': self._last_error,
         }

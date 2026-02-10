@@ -3,19 +3,14 @@ workflow:
     - if: $CI_COMMIT_BRANCH == "new_test"
       variables:
         DOCKERFILE_DIR: ./docker_api/
-        PROJECT_NAME: matmaster-tools-server-new_test
+        PROJECT_NAME: matmaster-evo-new_test
         BRANCH: new_test
         COVER: "false"
     - if: $CI_COMMIT_BRANCH == "test"
       variables:
         DOCKERFILE_DIR: ./docker_api/
-        PROJECT_NAME: matmaster-tools-server_test
+        PROJECT_NAME: matmaster-evo_test
         BRANCH: test
-        COVER: "false"
-    - if: $CI_COMMIT_BRANCH =~ /^feat\/.*$/
-      variables:
-        DOCKERFILE_DIR: ./docker_api/
-        PROJECT_NAME: matmaster-tools-server_test
         COVER: "false"
     - if: $CI_COMMIT_TAG
       variables:
