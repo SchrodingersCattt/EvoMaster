@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "mat_sg": {
+      "transport": "http",
+      "url": "http://qpus1389933.bohrium.tech:50003/mcp",
+      "headers": {}
+    },
+    "mat_sn": {
+      "transport": "sse",
+      "url": "http://bohrium-mcp-internal.dp.tech:11003/sse",
+      "headers": {}
+    },
+    "mat_doc": {
+      "transport": "http",
+      "url": "http://pfmx1355864.bohrium.tech:50005/mcp",
+      "headers": {}
+    },
+    "mat_dpa": {
+      "transport": "http",
+      "url": "http://qpus1389933.bohrium.tech:50001/mcp",
+      "headers": {}
+    },
+    "mat_struct_db": {
+      "transport": "http",
+      "url": "http://chvz1424099.bohrium.tech:50003/mcp",
+      "headers": {}
+    },
+    "mat_abacus": {
+      "transport": "sse",
+      "url": "http://toyl1410396.bohrium.tech:50004/sse",
+      "headers": {}
+    },
+    "mat_binary_calc": {
+      "transport": "http",
+      "url": "http://gjao1318755.bohrium.tech:50005/mcp",
+      "headers": {}
+    }
+  }
+}
