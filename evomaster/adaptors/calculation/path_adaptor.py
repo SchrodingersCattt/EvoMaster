@@ -22,29 +22,30 @@ logger = logging.getLogger(__name__)
 LOCAL_PATH_TOOLS: Set[str] = {}
 
 CALCULATION_PATH_ARGS: Dict[str, List[str]] = {
-    "get_structure_info": ["structure_path"],
-    "get_molecule_info": ["molecule_path"],
-    "build_bulk_structure_by_template": [],
-    "build_bulk_structure_by_wyckoff": [],
-    "make_supercell_structure": ["structure_path"],
-    "apply_structure_transformation": ["structure_path"],
-    "build_molecule_structures_from_smiles": [],
-    "add_cell_for_molecules": ["molecule_path"],
-    "build_surface_slab": ["material_path"],
-    "build_surface_adsorbate": ["surface_path", "adsorbate_path"],
-    "build_surface_interface": ["material1_path", "material2_path"],
-    "make_defect_structure": ["structure_path"],
-    "make_doped_structure": ["structure_path"],
-    "make_amorphous_structure": ["molecule_paths"],
-    "add_hydrogens": ["structure_path"],
-    "generate_ordered_replicas": ["structure_path"],
-    "remove_solvents": ["structure_path"],
-    "optimize_structure": ["input_structure"],
-    "calculate_phonon": ["input_structure"],
-    "run_molecular_dynamics": ["initial_structure"],
-    "calculate_elastic_constants": ["input_structure"],
-    "run_neb": ["initial_structure", "final_structure"],
-    "extract_info_from_webpage": [],
+    'get_structure_info': ['structure_path'],
+    'get_molecule_info': ['molecule_path'],
+    'build_bulk_structure_by_template': [],
+    'build_bulk_structure_by_wyckoff': [],
+    'make_supercell_structure': ['structure_path'],
+    'apply_structure_transformation': ['structure_path'],
+    'build_molecule_structures_from_smiles': [],
+    'add_cell_for_molecules': ['molecule_path'],
+    'build_surface_slab': ['material_path'],
+    'build_surface_adsorbate': ['surface_path', 'adsorbate_path'],
+    'build_surface_interface': ['material1_path', 'material2_path'],
+    'make_defect_structure': ['structure_path'],
+    'make_doped_structure': ['structure_path'],
+    'make_amorphous_structure': ['molecule_paths'],
+    'add_hydrogens': ['structure_path'],
+    'generate_ordered_replicas': ['structure_path'],
+    'remove_solvents': ['structure_path'],
+    'optimize_structure': ['input_structure'],
+    'calculate_phonon': ['input_structure'],
+    'run_molecular_dynamics': ['initial_structure'],
+    'calculate_elastic_constants': ['input_structure'],
+    'run_neb': ['initial_structure', 'final_structure'],
+    'extract_material_data_from_pdf': ['pdf_path'],
+    'extract_info_from_webpage': [],
 }
 
 
@@ -52,23 +53,24 @@ def _path_keys_from_schema(input_schema: Optional[Dict[str, Any]]) -> List[str]:
     """From MCP tool input_schema (JSON Schema), return param names that look path/file-related."""
     if not input_schema or not isinstance(input_schema, dict):
         return []
-    props = input_schema.get("properties") or {}
-    path_keywords = ("path", "file", "url", "structure", "pdf", "cif", "input_structure", "material_path", "surface_path", "adsorbate_path", "molecule_path")
+    props = input_schema.get('properties') or {}
     out = []
     for key, spec in props.items():
         if not isinstance(spec, dict):
             continue
         key_lower = key.lower()
-        desc = (spec.get("description") or spec.get("title") or "").lower()
-        if any(kw in key_lower for kw in ("path", "structure", "file", "pdf")):
+        desc = (spec.get('description') or spec.get('title') or '').lower()
+        if any(kw in key_lower for kw in ('path', 'structure', 'file', 'pdf')):
             out.append(key)
-        elif any(kw in desc for kw in ("path", "file", "url", "structure", "cif", "input")):
+        elif any(
+            kw in desc for kw in ('path', 'file', 'url', 'structure', 'cif', 'input')
+        ):
             out.append(key)
     return out
 
 
 # Schema keys that are NOT input file paths (do not upload / replace with OSS URL).
-_NON_PATH_SCHEMA_KEYS = frozenset({"crystal_structure", "output_file"})
+_NON_PATH_SCHEMA_KEYS = frozenset({'crystal_structure', 'output_file'})
 
 
 def _path_arg_names_from_schema(schema: Optional[Dict[str, Any]]) -> Set[str]:
@@ -76,8 +78,18 @@ def _path_arg_names_from_schema(schema: Optional[Dict[str, Any]]) -> Set[str]:
     out: Set[str] = set()
     if not schema or not isinstance(schema, dict):
         return out
-    props = schema.get("properties") or {}
-    key_hints = ("structure_path", "molecule_path", "material_path", "surface_path", "adsorbate_path", "input_structure", "initial_structure", "final_structure", "pdf_path")
+    props = schema.get('properties') or {}
+    key_hints = (
+        'structure_path',
+        'molecule_path',
+        'material_path',
+        'surface_path',
+        'adsorbate_path',
+        'input_structure',
+        'initial_structure',
+        'final_structure',
+        'pdf_path',
+    )
     for key, prop in props.items():
         key_lower = key.lower()
         if key_lower in _NON_PATH_SCHEMA_KEYS:
@@ -85,11 +97,11 @@ def _path_arg_names_from_schema(schema: Optional[Dict[str, Any]]) -> Set[str]:
         if any(h in key_lower for h in key_hints):
             out.add(key)
             continue
-        if key_lower.endswith("_path") or key_lower == "pdf_path":
+        if key_lower.endswith('_path') or key_lower == 'pdf_path':
             out.add(key)
         elif isinstance(prop, dict):
-            desc = (prop.get("description") or prop.get("title") or "").lower()
-            if "input" in desc and ("path" in desc or "file" in desc or "url" in desc):
+            desc = (prop.get('description') or prop.get('title') or '').lower()
+            if 'input' in desc and ('path' in desc or 'file' in desc or 'url' in desc):
                 out.add(key)
     return out
 
@@ -101,22 +113,22 @@ def _is_local_path(value: Any) -> bool:
     if not value:
         return False
     parsed = urlparse(value)
-    if parsed.scheme in ("http", "https"):
+    if parsed.scheme in ('http', 'https'):
         return False
-    if value.lower().startswith("local://"):
+    if value.lower().startswith('local://'):
         return False
     return True
 
 
 def _workspace_path_to_local(value: str, workspace_root: Path) -> Path:
     """Map /workspace/... or relative path to actual local Path under workspace_root."""
-    value = value.strip().replace("\\", "/")
-    if value.startswith("/workspace/"):
-        rel = value[len("/workspace/"):].lstrip("/")
+    value = value.strip().replace('\\', '/')
+    if value.startswith('/workspace/'):
+        rel = value[len('/workspace/') :].lstrip('/')
         return (workspace_root / rel).resolve()
-    if value.startswith("/workspace"):
-        rel = value[len("/workspace"):].lstrip("/")
-        return (workspace_root / (rel or ".")).resolve()
+    if value.startswith('/workspace'):
+        rel = value[len('/workspace') :].lstrip('/')
+        return (workspace_root / (rel or '.')).resolve()
     path = Path(value)
     if not path.is_absolute():
         return (workspace_root / path).resolve()
@@ -145,13 +157,15 @@ def _resolve_one(value: str, workspace_root: Path) -> str:
             f"Path argument file not found: {path}. For calculation MCP tools, input files must exist in workspace so they can be uploaded to OSS and passed as URL."
         )
     if not path.is_file():
-        raise ValueError(f"Path argument is not a file: {path}. Only files can be uploaded to OSS.")
+        raise ValueError(
+            f"Path argument is not a file: {path}. Only files can be uploaded to OSS."
+        )
     try:
         return upload_file_to_oss(path, workspace_root)
     except Exception as e:
         raise RuntimeError(
             f"Cannot pass local file to calculation MCP: OSS upload required but failed for {path}. "
-            "Set OSS_ENDPOINT, OSS_BUCKET_NAME, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET in .env at project root (run.py loads it)."
+            'Set OSS_ENDPOINT, OSS_BUCKET_NAME, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET in .env at project root (run.py loads it).'
         ) from e
 
 
@@ -162,6 +176,23 @@ class CalculationPathAdaptor:
         """Optional config: { server_name: { executor: {...}|null, sync_tools: [str] } }. From mcp.calculation_executors."""
         self.calculation_executors = calculation_executors or {}
 
+    def _resolve_executor(
+        self,
+        server_name: str,
+        remote_tool_name: str,
+        access_key: str | None = None,
+        project_id: int | str | None = None,
+        user_id: int | str | None = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Return executor for this (server, tool): None if sync tool or no config; else injected Bohrium executor.
+
+        Args:
+            server_name: MCP 服务器名称
+            remote_tool_name: 远程工具名称
+            access_key: 可选的 access_key，如果提供则优先使用
+            project_id: 可选的 project_id，如果提供则优先使用
+            user_id: 可选的 user_id，如果提供则优先使用
+        """
     def _resolve_executor(self, server_name: str, remote_tool_name: str) -> Optional[Dict[str, Any]]:
         """Return executor for this (server, tool): None if sync tool or no config; else injected Bohrium executor.
 
@@ -173,7 +204,7 @@ class CalculationPathAdaptor:
         server_cfg = self.calculation_executors.get(server_name)
         if not server_cfg:
             return None
-        sync_tools = server_cfg.get("sync_tools") or []
+        sync_tools = server_cfg.get('sync_tools') or []
         if remote_tool_name in sync_tools:
             return None
         # Per-tool executor_map: allows different images/machine types for each tool under the same server
@@ -183,10 +214,15 @@ class CalculationPathAdaptor:
             if tool_executor and isinstance(tool_executor, dict):
                 return inject_bohrium_executor(tool_executor)
         # Fallback to server-level default executor
-        executor_template = server_cfg.get("executor")
+        executor_template = server_cfg.get('executor')
         if not executor_template or not isinstance(executor_template, dict):
             return None
-        return inject_bohrium_executor(executor_template)
+        return inject_bohrium_executor(
+            executor_template,
+            access_key=access_key,
+            project_id=project_id,
+            user_id=user_id,
+        )
 
     def resolve_args(
         self,
@@ -195,16 +231,42 @@ class CalculationPathAdaptor:
         tool_name: str,
         server_name: str,
         input_schema: Optional[Dict[str, Any]] = None,
+        access_key: str | None = None,
+        project_id: int | str | None = None,
+        user_id: int | str | None = None,
     ) -> Dict[str, Any]:
-        """Inject executor (None for sync_tools else Bohrium with env), storage=https+Bohrium; path args → OSS URL."""
+        """Inject executor (None for sync_tools else Bohrium with env), storage=https+Bohrium; path args → OSS URL.
+
+        Args:
+            workspace_path: 工作区路径
+            args: 工具参数
+            tool_name: 工具名称
+            server_name: MCP 服务器名称
+            input_schema: 可选的输入 schema
+            access_key: 可选的 access_key，如果提供则优先使用
+            project_id: 可选的 project_id，如果提供则优先使用
+            user_id: 可选的 user_id，如果提供则优先使用
+        """
         out = dict(args)
         remote_name = tool_name
-        if server_name and tool_name.startswith(server_name + "_"):
+        if server_name and tool_name.startswith(server_name + '_'):
             remote_name = tool_name[len(server_name) + 1 :]
-        out["executor"] = self._resolve_executor(server_name, remote_name)
-        out["storage"] = get_bohrium_storage_config()
+        out['executor'] = self._resolve_executor(
+            server_name,
+            remote_name,
+            access_key=access_key,
+            project_id=project_id,
+            user_id=user_id,
+        )
+        out['storage'] = get_bohrium_storage_config(
+            access_key=access_key,
+            project_id=project_id,
+            user_id=user_id,
+        )
 
-        path_arg_names = set(CALCULATION_PATH_ARGS.get(remote_name, [])) | _path_arg_names_from_schema(input_schema)
+        path_arg_names = set(
+            CALCULATION_PATH_ARGS.get(remote_name, [])
+        ) | _path_arg_names_from_schema(input_schema)
         if not path_arg_names or not workspace_path:
             return out
 
@@ -222,7 +284,13 @@ class CalculationPathAdaptor:
         return out
 
 
-def get_calculation_path_adaptor(mcp_config: Optional[Dict[str, Any]] = None) -> CalculationPathAdaptor:
+def get_calculation_path_adaptor(
+    mcp_config: Optional[Dict[str, Any]] = None,
+) -> CalculationPathAdaptor:
     """Return a calculation path adaptor. If mcp_config has calculation_executors, use it for executor/sync_tools."""
-    executors = (mcp_config or {}).get("calculation_executors") if mcp_config is not None else None
+    executors = (
+        (mcp_config or {}).get('calculation_executors')
+        if mcp_config is not None
+        else None
+    )
     return CalculationPathAdaptor(calculation_executors=executors)
