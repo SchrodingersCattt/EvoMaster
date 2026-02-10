@@ -342,23 +342,34 @@ You can use the 'use_skill' tool to:
                     )
                     observation = observation + reminder
 
-                MAX_TOOL_OUTPUT = 30000
-                if len(observation) > MAX_TOOL_OUTPUT:
-                    observation = (
-                        observation[: MAX_TOOL_OUTPUT // 2]
-                        + "\n\n... [output truncated due to length] ...\n\n"
-                        + observation[-MAX_TOOL_OUTPUT // 2 :]
-                    )
-
+                # Full content for streaming (yield) and trajectory recording
                 tool_message = ToolMessage(
                     content=observation,
                     tool_call_id=tool_call.id,
                     name=tool_call.function.name,
                     meta={"info": info},
                 )
-                self.current_dialog.add_message(tool_message)
                 self._on_tool_message(tool_message)
                 step_record.tool_responses.append(tool_message)
+
+                # For LLM dialog: truncate if too long to prevent context overflow
+                # (naive mid-string split may break JSON, but LLM only needs gist)
+                MAX_TOOL_OUTPUT = 30000
+                if len(observation) > MAX_TOOL_OUTPUT:
+                    observation_for_llm = (
+                        observation[: MAX_TOOL_OUTPUT // 2]
+                        + "\n\n... [output truncated due to length] ...\n\n"
+                        + observation[-MAX_TOOL_OUTPUT // 2 :]
+                    )
+                    dialog_message = ToolMessage(
+                        content=observation_for_llm,
+                        tool_call_id=tool_call.id,
+                        name=tool_call.function.name,
+                        meta={"info": info},
+                    )
+                    self.current_dialog.add_message(dialog_message)
+                else:
+                    self.current_dialog.add_message(tool_message)
 
         # Handle finish tool (always last, sequential)
         if finish_call:
@@ -373,27 +384,37 @@ You can use the 'use_skill' tool to:
 
             observation, info = self._execute_tool(finish_call)
 
-            MAX_TOOL_OUTPUT = 30000
-            if len(observation) > MAX_TOOL_OUTPUT:
-                observation = (
-                    observation[: MAX_TOOL_OUTPUT // 2]
-                    + "\n\n... [output truncated due to length] ...\n\n"
-                    + observation[-MAX_TOOL_OUTPUT // 2 :]
-                )
-
             task_completed = info.get("task_completed", "false")
             if task_completed == "true":
                 should_finish = True
 
+            # Full content for streaming (yield) and trajectory recording
             tool_message = ToolMessage(
                 content=observation,
                 tool_call_id=finish_call.id,
                 name=finish_call.function.name,
                 meta={"info": info},
             )
-            self.current_dialog.add_message(tool_message)
             self._on_tool_message(tool_message)
             step_record.tool_responses.append(tool_message)
+
+            # For LLM dialog: truncate if too long to prevent context overflow
+            MAX_TOOL_OUTPUT = 30000
+            if len(observation) > MAX_TOOL_OUTPUT:
+                observation_for_llm = (
+                    observation[: MAX_TOOL_OUTPUT // 2]
+                    + "\n\n... [output truncated due to length] ...\n\n"
+                    + observation[-MAX_TOOL_OUTPUT // 2 :]
+                )
+                dialog_message = ToolMessage(
+                    content=observation_for_llm,
+                    tool_call_id=finish_call.id,
+                    name=finish_call.function.name,
+                    meta={"info": info},
+                )
+                self.current_dialog.add_message(dialog_message)
+            else:
+                self.current_dialog.add_message(tool_message)
 
         self.trajectory.add_step(step_record)
         self._append_trajectory_entry(dialog_for_query, step_record)
