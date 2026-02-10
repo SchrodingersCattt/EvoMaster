@@ -163,13 +163,26 @@ class CalculationPathAdaptor:
         self.calculation_executors = calculation_executors or {}
 
     def _resolve_executor(self, server_name: str, remote_tool_name: str) -> Optional[Dict[str, Any]]:
-        """Return executor for this (server, tool): None if sync tool or no config; else injected Bohrium executor."""
+        """Return executor for this (server, tool): None if sync tool or no config; else injected Bohrium executor.
+
+        Resolution order:
+        1. sync_tools → None (synchronous, no remote executor)
+        2. executor_map[remote_tool_name] → per-tool executor (different images/machine types per tool)
+        3. executor → server-level default executor
+        """
         server_cfg = self.calculation_executors.get(server_name)
         if not server_cfg:
             return None
         sync_tools = server_cfg.get("sync_tools") or []
         if remote_tool_name in sync_tools:
             return None
+        # Per-tool executor_map: allows different images/machine types for each tool under the same server
+        executor_map = server_cfg.get("executor_map")
+        if executor_map and isinstance(executor_map, dict):
+            tool_executor = executor_map.get(remote_tool_name)
+            if tool_executor and isinstance(tool_executor, dict):
+                return inject_bohrium_executor(tool_executor)
+        # Fallback to server-level default executor
         executor_template = server_cfg.get("executor")
         if not executor_template or not isinstance(executor_template, dict):
             return None
