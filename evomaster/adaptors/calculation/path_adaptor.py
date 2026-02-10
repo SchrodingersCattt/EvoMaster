@@ -193,14 +193,7 @@ class CalculationPathAdaptor:
             project_id: 可选的 project_id，如果提供则优先使用
             user_id: 可选的 user_id，如果提供则优先使用
         """
-    def _resolve_executor(self, server_name: str, remote_tool_name: str) -> Optional[Dict[str, Any]]:
-        """Return executor for this (server, tool): None if sync tool or no config; else injected Bohrium executor.
 
-        Resolution order:
-        1. sync_tools → None (synchronous, no remote executor)
-        2. executor_map[remote_tool_name] → per-tool executor (different images/machine types per tool)
-        3. executor → server-level default executor
-        """
         server_cfg = self.calculation_executors.get(server_name)
         if not server_cfg:
             return None
