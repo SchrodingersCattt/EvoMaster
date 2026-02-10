@@ -40,17 +40,28 @@ class MatMasterAgent(Agent):
 
     @staticmethod
     def _tool_fingerprint(tool_call) -> str:
-        """Create a hashable fingerprint for a tool call (name + args)."""
-        return f"{tool_call.function.name}|{tool_call.function.arguments}"
+        """Create a hashable fingerprint for a tool call (name + canonical args).
+
+        Uses sorted JSON keys so that identical calls with different key
+        orderings (a common LLM behaviour) produce the same fingerprint.
+        """
+        name = tool_call.function.name
+        args_str = tool_call.function.arguments or ""
+        try:
+            args_obj = json.loads(args_str) if args_str else {}
+            canonical = json.dumps(args_obj, sort_keys=True, ensure_ascii=False)
+        except (json.JSONDecodeError, TypeError):
+            canonical = args_str
+        return f"{name}|{canonical}"
 
     @staticmethod
     def _semantic_fingerprint(tool_call) -> str:
         """Create a normalised fingerprint that treats near-duplicate calls as identical.
 
-        For use_skill calls that run peek_manual.py, we extract the --search
-        keyword and ignore extra flags (--tree, --section, capitalization) so
-        that e.g. ``--search SPECIAL_KPOINT`` and ``--search SPECIAL_KPOINT --tree``
-        are recognised as the same search intent.
+        For use_skill calls that run peek_manual.py, we extract the key
+        arguments (--software, --search, --section, --sections) and normalise
+        them so that calls with different JSON key orderings or minor flag
+        differences are recognised as the same query intent.
         """
         name = tool_call.function.name
         args_str = tool_call.function.arguments or ""
@@ -63,18 +74,33 @@ class MatMasterAgent(Agent):
         script_args = args.get("script_args", "")
         script_name = args.get("script_name", "")
         if name == "use_skill" and "peek_manual" in script_name and script_args:
-            # Extract --search value
-            m = re.search(r'--search\s+["\']?([^"\']+?)["\']?(?:\s+--|$)', script_args)
+            # Extract key arguments to create a normalised fingerprint
+            sa = script_args.upper()
+            sw = ""
+            sw_m = re.search(r'--SOFTWARE\s+(\S+)', sa)
+            if sw_m:
+                sw = sw_m.group(1)
+            search_kw = ""
+            m = re.search(r'--SEARCH\s+["\']?([^"\']+?)["\']?(?:\s+--|$)', sa)
             if m:
-                kw = m.group(1).strip().upper()
-                sw = ""
-                sw_m = re.search(r'--software\s+(\S+)', script_args)
-                if sw_m:
-                    sw = sw_m.group(1).upper()
-                return f"peek_manual_search|{sw}|{kw}"
+                search_kw = m.group(1).strip()
+            section = ""
+            m = re.search(r'--SECTION\s+["\']?([^"\']+?)["\']?(?:\s+--|$)', sa)
+            if m:
+                section = m.group(1).strip()
+            sections = ""
+            m = re.search(r'--SECTIONS\s+["\']?([^"\']+?)["\']?(?:\s+--|$)', sa)
+            if m:
+                sections = m.group(1).strip()
+            tree = "--TREE" in sa
+            return f"peek_manual|{sw}|search={search_kw}|section={section}|sections={sections}|tree={tree}"
 
-        # Default: same as exact fingerprint
-        return f"{name}|{args_str}"
+        # Default: canonical JSON fingerprint (same as _tool_fingerprint)
+        try:
+            canonical = json.dumps(args, sort_keys=True, ensure_ascii=False)
+        except TypeError:
+            canonical = args_str
+        return f"{name}|{canonical}"
 
     def _is_loop(self, tool_call) -> bool:
         """Return True if this exact or semantically-equivalent call appeared >= _LOOP_THRESHOLD times."""
