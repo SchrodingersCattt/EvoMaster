@@ -16,6 +16,7 @@ const API_BASE =
     : "";
 
 export type LogEntry = {
+  msg_id?: number;
   source: string;
   type: string;
   content: unknown;

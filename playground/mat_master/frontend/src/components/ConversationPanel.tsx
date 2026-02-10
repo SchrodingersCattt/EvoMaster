@@ -62,7 +62,7 @@ export default function ConversationPanel({
         <div className="text-xs text-gray-500">暂无消息</div>
       ) : (
         filtered.map((log, i) => (
-          <div key={i} className={cardClass(log.source) + " whitespace-pre-wrap break-words"}>
+          <div key={log.msg_id ?? i} className={cardClass(log.source) + " whitespace-pre-wrap break-words"}>
             <div className="text-xs font-bold mb-1 opacity-70">{log.source}</div>
             {renderEntry(log)}
           </div>
