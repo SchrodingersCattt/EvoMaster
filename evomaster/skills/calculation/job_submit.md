@@ -39,7 +39,7 @@ mat_dpa_optimize_structure(input_structure="/workspace/data/Fe_bcc.cif", ...)
 # After get_job_results returns e.g. {"output_cif": "https://bohrium.oss-.../out.cif", ...}
 # Save to workspace so the user can open the file:
 execute_bash(cmd="curl -o output.cif 'https://bohrium.oss-.../out.cif'")
-# Or in resilient_calc mode the system already places results under workspace/calculation_results/
+# Or use the job-manager skill which downloads results to workspace/calculation_results/ automatically
 ```
 
 ---
@@ -75,4 +75,4 @@ execute_bash(cmd="curl -o output.cif 'https://bohrium.oss-.../out.cif'")
 
 ## 6. Download: result URLs to workspace
 
-- When a calculation job returns **result file URLs** (e.g. from `mat_dpa_get_job_results`, or any OSS/HTTP link in the response), **download them into the current workspace** so the user can open or post-process the files. In resilient_calc mode the system places results under the workspace (e.g. `calculation_results/`). When using tools directly, save or fetch result URLs into the working directory so outputs are visible and persistent.
+- When a calculation job returns **result file URLs** (e.g. from `mat_dpa_get_job_results`, or any OSS/HTTP link in the response), **download them into the current workspace** so the user can open or post-process the files. The **job-manager** skill handles this automatically (downloads to `calculation_results/`). When using tools directly, save or fetch result URLs into the working directory so outputs are visible and persistent.
