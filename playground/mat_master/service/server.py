@@ -496,9 +496,6 @@ def _run_agent_sync(
         mode = (mode or "direct").strip().lower() or "direct"
         pg.set_mode(mode)
 
-        if mode == "resilient_calc":
-            # Async calculation tasks: use ResilientCalcExp (calculation skills + path_adaptor OSS; results downloaded).
-            pass
         if mode == "planner" and planner_reply_queue is not None:
             pg._planner_input_fn = lambda prompt: _planner_ask_and_wait(
                 prompt, send_cb, loop, planner_reply_queue
@@ -619,7 +616,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
 
             mode = (data.get("mode") or "direct").strip().lower() or "direct"
-            if mode not in ("direct", "planner", "resilient_calc"):
+            if mode not in ("direct", "planner"):
                 mode = "direct"
 
             session_id = data.get("session_id") or str(uuid.uuid4())

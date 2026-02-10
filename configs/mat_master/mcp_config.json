@@ -22,7 +22,7 @@
     },
     "mat_struct_db": {
       "transport": "http",
-      "url": "http://chvz1424099.bohrium.tech:50001/mcp",
+      "url": "http://chvz1424099.bohrium.tech:50002/mcp",
       "headers": {}
     },
     "mat_abacus": {

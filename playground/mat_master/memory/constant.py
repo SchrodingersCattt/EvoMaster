@@ -21,20 +21,7 @@ MEMORY_TOOLS_STORE_RESULTS = frozenset(
         "search-papers-enhanced",
         "web-search",
         "extract_info_from_webpage",
-        # Knowledge-base literature queries
-        "query_heakb_literature",
-        "query_ssekb_literature",
-        "query_polymerkb_literature",
-        "query_steelkb_literature",
-        # Database schema and query results (perovskite and similar)
-        "get_database_info",
-        "sql_database_mcp",
-        # Structure DB fetch tools (OPTIMADE / MrDice)
-        "fetch_structures_with_filter",
-        "fetch_structures_with_spg",
-        "fetch_structures_with_bandgap",
-        "fetch_bohrium_crystals",
-        "fetch_openlam_structures",
-        "fetch_mofs_sql",
+        # Dababase
+        "fetch_structures_from_database",
     ]
 )
