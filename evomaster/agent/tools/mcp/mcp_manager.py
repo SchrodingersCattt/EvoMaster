@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -78,6 +79,11 @@ class MCPToolManager:
         # Example: {"mat_sn": ["web-search", "search-papers-enhanced"]} -> only those two from mat_sn.
         self.tool_include_only: dict[str, list[str]] = {}
 
+        # Reconnection support: runner 监听此事件以触发重连
+        self._reconnect_events: dict[str, asyncio.Event] = {}
+        # 等待重连完成的线程级 Event 列表（由 request_reconnect 添加，runner 完成后 set）
+        self._reconnect_waiters: dict[str, list[threading.Event]] = {}
+
     def _build_tools(self, server_name: str, connection: Any, tools_info: list[dict]) -> None:
         from .mcp import MCPTool
 
@@ -100,12 +106,52 @@ class MCPToolManager:
             )
             mcp_tool._mcp_server = server_name
             mcp_tool._mcp_loop = self.loop  # 你原来注入 loop 的逻辑保留
+            mcp_tool._mcp_manager = self  # 用于断线重连
             if self.path_adaptor_servers and self.path_adaptor_factory and server_name in self.path_adaptor_servers:
                 mcp_tool._path_adaptor = self.path_adaptor_factory()
 
             server_tools[prefixed_name] = mcp_tool
 
         self.tools_by_server[server_name] = server_tools
+
+    def _update_tool_connections(self, server_name: str, new_connection: Any) -> None:
+        """重连后，原地更新已有 MCPTool 的 connection 引用（避免重新创建对象）。"""
+        tools = self.tools_by_server.get(server_name, {})
+        for tool in tools.values():
+            tool.mcp_connection = new_connection
+        if tools:
+            self.logger.debug(
+                "Updated %d tool connection(s) for server '%s'", len(tools), server_name
+            )
+
+    def _notify_reconnect_waiters(self, server_name: str) -> None:
+        """通知所有等待重连完成的线程。"""
+        waiters = self._reconnect_waiters.pop(server_name, [])
+        for w in waiters:
+            w.set()
+
+    def request_reconnect(self, server_name: str) -> threading.Event:
+        """请求某个 MCP server 重连（线程安全）。
+
+        返回一个 threading.Event，重连完成（或不可重连）时会被 set。
+        调用方可以 done.wait(timeout=...) 阻塞等待。
+        """
+        done_event = threading.Event()
+
+        reconnect_evt = self._reconnect_events.get(server_name)
+        if not reconnect_evt or not self.loop or self.loop.is_closed():
+            done_event.set()  # 无法重连，立即返回
+            return done_event
+
+        def _trigger():
+            # 在 MCP loop 线程中执行，避免竞态
+            if server_name not in self._reconnect_waiters:
+                self._reconnect_waiters[server_name] = []
+            self._reconnect_waiters[server_name].append(done_event)
+            reconnect_evt.set()
+
+        self.loop.call_soon_threadsafe(_trigger)
+        return done_event
 
     async def add_server(self, name: str, transport: str, **connection_kwargs) -> None:
         if name in self._server_tasks:
@@ -131,37 +177,75 @@ class MCPToolManager:
             except ImportError:
                 _retry_exc = (OSError, asyncio.TimeoutError)
 
-            for attempt in range(1, 4):
-                try:
-                    async with create_connection(transport=transport, **connection_kwargs) as conn:
-                        self.connections[name] = conn
+            reconnect_evt = asyncio.Event()
+            self._reconnect_events[name] = reconnect_evt
+            first_connect = True
 
-                        tools_info = await conn.list_tools()
-                        self.logger.info(f"Found {len(tools_info)} tools from MCP server '{name}'")
+            while not stop_evt.is_set():
+                reconnect_evt.clear()
 
-                        self._build_tools(name, conn, tools_info)
+                for attempt in range(1, 4):
+                    try:
+                        async with create_connection(transport=transport, **connection_kwargs) as conn:
+                            self.connections[name] = conn
 
-                        if self._registered_registry:
-                            for tool in self.tools_by_server[name].values():
-                                self._registered_registry.register(tool)
+                            tools_info = await conn.list_tools()
 
-                        ready_evt.set()
-                        await stop_evt.wait()
-                    break
-                except _retry_exc as e:
-                    if attempt < 3:
-                        self.logger.warning(
-                            "MCP server '%s' connection failed (attempt %s/3), retrying in 2s: %s",
-                            name, attempt, e,
-                        )
-                        await asyncio.sleep(2)
-                    else:
-                        self.logger.error("MCP server '%s' failed after 3 attempts: %s", name, e)
+                            if first_connect:
+                                self.logger.info(f"Found {len(tools_info)} tools from MCP server '{name}'")
+                                self._build_tools(name, conn, tools_info)
+                                if self._registered_registry:
+                                    for tool in self.tools_by_server[name].values():
+                                        self._registered_registry.register(tool)
+                            else:
+                                self.logger.info(f"Reconnected MCP server '{name}', {len(tools_info)} tools")
+                                self._update_tool_connections(name, conn)
+
+                            ready_evt.set()
+                            first_connect = False
+
+                            # 通知所有等待重连的线程
+                            self._notify_reconnect_waiters(name)
+
+                            # 等待 stop 或 reconnect 信号
+                            stop_task = asyncio.create_task(stop_evt.wait())
+                            recon_task = asyncio.create_task(reconnect_evt.wait())
+                            _done, pending = await asyncio.wait(
+                                [stop_task, recon_task],
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+                            for t in pending:
+                                t.cancel()
+                                try:
+                                    await t
+                                except asyncio.CancelledError:
+                                    pass
+
+                            if stop_evt.is_set():
+                                return  # 正常关闭
+                            # else: 收到重连信号，退出 async with 以释放旧连接
+                        break  # 成功退出 context，跳出重试循环
+                    except _retry_exc as e:
+                        if attempt < 3:
+                            self.logger.warning(
+                                "MCP server '%s' connection failed (attempt %s/3), retrying in 2s: %s",
+                                name, attempt, e,
+                            )
+                            await asyncio.sleep(2)
+                        else:
+                            self.logger.error("MCP server '%s' failed after 3 attempts: %s", name, e)
+                            # 通知等待者失败
+                            self._notify_reconnect_waiters(name)
+                            if first_connect:
+                                ready_evt.set()
+                                raise
+                            # 非首次连接：等待后重试整个 while 循环
+                            self.logger.info(f"Will retry reconnection for '{name}' in 5s")
+                            await asyncio.sleep(5)
+                    except BaseException:
+                        self._notify_reconnect_waiters(name)
                         ready_evt.set()
                         raise
-                except BaseException:
-                    ready_evt.set()
-                    raise
 
         # ✅ 必须保证 runner task 在 self.loop 里创建
         if asyncio.get_running_loop() is not self.loop:
@@ -235,6 +319,10 @@ class MCPToolManager:
         self.connections.pop(server_name, None)
         tool_count = len(self.tools_by_server.get(server_name, {}))
         self.tools_by_server.pop(server_name, None)
+
+        # 清理重连状态并释放等待者
+        self._reconnect_events.pop(server_name, None)
+        self._notify_reconnect_waiters(server_name)
 
         self.logger.info(f"Removed {tool_count} tools from server '{server_name}'")
 
