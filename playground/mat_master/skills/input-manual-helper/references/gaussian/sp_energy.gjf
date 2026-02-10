@@ -1,0 +1,13 @@
+%mem=4GB
+%nprocshared=4
+%chk=sp_energy.chk
+#p B3LYP/6-311+G(d,p) SP SCF=Tight
+
+Single-point energy calculation
+
+0 1
+O         0.00000000    0.00000000    0.11779000
+H         0.00000000    0.75545000   -0.47116000
+H         0.00000000   -0.75545000   -0.47116000
+
+

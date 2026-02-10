@@ -1,0 +1,22 @@
+%mem=8GB
+%nprocshared=8
+%chk=ts_search.chk
+#p B3LYP/6-31+G(d,p) Opt=(TS,CalcFC,NoEigenTest) Freq
+
+Transition state search with frequency verification
+
+0 1
+C         0.00000000    0.00000000    0.00000000
+H         1.09000000    0.00000000    0.00000000
+H        -0.36300000    1.02700000    0.00000000
+H        -0.36300000   -0.51400000    0.88900000
+H        -0.36300000   -0.51400000   -0.88900000
+
+
+--Link1--
+%mem=8GB
+%nprocshared=8
+%chk=ts_search.chk
+#p B3LYP/6-31+G(d,p) IRC=(CalcFC,MaxPoints=20) Geom=AllCheck Guess=Read
+
+
