@@ -72,25 +72,16 @@ mat_master:
   planner:
     max_steps: 20
     state_file: "research_state.json"
-  # 专项能力开关（DirectSolver 路由时据此决定是否走 CALC/EVO）
+  # 专项能力开关（DirectSolver 路由时据此决定是否走 EVO）
   capabilities:
-    resilient_calc:
-      enabled: true
     skill_evolution:
       enabled: true
-  # 鲁棒计算能力配置（被 ResilientCalcExp 使用）
-  resilient_calc:
+  # 鲁棒计算配置（被 job-manager skill 使用，不再是 Exp）
+  # 注意：fix 策略现已内置于 job-manager/scripts/run_resilient_job.py 的 FIX_STRATEGIES 中。
+  # 此处保留供未来外部覆盖使用。
+  job_manager:
     max_retries: 3
     poll_interval_seconds: 60
-    error_handlers:
-      scf_diverged:
-        - action: "update_input"
-          params: {"ALGO": "Normal", "AMIX": 0.2}
-        - action: "update_input"
-          params: {"ISMEAR": 0}
-      time_limit_exceeded:
-        - action: "resubmit"
-          params: {"walltime": "48h", "continuation": true}
   # 技能进化能力配置（被 SkillEvolutionExp 使用）
   skill_evolution:
     dynamic_skills_root: "playground/mat_master/skills/dynamic"

@@ -26,6 +26,15 @@ _LOOP_THRESHOLD = 1
 # Prevents the LLM from endlessly searching the manual with different keywords.
 _PEEK_MANUAL_MAX_CALLS = 12
 
+# Tools that are EXEMPT from loop detection and fingerprint recording.
+# Job-status polling is designed to be called repeatedly with the same args
+# (the caller waits for the status to change); blocking it breaks the async
+# calculation workflow.
+_LOOP_EXEMPT_SUFFIXES = (
+    "query_job_status",
+    "get_job_status",
+)
+
 
 class MatMasterAgent(Agent):
     """Agent that only ends the run when the finish tool is called with task_completed=true.
@@ -119,9 +128,26 @@ class MatMasterAgent(Agent):
             args = {}
         return "peek_manual" in args.get("script_name", "")
 
+    @staticmethod
+    def _is_loop_exempt(tool_call) -> bool:
+        """Return True if this tool is exempt from loop detection.
+
+        Job-status polling tools (e.g. mat_abacus_query_job_status,
+        mat_binary_calc_query_job_status) are designed to be called
+        repeatedly with identical arguments while waiting for a status
+        change. Blocking them would break the async calculation workflow.
+        """
+        name = tool_call.function.name or ""
+        return any(name.endswith(suffix) for suffix in _LOOP_EXEMPT_SUFFIXES)
+
     def _is_loop(self, tool_call) -> bool:
         """Return True if this exact or semantically-equivalent call appeared >= _LOOP_THRESHOLD times,
-        or if the global peek_manual budget is exhausted."""
+        or if the global peek_manual budget is exhausted.
+
+        Loop-exempt tools (job status polling) always return False.
+        """
+        if self._is_loop_exempt(tool_call):
+            return False
         # Global budget for peek_manual queries
         if self._is_peek_manual_call(tool_call) and self._peek_manual_call_count >= _PEEK_MANUAL_MAX_CALLS:
             return True
@@ -135,7 +161,13 @@ class MatMasterAgent(Agent):
         return False
 
     def _record_tool_call(self, tool_call) -> None:
-        """Record a tool call fingerprint in the sliding window."""
+        """Record a tool call fingerprint in the sliding window.
+
+        Loop-exempt tools (job status polling) are NOT recorded so they
+        don't pollute the window or count toward any thresholds.
+        """
+        if self._is_loop_exempt(tool_call):
+            return
         self._recent_tool_fps.append(self._tool_fingerprint(tool_call))
         self._recent_sem_fps.append(self._semantic_fingerprint(tool_call))
         if self._is_peek_manual_call(tool_call):

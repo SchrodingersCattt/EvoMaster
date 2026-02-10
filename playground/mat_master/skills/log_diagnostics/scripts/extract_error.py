@@ -4,8 +4,8 @@ Log Diagnostics Script: extract error code from VASP/LAMMPS logs.
 Usage:
   python extract_error.py <log_file_path>
 
-Output: single line with canonical error code (e.g. scf_diverged, kpoints_error)
-for mapping to config.mat_master.resilient_calc.error_handlers.
+Output: single line with canonical error code (e.g. scf_diverged, kpoints_error).
+Used by job-manager skill internally and for manual diagnosis.
 """
 
 import re
