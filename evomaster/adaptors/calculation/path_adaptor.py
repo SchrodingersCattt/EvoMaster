@@ -44,7 +44,7 @@ CALCULATION_PATH_ARGS: Dict[str, List[str]] = {
     'run_molecular_dynamics': ['initial_structure'],
     'calculate_elastic_constants': ['input_structure'],
     'run_neb': ['initial_structure', 'final_structure'],
-    'extract_material_data_from_pdf': ['pdf_path'],
+    'extract_material_data_from_pdf': ['pdf_paths'],
     'extract_info_from_webpage': [],
 }
 
