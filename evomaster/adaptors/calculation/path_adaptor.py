@@ -205,7 +205,12 @@ class CalculationPathAdaptor:
         if executor_map and isinstance(executor_map, dict):
             tool_executor = executor_map.get(remote_tool_name)
             if tool_executor and isinstance(tool_executor, dict):
-                return inject_bohrium_executor(tool_executor)
+                return inject_bohrium_executor(
+                    tool_executor,
+                    access_key=access_key,
+                    project_id=project_id,
+                    user_id=user_id,
+                )
         # Fallback to server-level default executor
         executor_template = server_cfg.get('executor')
         if not executor_template or not isinstance(executor_template, dict):
