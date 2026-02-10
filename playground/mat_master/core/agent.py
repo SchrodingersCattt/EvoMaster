@@ -19,9 +19,12 @@ from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
 # How many recent tool calls to track for loop detection
 _LOOP_WINDOW = 30
 # How many times the same call must appear in the window to trigger loop-break
-# (2 = block on the 3rd identical call — the 1st call is genuine, the 2nd is
-#  already wasteful since output won't change, the 3rd is definitely a loop)
-_LOOP_THRESHOLD = 2
+# (1 = block on the 2nd identical call — the 1st call is the only genuine one;
+#  a 2nd identical call to a deterministic tool is always wasteful.)
+_LOOP_THRESHOLD = 1
+# Maximum number of peek_manual search/section queries per run.
+# Prevents the LLM from endlessly searching the manual with different keywords.
+_PEEK_MANUAL_MAX_CALLS = 12
 
 
 class MatMasterAgent(Agent):
@@ -37,20 +40,33 @@ class MatMasterAgent(Agent):
         self._recent_tool_fps: deque[str] = deque(maxlen=_LOOP_WINDOW)
         # Secondary window: normalised semantic fingerprints (catches near-dupes)
         self._recent_sem_fps: deque[str] = deque(maxlen=_LOOP_WINDOW)
+        # Global counter for peek_manual calls (search/section/sections queries)
+        self._peek_manual_call_count: int = 0
 
     @staticmethod
     def _tool_fingerprint(tool_call) -> str:
-        """Create a hashable fingerprint for a tool call (name + args)."""
-        return f"{tool_call.function.name}|{tool_call.function.arguments}"
+        """Create a hashable fingerprint for a tool call (name + canonical args).
+
+        Uses sorted JSON keys so that identical calls with different key
+        orderings (a common LLM behaviour) produce the same fingerprint.
+        """
+        name = tool_call.function.name
+        args_str = tool_call.function.arguments or ""
+        try:
+            args_obj = json.loads(args_str) if args_str else {}
+            canonical = json.dumps(args_obj, sort_keys=True, ensure_ascii=False)
+        except (json.JSONDecodeError, TypeError):
+            canonical = args_str
+        return f"{name}|{canonical}"
 
     @staticmethod
     def _semantic_fingerprint(tool_call) -> str:
         """Create a normalised fingerprint that treats near-duplicate calls as identical.
 
-        For use_skill calls that run peek_manual.py, we extract the --search
-        keyword and ignore extra flags (--tree, --section, capitalization) so
-        that e.g. ``--search SPECIAL_KPOINT`` and ``--search SPECIAL_KPOINT --tree``
-        are recognised as the same search intent.
+        For use_skill calls that run peek_manual.py, we extract the key
+        arguments (--software, --search, --section, --sections) and normalise
+        them so that calls with different JSON key orderings or minor flag
+        differences are recognised as the same query intent.
         """
         name = tool_call.function.name
         args_str = tool_call.function.arguments or ""
@@ -63,21 +79,52 @@ class MatMasterAgent(Agent):
         script_args = args.get("script_args", "")
         script_name = args.get("script_name", "")
         if name == "use_skill" and "peek_manual" in script_name and script_args:
-            # Extract --search value
-            m = re.search(r'--search\s+["\']?([^"\']+?)["\']?(?:\s+--|$)', script_args)
+            # Extract key arguments to create a normalised fingerprint
+            sa = script_args.upper()
+            sw = ""
+            sw_m = re.search(r'--SOFTWARE\s+(\S+)', sa)
+            if sw_m:
+                sw = sw_m.group(1)
+            search_kw = ""
+            m = re.search(r'--SEARCH\s+["\']?([^"\']+?)["\']?(?:\s+--|$)', sa)
             if m:
-                kw = m.group(1).strip().upper()
-                sw = ""
-                sw_m = re.search(r'--software\s+(\S+)', script_args)
-                if sw_m:
-                    sw = sw_m.group(1).upper()
-                return f"peek_manual_search|{sw}|{kw}"
+                search_kw = m.group(1).strip()
+            section = ""
+            m = re.search(r'--SECTION\s+["\']?([^"\']+?)["\']?(?:\s+--|$)', sa)
+            if m:
+                section = m.group(1).strip()
+            sections = ""
+            m = re.search(r'--SECTIONS\s+["\']?([^"\']+?)["\']?(?:\s+--|$)', sa)
+            if m:
+                sections = m.group(1).strip()
+            tree = "--TREE" in sa
+            return f"peek_manual|{sw}|search={search_kw}|section={section}|sections={sections}|tree={tree}"
 
-        # Default: same as exact fingerprint
-        return f"{name}|{args_str}"
+        # Default: canonical JSON fingerprint (same as _tool_fingerprint)
+        try:
+            canonical = json.dumps(args, sort_keys=True, ensure_ascii=False)
+        except TypeError:
+            canonical = args_str
+        return f"{name}|{canonical}"
+
+    def _is_peek_manual_call(self, tool_call) -> bool:
+        """Return True if this is a use_skill call that runs peek_manual.py."""
+        name = tool_call.function.name
+        if name != "use_skill":
+            return False
+        args_str = tool_call.function.arguments or ""
+        try:
+            args = json.loads(args_str) if args_str else {}
+        except (json.JSONDecodeError, TypeError):
+            args = {}
+        return "peek_manual" in args.get("script_name", "")
 
     def _is_loop(self, tool_call) -> bool:
-        """Return True if this exact or semantically-equivalent call appeared >= _LOOP_THRESHOLD times."""
+        """Return True if this exact or semantically-equivalent call appeared >= _LOOP_THRESHOLD times,
+        or if the global peek_manual budget is exhausted."""
+        # Global budget for peek_manual queries
+        if self._is_peek_manual_call(tool_call) and self._peek_manual_call_count >= _PEEK_MANUAL_MAX_CALLS:
+            return True
         fp = self._tool_fingerprint(tool_call)
         if self._recent_tool_fps.count(fp) >= _LOOP_THRESHOLD:
             return True
@@ -91,6 +138,8 @@ class MatMasterAgent(Agent):
         """Record a tool call fingerprint in the sliding window."""
         self._recent_tool_fps.append(self._tool_fingerprint(tool_call))
         self._recent_sem_fps.append(self._semantic_fingerprint(tool_call))
+        if self._is_peek_manual_call(tool_call):
+            self._peek_manual_call_count += 1
 
     def _get_system_prompt(self) -> str:
         """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills.
@@ -222,20 +271,42 @@ You can use the 'use_skill' tool to:
             loop_blocked: list[tuple[Any, str]] = []  # (tool_call, warning_msg)
             for tc in regular_calls:
                 if self._is_loop(tc):
-                    self.logger.warning(
-                        "LOOP DETECTED: tool '%s' with same args called %d+ times, skipping.",
-                        tc.function.name, _LOOP_THRESHOLD,
+                    # Distinguish between budget exhaustion and exact-duplicate loop
+                    is_budget = (
+                        self._is_peek_manual_call(tc)
+                        and self._peek_manual_call_count >= _PEEK_MANUAL_MAX_CALLS
                     )
-                    loop_blocked.append((tc, (
-                        f"⚠️ LOOP DETECTED: You have called '{tc.function.name}' with the exact same arguments "
-                        f"{_LOOP_THRESHOLD}+ times already and received the same result each time. "
-                        "This call was SKIPPED to prevent an infinite loop.\n\n"
-                        "ACTION REQUIRED: Do NOT call this tool again with the same arguments. Instead:\n"
-                        "1. If the parameter/section you are looking for is not in the manual, it does NOT exist. "
-                        "Use your domain knowledge to write the correct syntax directly.\n"
-                        "2. Try a completely DIFFERENT approach or search keyword.\n"
-                        "3. If you have enough information already, proceed to write the input file NOW."
-                    )))
+                    if is_budget:
+                        self.logger.warning(
+                            "BUDGET EXHAUSTED: peek_manual called %d times (max %d), skipping.",
+                            self._peek_manual_call_count, _PEEK_MANUAL_MAX_CALLS,
+                        )
+                        msg = (
+                            f"⚠️ MANUAL QUERY BUDGET EXHAUSTED: You have already called peek_manual.py "
+                            f"{self._peek_manual_call_count} times (limit: {_PEEK_MANUAL_MAX_CALLS}). "
+                            "ALL further manual queries are BLOCKED.\n\n"
+                            "ACTION REQUIRED: STOP searching the manual. You have enough information. "
+                            "Use your CP2K domain knowledge to write the input file directly NOW.\n"
+                            "Many CP2K subsections (XC_FUNCTIONAL/PBE, HF, SCREENING, OT, etc.) are "
+                            "valid CP2K syntax but simply not indexed in our reference JSON. "
+                            "Proceed with the input file you have and submit the calculation."
+                        )
+                    else:
+                        self.logger.warning(
+                            "LOOP DETECTED: tool '%s' with same args called %d+ times, skipping.",
+                            tc.function.name, _LOOP_THRESHOLD,
+                        )
+                        msg = (
+                            f"⚠️ LOOP DETECTED: You have called '{tc.function.name}' with the exact same arguments "
+                            f"{_LOOP_THRESHOLD}+ times already and received the same result each time. "
+                            "This call was SKIPPED to prevent an infinite loop.\n\n"
+                            "ACTION REQUIRED: Do NOT call this tool again with the same arguments. Instead:\n"
+                            "1. If the parameter/section you are looking for is not in the manual, it does NOT exist. "
+                            "Use your domain knowledge to write the correct syntax directly.\n"
+                            "2. Try a completely DIFFERENT approach or search keyword.\n"
+                            "3. If you have enough information already, proceed to write the input file NOW."
+                        )
+                    loop_blocked.append((tc, msg))
                 else:
                     exec_calls.append(tc)
                 self._record_tool_call(tc)
@@ -271,23 +342,34 @@ You can use the 'use_skill' tool to:
                     )
                     observation = observation + reminder
 
-                MAX_TOOL_OUTPUT = 30000
-                if len(observation) > MAX_TOOL_OUTPUT:
-                    observation = (
-                        observation[: MAX_TOOL_OUTPUT // 2]
-                        + "\n\n... [output truncated due to length] ...\n\n"
-                        + observation[-MAX_TOOL_OUTPUT // 2 :]
-                    )
-
+                # Full content for streaming (yield) and trajectory recording
                 tool_message = ToolMessage(
                     content=observation,
                     tool_call_id=tool_call.id,
                     name=tool_call.function.name,
                     meta={"info": info},
                 )
-                self.current_dialog.add_message(tool_message)
                 self._on_tool_message(tool_message)
                 step_record.tool_responses.append(tool_message)
+
+                # For LLM dialog: truncate if too long to prevent context overflow
+                # (naive mid-string split may break JSON, but LLM only needs gist)
+                MAX_TOOL_OUTPUT = 30000
+                if len(observation) > MAX_TOOL_OUTPUT:
+                    observation_for_llm = (
+                        observation[: MAX_TOOL_OUTPUT // 2]
+                        + "\n\n... [output truncated due to length] ...\n\n"
+                        + observation[-MAX_TOOL_OUTPUT // 2 :]
+                    )
+                    dialog_message = ToolMessage(
+                        content=observation_for_llm,
+                        tool_call_id=tool_call.id,
+                        name=tool_call.function.name,
+                        meta={"info": info},
+                    )
+                    self.current_dialog.add_message(dialog_message)
+                else:
+                    self.current_dialog.add_message(tool_message)
 
         # Handle finish tool (always last, sequential)
         if finish_call:
@@ -302,27 +384,37 @@ You can use the 'use_skill' tool to:
 
             observation, info = self._execute_tool(finish_call)
 
-            MAX_TOOL_OUTPUT = 30000
-            if len(observation) > MAX_TOOL_OUTPUT:
-                observation = (
-                    observation[: MAX_TOOL_OUTPUT // 2]
-                    + "\n\n... [output truncated due to length] ...\n\n"
-                    + observation[-MAX_TOOL_OUTPUT // 2 :]
-                )
-
             task_completed = info.get("task_completed", "false")
             if task_completed == "true":
                 should_finish = True
 
+            # Full content for streaming (yield) and trajectory recording
             tool_message = ToolMessage(
                 content=observation,
                 tool_call_id=finish_call.id,
                 name=finish_call.function.name,
                 meta={"info": info},
             )
-            self.current_dialog.add_message(tool_message)
             self._on_tool_message(tool_message)
             step_record.tool_responses.append(tool_message)
+
+            # For LLM dialog: truncate if too long to prevent context overflow
+            MAX_TOOL_OUTPUT = 30000
+            if len(observation) > MAX_TOOL_OUTPUT:
+                observation_for_llm = (
+                    observation[: MAX_TOOL_OUTPUT // 2]
+                    + "\n\n... [output truncated due to length] ...\n\n"
+                    + observation[-MAX_TOOL_OUTPUT // 2 :]
+                )
+                dialog_message = ToolMessage(
+                    content=observation_for_llm,
+                    tool_call_id=finish_call.id,
+                    name=finish_call.function.name,
+                    meta={"info": info},
+                )
+                self.current_dialog.add_message(dialog_message)
+            else:
+                self.current_dialog.add_message(tool_message)
 
         self.trajectory.add_step(step_record)
         self._append_trajectory_entry(dialog_for_query, step_record)
