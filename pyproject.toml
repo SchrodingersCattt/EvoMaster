@@ -31,6 +31,7 @@ dependencies = [
 calculation = [
     "ase>=3.22",
     "pymatgen>=2024.1",
+    "dpdata>=0.2.18",
 ]
 
 [build-system]
