@@ -328,6 +328,10 @@ class CalculationPathAdaptor:
         executor_map = server_cfg.get("executor_map")
         if executor_map and isinstance(executor_map, dict):
             tool_executor = executor_map.get(remote_tool_name)
+            # Fallback: strip SDK-generated "submit_" prefix — the async
+            # wrapper shares the same executor as the base tool.
+            if not tool_executor and remote_tool_name.startswith("submit_"):
+                tool_executor = executor_map.get(remote_tool_name[len("submit_"):])
             if tool_executor and isinstance(tool_executor, dict):
                 return inject_bohrium_executor(
                     tool_executor,
