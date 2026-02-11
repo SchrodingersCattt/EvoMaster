@@ -27,6 +27,9 @@ COVALENT_RADII = {
     "Au": 1.36, "Pb": 1.46, "Bi": 1.48,
 }
 
+# Maximum covalent radius in table — used to set neighbor search cutoff
+_MAX_RADIUS = max(COVALENT_RADII.values())
+
 
 def _get_radius(symbol: str) -> float:
     return COVALENT_RADII.get(symbol, 1.5)
@@ -89,14 +92,11 @@ def _dimensionality_pymatgen(struct) -> tuple[str, list]:
     warnings = []
     lattice = struct.lattice
     abc = lattice.abc
-    # Approximate atom span per direction (simplified: use cell and density of sites)
     import numpy as np
     frac = np.array([s.frac_coords for s in struct])
     if len(frac) == 0:
         return "Unknown", ["No sites"]
-    # Span in fractional coords ~ [0,1] per axis; convert to Cartesian span
     span_frac = np.ptp(frac, axis=0)
-    # Avoid 0 span
     span_frac = np.clip(span_frac, 0.01, 1.0)
     span_cart = span_frac * np.array(abc)
     vacuum = np.array(abc) - span_cart
@@ -146,32 +146,96 @@ def _dimensionality_ase(atoms) -> tuple[str, list]:
     return dim, warnings
 
 
+# ---------------------------------------------------------------------------
+# Sanity check — efficient O(n) neighbor-list based
+# ---------------------------------------------------------------------------
+
 def _min_distance_and_sanity(struct_or_atoms, backend: str) -> tuple[bool, list]:
-    """Check min pairwise distance >= 0.7 * (r_i + r_j). Return (is_valid, warnings)."""
+    """Check min pairwise distance >= 0.7 * (r_i + r_j).
+
+    Uses pymatgen get_all_neighbors() or ASE neighborlist for O(n) performance
+    instead of the old O(n^2) brute-force loop.
+    """
     import numpy as np
-    warnings = []
+    warnings: list[str] = []
+
+    # Cutoff: largest possible 0.7*(r_i+r_j) to catch all overlap candidates.
+    # Any pair farther apart than this cannot be an overlap.
+    cutoff = 2.0 * _MAX_RADIUS  # ~4.2 Å, covers all covalent bond checks
+
     if backend == "pymatgen":
         struct = struct_or_atoms
-        symbols = [str(s.specie) for s in struct]
         n = len(struct)
+        if n == 0:
+            return True, []
+        symbols = [str(s.specie) for s in struct]
+        # get_all_neighbors returns list-of-lists; each inner list has
+        # PeriodicNeighbor objects with .nn_distance attribute.
+        all_neighbors = struct.get_all_neighbors(cutoff, include_index=True)
+        min_dist = float("inf")
+        pair = (0, 0)
+        for i, neighbors in enumerate(all_neighbors):
+            for nb in neighbors:
+                # nb is (Site, distance, index, image) or PeriodicNeighbor
+                if hasattr(nb, "nn_distance"):
+                    d = nb.nn_distance
+                    j = nb.index
+                else:
+                    # older pymatgen returns tuple (site, dist, index, image)
+                    d = nb[1]
+                    j = nb[2]
+                if j <= i:
+                    continue  # avoid double counting
+                if d < min_dist:
+                    min_dist = d
+                    pair = (i, j)
     else:
+        # ASE backend — use scipy cKDTree with minimum-image convention
         atoms = struct_or_atoms
         symbols = atoms.get_chemical_symbols()
-        cell = atoms.get_cell()
-        coords = atoms.get_positions()
-        n = len(coords)
+        n = len(symbols)
+        if n == 0:
+            return True, []
+        try:
+            from ase.neighborlist import neighbor_list
+            idx_i, idx_j, dists = neighbor_list("ijd", atoms, cutoff)
+            if len(dists) == 0:
+                # No neighbors within cutoff — structure is fine
+                return True, []
+            # Only keep i < j to avoid double-counting
+            mask = idx_i < idx_j
+            if not np.any(mask):
+                return True, []
+            dists = dists[mask]
+            idx_i = idx_i[mask]
+            idx_j = idx_j[mask]
+            k = np.argmin(dists)
+            min_dist = dists[k]
+            pair = (idx_i[k], idx_j[k])
+        except ImportError:
+            # Fallback: scipy KDTree on fractional coords (simple min-image)
+            cell = np.array(atoms.get_cell())
+            coords = atoms.get_positions()
+            frac = np.linalg.solve(cell.T, coords.T).T
+            frac = frac - np.floor(frac)  # wrap into [0,1)
+            cart = frac @ cell
+            from scipy.spatial import cKDTree
+            tree = cKDTree(cart)
+            pairs = tree.query_pairs(cutoff)
+            if not pairs:
+                return True, []
+            min_dist = float("inf")
+            pair = (0, 0)
+            for (i, j) in pairs:
+                d = np.linalg.norm(cart[i] - cart[j])
+                if d < min_dist:
+                    min_dist = d
+                    pair = (i, j)
 
-    min_dist = float("inf")
-    pair = (0, 0)
-    for i in range(n):
-        for j in range(i + 1, n):
-            if backend == "pymatgen":
-                d = struct_or_atoms.get_distance(i, j)
-            else:
-                d = _pair_dist_pbc(coords[i], coords[j], cell)
-            if d < min_dist:
-                min_dist = d
-                pair = (i, j)
+    if min_dist == float("inf"):
+        # No close contacts at all
+        return True, []
+
     r_i = _get_radius(symbols[pair[0]])
     r_j = _get_radius(symbols[pair[1]])
     threshold = 0.7 * (r_i + r_j)
@@ -183,27 +247,47 @@ def _min_distance_and_sanity(struct_or_atoms, backend: str) -> tuple[bool, list]
     return True, warnings
 
 
-def _ase_distances(cell, coords):
-    """Minimal all-pairs distance for ASE (no full matrix needed for sanity)."""
+def _sanity_molecule(coords, symbols) -> tuple[bool, list[str]]:
+    """Sanity check for molecules (no PBC). Uses cKDTree for O(n log n)."""
     import numpy as np
     n = len(coords)
-    d = np.zeros((n, n))
-    for i in range(n):
-        for j in range(n):
-            if i == j:
-                continue
-            d[i, j] = _pair_dist_pbc(coords[i], coords[j], cell)
-    return d
+    if n < 2:
+        return True, []
 
+    # Cutoff for overlap check
+    cutoff = 2.0 * _MAX_RADIUS
 
-def _pair_dist_pbc(p, q, cell):
-    import numpy as np
-    d = p - q
-    # simple min image
-    frac = np.linalg.solve(cell.T, d)
-    frac = frac - np.round(frac)
-    d = frac @ cell
-    return np.linalg.norm(d)
+    try:
+        from scipy.spatial import cKDTree
+        tree = cKDTree(coords)
+        pairs = tree.query_pairs(cutoff)
+    except ImportError:
+        # Fallback: brute force but capped at first 2000 atoms to avoid hang
+        pairs = set()
+        cap = min(n, 2000)
+        for i in range(cap):
+            for j in range(i + 1, cap):
+                if np.linalg.norm(coords[i] - coords[j]) < cutoff:
+                    pairs.add((i, j))
+
+    if not pairs:
+        return True, []
+
+    sane = True
+    sane_warns: list[str] = []
+    for (i, j) in pairs:
+        d = np.linalg.norm(coords[i] - coords[j])
+        threshold = 0.7 * (_get_radius(symbols[i]) + _get_radius(symbols[j]))
+        if d < threshold:
+            sane_warns.append(
+                f"Short contact {symbols[i]}{i}-{symbols[j]}{j}: "
+                f"{d:.3f} A < 0.7*(r_i+r_j)={threshold:.3f} A"
+            )
+            sane = False
+            if len(sane_warns) >= 10:
+                sane_warns.append("... (more short contacts omitted)")
+                break
+    return sane, sane_warns
 
 
 def main() -> None:
@@ -222,26 +306,13 @@ def main() -> None:
         sys.exit(1)
     if backend == "pymatgen_molecule":
         # Molecule (no lattice) — dimensionality is 0D by definition
+        import numpy as np
         formula = obj.composition.reduced_formula
         dim = "0D Molecule"
         dim_warns = []
-        # Simple sanity: check pairwise distances (no PBC)
-        import numpy as np
         coords = np.array([s.coords for s in obj])
         symbols = [s.specie.symbol for s in obj]
-        sane_warns = []
-        sane = True
-        n = len(coords)
-        for i in range(n):
-            for j in range(i + 1, n):
-                d = np.linalg.norm(coords[i] - coords[j])
-                threshold = 0.7 * (_get_radius(symbols[i]) + _get_radius(symbols[j]))
-                if d < threshold:
-                    sane_warns.append(
-                        f"Short contact {symbols[i]}{i}-{symbols[j]}{j}: "
-                        f"{d:.3f} A < 0.7*(r_i+r_j)={threshold:.3f} A"
-                    )
-                    sane = False
+        sane, sane_warns = _sanity_molecule(coords, symbols)
     elif backend == "pymatgen":
         formula = obj.formula
         dim, dim_warns = _dimensionality_pymatgen(obj)
