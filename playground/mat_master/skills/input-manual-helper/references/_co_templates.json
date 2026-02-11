@@ -1,0 +1,57 @@
+{
+  "_comment": "Co-template hints. Naming convention: task_* needs a method_* paired; no-prefix = complete standalone. When agent fetches a task_ template, remind it to also fetch a method_ template, and vice versa.",
+
+  "cp2k/task_band.inp": {
+    "hint": "This is a TASK template (PBE k-path only). You MUST also fetch a method_ template for the functional. Do NOT construct &HF/&SCREENING/&ADMM from the manual.",
+    "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_admm_hse06.inp", "cp2k/method_admm_b3lyp.inp", "cp2k/method_r2scan.inp"]
+  },
+  "cp2k/task_scf.inp": {
+    "hint": "This is a TASK template (basic PBE SCF). If your task needs a different functional, also fetch the corresponding method_ template.",
+    "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_admm_hse06.inp", "cp2k/method_r2scan.inp", "cp2k/method_dft_plus_u.inp"]
+  },
+  "cp2k/task_opt.inp": {
+    "hint": "This is a TASK template (PBE geometry optimization). If your task needs a hybrid or meta-GGA functional, also fetch the corresponding method_ template.",
+    "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_admm_hse06.inp", "cp2k/method_r2scan.inp"]
+  },
+  "cp2k/task_cellopt.inp": {
+    "hint": "This is a TASK template (PBE cell optimization). If your task needs a different functional, also fetch the corresponding method_ template.",
+    "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_admm_hse06.inp", "cp2k/method_r2scan.inp"]
+  },
+  "cp2k/task_md_nvt.inp": {
+    "hint": "This is a TASK template (PBE NVT MD). If your task needs a different functional, also fetch a method_ template. For fast xTB MD, use xtb_aimd.inp instead.",
+    "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_r2scan.inp", "cp2k/xtb_aimd.inp"]
+  },
+
+  "cp2k/method_admm_pbe0.inp": {
+    "hint": "This is a METHOD template (ADMM+PBE0). Merge the XC/ADMM/HF sections into a task_ template. Which task do you need?",
+    "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp", "cp2k/task_cellopt.inp"]
+  },
+  "cp2k/method_admm_hse06.inp": {
+    "hint": "This is a METHOD template (ADMM+HSE06). Merge the XC/ADMM/HF sections into a task_ template. Which task do you need?",
+    "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp", "cp2k/task_cellopt.inp"]
+  },
+  "cp2k/method_admm_b3lyp.inp": {
+    "hint": "This is a METHOD template (ADMM+B3LYP). Merge the XC/ADMM/HF sections into a task_ template. Which task do you need?",
+    "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp"]
+  },
+  "cp2k/method_admm_m062x.inp": {
+    "hint": "This is a METHOD template (ADMM+M06-2X). Merge the XC/ADMM/HF sections into a task_ template. Which task do you need?",
+    "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp"]
+  },
+  "cp2k/method_r2scan.inp": {
+    "hint": "This is a METHOD template (r2SCAN meta-GGA). Merge the XC sections into a task_ template. Which task do you need?",
+    "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp"]
+  },
+  "cp2k/method_scan_libxc.inp": {
+    "hint": "This is a METHOD template (SCAN via LibXC). Merge the XC sections into a task_ template.",
+    "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp"]
+  },
+  "cp2k/method_gapw_b97m_rv.inp": {
+    "hint": "This is a METHOD template (GAPW B97M-rV, molecular). Suitable for molecular systems only.",
+    "related": ["cp2k/task_opt.inp", "cp2k/task_scf.inp"]
+  },
+  "cp2k/method_dft_plus_u.inp": {
+    "hint": "This is a METHOD template (DFT+U). Merge the DFT+U sections into a task_ template.",
+    "related": ["cp2k/task_scf.inp", "cp2k/task_opt.inp", "cp2k/task_band.inp"]
+  }
+}

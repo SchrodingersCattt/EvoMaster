@@ -81,15 +81,21 @@ def _find_manual_path(software: str, data_dir: Path | None = None) -> Path:
     )
 
 
-def _load_params(path: Path) -> tuple[str, list[dict[str, Any]]]:
+def _load_params(path: Path) -> tuple[str, list[dict[str, Any]], dict]:
+    """Load manual parameters and any extra data (methods, basis_sets, etc.).
+
+    Returns:
+        (software_name, parameters_list, extra_data_dict)
+    """
     with open(path, "rb") as f:
         data = json.loads(f.read().decode("utf-8"))
     if isinstance(data, dict) and "parameters" in data:
-        return data.get("software", path.stem), data["parameters"]
+        extra = {k: v for k, v in data.items() if k not in ("software", "parameters")}
+        return data.get("software", path.stem), data["parameters"], extra
     if isinstance(data, list):
         sw = data[0].get("software", path.stem) if data else path.stem
-        return sw, data
-    return path.stem, []
+        return sw, data, {}
+    return path.stem, [], {}
 
 
 # ---------------------------------------------------------------------------
@@ -395,6 +401,213 @@ def parse_gaussian(text: str) -> list[ParsedTag]:
     return tags
 
 
+def parse_orca(text: str) -> list[ParsedTag]:
+    """Parse ORCA input file format.
+
+    ORCA format:
+        ! keyword1 keyword2 method/basis ...   <- Route line (keywords to validate)
+        %maxcore 1000                          <- Simple setting
+        %pal nprocs 4 end                      <- Block setting (single line)
+        %block                                 <- Block setting (multi-line)
+          key value
+        end
+        %cpcm                                  <- Named block
+          smd true
+          SMDsolvent "water"
+        end
+        * xyz 0 1                              <- Coordinate start
+        O  0.0  0.0  0.1                       <- Skip coordinates
+        H  0.0  0.7 -0.4
+        *                                      <- Coordinate end
+
+    Only the ! keywords and %block settings are validated.
+    """
+    tags: list[ParsedTag] = []
+    lines = text.splitlines()
+    in_coords = False
+    in_block = ""
+
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Coordinate block: skip between * markers
+        if stripped.startswith("*"):
+            in_coords = not in_coords
+            continue
+        if in_coords:
+            continue
+
+        # Route line: ! keyword1 keyword2 ...
+        if stripped.startswith("!"):
+            route_text = stripped.lstrip("!").strip()
+            for token in route_text.split():
+                # Skip method/basis combos (contain /)
+                if "/" in token and not token.startswith("/"):
+                    continue
+                # Match keyword including optional parenthesized part
+                # e.g. def2-SV(P), CCSD(T), def2-TZVP(-f)
+                m = re.match(r"([A-Za-z_][\w-]*(?:\([^)]*\))?(?:-[\w]+)*)", token)
+                if m:
+                    tags.append(ParsedTag(m.group(1), "", i, "route"))
+            continue
+
+        # Block settings: %blockname ... end
+        if stripped.startswith("%"):
+            content = stripped[1:].strip()
+            parts = content.split(None, 1)
+            if not parts:
+                continue
+            block_name = parts[0]
+            rest = parts[1] if len(parts) > 1 else ""
+
+            # Single-line block: %pal nprocs 4 end
+            if rest.strip().lower().endswith("end"):
+                inner = rest.strip()[:-3].strip()
+                for kv in inner.split():
+                    m = re.match(r"([A-Za-z_]\w*)", kv)
+                    if m:
+                        tags.append(ParsedTag(m.group(1), "", i, f"%{block_name}"))
+                continue
+
+            # Simple setting: %maxcore 1000
+            if rest and not rest.strip().lower() == "end":
+                tags.append(ParsedTag(block_name, rest.strip(), i, "%"))
+                continue
+
+            # Multi-line block start: %blockname
+            in_block = block_name
+            continue
+
+        # Inside a multi-line %block
+        if in_block:
+            if stripped.lower() == "end":
+                in_block = ""
+                continue
+            # Parse key value pairs inside block
+            m = re.match(r"([A-Za-z_]\w*)\s+(.*)", stripped)
+            if m:
+                tags.append(ParsedTag(m.group(1), m.group(2).strip(), i, f"%{in_block}"))
+            continue
+
+    return tags
+
+
+def parse_psi4(text: str) -> list[ParsedTag]:
+    """Parse PSI4 input file format (Python-like).
+
+    PSI4 format:
+        memory 4 gb
+        molecule name {                        <- Skip molecule block
+          0 1
+          O  0.0  0.0  0.1
+          --
+          0 1
+          H  0.0  0.7 -0.4
+        }
+        set {                                  <- Settings block
+          basis aug-cc-pVTZ
+          scf_type df
+          freeze_core true
+        }
+        set module_name {                      <- Module settings
+          key value
+        }
+        energy('sapt2+(3)dmp2')               <- Task call
+        optimize('mp2')
+
+    Validates set block keys and top-level directives.
+    """
+    tags: list[ParsedTag] = []
+    lines = text.splitlines()
+    brace_depth = 0
+    in_molecule = False
+    in_set = False
+    set_module = ""
+
+    for i, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        # Track brace depth
+        open_braces = stripped.count("{")
+        close_braces = stripped.count("}")
+
+        # Molecule block: skip entirely
+        if re.match(r"molecule\s+", stripped, re.IGNORECASE) or \
+           (stripped.lower().startswith("molecule") and "{" in stripped):
+            in_molecule = True
+            brace_depth += open_braces - close_braces
+            if brace_depth <= 0:
+                in_molecule = False
+                brace_depth = 0
+            continue
+        if in_molecule:
+            brace_depth += open_braces - close_braces
+            if brace_depth <= 0:
+                in_molecule = False
+                brace_depth = 0
+            continue
+
+        # Set block
+        m_set = re.match(r"set\s+(\w+)?\s*\{", stripped, re.IGNORECASE)
+        if m_set or (stripped.lower().startswith("set") and "{" in stripped):
+            in_set = True
+            if m_set and m_set.group(1) and m_set.group(1) != "{":
+                set_module = m_set.group(1)
+            else:
+                set_module = ""
+            brace_depth += open_braces - close_braces
+            if brace_depth <= 0:
+                in_set = False
+                brace_depth = 0
+            continue
+        if in_set:
+            brace_depth += open_braces - close_braces
+            if "}" in stripped:
+                # Last line of set block
+                content = stripped.replace("}", "").strip()
+                if content:
+                    parts = content.split(None, 1)
+                    if parts and re.match(r"[A-Za-z_]\w*$", parts[0]):
+                        val = parts[1] if len(parts) > 1 else ""
+                        section = f"set/{set_module}" if set_module else "set"
+                        tags.append(ParsedTag(parts[0], val, i, section))
+                if brace_depth <= 0:
+                    in_set = False
+                    brace_depth = 0
+                continue
+            # Normal set key-value line
+            parts = stripped.split(None, 1)
+            if parts and re.match(r"[A-Za-z_]\w*$", parts[0]):
+                val = parts[1] if len(parts) > 1 else ""
+                section = f"set/{set_module}" if set_module else "set"
+                tags.append(ParsedTag(parts[0], val, i, section))
+            continue
+
+        # Top-level: set key value (without braces)
+        m_set_single = re.match(r"set\s+(\w+)\s+(.+)", stripped, re.IGNORECASE)
+        if m_set_single and "{" not in stripped:
+            tags.append(ParsedTag(m_set_single.group(1), m_set_single.group(2), i, "set"))
+            continue
+
+        # Task calls: energy('method'), optimize('method')
+        m_task = re.match(r"(energy|optimize|gradient|frequency|properties)\s*\(", stripped, re.IGNORECASE)
+        if m_task:
+            tags.append(ParsedTag(m_task.group(1), stripped, i, "task"))
+            continue
+
+        # Top-level directives: memory, basis, etc.
+        parts = stripped.split(None, 1)
+        if parts and re.match(r"[A-Za-z_]\w*$", parts[0]):
+            val = parts[1] if len(parts) > 1 else ""
+            tags.append(ParsedTag(parts[0], val, i, ""))
+
+    return tags
+
+
 def parse_json_input(text: str) -> list[ParsedTag]:
     """Parse JSON input (DeePMD-kit, DP-GEN, DPGEN2).
 
@@ -442,8 +655,8 @@ _SOFTWARE_PARADIGM: dict[str, str] = {
     "DPGEN": "JSON",
     "DPGEN2": "JSON",
     "GAUSSIAN": "GAUSSIAN_ROUTE",
-    "ORCA": "KEY_VALUE",
-    "PSI4": "KEY_VALUE",
+    "ORCA": "ORCA",
+    "PSI4": "PSI4",
     "PYATB": "KEY_VALUE",
     "PLUMED": "KEYWORD_LINE",
     "ASE": "KEY_VALUE",
@@ -458,6 +671,8 @@ _PARSER_MAP = {
     "NAMELIST": parse_namelist,
     "JSON": parse_json_input,
     "GAUSSIAN_ROUTE": parse_gaussian,
+    "ORCA": parse_orca,
+    "PSI4": parse_psi4,
 }
 
 
@@ -489,6 +704,7 @@ class Issue:
 
 def _build_manual_index(
     params: list[dict],
+    extra_data: dict | None = None,
 ) -> tuple[dict[str, list[dict]], dict[str, list[str]]]:
     """Build lookup structures from the manual.
 
@@ -510,6 +726,21 @@ def _build_manual_index(
 
         ps = p.get("parent_section", "") or ""
         section_index.setdefault(ps, []).append(name)
+
+    # Also index methods and basis_sets if present (for ORCA, PSI4, etc.)
+    if extra_data:
+        for method in extra_data.get("methods", []):
+            mname = method.get("name", "").strip().upper()
+            if mname:
+                name_index.setdefault(mname, []).append(method)
+                # Also add without parentheses: CCSD(T) -> CCSD
+                base = re.sub(r"\(.*\)", "", mname)
+                if base != mname:
+                    name_index.setdefault(base, []).append(method)
+        for basis in extra_data.get("basis_sets", []):
+            bname = basis.get("name", "").strip().upper()
+            if bname:
+                name_index.setdefault(bname, []).append(basis)
 
     return name_index, section_index
 
@@ -547,6 +778,7 @@ def validate(
     software: str,
     paradigm: str,
     raw_text: str = "",
+    extra_data: dict | None = None,
 ) -> list[Issue]:
     """Cross-validate parsed tags against the manual.
 
@@ -554,9 +786,11 @@ def validate(
         raw_text: Optional raw input file text. When provided, enables
                   structural checks (e.g. detecting keywords incorrectly
                   used as ``&SECTION`` blocks in CP2K).
+        extra_data: Optional dict with additional data from the JSON (methods,
+                    basis_sets, etc.) to build the name index from.
     """
     issues: list[Issue] = []
-    name_index, section_index = _build_manual_index(params)
+    name_index, section_index = _build_manual_index(params, extra_data)
     known_names = list(name_index.keys())
 
     # For CP2K, section placement matters
@@ -611,6 +845,76 @@ def validate(
             "EXTERNAL_PRESSURE", "PRESSURE_TOLERANCE",
             # &MD / &EACH: iteration counters
             "MD", "GEO_OPT", "CELL_OPT",
+
+            # ---- Multiwfn-generated keywords missing from JSON manual ----
+            # &DFT: restart / file paths
+            "WFN_RESTART_FILE_NAME", "BASIS_SET_FILE_NAME",
+            "POTENTIAL_FILE_NAME", "AUTO_BASIS",
+            # &QS
+            "EPS_PGF_ORB",
+            # &POISSON
+            "PSOLVER",
+            # &SCF / &MIXING
+            "NBROYDEN",
+            # &HF / &SCREENING
+            "FRACTION", "EPS_SCHWARZ", "SCREEN_ON_INITIAL_P",
+            # &HF / &INTERACTION_POTENTIAL
+            "POTENTIAL_TYPE", "CUTOFF_RADIUS", "OMEGA",
+            # &HF / &MEMORY
+            "MAX_MEMORY", "EPS_STORAGE_SCALING",
+            # &XC_FUNCTIONAL: functional scaling parameters
+            "SCALE_X", "SCALE_C", "SCALE_X0", "SCALE",
+            # &XC_FUNCTIONAL children: functional-specific
+            "FUNCTIONAL_TYPE",
+            # &VDW_POTENTIAL / &PAIR_POTENTIAL
+            "PARAMETER_FILE_NAME", "REFERENCE_FUNCTIONAL", "TYPE",
+            # &VDW_POTENTIAL / &NON_LOCAL
+            "PARAMETERS", "KERNEL_FILE_NAME",
+            # &WF_CORRELATION / &RI_MP2 / &RI_RPA
+            "QUADRATURE_POINTS", "EPS_GRID",
+            "SCALE_S", "SCALE_T",
+            # &WF_CORRELATION: general
+            "MEMORY", "GROUP_SIZE",
+            # &GW
+            "CORR_MOS_OCC", "CORR_MOS_VIRT", "EV_GW_ITER",
+            "SC_GW0_ITER", "UPDATE_XC_ENERGY", "RI_SIGMA_X",
+            "PERIODIC_CORRECTION", "KPOINTS_SELF_ENERGY",
+            # &SCF / &OT
+            "MINIMIZER", "LINESEARCH", "PRECONDITIONER",
+            # &BSSE / &FRAGMENT
+            "LIST", "GLB_CONF", "SUB_CONF",
+            # &BAND (NEB/CI-NEB)
+            "K_SPRING", "BAND_TYPE", "NUMBER_OF_REPLICA",
+            "NPROC_REP", "ALIGN_FRAMES", "ROTATE_FRAMES",
+            "OPTIMIZE_END_POINTS", "MAX_STEPSIZE",
+            "NSTEPS_IT", "INITIAL_CONFIGURATION_INFO",
+            "MAX_DR", "MAX_FORCE", "RMS_DR", "RMS_FORCE",
+            # &DIMER (TS search)
+            "ANGLE_TOLERANCE",
+            # &NMR / &CURRENT / &LINRES
+            "GAUGE", "ORBITAL_CENTER", "CHI_PBC",
+            # &PRINT / &MOMENTS
+            "MAGNETIC", "REFERENCE", "MAX_MOMENT",
+            "PERIODIC_DIPOLE_OPERATOR",
+            # &REAL_TIME_PROPAGATION
+            "DELTA_PULSE_DIRECTION", "APPLY_DELTA_PULSE",
+            # &SCCS (solvation)
+            "DIELECTRIC_CONSTANT", "RHO_MIN", "RHO_MAX",
+            "AUTO_VDW_RADII_TABLE", "AUTO_RMIN_SCALE", "AUTO_RMAX_SCALE",
+            # &XAS_TDP
+            "GRID", "ENERGY_RANGE",
+            "DEFINE_EXCITED", "ATOM_LIST", "STATE_TYPES", "N_SEARCH",
+            "RI_REGION",
+            # &XTB
+            "DO_EWALD", "CHECK_ATOMIC_CHARGES",
+            # &PIMD / &PINT
+            "P",
+            # &PRINT / &MO_MOLDEN
+            "NDIGITS",
+            # &EACH iteration counter types
+            "PINT", "QS_SCF",
+            # &PRINT misc
+            "STRIDE", "THERMOCHEMISTRY",
         }
         # Known typos → correct keyword.  Validation will emit a WARNING
         # with the correct name so the agent can fix it immediately instead
@@ -703,6 +1007,38 @@ def validate(
             "EACH", "LOW", "MEDIUM", "HIGH", "SILENT", "DEBUG",
             "WANNIER_CENTERS", "WANNIER_STATES", "WANNIER_PROJECTION",
             "RESP", "BLOCK_DIAG", "ELECTRIC_FIELD",
+            # Multiwfn-generated sections missing from JSON scraper
+            # &XC_FUNCTIONAL children (LibXC functional subsections)
+            "MGGA_X_R2SCAN", "MGGA_C_R2SCAN",
+            "MGGA_X_SCAN", "MGGA_C_SCAN",
+            "MGGA_XC_B97M_V",
+            "HYB_MGGA_X_M06_2X", "MGGA_C_M06_2X",
+            "HYB_GGA_XC_BHANDHLYP",
+            "GGA_X_PBE", "P86C", "XWPBE", "VWN",
+            # &WF_CORRELATION children
+            "RI_MP2", "RI_RPA", "GW", "INTEGRALS", "WFC_GPW",
+            # &BAND children (NEB)
+            "OPTIMIZE_BAND", "CI_NEB", "CONVERGENCE_INFO",
+            "CONVERGENCE_CONTROL", "PROGRAM_RUN_INFO", "REPLICA",
+            "DIIS",  # valid under OPTIMIZE_BAND for band/NEB optimization
+            # &GEO_OPT children
+            "LINE_SEARCH", "DIMER", "ROT_OPT",
+            # &BSSE
+            "FRAGMENT",
+            # &LINRES children
+            "CURRENT",
+            # &SCCS children / &PRINT
+            "POLARISATION_CHARGE_DENSITY", "DIELECTRIC_FUNCTION",
+            "ANDREUSSI", "SPHERE_SAMPLING",
+            "COORD_FIT_POINTS", "RESP_CHARGES_TO_FILE",
+            # &PRINT / molden
+            "MO_MOLDEN",
+            # &XAS_TDP children
+            "DONOR_STATES", "KERNEL", "EXACT_EXCHANGE", "XAS_TDP",
+            # &DFT children
+            "AUXILIARY_DENSITY_MATRIX_METHOD",
+            # &PINT (path integral)
+            "STAGING",
         })
         _cp2k_manual_sections |= _CP2K_VERIFIED_SECTIONS
 
@@ -712,7 +1048,8 @@ def validate(
     _CP2K_FAKE_SECTIONS: dict[str, str] = {}
     if paradigm == "HIERARCHICAL_BLOCK" and software.upper() in ("CP2K",):
         _CP2K_FAKE_SECTIONS = {
-            "DIIS": "Use keywords MAX_DIIS 7 and EPS_DIIS 0.1 directly inside &SCF",
+            # NOTE: &DIIS is valid under OPTIMIZE_BAND (NEB), but NOT under SCF.
+            # Since structural check is context-free, we keep it out of fakes.
             "ADDED_MOS": "Use keyword ADDED_MOS 30 directly inside &SCF",
             # NOTE: STRESS_TENSOR and CELL_MOTION are valid subsections under
             # &PRINT, so they are in _CP2K_VERIFIED_SECTIONS and should NOT
@@ -810,6 +1147,106 @@ def validate(
             },
         }
 
+    # ---- ORCA known-good whitelist ----
+    # ORCA route keywords (! line), %block settings, and common options
+    # that are not in the orca_parameters.json manual.
+    _ORCA_WHITELIST: set[str] = set()
+    if paradigm == "ORCA":
+        _ORCA_WHITELIST = {
+            # Task / job types
+            "OPT", "OPTTS", "FREQ", "NUMFREQ", "ENGRAD", "MD",
+            "NEB", "NEB-TS", "NEB-CI", "SCANRELAX",
+            # SCF options
+            "TIGHTSCF", "VERYTIGHTSCF", "NORMALSCF", "LOOSESCF",
+            "NOAUTOSTART", "AUTOSTART",
+            "SMALLPRINT", "MINIPRINT", "NORMALPRINT", "LARGEPRINT",
+            "NOPOP", "ALLPOP",
+            "RIJCOSX", "RIJONX", "RIJDX", "NORI", "RI",
+            "NOFINALGRID", "GRID4", "GRID5", "GRID6", "GRID7",
+            "DEFGRID1", "DEFGRID2", "DEFGRID3",
+            "NOITER", "CONV", "UNCONVIF",
+            "NOSOSCF", "SOSCF",
+            "UHF", "UKS", "RHF", "RKS", "ROHF", "ROKS",
+            "MOREAD", "PATOM", "PMODEL", "HUECKEL",
+            "CPCM", "SMD",
+            "SLOWCONV", "VERYSLOWCONV", "STRONGSCF",
+            "KDIIS", "SOSCF", "DAMP",
+            # Optimization / TS options
+            "TIGHTOPT", "VERYTIGHTOPT", "NORMALOPT", "LOOSEOPT",
+            "NUMHESS", "ANFREQ", "NUMGRAD",
+            "RECALCHESS",
+            # PNO thresholds
+            "NORMALPNO", "LOOSEPNO", "TIGHTPNO",
+            # Dispersion
+            "D3", "D3BJ", "D3ZERO", "D4",
+            # Composite / cheap methods
+            "B97-3C", "R2SCAN-3C", "WB97M-V", "WB97X-D3",
+            "PWPB95", "PWPB95-D4",
+            "REVDSD-PBEP86-D4", "DSD-PBEP86", "DSD-PBEP86-D4",
+            "RSX-QIDH", "RIJDOUBLEX",
+            # Method keywords
+            "DLPNO-CCSD", "DLPNO-CCSD(T)", "DLPNO-CCSD(T1)",
+            "STEOM-DLPNO-CCSD", "EOM-CCSD",
+            "CCSD(T)-F12", "CCSD(T)-F12/RI",
+            "RI-B2PLYP", "RI-MP2",
+            # Basis set families
+            "DEF2-SVP", "DEF2-SV(P)", "DEF2-TZVP", "DEF2-TZVP(-F)",
+            "DEF2-TZVPP", "DEF2-QZVPP", "DEF2-QZVP",
+            "MA-DEF2-SVP", "MA-DEF2-TZVP", "MA-DEF2-TZVPP",
+            "CC-PVDZ", "CC-PVTZ", "CC-PVQZ", "CC-PV5Z",
+            "AUG-CC-PVDZ", "AUG-CC-PVTZ", "AUG-CC-PVQZ",
+            "CC-PVDZ-F12", "CC-PVTZ-F12",
+            # Auxiliary basis
+            "DEF2/J", "DEF2/JK", "DEF2/C",
+            "AUTOAUX", "DEF2-TZVPP/C", "DEF2-QZVPP/C",
+            "CC-PVTZ/C", "CC-PVQZ/C",
+            "CC-PVDZ-F12-CABS", "CC-PVTZ-F12-CABS",
+            # Extrapolation
+            "EXTRAPOLATE",
+            # %block settings
+            "MAXCORE", "NPROCS",
+            # %tddft block settings
+            "NROOTS", "IROOT", "TRIPLETS", "TAMMDAN", "DOTRANS",
+            "MAXDIM", "MAXITER", "TDA",
+            # %mdci / %method block
+            "FROZENCORE", "FC_ELECTRONS",
+            # BSSE / Counterpoise
+            "BSSE",
+            # STD-DFT / sTDA
+            "STD-DFT",
+            # %stddft block settings
+            "MODE", "ETHRESH", "PTHRESH", "PTLIMIT",
+            # %cpcm / SMD block settings
+            "SMDSOLVENT", "EPSILON", "REFRAC",
+            # %md block settings
+            "TIMESTEP", "INITVEL", "THERMOSTAT", "DUMP", "RUN",
+            "TEMP", "TIMEINT",
+            # %geom block settings
+            "CALC_HESS", "RECALC_HESS", "TRUST", "INHESS",
+            "MAXSTEP", "CONVERGENCE",
+            "TRUE", "FALSE",  # boolean values parsed as keywords
+            # Misc
+            "PRINTBASIS", "PRINTMOS", "KEEPDENS",
+            "PAL", "NPROCS",
+        }
+
+    # ---- PSI4 known-good whitelist ----
+    # Top-level PSI4 directives and task functions not in the JSON manual.
+    _PSI4_WHITELIST: set[str] = set()
+    if paradigm == "PSI4":
+        _PSI4_WHITELIST = {
+            # Top-level directives
+            "MEMORY",
+            # Task functions
+            "ENERGY", "OPTIMIZE", "GRADIENT", "FREQUENCY", "PROPERTIES",
+            # Common settings not in JSON
+            "BASIS", "FREEZE_CORE",
+            "SCF_TYPE", "MP2_TYPE", "CC_TYPE",
+            "REFERENCE", "E_CONVERGENCE", "D_CONVERGENCE",
+            "ROOTS_PER_IRREP", "EOM_REFERENCE",
+            "SAPT_LEVEL", "DF_BASIS_SAPT", "DF_BASIS_ELST",
+        }
+
     for tag in parsed_tags:
         tag_upper = tag.name.upper()
 
@@ -857,9 +1294,12 @@ def validate(
                             entries = name_index.get(combined3.upper())
 
         if entries is None:
-            # Check CP2K whitelist before reporting error
+            # Check software-specific whitelists before reporting error
             if tag_upper in _CP2K_WHITELIST:
-                # Known valid keyword missing from manual — skip silently
+                continue
+            if tag_upper in _ORCA_WHITELIST:
+                continue
+            if tag_upper in _PSI4_WHITELIST:
                 continue
 
             # Check CP2K typo map — emit actionable WARNING instead of ERROR
@@ -1166,7 +1606,7 @@ def main() -> None:
         print(str(e), file=sys.stderr)
         sys.exit(1)
 
-    sw, params = _load_params(manual_path)
+    sw, params, extra_data = _load_params(manual_path)
     if not params:
         print(f"Manual for {args.software} is empty or could not be loaded.", file=sys.stderr)
         sys.exit(1)
@@ -1194,7 +1634,7 @@ def main() -> None:
         sys.exit(0)
 
     # Validate
-    issues = validate(parsed_tags, params, sw, paradigm, raw_text=input_text)
+    issues = validate(parsed_tags, params, sw, paradigm, raw_text=input_text, extra_data=extra_data)
 
     # Report
     report = format_report(issues, parsed_tags, sw, str(input_path))

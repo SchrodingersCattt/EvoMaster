@@ -156,8 +156,15 @@ class SkillTool(BaseTool):
 
         try:
             reference_content = skill.get_reference(reference_name)
+            observation = f"# Reference: {reference_name}\n\n{reference_content}"
+
+            # Append co-template hints if available
+            co_hint = self._get_co_template_hint(skill, reference_name)
+            if co_hint:
+                observation += co_hint
+
             return (
-                f"# Reference: {reference_name}\n\n{reference_content}",
+                observation,
                 {
                     "action": "get_reference",
                     "skill_name": skill.meta_info.name,
@@ -178,6 +185,70 @@ class SkillTool(BaseTool):
                     "warning": "reference_not_found_fallback_to_get_info",
                 }
             )
+
+    def _get_co_template_hint(
+        self,
+        skill: OperatorSkill,
+        reference_name: str,
+    ) -> str | None:
+        """Check for co-template hints and return a formatted reminder.
+
+        Looks for ``_co_templates.json`` in the skill's ``references/`` (or
+        ``reference/``) directory.  If the requested *reference_name* has an
+        entry, return a formatted block that reminds the agent to also fetch
+        related templates.  Returns ``None`` when no hint applies.
+        """
+        import json as _json
+        from pathlib import Path
+
+        # Locate the hints file
+        hints_path: Path | None = None
+        for candidate in (
+            skill.skill_path / "references" / "_co_templates.json",
+            skill.skill_path / "reference" / "_co_templates.json",
+            skill.skill_path / "_co_templates.json",
+        ):
+            if candidate.exists():
+                hints_path = candidate
+                break
+
+        if hints_path is None:
+            return None
+
+        try:
+            hints = _json.loads(hints_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+        entry = hints.get(reference_name)
+        if not entry:
+            return None
+
+        hint_text = entry.get("hint", "")
+        related = entry.get("related", [])
+        if not hint_text and not related:
+            return None
+
+        lines = [
+            "",
+            "",
+            "=" * 72,
+            ">>> IMPORTANT — CO-TEMPLATE REMINDER <<<",
+        ]
+        if hint_text:
+            lines.append(hint_text)
+        if related:
+            lines.append(
+                "Related templates you should ALSO fetch (use get_reference for each):"
+            )
+            for r in related:
+                lines.append(f"  - {r}")
+        lines.append(
+            "Do NOT skip fetching related templates. Do NOT try to manually "
+            "construct these sections by querying the manual."
+        )
+        lines.append("=" * 72)
+        return "\n".join(lines)
 
     def _run_script(
         self,
