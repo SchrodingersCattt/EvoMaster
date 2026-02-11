@@ -236,14 +236,50 @@ You can use the 'use_skill' tool to:
         return prompt
 
     def _execute_tool(self, tool_call) -> tuple[str, dict[str, Any]]:
-        """Execute tool with MAT callbacks."""
-        self._tool_callback_pipeline.run_before(tool_call)
-        # Emit tool_call event AFTER before-callbacks have patched the args,
-        # so the frontend/log shows the resolved arguments (e.g. DPA model
-        # alias -> OSS URL, patched bohr_job_id, etc.).
-        self._on_tool_call_start(tool_call)
-        observation, info = super()._execute_tool(tool_call)
-        return self._tool_callback_pipeline.run_after(tool_call, observation, info)
+        """Execute tool with MAT callbacks.
+
+        Overrides the base class so that **all** errors returned to the LLM
+        include the full Python traceback (MatMaster-only behaviour).
+        """
+        import traceback as _tb
+
+        try:
+            self._tool_callback_pipeline.run_before(tool_call)
+            # Emit tool_call event AFTER before-callbacks have patched the args,
+            # so the frontend/log shows the resolved arguments (e.g. DPA model
+            # alias -> OSS URL, patched bohr_job_id, etc.).
+            self._on_tool_call_start(tool_call)
+
+            tool_name = tool_call.function.name
+            tool_args = tool_call.function.arguments
+            self._log_tool_start(tool_name, tool_args)
+
+            tool = self.tools.get_tool(tool_name)
+            if tool is None:
+                error_msg = f"Unknown tool: {tool_name}"
+                self._log_tool_end(tool_name, error_msg, {"error": "tool_not_found"})
+                return self._tool_callback_pipeline.run_after(
+                    tool_call, error_msg, {"error": "tool_not_found"}
+                )
+
+            try:
+                observation, info = tool.execute(self.session, tool_args)
+                self._log_tool_end(tool_name, observation, info)
+            except Exception as e:
+                tb_str = _tb.format_exc()
+                error_msg = f"Tool execution error: {e}\n\nTraceback:\n{tb_str}"
+                self.logger.error("Tool execution failed:\n%s", tb_str)
+                self._log_tool_end(tool_name, error_msg, {"error": str(e)})
+                observation, info = error_msg, {"error": str(e)}
+
+            return self._tool_callback_pipeline.run_after(tool_call, observation, info)
+
+        except Exception as exc:
+            # Catch-all: callback pipeline or any other unexpected error
+            tb_str = _tb.format_exc()
+            error_msg = f"Tool execution error: {exc}\n\nTraceback:\n{tb_str}"
+            self.logger.error("_execute_tool failed:\n%s", tb_str)
+            return error_msg, {"error": str(exc)}
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
         """Optional hook after assistant message is added. Override in subclasses (e.g. streaming)."""
