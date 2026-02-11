@@ -873,6 +873,23 @@ def validate(
                 ))
                 continue
 
+            # LAMMPS: the manual (lammps_commands_sample.json) only covers a
+            # subset of LAMMPS commands (mainly pair_style/fix/compute variants).
+            # Many fundamental commands (boundary, atom_style, read_data,
+            # neigh_modify, mass, dimension, create_box, …) are NOT in it.
+            # Report as WARNING instead of ERROR so the agent is not misled.
+            if paradigm == "KEYWORD_LINE" and software.upper() == "LAMMPS":
+                suggestion = _suggest(tag_upper, known_names)
+                msg = (
+                    f'Command "{tag.name}" not in LAMMPS manual reference '
+                    f'(note: the reference is incomplete and only covers ~{len(known_names)} '
+                    f'command variants; this may be a perfectly valid LAMMPS command)'
+                )
+                if suggestion:
+                    msg += f' -- closest match: "{suggestion}"'
+                issues.append(Issue("WARNING", tag.line_num, msg))
+                continue
+
             # Unknown tag
             suggestion = _suggest(tag_upper, known_names)
             msg = f'Unknown tag "{tag.name}"'

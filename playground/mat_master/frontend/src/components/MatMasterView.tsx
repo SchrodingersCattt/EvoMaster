@@ -50,6 +50,8 @@ export default function MatMasterView({
   const [mode, setMode] = useState<"direct" | "planner">("direct");
   const [plannerAsk, setPlannerAsk] = useState<string | null>(null);
   const [plannerInput, setPlannerInput] = useState("");
+  const [askHumanQuestion, setAskHumanQuestion] = useState<string | null>(null);
+  const [askHumanInput, setAskHumanInput] = useState("");
   const [filePath, setFilePath] = useState("");
   const [reconnectTrigger, setReconnectTrigger] = useState(0);
   const [sessionFilesLogsKey, setSessionFilesLogsKey] = useState(0);
@@ -95,9 +97,22 @@ export default function MatMasterView({
           } else {
             setPlannerAsk(null);
           }
+          if (msg.type === "ask_human") {
+            let q = "";
+            if (typeof msg.content === "string") {
+              q = msg.content;
+            } else if (msg.content && typeof msg.content === "object") {
+              const c = msg.content as { question?: string; context?: string };
+              q = c.question || "";
+              if (c.context) q += "\n\n" + c.context;
+            }
+            setAskHumanQuestion(q || "The agent is asking for your input.");
+            setAskHumanInput("");
+          }
           if (msg.type === "finish" || msg.type === "error" || msg.type === "cancelled") {
             if (sid === runningSessionIdRef.current) setRunningSessionId(null);
             setRunning(false);
+            setAskHumanQuestion(null);
             if (sid === currentSessionIdRef.current) setSessionFilesLogsKey((k) => k + 1);
           }
         } catch {
@@ -157,6 +172,22 @@ export default function MatMasterView({
       );
       setPlannerAsk(null);
       setPlannerInput("");
+    },
+    [currentSessionId]
+  );
+
+  const sendAskHumanReply = useCallback(
+    (content: string) => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN) return;
+      wsRef.current.send(
+        JSON.stringify({
+          type: "ask_human_reply",
+          content: (content || "").trim(),
+          session_id: currentSessionId,
+        })
+      );
+      setAskHumanQuestion(null);
+      setAskHumanInput("");
     },
     [currentSessionId]
   );
@@ -290,6 +321,10 @@ export default function MatMasterView({
             plannerInput={plannerInput}
             setPlannerInput={setPlannerInput}
             sendPlannerReply={sendPlannerReply}
+            askHumanQuestion={askHumanQuestion}
+            askHumanInput={askHumanInput}
+            setAskHumanInput={setAskHumanInput}
+            sendAskHumanReply={sendAskHumanReply}
             readOnly={isReadOnly}
           />
         </div>

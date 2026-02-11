@@ -46,7 +46,7 @@ export default function ConversationPanel({
   scrollRef,
 }: {
   entries: LogEntry[];
-  scrollRef?: React.RefObject<HTMLDivElement | null>;
+  scrollRef?: React.RefObject<HTMLDivElement>;
 }) {
   const filtered = entries.filter(
     (e) => e.source !== "System" && e.type !== "log_line" && !isEnvRelatedEntry(e)
