@@ -238,11 +238,23 @@ You can use the 'use_skill' tool to:
     def _execute_tool(self, tool_call) -> tuple[str, dict[str, Any]]:
         """Execute tool with MAT callbacks."""
         self._tool_callback_pipeline.run_before(tool_call)
+        # Emit tool_call event AFTER before-callbacks have patched the args,
+        # so the frontend/log shows the resolved arguments (e.g. DPA model
+        # alias -> OSS URL, patched bohr_job_id, etc.).
+        self._on_tool_call_start(tool_call)
         observation, info = super()._execute_tool(tool_call)
         return self._tool_callback_pipeline.run_after(tool_call, observation, info)
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
         """Optional hook after assistant message is added. Override in subclasses (e.g. streaming)."""
+        pass
+
+    def _on_tool_call_start(self, tool_call) -> None:
+        """Optional hook called after before-callbacks have patched tool_call
+        args but before the tool is actually executed.
+
+        Override in subclasses (e.g. StreamingMatMasterAgent) to emit
+        ``tool_call`` events with the callback-resolved arguments."""
         pass
 
     def _on_tool_message(self, msg: ToolMessage) -> None:
@@ -369,6 +381,9 @@ You can use the 'use_skill' tool to:
                             "3. If you have enough information already, proceed to write the input file NOW."
                         )
                     loop_blocked.append((tc, msg))
+                    # Emit tool_call event for blocked calls too (with original
+                    # args — no before-callback ran since the tool is skipped).
+                    self._on_tool_call_start(tc)
                 else:
                     exec_calls.append(tc)
                 self._record_tool_call(tc)

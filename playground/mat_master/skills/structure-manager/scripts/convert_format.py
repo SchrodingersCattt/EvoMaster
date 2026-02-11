@@ -44,6 +44,7 @@ _EXT_TO_FMT: dict[str, str] = {
     ".cif": "cif",
     ".vasp": "vasp/poscar",
     ".lmp": "lammps/lmp",
+    ".data": "lammps/lmp",       # common LAMMPS data file extension
     ".dump": "lammps/dump",
     ".lammpstrj": "lammps/dump",
     ".xyz": "xyz",
