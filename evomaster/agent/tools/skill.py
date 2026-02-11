@@ -165,9 +165,18 @@ class SkillTool(BaseTool):
                 }
             )
         except FileNotFoundError as e:
+            # Guardrail: many skills only ship SKILL.md; when a specific
+            # reference file is missing, fall back to full skill info so
+            # the agent can still proceed instead of stalling.
+            full_info = skill.get_full_info()
             return (
-                f"Error: {str(e)}",
-                {"error": "reference_not_found"}
+                f"Error: {str(e)}\n\nFallback to skill info:\n\n# Skill: {skill.meta_info.name}\n\n{full_info}",
+                {
+                    "action": "get_reference",
+                    "skill_name": skill.meta_info.name,
+                    "reference_name": reference_name,
+                    "warning": "reference_not_found_fallback_to_get_info",
+                }
             )
 
     def _run_script(

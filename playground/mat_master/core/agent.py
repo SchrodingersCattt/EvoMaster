@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
@@ -183,6 +184,94 @@ class MatMasterAgent(Agent):
         if self._is_peek_manual_call(tool_call):
             self._peek_manual_call_count += 1
 
+    def _collect_submit_job_map(self) -> dict[str, str]:
+        """Collect ``job_id -> bohr_job_id`` from previous submit tool outputs.
+
+        We read prior ToolMessage payloads from dialog history and extract:
+        {
+          "job_id": "...",
+          "extra_info": {"bohr_job_id": "..."}
+        }
+        """
+        mapping: dict[str, str] = {}
+        if self.current_dialog is None:
+            return mapping
+
+        for msg in self.current_dialog.messages:
+            if not isinstance(msg, ToolMessage):
+                continue
+            name = getattr(msg, "name", "") or ""
+            # Submit tools are the only reliable source for bohr_job_id.
+            if "_submit_" not in name:
+                continue
+            content = getattr(msg, "content", "") or ""
+            try:
+                payload = json.loads(content)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+            job_id = payload.get("job_id")
+            extra_info = payload.get("extra_info") or {}
+            bohr_job_id = extra_info.get("bohr_job_id") if isinstance(extra_info, dict) else None
+            if isinstance(job_id, str) and isinstance(bohr_job_id, str) and job_id and bohr_job_id:
+                mapping[job_id] = bohr_job_id
+        return mapping
+
+    def _maybe_patch_job_manager_bohr_id(self, tool_call) -> None:
+        """Auto-fill missing ``--bohr_job_id`` for job-manager run_script calls.
+
+        This avoids fragile failures when the LLM remembers job_id but forgets
+        bohr_job_id, which is required/safer for some async backends.
+        """
+        if (tool_call.function.name or "") != "use_skill":
+            return
+        args_str = tool_call.function.arguments or ""
+        try:
+            args = json.loads(args_str) if args_str else {}
+        except (json.JSONDecodeError, TypeError):
+            return
+        if not isinstance(args, dict):
+            return
+        if args.get("skill_name") != "job-manager":
+            return
+        if args.get("action") != "run_script":
+            return
+        if args.get("script_name") != "run_resilient_job.py":
+            return
+
+        script_args = args.get("script_args")
+        if not isinstance(script_args, str) or not script_args.strip():
+            return
+        if "--bohr_job_id" in script_args:
+            return
+
+        try:
+            tokens = shlex.split(script_args)
+        except ValueError:
+            return
+
+        job_id = None
+        for i, tok in enumerate(tokens):
+            if tok == "--job_id" and i + 1 < len(tokens):
+                job_id = tokens[i + 1]
+                break
+        if not job_id:
+            return
+
+        bohr_map = self._collect_submit_job_map()
+        bohr_job_id = bohr_map.get(job_id)
+        if not bohr_job_id:
+            return
+
+        # Keep the original script_args format, append only the missing field.
+        args["script_args"] = f'{script_args} --bohr_job_id "{bohr_job_id}"'
+        tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
+        self.logger.info(
+            "Auto-patched job-manager args with bohr_job_id for job_id=%s",
+            job_id,
+        )
+
     def _get_system_prompt(self) -> str:
         """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills.
         Date and OS/Shell are appended last so they appear at the end of the prompt (and in log tail)."""
@@ -314,6 +403,10 @@ You can use the 'use_skill' tool to:
 
         # Execute regular tool calls in parallel (with loop detection)
         if regular_calls:
+            # Apply guardrails before loop detection/execution.
+            for tc in regular_calls:
+                self._maybe_patch_job_manager_bohr_id(tc)
+
             # Split into executable vs loop-blocked
             exec_calls = []
             loop_blocked: list[tuple[Any, str]] = []  # (tool_call, warning_msg)
