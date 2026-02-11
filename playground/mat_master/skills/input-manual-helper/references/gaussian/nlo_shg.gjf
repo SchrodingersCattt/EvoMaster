@@ -1,23 +1,13 @@
 %mem=8GB
 %nprocshared=8
 %chk=nlo_shg.chk
-#p PBE1PBE/genecp Polar=DCSHG CPHF=RdFreq
+#p PBE1PBE/6-311++G(d,p) Polar=DCSHG CPHF=RdFreq
 
 Frequency-dependent first hyperpolarizability (SHG) at 1064nm
 
 0 1
 C         0.00000000    0.00000000    0.00000000
 N         1.15000000    0.00000000    0.00000000
-
-C N H O 0
-6-311++G(d,p)
-****
-Fe Ru 0
-SDD
-****
-
-Fe Ru 0
-SDD
 
 1064nm
 

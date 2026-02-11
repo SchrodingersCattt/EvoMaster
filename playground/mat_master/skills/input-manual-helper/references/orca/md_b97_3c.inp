@@ -1,0 +1,20 @@
+! B97-3c noautostart miniprint
+%maxcore     1000
+%pal nprocs   4 end
+%md
+#restart ifexists  # Continue MD by reading [basename].mdrestart if it exists. In this case "initvel" should be commented
+#minimize  # Do minimization prior to MD simulation
+ timestep 0.5_fs  # This stepsize is safe at several hundreds of Kelvin
+ initvel 100_K no_overwrite # Assign velocity according to temperature for atoms whose velocities are not available
+ thermostat CSVR 298.15_K timecon 30.0_fs  # Target temperature and coupling time constant
+ dump position stride 1 format xyz filename "pos.xyz"  # Dump position every "stride" steps
+#dump force stride 1 format xyz filename "force.xyz"  # Dump force every "stride" steps
+#dump velocity stride 1 format xyz filename "vel.xyz"  # Dump velocity every "stride" steps
+#dump gbw stride 20 filename "wfn"  # Dump wavefunction to "wfn[step].gbw" files every "stride" steps
+ run 2000 CenterCOM # Number of MD steps. Remove motion of center of mass
+end
+* xyz   0   1
+O      0.00000000    0.00000000    0.11779000
+H      0.00000000    0.75545000   -0.47116000
+H      0.00000000   -0.75545000   -0.47116000
+*

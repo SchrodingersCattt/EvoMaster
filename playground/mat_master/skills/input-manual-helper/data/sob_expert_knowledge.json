@@ -1,0 +1,340 @@
+{
+  "_meta": {
+    "source": "sobereva.com (Tian Lu / sob) articles",
+    "description": "Expert knowledge distilled from sob's articles on Multiwfn input generation, DFT functional selection, basis set choice, CP2K hybrid functional tips, ORCA calculation levels, and PSI4 SAPT usage.",
+    "articles": [
+      {"id": 272, "title": "简谈量子化学计算中DFT泛函的选择", "url": "http://sobereva.com/272"},
+      {"id": 336, "title": "谈谈量子化学中基组的选择", "url": "http://sobereva.com/336"},
+      {"id": 373, "title": "谈谈赝势基组的选用", "url": "http://sobereva.com/373"},
+      {"id": 387, "title": "浅谈为什么优化和振动分析不需要用大基组", "url": "http://sobereva.com/387"},
+      {"id": 413, "title": "谈谈计算时是否需要加DFT-D3色散校正？", "url": "http://sobereva.com/413"},
+      {"id": 464, "title": "DFT-D4色散校正的简介与使用", "url": "http://sobereva.com/464"},
+      {"id": 490, "title": "详谈Multiwfn产生ORCA量子化学程序的输入文件的功能", "url": "http://sobereva.com/490"},
+      {"id": 587, "title": "使用Multiwfn非常便利地创建CP2K程序的输入文件", "url": "http://sobereva.com/587"},
+      {"id": 595, "title": "对Gaussian计算的IRC轨迹上每个点用PSI4做SAPT分析", "url": "http://sobereva.com/595"},
+      {"id": 690, "title": "CP2K做杂化泛函计算的关键要点和简单例子", "url": "http://sobereva.com/690"}
+    ]
+  },
+
+  "dft_functional_selection": {
+    "summary": "sob's systematic guide for choosing DFT functionals based on accuracy and cost trade-offs.",
+    "accuracy_hierarchy": "CCSD(T) > double_hybrid > well-chosen_hybrid > MP2 > HF > semi-empirical",
+
+    "double_hybrid_recommendations": {
+      "top_pick": {
+        "name": "wB97M(2)",
+        "note": "Best performing double hybrid overall."
+      },
+      "organic_reaction_energy_and_weak_interaction": {
+        "name": "revDSD-PBEP86-D4",
+        "note": "Top-tier for organic reaction energies AND weak interactions."
+      },
+      "robust_general_purpose": {
+        "name": "PWPB95-D4",
+        "note": "Robust and good accuracy, between wB97M-V and CCSD(T). Available in ORCA with RI acceleration."
+      },
+      "gaussian_user_fallback": {
+        "name": "B2PLYP-D3(BJ)",
+        "note": "Oldest double hybrid. For Gaussian users who cannot use PWPB95."
+      }
+    },
+
+    "hybrid_functional_recommendations": {
+      "best_general_dft": {
+        "name": "wB97M-V",
+        "note": "Top DFT (non-double-hybrid). Best for reaction energies, barriers, and weak interactions. No analytic Hessian in ORCA -> not for freq. Recommend for final single-point on structures optimized at cheaper level."
+      },
+      "vertical_excitation_energy": {
+        "name": "PBE0",
+        "note": "Standard choice for local valence excitations."
+      },
+      "charge_transfer_and_large_conjugation": {
+        "name": "CAM-B3LYP or wB97XD",
+        "note": "Range-separated hybrids for CT excitations and large conjugated systems."
+      },
+      "triplet_excitation": {
+        "name": "M06-2X",
+        "note": "Good for triplet excitation energies."
+      },
+      "geometry_optimization_cheap": {
+        "name": "B3LYP-D3(BJ)",
+        "note": "Classic workhorse for geometry optimization. Combine with D3(BJ) dispersion."
+      }
+    },
+
+    "composite_methods": {
+      "cheapest": {
+        "name": "B97-3c",
+        "note": "Extremely cheap, built-in basis/dispersion/SRB. Good for large system screening and optimization."
+      },
+      "recommended_cheap": {
+        "name": "r2SCAN-3c",
+        "note": "Successor to B97-3c. ~50% more expensive but significantly more accurate. Use instead of B97-3c when affordable."
+      }
+    },
+
+    "important_warnings": [
+      "M06-2X is NOT recommended in ORCA: more expensive than wB97M-V with lower accuracy, harder to converge, needs fine grids.",
+      "Pople basis sets (6-31G, 6-311G) are NOT recommended in ORCA: no RI auxiliary basis, use def2 series instead.",
+      "Do NOT blindly copy functional choice from published papers - many use outdated/suboptimal functionals.",
+      "Geometry optimization uses lower-level basis than single-point: opt with r2SCAN-3c or B3LYP-D3/def2-TZVP(-f), then single-point with wB97M-V/def2-TZVP."
+    ]
+  },
+
+  "basis_set_selection": {
+    "general_rules": [
+      "def2 series is the standard for ORCA calculations (def2-SVP, def2-TZVP, def2-TZVPP, def2-QZVPP).",
+      "Dunning cc-pVnZ series for post-HF/CBS extrapolation.",
+      "Geometry optimization and freq analysis tolerate smaller basis sets than energy calculations.",
+      "Post-HF and double hybrids need larger basis than ordinary DFT (at least def2-TZVPP)."
+    ],
+    "pseudopotential_guide": {
+      "periods_1_3": "Full electron basis STRONGLY recommended. ECP has no advantage.",
+      "period_4": "ECP acceptable for transition metals. Use SDD/Stuttgart if many TMs.",
+      "period_5_plus": "ECP STRONGLY recommended for relativistic effects. Use Stuttgart ECPs.",
+      "avoid": "Lanl2DZ is outdated and low accuracy. Use at least Lanl2TZ(f) or better Stuttgart ECPs."
+    },
+    "diffuse_functions": {
+      "when_needed": "Anions, excited states, properties sensitive to diffuse electron density.",
+      "def2_series": "Use ma-def2 series (add -2 option in Multiwfn/ORCA).",
+      "cc_series": "Use aug-cc-pVnZ.",
+      "note": "B97-3c, r2SCAN-3c, CCSD(T)-F12/cc-pVDZ-F12 cannot add diffuse functions."
+    }
+  },
+
+  "dispersion_correction": {
+    "summary": "DFT-D3(BJ) is the standard dispersion correction. DFT-D4 is newer and better for charged systems and TM complexes.",
+    "rules": [
+      "DFT-D3(BJ) costs essentially zero computation time - add it when in doubt.",
+      "MUST add for: van der Waals complexes, pi-pi stacking, crystal packing, adsorption.",
+      "Already included in: B97-3c, r2SCAN-3c (built-in), wB97M-V (VV10 nonlocal), wB97XD (built-in D2).",
+      "DFT-D4 is better than D3 for systems with significantly charged atoms or transition metal complexes.",
+      "For CP2K: use DFT-D3(BJ) via PAIR_POTENTIAL section. Multiwfn sets this up automatically."
+    ]
+  },
+
+  "orca_calculation_levels": {
+    "summary": "sob's ORCA method hierarchy with practical guidance from article 490.",
+    "ground_state": {
+      "1_b97_3c": {
+        "keywords": "B97-3c",
+        "cost": "lowest",
+        "use_for": "Large system screening, initial optimization, >100 atoms routine.",
+        "note": "Built-in basis/dispersion. No RI keywords needed."
+      },
+      "1b_r2scan_3c": {
+        "keywords": "r2SCAN-3c",
+        "cost": "low",
+        "use_for": "General purpose optimization. Recommended replacement for B97-3c.",
+        "note": "Significantly more accurate than B97-3c."
+      },
+      "5_wb97m_v": {
+        "keywords": "wB97M-V def2-TZVP def2/J RIJCOSX strongSCF",
+        "cost": "moderate",
+        "use_for": "High-quality single points after optimization at cheaper level.",
+        "note": "Best non-double-hybrid DFT. No analytic Hessian -> avoid for freq."
+      },
+      "6_pwpb95_d4": {
+        "keywords": "PWPB95 D4 def2-TZVPP def2/J def2-TZVPP/C RIJCOSX tightSCF",
+        "cost": "moderate-high",
+        "use_for": "Accurate energies for medium systems (<200 atoms with RI).",
+        "note": "Accuracy between wB97M-V and CCSD(T). Add 'float' keyword to halve time and disk."
+      },
+      "6c_revdsd_pbep86_d4": {
+        "keywords": "revDSD-PBEP86-D4/2021 def2-TZVPP def2/J def2-TZVPP/C RIJCOSX tightSCF",
+        "cost": "moderate-high",
+        "use_for": "Organic reaction energies AND weak interactions - top-tier for both."
+      },
+      "8_dlpno_ccsd_t_normal": {
+        "keywords": "DLPNO-CCSD(T) normalPNO RIJCOSX def2-TZVPP def2/J def2-TZVPP/C tightSCF",
+        "cost": "high",
+        "use_for": "Near-CCSD(T) quality for medium systems. Error usually <1 kcal/mol vs CCSD(T)."
+      },
+      "9_dlpno_ccsd_t_tight": {
+        "keywords": "DLPNO-CCSD(T) tightPNO RIJCOSX def2-TZVPP def2/J def2-TZVPP/C tightSCF",
+        "cost": "very_high",
+        "use_for": "Essentially CCSD(T) quality. Error ~1 kJ/mol vs CCSD(T). Several times more expensive than normalPNO."
+      },
+      "11_ccsd_t_f12": {
+        "keywords": "CCSD(T)-F12/RI cc-pVDZ-F12 cc-pVDZ-F12-CABS cc-pVTZ/C tightSCF",
+        "cost": "very_high",
+        "use_for": "Near cc-pVQZ accuracy at fraction of cost. Good for high-accuracy benchmarks on small molecules."
+      },
+      "12_ccsd_t_cbs_mp2": {
+        "keywords": "ExtrapolateEP2(3/4,cc,MP2) tightSCF",
+        "cost": "very_high",
+        "use_for": "Approximate CCSD(T)/CBS via MP2 extrapolation. Avoids expensive CCSD(T)/cc-pVQZ."
+      },
+      "13_dlpno_ccsd_t_cbs": {
+        "keywords": "DLPNO-CCSD(T) tightPNO Extrapolate(3/4,def2) def2-QZVPP/C RIJCOSX tightSCF",
+        "cost": "high",
+        "use_for": "CBS-extrapolated DLPNO-CCSD(T) for medium-large systems."
+      }
+    },
+    "excited_state": {
+      "20_std_dft": {
+        "keywords": "wB97X-D3 def2-SV(P) def2/J RIJCOSX %tddft Mode sTDDFT Ethresh 7.0 ...",
+        "cost": "very_low",
+        "use_for": "Very large systems (hundreds of atoms) electronic spectra. Approximate but fast."
+      },
+      "22_tddft_pbe0": {
+        "keywords": "PBE0 def2-SV(P) def2/J RIJCOSX tightSCF %tddft nroots 10 TDA false end",
+        "cost": "moderate",
+        "use_for": "Standard TDDFT. PBE0 for local excitations. Use CAM-B3LYP for CT and large conjugation."
+      },
+      "23_tddft_rsxqidh": {
+        "keywords": "RSX-QIDH def2-TZVP ...",
+        "cost": "high",
+        "use_for": "Intermolecular CT excitations. Best DH for this purpose."
+      },
+      "231_tddft_dsd_pbep86": {
+        "keywords": "DSD-PBEP86 def2-TZVP ...",
+        "cost": "high",
+        "use_for": "Local and intramolecular CT excitations. Best DH for these."
+      },
+      "24_eom_ccsd": {
+        "keywords": "EOM-CCSD cc-pVTZ tightSCF %mdci nroots 3 end",
+        "cost": "very_high",
+        "use_for": "High-accuracy excited states for small systems. No RI benefit."
+      },
+      "25_steom_dlpno_ccsd": {
+        "keywords": "STEOM-DLPNO-CCSD RIJCOSX def2-TZVP(-f) ...",
+        "cost": "high",
+        "use_for": "Medium system excited states (up to ~60 atoms). Better CT than EOM-CCSD. VERY disk-hungry (TBs)."
+      }
+    },
+    "tasks": {
+      "single_point": {"id": 1, "note": "Default. Most methods applicable."},
+      "optimize": {"id": 2, "note": "ORCA default uses tightSCF for optimization."},
+      "frequency": {"id": 3, "note": "Auto-adds tightSCF. wB97M-V has no analytic Hessian."},
+      "opt_freq": {"id": 4, "note": "Combined opt+freq."},
+      "ts_opt_freq": {"id": 5, "note": "Transition state optimization + frequency."},
+      "md": {"id": 6, "note": "Default: 298.15K, 0.5fs step, 500 steps."},
+      "counterpoise": {"id": 7, "note": "BSSE correction for interaction energy."}
+    },
+    "key_tips": [
+      "maxcore = (total_free_memory_MB / nprocs) * 0.8. Be conservative to avoid OOM crashes.",
+      "noautostart: prevents ORCA from reading old .gbw as initial guess unexpectedly.",
+      "miniprint: suppresses useless population analysis output (use Multiwfn for that instead).",
+      "For SMD solvation: use option -1, type solvent name (e.g. 'water', 'ethanol').",
+      "For CPCM solvation: use option -1, type 'c', then enter dielectric constant.",
+      "SCF convergence trouble: use Multiwfn to convert Gaussian fch to gbw as initial guess (sobereva.com/517)."
+    ]
+  },
+
+  "cp2k_hybrid_functional_critical_tips": {
+    "summary": "Essential knowledge for CP2K hybrid functional calculations from sob's article 690.",
+
+    "coulomb_truncation": {
+      "rule": "MANDATORY for periodic hybrid functional calculations.",
+      "recommended_radius": "6.0 Angstrom (good balance of cost and accuracy). 8.0 for high accuracy.",
+      "constraint": "Truncation radius MUST be < half of shortest cell dimension.",
+      "implication": "Cell shortest dimension must be > 12 Angstrom. Expand supercell if needed.",
+      "multiwfn": "Multiwfn auto-sets truncation radius based on cell dimensions."
+    },
+
+    "integral_screening": {
+      "eps_schwarz": {
+        "recommended": "1E-6 (good balance). Default 1E-10 is too expensive. 1E-8 for higher accuracy.",
+        "location": "&DFT/&XC/&HF/&SCREENING/EPS_SCHWARZ"
+      },
+      "screen_on_initial_p": {
+        "critical_tip": "Set to T for HUGE speedup. BUT requires good initial guess wavefunction!",
+        "workflow": "1) Run PBE single-point first. 2) Use PBE wfn as restart for PBE0. 3) Set SCF_GUESS RESTART.",
+        "danger": "Without good initial guess, screening is terrible -> wrong ERI ignored -> SCF divergence or bad energy.",
+        "restart_caveat": "For geo-opt/MD continuation: MUST provide .wfn file alongside .restart file."
+      }
+    },
+
+    "admm": {
+      "what": "Auxiliary Density Matrix Method - dramatically reduces HF exchange ERI count.",
+      "why_essential": "MOLOPT basis sets are fully generally-contracted -> ERI count ~N^4 of PGTF -> astronomical without ADMM.",
+      "auxiliary_basis": {
+        "recommended": "admm-dzp from BASIS_ADMM_UZH (modern, wide element coverage).",
+        "avoid": "FIT3, pFIT3 from old BASIS_ADMM (outdated, incomplete element coverage).",
+        "matching": "DZVP-MOLOPT-SR-GTH -> admm-dzp. TZVP-MOLOPT-GTH -> admm-dzp (ok) or admm-tzp (better).",
+        "all_electron": "Use pcseg-n main basis with admm-n auxiliary basis from BSE."
+      },
+      "all_or_nothing": "Cannot selectively apply ADMM to some atoms. If mixed basis, atoms without ADMM aux use main basis as aux."
+    },
+
+    "memory_management": {
+      "max_memory": "In &HF/&MEMORY/MAX_MEMORY (MB per MPI process). More = more in-core ERI = faster.",
+      "incore_vs_direct": "Enough memory -> all ERI cached (fast). Low memory -> on-the-fly each SCF step (slow).",
+      "recommendation": "Use maximum safe value: (free_RAM_MB / nprocs) with safety margin. OOM = immediate crash.",
+      "psmp_tip": "Use psmp (MPI+OpenMP) with fewer MPI procs to share memory for ERI storage across threads."
+    },
+
+    "eps_pgf_orb": {
+      "issue": "'The Kohn Sham matrix is not 100% occupied' warning.",
+      "fix": "Set &QS/EPS_PGF_ORB to 1E-12. Multiwfn auto-sets this for hybrid functionals.",
+      "alternative": "Set MIN_PAIR_LIST_RADIUS -1 in &QS to completely disable sparsity exploitation (slightly slower)."
+    },
+
+    "functional_definition": {
+      "critical_rule": "For periodic systems, NEVER just write PBE0 in &XC_FUNCTIONAL. You MUST manually split exchange/correlation AND define &HF/FRACTION.",
+      "pbe0_example": "&PBE SCALE_X 0.75 SCALE_C 1.0 + &HF FRACTION 0.25",
+      "hse06_note": "HSE06 is range-separated: needs special POTENTIAL_TYPE in &INTERACTION_POTENTIAL.",
+      "multiwfn": "Multiwfn generates correct functional definitions automatically. Use as reference."
+    },
+
+    "practical_workflow": [
+      "1. Generate PBE input with Multiwfn (or write manually).",
+      "2. Run PBE single-point to get converged .wfn file.",
+      "3. Generate PBE0/ADMM input with Multiwfn.",
+      "4. Edit: uncomment SCF_GUESS RESTART, set WFN_RESTART_FILE_NAME to PBE .wfn, set MAX_MEMORY.",
+      "5. Run PBE0 calculation. First SCF step is slow (computing ERI). Subsequent steps fast if enough memory."
+    ]
+  },
+
+  "cp2k_general_tips": {
+    "methods_available_via_multiwfn": {
+      "pure_gga": ["PBE", "revPBE", "PBEsol", "BLYP", "BP86"],
+      "meta_gga_libxc": ["TPSS", "SCAN", "r2SCAN", "B97M-rV", "MN15L", "RPBE", "revTPSS", "BEEF-vdW", "HLE17"],
+      "hybrid_with_admm": ["PBE0", "B3LYP", "HSE06", "BHandHLYP", "M06-2X"],
+      "double_hybrid": ["RI-B2PLYP", "RI-B2GP-PLYP", "RI-DSD-BLYP", "RI-revDSD-PBEP86"],
+      "post_hf": ["RI-MP2", "RI-SCS-MP2", "RI-(EXX+RPA)@PBE"],
+      "semi_empirical": ["GFN0-xTB", "GFN1-xTB", "GFN2-xTB", "PM6", "SCC-DFTB"],
+      "beyond_dft": ["GW@BHandHLYP", "GW@MN15L"],
+      "force_field": ["FIST module"]
+    },
+    "tasks_available_via_multiwfn": [
+      "Energy", "Energy+Force", "Geometry optimization (fixed cell)",
+      "Cell optimization", "Vibrational analysis", "Molecular dynamics",
+      "Dimer TS search", "CI-NEB (BAND)", "NMR", "Polarizability",
+      "BSSE correction", "Real-time propagation", "Path-integral MD (PIMD)",
+      "X-ray absorption spectroscopy (XAS)", "TDDFT excited states"
+    ],
+    "smearing": {
+      "when": "Metals and zero-gap systems. Toggle option 6 in CP2K menu.",
+      "note": "Multiwfn handles Fermi-Dirac smearing setup automatically."
+    },
+    "k_points": {
+      "when": "Small unit cells need k-point sampling. Set via option 8.",
+      "hybrid_note": "From CP2K 2024.1: RI-HFXk supports k-points with hybrid functionals."
+    },
+    "ot_vs_diag": {
+      "ot": "Orbital Transformation. Faster for insulators/semiconductors. Option 4.",
+      "diag": "Diagonalization. Required for metals, smearing, or when OT fails.",
+      "note": "For ADMM with diag: must add ADMM_PURIFICATION_METHOD NONE."
+    },
+    "pbc_directions": {
+      "option": "-7 to set XYZ, XY, X, or NONE periodicity.",
+      "surface_tip": "For 2D slabs: use XY periodicity with vacuum in Z."
+    }
+  },
+
+  "psi4_sapt_tips": {
+    "summary": "PSI4 is the best free tool for SAPT (Symmetry-Adapted Perturbation Theory) calculations.",
+    "suitable_for": "Decomposing WEAK intermolecular interactions into electrostatic, exchange, induction, dispersion components.",
+    "not_suitable_for": "Systems with covalent bonds between fragments.",
+    "methods": {
+      "sapt0": "Cheapest SAPT. Sufficient for qualitative analysis.",
+      "sapt2plus3_dmp2": "SAPT2+(3)dMP2. Gold standard for SAPT. Quantitative accuracy.",
+      "sapt_dft": "SAPT(DFT). Uses DFT orbitals instead of HF. Needs GRAC shift. Good for large systems."
+    },
+    "fragment_definition": "Each fragment defined by atom indices. Dimer must have exactly 2 fragments.",
+    "workflow_with_gaussian": "Gaussian IRC trajectory -> IRC_SAPT tool -> PSI4 SAPT at each IRC point. See sobereva.com/595.",
+    "distance_scan": "Use dimerscan tool to scan SAPT components vs intermolecular distance. See sobereva.com/469."
+  }
+}
