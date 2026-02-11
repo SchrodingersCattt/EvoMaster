@@ -50,8 +50,18 @@ class SkillEvolutionExp(BaseExp):
         task = TaskInstance(task_id=f"{task_id}_code", task_type="discovery", description=prompt)
         trajectory = self.agent.run(task)
 
-        run_dir = Path(self.run_dir) if self.run_dir else Path(".")
-        workspace = run_dir / "workspaces" / f"{task_id}_code"
+        # Derive workspace from the agent's actual session config (not from task_id),
+        # because the agent writes files to its configured workspace_path.
+        agent_workspace = getattr(
+            getattr(self.agent, "session", None),
+            "config", None,
+        )
+        agent_workspace = getattr(agent_workspace, "workspace_path", None) if agent_workspace else None
+        if agent_workspace:
+            workspace = Path(agent_workspace)
+        else:
+            run_dir = Path(self.run_dir) if self.run_dir else Path(".")
+            workspace = run_dir / "workspaces" / f"{task_id}_code"
         new_skill_path = workspace / "new_skill"
         if not new_skill_path.is_dir():
             new_skill_path = workspace / "workspace" / "new_skill"
