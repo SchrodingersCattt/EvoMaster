@@ -1,8 +1,9 @@
 """Resilient job lifecycle manager.
 
-Monitors a submitted remote calculation job (ABACUS, LAMMPS, CP2K, QE, ABINIT,
-ORCA, Gaussian), polls status, downloads results on success, diagnoses errors on
-failure, and returns a structured JSON summary.
+Monitors a submitted remote calculation job (DPA, ABACUS, LAMMPS, CP2K, QE,
+ABINIT, ORCA, Gaussian, and any future software), polls status, downloads
+results on success, diagnoses errors on failure, and returns a structured JSON
+summary.
 
 The agent calls this ONCE after submitting a job via MCP. The script blocks until
 the job reaches a terminal state (success or permanent failure).
@@ -84,7 +85,8 @@ FIX_STRATEGIES: dict[str, dict[str, Any]] = {
     },
 }
 
-# Log file name patterns per software
+# Log file name patterns per software.
+# New software can be added here; any unlisted software uses the generic fallback.
 LOG_PATTERNS: dict[str, list[str]] = {
     "vasp": ["OUTCAR", "vasp.out", "*.out"],
     "abacus": ["OUT.ABACUS", "running_*.log", "*.log"],
@@ -94,6 +96,7 @@ LOG_PATTERNS: dict[str, list[str]] = {
     "qe": ["*.out", "*.log"],
     "abinit": ["*.out", "*.log"],
     "orca": ["*.out", "*.log"],
+    "dpa": ["*.log", "*.out", "*.json"],
 }
 
 
@@ -108,7 +111,7 @@ def _get_log_diagnostics_dir() -> Path | None:
     return log_diag if log_diag.exists() else None
 
 
-def _diagnose_log(log_path: str) -> str:
+def _diagnose_log(log_path: str, software: str = "") -> str:
     """Run log_diagnostics analysis and return a canonical error code."""
     diag_dir = _get_log_diagnostics_dir()
     if diag_dir is None:
@@ -120,20 +123,33 @@ def _diagnose_log(log_path: str) -> str:
     try:
         from extract_error import analyze_lammps_log, analyze_vasp_log  # type: ignore[import-untyped]
 
+        sw_lower = software.lower()
         lower = log_path.lower()
-        if any(tok in lower for tok in ("outcar", "vasp", "abacus", "abinit", "qe")):
+        # DPA / MLP jobs: typically output JSON; no specialised analyser yet
+        if sw_lower == "dpa":
+            return "unknown_error"
+        if sw_lower in ("vasp", "abacus", "abinit", "qe") or any(
+            tok in lower for tok in ("outcar", "vasp", "abacus", "abinit", "qe")
+        ):
             return analyze_vasp_log(log_path)
-        return analyze_lammps_log(log_path)
+        if sw_lower in ("lammps",) or "lammps" in lower:
+            return analyze_lammps_log(log_path)
+        # Generic fallback: try VASP-style analysis first
+        return analyze_vasp_log(log_path)
     except Exception:
         return "unknown_error"
 
 
 def _find_log_file(workspace: str, software: str) -> str | None:
-    """Find the most recent log file in *workspace* for *software*."""
+    """Find the most recent log file in *workspace* for *software*.
+
+    Falls back to generic ``*.log`` / ``*.out`` patterns for any software
+    not listed in LOG_PATTERNS.
+    """
     ws = Path(workspace)
     if not ws.exists():
         return None
-    patterns = LOG_PATTERNS.get(software.lower(), ["*.log", "*.out"])
+    patterns = LOG_PATTERNS.get(software.lower(), ["*.log", "*.out", "*.json"])
     for pat in patterns:
         matches = sorted(ws.rglob(pat), key=lambda p: p.stat().st_mtime, reverse=True)
         if matches:
@@ -179,26 +195,26 @@ def _download_results(result_urls: list[str], workspace: str) -> dict[str, Any]:
 # Job status & results  (via calculation adaptor when available)
 # ---------------------------------------------------------------------------
 
-def _check_job_status(job_id: str, software: str) -> str:
-    """Query job status via the calculation adaptor API.
+def _check_job_status(job_id: str, software: str, bohr_job_id: str | None = None) -> str:
+    """Query job status via the Bohrium OpenAPI (calculation adaptor).
 
-    Returns one of: Done / Failed / Running / Pending / Unknown.
-    Falls back to "Unknown" when the adaptor is not wired.
+    Returns one of: Finished / Failed / Running / Pending / Scheduling / Unknown.
+    Falls back to "Unknown" when the adaptor is not available.
     """
     try:
         from evomaster.adaptors.calculation import query_job_status  # type: ignore[import-untyped]
-        return str(query_job_status(job_id, software=software))
+        return str(query_job_status(job_id, bohr_job_id=bohr_job_id, software=software))
     except ImportError:
         return "Unknown"
     except Exception as exc:
         return f"Error:{exc}"
 
 
-def _get_job_results(job_id: str, software: str) -> dict[str, Any]:
-    """Fetch job result payload (URLs, metadata) via the calculation adaptor API."""
+def _get_job_results(job_id: str, software: str, bohr_job_id: str | None = None) -> dict[str, Any]:
+    """Fetch job result payload (metadata, file listing) via the Bohrium OpenAPI."""
     try:
         from evomaster.adaptors.calculation import get_job_results  # type: ignore[import-untyped]
-        result = get_job_results(job_id, software=software)
+        result = get_job_results(job_id, bohr_job_id=bohr_job_id, software=software)
         return result if isinstance(result, dict) else {"raw": result}
     except ImportError:
         return {}
@@ -229,25 +245,35 @@ def run_lifecycle(
     software: str,
     workspace: str,
     poll_interval: int = 30,
-    max_retries: int = 3,
+    max_retries: int = 5,
+    bohr_job_id: str | None = None,
 ) -> dict[str, Any]:
     """Block until the job succeeds, fails permanently, or retries are exhausted.
 
     Returns a JSON-serialisable dict summarising the outcome.
+
+    Parameters
+    ----------
+    bohr_job_id : str | None
+        Explicit Bohrium job ID (from ``extra_info.bohr_job_id``).
+        Required for dpdispatcher-style MCP servers (ABACUS, etc.)
+        where the MCP ``job_id`` contains a hex hash.
     """
     current_job_id = job_id
     retries = 0
     max_polls = 720  # safety cap: 720 * 30s = 6 hours
+    unknown_count = 0
+    max_unknown = 3  # allow a few retries before giving up on unknown
 
     while retries <= max_retries:
         polls = 0
         # ── Poll loop ──
         while polls < max_polls:
-            status = _check_job_status(current_job_id, software)
+            status = _check_job_status(current_job_id, software, bohr_job_id=bohr_job_id)
 
             # -- Success --
             if status in TERMINAL_SUCCESS:
-                results = _get_job_results(current_job_id, software)
+                results = _get_job_results(current_job_id, software, bohr_job_id=bohr_job_id)
                 urls = _collect_result_urls(results)
                 download_info: dict[str, Any] = {}
                 if urls and workspace:
@@ -255,6 +281,7 @@ def run_lifecycle(
                 return {
                     "status": "success",
                     "job_id": current_job_id,
+                    "bohr_job_id": bohr_job_id or results.get("bohr_job_id"),
                     "retries": retries,
                     "results": results,
                     "downloads": download_info,
@@ -265,33 +292,42 @@ def run_lifecycle(
             if status in TERMINAL_FAILURE or status.startswith("Error:"):
                 break
 
-            # -- Unknown (adaptor not wired) --
+            # -- Unknown: retry a few times then give up --
             if status in UNKNOWN_STATUSES:
-                return {
-                    "status": "unknown",
-                    "job_id": current_job_id,
-                    "retries": retries,
-                    "message": (
-                        "Job status polling returned 'Unknown'. "
-                        "The calculation adaptor (evomaster.adaptors.calculation.query_job_status) "
-                        "is not wired for this environment. "
-                        "Please check job status manually or wire the adaptor."
-                    ),
-                }
+                unknown_count += 1
+                if unknown_count >= max_unknown:
+                    return {
+                        "status": "unknown",
+                        "job_id": current_job_id,
+                        "bohr_job_id": bohr_job_id,
+                        "retries": retries,
+                        "message": (
+                            f"Job status returned 'Unknown' {unknown_count} times.  "
+                            "Possible causes: (1) Bohrium access_key not set or invalid — "
+                            "check BOHRIUM_ACCESS_KEY in .env; (2) job ID could not be resolved "
+                            "— for ABACUS / dpdispatcher jobs, pass --bohr_job_id explicitly "
+                            "(from extra_info.bohr_job_id in the submit response)."
+                        ),
+                    }
+                # Short retry before giving up
+                time.sleep(min(poll_interval, 10))
+                continue
 
             # -- Still running: wait --
+            unknown_count = 0  # reset on non-unknown status
             time.sleep(poll_interval)
             polls += 1
 
         # ── Job failed — diagnose ──
         log_path = _find_log_file(workspace, software)
-        error_code = _diagnose_log(log_path) if log_path else "unknown_error"
+        error_code = _diagnose_log(log_path, software=software) if log_path else "unknown_error"
 
         fix = FIX_STRATEGIES.get(error_code)
         if not fix:
             return {
                 "status": "failed",
                 "job_id": current_job_id,
+                "bohr_job_id": bohr_job_id,
                 "retries": retries,
                 "error_code": error_code,
                 "log_file": log_path,
@@ -310,6 +346,7 @@ def run_lifecycle(
         return {
             "status": "needs_fix",
             "job_id": current_job_id,
+            "bohr_job_id": bohr_job_id,
             "retries": retries,
             "error_code": error_code,
             "fix_strategy": fix,
@@ -321,12 +358,22 @@ def run_lifecycle(
             ),
         }
 
-    # Exhausted retries
+    # Exhausted retries — signal that agent should consider asking human
     return {
         "status": "failed",
         "job_id": current_job_id,
+        "bohr_job_id": bohr_job_id,
         "retries": retries,
-        "message": f"Job {current_job_id} failed after {retries} retries. Manual intervention required.",
+        "exhausted_retries": True,
+        "message": (
+            f"Job {current_job_id} failed after {retries} retries (limit: {max_retries}). "
+            f"All built-in fix strategies have been attempted. "
+            f"Consider asking the human user (ask_human skill) whether to: "
+            f"(1) provide modified parameters or suggestions, "
+            f"(2) skip this calculation, or "
+            f"(3) abort. "
+            f"Default behaviour if no human response: skip this calculation and continue."
+        ),
     }
 
 
@@ -340,9 +387,17 @@ def main() -> None:
     )
     parser.add_argument("--job_id", required=True, help="Job ID from the MCP submit tool")
     parser.add_argument(
+        "--bohr_job_id",
+        default=None,
+        help=(
+            "Explicit Bohrium job ID (from extra_info.bohr_job_id in the submit response).  "
+            "Required for dpdispatcher jobs (ABACUS, etc.) whose MCP job_id contains a hex hash."
+        ),
+    )
+    parser.add_argument(
         "--software",
         required=True,
-        help="Software name: abacus, lammps, cp2k, qe, abinit, orca, gaussian",
+        help="Software name (case-insensitive): dpa, abacus, lammps, cp2k, qe, abinit, orca, gaussian, or any registered async software",
     )
     parser.add_argument(
         "--workspace",
@@ -358,8 +413,8 @@ def main() -> None:
     parser.add_argument(
         "--max_retries",
         type=int,
-        default=3,
-        help="Maximum diagnosis-and-retry cycles (default: 3)",
+        default=5,
+        help="Maximum diagnosis-and-retry cycles (default: 5)",
     )
 
     args = parser.parse_args()
@@ -370,6 +425,7 @@ def main() -> None:
         workspace=args.workspace,
         poll_interval=args.poll_interval,
         max_retries=args.max_retries,
+        bohr_job_id=args.bohr_job_id,
     )
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
