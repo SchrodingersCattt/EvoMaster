@@ -234,7 +234,7 @@ mcp:
             remote_profile:
               image_address: "registry.dp.tech/dptech/cp2k:2024.1"
               platform: "ali"
-              machine_type: "c32_m64_cpu"
+              machine_type: "c32_m128_cpu"
               app_key: "agent"
           resources:
             envs: {}
@@ -246,7 +246,7 @@ mcp:
             remote_profile:
               image_address: "registry.dp.tech/dptech/abinit:9.10.3"
               platform: "ali"
-              machine_type: "c32_m64_cpu"
+              machine_type: "c32_m128_cpu"
               app_key: "agent"
           resources:
             envs: {}
@@ -258,7 +258,7 @@ mcp:
             remote_profile:
               image_address: "registry.dp.tech/dptech/quantum-espresso:7.1"
               platform: "ali"
-              machine_type: "c32_m64_cpu"
+              machine_type: "c32_m128_cpu"
               app_key: "agent"
           resources:
             envs: {}
