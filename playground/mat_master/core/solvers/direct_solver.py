@@ -16,6 +16,7 @@ from typing import Any
 from evomaster.core.exp import BaseExp
 from evomaster.utils.types import Dialog, SystemMessage, UserMessage
 
+from ..async_tool_registry import AsyncToolRegistry
 from ..exp import SkillEvolutionExp, WorkerExp
 
 
@@ -91,11 +92,16 @@ def _parse_route(response: str) -> str:
     return "default"
 
 
-ROUTER_SYSTEM = """You are a deterministic task routing module for MatMaster. Your sole function is to classify the user's task into one of two execution modes based on strict system constraints.
+def _build_router_system(registry: AsyncToolRegistry) -> str:
+    """Build ROUTER_SYSTEM prompt with software names from registry (no hardcoding)."""
+    sw = registry.software_list_str()
+    sm = registry.server_mapping_str()
+    block = registry.crp_block_str()
+    return f"""You are a deterministic task routing module for MatMaster. Your sole function is to classify the user's task into one of two execution modes based on strict system constraints.
 
 SYSTEM CONSTRAINTS:
-1. Local Environment: The local sandbox supports Python scripting, data manipulation, and lightweight simulations (e.g., ASE, Pymatgen). It does NOT provide VASP, Gaussian, ABACUS, CP2K, LAMMPS, Quantum Espresso, ABINIT, or ORCA run services.
-2. Remote Delegation: Heavy ab-initio or molecular dynamics codes (ABACUS, LAMMPS, CP2K, QE, ABINIT, ORCA) are submitted via MCP tools (mat_abacus_*, mat_binary_calc_*) and monitored via the job-manager skill. This is handled within STANDARD_EXECUTION; no separate routing is needed.
+1. Local Environment: The local sandbox supports Python scripting, data manipulation, and lightweight simulations (e.g., ASE, Pymatgen). It does NOT provide {block}, {sw} run services locally.
+2. Remote Delegation: Heavy calculations ({sw}) are submitted via MCP tools ({sm}) and monitored via the job-manager skill. This is handled within STANDARD_EXECUTION; no separate routing is needed.
 3. Tool Availability: Use the provided 'Available Tools' list to decide if a programmatic capability is missing (SKILL_EVOLUTION) or can be fulfilled by existing tools and skills (STANDARD_EXECUTION). Always check the full tool list before concluding a tool is missing.
 
 ROUTING CATEGORIES:
@@ -104,10 +110,10 @@ B. [STANDARD_EXECUTION]: Choose this for all other tasks. This includes literatu
 
 OUTPUT FORMAT:
 You must output a strictly valid JSON object with exactly two keys. Do not include markdown formatting or explanatory text outside the JSON.
-{
+{{
     "decision": "<SKILL_EVOLUTION | STANDARD_EXECUTION>",
     "rationale": "<A precise, one-sentence logical deduction based on the constraints.>"
-}"""
+}}"""
 
 
 class DirectSolver(BaseExp):
@@ -124,6 +130,12 @@ class DirectSolver(BaseExp):
         self._mat = _get_mat_master_config(config)
         caps = self._mat.get("capabilities") or {}
         self._evo_enabled = caps.get("skill_evolution", {}).get("enabled", True)
+        # Build registry from config for dynamic router prompt
+        try:
+            cfg_dict = config.model_dump() if hasattr(config, "model_dump") else (dict(config) if config else {})
+        except Exception:
+            cfg_dict = {}
+        self._registry = AsyncToolRegistry(cfg_dict)
 
     def _route_task(self, task_description: str) -> str:
         """One-shot LLM route: SKILL_EVOLUTION | STANDARD_EXECUTION -> evo | default."""
@@ -139,9 +151,10 @@ Available Tools: {available_tools_str}
 
 Output the JSON object only (decision + rationale).'''
 
+        router_system = _build_router_system(self._registry)
         dialog = Dialog(
             messages=[
-                SystemMessage(content=ROUTER_SYSTEM),
+                SystemMessage(content=router_system),
                 UserMessage(content=user_content),
             ],
             tools=[],

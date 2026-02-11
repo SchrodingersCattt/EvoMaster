@@ -8,12 +8,12 @@ from __future__ import annotations
 import json
 import re
 from collections import deque
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from evomaster.agent.agent import Agent
+from .execution import BatchExecutor, ExecutionTask
 from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
 
 # How many recent tool calls to track for loop detection
@@ -43,7 +43,7 @@ class MatMasterAgent(Agent):
     tool response and continue (do not set should_finish).
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, direct_max_workers: int = 4, rate_limit: float | None = None, config_dict: dict | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         # Sliding window of recent tool-call fingerprints for loop detection
         self._recent_tool_fps: deque[str] = deque(maxlen=_LOOP_WINDOW)
@@ -51,6 +51,16 @@ class MatMasterAgent(Agent):
         self._recent_sem_fps: deque[str] = deque(maxlen=_LOOP_WINDOW)
         # Global counter for peek_manual calls (search/section/sections queries)
         self._peek_manual_call_count: int = 0
+        # Concurrency config for Direct mode (BatchExecutor)
+        self._direct_max_workers: int = max(1, direct_max_workers)
+        self._rate_limit: float | None = rate_limit
+        # Full config dict for async tool registry (prompt injection)
+        self._full_config_dict: dict = config_dict or {}
+
+    def _get_async_tool_registry(self):
+        """Lazily create AsyncToolRegistry from full config dict."""
+        from .async_tool_registry import AsyncToolRegistry
+        return AsyncToolRegistry(self._full_config_dict)
 
     @staticmethod
     def _tool_fingerprint(tool_call) -> str:
@@ -177,18 +187,25 @@ class MatMasterAgent(Agent):
         """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills.
         Date and OS/Shell are appended last so they appear at the end of the prompt (and in log tail)."""
         from ..prompts.build_prompt import build_mat_master_system_prompt
+        from .async_tool_registry import AsyncToolRegistry
 
-        base, current_date, os_type, shell_type = build_mat_master_system_prompt()
+        # Build registry from config for dynamic prompt injection
+        registry = self._get_async_tool_registry()
+
+        base, current_date, os_type, shell_type = build_mat_master_system_prompt(registry=registry)
 
         working_dir = self.session.config.workspace_path
         working_dir_abs = str(Path(working_dir).absolute())
         working_dir_info = f"\n\nYou must perform all operations in this working directory; do not change directory. All file operations and commands must be run under: {working_dir_abs}"
         prompt = base + working_dir_info
 
-        # Inject tool rules (fix once, apply every run) so repeated tool errors are avoided
+        # Inject tool rules (fix once, apply every run) so repeated tool errors are avoided.
+        # Placeholders like {{ASYNC_SOFTWARE_LIST}} are replaced with registry values.
         _tool_rules_path = Path(__file__).resolve().parent.parent / "prompts" / "tool_rules.txt"
         if _tool_rules_path.exists():
-            prompt += "\n\n" + _tool_rules_path.read_text(encoding="utf-8").strip()
+            tool_rules = _tool_rules_path.read_text(encoding="utf-8").strip()
+            tool_rules = registry.replace_placeholders(tool_rules)
+            prompt += "\n\n" + tool_rules
 
         # Mandatory citation and output format for survey/manuscript — agent MUST follow this
         _citation_format_path = Path(__file__).resolve().parent.parent / "skills" / "_common" / "reference" / "citation_and_output_format.md"
@@ -225,42 +242,42 @@ You can use the 'use_skill' tool to:
         *,
         max_workers: int = 4,
     ) -> list[tuple[Any, str, dict[str, Any]]]:
-        """Execute multiple tool calls concurrently via ThreadPoolExecutor.
+        """Execute multiple tool calls concurrently via the unified BatchExecutor.
 
         When the LLM returns N tool calls in a single response they are
         conceptually independent, so we run them in parallel.
 
         Returns a list of ``(tool_call, observation, info)`` in original order.
         """
-        workers = min(max_workers, len(tool_calls))
-        results: dict[int, tuple[str, dict[str, Any]]] = {}
+        if not tool_calls:
+            return []
 
-        def _run(idx: int, tc):
-            obs, info = self._execute_tool(tc)
-            return idx, obs, info
-
-        if workers <= 1:
-            for idx, tc in enumerate(tool_calls):
-                obs, info = self._execute_tool(tc)
-                results[idx] = (obs, info)
-        else:
-            self.logger.info(
-                "Executing %d tool calls in parallel (max_workers=%d)",
-                len(tool_calls), workers,
+        # Build ExecutionTask list — each task wraps _execute_tool for one tool_call
+        batch_tasks: list[ExecutionTask] = []
+        for idx, tc in enumerate(tool_calls):
+            batch_tasks.append(
+                ExecutionTask(
+                    task_id=str(idx),
+                    func=self._execute_tool,
+                    kwargs={"tool_call": tc},
+                    meta={"tool_call_index": idx},
+                )
             )
-            with ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = {
-                    pool.submit(_run, idx, tc): idx
-                    for idx, tc in enumerate(tool_calls)
-                }
-                for future in as_completed(futures):
-                    idx, obs, info = future.result()
-                    results[idx] = (obs, info)
 
-        return [
-            (tool_calls[i], *results[i])
-            for i in range(len(tool_calls))
-        ]
+        # Use shared BatchExecutor (true concurrency for I/O-bound tool calls)
+        executor = BatchExecutor(max_workers=max_workers, rate_limit=self._rate_limit)
+        results = executor.execute_batch(batch_tasks)
+
+        # Map results back to (tool_call, observation, info) triples
+        ordered: list[tuple[Any, str, dict[str, Any]]] = []
+        for idx, res in enumerate(results):
+            tc = tool_calls[idx]
+            if res.status == "success":
+                ordered.append((tc, res.output, res.info))
+            else:
+                # On failure, surface the error message as the observation
+                ordered.append((tc, res.output or res.error or "Unknown error", res.info))
+        return ordered
 
     def _step(self) -> bool:
         """Override: for finish tool, execute it and only set should_finish when task_completed==true."""
@@ -344,7 +361,7 @@ You can use the 'use_skill' tool to:
                 self._record_tool_call(tc)
 
             # Execute non-blocked calls in parallel
-            results = self._execute_tools_parallel(exec_calls) if exec_calls else []
+            results = self._execute_tools_parallel(exec_calls, max_workers=self._direct_max_workers) if exec_calls else []
 
             # Merge results: first the executed ones, then the loop-blocked ones (in original order)
             all_results: list[tuple[Any, str, dict[str, Any]]] = []

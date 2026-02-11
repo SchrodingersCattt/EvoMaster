@@ -1,8 +1,9 @@
 """Resilient job lifecycle manager.
 
-Monitors a submitted remote calculation job (ABACUS, LAMMPS, CP2K, QE, ABINIT,
-ORCA, Gaussian), polls status, downloads results on success, diagnoses errors on
-failure, and returns a structured JSON summary.
+Monitors a submitted remote calculation job (DPA, ABACUS, LAMMPS, CP2K, QE,
+ABINIT, ORCA, Gaussian, and any future software), polls status, downloads
+results on success, diagnoses errors on failure, and returns a structured JSON
+summary.
 
 The agent calls this ONCE after submitting a job via MCP. The script blocks until
 the job reaches a terminal state (success or permanent failure).
@@ -84,7 +85,8 @@ FIX_STRATEGIES: dict[str, dict[str, Any]] = {
     },
 }
 
-# Log file name patterns per software
+# Log file name patterns per software.
+# New software can be added here; any unlisted software uses the generic fallback.
 LOG_PATTERNS: dict[str, list[str]] = {
     "vasp": ["OUTCAR", "vasp.out", "*.out"],
     "abacus": ["OUT.ABACUS", "running_*.log", "*.log"],
@@ -94,6 +96,7 @@ LOG_PATTERNS: dict[str, list[str]] = {
     "qe": ["*.out", "*.log"],
     "abinit": ["*.out", "*.log"],
     "orca": ["*.out", "*.log"],
+    "dpa": ["*.log", "*.out", "*.json"],
 }
 
 
@@ -108,7 +111,7 @@ def _get_log_diagnostics_dir() -> Path | None:
     return log_diag if log_diag.exists() else None
 
 
-def _diagnose_log(log_path: str) -> str:
+def _diagnose_log(log_path: str, software: str = "") -> str:
     """Run log_diagnostics analysis and return a canonical error code."""
     diag_dir = _get_log_diagnostics_dir()
     if diag_dir is None:
@@ -120,20 +123,33 @@ def _diagnose_log(log_path: str) -> str:
     try:
         from extract_error import analyze_lammps_log, analyze_vasp_log  # type: ignore[import-untyped]
 
+        sw_lower = software.lower()
         lower = log_path.lower()
-        if any(tok in lower for tok in ("outcar", "vasp", "abacus", "abinit", "qe")):
+        # DPA / MLP jobs: typically output JSON; no specialised analyser yet
+        if sw_lower == "dpa":
+            return "unknown_error"
+        if sw_lower in ("vasp", "abacus", "abinit", "qe") or any(
+            tok in lower for tok in ("outcar", "vasp", "abacus", "abinit", "qe")
+        ):
             return analyze_vasp_log(log_path)
-        return analyze_lammps_log(log_path)
+        if sw_lower in ("lammps",) or "lammps" in lower:
+            return analyze_lammps_log(log_path)
+        # Generic fallback: try VASP-style analysis first
+        return analyze_vasp_log(log_path)
     except Exception:
         return "unknown_error"
 
 
 def _find_log_file(workspace: str, software: str) -> str | None:
-    """Find the most recent log file in *workspace* for *software*."""
+    """Find the most recent log file in *workspace* for *software*.
+
+    Falls back to generic ``*.log`` / ``*.out`` patterns for any software
+    not listed in LOG_PATTERNS.
+    """
     ws = Path(workspace)
     if not ws.exists():
         return None
-    patterns = LOG_PATTERNS.get(software.lower(), ["*.log", "*.out"])
+    patterns = LOG_PATTERNS.get(software.lower(), ["*.log", "*.out", "*.json"])
     for pat in patterns:
         matches = sorted(ws.rglob(pat), key=lambda p: p.stat().st_mtime, reverse=True)
         if matches:
@@ -285,7 +301,7 @@ def run_lifecycle(
 
         # ── Job failed — diagnose ──
         log_path = _find_log_file(workspace, software)
-        error_code = _diagnose_log(log_path) if log_path else "unknown_error"
+        error_code = _diagnose_log(log_path, software=software) if log_path else "unknown_error"
 
         fix = FIX_STRATEGIES.get(error_code)
         if not fix:
@@ -351,7 +367,7 @@ def main() -> None:
     parser.add_argument(
         "--software",
         required=True,
-        help="Software name: abacus, lammps, cp2k, qe, abinit, orca, gaussian",
+        help="Software name (case-insensitive): dpa, abacus, lammps, cp2k, qe, abinit, orca, gaussian, or any registered async software",
     )
     parser.add_argument(
         "--workspace",

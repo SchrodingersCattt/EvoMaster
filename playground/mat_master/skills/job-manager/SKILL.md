@@ -1,6 +1,6 @@
 ---
 name: job-manager
-description: "Resilient job lifecycle manager: monitors a submitted calculation job (ABACUS, LAMMPS, CP2K, QE, ABINIT, ORCA), polls status, downloads results on success, diagnoses errors on failure, and suggests fixes. Call ONCE after submitting a job — the script blocks until completion or failure. Usage: run_script run_resilient_job.py --job_id <ID> --software <SW> --workspace <PATH>"
+description: "Resilient job lifecycle manager: monitors a submitted remote calculation job, polls status, downloads results on success, diagnoses errors on failure, and suggests fixes. Supports all async software registered in config (DPA, ABACUS, LAMMPS, CP2K, QE, ABINIT, ORCA, Gaussian, and any future additions). Call ONCE after submitting a job — the script blocks until completion or failure. Usage: run_script run_resilient_job.py --job_id <ID> --software <SW> --workspace <PATH>"
 skill_type: operator
 ---
 
@@ -8,9 +8,11 @@ skill_type: operator
 
 Encapsulates the **Submit → Monitor → Diagnose → Fix** loop for remote calculation jobs so the agent does NOT need to poll `job_status` in a multi-turn chat loop (which wastes tokens and is fragile).
 
+**Supported software**: Any remote-execution software registered in `config.yaml → mat_master.async_software`. Currently includes: DPA, ABACUS, LAMMPS, CP2K, QE, ABINIT, ORCA, Gaussian. New software added to the config is automatically supported.
+
 ## Workflow (for the agent)
 
-1. **Submit** the job via the appropriate MCP tool (e.g. `mat_abacus_submit`, `mat_binary_calc_submit_run_lammps`). Note the `job_id` from the response.
+1. **Submit** the job via the appropriate MCP tool (e.g. `mat_dpa_submit_optimize_structure`, `mat_abacus_submit`, `mat_binary_calc_submit_run_lammps`). Note the `job_id` from the response.
 2. **Call this skill once**:
    ```
    use_skill(
@@ -35,7 +37,7 @@ Resilient job lifecycle manager.
 | Arg | Required | Description |
 |-----|----------|-------------|
 | `--job_id` | Yes | Job ID returned by the MCP submit tool |
-| `--software` | Yes | Software name: `abacus`, `lammps`, `cp2k`, `qe`, `abinit`, `orca`, `gaussian` |
+| `--software` | Yes | Software name (case-insensitive): `dpa`, `abacus`, `lammps`, `cp2k`, `qe`, `abinit`, `orca`, `gaussian`, or any software registered in config |
 | `--workspace` | No | Workspace directory for result downloads (default: `.`) |
 | `--poll_interval` | No | Seconds between status checks (default: `30`) |
 | `--max_retries` | No | Max diagnosis-and-retry cycles (default: `3`) |
@@ -54,7 +56,7 @@ use_skill(
   skill_name="job-manager",
   action="run_script",
   script_name="run_resilient_job.py",
-  script_args="--job_id abc123 --software abacus --workspace /path/to/ws --poll_interval 60"
+  script_args="--job_id abc123 --software dpa --workspace /path/to/ws --poll_interval 60"
 )
 ```
 
@@ -62,7 +64,7 @@ use_skill(
 
 - **log-diagnostics** (`extract_error.py`): Called internally to diagnose failed jobs. You do NOT need to call it separately when using job-manager.
 - **compliance-guardian** (`check_compliance.py`): The agent should still call this BEFORE submitting a job. job-manager handles post-submission only.
-- **input-manual-helper**: The agent should still use this to write correct input files BEFORE submission.
+- **input-manual-helper**: The agent should still use this to fix input files BEFORE submission.
 
 ## Error codes & fix strategies
 
