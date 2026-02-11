@@ -268,10 +268,10 @@ class LocalEnv(BaseEnv):
                 env=env,
             )
             return {
-                "stdout": result.stdout,
-                "stderr": result.stderr,
+                "stdout": result.stdout or "",
+                "stderr": result.stderr or "",
                 "exit_code": result.returncode,
-                "output": result.stdout + result.stderr,
+                "output": (result.stdout or "") + (result.stderr or ""),
             }
         except subprocess.TimeoutExpired:
             return {
