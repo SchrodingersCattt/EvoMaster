@@ -235,11 +235,71 @@ You can use the 'use_skill' tool to:
         prompt += f"\nToday's date: {current_date} (OS: {os_type}, Shell: {shell_type})"
         return prompt
 
+    # ------------------------------------------------------------------
+    # Observation formatting (MatMaster-only)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_bash_observation(observation: str, info: dict[str, Any]) -> dict[str, Any]:
+        """Build structured JSON object for ``execute_bash`` results.
+
+        Includes a ``status`` field (``"success"`` / ``"error"``) so the LLM
+        can reliably branch on command outcome.
+        """
+        exit_code = info.get("exit_code", -1)
+        has_error = "error" in info
+        if has_error:
+            status = "error"
+        elif exit_code != 0 and exit_code != -1:
+            status = "error"
+        else:
+            status = "success"
+        return {
+            "status": status,
+            "output": observation,
+            "exit_code": exit_code,
+            "working_dir": info.get("working_dir", ""),
+        }
+
+    @staticmethod
+    def _to_json_value(value: Any) -> Any:
+        """Convert observation payload to a JSON-compatible value when possible."""
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        if not text:
+            return ""
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return value
+
+    def _format_tool_observation(
+        self, tool_name: str, observation: str, info: dict[str, Any],
+    ) -> str:
+        """Return JSON text for every tool observation."""
+        if tool_name == "execute_bash":
+            payload = self._format_bash_observation(observation, info)
+        else:
+            payload = {
+                "status": "error" if "error" in info else "success",
+                "observation": self._to_json_value(observation),
+            }
+            if info:
+                payload["info"] = info
+        return json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+
+    # ------------------------------------------------------------------
+    # Tool execution
+    # ------------------------------------------------------------------
+
     def _execute_tool(self, tool_call) -> tuple[str, dict[str, Any]]:
         """Execute tool with MAT callbacks.
 
-        Overrides the base class so that **all** errors returned to the LLM
-        include the full Python traceback (MatMaster-only behaviour).
+        Overrides the base class so that:
+        1. **All** errors include the full Python traceback.
+        2. **All** observations are returned as JSON text.
+        3. ``execute_bash`` results include ``status`` + command metadata.
         """
         import traceback as _tb
 
@@ -258,9 +318,10 @@ You can use the 'use_skill' tool to:
             if tool is None:
                 error_msg = f"Unknown tool: {tool_name}"
                 self._log_tool_end(tool_name, error_msg, {"error": "tool_not_found"})
-                return self._tool_callback_pipeline.run_after(
+                obs, inf = self._tool_callback_pipeline.run_after(
                     tool_call, error_msg, {"error": "tool_not_found"}
                 )
+                return self._format_tool_observation(tool_name, obs, inf), inf
 
             try:
                 observation, info = tool.execute(self.session, tool_args)
@@ -272,14 +333,19 @@ You can use the 'use_skill' tool to:
                 self._log_tool_end(tool_name, error_msg, {"error": str(e)})
                 observation, info = error_msg, {"error": str(e)}
 
-            return self._tool_callback_pipeline.run_after(tool_call, observation, info)
+            observation, info = self._tool_callback_pipeline.run_after(
+                tool_call, observation, info,
+            )
+            return self._format_tool_observation(tool_name, observation, info), info
 
         except Exception as exc:
             # Catch-all: callback pipeline or any other unexpected error
             tb_str = _tb.format_exc()
             error_msg = f"Tool execution error: {exc}\n\nTraceback:\n{tb_str}"
             self.logger.error("_execute_tool failed:\n%s", tb_str)
-            return error_msg, {"error": str(exc)}
+            return self._format_tool_observation(
+                "internal_error", error_msg, {"error": str(exc)},
+            ), {"error": str(exc)}
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
         """Optional hook after assistant message is added. Override in subclasses (e.g. streaming)."""
