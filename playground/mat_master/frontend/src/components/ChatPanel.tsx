@@ -189,10 +189,14 @@ export default function ChatPanel({
   plannerInput,
   setPlannerInput,
   sendPlannerReply,
+  askHumanQuestion,
+  askHumanInput,
+  setAskHumanInput,
+  sendAskHumanReply,
   readOnly = false,
 }: {
   entries: LogEntry[];
-  scrollRef?: React.RefObject<HTMLDivElement | null>;
+  scrollRef?: React.RefObject<HTMLDivElement>;
   input: string;
   setInput: (v: string) => void;
   onSend: () => void;
@@ -210,6 +214,10 @@ export default function ChatPanel({
   plannerInput: string;
   setPlannerInput: (v: string) => void;
   sendPlannerReply: (content: string) => void;
+  askHumanQuestion: string | null;
+  askHumanInput: string;
+  setAskHumanInput: (v: string) => void;
+  sendAskHumanReply: (content: string) => void;
   readOnly?: boolean;
 }) {
   const filtered = entries.filter(
@@ -307,6 +315,47 @@ export default function ChatPanel({
                   Send feedback
                 </button>
               )}
+            </div>
+          </div>
+        )}
+
+        {!readOnly && askHumanQuestion !== null && (
+          <div className="flex-shrink-0 mx-4 mb-2 p-3 rounded-lg border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/30">
+            <div className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-2">
+              Agent needs your input
+            </div>
+            <div className="text-sm text-zinc-700 dark:text-zinc-300 mb-2 whitespace-pre-wrap">
+              {askHumanQuestion}
+            </div>
+            <div className="flex gap-2 items-center flex-wrap">
+              <input
+                type="text"
+                value={askHumanInput}
+                onChange={(e) => setAskHumanInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && askHumanInput.trim()) {
+                    sendAskHumanReply(askHumanInput);
+                  }
+                }}
+                placeholder="Type your answer…"
+                className="flex-1 min-w-[140px] rounded-md border border-amber-300 dark:border-amber-600 px-2.5 py-1.5 text-sm bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-amber-400 dark:focus:ring-amber-500"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => sendAskHumanReply(askHumanInput)}
+                disabled={!askHumanInput.trim()}
+                className="px-3 py-1.5 rounded-md bg-amber-600 dark:bg-amber-500 text-white text-sm font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Reply
+              </button>
+              <button
+                type="button"
+                onClick={() => sendAskHumanReply("skip")}
+                className="px-3 py-1.5 rounded-md border border-zinc-300 dark:border-zinc-600 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                Skip
+              </button>
             </div>
           </div>
         )}
