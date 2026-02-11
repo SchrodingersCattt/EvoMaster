@@ -13,6 +13,13 @@
 ## PDF parsing: always use MCP tools first
 - For **any PDF file**, you MUST call mat_doc_extract_material_data_from_pdf (sync) or mat_doc_submit_extract_material_data_from_pdf + mat_doc_get_job_results (async) **before** trying any other method (view, peek_file, Python libraries). mat_doc tools are purpose-built for PDF and return structured extraction. Only fall back to other methods if mat_doc tools explicitly fail.
 
+## Calculation MCP tools: file inputs must be OSS URLs (MANDATORY)
+- Calculation MCP tools (mat_dpa_*, mat_abacus_*, mat_binary_calc_*, etc.) run on **remote servers**. They **cannot access local files**.
+- **All file/path arguments** (e.g. `input_structure`, `model_path`, `initial_structure`, `final_structure`) must be **OSS URLs** (https://...), NOT local paths like `/workspace/Fe_bulk.cif`.
+- **Before calling any submit_* or calculation tool**: ensure every file input is already uploaded to OSS (the system auto-uploads local workspace files; just make sure the file exists in workspace first).
+- **Pre-trained model shortcuts**: For DPA model_path, you can use the short name listed in the tool description (e.g. `"DPA2.4-7M"`) — it will be auto-resolved to the full OSS URL. You do NOT need to copy the full URL yourself.
+- If a calculation tool returns `FileNotFoundError` or path-related errors, check that you passed an OSS URL, not a local path.
+
 ## structure-manager skill (download & validate structures)
 - **Download from URL**: When you have a direct link to a CIF/POSCAR/XYZ, use use_skill with skill_name=structure-manager, script_name=fetch_web_structure.py, script_args="--url <URL>". Do not use wget/curl/requests for structure files.
 - **Validation**: After obtaining any new structure (from URL, MCP, or user upload), use use_skill with skill_name=structure-manager, script_name=assess_structure.py, script_args="--file <path>". This checks dimensionality, sanity, and formula.
@@ -94,6 +101,20 @@
 ## Manuscript writing: retrieval before writing
 - Before calling manuscript-scribe write_section or init_manuscript, run literature search (mat_sn_search-papers-normal, mat_sn_scholar-search, mat_sn_web-search) for the section topic unless the user already provided source files.
 - Do not write sections from memory only; ground content in retrieved material and cite it. When citing papers use: In [year], [first author] et al. [did what / found that ...]; [n](url).
+
+## Retry exhaustion: ask human before giving up (MANDATORY)
+- When **job-manager** returns `exhausted_retries: true` or a step/calculation fails after all built-in retries:
+  1. Call **ask_human** (use_skill with skill_name=ask-human) with a clear question: describe the failure, list what was tried, and ask whether to (a) provide modified parameters/suggestions, (b) skip this step, or (c) abort.
+  2. **Timeout default = skip**: If no human response, default to **skip** (do NOT append more retries, do NOT block). The default tendency is to NOT add more attempts.
+  3. If the human provides modified parameters or suggestions, apply them and retry once. If that also fails, skip and continue.
+  4. **Always record** the failure and human decision (or timeout) for the final report.
+
+## Final report: honest disclosure (MANDATORY for any multi-step or calculation task)
+- The final report/summary MUST include these sections (use clear headings):
+  1. **Failed steps / calculations**: Every failure with error reason. Do NOT omit or hide.
+  2. **Approximations and simplifications**: Every compromise made (software substitution, coarser settings, fallback strategies used, steps skipped, screening vs production, MLP vs DFT, etc.).
+  3. **All original unprocessed results**: List each step's raw output item by item — numerical values, file paths/URLs, job IDs, warnings, anomalies.
+- Be factual and objective; do not downplay failures or exaggerate successes.
 
 ## Final document: show in chat then save
 - For survey/manuscript/report deliverables: first **output the complete final document** in your reply (so the frontend shows it to the user), then ensure it is saved to the .md file and call finish. Do not only say "Saved to …" without outputting the document content in your message.
