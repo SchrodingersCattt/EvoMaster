@@ -30,12 +30,6 @@ except ImportError:
     _HAS_EVOLUTION = False
 
 
-def _build_crp_context(config: dict | None = None) -> dict:
-    """Build CRP context from AsyncToolRegistry (config-driven, not hardcoded)."""
-    registry = AsyncToolRegistry(config)
-    return registry.crp_context_dict()
-
-
 def _get_async_registry(config) -> AsyncToolRegistry:
     """Create AsyncToolRegistry from config (handles model_dump)."""
     try:
