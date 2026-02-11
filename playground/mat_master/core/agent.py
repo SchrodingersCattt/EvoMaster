@@ -38,9 +38,9 @@ _LOOP_EXEMPT_SUFFIXES = (
 
 
 class MatMasterAgent(Agent):
-    """Agent that only ends the run when the finish tool is called with task_completed=true.
+    """Agent that ends the run when the finish tool is called with task_completed=true or partial.
 
-    If the agent calls finish with task_completed=false or partial, we add the
+    If the agent calls finish with task_completed=false, we add the
     tool response and continue (do not set should_finish).
     """
 
@@ -293,7 +293,7 @@ You can use the 'use_skill' tool to:
         return ordered
 
     def _step(self) -> bool:
-        """Override: for finish tool, execute it and only set should_finish when task_completed==true."""
+        """Override: for finish tool, execute it and set should_finish when task_completed is true or partial."""
         self._step_count += 1
 
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
@@ -431,7 +431,7 @@ You can use the 'use_skill' tool to:
             observation, info = self._execute_tool(finish_call)
 
             task_completed = info.get("task_completed", "false")
-            if task_completed == "true":
+            if task_completed in ("true", "partial"):
                 should_finish = True
 
             # Full content for streaming (yield) and trajectory recording

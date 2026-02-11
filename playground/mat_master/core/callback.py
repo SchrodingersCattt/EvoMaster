@@ -7,6 +7,7 @@ stays free of inline hook logic.
 from __future__ import annotations
 
 import json
+import queue
 import re
 import shlex
 import urllib.request
@@ -118,6 +119,7 @@ class MatToolCallbacks:
         """Register all MAT callbacks in execution order."""
         pipeline.register_before(self.before_resolve_dpa_model_alias)
         pipeline.register_before(self.before_patch_job_manager_bohr_id)
+        pipeline.register_after(self.after_ask_human_interaction)
         pipeline.register_after(self.after_autodownload_oss_results)
         pipeline.register_after(self.after_survey_reminder)
 
@@ -304,6 +306,101 @@ class MatToolCallbacks:
     # ------------------------------------------------------------------
     # After callbacks
     # ------------------------------------------------------------------
+
+    def after_ask_human_interaction(
+        self,
+        tool_call: Any,
+        observation: str,
+        info: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        """Intercept ask-human skill results: emit event and block for user reply.
+
+        When ``ask.py`` finishes it outputs a JSON ``{"question": "...", "context": "..."}``.
+        This callback:
+        1. Detects the ask-human skill by checking the tool call arguments.
+        2. Emits an ``ask_human`` event via the agent's ``event_callback``
+           (StreamingMatMasterAgent) so the frontend can display the question.
+        3. Blocks on ``agent._ask_human_queue`` until the user replies or a
+           timeout (5 min) is reached.
+        4. Returns the user's reply as the new observation.
+
+        If the agent has no ``_ask_human_queue`` (e.g. non-web mode), it returns
+        a message indicating that interactive input is unavailable.
+        """
+        # Only handle use_skill calls for ask-human
+        if (tool_call.function.name or "") != "use_skill":
+            return observation, info
+        try:
+            args = json.loads(tool_call.function.arguments or "{}")
+        except (json.JSONDecodeError, TypeError):
+            return observation, info
+        if not isinstance(args, dict) or args.get("skill_name") != "ask-human":
+            return observation, info
+
+        # Extract the question from the script output
+        question = ""
+        context = ""
+        # The script outputs a JSON line; try to parse it from stdout.
+        script_stdout = observation
+        # Strip the "Script output:\n" prefix if present
+        if script_stdout.startswith("Script output:\n"):
+            script_stdout = script_stdout[len("Script output:\n"):]
+        for line in script_stdout.strip().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+                if isinstance(payload, dict):
+                    question = payload.get("question", question)
+                    context = payload.get("context", context)
+                    break
+            except (json.JSONDecodeError, TypeError):
+                # Fallback: treat the whole output as the question
+                if not question:
+                    question = line
+
+        if not question:
+            question = "The agent is asking for your input."
+
+        # Emit ask_human event to the frontend
+        emit_fn = getattr(self.agent, "event_callback", None)
+        if callable(emit_fn):
+            ask_payload = {"question": question}
+            if context:
+                ask_payload["context"] = context
+            emit_fn("MatMaster", "ask_human", ask_payload)
+        else:
+            # For non-streaming agents, try the _emit helper
+            _emit = getattr(self.agent, "_emit", None)
+            if callable(_emit):
+                ask_payload = {"question": question}
+                if context:
+                    ask_payload["context"] = context
+                _emit("MatMaster", "ask_human", ask_payload)
+
+        # Block waiting for the user's reply
+        reply_queue: queue.Queue | None = getattr(self.agent, "_ask_human_queue", None)
+        if reply_queue is None:
+            self.logger.warning(
+                "ask-human invoked but no _ask_human_queue is set on the agent. "
+                "Returning a placeholder. Set agent._ask_human_queue for interactive mode."
+            )
+            return (
+                "⚠️ Interactive input is not available in the current execution mode. "
+                "The agent asked: " + question,
+                info,
+            )
+
+        self.logger.info("ask-human: waiting for user reply (timeout=300s)...")
+        try:
+            reply = reply_queue.get(timeout=300)
+        except queue.Empty:
+            self.logger.warning("ask-human: user reply timed out after 300s.")
+            return "⚠️ User did not reply within 5 minutes. Proceeding without input.", info
+
+        self.logger.info("ask-human: received user reply (%d chars).", len(reply))
+        return f"User replied: {reply}", info
 
     def after_autodownload_oss_results(
         self,
