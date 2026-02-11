@@ -144,6 +144,7 @@ class MCPTool(BaseTool):
                     self._tool_name,
                     self._mcp_server or '',
                     input_schema=getattr(self, '_input_schema', None),
+                    tool_description=getattr(self, '_tool_description', None),
                     access_key=access_key,
                     project_id=project_id,
                     user_id=user_id,

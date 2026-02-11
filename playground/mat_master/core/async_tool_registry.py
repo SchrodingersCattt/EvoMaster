@@ -247,7 +247,11 @@ class AsyncToolRegistry:
             f"suggested parameter changes to the input files, re-submit via MCP, and call job-manager again "
             f"with the new job_id.\n"
             f"Do NOT manually poll job_status in the chat loop — that wastes tokens and is fragile. "
-            f"Let job-manager handle the entire lifecycle."
+            f"Let job-manager handle the entire lifecycle.\n"
+            f"**File inputs**: All file/path arguments to calculation MCP tools must be **OSS URLs** "
+            f"(https://...), not local paths. The system auto-uploads workspace files; ensure the file "
+            f"exists locally before calling the tool. Pre-trained model shortcuts (e.g. \"DPA2.4-7M\") "
+            f"are auto-resolved to full OSS URLs."
         )
 
     def format_execution_constraints(self) -> str:

@@ -13,6 +13,13 @@
 ## PDF parsing: always use MCP tools first
 - For **any PDF file**, you MUST call mat_doc_extract_material_data_from_pdf (sync) or mat_doc_submit_extract_material_data_from_pdf + mat_doc_get_job_results (async) **before** trying any other method (view, peek_file, Python libraries). mat_doc tools are purpose-built for PDF and return structured extraction. Only fall back to other methods if mat_doc tools explicitly fail.
 
+## Calculation MCP tools: file inputs must be OSS URLs (MANDATORY)
+- Calculation MCP tools (mat_dpa_*, mat_abacus_*, mat_binary_calc_*, etc.) run on **remote servers**. They **cannot access local files**.
+- **All file/path arguments** (e.g. `input_structure`, `model_path`, `initial_structure`, `final_structure`) must be **OSS URLs** (https://...), NOT local paths like `/workspace/Fe_bulk.cif`.
+- **Before calling any submit_* or calculation tool**: ensure every file input is already uploaded to OSS (the system auto-uploads local workspace files; just make sure the file exists in workspace first).
+- **Pre-trained model shortcuts**: For DPA model_path, you can use the short name listed in the tool description (e.g. `"DPA2.4-7M"`) — it will be auto-resolved to the full OSS URL. You do NOT need to copy the full URL yourself.
+- If a calculation tool returns `FileNotFoundError` or path-related errors, check that you passed an OSS URL, not a local path.
+
 ## structure-manager skill (download & validate structures)
 - **Download from URL**: When you have a direct link to a CIF/POSCAR/XYZ, use use_skill with skill_name=structure-manager, script_name=fetch_web_structure.py, script_args="--url <URL>". Do not use wget/curl/requests for structure files.
 - **Validation**: After obtaining any new structure (from URL, MCP, or user upload), use use_skill with skill_name=structure-manager, script_name=assess_structure.py, script_args="--file <path>". This checks dimensionality, sanity, and formula.

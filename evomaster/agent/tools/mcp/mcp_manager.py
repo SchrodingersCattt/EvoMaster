@@ -93,14 +93,32 @@ class MCPToolManager:
             self.logger.info(f"Filtered to {len(tools_info)} tools for server '{server_name}' (include_only: {include_only})")
 
         server_tools: dict[str, MCPTool] = {}
+        # First pass: build name → description for base tools (used by submit_* below)
+        base_descriptions: dict[str, str] = {}
+        for tool_info in tools_info:
+            name = tool_info.get("name", "")
+            desc = tool_info.get("description", "")
+            if not name.startswith("submit_") and desc:
+                base_descriptions[name] = desc
+
         for tool_info in tools_info:
             original_name = tool_info["name"]
             prefixed_name = f"{server_name}_{original_name}"
 
+            description = tool_info.get("description", "")
+            # SDK-generated submit_* tools have a generic stub description
+            # ("Submit a job").  Propagate the base tool's full docstring
+            # so path_adaptor can parse (Path) annotations from it.
+            if original_name.startswith("submit_"):
+                base_name = original_name[len("submit_"):]
+                base_desc = base_descriptions.get(base_name, "")
+                if base_desc and len(base_desc) > len(description):
+                    description = base_desc
+
             mcp_tool = MCPTool(
                 mcp_connection=connection,
                 tool_name=prefixed_name,
-                tool_description=tool_info.get("description", ""),
+                tool_description=description,
                 input_schema=tool_info.get("input_schema", {}),
                 remote_tool_name=original_name,
             )
