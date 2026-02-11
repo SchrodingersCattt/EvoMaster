@@ -68,6 +68,46 @@ mat_master:
   # 可选：指定 workspace 根目录（与 MAT_MASTER_WORKSPACE_ROOT 相同）
   # 设置后前端文件树与 agent 的工作目录都指向此路径
   # workspace_root: "./"
+
+  # ── CRP 许可证防火墙 ──
+  # 决定哪些软件可以执行、哪些被阻止、以及默认替代方案。
+  # 异步软件列表不需要在此配置：由 AsyncToolRegistry 从 mcp.calculation_executors
+  # 自动推导（规则：存在 remote_profile 且不在 sync_tools 中的即为异步工具）。
+  crp:
+    allow_list:
+      - "ABACUS"
+      - "LAMMPS"
+      - "DPA"
+      - "CP2K"
+      - "QE"
+      - "ABINIT"
+      - "ORCA"
+      - "OpenBabel"
+      # MCP server prefixes (planner validation)
+      - "mat_abacus"
+      - "mat_dpa"
+      - "mat_sg"
+      - "mat_doc"
+      - "mat_sn"
+    block_list:
+      - "VASP"
+      - "Gaussian"
+      - "CASTEP"
+      - "Wien2k"
+    tool_stack:
+      preferred_dft: "ABACUS"
+      preferred_mlp: "DPA"
+      preferred_md: "LAMMPS"
+
+  # 统一并发执行层配置（Direct 模式 + Planner 模式共享）
+  execution:
+    # Direct 模式：LLM 单次返回的多个 tool call 并发执行的最大线程数
+    direct_max_workers: 4
+    # Planner 模式：一个 execution window 内同时执行 step 的最大线程数
+    planner_max_workers: 3
+    # 可选：全局速率限制（每秒最多发起多少次工具调用）; null 表示不限速
+    rate_limit: null
+
   # 规划模式配置（仅 --mode planner 时使用）
   planner:
     max_steps: 20

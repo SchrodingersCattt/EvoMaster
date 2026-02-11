@@ -288,6 +288,11 @@ class MatMasterPlayground(BasePlayground):
                 user_prompt_file = str((playground_base / prompt_path).resolve())
         prompt_format_kwargs = agent_config.get("prompt_format_kwargs", {})
 
+        # Read execution-layer config for the unified BatchExecutor
+        _full_config_dict = self.config.model_dump() or {}
+        _mat_master_cfg = _full_config_dict.get("mat_master") or {}
+        _exec_cfg = _mat_master_cfg.get("execution") or {}
+
         agent = MatMasterAgent(
             llm=llm,
             session=self.session,
@@ -300,6 +305,9 @@ class MatMasterPlayground(BasePlayground):
             output_config=output_config,
             config_dir=self.config_dir,
             enable_tools=enable_tools,
+            direct_max_workers=_exec_cfg.get("direct_max_workers", 4),
+            rate_limit=_exec_cfg.get("rate_limit"),
+            config_dict=_full_config_dict,
         )
         agent.set_agent_name(name)
         return agent

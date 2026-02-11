@@ -15,6 +15,8 @@ import threading
 from pathlib import Path
 from typing import Any, Callable
 
+from ..execution import BatchExecutor, ExecutionTask
+from ..async_tool_registry import AsyncToolRegistry
 from evomaster.core.exp import BaseExp
 from evomaster.utils.types import Dialog, SystemMessage, UserMessage
 
@@ -27,20 +29,23 @@ except ImportError:
     SkillEvolutionExp = None
     _HAS_EVOLUTION = False
 
-# === CRP: immutable protocol (no config override) ===
-INTERNAL_CRP_CONTEXT = {
-    "Protocol_Name": "MatMaster_CRP_v1.0",
-    "License_Registry": {
-        "Allow_List": ["ABACUS", "LAMMPS", "DPA", "CP2K", "OpenBabel", "mat_abacus", "mat_dpa", "mat_sg", "mat_doc", "mat_sn"],
-        "Block_List": ["VASP", "Gaussian", "CASTEP", "Wien2k"],
-        "Policy": "Strict_Block_Execution",
-    },
-    "Tool_Stack": {
-        "Preferred_DFT": "ABACUS",
-        "Preferred_MLP": "DPA",
-        "Preferred_MD": "LAMMPS",
-    },
-}
+
+def _build_crp_context(config: dict | None = None) -> dict:
+    """Build CRP context from AsyncToolRegistry (config-driven, not hardcoded)."""
+    registry = AsyncToolRegistry(config)
+    return registry.crp_context_dict()
+
+
+def _get_async_registry(config) -> AsyncToolRegistry:
+    """Create AsyncToolRegistry from config (handles model_dump)."""
+    try:
+        if hasattr(config, "model_dump"):
+            d = config.model_dump()
+        else:
+            d = dict(config) if config else {}
+    except Exception:
+        d = {}
+    return AsyncToolRegistry(d)
 
 
 PRE_CHECK_SYSTEM = """You are a pre-planning readiness assessor for a Computational Research Planner.
@@ -206,9 +211,15 @@ class ResearchPlanner(BaseExp):
         self.auto_replan = planner_cfg.get("auto_replan", True)
         self.replan_on_failure = planner_cfg.get("replan_on_failure", True)
         self.replan_on_new_skill = planner_cfg.get("replan_on_new_skill", True)
+        # Unified execution layer config (shared BatchExecutor)
+        exec_cfg = mat.get("execution") or {}
+        self._planner_max_workers: int = max(1, exec_cfg.get("planner_max_workers", self.window_size))
+        self._rate_limit: float | None = exec_cfg.get("rate_limit")
         self._input_fn = input_fn  # optional; if set, used instead of stdin in _ask_human (e.g. for WebSocket UI)
         self._output_callback: Callable[[str, str, Any], None] | None = output_callback  # (source, type, content) → frontend
         self._solver: DirectSolver | None = None  # lazily created in run()
+        # Async tool registry (config-driven) — used for CRP context and prompt placeholder replacement
+        self._registry: AsyncToolRegistry = _get_async_registry(config)
 
     def _emit(self, source: str, event_type: str, content: Any) -> None:
         if self._output_callback:
@@ -282,7 +293,7 @@ class ResearchPlanner(BaseExp):
 Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the research plan in strict JSON format: plan_id, status, strategy_name, fidelity_level, execution_graph (each step has goal and step_type, no tool_name), and plan_report (summary, cost_assessment, risks, alternatives). No other text."""
 
     def _load_system_prompt(self) -> str:
-        """Load planner_system_prompt.txt and append embedded CRP JSON."""
+        """Load planner_system_prompt.txt, replace {{placeholders}}, and append embedded CRP JSON."""
         base = Path(__file__).resolve().parent.parent.parent / "prompts"
         prompt_file = base / "planner_system_prompt.txt"
         if prompt_file.exists():
@@ -290,23 +301,39 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         else:
             self.logger.warning("planner_system_prompt.txt not found, using minimal fallback")
             raw = "You are a Research Planner. Output a single JSON object with plan_id, status, strategy_name, steps."
-        crp_str = json.dumps(INTERNAL_CRP_CONTEXT, indent=2)
+        # Replace {{placeholders}} with registry values (async software list, CRP, etc.)
+        raw = self._registry.replace_placeholders(raw)
+        # Also replace the license-firewall placeholder with the full generated section
+        raw = raw.replace("{{CRP_LICENSE_FIREWALL}}", self._registry.format_planner_license_firewall())
+        crp_context = self._registry.crp_context_dict()
+        crp_str = json.dumps(crp_context, indent=2)
         return f"{raw}\n\n# EMBEDDED SYSTEM PROTOCOL (IMMUTABLE)\n{crp_str}"
 
     # Regex patterns that indicate the blocked software name is used in a
     # *mapping / comparison / reference* context, NOT as an execution target.
     # e.g. "VASP -> ABACUS", "map VASP to ABACUS", "replace VASP with", "originally in VASP"
-    _MAPPING_PATTERNS: list[re.Pattern[str]] = [
-        re.compile(r"{sw}\s*(?:→|->|-->|=>)\s*\w", re.IGNORECASE),
-        re.compile(r"(?:map|convert|replace|switch|redirect|translate|migrate)\s+{sw}", re.IGNORECASE),
-        re.compile(r"{sw}\s+(?:to|into|with)\s+(?:ABACUS|LAMMPS|DPA|CP2K|open[\s-]?source)", re.IGNORECASE),
-        re.compile(r"(?:originally|formerly|previously|instead of|rather than|not)\s+(?:in\s+|using\s+)?{sw}", re.IGNORECASE),
-        re.compile(r"(?:mapped|equivalent)\s+.*{sw}", re.IGNORECASE),
+    # NOTE: The allowed-software alternation (ABACUS|LAMMPS|DPA|...) is built dynamically
+    # from the registry in _build_mapping_patterns().
+    _MAPPING_PATTERN_TEMPLATES: list[str] = [
+        r"{sw}\s*(?:→|->|-->|=>)\s*\w",
+        r"(?:map|convert|replace|switch|redirect|translate|migrate)\s+{sw}",
+        r"{sw}\s+(?:to|into|with)\s+(?:{{ALLOW_ALT}}|open[\s-]?source)",
+        r"(?:originally|formerly|previously|instead of|rather than|not)\s+(?:in\s+|using\s+)?{sw}",
+        r"(?:mapped|equivalent)\s+.*{sw}",
     ]
+
+    def _build_mapping_patterns(self) -> list[re.Pattern[str]]:
+        """Build mapping patterns with allowed-software names from registry."""
+        allow_alt = "|".join(re.escape(n) for n in self._registry.software_names)
+        patterns = []
+        for tmpl in self._MAPPING_PATTERN_TEMPLATES:
+            filled = tmpl.replace("{{ALLOW_ALT}}", allow_alt)
+            patterns.append(re.compile(filled, re.IGNORECASE))
+        return patterns
 
     def _is_mapping_context(self, text: str, sw: str) -> bool:
         """Return True if the blocked software name appears only in mapping/reference context."""
-        for pat in self._MAPPING_PATTERNS:
+        for pat in self._build_mapping_patterns():
             concrete = re.compile(pat.pattern.replace("{sw}", re.escape(sw)), re.IGNORECASE)
             if concrete.search(text):
                 return True
@@ -323,8 +350,9 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         """
         if plan.get("status") == "REFUSED":
             return plan
-        block = INTERNAL_CRP_CONTEXT["License_Registry"]["Block_List"]
-        preferred = INTERNAL_CRP_CONTEXT["Tool_Stack"]
+        crp_ctx = self._registry.crp_context_dict()
+        block = crp_ctx["License_Registry"]["Block_List"]
+        preferred = crp_ctx["Tool_Stack"]
         # Mapping table: blocked software -> preferred replacement
         redirect_map: dict[str, str] = {}
         for sw in block:
@@ -993,10 +1021,12 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             self._emit("Planner", "thought",
                         f"[CRP] Plan was refused: {reason}. Auto-revising (attempt {attempt + 1}/{max_auto_fix})...")
             # Ask LLM to fix the plan itself
+            allow_str = self._registry.software_list_str()
+            block_str = self._registry.crp_block_str()
             feedback = (
                 f"The plan was REFUSED for this reason: {reason}\n"
                 f"Please fix the offending steps to use ONLY CRP-allowed software "
-                f"(ABACUS, LAMMPS, DPA, CP2K). Do NOT use or mention VASP/Gaussian/CASTEP/Wien2k "
+                f"({allow_str}). Do NOT use or mention {block_str} "
                 f"as execution targets. You may reference them only in mapping descriptions "
                 f"(e.g., 'mapped from VASP → ABACUS'). "
                 f"Return the revised plan in the same JSON schema."
@@ -1087,8 +1117,25 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         self._emit("Planner", "phase_change", {"from": "preflight", "to": "executing"})
         return state
 
+    def _execute_single_step_for_batch(
+        self, step: dict[str, Any], state: dict[str, Any], task_id: str, workspaces: Path
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Adapter that wraps ``_execute_single_step`` for ``BatchExecutor``.
+
+        BatchExecutor expects ``func(**kwargs) -> tuple[output, info]``.
+        ``_execute_single_step`` returns a single dict, so we wrap it as
+        ``(result_dict, {})``.
+        """
+        result = self._execute_single_step(step, state, task_id, workspaces)
+        return result, {}
+
     def _phase_executing(self, state: dict[str, Any], task_id: str) -> dict[str, Any]:
-        """Windowed execution: run next step(s), observe results, check replan triggers.
+        """Windowed execution: run next step(s) **concurrently**, observe results, check replan triggers.
+
+        Steps within the same execution window (whose dependencies are all
+        resolved) are independent by definition.  We feed them into the shared
+        ``BatchExecutor`` so that I/O-bound work (remote calculation submission,
+        PDF parsing, etc.) runs in true parallel.
 
         Executes one window (1-N steps) per call and returns updated state.
         Transitions → replanning | completed | failed.
@@ -1110,8 +1157,47 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 self._emit("Planner", "phase_change", {"from": "executing", "to": "failed"})
             return state
 
+        # ----- Concurrent execution via BatchExecutor -----
+        # Build ExecutionTask list for all steps in the current window.
+        # The window_size naturally caps the concurrency.
+        batch_tasks: list[ExecutionTask] = []
         for step in window:
-            step_result = self._execute_single_step(step, state, task_id, workspaces)
+            batch_tasks.append(
+                ExecutionTask(
+                    task_id=str(step.get("step_id", 0)),
+                    func=self._execute_single_step_for_batch,
+                    kwargs={
+                        "step": step,
+                        "state": state,
+                        "task_id": task_id,
+                        "workspaces": workspaces,
+                    },
+                    meta={"step": step},
+                )
+            )
+
+        executor = BatchExecutor(
+            max_workers=self._planner_max_workers,
+            rate_limit=self._rate_limit,
+        )
+        exec_results = executor.execute_batch(batch_tasks)
+
+        # ----- Process results (in original window order) -----
+        for res, step in zip(exec_results, window):
+            if res.status == "success":
+                step_result = res.output  # dict returned by _execute_single_step
+            else:
+                # BatchExecutor caught an unexpected exception
+                step_result = {
+                    "step_id": step.get("step_id", 0),
+                    "status": "failed",
+                    "fallback_succeeded": False,
+                    "new_skill_registered": False,
+                    "skill_path": "",
+                    "result_summary": res.error or "Executor-level failure",
+                    "replan_requested": False,
+                    "replan_reason": "",
+                }
 
             # Update step status in plan
             if step_result["status"] == "done":
