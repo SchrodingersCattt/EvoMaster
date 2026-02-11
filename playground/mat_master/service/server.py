@@ -452,6 +452,7 @@ def _run_agent_sync(
     mode: str = "direct",
     planner_reply_queue: queue.Queue | None = None,
     task_id: str | None = None,
+    ask_human_queue: queue.Queue | None = None,
 ):
     """Run MatMaster in a thread (direct or planner exp); send_cb streams events. task_id is set by caller."""
     import logging
@@ -543,6 +544,8 @@ def _run_agent_sync(
         )
         agent.set_agent_name(getattr(base, "_agent_name", "default"))
         agent._stop_event = stop_event
+        if ask_human_queue is not None:
+            agent._ask_human_queue = ask_human_queue
 
         pg.agent = agent
         exp = pg._create_exp()
@@ -569,6 +572,7 @@ async def websocket_endpoint(websocket: WebSocket):
     loop = asyncio.get_event_loop()
     command_queue: asyncio.Queue = asyncio.Queue()
     planner_reply_queue: queue.Queue = queue.Queue()
+    ask_human_queue: queue.Queue = queue.Queue()
 
     async def send_json(payload: dict):
         await websocket.send_json(payload)
@@ -577,13 +581,23 @@ async def websocket_endpoint(websocket: WebSocket):
         try:
             while True:
                 data = await websocket.receive_json()
-                if data.get("type") == "planner_reply":
+                msg_type = data.get("type")
+                if msg_type == "planner_reply":
                     content = data.get("content", "")
                     planner_reply_queue.put(content)
                     sid = data.get("session_id") or SESSION_ID_DEMO
                     if sid not in SESSIONS:
                         SESSIONS[sid] = {"history": [], "task_ids": [], "last_task_id": None}
                     payload = {"source": "User", "type": "planner_reply", "content": content, "session_id": sid}
+                    SESSIONS[sid]["history"].append(payload)
+                    await send_json(payload)
+                elif msg_type == "ask_human_reply":
+                    content = data.get("content", "")
+                    ask_human_queue.put(content)
+                    sid = data.get("session_id") or SESSION_ID_DEMO
+                    if sid not in SESSIONS:
+                        SESSIONS[sid] = {"history": [], "task_ids": [], "last_task_id": None}
+                    payload = {"source": "User", "type": "ask_human_reply", "content": content, "session_id": sid}
                     SESSIONS[sid]["history"].append(payload)
                     await send_json(payload)
                 else:
@@ -648,6 +662,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 mode,
                 planner_reply_queue,
                 task_id,
+                ask_human_queue,
             )
     except asyncio.CancelledError:
         pass
