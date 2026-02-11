@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from evomaster.agent.agent import Agent
+from .callback import MatToolCallbacks, ToolCallbackPipeline
 from .execution import BatchExecutor, ExecutionTask
 from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
 
@@ -56,11 +57,18 @@ class MatMasterAgent(Agent):
         self._rate_limit: float | None = rate_limit
         # Full config dict for async tool registry (prompt injection)
         self._full_config_dict: dict = config_dict or {}
+        # Tool callback pipeline
+        self._tool_callback_pipeline = ToolCallbackPipeline(self.logger)
+        self._register_default_tool_callbacks()
 
     def _get_async_tool_registry(self):
         """Lazily create AsyncToolRegistry from full config dict."""
         from .async_tool_registry import AsyncToolRegistry
         return AsyncToolRegistry(self._full_config_dict)
+
+    def _register_default_tool_callbacks(self) -> None:
+        """Register default MAT callbacks in execution order."""
+        MatToolCallbacks(self).register(self._tool_callback_pipeline)
 
     @staticmethod
     def _tool_fingerprint(tool_call) -> str:
@@ -187,7 +195,6 @@ class MatMasterAgent(Agent):
         """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills.
         Date and OS/Shell are appended last so they appear at the end of the prompt (and in log tail)."""
         from ..prompts.build_prompt import build_mat_master_system_prompt
-        from .async_tool_registry import AsyncToolRegistry
 
         # Build registry from config for dynamic prompt injection
         registry = self._get_async_tool_registry()
@@ -227,6 +234,12 @@ You can use the 'use_skill' tool to:
         # Append date and OS/Shell last so they appear in the log tail (LLM logs truncate to head+tail)
         prompt += f"\nToday's date: {current_date} (OS: {os_type}, Shell: {shell_type})"
         return prompt
+
+    def _execute_tool(self, tool_call) -> tuple[str, dict[str, Any]]:
+        """Execute tool with MAT callbacks."""
+        self._tool_callback_pipeline.run_before(tool_call)
+        observation, info = super()._execute_tool(tool_call)
+        return self._tool_callback_pipeline.run_after(tool_call, observation, info)
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
         """Optional hook after assistant message is added. Override in subclasses (e.g. streaming)."""
@@ -375,22 +388,6 @@ You can use the 'use_skill' tool to:
                     all_results.append(next(exec_iter))
 
             for tool_call, observation, info in all_results:
-                # Remind agent to do multiple retrievals for survey
-                if tool_call.function.name == "mat_sn_search-papers-enhanced" and info.get("error") is None:
-                    n_papers = ""
-                    try:
-                        obj = json.loads(observation)
-                        if isinstance(obj, dict) and "data" in obj and isinstance(obj["data"], list):
-                            n_papers = str(len(obj["data"]))
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                    call_count = info.get("call_count", "?")
-                    reminder = (
-                        f"\n\n[Survey reminder: 本次返回 {n_papers or '?'} 篇（第 {call_count} 次检索）。"
-                        "综述/调研需至少 6–15 次检索；若结果偏少或检索次数不足，请换 question/words 继续调用 mat_sn_search-papers-enhanced 或 mat_sn_web-search。]"
-                    )
-                    observation = observation + reminder
-
                 # Full content for streaming (yield) and trajectory recording
                 tool_message = ToolMessage(
                     content=observation,
