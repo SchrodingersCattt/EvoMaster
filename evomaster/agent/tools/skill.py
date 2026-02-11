@@ -227,15 +227,16 @@ class SkillTool(BaseTool):
                 {"error": "unsupported_script_type"}
             )
 
-        # 添加参数：用 shlex 解析并正确引用，避免整串被当作一个参数（如 "--pdf x --focus y" 被当成一个 argv）
-        # Windows 上必须使用 posix=False，否则反斜杠路径会被当作转义符吞掉
         if script_args and script_args.strip():
             import sys as _sys
-            try:
-                parts = shlex.split(script_args.strip(), posix=(_sys.platform != "win32"))
-                cmd += " " + " ".join(shlex.quote(p) for p in parts)
-            except ValueError:
+            if _sys.platform == "win32":
                 cmd += " " + script_args.strip()
+            else:
+                try:
+                    parts = shlex.split(script_args.strip())
+                    cmd += " " + " ".join(shlex.quote(p) for p in parts)
+                except ValueError:
+                    cmd += " " + script_args.strip()
 
         # 使用 session 的 bash 工具执行脚本
         try:
