@@ -195,26 +195,26 @@ def _download_results(result_urls: list[str], workspace: str) -> dict[str, Any]:
 # Job status & results  (via calculation adaptor when available)
 # ---------------------------------------------------------------------------
 
-def _check_job_status(job_id: str, software: str) -> str:
-    """Query job status via the calculation adaptor API.
+def _check_job_status(job_id: str, software: str, bohr_job_id: str | None = None) -> str:
+    """Query job status via the Bohrium OpenAPI (calculation adaptor).
 
-    Returns one of: Done / Failed / Running / Pending / Unknown.
-    Falls back to "Unknown" when the adaptor is not wired.
+    Returns one of: Finished / Failed / Running / Pending / Scheduling / Unknown.
+    Falls back to "Unknown" when the adaptor is not available.
     """
     try:
         from evomaster.adaptors.calculation import query_job_status  # type: ignore[import-untyped]
-        return str(query_job_status(job_id, software=software))
+        return str(query_job_status(job_id, bohr_job_id=bohr_job_id, software=software))
     except ImportError:
         return "Unknown"
     except Exception as exc:
         return f"Error:{exc}"
 
 
-def _get_job_results(job_id: str, software: str) -> dict[str, Any]:
-    """Fetch job result payload (URLs, metadata) via the calculation adaptor API."""
+def _get_job_results(job_id: str, software: str, bohr_job_id: str | None = None) -> dict[str, Any]:
+    """Fetch job result payload (metadata, file listing) via the Bohrium OpenAPI."""
     try:
         from evomaster.adaptors.calculation import get_job_results  # type: ignore[import-untyped]
-        result = get_job_results(job_id, software=software)
+        result = get_job_results(job_id, bohr_job_id=bohr_job_id, software=software)
         return result if isinstance(result, dict) else {"raw": result}
     except ImportError:
         return {}
@@ -246,24 +246,34 @@ def run_lifecycle(
     workspace: str,
     poll_interval: int = 30,
     max_retries: int = 5,
+    bohr_job_id: str | None = None,
 ) -> dict[str, Any]:
     """Block until the job succeeds, fails permanently, or retries are exhausted.
 
     Returns a JSON-serialisable dict summarising the outcome.
+
+    Parameters
+    ----------
+    bohr_job_id : str | None
+        Explicit Bohrium job ID (from ``extra_info.bohr_job_id``).
+        Required for dpdispatcher-style MCP servers (ABACUS, etc.)
+        where the MCP ``job_id`` contains a hex hash.
     """
     current_job_id = job_id
     retries = 0
     max_polls = 720  # safety cap: 720 * 30s = 6 hours
+    unknown_count = 0
+    max_unknown = 3  # allow a few retries before giving up on unknown
 
     while retries <= max_retries:
         polls = 0
         # ── Poll loop ──
         while polls < max_polls:
-            status = _check_job_status(current_job_id, software)
+            status = _check_job_status(current_job_id, software, bohr_job_id=bohr_job_id)
 
             # -- Success --
             if status in TERMINAL_SUCCESS:
-                results = _get_job_results(current_job_id, software)
+                results = _get_job_results(current_job_id, software, bohr_job_id=bohr_job_id)
                 urls = _collect_result_urls(results)
                 download_info: dict[str, Any] = {}
                 if urls and workspace:
@@ -271,6 +281,7 @@ def run_lifecycle(
                 return {
                     "status": "success",
                     "job_id": current_job_id,
+                    "bohr_job_id": bohr_job_id or results.get("bohr_job_id"),
                     "retries": retries,
                     "results": results,
                     "downloads": download_info,
@@ -281,21 +292,29 @@ def run_lifecycle(
             if status in TERMINAL_FAILURE or status.startswith("Error:"):
                 break
 
-            # -- Unknown (adaptor not wired) --
+            # -- Unknown: retry a few times then give up --
             if status in UNKNOWN_STATUSES:
-                return {
-                    "status": "unknown",
-                    "job_id": current_job_id,
-                    "retries": retries,
-                    "message": (
-                        "Job status polling returned 'Unknown'. "
-                        "The calculation adaptor (evomaster.adaptors.calculation.query_job_status) "
-                        "is not wired for this environment. "
-                        "Please check job status manually or wire the adaptor."
-                    ),
-                }
+                unknown_count += 1
+                if unknown_count >= max_unknown:
+                    return {
+                        "status": "unknown",
+                        "job_id": current_job_id,
+                        "bohr_job_id": bohr_job_id,
+                        "retries": retries,
+                        "message": (
+                            f"Job status returned 'Unknown' {unknown_count} times.  "
+                            "Possible causes: (1) Bohrium access_key not set or invalid — "
+                            "check BOHRIUM_ACCESS_KEY in .env; (2) job ID could not be resolved "
+                            "— for ABACUS / dpdispatcher jobs, pass --bohr_job_id explicitly "
+                            "(from extra_info.bohr_job_id in the submit response)."
+                        ),
+                    }
+                # Short retry before giving up
+                time.sleep(min(poll_interval, 10))
+                continue
 
             # -- Still running: wait --
+            unknown_count = 0  # reset on non-unknown status
             time.sleep(poll_interval)
             polls += 1
 
@@ -308,6 +327,7 @@ def run_lifecycle(
             return {
                 "status": "failed",
                 "job_id": current_job_id,
+                "bohr_job_id": bohr_job_id,
                 "retries": retries,
                 "error_code": error_code,
                 "log_file": log_path,
@@ -326,6 +346,7 @@ def run_lifecycle(
         return {
             "status": "needs_fix",
             "job_id": current_job_id,
+            "bohr_job_id": bohr_job_id,
             "retries": retries,
             "error_code": error_code,
             "fix_strategy": fix,
@@ -341,6 +362,7 @@ def run_lifecycle(
     return {
         "status": "failed",
         "job_id": current_job_id,
+        "bohr_job_id": bohr_job_id,
         "retries": retries,
         "exhausted_retries": True,
         "message": (
@@ -364,6 +386,14 @@ def main() -> None:
         description="Resilient job lifecycle manager — monitors a remote calculation job.",
     )
     parser.add_argument("--job_id", required=True, help="Job ID from the MCP submit tool")
+    parser.add_argument(
+        "--bohr_job_id",
+        default=None,
+        help=(
+            "Explicit Bohrium job ID (from extra_info.bohr_job_id in the submit response).  "
+            "Required for dpdispatcher jobs (ABACUS, etc.) whose MCP job_id contains a hex hash."
+        ),
+    )
     parser.add_argument(
         "--software",
         required=True,
@@ -395,6 +425,7 @@ def main() -> None:
         workspace=args.workspace,
         poll_interval=args.poll_interval,
         max_retries=args.max_retries,
+        bohr_job_id=args.bohr_job_id,
     )
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
