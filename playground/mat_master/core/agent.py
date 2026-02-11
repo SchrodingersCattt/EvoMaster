@@ -187,7 +187,6 @@ class MatMasterAgent(Agent):
         """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills.
         Date and OS/Shell are appended last so they appear at the end of the prompt (and in log tail)."""
         from ..prompts.build_prompt import build_mat_master_system_prompt
-        from .async_tool_registry import AsyncToolRegistry
 
         # Build registry from config for dynamic prompt injection
         registry = self._get_async_tool_registry()
