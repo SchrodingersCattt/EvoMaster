@@ -13,6 +13,19 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from ..base import BaseTool, ToolError
 
+# Session-level error types from anyio for reliable isinstance checks.
+# These exceptions have an *empty* str() representation, so string matching alone
+# misses them (e.g. ``str(ClosedResourceError())`` → ``""``).
+_SESSION_ERROR_TYPES: tuple[type[Exception], ...] = ()
+try:
+    from anyio import (
+        ClosedResourceError as _ClosedResourceError,
+        BrokenResourceError as _BrokenResourceError,
+    )
+    _SESSION_ERROR_TYPES = (_ClosedResourceError, _BrokenResourceError)
+except ImportError:
+    pass
+
 # 外部服务（web-search、论文检索、结构库等）常需更长时间，默认 60 秒；可通过环境变量 MCP_TOOL_CALL_TIMEOUT 覆盖
 DEFAULT_MCP_TOOL_CALL_TIMEOUT = 60
 
@@ -173,9 +186,10 @@ class MCPTool(BaseTool):
             self._last_error = str(e)
             raise ToolError(f"Invalid JSON arguments: {str(e)}")
         except Exception as e:
-            self._last_error = str(e)
-            self.logger.error(f"MCP tool {self._tool_name} failed: {e}")
-            raise ToolError(f"MCP tool execution failed: {str(e)}")
+            err_desc = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
+            self._last_error = err_desc
+            self.logger.error(f"MCP tool {self._tool_name} failed: {err_desc}")
+            raise ToolError(f"MCP tool execution failed: {err_desc}")
 
     def _call_mcp_tool_sync(self, args: dict) -> Any:
         """同步调用 MCP 工具（内部处理异步）
@@ -212,15 +226,19 @@ class MCPTool(BaseTool):
                 timeout = getattr(self, '_call_timeout', DEFAULT_MCP_TOOL_CALL_TIMEOUT)
                 raise ToolError(f"MCP tool call timed out after {timeout} seconds")
             except Exception as e:
+                err_desc = f"{type(e).__name__}: {e}" if str(e) else type(e).__name__
                 # 检查是否是 session 过期/断开错误，尝试重连后重试
                 if attempt < max_attempts - 1 and self._is_session_error(e):
                     self.logger.warning(
                         "MCP session error for '%s', requesting reconnect (attempt %d/%d): %s",
-                        self._tool_name, attempt + 1, max_attempts, e,
+                        self._tool_name, attempt + 1, max_attempts, err_desc,
                     )
                     if self._try_reconnect():
                         continue  # 重连成功，用新 connection 重试
-                raise ToolError(f"Failed to call MCP tool: {str(e)}")
+                    self.logger.error(
+                        "MCP reconnect failed for '%s', giving up.", self._tool_name,
+                    )
+                raise ToolError(f"Failed to call MCP tool: {err_desc}")
 
         raise ToolError(f"MCP tool call failed after {max_attempts} attempts")
 
@@ -228,42 +246,91 @@ class MCPTool(BaseTool):
     # Session 断线重连辅助
     # ------------------------------------------------------------------
 
-    def _is_session_error(self, exc: Exception) -> bool:
-        """判断异常是否表示 MCP session 过期/连接断开。"""
-        err_name = type(exc).__name__
-        err_msg = str(exc).lower()
-        session_indicators = (
-            'closedresourceerror', 'brokenresourceerror',
-            'closedresource', 'brokenresource',
+    @staticmethod
+    def _is_session_error(exc: Exception) -> bool:
+        """判断异常是否表示 MCP session 过期/连接断开。
+
+        Primary: ``isinstance`` check against anyio error types (works even
+        when ``str(e)`` is empty).
+        Fallback: class-name string matching for unforeseen exception types.
+        """
+        # 1) Direct type check — most reliable
+        if _SESSION_ERROR_TYPES and isinstance(exc, _SESSION_ERROR_TYPES):
+            return True
+        # 2) Fallback: string matching on class name + message
+        combined = (type(exc).__name__ + ' ' + str(exc)).lower()
+        return any(
+            ind in combined
+            for ind in ('closedresourceerror', 'brokenresourceerror',
+                        'closedresource', 'brokenresource')
         )
-        combined = (err_name + ' ' + err_msg).lower()
-        return any(ind in combined for ind in session_indicators)
 
     def _try_reconnect(self, timeout: float = 30.0) -> bool:
         """通过 MCPToolManager 触发重连并等待完成。
 
+        Pre-flight: 检查 loop 和 runner task 是否存活，死了就不浪费时间。
+        Post-verify: ``done_event`` 被 set 不代表重连成功（manager 在
+        loop 已关闭或重试耗尽时也会 set event）。必须检查
+        ``self.mcp_connection.session`` 是否为有效的新 session。
+
         Returns:
-            True — 重连成功（self.mcp_connection 已被 manager 原地更新）。
-            False — 无法重连或超时。
+            True  — 重连成功，``self.mcp_connection`` 已指向新的活跃连接。
+            False — 无法重连、超时、或重连后 session 仍无效。
         """
         manager = getattr(self, '_mcp_manager', None)
         server_name = getattr(self, '_mcp_server', None)
         if not manager or not server_name:
             return False
 
+        # ---- pre-flight: loop must be alive ----
+        loop = getattr(manager, 'loop', None)
+        if loop is None or loop.is_closed():
+            self.logger.warning(
+                "MCP loop is closed/missing, cannot reconnect server '%s'",
+                server_name,
+            )
+            return False
+
+        # ---- pre-flight: runner task must still be alive to process reconnect ----
+        runner_task = manager._server_tasks.get(server_name)
+        if runner_task is None or runner_task.done():
+            self.logger.warning(
+                "Runner task for MCP server '%s' is dead, cannot reconnect",
+                server_name,
+            )
+            return False
+
         try:
             done_event = manager.request_reconnect(server_name)
-            success = done_event.wait(timeout=timeout)
-            if success:
+            finished = done_event.wait(timeout=timeout)
+            if not finished:
+                self.logger.warning(
+                    "MCP reconnection timed out for server '%s'", server_name,
+                )
+                return False
+
+            # ---- post-verify: connection must have a live session ----
+            # After a successful reconnect, _update_tool_connections() swaps
+            # self.mcp_connection to a *new* object whose .session was
+            # initialised inside ``async with create_connection(...)``.
+            # If the reconnect failed (3 retry attempts exhausted), the old
+            # connection's __aexit__ already set .session = None.
+            conn = self.mcp_connection
+            if conn is not None and getattr(conn, 'session', None) is not None:
                 self.logger.info(
                     "MCP server '%s' reconnected, retrying tool '%s'",
                     server_name, self._tool_name,
                 )
-            else:
-                self.logger.warning(
-                    "MCP reconnection timed out for server '%s'", server_name,
-                )
-            return success
+                return True
+
+            self.logger.warning(
+                "MCP reconnect for '%s' completed but connection session is "
+                "still invalid (session=%s)",
+                server_name,
+                getattr(conn, 'session', 'N/A'),
+            )
+            return False
+
         except Exception as e:
             self.logger.warning("Reconnect attempt failed for '%s': %s", server_name, e)
             return False
