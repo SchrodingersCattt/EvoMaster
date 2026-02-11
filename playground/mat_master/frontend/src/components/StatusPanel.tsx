@@ -7,7 +7,7 @@ function inferToolSuccess(entry: LogEntry): boolean {
   if (entry.type !== "tool_result" || !entry.content || typeof entry.content !== "object") return true;
   const c = entry.content as { result?: string };
   const r = typeof c.result === "string" ? c.result : "";
-  if (/error|failed|exception|exit code: [1-9]|non-zero exit/i.test(r)) return false;
+  if (/\berror\b|\bfailed\b|\bexception\b|exit code: [1-9]|non-zero exit/i.test(r)) return false;
   return true;
 }
 
