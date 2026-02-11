@@ -1,15 +1,19 @@
 """
-Ask Human Script: print a question to the user and return their reply.
+Ask Human Script: format and print a question for the user.
+
+The actual user interaction (waiting for reply) is handled by the agent's
+callback pipeline, NOT by this script.  This script simply outputs a JSON
+envelope so the callback can extract the question cleanly.
 
 Usage:
   python ask.py "Your question"
   python ask.py "Your question" "Optional context"
   echo "Your question" | python ask.py
 
-Output: prints the question (and context if provided) to stdout, then reads one
-line via input() and prints that line as the result for the caller.
+Output: a JSON object with keys ``question`` and ``context``.
 """
 
+import json
 import sys
 
 
@@ -25,12 +29,11 @@ def main() -> None:
             question = "Please provide input:"
             context = None
 
-    print(question)
+    # Output structured JSON so the callback can parse it reliably.
+    payload = {"question": question}
     if context:
-        print(f"Context: {context}")
-    print("(waiting for your reply)", flush=True)
-    reply = input().strip()
-    print(reply)
+        payload["context"] = context
+    print(json.dumps(payload, ensure_ascii=False))
 
 
 if __name__ == "__main__":
