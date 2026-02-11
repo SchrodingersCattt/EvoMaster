@@ -18,7 +18,6 @@ Usage::
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -179,6 +178,28 @@ class AsyncToolRegistry:
                 return e.server_prefix
         return None
 
+    def is_async_tool(self, server_prefix: str, remote_tool_name: str) -> bool:
+        """Return True if *remote_tool_name* on *server_prefix* is an async tool.
+
+        A tool is async when its server has a remote-execution entry **and**
+        the tool is **not** listed in ``sync_tools`` for that server.
+
+        Usage (e.g. in playground after MCP registration)::
+
+            registry = AsyncToolRegistry(config_dict)
+            for tool in mcp_tools:
+                if registry.is_async_tool(tool._mcp_server, tool._remote_tool_name):
+                    tool._call_timeout = None   # no timeout for async submissions
+        """
+        for entry in self._entries:
+            if entry.server_prefix != server_prefix:
+                continue
+            # Server matches an async entry → async unless explicitly sync
+            if remote_tool_name in entry.sync_tools:
+                return False
+            return True
+        return False
+
     # ── Formatted text snippets for prompt injection ──────────────────────
 
     def software_list_str(self) -> str:
@@ -197,7 +218,7 @@ class AsyncToolRegistry:
 
     def job_manager_software_arg(self) -> str:
         """For ``--software`` help: ``"sg, dpa, abacus, lammps, ..."``"""
-        return ", ".join(n.lower() for n in self.software_names)
+        return ", ".join(self.software_names_lower)
 
     # ── CRP snippets ──────────────────────────────────────────────────────
 

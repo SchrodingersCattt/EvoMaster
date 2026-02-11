@@ -441,6 +441,30 @@ class MatMasterPlayground(BasePlayground):
         future.result()
 
         manager.register_tools(self.tools)
+
+        # ── 异步工具不限超时 ──────────────────────────────────────────────
+        # 使用 AsyncToolRegistry（从 calculation_executors 推导）标记异步工具，
+        # 将其 _call_timeout 设为 None（fut.result(timeout=None) = 无限等待），
+        # 避免 submit_*/calculate_*/run_* 等远程提交因 MCP 服务端处理慢而误报超时。
+        try:
+            from .async_tool_registry import AsyncToolRegistry
+            config_dict = self.config.model_dump()
+            registry = AsyncToolRegistry(config_dict)
+            async_count = 0
+            for server_name, server_tools in manager.tools_by_server.items():
+                for tool_name, mcp_tool in server_tools.items():
+                    remote_name = getattr(mcp_tool, '_remote_tool_name', '') or ''
+                    if registry.is_async_tool(server_name, remote_name):
+                        mcp_tool._call_timeout = None
+                        async_count += 1
+            if async_count:
+                self.logger.info(
+                    "Async timeout override: %d MCP tools set to no-timeout (derived from calculation_executors)",
+                    async_count,
+                )
+        except Exception as e:
+            self.logger.warning("Failed to apply async timeout overrides: %s", e)
+
         tool_count = len(manager.get_tool_names())
         server_count = len(manager.get_server_names())
         self.logger.info(f"MCP tools setup complete: {tool_count} tools from {server_count} servers")

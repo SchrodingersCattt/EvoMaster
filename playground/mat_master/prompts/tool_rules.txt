@@ -19,6 +19,8 @@
 - **Before calling any submit_* or calculation tool**: ensure every file input is already uploaded to OSS (the system auto-uploads local workspace files; just make sure the file exists in workspace first).
 - **Pre-trained model shortcuts**: For DPA model_path, you can use the short name listed in the tool description (e.g. `"DPA2.4-7M"`) — it will be auto-resolved to the full OSS URL. You do NOT need to copy the full URL yourself.
 - If a calculation tool returns `FileNotFoundError` or path-related errors, check that you passed an OSS URL, not a local path.
+- **Auto-download**: mat_sg_* / mat_struct_db_* tool results are **automatically downloaded** to local workspace by a callback. You do NOT need to download them manually — use the `local_path` values appended to the tool output directly.
+- For other final deliverables (report/manuscript) returned as OSS URLs: prefer downloading a local copy when size is reasonable. If too large, keep the OSS URL and explain. Trajectory/trace/log-dump files can be skipped unless the user explicitly asks.
 
 ## structure-manager skill (download & validate structures)
 - **Download from URL**: When you have a direct link to a CIF/POSCAR/XYZ, use use_skill with skill_name=structure-manager, script_name=fetch_web_structure.py, script_args="--url <URL>". Do not use wget/curl/requests for structure files.
