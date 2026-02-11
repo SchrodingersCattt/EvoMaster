@@ -38,8 +38,11 @@ def _extract_think_content(args_str: str) -> str | None:
 class StreamingMatMasterAgent(MatMasterAgent):
     """
     MatMasterAgent that reports state in real time via event_callback.
-    Overrides _on_assistant_message and _on_tool_message to emit events.
+    Overrides _on_assistant_message, _on_tool_call_start, and _on_tool_message
+    to emit events.
     LLM 原生文本通过 thought 事件推送；think 工具的参数也作为 thought 推送，便于前端展示推理。
+    tool_call 事件在 _on_tool_call_start 中推送（before-callback 修补参数之后），
+    确保前端看到的是 callback 处理后的真实参数。
     """
 
     def __init__(self, event_callback: Callable[[str, str, Any], None] | None = None, **kwargs):
@@ -57,34 +60,47 @@ class StreamingMatMasterAgent(MatMasterAgent):
         self._emit(agent_name, "thought", native_text)
         if msg.tool_calls:
             for tc in msg.tool_calls:
-                # think 工具的参数作为“思考”再推一条，方便前端当作文本展示
+                # think 工具的参数作为"思考"再推一条，方便前端当作文本展示
                 if tc.function.name == "think":
                     thought_text = _extract_think_content(tc.function.arguments or "")
                     if thought_text:
                         self._emit(agent_name, "thought", thought_text)
-                source = _source_for_tool(tc.function.name)
-                args_raw = tc.function.arguments or ""
-                try:
-                    args_payload = json.loads(args_raw) if args_raw.strip() else {}
-                except (json.JSONDecodeError, TypeError):
-                    args_payload = args_raw
-                self._emit(
-                    source,
-                    "tool_call",
-                    {"id": tc.id, "name": tc.function.name, "args": args_payload},
-                )
+                # skill_hit 跟踪（skill_name 不被 before-callback 修改，此处可安全读取）
                 if tc.function.name == "use_skill":
                     try:
                         args = json.loads(tc.function.arguments or "{}")
                         if isinstance(args, dict) and args.get("skill_name"):
                             name = args.get("skill_name")
-                            # 只把“真实技能”记为 skill_hit，排除工具名（如 mat_sn_*、mat_sg_* 等）
+                            # 只把"真实技能"记为 skill_hit，排除工具名（如 mat_sn_*、mat_sg_* 等）
                             registry = getattr(self, "skill_registry", None)
                             if registry is not None and getattr(registry, "get_skill", None):
                                 if registry.get_skill(name) is not None:
                                     self._emit("ToolExecutor", "skill_hit", name)
                     except (json.JSONDecodeError, TypeError):
                         pass
+        # NOTE: tool_call 事件不再从此处推送。
+        # 改为在 _on_tool_call_start() 中推送，此时 before-callback 已完成参数修补
+        # （如 DPA 模型别名 -> OSS URL、bohr_job_id 自动补全等），
+        # 前端看到的是 callback 处理后的真实参数。
+
+    def _on_tool_call_start(self, tool_call) -> None:
+        """Emit tool_call event AFTER before-callbacks have patched the args.
+
+        This ensures the frontend displays the resolved arguments (e.g. DPA
+        model alias resolved to OSS URL, auto-filled bohr_job_id, etc.)
+        rather than the raw LLM output.
+        """
+        source = _source_for_tool(tool_call.function.name)
+        args_raw = tool_call.function.arguments or ""
+        try:
+            args_payload = json.loads(args_raw) if args_raw.strip() else {}
+        except (json.JSONDecodeError, TypeError):
+            args_payload = args_raw
+        self._emit(
+            source,
+            "tool_call",
+            {"id": tool_call.id, "name": tool_call.function.name, "args": args_payload},
+        )
 
     def _on_tool_message(self, msg: ToolMessage) -> None:
         self._emit(
