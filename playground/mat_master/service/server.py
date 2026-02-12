@@ -541,6 +541,9 @@ def _run_agent_sync(
             output_config=base.output_config,
             config_dir=pg.config_dir,
             enable_tools=base.enable_tools,
+            direct_max_workers=getattr(base, "_direct_max_workers", 4),
+            rate_limit=getattr(base, "_rate_limit", None),
+            config_dict=config_dict,
         )
         agent.set_agent_name(getattr(base, "_agent_name", "default"))
         agent._stop_event = stop_event

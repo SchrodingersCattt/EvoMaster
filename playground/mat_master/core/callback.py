@@ -120,6 +120,7 @@ class MatToolCallbacks:
         pipeline.register_before(self.before_resolve_dpa_model_alias)
         pipeline.register_before(self.before_patch_job_manager_bohr_id)
         pipeline.register_after(self.after_ask_human_interaction)
+        pipeline.register_after(self.after_track_async_submit)
         pipeline.register_after(self.after_autodownload_oss_results)
         pipeline.register_after(self.after_survey_reminder)
 
@@ -218,6 +219,43 @@ class MatToolCallbacks:
             if isinstance(job_id, str) and isinstance(bohr_job_id, str) and job_id and bohr_job_id:
                 mapping[job_id] = bohr_job_id
         return mapping
+
+    @staticmethod
+    def _extract_submit_payload(observation: str) -> dict[str, Any] | None:
+        """Best-effort extraction of submit payload from tool observation text."""
+        if not isinstance(observation, str) or not observation.strip():
+            return None
+        try:
+            payload = json.loads(observation)
+        except (json.JSONDecodeError, TypeError):
+            payload = None
+        if payload is None:
+            # Fallback for non-JSON strings that still contain JSON-like fragments.
+            job_match = re.search(r'"job_id"\s*:\s*"([^"]+)"', observation)
+            bohr_match = re.search(r'"bohr_job_id"\s*:\s*"([^"]+)"', observation)
+            if not job_match:
+                return None
+            out: dict[str, Any] = {"job_id": job_match.group(1)}
+            if bohr_match:
+                out["extra_info"] = {"bohr_job_id": bohr_match.group(1)}
+            return out
+        if not isinstance(payload, dict):
+            return None
+        # Common wrapper: {"status":"success", "observation": {...}}
+        obs = payload.get("observation")
+        if isinstance(obs, dict):
+            payload = obs
+        return payload if isinstance(payload, dict) else None
+
+    @staticmethod
+    def _derive_software_from_tool_name(tool_name: str) -> str:
+        # e.g. mat_dpa_submit_optimize_structure -> dpa
+        if not isinstance(tool_name, str):
+            return "unknown"
+        parts = tool_name.split("_")
+        if len(parts) >= 2 and parts[0] == "mat":
+            return parts[1]
+        return "unknown"
 
     # ------------------------------------------------------------------
     # Before callbacks
@@ -401,6 +439,53 @@ class MatToolCallbacks:
 
         self.logger.info("ask-human: received user reply (%d chars).", len(reply))
         return f"User replied: {reply}", info
+
+    def after_track_async_submit(
+        self,
+        tool_call: Any,
+        observation: str,
+        info: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        """Track submit_* jobs in runtime registry for finish-attempt gating."""
+        tool_name = tool_call.function.name or ""
+        if "_submit_" not in tool_name:
+            return observation, info
+        if info.get("error") is not None:
+            return observation, info
+
+        payload = self._extract_submit_payload(observation)
+        if not payload:
+            return observation, info
+
+        job_id = payload.get("job_id")
+        if not isinstance(job_id, str) or not job_id:
+            return observation, info
+
+        extra_info = payload.get("extra_info")
+        bohr_job_id = None
+        if isinstance(extra_info, dict):
+            b = extra_info.get("bohr_job_id")
+            if isinstance(b, str) and b:
+                bohr_job_id = b
+
+        software = self._derive_software_from_tool_name(tool_name)
+        registry = getattr(self.agent, "_job_registry", None)
+        if registry is None:
+            return observation, info
+
+        registry.record_submit(
+            job_id=job_id,
+            software=software,
+            source_tool=tool_name,
+            bohr_job_id=bohr_job_id,
+        )
+        self.logger.info(
+            "after_tool: tracked async submit job_id=%s software=%s bohr_job_id=%s",
+            job_id,
+            software,
+            bohr_job_id,
+        )
+        return observation, info
 
     def after_autodownload_oss_results(
         self,
