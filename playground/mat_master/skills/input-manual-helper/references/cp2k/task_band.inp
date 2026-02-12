@@ -2,6 +2,8 @@
 ! Adapt: PROJECT, basis/potential, CUTOFF, k-path, structure, ADDED_MOS count
 ! NOTE: ADDED_MOS is a KEYWORD (single line), NOT a subsection block.
 ! NOTE: SPECIAL_POINT is the correct keyword, NOT SPECIAL_KPOINT.
+! NOTE: Band structure k-path goes under &DFT / &PRINT / &BAND_STRUCTURE,
+!       NOT under &PROPERTIES / &BANDSTRUCTURE (which does NOT support &KPOINT_SET).
 &GLOBAL
   PROJECT my_band
   RUN_TYPE ENERGY
@@ -43,38 +45,37 @@
     &KPOINTS
       SCHEME MONKHORST-PACK 8 8 8
     &END KPOINTS
+    &PRINT
+      &BAND_STRUCTURE
+        FILENAME bandstructure.bs
+        &KPOINT_SET
+          NPOINTS 20
+          SPECIAL_POINT GAMMA 0.0 0.0 0.0
+          SPECIAL_POINT X     0.5 0.0 0.5
+        &END KPOINT_SET
+        &KPOINT_SET
+          NPOINTS 20
+          SPECIAL_POINT X     0.5 0.0 0.5
+          SPECIAL_POINT W     0.5 0.25 0.75
+        &END KPOINT_SET
+        &KPOINT_SET
+          NPOINTS 20
+          SPECIAL_POINT W     0.5 0.25 0.75
+          SPECIAL_POINT K     0.375 0.375 0.75
+        &END KPOINT_SET
+        &KPOINT_SET
+          NPOINTS 20
+          SPECIAL_POINT K     0.375 0.375 0.75
+          SPECIAL_POINT GAMMA 0.0 0.0 0.0
+        &END KPOINT_SET
+        &KPOINT_SET
+          NPOINTS 20
+          SPECIAL_POINT GAMMA 0.0 0.0 0.0
+          SPECIAL_POINT L     0.5 0.5 0.5
+        &END KPOINT_SET
+      &END BAND_STRUCTURE
+    &END PRINT
   &END DFT
-  &PROPERTIES
-    &BANDSTRUCTURE
-      ! Define k-path segments: each KPOINT_SET is one segment
-      ! SPECIAL_POINT <label> <kx> <ky> <kz>  (fractional, reciprocal space)
-      &KPOINT_SET
-        NPOINTS 20
-        SPECIAL_POINT GAMMA 0.0 0.0 0.0
-        SPECIAL_POINT X     0.5 0.0 0.5
-      &END KPOINT_SET
-      &KPOINT_SET
-        NPOINTS 20
-        SPECIAL_POINT X     0.5 0.0 0.5
-        SPECIAL_POINT W     0.5 0.25 0.75
-      &END KPOINT_SET
-      &KPOINT_SET
-        NPOINTS 20
-        SPECIAL_POINT W     0.5 0.25 0.75
-        SPECIAL_POINT K     0.375 0.375 0.75
-      &END KPOINT_SET
-      &KPOINT_SET
-        NPOINTS 20
-        SPECIAL_POINT K     0.375 0.375 0.75
-        SPECIAL_POINT GAMMA 0.0 0.0 0.0
-      &END KPOINT_SET
-      &KPOINT_SET
-        NPOINTS 20
-        SPECIAL_POINT GAMMA 0.0 0.0 0.0
-        SPECIAL_POINT L     0.5 0.5 0.5
-      &END KPOINT_SET
-    &END BANDSTRUCTURE
-  &END PROPERTIES
   &SUBSYS
     &CELL
       ABC 3.61 3.61 3.61
