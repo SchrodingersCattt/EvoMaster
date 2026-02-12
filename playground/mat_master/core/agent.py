@@ -145,8 +145,18 @@ You can use the 'use_skill' tool to:
         if tool_name == "execute_bash":
             payload = self._format_bash_observation(observation, info)
         else:
+            status = "error" if "error" in info else "success"
+            # For use_skill(action=run_script), propagate non-zero script exit code
+            # to outer status so tool-level status matches business outcome.
+            if (
+                tool_name == "use_skill"
+                and info.get("action") == "run_script"
+                and isinstance(info.get("exit_code"), int)
+                and info["exit_code"] != 0
+            ):
+                status = "error"
             payload = {
-                "status": "error" if "error" in info else "success",
+                "status": status,
                 "observation": self._to_json_value(observation),
             }
             if info:
