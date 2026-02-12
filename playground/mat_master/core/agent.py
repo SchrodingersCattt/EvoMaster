@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from evomaster.agent.agent import Agent
+from .async_execution_policy import AsyncExecutionPolicy
 from .callback import MatToolCallbacks, ToolCallbackPipeline
+from .job_registry import JobRegistry
 from .execution import BatchExecutor, ExecutionTask
 from .tool_guard import ToolGuard
 from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
@@ -31,14 +33,18 @@ class MatMasterAgent(Agent):
         self._rate_limit: float | None = rate_limit
         # Full config dict for async tool registry (prompt injection)
         self._full_config_dict: dict = config_dict or {}
+        from .async_tool_registry import AsyncToolRegistry
+        self._async_tool_registry = AsyncToolRegistry(self._full_config_dict)
+        self._async_execution_policy = AsyncExecutionPolicy(self._async_tool_registry)
+        # Runtime-tracked async jobs: source of truth for finish-attempt gate.
+        self._job_registry = JobRegistry(self.logger)
         # Tool callback pipeline
         self._tool_callback_pipeline = ToolCallbackPipeline(self.logger)
         self._register_default_tool_callbacks()
 
     def _get_async_tool_registry(self):
-        """Lazily create AsyncToolRegistry from full config dict."""
-        from .async_tool_registry import AsyncToolRegistry
-        return AsyncToolRegistry(self._full_config_dict)
+        """Get async registry derived from full config dict."""
+        return self._async_tool_registry
 
     def _register_default_tool_callbacks(self) -> None:
         """Register default MAT callbacks in execution order."""
@@ -87,6 +93,11 @@ You can use the 'use_skill' tool to:
         # Append date and OS/Shell last so they appear in the log tail (LLM logs truncate to head+tail)
         prompt += f"\nToday's date: {current_date} (OS: {os_type}, Shell: {shell_type})"
         return prompt
+
+    def _get_tool_specs(self) -> list:
+        """Expose MCP tools using unified async execution policy."""
+        specs = super()._get_tool_specs()
+        return self._async_execution_policy.filter_tool_specs_for_llm(specs)
 
     # ------------------------------------------------------------------
     # Observation formatting (MatMaster-only)
@@ -262,6 +273,8 @@ You can use the 'use_skill' tool to:
     def _step(self) -> bool:
         """Override: for finish tool, execute it and set should_finish when task_completed is true or partial."""
         self._step_count += 1
+        # Keep async monitor state fresh across turns.
+        self._job_registry.refresh_pending()
 
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
         assistant_message = self.llm.query(dialog_for_query)
@@ -298,7 +311,16 @@ You can use the 'use_skill' tool to:
             # Split into executable vs loop-blocked
             exec_calls = []
             loop_blocked: list[tuple[Any, str]] = []  # (tool_call, warning_msg)
+            pending_jobs_exist = bool(self._job_registry.pending_jobs())
             for tc in regular_calls:
+                if pending_jobs_exist and not self._async_execution_policy.is_call_allowed_while_pending(tc):
+                    loop_blocked.append((
+                        tc,
+                        self._async_execution_policy.pending_gate_message(),
+                    ))
+                    self._on_tool_call_start(tc)
+                    self._tool_guard.record_tool_call(tc)
+                    continue
                 decision = self._tool_guard.evaluate(tc)
                 if decision.blocked:
                     loop_blocked.append((tc, decision.message))
@@ -368,7 +390,19 @@ You can use the 'use_skill' tool to:
 
             task_completed = info.get("task_completed", "false")
             if task_completed in ("true", "partial"):
-                should_finish = True
+                self._job_registry.refresh_pending()
+                can_finish, gate_info = self._job_registry.can_finish()
+                info = dict(info or {})
+                info.update(gate_info)
+                if can_finish:
+                    should_finish = True
+                else:
+                    should_finish = False
+                    observation = (
+                        f"{observation}\n\n"
+                        "[finish_attempt_gate] Blocked: pending async jobs still running. "
+                        "Continue monitoring until pending_jobs_check passes."
+                    )
 
             # Full content for streaming (yield) and trajectory recording
             tool_message = ToolMessage(
