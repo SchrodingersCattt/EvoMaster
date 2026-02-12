@@ -311,7 +311,12 @@ class SkillTool(BaseTool):
 
         # 使用 session 的 bash 工具执行脚本
         try:
-            result = session.exec_bash(cmd)
+            timeout: int | None = None
+            # job-manager is expected to block for long-running remote jobs.
+            # Use a larger timeout to avoid false failures that cause tool drift.
+            if skill.meta_info.name == "job-manager" and script_name == "run_resilient_job.py":
+                timeout = 60 * 60  # 1 hour
+            result = session.exec_bash(cmd, timeout=timeout)
             stdout = result.get("stdout", "")
             stderr = result.get("stderr", "")
             exit_code = result.get("exit_code", 0)
