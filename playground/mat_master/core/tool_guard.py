@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
@@ -212,6 +213,19 @@ class ToolGuard:
 
     def evaluate(self, tool_call) -> GuardDecision:
         """Evaluate whether a tool call should be blocked."""
+        if tool_call.function.name == "execute_bash" and sys.platform == "win32":
+            args = self._parse_tool_args(tool_call)
+            command = str(args.get("command", "") or "")
+            if "<<" in command:
+                return GuardDecision(
+                    blocked=True,
+                    message=(
+                        "⚠️ WINDOWS SHELL GATE: heredoc syntax (`<<`) is blocked on Windows shell. "
+                        "Use `str_replace_editor` to write files, then run the script with `execute_bash`."
+                    ),
+                    info={"reason": "windows_heredoc_blocked"},
+                )
+
         submit_reason, software = self._submit_block_reason(tool_call)
         if submit_reason:
             args = self._parse_tool_args(tool_call)
