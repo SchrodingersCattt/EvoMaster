@@ -26,6 +26,7 @@ const API_BASE =
 
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg", ".ico"]);
 const PDF_EXT = new Set([".pdf"]);
+const MOLECULE_EXT = new Set([".xyz", ".mol", ".cif", ".vasp"]);
 const MARKDOWN_EXT = new Set([".md", ".markdown"]);
 const TEXT_EXT = new Set([
   ".txt",
@@ -89,6 +90,287 @@ function isPdfPath(path: string): boolean {
   return PDF_EXT.has(getFileExt(path));
 }
 
+function isPoscarPath(path: string): boolean {
+  const clean = path.replace(/\?.*$/, "").toLowerCase();
+  const name = clean.split(/[/\\]/).pop() ?? "";
+  return name === "poscar";
+}
+
+function isMoleculePath(path: string): boolean {
+  return MOLECULE_EXT.has(getFileExt(path)) || isPoscarPath(path);
+}
+
+function inferMoleculeFormat(path: string): string {
+  if (isPoscarPath(path)) return "vasp";
+  const ext = getFileExt(path);
+  if (ext === ".xyz") return "xyz";
+  if (ext === ".mol") return "sdf";
+  if (ext === ".cif") return "cif";
+  if (ext === ".vasp") return "vasp";
+  return "xyz";
+}
+
+type NglAtom = { element?: string };
+type NglStructure = { eachAtom: (callback: (atom: NglAtom) => void) => void };
+type NglComponent = {
+  addRepresentation: (name: string, params?: Record<string, unknown>) => void;
+  autoView: () => void;
+  structure?: NglStructure;
+};
+type NglStage = {
+  loadFile: (
+    input: Blob | string,
+    params?: { ext?: string; defaultRepresentation?: boolean }
+  ) => Promise<NglComponent>;
+  removeAllComponents: () => void;
+  setParameters: (params: Record<string, unknown>) => void;
+  handleResize: () => void;
+  dispose: () => void;
+};
+
+declare global {
+  interface Window {
+    NGL?: {
+      Stage: new (
+        element: HTMLElement,
+        params?: Record<string, unknown>
+      ) => NglStage;
+      ColormakerRegistry: {
+        addScheme: (factory: (this: { atomColor: (atom: { element?: string }) => number }) => void) => string;
+      };
+    };
+  }
+}
+
+const ELEMENT_COLORS: Record<string, string> = {
+  H: "#FFFFFF",
+  C: "#909090",
+  N: "#3050F8",
+  O: "#FF0D0D",
+  F: "#90E050",
+  Cl: "#1FF01F",
+  Br: "#A62929",
+  I: "#940094",
+  S: "#FFFF30",
+  P: "#FF8000",
+  B: "#FFB5B5",
+  Si: "#F0C8A0",
+  Na: "#AB5CF2",
+  K: "#8F40D4",
+  Ca: "#3DFF00",
+  Fe: "#E06633",
+  Cu: "#C88033",
+  Zn: "#7D80B0",
+  Y: "#94FFFF",
+  Ce: "#FFFFC7",
+};
+
+const ELEMENT_SYMBOLS = [
+  "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne",
+  "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca",
+  "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn",
+  "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y", "Zr",
+  "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn",
+  "Sb", "Te", "I", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd",
+  "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb",
+  "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt", "Au", "Hg",
+  "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th",
+  "Pa", "U", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm",
+  "Md", "No", "Lr", "Rf", "Db", "Sg", "Bh", "Hs", "Mt", "Ds",
+  "Rg", "Cn", "Nh", "Fl", "Mc", "Lv", "Ts", "Og",
+];
+const UPPER_TO_CANONICAL_ELEMENT = new Map(
+  ELEMENT_SYMBOLS.map((s) => [s.toUpperCase(), s] as const)
+);
+
+function canonicalizeElementSymbol(raw: string): string {
+  const t = (raw || "").trim();
+  if (!t) return "";
+  return UPPER_TO_CANONICAL_ELEMENT.get(t.toUpperCase()) ?? t;
+}
+
+function elementColor(el: string): string {
+  return ELEMENT_COLORS[canonicalizeElementSymbol(el)] ?? "#64748b";
+}
+
+function normalizeCifElementSymbols(raw: string): string {
+  // Some CIFs contain all-caps type symbols (e.g., CE), which can break rendering.
+  return raw.replace(/\b([A-Z]{1,2})\b/g, (token) => {
+    return UPPER_TO_CANONICAL_ELEMENT.get(token) ?? token;
+  });
+}
+
+function hexToColorValue(hex: string): number {
+  const clean = hex.replace("#", "");
+  const parsed = Number.parseInt(clean, 16);
+  return Number.isFinite(parsed) ? parsed : 0x64748b;
+}
+
+function MoleculePreview({
+  content,
+  format,
+  filePath,
+}: {
+  content: string;
+  format: string;
+  filePath: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<NglStage | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [elements, setElements] = useState<string[]>([]);
+  const isCrystal = format === "cif" || format === "vasp";
+
+  useEffect(() => {
+    let cancelled = false;
+    const onResize = () => stageRef.current?.handleResize();
+    window.addEventListener("resize", onResize);
+
+    const renderMolecule = async () => {
+      if (!containerRef.current) return;
+      setLoadError(null);
+      setElements([]);
+      try {
+        stageRef.current?.dispose();
+        stageRef.current = null;
+        containerRef.current.innerHTML = "";
+        if (!window.NGL) {
+          await new Promise<void>((resolve, reject) => {
+            const existing = document.querySelector(
+              'script[data-ngl="true"]'
+            ) as HTMLScriptElement | null;
+            if (existing) {
+              if ((existing as { dataset?: DOMStringMap }).dataset?.loaded === "true") {
+                resolve();
+                return;
+              }
+              existing.addEventListener("load", () => resolve(), { once: true });
+              existing.addEventListener("error", () => reject(new Error("NGL load failed")), {
+                once: true,
+              });
+              return;
+            }
+            const script = document.createElement("script");
+            script.src = "https://unpkg.com/ngl@2.1.1/dist/ngl.js";
+            script.async = true;
+            script.dataset["ngl"] = "true";
+            script.onload = () => {
+              script.dataset.loaded = "true";
+              resolve();
+            };
+            script.onerror = () => reject(new Error("NGL load failed"));
+            document.body.appendChild(script);
+          });
+        }
+        if (cancelled || !containerRef.current || !window.NGL) return;
+        const stage = new window.NGL.Stage(containerRef.current, {
+          backgroundColor: "white",
+          quality: "high",
+        });
+        stageRef.current = stage;
+
+        const ext = format === "sdf" ? "mol" : format;
+        const preparedContent =
+          ext === "cif" ? normalizeCifElementSymbols(content) : content;
+        const blob = new Blob([preparedContent], { type: "text/plain" });
+        const component = await stage.loadFile(blob, {
+          ext,
+          defaultRepresentation: false,
+        });
+        const elementColorScheme = window.NGL.ColormakerRegistry.addScheme(function () {
+          this.atomColor = (atom: { element?: string }) => {
+            return hexToColorValue(elementColor(atom.element ?? ""));
+          };
+        });
+        if (isCrystal) {
+          // Crystal tuning: smaller atoms + thicker bonds + thin black unit cell.
+          component.addRepresentation("spacefill", {
+            color: elementColorScheme,
+            radiusScale: 0.24,
+          });
+          component.addRepresentation("licorice", {
+            color: elementColorScheme,
+            radius: 0.32,
+            multipleBond: "symmetric",
+          });
+          component.addRepresentation("unitcell", {
+            colorValue: 0x000000,
+            linewidth: 1,
+          });
+        } else {
+          component.addRepresentation("ball+stick", {
+            multipleBond: "symmetric",
+            radiusScale: 0.9,
+            color: elementColorScheme,
+          });
+          // Fallback visibility layer in case bond perception fails.
+          component.addRepresentation("spacefill", {
+            color: elementColorScheme,
+            radiusScale: 0.25,
+            opacity: 0.85,
+          });
+        }
+        component.autoView();
+        stage.handleResize();
+
+        const elSet = new Set<string>();
+        let atomCount = 0;
+        component.structure?.eachAtom((atom) => {
+          atomCount += 1;
+          const el = canonicalizeElementSymbol(atom.element ?? "");
+          if (el) elSet.add(el);
+        });
+        if (atomCount === 0) {
+          throw new Error("结构中未解析到原子，可能是文件格式不兼容");
+        }
+        setElements(Array.from(elSet).sort((a, b) => a.localeCompare(b)));
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err instanceof Error ? err.message : "分子预览失败");
+        }
+      }
+    };
+
+    void renderMolecule();
+    return () => {
+      cancelled = true;
+      window.removeEventListener("resize", onResize);
+      stageRef.current?.dispose();
+      stageRef.current = null;
+    };
+  }, [content, format, isCrystal, filePath]);
+
+  if (loadError) {
+    return <p className="text-xs text-amber-600 dark:text-amber-400">{loadError}</p>;
+  }
+  return (
+    <div className="relative w-full h-[260px] rounded border border-zinc-200 overflow-hidden bg-white">
+      <div ref={containerRef} className="w-full h-full" />
+      {isCrystal && (
+        <span className="absolute top-2 left-2 text-[10px] px-1.5 py-0.5 rounded bg-zinc-900/75 text-white">
+          Unit Cell On
+        </span>
+      )}
+      {elements.length > 0 && (
+        <div className="absolute top-2 right-2 max-w-[45%] max-h-[85%] overflow-auto rounded bg-white/90 border border-zinc-300 px-2 py-1.5 text-[10px] text-zinc-700 shadow-sm">
+          <div className="font-semibold mb-1">Elements</div>
+          <div className="space-y-1">
+            {elements.map((el) => (
+              <div key={el} className="flex items-center gap-1.5">
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-full border border-zinc-400"
+                  style={{ backgroundColor: elementColor(el) }}
+                />
+                <span>{el}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FileViewer({
   sessionId,
   filePath,
@@ -103,13 +385,18 @@ function FileViewer({
   const contentUrl = `${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/files/content?path=${encodeURIComponent(filePath)}`;
   const showImage = isImagePath(filePath);
   const showPdf = isPdfPath(filePath);
+  const showMolecule = isMoleculePath(filePath);
   const [textContent, setTextContent] = useState<string | null>(null);
   const [textLoading, setTextLoading] = useState(false);
   const [textError, setTextError] = useState<string | null>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [moleculeContent, setMoleculeContent] = useState<string | null>(null);
+  const [moleculeLoading, setMoleculeLoading] = useState(false);
+  const [moleculeError, setMoleculeError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
-    if (showImage || showPdf) {
+    if (showImage || showPdf || showMolecule) {
       setTextContent(null);
       setTextError(null);
       return;
@@ -142,7 +429,75 @@ function FileViewer({
     return () => {
       active = false;
     };
-  }, [contentUrl, filePath, sessionId, showImage]);
+  }, [contentUrl, filePath, sessionId, showImage, showPdf, showMolecule]);
+
+  useEffect(() => {
+    if (!sessionId || !showPdf) {
+      setPdfBlobUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      return;
+    }
+    let active = true;
+    fetch(contentUrl)
+      .then((r) => {
+        if (!r.ok) throw new Error("pdf fetch failed");
+        return r.blob();
+      })
+      .then((blob) => {
+        if (!active) return;
+        setPdfBlobUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(blob);
+        });
+      })
+      .catch(() => {
+        if (active) setPdfBlobUrl(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [contentUrl, sessionId, showPdf]);
+
+  useEffect(() => {
+    if (!sessionId || !showMolecule) {
+      setMoleculeContent(null);
+      setMoleculeError(null);
+      setMoleculeLoading(false);
+      return;
+    }
+    let active = true;
+    setMoleculeLoading(true);
+    setMoleculeError(null);
+    setMoleculeContent(null);
+    fetch(contentUrl)
+      .then((r) => {
+        if (!r.ok) throw new Error("fetch failed");
+        return r.text();
+      })
+      .then((text) => {
+        if (active) setMoleculeContent(text);
+      })
+      .catch((err) => {
+        if (active) {
+          setMoleculeContent(null);
+          setMoleculeError(err instanceof Error ? err.message : "分子预览失败");
+        }
+      })
+      .finally(() => {
+        if (active) setMoleculeLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [contentUrl, sessionId, showMolecule]);
+
+  useEffect(() => {
+    return () => {
+      if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+    };
+  }, [pdfBlobUrl]);
 
   return (
     <div className="border border-zinc-200 dark:border-zinc-800 rounded-md overflow-hidden bg-zinc-50 dark:bg-zinc-900/50">
@@ -175,11 +530,30 @@ function FileViewer({
             className="max-w-full h-auto max-h-[260px] object-contain"
           />
         ) : showPdf ? (
-          <iframe
-            src={contentUrl}
-            title={fileName}
-            className="w-full h-[260px] bg-white dark:bg-zinc-900"
-          />
+          pdfBlobUrl ? (
+            <iframe
+              src={pdfBlobUrl}
+              title={fileName}
+              className="w-full h-[260px] bg-white dark:bg-zinc-900"
+            />
+          ) : (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">加载 PDF 中...</p>
+          )
+        ) : showMolecule ? (
+          moleculeLoading ? (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">加载分子结构中...</p>
+          ) : moleculeError ? (
+            <p className="text-xs text-amber-600 dark:text-amber-400">{moleculeError}</p>
+          ) : moleculeContent ? (
+            <MoleculePreview
+              key={filePath}
+              filePath={filePath}
+              content={moleculeContent}
+              format={inferMoleculeFormat(filePath)}
+            />
+          ) : (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">暂无可预览内容。</p>
+          )
         ) : textLoading ? (
           <p className="text-xs text-zinc-500 dark:text-zinc-400">加载中...</p>
         ) : textContent !== null ? (
@@ -260,6 +634,7 @@ export default function WorkspacePanel({
   onFilePathChange,
   sessionFilesLogsKey = 0,
   readOnly = false,
+  onJumpToLogIndex,
 }: {
   entries: LogEntry[];
   sessionId: string | null;
@@ -267,6 +642,7 @@ export default function WorkspacePanel({
   onFilePathChange: (path: string) => void;
   sessionFilesLogsKey?: number;
   readOnly?: boolean;
+  onJumpToLogIndex?: (index: number) => void;
 }) {
   const [selectedFile, setSelectedFile] = useState<{ path: string; name: string } | null>(null);
   const [fileTreeRefresh, setFileTreeRefresh] = useState(0);
@@ -301,12 +677,14 @@ export default function WorkspacePanel({
     }
   };
 
-  const toolResults = entries.filter(
-    (e) =>
+  const toolResults = entries
+    .map((e, index) => ({ entry: e, index }))
+    .filter(
+      ({ entry: e }) =>
       e.source === "ToolExecutor" &&
       e.type === "tool_result" &&
       !isEnvRelatedEntry(e)
-  );
+    );
   const statusStages = entries.filter((e) => e.type === "status_stages");
   const statusSkill = entries.filter((e) => e.type === "status_skill_produced");
   const skillHits = entries.filter((e) => e.type === "skill_hit").map((e) => String(e.content ?? ""));
@@ -437,7 +815,7 @@ export default function WorkspacePanel({
                   <p className="text-zinc-500">—</p>
                 ) : (
                   <ul className="space-y-0.5">
-                    {toolResults.map((e, i) => {
+                    {toolResults.map(({ entry: e, index }, i) => {
                       const c = e.content as { name?: string };
                       const ok = inferToolSuccess(e);
                       return (
@@ -453,7 +831,14 @@ export default function WorkspacePanel({
                           ) : (
                             <CircleXIcon size={14} className="shrink-0" />
                           )}
-                          {c?.name ?? "—"}
+                          <button
+                            type="button"
+                            className="underline-offset-2 hover:underline text-left"
+                            onClick={() => onJumpToLogIndex?.(index)}
+                            title="跳转到右侧对话"
+                          >
+                            {c?.name ?? "—"}
+                          </button>
                         </li>
                       );
                     })}

@@ -57,6 +57,7 @@ export default function MatMasterView({
   const [sessionFilesLogsKey, setSessionFilesLogsKey] = useState(0);
   const [leftWidthPercent, setLeftWidthPercent] = useState(40);
   const [isDragging, setIsDragging] = useState(false);
+  const [jumpToLogIndex, setJumpToLogIndex] = useState<number | null>(null);
 
   const isReadOnly = readOnly || (externalLogs !== undefined && externalLogs.length > 0);
 
@@ -289,6 +290,7 @@ export default function MatMasterView({
             onFilePathChange={setFilePath}
             sessionFilesLogsKey={sessionFilesLogsKey}
             readOnly={isReadOnly}
+            onJumpToLogIndex={setJumpToLogIndex}
           />
         </div>
         <div
@@ -326,6 +328,8 @@ export default function MatMasterView({
             setAskHumanInput={setAskHumanInput}
             sendAskHumanReply={sendAskHumanReply}
             readOnly={isReadOnly}
+            jumpToLogIndex={jumpToLogIndex}
+            onJumpHandled={() => setJumpToLogIndex(null)}
           />
         </div>
       </div>
