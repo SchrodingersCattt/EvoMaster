@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { SendIcon, SquareIcon, Loader2Icon } from "./icons";
 import { cn } from "@/lib/utils";
 import type { LogEntry } from "./LogStream";
@@ -18,30 +18,56 @@ function ToolCard({
 }) {
   return (
     <div className="my-2 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden shadow-sm">
-      {/* Header */}
-      <div className="flex items-center px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800">
-        <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500 dark:text-zinc-400">
-          {isResult ? "Output" : "Call"}
-        </span>
-        <span className="ml-2 text-xs font-mono text-zinc-700 dark:text-zinc-300 truncate">
-          {title}
-        </span>
-      </div>
-
-      {/* Body with Custom Scrollbar */}
-      <div
-        className={cn(
-          "max-h-60 overflow-y-auto p-3 text-xs font-mono",
-          "scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-600 scrollbar-track-transparent",
-          "[&::-webkit-scrollbar]:w-1.5",
-          "[&::-webkit-scrollbar-track]:bg-transparent",
-          "[&::-webkit-scrollbar-thumb]:bg-zinc-300/50 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600/50",
-          "[&::-webkit-scrollbar-thumb]:rounded-full",
-          "[&::-webkit-scrollbar-thumb]:hover:bg-zinc-400 dark:[&::-webkit-scrollbar-thumb]:hover:bg-zinc-500"
-        )}
-      >
-        {renderContent(content)}
-      </div>
+      {isResult ? (
+        <>
+          <div className="flex items-center px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800">
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500 dark:text-zinc-400">
+              Output
+            </span>
+            <span className="ml-2 text-xs font-mono text-zinc-700 dark:text-zinc-300 truncate">
+              {title}
+            </span>
+          </div>
+          <div
+            className={cn(
+              "max-h-60 overflow-y-auto p-3 text-xs font-mono",
+              "scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-600 scrollbar-track-transparent",
+              "[&::-webkit-scrollbar]:w-1.5",
+              "[&::-webkit-scrollbar-track]:bg-transparent",
+              "[&::-webkit-scrollbar-thumb]:bg-zinc-300/50 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600/50",
+              "[&::-webkit-scrollbar-thumb]:rounded-full",
+              "[&::-webkit-scrollbar-thumb]:hover:bg-zinc-400 dark:[&::-webkit-scrollbar-thumb]:hover:bg-zinc-500"
+            )}
+          >
+            {renderContent(content)}
+          </div>
+        </>
+      ) : (
+        <details>
+          <summary className="list-none flex items-center px-3 py-1.5 bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800 cursor-pointer">
+            <span className="text-[10px] uppercase tracking-wider font-semibold text-zinc-500 dark:text-zinc-400">
+              Call
+            </span>
+            <span className="ml-2 text-xs font-mono text-zinc-700 dark:text-zinc-300 truncate">
+              {title}
+            </span>
+            <span className="ml-auto text-zinc-400 text-xs">展开</span>
+          </summary>
+          <div
+            className={cn(
+              "max-h-60 overflow-y-auto p-3 text-xs font-mono",
+              "scrollbar-thin scrollbar-thumb-zinc-300 dark:scrollbar-thumb-zinc-600 scrollbar-track-transparent",
+              "[&::-webkit-scrollbar]:w-1.5",
+              "[&::-webkit-scrollbar-track]:bg-transparent",
+              "[&::-webkit-scrollbar-thumb]:bg-zinc-300/50 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600/50",
+              "[&::-webkit-scrollbar-thumb]:rounded-full",
+              "[&::-webkit-scrollbar-thumb]:hover:bg-zinc-400 dark:[&::-webkit-scrollbar-thumb]:hover:bg-zinc-500"
+            )}
+          >
+            {renderContent(content)}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
@@ -194,6 +220,8 @@ export default function ChatPanel({
   setAskHumanInput,
   sendAskHumanReply,
   readOnly = false,
+  jumpToLogIndex,
+  onJumpHandled,
 }: {
   entries: LogEntry[];
   scrollRef?: React.RefObject<HTMLDivElement>;
@@ -219,15 +247,20 @@ export default function ChatPanel({
   setAskHumanInput: (v: string) => void;
   sendAskHumanReply: (content: string) => void;
   readOnly?: boolean;
+  jumpToLogIndex?: number | null;
+  onJumpHandled?: () => void;
 }) {
-  const filtered = entries.filter(
-    (e) =>
+  const filtered = entries
+    .map((e, index) => ({ entry: e, index }))
+    .filter(
+      ({ entry: e }) =>
       e.source !== "System" &&
       e.type !== "log_line" &&
       !isEnvRelatedEntry(e)
-  );
+    );
   const isRunning = running && currentSessionId === runningSessionId;
   const canSend = status === "connected" && !isRunning;
+  const [highlightIndex, setHighlightIndex] = useState<number | null>(null);
 
   // Smart auto-scroll: only scroll to bottom after updates if user was already near bottom.
   const NEAR_BOTTOM_THRESHOLD_PX = 50;
@@ -251,6 +284,19 @@ export default function ChatPanel({
     }
   }, [filtered.length, scrollRef]);
 
+  useEffect(() => {
+    if (jumpToLogIndex === null || jumpToLogIndex === undefined) return;
+    const target = document.getElementById(`chat-log-${jumpToLogIndex}`);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightIndex(jumpToLogIndex);
+      window.setTimeout(() => {
+        setHighlightIndex((prev) => (prev === jumpToLogIndex ? null : prev));
+      }, 1800);
+    }
+    onJumpHandled?.();
+  }, [jumpToLogIndex, onJumpHandled]);
+
   return (
     <div className="flex flex-col h-full min-h-0 bg-background">
       <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
@@ -263,12 +309,20 @@ export default function ChatPanel({
               No messages yet. Send a task to start.
             </div>
           ) : (
-            filtered.map((log, i) => (
-              <MessageBubble
+            filtered.map(({ entry: log, index }, i) => (
+              <div
                 key={log.msg_id ?? i}
-                entry={log}
-                isUser={log.source === "User"}
-              />
+                id={`chat-log-${index}`}
+                className={cn(
+                  "rounded-xl transition-colors duration-500",
+                  highlightIndex === index && "bg-amber-100/60 dark:bg-amber-500/20"
+                )}
+              >
+                <MessageBubble
+                  entry={log}
+                  isUser={log.source === "User"}
+                />
+              </div>
             ))
           )}
         </div>

@@ -42,6 +42,20 @@ _PATH_FORMATS: frozenset[str] = frozenset({
 
 
 # ---------------------------------------------------------------------------
+# Executor helpers
+# ---------------------------------------------------------------------------
+def _has_remote_profile(executor_cfg: Any) -> bool:
+    """Return True if executor config contains machine.remote_profile."""
+    if not isinstance(executor_cfg, dict):
+        return False
+    machine = executor_cfg.get("machine")
+    if not isinstance(machine, dict):
+        return False
+    remote_profile = machine.get("remote_profile")
+    return isinstance(remote_profile, dict) and bool(remote_profile)
+
+
+# ---------------------------------------------------------------------------
 # Layer 1: schema-driven detection
 # ---------------------------------------------------------------------------
 
@@ -349,6 +363,57 @@ class CalculationPathAdaptor:
             user_id=user_id,
         )
 
+    def _is_async_remote_tool(self, server_name: str, remote_tool_name: str) -> bool:
+        """Return True when tool should run as async remote execution."""
+        server_cfg = self.calculation_executors.get(server_name)
+        if not isinstance(server_cfg, dict):
+            return False
+        sync_tools = set(server_cfg.get("sync_tools") or [])
+        if remote_tool_name in sync_tools:
+            return False
+
+        executor_map = server_cfg.get("executor_map")
+        if isinstance(executor_map, dict):
+            tool_executor = executor_map.get(remote_tool_name)
+            if tool_executor is None and remote_tool_name.startswith("submit_"):
+                tool_executor = executor_map.get(remote_tool_name[len("submit_"):])
+            if _has_remote_profile(tool_executor):
+                return True
+        return _has_remote_profile(server_cfg.get("executor"))
+
+    @staticmethod
+    def _validate_executor_profile(
+        executor: Optional[Dict[str, Any]],
+        *,
+        server_name: str,
+        remote_tool_name: str,
+    ) -> None:
+        if not isinstance(executor, dict):
+            raise ValueError(
+                f"Missing executor for async tool '{server_name}_{remote_tool_name}'. "
+                "Check calculation_executors config."
+            )
+        machine = executor.get("machine")
+        if not isinstance(machine, dict):
+            raise ValueError(
+                f"Executor missing 'machine' for '{server_name}_{remote_tool_name}'."
+            )
+        remote_profile = machine.get("remote_profile")
+        if not isinstance(remote_profile, dict):
+            raise ValueError(
+                f"Executor missing 'machine.remote_profile' for '{server_name}_{remote_tool_name}'."
+            )
+        machine_type = remote_profile.get("machine_type")
+        image_address = remote_profile.get("image_address")
+        if not isinstance(machine_type, str) or not machine_type.strip():
+            raise ValueError(
+                f"Executor missing remote_profile.machine_type for '{server_name}_{remote_tool_name}'."
+            )
+        if not isinstance(image_address, str) or not image_address.strip():
+            raise ValueError(
+                f"Executor missing remote_profile.image_address for '{server_name}_{remote_tool_name}'."
+            )
+
     def resolve_args(
         self,
         workspace_path: str,
@@ -372,7 +437,16 @@ class CalculationPathAdaptor:
         if server_name and tool_name.startswith(server_name + '_'):
             remote_name = tool_name[len(server_name) + 1:]
 
+        is_async_tool = self._is_async_remote_tool(server_name, remote_name)
+        if is_async_tool and not remote_name.startswith("submit_"):
+            raise ValueError(
+                f"Async tool '{tool_name}' is blocked for LLM runtime. "
+                f"Use submit interface: '{server_name}_submit_*'."
+            )
+
         # --- executor & storage injection ---
+        if "executor" in out:
+            logger.info("Ignoring user-provided executor for %s; using config executor.", tool_name)
         out['executor'] = self._resolve_executor(
             server_name,
             remote_name,
@@ -380,6 +454,12 @@ class CalculationPathAdaptor:
             project_id=project_id,
             user_id=user_id,
         )
+        if is_async_tool:
+            self._validate_executor_profile(
+                out["executor"],
+                server_name=server_name,
+                remote_tool_name=remote_name,
+            )
         out['storage'] = get_bohrium_storage_config(
             access_key=access_key,
             project_id=project_id,
