@@ -17,10 +17,8 @@ class AsyncExecutionPolicy:
     _HIDDEN_LIFECYCLE_NAMES = frozenset(
         {"query_job_status", "get_job_results", "terminate_job", "get_job_status"}
     )
-    _ALWAYS_ALLOWED_DURING_PENDING = frozenset(
-        {"finish", "think", "mem_save", "mem_recall"}
-    )
-    _ALLOWED_STATUS_SUFFIXES = ("_query_job_status", "_get_job_status")
+    _HIDDEN_LIFECYCLE_SUFFIXES = tuple(f"_{n}" for n in _HIDDEN_LIFECYCLE_NAMES)
+    _ALWAYS_ALLOWED_DURING_PENDING = frozenset({"think", "mem_save", "mem_recall"})
 
     def __init__(self, registry) -> None:
         self._registry = registry
@@ -42,6 +40,11 @@ class AsyncExecutionPolicy:
             name = getattr(fn, "name", "") if fn else ""
             if not isinstance(name, str) or not name:
                 filtered.append(spec)
+                continue
+
+            # Hide generic lifecycle tools globally for every mat_* server,
+            # not only servers discovered as async in registry.
+            if name.startswith("mat_") and name.endswith(self._HIDDEN_LIFECYCLE_SUFFIXES):
                 continue
 
             matched_prefix = None
@@ -76,14 +79,14 @@ class AsyncExecutionPolicy:
             return True
         if name.startswith("mat_") and "_submit_" in name:
             return True
-        if name.endswith(self._ALLOWED_STATUS_SUFFIXES):
-            return True
         if name == "use_skill":
             try:
                 args = json.loads(tool_call.function.arguments or "{}")
             except json.JSONDecodeError:
                 return False
-            return str(args.get("skill_name", "")).strip().lower() == "job-manager"
+            skill_name = str(args.get("skill_name", "")).strip().lower()
+            action = str(args.get("action", "")).strip().lower()
+            return skill_name == "job-manager" and action in {"run_script", "get_info", "get_reference"}
         return False
 
     @staticmethod
