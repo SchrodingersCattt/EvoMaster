@@ -99,6 +99,17 @@ LOG_PATTERNS: dict[str, list[str]] = {
     "dpa": ["*.log", "*.out", "*.json"],
 }
 
+_AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024
+_SKIP_DOWNLOAD_TOKENS = (
+    "trajectory",
+    "trace",
+    "traj",
+    "lammpstrj",
+    "dump",
+    "stdout",
+    "stderr",
+)
+
 
 # ---------------------------------------------------------------------------
 # Error diagnosis  (reuses log_diagnostics skill logic)
@@ -191,6 +202,68 @@ def _download_results(result_urls: list[str], workspace: str) -> dict[str, Any]:
     return info
 
 
+def _download_output_files(
+    output_files: list[str],
+    workspace: str,
+    bohr_job_id: str | None,
+) -> dict[str, Any]:
+    """Download job output_files entries (remote relative paths) into workspace."""
+    if not bohr_job_id:
+        return {"status": "skip", "reason": "bohr_job_id missing for output_files download"}
+    try:
+        from evomaster.adaptors.calculation import download_job_file, iterate_job_files  # type: ignore[import-untyped]
+    except ImportError:
+        return {"status": "skip", "reason": "download_job_file/iterate_job_files not available"}
+
+    download_dir = Path(workspace) / "calculation_results"
+    download_dir.mkdir(parents=True, exist_ok=True)
+
+    size_map: dict[str, int] = {}
+    try:
+        file_objs = iterate_job_files(bohr_job_id)
+        for obj in file_objs:
+            if not isinstance(obj, dict):
+                continue
+            p = obj.get("path")
+            s = obj.get("size")
+            if isinstance(p, str) and isinstance(s, int):
+                size_map[p] = s
+    except Exception:
+        size_map = {}
+
+    downloaded: list[str] = []
+    skipped: list[str] = []
+    errors: list[str] = []
+
+    for i, remote_path in enumerate(output_files):
+        if not isinstance(remote_path, str) or not remote_path.strip():
+            continue
+        rp = remote_path.strip()
+        lower = rp.lower()
+        if any(tok in lower for tok in _SKIP_DOWNLOAD_TOKENS):
+            skipped.append(f"{rp}: skipped by token policy")
+            continue
+        size = size_map.get(rp)
+        if isinstance(size, int) and size > _AUTO_DOWNLOAD_MAX_BYTES:
+            skipped.append(f"{rp}: skipped by size policy ({size} bytes)")
+            continue
+        segment = rp.rsplit("/", 1)[-1] or f"artifact_{i}"
+        segment = re.sub(r"[^\w.\-]", "_", segment) or f"artifact_{i}"
+        dest = download_dir / f"result_{i}_{segment}"
+        try:
+            path = download_job_file(rp, bohr_job_id, dest)
+            downloaded.append(str(path))
+        except Exception as exc:
+            errors.append(f"{rp}: {exc}")
+
+    info: dict[str, Any] = {"downloaded": downloaded, "download_dir": str(download_dir)}
+    if skipped:
+        info["download_skipped"] = skipped
+    if errors:
+        info["download_errors"] = errors
+    return info
+
+
 # ---------------------------------------------------------------------------
 # Job status & results  (via calculation adaptor when available)
 # ---------------------------------------------------------------------------
@@ -236,6 +309,24 @@ def _collect_result_urls(results: dict[str, Any]) -> list[str]:
     return urls
 
 
+def _collect_remote_output_files(results: dict[str, Any]) -> list[str]:
+    """Extract relative output file paths from results payload."""
+    val = results.get("output_files")
+    if isinstance(val, str):
+        val = [val]
+    if not isinstance(val, list):
+        return []
+    out: list[str] = []
+    for item in val:
+        if not isinstance(item, str):
+            continue
+        s = item.strip()
+        if not s or s.startswith("http"):
+            continue
+        out.append(s)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Main lifecycle
 # ---------------------------------------------------------------------------
@@ -274,14 +365,23 @@ def run_lifecycle(
             # -- Success --
             if status in TERMINAL_SUCCESS:
                 results = _get_job_results(current_job_id, software, bohr_job_id=bohr_job_id)
+                resolved_bohr_job_id = bohr_job_id or (
+                    results.get("bohr_job_id") if isinstance(results.get("bohr_job_id"), str) else None
+                )
                 urls = _collect_result_urls(results)
+                output_files = _collect_remote_output_files(results)
                 download_info: dict[str, Any] = {}
-                if urls and workspace:
-                    download_info = _download_results(urls, workspace)
+                if workspace:
+                    if urls:
+                        download_info["url_downloads"] = _download_results(urls, workspace)
+                    if output_files:
+                        download_info["output_file_downloads"] = _download_output_files(
+                            output_files, workspace, resolved_bohr_job_id
+                        )
                 return {
                     "status": "success",
                     "job_id": current_job_id,
-                    "bohr_job_id": bohr_job_id or results.get("bohr_job_id"),
+                    "bohr_job_id": resolved_bohr_job_id,
                     "retries": retries,
                     "results": results,
                     "downloads": download_info,

@@ -32,7 +32,6 @@ _DPA_MODEL_ALIAS_MAP: dict[str, str] = {
 }
 
 _OSS_URL_RE = re.compile(r"https?://[^\s,'\"<>)}\]]+")
-_AUTO_DOWNLOAD_SERVERS = ("mat_sg_", "mat_struct_db_")
 _DEFAULT_DOWNLOAD_SUBDIR = "_tmp/mat_oss_downloads"
 _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024
 _SKIP_DOWNLOAD_TOKENS = (
@@ -493,9 +492,9 @@ class MatToolCallbacks:
         observation: str,
         info: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
-        """Auto-download OSS artifacts for mat_sg/mat_struct_db tools."""
+        """Auto-download OSS artifacts for any mat_* tool."""
         tool_name = tool_call.function.name or ""
-        if not any(tool_name.startswith(prefix) for prefix in _AUTO_DOWNLOAD_SERVERS):
+        if not tool_name.startswith("mat_"):
             return observation, info
         urls = [u for u in _OSS_URL_RE.findall(observation or "") if self._is_oss_url(u)]
         if not urls:
