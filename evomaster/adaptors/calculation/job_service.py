@@ -200,6 +200,46 @@ def _download_binary(url: str, dest: Path, headers: dict[str, str] | None = None
     return dest
 
 
+def _extract_openapi_error(detail: dict[str, Any]) -> str | None:
+    """Return a concise OpenAPI business error message, if present."""
+    if not isinstance(detail, dict):
+        return "Invalid OpenAPI response: expected JSON object."
+
+    code = detail.get("code")
+    err_obj = detail.get("error")
+    err_msg = ""
+    if isinstance(err_obj, dict):
+        err_msg = str(err_obj.get("msg") or err_obj.get("title") or "").strip()
+    elif err_obj:
+        err_msg = str(err_obj).strip()
+
+    # Bohrium OpenAPI uses non-zero code for business errors.
+    if isinstance(code, int) and code != 0:
+        return f"OpenAPI code={code}: {err_msg}" if err_msg else f"OpenAPI code={code}"
+
+    # Defensive fallback when "error" exists but "code" is absent/unexpected.
+    if err_msg:
+        return err_msg
+
+    return None
+
+
+def _http_error_message(exc: HTTPError) -> str:
+    """Build a readable HTTPError message including response body when possible."""
+    body = ""
+    try:
+        raw = exc.read()
+        if raw:
+            body = raw.decode("utf-8", errors="replace").strip()
+    except Exception:
+        body = ""
+
+    base = f"HTTP {exc.code} {exc.reason}"
+    if body:
+        return f"{base}: {body}"
+    return base
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Low-level Bohrium OpenAPI calls
 # (sync equivalents of _tmp/MatMaster/services/job.py async functions)
@@ -330,19 +370,32 @@ def query_job_status(
         return "Unknown"
     try:
         detail = get_job_detail_raw(bid, access_key=access_key)
-        code = detail.get("data", {}).get("status", -999)
+        openapi_error = _extract_openapi_error(detail)
+        if openapi_error:
+            logger.warning("query_job_status(%s) business error: %s", bid, openapi_error)
+            return f"Error:{openapi_error}"
+
+        data = detail.get("data")
+        if not isinstance(data, dict):
+            return "Error:Invalid OpenAPI response: missing data object."
+        code = data.get("status", -999)
         status = _mapping_status(code)
         logger.info(
             "query_job_status(job_id=%s, bohr=%s) → status=%s (code=%s)",
             job_id, bid, status, code,
         )
         return status
-    except (HTTPError, URLError) as exc:
-        logger.warning("query_job_status(%s) HTTP error: %s", bid, exc)
-        return "Unknown"
+    except HTTPError as exc:
+        msg = _http_error_message(exc)
+        logger.warning("query_job_status(%s) HTTP error: %s", bid, msg)
+        return f"Error:{msg}"
+    except URLError as exc:
+        msg = str(exc.reason or exc)
+        logger.warning("query_job_status(%s) URL error: %s", bid, msg)
+        return f"Error:{msg}"
     except ValueError as exc:
         logger.warning("query_job_status(%s) value error: %s", bid, exc)
-        return "Unknown"
+        return f"Error:{exc}"
     except Exception as exc:
         logger.error("query_job_status(%s) unexpected error: %s", bid, exc, exc_info=True)
         return f"Error:{exc}"
@@ -366,7 +419,13 @@ def get_job_results(
 
     try:
         detail = get_job_detail_raw(bid, access_key=access_key)
-        data = detail.get("data", {})
+        openapi_error = _extract_openapi_error(detail)
+        if openapi_error:
+            return {"bohr_job_id": bid, "error": openapi_error}
+
+        data = detail.get("data")
+        if not isinstance(data, dict):
+            return {"bohr_job_id": bid, "error": "Invalid OpenAPI response: missing data object."}
         status_code = data.get("status", -999)
         status_str = _mapping_status(status_code)
 
