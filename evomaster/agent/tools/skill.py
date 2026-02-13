@@ -122,13 +122,16 @@ class SkillTool(BaseTool):
             return f"Error: {str(e)}", {'error': str(e)}
 
     @staticmethod
-    def _get_skill_project_root(skill: OperatorSkill) -> Path | None:
-        """从 skill 路径向上查找含 evomaster 的项目根，供 PYTHONPATH 使用。"""
+    def _get_skill_project_root(skill: OperatorSkill | Path | str) -> Path | None:
+        """从给定路径向上查找含 evomaster 的项目根，供 PYTHONPATH 使用。"""
         try:
-            base = getattr(skill, 'skill_path', None)
-            if base is None:
-                return None
-            path = Path(base) if not isinstance(base, Path) else base
+            if isinstance(skill, (Path, str)):
+                path = Path(skill)
+            else:
+                base = getattr(skill, 'skill_path', None)
+                if base is None:
+                    return None
+                path = Path(base) if not isinstance(base, Path) else base
             for parent in (path,) + tuple(path.parents):
                 if (parent / 'evomaster').is_dir():
                     return parent.resolve()
@@ -304,10 +307,21 @@ class SkillTool(BaseTool):
         project_root = self._get_skill_project_root(skill)
         # 构建命令
         if script_path.suffix == '.py':
-            py_prefix = ''
-            if project_root is not None:
-                py_prefix = f"PYTHONPATH={shlex.quote(str(project_root))} "
-            cmd = f"{py_prefix}python {script_path}"
+            import sys
+
+            if sys.platform == 'win32':
+                if project_root is not None:
+                    cmd = (
+                        f'set "PYTHONPATH={str(project_root)}" '
+                        f'&& python "{script_path}"'
+                    )
+                else:
+                    cmd = f'python "{script_path}"'
+            else:
+                py_prefix = ''
+                if project_root is not None:
+                    py_prefix = f"PYTHONPATH={shlex.quote(str(project_root))} "
+                cmd = f"{py_prefix}python {shlex.quote(str(script_path))}"
         elif script_path.suffix == '.sh':
             cmd = f"bash {script_path}"
         elif script_path.suffix == '.js':
@@ -319,9 +333,9 @@ class SkillTool(BaseTool):
             )
 
         if script_args and script_args.strip():
-            import sys as _sys
+            import sys
 
-            if _sys.platform == 'win32':
+            if sys.platform == 'win32':
                 cmd += ' ' + script_args.strip()
             else:
                 try:
