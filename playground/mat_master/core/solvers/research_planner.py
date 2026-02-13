@@ -188,6 +188,54 @@ def _extract_json_from_content(content: str) -> str | None:
     return None
 
 
+def _to_thought_tag(label: str) -> str:
+    """Normalize bracket labels like 'Pre-check' into stable snake_case tags."""
+    t = (label or "").strip().lower()
+    t = re.sub(r"[^a-z0-9]+", "_", t)
+    return t.strip("_")
+
+
+def _normalize_planner_thought(content: Any) -> dict[str, Any]:
+    """Convert planner thought payloads to structured JSON for frontend readability."""
+    if isinstance(content, dict):
+        return content
+    if content is None:
+        return {"message": ""}
+    if not isinstance(content, str):
+        return {"data": content}
+
+    raw_text = content
+    text = raw_text.strip()
+    payload: dict[str, Any] = {"message": raw_text}
+    if not text:
+        return payload
+
+    # Parse leading bracket tags, e.g. "[Pre-check] ...", "[CRP] ..."
+    tag_match = re.match(r"^\[([^\]]+)\]\s*([\s\S]*)$", text)
+    if tag_match:
+        payload["tag"] = _to_thought_tag(tag_match.group(1))
+        payload["message"] = tag_match.group(2).strip()
+
+    # If thought includes embedded JSON, expose it explicitly under `data`.
+    embedded = _extract_json_from_content(text)
+    if embedded:
+        try:
+            parsed = json.loads(embedded)
+            payload["data"] = parsed
+            # Avoid redundant payloads like {"message":"{...}", "data": {...}}
+            # If message is exactly the same JSON structure, keep only `data`.
+            msg_text = str(payload.get("message", "")).strip()
+            if msg_text:
+                try:
+                    if json.loads(msg_text) == parsed:
+                        payload.pop("message", None)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    return payload
+
+
 class ResearchPlanner(BaseExp):
     """Pre-check → Plan → PreFlight → Execute under CRP: readiness assessment → flight plan (JSON DEG) → validate → optional confirm → execute steps via DirectSolver."""
 
@@ -216,6 +264,8 @@ class ResearchPlanner(BaseExp):
         self._registry: AsyncToolRegistry = _get_async_registry(config)
 
     def _emit(self, source: str, event_type: str, content: Any) -> None:
+        if source == "Planner" and event_type == "thought":
+            content = _normalize_planner_thought(content)
         if self._output_callback:
             self._output_callback(source, event_type, content)
 
