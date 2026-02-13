@@ -323,10 +323,25 @@ def download_job_file(
 
     Uses the NAS file-token API.
     """
-    host, remote_path, token = get_file_token(file_path, bohr_job_id, access_key=access_key)
+    normalized = str(file_path or "").replace("\\", "/").strip()
+    if normalized:
+        try:
+            _, root_path, _ = get_file_token("", bohr_job_id, access_key=access_key)
+            root_prefix = str(root_path or "").replace("\\", "/")
+            if root_prefix and not root_prefix.endswith("/"):
+                root_prefix += "/"
+            if root_prefix and normalized.startswith(root_prefix):
+                normalized = normalized[len(root_prefix):].lstrip("/")
+        except Exception:
+            # Fall back to original path if root-prefix probing fails.
+            pass
+
+    host, remote_path, token = get_file_token(
+        normalized, bohr_job_id, access_key=access_key
+    )
     if not host or not remote_path or not token:
         raise RuntimeError(
-            f"Cannot download '{file_path}' from job {bohr_job_id}: "
+            f"Cannot download '{normalized or file_path}' from job {bohr_job_id}: "
             "incomplete file-token response (host/path/token empty)."
         )
     url = f"{host}/api/download/{remote_path}?token={token}"

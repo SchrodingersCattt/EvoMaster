@@ -32,6 +32,21 @@ import time
 from pathlib import Path
 from typing import Any
 
+_THIS_FILE = Path(__file__).resolve()
+for parent in (_THIS_FILE.parent, *_THIS_FILE.parents):
+    if (parent / "evomaster").is_dir():
+        p = str(parent)
+        if p not in sys.path:
+            sys.path.insert(0, p)
+        break
+
+from evomaster.adaptors.calculation.job_service import (
+    download_job_file as _adaptor_download_job_file,
+    get_job_results as _adaptor_get_job_results,
+    iterate_job_files as _adaptor_iterate_job_files,
+    query_job_status as _adaptor_query_job_status,
+)
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -110,7 +125,6 @@ _SKIP_DOWNLOAD_TOKENS = (
     "stderr",
 )
 
-
 # ---------------------------------------------------------------------------
 # Error diagnosis  (reuses log_diagnostics skill logic)
 # ---------------------------------------------------------------------------
@@ -172,62 +186,30 @@ def _find_log_file(workspace: str, software: str) -> str | None:
 # OSS / result download
 # ---------------------------------------------------------------------------
 
-def _download_results(result_urls: list[str], workspace: str) -> dict[str, Any]:
-    """Download result URLs (OSS / HTTP) to workspace/calculation_results/."""
-    try:
-        from evomaster.adaptors.calculation import download_oss_to_local  # type: ignore[import-untyped]
-    except ImportError:
-        return {"status": "skip", "reason": "download_oss_to_local not available; results are at remote URLs"}
-
-    download_dir = Path(workspace) / "calculation_results"
-    download_dir.mkdir(parents=True, exist_ok=True)
-
-    downloaded: list[str] = []
-    errors: list[str] = []
-    for i, url in enumerate(result_urls):
-        if not isinstance(url, str) or not url.startswith("http"):
-            continue
-        try:
-            segment = (url.split("?")[0].rstrip("/") or "").rsplit("/", 1)[-1] or "file"
-            segment = re.sub(r"[^\w.\-]", "_", segment) or "file"
-            rel = f"result_{i}_{segment}"
-            path = download_oss_to_local(url, download_dir, dest_relative_path=rel)
-            downloaded.append(str(path))
-        except Exception as exc:
-            errors.append(f"{url}: {exc}")
-
-    info: dict[str, Any] = {"downloaded": downloaded, "download_dir": str(download_dir)}
-    if errors:
-        info["download_errors"] = errors
-    return info
-
 
 def _download_output_files(
     output_files: list[str],
     workspace: str,
     bohr_job_id: str | None,
+    access_key: str | None = None,
 ) -> dict[str, Any]:
     """Download job output_files entries (remote relative paths) into workspace."""
     if not bohr_job_id:
         return {"status": "skip", "reason": "bohr_job_id missing for output_files download"}
-    try:
-        from evomaster.adaptors.calculation import download_job_file, iterate_job_files  # type: ignore[import-untyped]
-    except ImportError:
-        return {"status": "skip", "reason": "download_job_file/iterate_job_files not available"}
 
     download_dir = Path(workspace) / "calculation_results"
     download_dir.mkdir(parents=True, exist_ok=True)
 
     size_map: dict[str, int] = {}
     try:
-        file_objs = iterate_job_files(bohr_job_id)
+        file_objs = _adaptor_iterate_job_files(bohr_job_id, access_key=access_key)
         for obj in file_objs:
             if not isinstance(obj, dict):
                 continue
             p = obj.get("path")
             s = obj.get("size")
             if isinstance(p, str) and isinstance(s, int):
-                size_map[p] = s
+                size_map[p.replace("\\", "/")] = s
     except Exception:
         size_map = {}
 
@@ -243,7 +225,7 @@ def _download_output_files(
         if any(tok in lower for tok in _SKIP_DOWNLOAD_TOKENS):
             skipped.append(f"{rp}: skipped by token policy")
             continue
-        size = size_map.get(rp)
+        size = size_map.get(rp.replace("\\", "/"))
         if isinstance(size, int) and size > _AUTO_DOWNLOAD_MAX_BYTES:
             skipped.append(f"{rp}: skipped by size policy ({size} bytes)")
             continue
@@ -251,12 +233,15 @@ def _download_output_files(
         segment = re.sub(r"[^\w.\-]", "_", segment) or f"artifact_{i}"
         dest = download_dir / f"result_{i}_{segment}"
         try:
-            path = download_job_file(rp, bohr_job_id, dest)
-            downloaded.append(str(path))
+            path = _adaptor_download_job_file(rp, bohr_job_id, dest, access_key=access_key)
+            downloaded.append(path.resolve().as_posix())
         except Exception as exc:
             errors.append(f"{rp}: {exc}")
 
-    info: dict[str, Any] = {"downloaded": downloaded, "download_dir": str(download_dir)}
+    info: dict[str, Any] = {
+        "downloaded": downloaded,
+        "download_dir": download_dir.resolve().as_posix(),
+    }
     if skipped:
         info["download_skipped"] = skipped
     if errors:
@@ -265,48 +250,41 @@ def _download_output_files(
 
 
 # ---------------------------------------------------------------------------
-# Job status & results  (via calculation adaptor when available)
+# Job status & results  (via OpenAPI requests)
 # ---------------------------------------------------------------------------
 
-def _check_job_status(job_id: str, software: str, bohr_job_id: str | None = None) -> str:
-    """Query job status via the Bohrium OpenAPI (calculation adaptor).
+def _check_job_status(
+    job_id: str,
+    bohr_job_id: str | None = None,
+    access_key: str | None = None,
+) -> str:
+    """Query job status via Bohrium OpenAPI.
 
     Returns one of: Finished / Failed / Running / Pending / Scheduling / Unknown.
-    Falls back to "Unknown" when the adaptor is not available.
     """
-    try:
-        from evomaster.adaptors.calculation import query_job_status  # type: ignore[import-untyped]
-        return str(query_job_status(job_id, bohr_job_id=bohr_job_id, software=software))
-    except ImportError:
-        return "Unknown"
-    except Exception as exc:
-        return f"Error:{exc}"
+    return str(
+        _adaptor_query_job_status(
+            job_id,
+            bohr_job_id=bohr_job_id,
+            software=None,
+            access_key=access_key,
+        )
+    )
 
 
-def _get_job_results(job_id: str, software: str, bohr_job_id: str | None = None) -> dict[str, Any]:
-    """Fetch job result payload (metadata, file listing) via the Bohrium OpenAPI."""
-    try:
-        from evomaster.adaptors.calculation import get_job_results  # type: ignore[import-untyped]
-        result = get_job_results(job_id, bohr_job_id=bohr_job_id, software=software)
-        return result if isinstance(result, dict) else {"raw": result}
-    except ImportError:
-        return {}
-    except Exception as exc:
-        return {"error": str(exc)}
-
-
-def _collect_result_urls(results: dict[str, Any]) -> list[str]:
-    """Extract all HTTP URLs from a results dict."""
-    urls: list[str] = []
-    for key in ("output_files", "result_urls", "artifacts", "urls", "output_urls"):
-        val = results.get(key)
-        if not val:
-            continue
-        if isinstance(val, str):
-            val = [val]
-        if isinstance(val, list):
-            urls.extend(u for u in val if isinstance(u, str) and u.startswith("http"))
-    return urls
+def _get_job_results(
+    job_id: str,
+    bohr_job_id: str | None = None,
+    access_key: str | None = None,
+) -> dict[str, Any]:
+    """Fetch job result payload (metadata, file listing) via Bohrium OpenAPI."""
+    result = _adaptor_get_job_results(
+        job_id,
+        bohr_job_id=bohr_job_id,
+        software=None,
+        access_key=access_key,
+    )
+    return result if isinstance(result, dict) else {"raw": result}
 
 
 def _collect_remote_output_files(results: dict[str, Any]) -> list[str]:
@@ -338,6 +316,7 @@ def run_lifecycle(
     poll_interval: int = 30,
     max_retries: int = 5,
     bohr_job_id: str | None = None,
+    access_key: str | None = None,
 ) -> dict[str, Any]:
     """Block until the job succeeds, fails permanently, or retries are exhausted.
 
@@ -360,23 +339,31 @@ def run_lifecycle(
         polls = 0
         # ── Poll loop ──
         while polls < max_polls:
-            status = _check_job_status(current_job_id, software, bohr_job_id=bohr_job_id)
+            status = _check_job_status(
+                current_job_id,
+                bohr_job_id=bohr_job_id,
+                access_key=access_key,
+            )
 
             # -- Success --
             if status in TERMINAL_SUCCESS:
-                results = _get_job_results(current_job_id, software, bohr_job_id=bohr_job_id)
+                results = _get_job_results(
+                    current_job_id,
+                    bohr_job_id=bohr_job_id,
+                    access_key=access_key,
+                )
                 resolved_bohr_job_id = bohr_job_id or (
                     results.get("bohr_job_id") if isinstance(results.get("bohr_job_id"), str) else None
                 )
-                urls = _collect_result_urls(results)
                 output_files = _collect_remote_output_files(results)
                 download_info: dict[str, Any] = {}
                 if workspace:
-                    if urls:
-                        download_info["url_downloads"] = _download_results(urls, workspace)
                     if output_files:
                         download_info["output_file_downloads"] = _download_output_files(
-                            output_files, workspace, resolved_bohr_job_id
+                            output_files,
+                            workspace,
+                            resolved_bohr_job_id,
+                            access_key=access_key,
                         )
 
                 # Check whether downloads actually succeeded.
@@ -546,7 +533,6 @@ def main() -> None:
         default=5,
         help="Maximum diagnosis-and-retry cycles (default: 5)",
     )
-
     args = parser.parse_args()
 
     result = run_lifecycle(
