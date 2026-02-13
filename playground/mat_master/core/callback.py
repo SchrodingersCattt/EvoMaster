@@ -198,6 +198,13 @@ class MatToolCallbacks:
 
         Reads prior ToolMessage payloads from dialog history and extracts:
         ``{"job_id": "...", "extra_info": {"bohr_job_id": "..."}}``
+
+        Note: ToolMessage.content is the **formatted** observation produced by
+        ``_format_tool_observation``, which wraps the raw MCP result inside::
+
+            {"status": "success", "observation": {<raw>}, "info": {...}}
+
+        This method must unwrap ``observation`` before looking for ``job_id``.
         """
         from evomaster.utils.types import ToolMessage
 
@@ -219,6 +226,10 @@ class MatToolCallbacks:
                 continue
             if not isinstance(payload, dict):
                 continue
+            # Unwrap the formatted observation wrapper if present.
+            inner = payload.get("observation")
+            if isinstance(inner, dict):
+                payload = inner
             job_id = payload.get("job_id")
             extra_info = payload.get("extra_info") or {}
             bohr_job_id = extra_info.get("bohr_job_id") if isinstance(extra_info, dict) else None
