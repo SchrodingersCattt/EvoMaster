@@ -222,7 +222,7 @@ mcp:
             remote_profile:
               image_address: "registry.dp.tech/dptech/lammps-agent:03810da8"
               platform: "ali"
-              machine_type: "c8_m126_1 * NVIDIA 5090"
+              machine_type: "c16_m64_1 * NVIDIA 4090"
               app_key: "agent"
           resources:
             envs: {}
