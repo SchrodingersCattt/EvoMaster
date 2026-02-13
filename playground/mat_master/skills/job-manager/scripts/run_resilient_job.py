@@ -182,13 +182,18 @@ def _download_output_files(
     output_files: list[str],
     workspace: str,
     bohr_job_id: str | None,
+    download_tag: str | None = None,
     access_key: str | None = None,
 ) -> dict[str, Any]:
     """Download job output_files entries (remote relative paths) into workspace."""
     if not bohr_job_id:
         return {"status": "skip", "reason": "bohr_job_id missing for output_files download"}
 
-    download_dir = Path(workspace) / "calculation_results"
+    tag_raw = (download_tag or str(bohr_job_id) or "unknown_job").strip()
+    safe_job = re.sub(r"[^\w.\-]", "_", tag_raw)[:80] or "unknown_job"
+    run_stamp = time.strftime("%Y%m%d_%H%M%S")
+    # Use per-job + per-run directory to avoid cross-task overwrite.
+    download_dir = Path(workspace) / "calculation_results" / safe_job / f"run_{run_stamp}"
     download_dir.mkdir(parents=True, exist_ok=True)
 
     size_map: dict[str, int] = {}
@@ -269,6 +274,7 @@ def run_lifecycle(
     poll_interval: int = 30,
     max_retries: int = 5,
     bohr_job_id: str | None = None,
+    download_tag: str | None = None,
     access_key: str | None = None,
 ) -> dict[str, Any]:
     """Block until the job succeeds, fails permanently, or retries are exhausted.
@@ -321,6 +327,7 @@ def run_lifecycle(
                             output_files,
                             workspace,
                             resolved_bohr_job_id,
+                            download_tag=download_tag,
                             access_key=access_key,
                         )
 
@@ -491,6 +498,14 @@ def main() -> None:
         default=5,
         help="Maximum diagnosis-and-retry cycles (default: 5)",
     )
+    parser.add_argument(
+        "--download_tag",
+        default=None,
+        help=(
+            "Optional folder tag for downloaded results. "
+            "Use this to separate outputs across tasks; timestamp subfolder is always added."
+        ),
+    )
     args = parser.parse_args()
 
     result = run_lifecycle(
@@ -500,6 +515,7 @@ def main() -> None:
         poll_interval=args.poll_interval,
         max_retries=args.max_retries,
         bohr_job_id=args.bohr_job_id,
+        download_tag=args.download_tag,
     )
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
