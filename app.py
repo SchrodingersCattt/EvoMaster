@@ -1,26 +1,26 @@
+import json
 import logging
-import os
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from src.apis.api_router import api_router
+from src.base.base_res import BaseResponse
 from src.models.health import HealthResponse
 from src.models.root import RootResponse
 from src.utils.constant import DB_CONFIG
+from src.utils.exceptions import BaseErrorResponse
 from src.utils.logger import LoggingConfig, setup_logging
+from src.utils.user import optional_user_id
 
 log_config = LoggingConfig.get_main_app_config()
 setup_logging(**log_config)
 logger = logging.getLogger(__name__)
-
-# 安全组件
-security = HTTPBearer()
 
 
 @asynccontextmanager
@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
     # MatMaster Chat：提前初始化 playground，首条 /chat/send 无需等待
     try:
-        from src.services.chat_service import init_playground
+        from src.services.agent_run_service import init_playground
 
         await init_playground()
         logger.info('MatMaster chat playground initialized in lifespan.')
@@ -56,31 +56,10 @@ app.add_middleware(
 app.include_router(api_router, prefix='/api/v1')
 
 
-# API密钥验证（简单版本）
-def verify_api_key(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    # 从环境变量获取有效的API密钥
-    valid_api_keys = os.getenv('API_KEYS', '').split(',')
-    if credentials.credentials not in valid_api_keys:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail='无效的API密钥'
-        )
-    return credentials.credentials
-
-
-# 中间件：记录请求日志
-@app.middleware('http')
-async def log_requests(request: Request, call_next):
-    start_time = time.time()
-
-    response = await call_next(request)
-
-    process_time = time.time() - start_time
-    logger.info(
-        f"{request.client.host} - \"{request.method} {request.url.path} \" "
-        f"{response.status_code} - {process_time:.3f}s"
-    )
-
-    return response
+@app.get('/', tags=['系统状态'])
+async def root():
+    """根端点"""
+    return RootResponse(data={'description': 'MatMaster-Evo Service'})
 
 
 # 健康检查（无需认证）
@@ -102,17 +81,84 @@ async def health_check() -> HealthResponse:
         raise HTTPException(status_code=503, detail=f"服务不可用: {str(e)}")
 
 
-@app.get('/', tags=['系统状态'])
-async def root():
-    """根端点"""
-    return RootResponse(data={'description': 'MatMaster-Evo Service'})
+# 中间件：记录请求日志
+@app.middleware('http')
+async def log_requests(request: Request, call_next):
+    SENSITIVE_KEYS = {
+        'password',
+        'passwd',
+        'token',
+        'access_token',
+        'refresh_token',
+        'api_key',
+        'secret',
+    }
+    MAX_BODY_LEN = 2000  # 避免日志爆炸
+
+    def _redact(obj: Any) -> Any:
+        if isinstance(obj, dict):
+            out = {}
+            for k, v in obj.items():
+                if isinstance(k, str) and k.lower() in SENSITIVE_KEYS:
+                    out[k] = '***'
+                else:
+                    out[k] = _redact(v)
+            return out
+        if isinstance(obj, list):
+            return [_redact(x) for x in obj]
+        return obj
+
+    user_id = optional_user_id(request)
+    start = time.perf_counter()
+    query = dict(request.query_params)
+    path_params = request.scope.get('path_params') or {}
+
+    body_for_log = None
+    content_type = (request.headers.get('content-type') or '').lower()
+    # 注意：读取 body 会把整个请求体读入内存；只对 JSON 且长度可控时记录
+    if (
+        request.method in {'POST', 'PUT', 'PATCH'}
+        and 'application/json' in content_type
+    ):
+        body_bytes = (
+            await request.body()
+        )  # Starlette 会缓存，后续 request.json()/Body 仍可用
+        if body_bytes:
+            text = body_bytes.decode('utf-8', errors='replace')
+            text = text[:MAX_BODY_LEN]
+            try:
+                body_for_log = _redact(json.loads(text))
+            except json.JSONDecodeError:
+                body_for_log = text  # 非法 JSON 就记截断文本
+
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        cost_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            '%s %s %s - %s user_id=%s query=%s path_params=%s body=%s',
+            request.method,
+            request.url.path,
+            getattr(locals().get('response', None), 'status_code', None),
+            f'{cost_ms:.2f}ms',
+            user_id,
+            query,
+            path_params,
+            body_for_log,
+        )
 
 
-# 错误处理
+@app.exception_handler(BaseErrorResponse)
+async def base_error_handler(request: Request, exc: BaseErrorResponse):
+    payload = BaseResponse(code=exc.code, msg=exc.msg, data=exc.data)
+    return JSONResponse(status_code=exc.http_status, content=payload.model_dump())
+
+
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"全局异常: {str(exc)}")
-    return JSONResponse(status_code=500, content={'code': -1, 'msg': str(exc)})
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    payload = BaseResponse(code=500, msg='internal error', data=None)
+    return JSONResponse(status_code=500, content=payload.model_dump())
 
 
 if __name__ == '__main__':

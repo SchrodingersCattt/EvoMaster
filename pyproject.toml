@@ -1,5 +1,5 @@
 [project]
-name = "evomaster"
+name = "matmaster-evo"
 version = "0.1.0"
 description = "The Universal Infrastructure for Building Evolving Autonomous Scientific Research Agents"
 readme = "README.md"
@@ -23,15 +23,11 @@ dependencies = [
     "pre-commit>=4.5.1",
     "pymysql>=1.1.2",
     "gunicorn>=25.0.3",
-]
-
-[project.optional-dependencies]
-# Mat Master scientific computing: local structure building, CIF/POSCAR handling (ASE, Pymatgen).
-# Install with: pip install -e ".[calculation]"
-calculation = [
+    # 结构读写与科学计算
     "ase>=3.22",
     "pymatgen>=2024.1",
     "dpdata>=0.2.18",
+    "bohrium-sdk>=0.15.0",
 ]
 
 [build-system]
@@ -39,4 +35,4 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["evomaster"]
+packages = ["matmaster-evo"]

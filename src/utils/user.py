@@ -1,37 +1,45 @@
 import logging
+from functools import partial
+from typing import Literal, overload
 
 import httpx
-from fastapi import HTTPException
-from starlette import status
-from starlette.requests import Request
+from fastapi import HTTPException, Request, status
 
-from src.models.user import UserContext
 from src.utils.constant import BI_URL
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def get_current_user(request: Request) -> UserContext:
+@overload
+def get_user_id(request: Request, *, required: Literal[True] = True) -> str: ...
+@overload
+def get_user_id(request: Request, *, required: Literal[False]) -> str | None: ...
+
+
+def get_user_id(request: Request, *, required: bool = True) -> str | None:
     """
-    从BohrAPI传递的Header中提取用户信息
-    假设BohrAPI会在Header中传递以下信息：
-    - X-User-Id: 用户ID
-    - X-Username: 用户名（可选）
-    - X-User-Role: 用户角色（可选）
+    从 Header 中提取 X-User-Id。
+    required=True: 强制要求登录（缺失则 401）
+    required=False: 允许未登录（缺失则返回 None）
     """
     user_id = request.headers.get('X-User-Id')
-    logger.info(f"headers = {request.headers}")
 
-    if not user_id:
-        # 如果BohrAPI没有传递用户ID，说明鉴权有问题
+    if required and not user_id:
         logger.warning('未找到用户ID，Header中缺少X-User-Id')
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail='无法识别用户身份'
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='无法识别用户身份',
         )
 
-    logger.info(f"用户上下文: user_id={user_id}")
-    return UserContext(user_id=user_id)
+    if user_id:
+        logger.info(f"用户上下文: user_id={user_id}")
+
+    return user_id or None
+
+
+require_user_id = partial(get_user_id, required=True)
+optional_user_id = partial(get_user_id, required=False)
 
 
 def get_email_by_user_id(user_id: str, business_line: str = 'bohrium') -> str:
