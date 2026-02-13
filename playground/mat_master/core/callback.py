@@ -116,6 +116,9 @@ class MatToolCallbacks:
 
     def register(self, pipeline: ToolCallbackPipeline) -> None:
         """Register all MAT callbacks in execution order."""
+        # Normalisation callbacks run first so downstream hooks see clean args.
+        pipeline.register_before(self.before_normalize_skill_script_args)
+        pipeline.register_before(self.before_resolve_skill_reference_name)
         pipeline.register_before(self.before_resolve_dpa_model_alias)
         pipeline.register_before(self.before_patch_job_manager_bohr_id)
         pipeline.register_after(self.after_ask_human_interaction)
@@ -259,6 +262,129 @@ class MatToolCallbacks:
     # ------------------------------------------------------------------
     # Before callbacks
     # ------------------------------------------------------------------
+
+    # ------ use_skill normalisation helpers ------
+
+    @staticmethod
+    def _unwrap_quoted_args(raw: str) -> str:
+        """Strip one redundant outer quote pair from a script_args value.
+
+        LLMs frequently produce ``script_args = '"--file foo.cif"'`` which
+        makes the whole string a single shell token.  This helper peels
+        exactly one outer pair so that ``shlex.split`` can work correctly.
+        """
+        s = raw.strip()
+        if len(s) >= 2 and s[0] == s[-1] and s[0] in ("'", '"'):
+            s = s[1:-1].strip()
+        return s
+
+    def before_normalize_skill_script_args(self, tool_call: Any) -> None:
+        """Unwrap redundant outer quotes around ``script_args``.
+
+        LLMs often wrap the entire argument string in an extra pair of
+        quotes, e.g. ``"--file foo.cif"`` instead of ``--file foo.cif``.
+        When that happens, shlex / argparse inside the skill script sees
+        one single token ``--file foo.cif`` and fails.  This callback
+        strips one outer quote pair so downstream parsing succeeds.
+        """
+        if (tool_call.function.name or "") != "use_skill":
+            return
+        args_str = tool_call.function.arguments or ""
+        try:
+            args = json.loads(args_str) if args_str else {}
+        except (json.JSONDecodeError, TypeError):
+            return
+        if not isinstance(args, dict):
+            return
+        if args.get("action") != "run_script":
+            return
+
+        script_args = args.get("script_args")
+        if not isinstance(script_args, str) or not script_args.strip():
+            return
+
+        cleaned = self._unwrap_quoted_args(script_args)
+        if cleaned != script_args:
+            args["script_args"] = cleaned
+            tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
+            self.logger.info(
+                "before_tool: unwrapped outer quotes in script_args: %r -> %r",
+                script_args,
+                cleaned,
+            )
+
+    def before_resolve_skill_reference_name(self, tool_call: Any) -> None:
+        """Auto-resolve bare reference filenames to their full sub-path.
+
+        When the LLM passes ``reference_name="task_band.inp"`` but the
+        actual template lives at ``references/cp2k/task_band.inp``, this
+        callback searches the skill's ``references/`` tree for a unique
+        match and rewrites the argument so the downstream
+        ``get_reference()`` succeeds on the first try.
+        """
+        if (tool_call.function.name or "") != "use_skill":
+            return
+        args_str = tool_call.function.arguments or ""
+        try:
+            args = json.loads(args_str) if args_str else {}
+        except (json.JSONDecodeError, TypeError):
+            return
+        if not isinstance(args, dict):
+            return
+        if args.get("action") != "get_reference":
+            return
+
+        ref_name = args.get("reference_name")
+        if not isinstance(ref_name, str) or not ref_name.strip():
+            return
+        ref_name = ref_name.strip()
+        # Only try to resolve bare filenames (no directory separator).
+        if "/" in ref_name or "\\" in ref_name:
+            return
+
+        skill_name = args.get("skill_name")
+        if not skill_name:
+            return
+
+        # Access the skill registry through the agent.
+        registry = getattr(self.agent, "skill_registry", None)
+        if registry is None:
+            return
+        skill = registry.get_skill(skill_name)
+        if skill is None:
+            return
+
+        from pathlib import Path
+
+        candidates: list[Path] = []
+        for root_name in ("references", "reference"):
+            root = skill.skill_path / root_name
+            if root.exists():
+                try:
+                    candidates.extend(p for p in root.rglob(ref_name) if p.is_file())
+                except Exception:
+                    pass
+
+        if len(candidates) == 1:
+            # Compute the relative path from the references root.
+            matched = candidates[0]
+            for root_name in ("references", "reference"):
+                root = skill.skill_path / root_name
+                if root.exists():
+                    try:
+                        rel = matched.relative_to(root).as_posix()
+                        args["reference_name"] = rel
+                        tool_call.function.arguments = json.dumps(
+                            args, ensure_ascii=False
+                        )
+                        self.logger.info(
+                            "before_tool: resolved reference name %r -> %r",
+                            ref_name,
+                            rel,
+                        )
+                        return
+                    except ValueError:
+                        continue
 
     def before_resolve_dpa_model_alias(self, tool_call: Any) -> None:
         """Resolve DPA short model key to hard-coded OSS URL."""
