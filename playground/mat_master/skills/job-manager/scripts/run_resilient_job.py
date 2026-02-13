@@ -32,8 +32,17 @@ import time
 from pathlib import Path
 from typing import Any
 
+_THIS_FILE = Path(__file__).resolve()
+for parent in (_THIS_FILE.parent, *_THIS_FILE.parents):
+    if (parent / "evomaster").is_dir():
+        p = str(parent)
+        if p not in sys.path:
+            sys.path.insert(0, p)
+        break
+
 from evomaster.adaptors.calculation.job_service import (
     download_job_file,
+    get_file_token,
     get_job_results,
     iterate_job_files,
     query_job_status,
@@ -186,26 +195,85 @@ def _find_log_file(workspace: str, software: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _download_output_files(
-    output_files: list[str],
+def _download_from_results_txt(
     workspace: str,
     bohr_job_id: str | None,
     download_tag: str | None = None,
     access_key: str | None = None,
 ) -> dict[str, Any]:
-    """Download job output_files entries (remote relative paths) into workspace."""
+    """Download files referenced by results.txt (aligned with legacy job.py)."""
     if not bohr_job_id:
         return {
             'status': 'skip',
-            'reason': 'bohr_job_id missing for output_files download',
+            'reason': 'bohr_job_id missing for results.txt download',
         }
 
     tag_raw = (download_tag or str(bohr_job_id) or "unknown_job").strip()
     safe_job = re.sub(r"[^\w.\-]", "_", tag_raw)[:80] or "unknown_job"
     run_stamp = time.strftime("%Y%m%d_%H%M%S")
     # Use per-job + per-run directory to avoid cross-task overwrite.
-    download_dir = Path(workspace) / "calculation_results" / safe_job / f"run_{run_stamp}"
+    download_dir = Path(workspace)/ f"run_{safe_job}_{run_stamp}"
     download_dir.mkdir(parents=True, exist_ok=True)
+
+    results_txt_local = download_dir / "result_0_results.txt"
+    download_job_file("results.txt", bohr_job_id, results_txt_local, access_key=access_key)
+
+    parsed: Any
+    text = results_txt_local.read_text(encoding="utf-8", errors="replace")
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        parsed = {}
+
+    if not isinstance(parsed, dict):
+        return {
+            "status": "failed",
+            "downloaded": [results_txt_local.resolve().as_posix()],
+            "download_dir": download_dir.resolve().as_posix(),
+            "download_errors": ["results.txt parsed payload is not a dict"],
+        }
+
+    def _extract_path_from_py_reduce(v: Any) -> str | None:
+        if not isinstance(v, dict):
+            return None
+        reduce_items = v.get("py/reduce")
+        if not isinstance(reduce_items, list) or len(reduce_items) < 2:
+            return None
+        tuple_item = reduce_items[1]
+        if not isinstance(tuple_item, dict):
+            return None
+        tuple_vals = tuple_item.get("py/tuple")
+        if not isinstance(tuple_vals, list) or not tuple_vals:
+            return None
+        raw = tuple_vals[0]
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        return raw.replace("\\", "/").strip()
+
+    referenced_files: list[str] = []
+    for v in parsed.values():
+        if isinstance(v, str) and v.strip():
+            if "/" in v or "\\" in v or "." in v:
+                referenced_files.append(v.replace("\\", "/").strip())
+            continue
+        extracted = _extract_path_from_py_reduce(v)
+        if extracted:
+            referenced_files.append(extracted)
+
+    root_prefix = ""
+    try:
+        _, token_root_path, _ = get_file_token("", bohr_job_id, access_key=access_key)
+        root_prefix = str(token_root_path or "").replace("\\", "/")
+        if root_prefix and not root_prefix.endswith("/"):
+            root_prefix += "/"
+    except Exception:
+        root_prefix = ""
+
+    def _to_rel_path(remote_path: str) -> str:
+        p = remote_path.replace("\\", "/").strip()
+        if root_prefix and p.startswith(root_prefix):
+            return p[len(root_prefix):].lstrip("/")
+        return p
 
     size_map: dict[str, int] = {}
     try:
@@ -220,14 +288,15 @@ def _download_output_files(
     except Exception:
         size_map = {}
 
-    downloaded: list[str] = []
+    downloaded: list[str] = [results_txt_local.resolve().as_posix()]
     skipped: list[str] = []
     errors: list[str] = []
 
-    for i, remote_path in enumerate(output_files):
+    for i, remote_path in enumerate(referenced_files, start=1):
         if not isinstance(remote_path, str) or not remote_path.strip():
             continue
         rp = remote_path.strip()
+        rel_rp = _to_rel_path(rp)
         size = size_map.get(rp.replace("\\", "/"))
         if isinstance(size, int) and size > _AUTO_DOWNLOAD_MAX_BYTES:
             skipped.append(f"{rp}: skipped by size policy ({size} bytes)")
@@ -236,7 +305,7 @@ def _download_output_files(
         segment = re.sub(r'[^\w.\-]', '_', segment) or f"artifact_{i}"
         dest = download_dir / f"result_{i}_{segment}"
         try:
-            path = download_job_file(rp, bohr_job_id, dest, access_key=access_key)
+            path = download_job_file(rel_rp, bohr_job_id, dest, access_key=access_key)
             downloaded.append(path.resolve().as_posix())
         except Exception as exc:
             errors.append(f"{rp}: {exc}")
@@ -249,30 +318,13 @@ def _download_output_files(
         info['download_skipped'] = skipped
     if errors:
         info['download_errors'] = errors
+    info["referenced_files"] = referenced_files
     return info
 
 
 # ---------------------------------------------------------------------------
 # Job status & results  (via OpenAPI requests)
 # ---------------------------------------------------------------------------
-
-
-def _collect_remote_output_files(results: dict[str, Any]) -> list[str]:
-    """Extract relative output file paths from results payload."""
-    val = results.get('output_files')
-    if isinstance(val, str):
-        val = [val]
-    if not isinstance(val, list):
-        return []
-    out: list[str] = []
-    for item in val:
-        if not isinstance(item, str):
-            continue
-        s = item.strip()
-        if not s or s.startswith('http'):
-            continue
-        out.append(s)
-    return out
 
 
 # ---------------------------------------------------------------------------
@@ -338,17 +390,14 @@ def run_lifecycle(
                     if isinstance(results.get('bohr_job_id'), str)
                     else None
                 )
-                output_files = _collect_remote_output_files(results)
                 download_info: dict[str, Any] = {}
                 if workspace:
-                    if output_files:
-                        download_info['output_file_downloads'] = _download_output_files(
-                            output_files,
-                            workspace,
-                            resolved_bohr_job_id,
-                            download_tag=download_tag,
-                            access_key=access_key,
-                        )
+                    download_info['results_txt_downloads'] = _download_from_results_txt(
+                        workspace,
+                        resolved_bohr_job_id,
+                        download_tag=download_tag,
+                        access_key=access_key,
+                    )
 
                 # Check whether downloads actually succeeded.
                 # If nothing was downloaded but errors exist, report partial failure
@@ -531,7 +580,7 @@ def main() -> None:
         "--download_tag",
         default=None,
         help=(
-            "Optional folder tag for downloaded results. "
+            "Folder tag for downloaded results. "
             "Use this to separate outputs across tasks; timestamp subfolder is always added."
         ),
     )
