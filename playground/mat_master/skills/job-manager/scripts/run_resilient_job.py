@@ -32,14 +32,6 @@ import time
 from pathlib import Path
 from typing import Any
 
-_THIS_FILE = Path(__file__).resolve()
-for parent in (_THIS_FILE.parent, *_THIS_FILE.parents):
-    if (parent / "evomaster").is_dir():
-        p = str(parent)
-        if p not in sys.path:
-            sys.path.insert(0, p)
-        break
-
 from evomaster.adaptors.calculation.job_service import (
     download_job_file,
     get_job_results,
@@ -47,71 +39,83 @@ from evomaster.adaptors.calculation.job_service import (
     query_job_status,
 )
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-TERMINAL_SUCCESS = frozenset({"Done", "Success", "Finished", "Completed", "done", "success", "finished", "completed"})
-TERMINAL_FAILURE = frozenset({"Failed", "Error", "Cancelled", "failed", "error", "cancelled"})
-UNKNOWN_STATUSES = frozenset({"Unknown", "unknown"})
+TERMINAL_SUCCESS = frozenset(
+    {
+        'Done',
+        'Success',
+        'Finished',
+        'Completed',
+        'done',
+        'success',
+        'finished',
+        'completed',
+    }
+)
+TERMINAL_FAILURE = frozenset(
+    {'Failed', 'Error', 'Cancelled', 'failed', 'error', 'cancelled'}
+)
+UNKNOWN_STATUSES = frozenset({'Unknown', 'unknown'})
 
 # Built-in fix strategies keyed by canonical error code.
 FIX_STRATEGIES: dict[str, dict[str, Any]] = {
-    "scf_diverged": {
-        "action": "update_parameter",
-        "description": "SCF not converging — reduce mixing, switch algorithm",
-        "params": {"ALGO": "All", "AMIX": "0.1", "BMIX": "0.0001"},
+    'scf_diverged': {
+        'action': 'update_parameter',
+        'description': 'SCF not converging — reduce mixing, switch algorithm',
+        'params': {'ALGO': 'All', 'AMIX': '0.1', 'BMIX': '0.0001'},
     },
-    "scf_diagonalization_error": {
-        "action": "update_parameter",
-        "description": "Diagonalization failure — switch to more robust algorithm",
-        "params": {"ALGO": "Normal", "PREC": "Accurate"},
+    'scf_diagonalization_error': {
+        'action': 'update_parameter',
+        'description': 'Diagonalization failure — switch to more robust algorithm',
+        'params': {'ALGO': 'Normal', 'PREC': 'Accurate'},
     },
-    "kpoints_error": {
-        "action": "reduce_kpoints",
-        "description": "K-point / IBZKPT error — reduce k-mesh density by half",
-        "factor": 0.5,
+    'kpoints_error': {
+        'action': 'reduce_kpoints',
+        'description': 'K-point / IBZKPT error — reduce k-mesh density by half',
+        'factor': 0.5,
     },
-    "grid_too_coarse": {
-        "action": "increase_cutoff",
-        "description": "FFT grid too coarse — increase energy cutoff",
-        "increment": 50,
+    'grid_too_coarse': {
+        'action': 'increase_cutoff',
+        'description': 'FFT grid too coarse — increase energy cutoff',
+        'increment': 50,
     },
-    "lost_atoms": {
-        "action": "reduce_timestep",
-        "description": "Lost atoms in MD — halve the timestep",
-        "factor": 0.5,
+    'lost_atoms': {
+        'action': 'reduce_timestep',
+        'description': 'Lost atoms in MD — halve the timestep',
+        'factor': 0.5,
     },
-    "out_of_range": {
-        "action": "reduce_timestep",
-        "description": "Out of range — halve the timestep",
-        "factor": 0.5,
+    'out_of_range': {
+        'action': 'reduce_timestep',
+        'description': 'Out of range — halve the timestep',
+        'factor': 0.5,
     },
-    "walltime_exceeded": {
-        "action": "increase_walltime",
-        "description": "Job killed by walltime — double the walltime limit",
-        "factor": 2.0,
+    'walltime_exceeded': {
+        'action': 'increase_walltime',
+        'description': 'Job killed by walltime — double the walltime limit',
+        'factor': 2.0,
     },
-    "oom_error": {
-        "action": "reduce_parallelism",
-        "description": "Out of memory — reduce parallelism or memory per node",
-        "suggestion": "Reduce NCORE/NPAR or split into smaller systems",
+    'oom_error': {
+        'action': 'reduce_parallelism',
+        'description': 'Out of memory — reduce parallelism or memory per node',
+        'suggestion': 'Reduce NCORE/NPAR or split into smaller systems',
     },
 }
 
 # Log file name patterns per software.
 # New software can be added here; any unlisted software uses the generic fallback.
 LOG_PATTERNS: dict[str, list[str]] = {
-    "vasp": ["OUTCAR", "vasp.out", "*.out"],
-    "abacus": ["OUT.ABACUS", "running_*.log", "*.log"],
-    "lammps": ["log.lammps", "*.log"],
-    "cp2k": ["*.out", "cp2k.out", "*.log"],
-    "gaussian": ["*.log", "*.out"],
-    "qe": ["*.out", "*.log"],
-    "abinit": ["*.out", "*.log"],
-    "orca": ["*.out", "*.log"],
-    "dpa": ["*.log", "*.out", "*.json"],
+    'vasp': ['OUTCAR', 'vasp.out', '*.out'],
+    'abacus': ['OUT.ABACUS', 'running_*.log', '*.log'],
+    'lammps': ['log.lammps', '*.log'],
+    'cp2k': ['*.out', 'cp2k.out', '*.log'],
+    'gaussian': ['*.log', '*.out'],
+    'qe': ['*.out', '*.log'],
+    'abinit': ['*.out', '*.log'],
+    'orca': ['*.out', '*.log'],
+    'dpa': ['*.log', '*.out', '*.json'],
 }
 
 _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024
@@ -120,40 +124,44 @@ _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024
 # Error diagnosis  (reuses log_diagnostics skill logic)
 # ---------------------------------------------------------------------------
 
+
 def _get_log_diagnostics_dir() -> Path | None:
     """Resolve path to log_diagnostics/scripts/ relative to this skill."""
     skill_dir = Path(__file__).resolve().parent.parent  # job-manager/
-    log_diag = skill_dir.parent / "log_diagnostics" / "scripts"
+    log_diag = skill_dir.parent / 'log_diagnostics' / 'scripts'
     return log_diag if log_diag.exists() else None
 
 
-def _diagnose_log(log_path: str, software: str = "") -> str:
+def _diagnose_log(log_path: str, software: str = '') -> str:
     """Run log_diagnostics analysis and return a canonical error code."""
     diag_dir = _get_log_diagnostics_dir()
     if diag_dir is None:
-        return "unknown_error"
+        return 'unknown_error'
 
     # Import the analysis functions from the sibling skill
     if str(diag_dir) not in sys.path:
         sys.path.insert(0, str(diag_dir))
     try:
-        from extract_error import analyze_lammps_log, analyze_vasp_log  # type: ignore[import-untyped]
+        from extract_error import (  # type: ignore[import-untyped]
+            analyze_lammps_log,
+            analyze_vasp_log,
+        )
 
         sw_lower = software.lower()
         lower = log_path.lower()
         # DPA / MLP jobs: typically output JSON; no specialised analyser yet
-        if sw_lower == "dpa":
-            return "unknown_error"
-        if sw_lower in ("vasp", "abacus", "abinit", "qe") or any(
-            tok in lower for tok in ("outcar", "vasp", "abacus", "abinit", "qe")
+        if sw_lower == 'dpa':
+            return 'unknown_error'
+        if sw_lower in ('vasp', 'abacus', 'abinit', 'qe') or any(
+            tok in lower for tok in ('outcar', 'vasp', 'abacus', 'abinit', 'qe')
         ):
             return analyze_vasp_log(log_path)
-        if sw_lower in ("lammps",) or "lammps" in lower:
+        if sw_lower in ('lammps',) or 'lammps' in lower:
             return analyze_lammps_log(log_path)
         # Generic fallback: try VASP-style analysis first
         return analyze_vasp_log(log_path)
     except Exception:
-        return "unknown_error"
+        return 'unknown_error'
 
 
 def _find_log_file(workspace: str, software: str) -> str | None:
@@ -165,7 +173,7 @@ def _find_log_file(workspace: str, software: str) -> str | None:
     ws = Path(workspace)
     if not ws.exists():
         return None
-    patterns = LOG_PATTERNS.get(software.lower(), ["*.log", "*.out", "*.json"])
+    patterns = LOG_PATTERNS.get(software.lower(), ['*.log', '*.out', '*.json'])
     for pat in patterns:
         matches = sorted(ws.rglob(pat), key=lambda p: p.stat().st_mtime, reverse=True)
         if matches:
@@ -187,7 +195,10 @@ def _download_output_files(
 ) -> dict[str, Any]:
     """Download job output_files entries (remote relative paths) into workspace."""
     if not bohr_job_id:
-        return {"status": "skip", "reason": "bohr_job_id missing for output_files download"}
+        return {
+            'status': 'skip',
+            'reason': 'bohr_job_id missing for output_files download',
+        }
 
     tag_raw = (download_tag or str(bohr_job_id) or "unknown_job").strip()
     safe_job = re.sub(r"[^\w.\-]", "_", tag_raw)[:80] or "unknown_job"
@@ -202,10 +213,10 @@ def _download_output_files(
         for obj in file_objs:
             if not isinstance(obj, dict):
                 continue
-            p = obj.get("path")
-            s = obj.get("size")
+            p = obj.get('path')
+            s = obj.get('size')
             if isinstance(p, str) and isinstance(s, int):
-                size_map[p.replace("\\", "/")] = s
+                size_map[p.replace('\\', '/')] = s
     except Exception:
         size_map = {}
 
@@ -221,8 +232,8 @@ def _download_output_files(
         if isinstance(size, int) and size > _AUTO_DOWNLOAD_MAX_BYTES:
             skipped.append(f"{rp}: skipped by size policy ({size} bytes)")
             continue
-        segment = rp.rsplit("/", 1)[-1] or f"artifact_{i}"
-        segment = re.sub(r"[^\w.\-]", "_", segment) or f"artifact_{i}"
+        segment = rp.rsplit('/', 1)[-1] or f"artifact_{i}"
+        segment = re.sub(r'[^\w.\-]', '_', segment) or f"artifact_{i}"
         dest = download_dir / f"result_{i}_{segment}"
         try:
             path = download_job_file(rp, bohr_job_id, dest, access_key=access_key)
@@ -231,13 +242,13 @@ def _download_output_files(
             errors.append(f"{rp}: {exc}")
 
     info: dict[str, Any] = {
-        "downloaded": downloaded,
-        "download_dir": download_dir.resolve().as_posix(),
+        'downloaded': downloaded,
+        'download_dir': download_dir.resolve().as_posix(),
     }
     if skipped:
-        info["download_skipped"] = skipped
+        info['download_skipped'] = skipped
     if errors:
-        info["download_errors"] = errors
+        info['download_errors'] = errors
     return info
 
 
@@ -245,9 +256,10 @@ def _download_output_files(
 # Job status & results  (via OpenAPI requests)
 # ---------------------------------------------------------------------------
 
+
 def _collect_remote_output_files(results: dict[str, Any]) -> list[str]:
     """Extract relative output file paths from results payload."""
-    val = results.get("output_files")
+    val = results.get('output_files')
     if isinstance(val, str):
         val = [val]
     if not isinstance(val, list):
@@ -257,7 +269,7 @@ def _collect_remote_output_files(results: dict[str, Any]) -> list[str]:
         if not isinstance(item, str):
             continue
         s = item.strip()
-        if not s or s.startswith("http"):
+        if not s or s.startswith('http'):
             continue
         out.append(s)
     return out
@@ -266,6 +278,7 @@ def _collect_remote_output_files(results: dict[str, Any]) -> list[str]:
 # ---------------------------------------------------------------------------
 # Main lifecycle
 # ---------------------------------------------------------------------------
+
 
 def run_lifecycle(
     job_id: str,
@@ -315,15 +328,21 @@ def run_lifecycle(
                     software=None,
                     access_key=access_key,
                 )
-                results = raw_results if isinstance(raw_results, dict) else {"raw": raw_results}
+                results = (
+                    raw_results
+                    if isinstance(raw_results, dict)
+                    else {'raw': raw_results}
+                )
                 resolved_bohr_job_id = bohr_job_id or (
-                    results.get("bohr_job_id") if isinstance(results.get("bohr_job_id"), str) else None
+                    results.get('bohr_job_id')
+                    if isinstance(results.get('bohr_job_id'), str)
+                    else None
                 )
                 output_files = _collect_remote_output_files(results)
                 download_info: dict[str, Any] = {}
                 if workspace:
                     if output_files:
-                        download_info["output_file_downloads"] = _download_output_files(
+                        download_info['output_file_downloads'] = _download_output_files(
                             output_files,
                             workspace,
                             resolved_bohr_job_id,
@@ -338,40 +357,40 @@ def run_lifecycle(
                 total_errors: list[str] = []
                 for section in download_info.values():
                     if isinstance(section, dict):
-                        total_downloaded.extend(section.get("downloaded") or [])
-                        total_errors.extend(section.get("download_errors") or [])
+                        total_downloaded.extend(section.get('downloaded') or [])
+                        total_errors.extend(section.get('download_errors') or [])
 
                 if total_errors and not total_downloaded:
                     return {
-                        "status": "failed",
-                        "job_id": current_job_id,
-                        "bohr_job_id": resolved_bohr_job_id,
-                        "retries": retries,
-                        "results": results,
-                        "downloads": download_info,
-                        "message": (
+                        'status': 'failed',
+                        'job_id': current_job_id,
+                        'bohr_job_id': resolved_bohr_job_id,
+                        'retries': retries,
+                        'results': results,
+                        'downloads': download_info,
+                        'message': (
                             f"Job {current_job_id} finished but all result downloads failed "
                             f"({len(total_errors)} errors). Check download_errors for details."
                         ),
                     }
 
-                out_status = "success" if not total_errors else "partial_success"
+                out_status = 'success' if not total_errors else 'partial_success'
                 return {
-                    "status": out_status,
-                    "job_id": current_job_id,
-                    "bohr_job_id": resolved_bohr_job_id,
-                    "retries": retries,
-                    "results": results,
-                    "downloads": download_info,
-                    "message": (
+                    'status': out_status,
+                    'job_id': current_job_id,
+                    'bohr_job_id': resolved_bohr_job_id,
+                    'retries': retries,
+                    'results': results,
+                    'downloads': download_info,
+                    'message': (
                         f"Job {current_job_id} completed successfully."
-                        if out_status == "success"
+                        if out_status == 'success'
                         else f"Job {current_job_id} completed but {len(total_errors)} file(s) failed to download."
                     ),
                 }
 
             # -- Failure --
-            if status in TERMINAL_FAILURE or status.startswith("Error:"):
+            if status in TERMINAL_FAILURE or status.startswith('Error:'):
                 break
 
             # -- Unknown: retry a few times then give up --
@@ -379,16 +398,16 @@ def run_lifecycle(
                 unknown_count += 1
                 if unknown_count >= max_unknown:
                     return {
-                        "status": "unknown",
-                        "job_id": current_job_id,
-                        "bohr_job_id": bohr_job_id,
-                        "retries": retries,
-                        "message": (
+                        'status': 'unknown',
+                        'job_id': current_job_id,
+                        'bohr_job_id': bohr_job_id,
+                        'retries': retries,
+                        'message': (
                             f"Job status returned 'Unknown' {unknown_count} times.  "
-                            "Possible causes: (1) Bohrium access_key not set or invalid — "
-                            "check BOHRIUM_ACCESS_KEY in .env; (2) job ID could not be resolved "
-                            "— for ABACUS / dpdispatcher jobs, pass --bohr_job_id explicitly "
-                            "(from extra_info.bohr_job_id in the submit response)."
+                            'Possible causes: (1) Bohrium access_key not set or invalid — '
+                            'check BOHRIUM_ACCESS_KEY in .env; (2) job ID could not be resolved '
+                            '— for ABACUS / dpdispatcher jobs, pass --bohr_job_id explicitly '
+                            '(from extra_info.bohr_job_id in the submit response).'
                         ),
                     }
                 # Short retry before giving up
@@ -402,18 +421,20 @@ def run_lifecycle(
 
         # ── Job failed — diagnose ──
         log_path = _find_log_file(workspace, software)
-        error_code = _diagnose_log(log_path, software=software) if log_path else "unknown_error"
+        error_code = (
+            _diagnose_log(log_path, software=software) if log_path else 'unknown_error'
+        )
 
         fix = FIX_STRATEGIES.get(error_code)
         if not fix:
             return {
-                "status": "failed",
-                "job_id": current_job_id,
-                "bohr_job_id": bohr_job_id,
-                "retries": retries,
-                "error_code": error_code,
-                "log_file": log_path,
-                "message": (
+                'status': 'failed',
+                'job_id': current_job_id,
+                'bohr_job_id': bohr_job_id,
+                'retries': retries,
+                'error_code': error_code,
+                'log_file': log_path,
+                'message': (
                     f"Job {current_job_id} failed with error '{error_code}'. "
                     f"No built-in fix strategy. Review the log file and fix manually."
                 ),
@@ -426,14 +447,14 @@ def run_lifecycle(
         # ── Return diagnosis + fix suggestion to the agent ──
         # The agent should: apply the fix, resubmit via MCP, and call job-manager again.
         return {
-            "status": "needs_fix",
-            "job_id": current_job_id,
-            "bohr_job_id": bohr_job_id,
-            "retries": retries,
-            "error_code": error_code,
-            "fix_strategy": fix,
-            "log_file": log_path,
-            "message": (
+            'status': 'needs_fix',
+            'job_id': current_job_id,
+            'bohr_job_id': bohr_job_id,
+            'retries': retries,
+            'error_code': error_code,
+            'fix_strategy': fix,
+            'log_file': log_path,
+            'message': (
                 f"Job {current_job_id} failed with '{error_code}' (retry {retries}/{max_retries}). "
                 f"Suggested fix: {fix['description']}. "
                 f"Apply the fix to input files, re-submit via MCP, then call job-manager again with the new job_id."
@@ -442,12 +463,12 @@ def run_lifecycle(
 
     # Exhausted retries — signal that agent should consider asking human
     return {
-        "status": "failed",
-        "job_id": current_job_id,
-        "bohr_job_id": bohr_job_id,
-        "retries": retries,
-        "exhausted_retries": True,
-        "message": (
+        'status': 'failed',
+        'job_id': current_job_id,
+        'bohr_job_id': bohr_job_id,
+        'retries': retries,
+        'exhausted_retries': True,
+        'message': (
             f"Job {current_job_id} failed after {retries} retries (limit: {max_retries}). "
             f"All built-in fix strategies have been attempted. "
             f"Consider asking the human user (ask_human skill) whether to: "
@@ -463,40 +484,48 @@ def run_lifecycle(
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Resilient job lifecycle manager — monitors a remote calculation job.",
+        description='Resilient job lifecycle manager — monitors a remote calculation job.',
     )
-    parser.add_argument("--job_id", required=True, help="Job ID from the MCP submit tool")
     parser.add_argument(
-        "--bohr_job_id",
+        '--job_id', required=True, help='Job ID from the MCP submit tool'
+    )
+    parser.add_argument(
+        '--bohr_job_id',
         default=None,
         help=(
-            "Explicit Bohrium job ID (from extra_info.bohr_job_id in the submit response).  "
-            "Required for dpdispatcher jobs (ABACUS, etc.) whose MCP job_id contains a hex hash."
+            'Explicit Bohrium job ID (from extra_info.bohr_job_id in the submit response).  '
+            'Required for dpdispatcher jobs (ABACUS, etc.) whose MCP job_id contains a hex hash.'
         ),
     )
     parser.add_argument(
-        "--software",
+        '--software',
         required=True,
-        help="Software name (case-insensitive): dpa, abacus, lammps, cp2k, qe, abinit, orca, gaussian, or any registered async software",
+        help='Software name (case-insensitive): dpa, abacus, lammps, cp2k, qe, abinit, orca, gaussian, or any registered async software',
     )
     parser.add_argument(
-        "--workspace",
-        default=".",
-        help="Workspace directory for result downloads (default: current dir)",
+        '--workspace',
+        default='.',
+        help='Workspace directory for result downloads (default: current dir)',
     )
     parser.add_argument(
-        "--poll_interval",
+        '--poll_interval',
         type=int,
         default=30,
-        help="Seconds between status checks (default: 30)",
+        help='Seconds between status checks (default: 30)',
     )
     parser.add_argument(
-        "--max_retries",
+        '--max_retries',
         type=int,
         default=5,
-        help="Maximum diagnosis-and-retry cycles (default: 5)",
+        help='Maximum diagnosis-and-retry cycles (default: 5)',
+    )
+    parser.add_argument(
+        '--access_key',
+        default=None,
+        help='Bohrium access key (optional; else uses BOHRIUM_ACCESS_KEY env). Passed from chat session when available.',
     )
     parser.add_argument(
         "--download_tag",
@@ -516,11 +545,12 @@ def main() -> None:
         max_retries=args.max_retries,
         bohr_job_id=args.bohr_job_id,
         download_tag=args.download_tag,
+        access_key=args.access_key,
     )
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
-    sys.exit(0 if result.get("status") == "success" else 1)
+    sys.exit(0 if result.get('status') == 'success' else 1)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
