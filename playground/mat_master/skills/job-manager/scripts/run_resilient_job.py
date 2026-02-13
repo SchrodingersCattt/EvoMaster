@@ -253,40 +253,6 @@ def _download_output_files(
 # Job status & results  (via OpenAPI requests)
 # ---------------------------------------------------------------------------
 
-def _check_job_status(
-    job_id: str,
-    bohr_job_id: str | None = None,
-    access_key: str | None = None,
-) -> str:
-    """Query job status via Bohrium OpenAPI.
-
-    Returns one of: Finished / Failed / Running / Pending / Scheduling / Unknown.
-    """
-    return str(
-        query_job_status(
-            job_id,
-            bohr_job_id=bohr_job_id,
-            software=None,
-            access_key=access_key,
-        )
-    )
-
-
-def _get_job_results(
-    job_id: str,
-    bohr_job_id: str | None = None,
-    access_key: str | None = None,
-) -> dict[str, Any]:
-    """Fetch job result payload (metadata, file listing) via Bohrium OpenAPI."""
-    result = get_job_results(
-        job_id,
-        bohr_job_id=bohr_job_id,
-        software=None,
-        access_key=access_key,
-    )
-    return result if isinstance(result, dict) else {"raw": result}
-
-
 def _collect_remote_output_files(results: dict[str, Any]) -> list[str]:
     """Extract relative output file paths from results payload."""
     val = results.get("output_files")
@@ -339,19 +305,24 @@ def run_lifecycle(
         polls = 0
         # ── Poll loop ──
         while polls < max_polls:
-            status = _check_job_status(
-                current_job_id,
-                bohr_job_id=bohr_job_id,
-                access_key=access_key,
+            status = str(
+                query_job_status(
+                    current_job_id,
+                    bohr_job_id=bohr_job_id,
+                    software=None,
+                    access_key=access_key,
+                )
             )
 
             # -- Success --
             if status in TERMINAL_SUCCESS:
-                results = _get_job_results(
+                raw_results = get_job_results(
                     current_job_id,
                     bohr_job_id=bohr_job_id,
+                    software=None,
                     access_key=access_key,
                 )
+                results = raw_results if isinstance(raw_results, dict) else {"raw": raw_results}
                 resolved_bohr_job_id = bohr_job_id or (
                     results.get("bohr_job_id") if isinstance(results.get("bohr_job_id"), str) else None
                 )
