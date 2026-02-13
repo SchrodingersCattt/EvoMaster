@@ -7,6 +7,8 @@ load_dotenv()
 CURRENT_ENV = os.getenv('SERVICE_ENV', 'test')
 load_dotenv(find_dotenv(f'.env.{CURRENT_ENV}'))
 
+AG_UI_EVENT = 'ag-ui'
+
 DB_CONFIG = {
     'host': os.getenv('MYSQL_HOST', 'localhost'),
     'port': int(os.getenv('MYSQL_PORT', 3306)),
@@ -18,5 +20,4 @@ DB_CONFIG = {
     'autocommit': False,
 }
 
-MODEL_NAME = os.getenv('MODEL_NAME', '/app/models/moka-ai/m3e-base')
 BI_URL = os.getenv('BI_URL', 'https://account.test.dp.tech')
