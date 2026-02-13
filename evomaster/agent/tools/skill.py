@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import shlex
-import subprocess
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field
@@ -24,23 +24,20 @@ class SkillToolParams(BaseToolParams):
     Skill 是 EvoMaster 的扩展能力，包含领域知识和可执行脚本。
     """
 
-    name: ClassVar[str] = "use_skill"
+    name: ClassVar[str] = 'use_skill'
 
-    skill_name: str = Field(description="技能名称")
+    skill_name: str = Field(description='技能名称')
     action: str = Field(
         description="要执行的操作：'get_info' 获取完整信息，'get_reference' 获取参考文档，'run_script' 运行脚本"
     )
     reference_name: str | None = Field(
-        default=None,
-        description="参考文档名称（当 action='get_reference' 时需要）"
+        default=None, description="参考文档名称（当 action='get_reference' 时需要）"
     )
     script_name: str | None = Field(
-        default=None,
-        description="脚本名称（当 action='run_script' 时需要）"
+        default=None, description="脚本名称（当 action='run_script' 时需要）"
     )
     script_args: str | None = Field(
-        default=None,
-        description="脚本参数，空格分隔（当 action='run_script' 时可选）"
+        default=None, description="脚本参数，空格分隔（当 action='run_script' 时可选）"
     )
 
 
@@ -53,7 +50,7 @@ class SkillTool(BaseTool):
     - 执行技能中的脚本
     """
 
-    name: ClassVar[str] = "use_skill"
+    name: ClassVar[str] = 'use_skill'
     params_class: ClassVar[type[BaseToolParams]] = SkillToolParams
 
     def __init__(self, skill_registry: SkillRegistry):
@@ -65,7 +62,9 @@ class SkillTool(BaseTool):
         super().__init__()
         self.skill_registry = skill_registry
 
-    def execute(self, session: BaseSession, args_json: str) -> tuple[str, dict[str, Any]]:
+    def execute(
+        self, session: BaseSession, args_json: str
+    ) -> tuple[str, dict[str, Any]]:
         """执行技能操作
 
         Args:
@@ -83,41 +82,59 @@ class SkillTool(BaseTool):
             if skill is None:
                 return (
                     f"Error: Skill '{params.skill_name}' not found",
-                    {"error": "skill_not_found"}
+                    {'error': 'skill_not_found'},
                 )
 
             # 只支持 Operator 类型的 skill
             from evomaster.skills import OperatorSkill
+
             if not isinstance(skill, OperatorSkill):
                 return (
                     f"Error: Skill '{params.skill_name}' is not an Operator skill",
-                    {"error": "invalid_skill_type"}
+                    {'error': 'invalid_skill_type'},
                 )
 
             self.logger.info(
-                "Skill hit: skill_name=%s action=%s ref=%s script=%s",
+                'Skill hit: skill_name=%s action=%s ref=%s script=%s',
                 params.skill_name,
                 params.action,
-                params.reference_name or "-",
-                params.script_name or "-",
+                params.reference_name or '-',
+                params.script_name or '-',
             )
 
             # 根据 action 执行不同操作
-            if params.action == "get_info":
+            if params.action == 'get_info':
                 return self._get_info(skill)
-            elif params.action == "get_reference":
+            elif params.action == 'get_reference':
                 return self._get_reference(skill, params.reference_name)
-            elif params.action == "run_script":
-                return self._run_script(session, skill, params.script_name, params.script_args)
+            elif params.action == 'run_script':
+                return self._run_script(
+                    session, skill, params.script_name, params.script_args
+                )
             else:
                 return (
                     f"Error: Unknown action '{params.action}'",
-                    {"error": "invalid_action"}
+                    {'error': 'invalid_action'},
                 )
 
         except Exception as e:
             self.logger.error(f"Skill tool execution failed: {e}", exc_info=True)
-            return f"Error: {str(e)}", {"error": str(e)}
+            return f"Error: {str(e)}", {'error': str(e)}
+
+    @staticmethod
+    def _get_skill_project_root(skill: OperatorSkill) -> Path | None:
+        """从 skill 路径向上查找含 evomaster 的项目根，供 PYTHONPATH 使用。"""
+        try:
+            base = getattr(skill, 'skill_path', None)
+            if base is None:
+                return None
+            path = Path(base) if not isinstance(base, Path) else base
+            for parent in (path,) + tuple(path.parents):
+                if (parent / 'evomaster').is_dir():
+                    return parent.resolve()
+        except Exception:
+            pass
+        return None
 
     def _get_info(self, skill: OperatorSkill) -> tuple[str, dict[str, Any]]:
         """获取技能的完整信息
@@ -131,13 +148,11 @@ class SkillTool(BaseTool):
         full_info = skill.get_full_info()
         return (
             f"# Skill: {skill.meta_info.name}\n\n{full_info}",
-            {"action": "get_info", "skill_name": skill.meta_info.name}
+            {'action': 'get_info', 'skill_name': skill.meta_info.name},
         )
 
     def _get_reference(
-        self,
-        skill: OperatorSkill,
-        reference_name: str | None
+        self, skill: OperatorSkill, reference_name: str | None
     ) -> tuple[str, dict[str, Any]]:
         """获取技能的参考文档
 
@@ -151,7 +166,7 @@ class SkillTool(BaseTool):
         if not reference_name:
             return (
                 "Error: reference_name is required for action='get_reference'",
-                {"error": "missing_parameter"}
+                {'error': 'missing_parameter'},
             )
 
         try:
@@ -166,10 +181,10 @@ class SkillTool(BaseTool):
             return (
                 observation,
                 {
-                    "action": "get_reference",
-                    "skill_name": skill.meta_info.name,
-                    "reference_name": reference_name
-                }
+                    'action': 'get_reference',
+                    'skill_name': skill.meta_info.name,
+                    'reference_name': reference_name,
+                },
             )
         except FileNotFoundError as e:
             # Guardrail: many skills only ship SKILL.md; when a specific
@@ -179,11 +194,11 @@ class SkillTool(BaseTool):
             return (
                 f"Error: {str(e)}\n\nFallback to skill info:\n\n# Skill: {skill.meta_info.name}\n\n{full_info}",
                 {
-                    "action": "get_reference",
-                    "skill_name": skill.meta_info.name,
-                    "reference_name": reference_name,
-                    "warning": "reference_not_found_fallback_to_get_info",
-                }
+                    'action': 'get_reference',
+                    'skill_name': skill.meta_info.name,
+                    'reference_name': reference_name,
+                    'warning': 'reference_not_found_fallback_to_get_info',
+                },
             )
 
     def _get_co_template_hint(
@@ -204,9 +219,9 @@ class SkillTool(BaseTool):
         # Locate the hints file
         hints_path: Path | None = None
         for candidate in (
-            skill.skill_path / "references" / "_co_templates.json",
-            skill.skill_path / "reference" / "_co_templates.json",
-            skill.skill_path / "_co_templates.json",
+            skill.skill_path / 'references' / '_co_templates.json',
+            skill.skill_path / 'reference' / '_co_templates.json',
+            skill.skill_path / '_co_templates.json',
         ):
             if candidate.exists():
                 hints_path = candidate
@@ -216,7 +231,7 @@ class SkillTool(BaseTool):
             return None
 
         try:
-            hints = _json.loads(hints_path.read_text(encoding="utf-8"))
+            hints = _json.loads(hints_path.read_text(encoding='utf-8'))
         except Exception:
             return None
 
@@ -224,38 +239,38 @@ class SkillTool(BaseTool):
         if not entry:
             return None
 
-        hint_text = entry.get("hint", "")
-        related = entry.get("related", [])
+        hint_text = entry.get('hint', '')
+        related = entry.get('related', [])
         if not hint_text and not related:
             return None
 
         lines = [
-            "",
-            "",
-            "=" * 72,
-            ">>> IMPORTANT — CO-TEMPLATE REMINDER <<<",
+            '',
+            '',
+            '=' * 72,
+            '>>> IMPORTANT — CO-TEMPLATE REMINDER <<<',
         ]
         if hint_text:
             lines.append(hint_text)
         if related:
             lines.append(
-                "Related templates you should ALSO fetch (use get_reference for each):"
+                'Related templates you should ALSO fetch (use get_reference for each):'
             )
             for r in related:
                 lines.append(f"  - {r}")
         lines.append(
-            "Do NOT skip fetching related templates. Do NOT try to manually "
-            "construct these sections by querying the manual."
+            'Do NOT skip fetching related templates. Do NOT try to manually '
+            'construct these sections by querying the manual.'
         )
-        lines.append("=" * 72)
-        return "\n".join(lines)
+        lines.append('=' * 72)
+        return '\n'.join(lines)
 
     def _run_script(
         self,
         session: BaseSession,
         skill: OperatorSkill,
         script_name: str | None,
-        script_args: str | None
+        script_args: str | None,
     ) -> tuple[str, dict[str, Any]]:
         """运行技能中的脚本
 
@@ -271,23 +286,28 @@ class SkillTool(BaseTool):
         if not script_name:
             return (
                 "Error: script_name is required for action='run_script'",
-                {"error": "missing_parameter"}
+                {'error': 'missing_parameter'},
             )
 
         # 获取脚本路径
         script_path = skill.get_script_path(script_name)
         if script_path is None:
-            available_scripts = ", ".join([s.name for s in skill.available_scripts])
+            available_scripts = ', '.join([s.name for s in skill.available_scripts])
             return (
                 f"Error: Script '{script_name}' not found in skill '{skill.meta_info.name}'. "
                 f"Available scripts: {available_scripts}",
-                {"error": "script_not_found"}
+                {'error': 'script_not_found'},
             )
         # 转换为绝对路径
         script_path = script_path.resolve()
+        # 解析项目根（含 evomaster 的目录），供 Python 脚本设置 PYTHONPATH
+        project_root = self._get_skill_project_root(skill)
         # 构建命令
         if script_path.suffix == '.py':
-            cmd = f"python {script_path}"
+            py_prefix = ''
+            if project_root is not None:
+                py_prefix = f"PYTHONPATH={shlex.quote(str(project_root))} "
+            cmd = f"{py_prefix}python {script_path}"
         elif script_path.suffix == '.sh':
             cmd = f"bash {script_path}"
         elif script_path.suffix == '.js':
@@ -295,31 +315,45 @@ class SkillTool(BaseTool):
         else:
             return (
                 f"Error: Unsupported script type: {script_path.suffix}",
-                {"error": "unsupported_script_type"}
+                {'error': 'unsupported_script_type'},
             )
 
         if script_args and script_args.strip():
             import sys as _sys
-            if _sys.platform == "win32":
-                cmd += " " + script_args.strip()
+
+            if _sys.platform == 'win32':
+                cmd += ' ' + script_args.strip()
             else:
                 try:
                     parts = shlex.split(script_args.strip())
-                    cmd += " " + " ".join(shlex.quote(p) for p in parts)
+                    cmd += ' ' + ' '.join(shlex.quote(p) for p in parts)
                 except ValueError:
-                    cmd += " " + script_args.strip()
+                    cmd += ' ' + script_args.strip()
+
+        # job-manager/run_resilient_job.py 需要 Bohrium 鉴权：从 session 注入前端传入的 access_key
+        if (
+            skill.meta_info.name == 'job-manager'
+            and script_name == 'run_resilient_job.py'
+        ):
+            bohrium_creds = getattr(session, '_bohrium_credentials', None) or {}
+            access_key = (bohrium_creds.get('access_key') or '').strip()
+            if access_key:
+                cmd += ' ' + shlex.quote('--access_key') + ' ' + shlex.quote(access_key)
 
         # 使用 session 的 bash 工具执行脚本
         try:
             timeout: int | None = None
             # job-manager is expected to block for long-running remote jobs.
             # Use a larger timeout to avoid false failures that cause tool drift.
-            if skill.meta_info.name == "job-manager" and script_name == "run_resilient_job.py":
+            if (
+                skill.meta_info.name == 'job-manager'
+                and script_name == 'run_resilient_job.py'
+            ):
                 timeout = 60 * 60  # 1 hour
             result = session.exec_bash(cmd, timeout=timeout)
-            stdout = result.get("stdout", "")
-            stderr = result.get("stderr", "")
-            exit_code = result.get("exit_code", 0)
+            stdout = result.get('stdout', '')
+            stderr = result.get('stderr', '')
+            exit_code = result.get('exit_code', 0)
 
             output = f"Script output:\n{stdout}"
             if stderr:
@@ -330,15 +364,15 @@ class SkillTool(BaseTool):
             return (
                 output,
                 {
-                    "action": "run_script",
-                    "skill_name": skill.meta_info.name,
-                    "script_name": script_name,
-                    "script_args": script_args,
-                    "exit_code": exit_code,
-                }
+                    'action': 'run_script',
+                    'skill_name': skill.meta_info.name,
+                    'script_name': script_name,
+                    'script_args': script_args,
+                    'exit_code': exit_code,
+                },
             )
         except Exception as e:
             return (
                 f"Error executing script: {str(e)}",
-                {"error": "script_execution_failed"}
+                {'error': 'script_execution_failed'},
             )
