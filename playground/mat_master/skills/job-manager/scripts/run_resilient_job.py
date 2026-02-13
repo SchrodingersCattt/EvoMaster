@@ -41,10 +41,10 @@ for parent in (_THIS_FILE.parent, *_THIS_FILE.parents):
         break
 
 from evomaster.adaptors.calculation.job_service import (
-    download_job_file as _adaptor_download_job_file,
-    get_job_results as _adaptor_get_job_results,
-    iterate_job_files as _adaptor_iterate_job_files,
-    query_job_status as _adaptor_query_job_status,
+    download_job_file,
+    get_job_results,
+    iterate_job_files,
+    query_job_status,
 )
 
 
@@ -202,7 +202,7 @@ def _download_output_files(
 
     size_map: dict[str, int] = {}
     try:
-        file_objs = _adaptor_iterate_job_files(bohr_job_id, access_key=access_key)
+        file_objs = iterate_job_files(bohr_job_id, access_key=access_key)
         for obj in file_objs:
             if not isinstance(obj, dict):
                 continue
@@ -233,7 +233,7 @@ def _download_output_files(
         segment = re.sub(r"[^\w.\-]", "_", segment) or f"artifact_{i}"
         dest = download_dir / f"result_{i}_{segment}"
         try:
-            path = _adaptor_download_job_file(rp, bohr_job_id, dest, access_key=access_key)
+            path = download_job_file(rp, bohr_job_id, dest, access_key=access_key)
             downloaded.append(path.resolve().as_posix())
         except Exception as exc:
             errors.append(f"{rp}: {exc}")
@@ -263,7 +263,7 @@ def _check_job_status(
     Returns one of: Finished / Failed / Running / Pending / Scheduling / Unknown.
     """
     return str(
-        _adaptor_query_job_status(
+        query_job_status(
             job_id,
             bohr_job_id=bohr_job_id,
             software=None,
@@ -278,7 +278,7 @@ def _get_job_results(
     access_key: str | None = None,
 ) -> dict[str, Any]:
     """Fetch job result payload (metadata, file listing) via Bohrium OpenAPI."""
-    result = _adaptor_get_job_results(
+    result = get_job_results(
         job_id,
         bohr_job_id=bohr_job_id,
         software=None,
