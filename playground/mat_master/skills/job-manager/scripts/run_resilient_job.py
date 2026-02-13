@@ -212,7 +212,7 @@ def _download_from_results_txt(
     safe_job = re.sub(r"[^\w.\-]", "_", tag_raw)[:80] or "unknown_job"
     run_stamp = time.strftime("%Y%m%d_%H%M%S")
     # Use per-job + per-run directory to avoid cross-task overwrite.
-    download_dir = Path(workspace)/ f"run_{safe_job}_{run_stamp}"
+    download_dir = Path(workspace)/ "calculation_results" / f"run_{safe_job}_{run_stamp}"
     download_dir.mkdir(parents=True, exist_ok=True)
 
     results_txt_local = download_dir / "result_0_results.txt"
