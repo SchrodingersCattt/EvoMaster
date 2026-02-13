@@ -121,6 +121,10 @@ class MatToolCallbacks:
         pipeline.register_before(self.before_resolve_skill_reference_name)
         pipeline.register_before(self.before_resolve_dpa_model_alias)
         pipeline.register_before(self.before_patch_job_manager_bohr_id)
+        # MCP business-error detection runs FIRST among after-callbacks so that
+        # downstream hooks (track_async_submit, autodownload, etc.) can
+        # short-circuit on ``info.get("error")``.
+        pipeline.register_after(self.after_detect_mcp_business_error)
         pipeline.register_after(self.after_ask_human_interaction)
         pipeline.register_after(self.after_track_async_submit)
         pipeline.register_after(self.after_autodownload_oss_results)
@@ -469,6 +473,106 @@ class MatToolCallbacks:
     # ------------------------------------------------------------------
     # After callbacks
     # ------------------------------------------------------------------
+
+    # --- MCP business-error detection helpers ---
+
+    @staticmethod
+    def _try_parse_observation_json(observation: str) -> dict | None:
+        """Try to parse observation text as a JSON object.
+
+        Returns the parsed dict if successful, None otherwise.
+        Only attempts parsing when the text looks like a JSON object
+        (starts with ``{``) to avoid unnecessary work.
+        """
+        if not isinstance(observation, str):
+            return None
+        text = observation.strip()
+        if not text or not text.startswith("{"):
+            return None
+        try:
+            parsed = json.loads(text)
+            return parsed if isinstance(parsed, dict) else None
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    @staticmethod
+    def _detect_business_error(payload: dict) -> str | None:
+        """Detect business-level error from a parsed MCP tool result.
+
+        Returns an error message string if error is detected, None otherwise.
+
+        Detection rules (in priority order):
+
+        1. ``code`` field: non-zero integer → error
+           Common pattern: ``{"code": 1, "message": "Lattice mismatch ..."}``
+        2. ``success`` field: explicitly ``False`` → error
+           Common pattern: ``{"success": false, "message": "..."}``
+        3. ``error`` field: non-empty string → error
+           Common pattern: ``{"error": "something went wrong"}``
+        """
+        # Rule 1: code field — non-zero integer indicates failure
+        code = payload.get("code")
+        if isinstance(code, (int, float)) and int(code) != 0:
+            msg = payload.get("message") or payload.get("msg") or payload.get("error")
+            return str(msg) if msg else f"Tool returned error code {int(code)}"
+
+        # Rule 2: success field — explicit False
+        success = payload.get("success")
+        if success is False:  # must be explicit False, not None/missing
+            msg = payload.get("message") or payload.get("msg") or payload.get("error")
+            return str(msg) if msg else "Tool returned success=false"
+
+        # Rule 3: error field — non-empty string
+        error = payload.get("error")
+        if isinstance(error, str) and error.strip():
+            return error.strip()
+
+        return None
+
+    def after_detect_mcp_business_error(
+        self,
+        tool_call: Any,
+        observation: str,
+        info: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        """Detect business-level errors in MCP tool observation content.
+
+        MCP transport success (no Python exception) does **not** mean the tool
+        operation succeeded.  Many ``mat_*`` MCP tools return structured JSON
+        with error indicators (``code != 0``, ``success == false``, etc.)
+        while the MCP call itself completes normally.
+
+        This callback inspects the observation text, and when a business
+        error is detected it sets ``info["error"]`` so that downstream
+        ``_format_tool_observation()`` correctly reports ``status = "error"``
+        and the LLM can adjust parameters or retry.
+        """
+        # Only applies to MCP tools (identified by mcp_tool in info)
+        if not info.get("mcp_tool"):
+            return observation, info
+        # Already marked as error by upstream logic
+        if "error" in info:
+            return observation, info
+
+        parsed = self._try_parse_observation_json(observation)
+        if parsed is None:
+            return observation, info
+
+        error_msg = self._detect_business_error(parsed)
+        if error_msg is None:
+            return observation, info
+
+        # Mark as business-level error so _format_tool_observation sets
+        # status="error" and the LLM sees the failure clearly.
+        new_info = dict(info)
+        new_info["error"] = error_msg
+        new_info["success"] = False
+        self.logger.warning(
+            "MCP business error detected for tool '%s': %s",
+            info.get("mcp_tool", "?"),
+            error_msg[:200],
+        )
+        return observation, new_info
 
     def after_ask_human_interaction(
         self,
