@@ -32,13 +32,14 @@ import time
 from pathlib import Path
 from typing import Any
 
+from evomaster.agent.tools.skill import SkillTool
+
 _THIS_FILE = Path(__file__).resolve()
-for parent in (_THIS_FILE.parent, *_THIS_FILE.parents):
-    if (parent / "evomaster").is_dir():
-        p = str(parent)
-        if p not in sys.path:
-            sys.path.insert(0, p)
-        break
+_PROJECT_ROOT = SkillTool._get_skill_project_root(_THIS_FILE.parent)
+if _PROJECT_ROOT is not None:
+    p = str(_PROJECT_ROOT)
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 from evomaster.adaptors.calculation.job_service import (
     download_job_file,
