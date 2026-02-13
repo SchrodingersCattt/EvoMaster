@@ -304,10 +304,21 @@ class SkillTool(BaseTool):
         project_root = self._get_skill_project_root(skill)
         # 构建命令
         if script_path.suffix == '.py':
-            py_prefix = ''
-            if project_root is not None:
-                py_prefix = f"PYTHONPATH={shlex.quote(str(project_root))} "
-            cmd = f"{py_prefix}python {script_path}"
+            import sys
+
+            if sys.platform == 'win32':
+                if project_root is not None:
+                    cmd = (
+                        f'set "PYTHONPATH={str(project_root)}" '
+                        f'&& python "{script_path}"'
+                    )
+                else:
+                    cmd = f'python "{script_path}"'
+            else:
+                py_prefix = ''
+                if project_root is not None:
+                    py_prefix = f"PYTHONPATH={shlex.quote(str(project_root))} "
+                cmd = f"{py_prefix}python {shlex.quote(str(script_path))}"
         elif script_path.suffix == '.sh':
             cmd = f"bash {script_path}"
         elif script_path.suffix == '.js':
@@ -319,9 +330,9 @@ class SkillTool(BaseTool):
             )
 
         if script_args and script_args.strip():
-            import sys as _sys
+            import sys
 
-            if _sys.platform == 'win32':
+            if sys.platform == 'win32':
                 cmd += ' ' + script_args.strip()
             else:
                 try:
