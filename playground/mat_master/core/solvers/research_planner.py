@@ -266,6 +266,7 @@ class ResearchPlanner(BaseExp):
     def _emit(self, source: str, event_type: str, content: Any) -> None:
         if source == "Planner" and event_type == "thought":
             content = _normalize_planner_thought(content)
+            event_type = "planner_reply"
         if self._output_callback:
             self._output_callback(source, event_type, content)
 
