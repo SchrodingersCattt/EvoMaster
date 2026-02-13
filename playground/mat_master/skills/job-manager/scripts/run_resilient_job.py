@@ -378,14 +378,44 @@ def run_lifecycle(
                         download_info["output_file_downloads"] = _download_output_files(
                             output_files, workspace, resolved_bohr_job_id
                         )
+
+                # Check whether downloads actually succeeded.
+                # If nothing was downloaded but errors exist, report partial failure
+                # so the outer exit_code != 0 mechanism marks status="error".
+                total_downloaded: list[str] = []
+                total_errors: list[str] = []
+                for section in download_info.values():
+                    if isinstance(section, dict):
+                        total_downloaded.extend(section.get("downloaded") or [])
+                        total_errors.extend(section.get("download_errors") or [])
+
+                if total_errors and not total_downloaded:
+                    return {
+                        "status": "failed",
+                        "job_id": current_job_id,
+                        "bohr_job_id": resolved_bohr_job_id,
+                        "retries": retries,
+                        "results": results,
+                        "downloads": download_info,
+                        "message": (
+                            f"Job {current_job_id} finished but all result downloads failed "
+                            f"({len(total_errors)} errors). Check download_errors for details."
+                        ),
+                    }
+
+                out_status = "success" if not total_errors else "partial_success"
                 return {
-                    "status": "success",
+                    "status": out_status,
                     "job_id": current_job_id,
                     "bohr_job_id": resolved_bohr_job_id,
                     "retries": retries,
                     "results": results,
                     "downloads": download_info,
-                    "message": f"Job {current_job_id} completed successfully.",
+                    "message": (
+                        f"Job {current_job_id} completed successfully."
+                        if out_status == "success"
+                        else f"Job {current_job_id} completed but {len(total_errors)} file(s) failed to download."
+                    ),
                 }
 
             # -- Failure --
