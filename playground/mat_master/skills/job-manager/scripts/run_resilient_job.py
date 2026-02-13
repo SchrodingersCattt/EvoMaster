@@ -115,15 +115,6 @@ LOG_PATTERNS: dict[str, list[str]] = {
 }
 
 _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024
-_SKIP_DOWNLOAD_TOKENS = (
-    "trajectory",
-    "trace",
-    "traj",
-    "lammpstrj",
-    "dump",
-    "stdout",
-    "stderr",
-)
 
 # ---------------------------------------------------------------------------
 # Error diagnosis  (reuses log_diagnostics skill logic)
@@ -221,10 +212,6 @@ def _download_output_files(
         if not isinstance(remote_path, str) or not remote_path.strip():
             continue
         rp = remote_path.strip()
-        lower = rp.lower()
-        if any(tok in lower for tok in _SKIP_DOWNLOAD_TOKENS):
-            skipped.append(f"{rp}: skipped by token policy")
-            continue
         size = size_map.get(rp.replace("\\", "/"))
         if isinstance(size, int) and size > _AUTO_DOWNLOAD_MAX_BYTES:
             skipped.append(f"{rp}: skipped by size policy ({size} bytes)")
