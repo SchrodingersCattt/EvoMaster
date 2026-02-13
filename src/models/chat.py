@@ -3,7 +3,7 @@
 ag-ui 协议（前后端约定）：
 - 服务端 -> 客户端：SSE，event 固定为 "ag-ui"，data 为 JSON 字符串，字段：
   source: "System"|"User"|"MatMaster"|"Planner", type: 事件类型, content: 内容, session_id: 会话 id
-  事件类型示例: status, query, thought, tool_call, tool_result, finish, error, cancelled, planner_ask, planner_reply, exp_run, log_line 等
+  事件类型示例: status, query, thought, tool_call, tool_result, finish, error, cancelled, planner_ask, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error 等
 - 客户端 -> 服务端：REST
   POST /chat/sessions/{session_id}/stream  Body 可选：不传或 content 为空→仅历史+ping；有 content→发送并返回本次 SSE 流
   POST /chat/sessions/{session_id}/cancel  取消当前运行
@@ -11,9 +11,11 @@ ag-ui 协议（前后端约定）：
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel
+
+from src.base.base_res import BaseResponse
 
 
 class ChatRequest(BaseModel):
@@ -34,14 +36,29 @@ class SessionItem(BaseModel):
     """会话列表项"""
 
     id: str
+    status: str = 'idle'  # idle=空闲/已结束，active=运行中（用于限流与前端展示）
     history_length: int
     first_user_message: Optional[str] = None  # 第一条用户消息
 
 
 class SessionListResponse(BaseModel):
-    """GET /api/sessions 响应"""
+    """GET /api/sessions 列表数据（放在 data 字段内）"""
 
     sessions: List[SessionItem]
+
+
+class SessionListApiResponse(BaseResponse[SessionListResponse]):
+    """GET /api/sessions 规范响应：code, msg, data"""
+
+
+class ActiveSessionsCountData(BaseModel):
+    """GET /chat/sessions/active_count 的 data 字段"""
+
+    active_count: int
+
+
+class ActiveSessionsCountApiResponse(BaseResponse[ActiveSessionsCountData]):
+    """GET /chat/sessions/active_count 规范响应：code, msg, data"""
 
 
 class RunInfoResponse(BaseModel):
@@ -91,6 +108,48 @@ class RunFilesResponse(BaseModel):
     entries: List[FileEntry]
 
 
+# ---------- Workspace OSS 列表 ----------
+
+
+class WorkspaceEntry(BaseModel):
+    """workspace 列表：单项（目录或文件），按 entries 顺序展示即可。"""
+
+    type: Literal['directory', 'file']
+    name: str
+    path: str
+    download_url: Optional[str] = None  # 仅 type=file 时有值
+
+
+class WorkspaceListData(BaseModel):
+    """GET /chat/sessions/{session_id}/workspace/list 的 data 字段。entries 已按目录在前、文件在后、同类型按 name 排序。"""
+
+    path: str
+    entries: List[WorkspaceEntry]
+
+
+class WorkspaceListApiResponse(BaseResponse[WorkspaceListData]):
+    """GET /chat/sessions/{session_id}/workspace/list 规范响应：code, msg, data"""
+
+
+# ---------- 会话分享 ----------
+
+
+class ShareStatusData(BaseModel):
+    """分享状态 data 字段"""
+
+    enabled: bool
+
+
+class ShareStatusApiResponse(BaseResponse[ShareStatusData]):
+    """GET/PUT /chat/sessions/{session_id}/share 规范响应：code, msg, data"""
+
+
+class ShareSetRequest(BaseModel):
+    """PUT /chat/sessions/{session_id}/share 设置分享状态请求体"""
+
+    enabled: bool
+
+
 # ---------- ag-ui 协议：客户端 -> 服务端 (REST Body) ----------
 
 
@@ -98,9 +157,15 @@ class ChatSendRequest(BaseModel):
     """POST /chat/sessions/{session_id}/stream 请求体：不传或 content 为空则仅拉历史+ping；有 content 则发送消息并返回本次运行的 SSE 流"""
 
     content: str = ''  # 为空或不传 body 时为「仅订阅」模式
+    files: List[str] | None = (
+        None  # 可选，OSS 链接列表，前端展示与 content 分开，传给 agent 时拼成 content + URLs
+    )
     mode: str = 'direct'  # "direct" | "planner"
     bohrium_access_key: str | None = None  # 可选的 Bohrium access key
     bohrium_project_id: int | str | None = None  # 可选的 Bohrium project id
+    bohrium_user_id: int | str | None = (
+        None  # 可选的 Bohrium user id（MCP 计算类工具需要）
+    )
 
 
 class ChatPlannerReplyRequest(BaseModel):

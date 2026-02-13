@@ -1,354 +1,233 @@
-"""Chat 相关的 API
+import logging
+from urllib.parse import parse_qs, quote
 
-包含：
-1. Sessions 列表相关的接口（不需要 session_id）：
-   - POST /chat/sessions/start - 创建新会话
-   - GET /chat/sessions/list - 获取会话列表
-   - GET /chat/sessions/api/runs - 获取 runs 列表
-   - GET /chat/sessions/api/runs/{run_id}/files - 获取 run 的文件列表
+from fastapi import APIRouter, Body, Depends, Request
+from fastapi.responses import Response, StreamingResponse
 
-2. 单个 Session 相关的接口（需要 session_id）：
-   - POST /chat/sessions/{session_id}/stream - 统一流接口：body 不传或 content 为空→历史+ping；有 content→发送消息并返回本次 SSE 流
-   - POST /chat/sessions/{session_id}/cancel - 取消运行
-   - POST /chat/sessions/{session_id}/planner_reply - Planner 回复
-   - GET /chat/sessions/{session_id}/history - 获取历史
-   - GET /chat/sessions/{session_id}/run_info - 获取运行信息
-   - GET /chat/sessions/{session_id}/files - 获取文件列表
-   - GET /chat/sessions/{session_id}/files/content - 获取文件内容
-   - GET /chat/sessions/{session_id}/api/share - 获取分享数据
-"""
-
-import asyncio
-import json
-import queue
-import threading
-import uuid
-
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
-
+from src.base.base_res import BaseResponse
 from src.models.chat import (
+    ActiveSessionsCountApiResponse,
+    ActiveSessionsCountData,
     ChatPlannerReplyRequest,
-    ChatRequest,
     ChatSendRequest,
-    ChatStartResponse,
-    FileEntry,
-    RunFilesResponse,
-    RunInfoResponse,
-    RunItem,
-    RunListResponse,
-    SessionFilesResponse,
     SessionItem,
+    SessionListApiResponse,
     SessionListResponse,
+    ShareSetRequest,
+    ShareStatusApiResponse,
+    ShareStatusData,
+    WorkspaceEntry,
+    WorkspaceListApiResponse,
+    WorkspaceListData,
 )
-from src.services import chat_service as svc
-from src.utils.user import get_current_user
+from src.services.events_service import ChatEventsService, get_events_service
+from src.services.sessions_service import ChatSessionsService, get_sessions_service
+from src.services.stream_service import (
+    ChatStreamService,
+    get_stream_service,
+)
+from src.services.workspace_service import WorkspaceService, get_workspace_service
+from src.utils.exceptions import (
+    BadRequestErrorResponse,
+    ConflictErrorResponse,
+    ForbiddenErrorResponse,
+    NotFoundErrorResponse,
+)
+from src.utils.user import optional_user_id, require_user_id
 
 router = APIRouter()
 
-# ag-ui：session_id -> 该会话下所有 SSE 连接的队列，agent 事件会广播到这些队列
-_sse_queues: dict[str, list[asyncio.Queue]] = {}
-# session_id -> 当前 run 的 planner_reply 队列（POST /planner_reply 写入）
-_planner_reply_queues: dict[str, queue.Queue] = {}
+SSE_HEADERS = {
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+}
 
-AG_UI_EVENT = 'ag-ui'
-
-
-def get_user_id(request: Request) -> str:
-    """获取必需的 user_id（如果获取不到则抛出异常）"""
-    user_context = get_current_user(request)
-    return user_context.user_id
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
-def _sse_format(payload: dict) -> str:
-    """ag-ui 协议：单条 SSE 格式为 event: ag-ui\\ndata: {json}\\n\\n"""
-    return f"event: {AG_UI_EVENT}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-
-# ========== Sessions 列表相关的接口（不需要 session_id） ==========
-
-
-@router.post('/start', response_model=ChatStartResponse)
-async def start_task(req: ChatRequest, user_id: str = Depends(get_user_id)):
-    """创建新会话"""
-    session_id = svc.start_session(user_id=user_id)
-    return ChatStartResponse(status='ready', session_id=session_id)
-
-
-@router.get('/list', response_model=SessionListResponse)
-def list_sessions(user_id: str = Depends(get_user_id)):
-    """获取会话列表（需要用户认证）"""
-    sessions = svc.get_sessions(user_id=user_id)
-    return SessionListResponse(sessions=[SessionItem(**s) for s in sessions])
-
-
-@router.get('/api/runs', response_model=RunListResponse)
-def list_runs():
-    """获取 runs 列表"""
-    runs = svc.list_runs()
-    return RunListResponse(runs=[RunItem(**r) for r in runs])
-
-
-@router.get('/api/runs/{run_id}/files', response_model=RunFilesResponse)
-def list_run_files(run_id: str, path: str = '', task_id: str | None = None):
-    """获取 run 的文件列表"""
-    result = svc.list_run_files(run_id, path, task_id)
-    if result is None:
-        raise HTTPException(status_code=404, detail='Run not found')
-    entries = [FileEntry(**e) for e in result['entries']]
-    return RunFilesResponse(
-        run_id=result['run_id'],
-        path=result['path'],
-        entries=entries,
+@router.get('/list', response_model=SessionListApiResponse)
+def list_sessions(
+    user_id: str = Depends(require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    sessions = chat_svc.list_sessions(user_id=user_id)
+    return SessionListApiResponse(
+        data=SessionListResponse(
+            sessions=[SessionItem.model_validate(s) for s in sessions]
+        ),
     )
 
 
-# ========== 单个 Session 相关的接口（需要 session_id） ==========
+@router.get('/active_count', response_model=ActiveSessionsCountApiResponse)
+def get_active_sessions_count(
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """获取全局活跃会话数量（不限于当前用户，无需认证）"""
+    count = chat_svc.get_active_sessions_count()
+    return ActiveSessionsCountApiResponse(
+        data=ActiveSessionsCountData(active_count=count),
+    )
 
 
 @router.post('/{session_id}/stream')
 async def chat_stream(
     session_id: str,
     req: ChatSendRequest | None = Body(None),
-    user_id: str = Depends(get_user_id),
+    user_id: str | None = Depends(optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+    stream_svc: ChatStreamService = Depends(get_stream_service),
 ):
-    """ag-ui：统一流接口。body 不传或 content 为空→仅历史+ping；有 content→发送消息并返回本次运行的 SSE 流（多 worker 一致）。"""
-    sid = session_id.strip() or svc.SESSION_ID_DEMO
-    svc.ensure_session(sid, user_id=user_id)
+    """ag-ui：统一流接口。会话已分享时可不鉴权；未分享时需登录且为会话所有者。"""
+    sid = session_id.strip()
+    if not chat_svc.can_access_session(sid, user_id):
+        raise ForbiddenErrorResponse(msg='无权限访问该会话')
+    chat_svc.ensure_session(sid, user_id=user_id)
     user_prompt = (req.content or '').strip() if req else ''
     subscribe_only = not user_prompt
 
     if subscribe_only:
-        # 仅订阅：历史 + 注册到 _sse_queues + ping
-        event_queue: asyncio.Queue = asyncio.Queue()
-        if sid not in _sse_queues:
-            _sse_queues[sid] = []
-        _sse_queues[sid].append(event_queue)
-        try:
-
-            async def generate_subscribe():
-                try:
-                    events = svc.get_session_events(sid)
-                    if events:
-                        for event in events:
-                            if event.get('type') != 'log_line':
-                                yield _sse_format(event)
-                    while True:
-                        try:
-                            payload = await asyncio.wait_for(
-                                event_queue.get(), timeout=30.0
-                            )
-                        except asyncio.TimeoutError:
-                            yield _sse_format(
-                                {
-                                    'source': 'System',
-                                    'type': 'ping',
-                                    'content': '',
-                                    'session_id': sid,
-                                }
-                            )
-                            continue
-                        if payload is None:
-                            break
-                        if payload.get('type') == 'end':
-                            yield _sse_format(payload)
-                            break
-                        yield _sse_format(payload)
-                finally:
-                    if sid in _sse_queues:
-                        try:
-                            _sse_queues[sid].remove(event_queue)
-                        except ValueError:
-                            pass
-                        if not _sse_queues[sid]:
-                            del _sse_queues[sid]
-
-            return StreamingResponse(
-                generate_subscribe(),
-                media_type='text/event-stream',
-                headers={
-                    'Cache-Control': 'no-cache',
-                    'Connection': 'keep-alive',
-                    'X-Accel-Buffering': 'no',
-                },
-            )
-        except Exception:
-            if sid in _sse_queues:
-                try:
-                    _sse_queues[sid].remove(event_queue)
-                except ValueError:
-                    pass
-                if not _sse_queues[sid]:
-                    del _sse_queues[sid]
-            raise
+        return StreamingResponse(
+            stream_svc.generate_subscribe_stream(sid),
+            media_type='text/event-stream',
+            headers=SSE_HEADERS,
+        )
 
     # 发送消息并返回本次运行的 SSE 流（此时 req 必存在且 content 非空）
     assert req is not None
-    mode = (req.mode or 'direct').strip().lower() or 'direct'
-    if mode not in ('direct', 'planner'):
-        mode = 'direct'
-    sid = session_id.strip()
-    svc.ensure_session(sid, user_id=user_id)
-
-    if req.bohrium_access_key or req.bohrium_project_id:
-        bohrium_creds = {}
-        if req.bohrium_access_key:
-            bohrium_creds['access_key'] = req.bohrium_access_key.strip()
-        if req.bohrium_project_id is not None:
-            try:
-                bohrium_creds['project_id'] = int(req.bohrium_project_id)
-            except (TypeError, ValueError):
-                pass
-        if bohrium_creds:
-            svc.SESSIONS[sid]['bohrium_credentials'] = bohrium_creds
-
-    task_id = 'sse_' + uuid.uuid4().hex[:8]
-    svc.set_session_last_task(sid, task_id, user_id=user_id)
-    user_msg = {
-        'source': 'User',
-        'type': 'query',
-        'content': user_prompt,
-        'mode': mode,
-        'session_id': sid,
-    }
-    svc.add_history_event(sid, user_msg, user_id=user_id)
-
-    loop = asyncio.get_event_loop()
-    # 本请求专属队列，保证多 worker 下流与请求在同一连接
-    request_event_queue: asyncio.Queue = asyncio.Queue()
-
-    async def send_cb(payload: dict):
-        request_event_queue.put_nowait(payload)
-        for q in _sse_queues.get(sid) or []:
-            try:
-                q.put_nowait(payload)
-            except Exception:
-                pass
-
-    planner_reply_queue: queue.Queue = queue.Queue()
-    _planner_reply_queues[sid] = planner_reply_queue
-    stop_ev = threading.Event()
-    svc.set_stop_event(sid, stop_ev)
-
-    init_msg = {
-        'source': 'System',
-        'type': 'status',
-        'content': f"Initializing ({mode})...",
-        'session_id': sid,
-    }
-
-    async def generate():
-        # 1) 历史（不含 log_line）
-        for event in svc.get_session_events(sid) or []:
-            if event.get('type') != 'log_line':
-                yield _sse_format(event)
-        # 2) 用户消息 + 状态
-        yield _sse_format(user_msg)
-        yield _sse_format(init_msg)
-        # 3) 在后台跑 agent，本连接从 request_event_queue 收事件
-        future = loop.run_in_executor(
-            svc.get_executor(),
-            svc.run_agent_sync,
-            sid,
-            user_prompt,
-            send_cb,
-            loop,
-            stop_ev,
-            mode,
-            planner_reply_queue,
-            task_id,
+    ctx = stream_svc.prepare_send_message(sid, req, user_id)
+    if ctx is None:
+        raise ConflictErrorResponse(
+            msg='该会话已有任务在运行，请等待完成或先取消后再发新消息',
         )
-        while True:
-            payload = await request_event_queue.get()
-            yield _sse_format(payload)
-            if payload.get('type') == 'end':
-                break
-        await future
-
+    # 给 agent 的 prompt：正文 + 附件 URL 列表（前端展示仍用 ctx.user_msg 的 content / files 分开）
+    agent_prompt = (req.content or '').strip()
+    if req.files:
+        agent_prompt += '\n\n[Attached files]\n' + '\n'.join(req.files)
     return StreamingResponse(
-        generate(),
+        stream_svc.generate_send_stream(sid, agent_prompt, ctx),
         media_type='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no',
-        },
+        headers=SSE_HEADERS,
     )
 
 
-@router.post('/{session_id}/cancel')
-async def chat_cancel(session_id: str):
-    """ag-ui：取消当前会话的运行。"""
-    svc.cancel_run(session_id)
-    return {'session_id': session_id, 'status': 'cancelled'}
-
-
-@router.post('/{session_id}/planner_reply')
-async def chat_planner_reply(
-    session_id: str, req: ChatPlannerReplyRequest, user_id: str = Depends(get_user_id)
+@router.post('/{session_id}/planner_reply', response_model=BaseResponse)
+async def planner_reply(
+    session_id: str,
+    req: ChatPlannerReplyRequest = Body(...),
+    user_id: str | None = Depends(optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+    stream_svc: ChatStreamService = Depends(get_stream_service),
+    events_svc: ChatEventsService = Depends(get_events_service),
 ):
-    """ag-ui：Planner 模式下用户对 planner_ask 的回复。"""
-    svc.ensure_session(session_id, user_id=user_id)
+    """Planner 模式下：收到 planner_ask 后，调用本接口传入用户回复，agent 会继续执行。"""
+    sid = session_id.strip()
+    if not chat_svc.can_access_session(sid, user_id):
+        raise ForbiddenErrorResponse(msg='无权限访问该会话')
+    reply_queue = stream_svc.get_planner_reply_queue(sid)
+    if reply_queue is None:
+        raise ConflictErrorResponse(
+            msg='当前无活跃的 planner 任务，或任务已结束',
+        )
+    content = (req.content or '').strip()
+    reply_queue.put(content)
+    stream_svc.broadcast_planner_reply(sid, content)
     payload = {
         'source': 'User',
         'type': 'planner_reply',
-        'content': req.content,
-        'session_id': session_id,
+        'content': content,
+        'session_id': sid,
     }
-    svc.add_history_event(session_id, payload, user_id=user_id)
-    pq = _planner_reply_queues.get(session_id)
-    if pq is not None:
-        pq.put(req.content)
-    return {'session_id': session_id, 'status': 'ok'}
+    events_svc.add_history_event(sid, payload, user_id=user_id)
+    return BaseResponse(msg='ok')
 
 
-@router.get('/{session_id}/history')
-def get_session_history(session_id: str):
-    """获取会话历史消息"""
-    return svc.get_session_events(session_id)
-
-
-@router.get('/{session_id}/run_info', response_model=RunInfoResponse)
-def get_session_run_info(session_id: str):
-    """获取会话的运行信息"""
-    return RunInfoResponse(**svc.get_session_run_info(session_id))
-
-
-@router.get('/{session_id}/files', response_model=SessionFilesResponse)
-def list_session_files(session_id: str, path: str = ''):
-    """获取会话的文件列表"""
-    result = svc.list_session_files(session_id, path)
-    if result is None:
-        raise HTTPException(status_code=404, detail='Path not found')
-    entries = [FileEntry(**e) for e in result['entries']]
-    return SessionFilesResponse(
-        run_id=result['run_id'],
-        path=result['path'],
-        entries=entries,
-        workspace_root=result.get('workspace_root'),
-        task_id=result.get('task_id'),
+@router.get('/{session_id}/share', response_model=ShareStatusApiResponse)
+def get_share_status(
+    session_id: str,
+    user_id: str | None = Depends(optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """查看分享状态。已分享时会话任何人可查看；未分享时需为会话所有者。"""
+    status = chat_svc.get_share_status(session_id)
+    if not status['enabled'] and not chat_svc.can_access_session(session_id, user_id):
+        raise ForbiddenErrorResponse(msg='无权限查看该会话')
+    return ShareStatusApiResponse(
+        data=ShareStatusData(enabled=status['enabled']),
     )
 
 
-@router.get('/{session_id}/files/content')
-def get_session_file_content(session_id: str, path: str):
-    """获取会话文件内容"""
-    if not path or not path.strip():
-        raise HTTPException(status_code=400, detail='path is required')
-    file_path, media_type = svc.get_session_file_path(session_id, path)
-    if file_path is None:
-        raise HTTPException(status_code=404, detail='File not found')
-    return FileResponse(
-        path=str(file_path),
-        media_type=media_type or 'application/octet-stream',
-        filename=file_path.name,
+@router.put('/{session_id}/share', response_model=ShareStatusApiResponse)
+def set_share_status(
+    session_id: str,
+    body: ShareSetRequest,
+    user_id: str = Depends(require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """设置分享状态。仅会话所有者可设置。开启后，stream 等接口可不鉴权访问。"""
+    if not chat_svc.set_share_status(session_id, enabled=body.enabled, user_id=user_id):
+        raise NotFoundErrorResponse(
+            msg='Session not found or you are not the owner',
+        )
+    return ShareStatusApiResponse(
+        data=ShareStatusData(enabled=body.enabled),
     )
 
 
-@router.get('/{session_id}/api/share')
-def get_share_data(session_id: str):
-    """获取分享数据"""
-    history = svc.get_share_history(session_id)
-    if history is None:
-        raise HTTPException(status_code=404, detail='Session not found')
-    return history
+@router.get('/{session_id}/workspace/list')
+def workspace_list(
+    session_id: str,
+    task_id: str,
+    path: str = '',
+    workspace_svc: WorkspaceService = Depends(get_workspace_service),
+):
+    """列出已上传到 OSS 的 workspace 在指定 path 下的一级子目录和文件。path 为空表示根。成功返回 code=0, msg, data；失败返回规范 JSON 及对应 HTTP 状态码。"""
+    path = (path or '').strip()
+    if '..' in path or path.startswith('/'):
+        raise BadRequestErrorResponse(msg='Invalid path')
+
+    entries = workspace_svc.workspace_list(session_id, task_id, path)
+    return WorkspaceListApiResponse(
+        data=WorkspaceListData(
+            path=path or '/',
+            entries=[WorkspaceEntry.model_validate(e) for e in entries],
+        )
+    )
+
+
+@router.get('/{session_id}/workspace/download')
+def workspace_download(
+    request: Request,
+    session_id: str,
+    task_id: str,
+    path: str | None = None,
+    workspace_svc: WorkspaceService = Depends(get_workspace_service),
+):
+    """下载已上传到 OSS 的 workspace 文件。成功返回文件流，失败返回规范 JSON（code, msg, data）。"""
+    path = (path or '').strip()
+    # 容错：前端误用第二个 ? 拼 path 时（如 ...&task_id=xxx?path=file.cif），从 query 中解析
+    if not path and request.url.query and '?' in request.url.query:
+        tail = request.url.query.split('?')[-1]
+        parsed = parse_qs(tail)
+        path = (parsed.get('path') or [''])[0]
+    path = (path or '').strip()
+    if not path or '..' in path or path.startswith('/'):
+        raise BadRequestErrorResponse(msg='Invalid path')
+
+    content, filename = workspace_svc.workspace_download(session_id, task_id, path)
+    # HTTP 头仅支持 latin-1，中文等非 ASCII 文件名用 RFC 5987 filename*=UTF-8'' 编码
+    ascii_fallback = (
+        ''.join(c for c in filename if ord(c) < 128 and c not in '"\\\r\n')
+        or 'download'
+    )
+    disposition = (
+        f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(filename)}"
+    )
+    return Response(
+        content=content,
+        media_type='application/octet-stream',
+        headers={
+            'Content-Disposition': disposition,
+        },
+    )
