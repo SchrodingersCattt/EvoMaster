@@ -122,13 +122,16 @@ class SkillTool(BaseTool):
             return f"Error: {str(e)}", {'error': str(e)}
 
     @staticmethod
-    def _get_skill_project_root(skill: OperatorSkill) -> Path | None:
-        """从 skill 路径向上查找含 evomaster 的项目根，供 PYTHONPATH 使用。"""
+    def _get_skill_project_root(skill: OperatorSkill | Path | str) -> Path | None:
+        """从给定路径向上查找含 evomaster 的项目根，供 PYTHONPATH 使用。"""
         try:
-            base = getattr(skill, 'skill_path', None)
-            if base is None:
-                return None
-            path = Path(base) if not isinstance(base, Path) else base
+            if isinstance(skill, (Path, str)):
+                path = Path(skill)
+            else:
+                base = getattr(skill, 'skill_path', None)
+                if base is None:
+                    return None
+                path = Path(base) if not isinstance(base, Path) else base
             for parent in (path,) + tuple(path.parents):
                 if (parent / 'evomaster').is_dir():
                     return parent.resolve()
