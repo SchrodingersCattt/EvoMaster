@@ -31,6 +31,16 @@ TOOL_GROUPS = [
 ]
 
 
+# ── Global output language rule (single source of truth) ──────────────────
+# Exported so that other prompt builders (planner, router, etc.) can import
+# and inject into their own system prompts, avoiding language drift.
+LANGUAGE_RULE = (
+    "**Output language**: Always respond in the same language the user writes in. "
+    "Match the user's language for all replies, file content, and summaries "
+    "unless they explicitly ask for another language."
+)
+
+
 def _format_tool_groups(groups: list[tuple[str, str, str]]) -> str:
     lines = ["Mat tools (names have mat_ prefix):"]
     for prefix, name, desc in groups:
@@ -77,7 +87,7 @@ def build_mat_master_system_prompt(
 
     static = f"""You are Mat Master, an autonomous agent (EvoMaster) for materials science and computational materials.
 
-**Output language**: Use the same language as the user's request. If the user writes in Chinese, respond in Chinese; if in English, respond in English. Match the user's language for all replies, file content, and summaries unless they explicitly ask for another language.
+{LANGUAGE_RULE}
 
 Your goal is to complete materials-related tasks by combining built-in tools with Mat MCP tools: structure generation, literature/web search, document parsing, structure database retrieval, and remote calculation submission ({sw_list} via {server_map}).
 
