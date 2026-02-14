@@ -70,7 +70,7 @@ Return a strictly valid JSON object with these keys:
 
 RULES:
 - If the task is straightforward (e.g. "calculate band gap of Si", "search for X structures") and no files need pre-processing: set ready_to_plan=true, prerequisites=[].
-- If there are PDF/paper files that the user asks to reproduce/analyze/read, or if the task says "按照文献/根据论文": set ready_to_plan=false and include parse_pdf prerequisites.
+- If there are PDF/paper files that the user asks to reproduce/analyze/read, or if the task says to follow a paper/literature: set ready_to_plan=false and include parse_pdf prerequisites.
 - If the task mentions files to process but doesn't specify which files exist, check the workspace file listing.
 - Be conservative: when in doubt about whether pre-processing is needed, recommend it.
 - Do NOT generate the plan itself. Only assess readiness."""
@@ -315,7 +315,7 @@ class ResearchPlanner(BaseExp):
         crp_cfg = mat.get("crp", {})
         active_licenses = crp_cfg.get("licenses", [])
         task_lower = task_description.lower()
-        fidelity = "Screening" if any(w in task_lower for w in ["quick", "fast", "screen", "rough", "粗略", "快速", "筛选"]) else "Production"
+        fidelity = "Screening" if any(w in task_lower for w in ["quick", "fast", "screen", "rough", "coarse", "preliminary"]) else "Production"
         context_data = {
             "RUNTIME_CONTEXT": {
                 "Hardware": {

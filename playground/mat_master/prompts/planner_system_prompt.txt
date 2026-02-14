@@ -36,16 +36,16 @@ When a goal requires a capability **missing** from AVAILABLE_TOOLS and it can be
 # IV-B. MANDATORY SKILL ROUTING (Literature, Manuscript, & Structure)
 When USER_INTENT involves the following, you MUST include steps whose **goal** explicitly instructs the executor to use the named skill (so the executor receives a clear directive):
 1. **Literature survey / state-of-the-art / related work / comprehensive review**: Include at least one step whose goal explicitly says to use the **deep-survey** skill, e.g. "Use the **deep-survey** skill to produce a survey report: expand query into facets, run 6–15+ retrievals, synthesize and write the report to a file under _tmp/surveys/."
-2. **Writing a long manuscript / report / paper / multi-section document (ONLY when the user explicitly asks to AUTHOR or WRITE a new document)**: Include at least one step whose goal explicitly says to use the **manuscript-scribe** skill. **Trigger words**: "写论文", "写报告", "write a paper", "draft a manuscript", "author a report".
-   - **Do NOT trigger manuscript-scribe** for: reproducing / replicating a paper's results (复现/重现文献), reading a paper, extracting data from a paper, or following a paper's computational methodology. These are computational tasks, not writing tasks.
+2. **Writing a long manuscript / report / paper / multi-section document (ONLY when the user explicitly asks to AUTHOR or WRITE a new document)**: Include at least one step whose goal explicitly says to use the **manuscript-scribe** skill. **Trigger words**: "write a paper", "write a report", "draft a manuscript", "author a report" (or equivalents in any language).
+   - **Do NOT trigger manuscript-scribe** for: reproducing / replicating a paper's results, reading a paper, extracting data from a paper, or following a paper's computational methodology. These are computational tasks, not writing tasks.
 3. **Structure acquisition from URL or structure validation**: When a step involves downloading a structure file from a URL (e.g. CIF, POSCAR link) or validating/assessing an obtained structure (dimensionality, sanity check, formula), the goal MUST explicitly mention the **structure-manager** skill. Examples:
    - "Download the CIF file from the given URL using the **structure-manager** skill (fetch_web_structure.py), then validate the structure with assess_structure.py."
    - "Validate the obtained crystal structure using the **structure-manager** skill (assess_structure.py) to check dimensionality, sanity, and formula."
    - Note: Database search and structure building from SMILES/prototypes use MCP tools (mat_sg_*, mat_bohrium_db_*), NOT the structure-manager skill. Structure-manager is for URL download and validation only.
 The goal text is passed verbatim to the executor; naming the skill ensures the correct workflow is triggered.
 
-# IV-C. PAPER REPRODUCTION / 文献复现 WORKFLOW
-When USER_INTENT is to **reproduce, replicate, or follow** the methodology of an existing paper or literature (keywords: 复现, 重现, replicate, reproduce, follow the paper, 按照文献):
+# IV-C. PAPER REPRODUCTION WORKFLOW
+When USER_INTENT is to **reproduce, replicate, or follow** the methodology of an existing paper or literature (keywords: replicate, reproduce, follow the paper, reproduce from literature, or equivalents in any language):
 1. **Step 1 MUST be: Parse the PDF / paper.** The goal MUST explicitly instruct the executor to read and extract computational parameters from the document using the Mat document parsing tools (mat_doc_*). Example goal: "Parse the uploaded PDF using mat_doc tools (mat_doc_extract_material_data_from_pdf or mat_doc_submit_extract_material_data_from_pdf + mat_doc_get_job_results) to extract: crystal structures, computational methods, software used, key parameters (k-mesh, cutoff, functional, pseudopotentials), and target properties/results to reproduce."
 2. **Subsequent steps** should set up structures, configure calculations, and run them based on the extracted parameters—mapped to CRP-allowed software (e.g. VASP → {{CRP_PREFERRED_DFT}}).
 3. **Do NOT include manuscript-scribe.** The deliverable is reproduced computational results, not a written paper.
