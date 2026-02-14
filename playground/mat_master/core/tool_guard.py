@@ -21,10 +21,12 @@ LOOP_EXEMPT_SUFFIXES = (
     "query_job_status",
     "get_job_status",
 )
-# Tool-name prefixes exempt from loop detection (search APIs are non-deterministic
-# and manuscript-scribe workflows legitimately repeat search→summarize→write cycles).
-LOOP_EXEMPT_PREFIXES = (
-    "mat_sn_",
+# use_skill calls for these skills are exempt from loop detection, because
+# multi-stage workflows may legitimately issue repeated calls with identical
+# arguments while aggregating results.
+LOOP_EXEMPT_SKILLS = (
+    "deep-survey",
+    "manuscript-scribe",
 )
 
 
@@ -46,6 +48,23 @@ class ToolGuard:
         self._peek_manual_nohit_counts: dict[str, int] = {}
         # Keyed by (normalized_input_file, normalized_software).
         self._validate_status_by_key: dict[tuple[str, str], bool] = {}
+
+    def reset_loop_history(self) -> None:
+        """Clear loop-detection state so a new logical phase starts fresh.
+
+        This resets the sliding-window fingerprints and peek_manual counters
+        but intentionally preserves ``_validate_status_by_key`` because
+        validation results remain valid across planner steps.
+
+        Typical call site: the beginning of each planner step execution,
+        so that independent steps are not blocked by tool calls from
+        earlier steps.
+        """
+        self._recent_tool_fps.clear()
+        self._recent_sem_fps.clear()
+        self._peek_manual_call_count = 0
+        self._peek_manual_nohit_counts.clear()
+        self.logger.debug("ToolGuard loop history reset.")
 
     @staticmethod
     def _parse_tool_args(tool_call) -> dict[str, Any]:
@@ -132,8 +151,11 @@ class ToolGuard:
         name = tool_call.function.name or ""
         if any(name.endswith(suffix) for suffix in LOOP_EXEMPT_SUFFIXES):
             return True
-        if any(name.startswith(prefix) for prefix in LOOP_EXEMPT_PREFIXES):
-            return True
+        if name == "use_skill":
+            args = ToolGuard._parse_tool_args(tool_call)
+            skill_name = str(args.get("skill_name", "")).strip().lower()
+            if skill_name in LOOP_EXEMPT_SKILLS:
+                return True
         return False
 
     @staticmethod
