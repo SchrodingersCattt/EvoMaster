@@ -7,9 +7,38 @@ Single source of truth for literature/survey reports and manuscripts. Used by **
 - Output in **plain text** or **Markdown**; start directly with substantive content (no "Sure...", "Okay...", "I will now analyze...").
 - Every factual claim must be supported by tool/source results; do not add unsupported superlatives or invented facts.
 - Numbers and units: add a space (e.g. 10 cm, 5 kg). No extra space between Chinese and English characters.
-- Italic for physical quantities: *E*, *T*, *k*. Bold for vectors and compound codes: **F**, **E**, compound **1**.
-- Define all abbreviations at first use and use them consistently.
+- Italic for physical quantities: *E*, *T*, *k*, *U*, *V*, *P*. Bold for vectors: **F**, **k**. Bold for compound codes: compound **1**.
+- Define all abbreviations at first use ("Full Name (ABBR)") and use them consistently afterward.
 - Journal/article names: italic only, e.g. *Journal of Chemical Physics*; do not use 《》 for titles.
+
+## Typographic conventions (mandatory for manuscripts)
+
+### Physical quantities and sub/superscripts
+- **Scalar quantities**: always italic — `*U*`, `*E*`, `*T*`, `*k*`.
+- **Subscripts**: use `_{text}` — `*U*_{eff}`, `*E*_{F}`, `*E*_{g}`. Descriptive subscripts are roman (upright).
+- **Superscripts**: use `^{text}` — `10^{−6}`, `cm^{−1}`.
+- **No Unicode fake sub/superscripts** (`³`, `₂`, `⁻⁶`); use `^{}`/`_{}` notation for export scripts.
+
+### Dash and minus
+- **Range / bond: en-dash "–"** (U+2013): `1.88–1.89 Å`, `Cu–N`, `pp. 57–70`.
+- **Negative: minus "−"** (U+2212): `−6`, `−0.5 eV`, `10^{−6}`.
+- **Hyphen "-"** only for compound adjectives: `self-consistent`, `plane-wave`.
+
+### Chemical formulas
+- Element order: Hill system (C, H, then alphabetical; inorganic: electropositive first).
+- No spaces between elements. Counts as subscripts: `C_{7}H_{8}` or simple `CO2` (auto-detected by export).
+
+### Significant figures
+- Match precision to method accuracy (DFT bond lengths: 2 decimals; band gaps: 2 decimals).
+- Use "≈" for rounded/approximate values in conclusions.
+
+### Periodic-system terminology
+- Crystal orbitals: **HOCO / LUCO**, not HOMO / LUMO. Band edges: **VBM / CBM**.
+
+### Computational report content rules
+- **No raw input keywords** (`RUN_TYPE ENERGY`, `EPS_SCF`); describe physically ("single-point energy", "convergence threshold").
+- **No file paths** (`cp2k.inp`, `*.pdos`); use generic terms ("the input file", "the PDOS data").
+- Build toward **mechanism-oriented interpretation** (e.g. orbital analysis → charge-transfer assignment).
 
 ## Citation (mandatory format)
 
@@ -37,8 +66,12 @@ You may omit the full title and journal name in the sentence; give them in the R
 ## References section (manuscripts)
 
 - The **References** section must list **exactly** the same [n] as in the text, in numerical order.
-- Each entry: [n], full citation (Authors, Title, *Journal*, Year), and **original source URL**.
+- Each entry: `[n] Authors. Title. *Journal*, **Year**, Volume, Pages. URL`
+  - **Journal name**: italic (*J. Chem. Phys.*)
+  - **Year**: bold (**2020**)
+  - **Page range**: en-dash (477–506, not 477-506); article numbers are acceptable (e.g. 194103)
 - Every [n] in the body must have exactly one [n] in References; no extra or missing entries.
+- Every reference MUST have a URL.
 
 ## Concept explanation and conceptual rigor (all outputs)
 

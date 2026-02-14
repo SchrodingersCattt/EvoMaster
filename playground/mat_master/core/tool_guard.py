@@ -21,6 +21,11 @@ LOOP_EXEMPT_SUFFIXES = (
     "query_job_status",
     "get_job_status",
 )
+# Tool-name prefixes exempt from loop detection (search APIs are non-deterministic
+# and manuscript-scribe workflows legitimately repeat search→summarize→write cycles).
+LOOP_EXEMPT_PREFIXES = (
+    "mat_sn_",
+)
 
 
 @dataclass
@@ -125,7 +130,11 @@ class ToolGuard:
     @staticmethod
     def _is_loop_exempt(tool_call) -> bool:
         name = tool_call.function.name or ""
-        return any(name.endswith(suffix) for suffix in LOOP_EXEMPT_SUFFIXES)
+        if any(name.endswith(suffix) for suffix in LOOP_EXEMPT_SUFFIXES):
+            return True
+        if any(name.startswith(prefix) for prefix in LOOP_EXEMPT_PREFIXES):
+            return True
+        return False
 
     @staticmethod
     def _is_peek_manual_call(tool_call) -> bool:
