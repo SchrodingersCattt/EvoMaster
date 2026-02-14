@@ -1,12 +1,14 @@
 """
-Assemble section files (or a single draft) into one manuscript and run three checks:
+Assemble section files (or a single draft) into one manuscript and run checks:
 1. All technical terms are defined (at first use).
 2. All abbreviations are defined exactly once (no duplicate definitions).
 3. Reference links are valid and References section matches in-text citations.
+4. (Optional) Word-count and content validation via --profile + --check_length.
 
 Usage:
   python assemble_manuscript.py --sections_dir sections/ --output draft_manuscript.md
   python assemble_manuscript.py --draft draft_manuscript.md --output final.md --validate
+  python assemble_manuscript.py --draft draft.md --output final.md --profile generic --check_length
 
 Output: Writes assembled Markdown and a validation report (JSON or text).
 """
@@ -18,12 +20,19 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 try:
     import requests
 except ImportError:
     requests = None
 
-# Section order when merging from a directory
+try:
+    from format_profiles import get_profile
+except ImportError:
+    get_profile = None  # type: ignore[assignment]
+
+# Section order when merging from a directory (fallback when no --profile)
 DEFAULT_SECTION_ORDER = [
     "Abstract",
     "Introduction",
@@ -248,6 +257,37 @@ def check_references(full_text: str, validate_urls: bool = False) -> dict:
     return result
 
 
+def _word_count(text: str) -> int:
+    """Count words (handles mixed CJK and Latin text)."""
+    cjk = len(re.findall(r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]", text))
+    latin = len(re.findall(r"[A-Za-z0-9]+(?:[-'][A-Za-z0-9]+)*", text))
+    return cjk + latin
+
+
+def _strip_html_comments(text: str) -> str:
+    """Remove HTML comments (<!-- ... -->) from text."""
+    return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL).strip()
+
+
+def _section_body(text: str) -> str:
+    """Extract clean body text from a section (strip ## header and HTML comments)."""
+    body = re.sub(r"^##\s+.*\n?", "", text).strip()
+    return _strip_html_comments(body)
+
+
+def _print_word_summary(combined: str) -> None:
+    """Print per-section and total word counts."""
+    sections = extract_sections_from_draft(combined)
+    total = 0
+    print("\n--- Word Count Summary ---")
+    for name, text in sections.items():
+        body = _section_body(text)
+        wc = _word_count(body)
+        total += wc
+        print(f"  {name}: {wc} words")
+    print(f"  TOTAL: {total} words")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Assemble manuscript and run consistency checks.")
     ap.add_argument("--sections_dir", default=None, help="Directory of section .md files to merge")
@@ -256,6 +296,24 @@ def main() -> None:
     ap.add_argument("--validate", action="store_true", help="Validate reference URLs (HTTP HEAD)")
     ap.add_argument("--terms", default=None, help="Optional file listing required technical terms (one per line)")
     ap.add_argument("--report", default=None, help="Write validation report to this JSON file")
+    ap.add_argument(
+        "--profile",
+        default=None,
+        help="Format profile name (e.g. generic, computational_report). "
+             "When set, uses the profile's section order instead of the default.",
+    )
+    ap.add_argument(
+        "--check_length",
+        action="store_true",
+        help="Run word-count and content validation (requires --profile).",
+    )
+    ap.add_argument(
+        "--export",
+        default="all",
+        choices=["all", "md", "docx", "latex"],
+        help="Export format(s) after assembly. 'all' (default) = .md + .tex + .docx "
+             "(docx skipped if python-docx not installed). 'md' = Markdown only.",
+    )
     args = ap.parse_args()
 
     if args.sections_dir and args.draft:
@@ -264,20 +322,42 @@ def main() -> None:
     if not args.sections_dir and not args.draft:
         print("Provide --sections_dir or --draft. Example: --draft draft_manuscript.md --output final.md", file=sys.stderr)
         sys.exit(1)
+    if args.check_length and not args.profile:
+        print("--check_length requires --profile.", file=sys.stderr)
+        sys.exit(1)
 
+    # ── Resolve section order from profile or default ──────────────────
+    profile = None
+    section_order = DEFAULT_SECTION_ORDER
+    if args.profile:
+        if get_profile is None:
+            print("Warning: format_profiles not available; using default section order.", file=sys.stderr)
+        else:
+            profile = get_profile(args.profile)
+            section_order = profile["sections"]
+
+    # ── Load and assemble ──────────────────────────────────────────────
     if args.sections_dir:
         sections_dir = Path(args.sections_dir)
         sections = load_sections_from_dir(sections_dir)
-        # Take title from first section file if present (e.g. "# Title" in Abstract.md)
+
+        # Try to load profile from _profile.json if --profile not given
+        if profile is None:
+            pj = sections_dir / "_profile.json"
+            if pj.exists():
+                pdata = json.loads(pj.read_text(encoding="utf-8"))
+                section_order = pdata.get("sections", section_order)
+
+        # Take title from first section file if present
         title = None
-        for name in DEFAULT_SECTION_ORDER:
+        for name in section_order:
             f = sections_dir / f"{name}.md"
             if f.exists():
                 first_line = f.read_text(encoding="utf-8").splitlines()[0].strip()
                 if first_line.startswith("# ") and not first_line.startswith("## "):
                     title = first_line.lstrip("# ")
                 break
-        combined = assemble(sections, title=title)
+        combined = assemble(sections, order=section_order, title=title)
     else:
         combined = Path(args.draft).read_text(encoding="utf-8")
 
@@ -286,7 +366,10 @@ def main() -> None:
     out_path.write_text(combined, encoding="utf-8")
     print(f"Assembled manuscript written to {out_path}.")
 
-    # Run three checks
+    # ── Word count summary (always shown) ──────────────────────────────
+    _print_word_summary(combined)
+
+    # ── Run three consistency checks ───────────────────────────────────
     terms_file = Path(args.terms) if args.terms else None
     body_only = combined
     ref_start = re.search(r"\n##\s+References\s*\n", combined, re.IGNORECASE)
@@ -297,19 +380,62 @@ def main() -> None:
     check2 = check_abbreviations(combined)
     check3 = check_references(combined, validate_urls=args.validate)
 
-    report = {
+    report: dict = {
         "technical_terms": check1,
         "abbreviations": check2,
         "references": check3,
         "overall_passed": check1["passed"] and check2["passed"] and check3["passed"],
     }
+    print("\n--- Consistency Checks ---")
     print("1. Technical terms:", check1["message"])
     print("2. Abbreviations:", check2["message"])
     print("3. References:", check3["message"])
-    print("Overall:", "PASSED" if report["overall_passed"] else "FAILED")
+
+    # ── Optional: content validation via validate_content ──────────────
+    if args.check_length and profile is not None:
+        try:
+            from validate_content import run_validation, print_report as vc_print
+            # Re-parse sections for validation (body-only, no headers/comments)
+            vc_sections: dict[str, str] = {}
+            parsed = extract_sections_from_draft(combined)
+            for name, text in parsed.items():
+                vc_sections[name] = _section_body(text)
+            vc_report = run_validation(vc_sections, profile)
+            print("\n--- Content Validation ---")
+            vc_print(vc_report)
+            report["content_validation"] = vc_report
+            if not vc_report["overall_passed"]:
+                report["overall_passed"] = False
+        except ImportError:
+            print("Warning: validate_content.py not available; skipped content validation.", file=sys.stderr)
+
+    print("\nOverall:", "PASSED" if report["overall_passed"] else "FAILED")
+
+    # ── Auto-export to other formats ───────────────────────────────────
+    if args.export in ("all", "latex"):
+        try:
+            from export_latex import export_markdown_to_latex
+            tex_path = out_path.with_suffix(".tex")
+            bib_name = out_path.stem + ".bib"
+            export_markdown_to_latex(combined, tex_path, bibfile=bib_name)
+        except Exception as e:
+            print(f"LaTeX export skipped: {e}", file=sys.stderr)
+
+    if args.export in ("all", "docx"):
+        try:
+            from export_docx import export_markdown_to_docx
+            docx_path = out_path.with_suffix(".docx")
+            export_markdown_to_docx(combined, docx_path)
+        except ImportError:
+            print("Word export skipped: python-docx not installed (pip install python-docx).", file=sys.stderr)
+        except Exception as e:
+            print(f"Word export skipped: {e}", file=sys.stderr)
 
     if args.report:
-        Path(args.report).write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+        Path(args.report).write_text(
+            json.dumps(report, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
         print(f"Report written to {args.report}.")
 
 

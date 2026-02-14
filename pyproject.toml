@@ -30,6 +30,9 @@ dependencies = [
     "bohrium-sdk>=0.15.0",
 ]
 
+[project.optional-dependencies]
+docx = ["python-docx>=1.1.0"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

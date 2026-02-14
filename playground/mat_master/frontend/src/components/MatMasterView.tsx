@@ -89,7 +89,10 @@ export default function MatMasterView({
           const cur = currentSessionIdRef.current;
           setLogs((prev) => {
             if (sid !== undefined && sid !== cur) return prev;
-            if (msg.type === "log_line" || msg.source === "System") return prev;
+            if (msg.type === "log_line") return prev;
+            // Allow System events like finish/error/cancelled through;
+            // only drop ephemeral "status" messages (e.g. "Initializing...")
+            if (msg.source === "System" && msg.type === "status") return prev;
             return [...prev, msg];
           });
           if (msg.type === "planner_ask") {
