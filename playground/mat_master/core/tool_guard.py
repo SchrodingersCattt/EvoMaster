@@ -1,3 +1,16 @@
+"""Stateful tool-call guard: loop prevention, validation gate, manuscript gate.
+
+Three independent concerns, each with its own state and public method:
+
+1. **Loop detection** (``evaluate`` / ``record_tool_call``): Blocks repeated
+   calls with identical arguments within a sliding window.
+2. **Input-validation gate** (``_submit_block_reason``): Blocks ``submit_*``
+   calls until ``validate_input.py`` passes for that (file, software) pair.
+3. **Manuscript gate** (``can_finish_manuscript``): Blocks ``finish`` when
+   manuscript sections were written but never validated, or when the last
+   validation failed.
+"""
+
 from __future__ import annotations
 
 import json
@@ -7,26 +20,38 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
-# How many recent tool calls to track for loop detection.
-LOOP_WINDOW = 30
-# Block on the 2nd identical call for deterministic tools.
-LOOP_THRESHOLD = 1
-# Maximum number of peek_manual search/section queries per run.
+# ── Loop-detection parameters ──────────────────────────────────
+LOOP_WINDOW = 5          # sliding-window size for recent tool fingerprints
+LOOP_THRESHOLD = 2       # block after N identical calls inside the window
+
+# ── Peek-manual budget ─────────────────────────────────────────
 PEEK_MANUAL_MAX_CALLS = 12
-# For the same "no-result" manual query intent, block after this many misses.
 PEEK_MANUAL_LOW_GAIN_MAX_REPEATS = 2
 
-# Tools exempt from loop detection and fingerprint recording.
-LOOP_EXEMPT_SUFFIXES = (
+# ── Loop-detection exemptions ──────────────────────────────────
+EXEMPT_TOOL_SUFFIXES = frozenset({
     "query_job_status",
     "get_job_status",
-)
-# use_skill calls for these skills are exempt from loop detection, because
-# multi-stage workflows may legitimately issue repeated calls with identical
-# arguments while aggregating results.
-LOOP_EXEMPT_SKILLS = (
+})
+EXEMPT_SKILL_NAMES = frozenset({
     "deep-survey",
     "manuscript-scribe",
+})
+
+# ── Manuscript-gate markers ────────────────────────────────────
+# If any of these substrings appear in validate_content / assemble_manuscript
+# output (lowercased), the script is considered to have FAILED.
+_MANUSCRIPT_FAIL_MARKERS: tuple[str, ...] = (
+    "overall: failed",
+    "still tbd",
+    "empty sections",
+    "missing sections",
+    "missing required elements",
+    "unexpected sections",
+    "not contiguous",
+    "missing in references",
+    "references not cited",
+    "[fail]",
 )
 
 
@@ -38,33 +63,44 @@ class GuardDecision:
 
 
 class ToolGuard:
-    """Stateful tool-call guard (loop protection + validation gate)."""
+    """Stateful tool-call guard (loop protection + validation gate + manuscript gate)."""
+
+    # ── construction / reset ───────────────────────────────────
 
     def __init__(self, logger: Any):
         self.logger = logger
+
+        # Loop detection
         self._recent_tool_fps: deque[str] = deque(maxlen=LOOP_WINDOW)
         self._recent_sem_fps: deque[str] = deque(maxlen=LOOP_WINDOW)
         self._peek_manual_call_count: int = 0
         self._peek_manual_nohit_counts: dict[str, int] = {}
-        # Keyed by (normalized_input_file, normalized_software).
+
+        # Input-validation gate: (normalised_file, normalised_software) → passed?
         self._validate_status_by_key: dict[tuple[str, str], bool] = {}
 
+        # Manuscript gate (three-state):
+        #   _manuscript_writes > 0  →  "some section was written; validation needed"
+        #   _manuscript_validated is None  →  "never validated"
+        #   _manuscript_validated is True  →  "last validation passed"
+        #   _manuscript_validated is False →  "last validation failed"
+        self._manuscript_writes: int = 0
+        self._manuscript_validated: bool | None = None
+        self._manuscript_fail_reason: str = ""
+
     def reset_loop_history(self) -> None:
-        """Clear loop-detection state so a new logical phase starts fresh.
+        """Clear loop-detection state so a new planner step starts fresh.
 
-        This resets the sliding-window fingerprints and peek_manual counters
-        but intentionally preserves ``_validate_status_by_key`` because
-        validation results remain valid across planner steps.
-
-        Typical call site: the beginning of each planner step execution,
-        so that independent steps are not blocked by tool calls from
-        earlier steps.
+        Preserves ``_validate_status_by_key`` (input-file validations remain
+        valid) and ``_manuscript_*`` state (manuscript gate spans the whole run).
         """
         self._recent_tool_fps.clear()
         self._recent_sem_fps.clear()
         self._peek_manual_call_count = 0
         self._peek_manual_nohit_counts.clear()
         self.logger.debug("ToolGuard loop history reset.")
+
+    # ── static helpers: parsing / normalisation ────────────────
 
     @staticmethod
     def _parse_tool_args(tool_call) -> dict[str, Any]:
@@ -98,6 +134,28 @@ class ToolGuard:
         return m.group(1).strip() if m else None
 
     @staticmethod
+    def _display_software(software: str) -> str:
+        mapping = {
+            "cp2k": "CP2K", "abinit": "ABINIT", "lammps": "LAMMPS",
+            "orca": "ORCA", "pyatb": "PyATB", "quantum_espresso": "Quantum Espresso",
+        }
+        return mapping.get(software, software.upper())
+
+    @staticmethod
+    def _infer_binary_submit_software(tool_name: str) -> str:
+        m = re.match(r"^mat_binary_calc_submit_run_(.+)$", tool_name or "")
+        if not m:
+            return ""
+        token = m.group(1).lower()
+        mapping = {
+            "cp2k": "cp2k", "abinit": "abinit", "lammps": "lammps",
+            "orca": "orca", "pyatb": "pyatb", "quantum_espresso": "quantum_espresso",
+        }
+        return mapping.get(token, token)
+
+    # ── fingerprinting ─────────────────────────────────────────
+
+    @staticmethod
     def _tool_fingerprint(tool_call) -> str:
         name = tool_call.function.name
         args_str = tool_call.function.arguments or ""
@@ -121,10 +179,8 @@ class ToolGuard:
         script_name = args.get("script_name", "")
         if name == "use_skill" and "peek_manual" in script_name and script_args:
             sa = script_args.upper()
-            sw = ""
             sw_m = re.search(r'--SOFTWARE\s+(\S+)', sa)
-            if sw_m:
-                sw = sw_m.group(1)
+            sw = sw_m.group(1) if sw_m else ""
             search_kw = ""
             m = re.search(r'--SEARCH\s+["\']?([^"\']+?)["\']?(?:\s+--|$)', sa)
             if m:
@@ -138,7 +194,10 @@ class ToolGuard:
             if m:
                 sections = m.group(1).strip()
             tree = "--TREE" in sa
-            return f"peek_manual|{sw}|search={search_kw}|section={section}|sections={sections}|tree={tree}"
+            return (
+                f"peek_manual|{sw}|search={search_kw}"
+                f"|section={section}|sections={sections}|tree={tree}"
+            )
 
         try:
             canonical = json.dumps(args, sort_keys=True, ensure_ascii=False)
@@ -146,15 +205,17 @@ class ToolGuard:
             canonical = args_str
         return f"{name}|{canonical}"
 
+    # ── exemption / classification predicates ──────────────────
+
     @staticmethod
-    def _is_loop_exempt(tool_call) -> bool:
+    def _is_exempt(tool_call) -> bool:
         name = tool_call.function.name or ""
-        if any(name.endswith(suffix) for suffix in LOOP_EXEMPT_SUFFIXES):
+        if any(name.endswith(s) for s in EXEMPT_TOOL_SUFFIXES):
             return True
         if name == "use_skill":
             args = ToolGuard._parse_tool_args(tool_call)
-            skill_name = str(args.get("skill_name", "")).strip().lower()
-            if skill_name in LOOP_EXEMPT_SKILLS:
+            skill = str(args.get("skill_name", "")).strip().lower()
+            if skill in EXEMPT_SKILL_NAMES:
                 return True
         return False
 
@@ -177,33 +238,49 @@ class ToolGuard:
         )
         return any(m in text for m in markers)
 
-    @staticmethod
-    def _infer_binary_submit_software(tool_name: str) -> str:
-        m = re.match(r"^mat_binary_calc_submit_run_(.+)$", tool_name or "")
-        if not m:
-            return ""
-        token = m.group(1).lower()
-        mapping = {
-            "cp2k": "cp2k",
-            "abinit": "abinit",
-            "lammps": "lammps",
-            "orca": "orca",
-            "pyatb": "pyatb",
-            "quantum_espresso": "quantum_espresso",
-        }
-        return mapping.get(token, token)
+    # ── manuscript gate ────────────────────────────────────────
 
     @staticmethod
-    def _display_software(software: str) -> str:
-        mapping = {
-            "cp2k": "CP2K",
-            "abinit": "ABINIT",
-            "lammps": "LAMMPS",
-            "orca": "ORCA",
-            "pyatb": "PyATB",
-            "quantum_espresso": "Quantum Espresso",
-        }
-        return mapping.get(software, software.upper())
+    def _check_manuscript_script_ok(
+        script_name: str, observation: str, info: dict[str, Any],
+    ) -> tuple[bool, str]:
+        """Check whether a manuscript-scribe validation / assembly script passed.
+
+        Returns ``(ok, fail_reason)``.  Only inspects scripts that produce
+        validation verdicts (``validate_content.py``, ``assemble_manuscript.py``).
+        """
+        script = (script_name or "").strip().lower()
+        if script not in {"validate_content.py", "assemble_manuscript.py"}:
+            return True, ""
+
+        exit_code = int(info.get("exit_code", 0) or 0)
+        if exit_code != 0:
+            return False, f"{script} exited with code {exit_code}."
+
+        text = (observation or "").lower()
+        for marker in _MANUSCRIPT_FAIL_MARKERS:
+            if marker in text:
+                return False, f"Validation failed: '{marker}' detected in output."
+        return True, ""
+
+    def can_finish_manuscript(self) -> tuple[bool, str]:
+        """Gate for ``finish``: block if manuscript was written but not validated,
+        or if the latest validation / assembly failed.
+
+        Returns ``(can_finish, reason_if_blocked)``.
+        """
+        if self._manuscript_writes == 0:
+            return True, ""  # No manuscript work this run — gate open.
+        if self._manuscript_validated is None:
+            return False, (
+                "Manuscript sections were written but never validated. "
+                "Run validate_content.py or assemble_manuscript.py before finishing."
+            )
+        if self._manuscript_validated is False:
+            return False, self._manuscript_fail_reason or "Manuscript validation failed."
+        return True, ""
+
+    # ── input-validation gate (submit blocking) ────────────────
 
     def _submit_block_reason(self, tool_call) -> tuple[str | None, str]:
         name = tool_call.function.name
@@ -224,9 +301,11 @@ class ToolGuard:
             return "validate_failed", software
         return None, software
 
+    # ── loop detection core ────────────────────────────────────
+
     def _is_loop(self, tool_call) -> tuple[bool, dict[str, Any]]:
-        if self._is_loop_exempt(tool_call):
-            return False, {"reason": "loop_exempt"}
+        if self._is_exempt(tool_call):
+            return False, {"reason": "exempt"}
 
         sem_fp = self._semantic_fingerprint(tool_call)
         if self._is_peek_manual_call(tool_call):
@@ -242,8 +321,11 @@ class ToolGuard:
             return True, {"reason": "semantic_duplicate"}
         return False, {"reason": "ok"}
 
+    # ── public API ─────────────────────────────────────────────
+
     def evaluate(self, tool_call) -> GuardDecision:
         """Evaluate whether a tool call should be blocked."""
+        # Windows heredoc gate
         if tool_call.function.name == "execute_bash" and sys.platform == "win32":
             args = self._parse_tool_args(tool_call)
             command = str(args.get("command", "") or "")
@@ -257,65 +339,117 @@ class ToolGuard:
                     info={"reason": "windows_heredoc_blocked"},
                 )
 
+        # Input-validation gate
         submit_reason, software = self._submit_block_reason(tool_call)
         if submit_reason:
-            args = self._parse_tool_args(tool_call)
-            input_file = args.get("input_file", "<unknown>")
-            self.logger.warning(
-                "VALIDATION GATE BLOCKED: tool='%s' input_file='%s' reason=%s software=%s",
-                tool_call.function.name,
-                input_file,
-                submit_reason,
-                software,
-            )
-            sw_disp = self._display_software(software)
-            if submit_reason == "not_validated":
-                return GuardDecision(
-                    blocked=True,
-                    message=(
-                        "⚠️ VALIDATION GATE BLOCKED: Submission is blocked because this input file has not passed "
-                        "`validate_input.py` yet.\n\n"
-                        "ACTION REQUIRED:\n"
-                        "1. Run `use_skill` with `validate_input.py --input_file \""
-                        f"{input_file}"
-                        f"\" --software {sw_disp}`.\n"
-                        "2. Fix all validation errors.\n"
-                        "3. Re-run validation until exit_code=0, then submit."
-                    ),
-                    info={"reason": "not_validated", "software": software},
-                )
-            if submit_reason == "validate_failed":
-                return GuardDecision(
-                    blocked=True,
-                    message=(
-                        "⚠️ VALIDATION GATE BLOCKED: Submission is blocked because the latest "
-                        "`validate_input.py` result for this input file is FAIL.\n\n"
-                        "ACTION REQUIRED:\n"
-                        "1. Read validation errors.\n"
-                        "2. Fix the input file.\n"
-                        "3. Re-run validation until exit_code=0, then submit."
-                    ),
-                    info={"reason": "validate_failed", "software": software},
-                )
-            return GuardDecision(
-                blocked=True,
-                message=(
-                    "⚠️ VALIDATION GATE BLOCKED: Submission is blocked because input_file is missing or invalid.\n"
-                    "Provide a valid input_file and pass validation first."
-                ),
-                info={"reason": "missing_input_file", "software": software},
-            )
+            return self._build_submit_block(tool_call, submit_reason, software)
 
+        # Loop detection
         is_loop, loop_info = self._is_loop(tool_call)
         if not is_loop:
             return GuardDecision(blocked=False, info={"reason": "ok"})
+        return self._build_loop_block(tool_call, loop_info)
 
+    def record_tool_call(self, tool_call) -> None:
+        """Record a tool call fingerprint in the sliding window."""
+        if self._is_exempt(tool_call):
+            return
+        self._recent_tool_fps.append(self._tool_fingerprint(tool_call))
+        self._recent_sem_fps.append(self._semantic_fingerprint(tool_call))
+        if self._is_peek_manual_call(tool_call):
+            self._peek_manual_call_count += 1
+
+    def update_after_tool(
+        self, tool_call, observation: str, info: dict[str, Any],
+    ) -> None:
+        """Update post-execution state from a completed tool call."""
+        args = self._parse_tool_args(tool_call)
+
+        # ── peek_manual low-gain tracking ────────────────────
+        if self._is_peek_manual_call(tool_call):
+            sem_fp = self._semantic_fingerprint(tool_call)
+            if self._is_low_gain_manual_observation(observation):
+                self._peek_manual_nohit_counts[sem_fp] = (
+                    self._peek_manual_nohit_counts.get(sem_fp, 0) + 1
+                )
+            else:
+                self._peek_manual_nohit_counts.pop(sem_fp, None)
+
+        # ── validate_input gate tracking ─────────────────────
+        if (
+            tool_call.function.name == "use_skill"
+            and args.get("script_name") == "validate_input.py"
+        ):
+            script_args = args.get("script_args", "") or ""
+            input_file = self._extract_flag_value(script_args, "input_file")
+            software = self._extract_flag_value(script_args, "software")
+            nf = self._normalize_input_path(input_file)
+            ns = self._normalize_software_name(software)
+            if nf and ns:
+                self._validate_status_by_key[(nf, ns)] = (info.get("exit_code") == 0)
+
+        # ── manuscript gate tracking ─────────────────────────
+        if tool_call.function.name == "use_skill":
+            skill = str(args.get("skill_name", "")).strip().lower()
+            script = str(args.get("script_name", "")).strip().lower()
+            if skill == "manuscript-scribe":
+                if "write_section" in script:
+                    self._manuscript_writes += 1
+                if script in {"validate_content.py", "assemble_manuscript.py"}:
+                    ok, reason = self._check_manuscript_script_ok(
+                        script, observation, info or {},
+                    )
+                    self._manuscript_validated = ok
+                    self._manuscript_fail_reason = "" if ok else reason
+
+    # ── private: decision builders ─────────────────────────────
+
+    def _build_submit_block(
+        self, tool_call, reason: str, software: str,
+    ) -> GuardDecision:
+        args = self._parse_tool_args(tool_call)
+        input_file = args.get("input_file", "<unknown>")
+        sw_disp = self._display_software(software)
+        self.logger.warning(
+            "VALIDATION GATE BLOCKED: tool='%s' input_file='%s' reason=%s software=%s",
+            tool_call.function.name, input_file, reason, software,
+        )
+        messages = {
+            "not_validated": (
+                "⚠️ VALIDATION GATE BLOCKED: Submission is blocked because this input file has not passed "
+                "`validate_input.py` yet.\n\n"
+                "ACTION REQUIRED:\n"
+                f"1. Run `use_skill` with `validate_input.py --input_file \"{input_file}\" --software {sw_disp}`.\n"
+                "2. Fix all validation errors.\n"
+                "3. Re-run validation until exit_code=0, then submit."
+            ),
+            "validate_failed": (
+                "⚠️ VALIDATION GATE BLOCKED: Submission is blocked because the latest "
+                "`validate_input.py` result for this input file is FAIL.\n\n"
+                "ACTION REQUIRED:\n"
+                "1. Read validation errors.\n"
+                "2. Fix the input file.\n"
+                "3. Re-run validation until exit_code=0, then submit."
+            ),
+        }
+        msg = messages.get(reason, (
+            "⚠️ VALIDATION GATE BLOCKED: Submission is blocked because input_file is missing or invalid.\n"
+            "Provide a valid input_file and pass validation first."
+        ))
+        return GuardDecision(
+            blocked=True, message=msg,
+            info={"reason": reason, "software": software},
+        )
+
+    def _build_loop_block(
+        self, tool_call, loop_info: dict[str, Any],
+    ) -> GuardDecision:
         reason = loop_info.get("reason", "loop_detected")
+
         if reason == "manual_budget":
             self.logger.warning(
                 "BUDGET EXHAUSTED: peek_manual called %d times (max %d), skipping.",
-                self._peek_manual_call_count,
-                PEEK_MANUAL_MAX_CALLS,
+                self._peek_manual_call_count, PEEK_MANUAL_MAX_CALLS,
             )
             return GuardDecision(
                 blocked=True,
@@ -328,6 +462,7 @@ class ToolGuard:
                 ),
                 info={"reason": reason},
             )
+
         if reason == "manual_low_gain_repeat":
             self.logger.warning(
                 "LOW-GAIN REPEAT BLOCKED: same no-result manual intent repeated >= %d times.",
@@ -346,10 +481,10 @@ class ToolGuard:
                 info={"reason": reason},
             )
 
+        # exact_duplicate / semantic_duplicate
         self.logger.warning(
             "LOOP DETECTED: tool '%s' with same args called %d+ times, skipping.",
-            tool_call.function.name,
-            LOOP_THRESHOLD,
+            tool_call.function.name, LOOP_THRESHOLD,
         )
         return GuardDecision(
             blocked=True,
@@ -362,33 +497,3 @@ class ToolGuard:
             ),
             info={"reason": reason},
         )
-
-    def record_tool_call(self, tool_call) -> None:
-        """Record a tool call fingerprint in the sliding window."""
-        if self._is_loop_exempt(tool_call):
-            return
-        self._recent_tool_fps.append(self._tool_fingerprint(tool_call))
-        self._recent_sem_fps.append(self._semantic_fingerprint(tool_call))
-        if self._is_peek_manual_call(tool_call):
-            self._peek_manual_call_count += 1
-
-    def update_after_tool(self, tool_call, observation: str, info: dict[str, Any]) -> None:
-        """Update low-gain and validation gate states from a completed tool call."""
-        args = self._parse_tool_args(tool_call)
-
-        if self._is_peek_manual_call(tool_call):
-            sem_fp = self._semantic_fingerprint(tool_call)
-            if self._is_low_gain_manual_observation(observation):
-                self._peek_manual_nohit_counts[sem_fp] = self._peek_manual_nohit_counts.get(sem_fp, 0) + 1
-            else:
-                self._peek_manual_nohit_counts.pop(sem_fp, None)
-
-        if tool_call.function.name == "use_skill" and args.get("script_name") == "validate_input.py":
-            script_args = args.get("script_args", "") or ""
-            input_file = self._extract_flag_value(script_args, "input_file")
-            software = self._extract_flag_value(script_args, "software")
-            normalized_file = self._normalize_input_path(input_file)
-            normalized_sw = self._normalize_software_name(software)
-            if normalized_file and normalized_sw:
-                self._validate_status_by_key[(normalized_file, normalized_sw)] = (info.get("exit_code") == 0)
-

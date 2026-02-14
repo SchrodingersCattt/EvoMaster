@@ -6,6 +6,10 @@ Citations: [n](URL) or [n](#ref-n); References section must list same [n]. See r
 With --profile, prints a word-count warning if the section is below the profile's minimum.
 With --min_words, uses an explicit floor instead.
 
+When --profile is given the section name is resolved through ``format_profiles.resolve_section()``
+so common aliases (e.g. "Computational Methods" → "Methods") work transparently and strict
+profiles reject unknown section names with exit-code 2.
+
 Usage:
   python write_section.py --section "Methods" --content_file "methods_notes.txt" --draft "draft_manuscript.md"
   python write_section.py --section "Introduction" --content "First paragraph..." --output "sections/Introduction.md"
@@ -25,9 +29,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from section_utils import find_section as _find_section
 
 try:
-    from format_profiles import get_profile as _get_profile
+    from format_profiles import get_profile as _get_profile, resolve_section as _resolve_section
 except ImportError:
-    _get_profile = None  # type: ignore[assignment]
+    _get_profile = None   # type: ignore[assignment]
+    _resolve_section = None  # type: ignore[assignment]
 
 
 def _word_count(text: str) -> int:
@@ -73,7 +78,7 @@ def main() -> None:
         "--profile",
         default=None,
         help="Format profile name (e.g. generic, computational_report). "
-             "Used to check word-count minimums after writing.",
+             "Used for section-name validation and word-count minimums.",
     )
     ap.add_argument(
         "--min_words",
@@ -82,6 +87,14 @@ def main() -> None:
         help="Explicit minimum word count (overrides profile setting).",
     )
     args = ap.parse_args()
+
+    # ── Section-name resolution via format_profiles ──────────────────
+    if args.profile and _resolve_section is not None:
+        try:
+            args.section = _resolve_section(args.profile, args.section)
+        except (ValueError, KeyError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(2)
 
     if not args.draft and not args.output:
         args.draft = "draft_manuscript.md"

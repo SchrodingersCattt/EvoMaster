@@ -698,8 +698,29 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
             return json.dumps(safe_result, ensure_ascii=False)[:max_len]
         return str(result)[:max_len]
 
+    # Section lists for strict profiles.  Must stay in sync with
+    # skills/manuscript-scribe/scripts/format_profiles.py (the canonical
+    # source).  We duplicate a minimal constant here because the planner
+    # cannot import format_profiles directly (different package tree).
+    _STRICT_PROFILE_SECTIONS: dict[str, list[str]] = {
+        "computational_report": ["Methods", "Results and Discussion", "References"],
+        "patent": [
+            "Technical Field", "Background Art", "Summary of Invention",
+            "Detailed Description", "Claims", "Abstract",
+        ],
+    }
+
     def _enforce_manuscript_plan_consistency(self, plan: dict[str, Any], goal: str) -> dict[str, Any]:
-        """Harden manuscript plans against profile drift (e.g., patent -> review)."""
+        """Ensure manuscript plan uses the right profile and covers required sections.
+
+        Two checks, both generic (no per-profile if/elif):
+        1. Auto-align ``--template`` / ``--profile`` in step intents.
+        2. For strict profiles, verify every required section is mentioned.
+
+        Forbidden-section substring matching was intentionally removed: it caused
+        false positives (e.g. "introduction" as a common English word).  Unexpected
+        sections are caught at execution time by ``validate_content.py``.
+        """
         target_profile = self._infer_manuscript_profile(goal)
         if not target_profile or plan.get("status") == "REFUSED":
             return plan
@@ -709,6 +730,7 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         if not manuscript_steps:
             return plan
 
+        # ── 1. Auto-align --template / --profile arguments ───────────
         template_re = re.compile(r'--template\s+["\']?([a-zA-Z_]+)["\']?', flags=re.IGNORECASE)
         profile_re = re.compile(r'--profile\s+["\']?([a-zA-Z_]+)["\']?', flags=re.IGNORECASE)
         rewritten_ids: list[int] = []
@@ -719,75 +741,51 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
             if new_intent != intent:
                 step["intent"] = new_intent
                 rewritten_ids.append(step.get("step_id", -1))
-
         if rewritten_ids:
             self._emit(
-                "Planner",
-                "thought",
-                f"[Planner] Auto-aligned manuscript profile to '{target_profile}' for step(s): {rewritten_ids}.",
+                "Planner", "thought",
+                f"[Planner] Auto-aligned profile to '{target_profile}' in step(s) {rewritten_ids}.",
             )
 
-        if target_profile == "patent":
-            forbidden_review_sections = (
-                "Executive Summary",
-                "State of the Art",
-                "Gap Analysis",
-                "Scope and Methodology",
-                "Critical Analysis",
-                "Future Directions",
-                "Conclusions",
-            )
-            bad_steps = []
-            for step in manuscript_steps:
-                text = step.get("intent", "")
-                if any(sec.lower() in text.lower() for sec in forbidden_review_sections):
-                    bad_steps.append(step.get("step_id", "?"))
-            if bad_steps:
-                plan["status"] = "REFUSED"
-                plan["refusal_reason"] = (
-                    "manuscript_consistency: patent task contains review-style section goals "
-                    f"in step(s) {bad_steps}. Use patent sections only."
-                )
-                return plan
-
-            required_sections = (
-                "Technical Field",
-                "Background Art",
-                "Summary of Invention",
-                "Detailed Description",
-                "Claims",
-                "Abstract",
-            )
-            all_intents = " ".join((s.get("intent", "") or "") for s in manuscript_steps).lower()
-            missing = [sec for sec in required_sections if sec.lower() not in all_intents]
+        # ── 2. Required-section coverage (strict profiles only) ──────
+        required = self._STRICT_PROFILE_SECTIONS.get(target_profile)
+        if required:
+            all_intents = " ".join(s.get("intent", "") for s in manuscript_steps).lower()
+            missing = [sec for sec in required if sec.lower() not in all_intents]
             if missing:
                 plan["status"] = "REFUSED"
                 plan["refusal_reason"] = (
-                    "manuscript_consistency: patent plan missing required section goals: "
-                    + ", ".join(missing)
+                    f"manuscript_consistency: {target_profile} plan missing required "
+                    f"section mentions: {', '.join(missing)}"
                 )
-                return plan
 
         return plan
 
-    @staticmethod
-    def _detect_manuscript_validation_failure(intent: str, result_text: str) -> tuple[bool, str]:
+    # Markers that indicate manuscript validation / assembly failure.
+    _MANUSCRIPT_FAIL_MARKERS: tuple[str, ...] = (
+        "overall: failed",
+        "still tbd",
+        "missing required elements",
+        "unexpected sections",
+        "not contiguous",
+        "missing in references",
+        "references not cited",
+        "[fail]",
+    )
+
+    @classmethod
+    def _detect_manuscript_validation_failure(cls, intent: str, result_text: str) -> tuple[bool, str]:
         """Detect manuscript-scribe failures encoded in textual tool output."""
         i = (intent or "").lower()
-        t = (result_text or "").lower()
         if "manuscript-scribe" not in i:
             return False, ""
-        if "assemble_manuscript.py" in i or "validate_content.py" in i:
-            if (
-                "overall: failed" in t
-                or "still tbd" in t
-                or "missing required elements" in t
-                or "error: overall:" in t
-                or "[fail]" in t
-            ):
-                return True, "manuscript validation/assembly failed"
-        if "write_section.py" in i and "warning" in t and "minimum" in t:
-            return True, "manuscript section under minimum requirements"
+        t = (result_text or "").lower()
+        if "assemble_manuscript" in i or "validate_content" in i:
+            for marker in cls._MANUSCRIPT_FAIL_MARKERS:
+                if marker in t:
+                    return True, f"manuscript validation failed ({marker})"
+        if "write_section" in i and "warning" in t and "minimum" in t:
+            return True, "section below minimum word count"
         return False, ""
 
     def _get_next_execution_window(self, plan: dict[str, Any]) -> list[dict[str, Any]]:

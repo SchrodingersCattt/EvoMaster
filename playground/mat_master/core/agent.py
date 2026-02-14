@@ -404,15 +404,23 @@ You can use the 'use_skill' tool to:
                 can_finish, gate_info = self._job_registry.can_finish()
                 info = dict(info or {})
                 info.update(gate_info)
-                if can_finish:
+                manuscript_ok, manuscript_reason = self._tool_guard.can_finish_manuscript()
+                if can_finish and manuscript_ok:
                     should_finish = True
                 else:
                     should_finish = False
-                    observation = (
-                        f"{observation}\n\n"
-                        "[finish_attempt_gate] Blocked: pending async jobs still running. "
-                        "Continue monitoring until pending_jobs_check passes."
-                    )
+                    if not can_finish:
+                        observation = (
+                            f"{observation}\n\n"
+                            "[finish_attempt_gate] Blocked: pending async jobs still running. "
+                            "Continue monitoring until pending_jobs_check passes."
+                        )
+                    if not manuscript_ok:
+                        observation = (
+                            f"{observation}\n\n"
+                            "[finish_attempt_gate] Blocked: manuscript validation gate is failing. "
+                            f"{manuscript_reason} Re-run manuscript-scribe validation/assembly and fix issues before finishing."
+                        )
 
             # Full content for streaming (yield) and trajectory recording
             tool_message = ToolMessage(

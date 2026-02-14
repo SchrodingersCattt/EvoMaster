@@ -1,6 +1,7 @@
 """
 Validate manuscript content against a format profile: word counts, completeness,
-required elements, information flow between sections, and section ordering.
+required elements, information flow, section ordering, unexpected sections, and
+citation numbering consistency.
 
 Run this **before** assemble_manuscript.py to catch short or incomplete sections early,
 or pass --profile to assemble_manuscript.py to run checks at assembly time.
@@ -104,7 +105,7 @@ def _extract_key_terms(text: str) -> set[str]:
     for m in re.finditer(r"\b([A-Z][A-Z0-9]{1,})\b", text):
         t = m.group(1)
         # Filter common words
-        if t not in {"TBD", "URL", "HTTP", "HTTPS", "PDF", "JSON", "HTML", "API", "URL", "AND", "THE", "FOR", "NOT"}:
+        if t not in {"TBD", "URL", "HTTP", "HTTPS", "PDF", "JSON", "HTML", "API", "AND", "THE", "FOR", "NOT"}:
             terms.add(t)
     return terms
 
@@ -294,6 +295,99 @@ def check_section_ordering(
     return result
 
 
+def check_unexpected_sections(
+    sections: dict[str, str],
+    profile: dict[str, Any],
+) -> dict[str, Any]:
+    """Flag sections not defined in the profile.
+
+    * **Strict** profiles (``strict_sections=True``): unexpected sections are
+      **errors** and set ``passed=False``.
+    * **Non-strict** profiles: unexpected sections are **warnings** only —
+      ``passed`` stays ``True`` so they do not block validation.
+    """
+    expected = set(profile["sections"])
+    unexpected = [s for s in sections if s not in expected]
+    strict = bool(profile.get("strict_sections", False))
+    return {
+        "passed": (not unexpected) if strict else True,
+        "unexpected": unexpected,
+        "strict": strict,
+    }
+
+
+def check_citation_consistency(
+    sections: dict[str, str],
+    profile: dict[str, Any],
+) -> dict[str, Any]:
+    """Check in-text ``[n]`` citations against References numbering.
+
+    Validates:
+    * In-text numbers are contiguous from 1.
+    * References list numbers are contiguous from 1.
+    * Every in-text ``[n]`` has a matching ``[n]`` in References and vice-versa.
+    """
+    result: dict[str, Any] = {
+        "passed": True,
+        "in_text": [],
+        "reference_entries": [],
+        "missing_in_references": [],
+        "unused_references": [],
+        "errors": [],
+    }
+
+    # Determine the references section name for this profile.
+    reference_section = next(
+        (s for s in profile["sections"] if s.lower() == "references"),
+        "References",
+    )
+
+    # Body text (everything except the reference section).
+    non_ref_text = "\n\n".join(
+        body for name, body in sections.items() if name != reference_section
+    )
+    in_text_nums = sorted(
+        {int(m.group(1)) for m in re.finditer(r"\[(\d+)\](?:\([^)]+\))?", non_ref_text)}
+    )
+
+    # Reference entries (lines starting with [n]).
+    ref_body = sections.get(reference_section, "")
+    ref_nums = sorted(
+        {int(m.group(1)) for m in re.finditer(r"^\s*\[(\d+)\]", ref_body, flags=re.MULTILINE)}
+    )
+
+    result["in_text"] = in_text_nums
+    result["reference_entries"] = ref_nums
+
+    # Contiguity
+    if in_text_nums:
+        expected = list(range(1, max(in_text_nums) + 1))
+        if in_text_nums != expected:
+            result["errors"].append(
+                f"In-text citation numbering is not contiguous from 1: found {in_text_nums}, expected {expected}."
+            )
+    if ref_nums:
+        expected_ref = list(range(1, max(ref_nums) + 1))
+        if ref_nums != expected_ref:
+            result["errors"].append(
+                f"References numbering is not contiguous from 1: found {ref_nums}, expected {expected_ref}."
+            )
+
+    # Cross-check
+    missing = [n for n in in_text_nums if n not in ref_nums]
+    unused = [n for n in ref_nums if n not in in_text_nums]
+    if missing:
+        result["missing_in_references"] = missing
+        result["errors"].append(f"In-text citations missing in References: {missing}")
+    if unused:
+        result["unused_references"] = unused
+        result["errors"].append(f"References not cited in text: {unused}")
+
+    if result["errors"]:
+        result["passed"] = False
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -310,11 +404,20 @@ def run_validation(
     report["required_elements"] = check_required_elements(sections, profile)
     report["information_flow"] = check_information_flow(sections, profile)
     report["section_ordering"] = check_section_ordering(sections, profile)
+    report["unexpected_sections"] = check_unexpected_sections(sections, profile)
+    report["citation_consistency"] = check_citation_consistency(sections, profile)
 
     report["overall_passed"] = all(
         report[k]["passed"]
-        for k in ["word_counts", "completeness", "required_elements",
-                   "information_flow", "section_ordering"]
+        for k in [
+            "word_counts",
+            "completeness",
+            "required_elements",
+            "information_flow",
+            "section_ordering",
+            "unexpected_sections",
+            "citation_consistency",
+        ]
     )
     return report
 
@@ -358,6 +461,19 @@ def print_report(report: dict[str, Any]) -> None:
         print("\n=== Section Ordering ===")
         for w in order["warnings"]:
             print(f"  {w}")
+
+    unexpected = report["unexpected_sections"]
+    if unexpected["unexpected"]:
+        severity = "ERROR" if unexpected.get("strict") else "WARN"
+        print(f"\n=== Unexpected Sections (not in profile) ===")
+        for s in unexpected["unexpected"]:
+            print(f"  [{severity}] {s}")
+
+    cite = report["citation_consistency"]
+    if cite["errors"]:
+        print("\n=== Citation Consistency ===")
+        for e in cite["errors"]:
+            print(f"  ERROR: {e}")
 
     overall = "PASSED" if report["overall_passed"] else "FAILED"
     print(f"\nOverall: {overall}")

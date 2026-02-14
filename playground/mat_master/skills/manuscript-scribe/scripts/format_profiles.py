@@ -6,13 +6,31 @@ required_elements, writing_hint), and an overall minimum word count.  Profiles
 drive ``init_manuscript.py`` (template generation), ``validate_content.py``
 (quality gates), and ``assemble_manuscript.py`` (section ordering).
 
+Two profile-level flags control strictness:
+
+* ``strict_sections`` (bool, default ``False``):
+  When ``True``, **only** the listed sections are accepted. ``write_section.py``
+  rejects unknown names with exit-code 2, and ``validate_content.py`` marks
+  unexpected sections as errors.  When ``False``, extra sections are allowed
+  (warned but not blocked).
+
+* ``section_aliases`` (dict[str, str], default ``{}``):
+  Maps common misspellings / synonyms (lower-case) to the canonical section
+  name.  Alias resolution happens in ``resolve_section()`` and is used by
+  ``write_section.py`` so the agent can write ``"Computational Methods"`` and
+  it lands in ``"Methods"``.
+
 Usage from other scripts::
 
-    from format_profiles import get_profile, list_profiles, FORMAT_PROFILES
+    from format_profiles import (
+        get_profile, list_profiles, resolve_section,
+        required_content_sections, is_strict_profile,
+    )
 """
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -209,6 +227,19 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
             "Lean computational study write-up (DFT, MD, simulation results). "
             "Three sections only: Methods, Results and Discussion, References."
         ),
+        "strict_sections": True,
+        "section_aliases": {
+            "method": "Methods",
+            "computational method": "Methods",
+            "computational methods": "Methods",
+            "methodology": "Methods",
+            "result": "Results and Discussion",
+            "results": "Results and Discussion",
+            "discussion": "Results and Discussion",
+            "results discussion": "Results and Discussion",
+            "reference": "References",
+            "bibliography": "References",
+        },
         "sections": [
             "Methods",
             "Results and Discussion",
@@ -268,6 +299,14 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
     # ── Patent application ────────────────────────────────────────────────
     "patent": {
         "description": "Patent application document",
+        "strict_sections": True,
+        "section_aliases": {
+            "prior art": "Background Art",
+            "technical background": "Background Art",
+            "invention summary": "Summary of Invention",
+            "description": "Detailed Description",
+            "embodiments": "Detailed Description",
+        },
         "sections": [
             "Technical Field",
             "Background Art",
@@ -562,7 +601,7 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers — single source of truth for profile queries
 # ---------------------------------------------------------------------------
 
 def get_profile(name: str) -> dict[str, Any]:
@@ -576,6 +615,52 @@ def get_profile(name: str) -> dict[str, Any]:
 def list_profiles() -> list[str]:
     """Return sorted list of available profile names."""
     return sorted(FORMAT_PROFILES)
+
+
+def is_strict_profile(name: str) -> bool:
+    """Return ``True`` if the profile rejects unexpected sections."""
+    return bool(get_profile(name).get("strict_sections", False))
+
+
+def resolve_section(profile_name: str, raw_section: str) -> str:
+    """Resolve *raw_section* to its canonical section name.
+
+    Resolution order:
+    1. Case-insensitive exact match with profile section list.
+    2. Alias match via ``section_aliases``.
+    3. Strict profile → ``ValueError``; non-strict → passthrough.
+    """
+    profile = get_profile(profile_name)
+    sections = profile["sections"]
+
+    # Normalise whitespace for comparison
+    key = re.sub(r"\s+", " ", raw_section.strip()).lower()
+    canonical_map = {re.sub(r"\s+", " ", s).lower(): s for s in sections}
+    if key in canonical_map:
+        return canonical_map[key]
+
+    aliases: dict[str, str] = profile.get("section_aliases", {})
+    mapped = aliases.get(key)
+    if mapped and mapped in sections:
+        return mapped
+
+    if profile.get("strict_sections", False):
+        allowed_text = ", ".join(sections)
+        raise ValueError(
+            f"Section '{raw_section}' is not allowed for strict profile "
+            f"'{profile_name}'. Allowed: {allowed_text}"
+        )
+    return raw_section
+
+
+def required_content_sections(profile_name: str) -> list[str]:
+    """Return sections with ``min_words > 0`` (i.e. that need real content)."""
+    profile = get_profile(profile_name)
+    return [
+        sec
+        for sec in profile["sections"]
+        if profile.get("section_meta", {}).get(sec, {}).get("min_words", 0) > 0
+    ]
 
 
 def profile_summary(name: str) -> str:
@@ -596,5 +681,7 @@ def all_profiles_summary() -> str:
         lines.append(f"    {p['description']}")
         lines.append(f"    Sections: {secs}")
         lines.append(f"    Min words: {p['overall_min_words']}")
+        strict = "yes" if p.get("strict_sections") else "no"
+        lines.append(f"    Strict: {strict}")
         lines.append("")
     return "\n".join(lines)
