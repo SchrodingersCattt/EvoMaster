@@ -20,6 +20,7 @@ from ..async_tool_registry import AsyncToolRegistry
 from evomaster.core.exp import BaseExp
 from evomaster.utils.types import Dialog, SystemMessage, UserMessage
 
+from ...prompts.build_prompt import LANGUAGE_RULE
 from .direct_solver import DirectSolver, _get_available_tool_names
 
 try:
@@ -42,7 +43,9 @@ def _get_async_registry(config) -> AsyncToolRegistry:
     return AsyncToolRegistry(d)
 
 
-PRE_CHECK_SYSTEM = """You are a pre-planning readiness assessor for a Computational Research Planner.
+_PRE_CHECK_SYSTEM_TEMPLATE = """You are a pre-planning readiness assessor for a Computational Research Planner.
+
+{language_rule}
 
 Your job is to analyze the user's task and workspace to determine whether the planner has enough information to create a good execution plan right now, or whether preliminary work is needed first.
 
@@ -53,17 +56,17 @@ ASSESSMENT CRITERIA:
 
 OUTPUT FORMAT:
 Return a strictly valid JSON object with these keys:
-{
+{{
     "ready_to_plan": true | false,
     "prerequisites": [
-        {
+        {{
             "type": "parse_pdf" | "parse_files" | "search_info" | "clarify_task",
             "description": "What needs to be done and why",
             "target": "file path or search query if applicable"
-        }
+        }}
     ],
     "reasoning": "Brief explanation of your assessment"
-}
+}}
 
 RULES:
 - If the task is straightforward (e.g. "calculate band gap of Si", "search for X structures") and no files need pre-processing: set ready_to_plan=true, prerequisites=[].
@@ -71,6 +74,8 @@ RULES:
 - If the task mentions files to process but doesn't specify which files exist, check the workspace file listing.
 - Be conservative: when in doubt about whether pre-processing is needed, recommend it.
 - Do NOT generate the plan itself. Only assess readiness."""
+
+PRE_CHECK_SYSTEM = _PRE_CHECK_SYSTEM_TEMPLATE.format(language_rule=LANGUAGE_RULE)
 
 
 def _get_mat_master_config(config) -> dict:
@@ -352,7 +357,7 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         raw = raw.replace("{{CRP_LICENSE_FIREWALL}}", self._registry.format_planner_license_firewall())
         crp_context = self._registry.crp_context_dict()
         crp_str = json.dumps(crp_context, indent=2)
-        return f"{raw}\n\n# EMBEDDED SYSTEM PROTOCOL (IMMUTABLE)\n{crp_str}"
+        return f"{raw}\n\n{LANGUAGE_RULE}\n\n# EMBEDDED SYSTEM PROTOCOL (IMMUTABLE)\n{crp_str}"
 
     # Regex patterns that indicate the blocked software name is used in a
     # *mapping / comparison / reference* context, NOT as an execution target.
@@ -716,7 +721,7 @@ Remaining planned steps:
 Question: Based on the latest result, do the remaining steps still make sense, or should the plan be revised?
 Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief explanation"}}"""
         dialog = Dialog(
-            messages=[SystemMessage(content="You are a concise research plan evaluator. Output only JSON."), UserMessage(content=prompt)],
+            messages=[SystemMessage(content=f"You are a concise research plan evaluator. Output only JSON.\n\n{LANGUAGE_RULE}"), UserMessage(content=prompt)],
             tools=[],
         )
         try:
