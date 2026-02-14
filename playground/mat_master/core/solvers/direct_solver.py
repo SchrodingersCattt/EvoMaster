@@ -18,6 +18,7 @@ from evomaster.utils.types import Dialog, SystemMessage, UserMessage
 
 from ..async_tool_registry import AsyncToolRegistry
 from ..exp import SkillEvolutionExp, WorkerExp
+from ...prompts.build_prompt import LANGUAGE_RULE
 
 
 def _get_mat_master_config(config) -> dict:
@@ -33,9 +34,19 @@ def _get_mat_master_config(config) -> dict:
 
 
 def _get_available_tool_names(agent) -> list[str]:
-    """Get list of tool names for router context. Empty if not available."""
+    """Get list of tool names for router context (respects async policy filtering).
+
+    Uses ``agent._get_tool_specs()`` so the router sees the same filtered tool
+    surface as the agent (submit-only for async tools, lifecycle tools hidden).
+    """
     try:
-        if agent is None or not hasattr(agent, "tools") or agent.tools is None:
+        if agent is None:
+            return []
+        # Prefer the agent-level filtered specs (applies AsyncExecutionPolicy).
+        if hasattr(agent, "_get_tool_specs"):
+            specs = agent._get_tool_specs()
+            return [s.function.name for s in specs if hasattr(s, "function") and s.function]
+        if not hasattr(agent, "tools") or agent.tools is None:
             return []
         tools = agent.tools
         if hasattr(tools, "get_tool_names"):
@@ -98,6 +109,8 @@ def _build_router_system(registry: AsyncToolRegistry) -> str:
     sm = registry.server_mapping_str()
     block = registry.crp_block_str()
     return f"""You are a deterministic task routing module for MatMaster. Your sole function is to classify the user's task into one of two execution modes based on strict system constraints.
+
+{LANGUAGE_RULE}
 
 SYSTEM CONSTRAINTS:
 1. Local Environment: The local sandbox supports Python scripting, data manipulation, and lightweight simulations (e.g., ASE, Pymatgen). It does NOT provide {block}, {sw} run services locally.

@@ -20,6 +20,7 @@ from ..async_tool_registry import AsyncToolRegistry
 from evomaster.core.exp import BaseExp
 from evomaster.utils.types import Dialog, SystemMessage, UserMessage
 
+from ...prompts.build_prompt import LANGUAGE_RULE
 from .direct_solver import DirectSolver, _get_available_tool_names
 
 try:
@@ -42,7 +43,9 @@ def _get_async_registry(config) -> AsyncToolRegistry:
     return AsyncToolRegistry(d)
 
 
-PRE_CHECK_SYSTEM = """You are a pre-planning readiness assessor for a Computational Research Planner.
+_PRE_CHECK_SYSTEM_TEMPLATE = """You are a pre-planning readiness assessor for a Computational Research Planner.
+
+{language_rule}
 
 Your job is to analyze the user's task and workspace to determine whether the planner has enough information to create a good execution plan right now, or whether preliminary work is needed first.
 
@@ -53,24 +56,26 @@ ASSESSMENT CRITERIA:
 
 OUTPUT FORMAT:
 Return a strictly valid JSON object with these keys:
-{
+{{
     "ready_to_plan": true | false,
     "prerequisites": [
-        {
+        {{
             "type": "parse_pdf" | "parse_files" | "search_info" | "clarify_task",
             "description": "What needs to be done and why",
             "target": "file path or search query if applicable"
-        }
+        }}
     ],
     "reasoning": "Brief explanation of your assessment"
-}
+}}
 
 RULES:
 - If the task is straightforward (e.g. "calculate band gap of Si", "search for X structures") and no files need pre-processing: set ready_to_plan=true, prerequisites=[].
-- If there are PDF/paper files that the user asks to reproduce/analyze/read, or if the task says "按照文献/根据论文": set ready_to_plan=false and include parse_pdf prerequisites.
+- If there are PDF/paper files that the user asks to reproduce/analyze/read, or if the task says to follow a paper/literature: set ready_to_plan=false and include parse_pdf prerequisites.
 - If the task mentions files to process but doesn't specify which files exist, check the workspace file listing.
 - Be conservative: when in doubt about whether pre-processing is needed, recommend it.
 - Do NOT generate the plan itself. Only assess readiness."""
+
+PRE_CHECK_SYSTEM = _PRE_CHECK_SYSTEM_TEMPLATE.format(language_rule=LANGUAGE_RULE)
 
 
 def _get_mat_master_config(config) -> dict:
@@ -310,7 +315,7 @@ class ResearchPlanner(BaseExp):
         crp_cfg = mat.get("crp", {})
         active_licenses = crp_cfg.get("licenses", [])
         task_lower = task_description.lower()
-        fidelity = "Screening" if any(w in task_lower for w in ["quick", "fast", "screen", "rough", "粗略", "快速", "筛选"]) else "Production"
+        fidelity = "Screening" if any(w in task_lower for w in ["quick", "fast", "screen", "rough", "coarse", "preliminary"]) else "Production"
         context_data = {
             "RUNTIME_CONTEXT": {
                 "Hardware": {
@@ -352,7 +357,7 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         raw = raw.replace("{{CRP_LICENSE_FIREWALL}}", self._registry.format_planner_license_firewall())
         crp_context = self._registry.crp_context_dict()
         crp_str = json.dumps(crp_context, indent=2)
-        return f"{raw}\n\n# EMBEDDED SYSTEM PROTOCOL (IMMUTABLE)\n{crp_str}"
+        return f"{raw}\n\n{LANGUAGE_RULE}\n\n# EMBEDDED SYSTEM PROTOCOL (IMMUTABLE)\n{crp_str}"
 
     # Regex patterns that indicate the blocked software name is used in a
     # *mapping / comparison / reference* context, NOT as an execution target.
@@ -465,7 +470,9 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         if not plan.get("steps"):
             plan["status"] = "REFUSED"
             plan["refusal_reason"] = plan.get("refusal_reason") or "Plan must have at least one step."
-        return self._validate_plan_safety(plan)
+        plan = self._validate_plan_safety(plan)
+        plan = self._enforce_manuscript_plan_consistency(plan, goal)
+        return plan
 
     def _revise_plan(self, goal: str, current_plan: dict[str, Any], user_feedback: str) -> dict[str, Any]:
         """Revise plan from user feedback; same schema and validation as _generate_plan."""
@@ -494,7 +501,9 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         if not plan.get("steps"):
             plan["status"] = "REFUSED"
             plan["refusal_reason"] = plan.get("refusal_reason") or "Plan must have at least one step."
-        return self._validate_plan_safety(plan)
+        plan = self._validate_plan_safety(plan)
+        plan = self._enforce_manuscript_plan_consistency(plan, goal)
+        return plan
 
     def _ask_human(self, prompt: str) -> str:
         if self._input_fn is not None:
@@ -641,15 +650,143 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         return state
 
     def _is_goal_achieved(self, state: dict[str, Any]) -> bool:
-        """Check if the research goal has been met (all steps done or no pending steps remain)."""
+        """Check if the research goal has been met.
+
+        A mission is considered achieved only when all steps are done.
+        Failed steps are not treated as completed goals.
+        """
         plan = state.get("plan")
         if not plan or not isinstance(plan, dict):
             return False
         steps = plan.get("steps", [])
         if not steps:
             return False
-        # Goal is achieved if no pending steps remain (all are done or failed)
-        return all(s.get("status") in ("done", "failed") for s in steps)
+        # Only fully done plans count as achieved.
+        return all(s.get("status") == "done" for s in steps)
+
+    @staticmethod
+    def _infer_manuscript_profile(text: str) -> str | None:
+        """Infer intended manuscript profile from user intent text."""
+        t = (text or "").lower()
+        if any(k in t for k in ("专利", "patent")):
+            return "patent"
+        if any(k in t for k in ("thesis", "论文", "学位")):
+            return "thesis_section"
+        if any(k in t for k in ("computational report", "计算报告")):
+            return "computational_report"
+        if any(k in t for k in ("review", "综述")):
+            return "review"
+        if any(k in t for k in ("technical report", "技术报告")):
+            return "technical_report"
+        if any(k in t for k in ("grant", "基金")):
+            return "grant"
+        return None
+
+    @staticmethod
+    def _summarize_solver_result(result: Any, max_len: int = 1200) -> str:
+        """Extract concise text summary from DirectSolver output."""
+        if isinstance(result, dict):
+            for key in ("result_summary", "summary", "message", "final_message"):
+                value = result.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()[:max_len]
+            if isinstance(result.get("execution_summary"), dict):
+                return json.dumps(result["execution_summary"], ensure_ascii=False)[:max_len]
+            if "status" in result:
+                return f"status={result.get('status')}"[:max_len]
+            safe_result = {k: v for k, v in result.items() if k != "trajectory"}
+            return json.dumps(safe_result, ensure_ascii=False)[:max_len]
+        return str(result)[:max_len]
+
+    # Section lists for strict profiles.  Must stay in sync with
+    # skills/manuscript-scribe/scripts/format_profiles.py (the canonical
+    # source).  We duplicate a minimal constant here because the planner
+    # cannot import format_profiles directly (different package tree).
+    _STRICT_PROFILE_SECTIONS: dict[str, list[str]] = {
+        "computational_report": ["Methods", "Results and Discussion", "References"],
+        "patent": [
+            "Technical Field", "Background Art", "Summary of Invention",
+            "Detailed Description", "Claims", "Abstract",
+        ],
+    }
+
+    def _enforce_manuscript_plan_consistency(self, plan: dict[str, Any], goal: str) -> dict[str, Any]:
+        """Ensure manuscript plan uses the right profile and covers required sections.
+
+        Two checks, both generic (no per-profile if/elif):
+        1. Auto-align ``--template`` / ``--profile`` in step intents.
+        2. For strict profiles, verify every required section is mentioned.
+
+        Forbidden-section substring matching was intentionally removed: it caused
+        false positives (e.g. "introduction" as a common English word).  Unexpected
+        sections are caught at execution time by ``validate_content.py``.
+        """
+        target_profile = self._infer_manuscript_profile(goal)
+        if not target_profile or plan.get("status") == "REFUSED":
+            return plan
+
+        steps = plan.get("steps", [])
+        manuscript_steps = [s for s in steps if "manuscript-scribe" in (s.get("intent", "") or "").lower()]
+        if not manuscript_steps:
+            return plan
+
+        # ── 1. Auto-align --template / --profile arguments ───────────
+        template_re = re.compile(r'--template\s+["\']?([a-zA-Z_]+)["\']?', flags=re.IGNORECASE)
+        profile_re = re.compile(r'--profile\s+["\']?([a-zA-Z_]+)["\']?', flags=re.IGNORECASE)
+        rewritten_ids: list[int] = []
+        for step in manuscript_steps:
+            intent = step.get("intent", "")
+            new_intent = template_re.sub(f"--template {target_profile}", intent)
+            new_intent = profile_re.sub(f"--profile {target_profile}", new_intent)
+            if new_intent != intent:
+                step["intent"] = new_intent
+                rewritten_ids.append(step.get("step_id", -1))
+        if rewritten_ids:
+            self._emit(
+                "Planner", "thought",
+                f"[Planner] Auto-aligned profile to '{target_profile}' in step(s) {rewritten_ids}.",
+            )
+
+        # ── 2. Required-section coverage (strict profiles only) ──────
+        required = self._STRICT_PROFILE_SECTIONS.get(target_profile)
+        if required:
+            all_intents = " ".join(s.get("intent", "") for s in manuscript_steps).lower()
+            missing = [sec for sec in required if sec.lower() not in all_intents]
+            if missing:
+                plan["status"] = "REFUSED"
+                plan["refusal_reason"] = (
+                    f"manuscript_consistency: {target_profile} plan missing required "
+                    f"section mentions: {', '.join(missing)}"
+                )
+
+        return plan
+
+    # Markers that indicate manuscript validation / assembly failure.
+    _MANUSCRIPT_FAIL_MARKERS: tuple[str, ...] = (
+        "overall: failed",
+        "still tbd",
+        "missing required elements",
+        "unexpected sections",
+        "not contiguous",
+        "missing in references",
+        "references not cited",
+        "[fail]",
+    )
+
+    @classmethod
+    def _detect_manuscript_validation_failure(cls, intent: str, result_text: str) -> tuple[bool, str]:
+        """Detect manuscript-scribe failures encoded in textual tool output."""
+        i = (intent or "").lower()
+        if "manuscript-scribe" not in i:
+            return False, ""
+        t = (result_text or "").lower()
+        if "assemble_manuscript" in i or "validate_content" in i:
+            for marker in cls._MANUSCRIPT_FAIL_MARKERS:
+                if marker in t:
+                    return True, f"manuscript validation failed ({marker})"
+        if "write_section" in i and "warning" in t and "minimum" in t:
+            return True, "section below minimum word count"
+        return False, ""
 
     def _get_next_execution_window(self, plan: dict[str, Any]) -> list[dict[str, Any]]:
         """Return next batch of pending steps respecting dependencies and window_size."""
@@ -716,7 +853,7 @@ Remaining planned steps:
 Question: Based on the latest result, do the remaining steps still make sense, or should the plan be revised?
 Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief explanation"}}"""
         dialog = Dialog(
-            messages=[SystemMessage(content="You are a concise research plan evaluator. Output only JSON."), UserMessage(content=prompt)],
+            messages=[SystemMessage(content=f"You are a concise research plan evaluator. Output only JSON.\n\n{LANGUAGE_RULE}"), UserMessage(content=prompt)],
             tools=[],
         )
         try:
@@ -811,6 +948,13 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
 
         self.logger.info("[Planner] Step %s (goal): %s", step_id, intent[:80])
 
+        # Reset loop-detection state so each planner step starts with a clean
+        # slate.  Without this, legitimate tool calls (e.g. ``use_skill``,
+        # ``execute_bash ls``) get blocked because an earlier step happened
+        # to make the same call.
+        if hasattr(self.agent, "_tool_guard"):
+            self.agent._tool_guard.reset_loop_history()
+
         assert self._solver is not None, "DirectSolver not initialized"
         solver = self._solver
 
@@ -865,7 +1009,13 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
         try:
             solver.set_run_dir(step_dir)
             result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
-            result_info["result_summary"] = str(result)[:200]
+            summary = self._summarize_solver_result(result, max_len=1000)
+            result_info["result_summary"] = summary[:200]
+            failed, fail_reason = self._detect_manuscript_validation_failure(intent, summary)
+            if failed:
+                result_info["status"] = "failed"
+                result_info["replan_requested"] = True
+                result_info["replan_reason"] = f"Step {step_id}: {fail_reason}"
         except Exception as e:
             self.logger.error("[Planner] Step %s failed: %s", step_id, e)
             print("\033[93m[Planner] Step failed. Attempting fallback...\033[0m")
@@ -951,6 +1101,11 @@ Assess whether this task can be planned immediately or needs preliminary work. O
 
         collected_context: list[str] = []
         for i, prereq in enumerate(prerequisites):
+            # Reset loop-detection per prerequisite so independent tasks don't
+            # block each other.
+            if hasattr(self.agent, "_tool_guard"):
+                self.agent._tool_guard.reset_loop_history()
+
             prereq_type = prereq.get("type", "unknown")
             description = prereq.get("description", "")
             target = prereq.get("target", "")
@@ -987,7 +1142,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
 
             try:
                 result = solver.run(prompt, task_id=f"{task_id}_precheck_{i}")
-                summary = str(result.get("result_summary", result))[:2000] if isinstance(result, dict) else str(result)[:2000]
+                summary = self._summarize_solver_result(result, max_len=2000)
                 collected_context.append(f"[Prerequisite {i + 1}: {prereq_type}] {description}\nResult: {summary}")
             except Exception as e:
                 self.logger.warning("[Pre-check] Prerequisite %d failed: %s", i + 1, e)
@@ -1039,9 +1194,17 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         """
         plan = state.get("plan")
         if _is_deg_plan(plan) and state.get("goal") == goal:
-            # Existing valid plan (e.g. resumed) — skip to preflight
-            state["phase"] = "preflight"
-            return state
+            # Existing valid plan (e.g. resumed) — but first enforce
+            # manuscript consistency to avoid resuming stale wrong-profile plans.
+            checked = self._enforce_manuscript_plan_consistency(plan, goal)
+            if checked.get("status") != "REFUSED":
+                state["plan"] = checked
+                state["phase"] = "preflight"
+                return state
+            self.logger.info(
+                "[Planner] Existing plan rejected by consistency guard; regenerating. reason=%s",
+                checked.get("refusal_reason", "unknown"),
+            )
 
         # Enrich goal with pre-check context if available
         enriched_goal = goal
@@ -1065,17 +1228,30 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             self.logger.warning("[CRP] Plan refused (attempt %d/%d): %s", attempt + 1, max_auto_fix, reason)
             self._emit("Planner", "thought",
                         f"[CRP] Plan was refused: {reason}. Auto-revising (attempt {attempt + 1}/{max_auto_fix})...")
-            # Ask LLM to fix the plan itself
-            allow_str = self._registry.software_list_str()
-            block_str = self._registry.crp_block_str()
-            feedback = (
-                f"The plan was REFUSED for this reason: {reason}\n"
-                f"Please fix the offending steps to use ONLY CRP-allowed software "
-                f"({allow_str}). Do NOT use or mention {block_str} "
-                f"as execution targets. You may reference them only in mapping descriptions "
-                f"(e.g., 'mapped from VASP → ABACUS'). "
-                f"Return the revised plan in the same JSON schema."
-            )
+            # Ask LLM to fix the plan itself. Use targeted feedback for
+            # manuscript consistency failures.
+            if "manuscript_consistency" in str(reason):
+                feedback = (
+                    f"The plan was REFUSED for this reason: {reason}\n"
+                    "Fix manuscript workflow consistency now:\n"
+                    "1) Keep manuscript profile consistent with USER_INTENT (e.g., patent task -> --template patent / --profile patent).\n"
+                    "2) Do not mix review sections into a patent plan.\n"
+                    "3) Include per-section writing goals for all required patent sections: "
+                    "Technical Field, Background Art, Summary of Invention, Detailed Description, Claims, Abstract.\n"
+                    "4) Keep validate_content and assemble_manuscript goals.\n"
+                    "Return the revised plan in the same JSON schema."
+                )
+            else:
+                allow_str = self._registry.software_list_str()
+                block_str = self._registry.crp_block_str()
+                feedback = (
+                    f"The plan was REFUSED for this reason: {reason}\n"
+                    f"Please fix the offending steps to use ONLY CRP-allowed software "
+                    f"({allow_str}). Do NOT use or mention {block_str} "
+                    f"as execution targets. You may reference them only in mapping descriptions "
+                    f"(e.g., 'mapped from VASP → ABACUS'). "
+                    f"Return the revised plan in the same JSON schema."
+                )
             plan = self._revise_plan(goal, plan, feedback)
 
         state["plan"] = plan
