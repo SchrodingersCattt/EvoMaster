@@ -34,9 +34,19 @@ def _get_mat_master_config(config) -> dict:
 
 
 def _get_available_tool_names(agent) -> list[str]:
-    """Get list of tool names for router context. Empty if not available."""
+    """Get list of tool names for router context (respects async policy filtering).
+
+    Uses ``agent._get_tool_specs()`` so the router sees the same filtered tool
+    surface as the agent (submit-only for async tools, lifecycle tools hidden).
+    """
     try:
-        if agent is None or not hasattr(agent, "tools") or agent.tools is None:
+        if agent is None:
+            return []
+        # Prefer the agent-level filtered specs (applies AsyncExecutionPolicy).
+        if hasattr(agent, "_get_tool_specs"):
+            specs = agent._get_tool_specs()
+            return [s.function.name for s in specs if hasattr(s, "function") and s.function]
+        if not hasattr(agent, "tools") or agent.tools is None:
             return []
         tools = agent.tools
         if hasattr(tools, "get_tool_names"):
