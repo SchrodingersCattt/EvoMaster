@@ -43,6 +43,9 @@
 - manuscript-scribe write_section.py: For long sections (lists, multiple refs, 2+ paragraphs), use --content_file: write content to a file first (str_replace_editor or execute_bash), then script_args="--section \"SectionName\" --content_file path/to/file.md --draft draft_manuscript.md --profile generic". Do not pass long text in --content; it can be truncated. Always pass --profile for word-count feedback.
 - manuscript-scribe validate_content.py: Run **before** assemble_manuscript in planner mode. Required: --profile. Example: script_args="--draft draft.md --profile generic --planner_mode". Fix any sections reported as under minimum word count before assembly.
 - manuscript-scribe export (unified): `assemble_manuscript.py` now auto-exports to `.tex`+`.bib` and `.docx` by default (`--export all`). Word export requires python-docx (gracefully skipped if missing). Use `--export md` to skip exports. Standalone: export_docx.py, export_latex.py.
+- computational_report profile is strict: only `Methods`, `Results and Discussion`, `References` are allowed. Do NOT write `Introduction`, `Conclusion`, `Computational Methods`, or other extra sections.
+- Citation numbering must be internally consistent: in-text [n] indices must be contiguous from [1], and References must contain exactly the same numbers (no missing, no extra).
+- If manuscript-scribe `validate_content.py` or `assemble_manuscript.py` reports `FAILED`, missing sections, `(TBD)`, citation inconsistency, or under-minimum sections, you must fix and re-run validation/assembly before calling `finish`.
 - **Typographic rules (mandatory for all manuscript-scribe output)**:
   - Physical quantities italic: `*U*`, `*E*`. Subscripts: `_{eff}`, `_{F}`. Superscripts: `^{−6}`. NO Unicode fake sub/superscripts (`³`, `₂`).
   - Chemical formulas: `C_{7}H_{8}N_{2}O` or simple `CO2` (auto-subscripted by export). Hill system element order, no spaces.
