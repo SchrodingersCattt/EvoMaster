@@ -1,0 +1,20 @@
+{
+  "question_id": "L1_Q05",
+  "material": "Si",
+  "units": {
+    "volume": "A^3",
+    "energy": "eV",
+    "bulk_modulus": "GPa"
+  },
+  "volumes_A3": [150.0, 154.0, 158.0, 162.0, 166.0, 170.0, 174.0],
+  "energies_eV": [-104.31, -104.72, -104.95, -105.01, -104.98, -104.84, -104.62],
+  "fit_hint": {
+    "model": "birch_murnaghan_3rd_order",
+    "initial_guess": {
+      "v0_A3": 162.0,
+      "b0_GPa": 90.0,
+      "b0_prime": 4.0
+    }
+  },
+  "placeholder_note": "Synthetic but consistent EOS dataset for local evaluation."
+}

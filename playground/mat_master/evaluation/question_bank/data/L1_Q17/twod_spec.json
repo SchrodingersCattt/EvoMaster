@@ -1,0 +1,18 @@
+{
+  "task": "build_2d_material",
+  "method": "exfoliate_from_bulk",
+  "bulk": {
+    "material": "MoS2",
+    "phase": "2H",
+    "space_group": "P63/mmc",
+    "lattice_a": 3.16,
+    "lattice_c": 12.30
+  },
+  "requirements": {
+    "extract_monolayer": true,
+    "vacuum_A": 20.0,
+    "verify_stoichiometry": "MoS2",
+    "verify_thickness": "S-Mo-S trilayer, ~3.1 A thick",
+    "output_format": "POSCAR"
+  }
+}
