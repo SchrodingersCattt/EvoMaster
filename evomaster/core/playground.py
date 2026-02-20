@@ -589,7 +589,7 @@ class BasePlayground:
                 manager.path_adaptor_servers = {s.get("name") for s in servers if s.get("name")}
             # Pass mcp_config so adaptor gets calculation_executors (executor template + sync_tools per server)
             manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(mcp_config)
-            self.logger.info("Calculation path adaptor enabled for servers: %s", manager.path_adaptor_servers)
+            self.logger.info("Path adaptor enabled for servers: %s", manager.path_adaptor_servers)
 
         # 8. 异步初始化 MCP 服务器
         async def init_mcp_servers():
