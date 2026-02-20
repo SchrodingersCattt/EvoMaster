@@ -6,6 +6,7 @@ import os
 import gzip
 import json
 import base64
+from pathlib import Path
 from typing import Dict, Any, Tuple, ClassVar
 
 from pydantic import Field
@@ -255,8 +256,17 @@ class PeekFileTool(BaseTool):
         try:
             params = self.parse_params(args_json)
             assert isinstance(params, PeekFileToolParams)
+
+            file_path = params.file_path
+            resolved = Path(file_path)
+            if not resolved.is_absolute():
+                ws = getattr(getattr(session, "config", None), "workspace_path", None)
+                if ws is not None:
+                    resolved = Path(ws) / file_path
+                    file_path = str(resolved)
+
             result = peek_file(
-                params.file_path,
+                file_path,
                 include_preview=params.include_preview,
             )
             # Return a concise observation for the agent; full content in result
