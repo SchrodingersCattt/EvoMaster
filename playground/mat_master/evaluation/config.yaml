@@ -1,0 +1,34 @@
+# MATTER evaluation module standalone config
+
+modes: ["direct", "planner"]
+k: 1
+question_bank_dir: "playground/mat_master/evaluation/question_bank"
+output_dir: "runs/mat_master_eval"
+run_label: "matter_eval"
+use_seed_prompt: true
+max_workers: 1
+random_seed: 7
+
+# Mat Master runtime config used by evaluator runner
+mat_config_path: "configs/mat_master/config.yaml"
+
+# Optional simulator/evaluator LLM configs.
+# If omitted, simulator uses seed prompt directly and evaluator uses deterministic fallback.
+#
+# simulator_llm:
+#   provider: "openai"
+#   model: "gpt-4o-mini"
+#   api_key: "${YOUR_API_KEY}"
+#   base_url: null
+#   temperature: 0.3
+#   max_tokens: 1024
+#   timeout: 120
+#
+# evaluator_llm:
+#   provider: "openai"
+#   model: "gpt-4o"
+#   api_key: "${YOUR_API_KEY}"
+#   base_url: null
+#   temperature: 0.0
+#   max_tokens: 2048
+#   timeout: 180
