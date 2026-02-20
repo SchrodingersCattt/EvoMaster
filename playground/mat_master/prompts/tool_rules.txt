@@ -1,8 +1,21 @@
 # Tool usage rules (fix once, apply every run)
 
+## Mode contract
+- **Direct mode**: prioritize speed and concise responses. Avoid heavy multi-stage writing/data pipelines unless user explicitly requests a long-form file deliverable.
+- **Planner mode**: prioritize long-horizon quality and robustness. For long-form writing/data tasks, use staged workflow + validation/fix loops and checkpoint/resume semantics.
+
 ## Web search and retrieval
 - Web search returns **snippets only**. When answering from web results, **parse/fetch full content** first (e.g. mat_doc_* extract from webpage, or other parsing); do not answer from snippets alone.
 - **Retrieval: prefer English** query terms when using mat_sn_*; before answering, consider each source’s quality (authority, relevance, recency).
+
+## Characterization MCP routing (MANDATORY)
+- For **NMR-related tasks** (chemical shifts/peaks, structure assignment from spectra, NMR forward prediction), prioritize these tools:
+  - `mat_nmr_NMR_search_tool` for spectrum-to-candidate retrieval
+  - `mat_nmr_NMR_predict_tool` for forward 1H/13C prediction on given structures
+  - `mat_nmr_NMR_reverse_predict_tool` for reverse structure inference from NMR data
+- For **XRD phase identification** tasks, call `mat_xrd_xrd_phase_identification` first (use local scripts only for surrounding pre/post-processing or formatting).
+- For **TEM/SEM image morphology/particle analysis** tasks, call `mat_electron_microscope_get_electron_microscope_recognize` first.
+- Do not route these covered characterization tasks to skill-evolution by default. Only consider skill-evolution if the required capability is clearly outside the above tools.
 
 ## Routing: technical Q&A vs writing (do not over-use writing skills)
 - If the user is only asking a **technical question** (e.g. what is X, how does Y work, how to fix a specific issue) and does **not** ask for a report/review/survey/written document/output to file: do **not** use deep-survey or manuscript-scribe. Do **1–2** mat_sn or mat_sn_web-search calls, answer in chat from the results, then call finish. Use writing skills only when the user clearly wants a **file** (review, survey report, paper, long-form document).
@@ -13,19 +26,34 @@
 ## PDF parsing: always use MCP tools first
 - For **any PDF file**, you MUST call mat_doc_extract_material_data_from_pdf (sync) or mat_doc_submit_extract_material_data_from_pdf + mat_doc_get_job_results (async) **before** trying any other method (view, peek_file, Python libraries). mat_doc tools are purpose-built for PDF and return structured extraction. Only fall back to other methods if mat_doc tools explicitly fail.
 
-## Calculation MCP tools: file inputs must be OSS URLs (MANDATORY)
-- Calculation MCP tools (mat_dpa_*, mat_abacus_*, mat_binary_calc_*, etc.) run on **remote servers**. They **cannot access local files**.
-- **All file/path arguments** (e.g. `input_structure`, `model_path`, `initial_structure`, `final_structure`) must be **OSS URLs** (https://...), NOT local paths like `/workspace/Fe_bulk.cif`.
-- **Before calling any submit_* or calculation tool**: ensure every file input is already uploaded to OSS (the system auto-uploads local workspace files; just make sure the file exists in workspace first).
+## Mat MCP tools: file inputs are OSS URLs (MANDATORY, runtime-enforced)
+- mat_* MCP tools require URL-based file inputs; local files are not directly visible on remote runners.
+- Runtime path adaptor automatically uploads local workspace files and rewrites local paths to OSS URLs before dispatch.
+- Never fabricate URLs from `job_id` / `bohr_job_id`; use real local paths or real URLs returned by tools.
 - **Pre-trained model shortcuts**: For DPA model_path, you can use the short name listed in the tool description (e.g. `"DPA2.4-7M"`) — it will be auto-resolved to the full OSS URL. You do NOT need to copy the full URL yourself.
-- If a calculation tool returns `FileNotFoundError` or path-related errors, check that you passed an OSS URL, not a local path.
+- If a mat_* tool returns `FileNotFoundError` or path-related errors, check that the local file exists in workspace (so it can be uploaded) or provide a valid OSS URL.
 - **Auto-download**: mat_sg_* / mat_struct_db_* tool results are **automatically downloaded** to local workspace by a callback. You do NOT need to download them manually — use the `local_path` values appended to the tool output directly.
 - For other final deliverables (report/manuscript) returned as OSS URLs: prefer downloading a local copy when size is reasonable. If too large, keep the OSS URL and explain. Trajectory/trace/log-dump files can be skipped unless the user explicitly asks.
 
 ## structure-manager skill (download & validate structures)
 - **Download from URL**: When you have a direct link to a CIF/POSCAR/XYZ, use use_skill with skill_name=structure-manager, script_name=fetch_web_structure.py, script_args="--url <URL>". Do not use wget/curl/requests for structure files.
 - **Validation**: After obtaining any new structure (from URL, MCP, or user upload), use use_skill with skill_name=structure-manager, script_name=assess_structure.py, script_args="--file <path>". This checks dimensionality, sanity, and formula.
-- **Database search** and **structure building** (SMILES, prototypes) use MCP tools (mat_sg_*, mat_bohrium_db_*), NOT structure-manager.
+- **Database search** and **structure building** (SMILES, prototypes) use MCP tools (mat_sg_*, mat_struct_db_*), NOT structure-manager.
+
+## lit-data-organizer skill (literature table normalization)
+- When the user asks to **organize literature results into a structured table/dataset** (e.g. "material-property table", CSV/JSONL export, comparison matrix, multi-source consolidation), you MUST use `use_skill` with `skill_name=lit-data-organizer`, `action=run_script`, `script_name=build_lit_table.py` before final reporting.
+- When the user requests **Pareto analysis or plotting based on literature metrics**, you MUST first build the canonical table with `lit-data-organizer`; plotting scripts must read that generated table instead of hard-coded values.
+- Do not fabricate numeric values for missing fields. Keep missing values empty/NA and include source traceability columns.
+- For PDF-derived inputs, still follow the PDF-first rule: parse with `mat_doc_*` first, then pass structured outputs to `lit-data-organizer`.
+- For long runs, prefer staged/resumable execution: pass `--state _tmp/lit_data/state.json --resume` and use `--stage` (`normalize`, `dedup`, `conflict`, `export`, `all`) for recovery.
+
+## composition-optimization skill (composition search orchestration)
+- When the user asks for **composition optimization** (alloy/HEA composition design, GA-based composition search, run_dart_ga-style optimization), you MUST first call `use_skill` with `skill_name=composition-optimization`, `action=get_info` to load the branch workflow before selecting tools.
+- If the user did **not** provide initial candidate data, gather evidence and normalize candidates (deep-survey only when long-form report is requested; then `lit-data-organizer` for canonical table) before optimization.
+- If a surrogate model is available and a DART GA tool is registered (prefer `mat_compdart_submit_run_dart_ga`; fallback: another tool ending with `_run_dart_ga`), you may run GA optimization. If surrogate model is absent, do not force DART GA.
+- If only composition/formula is given (no explicit structure), you MUST run composition->structure heuristic generation via `mat_struct_db_*` / `mat_sg_*` and validate with `structure-manager` (`assess_structure.py`) before DPA calculations.
+- DPA-related downstream steps require explicit structure definition (lattice, coordinates, atom types/species mapping). Do not submit incomplete structural inputs.
+- **No local surrogate probing before first CompDART call**: when user already provides a surrogate model URL/path for DART GA, pass it directly as `targets[*].model_path` to `mat_compdart_submit_run_dart_ga` (or `_run_dart_ga` fallback). Do NOT use `execute_bash`/`peek_file` to download/unzip/inspect `.pt`/`.zip` model files before first CompDART attempt, unless the CompDART tool explicitly returns a model-format error requiring conversion.
 
 ## input-manual-helper (input file writing & validation)
 - When writing any software input file, use the input-manual-helper skill. The SOP is in the skill description — run `list_references.py` to discover templates, fetch them, merge, adapt, validate.
@@ -40,12 +68,15 @@
 - Always pass all required script arguments. Missing args cause exit code 2 and waste tokens.
 - manuscript-scribe init_manuscript.py: required --title. Always pass --template matching the document type (generic, Nature, grant, computational_report, patent, review, technical_report, thesis_section). Example: script_name=init_manuscript.py, script_args="--title \"My Paper\" --template computational_report"
 - manuscript-scribe assemble_manuscript.py: required --output and one of --draft or --sections_dir. Always pass --profile matching the template used in init_manuscript. Example: script_args="--draft draft_manuscript.md --output final.md --profile generic --check_length"
+- manuscript-scribe sections_dir safety: NEVER pass `--sections_dir .` (or workspace root). Use a dedicated directory that contains only section files (e.g. `sections/`). Otherwise older versioned drafts in the workspace can be concatenated into one assembled document/docx.
 - manuscript-scribe write_section.py: For long sections (lists, multiple refs, 2+ paragraphs), use --content_file: write content to a file first (str_replace_editor or execute_bash), then script_args="--section \"SectionName\" --content_file path/to/file.md --draft draft_manuscript.md --profile generic". Do not pass long text in --content; it can be truncated. Always pass --profile for word-count feedback.
 - manuscript-scribe validate_content.py: Run **before** assemble_manuscript in planner mode. Required: --profile. Example: script_args="--draft draft.md --profile generic --planner_mode". Fix any sections reported as under minimum word count before assembly.
+- manuscript-scribe long-task state: prefer `--state _tmp/manuscript/state.json --resume` for write_section / validate_content / assemble_manuscript / run_pipeline.py so long tasks can resume deterministically.
 - manuscript-scribe export (unified): `assemble_manuscript.py` now auto-exports to `.tex`+`.bib` and `.docx` by default (`--export all`). Word export requires python-docx (gracefully skipped if missing). Use `--export md` to skip exports. Standalone: export_docx.py, export_latex.py.
 - computational_report profile is strict: only `Methods`, `Results and Discussion`, `References` are allowed. Do NOT write `Introduction`, `Conclusion`, `Computational Methods`, or other extra sections.
 - Citation numbering must be internally consistent: in-text [n] indices must be contiguous from [1], and References must contain exactly the same numbers (no missing, no extra).
 - If manuscript-scribe `validate_content.py` or `assemble_manuscript.py` reports `FAILED`, missing sections, `(TBD)`, citation inconsistency, or under-minimum sections, you must fix and re-run validation/assembly before calling `finish`.
+- Under-minimum warning from `write_section.py` during iterative drafting is a warning (non-fatal); use validate/assemble as the final hard quality gate.
 - **Typographic rules (mandatory for all manuscript-scribe output)**:
   - Physical quantities italic: `*U*`, `*E*`. Subscripts: `_{eff}`, `_{F}`. Superscripts: `^{−6}`. NO Unicode fake sub/superscripts (`³`, `₂`).
   - Chemical formulas: `C_{7}H_{8}N_{2}O` or simple `CO2` (auto-subscripted by export). Hill system element order, no spaces.
@@ -88,5 +119,6 @@
   3. **All original unprocessed results**: List each step's raw output item by item — numerical values, file paths/URLs, job IDs, warnings, anomalies.
 - Be factual and objective; do not downplay failures or exaggerate successes.
 
-## Final document: show in chat then save
-- For survey/manuscript/report deliverables: first **output the complete final document** in your reply (so the frontend shows it to the user), then ensure it is saved to the .md file and call finish. Do not only say "Saved to …" without outputting the document content in your message.
+## Final document delivery (mode-aware)
+- **Planner mode**: for survey/manuscript/report deliverables, output the complete final document in chat, then ensure it is saved and call finish.
+- **Direct mode**: default to concise summary + file path; output full document in chat only when user explicitly asks for full text.
