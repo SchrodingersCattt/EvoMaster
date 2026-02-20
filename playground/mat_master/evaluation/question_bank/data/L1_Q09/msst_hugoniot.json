@@ -1,0 +1,21 @@
+{
+  "task": "hugoniot_cj_fitting",
+  "material": "RDX",
+  "molecular_formula": "C3H6N6O6",
+  "initial_density_g_cm3": 1.806,
+  "method": "ReaxFF-MSST via LAMMPS",
+  "shock_data": [
+    {"shock_vel_m_s": 6000, "P_GPa": 12.3, "V_cm3_g": 0.487, "T_K": 1850, "reacted": false},
+    {"shock_vel_m_s": 6500, "P_GPa": 16.8, "V_cm3_g": 0.461, "T_K": 2340, "reacted": false},
+    {"shock_vel_m_s": 7000, "P_GPa": 21.9, "V_cm3_g": 0.438, "T_K": 2890},
+    {"shock_vel_m_s": 7500, "P_GPa": 27.5, "V_cm3_g": 0.418, "T_K": 3410, "reacted": true},
+    {"shock_vel_m_s": 8000, "P_GPa": 33.2, "V_cm3_g": 0.401, "T_K": 3780, "reacted": true},
+    {"shock_vel_m_s": 8500, "P_GPa": 39.1, "V_cm3_g": 0.386, "T_K": 4020, "reacted": true},
+    {"shock_vel_m_s": 8750, "P_GPa": 42.5, "V_cm3_g": 0.378, "T_K": 4150, "reacted": true},
+    {"shock_vel_m_s": 9000, "P_GPa": 46.0, "V_cm3_g": 0.371, "T_K": 4280, "reacted": true},
+    {"shock_vel_m_s": 9500, "P_GPa": 53.2, "V_cm3_g": 0.358, "T_K": 4510, "reacted": true},
+    {"shock_vel_m_s": 10000, "P_GPa": 61.1, "V_cm3_g": 0.346, "T_K": 4750, "reacted": true}
+  ],
+  "reference_cj_velocity_m_s": 8750,
+  "reference_cj_pressure_GPa": 34.0
+}

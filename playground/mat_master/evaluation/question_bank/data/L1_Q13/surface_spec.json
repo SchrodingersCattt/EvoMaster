@@ -1,0 +1,20 @@
+{
+  "task": "cut_surface_slab",
+  "description": "Cut a Cu(111) surface slab from bulk FCC copper for adsorption studies.",
+  "bulk": {
+    "material": "Cu",
+    "structure": "FCC",
+    "lattice_a": 3.615,
+    "space_group": "Fm-3m"
+  },
+  "surface_requirements": {
+    "miller_indices": [1, 1, 1],
+    "slab_layers": 4,
+    "vacuum_thickness_A": 15.0,
+    "fix_bottom_layers": 2,
+    "supercell_lateral": [3, 3],
+    "output_format": "POSCAR"
+  },
+  "expected_total_atoms": 36,
+  "expected_surface_area_A2": 58.8
+}

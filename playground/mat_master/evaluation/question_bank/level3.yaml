@@ -1,0 +1,225 @@
+version: "v2"
+level: "L3"
+rubric:
+  id: "R_L3_001"
+  level: "L3"
+  score_bands: [0.0, 3.0, 6.0, 10.0]
+  pass_threshold: 6.0
+  description: "Diagnosis and strategy convergence on concrete anomaly cases."
+  criteria:
+    "10.0": "Diagnoses anomaly correctly, proposes executable fixes, and gives falsifiable follow-up checks."
+    "6.0": "Main diagnosis is plausible but one critical fix/check is missing."
+    "3.0": "High-level suggestions without mapping to concrete anomaly evidence."
+    "0.0": "No evidence-based diagnosis."
+questions:
+  - id: "L3_Q01"
+    level: "L3"
+    rubric_id: "R_L3_001"
+    intent: "Given perovskite screening results with mixed anomalies, filter candidates and justify exclusions with numeric evidence."
+    human_prompt_seed: "读取 `anomaly_bundle.json` 的 perovskite_screening_outliers 案例：完成筛选、列出被排除体系和数值依据。"
+    tags: ["screening_diagnosis", "perovskite", "evidence_filtering"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "anomaly_bundle"
+        path: "data/L3_Q01/anomaly_bundle.json"
+        oss_url: ""
+        description: "L3 anomaly case index placeholder."
+    reference_answers:
+      - key: "kept_candidates_count"
+        value: 2
+        tolerance: 0.0
+      - key: "excluded_candidates_count"
+        value: 3
+        tolerance: 0.0
+      - key: "required_fields"
+        value: ["kept_candidates", "excluded_candidates", "numeric_reason", "next_validation"]
+    scoring_checklist:
+      - id: "kept_candidates_count"
+        criterion: "Number of kept candidates is correct."
+        weight: 0.25
+        verify: "numerical_range"
+      - id: "excluded_candidates_count"
+        criterion: "Number of excluded candidates is correct."
+        weight: 0.25
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Contains required evidence and follow-up fields."
+        weight: 0.50
+        verify: "contains_all"
+    touchpoints:
+      full: ["Candidate filtering is evidence-driven and complete."]
+      partial: ["Filter decisions without explicit numeric evidence."]
+      fail: ["No deterministic filtering result."]
+
+  - id: "L3_Q02"
+    level: "L3"
+    rubric_id: "R_L3_001"
+    intent: "Diagnose a Gamma-point imaginary mode case and propose at least two physically distinct repair strategies."
+    human_prompt_seed: "读取 `anomaly_bundle.json` 的 imaginary_phonon_mode 案例，解释虚频成因并给两种修复路径。"
+    tags: ["imaginary_mode", "stability_diagnosis", "repair_strategy"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "anomaly_bundle"
+        path: "data/L3_Q01/anomaly_bundle.json"
+        oss_url: ""
+        description: "Contains imaginary phonon anomaly placeholder."
+    reference_answers:
+      - key: "imaginary_frequency_cm1"
+        value: -45.0
+        tolerance: 8.0
+      - key: "min_strategy_count"
+        value: 2
+        tolerance: 0.0
+      - key: "required_fields"
+        value: ["root_cause", "strategy_A", "strategy_B", "verification_signal"]
+    scoring_checklist:
+      - id: "imaginary_frequency_cm1"
+        criterion: "Imaginary mode value is read correctly."
+        weight: 0.25
+        verify: "numerical_range"
+      - id: "min_strategy_count"
+        criterion: "At least two repair strategies are given."
+        weight: 0.25
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Includes cause, two strategies, and verification signal."
+        weight: 0.50
+        verify: "contains_all"
+    touchpoints:
+      full: ["Diagnosis and dual-path repair are concrete."]
+      partial: ["Only one repair strategy or weak verification plan."]
+      fail: ["No actionable repair strategy."]
+
+  - id: "L3_Q03"
+    level: "L3"
+    rubric_id: "R_L3_001"
+    intent: "Classify mixed failure logs from high-throughput batch and map each class to a parameterized retry action."
+    human_prompt_seed: "读取 `anomaly_bundle.json` 的 high_throughput_failure_mix 案例，分类失败并给出每类重试参数。"
+    tags: ["ht_batch", "failure_taxonomy", "retry_mapping"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "anomaly_bundle"
+        path: "data/L3_Q01/anomaly_bundle.json"
+        oss_url: ""
+        description: "Contains mixed failure case placeholder."
+    reference_answers:
+      - key: "failure_class_count"
+        value: 3
+        tolerance: 0.0
+      - key: "required_fields"
+        value: ["class_A", "class_B", "class_C", "retry_parameters", "stop_rule"]
+    scoring_checklist:
+      - id: "failure_class_count"
+        criterion: "Failure-class count is correct."
+        weight: 0.30
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Per-class retry parameter mapping is complete."
+        weight: 0.70
+        verify: "contains_all"
+    touchpoints:
+      full: ["Failure taxonomy and retry mapping are complete."]
+      partial: ["Failure classes identified but retry settings vague."]
+      fail: ["No class-specific retry plan."]
+
+  - id: "L3_Q04"
+    level: "L3"
+    rubric_id: "R_L3_001"
+    intent: "Analyze EOS outlier case, identify suspect point, and propose correction protocol with expected fit-quality improvement."
+    human_prompt_seed: "读取 `anomaly_bundle.json` 的 eos_outlier_point 案例：识别异常点并给修复后拟合质量提升预期。"
+    tags: ["eos_outlier", "fit_quality", "data_curation"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "anomaly_bundle"
+        path: "data/L3_Q01/anomaly_bundle.json"
+        oss_url: ""
+        description: "Contains EOS outlier case placeholder."
+    reference_answers:
+      - key: "outlier_index"
+        value: 4
+        tolerance: 0.0
+      - key: "target_r2_after_fix"
+        value: 0.98
+        tolerance: 0.03
+      - key: "required_fields"
+        value: ["outlier_index", "cause_hypotheses", "re_fit_plan", "expected_r2"]
+    scoring_checklist:
+      - id: "outlier_index"
+        criterion: "Outlier point index is correctly identified."
+        weight: 0.30
+        verify: "numerical_range"
+      - id: "target_r2_after_fix"
+        criterion: "Expected post-fix fit quality is realistic."
+        weight: 0.25
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Includes cause hypotheses and re-fit protocol."
+        weight: 0.45
+        verify: "contains_all"
+    touchpoints:
+      full: ["Outlier diagnosis is evidence-backed and actionable."]
+      partial: ["Outlier detected but re-fit protocol weak."]
+      fail: ["No specific outlier identification."]
+
+  - id: "L3_Q05"
+    level: "L3"
+    rubric_id: "R_L3_001"
+    intent: "Resolve defect-phase conflict under biased chemical potential and pick stable defect species with follow-up migration plan."
+    human_prompt_seed: "读取 `anomaly_bundle.json` 的 defect_phase_conflict 案例：选稳定缺陷并给后续迁移势垒路线。"
+    tags: ["defect_phase_conflict", "chemical_potential", "migration_plan"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "anomaly_bundle"
+        path: "data/L3_Q01/anomaly_bundle.json"
+        oss_url: ""
+        description: "Contains defect-phase conflict placeholder."
+    reference_answers:
+      - key: "stable_defect_label"
+        value: "vacancy"
+      - key: "required_fields"
+        value: ["phase_window", "stable_defect", "migration_path", "validation_metric"]
+    scoring_checklist:
+      - id: "stable_defect_label"
+        criterion: "Stable defect species is identified correctly."
+        weight: 0.35
+        verify: "exact_match"
+      - id: "required_fields"
+        criterion: "Includes phase-window and migration-validation outputs."
+        weight: 0.65
+        verify: "contains_all"
+    touchpoints:
+      full: ["Phase conflict resolved with explicit follow-up path."]
+      partial: ["Stable species guessed without phase-window evidence."]
+      fail: ["No defect-selection decision."]
+
+  - id: "L3_Q06"
+    level: "L3"
+    rubric_id: "R_L3_001"
+    intent: "Interpret ambiguous phase-transition signals and choose next experiment/simulation split to disambiguate mechanism."
+    human_prompt_seed: "读取 `anomaly_bundle.json` 的 phase_transition_signal_ambiguity 案例，给判别机制的下一步分流策略。"
+    tags: ["phase_transition", "ambiguity_resolution", "decision_split"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "anomaly_bundle"
+        path: "data/L3_Q01/anomaly_bundle.json"
+        oss_url: ""
+        description: "Contains phase-transition ambiguity placeholder."
+    reference_answers:
+      - key: "strategy_branch_count"
+        value: 2
+        tolerance: 0.0
+      - key: "required_fields"
+        value: ["signal_conflict", "branch_A", "branch_B", "disambiguation_criterion"]
+    scoring_checklist:
+      - id: "strategy_branch_count"
+        criterion: "Provides at least two disambiguation branches."
+        weight: 0.30
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Both branches and decision criterion are explicit."
+        weight: 0.70
+        verify: "contains_all"
+    touchpoints:
+      full: ["Ambiguity is resolved by explicit branch strategy."]
+      partial: ["Mentions branches without decision criterion."]
+      fail: ["No disambiguation strategy."]

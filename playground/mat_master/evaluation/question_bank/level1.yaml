@@ -1,0 +1,662 @@
+version: "v2"
+level: "L1"
+rubric:
+  id: "R_L1_001"
+  level: "L1"
+  score_bands: [0.0, 0.5, 1.0]
+  pass_threshold: 1.0
+  description: "Labor-intensive batch operations, diagnostic reasoning, deterministic fitting, and structural manipulation."
+  criteria:
+    "1.0": "All required outputs are present and verifiable within tolerance."
+    "0.5": "Main workflow is correct but misses one critical numeric/structural requirement."
+    "0.0": "Outputs are non-verifiable, inconsistent, or physically invalid."
+
+questions:
+  # ============================================================
+  # Batch labor-intensive operations (Q01-Q03)
+  # ============================================================
+
+  - id: "L1_Q01"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Resolve partial occupancy for 10 disordered crystal structures, enumerating symmetry-inequivalent ordered configurations for each."
+    human_prompt_seed: >
+      读取 `disorder_manifest.json`，其中列出了 10 个含无序占位的晶体结构参数。
+      对每个结构，使用工具生成有序构型（枚举对称不等价的占位排列），
+      输出每个结构的有序构型数量和对应的 CIF 文件。
+    tags: ["batch_operation", "disorder_resolution", "structure_enumeration"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "disorder_manifest"
+        path: "data/L1_Q01/disorder_manifest.json"
+        oss_url: ""
+        description: "JSON manifest listing 10 disordered crystal structures with partial occupancies."
+    reference_answers:
+      - key: "structures_processed"
+        value: 10
+        tolerance: 0.0
+      - key: "required_fields"
+        value: ["ordered_configurations_count", "output_files", "space_group_per_config"]
+    scoring_checklist:
+      - id: "structures_processed"
+        criterion: "All 10 structures are processed."
+        weight: 0.40
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Each result includes config count, output files, and space group info."
+        weight: 0.60
+        verify: "contains_all"
+    touchpoints:
+      full: ["All 10 structures resolved with enumerated ordered configurations."]
+      partial: ["Most structures resolved but 1-2 skipped or incomplete."]
+      fail: ["Fewer than 5 structures processed."]
+
+  - id: "L1_Q02"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Construct 10 random FCC supercells for Fe-Ni INVAR alloy compositions with specified stoichiometry."
+    human_prompt_seed: >
+      读取 `invar_compositions.json`，其中列出了 10 种 Fe-Ni INVAR 合金组分。
+      对每个组分，构造 3x3x3 FCC 超胞（108 原子），以随机方式将 Fe/Ni 填入格点，
+      使实际组分与目标一致。输出每个超胞的 POSCAR 文件，并报告实际 Fe/Ni 原子数和使用的随机种子。
+    tags: ["batch_operation", "alloy_supercell", "random_occupation"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "invar_compositions"
+        path: "data/L1_Q02/invar_compositions.json"
+        oss_url: ""
+        description: "JSON manifest of 10 Fe-Ni INVAR alloy compositions for supercell construction."
+    reference_answers:
+      - key: "supercells_built"
+        value: 10
+        tolerance: 0.0
+      - key: "atoms_per_supercell"
+        value: 108
+        tolerance: 0.0
+      - key: "required_fields"
+        value: ["poscar_file", "fe_count", "ni_count", "random_seed"]
+    scoring_checklist:
+      - id: "supercells_built"
+        criterion: "All 10 supercells are constructed."
+        weight: 0.35
+        verify: "numerical_range"
+      - id: "atoms_per_supercell"
+        criterion: "Each supercell contains exactly 108 atoms."
+        weight: 0.30
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Output includes file, atom counts, and random seed per composition."
+        weight: 0.35
+        verify: "contains_all"
+    touchpoints:
+      full: ["All 10 supercells with correct composition and reproducible seeds."]
+      partial: ["Most supercells correct, 1-2 with wrong atom count."]
+      fail: ["Fewer than 5 supercells built."]
+
+  - id: "L1_Q03"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Construct doped supercells for 10 host-dopant pairs using structure tools."
+    human_prompt_seed: >
+      读取 `batch_doping_manifest.json`，其中列出了 10 对宿主-掺杂体系。
+      对每个体系，先构建指定大小的超胞，再按给定比例随机替换宿主原子为掺杂原子。
+      输出每个掺杂超胞的结构文件，报告实际掺杂原子数和实际掺杂比例。
+    tags: ["batch_operation", "doping", "supercell_construction"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "batch_doping_manifest"
+        path: "data/L1_Q03/batch_doping_manifest.json"
+        oss_url: ""
+        description: "JSON manifest of 10 host-dopant pairs with target doping fractions."
+    reference_answers:
+      - key: "structures_doped"
+        value: 10
+        tolerance: 0.0
+      - key: "required_fields"
+        value: ["doped_structure_file", "actual_dopant_count", "actual_fraction"]
+    scoring_checklist:
+      - id: "structures_doped"
+        criterion: "All 10 doped structures are generated."
+        weight: 0.40
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Each output includes structure file, dopant count, and fraction."
+        weight: 0.60
+        verify: "contains_all"
+    touchpoints:
+      full: ["All 10 doped supercells generated with correct composition."]
+      partial: ["Most structures doped, 1-2 with wrong fraction."]
+      fail: ["Fewer than 5 structures processed."]
+
+  # ============================================================
+  # Diagnostic reasoning (Q04-Q07)
+  # Based on sobereva.com/61 and sobereva.com/164
+  # ============================================================
+
+  - id: "L1_Q04"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Diagnose SCF non-convergence caused by missing spin polarization on a magnetic oxide."
+    human_prompt_seed: >
+      读取 `case_bundle.json`，其中包含一个 Fe2O3 计算的 INCAR 参数、POSCAR 摘要和 OUTCAR 能量迭代摘录。
+      SCF 迭代 60 步仍未收敛，能量振幅约 0.25 eV。请诊断根本原因，并给出修复方案。
+    tags: ["scf_diagnosis", "spin_polarization", "magnetic_oxide"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "case_bundle"
+        path: "data/L1_Q04/case_bundle.json"
+        oss_url: ""
+        description: "VASP input/output bundle: Fe2O3 with ISPIN=1, SCF oscillates."
+    reference_answers:
+      - key: "root_cause"
+        value: "spin_not_enabled"
+      - key: "required_fields"
+        value: ["root_cause", "evidence", "fix_ISPIN", "fix_MAGMOM"]
+    scoring_checklist:
+      - id: "root_cause"
+        criterion: "Correctly identifies missing spin polarization as root cause."
+        weight: 0.40
+        verify: "exact_match"
+      - id: "required_fields"
+        criterion: "Provides cause, evidence from logs, and concrete INCAR fixes."
+        weight: 0.60
+        verify: "contains_all"
+    touchpoints:
+      full: ["Identifies ISPIN=1 bug, explains why Fe2O3 needs AFM spin, gives MAGMOM."]
+      partial: ["Suggests enabling spin but no MAGMOM guidance."]
+      fail: ["Suggests unrelated fixes like increasing NELM."]
+
+  - id: "L1_Q05"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Diagnose SCF non-convergence caused by wrong SMEARING settings for a semiconductor."
+    human_prompt_seed: >
+      读取 `case_bundle.json`，其中包含一个 Si 计算的 INCAR 参数和 OUTCAR 能量迭代摘录。
+      SCF 100 步仍未收敛，能量振幅约 5 meV，且有分数占据。请诊断根本原因，并给出修复方案。
+    tags: ["scf_diagnosis", "smearing", "semiconductor"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "case_bundle"
+        path: "data/L1_Q05/case_bundle.json"
+        oss_url: ""
+        description: "VASP input/output bundle: Si with ISMEAR=1 SIGMA=0.4, SCF oscillates."
+    reference_answers:
+      - key: "root_cause"
+        value: "smearing_wrong_for_semiconductor"
+      - key: "required_fields"
+        value: ["root_cause", "evidence", "fix_ISMEAR", "fix_SIGMA"]
+    scoring_checklist:
+      - id: "root_cause"
+        criterion: "Correctly identifies ISMEAR/SIGMA mismatch for semiconductor."
+        weight: 0.40
+        verify: "exact_match"
+      - id: "required_fields"
+        criterion: "Provides cause, evidence, and concrete ISMEAR/SIGMA fixes."
+        weight: 0.60
+        verify: "contains_all"
+    touchpoints:
+      full: ["Identifies ISMEAR=1+SIGMA=0.4 is wrong for semiconductors, recommends ISMEAR=0 or -5."]
+      partial: ["Suggests reducing SIGMA but misses the ISMEAR issue."]
+      fail: ["Suggests unrelated fixes."]
+
+  - id: "L1_Q06"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Diagnose relaxation non-convergence caused by EDIFF being too loose relative to EDIFFG."
+    human_prompt_seed: >
+      读取 `case_bundle.json`，其中包含一个 LiCoO2 弛豫计算的 INCAR 参数和离子步摘录。
+      200 步 NSW 用完仍未收敛，力在 0.019-0.022 eV/A 之间振荡，且每步 SCF 仅 3 步就收敛了。
+      请诊断根本原因，并给出修复方案。
+    tags: ["relax_diagnosis", "ediff_precision", "force_noise"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "case_bundle"
+        path: "data/L1_Q06/case_bundle.json"
+        oss_url: ""
+        description: "VASP input/output bundle: LiCoO2 relax with EDIFF=1E-3, force oscillates."
+    reference_answers:
+      - key: "root_cause"
+        value: "ediff_too_loose_for_relax"
+      - key: "required_fields"
+        value: ["root_cause", "evidence", "fix_EDIFF", "ediff_ediffg_rule"]
+    scoring_checklist:
+      - id: "root_cause"
+        criterion: "Correctly identifies EDIFF too loose as root cause."
+        weight: 0.40
+        verify: "exact_match"
+      - id: "required_fields"
+        criterion: "Explains force noise mechanism and gives EDIFF recommendation."
+        weight: 0.60
+        verify: "contains_all"
+    touchpoints:
+      full: ["Links SCF precision to force noise, recommends EDIFF=1E-5 or 1E-6."]
+      partial: ["Suggests tightening EDIFF without explaining the mechanism."]
+      fail: ["Suggests increasing NSW or changing IBRION."]
+
+  - id: "L1_Q07"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Diagnose relaxation divergence caused by POTIM too large combined with wrong initial phase."
+    human_prompt_seed: >
+      读取 `case_bundle.json`，其中包含一个 CsPbI3 弛豫计算的 INCAR 参数和离子步摘录。
+      5 步内能量从 -19 eV 升到 +8 eV，力从 2.3 爆炸到 48 eV/A，体积剧烈波动。
+      请诊断根本原因，并给出修复方案。
+    tags: ["relax_diagnosis", "potim", "initial_structure", "phase_mismatch"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "case_bundle"
+        path: "data/L1_Q07/case_bundle.json"
+        oss_url: ""
+        description: "VASP input/output bundle: CsPbI3 cubic->orthorhombic relax with POTIM=1.0, diverges."
+    reference_answers:
+      - key: "root_cause"
+        value: "potim_too_large_and_bad_initial_structure"
+      - key: "required_fields"
+        value: ["root_cause", "evidence", "fix_POTIM", "fix_initial_structure"]
+    scoring_checklist:
+      - id: "root_cause"
+        criterion: "Identifies both POTIM and initial structure issues."
+        weight: 0.40
+        verify: "exact_match"
+      - id: "required_fields"
+        criterion: "Provides evidence from energy/force trajectory and dual fix."
+        weight: 0.60
+        verify: "contains_all"
+    touchpoints:
+      full: ["Identifies POTIM=1.0 overshooting + wrong phase, recommends POTIM=0.1 and Pnma start."]
+      partial: ["Identifies POTIM issue only without phase discussion."]
+      fail: ["Suggests increasing NSW."]
+
+  # ============================================================
+  # Deterministic fitting (Q08-Q09)
+  # ============================================================
+
+  - id: "L1_Q08"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Fit equation of state from provided E-V data and report V0 and B0."
+    human_prompt_seed: "使用 `ev_curve.json` 中的 E-V 数据拟合 Birch-Murnaghan 状态方程，输出 V0(A3) 与 B0(GPa)。"
+    tags: ["eos_fit", "numeric_postprocess", "bulk_modulus"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "ev_table"
+        path: "data/L1_Q05/ev_curve.json"
+        oss_url: ""
+        description: "Energy-volume data points for EOS fitting."
+    reference_answers:
+      - key: "v0_A3"
+        value: 162.0
+        tolerance: 2.0
+      - key: "b0_GPa"
+        value: 92.0
+        tolerance: 12.0
+      - key: "required_fields"
+        value: ["v0", "b0", "fit_quality"]
+    scoring_checklist:
+      - id: "v0_A3"
+        criterion: "V0 is within tolerance."
+        weight: 0.35
+        verify: "numerical_range"
+      - id: "b0_GPa"
+        criterion: "B0 is within tolerance."
+        weight: 0.35
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Includes fit quality/report keys."
+        weight: 0.30
+        verify: "contains_all"
+    touchpoints:
+      full: ["Reports EOS parameters with fit quality."]
+      partial: ["Only one EOS parameter reported."]
+      fail: ["No EOS parameter extraction."]
+
+  - id: "L1_Q09"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "From MSST Hugoniot simulation data, fit the P-V Hugoniot curve and determine C-J detonation velocity and pressure for RDX."
+    human_prompt_seed: >
+      读取 `msst_hugoniot.json`，其中包含 RDX 在不同冲击波速度下的 MSST 模拟数据
+      （压力、比容、温度、是否反应）。筛选完全反应的数据点，拟合 P-V Hugoniot 曲线，
+      通过 Rayleigh 线切线法确定 Chapman-Jouguet (C-J) 点，输出 C-J 爆速 (m/s) 和爆压 (GPa)。
+    tags: ["hugoniot_fit", "detonation", "cj_point", "energetic_materials"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "msst_data"
+        path: "data/L1_Q09/msst_hugoniot.json"
+        oss_url: ""
+        description: "MSST simulation data at multiple shock velocities for RDX."
+    reference_answers:
+      - key: "cj_velocity_m_s"
+        value: 8750.0
+        tolerance: 300.0
+      - key: "cj_pressure_GPa"
+        value: 34.0
+        tolerance: 5.0
+      - key: "required_fields"
+        value: ["cj_velocity", "cj_pressure", "hugoniot_fit", "rayleigh_line"]
+    scoring_checklist:
+      - id: "cj_velocity_m_s"
+        criterion: "C-J detonation velocity is within tolerance."
+        weight: 0.30
+        verify: "numerical_range"
+      - id: "cj_pressure_GPa"
+        criterion: "C-J detonation pressure is within tolerance."
+        weight: 0.30
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Includes Hugoniot fit details and Rayleigh line analysis."
+        weight: 0.40
+        verify: "contains_all"
+    touchpoints:
+      full: ["Reports C-J point with Hugoniot and Rayleigh line analysis."]
+      partial: ["C-J values reported without fitting details."]
+      fail: ["No C-J point determination."]
+
+  # ============================================================
+  # Band gap (Q10) - kept from original Q06
+  # ============================================================
+
+  - id: "L1_Q10"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Determine band-gap type and value from given band-edge dataset."
+    human_prompt_seed: "读取 `band_edges.json`，判断直接/间接带隙并输出带隙值 (eV)、VBM 和 CBM 的 k 点位置。"
+    tags: ["bandgap", "classification", "electronic_structure"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "band_data"
+        path: "data/L1_Q06/band_edges.json"
+        oss_url: ""
+        description: "Band-edge summary data."
+    reference_answers:
+      - key: "gap_type"
+        value: "indirect"
+      - key: "gap_value_eV"
+        value: 1.18
+        tolerance: 0.08
+      - key: "required_fields"
+        value: ["gap_type", "gap_value", "vbm_kpoint", "cbm_kpoint"]
+    scoring_checklist:
+      - id: "gap_type"
+        criterion: "Band-gap type is correct."
+        weight: 0.35
+        verify: "exact_match"
+      - id: "gap_value_eV"
+        criterion: "Band-gap value is in tolerance."
+        weight: 0.35
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Reports all mandatory fields."
+        weight: 0.30
+        verify: "contains_all"
+    touchpoints:
+      full: ["Correctly identifies indirect gap and value with k-points."]
+      partial: ["Type correct but VBM/CBM k-points missing."]
+      fail: ["Wrong gap type."]
+
+  # ============================================================
+  # Structural manipulation - Heterostructure (Q11-Q12)
+  # ============================================================
+
+  - id: "L1_Q11"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Build a graphene/h-BN vertical van der Waals heterostructure with controlled lattice mismatch."
+    human_prompt_seed: >
+      读取 `hetero_spec.json`，构建 graphene/h-BN 垂直范德华异质结。
+      要求：(1) 构建共度超胞使晶格失配 < 2%；(2) AB 堆叠，层间距 3.35 A；
+      (3) z 方向加 15 A 真空层。输出 POSCAR 和 CIF，报告实际失配度和总原子数。
+    tags: ["heterostructure", "vdw", "graphene", "hBN", "structure_build"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "hetero_spec"
+        path: "data/L1_Q11/hetero_spec.json"
+        oss_url: ""
+        description: "Specification for graphene/h-BN heterostructure construction."
+    reference_answers:
+      - key: "mismatch_percent"
+        value: 1.6
+        tolerance: 1.0
+      - key: "required_fields"
+        value: ["structure_file", "lattice_mismatch", "total_atoms", "interlayer_distance"]
+    scoring_checklist:
+      - id: "mismatch_percent"
+        criterion: "Lattice mismatch is below 2%."
+        weight: 0.35
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Output includes structure file and all required metadata."
+        weight: 0.65
+        verify: "contains_all"
+    touchpoints:
+      full: ["Heterostructure built with correct stacking, mismatch, and vacuum."]
+      partial: ["Structure built but mismatch or vacuum incorrect."]
+      fail: ["No valid heterostructure output."]
+
+  - id: "L1_Q12"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Build a MoS2/WSe2 vertical vdW heterostructure for type-II band alignment studies."
+    human_prompt_seed: >
+      读取 `hetero_spec.json`，构建 MoS2/WSe2 垂直范德华异质结。
+      要求：(1) 构建共度超胞使晶格失配 < 3%；(2) 层间距 6.5 A；
+      (3) z 方向加 20 A 真空层。输出 POSCAR，报告失配度、超胞大小和总原子数。
+    tags: ["heterostructure", "vdw", "TMD", "MoS2", "WSe2"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "hetero_spec"
+        path: "data/L1_Q12/hetero_spec.json"
+        oss_url: ""
+        description: "Specification for MoS2/WSe2 heterostructure construction."
+    reference_answers:
+      - key: "mismatch_percent"
+        value: 3.0
+        tolerance: 2.0
+      - key: "required_fields"
+        value: ["structure_file", "lattice_mismatch", "supercell_size", "total_atoms"]
+    scoring_checklist:
+      - id: "mismatch_percent"
+        criterion: "Lattice mismatch is below 3%."
+        weight: 0.35
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Output includes structure file and all required metadata."
+        weight: 0.65
+        verify: "contains_all"
+    touchpoints:
+      full: ["Commensurate heterostructure with correct layer stacking."]
+      partial: ["Structure built but mismatch too large."]
+      fail: ["No valid heterostructure output."]
+
+  # ============================================================
+  # Structural manipulation - Surface cutting (Q13-Q14)
+  # ============================================================
+
+  - id: "L1_Q13"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Cut a Cu(111) surface slab from bulk FCC copper with vacuum and fixed bottom layers."
+    human_prompt_seed: >
+      读取 `surface_spec.json`，从 FCC Cu 体相切出 (111) 表面 slab。
+      要求：4 层原子层，底部 2 层固定，3x3 横向超胞，15 A 真空层。
+      输出 POSCAR，报告总原子数和表面面积。
+    tags: ["surface_slab", "Cu111", "vacuum", "structure_build"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "surface_spec"
+        path: "data/L1_Q13/surface_spec.json"
+        oss_url: ""
+        description: "Specification for Cu(111) surface slab construction."
+    reference_answers:
+      - key: "total_atoms"
+        value: 36
+        tolerance: 0.0
+      - key: "required_fields"
+        value: ["structure_file", "total_atoms", "surface_area", "fixed_layers"]
+    scoring_checklist:
+      - id: "total_atoms"
+        criterion: "Total atom count is correct."
+        weight: 0.35
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Output includes structure file and all required metadata."
+        weight: 0.65
+        verify: "contains_all"
+    touchpoints:
+      full: ["Correct 4-layer Cu(111) slab with vacuum and fixed layers."]
+      partial: ["Slab built but wrong layer count or vacuum."]
+      fail: ["No valid slab output."]
+
+  - id: "L1_Q14"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Cut a TiO2 rutile (110) surface slab with correct bridging-oxygen termination."
+    human_prompt_seed: >
+      读取 `surface_spec.json`，从金红石 TiO2 体相切出 (110) 表面 slab。
+      要求：5 层，底部 2 层固定，2x1 横向超胞，15 A 真空层。
+      验证表面端面存在桥氧和五配位 Ti。输出 POSCAR。
+    tags: ["surface_slab", "TiO2_rutile", "termination", "structure_build"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "surface_spec"
+        path: "data/L1_Q14/surface_spec.json"
+        oss_url: ""
+        description: "Specification for TiO2 rutile (110) surface slab."
+    reference_answers:
+      - key: "required_fields"
+        value: ["structure_file", "termination_type", "total_atoms", "surface_area"]
+      - key: "termination_type"
+        value: "bridging_O_and_5c_Ti"
+    scoring_checklist:
+      - id: "termination_type"
+        criterion: "Surface termination is correctly identified and constructed."
+        weight: 0.40
+        verify: "exact_match"
+      - id: "required_fields"
+        criterion: "Output includes structure file and termination verification."
+        weight: 0.60
+        verify: "contains_all"
+    touchpoints:
+      full: ["Correct (110) slab with bridging-O termination verified."]
+      partial: ["Slab cut but termination not verified."]
+      fail: ["Wrong Miller index or no slab output."]
+
+  # ============================================================
+  # Structural manipulation - Hydrogen passivation (Q15-Q16)
+  # ============================================================
+
+  - id: "L1_Q15"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Passivate dangling bonds on Si(100) surface slab bottom with hydrogen atoms."
+    human_prompt_seed: >
+      读取 `hydrogen_cap_spec.json`，对 Si(100) slab 底部的悬挂键进行氢饱和。
+      要求：识别底部欠配位 Si 原子，添加 H 使其达到四配位。
+      Si-H 键长约 1.48 A。输出 POSCAR 并报告添加的 H 原子数。
+    tags: ["hydrogen_passivation", "Si100", "dangling_bond", "structure_build"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "hydrogen_cap_spec"
+        path: "data/L1_Q15/hydrogen_cap_spec.json"
+        oss_url: ""
+        description: "Specification for Si(100) surface hydrogen passivation."
+    reference_answers:
+      - key: "required_fields"
+        value: ["structure_file", "h_atoms_added", "all_bottom_si_4coordinated"]
+    scoring_checklist:
+      - id: "required_fields"
+        criterion: "Output includes passivated structure and coordination verification."
+        weight: 1.0
+        verify: "contains_all"
+    touchpoints:
+      full: ["All bottom dangling bonds passivated, verified 4-coordinated."]
+      partial: ["H added but some bonds missed."]
+      fail: ["No hydrogen passivation performed."]
+
+  - id: "L1_Q16"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Passivate undercoordinated atoms on a cleaved MAPbI3 perovskite surface."
+    human_prompt_seed: >
+      读取 `hydrogen_cap_spec.json`，对 MAPbI3 (001) slab 的解理面进行钝化处理。
+      识别欠配位的 Pb 和 I 原子，用 H 或赝氢进行饱和，保持电荷中性。
+      输出 CIF 并报告钝化方案。
+    tags: ["hydrogen_passivation", "perovskite", "surface_termination", "structure_build"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "hydrogen_cap_spec"
+        path: "data/L1_Q16/hydrogen_cap_spec.json"
+        oss_url: ""
+        description: "Specification for MAPbI3 surface passivation."
+    reference_answers:
+      - key: "required_fields"
+        value: ["structure_file", "undercoordinated_atoms_identified", "passivation_strategy", "charge_neutrality"]
+    scoring_checklist:
+      - id: "required_fields"
+        criterion: "Output includes passivated structure with charge-neutral termination."
+        weight: 1.0
+        verify: "contains_all"
+    touchpoints:
+      full: ["All undercoordinated atoms passivated with charge neutrality."]
+      partial: ["Partial passivation or charge imbalance."]
+      fail: ["No passivation performed."]
+
+  # ============================================================
+  # Structural manipulation - 2D material building (Q17-Q18)
+  # ============================================================
+
+  - id: "L1_Q17"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Exfoliate a MoS2 monolayer from bulk 2H-MoS2 and verify the 2D structure."
+    human_prompt_seed: >
+      读取 `twod_spec.json`，从体相 2H-MoS2 中剥离单层 MoS2。
+      添加 20 A z 方向真空层，验证化学计量比为 MoS2，层厚约 3.1 A。
+      输出 POSCAR。
+    tags: ["2d_material", "exfoliation", "MoS2", "monolayer"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "twod_spec"
+        path: "data/L1_Q17/twod_spec.json"
+        oss_url: ""
+        description: "Specification for MoS2 monolayer exfoliation."
+    reference_answers:
+      - key: "required_fields"
+        value: ["structure_file", "stoichiometry_verified", "layer_thickness_A", "vacuum_A"]
+    scoring_checklist:
+      - id: "required_fields"
+        criterion: "Monolayer extracted with correct stoichiometry and vacuum."
+        weight: 1.0
+        verify: "contains_all"
+    touchpoints:
+      full: ["Correct MoS2 monolayer with S-Mo-S trilayer and 20 A vacuum."]
+      partial: ["Monolayer extracted but bilayer or wrong vacuum."]
+      fail: ["No 2D structure output."]
+
+  - id: "L1_Q18"
+    level: "L1"
+    rubric_id: "R_L1_001"
+    intent: "Derive Ti3C2 MXene from Ti3AlC2 MAX phase by removing the Al layer and adding OH termination."
+    human_prompt_seed: >
+      读取 `twod_spec.json`，从 Ti3AlC2 MAX 相出发，移除 Al 层得到 Ti3C2 MXene，
+      再在表面添加 OH 端基。加 20 A 真空层，验证最终化学计量比为 Ti3C2(OH)2。
+      输出 POSCAR。
+    tags: ["2d_material", "MXene", "MAX_phase", "surface_termination"]
+    mode_scope: ["direct", "planner"]
+    data_files:
+      - key: "twod_spec"
+        path: "data/L1_Q18/twod_spec.json"
+        oss_url: ""
+        description: "Specification for Ti3C2 MXene derivation from MAX phase."
+    reference_answers:
+      - key: "required_fields"
+        value: ["structure_file", "no_Al_remaining", "OH_termination", "stoichiometry_verified"]
+    scoring_checklist:
+      - id: "required_fields"
+        criterion: "MXene derived with correct termination and no residual Al."
+        weight: 1.0
+        verify: "contains_all"
+    touchpoints:
+      full: ["Ti3C2(OH)2 with correct stoichiometry and no Al."]
+      partial: ["Al removed but no termination added."]
+      fail: ["Al layer not removed or wrong material."]

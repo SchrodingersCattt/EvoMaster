@@ -1,0 +1,52 @@
+{
+  "question_id": "L2_Q01",
+  "schema_version": "1.0",
+  "units": {
+    "energy": "eV",
+    "length": "A",
+    "modulus": "GPa",
+    "frequency": "cm^-1"
+  },
+  "cases": {
+    "al_eos": {
+      "structure_file": "al_fcc_primitive.cif",
+      "volume_scale": [0.95, 0.975, 1.000, 1.025, 1.050],
+      "target_outputs": ["a0_A", "b0_GPa"],
+      "expected_range": {"a0_A": [3.96, 4.12], "b0_GPa": [71, 87]}
+    },
+    "mgo_elastic": {
+      "structure_file": "mgo_rocksalt.cif",
+      "strain_patterns": ["xx", "yy", "zz", "xy", "yz", "xz"],
+      "target_outputs": ["C11", "C12", "C44", "bulk_modulus", "shear_modulus"]
+    },
+    "si_band": {
+      "structure_file": "si_diamond.cif",
+      "kpath": ["G", "X", "L", "G"],
+      "target_outputs": ["gap_type", "gap_value_eV"]
+    },
+    "vacancy_formation": {
+      "perfect_structure": "li_o_supercell_ideal.cif",
+      "defective_structure": "li_o_supercell_vacancy.cif",
+      "target_outputs": ["formation_energy_eV"]
+    },
+    "energetic_kj": {
+      "molecule_file": "energetic_molecule.xyz",
+      "input_properties": ["density_g_cm3", "formation_enthalpy_kJ_mol"],
+      "target_outputs": ["detonation_velocity_m_s", "detonation_pressure_GPa"]
+    },
+    "water64_gap": {
+      "structure_file": "water64_periodic.xyz",
+      "method_constraints": ["hybrid_functional", "acceleration_strategy"],
+      "target_outputs": ["homo_lumo_gap_eV", "cost_note"]
+    },
+    "graphene_phonon": {
+      "force_constants_file": "FORCE_CONSTANTS",
+      "target_outputs": ["gamma_optical_max_cm1", "dispersion_path"]
+    },
+    "batch_failure_recovery": {
+      "failed_job_logs": ["job_01.log", "job_07.log", "job_13.log"],
+      "required_actions": ["classify_failure", "retry_parameters", "stop_condition"]
+    }
+  },
+  "placeholder_note": "Replace filenames with real local artifacts or mirrored OSS bundles."
+}
