@@ -1069,7 +1069,7 @@ def validate(
                 hint = _CP2K_FAKE_SECTIONS[sec_name]
                 issues.append(Issue(
                     "ERROR", line_num,
-                    f'"&{sec_name} ... &END {sec_name}" is WRONG — '
+                    f'"&{sec_name} ... &END {sec_name}" is WRONG -- '
                     f'&{sec_name} is NOT a valid CP2K subsection. '
                     f'Correct usage: {hint}.',
                 ))
@@ -1082,7 +1082,7 @@ def validate(
                 syntax = entries[0].get("syntax_template", f"{sec_name} <value>")
                 issues.append(Issue(
                     "ERROR", line_num,
-                    f'"&{sec_name} ... &END {sec_name}" is WRONG — '
+                    f'"&{sec_name} ... &END {sec_name}" is WRONG -- '
                     f'{sec_name} is a keyword, not a subsection. '
                     f'Remove the & prefix and &END block. '
                     f'Correct syntax: {syntax} (inside &{parent})',
@@ -1091,7 +1091,7 @@ def validate(
                 line_num = raw_text[:m_sec.start()].count('\n') + 1
                 issues.append(Issue(
                     "ERROR", line_num,
-                    f'"&{sec_name} ... &END {sec_name}" is WRONG — '
+                    f'"&{sec_name} ... &END {sec_name}" is WRONG -- '
                     f'{sec_name} is a keyword, not a subsection. '
                     f'Remove the & prefix and &END block. '
                     f'Use it as a single line: {sec_name} <value>',
@@ -1492,7 +1492,7 @@ def _gaussian_structural_check(
                 "ERROR", route_line_num,
                 'NLO/polarizability calculation (Polar/CPHF) detected but NO diffuse '
                 'functions found in the basis set. Hyperpolarizability and polarizability '
-                'are extremely sensitive to diffuse functions — results without them are '
+                'are extremely sensitive to diffuse functions -- results without them are '
                 'physically meaningless. Use 6-311++G(d,p), aug-cc-pVDZ, or similar.',
             ))
 
