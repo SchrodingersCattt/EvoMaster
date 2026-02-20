@@ -20,9 +20,29 @@
       "url": "https://dpa-uuid1750659890.appspace.bohrium.com/mcp?token=b2b94c52d10141e992514f9d17bcca23",
       "headers": {}
     },
+    "mat_compdart": {
+      "transport": "http",
+      "url": "https://dart-uuid1754393230.appspace.bohrium.com/mcp?token=b3a955c99823427683843616328023d8",
+      "headers": {}
+    },
     "mat_struct_db": {
       "transport": "http",
       "url": "http://chvz1424099.bohrium.tech:50002/mcp",
+      "headers": {}
+    },
+    "mat_nmr": {
+      "transport": "sse",
+      "url": "https://nmr-server-matmaster-uuid1764741165.appspace.bohrium.com/sse?token=1467bc01801642c09273966fcd04e3a6",
+      "headers": {}
+    },
+    "mat_xrd": {
+      "transport": "sse",
+      "url": "http://root@pkfz1410356.bohrium.tech:50001/sse",
+      "headers": {}
+    },
+    "mat_electron_microscope": {
+      "transport": "sse",
+      "url": "http://root@pkfz1410356.bohrium.tech:50002/sse",
       "headers": {}
     },
     "mat_abacus": {
