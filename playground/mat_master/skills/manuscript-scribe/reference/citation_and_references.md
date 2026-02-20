@@ -4,4 +4,4 @@
 
 **Manuscript-specific**: At assembly time, run `assemble_manuscript.py --validate` to check: (1) in-text [n] and References section match 1:1, (2) reference URLs valid, (3) no duplicate abbreviation definitions.
 
-**Typographic style**: see **reference/typographic_style.md** for mandatory formatting rules — physical quantities, subscripts/superscripts, chemical formulas, en-dash/minus, reference list format, computational report content rules, periodic-system terminology.
+**Typographic style**: see the "Typographic style" section in SKILL.md for mandatory formatting rules — physical quantities, subscripts/superscripts, chemical formulas, en-dash/minus, reference list format, computational report content rules, periodic-system terminology.
