@@ -168,7 +168,7 @@ def _min_distance_and_sanity(struct_or_atoms, backend: str) -> tuple[bool, list]
         n = len(struct)
         if n == 0:
             return True, []
-        symbols = [str(s.specie) for s in struct]
+        symbols = [str(s.species) for s in struct]
         # get_all_neighbors returns list-of-lists; each inner list has
         # PeriodicNeighbor objects with .nn_distance attribute.
         all_neighbors = struct.get_all_neighbors(cutoff, include_index=True)
@@ -311,7 +311,7 @@ def main() -> None:
         dim = "0D Molecule"
         dim_warns = []
         coords = np.array([s.coords for s in obj])
-        symbols = [s.specie.symbol for s in obj]
+        symbols = [s.species.symbol for s in obj]
         sane, sane_warns = _sanity_molecule(coords, symbols)
     elif backend == "pymatgen":
         formula = obj.formula
