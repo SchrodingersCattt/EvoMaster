@@ -28,9 +28,20 @@ except ImportError:
     requests = None
 
 try:
-    from format_profiles import get_profile
+    from format_profiles import get_profile, resolve_section
 except ImportError:
     get_profile = None  # type: ignore[assignment]
+    resolve_section = None  # type: ignore[assignment]
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
+from longtask_runtime import (
+    STATUS_COMPLETED,
+    STATUS_FATAL_ERROR,
+    STATUS_RETRYABLE_ERROR,
+    append_event,
+    build_result,
+    emit_result,
+    init_or_load_state,
+)
 
 # Section order when merging from a directory (fallback when no --profile)
 DEFAULT_SECTION_ORDER = [
@@ -184,7 +195,7 @@ def check_abbreviations(full_text: str) -> dict:
 def extract_citation_numbers_from_body(text: str) -> set[int]:
     """Extract [n] and [n](url) from body (exclude References section)."""
     # Remove References section for body
-    ref_start = re.search(r"\n##\s+References\s*\n", text, re.IGNORECASE)
+    ref_start = re.search(r"\n##\s+(References|参考文献)\s*\n", text, re.IGNORECASE)
     body = text[: ref_start.start()] if ref_start else text
     nums = set()
     for m in re.finditer(r"\[(\d+)\](?:\([^)]*\))?", body):
@@ -194,8 +205,15 @@ def extract_citation_numbers_from_body(text: str) -> set[int]:
 
 def extract_references_section(text: str) -> str:
     """Return the References section content (after ## References)."""
-    m = re.search(r"\n##\s+References\s*\n(.*)", text, re.IGNORECASE | re.DOTALL)
-    return m.group(1).strip() if m else ""
+    m = re.search(
+        r"\n##\s+(References|参考文献)\s*\n(.*)",
+        text,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not m:
+        return ""
+    # Group 2 is the body because group 1 is the heading label alternation.
+    return m.group(2).strip()
 
 
 def parse_references_entries(ref_section: str) -> dict[int, str]:
@@ -214,9 +232,16 @@ def extract_url_from_ref_line(line: str) -> str | None:
     return m.group(0).rstrip(".,;:)") if m else None
 
 
-def check_references(full_text: str, validate_urls: bool = False) -> dict:
+def check_references(
+    full_text: str,
+    validate_urls: bool = False,
+    require_references: bool = True,
+) -> dict:
     """Ensure in-text citations and References section match; optionally validate URLs."""
     result = {"passed": True, "missing_in_refs": [], "missing_in_text": [], "invalid_urls": [], "message": ""}
+    if not require_references:
+        result["message"] = "References check skipped for profile without a References section."
+        return result
     body_nums = extract_citation_numbers_from_body(full_text)
     ref_section = extract_references_section(full_text)
     ref_entries = parse_references_entries(ref_section)
@@ -275,6 +300,57 @@ def _section_body(text: str) -> str:
     return _strip_html_comments(body)
 
 
+def _is_placeholder_body(text: str) -> bool:
+    t = _section_body(text).strip().lower()
+    return t in {"(tbd)", "tbd", "todo", "待补充", "待完善", "待定"}
+
+
+def _prefer_section_text(existing: str, incoming: str) -> str:
+    if not existing:
+        return incoming
+    if not incoming:
+        return existing
+    existing_placeholder = _is_placeholder_body(existing)
+    incoming_placeholder = _is_placeholder_body(incoming)
+    if existing_placeholder and not incoming_placeholder:
+        return incoming
+    if incoming_placeholder and not existing_placeholder:
+        return existing
+    return incoming if _word_count(_section_body(incoming)) > _word_count(_section_body(existing)) else existing
+
+
+def _rename_section_header(text: str, canonical_name: str) -> str:
+    stripped = text.strip()
+    if not stripped:
+        return f"## {canonical_name}\n"
+    lines = stripped.splitlines()
+    if lines and re.match(r"^##\s+.+$", lines[0].strip()):
+        lines[0] = f"## {canonical_name}"
+        return "\n".join(lines)
+    return f"## {canonical_name}\n\n{stripped}"
+
+
+def _canonicalize_sections_for_profile(
+    sections: dict[str, str],
+    profile_name: str,
+) -> dict[str, str]:
+    """Canonicalize section names via format profile aliases and merge duplicates."""
+    if resolve_section is None:
+        return sections
+    normalized: dict[str, str] = {}
+    for raw_name, raw_text in sections.items():
+        try:
+            canonical = resolve_section(profile_name, raw_name)
+        except Exception:
+            canonical = raw_name
+        text = raw_text if canonical == raw_name else _rename_section_header(raw_text, canonical)
+        if canonical in normalized:
+            normalized[canonical] = _prefer_section_text(normalized[canonical], text)
+        else:
+            normalized[canonical] = text
+    return normalized
+
+
 def _print_word_summary(combined: str) -> None:
     """Print per-section and total word counts."""
     sections = extract_sections_from_draft(combined)
@@ -288,7 +364,7 @@ def _print_word_summary(combined: str) -> None:
     print(f"  TOTAL: {total} words")
 
 
-def main() -> None:
+def main() -> int:
     ap = argparse.ArgumentParser(description="Assemble manuscript and run consistency checks.")
     ap.add_argument("--sections_dir", default=None, help="Directory of section .md files to merge")
     ap.add_argument("--draft", default=None, help="Single draft file (sections as ## Headers)")
@@ -313,6 +389,16 @@ def main() -> None:
         choices=["all", "md", "docx", "latex"],
         help="Export format(s) after assembly. 'all' (default) = .md + .tex + .docx "
              "(docx skipped if python-docx not installed). 'md' = Markdown only.",
+    )
+    ap.add_argument(
+        "--state",
+        default=None,
+        help="Optional long-task state file path (default: _tmp/manuscript/state.json).",
+    )
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume and update existing state file when available.",
     )
     args = ap.parse_args()
 
@@ -340,6 +426,32 @@ def main() -> None:
     if args.sections_dir:
         sections_dir = Path(args.sections_dir)
         sections = load_sections_from_dir(sections_dir)
+        if args.profile:
+            sections = _canonicalize_sections_for_profile(sections, args.profile)
+            if profile is not None and bool(profile.get("strict_sections", False)):
+                allowed = set(profile.get("sections", []))
+                ignored = sorted(name for name in sections if name not in allowed)
+                if ignored:
+                    sections_dir_resolved = sections_dir.resolve()
+                    cwd_resolved = Path.cwd().resolve()
+                    if sections_dir_resolved == cwd_resolved:
+                        print(
+                            "ERROR: --sections_dir points to current working directory and includes non-profile "
+                            "markdown files, which can concatenate versioned drafts into one document. "
+                            "Use a dedicated sections directory (e.g. ./sections) or switch to --draft.",
+                            file=sys.stderr,
+                        )
+                        print(
+                            "Detected non-profile markdown stems: " + ", ".join(ignored),
+                            file=sys.stderr,
+                        )
+                        sys.exit(2)
+                    print(
+                        "Warning: ignored non-profile section files in strict mode: "
+                        + ", ".join(ignored),
+                        file=sys.stderr,
+                    )
+                sections = {name: text for name, text in sections.items() if name in allowed}
 
         # Try to load profile from _profile.json if --profile not given
         if profile is None:
@@ -378,7 +490,14 @@ def main() -> None:
 
     check1 = check_terms(body_only, terms_file)
     check2 = check_abbreviations(combined)
-    check3 = check_references(combined, validate_urls=args.validate)
+    references_required = True
+    if profile is not None:
+        references_required = any(s.lower() == "references" for s in profile.get("sections", []))
+    check3 = check_references(
+        combined,
+        validate_urls=args.validate,
+        require_references=references_required,
+    )
 
     report: dict = {
         "technical_terms": check1,
@@ -438,6 +557,60 @@ def main() -> None:
         )
         print(f"Report written to {args.report}.")
 
+    state_path = Path(args.state) if args.state else Path("_tmp/manuscript/state.json")
+    result_path = state_path.parent / "result.json"
+    events_path = state_path.parent / "events.jsonl"
+    status = STATUS_COMPLETED if report.get("overall_passed") else STATUS_RETRYABLE_ERROR
+    message = "Assembly and checks passed." if status == STATUS_COMPLETED else "Assembly completed with validation issues."
+    init_or_load_state(
+        state_path=state_path,
+        task_type="manuscript",
+        stage="assemble_manuscript",
+        resume=args.resume,
+        extra={
+            "profile": args.profile or "",
+            "output": str(out_path),
+            "overall_passed": bool(report.get("overall_passed")),
+            "export": args.export,
+        },
+    )
+    append_event(
+        events_path=events_path,
+        status=status,
+        stage="assemble_manuscript",
+        message=message,
+        payload={
+            "output": str(out_path),
+            "overall_passed": bool(report.get("overall_passed")),
+            "export": args.export,
+        },
+    )
+    emit_result(
+        build_result(
+            status=status,
+            stage="assemble_manuscript",
+            message=message,
+            result_path=result_path,
+            payload={
+                "output": str(out_path),
+                "overall_passed": bool(report.get("overall_passed")),
+                "report_file": args.report or "",
+                "export": args.export,
+            },
+        )
+    )
+    return 0 if status == STATUS_COMPLETED else 2
+
 
 if __name__ == "__main__":
-    main()
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        emit_result(
+            build_result(
+                status=STATUS_FATAL_ERROR,
+                stage="assemble_manuscript",
+                message=f"Fatal error: {exc}",
+            )
+        )
+        raise SystemExit(1)

@@ -24,8 +24,18 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from format_profiles import get_profile
+from format_profiles import get_profile, resolve_section
 from section_utils import find_section
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
+from longtask_runtime import (
+    STATUS_COMPLETED,
+    STATUS_FATAL_ERROR,
+    STATUS_RETRYABLE_ERROR,
+    append_event,
+    build_result,
+    emit_result,
+    init_or_load_state,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +54,67 @@ def _word_count(text: str) -> int:
 def _strip_html_comments(text: str) -> str:
     """Remove HTML comments (<!-- ... -->) from text."""
     return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL).strip()
+
+
+def _normalize_section_key(name: str) -> str:
+    """Normalize section labels across styles (spaces/snake/camel/kebab)."""
+    text = name.strip()
+    text = re.sub(r"[_\-]+", " ", text)
+    text = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.lower().strip()
+
+
+def _is_placeholder_body(text: str) -> bool:
+    t = _strip_html_comments(text).strip().lower()
+    return t in {"(tbd)", "tbd", "todo", "待补充", "待完善", "待定"}
+
+
+def _prefer_section_body(existing: str, incoming: str) -> str:
+    """Merge duplicate section bodies by preferring richer non-placeholder text."""
+    if not existing:
+        return incoming
+    if not incoming:
+        return existing
+    existing_placeholder = _is_placeholder_body(existing)
+    incoming_placeholder = _is_placeholder_body(incoming)
+    if existing_placeholder and not incoming_placeholder:
+        return incoming
+    if incoming_placeholder and not existing_placeholder:
+        return existing
+    return incoming if _word_count(incoming) > _word_count(existing) else existing
+
+
+def _canonicalize_sections(
+    sections: dict[str, str],
+    profile: dict[str, Any],
+) -> dict[str, str]:
+    """Canonicalize section keys by profile aliases and merge duplicates."""
+    profile_name = str(profile.get("_profile_name", "") or "")
+    canonical: dict[str, str] = {}
+    canonical_map = {
+        _normalize_section_key(sec): sec for sec in profile.get("sections", [])
+    }
+    alias_map = {
+        _normalize_section_key(k): v
+        for k, v in (profile.get("section_aliases", {}) or {}).items()
+    }
+
+    for raw_name, body in sections.items():
+        key = _normalize_section_key(raw_name)
+        mapped = canonical_map.get(key) or alias_map.get(key)
+        if not mapped and profile_name:
+            # Reuse shared resolver for consistency across scripts.
+            try:
+                mapped = resolve_section(profile_name, raw_name)
+            except Exception:
+                mapped = raw_name
+        canonical_name = mapped or raw_name
+        if canonical_name in canonical:
+            canonical[canonical_name] = _prefer_section_body(canonical[canonical_name], body)
+        else:
+            canonical[canonical_name] = body
+    return canonical
 
 
 def _extract_sections_from_draft(content: str) -> dict[str, str]:
@@ -207,10 +278,15 @@ def check_required_elements(
 
         missing = []
         for elem in required:
-            # Flexible matching: split underscore-joined element names and check
-            # if any of the component words appear
-            keywords = elem.replace("_", " ").split()
-            if not any(kw in body for kw in keywords):
+            # Support multilingual aliases in one token, e.g. "solution|技术方案".
+            alias_groups = [p.strip().lower() for p in str(elem).split("|") if p.strip()]
+            matched = False
+            for alias in alias_groups:
+                keywords = alias.replace("_", " ").split()
+                if any(kw in body for kw in keywords):
+                    matched = True
+                    break
+            if not matched:
                 missing.append(elem)
         if missing:
             result["missing_elements"][sec_name] = missing
@@ -339,8 +415,16 @@ def check_citation_consistency(
     # Determine the references section name for this profile.
     reference_section = next(
         (s for s in profile["sections"] if s.lower() == "references"),
-        "References",
+        None,
     )
+    if reference_section is None:
+        # Some profiles (e.g. patent) do not require a dedicated References section.
+        non_ref_text = "\n\n".join(sections.values())
+        result["in_text"] = sorted(
+            {int(m.group(1)) for m in re.finditer(r"\[(\d+)\](?:\([^)]+\))?", non_ref_text)}
+        )
+        result["reference_entries"] = []
+        return result
 
     # Body text (everything except the reference section).
     non_ref_text = "\n\n".join(
@@ -398,6 +482,7 @@ def run_validation(
     planner_mode: bool = False,
 ) -> dict[str, Any]:
     """Run all validation checks and return a combined report."""
+    sections = _canonicalize_sections(sections, profile)
     report: dict[str, Any] = {}
     report["word_counts"] = check_word_counts(sections, profile, planner_mode)
     report["completeness"] = check_completeness(sections, profile)
@@ -479,13 +564,23 @@ def print_report(report: dict[str, Any]) -> None:
     print(f"\nOverall: {overall}")
 
 
-def main() -> None:
+def main() -> int:
     ap = argparse.ArgumentParser(description="Validate manuscript content against a format profile.")
     ap.add_argument("--draft", default=None, help="Path to single draft file")
     ap.add_argument("--sections_dir", default=None, help="Directory of section .md files")
     ap.add_argument("--profile", required=True, help="Format profile name (e.g. generic, computational_report)")
     ap.add_argument("--planner_mode", action="store_true", help="Enforce stricter minimums (1.5x base)")
     ap.add_argument("--report", default=None, help="Write JSON report to this path")
+    ap.add_argument(
+        "--state",
+        default=None,
+        help="Optional long-task state file path (default: _tmp/manuscript/state.json).",
+    )
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume and update existing state file when available.",
+    )
     args = ap.parse_args()
 
     if not args.draft and not args.sections_dir:
@@ -496,6 +591,8 @@ def main() -> None:
         sys.exit(1)
 
     profile = get_profile(args.profile)
+    profile = dict(profile)
+    profile["_profile_name"] = args.profile
     sections = _load_sections(args)
 
     report = run_validation(sections, profile, planner_mode=args.planner_mode)
@@ -509,6 +606,61 @@ def main() -> None:
         )
         print(f"\nReport written to {args.report}.")
 
+    state_path = Path(args.state) if args.state else Path("_tmp/manuscript/state.json")
+    result_path = state_path.parent / "result.json"
+    events_path = state_path.parent / "events.jsonl"
+    status = STATUS_COMPLETED if report.get("overall_passed") else STATUS_RETRYABLE_ERROR
+    message = "Validation passed." if status == STATUS_COMPLETED else "Validation reported issues to fix."
+    init_or_load_state(
+        state_path=state_path,
+        task_type="manuscript",
+        stage="validate_content",
+        resume=args.resume,
+        extra={
+            "profile": args.profile,
+            "planner_mode": bool(args.planner_mode),
+            "overall_passed": bool(report.get("overall_passed")),
+            "source": args.draft or args.sections_dir or "",
+        },
+    )
+    append_event(
+        events_path=events_path,
+        status=status,
+        stage="validate_content",
+        message=message,
+        payload={
+            "profile": args.profile,
+            "planner_mode": bool(args.planner_mode),
+            "overall_passed": bool(report.get("overall_passed")),
+            "errors": report.get("word_counts", {}).get("errors", []),
+        },
+    )
+    emit_result(
+        build_result(
+            status=status,
+            stage="validate_content",
+            message=message,
+            result_path=result_path,
+            payload={
+                "profile": args.profile,
+                "planner_mode": bool(args.planner_mode),
+                "overall_passed": bool(report.get("overall_passed")),
+                "report_file": args.report or "",
+            },
+        )
+    )
+    return 0 if status == STATUS_COMPLETED else 2
+
 
 if __name__ == "__main__":
-    main()
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        emit_result(
+            build_result(
+                status=STATUS_FATAL_ERROR,
+                stage="validate_content",
+                message=f"Fatal error: {exc}",
+            )
+        )
+        raise SystemExit(1)

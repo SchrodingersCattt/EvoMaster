@@ -27,6 +27,14 @@ from pathlib import Path
 # Allow importing sibling modules when script is run from any cwd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from section_utils import find_section as _find_section
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
+from longtask_runtime import (
+    STATUS_COMPLETED,
+    append_event,
+    build_result,
+    emit_result,
+    init_or_load_state,
+)
 
 try:
     from format_profiles import get_profile as _get_profile, resolve_section as _resolve_section
@@ -42,8 +50,16 @@ def _word_count(text: str) -> int:
     return cjk + latin
 
 
-def _check_word_count(section_name: str, body: str, profile_name: str | None, min_words_override: int | None) -> None:
-    """Print word count and warn if below minimum."""
+def _check_word_count(
+    section_name: str,
+    body: str,
+    profile_name: str | None,
+    min_words_override: int | None,
+) -> tuple[int, int, bool]:
+    """Print word count and warn if below minimum.
+
+    Returns: (word_count, min_words, is_under_minimum)
+    """
     wc = _word_count(body)
     min_w = min_words_override or 0
 
@@ -61,8 +77,14 @@ def _check_word_count(section_name: str, body: str, profile_name: str | None, mi
             f"Consider adding more content with --append or --content_file.",
             flush=True,
         )
+        return wc, min_w, True
     else:
         print(f"Section {section_name}: {wc} words.", flush=True)
+    return wc, min_w, False
+
+
+def _default_state_path() -> Path:
+    return Path("_tmp/manuscript/state.json")
 
 
 def main() -> None:
@@ -85,6 +107,16 @@ def main() -> None:
         type=int,
         default=None,
         help="Explicit minimum word count (overrides profile setting).",
+    )
+    ap.add_argument(
+        "--state",
+        default=None,
+        help="Optional long-task state file path (default: _tmp/manuscript/state.json).",
+    )
+    ap.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume and update existing state file when available.",
     )
     args = ap.parse_args()
 
@@ -121,13 +153,109 @@ def main() -> None:
         draft_path.parent.mkdir(parents=True, exist_ok=True)
         draft_path.write_text(new_section.strip(), encoding="utf-8")
         print(f"Section {args.section} written to {draft_path}.")
-        _check_word_count(args.section, final_body, args.profile, args.min_words)
+        wc, min_w, is_under = _check_word_count(
+            args.section,
+            final_body,
+            args.profile,
+            args.min_words,
+        )
+        state_path = Path(args.state) if args.state else _default_state_path()
+        result_path = state_path.parent / "result.json"
+        events_path = state_path.parent / "events.jsonl"
+        init_or_load_state(
+            state_path=state_path,
+            task_type="manuscript",
+            stage="write_section",
+            resume=args.resume,
+            extra={
+                "section": args.section,
+                "profile": args.profile,
+                "draft_path": str(draft_path),
+                "warnings": ["under_minimum_words"] if is_under else [],
+            },
+        )
+        append_event(
+            events_path=events_path,
+            status=STATUS_COMPLETED,
+            stage="write_section",
+            message=f"Section {args.section} updated.",
+            payload={
+                "section": args.section,
+                "word_count": wc,
+                "min_words": min_w,
+                "under_minimum_words": is_under,
+                "draft_path": str(draft_path),
+            },
+        )
+        emit_result(
+            build_result(
+                status=STATUS_COMPLETED,
+                stage="write_section",
+                message=f"Section {args.section} updated.",
+                result_path=result_path,
+                payload={
+                    "section": args.section,
+                    "word_count": wc,
+                    "min_words": min_w,
+                    "under_minimum_words": is_under,
+                    "draft_path": str(draft_path),
+                },
+            )
+        )
         return
 
     if not draft_path.exists():
         draft_path.write_text(f"# Draft\n\n{new_section}", encoding="utf-8")
         print(f"Section {args.section} written to {draft_path}.")
-        _check_word_count(args.section, final_body, args.profile, args.min_words)
+        wc, min_w, is_under = _check_word_count(
+            args.section,
+            final_body,
+            args.profile,
+            args.min_words,
+        )
+        state_path = Path(args.state) if args.state else _default_state_path()
+        result_path = state_path.parent / "result.json"
+        events_path = state_path.parent / "events.jsonl"
+        init_or_load_state(
+            state_path=state_path,
+            task_type="manuscript",
+            stage="write_section",
+            resume=args.resume,
+            extra={
+                "section": args.section,
+                "profile": args.profile,
+                "draft_path": str(draft_path),
+                "warnings": ["under_minimum_words"] if is_under else [],
+            },
+        )
+        append_event(
+            events_path=events_path,
+            status=STATUS_COMPLETED,
+            stage="write_section",
+            message=f"Section {args.section} created.",
+            payload={
+                "section": args.section,
+                "word_count": wc,
+                "min_words": min_w,
+                "under_minimum_words": is_under,
+                "draft_path": str(draft_path),
+            },
+        )
+        emit_result(
+            build_result(
+                status=STATUS_COMPLETED,
+                stage="write_section",
+                message=f"Section {args.section} created.",
+                result_path=result_path,
+                payload={
+                    "section": args.section,
+                    "word_count": wc,
+                    "min_words": min_w,
+                    "under_minimum_words": is_under,
+                    "draft_path": str(draft_path),
+                },
+            )
+        )
         return
 
     content = draft_path.read_text(encoding="utf-8")
@@ -156,7 +284,55 @@ def main() -> None:
     content = content[:start] + replacement + content[end:].lstrip()
     draft_path.write_text(content, encoding="utf-8")
     print(f"Section {args.section} written to {draft_path}.")
-    _check_word_count(args.section, final_body, args.profile, args.min_words)
+    wc, min_w, is_under = _check_word_count(
+        args.section,
+        final_body,
+        args.profile,
+        args.min_words,
+    )
+    state_path = Path(args.state) if args.state else _default_state_path()
+    result_path = state_path.parent / "result.json"
+    events_path = state_path.parent / "events.jsonl"
+    init_or_load_state(
+        state_path=state_path,
+        task_type="manuscript",
+        stage="write_section",
+        resume=args.resume,
+        extra={
+            "section": args.section,
+            "profile": args.profile,
+            "draft_path": str(draft_path),
+            "warnings": ["under_minimum_words"] if is_under else [],
+        },
+    )
+    append_event(
+        events_path=events_path,
+        status=STATUS_COMPLETED,
+        stage="write_section",
+        message=f"Section {args.section} updated.",
+        payload={
+            "section": args.section,
+            "word_count": wc,
+            "min_words": min_w,
+            "under_minimum_words": is_under,
+            "draft_path": str(draft_path),
+        },
+    )
+    emit_result(
+        build_result(
+            status=STATUS_COMPLETED,
+            stage="write_section",
+            message=f"Section {args.section} updated.",
+            result_path=result_path,
+            payload={
+                "section": args.section,
+                "word_count": wc,
+                "min_words": min_w,
+                "under_minimum_words": is_under,
+                "draft_path": str(draft_path),
+            },
+        )
+    )
 
 
 if __name__ == "__main__":
