@@ -12,6 +12,7 @@ import re
 import shutil
 import sys
 import threading
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -21,6 +22,7 @@ from evomaster.core.exp import BaseExp
 from evomaster.utils.types import Dialog, SystemMessage, UserMessage
 
 from ...prompts.build_prompt import LANGUAGE_RULE
+from ..constants import MANUSCRIPT_FAIL_MARKERS
 from .direct_solver import DirectSolver, _get_available_tool_names
 
 try:
@@ -38,7 +40,8 @@ def _get_async_registry(config) -> AsyncToolRegistry:
             d = config.model_dump()
         else:
             d = dict(config) if config else {}
-    except Exception:
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Failed to parse config for AsyncToolRegistry: %s", exc)
         d = {}
     return AsyncToolRegistry(d)
 
@@ -85,7 +88,8 @@ def _get_mat_master_config(config) -> dict:
         else:
             d = dict(config) if config else {}
         return d.get("mat_master") or {}
-    except Exception:
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Failed to parse mat_master config: %s", exc)
         return {}
 
 
@@ -244,11 +248,13 @@ def _normalize_planner_thought(content: Any) -> dict[str, Any]:
 class ResearchPlanner(BaseExp):
     """Pre-check → Plan → PreFlight → Execute under CRP: readiness assessment → flight plan (JSON DEG) → validate → optional confirm → execute steps via DirectSolver."""
 
-    def __init__(self, agent, config, input_fn=None, output_callback=None):
+    def __init__(self, agent, config, input_fn=None, output_callback=None, config_dir: str | Path | None = None):
         super().__init__(agent, config)
         self.logger = logging.getLogger("MatMaster.Planner")
         mat = _get_mat_master_config(config)
         planner_cfg = mat.get("planner") or {}
+        self._config_dir = Path(config_dir).resolve() if config_dir else None
+        self._planner_prompt_file = str(planner_cfg.get("system_prompt_file", "prompts/planner_system_prompt.txt"))
         self.state_file = planner_cfg.get("state_file", "research_state.json")
         self.max_steps = planner_cfg.get("max_steps", 20)
         self.human_check = planner_cfg.get("human_check_step", True)
@@ -267,6 +273,14 @@ class ResearchPlanner(BaseExp):
         self._solver: DirectSolver | None = None  # lazily created in run()
         # Async tool registry (config-driven) — used for CRP context and prompt placeholder replacement
         self._registry: AsyncToolRegistry = _get_async_registry(config)
+        quality_cfg = planner_cfg.get("quality_gates") or {}
+        self._quality_gate_cfg: dict[str, int] = {
+            "survey_min_references": max(1, int(quality_cfg.get("survey_min_references", 5))),
+            "survey_min_unique_dois": max(1, int(quality_cfg.get("survey_min_unique_dois", 3))),
+            "survey_min_substantial_lines": max(1, int(quality_cfg.get("survey_min_substantial_lines", 8))),
+            "survey_min_evidence_delta": max(1, int(quality_cfg.get("survey_min_evidence_delta", 1))),
+            "survey_min_line_length": max(1, int(quality_cfg.get("survey_min_line_length", 60))),
+        }
 
     def _emit(self, source: str, event_type: str, content: Any) -> None:
         if source == "Planner" and event_type == "thought":
@@ -283,6 +297,12 @@ class ResearchPlanner(BaseExp):
         workspaces = base / "workspaces" / task_id
         workspaces.mkdir(parents=True, exist_ok=True)
         return workspaces / self.state_file
+
+    def _task_workspace_dir(self, task_id: str) -> Path:
+        base = self._run_dir_path()
+        workspaces = base / "workspaces" / task_id
+        workspaces.mkdir(parents=True, exist_ok=True)
+        return workspaces
 
     def _load_state(self, task_id: str) -> dict[str, Any]:
         path = self._state_path(task_id)
@@ -303,6 +323,125 @@ class ResearchPlanner(BaseExp):
             shutil.move(tmp, path)
         except Exception as e:
             self.logger.error("Failed to save state: %s", e)
+
+    def _planner_artifact_dir(self, task_id: str) -> Path:
+        base = self._task_workspace_dir(task_id)
+        artifact_dir = base / "_tmp" / "planner"
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        return artifact_dir
+
+    def _ensure_longtask_artifacts(self, state: dict[str, Any], task_id: str, goal: str) -> dict[str, Any]:
+        """Create planner artifacts used by quality gates and resume safety."""
+        artifact_dir = self._planner_artifact_dir(task_id)
+        journal_path = artifact_dir / "research_journal.md"
+        literature_path = artifact_dir / "literature_index.jsonl"
+        if not journal_path.exists():
+            journal_path.write_text(
+                "# Planner Research Journal\n\n"
+                f"- task_id: {task_id}\n"
+                f"- created_at: {datetime.now(UTC).isoformat()}\n"
+                f"- goal: {goal}\n\n",
+                encoding="utf-8",
+            )
+        if not literature_path.exists():
+            literature_path.write_text("", encoding="utf-8")
+        artifacts = state.setdefault("artifacts", {})
+        if not isinstance(artifacts, dict):
+            artifacts = {}
+            state["artifacts"] = artifacts
+        artifacts["research_journal"] = str(journal_path)
+        artifacts["literature_index"] = str(literature_path)
+        state.setdefault("literature_seen_urls", [])
+        state.setdefault("literature_entry_count", 0)
+        if not state.get("longtask_initialized"):
+            self._append_journal(
+                state,
+                task_id,
+                phase="init",
+                title="Planner long-task artifacts initialized",
+                body="Created research_journal.md and literature_index.jsonl.",
+            )
+            state["longtask_initialized"] = True
+        return state
+
+    def _append_journal(
+        self,
+        state: dict[str, Any],
+        task_id: str,
+        *,
+        phase: str,
+        title: str,
+        body: str = "",
+    ) -> None:
+        artifacts = state.get("artifacts") or {}
+        journal_raw = artifacts.get("research_journal", "")
+        journal_path = Path(journal_raw) if journal_raw else (self._planner_artifact_dir(task_id) / "research_journal.md")
+        ts = datetime.now(UTC).isoformat()
+        block = [f"## [{ts}] {phase}: {title}"]
+        if body:
+            block.append(body.strip())
+        block.append("")
+        with journal_path.open("a", encoding="utf-8") as f:
+            f.write("\n".join(block))
+            f.write("\n")
+
+    @staticmethod
+    def _extract_urls_from_text(text: str) -> list[str]:
+        urls: list[str] = []
+        if not text:
+            return urls
+        seen_dois: set[str] = set()
+        for m in re.findall(r"https?://[^\s\)\]\"'>]+", text):
+            url = m.rstrip(".,;:)")
+            if not url:
+                continue
+            urls.append(url)
+            doi_m = re.search(r"doi\.org/(.+)", url)
+            if doi_m:
+                seen_dois.add(doi_m.group(1).rstrip(".,;:)").lower())
+        for doi in re.findall(r"\b10\.\d{4,9}/[-._;()/:A-Za-z0-9]+\b", text):
+            clean = doi.rstrip(".,;:)")
+            if clean and clean.lower() not in seen_dois:
+                urls.append(f"https://doi.org/{clean}")
+                seen_dois.add(clean.lower())
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for u in urls:
+            if u in seen:
+                continue
+            seen.add(u)
+            deduped.append(u)
+        return deduped
+
+    def _append_literature_index(
+        self,
+        state: dict[str, Any],
+        task_id: str,
+        *,
+        source: str,
+        text: str,
+    ) -> int:
+        artifacts = state.get("artifacts") or {}
+        lit_raw = artifacts.get("literature_index", "")
+        lit_path = Path(lit_raw) if lit_raw else (self._planner_artifact_dir(task_id) / "literature_index.jsonl")
+        seen = state.get("literature_seen_urls") or []
+        if not isinstance(seen, list):
+            seen = []
+        seen_set = set(str(x) for x in seen)
+        added = 0
+        new_urls = [u for u in self._extract_urls_from_text(text) if u not in seen_set]
+        if new_urls:
+            with lit_path.open("a", encoding="utf-8") as f:
+                for url in new_urls:
+                    seen_set.add(url)
+                    rec = {"ts": datetime.now(UTC).isoformat(), "source": source, "url": url}
+                    f.write(json.dumps(rec, ensure_ascii=False))
+                    f.write("\n")
+                    added += 1
+        if added:
+            state["literature_seen_urls"] = list(seen_set)
+            state["literature_entry_count"] = int(state.get("literature_entry_count", 0) or 0) + added
+        return added
 
     def _build_context_prompt(self, task_description: str) -> str:
         """Build RUNTIME_CONTEXT + REQUEST_CONFIG + USER_INTENT for the planner; includes hardware and license awareness."""
@@ -342,14 +481,34 @@ class ResearchPlanner(BaseExp):
 # INSTRUCTION
 Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the research plan in strict JSON format: plan_id, status, strategy_name, fidelity_level, execution_graph (each step has goal and step_type, no tool_name), and plan_report (summary, cost_assessment, risks, alternatives). No other text."""
 
+    def _resolve_planner_prompt_path(self) -> Path:
+        configured = Path(self._planner_prompt_file)
+        if configured.is_absolute():
+            return configured
+
+        candidates: list[Path] = []
+        if self._config_dir is not None:
+            # Keep parity with Evo playground prompt path resolution:
+            # relative prompt paths are resolved against a mirrored playground base.
+            playground_base = Path(str(self._config_dir).replace("configs", "playground", 1))
+            candidates.append((playground_base / configured).resolve())
+            candidates.append((self._config_dir / configured).resolve())
+
+        local_prompts_base = Path(__file__).resolve().parent.parent.parent
+        candidates.append((local_prompts_base / configured).resolve())
+        candidates.append((local_prompts_base / "prompts" / "planner_system_prompt.txt").resolve())
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return candidates[0]
+
     def _load_system_prompt(self) -> str:
-        """Load planner_system_prompt.txt, replace {{placeholders}}, and append embedded CRP JSON."""
-        base = Path(__file__).resolve().parent.parent.parent / "prompts"
-        prompt_file = base / "planner_system_prompt.txt"
+        """Load planner system prompt file from config, then apply runtime replacements."""
+        prompt_file = self._resolve_planner_prompt_path()
         if prompt_file.exists():
             raw = prompt_file.read_text(encoding="utf-8")
         else:
-            self.logger.warning("planner_system_prompt.txt not found, using minimal fallback")
+            self.logger.warning("Planner prompt file not found (%s), using minimal fallback", prompt_file)
             raw = "You are a Research Planner. Output a single JSON object with plan_id, status, strategy_name, steps."
         # Replace {{placeholders}} with registry values (async software list, CRP, etc.)
         raw = self._registry.replace_placeholders(raw)
@@ -636,17 +795,27 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         """Load persisted state or create fresh; ensure all required keys exist."""
         state = self._load_state(task_id)
         state.setdefault("goal", task_description)
+        state.setdefault("plan", None)
         state.setdefault("history", [])
         state.setdefault("phase", "pre_check")
         state.setdefault("replan_count", 0)
         state.setdefault("execution_window", 0)
         state.setdefault("pre_check_context", "")
+        state.setdefault("artifacts", {})
+        state.setdefault("literature_seen_urls", [])
+        state.setdefault("literature_entry_count", 0)
         # If goal changed, reset to pre_check phase
         if state.get("goal") != task_description:
             state["goal"] = task_description
+            state["plan"] = None
+            state["history"] = []
             state["phase"] = "pre_check"
             state["replan_count"] = 0
             state["pre_check_context"] = ""
+            state["literature_seen_urls"] = []
+            state["literature_entry_count"] = 0
+            state["longtask_initialized"] = False
+        state = self._ensure_longtask_artifacts(state, task_id, task_description)
         return state
 
     def _is_goal_achieved(self, state: dict[str, Any]) -> bool:
@@ -761,17 +930,12 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
 
         return plan
 
-    # Markers that indicate manuscript validation / assembly failure.
-    _MANUSCRIPT_FAIL_MARKERS: tuple[str, ...] = (
-        "overall: failed",
-        "still tbd",
-        "missing required elements",
-        "unexpected sections",
-        "not contiguous",
-        "missing in references",
-        "references not cited",
-        "[fail]",
-    )
+    _MANUSCRIPT_FAIL_MARKERS = MANUSCRIPT_FAIL_MARKERS
+
+    @staticmethod
+    def _extract_longtask_result(result_text: str) -> dict[str, Any] | None:
+        from ...skills._common.longtask_runtime import parse_prefixed_result_line
+        return parse_prefixed_result_line(result_text or "")
 
     @classmethod
     def _detect_manuscript_validation_failure(cls, intent: str, result_text: str) -> tuple[bool, str]:
@@ -779,13 +943,169 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         i = (intent or "").lower()
         if "manuscript-scribe" not in i:
             return False, ""
+
+        # Structured status has precedence over textual markers when available.
+        structured = cls._extract_longtask_result(result_text)
+        if structured:
+            status = str(structured.get("status", "")).strip().lower()
+            message = str(structured.get("message", "")).strip()
+            if status in {"retryable_error", "fatal_error"}:
+                return True, message or f"manuscript status={status}"
+            if status == "completed":
+                return False, ""
+
         t = (result_text or "").lower()
         if "assemble_manuscript" in i or "validate_content" in i:
             for marker in cls._MANUSCRIPT_FAIL_MARKERS:
                 if marker in t:
                     return True, f"manuscript validation failed ({marker})"
-        if "write_section" in i and "warning" in t and "minimum" in t:
-            return True, "section below minimum word count"
+        return False, ""
+
+    _QUALITY_CRITICAL_HINTS: tuple[str, ...] = (
+        "deep-survey",
+        "run_survey",
+        "literature review",
+        "literature survey",
+        "综述报告",
+        "文献调研",
+    )
+
+    @classmethod
+    def _is_quality_critical_step(cls, intent: str) -> bool:
+        text = (intent or "").lower()
+        return any(h in text for h in cls._QUALITY_CRITICAL_HINTS)
+
+    @staticmethod
+    def _extract_markdown_paths_from_text(text: str, workspace_dir: Path) -> list[Path]:
+        candidates: list[Path] = []
+        if not text:
+            return candidates
+        for raw in re.findall(r"([A-Za-z0-9_./\\:\-]+\.md)", text):
+            cleaned = raw.strip().strip("`'\"")
+            if not cleaned:
+                continue
+            path = Path(cleaned)
+            if not path.is_absolute():
+                path = workspace_dir / path
+            if path.exists() and path.is_file():
+                candidates.append(path)
+        return candidates
+
+    @staticmethod
+    def _count_substantial_lines(content: str, min_length: int = 60) -> int:
+        count = 0
+        for line in content.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if stripped.startswith("#"):
+                continue
+            if stripped.startswith("<!--"):
+                continue
+            if len(stripped) < min_length:
+                continue
+            count += 1
+        return count
+
+    @staticmethod
+    def _reference_metrics(content: str) -> tuple[int, int]:
+        lower = content.lower()
+        match = re.search(r"^\s{0,3}#{1,6}\s+references?\s*$", lower, flags=re.MULTILINE)
+        ref_text = content[match.end() :] if match else content
+        ref_entries = re.findall(r"(?m)^\s*\[(\d+)\]\s+", ref_text)
+        if ref_entries:
+            ref_count = len(set(ref_entries))
+        else:
+            cite_entries = re.findall(r"\[(\d+)\]\(https?://[^\)]+\)", ref_text)
+            ref_count = len(set(cite_entries))
+        doi_urls = set(
+            re.findall(r"https?://(?:dx\.)?doi\.org/([^\s\)]+)", lower)
+        )
+        bare_dois = set(
+            re.findall(r"\b10\.\d{4,9}/[-._;()/:a-z0-9]+\b", lower)
+        )
+        unique_doi_count = len({d.rstrip(".,;:)") for d in doi_urls | bare_dois})
+        return ref_count, unique_doi_count
+
+    def _collect_quality_files(self, step_dir: Path, workspace_dir: Path, result_text: str) -> list[Path]:
+        files: list[Path] = []
+        seen: set[str] = set()
+
+        def _add(path: Path) -> None:
+            key = str(path.resolve()) if path.exists() else str(path)
+            if key in seen:
+                return
+            seen.add(key)
+            files.append(path)
+
+        for p in step_dir.glob("*.md"):
+            _add(p)
+
+        survey_dir = workspace_dir / "_tmp" / "surveys"
+        if survey_dir.exists():
+            for p in survey_dir.glob("*.md"):
+                _add(p)
+        for p in workspace_dir.glob("*_review_*.md"):
+            _add(p)
+        for p in workspace_dir.glob("*_survey_*.md"):
+            _add(p)
+        for p in self._extract_markdown_paths_from_text(result_text, workspace_dir):
+            _add(p)
+        return files
+
+    def _detect_survey_quality_failure(
+        self,
+        *,
+        intent: str,
+        quality_files: list[Path],
+        evidence_delta: int,
+    ) -> tuple[bool, str]:
+        if not self._is_quality_critical_step(intent):
+            return False, ""
+        if not quality_files:
+            return True, "No markdown artifact found for quality-critical survey/literature step."
+
+        min_line_len = self._quality_gate_cfg.get("survey_min_line_length", 60)
+        best: tuple[int, int, int, Path] | None = None
+        best_content: str = ""
+        for path in quality_files:
+            try:
+                content = path.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            refs, dois = self._reference_metrics(content)
+            substantial = self._count_substantial_lines(content, min_length=min_line_len)
+            score = (refs, dois, substantial, path)
+            if best is None or score[:3] > best[:3]:
+                best = score
+                best_content = content
+
+        if best is None:
+            return True, "Survey quality check found no readable markdown artifacts."
+
+        refs, dois, substantial, best_path = best
+        if refs < self._quality_gate_cfg["survey_min_references"]:
+            return True, (
+                f"Insufficient references in {best_path.name}: {refs} "
+                f"(min {self._quality_gate_cfg['survey_min_references']})."
+            )
+        if dois < self._quality_gate_cfg["survey_min_unique_dois"]:
+            return True, (
+                f"Insufficient unique DOIs in {best_path.name}: {dois} "
+                f"(min {self._quality_gate_cfg['survey_min_unique_dois']})."
+            )
+        if substantial < self._quality_gate_cfg["survey_min_substantial_lines"]:
+            return True, (
+                f"Insufficient substantive content in {best_path.name}: {substantial} lines "
+                f"(min {self._quality_gate_cfg['survey_min_substantial_lines']})."
+            )
+        if evidence_delta < self._quality_gate_cfg["survey_min_evidence_delta"]:
+            return True, (
+                f"No evidence growth in literature index: delta={evidence_delta} "
+                f"(min {self._quality_gate_cfg['survey_min_evidence_delta']})."
+            )
+        if best_content and re.search(r"\btbd\b", best_content.lower()):
+            return True, f"Survey artifact still contains TBD placeholder: {best_path.name}"
         return False, ""
 
     def _get_next_execution_window(self, plan: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1011,6 +1331,52 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
             summary = self._summarize_solver_result(result, max_len=1000)
             result_info["result_summary"] = summary[:200]
+            if self._is_quality_critical_step(intent):
+                workspace_dir = self._task_workspace_dir(task_id)
+                quality_files = self._collect_quality_files(step_dir, workspace_dir, summary)
+                before_count = int(state.get("literature_entry_count", 0) or 0)
+                self._append_literature_index(
+                    state,
+                    task_id,
+                    source=f"step:{step_id}:summary",
+                    text=summary,
+                )
+                for quality_file in quality_files:
+                    try:
+                        text = quality_file.read_text(encoding="utf-8")
+                    except Exception:
+                        continue
+                    self._append_literature_index(
+                        state,
+                        task_id,
+                        source=f"step:{step_id}:file:{quality_file.name}",
+                        text=text[:200000],
+                    )
+                evidence_delta = int(state.get("literature_entry_count", 0) or 0) - before_count
+                survey_failed, survey_reason = self._detect_survey_quality_failure(
+                    intent=intent,
+                    quality_files=quality_files,
+                    evidence_delta=max(0, evidence_delta),
+                )
+                if survey_failed:
+                    result_info["status"] = "failed"
+                    result_info["replan_requested"] = True
+                    result_info["replan_reason"] = f"Step {step_id}: {survey_reason}"
+                    self._append_journal(
+                        state,
+                        task_id,
+                        phase="executing",
+                        title=f"Step {step_id} quality gate failed",
+                        body=survey_reason,
+                    )
+                    return result_info
+                self._append_journal(
+                    state,
+                    task_id,
+                    phase="executing",
+                    title=f"Step {step_id} quality gate passed",
+                    body=f"evidence_delta={max(0, evidence_delta)}",
+                )
             failed, fail_reason = self._detect_manuscript_validation_failure(intent, summary)
             if failed:
                 result_info["status"] = "failed"
@@ -1021,7 +1387,16 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             print("\033[93m[Planner] Step failed. Attempting fallback...\033[0m")
             if self._execute_fallback(step, solver, workspaces):
                 result_info["fallback_succeeded"] = True
-                result_info["result_summary"] = "completed_via_fallback"
+                if self._is_quality_critical_step(intent):
+                    result_info["status"] = "failed"
+                    result_info["result_summary"] = "fallback_used_for_quality_critical_step"
+                    result_info["replan_requested"] = True
+                    result_info["replan_reason"] = (
+                        f"Step {step_id}: fallback used in a quality-critical step; "
+                        "re-run primary deep-survey/literature path with stronger evidence accumulation."
+                    )
+                else:
+                    result_info["result_summary"] = "completed_via_fallback"
             else:
                 result_info["status"] = "failed"
                 result_info["result_summary"] = str(e)[:200]
@@ -1083,11 +1458,15 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 return json.loads(raw)
         except Exception as e:
             self.logger.warning("[Pre-check] Assessment failed, proceeding to plan: %s", e)
-        # Default: ready to plan
-        return {"ready_to_plan": True, "prerequisites": [], "reasoning": "Assessment failed; proceeding directly."}
+        return {"ready_to_plan": False, "prerequisites": [], "reasoning": "Assessment failed; defaulting to not ready."}
 
-    def _execute_prerequisites(self, prerequisites: list[dict[str, Any]], task_description: str,
-                                task_id: str) -> str:
+    def _execute_prerequisites(
+        self,
+        prerequisites: list[dict[str, Any]],
+        task_description: str,
+        task_id: str,
+        state: dict[str, Any],
+    ) -> str:
         """Run prerequisite tasks via DirectSolver and collect extracted context."""
         if not prerequisites:
             return ""
@@ -1144,9 +1523,29 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 result = solver.run(prompt, task_id=f"{task_id}_precheck_{i}")
                 summary = self._summarize_solver_result(result, max_len=2000)
                 collected_context.append(f"[Prerequisite {i + 1}: {prereq_type}] {description}\nResult: {summary}")
+                self._append_journal(
+                    state,
+                    task_id,
+                    phase="pre_check",
+                    title=f"Prerequisite {i + 1}/{len(prerequisites)} completed",
+                    body=f"type={prereq_type}\n{description}\n\nResult summary:\n{summary}",
+                )
+                self._append_literature_index(
+                    state,
+                    task_id,
+                    source=f"precheck:{prereq_type}",
+                    text=summary,
+                )
             except Exception as e:
                 self.logger.warning("[Pre-check] Prerequisite %d failed: %s", i + 1, e)
                 collected_context.append(f"[Prerequisite {i + 1}: {prereq_type}] FAILED: {e}")
+                self._append_journal(
+                    state,
+                    task_id,
+                    phase="pre_check",
+                    title=f"Prerequisite {i + 1}/{len(prerequisites)} failed",
+                    body=f"type={prereq_type}\n{description}\n\nError: {e}",
+                )
 
         return "\n\n".join(collected_context)
 
@@ -1162,6 +1561,13 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         if assessment.get("ready_to_plan") and not prerequisites:
             self.logger.info("[Pre-check] Ready to plan: %s", reasoning)
             self._emit("Planner", "thought", f"[Pre-check] Ready to plan. {reasoning}")
+            self._append_journal(
+                state,
+                task_id,
+                phase="pre_check",
+                title="Ready to plan",
+                body=reasoning,
+            )
             state["phase"] = "planning"
             self._emit("Planner", "phase_change", {"from": "pre_check", "to": "planning"})
             return state
@@ -1171,12 +1577,26 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         self._emit("Planner", "thought",
                     f"[Pre-check] Not ready to plan yet. {reasoning}\n"
                     f"Running {len(prerequisites)} prerequisite(s) first...")
+        self._append_journal(
+            state,
+            task_id,
+            phase="pre_check",
+            title="Prerequisites required",
+            body=f"{reasoning}\ncount={len(prerequisites)}",
+        )
 
-        pre_check_context = self._execute_prerequisites(prerequisites, goal, task_id)
+        pre_check_context = self._execute_prerequisites(prerequisites, goal, task_id, state)
         state["pre_check_context"] = pre_check_context
 
         self.logger.info("[Pre-check] Prerequisites completed. Proceeding to planning.")
         self._emit("Planner", "thought", "[Pre-check] Prerequisites completed. Now generating plan with enriched context.")
+        self._append_journal(
+            state,
+            task_id,
+            phase="pre_check",
+            title="Prerequisites completed",
+            body=pre_check_context[:2000],
+        )
         state["phase"] = "planning"
         self._emit("Planner", "phase_change", {"from": "pre_check", "to": "planning"})
         return state

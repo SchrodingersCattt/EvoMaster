@@ -59,6 +59,7 @@ agents:
       preserve_system_messages: true
       preserve_recent_turns: 5
 
+    system_prompt_file: "prompts/mat_master_system_prompt.txt"
     user_prompt_file: "prompts/user_prompt.txt"
 
 # ============================================
@@ -78,6 +79,7 @@ mat_master:
       - "ABACUS"
       - "LAMMPS"
       - "DPA"
+      - "COMPDART"
       - "CP2K"
       - "QE"
       - "ABINIT"
@@ -86,9 +88,13 @@ mat_master:
       # MCP server prefixes (planner validation)
       - "mat_abacus"
       - "mat_dpa"
+      - "mat_compdart"
       - "mat_sg"
       - "mat_doc"
       - "mat_sn"
+      - "mat_nmr"
+      - "mat_xrd"
+      - "mat_electron_microscope"
     block_list:
       - "VASP"
       - "Gaussian"
@@ -112,6 +118,7 @@ mat_master:
   planner:
     max_steps: 20
     state_file: "research_state.json"
+    system_prompt_file: "prompts/planner_system_prompt.txt"
   # 专项能力开关（DirectSolver 路由时据此决定是否走 EVO）
   capabilities:
     skill_evolution:
@@ -130,19 +137,37 @@ mat_master:
 # ============================================
 # MCP 配置（仅 mat_master 专用）
 # ============================================
-# path_adaptor: calculation 表示对 calculation 类 MCP 做路径解析与 executor/storage 注入（对齐 _tmp/MatMaster）
-# calculation_servers: 仅对这些服务器启用 path adaptor
+# path_adaptor: "calculation" 为历史命名；对所列服务器统一做路径解析与 executor/storage 注入
+# calculation_servers: 仅对这些服务器启用 path adaptor（本地文件参数会自动上传 OSS 并改写为 URL）
 # calculation_executors: 每服务器可配置 executor（镜像/机型）与 sync_tools；同步任务传 executor=null，否则传 Bohrium executor（鉴权从 .env BOHRIUM_* 注入）
-# 结构数据库检索: mat_bohrium_db(fetch_bohrium_crystals), mat_optimade(fetch_structures_with_*), mat_openlam(fetch_openlam_*), mat_mofdb(fetch_mofs_sql)
-# ABACUS 计算: mat_abacus
+# 结构数据库检索（当前）: mat_struct_db
+# 第一性原理计算: mat_abacus
 mcp:
   config_file: "mcp_config.json"
   enabled: true
   path_adaptor: "calculation"
-  calculation_servers: ["mat_sg", "mat_dpa", "mat_doc", "mat_abacus", "mat_binary_calc", "mat_struct_db"]
+  calculation_servers:
+    - "mat_sg"
+    - "mat_dpa"
+    - "mat_compdart"
+    - "mat_doc"
+    - "mat_abacus"
+    - "mat_binary_calc"
+    - "mat_struct_db"
+    - "mat_nmr"
+    - "mat_xrd"
+    - "mat_electron_microscope"
   # Per-server tool filter: only register these tools (original names). Omitted servers register all tools.
   tool_include_only:
     mat_sn: ["web-search", "search-papers-enhanced"]
+    mat_nmr:
+      - "NMR_search_tool"
+      - "NMR_predict_tool"
+      - "NMR_reverse_predict_tool"
+    mat_xrd:
+      - "xrd_phase_identification"
+    mat_electron_microscope:
+      - "get_electron_microscope_recognize"
   # Per-server executor (image/machine_type) and sync_tools. Sync tools → executor None; others → Bohrium executor with env auth.
   calculation_executors:
     mat_sg:
@@ -161,6 +186,7 @@ mcp:
       sync_tools:
         - add_hydrogens
         - generate_ordered_replicas
+        - apply_structure_transformation
         - remove_solvents
         - build_bulk_structure_by_template
         - build_bulk_structure_by_wyckoff
@@ -189,9 +215,37 @@ mcp:
         resources:
           envs: {}
       sync_tools: []
+    mat_compdart:
+      executor:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/dpa-calculator:10fe4948"
+            platform: "ali"
+            machine_type: "c16_m64_1 * NVIDIA 4090"
+            app_key: "agent"
+        resources:
+          envs: {}
+      sync_tools: []
     mat_doc:
       executor: null
       sync_tools: []
+    mat_nmr:
+      executor: null
+      sync_tools:
+        - NMR_search_tool
+        - NMR_predict_tool
+        - NMR_reverse_predict_tool
+    mat_xrd:
+      executor: null
+      sync_tools:
+        - xrd_phase_identification
+    mat_electron_microscope:
+      executor: null
+      sync_tools:
+        - get_electron_microscope_recognize
     mat_abacus:
       executor:
         type: "dispatcher"

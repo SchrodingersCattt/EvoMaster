@@ -229,7 +229,13 @@ class MatMasterPlayground(BasePlayground):
         if mode == "planner":
             input_fn = getattr(self, "_planner_input_fn", None)
             output_callback = getattr(self, "_planner_output_callback", None)
-            exp = ResearchPlanner(self.agent, self.config, input_fn=input_fn, output_callback=output_callback)
+            exp = ResearchPlanner(
+                self.agent,
+                self.config,
+                input_fn=input_fn,
+                output_callback=output_callback,
+                config_dir=self.config_dir,
+            )
         else:
             exp = DirectSolver(self.agent, self.config)
 
@@ -264,7 +270,14 @@ class MatMasterPlayground(BasePlayground):
         from evomaster.agent.context import ContextConfig
         from evomaster.utils import LLMConfig, create_llm
 
-        max_turns = agent_config.get("max_turns", 20)
+        base_max_turns = agent_config.get("max_turns", 20)
+        full_cfg = self.config.model_dump() or {}
+        mode = (self._run_mode or "direct").strip().lower()
+        mode_profiles = ((full_cfg.get("mat_master") or {}).get("mode_profiles") or {})
+        mode_cfg = mode_profiles.get(mode) if isinstance(mode_profiles, dict) else {}
+        if not isinstance(mode_cfg, dict):
+            mode_cfg = {}
+        max_turns = int(mode_cfg.get("agent_max_turns", base_max_turns))
         context_config_dict = agent_config.get("context", {})
         context_config = ContextConfig(**context_config_dict)
         agent_cfg = AgentConfig(max_turns=max_turns, context_config=context_config)
@@ -308,6 +321,7 @@ class MatMasterPlayground(BasePlayground):
             direct_max_workers=_exec_cfg.get("direct_max_workers", 4),
             rate_limit=_exec_cfg.get("rate_limit"),
             config_dict=_full_config_dict,
+            mode_profile=(self._run_mode or "direct"),
         )
         agent.set_agent_name(name)
         return agent
@@ -407,7 +421,7 @@ class MatMasterPlayground(BasePlayground):
             else:
                 manager.path_adaptor_servers = {s.get("name") for s in servers if s.get("name")}
             manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(mcp_config)
-            self.logger.info("Calculation path adaptor enabled for servers: %s", manager.path_adaptor_servers)
+            self.logger.info("Path adaptor enabled for servers: %s", manager.path_adaptor_servers)
 
         # mat_master：仅在此处设置 tool_include_only，基类 core 不包含此逻辑
         include_only = mcp_config.get("tool_include_only")

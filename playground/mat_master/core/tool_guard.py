@@ -14,11 +14,14 @@ Three independent concerns, each with its own state and public method:
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
+
+from .constants import MANUSCRIPT_FAIL_MARKERS
 
 # ── Loop-detection parameters ──────────────────────────────────
 LOOP_WINDOW = 5          # sliding-window size for recent tool fingerprints
@@ -38,21 +41,7 @@ EXEMPT_SKILL_NAMES = frozenset({
     "manuscript-scribe",
 })
 
-# ── Manuscript-gate markers ────────────────────────────────────
-# If any of these substrings appear in validate_content / assemble_manuscript
-# output (lowercased), the script is considered to have FAILED.
-_MANUSCRIPT_FAIL_MARKERS: tuple[str, ...] = (
-    "overall: failed",
-    "still tbd",
-    "empty sections",
-    "missing sections",
-    "missing required elements",
-    "unexpected sections",
-    "not contiguous",
-    "missing in references",
-    "references not cited",
-    "[fail]",
-)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -67,7 +56,7 @@ class ToolGuard:
 
     # ── construction / reset ───────────────────────────────────
 
-    def __init__(self, logger: Any):
+    def __init__(self, logger: Any, config_dict: dict[str, Any] | None = None):
         self.logger = logger
 
         # Loop detection
@@ -87,6 +76,12 @@ class ToolGuard:
         self._manuscript_writes: int = 0
         self._manuscript_validated: bool | None = None
         self._manuscript_fail_reason: str = ""
+        planner_cfg = ((config_dict or {}).get("mat_master") or {}).get("planner") or {}
+        quality_cfg = planner_cfg.get("quality_gates") or {}
+        self._survey_min_retrieval_calls: int = int(quality_cfg.get("survey_min_retrieval_calls", 6))
+        self._survey_min_retrieval_calls = max(1, self._survey_min_retrieval_calls)
+        self._survey_retrieval_count: int = 0
+        self._survey_writes: int = 0
 
     def reset_loop_history(self) -> None:
         """Clear loop-detection state so a new planner step starts fresh.
@@ -238,11 +233,45 @@ class ToolGuard:
         )
         return any(m in text for m in markers)
 
+    @staticmethod
+    def _extract_observation_text(observation: str) -> str:
+        """Unwrap formatted tool observation payload when possible."""
+        if not observation:
+            return ""
+        text = observation
+        try:
+            parsed = json.loads(observation)
+            if isinstance(parsed, dict) and "observation" in parsed:
+                inner = parsed.get("observation")
+                if isinstance(inner, str):
+                    text = inner
+                elif isinstance(inner, dict):
+                    text = json.dumps(inner, ensure_ascii=False)
+        except Exception:
+            pass
+        return text
+
+    @classmethod
+    def _extract_longtask_status(cls, observation: str) -> tuple[str, str] | None:
+        """Parse LONGTASK_RESULT_JSON status from tool output text."""
+        from ..skills._common.longtask_runtime import parse_prefixed_result_line
+
+        text = cls._extract_observation_text(observation)
+        obj = parse_prefixed_result_line(text)
+        if obj is None:
+            return None
+        status = str(obj.get("status", "")).strip().lower()
+        message = str(obj.get("message", "")).strip()
+        return (status, message) if status else None
+
     # ── manuscript gate ────────────────────────────────────────
 
-    @staticmethod
+    @classmethod
     def _check_manuscript_script_ok(
-        script_name: str, observation: str, info: dict[str, Any],
+        cls,
+        script_name: str,
+        observation: str,
+        info: dict[str, Any],
     ) -> tuple[bool, str]:
         """Check whether a manuscript-scribe validation / assembly script passed.
 
@@ -253,12 +282,21 @@ class ToolGuard:
         if script not in {"validate_content.py", "assemble_manuscript.py"}:
             return True, ""
 
+        longtask = cls._extract_longtask_status(observation)
+        if longtask is not None:
+            status, msg = longtask
+            if status == "completed":
+                return True, ""
+            if status in {"retryable_error", "fatal_error", "needs_input", "running"}:
+                reason = msg or f"{script} returned status={status}"
+                return False, reason
+
         exit_code = int(info.get("exit_code", 0) or 0)
         if exit_code != 0:
             return False, f"{script} exited with code {exit_code}."
 
-        text = (observation or "").lower()
-        for marker in _MANUSCRIPT_FAIL_MARKERS:
+        text = cls._extract_observation_text(observation).lower()
+        for marker in MANUSCRIPT_FAIL_MARKERS:
             if marker in text:
                 return False, f"Validation failed: '{marker}' detected in output."
         return True, ""
@@ -278,6 +316,18 @@ class ToolGuard:
             )
         if self._manuscript_validated is False:
             return False, self._manuscript_fail_reason or "Manuscript validation failed."
+        return True, ""
+
+    def can_finish_survey(self) -> tuple[bool, str]:
+        """Gate for ``finish`` on survey/literature runs."""
+        if self._survey_writes == 0:
+            return True, ""
+        if self._survey_retrieval_count < self._survey_min_retrieval_calls:
+            return False, (
+                "Survey/literature artifacts were written but retrieval depth is insufficient. "
+                f"Observed retrieval calls: {self._survey_retrieval_count}, "
+                f"required minimum: {self._survey_min_retrieval_calls}."
+            )
         return True, ""
 
     # ── input-validation gate (submit blocking) ────────────────
@@ -364,6 +414,9 @@ class ToolGuard:
     ) -> None:
         """Update post-execution state from a completed tool call."""
         args = self._parse_tool_args(tool_call)
+        tool_name = str(tool_call.function.name or "").strip()
+        if info.get("loop_blocked"):
+            return
 
         # ── peek_manual low-gain tracking ────────────────────
         if self._is_peek_manual_call(tool_call):
@@ -401,6 +454,32 @@ class ToolGuard:
                     )
                     self._manuscript_validated = ok
                     self._manuscript_fail_reason = "" if ok else reason
+            if skill == "deep-survey":
+                if script in {"run_survey.py", "write_section.py"} and int(info.get("exit_code", 0) or 0) == 0:
+                    self._survey_writes += 1
+
+        if tool_name in {"mat_sn_search-papers-enhanced", "mat_sn_web-search"}:
+            if self._observation_is_success(observation):
+                self._survey_retrieval_count += 1
+
+    @staticmethod
+    def _observation_is_success(observation: str) -> bool:
+        text = observation or ""
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                status = str(parsed.get("status", "")).strip().lower()
+                if status:
+                    return status == "success"
+                inner = parsed.get("observation")
+                if isinstance(inner, dict):
+                    inner_status = str(inner.get("status", "")).strip().lower()
+                    if inner_status:
+                        return inner_status == "success"
+        except Exception:
+            pass
+        # Conservative: only count as success when explicit "success" is found.
+        return False
 
     # ── private: decision builders ─────────────────────────────
 
