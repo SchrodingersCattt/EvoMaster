@@ -1,0 +1,1189 @@
+# Literature reproduction benchmark -- lightweight task specs.
+#
+# 93 papers across 12 categories (A-L).
+# Each entry: ONE reproducible calculation per paper.
+# HumanSimulator generates the prompt; mat_master decides how to execute.
+#
+# difficulty: 1=minimal prompt, 2=guided, 3=detailed hints
+# tolerance: absolute unless noted; based on inter-code variability
+
+tasks:
+
+  # =====================================================================
+  # A: EOS / Lattice / Bulk Modulus  (8 papers)
+  # =====================================================================
+
+  - id: "A1_Si_EOS"
+    paper_id: "A1"
+    doi: "10.1038/s41524-021-00594-6"
+    calc_type: "eos"
+    formula: "Si"
+    space_group: "Fd-3m"
+    mp_id: "mp-149"
+    difficulty: 1
+    expected:
+      - { key: "a0_A", value: 5.469, tolerance: 0.11, unit: "angstrom" }
+      - { key: "B0_GPa", value: 88.0, tolerance: 13.2, unit: "GPa" }
+
+  - id: "A2_GaAs_EOS"
+    paper_id: "A2"
+    doi: "10.1038/s42254-023-00655-3"
+    calc_type: "eos"
+    formula: "GaAs"
+    space_group: "F-43m"
+    mp_id: "mp-2534"
+    difficulty: 1
+    expected:
+      - { key: "a0_A", value: 5.75, tolerance: 0.12, unit: "angstrom" }
+      - { key: "B0_GPa", value: 60.0, tolerance: 9.0, unit: "GPa" }
+
+  - id: "A3_Al_convergence"
+    paper_id: "A3"
+    doi: "10.1038/s41524-024-01388-2"
+    calc_type: "eos"
+    formula: "Al"
+    space_group: "Fm-3m"
+    mp_id: "mp-134"
+    difficulty: 1
+    expected:
+      - { key: "a0_A", value: 4.04, tolerance: 0.08, unit: "angstrom" }
+      - { key: "B0_GPa", value: 79.0, tolerance: 12.0, unit: "GPa" }
+
+  - id: "A4_diamond_B0"
+    paper_id: "A4"
+    doi: "10.1038/s41467-023-39826-2"
+    calc_type: "eos"
+    formula: "C"
+    space_group: "Fd-3m"
+    mp_id: "mp-66"
+    difficulty: 2
+    expected:
+      - { key: "B0_GPa", value: 443.0, tolerance: 66.0, unit: "GPa" }
+
+  - id: "A5_Si_formation"
+    paper_id: "A5"
+    doi: "10.1038/s41524-024-01259-w"
+    calc_type: "formation_energy"
+    formula: "Si"
+    space_group: "Fd-3m"
+    mp_id: "mp-149"
+    difficulty: 1
+    expected:
+      - { key: "Ef_eV_atom", value: 0.0, tolerance: 0.05, unit: "eV/atom" }
+
+  - id: "A6_Cu_EOS"
+    paper_id: "A6"
+    doi: "10.1038/s41467-024-54554-x"
+    calc_type: "eos"
+    formula: "Cu"
+    space_group: "Fm-3m"
+    mp_id: "mp-30"
+    difficulty: 1
+    expected:
+      - { key: "a0_A", value: 3.63, tolerance: 0.07, unit: "angstrom" }
+      - { key: "B0_GPa", value: 142.0, tolerance: 21.0, unit: "GPa" }
+
+  - id: "A7_MgO_EOS"
+    paper_id: "A7"
+    doi: "10.1038/s41524-024-01437-w"
+    calc_type: "eos"
+    formula: "MgO"
+    space_group: "Fm-3m"
+    mp_id: "mp-1265"
+    difficulty: 1
+    expected:
+      - { key: "a0_A", value: 4.26, tolerance: 0.09, unit: "angstrom" }
+      - { key: "B0_GPa", value: 160.0, tolerance: 24.0, unit: "GPa" }
+
+  - id: "A8_NaCl_EOS"
+    paper_id: "A8"
+    doi: "10.1038/npjcompumats.2015.10"
+    calc_type: "eos"
+    formula: "NaCl"
+    space_group: "Fm-3m"
+    mp_id: "mp-22862"
+    difficulty: 1
+    expected:
+      - { key: "a0_A", value: 5.69, tolerance: 0.11, unit: "angstrom" }
+      - { key: "B0_GPa", value: 25.0, tolerance: 5.0, unit: "GPa" }
+
+  # =====================================================================
+  # B: Elastic Constants  (7 papers)
+  # =====================================================================
+
+  - id: "B1_Cu_elastic"
+    paper_id: "B1"
+    doi: "10.1038/s41467-024-54554-x"
+    calc_type: "elastic"
+    formula: "Cu"
+    space_group: "Fm-3m"
+    mp_id: "mp-30"
+    difficulty: 1
+    expected:
+      - { key: "C11_GPa", value: 176.0, tolerance: 26.0, unit: "GPa" }
+      - { key: "C12_GPa", value: 125.0, tolerance: 19.0, unit: "GPa" }
+      - { key: "C44_GPa", value: 82.0, tolerance: 12.0, unit: "GPa" }
+
+  - id: "B2_Al_elastic_Tdep"
+    paper_id: "B2"
+    doi: "10.1038/s41524-025-01765-5"
+    calc_type: "elastic"
+    formula: "Al"
+    space_group: "Fm-3m"
+    mp_id: "mp-134"
+    difficulty: 3
+    expected:
+      - { key: "C11_GPa", value: 114.0, tolerance: 17.0, unit: "GPa" }
+      - { key: "C12_GPa", value: 62.0, tolerance: 9.0, unit: "GPa" }
+      - { key: "C44_GPa", value: 32.0, tolerance: 5.0, unit: "GPa" }
+
+  - id: "B3_MgZn2_elastic"
+    paper_id: "B3"
+    doi: "10.1038/s41598-025-96708-x"
+    calc_type: "elastic"
+    formula: "MgZn2"
+    space_group: "P6_3/mmc"
+    mp_id: "mp-1094"
+    difficulty: 2
+    expected:
+      - { key: "B_GPa", value: 70.0, tolerance: 15.0, unit: "GPa" }
+
+  - id: "B4_Ni_GSFE"
+    paper_id: "B4"
+    doi: ""
+    calc_type: "surface"
+    formula: "Ni"
+    space_group: "Fm-3m"
+    mp_id: "mp-23"
+    difficulty: 3
+    expected:
+      - { key: "gamma_usf_mJ_m2", value: 273.0, tolerance: 50.0, unit: "mJ/m2" }
+
+  - id: "B5_Cu_SFE"
+    paper_id: "B5"
+    doi: ""
+    calc_type: "surface"
+    formula: "Cu"
+    space_group: "Fm-3m"
+    mp_id: "mp-30"
+    difficulty: 2
+    expected:
+      - { key: "gamma_isf_mJ_m2", value: 41.0, tolerance: 15.0, unit: "mJ/m2" }
+
+  - id: "B6_W_elastic"
+    paper_id: "B6"
+    doi: "10.1038/s41524-024-01394-4"
+    calc_type: "elastic"
+    formula: "W"
+    space_group: "Im-3m"
+    mp_id: "mp-91"
+    difficulty: 2
+    expected:
+      - { key: "C11_GPa", value: 533.0, tolerance: 80.0, unit: "GPa" }
+      - { key: "C12_GPa", value: 205.0, tolerance: 31.0, unit: "GPa" }
+      - { key: "C44_GPa", value: 163.0, tolerance: 24.0, unit: "GPa" }
+
+  - id: "B7_molecular_elastic"
+    paper_id: "B7"
+    doi: "10.1038/s41563-025-02133-w"
+    calc_type: "elastic"
+    formula: "NaCl"
+    space_group: "Fm-3m"
+    mp_id: "mp-22862"
+    difficulty: 3
+    expected:
+      - { key: "B_GPa", value: 25.0, tolerance: 5.0, unit: "GPa" }
+
+  # =====================================================================
+  # C: Surface Energy / Adsorption  (10 papers)
+  # =====================================================================
+
+  - id: "C1_Cu111_surface"
+    paper_id: "C1"
+    doi: "10.1038/s41467-024-54554-x"
+    calc_type: "surface"
+    formula: "Cu"
+    space_group: "Fm-3m"
+    mp_id: "mp-30"
+    difficulty: 2
+    expected:
+      - { key: "gamma_111_J_m2", value: 1.41, tolerance: 0.35, unit: "J/m2" }
+
+  - id: "C2_Pt111_H_ads"
+    paper_id: "C2"
+    doi: "10.1038/s41598-024-71703-w"
+    calc_type: "adsorption"
+    formula: "Pt"
+    space_group: "Fm-3m"
+    mp_id: "mp-126"
+    difficulty: 2
+    expected:
+      - { key: "Eads_H_eV", value: -0.45, tolerance: 0.20, unit: "eV" }
+
+  - id: "C3_Cu111_CO_ads"
+    paper_id: "C3"
+    doi: "10.1038/s41524-023-01121-5"
+    calc_type: "adsorption"
+    formula: "Cu"
+    space_group: "Fm-3m"
+    mp_id: "mp-30"
+    difficulty: 3
+    expected:
+      - { key: "Eads_CO_eV", value: -0.65, tolerance: 0.25, unit: "eV" }
+
+  - id: "C4_Rh111_CO_ads"
+    paper_id: "C4"
+    doi: "10.1038/s41524-023-01065-w"
+    calc_type: "adsorption"
+    formula: "Rh"
+    space_group: "Fm-3m"
+    mp_id: "mp-74"
+    difficulty: 3
+    expected:
+      - { key: "Eads_CO_eV", value: -1.70, tolerance: 0.30, unit: "eV" }
+
+  - id: "C5_Cs2Te_surface"
+    paper_id: "C5"
+    doi: "10.1038/s41524-024-01224-7"
+    calc_type: "surface"
+    formula: "Cs2Te"
+    space_group: "Fm-3m"
+    mp_id: "mp-1070"
+    difficulty: 2
+    expected:
+      - { key: "gamma_J_m2", value: 0.30, tolerance: 0.15, unit: "J/m2" }
+
+  - id: "C6_Co3O4_OER"
+    paper_id: "C6"
+    doi: "10.1039/D4SC00192C"
+    calc_type: "adsorption"
+    formula: "Co3O4"
+    space_group: "Fd-3m"
+    mp_id: "mp-18748"
+    difficulty: 3
+    expected:
+      - { key: "Eads_OH_eV", value: -1.0, tolerance: 0.4, unit: "eV" }
+
+  - id: "C7_SrTiO3_surface"
+    paper_id: "C7"
+    doi: "10.1038/s41524-024-01273-y"
+    calc_type: "surface"
+    formula: "SrTiO3"
+    space_group: "Pm-3m"
+    mp_id: "mp-5229"
+    difficulty: 3
+    expected:
+      - { key: "gamma_001_J_m2", value: 1.28, tolerance: 0.35, unit: "J/m2" }
+
+  - id: "C8_TiO2_bandgap"
+    paper_id: "C8"
+    doi: "10.1039/D3CP04453J"
+    calc_type: "band"
+    formula: "TiO2"
+    space_group: "I4_1/amd"
+    mp_id: "mp-390"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 2.0, tolerance: 0.5, unit: "eV" }
+
+  - id: "C9_RuO2_surface"
+    paper_id: "C9"
+    doi: "10.1038/s41467-026-69200-x"
+    calc_type: "surface"
+    formula: "RuO2"
+    space_group: "P4_2/mnm"
+    mp_id: "mp-825"
+    difficulty: 3
+    expected:
+      - { key: "work_function_eV", value: 5.8, tolerance: 0.5, unit: "eV" }
+
+  - id: "C10_oxide_surface"
+    paper_id: "C10"
+    doi: "10.1038/s41467-024-45824-9"
+    calc_type: "surface"
+    formula: "SrTiO3"
+    space_group: "Pm-3m"
+    mp_id: "mp-5229"
+    difficulty: 3
+    expected:
+      - { key: "work_function_eV", value: 4.2, tolerance: 0.5, unit: "eV" }
+
+  # =====================================================================
+  # D: Defect Formation Energy  (8 papers)
+  # =====================================================================
+
+  - id: "D1_Al_vacancy"
+    paper_id: "D1"
+    doi: "10.1038/s41467-024-54554-x"
+    calc_type: "defect"
+    formula: "Al"
+    space_group: "Fm-3m"
+    mp_id: "mp-134"
+    difficulty: 1
+    expected:
+      - { key: "Ev_eV", value: 0.65, tolerance: 0.15, unit: "eV" }
+
+  - id: "D2_CdTe_defect"
+    paper_id: "D2"
+    doi: "10.1038/s41524-024-01303-9"
+    calc_type: "defect"
+    formula: "CdTe"
+    space_group: "F-43m"
+    mp_id: "mp-406"
+    difficulty: 3
+    expected:
+      - { key: "Ev_Cd_eV", value: 1.8, tolerance: 0.5, unit: "eV" }
+
+  - id: "D3_Si_vacancy"
+    paper_id: "D3"
+    doi: "10.1038/s41524-023-01015-6"
+    calc_type: "defect"
+    formula: "Si"
+    space_group: "Fd-3m"
+    mp_id: "mp-149"
+    difficulty: 2
+    expected:
+      - { key: "Ev_eV", value: 3.6, tolerance: 0.5, unit: "eV" }
+
+  - id: "D4_SrTiO3_Ovac"
+    paper_id: "D4"
+    doi: "10.1038/sdata.2017.153"
+    calc_type: "defect"
+    formula: "SrTiO3"
+    space_group: "Pm-3m"
+    mp_id: "mp-5229"
+    difficulty: 2
+    expected:
+      - { key: "Ev_O_eV", value: 6.0, tolerance: 1.0, unit: "eV" }
+
+  - id: "D5_SrTiO3_Odiff"
+    paper_id: "D5"
+    doi: ""
+    calc_type: "neb"
+    formula: "SrTiO3"
+    space_group: "Pm-3m"
+    mp_id: "mp-5229"
+    difficulty: 2
+    expected:
+      - { key: "barrier_eV", value: 0.44, tolerance: 0.15, unit: "eV" }
+
+  - id: "D6_BaTiO3_vacancy"
+    paper_id: "D6"
+    doi: ""
+    calc_type: "defect"
+    formula: "BaTiO3"
+    space_group: "Pm-3m"
+    mp_id: "mp-5020"
+    difficulty: 3
+    expected:
+      - { key: "Ev_O_eV", value: 5.5, tolerance: 1.0, unit: "eV" }
+
+  - id: "D7_hBN_defect"
+    paper_id: "D7"
+    doi: "10.1038/s41699-024-00472-x"
+    calc_type: "defect"
+    formula: "BN"
+    space_group: "P6_3/mmc"
+    mp_id: "mp-984"
+    difficulty: 3
+    expected:
+      - { key: "Ev_N_eV", value: 8.0, tolerance: 1.5, unit: "eV" }
+
+  - id: "D8_MgO_vacancy"
+    paper_id: "D8"
+    doi: "10.1038/s41578-025-00879-y"
+    calc_type: "defect"
+    formula: "MgO"
+    space_group: "Fm-3m"
+    mp_id: "mp-1265"
+    difficulty: 1
+    expected:
+      - { key: "Ev_O_eV", value: 7.5, tolerance: 1.5, unit: "eV" }
+
+  # =====================================================================
+  # E: Electronic Structure / Band / DOS / Band Gap  (13 papers)
+  # =====================================================================
+
+  - id: "E1_CsPbI3_bandgap"
+    paper_id: "E1"
+    doi: "10.1038/s41524-024-01270-1"
+    calc_type: "band"
+    formula: "CsPbI3"
+    space_group: "Pm-3m"
+    mp_id: "mp-1069538"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 1.73, tolerance: 0.5, unit: "eV" }
+
+  - id: "E2_CsPbBr3_bandgap"
+    paper_id: "E2"
+    doi: "10.1038/s41524-024-01323-5"
+    calc_type: "band"
+    formula: "CsPbBr3"
+    space_group: "Pm-3m"
+    mp_id: "mp-600089"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 2.36, tolerance: 0.5, unit: "eV" }
+
+  - id: "E3_MoS2_bandgap"
+    paper_id: "E3"
+    doi: "10.1038/s41524-024-01253-2"
+    calc_type: "band"
+    formula: "MoS2"
+    space_group: "P-6m2"
+    mp_id: "mp-2815"
+    difficulty: 3
+    expected:
+      - { key: "Eg_eV", value: 1.75, tolerance: 0.5, unit: "eV" }
+
+  - id: "E4_LaSrAlO4_bandgap"
+    paper_id: "E4"
+    doi: "10.1038/ncomms7191"
+    calc_type: "band"
+    formula: "SrLaAlO4"
+    space_group: "I4/mmm"
+    mp_id: "mp-3584"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 3.5, tolerance: 1.0, unit: "eV" }
+
+  - id: "E5_Si_bandgap"
+    paper_id: "E5"
+    doi: "10.1038/s41524-025-01855-4"
+    calc_type: "band"
+    formula: "Si"
+    space_group: "Fd-3m"
+    mp_id: "mp-149"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 1.17, tolerance: 0.5, unit: "eV" }
+
+  - id: "E6_WS2_bandgap"
+    paper_id: "E6"
+    doi: "10.1038/s41524-024-01417-0"
+    calc_type: "band"
+    formula: "WS2"
+    space_group: "P-6m2"
+    mp_id: "mp-224"
+    difficulty: 3
+    expected:
+      - { key: "Eg_eV", value: 1.80, tolerance: 0.5, unit: "eV" }
+
+  - id: "E7_TiO2_band"
+    paper_id: "E7"
+    doi: "10.1038/s41467-024-46570-8"
+    calc_type: "band"
+    formula: "TiO2"
+    space_group: "I4_1/amd"
+    mp_id: "mp-390"
+    difficulty: 3
+    expected:
+      - { key: "Eg_eV", value: 2.0, tolerance: 0.5, unit: "eV" }
+
+  - id: "E8_GaAs_bandgap"
+    paper_id: "E8"
+    doi: "10.1038/s41597-020-00723-8"
+    calc_type: "band"
+    formula: "GaAs"
+    space_group: "F-43m"
+    mp_id: "mp-2534"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 1.52, tolerance: 0.5, unit: "eV" }
+
+  - id: "E9_Fe_redox"
+    paper_id: "E9"
+    doi: "10.1038/s41524-024-01295-6"
+    calc_type: "band"
+    formula: "Fe2O3"
+    space_group: "R-3c"
+    mp_id: "mp-19770"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 2.2, tolerance: 0.6, unit: "eV" }
+
+  - id: "E10_BaTiO3_dielectric"
+    paper_id: "E10"
+    doi: "10.1038/s41524-024-01450-z"
+    calc_type: "band"
+    formula: "BaTiO3"
+    space_group: "Pm-3m"
+    mp_id: "mp-5020"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 1.7, tolerance: 0.5, unit: "eV" }
+
+  - id: "E11_SrTiO3_band"
+    paper_id: "E11"
+    doi: "10.1038/s41524-024-01366-8"
+    calc_type: "band"
+    formula: "SrTiO3"
+    space_group: "Pm-3m"
+    mp_id: "mp-5229"
+    difficulty: 3
+    expected:
+      - { key: "Eg_eV", value: 1.8, tolerance: 0.5, unit: "eV" }
+
+  - id: "E12_NbAs_band"
+    paper_id: "E12"
+    doi: "10.1038/s41524-024-01263-0"
+    calc_type: "band"
+    formula: "NbAs"
+    space_group: "I4_1md"
+    mp_id: "mp-2667"
+    difficulty: 3
+    expected:
+      - { key: "Eg_eV", value: 0.0, tolerance: 0.1, unit: "eV" }
+    tags: ["semimetal"]
+
+  - id: "E13_MAPbI3_bandgap"
+    paper_id: "E13"
+    doi: "10.1039/D4MA01050G"
+    calc_type: "band"
+    formula: "CsPbI3"
+    space_group: "Pm-3m"
+    mp_id: "mp-1069538"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 1.73, tolerance: 0.5, unit: "eV" }
+
+  # =====================================================================
+  # F: Phonon / Thermal  (10 papers)
+  # =====================================================================
+
+  - id: "F1_MgO_phonon"
+    paper_id: "F1"
+    doi: "10.1038/s41524-024-01437-w"
+    calc_type: "phonon"
+    formula: "MgO"
+    space_group: "Fm-3m"
+    mp_id: "mp-1265"
+    difficulty: 2
+    expected:
+      - { key: "omega_LO_cm-1", value: 725.0, tolerance: 75.0, unit: "cm-1" }
+
+  - id: "F2_Si_phonon"
+    paper_id: "F2"
+    doi: "10.1038/s41524-024-01215-8"
+    calc_type: "phonon"
+    formula: "Si"
+    space_group: "Fd-3m"
+    mp_id: "mp-149"
+    difficulty: 2
+    expected:
+      - { key: "omega_LO_cm-1", value: 520.0, tolerance: 52.0, unit: "cm-1" }
+
+  - id: "F3_Cu_phonon"
+    paper_id: "F3"
+    doi: "10.1038/s41467-024-54554-x"
+    calc_type: "phonon"
+    formula: "Cu"
+    space_group: "Fm-3m"
+    mp_id: "mp-30"
+    difficulty: 2
+    expected:
+      - { key: "omega_max_cm-1", value: 240.0, tolerance: 36.0, unit: "cm-1" }
+
+  - id: "F4_Si_eph"
+    paper_id: "F4"
+    doi: "10.1038/s41524-025-01587-5"
+    calc_type: "phonon"
+    formula: "Si"
+    space_group: "Fd-3m"
+    mp_id: "mp-149"
+    difficulty: 3
+    expected:
+      - { key: "omega_LO_cm-1", value: 520.0, tolerance: 52.0, unit: "cm-1" }
+
+  - id: "F5_GaAs_phonon"
+    paper_id: "F5"
+    doi: "10.1038/s41524-025-01650-1"
+    calc_type: "phonon"
+    formula: "GaAs"
+    space_group: "F-43m"
+    mp_id: "mp-2534"
+    difficulty: 3
+    expected:
+      - { key: "omega_LO_cm-1", value: 292.0, tolerance: 44.0, unit: "cm-1" }
+
+  - id: "F6_Si_thermal"
+    paper_id: "F6"
+    doi: "10.1038/s41524-024-01364-w"
+    calc_type: "phonon"
+    formula: "Si"
+    space_group: "Fd-3m"
+    mp_id: "mp-149"
+    difficulty: 3
+    expected:
+      - { key: "omega_LO_cm-1", value: 520.0, tolerance: 52.0, unit: "cm-1" }
+
+  - id: "F7_Ge_phonon"
+    paper_id: "F7"
+    doi: "10.1038/s41524-025-01673-8"
+    calc_type: "phonon"
+    formula: "Ge"
+    space_group: "Fd-3m"
+    mp_id: "mp-32"
+    difficulty: 3
+    expected:
+      - { key: "omega_LO_cm-1", value: 301.0, tolerance: 45.0, unit: "cm-1" }
+
+  - id: "F8_diamond_phonon"
+    paper_id: "F8"
+    doi: "10.1038/s41524-025-01625-2"
+    calc_type: "phonon"
+    formula: "C"
+    space_group: "Fd-3m"
+    mp_id: "mp-66"
+    difficulty: 3
+    expected:
+      - { key: "omega_LO_cm-1", value: 1332.0, tolerance: 100.0, unit: "cm-1" }
+
+  - id: "F9_Mg3Sb2_phonon"
+    paper_id: "F9"
+    doi: ""
+    calc_type: "phonon"
+    formula: "Mg3Sb2"
+    space_group: "P-3m1"
+    mp_id: "mp-2646"
+    difficulty: 3
+    expected:
+      - { key: "omega_max_cm-1", value: 250.0, tolerance: 50.0, unit: "cm-1" }
+
+  - id: "F10_NaCl_phonon"
+    paper_id: "F10"
+    doi: "10.1038/s41524-025-01920-y"
+    calc_type: "phonon"
+    formula: "NaCl"
+    space_group: "Fm-3m"
+    mp_id: "mp-22862"
+    difficulty: 3
+    expected:
+      - { key: "omega_LO_cm-1", value: 264.0, tolerance: 40.0, unit: "cm-1" }
+
+  # =====================================================================
+  # G: Molecular Dynamics  (8 papers)
+  # =====================================================================
+
+  - id: "G1_MoTaVW_elastic"
+    paper_id: "G1"
+    doi: "10.1038/s41467-024-54554-x"
+    calc_type: "elastic"
+    formula: "Mo"
+    space_group: "Im-3m"
+    mp_id: "mp-129"
+    difficulty: 3
+    expected:
+      - { key: "C11_GPa", value: 472.0, tolerance: 71.0, unit: "GPa" }
+      - { key: "C12_GPa", value: 158.0, tolerance: 24.0, unit: "GPa" }
+      - { key: "C44_GPa", value: 110.0, tolerance: 17.0, unit: "GPa" }
+
+  - id: "G2_Ni_EOS"
+    paper_id: "G2"
+    doi: "10.1038/s41524-025-01561-1"
+    calc_type: "eos"
+    formula: "Ni"
+    space_group: "Fm-3m"
+    mp_id: "mp-23"
+    difficulty: 3
+    expected:
+      - { key: "a0_A", value: 3.52, tolerance: 0.07, unit: "angstrom" }
+
+  - id: "G3_Ta_elastic"
+    paper_id: "G3"
+    doi: "10.1038/s41524-025-01950-6"
+    calc_type: "elastic"
+    formula: "Ta"
+    space_group: "Im-3m"
+    mp_id: "mp-50"
+    difficulty: 3
+    expected:
+      - { key: "C11_GPa", value: 266.0, tolerance: 40.0, unit: "GPa" }
+      - { key: "C44_GPa", value: 82.0, tolerance: 12.0, unit: "GPa" }
+
+  - id: "G4_Ni_elastic"
+    paper_id: "G4"
+    doi: "10.1038/s43246-024-00603-3"
+    calc_type: "elastic"
+    formula: "Ni"
+    space_group: "Fm-3m"
+    mp_id: "mp-23"
+    difficulty: 2
+    expected:
+      - { key: "C11_GPa", value: 276.0, tolerance: 40.0, unit: "GPa" }
+      - { key: "C12_GPa", value: 159.0, tolerance: 25.0, unit: "GPa" }
+      - { key: "C44_GPa", value: 132.0, tolerance: 20.0, unit: "GPa" }
+
+  - id: "G5_Al_EOS"
+    paper_id: "G5"
+    doi: "10.1039/D4DD00069B"
+    calc_type: "eos"
+    formula: "Al"
+    space_group: "Fm-3m"
+    mp_id: "mp-134"
+    difficulty: 2
+    expected:
+      - { key: "a0_A", value: 4.04, tolerance: 0.08, unit: "angstrom" }
+
+  - id: "G6_Pt_EOS"
+    paper_id: "G6"
+    doi: "10.1038/s41467-024-54554-x"
+    calc_type: "eos"
+    formula: "Pt"
+    space_group: "Fm-3m"
+    mp_id: "mp-126"
+    difficulty: 3
+    expected:
+      - { key: "a0_A", value: 3.97, tolerance: 0.08, unit: "angstrom" }
+
+  - id: "G7_Fe_elastic"
+    paper_id: "G7"
+    doi: "10.1038/s41524-024-01394-4"
+    calc_type: "elastic"
+    formula: "Fe"
+    space_group: "Im-3m"
+    mp_id: "mp-13"
+    difficulty: 3
+    expected:
+      - { key: "C11_GPa", value: 243.0, tolerance: 36.0, unit: "GPa" }
+      - { key: "C44_GPa", value: 116.0, tolerance: 17.0, unit: "GPa" }
+
+  - id: "G8_Ni_EOS_HEA"
+    paper_id: "G8"
+    doi: "10.1038/s41598-024-67422-x"
+    calc_type: "eos"
+    formula: "Ni"
+    space_group: "Fm-3m"
+    mp_id: "mp-23"
+    difficulty: 3
+    expected:
+      - { key: "a0_A", value: 3.52, tolerance: 0.07, unit: "angstrom" }
+
+  # =====================================================================
+  # H: Catalysis / Adsorption / Reaction  (10 papers)
+  # =====================================================================
+
+  - id: "H1_Fe_CO2_ads"
+    paper_id: "H1"
+    doi: "10.1038/s41467-023-40667-2"
+    calc_type: "adsorption"
+    formula: "Fe"
+    space_group: "Im-3m"
+    mp_id: "mp-13"
+    difficulty: 3
+    expected:
+      - { key: "Eads_COOH_eV", value: -0.5, tolerance: 0.3, unit: "eV" }
+
+  - id: "H2_W_H_adsorption"
+    paper_id: "H2"
+    doi: "10.1038/s41467-023-41097-w"
+    calc_type: "adsorption"
+    formula: "W"
+    space_group: "Im-3m"
+    mp_id: "mp-91"
+    difficulty: 2
+    expected:
+      - { key: "Eads_H_eV", value: -0.45, tolerance: 0.25, unit: "eV" }
+
+  - id: "H3_Fe_N4_ads"
+    paper_id: "H3"
+    doi: "10.1038/s41467-023-40174-4"
+    calc_type: "adsorption"
+    formula: "Fe"
+    space_group: "Im-3m"
+    mp_id: "mp-13"
+    difficulty: 3
+    expected:
+      - { key: "Eads_NO2_eV", value: -1.0, tolerance: 0.4, unit: "eV" }
+
+  - id: "H4_Pt_biomass_ads"
+    paper_id: "H4"
+    doi: "10.1038/s41597-024-03872-2"
+    calc_type: "adsorption"
+    formula: "Pt"
+    space_group: "Fm-3m"
+    mp_id: "mp-126"
+    difficulty: 2
+    expected:
+      - { key: "Eads_CO_eV", value: -1.8, tolerance: 0.3, unit: "eV" }
+
+  - id: "H5_Pd_barrier"
+    paper_id: "H5"
+    doi: "10.1039/D4SC00628C"
+    calc_type: "neb"
+    formula: "Pd"
+    space_group: "Fm-3m"
+    mp_id: "mp-2"
+    difficulty: 3
+    expected:
+      - { key: "barrier_eV", value: 0.8, tolerance: 0.3, unit: "eV" }
+
+  - id: "H6_barrier_kcal"
+    paper_id: "H6"
+    doi: "10.1039/D4SC04829F"
+    calc_type: "neb"
+    formula: "C8H9+"
+    space_group: ""
+    mp_id: ""
+    difficulty: 2
+    expected:
+      - { key: "barrier_kcal_mol", value: 2.3, tolerance: 1.5, unit: "kcal/mol" }
+
+  - id: "H7_HAT_barrier"
+    paper_id: "H7"
+    doi: "10.1039/D3SC03922F"
+    calc_type: "neb"
+    formula: "C2H6"
+    space_group: ""
+    mp_id: ""
+    difficulty: 3
+    expected:
+      - { key: "barrier_kcal_mol", value: 15.0, tolerance: 5.0, unit: "kcal/mol" }
+
+  - id: "H8_Cu_H_ads"
+    paper_id: "H8"
+    doi: "10.1038/s41467-023-36142-7"
+    calc_type: "adsorption"
+    formula: "Cu"
+    space_group: "Fm-3m"
+    mp_id: "mp-30"
+    difficulty: 3
+    expected:
+      - { key: "Eads_H_eV", value: -0.20, tolerance: 0.20, unit: "eV" }
+
+  - id: "H9_Zn_Cu_ads"
+    paper_id: "H9"
+    doi: "10.1038/s41929-023-01020-4"
+    calc_type: "adsorption"
+    formula: "Zn"
+    space_group: "P6_3/mmc"
+    mp_id: "mp-79"
+    difficulty: 3
+    expected:
+      - { key: "Eads_CO_eV", value: -0.3, tolerance: 0.25, unit: "eV" }
+
+  - id: "H10_CeO2_ads"
+    paper_id: "H10"
+    doi: "10.1039/D4NR01296H"
+    calc_type: "adsorption"
+    formula: "CeO2"
+    space_group: "Fm-3m"
+    mp_id: "mp-20194"
+    difficulty: 3
+    expected:
+      - { key: "Eads_H2O_eV", value: -0.6, tolerance: 0.3, unit: "eV" }
+
+  # =====================================================================
+  # I: Battery / Ion Diffusion  (8 papers)
+  # =====================================================================
+
+  - id: "I1_LiFePO4_voltage"
+    paper_id: "I1"
+    doi: "10.48550/arXiv.2203.15732"
+    calc_type: "formation_energy"
+    formula: "LiFePO4"
+    space_group: "Pnma"
+    mp_id: "mp-19017"
+    difficulty: 2
+    expected:
+      - { key: "voltage_V", value: 3.5, tolerance: 0.5, unit: "V" }
+
+  - id: "I2_NaFePO4_voltage"
+    paper_id: "I2"
+    doi: "10.1038/s41597-025-05799-8"
+    calc_type: "formation_energy"
+    formula: "NaFePO4"
+    space_group: "Pnma"
+    mp_id: "mp-25481"
+    difficulty: 3
+    expected:
+      - { key: "voltage_V", value: 2.9, tolerance: 0.5, unit: "V" }
+
+  - id: "I3_Li3YCl6_EOS"
+    paper_id: "I3"
+    doi: "10.1038/s41467-024-45258-3"
+    calc_type: "eos"
+    formula: "Li3YCl6"
+    space_group: "P-3m1"
+    mp_id: ""
+    difficulty: 3
+    expected:
+      - { key: "a0_A", value: 11.2, tolerance: 0.3, unit: "angstrom" }
+
+  - id: "I4_Li3YCl6_band"
+    paper_id: "I4"
+    doi: "10.1038/s41557-024-01634-6"
+    calc_type: "band"
+    formula: "Li3YCl6"
+    space_group: "P-3m1"
+    mp_id: ""
+    difficulty: 3
+    expected:
+      - { key: "Eg_eV", value: 5.0, tolerance: 1.0, unit: "eV" }
+
+  - id: "I5_LiZrCl_band"
+    paper_id: "I5"
+    doi: "10.1038/s41524-024-01346-y"
+    calc_type: "band"
+    formula: "Li2ZrCl6"
+    space_group: "P-3m1"
+    mp_id: ""
+    difficulty: 3
+    expected:
+      - { key: "Eg_eV", value: 5.5, tolerance: 1.0, unit: "eV" }
+
+  - id: "I6_Li6PS5Cl_EOS"
+    paper_id: "I6"
+    doi: "10.1038/s41467-025-56662-8"
+    calc_type: "eos"
+    formula: "Li6PS5Cl"
+    space_group: "F-43m"
+    mp_id: "mp-985583"
+    difficulty: 3
+    expected:
+      - { key: "a0_A", value: 9.86, tolerance: 0.20, unit: "angstrom" }
+
+  - id: "I7_LiCoO2_voltage"
+    paper_id: "I7"
+    doi: "10.1038/ncomms6559"
+    calc_type: "formation_energy"
+    formula: "LiCoO2"
+    space_group: "R-3m"
+    mp_id: "mp-22526"
+    difficulty: 2
+    expected:
+      - { key: "voltage_V", value: 4.0, tolerance: 0.5, unit: "V" }
+
+  - id: "I8_MgO_Na_NEB"
+    paper_id: "I8"
+    doi: ""
+    calc_type: "neb"
+    formula: "MgO"
+    space_group: "Fm-3m"
+    mp_id: "mp-1265"
+    difficulty: 2
+    expected:
+      - { key: "barrier_eV", value: 0.31, tolerance: 0.15, unit: "eV" }
+
+  # =====================================================================
+  # J: Magnetic / Spin  (6 papers)
+  # =====================================================================
+
+  - id: "J1_Fe_magnetic"
+    paper_id: "J1"
+    doi: "10.1038/s41524-024-01202-z"
+    calc_type: "magnetic"
+    formula: "Fe"
+    space_group: "Im-3m"
+    mp_id: "mp-13"
+    difficulty: 1
+    expected:
+      - { key: "mu_B", value: 2.2, tolerance: 0.4, unit: "mu_B" }
+
+  - id: "J2_FeNi_magnetic"
+    paper_id: "J2"
+    doi: "10.1038/s41524-024-01435-y"
+    calc_type: "magnetic"
+    formula: "FeNi"
+    space_group: "P4/mmm"
+    mp_id: ""
+    difficulty: 3
+    expected:
+      - { key: "mu_Fe_B", value: 2.8, tolerance: 0.5, unit: "mu_B" }
+
+  - id: "J3_Co2MnSi_magnetic"
+    paper_id: "J3"
+    doi: "10.1038/s41524-023-01079-4"
+    calc_type: "magnetic"
+    formula: "Co2MnSi"
+    space_group: "Fm-3m"
+    mp_id: "mp-5765"
+    difficulty: 3
+    expected:
+      - { key: "mu_total_B", value: 5.0, tolerance: 0.5, unit: "mu_B" }
+
+  - id: "J4_NiO_magnetic"
+    paper_id: "J4"
+    doi: "10.1038/s41467-024-53319-w"
+    calc_type: "magnetic"
+    formula: "NiO"
+    space_group: "Fm-3m"
+    mp_id: "mp-19009"
+    difficulty: 2
+    expected:
+      - { key: "mu_Ni_B", value: 1.7, tolerance: 0.3, unit: "mu_B" }
+
+  - id: "J5_Cr2Te3_magnetic"
+    paper_id: "J5"
+    doi: "10.1038/s41586-024-08330-y"
+    calc_type: "magnetic"
+    formula: "Cr2Te3"
+    space_group: "P-3"
+    mp_id: "mp-2815"
+    difficulty: 3
+    expected:
+      - { key: "mu_Cr_B", value: 3.0, tolerance: 0.5, unit: "mu_B" }
+
+  - id: "J6_Ni_magnetic"
+    paper_id: "J6"
+    doi: "10.1038/s41524-024-01445-w"
+    calc_type: "magnetic"
+    formula: "Ni"
+    space_group: "Fm-3m"
+    mp_id: "mp-23"
+    difficulty: 2
+    expected:
+      - { key: "mu_B", value: 0.62, tolerance: 0.10, unit: "mu_B" }
+
+  # =====================================================================
+  # K: 2D Materials  (7 papers)
+  # =====================================================================
+
+  - id: "K1_MoS2_bandgap"
+    paper_id: "K1"
+    doi: "10.1038/s41524-024-01253-2"
+    calc_type: "band"
+    formula: "MoS2"
+    space_group: "P-6m2"
+    mp_id: "mp-2815"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 1.75, tolerance: 0.5, unit: "eV" }
+
+  - id: "K2_WS2_bandgap"
+    paper_id: "K2"
+    doi: "10.1038/s41524-024-01417-0"
+    calc_type: "band"
+    formula: "WS2"
+    space_group: "P-6m2"
+    mp_id: "mp-224"
+    difficulty: 3
+    expected:
+      - { key: "Eg_eV", value: 1.80, tolerance: 0.5, unit: "eV" }
+
+  - id: "K3_MoS2_bilayer"
+    paper_id: "K3"
+    doi: "10.1038/s41597-023-02146-7"
+    calc_type: "band"
+    formula: "MoS2"
+    space_group: "P-6m2"
+    mp_id: "mp-2815"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 1.20, tolerance: 0.5, unit: "eV" }
+    tags: ["bilayer"]
+
+  - id: "K4_MoS2_graphene"
+    paper_id: "K4"
+    doi: "10.1038/s41699-024-00488-3"
+    calc_type: "band"
+    formula: "MoS2"
+    space_group: "P-6m2"
+    mp_id: "mp-2815"
+    difficulty: 3
+    expected:
+      - { key: "Eg_eV", value: 1.75, tolerance: 0.5, unit: "eV" }
+
+  - id: "K5_hBN_defect"
+    paper_id: "K5"
+    doi: "10.1038/s41699-024-00472-x"
+    calc_type: "defect"
+    formula: "BN"
+    space_group: "P6_3/mmc"
+    mp_id: "mp-984"
+    difficulty: 3
+    expected:
+      - { key: "Ev_N_eV", value: 8.0, tolerance: 1.5, unit: "eV" }
+
+  - id: "K6_MoS2_phonon"
+    paper_id: "K6"
+    doi: "10.1038/s41524-024-01315-5"
+    calc_type: "phonon"
+    formula: "MoS2"
+    space_group: "P-6m2"
+    mp_id: "mp-2815"
+    difficulty: 3
+    expected:
+      - { key: "omega_E2g_cm-1", value: 383.0, tolerance: 40.0, unit: "cm-1" }
+
+  - id: "K7_ZrNCl_bandgap"
+    paper_id: "K7"
+    doi: ""
+    calc_type: "band"
+    formula: "ZrNCl"
+    space_group: "R-3m"
+    mp_id: "mp-9266"
+    difficulty: 2
+    expected:
+      - { key: "Eg_eV", value: 2.0, tolerance: 0.6, unit: "eV" }
+
+  # =====================================================================
+  # L: Phase Stability / Formation Energy  (6 papers)
+  # =====================================================================
+
+  - id: "L1_CoNi_formation"
+    paper_id: "L1"
+    doi: "10.1038/s41524-024-01391-7"
+    calc_type: "formation_energy"
+    formula: "CoNi"
+    space_group: "Fm-3m"
+    mp_id: ""
+    difficulty: 3
+    expected:
+      - { key: "Ef_eV_atom", value: -0.02, tolerance: 0.1, unit: "eV/atom" }
+
+  - id: "L2_NiAl_formation"
+    paper_id: "L2"
+    doi: "10.1038/s41524-024-01452-x"
+    calc_type: "formation_energy"
+    formula: "NiAl"
+    space_group: "Pm-3m"
+    mp_id: "mp-1487"
+    difficulty: 3
+    expected:
+      - { key: "Ef_eV_atom", value: -0.64, tolerance: 0.1, unit: "eV/atom" }
+
+  - id: "L3_NbTa_formation"
+    paper_id: "L3"
+    doi: "10.1038/s41597-024-03720-3"
+    calc_type: "formation_energy"
+    formula: "NbTa"
+    space_group: "Im-3m"
+    mp_id: ""
+    difficulty: 1
+    expected:
+      - { key: "Ef_eV_atom", value: -0.04, tolerance: 0.1, unit: "eV/atom" }
+
+  - id: "L4_HEA_EOS"
+    paper_id: "L4"
+    doi: "10.1038/s41524-024-01335-1"
+    calc_type: "eos"
+    formula: "Fe"
+    space_group: "Im-3m"
+    mp_id: "mp-13"
+    difficulty: 3
+    expected:
+      - { key: "a0_A", value: 2.87, tolerance: 0.06, unit: "angstrom" }
+
+  - id: "L5_SrTiO3_formation"
+    paper_id: "L5"
+    doi: "10.1038/sdata.2017.153"
+    calc_type: "formation_energy"
+    formula: "SrTiO3"
+    space_group: "Pm-3m"
+    mp_id: "mp-5229"
+    difficulty: 2
+    expected:
+      - { key: "Ef_eV_atom", value: -1.7, tolerance: 0.2, unit: "eV/atom" }
+
+  - id: "L6_MgB2_EOS"
+    paper_id: "L6"
+    doi: "10.1038/s41524-024-01475-4"
+    calc_type: "eos"
+    formula: "MgB2"
+    space_group: "P6/mmm"
+    mp_id: "mp-763"
+    difficulty: 3
+    expected:
+      - { key: "a0_A", value: 3.08, tolerance: 0.06, unit: "angstrom" }

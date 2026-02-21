@@ -1,0 +1,6 @@
+# Literature reproduction benchmark configuration.
+modes: ["planner"]
+k: 1
+output_dir: "playground/mat_master/evaluation/literature_benchmark/runs"
+run_label: "lit_bench"
+mat_config_path: "configs/mat_master/config.yaml"
