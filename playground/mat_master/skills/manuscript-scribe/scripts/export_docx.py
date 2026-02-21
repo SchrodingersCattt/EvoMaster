@@ -94,6 +94,52 @@ def _add_chemical_formula(paragraph, formula: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# CJK spacing fix
+# ---------------------------------------------------------------------------
+
+# CJK unified ideographs + extensions + compatibility
+_CJK_CHAR = (
+    r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff"
+    r"\u3000-\u303f\uff00-\uffef"
+    r"\u2e80-\u2eff\u3100-\u312f]"
+)
+
+_CJK_SPACE_AFTER = re.compile(
+    rf"({_CJK_CHAR})\s+([\d(A-Za-z\u2212\u2013\u2014\u00b1\u2248\u2264\u2265<>≈±])"
+)
+_CJK_SPACE_BEFORE = re.compile(
+    rf"([\d)A-Za-z%°\u2212\u2013\u00b1\u2248\u2264\u2265])\s+({_CJK_CHAR})"
+)
+
+
+def _fix_cjk_spacing(text: str) -> str:
+    """Remove spurious spaces between CJK characters and adjacent numbers/units.
+
+    Rules:
+    * CJK + space + digit/latin → remove space  (约 1.9 → 约1.9)
+    * digit/latin + space + CJK → remove space  (eV 的  → eV的)
+    * Latin + space + Latin is preserved          (1.9 eV stays)
+    """
+    text = _CJK_SPACE_AFTER.sub(r"\1\2", text)
+    text = _CJK_SPACE_BEFORE.sub(r"\1\2", text)
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Markdown escape stripping (for science notation)
+# ---------------------------------------------------------------------------
+
+def _strip_md_escapes(text: str) -> str:
+    r"""Remove Markdown backslash escapes that break science notation.
+
+    ``\_\{g\}``  →  ``_{g}``
+    ``\*E\*``    →  ``*E*``
+    Only strips escapes before ``_``, ``{``, ``}``, ``*``, ``^``, ``-``.
+    """
+    return re.sub(r"\\([_{}\-*^])", r"\1", text)
+
+
+# ---------------------------------------------------------------------------
 # Smart inline formatting: subscripts, superscripts, chemical formulas
 # ---------------------------------------------------------------------------
 
@@ -137,10 +183,16 @@ def _add_plain_text_with_science(paragraph, text: str) -> None:
     subscript/superscript notation.
 
     Handles:
-      - _{text} -> Word subscript
+      - _{text} -> Word subscript  (also after Markdown escape stripping)
       - ^{text} -> Word superscript
       - Chemical formulas (CO2, H2O, Fe2O3) -> element + subscript numbers
+      - CJK spacing fix (remove spurious spaces between CJK and digits/units)
     """
+    # Strip Markdown backslash escapes that hide science notation
+    text = _strip_md_escapes(text)
+    # Fix CJK spacing before emitting runs
+    text = _fix_cjk_spacing(text)
+
     # Pattern for sub/superscript notation and potential chemical formulas
     pattern = re.compile(
         r"(_\{([^}]+)\})"          # _{text} subscript
@@ -177,11 +229,14 @@ def _add_formatted_text(paragraph, text: str, is_reference_entry: bool = False) 
     """Parse inline Markdown and add runs with formatting to a paragraph.
 
     Handles: **bold**, *italic*, `code`, [n](url) citations, _{sub}, ^{sup},
-    chemical formulas (CO2, H2O, etc.).
+    chemical formulas (CO2, H2O, etc.), CJK spacing fixes.
 
     If is_reference_entry=True, applies special formatting: journal names italic,
     year bold, page-range en-dash.
     """
+    # Strip Markdown backslash escapes early so \_\{g\} becomes _{g}
+    text = _strip_md_escapes(text)
+
     if is_reference_entry:
         _add_reference_entry(paragraph, text)
         return

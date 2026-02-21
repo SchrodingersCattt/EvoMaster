@@ -13,6 +13,8 @@ import json
 import logging
 from typing import Any
 
+logger = logging.getLogger(__name__)
+
 from evomaster.core.exp import BaseExp
 from evomaster.utils.types import Dialog, SystemMessage, UserMessage
 
@@ -29,7 +31,8 @@ def _get_mat_master_config(config) -> dict:
         else:
             d = dict(config) if config else {}
         return d.get("mat_master") or {}
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to parse mat_master config: %s", exc)
         return {}
 
 
@@ -116,6 +119,7 @@ SYSTEM CONSTRAINTS:
 1. Local Environment: The local sandbox supports Python scripting, data manipulation, and lightweight simulations (e.g., ASE, Pymatgen). It does NOT provide {block}, {sw} run services locally.
 2. Remote Delegation: Heavy calculations ({sw}) are submitted via MCP tools ({sm}) and monitored via the job-manager skill. This is handled within STANDARD_EXECUTION; no separate routing is needed.
 3. Tool Availability: Use the provided 'Available Tools' list to decide if a programmatic capability is missing (SKILL_EVOLUTION) or can be fulfilled by existing tools and skills (STANDARD_EXECUTION). Always check the full tool list before concluding a tool is missing.
+4. Characterization routing baseline: NMR/XRD/electron-microscopy requests should default to STANDARD_EXECUTION when dedicated MCP tools exist (e.g., mat_nmr_NMR_search_tool, mat_nmr_NMR_predict_tool, mat_nmr_NMR_reverse_predict_tool, mat_xrd_xrd_phase_identification, mat_electron_microscope_get_electron_microscope_recognize). Do NOT choose SKILL_EVOLUTION for these unless the user requests a clearly missing capability.
 
 ROUTING CATEGORIES:
 A. [SKILL_EVOLUTION]: Choose this IF AND ONLY IF the task requires a programmatic tool or specific Python capability that is strictly absent from the 'Available Tools' list, necessitating the generation of a new script. Do NOT choose this if a matching tool already exists (e.g., mat_binary_calc_run_cp2k for CP2K tasks, job-manager for monitoring calculation jobs).

@@ -132,7 +132,7 @@ class MCPTool(BaseTool):
             args = json.loads(args_json)
             self.logger.debug(f"Executing MCP tool {self._tool_name} with args: {args}")
 
-            # 2. Path adaptor (calculation): path args must be OSS links; local paths → upload then pass URL
+            # 2. Path adaptor: path args must be URL links; local paths → upload then pass OSS URL
             path_adaptor = getattr(self, '_path_adaptor', None)
             if path_adaptor is not None:
                 workspace_path = (

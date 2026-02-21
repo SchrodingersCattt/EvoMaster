@@ -6,7 +6,7 @@ skill_type: operator
 
 # Manuscript Scribe Skill
 
-The "Ghostwriter" for MatMaster. Output is always to **files**; chat is only for instructions and progress.
+The "Ghostwriter" for MatMaster. Primary output is **files**. In planner mode, full-document chat output is expected for final delivery; in direct mode, default to concise summary + file path unless the user asks for full text.
 
 **When NOT to use**: If the user is only asking a technical question (e.g. "what is X?", "how does Y work?") and does **not** ask for a paper/report/写一篇/输出到文件, do **not** invoke this skill. Use 1–2 mat_sn or web searches, answer in chat, and finish. Use manuscript-scribe only when the deliverable is clearly a **file** (paper, report, section to file).
 
@@ -65,7 +65,17 @@ So: **one search → agent LLM summary → append to temp file**; then concatena
 
 Do not skip the validate and assemble steps: writing is chunked (or built in temp files), validated for length/completeness, then concatenated into one long document, then polished with LLM.
 
-**Delivery**: When the final manuscript is assembled and polished, **first output the complete final document** in your reply (message text) so the user sees it in the chat/frontend; then call finish. The .md file should already be written; your reply makes the document visible to the user. Do not only say "Saved to path" without outputting the document.
+## Resumable pipeline (recommended for long tasks)
+
+For long-running writing tasks, keep persistent workflow state:
+
+- Use `run_pipeline.py --state _tmp/manuscript/state.json --resume` for stage orchestration/checkpoints.
+- Pass `--state _tmp/manuscript/state.json --resume` to `write_section.py`, `validate_content.py`, and `assemble_manuscript.py`.
+- Structured stage status is emitted as `LONGTASK_RESULT_JSON: {...}` for reliable planner/guard parsing.
+
+**Delivery (mode-aware)**:
+- **Planner mode**: When the final manuscript is assembled and polished, output the complete final document in chat, then call finish.
+- **Direct mode**: Default to concise summary + file path. Output full document text only when the user explicitly asks for full content in chat.
 
 ## Chunked writing (how to get substantial sections)
 
@@ -111,41 +121,64 @@ Academic writing must not skip definitions or leave formulas unexplained.
 - **Concept relationships**: State **how concepts relate**—dependence, contrast, hierarchy, or causal link. Do not list concepts in isolation.
 - **Examples (optional)**: Where helpful, illustrate with concrete examples from retrieval (specific material, method, or result).
 
-## Typographic style (mandatory)
+## Typographic style (mandatory for all manuscript-scribe output)
 
-Full details: `get_reference` with reference_name="typographic_style.md". Key rules that the LLM MUST follow when writing:
+The export scripts (`export_docx.py`, `export_latex.py`) apply many of these automatically, but the **LLM must produce correctly formatted Markdown** for the conversion to work.
 
 ### Content & expression (especially computational reports)
-- **No raw input keywords/variable names** (`RUN_TYPE ENERGY`, `EPS_SCF`, `CUTOFF 600`). Use physical descriptions: "single-point energy calculation", "self-consistent convergence threshold", "plane-wave cutoff of 600 Ry".
-- **No file names/paths** (`cp2k.inp`, `*.pdos`). Use "the input file", "the PDOS data", "the orbital cube file".
-- **Mechanism-oriented narrative**: Build toward physical interpretation (e.g. orbital analysis → charge-transfer assignment).
+- **No raw input keywords or variable names** (`RUN_TYPE ENERGY`, `EPS_SCF`, `CUTOFF 600`, `&DFT ... &END DFT`). Use physical descriptions: "single-point total-energy calculation", "self-consistent convergence threshold", "plane-wave cutoff of 600 Ry", "projected density of states".
+- **No file names or paths** (`cp2k.inp`, `output.log`, `*.pdos`, `HOCO_CUBE.cube`). Use "the input file", "the output log", "the PDOS data", "the orbital cube file".
+- **Mechanism-oriented narrative**: Build toward physical interpretation — e.g. use HOCO/LUCO spatial separation and PDOS decomposition to support a charge-transfer assignment (MLCT, MLLCT, etc.), not just list numbers.
 
 ### Terminology & periodic systems
-- Define all abbreviations at first use; reuse the abbreviation afterward.
-- **Periodic systems**: Use **HOCO/LUCO** (crystal orbitals), NOT HOMO/LUMO. Use **VBM/CBM** for band edges.
+- **Define every abbreviation** at first use: "density functional theory (DFT)", "projected density of states (PDOS)". After the definition, use only the abbreviation.
+- **Periodic systems**: Use **HOCO / LUCO** (highest occupied / lowest unoccupied crystal orbital), NOT HOMO / LUMO. At first use, add: "In periodic systems these are crystal orbitals rather than molecular orbitals, denoted HOCO and LUCO."
+- **Band-edge terminology**: Use "valence-band maximum (VBM)" and "conduction-band minimum (CBM)" for periodic solids, not "HOMO energy" / "LUMO energy".
 
-### Physical quantities & formatting in Markdown
-- Italic for scalar quantities: `*U*`, `*E*`, `*k*`, `*T*`.
-- Subscripts: `_{text}` → `*U*_{eff}`, `*E*_{F}`, `*E*_{g}`, `*k*_{B}`. Export scripts convert to Word subscript / LaTeX `\mathrm{}`.
-- Superscripts: `^{text}` → `10^{−6}`, `cm^{−1}`. Export scripts convert to Word superscript / LaTeX `^{}`.
-- **No Unicode fake sub/superscripts** (`³`, `₂`, `⁻⁶`); use `^{}`/`_{}` notation.
+### Physical quantities & font conventions in Markdown
+- **Italic for scalar physical quantities**: `*U*`, `*E*`, `*k*`, `*T*`, `*V*`. Bold for vectors: `**F**`, `**k**`.
+- **Subscripts**: `_{text}` notation: `*U*_{eff}`, `*E*_{F}`, `*E*_{g}`, `*k*_{B}`. Export scripts convert to Word subscript / LaTeX `_{\mathrm{...}}`.
+- **Superscripts**: `^{text}` notation: `10^{−6}`, `cm^{−1}`, `Å^{2}`. Export scripts convert to Word superscript / LaTeX `^{}`.
+- **Descriptive subscripts are roman** (upright), not italic. Examples: *U*_{eff} — *U* italic, "eff" roman; *E*_{F} — "F" roman (Fermi); *E*_{g} — "g" roman (gap); *k*_{B} — "B" roman (Boltzmann).
+- Physical quantity symbols: **always italic** (*U*, *E*, *T*, *k*, *V*, *P*, *H*, *G*, *S*).
+- **No Unicode fake superscripts/subscripts**: Do NOT use `³`, `₂`, `⁻⁶`. Use `^{3}`, `_{2}`, `^{−6}`. Exception: in pure Markdown output (no export), Unicode is acceptable as a fallback.
 
-### Symbols
-- **Range/bond**: en-dash "–" (U+2013): `1.88–1.89 Å`, `Cu–N bond`.
-- **Negative**: minus "−" (U+2212): `−0.5 eV`, `10^{−6}`.
-- **Hyphen** only for compound adjectives: `self-consistent`, `plane-wave`.
+### Symbols: dash and minus
+- **Range / connection: en-dash "–"** (U+2013), NOT hyphen "-". Examples: `1.88–1.89 Å`, `pp. 57–70`, `Cu–N bond`.
+- **Negative sign: minus "−"** (U+2212), NOT hyphen. Examples: `−6`, `−0.5 eV`, `10^{−6}`.
+- **Hyphen "-"** only for compound adjectives: `self-consistent`, `plane-wave`, `Broyden-type`.
+- The LLM must use the correct Unicode characters (–, −) in the Markdown source. The export scripts preserve them.
 
-### Chemical formulas
-- Element order: Hill system (C, H, then alphabetical). No spaces between elements.
-- Counts as subscripts: `C_{7}H_{8}N_{2}O` or simple `CO2` (auto-detected by export scripts).
+### Chemical formula formatting
+- **Element order**: Hill system — C first, H second, then remaining elements alphabetically. For inorganic: electropositive first. Examples: `CH_{4}`, `C_{79}H_{88}N_{23}O_{12}S_{16}Cu_{19}`.
+- **No spaces** between elements in a formula.
+- **Element counts as subscripts**: Write `C_{7}H_{8}N_{2}O`. Export scripts convert `_{n}` to proper subscripts. For simple inline mentions, export scripts also auto-detect patterns like `CO2`, `H2O`, `Fe2O3`.
 
 ### Significant figures
-- Match precision to method accuracy (DFT bond lengths: 2 decimals, band gaps: 2 decimals).
-- Use "≈" for approximate values.
+- **Match precision to method accuracy**: DFT bond lengths 2 decimals (1.89 Å, not 1.893742 Å), band gaps 2 decimals (2.34 eV), lattice parameters 3–4 decimals.
+- **Use "≈"** for approximate values: "the band gap is ≈ 2.3 eV".
+- Do not pile unnecessary decimals: `5 × 10^{−6}` not `5.000000 × 10^{−6}`.
 
 ### Reference list format
 - `[n] Authors. Title. *Journal*, **Year**, Volume, Pages. URL`
-- Journal italic, year bold, page range with en-dash.
+- **Journal name**: italic (*J. Chem. Phys.*). **Year**: bold (**2020**). **Page range**: en-dash (477–506, not 477-506). Article numbers acceptable (e.g. 194103).
+- Export scripts auto-format: detect journal names (italic), years (bold), page ranges (en-dash).
+
+### Quick reference: LLM vs export responsibilities
+
+| Rule | LLM writes (Markdown) | Export script handles |
+|------|----------------------|---------------------|
+| Italic physics quantities | `*E*`, `*U*` | Convert to italic font |
+| Subscripts | `_{eff}`, `_{2}` | Word subscript / LaTeX `_{\mathrm{}}` |
+| Superscripts | `^{−6}`, `^{2}` | Word superscript / LaTeX `^{}` |
+| Chemical formula subscripts | `C_{7}H_{8}` or `CO2` | Auto-detect and subscript numbers |
+| En-dash for ranges | `–` (U+2013) | Preserve |
+| Minus sign | `−` (U+2212) | Preserve |
+| No raw keywords | Describe physically | N/A |
+| No file paths | Use generic descriptions | N/A |
+| HOCO/LUCO terminology | Use correct terms | N/A |
+| Reference formatting | `*Journal*, **Year**, Vol, Pages` | Auto-detect and format |
+| Significant figures | Round appropriately | N/A |
 
 ## Citation and references (mandatory)
 
@@ -195,6 +228,7 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
   4. **Information flow**: Checks cross-section term overlap (Methods terms should appear in Results, Results terms in Discussion).
   5. **Section ordering**: Verifies sections match profile's expected order.
 * **Output**: Prints summary; optionally writes JSON report to `--report`.
+* **Status contract**: Emits `LONGTASK_RESULT_JSON` with `status=completed` (pass) or `status=retryable_error` (issues to fix).
 
 ### `assemble_manuscript.py` (concatenate + review)
 
@@ -210,6 +244,17 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
   6. **Check 4 – Content validation** (with `--check_length --profile`): Run full word-count and content validation.
 * **--profile**: Use the profile's section order instead of the default (Abstract, Intro, Methods, Results, Discussion, References).
 * **Output**: Writes the assembled manuscript to `--output` and prints reports; optionally writes `--report report.json`.
+* **Status contract**: Emits `LONGTASK_RESULT_JSON` with `status=completed` (pass) or `status=retryable_error` (consistency/content issues to fix).
+
+### `run_pipeline.py` (resumable stage orchestrator)
+
+* **Usage**:
+  - Initialize: `python run_pipeline.py --stage init --title "My Paper" --profile generic --state _tmp/manuscript/state.json`
+  - Checkpoint: `python run_pipeline.py --stage checkpoint --next_stage draft --state _tmp/manuscript/state.json --resume`
+  - Validate stage: `python run_pipeline.py --stage validate --profile generic --draft draft.md --planner_mode --state _tmp/manuscript/state.json --resume`
+  - Assemble stage: `python run_pipeline.py --stage assemble --profile generic --draft draft.md --output final.md --export all --state _tmp/manuscript/state.json --resume`
+  - Status: `python run_pipeline.py --stage status --state _tmp/manuscript/state.json --resume`
+* **Logic**: Persists `state.json` + `events.jsonl`, proxies validate/assemble stages, and emits structured status for resume-friendly orchestration.
 
 ### `append_chunk.py`
 
@@ -273,7 +318,7 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 
 ## Tool (via use_skill)
 
-- **run_script** with **script_name**: `init_manuscript.py`, `write_section.py`, `append_chunk.py`, `validate_content.py`, `assemble_manuscript.py`, `polish_text.py`, `export_docx.py`, or `export_latex.py`; **script_args** as in Usage above.
+- **run_script** with **script_name**: `init_manuscript.py`, `write_section.py`, `append_chunk.py`, `validate_content.py`, `assemble_manuscript.py`, `run_pipeline.py`, `polish_text.py`, `export_docx.py`, or `export_latex.py`; **script_args** as in Usage above.
 
 ## Rules
 
@@ -281,6 +326,7 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 * **Required args**: init_manuscript.py always needs --title; pass it in script_args (e.g. script_args="--title \"My Paper\" --template generic"). assemble_manuscript.py always needs **--output** and one of **--draft** or **--sections_dir** (e.g. script_args="--draft draft_manuscript.md --output final.md").
 * **Long section content (critical)**: Section content passed via **--content** in script_args can be truncated by the tool layer (e.g. ~500–1000 chars). For any section longer than a short paragraph (lists, multiple refs, 2+ paragraphs), **write the content to a file first** (e.g. with str_replace_editor or execute_bash), then call `write_section.py --section "SectionName" --content_file path/to/section.md --draft draft_manuscript.md`. Do not rely on long --content strings for Summary, State-of-the-Art, or References.
 * **Chunked writing**: Use multiple `write_section.py` calls per section (first call creates, further calls use `--append`) or build the full section in a file then pass with `--content_file`; the script does not expand short text.
+* **Long-task state (recommended)**: Use `--state _tmp/manuscript/state.json --resume` on write/validate/assemble stages for deterministic resume.
 * **Profile**: Always pass `--profile <name>` to init_manuscript, write_section, validate_content, and assemble_manuscript. Use `computational_report` for DFT/MD write-ups, `patent` for patent apps, `thesis_section` for thesis chapters, etc.
 * Citations: **text + hyperlink** to original source; References section must match in-text [n] exactly (see reference/citation_and_references.md).
 * Always write long content to **files**; one section per call for `write_section.py`.
@@ -288,4 +334,4 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 * Before finalizing, run `validate_content.py` then `assemble_manuscript.py` with `--validate` and address term, abbreviation, reference, and word-count checks.
 * Preferred long-form flow: after each search, summarize with the agent LLM and append to a temp file (`append_chunk.py`); then build sections from those files, validate, assemble into one document, and run `polish_text.py --use_llm` for point-by-point revision.
 * **Export**: `assemble_manuscript.py` auto-exports to `.tex`+`.bib` and `.docx` by default (`--export all`). Word export requires `python-docx` (gracefully skipped if missing). Use `--export md` to skip.
-* **Typographic rules**: Follow the mandatory typographic style (see section above). Use `get_reference` with reference_name="typographic_style.md" for the full guide. The export scripts handle Word subscript/superscript and chemical formula formatting, but the LLM must write correct Markdown notation (`_{text}`, `^{text}`, en-dash "–", minus "−").
+* **Typographic rules**: Follow the mandatory typographic style section above. The export scripts handle Word subscript/superscript and chemical formula formatting, but the LLM must write correct Markdown notation (`_{text}`, `^{text}`, en-dash "–", minus "−").

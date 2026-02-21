@@ -304,8 +304,30 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
             "prior art": "Background Art",
             "technical background": "Background Art",
             "invention summary": "Summary of Invention",
+            "invention_summary": "Summary of Invention",
             "description": "Detailed Description",
             "embodiments": "Detailed Description",
+            # Chinese headings
+            "技术领域": "Technical Field",
+            "背景技术": "Background Art",
+            "发明内容": "Summary of Invention",
+            "具体实施方式": "Detailed Description",
+            "具体实施例": "Detailed Description",
+            "实施方式": "Detailed Description",
+            "权利要求": "Claims",
+            "权利要求书": "Claims",
+            "摘要": "Abstract",
+            # File-stem / snake_case / compact variants
+            "technical_field": "Technical Field",
+            "technicalfield": "Technical Field",
+            "background_art": "Background Art",
+            "backgroundart": "Background Art",
+            "summary_of_invention": "Summary of Invention",
+            "summaryofinvention": "Summary of Invention",
+            "detailed_description": "Detailed Description",
+            "detaileddescription": "Detailed Description",
+            "abstract_patent": "Abstract",
+            "abstractpatent": "Abstract",
         },
         "sections": [
             "Technical Field",
@@ -319,7 +341,7 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
         "section_meta": {
             "Technical Field": {
                 "min_words": 50,
-                "required_elements": ["field"],
+                "required_elements": ["field|技术领域"],
                 "writing_hint": (
                     "One or two sentences identifying the technical field of the "
                     "invention."
@@ -327,7 +349,7 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
             },
             "Background Art": {
                 "min_words": 300,
-                "required_elements": ["prior_art", "problem"],
+                "required_elements": ["prior_art|背景技术", "problem|问题"],
                 "writing_hint": (
                     "Describe the state of the art and the technical problem that "
                     "the invention solves. Reference prior patents or publications."
@@ -335,7 +357,7 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
             },
             "Summary of Invention": {
                 "min_words": 200,
-                "required_elements": ["solution", "advantage"],
+                "required_elements": ["solution|技术方案", "advantage|有益效果"],
                 "writing_hint": (
                     "Broad description of the invention and its advantages over "
                     "prior art. Should correspond to the broadest claim."
@@ -343,7 +365,7 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
             },
             "Detailed Description": {
                 "min_words": 1000,
-                "required_elements": ["embodiment", "examples"],
+                "required_elements": ["embodiment|实施例", "examples|示例"],
                 "writing_hint": (
                     "Full technical description with at least one preferred "
                     "embodiment. Include specific materials, conditions, dimensions, "
@@ -353,7 +375,10 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
             },
             "Claims": {
                 "min_words": 200,
-                "required_elements": ["independent_claim", "dependent_claims"],
+                "required_elements": [
+                    "independent_claim|独立权利要求",
+                    "dependent_claims|从属权利要求",
+                ],
                 "writing_hint": (
                     "Numbered claims. Start with the broadest independent claim, "
                     "then dependent claims that narrow it. Use patent claim language "
@@ -363,7 +388,7 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
             "Abstract": {
                 "min_words": 50,
                 "max_words": 150,
-                "required_elements": ["summary"],
+                "required_elements": ["summary|摘要"],
                 "writing_hint": (
                     "Brief summary of the disclosure for search/classification "
                     "purposes. Typically matches the broadest independent claim."
@@ -633,14 +658,22 @@ def resolve_section(profile_name: str, raw_section: str) -> str:
     profile = get_profile(profile_name)
     sections = profile["sections"]
 
-    # Normalise whitespace for comparison
-    key = re.sub(r"\s+", " ", raw_section.strip()).lower()
-    canonical_map = {re.sub(r"\s+", " ", s).lower(): s for s in sections}
+    def _norm(value: str) -> str:
+        # Accept section keys in snake_case, camelCase, kebab-case, and mixed spacing.
+        text = value.strip()
+        text = re.sub(r"[_\-]+", " ", text)
+        text = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text)
+        text = re.sub(r"\s+", " ", text)
+        return text.lower().strip()
+
+    key = _norm(raw_section)
+    canonical_map = {_norm(s): s for s in sections}
     if key in canonical_map:
         return canonical_map[key]
 
     aliases: dict[str, str] = profile.get("section_aliases", {})
-    mapped = aliases.get(key)
+    alias_map = {_norm(k): v for k, v in aliases.items()}
+    mapped = alias_map.get(key)
     if mapped and mapped in sections:
         return mapped
 

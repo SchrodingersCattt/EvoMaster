@@ -29,7 +29,7 @@ import json
 import re
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from evomaster.agent.tools.skill import SkillTool
@@ -212,8 +212,10 @@ def _download_from_results_txt(
     tag_raw = (download_tag or str(bohr_job_id) or "unknown_job").strip()
     safe_job = re.sub(r"[^\w.\-]", "_", tag_raw)[:80] or "unknown_job"
     run_stamp = time.strftime("%Y%m%d_%H%M%S")
-    # Use per-job + per-run directory to avoid cross-task overwrite.
-    download_dir = Path(workspace)/ "calculation_results" / f"run_{safe_job}_{run_stamp}"
+    # Resolve to absolute so long-path support kicks in on Windows.
+    download_dir = (
+        Path(workspace) / "calculation_results" / f"run_{safe_job}_{run_stamp}"
+    ).resolve()
     download_dir.mkdir(parents=True, exist_ok=True)
 
     results_txt_local = download_dir / "result_0_results.txt"
@@ -246,10 +248,16 @@ def _download_from_results_txt(
         tuple_vals = tuple_item.get("py/tuple")
         if not isinstance(tuple_vals, list) or not tuple_vals:
             return None
-        raw = tuple_vals[0]
-        if not isinstance(raw, str) or not raw.strip():
+        parts: list[str] = []
+        for item in tuple_vals:
+            if not isinstance(item, str):
+                continue
+            segment = item.replace("\\", "/").strip()
+            if segment:
+                parts.append(segment)
+        if not parts:
             return None
-        return raw.replace("\\", "/").strip()
+        return str(PurePosixPath(parts[0], *parts[1:]))
 
     referenced_files: list[str] = []
     for v in parsed.values():

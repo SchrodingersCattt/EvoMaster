@@ -44,6 +44,30 @@ _SKIP_DOWNLOAD_TOKENS = (
     "stderr",
 )
 
+# ---------------------------------------------------------------------------
+# Characterization file-transfer constants
+# ---------------------------------------------------------------------------
+
+_CHARACTERIZATION_PREFIXES: tuple[str, ...] = (
+    "mat_nmr_",
+    "mat_xrd_",
+    "mat_electron_microscope_",
+)
+
+_CHARACTERIZATION_ARTIFACT_KEYS: frozenset[str] = frozenset({
+    "chart_option_path",
+    "csv_path",
+    "raw_data_path",
+    "features_path",
+    "top_phases_csv_path",
+    "all_phases_path",
+    "chart_json_path",
+})
+
+_MOL_FILE_EXTS: frozenset[str] = frozenset({
+    ".xyz", ".pdb", ".sdf", ".mol", ".mol2", ".cif",
+})
+
 
 def _normalize_alias(text: str) -> str:
     return re.sub(r"[^a-z0-9]", "", text.lower())
@@ -52,6 +76,21 @@ def _normalize_alias(text: str) -> str:
 _DPA_MODEL_ALIAS_NORM_MAP = {
     _normalize_alias(k): v for k, v in _DPA_MODEL_ALIAS_MAP.items()
 }
+
+
+def _extract_artifact_urls(obj: Any, keys: frozenset[str]) -> list[str]:
+    """Recursively extract HTTP(S) URLs from known artifact-key values in a JSON object."""
+    urls: list[str] = []
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in keys and isinstance(v, str) and v.strip().startswith("http"):
+                urls.append(v.strip())
+            elif isinstance(v, (dict, list)):
+                urls.extend(_extract_artifact_urls(v, keys))
+    elif isinstance(obj, list):
+        for item in obj:
+            urls.extend(_extract_artifact_urls(item, keys))
+    return urls
 
 # ---------------------------------------------------------------------------
 # Pipeline
@@ -121,6 +160,7 @@ class MatToolCallbacks:
         pipeline.register_before(self.before_resolve_skill_reference_name)
         pipeline.register_before(self.before_resolve_dpa_model_alias)
         pipeline.register_before(self.before_patch_job_manager_bohr_id)
+        pipeline.register_before(self.before_upload_nmr_predict_files)
         # MCP business-error detection runs FIRST among after-callbacks so that
         # downstream hooks (track_async_submit, autodownload, etc.) can
         # short-circuit on ``info.get("error")``.
@@ -128,6 +168,7 @@ class MatToolCallbacks:
         pipeline.register_after(self.after_ask_human_interaction)
         pipeline.register_after(self.after_track_async_submit)
         pipeline.register_after(self.after_autodownload_oss_results)
+        pipeline.register_after(self.after_download_characterization_results)
         pipeline.register_after(self.after_survey_reminder)
 
     # ------------------------------------------------------------------
@@ -404,7 +445,7 @@ class MatToolCallbacks:
     def before_resolve_dpa_model_alias(self, tool_call: Any) -> None:
         """Resolve DPA short model key to hard-coded OSS URL."""
         tool_name = tool_call.function.name or ""
-        if not tool_name.startswith("mat_dpa_"):
+        if not (tool_name.startswith("mat_dpa_") or tool_name.startswith("mat_compdart_")):
             return
         args_str = tool_call.function.arguments or ""
         try:
@@ -480,6 +521,108 @@ class MatToolCallbacks:
             "before_tool: patched job-manager args with bohr_job_id for job_id=%s",
             job_id,
         )
+
+    # ------ characterization file upload ------
+
+    def _resolve_workspace_root(self) -> Path | None:
+        workspace = (
+            getattr(getattr(self.agent.session, "config", None), "workspace_path", None)
+            or ""
+        )
+        if not workspace:
+            return None
+        return Path(workspace).resolve()
+
+    @staticmethod
+    def _workspace_to_local_path(value: str, workspace_root: Path) -> Path | None:
+        import os
+        mount_prefix = os.environ.get("WORKSPACE_MOUNT_PREFIX", "/workspace")
+        value = value.strip().replace("\\", "/")
+        prefix_slash = mount_prefix.rstrip("/") + "/"
+        if value.startswith(prefix_slash):
+            rel = value[len(prefix_slash):].lstrip("/")
+            return (workspace_root / rel).resolve()
+        if value.startswith(mount_prefix):
+            rel = value[len(mount_prefix):].lstrip("/")
+            return (workspace_root / (rel or ".")).resolve()
+        path = Path(value)
+        if not path.is_absolute():
+            return (workspace_root / path).resolve()
+        return path
+
+    def before_upload_nmr_predict_files(self, tool_call: Any) -> None:
+        """Upload molecular file paths in NMR_predict_tool's ``smiles_list``.
+
+        ``smiles_list`` can mix SMILES strings and molecular file paths
+        (e.g. ``["CCO", "/workspace/mol.sdf"]``).  The path adaptor cannot
+        handle this mixed list because it would try to upload SMILES strings
+        as file paths.  This callback detects file-like items by extension
+        or directory separator, uploads them to OSS, and replaces with URLs
+        so the MCP tool receives only SMILES strings and OSS URLs.
+        """
+        tool_name = tool_call.function.name or ""
+        if tool_name != "mat_nmr_NMR_predict_tool":
+            return
+        args_str = tool_call.function.arguments or ""
+        try:
+            args = json.loads(args_str) if args_str else {}
+        except (json.JSONDecodeError, TypeError):
+            return
+        if not isinstance(args, dict):
+            return
+        smiles_list = args.get("smiles_list")
+        if not isinstance(smiles_list, list):
+            return
+
+        workspace_root = self._resolve_workspace_root()
+        if workspace_root is None:
+            return
+
+        changed = False
+        new_list: list[Any] = []
+        for item in smiles_list:
+            if not isinstance(item, str) or not item.strip():
+                new_list.append(item)
+                continue
+            val = item.strip()
+            # Already a URL → keep
+            if val.startswith("http://") or val.startswith("https://"):
+                new_list.append(item)
+                continue
+            # Heuristic: file path if it has directory separators or molecular file extension
+            is_file = ("/" in val or "\\" in val)
+            if not is_file:
+                suffix = Path(val).suffix.lower()
+                is_file = suffix in _MOL_FILE_EXTS
+            if not is_file:
+                new_list.append(item)
+                continue
+            # Resolve and upload
+            local = self._workspace_to_local_path(val, workspace_root)
+            if local is None or not local.exists() or not local.is_file():
+                self.logger.warning(
+                    "NMR_predict_tool: file in smiles_list not found: %s", val
+                )
+                new_list.append(item)
+                continue
+            try:
+                from evomaster.adaptors.calculation.oss_io import upload_file_to_oss
+
+                oss_url = upload_file_to_oss(local, workspace_root)
+                new_list.append(oss_url)
+                changed = True
+                self.logger.info(
+                    "before_tool: uploaded NMR predict file %s -> %s", val, oss_url
+                )
+            except Exception as e:
+                self.logger.warning(
+                    "before_tool: NMR predict file upload failed %s: %s", val, e
+                )
+                new_list.append(item)
+
+        if changed:
+            args["smiles_list"] = new_list
+            tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
 
     # ------------------------------------------------------------------
     # After callbacks
@@ -789,6 +932,83 @@ class MatToolCallbacks:
         new_obs = (observation or "") + "\n" + "\n".join(note_lines)
         new_info = dict(info or {})
         new_info["auto_downloaded_files"] = downloaded
+        return new_obs, new_info
+
+    def after_download_characterization_results(
+        self,
+        tool_call: Any,
+        observation: str,
+        info: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        """Download file artifacts from characterization MCP tool results.
+
+        Complements ``after_autodownload_oss_results`` by parsing structured
+        JSON output for known artifact keys (``chart_option_path``,
+        ``csv_path``, ``top_phases_csv_path``, etc.) and downloading ANY
+        HTTP(S) URL found in those keys—not only OSS URLs.  This catches
+        results hosted on Bohrium / dp.tech / MCP-server endpoints.
+
+        Skips URLs already downloaded by the upstream OSS callback to avoid
+        duplicate downloads.
+        """
+        tool_name = tool_call.function.name or ""
+        if not any(tool_name.startswith(p) for p in _CHARACTERIZATION_PREFIXES):
+            return observation, info
+        if info.get("error") is not None:
+            return observation, info
+
+        parsed = self._try_parse_observation_json(observation)
+        if parsed is None:
+            return observation, info
+
+        # Unwrap standard ``{"status":"success","observation":{...}}`` wrapper
+        inner = parsed.get("observation")
+        if isinstance(inner, dict):
+            parsed = inner
+
+        artifact_urls = _extract_artifact_urls(parsed, _CHARACTERIZATION_ARTIFACT_KEYS)
+        if not artifact_urls:
+            return observation, info
+
+        already = {d["url"] for d in info.get("auto_downloaded_files", [])}
+        new_urls = [
+            u for u in artifact_urls
+            if u not in already and not self._should_skip_download(u)
+        ]
+        if not new_urls:
+            return observation, info
+
+        download_dir = self._resolve_download_dir()
+        if download_dir is None:
+            return observation, info
+        download_dir.mkdir(parents=True, exist_ok=True)
+
+        downloaded: list[dict[str, str]] = []
+        for url in new_urls:
+            try:
+                local = self._download_single(url, download_dir)
+                if local is not None:
+                    downloaded.append({"url": url, "local_path": str(local)})
+            except Exception as e:
+                self.logger.warning(
+                    "Characterization artifact download failed (%s): %s", url, e
+                )
+
+        if not downloaded:
+            return observation, info
+
+        note_lines = [
+            "",
+            "[Characterization callback] Downloaded result artifacts to local workspace:",
+        ]
+        for item in downloaded:
+            note_lines.append(f"- {item['url']}")
+            note_lines.append(f"  local_path: {item['local_path']}")
+
+        new_obs = (observation or "") + "\n" + "\n".join(note_lines)
+        new_info = dict(info or {})
+        existing = list(new_info.get("auto_downloaded_files", []))
+        new_info["auto_downloaded_files"] = existing + downloaded
         return new_obs, new_info
 
     def after_survey_reminder(

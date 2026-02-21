@@ -1,14 +1,16 @@
-"""Path adaptor: Bohrium HTTPS storage and executor/sync logic for calculation MCP tools.
+"""Path adaptor: Bohrium HTTPS storage and executor/sync logic for MCP tools.
 
-All calculation-related MCP tools must receive OSS (or HTTP) links for path arguments.
-If the caller passes a local path, the adaptor uploads the file to OSS and passes
-the resulting URL.
+For any MCP tool routed through this adaptor, file/path arguments must be URL-based
+(OSS or HTTP). If the caller passes a local path, the adaptor uploads the file to OSS
+and passes the resulting URL.
 
-Path detection uses two layers (in order):
+Path detection uses three layers (in order):
 1. **Schema-driven**: ``"format": "path"`` in the JSON Schema (works when MCP SDK
    preserves Pydantic's format annotation).
 2. **Description fallback**: parse the tool docstring for ``param_name (Path):``
    patterns (handles SDKs that convert ``Path → str`` and strip the format).
+3. **Param-name heuristic**: parameter names ending with ``_path`` (catches servers
+   where both schema and docstring detection miss, e.g. ``processed_csv_path``).
 
 Model alias resolution: short model names like ``"DPA2.4-7M"`` are automatically
 resolved to their full OSS URLs by matching against URLs found in the parameter's
@@ -148,6 +150,22 @@ def _path_keys_from_description(description: Optional[str]) -> Set[str]:
 
     args_section = args_match.group(1)
     return set(_DOCSTRING_PATH_RE.findall(args_section))
+
+
+# ---------------------------------------------------------------------------
+# Layer 3: parameter-name heuristic
+# ---------------------------------------------------------------------------
+
+def _path_keys_from_param_names(input_schema: Optional[Dict[str, Any]]) -> Set[str]:
+    """Heuristic: parameter names ending with ``_path`` likely accept file paths.
+
+    Catches common conventions like ``processed_csv_path``, ``img_path``,
+    ``file_path`` even when both schema format and docstring detection miss.
+    """
+    if not input_schema or not isinstance(input_schema, dict):
+        return set()
+    props = input_schema.get('properties') or {}
+    return {k for k in props if k.endswith('_path')}
 
 
 # ---------------------------------------------------------------------------
@@ -318,7 +336,9 @@ def _resolve_one(value: str, workspace_root: Path) -> str:
 class CalculationPathAdaptor:
     """Bohrium storage + per-server executor/sync_tools.
 
-    Sync tools → executor None; else Bohrium executor with env auth.
+    For tools covered by this adaptor:
+    - local file paths are rewritten to OSS URLs
+    - sync tools → executor None; async tools → Bohrium executor with env auth
     """
 
     def __init__(self, calculation_executors: Optional[Dict[str, Any]] = None):
@@ -476,6 +496,12 @@ class CalculationPathAdaptor:
             path_arg_names = _path_keys_from_description(tool_description)
             if path_arg_names:
                 source = "description"
+
+        # Layer 3: param-name heuristic (names ending with _path)
+        if not path_arg_names:
+            path_arg_names = _path_keys_from_param_names(input_schema)
+            if path_arg_names:
+                source = "param_name"
 
         if path_arg_names:
             logger.debug(
