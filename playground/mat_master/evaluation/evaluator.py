@@ -83,7 +83,10 @@ class RubricEvaluator:
         question: QuestionItem,
         rubric: Rubric,
         answer: str,
+        tool_calls: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        if tool_calls is None:
+            tool_calls = []
         if question.level == "Safety":
             safety = self.evaluate_safety(question=question, answer=answer)
             return {
@@ -94,7 +97,9 @@ class RubricEvaluator:
                 "safety_veto": safety.model_dump(),
             }
         if question.scoring_checklist:
-            payload = self._evaluate_with_checklist(question=question, rubric=rubric, answer=answer)
+            payload = self._evaluate_with_checklist(
+                question=question, rubric=rubric, answer=answer, tool_calls=tool_calls,
+            )
         else:
             payload = self._evaluate_general(question=question, rubric=rubric, answer=answer)
         payload["safety_veto"] = SafetyVetoRecord().model_dump()
@@ -190,7 +195,14 @@ class RubricEvaluator:
             "confidence": confidence,
         }
 
-    def _evaluate_with_checklist(self, *, question: QuestionItem, rubric: Rubric, answer: str) -> dict[str, Any]:
+    def _evaluate_with_checklist(
+        self,
+        *,
+        question: QuestionItem,
+        rubric: Rubric,
+        answer: str,
+        tool_calls: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         ref_map = {item.key: item for item in question.reference_answers}
         check_outputs: dict[str, dict[str, Any]] = {}
         deductions: list[dict[str, Any]] = []
@@ -198,7 +210,10 @@ class RubricEvaluator:
         hit_weight = 0.0
 
         for item in question.scoring_checklist:
-            hit, evidence = self._evaluate_check_item(item=item, reference_map=ref_map, answer=answer, question=question)
+            hit, evidence = self._evaluate_check_item(
+                item=item, reference_map=ref_map, answer=answer, question=question,
+                tool_calls=tool_calls,
+            )
             check_outputs[item.id] = {
                 "hit": hit,
                 "evidence": evidence,
@@ -234,6 +249,7 @@ class RubricEvaluator:
         reference_map: dict[str, ReferenceAnswer],
         answer: str,
         question: QuestionItem,
+        tool_calls: list[dict[str, Any]],
     ) -> tuple[bool, str]:
         ref = reference_map.get(item.id)
         if item.verify == "exact_match":
@@ -250,6 +266,14 @@ class RubricEvaluator:
             return self._check_contains_all(answer=answer, expected=ref.value)
         if item.verify == "llm_judge":
             return self._check_with_llm(item=item, answer=answer, question=question)
+        if item.verify == "tool_called":
+            if ref is None:
+                return False, "missing reference answer"
+            return self._check_tool_called(tool_calls=tool_calls, expected=ref.value)
+        if item.verify == "tool_args_match":
+            if ref is None:
+                return False, "missing reference answer"
+            return self._check_tool_args_match(tool_calls=tool_calls, ref=ref)
         return False, f"unsupported verify type: {item.verify}"
 
     @staticmethod
@@ -325,6 +349,60 @@ class RubricEvaluator:
             return False, f"llm_judge parse error: {exc}"
 
     @staticmethod
+    def _check_tool_called(
+        *, tool_calls: list[dict[str, Any]], expected: Any,
+    ) -> tuple[bool, str]:
+        """Check whether a tool with the given name was called at least once.
+
+        ``expected`` may be a single tool name string or a list of acceptable
+        alternative tool names (any one match suffices).
+        """
+        targets = [str(t) for t in expected] if isinstance(expected, list) else [str(expected)]
+        for call in tool_calls:
+            name = call.get("tool_name", "")
+            if name in targets:
+                return True, f"tool '{name}' called at step {call.get('step')}"
+        called_names = sorted({c.get("tool_name", "") for c in tool_calls})
+        return False, f"none of {targets} called (called: {called_names})"
+
+    @staticmethod
+    def _check_tool_args_match(
+        *, tool_calls: list[dict[str, Any]], ref: ReferenceAnswer,
+    ) -> tuple[bool, str]:
+        """Check whether a tool was called with a matching argument value.
+
+        Requires ``ref.tool_name`` and ``ref.tool_arg``.  ``ref.tool_name``
+        may contain multiple names separated by ``|`` to accept alternatives.
+        For numeric values ``ref.tolerance`` is respected; otherwise an exact
+        comparison is used.
+        """
+        if not ref.tool_name or not ref.tool_arg:
+            return False, "tool_args_match requires tool_name and tool_arg in reference"
+        if isinstance(ref.tool_name, str) and "|" in ref.tool_name:
+            names = [n.strip() for n in ref.tool_name.split("|")]
+        else:
+            names = [ref.tool_name]
+        matching_calls = [c for c in tool_calls if c.get("tool_name") in names]
+        if not matching_calls:
+            return False, f"none of {names} was ever called"
+        for call in matching_calls:
+            args = call.get("tool_args", {})
+            if ref.tool_arg not in args:
+                continue
+            actual = args[ref.tool_arg]
+            if ref.tolerance is not None and isinstance(ref.value, (int, float)):
+                try:
+                    if abs(float(actual) - float(ref.value)) <= ref.tolerance:
+                        return True, f"{ref.tool_arg}={actual} (expected {ref.value}+/-{ref.tolerance})"
+                except (TypeError, ValueError):
+                    continue
+            else:
+                if actual == ref.value:
+                    return True, f"{ref.tool_arg}={actual}"
+        actuals = [c.get("tool_args", {}).get(ref.tool_arg, "<missing>") for c in matching_calls]
+        return False, f"no call to {names} had {ref.tool_arg}={ref.value} (found: {actuals})"
+
+    @staticmethod
     def _extract_numbers(text: str) -> list[float]:
         pattern = r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?"
         numbers: list[float] = []
@@ -354,12 +432,19 @@ class RubricEvaluator:
 
     @staticmethod
     def _parse_json(text: str) -> dict[str, Any]:
+        def _try_loads(s: str) -> dict[str, Any]:
+            try:
+                return json.loads(s)
+            except json.JSONDecodeError:
+                sanitized = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', s)
+                return json.loads(sanitized)
+
         stripped = text.strip()
         if stripped.startswith("{") and stripped.endswith("}"):
-            return json.loads(stripped)
+            return _try_loads(stripped)
         start = stripped.find("{")
         end = stripped.rfind("}")
         if start >= 0 and end > start:
-            return json.loads(stripped[start : end + 1])
+            return _try_loads(stripped[start : end + 1])
         raise ValueError("No JSON object found")
 

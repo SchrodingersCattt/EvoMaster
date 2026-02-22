@@ -37,15 +37,21 @@ questions:
         tolerance: 0.0
       - key: "required_fields"
         value: ["ordered_configurations_count", "output_files", "space_group_per_config"]
+      - key: "used_ordered_replica_tool"
+        value: "mat_sg_generate_ordered_replicas"
     scoring_checklist:
       - id: "structures_processed"
         criterion: "All 10 structures are processed."
-        weight: 0.40
+        weight: 0.35
         verify: "numerical_range"
+      - id: "used_ordered_replica_tool"
+        criterion: "Used the MCP ordered replica generation tool."
+        weight: 0.20
+        verify: "tool_called"
       - id: "required_fields"
-        criterion: "Each result includes config count, output files, and space group info."
-        weight: 0.60
-        verify: "contains_all"
+        criterion: "Each result includes ordered configuration count, output CIF files, and space group information."
+        weight: 0.45
+        verify: "llm_judge"
     touchpoints:
       full: ["All 10 structures resolved with enumerated ordered configurations."]
       partial: ["Most structures resolved but 1-2 skipped or incomplete."]
@@ -85,9 +91,9 @@ questions:
         weight: 0.30
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Output includes file, atom counts, and random seed per composition."
+        criterion: "Output includes POSCAR file, Fe/Ni atom counts, and random seed per composition."
         weight: 0.35
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["All 10 supercells with correct composition and reproducible seeds."]
       partial: ["Most supercells correct, 1-2 with wrong atom count."]
@@ -114,15 +120,24 @@ questions:
         tolerance: 0.0
       - key: "required_fields"
         value: ["doped_structure_file", "actual_dopant_count", "actual_fraction"]
+      - key: "used_db_fetch"
+        value:
+          - "mat_struct_db_fetch_structures_from_db"
+          - "mat_sg_build_bulk_structure_by_template"
+          - "mat_sg_build_bulk_structure_by_wyckoff"
     scoring_checklist:
       - id: "structures_doped"
         criterion: "All 10 doped structures are generated."
-        weight: 0.40
+        weight: 0.35
         verify: "numerical_range"
+      - id: "used_db_fetch"
+        criterion: "Used the structure database to fetch host structures."
+        weight: 0.20
+        verify: "tool_called"
       - id: "required_fields"
-        criterion: "Each output includes structure file, dopant count, and fraction."
-        weight: 0.60
-        verify: "contains_all"
+        criterion: "Each output includes doped structure file, actual dopant count, and actual doping fraction."
+        weight: 0.45
+        verify: "llm_judge"
     touchpoints:
       full: ["All 10 doped supercells generated with correct composition."]
       partial: ["Most structures doped, 1-2 with wrong fraction."]
@@ -154,13 +169,13 @@ questions:
         value: ["root_cause", "evidence", "fix_ISPIN", "fix_MAGMOM"]
     scoring_checklist:
       - id: "root_cause"
-        criterion: "Correctly identifies missing spin polarization as root cause."
+        criterion: "Correctly identifies missing spin polarization (ISPIN=1 on magnetic Fe2O3) as root cause."
         weight: 0.40
-        verify: "exact_match"
+        verify: "llm_judge"
       - id: "required_fields"
-        criterion: "Provides cause, evidence from logs, and concrete INCAR fixes."
+        criterion: "Provides root cause, evidence from SCF energy oscillation, and concrete INCAR fixes (ISPIN=2 and MAGMOM)."
         weight: 0.60
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Identifies ISPIN=1 bug, explains why Fe2O3 needs AFM spin, gives MAGMOM."]
       partial: ["Suggests enabling spin but no MAGMOM guidance."]
@@ -187,13 +202,13 @@ questions:
         value: ["root_cause", "evidence", "fix_ISMEAR", "fix_SIGMA"]
     scoring_checklist:
       - id: "root_cause"
-        criterion: "Correctly identifies ISMEAR/SIGMA mismatch for semiconductor."
+        criterion: "Correctly identifies ISMEAR/SIGMA mismatch (Methfessel-Paxton on semiconductor Si) as root cause."
         weight: 0.40
-        verify: "exact_match"
+        verify: "llm_judge"
       - id: "required_fields"
-        criterion: "Provides cause, evidence, and concrete ISMEAR/SIGMA fixes."
+        criterion: "Provides root cause, evidence from fractional occupation, and concrete fixes (ISMEAR=0 or -5, reduce SIGMA)."
         weight: 0.60
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Identifies ISMEAR=1+SIGMA=0.4 is wrong for semiconductors, recommends ISMEAR=0 or -5."]
       partial: ["Suggests reducing SIGMA but misses the ISMEAR issue."]
@@ -221,13 +236,13 @@ questions:
         value: ["root_cause", "evidence", "fix_EDIFF", "ediff_ediffg_rule"]
     scoring_checklist:
       - id: "root_cause"
-        criterion: "Correctly identifies EDIFF too loose as root cause."
+        criterion: "Correctly identifies EDIFF too loose (1E-3 causing force noise in LiCoO2 relax) as root cause."
         weight: 0.40
-        verify: "exact_match"
+        verify: "llm_judge"
       - id: "required_fields"
-        criterion: "Explains force noise mechanism and gives EDIFF recommendation."
+        criterion: "Explains force noise mechanism from loose EDIFF, and recommends tightening EDIFF to 1E-5 or 1E-6."
         weight: 0.60
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Links SCF precision to force noise, recommends EDIFF=1E-5 or 1E-6."]
       partial: ["Suggests tightening EDIFF without explaining the mechanism."]
@@ -255,13 +270,13 @@ questions:
         value: ["root_cause", "evidence", "fix_POTIM", "fix_initial_structure"]
     scoring_checklist:
       - id: "root_cause"
-        criterion: "Identifies both POTIM and initial structure issues."
+        criterion: "Identifies both POTIM too large (1.0) and wrong initial phase (cubic vs orthorhombic CsPbI3)."
         weight: 0.40
-        verify: "exact_match"
+        verify: "llm_judge"
       - id: "required_fields"
-        criterion: "Provides evidence from energy/force trajectory and dual fix."
+        criterion: "Provides evidence from energy/force divergence trajectory, and recommends both reducing POTIM and using correct Pnma phase."
         weight: 0.60
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Identifies POTIM=1.0 overshooting + wrong phase, recommends POTIM=0.1 and Pnma start."]
       partial: ["Identifies POTIM issue only without phase discussion."]
@@ -302,9 +317,9 @@ questions:
         weight: 0.35
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Includes fit quality/report keys."
+        criterion: "Reports V0, B0, and some measure of fit quality (R-squared, residuals, or similar)."
         weight: 0.30
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Reports EOS parameters with fit quality."]
       partial: ["Only one EOS parameter reported."]
@@ -344,9 +359,9 @@ questions:
         weight: 0.30
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Includes Hugoniot fit details and Rayleigh line analysis."
+        criterion: "Includes Hugoniot curve fitting details, Rayleigh line analysis, and C-J velocity/pressure values."
         weight: 0.40
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Reports C-J point with Hugoniot and Rayleigh line analysis."]
       partial: ["C-J values reported without fitting details."]
@@ -378,17 +393,17 @@ questions:
         value: ["gap_type", "gap_value", "vbm_kpoint", "cbm_kpoint"]
     scoring_checklist:
       - id: "gap_type"
-        criterion: "Band-gap type is correct."
+        criterion: "Band-gap type is correctly identified as indirect (not direct)."
         weight: 0.35
-        verify: "exact_match"
+        verify: "llm_judge"
       - id: "gap_value_eV"
         criterion: "Band-gap value is in tolerance."
         weight: 0.35
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Reports all mandatory fields."
+        criterion: "Reports band gap type, band gap value in eV, VBM k-point location, and CBM k-point location."
         weight: 0.30
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Correctly identifies indirect gap and value with k-points."]
       partial: ["Type correct but VBM/CBM k-points missing."]
@@ -419,15 +434,21 @@ questions:
         tolerance: 1.0
       - key: "required_fields"
         value: ["structure_file", "lattice_mismatch", "total_atoms", "interlayer_distance"]
+      - key: "used_interface_builder"
+        value: "mat_sg_build_surface_interface"
     scoring_checklist:
       - id: "mismatch_percent"
         criterion: "Lattice mismatch is below 2%."
-        weight: 0.35
+        weight: 0.30
         verify: "numerical_range"
+      - id: "used_interface_builder"
+        criterion: "Used the MCP surface interface builder tool for heterostructure."
+        weight: 0.20
+        verify: "tool_called"
       - id: "required_fields"
-        criterion: "Output includes structure file and all required metadata."
-        weight: 0.65
-        verify: "contains_all"
+        criterion: "Output includes structure file (POSCAR/CIF), lattice mismatch percentage, total atom count, and interlayer distance."
+        weight: 0.50
+        verify: "llm_judge"
     touchpoints:
       full: ["Heterostructure built with correct stacking, mismatch, and vacuum."]
       partial: ["Structure built but mismatch or vacuum incorrect."]
@@ -439,7 +460,7 @@ questions:
     intent: "Build a MoS2/WSe2 vertical vdW heterostructure for type-II band alignment studies."
     human_prompt_seed: >
       读取 `hetero_spec.json`，构建 MoS2/WSe2 垂直范德华异质结。
-      要求：(1) 构建共度超胞使晶格失配 < 3%；(2) 层间距 6.5 A；
+      要求：(1) 构建共度超胞使晶格失配 < 5%；(2) 层间距 6.5 A；
       (3) z 方向加 20 A 真空层。输出 POSCAR，报告失配度、超胞大小和总原子数。
     tags: ["heterostructure", "vdw", "TMD", "MoS2", "WSe2"]
     mode_scope: ["direct", "planner"]
@@ -450,22 +471,28 @@ questions:
         description: "Specification for MoS2/WSe2 heterostructure construction."
     reference_answers:
       - key: "mismatch_percent"
-        value: 3.0
-        tolerance: 2.0
+        value: 3.8
+        tolerance: 1.5
       - key: "required_fields"
         value: ["structure_file", "lattice_mismatch", "supercell_size", "total_atoms"]
+      - key: "used_interface_builder"
+        value: "mat_sg_build_surface_interface"
     scoring_checklist:
       - id: "mismatch_percent"
-        criterion: "Lattice mismatch is below 3%."
-        weight: 0.35
+        criterion: "Lattice mismatch is below 5%."
+        weight: 0.30
         verify: "numerical_range"
+      - id: "used_interface_builder"
+        criterion: "Used the MCP surface interface builder tool for heterostructure."
+        weight: 0.20
+        verify: "tool_called"
       - id: "required_fields"
-        criterion: "Output includes structure file and all required metadata."
-        weight: 0.65
-        verify: "contains_all"
+        criterion: "Output includes structure file, lattice mismatch percentage, supercell dimensions, and total atom count."
+        weight: 0.50
+        verify: "llm_judge"
     touchpoints:
       full: ["Commensurate heterostructure with correct layer stacking."]
-      partial: ["Structure built but mismatch too large."]
+      partial: ["Structure built but mismatch not reported."]
       fail: ["No valid heterostructure output."]
 
   # ============================================================
@@ -493,15 +520,29 @@ questions:
         tolerance: 0.0
       - key: "required_fields"
         value: ["structure_file", "total_atoms", "surface_area", "fixed_layers"]
+      - key: "used_slab_builder"
+        value: "mat_sg_build_surface_slab"
+      - key: "correct_miller"
+        value: [1, 1, 1]
+        tool_name: "mat_sg_build_surface_slab"
+        tool_arg: "miller_index"
     scoring_checklist:
+      - id: "used_slab_builder"
+        criterion: "Used the MCP surface slab builder tool."
+        weight: 0.15
+        verify: "tool_called"
+      - id: "correct_miller"
+        criterion: "Slab built with correct (111) Miller index."
+        weight: 0.20
+        verify: "tool_args_match"
       - id: "total_atoms"
-        criterion: "Total atom count is correct."
-        weight: 0.35
+        criterion: "Total atom count is correct (36 for 4-layer 3x3 FCC(111))."
+        weight: 0.30
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Output includes structure file and all required metadata."
-        weight: 0.65
-        verify: "contains_all"
+        criterion: "Output includes structure file, total atom count, surface area, and which layers are fixed."
+        weight: 0.35
+        verify: "llm_judge"
     touchpoints:
       full: ["Correct 4-layer Cu(111) slab with vacuum and fixed layers."]
       partial: ["Slab built but wrong layer count or vacuum."]
@@ -527,15 +568,29 @@ questions:
         value: ["structure_file", "termination_type", "total_atoms", "surface_area"]
       - key: "termination_type"
         value: "bridging_O_and_5c_Ti"
+      - key: "used_slab_builder"
+        value: "mat_sg_build_surface_slab"
+      - key: "correct_miller"
+        value: [1, 1, 0]
+        tool_name: "mat_sg_build_surface_slab"
+        tool_arg: "miller_index"
     scoring_checklist:
+      - id: "used_slab_builder"
+        criterion: "Used the MCP surface slab builder tool."
+        weight: 0.15
+        verify: "tool_called"
+      - id: "correct_miller"
+        criterion: "Slab built with correct (110) Miller index."
+        weight: 0.20
+        verify: "tool_args_match"
       - id: "termination_type"
-        criterion: "Surface termination is correctly identified and constructed."
-        weight: 0.40
-        verify: "exact_match"
+        criterion: "Surface termination includes bridging oxygen and 5-coordinated Ti atoms on rutile TiO2(110)."
+        weight: 0.30
+        verify: "llm_judge"
       - id: "required_fields"
-        criterion: "Output includes structure file and termination verification."
-        weight: 0.60
-        verify: "contains_all"
+        criterion: "Output includes structure file and verification of bridging-O and 5c-Ti surface termination."
+        weight: 0.35
+        verify: "llm_judge"
     touchpoints:
       full: ["Correct (110) slab with bridging-O termination verified."]
       partial: ["Slab cut but termination not verified."]
@@ -561,13 +616,27 @@ questions:
         oss_url: ""
         description: "Specification for Si(100) surface hydrogen passivation."
     reference_answers:
-      - key: "required_fields"
-        value: ["structure_file", "h_atoms_added", "all_bottom_si_4coordinated"]
+      - key: "used_slab_builder"
+        value: "mat_sg_build_surface_slab"
+      - key: "correct_miller"
+        value: [1, 0, 0]
+        tool_name: "mat_sg_build_surface_slab"
+        tool_arg: "miller_index"
+      - key: "passivation_quality"
+        value: "H atoms added to satisfy 4-coordination on bottom Si atoms"
     scoring_checklist:
-      - id: "required_fields"
-        criterion: "Output includes passivated structure and coordination verification."
-        weight: 1.0
-        verify: "contains_all"
+      - id: "used_slab_builder"
+        criterion: "Used MCP surface slab builder tool."
+        weight: 0.20
+        verify: "tool_called"
+      - id: "correct_miller"
+        criterion: "Slab built with correct (100) Miller index."
+        weight: 0.25
+        verify: "tool_args_match"
+      - id: "passivation_quality"
+        criterion: "Bottom Si atoms passivated with H to achieve 4-coordination, with Si-H bond length ~1.48 A."
+        weight: 0.55
+        verify: "llm_judge"
     touchpoints:
       full: ["All bottom dangling bonds passivated, verified 4-coordinated."]
       partial: ["H added but some bonds missed."]
@@ -591,11 +660,25 @@ questions:
     reference_answers:
       - key: "required_fields"
         value: ["structure_file", "undercoordinated_atoms_identified", "passivation_strategy", "charge_neutrality"]
+      - key: "used_slab_builder"
+        value: "mat_sg_build_surface_slab"
+      - key: "correct_miller"
+        value: [0, 0, 1]
+        tool_name: "mat_sg_build_surface_slab"
+        tool_arg: "miller_index"
     scoring_checklist:
+      - id: "used_slab_builder"
+        criterion: "Used MCP surface slab builder tool for cleaving."
+        weight: 0.15
+        verify: "tool_called"
+      - id: "correct_miller"
+        criterion: "Slab cleaved with correct (001) Miller index."
+        weight: 0.20
+        verify: "tool_args_match"
       - id: "required_fields"
-        criterion: "Output includes passivated structure with charge-neutral termination."
-        weight: 1.0
-        verify: "contains_all"
+        criterion: "Output includes passivated structure, identification of undercoordinated Pb/I atoms, passivation strategy, and charge neutrality verification."
+        weight: 0.65
+        verify: "llm_judge"
     touchpoints:
       full: ["All undercoordinated atoms passivated with charge neutrality."]
       partial: ["Partial passivation or charge imbalance."]
@@ -623,11 +706,26 @@ questions:
     reference_answers:
       - key: "required_fields"
         value: ["structure_file", "stoichiometry_verified", "layer_thickness_A", "vacuum_A"]
+      - key: "used_slab_builder"
+        value: "mat_sg_build_surface_slab"
+      - key: "correct_vacuum"
+        value: 20
+        tolerance: 2.0
+        tool_name: "mat_sg_build_surface_slab"
+        tool_arg: "vacuum"
     scoring_checklist:
+      - id: "used_slab_builder"
+        criterion: "Used MCP surface slab builder for exfoliation."
+        weight: 0.20
+        verify: "tool_called"
+      - id: "correct_vacuum"
+        criterion: "Vacuum layer set to ~20 A in slab builder call."
+        weight: 0.20
+        verify: "tool_args_match"
       - id: "required_fields"
-        criterion: "Monolayer extracted with correct stoichiometry and vacuum."
-        weight: 1.0
-        verify: "contains_all"
+        criterion: "Monolayer POSCAR output with verified MoS2 stoichiometry, reported layer thickness (~3.1 A), and vacuum layer (~20 A)."
+        weight: 0.60
+        verify: "llm_judge"
     touchpoints:
       full: ["Correct MoS2 monolayer with S-Mo-S trilayer and 20 A vacuum."]
       partial: ["Monolayer extracted but bilayer or wrong vacuum."]
@@ -651,11 +749,20 @@ questions:
     reference_answers:
       - key: "required_fields"
         value: ["structure_file", "no_Al_remaining", "OH_termination", "stoichiometry_verified"]
+      - key: "used_db_fetch"
+        value:
+          - "mat_struct_db_fetch_structures_from_db"
+          - "mat_sg_build_bulk_structure_by_template"
+          - "mat_sg_build_bulk_structure_by_wyckoff"
     scoring_checklist:
+      - id: "used_db_fetch"
+        criterion: "Used structure database or builder tool to obtain Ti3AlC2 MAX phase structure."
+        weight: 0.20
+        verify: "tool_called"
       - id: "required_fields"
-        criterion: "MXene derived with correct termination and no residual Al."
-        weight: 1.0
-        verify: "contains_all"
+        criterion: "MXene POSCAR output with no residual Al atoms, OH surface termination, and verified Ti3C2(OH)2 stoichiometry."
+        weight: 0.80
+        verify: "llm_judge"
     touchpoints:
       full: ["Ti3C2(OH)2 with correct stoichiometry and no Al."]
       partial: ["Al removed but no termination added."]

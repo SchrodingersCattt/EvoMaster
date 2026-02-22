@@ -30,6 +30,15 @@ questions:
     mode_scope: ["direct", "planner"]
     data_files: []
     reference_answers:
+      - key: "used_db_fetch"
+        value:
+          - "mat_struct_db_fetch_structures_from_db"
+          - "mat_sg_build_bulk_structure_by_template"
+          - "mat_sg_build_bulk_structure_by_wyckoff"
+      - key: "used_dpa_optimizer"
+        value:
+          - "mat_dpa_submit_optimize_structure"
+          - "mat_abacus_submit_abacus_eos"
       - key: "a0_A"
         value: 4.04
         tolerance: 0.08
@@ -39,18 +48,26 @@ questions:
       - key: "required_fields"
         value: ["volume_points", "fit_model", "a0", "b0", "failure_handling"]
     scoring_checklist:
+      - id: "used_db_fetch"
+        criterion: "Used structure database or builder tool to obtain Al FCC structure."
+        weight: 0.10
+        verify: "tool_called"
+      - id: "used_dpa_optimizer"
+        criterion: "Used DPA optimizer or ABACUS EOS tool for volume-scan calculations."
+        weight: 0.10
+        verify: "tool_called"
       - id: "a0_A"
         criterion: "Equilibrium lattice constant is in range."
-        weight: 0.30
+        weight: 0.25
         verify: "numerical_range"
       - id: "b0_GPa"
         criterion: "Bulk modulus is in range."
-        weight: 0.30
+        weight: 0.25
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Workflow report includes all mandatory stages."
-        weight: 0.40
-        verify: "contains_all"
+        criterion: "Report includes volume scan points, fit model identification, a0 and b0 values, and any failure handling notes."
+        weight: 0.30
+        verify: "llm_judge"
     touchpoints:
       full: ["End-to-end EOS workflow: database fetch -> volume scan -> fit -> report."]
       partial: ["EOS present but one target metric missing."]
@@ -73,20 +90,32 @@ questions:
     mode_scope: ["direct", "planner"]
     data_files: []
     reference_answers:
+      - key: "used_slab_builder"
+        value: "mat_sg_build_surface_slab"
+      - key: "used_dpa_optimizer"
+        value: "mat_dpa_submit_optimize_structure"
       - key: "surface_energy_J_m2"
         value: 1.25
         tolerance: 0.35
       - key: "required_fields"
         value: ["E_bulk_per_atom", "E_slab", "surface_area", "surface_energy", "convergence_check"]
     scoring_checklist:
+      - id: "used_slab_builder"
+        criterion: "Used MCP slab builder for MgO(100) surface construction."
+        weight: 0.10
+        verify: "tool_called"
+      - id: "used_dpa_optimizer"
+        criterion: "Used DPA optimizer for bulk and slab relaxation."
+        weight: 0.10
+        verify: "tool_called"
       - id: "surface_energy_J_m2"
         criterion: "Surface energy is in expected range."
-        weight: 0.40
+        weight: 0.35
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "All energy terms and surface area are explicitly reported."
-        weight: 0.60
-        verify: "contains_all"
+        criterion: "Report includes bulk energy per atom, slab total energy, surface area, computed surface energy, and convergence check."
+        weight: 0.45
+        verify: "llm_judge"
     touchpoints:
       full: ["Complete workflow with bulk reference, slab construction, and surface energy."]
       partial: ["Surface energy reported but bulk reference unclear."]
@@ -108,6 +137,8 @@ questions:
     mode_scope: ["direct", "planner"]
     data_files: []
     reference_answers:
+      - key: "used_band_calc"
+        value: "mat_abacus_submit_abacus_cal_band"
       - key: "gap_type"
         value: "indirect"
       - key: "gap_value_eV"
@@ -116,18 +147,22 @@ questions:
       - key: "required_fields"
         value: ["kpath", "gap_type", "gap_value", "uncertainty_note"]
     scoring_checklist:
+      - id: "used_band_calc"
+        criterion: "Used ABACUS band structure calculation tool."
+        weight: 0.10
+        verify: "tool_called"
       - id: "gap_type"
-        criterion: "Gap type is correct."
-        weight: 0.35
-        verify: "exact_match"
+        criterion: "Band-gap type is correctly identified as indirect (not direct)."
+        weight: 0.30
+        verify: "llm_judge"
       - id: "gap_value_eV"
         criterion: "Gap value is in expected DFT range."
-        weight: 0.30
+        weight: 0.25
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Workflow output includes all key report fields."
+        criterion: "Report includes high-symmetry k-path, gap type classification, gap value, and DFT uncertainty note."
         weight: 0.35
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Band workflow and report are complete with uncertainty statement."]
       partial: ["Report exists but lacks uncertainty statement."]
@@ -150,20 +185,32 @@ questions:
     mode_scope: ["direct", "planner"]
     data_files: []
     reference_answers:
+      - key: "used_defect_builder"
+        value: "mat_sg_make_defect_structure"
+      - key: "used_dpa_optimizer"
+        value: "mat_dpa_submit_optimize_structure"
       - key: "formation_energy_eV"
         value: 7.5
         tolerance: 1.5
       - key: "required_fields"
         value: ["E_defective", "E_perfect", "chemical_potential", "formation_energy"]
     scoring_checklist:
+      - id: "used_defect_builder"
+        criterion: "Used MCP defect structure builder to create O vacancy."
+        weight: 0.10
+        verify: "tool_called"
+      - id: "used_dpa_optimizer"
+        criterion: "Used DPA optimizer for perfect and defective cell relaxation."
+        weight: 0.10
+        verify: "tool_called"
       - id: "formation_energy_eV"
         criterion: "Vacancy formation energy is in tolerance."
-        weight: 0.45
+        weight: 0.35
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Expression terms are explicitly reported."
-        weight: 0.55
-        verify: "contains_all"
+        criterion: "Report includes defective/perfect cell energies, chemical potential definition, and formation energy formula."
+        weight: 0.45
+        verify: "llm_judge"
     touchpoints:
       full: ["Energy expression and numeric value both valid."]
       partial: ["Expression given but numeric value absent."]
@@ -205,9 +252,9 @@ questions:
         weight: 0.30
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Formula and unit treatment are explicitly documented."
+        criterion: "Report includes Kamlet-Jacobs equation, unit consistency check, velocity and pressure values."
         weight: 0.40
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Outputs physically consistent velocity/pressure with formula context."]
       partial: ["One target metric missing."]
@@ -230,20 +277,32 @@ questions:
     mode_scope: ["direct", "planner"]
     data_files: []
     reference_answers:
+      - key: "used_amorphous_builder"
+        value: "mat_sg_make_amorphous_structure"
+      - key: "used_dos_calc"
+        value: "mat_abacus_submit_abacus_dos_run"
       - key: "gap_value_eV"
         value: 6.2
         tolerance: 1.2
       - key: "required_fields"
         value: ["hybrid_setup", "acceleration_strategy", "gap_extraction", "cost_note"]
     scoring_checklist:
+      - id: "used_amorphous_builder"
+        criterion: "Used MCP amorphous structure builder for water box."
+        weight: 0.10
+        verify: "tool_called"
+      - id: "used_dos_calc"
+        criterion: "Used ABACUS DOS calculation for gap extraction."
+        weight: 0.10
+        verify: "tool_called"
       - id: "gap_value_eV"
         criterion: "Gap value is in tolerance."
-        weight: 0.35
+        weight: 0.30
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Workflow includes required setup/extraction/cost fields."
-        weight: 0.65
-        verify: "contains_all"
+        criterion: "Report includes hybrid functional setup, acceleration strategy description, gap extraction method, and cost estimate."
+        weight: 0.50
+        verify: "llm_judge"
     touchpoints:
       full: ["Workflow is complete and gap is extracted."]
       partial: ["Workflow present but extraction details weak."]
@@ -276,9 +335,9 @@ questions:
         weight: 0.40
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Extraction rule and units are explicit."
+        criterion: "Report includes phonon dispersion k-path, Gamma point extraction rule, and frequencies in cm-1 units."
         weight: 0.60
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Dispersion workflow and Gamma extraction are explicit."]
       partial: ["Computes dispersion but no extraction rule."]
@@ -314,9 +373,9 @@ questions:
         weight: 0.30
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Retry strategy includes all required control fields."
+        criterion: "Report includes failure classification table, per-class retry parameters, fallback rule, and stop condition."
         weight: 0.70
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Failure taxonomy and retry policy are complete."]
       partial: ["Taxonomy present but retry policy under-specified."]
