@@ -43,9 +43,9 @@ questions:
         weight: 0.25
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Contains required evidence and follow-up fields."
+        criterion: "Output includes list of kept candidates, list of excluded candidates, numeric reasoning for exclusions, and proposed next validation steps."
         weight: 0.50
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Candidate filtering is evidence-driven and complete."]
       partial: ["Filter decisions without explicit numeric evidence."]
@@ -82,9 +82,9 @@ questions:
         weight: 0.25
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Includes cause, two strategies, and verification signal."
+        criterion: "Output includes root cause explanation, two physically distinct repair strategies (A and B), and a verification signal to confirm the fix."
         weight: 0.50
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Diagnosis and dual-path repair are concrete."]
       partial: ["Only one repair strategy or weak verification plan."]
@@ -114,9 +114,9 @@ questions:
         weight: 0.30
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Per-class retry parameter mapping is complete."
+        criterion: "Output includes per-failure-class classification, retry parameters for each class, and a stop rule for retry loops."
         weight: 0.70
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Failure taxonomy and retry mapping are complete."]
       partial: ["Failure classes identified but retry settings vague."]
@@ -153,9 +153,9 @@ questions:
         weight: 0.25
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Includes cause hypotheses and re-fit protocol."
+        criterion: "Output includes identified outlier index, cause hypotheses, re-fit protocol, and expected R² improvement."
         weight: 0.45
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Outlier diagnosis is evidence-backed and actionable."]
       partial: ["Outlier detected but re-fit protocol weak."]
@@ -180,13 +180,13 @@ questions:
         value: ["phase_window", "stable_defect", "migration_path", "validation_metric"]
     scoring_checklist:
       - id: "stable_defect_label"
-        criterion: "Stable defect species is identified correctly."
+        criterion: "Correctly identifies the stable defect species as vacancy under the given chemical potential conditions."
         weight: 0.35
-        verify: "exact_match"
+        verify: "llm_judge"
       - id: "required_fields"
-        criterion: "Includes phase-window and migration-validation outputs."
+        criterion: "Output includes chemical potential phase window, stable defect identification, migration path proposal, and validation metric."
         weight: 0.65
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Phase conflict resolved with explicit follow-up path."]
       partial: ["Stable species guessed without phase-window evidence."]
@@ -216,9 +216,9 @@ questions:
         weight: 0.30
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Both branches and decision criterion are explicit."
+        criterion: "Output includes description of signal conflict, two disambiguation branches, and explicit decision criterion."
         weight: 0.70
-        verify: "contains_all"
+        verify: "llm_judge"
     touchpoints:
       full: ["Ambiguity is resolved by explicit branch strategy."]
       partial: ["Mentions branches without decision criterion."]
