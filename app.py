@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -13,6 +14,8 @@ from src.apis.api_router import api_router
 from src.base.base_res import BaseResponse
 from src.models.health import HealthResponse
 from src.models.root import RootResponse
+from src.services.agent_run_service import get_agent_run_service, init_playground
+from src.services.sessions_service import get_sessions_service
 from src.utils.constant import DB_CONFIG
 from src.utils.exceptions import BaseErrorResponse
 from src.utils.logger import LoggingConfig, setup_logging
@@ -26,15 +29,38 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
+    # 部署/重启后清理：上一进程若被终止，stream 可能未执行 release，DB 中会残留 active 会话
+    try:
+        n = get_sessions_service().reset_stale_active_sessions()
+        if n:
+            logger.info('Lifespan: reset %d stale active session(s) to idle.', n)
+    except Exception as e:
+        logger.warning('Lifespan: reset stale active sessions skipped: %s', e)
     # MatMaster Chat：提前初始化 playground，首条 /chat/send 无需等待
     try:
-        from src.services.agent_run_service import init_playground
-
         await init_playground()
         logger.info('MatMaster chat playground initialized in lifespan.')
     except Exception as e:
         logger.warning('MatMaster chat playground init skipped in lifespan: %s', e)
     yield
+    # 优雅退出：最多等待 30s 让当前 agent 任务结束，再关闭线程池
+    try:
+        svc = get_agent_run_service()
+        executor = svc.get_executor()
+        logger.info('Shutting down: waiting for agent executor (max 30s)...')
+        loop = asyncio.get_event_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: executor.shutdown(wait=True)),
+                timeout=30.0,
+            )
+            logger.info('Agent executor shut down.')
+        except asyncio.TimeoutError:
+            logger.warning(
+                'Agent executor shutdown timed out after 30s, proceeding with exit.'
+            )
+    except Exception as e:
+        logger.warning('Graceful shutdown skip: %s', e)
 
 
 app = FastAPI(
