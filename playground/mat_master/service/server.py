@@ -10,6 +10,7 @@ import importlib
 import logging
 import mimetypes
 import os
+import tempfile
 import yaml
 import queue
 import sys
@@ -21,7 +22,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
 # Ensure project root is on path (service is at playground/mat_master/service)
@@ -72,7 +73,14 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, _init_playground_sync)
     yield
-    # shutdown: nothing to tear down for now
+    if _cached_pg is not None:
+        s = _get_session()
+        if s is not None and hasattr(s, "close"):
+            try:
+                s.close()
+                logger.info("SSH session closed on shutdown.")
+            except Exception:
+                pass
 
 
 app = FastAPI(title="MatMaster Web Service", lifespan=lifespan)
@@ -178,10 +186,27 @@ def get_session_run_info(session_id: str):
 def list_session_files(session_id: str, path: str = ""):
     """List files under this session's workspace.
 
-    Always uses runs/mat_master_web/workspaces/<key>/ (never the single run_dir/workspace):
-    - If the session has a last run: key = last_task_id (e.g. ws_abc123).
-    - If no run yet: key = session_id (e.g. demo_session), folder created on first access.
+    For remote sessions (SSH/Docker), lists files on the remote host.
+    For local sessions, uses runs/mat_master_web/workspaces/<key>/.
     """
+    if _is_remote_session():
+        ws = _remote_workspace()
+        target = f"{ws.rstrip('/')}/{path}" if path else ws
+        if not _remote_is_dir(target):
+            raise HTTPException(status_code=404, detail="Path not found")
+        entries = _remote_list_dir(target)
+        if path:
+            for e in entries:
+                e["path"] = f"{path.rstrip('/')}/{e['name']}"
+        return {
+            "run_id": RUN_ID_WEB,
+            "path": path or ".",
+            "entries": entries,
+            "workspace_root": ws,
+            "task_id": session_id,
+        }
+
+    # --- local fallback ---
     try:
         base, task_id = _resolve_session_workspace(session_id, create=True)
     except HTTPException:
@@ -212,9 +237,30 @@ def list_session_files(session_id: str, path: str = ""):
 
 @app.get("/api/sessions/{session_id}/files/content")
 def get_session_file_content(session_id: str, path: str):
-    """Serve file content for display or download. path is required (relative path within workspace)."""
+    """Serve file content for display or download.
+
+    For remote sessions, downloads the file via session and returns bytes.
+    """
     if not path or not path.strip():
         raise HTTPException(status_code=400, detail="path is required")
+
+    if _is_remote_session():
+        ws = _remote_workspace()
+        remote_path = f"{ws.rstrip('/')}/{path.strip()}"
+        if not _remote_path_exists(remote_path):
+            raise HTTPException(status_code=404, detail="File not found")
+        if _remote_is_dir(remote_path):
+            raise HTTPException(status_code=400, detail="Path is a directory")
+        data = _remote_read_file(remote_path)
+        media_type, _ = mimetypes.guess_type(path.strip(), strict=False)
+        filename = path.strip().rsplit("/", 1)[-1]
+        return Response(
+            content=data,
+            media_type=media_type or "application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # --- local fallback ---
     base, _ = _resolve_session_workspace(session_id, create=False)
     target = (base / path.strip()).resolve()
     try:
@@ -235,7 +281,25 @@ def get_session_file_content(session_id: str, path: str):
 
 @app.post("/api/sessions/{session_id}/files/upload")
 async def upload_session_file(session_id: str, file: UploadFile = File(...), path: str = Form("")):
-    """Upload a file into the session workspace under the given relative path."""
+    """Upload a file into the session workspace.
+
+    For remote sessions, uploads via session.upload to the remote host.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename is required")
+
+    if _is_remote_session():
+        ws = _remote_workspace()
+        target_dir = f"{ws.rstrip('/')}/{path}" if path else ws
+        remote_dest = f"{target_dir.rstrip('/')}/{file.filename}"
+        if _remote_path_exists(remote_dest):
+            raise HTTPException(status_code=409, detail="File already exists")
+        data = await file.read()
+        _remote_write_file(remote_dest, data)
+        rel = f"{path.rstrip('/')}/{file.filename}" if path else file.filename
+        return {"status": "ok", "path": rel}
+
+    # --- local fallback ---
     base, _ = _resolve_session_workspace(session_id, create=True)
     target_dir = (base / path).resolve() if path else base
     try:
@@ -244,8 +308,6 @@ async def upload_session_file(session_id: str, file: UploadFile = File(...), pat
         raise HTTPException(status_code=400, detail="Path outside workspace")
     if not target_dir.is_dir():
         raise HTTPException(status_code=404, detail="Target directory not found")
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Filename is required")
     dest = (target_dir / file.filename).resolve()
     try:
         dest.relative_to(base)
@@ -269,6 +331,24 @@ def rename_session_file(session_id: str, req: RenameRequest):
         raise HTTPException(status_code=400, detail="path is required")
     if not req.new_name or not req.new_name.strip():
         raise HTTPException(status_code=400, detail="new_name is required")
+
+    if _is_remote_session():
+        ws = _remote_workspace()
+        old_path = f"{ws.rstrip('/')}/{req.path.strip()}"
+        if not _remote_path_exists(old_path):
+            raise HTTPException(status_code=404, detail="Path not found")
+        new_name = req.new_name.strip().rsplit("/", 1)[-1]
+        if not new_name or new_name in {".", ".."}:
+            raise HTTPException(status_code=400, detail="Invalid new_name")
+        parent = old_path.rsplit("/", 1)[0]
+        new_path = f"{parent}/{new_name}"
+        if _remote_path_exists(new_path):
+            raise HTTPException(status_code=409, detail="Target already exists")
+        _remote_rename(old_path, new_path)
+        rel = f"{req.path.strip().rsplit('/', 1)[0]}/{new_name}" if "/" in req.path.strip() else new_name
+        return {"status": "ok", "path": rel}
+
+    # --- local fallback ---
     base, _ = _resolve_session_workspace(session_id, create=False)
     target = (base / req.path.strip()).resolve()
     try:
@@ -386,6 +466,103 @@ def _resolve_session_workspace(session_id: str, create: bool = True) -> tuple[Pa
     return base, task_id
 
 
+# ---------------------------------------------------------------------------
+# Remote-session aware file helpers
+# ---------------------------------------------------------------------------
+
+def _get_session():
+    """Return the current session from the cached playground (or None)."""
+    if _cached_pg is not None and hasattr(_cached_pg, "session"):
+        return _cached_pg.session
+    return None
+
+
+def _is_remote_session() -> bool:
+    """True when the playground uses a remote session (SSH / Docker)."""
+    s = _get_session()
+    if s is None:
+        return False
+    return "Local" not in type(s).__name__
+
+
+def _remote_workspace() -> str:
+    """Return the remote workspace root (e.g. ``/workspace``)."""
+    s = _get_session()
+    if s is None:
+        return "/workspace"
+    return getattr(getattr(s, "config", None), "workspace_path", "/workspace") or "/workspace"
+
+
+def _remote_list_dir(dir_path: str) -> list[dict]:
+    """List entries in *dir_path* on the remote session."""
+    s = _get_session()
+    if s is None:
+        return []
+    cmd = (
+        f"find '{dir_path}' -maxdepth 1 -mindepth 1 "
+        f"-printf '%y %f\\n' 2>/dev/null | sort -k2"
+    )
+    result = s.exec_bash(cmd)
+    entries = []
+    for line in (result.get("stdout") or "").strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(None, 1)
+        if len(parts) != 2:
+            continue
+        ftype, name = parts
+        entries.append({"name": name, "path": name, "dir": ftype == "d"})
+    entries.sort(key=lambda e: (not e["dir"], e["name"].lower()))
+    return entries
+
+
+def _remote_read_file(remote_path: str) -> bytes:
+    """Download a remote file as bytes."""
+    s = _get_session()
+    if s is None:
+        raise HTTPException(status_code=500, detail="No session available")
+    return s.download(remote_path)
+
+
+def _remote_write_file(remote_path: str, data: bytes) -> None:
+    """Write bytes to a remote file via upload (binary-safe)."""
+    s = _get_session()
+    if s is None:
+        raise HTTPException(status_code=500, detail="No session available")
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        tmp.write(data)
+        tmp_path = tmp.name
+    try:
+        s.upload(tmp_path, remote_path)
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
+def _remote_path_exists(remote_path: str) -> bool:
+    s = _get_session()
+    return s is not None and s.path_exists(remote_path)
+
+
+def _remote_is_dir(remote_path: str) -> bool:
+    s = _get_session()
+    return s is not None and s.is_directory(remote_path)
+
+
+def _remote_is_file(remote_path: str) -> bool:
+    s = _get_session()
+    return s is not None and s.is_file(remote_path)
+
+
+def _remote_rename(old_path: str, new_path: str) -> None:
+    s = _get_session()
+    if s is None:
+        raise HTTPException(status_code=500, detail="No session available")
+    result = s.exec_bash(f"mv '{old_path}' '{new_path}'")
+    if result.get("exit_code", -1) != 0:
+        raise HTTPException(status_code=500, detail=f"Rename failed: {result.get('stdout', '')}")
+
+
 @app.get("/api/runs")
 def list_runs():
     """List run directories (mat_master_* under runs/, same as run.py)."""
@@ -453,12 +630,15 @@ def _run_agent_sync(
     planner_reply_queue: queue.Queue | None = None,
     task_id: str | None = None,
     ask_human_queue: queue.Queue | None = None,
+    bohrium_access_key: str | None = None,
+    bohrium_project_id: int | None = None,
 ):
     """Run MatMaster in a thread (direct or planner exp); send_cb streams events. task_id is set by caller."""
     import logging
     logging.basicConfig(level=logging.INFO)
     run_done: threading.Event | None = None
     _msg_seq = 0  # auto-incrementing message id per run
+    _ssh_attached = False
 
     def event_callback(source: str, event_type: str, content) -> None:
         nonlocal _msg_seq
@@ -501,8 +681,37 @@ def _run_agent_sync(
             pg._planner_input_fn = lambda prompt: _planner_ask_and_wait(
                 prompt, send_cb, loop, planner_reply_queue
             )
-        # Planner 的 LLM 输出（方案 JSON、Plan Report、步骤列表）通过 event_callback 推送到前端
         pg._planner_output_callback = event_callback
+
+        # Bohrium node lifecycle: create -> wait -> attach SSH -> run -> destroy
+        bohrium_node_id = None
+        access_key = (bohrium_access_key or "").strip()
+        if access_key and bohrium_project_id is not None:
+            try:
+                from src.services.bohrium_node_service import get_bohrium_node_service
+                node_svc = get_bohrium_node_service()
+                node_info = node_svc.create_node(access_key, int(bohrium_project_id))
+                bohrium_node_id = node_info.get("node_id")
+                if bohrium_node_id is not None:
+                    event_callback("System", "bohrium_node", {
+                        "node_id": bohrium_node_id, "status": "created",
+                        "message": "节点已创建，正在等待就绪...",
+                    })
+                    node_info = node_svc.wait_until_ready(access_key, bohrium_node_id)
+                    node_ip = node_info.get("ip")
+                    node_pwd = node_info.get("password")
+                    event_callback("System", "bohrium_node", {
+                        "node_id": bohrium_node_id, "status": "ready",
+                        "ip": node_ip, "message": "Bohrium 节点已就绪",
+                    })
+                    if node_ip:
+                        pg.attach_ssh_session(host=node_ip, password=node_pwd, working_dir="/workspace")
+                        _ssh_attached = True
+                        logger.info("SSH session attached to Bohrium node ip=%s", node_ip)
+                        event_callback("System", "status", f"已连接到 Bohrium 节点 {node_ip}")
+            except Exception as e:
+                logger.warning("Auto create Bohrium node failed: %s", e, exc_info=True)
+                event_callback("System", "status", f"自动创建 Bohrium 节点失败: {e}，继续使用当前环境运行")
 
         base = pg.agent
         config_dict = pg.config.model_dump()
@@ -564,6 +773,27 @@ def _run_agent_sync(
         event_callback("System", "error", str(e))
         raise
     finally:
+        # Destroy Bohrium node and restore default session
+        if bohrium_node_id is not None:
+            if _ssh_attached:
+                try:
+                    pg.detach_session()
+                    pg._setup_session()
+                    logger.info("SSH session detached, default session restored")
+                except Exception as e:
+                    logger.warning("Session restore failed: %s", e)
+            try:
+                from src.services.bohrium_node_service import get_bohrium_node_service
+                get_bohrium_node_service().destroy_node(
+                    access_key, int(bohrium_node_id), int(bohrium_project_id or 0),
+                )
+                logger.info("Bohrium node destroyed node_id=%s", bohrium_node_id)
+                event_callback("System", "bohrium_node", {
+                    "node_id": bohrium_node_id, "status": "destroyed",
+                    "message": "节点已销毁",
+                })
+            except Exception as e:
+                logger.warning("Auto destroy Bohrium node failed: %s", e, exc_info=True)
         if run_done is not None:
             run_done.set()
         _run_stop_events.pop(session_id, None)
@@ -654,6 +884,18 @@ async def websocket_endpoint(websocket: WebSocket):
 
             stop_ev = threading.Event()
             _run_stop_events[session_id] = stop_ev
+            bak = (data.get("bohrium_access_key") or "").strip() or None
+            bpid = data.get("bohrium_project_id")
+            # Fallback: when frontend doesn't send creds, use env vars
+            # if ENABLE_SSH_SANDBOX is set (opt-in for local testing).
+            if not bak and os.environ.get("ENABLE_SSH_SANDBOX", "").lower() in ("1", "true", "yes"):
+                bak = os.environ.get("BOHRIUM_ACCESS_KEY", "").strip() or None
+                bpid = bpid or os.environ.get("BOHRIUM_PROJECT_ID")
+            if bpid is not None:
+                try:
+                    bpid = int(bpid)
+                except (TypeError, ValueError):
+                    bpid = None
             asyncio.get_event_loop().run_in_executor(
                 _executor,
                 _run_agent_sync,
@@ -666,6 +908,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 planner_reply_queue,
                 task_id,
                 ask_human_queue,
+                bak,
+                bpid,
             )
     except asyncio.CancelledError:
         pass

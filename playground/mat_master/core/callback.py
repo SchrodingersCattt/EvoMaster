@@ -10,9 +10,10 @@ import json
 import queue
 import re
 import shlex
+import tempfile
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Callable
 from urllib.parse import urlparse
 
@@ -175,6 +176,17 @@ class MatToolCallbacks:
     # Helpers
     # ------------------------------------------------------------------
 
+    @property
+    def _session(self):
+        """Shortcut for ``self.agent.session``."""
+        return self.agent.session
+
+    @property
+    def _is_remote(self) -> bool:
+        """True when the session is remote (SSH / Docker), not local."""
+        cls_name = type(self._session).__name__
+        return "Local" not in cls_name
+
     @staticmethod
     def _is_oss_url(url: str) -> bool:
         try:
@@ -188,34 +200,70 @@ class MatToolCallbacks:
         lower = url.lower()
         return any(tok in lower for tok in _SKIP_DOWNLOAD_TOKENS)
 
-    @staticmethod
-    def _pick_download_path(download_dir: Path, url: str) -> Path:
-        parsed = urlparse(url)
-        name = Path(parsed.path).name or "artifact.bin"
-        base = download_dir / name
-        if not base.exists():
-            return base
-        stem = base.stem
-        suffix = base.suffix
-        i = 1
-        while True:
-            candidate = download_dir / f"{stem}_{i}{suffix}"
-            if not candidate.exists():
-                return candidate
-            i += 1
+    def _pick_download_path(self, download_dir: str, url: str) -> str:
+        """Return a unique destination path (string) under *download_dir*.
 
-    def _resolve_download_dir(self) -> Path | None:
-        """Derive download directory from the agent's workspace config."""
+        Works for both local and remote sessions: uses ``session.path_exists``
+        for remote, ``Path.exists`` for local.
+        """
+        parsed = urlparse(url)
+        name = PurePosixPath(parsed.path).name or "artifact.bin"
+
+        if self._is_remote:
+            base = f"{download_dir.rstrip('/')}/{name}"
+            if not self._session.path_exists(base):
+                return base
+            stem = PurePosixPath(name).stem
+            suffix = PurePosixPath(name).suffix
+            i = 1
+            while True:
+                candidate = f"{download_dir.rstrip('/')}/{stem}_{i}{suffix}"
+                if not self._session.path_exists(candidate):
+                    return candidate
+                i += 1
+        else:
+            base = Path(download_dir) / name
+            if not base.exists():
+                return str(base)
+            stem = base.stem
+            suffix = base.suffix
+            i = 1
+            while True:
+                candidate = Path(download_dir) / f"{stem}_{i}{suffix}"
+                if not candidate.exists():
+                    return str(candidate)
+                i += 1
+
+    def _resolve_download_dir(self) -> str | None:
+        """Derive download directory (string) from the agent's workspace config.
+
+        For remote sessions the returned path is POSIX (e.g. ``/workspace/_tmp/…``).
+        For local sessions it is an absolute local path.
+        """
         workspace = (
             getattr(getattr(self.agent.session, "config", None), "workspace_path", None)
             or ""
         )
         if not workspace:
             return None
-        return (Path(workspace).resolve() / self._download_subdir).resolve()
+        if self._is_remote:
+            return f"{workspace.rstrip('/')}/{self._download_subdir}"
+        return str((Path(workspace).resolve() / self._download_subdir).resolve())
 
-    def _download_single(self, url: str, download_dir: Path) -> Path | None:
-        """Download a single OSS URL to *download_dir*. Returns local path or None."""
+    def _ensure_download_dir(self, download_dir: str) -> None:
+        """Create *download_dir* if it does not exist."""
+        if self._is_remote:
+            self._session.exec_bash(f"mkdir -p '{download_dir}'")
+        else:
+            Path(download_dir).mkdir(parents=True, exist_ok=True)
+
+    def _download_single(self, url: str, download_dir: str) -> str | None:
+        """Download a single URL to *download_dir*. Returns dest path string or None.
+
+        For remote sessions the file is fetched into memory and written via
+        ``session.write_file`` (binary-safe via session.upload with tempfile).
+        For local sessions it writes directly to the filesystem.
+        """
         dest = self._pick_download_path(download_dir, url)
         req = urllib.request.Request(url, method="GET")
         with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310
@@ -231,7 +279,18 @@ class MatToolCallbacks:
             if len(data) > _AUTO_DOWNLOAD_MAX_BYTES:
                 self.logger.info("Skip oversized OSS payload during read: %s", url)
                 return None
-            dest.write_bytes(data)
+
+        if self._is_remote:
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                tmp.write(data)
+                tmp_path = tmp.name
+            try:
+                self._session.upload(tmp_path, dest)
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
+        else:
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_bytes(data)
         return dest
 
     def _collect_submit_job_map(self) -> dict[str, str]:
@@ -524,31 +583,71 @@ class MatToolCallbacks:
 
     # ------ characterization file upload ------
 
-    def _resolve_workspace_root(self) -> Path | None:
+    def _resolve_workspace_root(self) -> str | None:
+        """Return workspace root as a string path.
+
+        For remote sessions returns the POSIX path (e.g. ``/workspace``),
+        for local sessions returns the resolved local path.
+        """
         workspace = (
             getattr(getattr(self.agent.session, "config", None), "workspace_path", None)
             or ""
         )
         if not workspace:
             return None
-        return Path(workspace).resolve()
+        if self._is_remote:
+            return workspace
+        return str(Path(workspace).resolve())
 
-    @staticmethod
-    def _workspace_to_local_path(value: str, workspace_root: Path) -> Path | None:
+    def _resolve_file_path(self, value: str, workspace_root: str) -> str | None:
+        """Resolve a user-provided file path against *workspace_root*.
+
+        Works for both local and remote sessions (uses ``PurePosixPath`` for
+        remote to avoid Windows path mangling).
+        """
         import os
         mount_prefix = os.environ.get("WORKSPACE_MOUNT_PREFIX", "/workspace")
         value = value.strip().replace("\\", "/")
         prefix_slash = mount_prefix.rstrip("/") + "/"
-        if value.startswith(prefix_slash):
-            rel = value[len(prefix_slash):].lstrip("/")
-            return (workspace_root / rel).resolve()
-        if value.startswith(mount_prefix):
-            rel = value[len(mount_prefix):].lstrip("/")
-            return (workspace_root / (rel or ".")).resolve()
-        path = Path(value)
-        if not path.is_absolute():
-            return (workspace_root / path).resolve()
-        return path
+
+        if self._is_remote:
+            pp = PurePosixPath
+            if value.startswith(prefix_slash):
+                rel = value[len(prefix_slash):].lstrip("/")
+                return str(pp(workspace_root) / rel)
+            if value.startswith(mount_prefix):
+                rel = value[len(mount_prefix):].lstrip("/")
+                return str(pp(workspace_root) / (rel or "."))
+            if not PurePosixPath(value).is_absolute():
+                return str(pp(workspace_root) / value)
+            return value
+        else:
+            ws = Path(workspace_root)
+            if value.startswith(prefix_slash):
+                rel = value[len(prefix_slash):].lstrip("/")
+                return str((ws / rel).resolve())
+            if value.startswith(mount_prefix):
+                rel = value[len(mount_prefix):].lstrip("/")
+                return str((ws / (rel or ".")).resolve())
+            path = Path(value)
+            if not path.is_absolute():
+                return str((ws / path).resolve())
+            return str(path)
+
+    def _file_exists_and_is_file(self, path: str) -> bool:
+        """Check if *path* exists and is a regular file (local or remote)."""
+        if self._is_remote:
+            return self._session.is_file(path)
+        return Path(path).is_file()
+
+    def _download_remote_to_temp(self, remote_path: str) -> Path:
+        """Download a remote file to a local temp file for OSS upload."""
+        data = self._session.download(remote_path)
+        suffix = PurePosixPath(remote_path).suffix or ""
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+        tmp.write(data)
+        tmp.close()
+        return Path(tmp.name)
 
     def before_upload_nmr_predict_files(self, tool_call: Any) -> None:
         """Upload molecular file paths in NMR_predict_tool's ``smiles_list``.
@@ -585,30 +684,33 @@ class MatToolCallbacks:
                 new_list.append(item)
                 continue
             val = item.strip()
-            # Already a URL → keep
             if val.startswith("http://") or val.startswith("https://"):
                 new_list.append(item)
                 continue
-            # Heuristic: file path if it has directory separators or molecular file extension
             is_file = ("/" in val or "\\" in val)
             if not is_file:
-                suffix = Path(val).suffix.lower()
+                suffix = PurePosixPath(val).suffix.lower()
                 is_file = suffix in _MOL_FILE_EXTS
             if not is_file:
                 new_list.append(item)
                 continue
-            # Resolve and upload
-            local = self._workspace_to_local_path(val, workspace_root)
-            if local is None or not local.exists() or not local.is_file():
+
+            resolved = self._resolve_file_path(val, workspace_root)
+            if resolved is None or not self._file_exists_and_is_file(resolved):
                 self.logger.warning(
                     "NMR_predict_tool: file in smiles_list not found: %s", val
                 )
                 new_list.append(item)
                 continue
-            try:
-                from evomaster.adaptors.calculation.oss_io import upload_file_to_oss
 
-                oss_url = upload_file_to_oss(local, workspace_root)
+            # For remote sessions, download to a temp file first for OSS upload
+            local_for_upload = Path(resolved) if not self._is_remote else None
+            try:
+                if self._is_remote:
+                    local_for_upload = self._download_remote_to_temp(resolved)
+
+                from evomaster.adaptors.calculation.oss_io import upload_file_to_oss
+                oss_url = upload_file_to_oss(local_for_upload, Path(workspace_root))
                 new_list.append(oss_url)
                 changed = True
                 self.logger.info(
@@ -619,6 +721,9 @@ class MatToolCallbacks:
                     "before_tool: NMR predict file upload failed %s: %s", val, e
                 )
                 new_list.append(item)
+            finally:
+                if self._is_remote and local_for_upload is not None:
+                    local_for_upload.unlink(missing_ok=True)
 
         if changed:
             args["smiles_list"] = new_list
@@ -887,7 +992,7 @@ class MatToolCallbacks:
         download_dir = self._resolve_download_dir()
         if download_dir is None:
             return observation, info
-        download_dir.mkdir(parents=True, exist_ok=True)
+        self._ensure_download_dir(download_dir)
 
         # De-duplicate and filter
         targets: list[str] = []
@@ -904,7 +1009,7 @@ class MatToolCallbacks:
         # Parallel download (up to 4 concurrent)
         downloaded: list[dict[str, str]] = []
 
-        def _do(u: str) -> tuple[str, Path | None]:
+        def _do(u: str) -> tuple[str, str | None]:
             return u, self._download_single(u, download_dir)
 
         with ThreadPoolExecutor(max_workers=min(4, len(targets))) as pool:
@@ -924,7 +1029,7 @@ class MatToolCallbacks:
 
         note_lines = [
             "",
-            "[Auto-download callback] Downloaded OSS artifacts to local workspace:",
+            "[Auto-download callback] Downloaded OSS artifacts to workspace:",
         ]
         for item in downloaded:
             note_lines.append(f"- {item['url']}")
@@ -981,14 +1086,14 @@ class MatToolCallbacks:
         download_dir = self._resolve_download_dir()
         if download_dir is None:
             return observation, info
-        download_dir.mkdir(parents=True, exist_ok=True)
+        self._ensure_download_dir(download_dir)
 
         downloaded: list[dict[str, str]] = []
         for url in new_urls:
             try:
-                local = self._download_single(url, download_dir)
-                if local is not None:
-                    downloaded.append({"url": url, "local_path": str(local)})
+                dest = self._download_single(url, download_dir)
+                if dest is not None:
+                    downloaded.append({"url": url, "local_path": dest})
             except Exception as e:
                 self.logger.warning(
                     "Characterization artifact download failed (%s): %s", url, e
@@ -999,7 +1104,7 @@ class MatToolCallbacks:
 
         note_lines = [
             "",
-            "[Characterization callback] Downloaded result artifacts to local workspace:",
+            "[Characterization callback] Downloaded result artifacts to workspace:",
         ]
         for item in downloaded:
             note_lines.append(f"- {item['url']}")
