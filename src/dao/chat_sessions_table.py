@@ -111,6 +111,17 @@ class ChatSessionsTable(BaseTable):
                 conn.commit()
                 return cursor.rowcount > 0
 
+    def delete_session(self, session_id: str, user_id: str) -> bool:
+        """删除会话。仅当会话属于该用户时删除（evo_chat_events 有 ON DELETE CASCADE 会级联删除）。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f'DELETE FROM {self.table_name} WHERE session_id = %s AND user_id = %s',
+                    (session_id, user_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
+
     def count_active_sessions(self) -> int:
         """统计所有用户的活跃会话数量（status='active'）"""
         with self.get_connection() as conn:
@@ -125,6 +136,24 @@ class ChatSessionsTable(BaseTable):
                 )
                 row = cursor.fetchone()
                 return int(row['cnt']) if row and row.get('cnt') is not None else 0
+
+    def reset_all_active_to_idle(self) -> int:
+        """
+        将当前所有 status='active' 的会话重置为 'idle'。
+        用于部署/重启后清理上一进程未正确 release 的残留 active 会话。
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f'''
+                    UPDATE {self.table_name}
+                    SET status = 'idle', updated_at = NOW()
+                    WHERE status = %s
+                    ''',
+                    ('active',),
+                )
+                conn.commit()
+                return cursor.rowcount or 0
 
     def list_sessions(self, user_id: str) -> List[Dict]:
         """获取会话列表，只返回该用户的会话，包含第一条用户消息"""

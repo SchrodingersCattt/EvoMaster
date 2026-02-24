@@ -4,7 +4,7 @@ FROM registry.dp.tech/public/python:3.13-slim
 RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
     sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
 
-# 安装 weasyprint 系统依赖及 curl、wget
+# 安装 weasyprint 系统依赖及 curl、wget、unzip、git
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
@@ -15,6 +15,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fontconfig \
     curl \
     wget \
+    unzip \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 # 配置 pip 使用国内源
