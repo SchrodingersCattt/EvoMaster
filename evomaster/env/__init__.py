@@ -10,6 +10,7 @@ Env 是 EvoMaster 的环境组件，负责：
 from .base import BaseEnv, EnvConfig
 from .local import LocalEnv, LocalEnvConfig
 from .docker import DockerEnv, DockerEnvConfig
+from .ssh import SSHEnv, SSHEnvConfig
 from .bohrium import (
     get_bohrium_credentials,
     get_bohrium_storage_config,
@@ -21,13 +22,11 @@ from .bohrium import (
 def _rebuild_env_configs():
     """延迟重建 EnvConfig 模型以解决循环依赖"""
     try:
-        # 确保 SessionConfig 子类已导入
-        from evomaster.agent.session import DockerSessionConfig, LocalSessionConfig
-        # 重建 EnvConfig 模型
+        from evomaster.agent.session import DockerSessionConfig, LocalSessionConfig, SSHSessionConfig
         DockerEnvConfig.model_rebuild()
         LocalEnvConfig.model_rebuild()
+        SSHEnvConfig.model_rebuild()
     except Exception:
-        # 如果重建失败，忽略（可能已经重建过或还未导入）
         pass
 
 # 延迟执行重建，确保所有模块都已加载
@@ -40,6 +39,8 @@ __all__ = [
     "LocalEnvConfig",
     "DockerEnv",
     "DockerEnvConfig",
+    "SSHEnv",
+    "SSHEnvConfig",
     "get_bohrium_credentials",
     "get_bohrium_storage_config",
     "inject_bohrium_executor",

@@ -13,7 +13,12 @@ from datetime import datetime
 from evomaster.config import ConfigManager
 from evomaster.utils import LLMConfig, create_llm
 from evomaster.agent import create_default_registry
-from evomaster.agent.session import LocalSession, LocalSessionConfig, DockerSession, DockerSessionConfig
+from evomaster.agent.session import (
+    BaseSession,
+    LocalSession, LocalSessionConfig,
+    DockerSession, DockerSessionConfig,
+    SSHSession, SSHSessionConfig,
+)
 from evomaster.skills import SkillRegistry
 
 from .exp import BaseExp
@@ -250,6 +255,8 @@ class BasePlayground:
         """创建并打开 Session（如果尚未创建）
 
         根据配置选择 local 或 docker session。
+        SSH session 不在此处创建，而是由后端在运行时通过
+        attach_ssh_session() 动态挂载。
         """
         if self.session is None:
             session_type = self.config.session.get("type", "local")
@@ -497,6 +504,92 @@ class BasePlayground:
             )
             
             self.logger.info("Single-agent playground setup complete")
+
+    # ------------------------------------------------------------------
+    # Dynamic session attach / detach
+    # ------------------------------------------------------------------
+
+    def attach_session(self, session: BaseSession) -> None:
+        """Replace the current session with *session* at runtime.
+
+        Closes the previous session (if open and remote), assigns the new
+        one, opens it, and propagates the reference to the agent so that
+        subsequent tool calls use the new session.
+
+        Args:
+            session: An already-configured but not-yet-opened BaseSession
+                     (SSHSession, DockerSession, etc.).
+        """
+        if self.session is not None and self.session.is_open:
+            if not isinstance(self.session, LocalSession):
+                try:
+                    self.session.close()
+                    self.logger.info("Previous session closed before attach")
+                except Exception as e:
+                    self.logger.warning(f"Error closing previous session: {e}")
+
+        self.session = session
+
+        if not self.session.is_open:
+            self.session.open()
+            self.logger.info(f"Attached session opened: {type(session).__name__}")
+
+        if self.agent is not None:
+            self.agent.session = self.session
+            self.logger.debug("Agent session reference updated")
+
+    def attach_ssh_session(
+        self,
+        host: str,
+        port: int = 22,
+        username: str = "root",
+        password: str | None = None,
+        key_file: str | None = None,
+        working_dir: str = "/workspace",
+        **kwargs,
+    ) -> SSHSession:
+        """Create and attach an SSHSession from explicit credentials.
+
+        Convenience wrapper around :meth:`attach_session` for the common
+        case where the caller has ``(host, port, password)`` from an
+        external container allocator (e.g. Bohrium).
+
+        Returns:
+            The opened SSHSession instance.
+        """
+        config = SSHSessionConfig(
+            host=host,
+            port=port,
+            username=username,
+            password=password,
+            key_file=key_file,
+            working_dir=working_dir,
+            workspace_path=working_dir,
+            **kwargs,
+        )
+        session = SSHSession(config)
+        self.attach_session(session)
+        return session
+
+    def detach_session(self) -> None:
+        """Close and remove the current session.
+
+        After this call ``self.session`` is ``None``.  The caller (external
+        backend) is responsible for releasing the underlying container.
+        """
+        if self.session is not None and self.session.is_open:
+            if not isinstance(self.session, LocalSession):
+                try:
+                    self.session.close()
+                    self.logger.info("Session detached and closed")
+                except Exception as e:
+                    self.logger.warning(f"Error closing session during detach: {e}")
+
+        self.session = None
+
+        if self.agent is not None:
+            self.agent.session = None
+            self.logger.debug("Agent session reference cleared")
 
     def _setup_mcp_tools(self):
         """初始化 MCP 工具
