@@ -21,3 +21,20 @@ DB_CONFIG = {
 }
 
 BI_URL = os.getenv('BI_URL', 'https://account.test.dp.tech')
+
+# 配额服务（与 MatMaster 一致：matmaster-tools-server）
+_URL_PART = f'.{CURRENT_ENV}' if CURRENT_ENV and CURRENT_ENV != 'prod' else ''
+MATMASTER_TOOLS_SERVER = os.getenv(
+    'MATMASTER_TOOLS_SERVER',
+    f'https://matmaster-tools-server{_URL_PART}.bohrium.com',
+)
+
+# Bohrium 节点 Open API（创建/列表/删除节点），test 环境走 openapi.test.dp.tech
+BOHRIUM_OPENAPI_BASE_URL = os.getenv(
+    'BOHRIUM_BASE_URL',
+    (
+        f'https://openapi{_URL_PART}.dp.tech/openapi/v1'
+        if _URL_PART
+        else 'https://open.bohrium.com/openapi/v1'
+    ),
+)

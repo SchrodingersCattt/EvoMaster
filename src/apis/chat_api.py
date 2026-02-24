@@ -21,6 +21,7 @@ from src.models.chat import (
     WorkspaceListData,
 )
 from src.services.events_service import ChatEventsService, get_events_service
+from src.services.quota_service import check_quota
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.stream_service import (
     ChatStreamService,
@@ -94,8 +95,16 @@ async def chat_stream(
             headers=SSE_HEADERS,
         )
 
-    # 发送消息并返回本次运行的 SSE 流（此时 req 必存在且 content 非空）
+    # 发送消息前检查配额（与 MatMaster 一致：有 user_id 时检查，无剩余则 403）
     assert req is not None
+    if user_id:
+        remaining = await check_quota(user_id)
+        if remaining <= 0:
+            raise ForbiddenErrorResponse(
+                msg='当日免费额度已用完。请填写问卷申请额度，审核通过后再试。',
+            )
+
+    # 发送消息并返回本次运行的 SSE 流（此时 req 必存在且 content 非空）
     ctx = stream_svc.prepare_send_message(sid, req, user_id)
     if ctx is None:
         raise ConflictErrorResponse(
@@ -173,6 +182,21 @@ def set_share_status(
     return ShareStatusApiResponse(
         data=ShareStatusData(enabled=body.enabled),
     )
+
+
+@router.delete('/{session_id}', response_model=BaseResponse)
+def delete_session(
+    session_id: str,
+    user_id: str = Depends(require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """删除会话。仅会话所有者可删除；关联的聊天事件会随会话级联删除。"""
+    sid = session_id.strip()
+    if not chat_svc.delete_session(sid, user_id=user_id):
+        raise NotFoundErrorResponse(
+            msg='Session not found or you are not the owner',
+        )
+    return BaseResponse(msg='ok')
 
 
 @router.get('/{session_id}/workspace/list')

@@ -28,6 +28,8 @@ dependencies = [
     "pymatgen>=2024.1",
     "dpdata>=0.2.18",
     "bohrium-sdk>=0.15.0",
+    "python-docx>=1.2.0",
+    "httpx>=0.28.1",
 ]
 
 [project.optional-dependencies]
