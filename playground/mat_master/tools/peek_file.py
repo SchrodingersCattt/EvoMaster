@@ -6,7 +6,7 @@ import os
 import gzip
 import json
 import base64
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Dict, Any, Tuple, ClassVar
 
 from pydantic import Field
@@ -143,6 +143,53 @@ def is_binary_content(file_content: str, sample_size: int = 1000) -> bool:
     return any(indicator in file_content[:sample_size] for indicator in binary_indicators)
 
 
+def decode_bytes_content(content: bytes) -> Tuple[str, Dict[str, Any]]:
+    """Decode raw bytes with automatic compression and encoding detection.
+
+    Extracted from ``read_and_decode_file`` so it can be reused when the
+    caller already has the bytes (e.g. fetched via ``session.download()``).
+
+    Returns:
+        (decoded_text, metadata)  where metadata contains compression_type,
+        encoding, and file_size (= len(content)).
+    """
+    metadata: Dict[str, Any] = {
+        "file_size": len(content),
+        "compression_type": None,
+        "encoding": None,
+    }
+
+    if content[:4] == b"\x28\xb5\x2f\xfd":
+        metadata["compression_type"] = "zstandard"
+        return "[File is Zstandard (.zst) compressed. To decompress install: pip install zstandard]", metadata
+    if len(content) >= 2 and content.startswith(b"\x1b\x78"):
+        metadata["compression_type"] = "brotli"
+        return "[File is Brotli (.br) compressed. To decompress install: pip install brotli]", metadata
+    if len(content) >= 4 and content.startswith(b"\x04\x22\x4d\x18"):
+        metadata["compression_type"] = "lz4"
+        return "[File is LZ4 compressed. To decompress install: pip install lz4]", metadata
+    if content.startswith(b"\x1f\x8b\x08"):
+        metadata["compression_type"] = "gzip"
+        try:
+            content = gzip.decompress(content)
+        except Exception:
+            pass
+
+    encodings = ["utf-8", "utf-16", "utf-32", "gbk", "gb2312", "latin-1"]
+    decoded_content = None
+    for encoding in encodings:
+        try:
+            decoded_content = content.decode(encoding)
+            metadata["encoding"] = encoding
+            break
+        except (UnicodeDecodeError, UnicodeError):
+            continue
+    if decoded_content is None:
+        decoded_content = content.decode("utf-8", errors="ignore")
+        metadata["encoding"] = "utf-8-with-errors"
+    return decoded_content, metadata
+
+
 def read_and_decode_file(file_path: str) -> Tuple[str, Dict[str, Any]]:
     """
     Read and decode a file, returning both the content and metadata about the file.
@@ -153,39 +200,10 @@ def read_and_decode_file(file_path: str) -> Tuple[str, Dict[str, Any]]:
         "encoding": None,
     }
     try:
-        metadata["file_size"] = os.path.getsize(file_path)
         with open(file_path, "rb") as f:
             content = f.read()
-
-        if content[:4] == b"\x28\xb5\x2f\xfd":
-            metadata["compression_type"] = "zstandard"
-            return "[File is Zstandard (.zst) compressed. To decompress install: pip install zstandard]", metadata
-        if len(content) >= 2 and content.startswith(b"\x1b\x78"):
-            metadata["compression_type"] = "brotli"
-            return "[File is Brotli (.br) compressed. To decompress install: pip install brotli]", metadata
-        if len(content) >= 4 and content.startswith(b"\x04\x22\x4d\x18"):
-            metadata["compression_type"] = "lz4"
-            return "[File is LZ4 compressed. To decompress install: pip install lz4]", metadata
-        if content.startswith(b"\x1f\x8b\x08"):
-            metadata["compression_type"] = "gzip"
-            try:
-                content = gzip.decompress(content)
-            except Exception:
-                pass
-
-        encodings = ["utf-8", "utf-16", "utf-32", "gbk", "gb2312", "latin-1"]
-        decoded_content = None
-        for encoding in encodings:
-            try:
-                decoded_content = content.decode(encoding)
-                metadata["encoding"] = encoding
-                break
-            except (UnicodeDecodeError, UnicodeError):
-                continue
-        if decoded_content is None:
-            decoded_content = content.decode("utf-8", errors="ignore")
-            metadata["encoding"] = "utf-8-with-errors"
-        return decoded_content, metadata
+        decoded, metadata = decode_bytes_content(content)
+        return decoded, metadata
     except Exception as e:
         return f"[Error reading file: {str(e)}]", metadata
 
@@ -232,6 +250,16 @@ def peek_file(
 # --- EvoMaster BaseTool wrapper ---
 
 
+def _is_local_session(session: Any) -> bool:
+    """Return True when *session* is a local (non-remote) session.
+
+    Avoids importing LocalSession directly to prevent circular dependencies;
+    uses the class name as a lightweight heuristic.
+    """
+    cls_name = type(session).__name__
+    return "Local" in cls_name
+
+
 class PeekFileToolParams(BaseToolParams):
     """Read full file content with automatic compression and encoding detection."""
 
@@ -258,18 +286,60 @@ class PeekFileTool(BaseTool):
             assert isinstance(params, PeekFileToolParams)
 
             file_path = params.file_path
-            resolved = Path(file_path)
-            if not resolved.is_absolute():
-                ws = getattr(getattr(session, "config", None), "workspace_path", None)
-                if ws is not None:
-                    resolved = Path(ws) / file_path
-                    file_path = str(resolved)
+            ws = getattr(getattr(session, "config", None), "workspace_path", None)
 
-            result = peek_file(
-                file_path,
-                include_preview=params.include_preview,
+            # Determine whether the session is remote (SSH, Docker, etc.) or local.
+            # For remote sessions we use PurePosixPath so that POSIX-style paths
+            # (e.g. /workspace/file.txt) are never mangled into Windows backslashes
+            # on the host machine.
+            is_remote = (
+                session is not None
+                and hasattr(session, "download")
+                and not _is_local_session(session)
             )
-            # Return a concise observation for the agent; full content in result
+
+            # Resolve relative paths against workspace
+            if is_remote:
+                posix_path = PurePosixPath(file_path)
+                if not posix_path.is_absolute() and ws is not None:
+                    file_path = str(PurePosixPath(ws) / file_path)
+                else:
+                    file_path = str(posix_path)
+            else:
+                local_path = Path(file_path)
+                if not local_path.is_absolute() and ws is not None:
+                    file_path = str(Path(ws) / file_path)
+
+            # Try to read via session (works for SSH / Docker / any remote session).
+            # Fall back to local open() for local sessions.
+            raw_bytes: bytes | None = None
+            if is_remote:
+                try:
+                    raw_bytes = session.download(file_path)
+                except Exception as exc:
+                    self.logger.warning(
+                        "peek_file: session.download(%s) failed (%s), falling back to local read",
+                        file_path, exc,
+                    )
+
+            if raw_bytes is not None:
+                decoded, metadata = decode_bytes_content(raw_bytes)
+            else:
+                decoded, metadata = read_and_decode_file(file_path)
+
+            is_binary = is_binary_content(decoded)
+            result: Dict[str, Any] = {
+                "content": decoded,
+                "metadata": metadata,
+                "is_binary": is_binary,
+            }
+            if params.include_preview:
+                if is_binary:
+                    analysis_info, _ = analyze_binary_json_file(decoded)
+                    result["binary_analysis"] = analysis_info
+                else:
+                    result["preview"] = decoded
+
             content = result.get("content", "")
             preview = result.get("preview") or result.get("binary_analysis") or content
             meta = result.get("metadata", {})
