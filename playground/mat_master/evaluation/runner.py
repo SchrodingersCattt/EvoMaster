@@ -14,7 +14,7 @@ from .evaluator import RubricEvaluator
 from .mat_runner import run_mat_task
 from .reporter import append_raw_run, write_reports
 from .schemas import EvalConfig, EvalRunRecord, QuestionBank, QuestionItem, Rubric, SafetyVetoRecord
-from .simulator import SingleTurnSimulator
+from .simulator import HumanSimulator
 
 
 def run_evaluation(config: EvalConfig) -> dict[str, Any]:
@@ -22,6 +22,7 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
     bank_dir = Path(_resolve_to_project_root(config.question_bank_dir))
     question_banks = load_question_banks(bank_dir)
     questions, rubric_map = _flatten_banks(question_banks)
+    questions = _apply_filters(questions, config)
 
     output_dir = Path(_resolve_to_project_root(config.output_dir))
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -31,7 +32,7 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
     mat_runs_dir = run_dir / "mat_runs"
     mat_runs_dir.mkdir(parents=True, exist_ok=True)
 
-    simulator = SingleTurnSimulator(llm_cfg=config.simulator_llm, use_seed_prompt=config.use_seed_prompt)
+    simulator = HumanSimulator(llm_cfg=config.simulator_llm, use_seed_prompt=config.use_seed_prompt)
     evaluator = RubricEvaluator(llm_cfg=config.evaluator_llm)
 
     records: list[EvalRunRecord] = []
@@ -43,7 +44,8 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
         repeat_idx = plan_item["repeat_idx"]
         rubric = rubric_map[question.rubric_id]
 
-        prompt = simulator.render_prompt(question)
+        task = simulator.formulate(question)
+        prompt = task.prompt
         task_id = f"{question.id}_{mode}_r{repeat_idx}"
         workspace_path = mat_runs_dir / "workspaces" / task_id
         workspace_path.mkdir(parents=True, exist_ok=True)
@@ -56,7 +58,10 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
             mat_config_path=mat_config_path,
         )
         answer = str(mat_result.get("answer", "") or "")
-        eval_payload = evaluator.evaluate(question=question, rubric=rubric, answer=answer)
+        tool_calls = mat_result.get("tool_calls", [])
+        eval_payload = evaluator.evaluate(
+            question=question, rubric=rubric, answer=answer, tool_calls=tool_calls,
+        )
         safety_payload = eval_payload.get("safety_veto", {})
         safety_record = (
             SafetyVetoRecord.model_validate(safety_payload)
@@ -76,6 +81,7 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
             deductions=eval_payload.get("deductions", []),
             confidence=float(eval_payload.get("confidence", 0.0)),
             safety_veto=safety_record,
+            tool_calls=tool_calls,
             raw_result=mat_result,
         )
         records.append(record)
@@ -89,6 +95,19 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
         "summary": summary,
         "report_paths": report_paths,
     }
+
+
+def _apply_filters(questions: list[QuestionItem], config: EvalConfig) -> list[QuestionItem]:
+    """Filter questions by level and/or explicit IDs when CLI overrides are set."""
+    if config.include_levels:
+        levels = {lvl.upper() for lvl in config.include_levels}
+        questions = [q for q in questions if q.level.upper() in levels]
+    if config.include_question_ids:
+        ids = set(config.include_question_ids)
+        questions = [q for q in questions if q.id in ids]
+    if not questions:
+        raise ValueError("No questions remaining after applying --levels / --questions filters")
+    return questions
 
 
 def expand_run_plan(*, questions: list[QuestionItem], config: EvalConfig) -> list[dict[str, Any]]:

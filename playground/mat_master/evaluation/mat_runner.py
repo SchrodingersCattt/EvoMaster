@@ -81,10 +81,15 @@ def run_mat_task(
     if not answer and trajectory_path is not None and trajectory_path.exists():
         answer = extract_answer_from_trajectory_file(trajectory_path, task_id=task_id)
 
+    tool_calls: list[dict[str, Any]] = []
+    if trajectory_path is not None and trajectory_path.exists():
+        tool_calls = extract_tool_calls_from_trajectory_file(trajectory_path, task_id=task_id)
+
     return {
         "task_id": task_id,
         "mode": mode,
         "answer": answer,
+        "tool_calls": tool_calls,
         "result": result,
         "trajectory_path": str(trajectory_path) if trajectory_path else "",
         "status": _extract_run_status(result),
@@ -233,4 +238,105 @@ def _extract_finish_message_from_dict(tool_calls: Any) -> str:
             if isinstance(message, str) and message.strip():
                 return message
     return ""
+
+
+def extract_tool_calls_from_trajectory_file(
+    path: Path, *, task_id: str | None = None
+) -> list[dict[str, Any]]:
+    """Extract a flat list of tool call records from a trajectory JSON file.
+
+    Each record contains the tool name, parsed arguments, and whether the
+    tool execution succeeded.  Only non-lifecycle tool calls are included
+    (``finish``, ``think``, ``peek_file`` are excluded).
+    """
+    try:
+        content = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+    entries: list[dict[str, Any]] = []
+    if isinstance(content, list):
+        entries = [e for e in content if isinstance(e, dict)]
+    elif isinstance(content, dict):
+        entries = [content]
+    else:
+        return []
+
+    _SKIP_TOOLS = {"finish", "think", "peek_file"}
+    records: list[dict[str, Any]] = []
+
+    for entry in entries:
+        trajectory = entry.get("trajectory", entry)
+        if not isinstance(trajectory, dict):
+            continue
+        current_task_id = str(trajectory.get("task_id", "") or "")
+        if task_id and current_task_id and current_task_id != task_id:
+            continue
+
+        steps = trajectory.get("steps")
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            step_id = step.get("step_id", 0)
+            assistant_msg = step.get("assistant_message")
+            if not isinstance(assistant_msg, dict):
+                continue
+
+            tool_responses = step.get("tool_responses", [])
+            if not isinstance(tool_responses, list):
+                tool_responses = []
+            response_by_id: dict[str, dict[str, Any]] = {}
+            for tr in tool_responses:
+                if isinstance(tr, dict):
+                    tid = tr.get("tool_call_id", "")
+                    if tid:
+                        response_by_id[tid] = tr
+
+            for tc in assistant_msg.get("tool_calls", []):
+                if not isinstance(tc, dict):
+                    continue
+                fn = tc.get("function", {})
+                if not isinstance(fn, dict):
+                    continue
+                tool_name = fn.get("name", "")
+                if not tool_name or tool_name in _SKIP_TOOLS:
+                    continue
+                raw_args = fn.get("arguments", "{}")
+                try:
+                    tool_args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                except Exception:
+                    tool_args = {}
+                if not isinstance(tool_args, dict):
+                    tool_args = {}
+
+                call_id = tc.get("id", "")
+                resp = response_by_id.get(call_id, {})
+                success = _parse_tool_success(resp)
+
+                records.append({
+                    "step": step_id,
+                    "tool_name": tool_name,
+                    "tool_args": tool_args,
+                    "success": success,
+                })
+    return records
+
+
+def _parse_tool_success(response: dict[str, Any]) -> bool:
+    """Determine whether a tool response indicates success."""
+    meta_info = (response.get("meta") or {}).get("info", {})
+    if isinstance(meta_info, dict) and "success" in meta_info:
+        return bool(meta_info["success"])
+    content = response.get("content", "")
+    if isinstance(content, str):
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, dict):
+                status = parsed.get("status", "")
+                return str(status).lower() == "success"
+        except Exception:
+            pass
+    return True
 
