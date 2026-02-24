@@ -352,18 +352,6 @@ session:
     auto_remove: false
     timeout: 300
 
-  ssh:
-    host: ""                 # 远端容器 IP（由后端分配后填入）
-    port: 22
-    username: "root"
-    password: ""             # 或使用 key_file
-    key_file: null
-    working_dir: "/workspace"
-    timeout: 300
-    connect_timeout: 10
-    keepalive_interval: 30
-    max_retries: 3
-
 # ============================================
 # Env 配置
 # ============================================

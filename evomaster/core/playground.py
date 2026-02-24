@@ -175,14 +175,6 @@ class BasePlayground:
 
                     self.logger.debug(f"Updated Docker volume: {workspace_path_str} -> {container_workspace}")
 
-                # 更新 SSH Session（远端 workspace 不随 host 侧 run_dir 变化）
-                elif session_type == 'ssh' and 'ssh' in session_config:
-                    ssh_config = session_config['ssh']
-                    remote_workspace = ssh_config.get('working_dir', '/workspace')
-                    ssh_config['workspace_path'] = remote_workspace
-                    ssh_config['working_dir'] = remote_workspace
-                    self.logger.debug(f"SSH workspace kept at remote: {remote_workspace}")
-
             # 对于 Pydantic 模型（如果已加载）
             elif hasattr(session_config, 'local') and hasattr(session_config.local, 'workspace_path'):
                 session_config.local.workspace_path = workspace_path_str
@@ -190,8 +182,6 @@ class BasePlayground:
             elif hasattr(session_config, 'docker') and hasattr(session_config.docker, 'workspace_path'):
                 session_config.docker.workspace_path = workspace_path_str
                 session_config.docker.working_dir = workspace_path_str
-            elif hasattr(session_config, 'ssh') and hasattr(session_config.ssh, 'workspace_path'):
-                pass  # SSH remote workspace is managed by attach_ssh_session
 
         self.logger.info(f"Updated workspace path to: {workspace_path_str}")
 
@@ -264,7 +254,9 @@ class BasePlayground:
     def _setup_session(self) -> None:
         """创建并打开 Session（如果尚未创建）
 
-        根据配置选择 local、docker 或 ssh session。
+        根据配置选择 local 或 docker session。
+        SSH session 不在此处创建，而是由后端在运行时通过
+        attach_ssh_session() 动态挂载。
         """
         if self.session is None:
             session_type = self.config.session.get("type", "local")
@@ -281,18 +273,6 @@ class BasePlayground:
                 session_config = DockerSessionConfig(**session_config_dict)
                 self.session = DockerSession(session_config)
                 self.logger.info(f"Using Docker session with image: {session_config.image}")
-            elif session_type == "ssh":
-                session_config_dict = self.config.session.get("ssh", {}).copy()
-                if "working_dir" in session_config_dict and "workspace_path" not in session_config_dict:
-                    session_config_dict["workspace_path"] = session_config_dict["working_dir"]
-                elif "workspace_path" in session_config_dict and "working_dir" not in session_config_dict:
-                    session_config_dict["working_dir"] = session_config_dict["workspace_path"]
-                elif "workspace_path" not in session_config_dict and "working_dir" not in session_config_dict:
-                    session_config_dict["workspace_path"] = "/workspace"
-                    session_config_dict["working_dir"] = "/workspace"
-                session_config = SSHSessionConfig(**session_config_dict)
-                self.session = SSHSession(session_config)
-                self.logger.info(f"Using SSH session: {session_config.host}:{session_config.port}")
             else:
                 session_config_dict = self.config.session.get("local", {}).copy()
                 # 同步 working_dir 和 workspace_path
