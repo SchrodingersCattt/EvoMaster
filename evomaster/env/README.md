@@ -44,15 +44,26 @@ Env 的抽象基类，定义所有 Env 实现必须提供的接口：
 - 复用 DockerEnv 的 tmux + PS1 机制（直接 import `BashMetadata`、`PS1_PATTERN`）
 - 通过持久化 SFTP channel 进行文件操作（比 `ssh_exec cat` 更高效）
 - 内置 keepalive 心跳（`transport.set_keepalive`）和 `_ensure_connected` 断线重连
-- **不管理容器生命周期**：容器由外部后端负责，SSHEnv 只负责「连上去、用、断开」
+- **不管理容器生命周期**：容器由外部后端（如 Bohrium）负责分配和释放，SSHEnv 只负责「连上去、用、断开」
+- **运行时动态创建**：由 `playground.attach_ssh_session()` 在后端获取到节点 IP/密码后动态实例化，不通过 config.yaml 静态配置
 
 ## 架构关系
 
 ```
+后端 (server.py / agent_run_service.py)
+    │  Bohrium API: create_node → wait_until_ready → (ip, password)
+    ▼
+Playground.attach_ssh_session(host, password)
+    │  创建 SSHSession，替换当前 session
+    ▼
 SSHSession (agent/session/ssh.py)
     └── SSHEnv (env/ssh.py)          ← 复用 BashMetadata / PS1_PATTERN
             ↑
         DockerEnv (env/docker.py)    ← 定义 tmux+PS1 机制
+
+运行结束后:
+    Playground.detach_session()      ← 关闭 SSH，恢复本地 session
+    后端: destroy_node()             ← 释放 Bohrium 节点
 ```
 
 ## 使用示例
