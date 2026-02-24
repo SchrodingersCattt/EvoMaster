@@ -261,14 +261,27 @@ class SSHEnv(BaseEnv):
         self._tmux_session = session_name
         self._tmux_log_path = log_path
 
-        self.ssh_exec(
-            "command -v tmux >/dev/null 2>&1 || "
-            "(apt-get update -qq && apt-get install -y -qq tmux || "
-            "yum install -y tmux || true)",
-            timeout=120,
-        )
+        check = self.ssh_exec("command -v tmux", timeout=10)
+        if check.get("exit_code") != 0:
+            self.logger.info("tmux not found, attempting to install...")
+            self.ssh_exec(
+                "(apt-get update -qq && apt-get install -y -qq tmux) || "
+                "(yum install -y tmux) || "
+                "(apk add --no-cache tmux)",
+                timeout=120,
+            )
+            verify = self.ssh_exec("command -v tmux", timeout=10)
+            if verify.get("exit_code") != 0:
+                raise RuntimeError(
+                    "tmux is not available on the remote node and auto-install failed. "
+                    "Please ensure tmux is installed in the container image."
+                )
 
-        self.ssh_exec(f"tmux new-session -d -s {session_name} 'bash -i'")
+        result = self.ssh_exec(f"tmux new-session -d -s {session_name} 'bash -i'")
+        if result.get("exit_code") != 0:
+            raise RuntimeError(
+                f"Failed to create tmux session: {result.get('stdout', '')} {result.get('stderr', '')}"
+            )
         self.ssh_exec(
             f"tmux pipe-pane -o -t {session_name} 'cat >> {log_path}'"
         )
