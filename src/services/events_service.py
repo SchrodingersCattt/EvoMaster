@@ -4,11 +4,7 @@ import logging
 from functools import lru_cache
 
 from src.dao.chat_events_table import ChatEventsTable, get_chat_events_table
-from src.services.sessions_service import (
-    SESSIONS,
-    ChatSessionsService,
-    get_sessions_service,
-)
+from src.services.sessions_service import ChatSessionsService, get_sessions_service
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +26,8 @@ class ChatEventsService:
         payload: dict,
         user_id: str | None = None,
     ) -> None:
-        """向会话历史追加一条事件。user_id 可为空（如分享后匿名访问）。"""
+        """向会话历史追加一条事件（仅持久化到 DB）。user_id 可为空（如分享后匿名访问）。"""
         self._sessions_service.ensure_session(session_id, user_id=user_id)
-        SESSIONS[session_id]['history'].append(payload)
         if not self.table:
             return
         source = payload.get('source', 'System')
