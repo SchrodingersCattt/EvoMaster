@@ -7,6 +7,7 @@ Session 是 Agent 与远程集群环境交互的中间层，提供统一的接�
 - `base.py` - Session 抽象基类，定义标准接口
 - `local.py` - 本地 Session 实现，在本地直接执行命令
 - `docker.py` - Docker Session 实现，使用 Docker 容器提供隔离的执行环境
+- `ssh.py` - SSH Session 实现，通过 SSH 连接远端容器（如 Bohrium 节点）
 
 ## 核心类
 
@@ -36,6 +37,16 @@ Session 的抽象基类，定义所有 Session 实现必须提供的接口：
 - 支持环境变量、工作目录等状态保持
 - 支持资源限制（内存、CPU）和卷挂载
 
+### SSHSession（ssh.py）
+基于 SSH 的 Session 实现，连接远端容器执行命令：
+
+- 通过 paramiko 建立 SSH 连接，支持密码和密钥两种认证方式
+- 复用 DockerSession 的 tmux + PS1 机制维持持久化 bash 状态
+- 通过 SFTP 进行文件读写，比 `cat`/`echo` 重定向更高效可靠
+- 内置 keepalive 心跳和断线自动重连
+- **不管理容器生命周期**：容器由外部后端（如 Bohrium）负责分配和释放，SSHSession 只负责「连上去、用、断开」
+- 敏感字段（`password`、`key_data`、`passphrase`）在 repr/日志中自动脱敏
+
 ## 使用示例
 
 ### 本地 Session
@@ -43,19 +54,13 @@ Session 的抽象基类，定义所有 Session 实现必须提供的接口：
 ```python
 from evomaster.agent.session import LocalSession, LocalSessionConfig
 
-# 创建配置
 config = LocalSessionConfig(timeout=30)
 
-# 使用 Session
 with LocalSession(config) as session:
-    # 执行命令
     result = session.exec_bash("python --version")
     print(result["stdout"])
 
-    # 上传文件（本地复制）
     session.upload("/local/path", "/tmp/remote.py")
-
-    # 下载文件（本地读取）
     content = session.download("/tmp/file.txt")
 ```
 
@@ -64,33 +69,82 @@ with LocalSession(config) as session:
 ```python
 from evomaster.agent.session import DockerSession, DockerSessionConfig
 
-# 创建配置
 config = DockerSessionConfig(
     image="python:3.11-slim",
     memory_limit="4g",
     cpu_limit=2.0,
 )
 
-# 使用 Session
 with DockerSession(config) as session:
-    # 执行命令
     result = session.exec_bash("python --version")
     print(result["stdout"])
 
-    # 上传文件
     session.upload("/local/path", "/workspace/remote.py")
-
-    # 下载文件
     content = session.download("/workspace/output.txt")
+```
+
+### SSH Session（密码认证）
+
+```python
+from evomaster.agent.session import SSHSession, SSHSessionConfig
+
+config = SSHSessionConfig(
+    host="192.168.1.100",   # 后端分配的容器 IP
+    port=22,
+    username="root",
+    password="your-password",
+    working_dir="/workspace",
+    timeout=300,
+)
+
+with SSHSession(config) as session:
+    result = session.exec_bash("nvidia-smi")
+    print(result["stdout"])
+
+    session.write_file("/workspace/run.py", "print('hello')")
+    session.exec_bash("python /workspace/run.py")
+    output = session.read_file("/workspace/run.py")
+```
+
+### SSH Session（密钥认证）
+
+```python
+config = SSHSessionConfig(
+    host="192.168.1.100",
+    username="root",
+    key_file="~/.ssh/id_rsa",       # 本地私钥文件路径
+    # 或 key_data="-----BEGIN RSA..."  # 私钥内容（适合从环境变量注入）
+    working_dir="/workspace",
+)
+```
+
+### 通过 config.yaml 启用
+
+在 `configs/mat_master/config.yaml` 中将 `type` 改为 `ssh` 并填写连接信息：
+
+```yaml
+session:
+  type: "ssh"
+
+  ssh:
+    host: "192.168.1.100"
+    port: 22
+    username: "root"
+    password: "your-password"
+    working_dir: "/workspace"
+    timeout: 300
+    connect_timeout: 10
+    keepalive_interval: 30
+    max_retries: 3
 ```
 
 ## 设计特点
 
-1. **抽象接口** - BaseSession 定义标准接口，便于多种实现（本地、远程、Kubernetes 等）
-2. **多种实现** - 支持本地、Docker、以及未来的其他环境
-3. **隔离环境** - Docker 容器提供完整的隔离执行环境
-4. **持久化会话** - 使用 tmux 维持 bash 状态，支持长期实验
-5. **资源管理** - 支持内存、CPU 等资源限制
+1. **抽象接口** - BaseSession 定义标准接口，便于多种实现（本地、Docker、SSH 等）
+2. **多种实现** - 支持本地、Docker、SSH 远端容器
+3. **隔离环境** - Docker/SSH 容器提供完整的隔离执行环境，防止代码泄露
+4. **持久化会话** - 使用 tmux 维持 bash 状态，支持长期实验（DockerSession 和 SSHSession 共用同一套机制）
+5. **资源管理** - Docker 支持内存、CPU 等资源限制
 6. **上下文管理** - 实现了 Python 上下文管理器接口
 
 ## 配置参数
@@ -113,10 +167,23 @@ with DockerSession(config) as session:
 - `env_vars` - 环境变量
 - `auto_remove` - 容器结束后是否自动删除，默认 True
 
+### SSHSessionConfig（SSH Session 配置）
+继承 `SessionConfig`，额外参数：
+- `host` - 远端主机 IP 或域名（必填）
+- `port` - SSH 端口，默认 22
+- `username` - SSH 用户名，默认 `root`
+- `password` - SSH 密码（与 `key_file`/`key_data` 二选一）
+- `key_file` - SSH 私钥文件路径（如 `~/.ssh/id_rsa`）
+- `key_data` - SSH 私钥内容字符串（适合从环境变量注入）
+- `passphrase` - 私钥密码
+- `working_dir` - 远端工作目录，默认 `/workspace`
+- `connect_timeout` - SSH 连接超时（秒），默认 10
+- `keepalive_interval` - 心跳间隔（秒），默认 30；设为 0 禁用
+- `max_retries` - 连接失败最大重试次数，默认 3
+
 ## 后续扩展
 
 可在此基础上实现：
-- `RemoteSession` - SSH 连接远程服务器
 - `KubernetesSession` - Kubernetes 集群执行
 - `RaySession` - Ray 分布式框架
 
