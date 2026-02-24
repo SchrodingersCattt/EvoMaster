@@ -705,7 +705,7 @@ def _run_agent_sync(
                         "ip": node_ip, "message": "Bohrium 节点已就绪",
                     })
                     if node_ip:
-                        pg.attach_ssh_session(host=node_ip, password=node_pwd, working_dir="/workspace")
+                        pg.attach_ssh_session(host=node_ip, password=node_pwd, working_dir="/workspace", session_id=session_id)
                         _ssh_attached = True
                         logger.info("SSH session attached to Bohrium node ip=%s", node_ip)
                         event_callback("System", "status", f"已连接到 Bohrium 节点 {node_ip}")
