@@ -9,7 +9,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 ModeLiteral = Literal["direct", "planner"]
-VerifyLiteral = Literal["exact_match", "numerical_range", "contains_all", "llm_judge"]
+VerifyLiteral = Literal[
+    "exact_match", "numerical_range", "contains_all", "llm_judge",
+    "tool_called", "tool_args_match",
+]
 
 
 class TouchpointBands(BaseModel):
@@ -63,6 +66,8 @@ class ReferenceAnswer(BaseModel):
     value: Any
     tolerance: float | None = None
     unit: str = ""
+    tool_name: str | None = None
+    tool_arg: str | None = None
 
     @field_validator("tolerance")
     @classmethod
@@ -132,7 +137,7 @@ class QuestionItem(BaseModel):
             raise ValueError("question must include at least one scoring_checklist entry")
         ref_keys = {item.key for item in self.reference_answers}
         for item in self.scoring_checklist:
-            if item.verify in ("exact_match", "numerical_range", "contains_all") and item.id not in ref_keys:
+            if item.verify in ("exact_match", "numerical_range", "contains_all", "tool_called", "tool_args_match") and item.id not in ref_keys:
                 raise ValueError(
                     f"scoring_checklist item '{item.id}' requires a matching reference_answers key"
                 )
@@ -189,6 +194,8 @@ class EvalConfig(BaseModel):
     mat_config_path: str = "configs/mat_master/config.yaml"
     simulator_llm: LLMRuntimeConfig | None = None
     evaluator_llm: LLMRuntimeConfig | None = None
+    include_levels: list[str] | None = None
+    include_question_ids: list[str] | None = None
 
     @field_validator("k")
     @classmethod
@@ -234,6 +241,7 @@ class EvalRunRecord(BaseModel):
     deductions: list[dict[str, Any]] = Field(default_factory=list)
     confidence: float = 0.0
     safety_veto: SafetyVetoRecord = Field(default_factory=SafetyVetoRecord)
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     raw_result: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -247,4 +255,71 @@ class EvaluationSummary(BaseModel):
     by_mode: dict[str, Any]
     overall: dict[str, Any]
     safety: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# HumanSimulator schemas
+# ---------------------------------------------------------------------------
+
+
+class ExpectedResult(BaseModel):
+    """One expected numerical result for scoring."""
+
+    key: str
+    value: float
+    tolerance: float
+    unit: str = ""
+
+    @field_validator("tolerance")
+    @classmethod
+    def _validate_tolerance(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("tolerance must be >= 0")
+        return value
+
+
+class TaskSpec(BaseModel):
+    """Lightweight task specification for literature reproduction.
+
+    Replaces the verbose per-paper annotation YAMLs.  Only records *what* to
+    compute and the expected answer -- never *how*.
+    """
+
+    id: str
+    paper_id: str = ""
+    doi: str = ""
+    calc_type: str
+    formula: str
+    space_group: str = ""
+    mp_id: str = ""
+    difficulty: int = 1
+    expected: list[ExpectedResult]
+    cif_path: str = ""
+    tags: list[str] = Field(default_factory=list)
+
+    @field_validator("difficulty")
+    @classmethod
+    def _validate_difficulty(cls, value: int) -> int:
+        return max(1, min(value, 3))
+
+    def template_vars(self) -> dict[str, str]:
+        """Variables available to prompt templates."""
+        return {
+            "formula": self.formula,
+            "space_group": self.space_group or "?",
+            "mp_id": self.mp_id or "?",
+            "expected_keys": ", ".join(
+                f"{e.key} ({e.unit})" if e.unit else e.key for e in self.expected
+            ),
+        }
+
+
+class SimulatedTask(BaseModel):
+    """Output of ``HumanSimulator.formulate()`` -- everything the runner needs."""
+
+    prompt: str
+    expected: list[ExpectedResult] = Field(default_factory=list)
+    data_files: list[DataFileRef] = Field(default_factory=list)
+    spec: TaskSpec | None = None
+    question: QuestionItem | None = None
 

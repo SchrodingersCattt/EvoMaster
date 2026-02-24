@@ -5,6 +5,7 @@ from .schemas import (
     EvalConfig,
     EvalRunRecord,
     EvaluationSummary,
+    ExpectedResult,
     LLMRuntimeConfig,
     ModeLiteral,
     QuestionBank,
@@ -13,6 +14,8 @@ from .schemas import (
     Rubric,
     ScoringCheckItem,
     SafetyVetoRecord,
+    SimulatedTask,
+    TaskSpec,
 )
 
 __all__ = [
@@ -20,6 +23,7 @@ __all__ = [
     "EvalConfig",
     "EvalRunRecord",
     "EvaluationSummary",
+    "ExpectedResult",
     "LLMRuntimeConfig",
     "ModeLiteral",
     "QuestionBank",
@@ -28,4 +32,6 @@ __all__ = [
     "Rubric",
     "ScoringCheckItem",
     "SafetyVetoRecord",
+    "SimulatedTask",
+    "TaskSpec",
 ]
