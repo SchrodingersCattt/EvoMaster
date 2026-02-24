@@ -45,6 +45,7 @@ Session 的抽象基类，定义所有 Session 实现必须提供的接口：
 - 通过 SFTP 进行文件读写，比 `cat`/`echo` 重定向更高效可靠
 - 内置 keepalive 心跳和断线自动重连
 - **不管理容器生命周期**：容器由外部后端（如 Bohrium）负责分配和释放，SSHSession 只负责「连上去、用、断开」
+- **不通过 config.yaml 静态配置**：由后端在运行时通过 `playground.attach_ssh_session()` 动态创建和挂载
 - 敏感字段（`password`、`key_data`、`passphrase`）在 repr/日志中自动脱敏
 
 ## 使用示例
@@ -83,13 +84,34 @@ with DockerSession(config) as session:
     content = session.download("/workspace/output.txt")
 ```
 
-### SSH Session（密码认证）
+### SSH Session（通过 Playground 动态挂载）
+
+SSH Session 不在 `config.yaml` 中静态配置，而是由后端在运行时动态挂载。
+典型流程：后端创建 Bohrium 节点 → 获取 IP/密码 → 调用 `playground.attach_ssh_session()` → agent 在远端执行 → 结束后 `detach_session()` 恢复本地 session。
+
+```python
+# 后端代码示例（server.py / agent_run_service.py）
+pg.attach_ssh_session(
+    host="47.92.199.255",       # Bohrium 分配的节点 IP
+    password="node-password",
+    working_dir="/workspace",
+)
+
+# agent 运行期间，所有 tool 操作走 SSH 远程执行
+# ...
+
+# 运行结束后恢复本地 session
+pg.detach_session()
+pg._setup_session()
+```
+
+### SSH Session（直接使用，用于测试）
 
 ```python
 from evomaster.agent.session import SSHSession, SSHSessionConfig
 
 config = SSHSessionConfig(
-    host="192.168.1.100",   # 后端分配的容器 IP
+    host="192.168.1.100",
     port=22,
     username="root",
     password="your-password",
@@ -106,38 +128,6 @@ with SSHSession(config) as session:
     output = session.read_file("/workspace/run.py")
 ```
 
-### SSH Session（密钥认证）
-
-```python
-config = SSHSessionConfig(
-    host="192.168.1.100",
-    username="root",
-    key_file="~/.ssh/id_rsa",       # 本地私钥文件路径
-    # 或 key_data="-----BEGIN RSA..."  # 私钥内容（适合从环境变量注入）
-    working_dir="/workspace",
-)
-```
-
-### 通过 config.yaml 启用
-
-在 `configs/mat_master/config.yaml` 中将 `type` 改为 `ssh` 并填写连接信息：
-
-```yaml
-session:
-  type: "ssh"
-
-  ssh:
-    host: "192.168.1.100"
-    port: 22
-    username: "root"
-    password: "your-password"
-    working_dir: "/workspace"
-    timeout: 300
-    connect_timeout: 10
-    keepalive_interval: 30
-    max_retries: 3
-```
-
 ## 设计特点
 
 1. **抽象接口** - BaseSession 定义标准接口，便于多种实现（本地、Docker、SSH 等）
@@ -146,6 +136,7 @@ session:
 4. **持久化会话** - 使用 tmux 维持 bash 状态，支持长期实验（DockerSession 和 SSHSession 共用同一套机制）
 5. **资源管理** - Docker 支持内存、CPU 等资源限制
 6. **上下文管理** - 实现了 Python 上下文管理器接口
+7. **动态挂载** - SSH Session 由后端在运行时通过 `playground.attach_ssh_session()` 动态创建，无需在 config.yaml 中静态配置
 
 ## 配置参数
 
