@@ -15,6 +15,7 @@ if str(_project_root) not in sys.path:
 
 importlib.import_module('playground.mat_master.core.playground')
 
+# 仅存会话级运行时数据（如 bohrium_credentials）。history / task_ids / last_task_id 已持久化在 DB。
 SESSIONS: dict[str, dict] = {}
 
 
@@ -45,27 +46,16 @@ class ChatSessionsService:
         return row.get('user_id') == user_id
 
     def ensure_session(self, session_id: str, user_id: str | None = None) -> None:
-        """确保会话存在（空 history/task_ids）。user_id 为 None 时仅从 DB 加载到内存，不创建。"""
+        """确保会话存在：DB 有记录且内存有 SESSIONS 槽（仅存 bohrium_credentials 等运行时数据）。"""
         if session_id in SESSIONS:
             return
         if user_id is not None:
-            SESSIONS[session_id] = {
-                'history': [],
-                'task_ids': [],
-                'last_task_id': None,
-                'bohrium_credentials': None,
-            }
             self.table.create_session(session_id, user_id=user_id)
-            return
-
-        row = self.table.get_session(session_id)
-        if row:
-            SESSIONS[session_id] = {
-                'history': [],
-                'task_ids': [],
-                'last_task_id': row.get('last_task_id'),
-                'bohrium_credentials': None,
-            }
+        else:
+            row = self.table.get_session(session_id)
+            if not row:
+                return
+        SESSIONS[session_id] = {'bohrium_credentials': None}
 
     def list_sessions(self, user_id: str) -> list[dict]:
         return self.table.list_sessions(user_id=user_id) or []
@@ -73,6 +63,21 @@ class ChatSessionsService:
     def get_active_sessions_count(self) -> int:
         """返回所有用户的活跃会话数量（status='active'），不限于当前用户。"""
         return self.table.count_active_sessions()
+
+    def reset_stale_active_sessions(self) -> int:
+        """
+        将数据库中所有 status='active' 的会话重置为 'idle'。
+        部署/重启后调用：上一进程若被强制终止，stream 可能未执行 release，导致 DB 残留 active。
+        """
+        return self.table.reset_all_active_to_idle()
+
+    def get_session_user_id(self, session_id: str) -> str | None:
+        """获取会话所属用户 ID；会话不存在或无 user_id 时返回 None。"""
+        row = self.table.get_session(session_id)
+        if not row:
+            return None
+        uid = row.get('user_id')
+        return str(uid) if uid is not None else None
 
     def get_share_status(self, session_id: str) -> dict:
         """获取会话分享状态。返回 { \"enabled\": bool }，会话不存在返回 None。"""
@@ -84,6 +89,19 @@ class ChatSessionsService:
         return self.table.set_share_status(
             session_id, is_shared=enabled, user_id=user_id
         )
+
+    def delete_session(self, session_id: str, user_id: str) -> bool:
+        """删除会话。仅会话所有者可删除；会清理内存中的 SESSIONS 与 run 占用。"""
+        row = self.table.get_session(session_id)
+        if not row:
+            return False
+        if row.get('user_id') != user_id:
+            return False
+        SESSIONS.pop(session_id, None)
+        with self._sessions_run_lock:
+            self._sessions_in_run.discard(session_id)
+        self._run_stop_events.pop(session_id, None)
+        return self.table.delete_session(session_id, user_id)
 
     def try_acquire_session_run(self, session_id: str) -> bool:
         """若该 session 当前没有在跑的 agent 则占用并返回 True，否则返回 False。"""
@@ -103,10 +121,8 @@ class ChatSessionsService:
     def set_session_last_task(
         self, session_id: str, task_id: str, user_id: str | None = None
     ) -> None:
-        """设置会话当前 task_id 并加入 task_ids。"""
+        """设置会话当前 task_id（持久化到 DB）。"""
         self.ensure_session(session_id, user_id=user_id)
-        SESSIONS[session_id].setdefault('task_ids', []).append(task_id)
-        SESSIONS[session_id]['last_task_id'] = task_id
         self.table.set_session_last_task(session_id, task_id)
 
     def set_stop_event(self, session_id: str, stop_event: threading.Event) -> None:
