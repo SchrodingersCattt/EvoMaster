@@ -32,6 +32,7 @@ dependencies = [
 
 [project.optional-dependencies]
 docx = ["python-docx>=1.1.0"]
+ssh = ["paramiko>=3.0"]
 
 [build-system]
 requires = ["hatchling"]

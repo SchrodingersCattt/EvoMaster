@@ -13,7 +13,11 @@ from datetime import datetime
 from evomaster.config import ConfigManager
 from evomaster.utils import LLMConfig, create_llm
 from evomaster.agent import create_default_registry
-from evomaster.agent.session import LocalSession, LocalSessionConfig, DockerSession, DockerSessionConfig
+from evomaster.agent.session import (
+    LocalSession, LocalSessionConfig,
+    DockerSession, DockerSessionConfig,
+    SSHSession, SSHSessionConfig,
+)
 from evomaster.skills import SkillRegistry
 
 from .exp import BaseExp
@@ -249,7 +253,7 @@ class BasePlayground:
     def _setup_session(self) -> None:
         """创建并打开 Session（如果尚未创建）
 
-        根据配置选择 local 或 docker session。
+        根据配置选择 local、docker 或 ssh session。
         """
         if self.session is None:
             session_type = self.config.session.get("type", "local")
@@ -266,6 +270,18 @@ class BasePlayground:
                 session_config = DockerSessionConfig(**session_config_dict)
                 self.session = DockerSession(session_config)
                 self.logger.info(f"Using Docker session with image: {session_config.image}")
+            elif session_type == "ssh":
+                session_config_dict = self.config.session.get("ssh", {}).copy()
+                if "working_dir" in session_config_dict and "workspace_path" not in session_config_dict:
+                    session_config_dict["workspace_path"] = session_config_dict["working_dir"]
+                elif "workspace_path" in session_config_dict and "working_dir" not in session_config_dict:
+                    session_config_dict["working_dir"] = session_config_dict["workspace_path"]
+                elif "workspace_path" not in session_config_dict and "working_dir" not in session_config_dict:
+                    session_config_dict["workspace_path"] = "/workspace"
+                    session_config_dict["working_dir"] = "/workspace"
+                session_config = SSHSessionConfig(**session_config_dict)
+                self.session = SSHSession(session_config)
+                self.logger.info(f"Using SSH session: {session_config.host}:{session_config.port}")
             else:
                 session_config_dict = self.config.session.get("local", {}).copy()
                 # 同步 working_dir 和 workspace_path
