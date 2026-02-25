@@ -599,6 +599,40 @@ class BasePlayground:
             self.agent.session = None
             self.logger.debug("Agent session reference cleared")
 
+    def sync_skills_to_remote(
+        self,
+        remote_base: str = "/personal/workspace/.evomaster",
+    ) -> None:
+        """Upload skills directories to the remote SSH node and set remote_project_root.
+
+        Only effective when the current session is an SSHSession.
+        Subclasses with additional skill tiers should override this method.
+        """
+        if not isinstance(self.session, SSHSession):
+            self.logger.debug("sync_skills_to_remote: skipped (not an SSH session)")
+            return
+
+        env = self.session._env
+        exclude = {"__pycache__", ".git", "node_modules", ".mypy_cache", ".pytest_cache"}
+
+        config_dict = self.config.model_dump()
+        skills_config = config_dict.get("skills", {})
+        skills_root_rel = skills_config.get("skills_root", "evomaster/skills")
+        skills_root = Path(skills_root_rel)
+        if not skills_root.is_absolute():
+            skills_root = Path(__file__).resolve().parent.parent.parent / skills_root
+
+        if skills_root.is_dir():
+            remote_skills = f"{remote_base}/{skills_root_rel}"
+            env.upload_directory(str(skills_root), remote_skills, exclude=exclude)
+
+        evomaster_pkg = Path(__file__).resolve().parent.parent
+        remote_pkg = f"{remote_base}/evomaster"
+        env.upload_directory(str(evomaster_pkg), remote_pkg, exclude=exclude)
+
+        self.session.remote_project_root = remote_base
+        self.logger.info("sync_skills_to_remote: done, remote_project_root=%s", remote_base)
+
     def _setup_mcp_tools(self):
         """初始化 MCP 工具
 

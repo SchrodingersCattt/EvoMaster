@@ -305,44 +305,77 @@ class SkillTool(BaseTool):
         script_path = script_path.resolve()
         # 解析项目根（含 evomaster 的目录），供 Python 脚本设置 PYTHONPATH
         project_root = self._get_skill_project_root(skill)
-        # 构建命令
-        if script_path.suffix == '.py':
-            import sys
 
-            if sys.platform == 'win32':
-                if project_root is not None:
-                    cmd = (
-                        f'set "PYTHONPATH={str(project_root)}" '
-                        f'&& python "{script_path}"'
-                    )
-                else:
-                    cmd = f'python "{script_path}"'
+        # SSH-aware: when remote_project_root is set, remap local paths to remote POSIX paths
+        remote_root = getattr(session, 'remote_project_root', None)
+        use_remote = remote_root is not None and project_root is not None
+
+        if use_remote:
+            from pathlib import PurePosixPath
+            try:
+                rel = script_path.relative_to(project_root).as_posix()
+            except ValueError:
+                rel = script_path.name
+            remote_script = str(PurePosixPath(remote_root) / rel)
+            suffix = script_path.suffix
+
+            if suffix == '.py':
+                cmd = f"PYTHONPATH={shlex.quote(remote_root)} python {shlex.quote(remote_script)}"
+            elif suffix == '.sh':
+                cmd = f"bash {shlex.quote(remote_script)}"
+            elif suffix == '.js':
+                cmd = f"node {shlex.quote(remote_script)}"
             else:
-                py_prefix = ''
-                if project_root is not None:
-                    py_prefix = f"PYTHONPATH={shlex.quote(str(project_root))} "
-                cmd = f"{py_prefix}python {shlex.quote(str(script_path))}"
-        elif script_path.suffix == '.sh':
-            cmd = f"bash {script_path}"
-        elif script_path.suffix == '.js':
-            cmd = f"node {script_path}"
-        else:
-            return (
-                f"Error: Unsupported script type: {script_path.suffix}",
-                {'error': 'unsupported_script_type'},
-            )
+                return (
+                    f"Error: Unsupported script type: {suffix}",
+                    {'error': 'unsupported_script_type'},
+                )
 
-        if script_args and script_args.strip():
-            import sys
-
-            if sys.platform == 'win32':
-                cmd += ' ' + script_args.strip()
-            else:
+            if script_args and script_args.strip():
                 try:
                     parts = shlex.split(script_args.strip())
                     cmd += ' ' + ' '.join(shlex.quote(p) for p in parts)
                 except ValueError:
                     cmd += ' ' + script_args.strip()
+        else:
+            # Local execution (original logic)
+            if script_path.suffix == '.py':
+                import sys
+
+                if sys.platform == 'win32':
+                    if project_root is not None:
+                        cmd = (
+                            f'set "PYTHONPATH={str(project_root)}" '
+                            f'&& python "{script_path}"'
+                        )
+                    else:
+                        cmd = f'python "{script_path}"'
+                else:
+                    py_prefix = ''
+                    if project_root is not None:
+                        py_prefix = f"PYTHONPATH={shlex.quote(str(project_root))} "
+                    cmd = f"{py_prefix}python {shlex.quote(str(script_path))}"
+            elif script_path.suffix == '.sh':
+                cmd = f"bash {script_path}"
+            elif script_path.suffix == '.js':
+                cmd = f"node {script_path}"
+            else:
+                return (
+                    f"Error: Unsupported script type: {script_path.suffix}",
+                    {'error': 'unsupported_script_type'},
+                )
+
+            if script_args and script_args.strip():
+                import sys
+
+                if sys.platform == 'win32':
+                    cmd += ' ' + script_args.strip()
+                else:
+                    try:
+                        parts = shlex.split(script_args.strip())
+                        cmd += ' ' + ' '.join(shlex.quote(p) for p in parts)
+                    except ValueError:
+                        cmd += ' ' + script_args.strip()
 
         # job-manager/run_resilient_job.py 需要 Bohrium 鉴权：从 session 注入前端传入的 access_key
         if (

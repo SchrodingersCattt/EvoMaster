@@ -347,6 +347,52 @@ class SSHEnv(BaseEnv):
         self.ssh_exec(f"mkdir -p '{remote_dir}'")
         self._sftp.put(local_path, remote_path)
 
+    def upload_directory(
+        self,
+        local_dir: str,
+        remote_dir: str,
+        exclude: set[str] | None = None,
+    ) -> int:
+        """Recursively upload a local directory tree to the remote host via SFTP.
+
+        Returns the number of files uploaded.
+        """
+        from pathlib import Path
+
+        self._ensure_connected()
+        assert self._sftp is not None
+
+        exclude = exclude or set()
+        local_root = Path(local_dir)
+        if not local_root.is_dir():
+            raise FileNotFoundError(f"Local directory not found: {local_dir}")
+
+        created_dirs: set[str] = set()
+        count = 0
+
+        for root, dirs, files in os.walk(local_root):
+            dirs[:] = [d for d in dirs if d not in exclude]
+            rel = Path(root).relative_to(local_root).as_posix()
+            remote_sub = f"{remote_dir}/{rel}" if rel != "." else remote_dir
+
+            if remote_sub not in created_dirs:
+                self.ssh_exec(f"mkdir -p '{remote_sub}'")
+                created_dirs.add(remote_sub)
+
+            for fname in files:
+                if fname in exclude:
+                    continue
+                local_file = os.path.join(root, fname)
+                remote_file = f"{remote_sub}/{fname}"
+                try:
+                    self._sftp.put(local_file, remote_file)
+                    count += 1
+                except Exception as exc:
+                    logger.warning("upload_directory: skip %s -> %s: %s", local_file, remote_file, exc)
+
+        logger.info("upload_directory: %s -> %s (%d files)", local_dir, remote_dir, count)
+        return count
+
     def download_file(self, remote_path: str, timeout: int | None = None) -> bytes:
         """Download a remote file into memory via SFTP."""
         self._ensure_connected()
