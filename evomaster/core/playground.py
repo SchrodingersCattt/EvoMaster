@@ -613,7 +613,7 @@ class BasePlayground:
             return
 
         env = self.session._env
-        exclude = {"__pycache__", ".git", "node_modules", ".mypy_cache", ".pytest_cache"}
+        exclude = {"__pycache__", ".git", "node_modules", ".mypy_cache", ".pytest_cache", "SKILL.md"}
 
         config_dict = self.config.model_dump()
         skills_config = config_dict.get("skills", {})
@@ -625,10 +625,6 @@ class BasePlayground:
         if skills_root.is_dir():
             remote_skills = f"{remote_base}/{skills_root_rel}"
             env.upload_directory(str(skills_root), remote_skills, exclude=exclude)
-
-        evomaster_pkg = Path(__file__).resolve().parent.parent
-        remote_pkg = f"{remote_base}/evomaster"
-        env.upload_directory(str(evomaster_pkg), remote_pkg, exclude=exclude)
 
         self.session.remote_project_root = remote_base
         self.logger.info("sync_skills_to_remote: done, remote_project_root=%s", remote_base)
