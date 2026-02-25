@@ -546,6 +546,7 @@ class BasePlayground:
         password: str | None = None,
         key_file: str | None = None,
         working_dir: str = "/workspace",
+        session_id: str | None = None,
         **kwargs,
     ) -> SSHSession:
         """Create and attach an SSHSession from explicit credentials.
@@ -554,9 +555,15 @@ class BasePlayground:
         case where the caller has ``(host, port, password)`` from an
         external container allocator (e.g. Bohrium).
 
+        Args:
+            session_id: When provided, the remote working directory becomes
+                ``{working_dir}/{session_id}`` to isolate concurrent sessions.
+
         Returns:
             The opened SSHSession instance.
         """
+        if session_id:
+            working_dir = f"{working_dir.rstrip('/')}/{session_id}"
         config = SSHSessionConfig(
             host=host,
             port=port,
@@ -569,6 +576,7 @@ class BasePlayground:
         )
         session = SSHSession(config)
         self.attach_session(session)
+        self.logger.info("SSH workspace: %s", working_dir)
         return session
 
     def detach_session(self) -> None:
