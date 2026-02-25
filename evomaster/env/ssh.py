@@ -295,7 +295,11 @@ class SSHEnv(BaseEnv):
         self.tmux_send_keys("", enter=True)
         time.sleep(0.5)
 
-        self.logger.debug("tmux session %s initialized", session_name)
+        working_dir = getattr(self.config.session_config, "working_dir", "/workspace")
+        self.tmux_send_keys(f"mkdir -p '{working_dir}' && cd '{working_dir}'", enter=True)
+        time.sleep(0.2)
+
+        self.logger.debug("tmux session %s initialized at %s", session_name, working_dir)
 
     def tmux_send_keys(self, keys: str, enter: bool = False) -> None:
         """Send keys to the tmux session."""
