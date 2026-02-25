@@ -597,19 +597,41 @@ class MatToolCallbacks:
         )
 
     def before_patch_job_manager_bohr_id(self, tool_call: Any) -> None:
-        """Auto-fill missing ``--bohr_job_id`` for job-manager run_script calls.
+        """Auto-fill missing bohr_job_id for monitor_job calls (and legacy job-manager use_skill).
 
         Avoids fragile failures when the LLM remembers job_id but forgets
         bohr_job_id, which is required/safer for some async backends.
         """
-        if (tool_call.function.name or '') != 'use_skill':
-            return
+        tool_name = tool_call.function.name or ''
         args_str = tool_call.function.arguments or ''
         try:
             args = json.loads(args_str) if args_str else {}
         except (json.JSONDecodeError, TypeError):
             return
         if not isinstance(args, dict):
+            return
+
+        # ── monitor_job (structured tool) ──────────────────────────────────
+        if tool_name == 'monitor_job':
+            if args.get('bohr_job_id'):
+                return
+            job_id = args.get('job_id')
+            if not job_id:
+                return
+            bohr_map = self._collect_submit_job_map()
+            bohr_job_id = bohr_map.get(job_id)
+            if not bohr_job_id:
+                return
+            args['bohr_job_id'] = bohr_job_id
+            tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
+            self.logger.info(
+                'before_tool: patched monitor_job bohr_job_id for job_id=%s',
+                job_id,
+            )
+            return
+
+        # ── Legacy: use_skill + job-manager (kept for backward compatibility) ──
+        if tool_name != 'use_skill':
             return
         if args.get('skill_name') != 'job-manager':
             return

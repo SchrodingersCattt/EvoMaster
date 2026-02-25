@@ -32,10 +32,15 @@ import time
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from evomaster.agent.tools.skill import SkillTool
+def _find_project_root(start: Path) -> Path | None:
+    """Walk up from *start* to find the directory containing an ``evomaster/`` sub-package."""
+    for parent in (start,) + tuple(start.parents):
+        if (parent / 'evomaster').is_dir():
+            return parent.resolve()
+    return None
 
 _THIS_FILE = Path(__file__).resolve()
-_PROJECT_ROOT = SkillTool._get_skill_project_root(_THIS_FILE.parent)
+_PROJECT_ROOT = _find_project_root(_THIS_FILE.parent)
 if _PROJECT_ROOT is not None:
     p = str(_PROJECT_ROOT)
     if p not in sys.path:
