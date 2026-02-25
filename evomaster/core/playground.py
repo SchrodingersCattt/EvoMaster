@@ -545,7 +545,7 @@ class BasePlayground:
         username: str = "root",
         password: str | None = None,
         key_file: str | None = None,
-        working_dir: str = "/workspace",
+        working_dir: str = "/personal/workspace",
         session_id: str | None = None,
         **kwargs,
     ) -> SSHSession:
