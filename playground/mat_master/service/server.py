@@ -638,8 +638,6 @@ def _run_agent_sync(
     logging.basicConfig(level=logging.INFO)
     run_done: threading.Event | None = None
     _msg_seq = 0  # auto-incrementing message id per run
-    _ssh_attached = False
-
     def event_callback(source: str, event_type: str, content) -> None:
         nonlocal _msg_seq
         _msg_seq += 1
@@ -685,6 +683,7 @@ def _run_agent_sync(
 
         # Bohrium node lifecycle: create -> wait -> attach SSH -> run -> destroy
         bohrium_node_id = None
+        _ssh_attached = False
         access_key = (bohrium_access_key or "").strip()
         if access_key and bohrium_project_id is not None:
             try:
@@ -699,16 +698,30 @@ def _run_agent_sync(
                     })
                     node_info = node_svc.wait_until_ready(access_key, bohrium_node_id)
                     node_ip = node_info.get("ip")
+                    node_domain = node_info.get("domain") or ""
                     node_pwd = node_info.get("password")
+                    node_user = node_info.get("node_user") or "root"
+                    # Bohrium container nodes expose SSH via domainName, not raw IP
+                    ssh_host = node_domain or node_ip
                     event_callback("System", "bohrium_node", {
                         "node_id": bohrium_node_id, "status": "ready",
-                        "ip": node_ip, "message": "Bohrium 节点已就绪",
+                        "ip": node_ip, "domain": node_domain, "message": "Bohrium 节点已就绪",
                     })
-                    if node_ip:
-                        pg.attach_ssh_session(host=node_ip, password=node_pwd, working_dir="/workspace", session_id=session_id)
+                    if ssh_host:
+                        pg.attach_ssh_session(
+                            host=ssh_host,
+                            username=node_user,
+                            password=node_pwd,
+                            working_dir="/personal/workspace",
+                        )
                         _ssh_attached = True
-                        logger.info("SSH session attached to Bohrium node ip=%s", node_ip)
-                        event_callback("System", "status", f"已连接到 Bohrium 节点 {node_ip}")
+                        logger.info("SSH session attached to Bohrium node host=%s", ssh_host)
+                        event_callback("System", "status", f"已连接到 Bohrium 节点 {ssh_host}")
+                        try:
+                            pg.sync_skills_to_remote()
+                            event_callback("System", "status", "Skills 已同步到远程节点")
+                        except Exception as e:
+                            logger.warning("sync_skills_to_remote failed: %s", e, exc_info=True)
             except Exception as e:
                 logger.warning("Auto create Bohrium node failed: %s", e, exc_info=True)
                 event_callback("System", "status", f"自动创建 Bohrium 节点失败: {e}，继续使用当前环境运行")
@@ -773,15 +786,16 @@ def _run_agent_sync(
         event_callback("System", "error", str(e))
         raise
     finally:
-        # Destroy Bohrium node and restore default session
+        # Detach SSH session and restore default session
+        if _ssh_attached:
+            try:
+                pg.detach_session()
+                pg._setup_session()
+                logger.info("SSH session detached, default session restored")
+            except Exception as e:
+                logger.warning("Session restore failed: %s", e)
+        # Destroy Bohrium node
         if bohrium_node_id is not None:
-            if _ssh_attached:
-                try:
-                    pg.detach_session()
-                    pg._setup_session()
-                    logger.info("SSH session detached, default session restored")
-                except Exception as e:
-                    logger.warning("Session restore failed: %s", e)
             try:
                 from src.services.bohrium_node_service import get_bohrium_node_service
                 get_bohrium_node_service().destroy_node(

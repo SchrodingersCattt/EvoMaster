@@ -35,7 +35,7 @@ class MatMasterPlayground(BasePlayground):
     文档解析、DPA 计算），支持 LiteLLM 与 Azure 的 LLM 配置格式。
     使用 MatMasterAgent：异步任务未完成时不会因 partial 结束，需 task_completed=true 才结束。
     工作流模式通过 --mode 切换：direct（即时）| planner（规划执行）。
-    异步计算的弹性监控（submit→poll→diagnose→retry）由 job-manager skill 处理，
+    异步计算的弹性监控（submit→poll→diagnose→retry）由内置工具 monitor_job 处理，
     不再作为独立的 Exp 模式。
 
     使用方式：
@@ -117,7 +117,43 @@ class MatMasterPlayground(BasePlayground):
         memory_tools = get_memory_tools(self.memory_service)
         self.tools.register_many(memory_tools)
         self.tools.register(get_peek_file_tool())
-        self.logger.info("Registered %d memory tools and peek_file", len(memory_tools))
+        from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
+        self.tools.register(MonitorJobTool())
+        self.logger.info("Registered %d memory tools, peek_file, monitor_job", len(memory_tools))
+
+    def sync_skills_to_remote(
+        self,
+        remote_base: str = "/personal/workspace/.evomaster",
+    ) -> None:
+        """Upload 3-tier skills (core + mat_master + evomaster pkg) to the remote node."""
+        from evomaster.agent.session import SSHSession
+
+        if not isinstance(self.session, SSHSession):
+            self.logger.debug("sync_skills_to_remote: skipped (not an SSH session)")
+            return
+
+        env = self.session._env
+        exclude = {"__pycache__", ".git", "node_modules", ".mypy_cache", ".pytest_cache", "SKILL.md"}
+
+        config_dict = self.config.model_dump()
+        skills_config = config_dict.get("skills", {})
+        skills_root_rel = skills_config.get("skills_root", "evomaster/skills")
+        skills_root = Path(skills_root_rel)
+        if not skills_root.is_absolute():
+            skills_root = _project_root() / skills_root
+        if skills_root.is_dir():
+            env.upload_directory(str(skills_root), f"{remote_base}/{skills_root_rel}", exclude=exclude)
+
+        mat_skills_root = _project_root() / "playground" / "mat_master" / "skills"
+        if mat_skills_root.is_dir():
+            env.upload_directory(
+                str(mat_skills_root),
+                f"{remote_base}/playground/mat_master/skills",
+                exclude=exclude,
+            )
+
+        self.session.remote_project_root = remote_base
+        self.logger.info("sync_skills_to_remote: done, remote_project_root=%s", remote_base)
 
     def setup(self) -> None:
         """Override: build MatMasterSkillRegistry and pass to tools/agents."""
@@ -222,8 +258,8 @@ class MatMasterPlayground(BasePlayground):
         """Return solver by --mode: direct | planner.
 
         Resilient calculation logic (submit/monitor/diagnose/retry) is now handled
-        by the job-manager skill, not a top-level Exp. The agent invokes it naturally
-        via use_skill within either Direct or Planner mode.
+        by the monitor_job built-in tool, not a top-level Exp. The agent invokes it
+        naturally within either Direct or Planner mode.
         """
         mode = getattr(self, "_run_mode", None) or "direct"
         if mode == "planner":

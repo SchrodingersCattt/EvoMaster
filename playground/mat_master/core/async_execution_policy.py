@@ -79,6 +79,8 @@ class AsyncExecutionPolicy:
             return True
         if name.startswith("mat_") and "_submit_" in name:
             return True
+        if name == "monitor_job":
+            return True
         if name == "use_skill":
             try:
                 args = json.loads(tool_call.function.arguments or "{}")
