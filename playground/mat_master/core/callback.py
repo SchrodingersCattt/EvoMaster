@@ -28,21 +28,21 @@ AfterToolCallback = Callable[[Any, str, dict[str, Any]], tuple[str, dict[str, An
 # ---------------------------------------------------------------------------
 
 _DPA_MODEL_ALIAS_MAP: dict[str, str] = {
-    "DPA2.4-7M": "https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/cd12300a-d3e6-4de9-9783-dd9899376cae/dpa-2.4-7M.pt",
-    "DPA3.1-3M": "https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/18b8f35e-69f5-47de-92ef-af8ef2c13f54/DPA-3.1-3M.pt",
+    'DPA2.4-7M': 'https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/cd12300a-d3e6-4de9-9783-dd9899376cae/dpa-2.4-7M.pt',
+    'DPA3.1-3M': 'https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/18b8f35e-69f5-47de-92ef-af8ef2c13f54/DPA-3.1-3M.pt',
 }
 
 _OSS_URL_RE = re.compile(r"https?://[^\s,'\"<>)}\]]+")
-_DEFAULT_DOWNLOAD_SUBDIR = "_tmp/mat_oss_downloads"
+_DEFAULT_DOWNLOAD_SUBDIR = '_tmp/mat_oss_downloads'
 _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024
 _SKIP_DOWNLOAD_TOKENS = (
-    "trajectory",
-    "trace",
-    "traj",
-    "lammpstrj",
-    "dump",
-    "stdout",
-    "stderr",
+    'trajectory',
+    'trace',
+    'traj',
+    'lammpstrj',
+    'dump',
+    'stdout',
+    'stderr',
 )
 
 # ---------------------------------------------------------------------------
@@ -50,28 +50,37 @@ _SKIP_DOWNLOAD_TOKENS = (
 # ---------------------------------------------------------------------------
 
 _CHARACTERIZATION_PREFIXES: tuple[str, ...] = (
-    "mat_nmr_",
-    "mat_xrd_",
-    "mat_electron_microscope_",
+    'mat_nmr_',
+    'mat_xrd_',
+    'mat_electron_microscope_',
 )
 
-_CHARACTERIZATION_ARTIFACT_KEYS: frozenset[str] = frozenset({
-    "chart_option_path",
-    "csv_path",
-    "raw_data_path",
-    "features_path",
-    "top_phases_csv_path",
-    "all_phases_path",
-    "chart_json_path",
-})
+_CHARACTERIZATION_ARTIFACT_KEYS: frozenset[str] = frozenset(
+    {
+        'chart_option_path',
+        'csv_path',
+        'raw_data_path',
+        'features_path',
+        'top_phases_csv_path',
+        'all_phases_path',
+        'chart_json_path',
+    }
+)
 
-_MOL_FILE_EXTS: frozenset[str] = frozenset({
-    ".xyz", ".pdb", ".sdf", ".mol", ".mol2", ".cif",
-})
+_MOL_FILE_EXTS: frozenset[str] = frozenset(
+    {
+        '.xyz',
+        '.pdb',
+        '.sdf',
+        '.mol',
+        '.mol2',
+        '.cif',
+    }
+)
 
 
 def _normalize_alias(text: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", text.lower())
+    return re.sub(r'[^a-z0-9]', '', text.lower())
 
 
 _DPA_MODEL_ALIAS_NORM_MAP = {
@@ -84,7 +93,7 @@ def _extract_artifact_urls(obj: Any, keys: frozenset[str]) -> list[str]:
     urls: list[str] = []
     if isinstance(obj, dict):
         for k, v in obj.items():
-            if k in keys and isinstance(v, str) and v.strip().startswith("http"):
+            if k in keys and isinstance(v, str) and v.strip().startswith('http'):
                 urls.append(v.strip())
             elif isinstance(v, (dict, list)):
                 urls.extend(_extract_artifact_urls(v, keys))
@@ -92,6 +101,7 @@ def _extract_artifact_urls(obj: Any, keys: frozenset[str]) -> list[str]:
         for item in obj:
             urls.extend(_extract_artifact_urls(item, keys))
     return urls
+
 
 # ---------------------------------------------------------------------------
 # Pipeline
@@ -117,18 +127,29 @@ class ToolCallbackPipeline:
             try:
                 cb(tool_call)
             except Exception as e:
-                self.logger.warning("before_tool callback failed: %s", e)
+                self.logger.warning('before_tool callback failed: %s', e)
 
     def run_after(
         self, tool_call: Any, observation: str, info: dict[str, Any]
     ) -> tuple[str, dict[str, Any]]:
         obs = observation
         meta = dict(info or {})
-        for cb in self._after:
+        for i, cb in enumerate(self._after):
+            cb_name = getattr(cb, '__name__', str(cb))
             try:
+                self.logger.info(
+                    '[flow] ToolCallbackPipeline.run_after callback %d/%d %s',
+                    i + 1,
+                    len(self._after),
+                    cb_name,
+                )
                 obs, meta = cb(tool_call, obs, meta)
+                self.logger.info(
+                    '[flow] ToolCallbackPipeline.run_after callback %s done',
+                    cb_name,
+                )
             except Exception as e:
-                self.logger.warning("after_tool callback failed: %s", e)
+                self.logger.warning('after_tool callback failed: %s', e)
         return obs, meta
 
 
@@ -185,7 +206,7 @@ class MatToolCallbacks:
     def _is_remote(self) -> bool:
         """True when the session is remote (SSH / Docker), not local."""
         cls_name = type(self._session).__name__
-        return "Local" not in cls_name
+        return 'Local' not in cls_name
 
     @staticmethod
     def _is_oss_url(url: str) -> bool:
@@ -193,7 +214,7 @@ class MatToolCallbacks:
             host = urlparse(url).netloc.lower()
         except Exception:
             return False
-        return ("aliyuncs.com" in host) or (".oss-" in host) or host.startswith("oss-")
+        return ('aliyuncs.com' in host) or ('.oss-' in host) or host.startswith('oss-')
 
     @staticmethod
     def _should_skip_download(url: str) -> bool:
@@ -207,11 +228,17 @@ class MatToolCallbacks:
         for remote, ``Path.exists`` for local.
         """
         parsed = urlparse(url)
-        name = PurePosixPath(parsed.path).name or "artifact.bin"
+        name = PurePosixPath(parsed.path).name or 'artifact.bin'
 
         if self._is_remote:
+            self.logger.info(
+                '[autodownload] _pick_download_path remote start name=%s', name
+            )
             base = f"{download_dir.rstrip('/')}/{name}"
             if not self._session.path_exists(base):
+                self.logger.info(
+                    '[autodownload] _pick_download_path remote base not exists return base'
+                )
                 return base
             stem = PurePosixPath(name).stem
             suffix = PurePosixPath(name).suffix
@@ -219,6 +246,10 @@ class MatToolCallbacks:
             while True:
                 candidate = f"{download_dir.rstrip('/')}/{stem}_{i}{suffix}"
                 if not self._session.path_exists(candidate):
+                    self.logger.info(
+                        '[autodownload] _pick_download_path remote candidate=%s return',
+                        candidate,
+                    )
                     return candidate
                 i += 1
         else:
@@ -241,8 +272,8 @@ class MatToolCallbacks:
         For local sessions it is an absolute local path.
         """
         workspace = (
-            getattr(getattr(self.agent.session, "config", None), "workspace_path", None)
-            or ""
+            getattr(getattr(self.agent.session, 'config', None), 'workspace_path', None)
+            or ''
         )
         if not workspace:
             return None
@@ -253,7 +284,12 @@ class MatToolCallbacks:
     def _ensure_download_dir(self, download_dir: str) -> None:
         """Create *download_dir* if it does not exist."""
         if self._is_remote:
+            self.logger.info(
+                '[autodownload] _ensure_download_dir remote mkdir start dir=%s',
+                download_dir,
+            )
             self._session.exec_bash(f"mkdir -p '{download_dir}'")
+            self.logger.info('[autodownload] _ensure_download_dir remote mkdir done')
         else:
             Path(download_dir).mkdir(parents=True, exist_ok=True)
 
@@ -264,28 +300,51 @@ class MatToolCallbacks:
         ``session.write_file`` (binary-safe via session.upload with tempfile).
         For local sessions it writes directly to the filesystem.
         """
+        self.logger.info(
+            '[autodownload] _download_single start url=%s dir=%s is_remote=%s',
+            url[:80],
+            download_dir,
+            self._is_remote,
+        )
         dest = self._pick_download_path(download_dir, url)
-        req = urllib.request.Request(url, method="GET")
+        self.logger.info(
+            '[autodownload] _download_single _pick_download_path done dest=%s', dest
+        )
+        req = urllib.request.Request(url, method='GET')
+        self.logger.info(
+            '[autodownload] _download_single urlopen start url=%s', url[:80]
+        )
         with urllib.request.urlopen(req, timeout=60) as resp:  # nosec B310
-            content_len = resp.headers.get("Content-Length")
+            content_len = resp.headers.get('Content-Length')
             if content_len:
                 try:
                     if int(content_len) > _AUTO_DOWNLOAD_MAX_BYTES:
-                        self.logger.info("Skip large OSS file: %s (%s bytes)", url, content_len)
+                        self.logger.info(
+                            'Skip large OSS file: %s (%s bytes)', url, content_len
+                        )
                         return None
                 except ValueError:
                     pass
             data = resp.read(_AUTO_DOWNLOAD_MAX_BYTES + 1)
             if len(data) > _AUTO_DOWNLOAD_MAX_BYTES:
-                self.logger.info("Skip oversized OSS payload during read: %s", url)
+                self.logger.info('Skip oversized OSS payload during read: %s', url)
                 return None
+        self.logger.info(
+            '[autodownload] _download_single urlopen done len=%s', len(data)
+        )
 
         if self._is_remote:
             with tempfile.NamedTemporaryFile(delete=False) as tmp:
                 tmp.write(data)
                 tmp_path = tmp.name
             try:
+                self.logger.info(
+                    '[autodownload] _download_single session.upload start dest=%s', dest
+                )
                 self._session.upload(tmp_path, dest)
+                self.logger.info(
+                    '[autodownload] _download_single session.upload done dest=%s', dest
+                )
             finally:
                 Path(tmp_path).unlink(missing_ok=True)
         else:
@@ -316,10 +375,10 @@ class MatToolCallbacks:
         for msg in dialog.messages:
             if not isinstance(msg, ToolMessage):
                 continue
-            name = getattr(msg, "name", "") or ""
-            if "_submit_" not in name:
+            name = getattr(msg, 'name', '') or ''
+            if '_submit_' not in name:
                 continue
-            content = getattr(msg, "content", "") or ""
+            content = getattr(msg, 'content', '') or ''
             try:
                 payload = json.loads(content)
             except (json.JSONDecodeError, TypeError):
@@ -327,13 +386,20 @@ class MatToolCallbacks:
             if not isinstance(payload, dict):
                 continue
             # Unwrap the formatted observation wrapper if present.
-            inner = payload.get("observation")
+            inner = payload.get('observation')
             if isinstance(inner, dict):
                 payload = inner
-            job_id = payload.get("job_id")
-            extra_info = payload.get("extra_info") or {}
-            bohr_job_id = extra_info.get("bohr_job_id") if isinstance(extra_info, dict) else None
-            if isinstance(job_id, str) and isinstance(bohr_job_id, str) and job_id and bohr_job_id:
+            job_id = payload.get('job_id')
+            extra_info = payload.get('extra_info') or {}
+            bohr_job_id = (
+                extra_info.get('bohr_job_id') if isinstance(extra_info, dict) else None
+            )
+            if (
+                isinstance(job_id, str)
+                and isinstance(bohr_job_id, str)
+                and job_id
+                and bohr_job_id
+            ):
                 mapping[job_id] = bohr_job_id
         return mapping
 
@@ -352,14 +418,14 @@ class MatToolCallbacks:
             bohr_match = re.search(r'"bohr_job_id"\s*:\s*"([^"]+)"', observation)
             if not job_match:
                 return None
-            out: dict[str, Any] = {"job_id": job_match.group(1)}
+            out: dict[str, Any] = {'job_id': job_match.group(1)}
             if bohr_match:
-                out["extra_info"] = {"bohr_job_id": bohr_match.group(1)}
+                out['extra_info'] = {'bohr_job_id': bohr_match.group(1)}
             return out
         if not isinstance(payload, dict):
             return None
         # Common wrapper: {"status":"success", "observation": {...}}
-        obs = payload.get("observation")
+        obs = payload.get('observation')
         if isinstance(obs, dict):
             payload = obs
         return payload if isinstance(payload, dict) else None
@@ -368,11 +434,11 @@ class MatToolCallbacks:
     def _derive_software_from_tool_name(tool_name: str) -> str:
         # e.g. mat_dpa_submit_optimize_structure -> dpa
         if not isinstance(tool_name, str):
-            return "unknown"
-        parts = tool_name.split("_")
-        if len(parts) >= 2 and parts[0] == "mat":
+            return 'unknown'
+        parts = tool_name.split('_')
+        if len(parts) >= 2 and parts[0] == 'mat':
             return parts[1]
-        return "unknown"
+        return 'unknown'
 
     # ------------------------------------------------------------------
     # Before callbacks
@@ -402,28 +468,28 @@ class MatToolCallbacks:
         one single token ``--file foo.cif`` and fails.  This callback
         strips one outer quote pair so downstream parsing succeeds.
         """
-        if (tool_call.function.name or "") != "use_skill":
+        if (tool_call.function.name or '') != 'use_skill':
             return
-        args_str = tool_call.function.arguments or ""
+        args_str = tool_call.function.arguments or ''
         try:
             args = json.loads(args_str) if args_str else {}
         except (json.JSONDecodeError, TypeError):
             return
         if not isinstance(args, dict):
             return
-        if args.get("action") != "run_script":
+        if args.get('action') != 'run_script':
             return
 
-        script_args = args.get("script_args")
+        script_args = args.get('script_args')
         if not isinstance(script_args, str) or not script_args.strip():
             return
 
         cleaned = self._unwrap_quoted_args(script_args)
         if cleaned != script_args:
-            args["script_args"] = cleaned
+            args['script_args'] = cleaned
             tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
             self.logger.info(
-                "before_tool: unwrapped outer quotes in script_args: %r -> %r",
+                'before_tool: unwrapped outer quotes in script_args: %r -> %r',
                 script_args,
                 cleaned,
             )
@@ -437,32 +503,32 @@ class MatToolCallbacks:
         match and rewrites the argument so the downstream
         ``get_reference()`` succeeds on the first try.
         """
-        if (tool_call.function.name or "") != "use_skill":
+        if (tool_call.function.name or '') != 'use_skill':
             return
-        args_str = tool_call.function.arguments or ""
+        args_str = tool_call.function.arguments or ''
         try:
             args = json.loads(args_str) if args_str else {}
         except (json.JSONDecodeError, TypeError):
             return
         if not isinstance(args, dict):
             return
-        if args.get("action") != "get_reference":
+        if args.get('action') != 'get_reference':
             return
 
-        ref_name = args.get("reference_name")
+        ref_name = args.get('reference_name')
         if not isinstance(ref_name, str) or not ref_name.strip():
             return
         ref_name = ref_name.strip()
         # Only try to resolve bare filenames (no directory separator).
-        if "/" in ref_name or "\\" in ref_name:
+        if '/' in ref_name or '\\' in ref_name:
             return
 
-        skill_name = args.get("skill_name")
+        skill_name = args.get('skill_name')
         if not skill_name:
             return
 
         # Access the skill registry through the agent.
-        registry = getattr(self.agent, "skill_registry", None)
+        registry = getattr(self.agent, 'skill_registry', None)
         if registry is None:
             return
         skill = registry.get_skill(skill_name)
@@ -472,7 +538,7 @@ class MatToolCallbacks:
         from pathlib import Path
 
         candidates: list[Path] = []
-        for root_name in ("references", "reference"):
+        for root_name in ('references', 'reference'):
             root = skill.skill_path / root_name
             if root.exists():
                 try:
@@ -483,17 +549,17 @@ class MatToolCallbacks:
         if len(candidates) == 1:
             # Compute the relative path from the references root.
             matched = candidates[0]
-            for root_name in ("references", "reference"):
+            for root_name in ('references', 'reference'):
                 root = skill.skill_path / root_name
                 if root.exists():
                     try:
                         rel = matched.relative_to(root).as_posix()
-                        args["reference_name"] = rel
+                        args['reference_name'] = rel
                         tool_call.function.arguments = json.dumps(
                             args, ensure_ascii=False
                         )
                         self.logger.info(
-                            "before_tool: resolved reference name %r -> %r",
+                            'before_tool: resolved reference name %r -> %r',
                             ref_name,
                             rel,
                         )
@@ -503,27 +569,29 @@ class MatToolCallbacks:
 
     def before_resolve_dpa_model_alias(self, tool_call: Any) -> None:
         """Resolve DPA short model key to hard-coded OSS URL."""
-        tool_name = tool_call.function.name or ""
-        if not (tool_name.startswith("mat_dpa_") or tool_name.startswith("mat_compdart_")):
+        tool_name = tool_call.function.name or ''
+        if not (
+            tool_name.startswith('mat_dpa_') or tool_name.startswith('mat_compdart_')
+        ):
             return
-        args_str = tool_call.function.arguments or ""
+        args_str = tool_call.function.arguments or ''
         try:
             args = json.loads(args_str) if args_str else {}
         except (json.JSONDecodeError, TypeError):
             return
         if not isinstance(args, dict):
             return
-        model_path = args.get("model_path")
+        model_path = args.get('model_path')
         if not isinstance(model_path, str):
             return
         norm = _normalize_alias(model_path)
         resolved = _DPA_MODEL_ALIAS_NORM_MAP.get(norm)
         if not resolved:
             return
-        args["model_path"] = resolved
+        args['model_path'] = resolved
         tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
         self.logger.info(
-            "before_tool: resolved DPA model alias %s -> %s",
+            'before_tool: resolved DPA model alias %s -> %s',
             model_path,
             resolved,
         )
@@ -534,26 +602,26 @@ class MatToolCallbacks:
         Avoids fragile failures when the LLM remembers job_id but forgets
         bohr_job_id, which is required/safer for some async backends.
         """
-        if (tool_call.function.name or "") != "use_skill":
+        if (tool_call.function.name or '') != 'use_skill':
             return
-        args_str = tool_call.function.arguments or ""
+        args_str = tool_call.function.arguments or ''
         try:
             args = json.loads(args_str) if args_str else {}
         except (json.JSONDecodeError, TypeError):
             return
         if not isinstance(args, dict):
             return
-        if args.get("skill_name") != "job-manager":
+        if args.get('skill_name') != 'job-manager':
             return
-        if args.get("action") != "run_script":
+        if args.get('action') != 'run_script':
             return
-        if args.get("script_name") != "run_resilient_job.py":
+        if args.get('script_name') != 'run_resilient_job.py':
             return
 
-        script_args = args.get("script_args")
+        script_args = args.get('script_args')
         if not isinstance(script_args, str) or not script_args.strip():
             return
-        if "--bohr_job_id" in script_args:
+        if '--bohr_job_id' in script_args:
             return
 
         try:
@@ -563,7 +631,7 @@ class MatToolCallbacks:
 
         job_id = None
         for i, tok in enumerate(tokens):
-            if tok == "--job_id" and i + 1 < len(tokens):
+            if tok == '--job_id' and i + 1 < len(tokens):
                 job_id = tokens[i + 1]
                 break
         if not job_id:
@@ -574,10 +642,10 @@ class MatToolCallbacks:
         if not bohr_job_id:
             return
 
-        args["script_args"] = f'{script_args} --bohr_job_id "{bohr_job_id}"'
+        args['script_args'] = f'{script_args} --bohr_job_id "{bohr_job_id}"'
         tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
         self.logger.info(
-            "before_tool: patched job-manager args with bohr_job_id for job_id=%s",
+            'before_tool: patched job-manager args with bohr_job_id for job_id=%s',
             job_id,
         )
 
@@ -590,8 +658,8 @@ class MatToolCallbacks:
         for local sessions returns the resolved local path.
         """
         workspace = (
-            getattr(getattr(self.agent.session, "config", None), "workspace_path", None)
-            or ""
+            getattr(getattr(self.agent.session, 'config', None), 'workspace_path', None)
+            or ''
         )
         if not workspace:
             return None
@@ -606,29 +674,30 @@ class MatToolCallbacks:
         remote to avoid Windows path mangling).
         """
         import os
-        mount_prefix = os.environ.get("WORKSPACE_MOUNT_PREFIX", "/workspace")
-        value = value.strip().replace("\\", "/")
-        prefix_slash = mount_prefix.rstrip("/") + "/"
+
+        mount_prefix = os.environ.get('WORKSPACE_MOUNT_PREFIX', '/workspace')
+        value = value.strip().replace('\\', '/')
+        prefix_slash = mount_prefix.rstrip('/') + '/'
 
         if self._is_remote:
             pp = PurePosixPath
             if value.startswith(prefix_slash):
-                rel = value[len(prefix_slash):].lstrip("/")
+                rel = value[len(prefix_slash) :].lstrip('/')
                 return str(pp(workspace_root) / rel)
             if value.startswith(mount_prefix):
-                rel = value[len(mount_prefix):].lstrip("/")
-                return str(pp(workspace_root) / (rel or "."))
+                rel = value[len(mount_prefix) :].lstrip('/')
+                return str(pp(workspace_root) / (rel or '.'))
             if not PurePosixPath(value).is_absolute():
                 return str(pp(workspace_root) / value)
             return value
         else:
             ws = Path(workspace_root)
             if value.startswith(prefix_slash):
-                rel = value[len(prefix_slash):].lstrip("/")
+                rel = value[len(prefix_slash) :].lstrip('/')
                 return str((ws / rel).resolve())
             if value.startswith(mount_prefix):
-                rel = value[len(mount_prefix):].lstrip("/")
-                return str((ws / (rel or ".")).resolve())
+                rel = value[len(mount_prefix) :].lstrip('/')
+                return str((ws / (rel or '.')).resolve())
             path = Path(value)
             if not path.is_absolute():
                 return str((ws / path).resolve())
@@ -643,7 +712,7 @@ class MatToolCallbacks:
     def _download_remote_to_temp(self, remote_path: str) -> Path:
         """Download a remote file to a local temp file for OSS upload."""
         data = self._session.download(remote_path)
-        suffix = PurePosixPath(remote_path).suffix or ""
+        suffix = PurePosixPath(remote_path).suffix or ''
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
         tmp.write(data)
         tmp.close()
@@ -659,17 +728,17 @@ class MatToolCallbacks:
         or directory separator, uploads them to OSS, and replaces with URLs
         so the MCP tool receives only SMILES strings and OSS URLs.
         """
-        tool_name = tool_call.function.name or ""
-        if tool_name != "mat_nmr_NMR_predict_tool":
+        tool_name = tool_call.function.name or ''
+        if tool_name != 'mat_nmr_NMR_predict_tool':
             return
-        args_str = tool_call.function.arguments or ""
+        args_str = tool_call.function.arguments or ''
         try:
             args = json.loads(args_str) if args_str else {}
         except (json.JSONDecodeError, TypeError):
             return
         if not isinstance(args, dict):
             return
-        smiles_list = args.get("smiles_list")
+        smiles_list = args.get('smiles_list')
         if not isinstance(smiles_list, list):
             return
 
@@ -684,10 +753,10 @@ class MatToolCallbacks:
                 new_list.append(item)
                 continue
             val = item.strip()
-            if val.startswith("http://") or val.startswith("https://"):
+            if val.startswith('http://') or val.startswith('https://'):
                 new_list.append(item)
                 continue
-            is_file = ("/" in val or "\\" in val)
+            is_file = '/' in val or '\\' in val
             if not is_file:
                 suffix = PurePosixPath(val).suffix.lower()
                 is_file = suffix in _MOL_FILE_EXTS
@@ -698,7 +767,7 @@ class MatToolCallbacks:
             resolved = self._resolve_file_path(val, workspace_root)
             if resolved is None or not self._file_exists_and_is_file(resolved):
                 self.logger.warning(
-                    "NMR_predict_tool: file in smiles_list not found: %s", val
+                    'NMR_predict_tool: file in smiles_list not found: %s', val
                 )
                 new_list.append(item)
                 continue
@@ -710,15 +779,16 @@ class MatToolCallbacks:
                     local_for_upload = self._download_remote_to_temp(resolved)
 
                 from evomaster.adaptors.calculation.oss_io import upload_file_to_oss
+
                 oss_url = upload_file_to_oss(local_for_upload, Path(workspace_root))
                 new_list.append(oss_url)
                 changed = True
                 self.logger.info(
-                    "before_tool: uploaded NMR predict file %s -> %s", val, oss_url
+                    'before_tool: uploaded NMR predict file %s -> %s', val, oss_url
                 )
             except Exception as e:
                 self.logger.warning(
-                    "before_tool: NMR predict file upload failed %s: %s", val, e
+                    'before_tool: NMR predict file upload failed %s: %s', val, e
                 )
                 new_list.append(item)
             finally:
@@ -726,7 +796,7 @@ class MatToolCallbacks:
                     local_for_upload.unlink(missing_ok=True)
 
         if changed:
-            args["smiles_list"] = new_list
+            args['smiles_list'] = new_list
             tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
 
     # ------------------------------------------------------------------
@@ -746,7 +816,7 @@ class MatToolCallbacks:
         if not isinstance(observation, str):
             return None
         text = observation.strip()
-        if not text or not text.startswith("{"):
+        if not text or not text.startswith('{'):
             return None
         try:
             parsed = json.loads(text)
@@ -770,19 +840,19 @@ class MatToolCallbacks:
            Common pattern: ``{"error": "something went wrong"}``
         """
         # Rule 1: code field — non-zero integer indicates failure
-        code = payload.get("code")
+        code = payload.get('code')
         if isinstance(code, (int, float)) and int(code) != 0:
-            msg = payload.get("message") or payload.get("msg") or payload.get("error")
+            msg = payload.get('message') or payload.get('msg') or payload.get('error')
             return str(msg) if msg else f"Tool returned error code {int(code)}"
 
         # Rule 2: success field — explicit False
-        success = payload.get("success")
+        success = payload.get('success')
         if success is False:  # must be explicit False, not None/missing
-            msg = payload.get("message") or payload.get("msg") or payload.get("error")
-            return str(msg) if msg else "Tool returned success=false"
+            msg = payload.get('message') or payload.get('msg') or payload.get('error')
+            return str(msg) if msg else 'Tool returned success=false'
 
         # Rule 3: error field — non-empty string
-        error = payload.get("error")
+        error = payload.get('error')
         if isinstance(error, str) and error.strip():
             return error.strip()
 
@@ -807,10 +877,10 @@ class MatToolCallbacks:
         and the LLM can adjust parameters or retry.
         """
         # Only applies to MCP tools (identified by mcp_tool in info)
-        if not info.get("mcp_tool"):
+        if not info.get('mcp_tool'):
             return observation, info
         # Already marked as error by upstream logic
-        if "error" in info:
+        if 'error' in info:
             return observation, info
 
         parsed = self._try_parse_observation_json(observation)
@@ -824,11 +894,11 @@ class MatToolCallbacks:
         # Mark as business-level error so _format_tool_observation sets
         # status="error" and the LLM sees the failure clearly.
         new_info = dict(info)
-        new_info["error"] = error_msg
-        new_info["success"] = False
+        new_info['error'] = error_msg
+        new_info['success'] = False
         self.logger.warning(
             "MCP business error detected for tool '%s': %s",
-            info.get("mcp_tool", "?"),
+            info.get('mcp_tool', '?'),
             error_msg[:200],
         )
         return observation, new_info
@@ -854,23 +924,23 @@ class MatToolCallbacks:
         a message indicating that interactive input is unavailable.
         """
         # Only handle use_skill calls for ask-human
-        if (tool_call.function.name or "") != "use_skill":
+        if (tool_call.function.name or '') != 'use_skill':
             return observation, info
         try:
-            args = json.loads(tool_call.function.arguments or "{}")
+            args = json.loads(tool_call.function.arguments or '{}')
         except (json.JSONDecodeError, TypeError):
             return observation, info
-        if not isinstance(args, dict) or args.get("skill_name") != "ask-human":
+        if not isinstance(args, dict) or args.get('skill_name') != 'ask-human':
             return observation, info
 
         # Extract the question from the script output
-        question = ""
-        context = ""
+        question = ''
+        context = ''
         # The script outputs a JSON line; try to parse it from stdout.
         script_stdout = observation
         # Strip the "Script output:\n" prefix if present
-        if script_stdout.startswith("Script output:\n"):
-            script_stdout = script_stdout[len("Script output:\n"):]
+        if script_stdout.startswith('Script output:\n'):
+            script_stdout = script_stdout[len('Script output:\n') :]
         for line in script_stdout.strip().splitlines():
             line = line.strip()
             if not line:
@@ -878,8 +948,8 @@ class MatToolCallbacks:
             try:
                 payload = json.loads(line)
                 if isinstance(payload, dict):
-                    question = payload.get("question", question)
-                    context = payload.get("context", context)
+                    question = payload.get('question', question)
+                    context = payload.get('context', context)
                     break
             except (json.JSONDecodeError, TypeError):
                 # Fallback: treat the whole output as the question
@@ -887,45 +957,48 @@ class MatToolCallbacks:
                     question = line
 
         if not question:
-            question = "The agent is asking for your input."
+            question = 'The agent is asking for your input.'
 
         # Emit ask_human event to the frontend
-        emit_fn = getattr(self.agent, "event_callback", None)
+        emit_fn = getattr(self.agent, 'event_callback', None)
         if callable(emit_fn):
-            ask_payload = {"question": question}
+            ask_payload = {'question': question}
             if context:
-                ask_payload["context"] = context
-            emit_fn("MatMaster", "ask_human", ask_payload)
+                ask_payload['context'] = context
+            emit_fn('MatMaster', 'ask_human', ask_payload)
         else:
             # For non-streaming agents, try the _emit helper
-            _emit = getattr(self.agent, "_emit", None)
+            _emit = getattr(self.agent, '_emit', None)
             if callable(_emit):
-                ask_payload = {"question": question}
+                ask_payload = {'question': question}
                 if context:
-                    ask_payload["context"] = context
-                _emit("MatMaster", "ask_human", ask_payload)
+                    ask_payload['context'] = context
+                _emit('MatMaster', 'ask_human', ask_payload)
 
         # Block waiting for the user's reply
-        reply_queue: queue.Queue | None = getattr(self.agent, "_ask_human_queue", None)
+        reply_queue: queue.Queue | None = getattr(self.agent, '_ask_human_queue', None)
         if reply_queue is None:
             self.logger.warning(
-                "ask-human invoked but no _ask_human_queue is set on the agent. "
-                "Returning a placeholder. Set agent._ask_human_queue for interactive mode."
+                'ask-human invoked but no _ask_human_queue is set on the agent. '
+                'Returning a placeholder. Set agent._ask_human_queue for interactive mode.'
             )
             return (
-                "⚠️ Interactive input is not available in the current execution mode. "
-                "The agent asked: " + question,
+                '⚠️ Interactive input is not available in the current execution mode. '
+                'The agent asked: ' + question,
                 info,
             )
 
-        self.logger.info("ask-human: waiting for user reply (timeout=300s)...")
+        self.logger.info('ask-human: waiting for user reply (timeout=300s)...')
         try:
             reply = reply_queue.get(timeout=300)
         except queue.Empty:
-            self.logger.warning("ask-human: user reply timed out after 300s.")
-            return "⚠️ User did not reply within 5 minutes. Proceeding without input.", info
+            self.logger.warning('ask-human: user reply timed out after 300s.')
+            return (
+                '⚠️ User did not reply within 5 minutes. Proceeding without input.',
+                info,
+            )
 
-        self.logger.info("ask-human: received user reply (%d chars).", len(reply))
+        self.logger.info('ask-human: received user reply (%d chars).', len(reply))
         return f"User replied: {reply}", info
 
     def after_track_async_submit(
@@ -935,29 +1008,29 @@ class MatToolCallbacks:
         info: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
         """Track submit_* jobs in runtime registry for finish-attempt gating."""
-        tool_name = tool_call.function.name or ""
-        if "_submit_" not in tool_name:
+        tool_name = tool_call.function.name or ''
+        if '_submit_' not in tool_name:
             return observation, info
-        if info.get("error") is not None:
+        if info.get('error') is not None:
             return observation, info
 
         payload = self._extract_submit_payload(observation)
         if not payload:
             return observation, info
 
-        job_id = payload.get("job_id")
+        job_id = payload.get('job_id')
         if not isinstance(job_id, str) or not job_id:
             return observation, info
 
-        extra_info = payload.get("extra_info")
+        extra_info = payload.get('extra_info')
         bohr_job_id = None
         if isinstance(extra_info, dict):
-            b = extra_info.get("bohr_job_id")
+            b = extra_info.get('bohr_job_id')
             if isinstance(b, str) and b:
                 bohr_job_id = b
 
         software = self._derive_software_from_tool_name(tool_name)
-        registry = getattr(self.agent, "_job_registry", None)
+        registry = getattr(self.agent, '_job_registry', None)
         if registry is None:
             return observation, info
 
@@ -968,7 +1041,7 @@ class MatToolCallbacks:
             bohr_job_id=bohr_job_id,
         )
         self.logger.info(
-            "after_tool: tracked async submit job_id=%s software=%s bohr_job_id=%s",
+            'after_tool: tracked async submit job_id=%s software=%s bohr_job_id=%s',
             job_id,
             software,
             bohr_job_id,
@@ -982,17 +1055,34 @@ class MatToolCallbacks:
         info: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
         """Auto-download OSS artifacts for any mat_* tool."""
-        tool_name = tool_call.function.name or ""
-        if not tool_name.startswith("mat_"):
+        tool_name = tool_call.function.name or ''
+        if not tool_name.startswith('mat_'):
             return observation, info
-        urls = [u for u in _OSS_URL_RE.findall(observation or "") if self._is_oss_url(u)]
+        urls = [
+            u for u in _OSS_URL_RE.findall(observation or '') if self._is_oss_url(u)
+        ]
         if not urls:
             return observation, info
 
+        self.logger.info(
+            '[autodownload] after_autodownload_oss_results urls_count=%s is_remote=%s',
+            len(urls),
+            self._is_remote,
+        )
         download_dir = self._resolve_download_dir()
         if download_dir is None:
+            self.logger.info(
+                '[autodownload] after_autodownload_oss_results resolve_download_dir=None skip'
+            )
             return observation, info
+        self.logger.info(
+            '[autodownload] after_autodownload_oss_results ensure_download_dir start dir=%s',
+            download_dir,
+        )
         self._ensure_download_dir(download_dir)
+        self.logger.info(
+            '[autodownload] after_autodownload_oss_results ensure_download_dir done'
+        )
 
         # De-duplicate and filter
         targets: list[str] = []
@@ -1006,6 +1096,10 @@ class MatToolCallbacks:
         if not targets:
             return observation, info
 
+        self.logger.info(
+            '[autodownload] after_autodownload_oss_results ThreadPoolExecutor start targets=%s',
+            len(targets),
+        )
         # Parallel download (up to 4 concurrent)
         downloaded: list[dict[str, str]] = []
 
@@ -1019,24 +1113,30 @@ class MatToolCallbacks:
                 try:
                     _, local_path = fut.result()
                 except Exception as e:
-                    self.logger.warning("after_tool: OSS download failed (%s): %s", url_key, e)
+                    self.logger.warning(
+                        'after_tool: OSS download failed (%s): %s', url_key, e
+                    )
                     continue
                 if local_path is not None:
-                    downloaded.append({"url": url_key, "local_path": str(local_path)})
+                    downloaded.append({'url': url_key, 'local_path': str(local_path)})
+        self.logger.info(
+            '[autodownload] after_autodownload_oss_results ThreadPoolExecutor done downloaded=%s',
+            len(downloaded),
+        )
 
         if not downloaded:
             return observation, info
 
         note_lines = [
-            "",
-            "[Auto-download callback] Downloaded OSS artifacts to workspace:",
+            '',
+            '[Auto-download callback] Downloaded OSS artifacts to workspace:',
         ]
         for item in downloaded:
             note_lines.append(f"- {item['url']}")
             note_lines.append(f"  local_path: {item['local_path']}")
-        new_obs = (observation or "") + "\n" + "\n".join(note_lines)
+        new_obs = (observation or '') + '\n' + '\n'.join(note_lines)
         new_info = dict(info or {})
-        new_info["auto_downloaded_files"] = downloaded
+        new_info['auto_downloaded_files'] = downloaded
         return new_obs, new_info
 
     def after_download_characterization_results(
@@ -1056,10 +1156,10 @@ class MatToolCallbacks:
         Skips URLs already downloaded by the upstream OSS callback to avoid
         duplicate downloads.
         """
-        tool_name = tool_call.function.name or ""
+        tool_name = tool_call.function.name or ''
         if not any(tool_name.startswith(p) for p in _CHARACTERIZATION_PREFIXES):
             return observation, info
-        if info.get("error") is not None:
+        if info.get('error') is not None:
             return observation, info
 
         parsed = self._try_parse_observation_json(observation)
@@ -1067,7 +1167,7 @@ class MatToolCallbacks:
             return observation, info
 
         # Unwrap standard ``{"status":"success","observation":{...}}`` wrapper
-        inner = parsed.get("observation")
+        inner = parsed.get('observation')
         if isinstance(inner, dict):
             parsed = inner
 
@@ -1075,9 +1175,10 @@ class MatToolCallbacks:
         if not artifact_urls:
             return observation, info
 
-        already = {d["url"] for d in info.get("auto_downloaded_files", [])}
+        already = {d['url'] for d in info.get('auto_downloaded_files', [])}
         new_urls = [
-            u for u in artifact_urls
+            u
+            for u in artifact_urls
             if u not in already and not self._should_skip_download(u)
         ]
         if not new_urls:
@@ -1093,27 +1194,27 @@ class MatToolCallbacks:
             try:
                 dest = self._download_single(url, download_dir)
                 if dest is not None:
-                    downloaded.append({"url": url, "local_path": dest})
+                    downloaded.append({'url': url, 'local_path': dest})
             except Exception as e:
                 self.logger.warning(
-                    "Characterization artifact download failed (%s): %s", url, e
+                    'Characterization artifact download failed (%s): %s', url, e
                 )
 
         if not downloaded:
             return observation, info
 
         note_lines = [
-            "",
-            "[Characterization callback] Downloaded result artifacts to workspace:",
+            '',
+            '[Characterization callback] Downloaded result artifacts to workspace:',
         ]
         for item in downloaded:
             note_lines.append(f"- {item['url']}")
             note_lines.append(f"  local_path: {item['local_path']}")
 
-        new_obs = (observation or "") + "\n" + "\n".join(note_lines)
+        new_obs = (observation or '') + '\n' + '\n'.join(note_lines)
         new_info = dict(info or {})
-        existing = list(new_info.get("auto_downloaded_files", []))
-        new_info["auto_downloaded_files"] = existing + downloaded
+        existing = list(new_info.get('auto_downloaded_files', []))
+        new_info['auto_downloaded_files'] = existing + downloaded
         return new_obs, new_info
 
     def after_survey_reminder(
@@ -1123,24 +1224,28 @@ class MatToolCallbacks:
         info: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
         """Append survey-retrieval reminder after mat_sn_search-papers-enhanced."""
-        if tool_call.function.name != "mat_sn_search-papers-enhanced":
+        if tool_call.function.name != 'mat_sn_search-papers-enhanced':
             return observation, info
-        if info.get("error") is not None:
+        if info.get('error') is not None:
             return observation, info
 
-        n_papers = ""
+        n_papers = ''
         try:
             obj = json.loads(observation)
-            if isinstance(obj, dict) and "data" in obj and isinstance(obj["data"], list):
-                n_papers = str(len(obj["data"]))
+            if (
+                isinstance(obj, dict)
+                and 'data' in obj
+                and isinstance(obj['data'], list)
+            ):
+                n_papers = str(len(obj['data']))
         except (json.JSONDecodeError, TypeError):
             pass
 
-        call_count = info.get("call_count", "?")
+        call_count = info.get('call_count', '?')
         reminder = (
             f"\n\n[Survey reminder: {n_papers or '?'} papers returned (retrieval #{call_count}). "
-            "A thorough survey requires at least 6-15 retrievals; if results are sparse or "
-            "retrieval count is low, vary your question/words and call "
-            "mat_sn_search-papers-enhanced or mat_sn_web-search again.]"
+            'A thorough survey requires at least 6-15 retrievals; if results are sparse or '
+            'retrieval count is low, vary your question/words and call '
+            'mat_sn_search-papers-enhanced or mat_sn_web-search again.]'
         )
         return observation + reminder, info

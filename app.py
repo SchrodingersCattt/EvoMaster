@@ -16,10 +16,10 @@ from src.models.health import HealthResponse
 from src.models.root import RootResponse
 from src.services.agent_run_service import get_agent_run_service, init_playground
 from src.services.sessions_service import get_sessions_service
+from src.services.user_service import get_user_service
 from src.utils.constant import DB_CONFIG
 from src.utils.exceptions import BaseErrorResponse
 from src.utils.logger import LoggingConfig, setup_logging
-from src.utils.user import optional_user_id
 
 log_config = LoggingConfig.get_main_app_config()
 setup_logging(**log_config)
@@ -134,7 +134,7 @@ async def log_requests(request: Request, call_next):
             return [_redact(x) for x in obj]
         return obj
 
-    user_id = optional_user_id(request)
+    user_id = get_user_service().get_user_id(request, required=False)
     start = time.perf_counter()
     query = dict(request.query_params)
     path_params = request.scope.get('path_params') or {}

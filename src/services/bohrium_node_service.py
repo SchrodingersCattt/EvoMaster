@@ -18,7 +18,7 @@ from src.utils.constant import BOHRIUM_OPENAPI_BASE_URL
 logger = logging.getLogger(__name__)
 
 # 与 start.sh 一致：镜像、磁盘、自动关机时间等
-DEFAULT_IMAGE_ID = 1038
+DEFAULT_IMAGE_ID = 48917
 DEFAULT_DISK_SIZE = 40
 DEFAULT_TURNOFF_AFTER = 24
 # 默认机器类型对应 SKU（与 start.sh 中 case 一致）
@@ -145,6 +145,31 @@ class BohriumNodeService:
         raise TimeoutError(
             f"Bohrium node node_id={node_id} did not become ready within {timeout}s"
         )
+
+    def get_node_info(self, access_key: str, node_id: int) -> dict[str, Any] | None:
+        """
+        单次调用 node/list 获取该节点信息。若 status=2（就绪）返回 {node_id, ip, password}，否则返回 None。
+        用于复用表中有 node_id 时快速判断是否可直接用，不轮询。
+        """
+        with httpx.Client(timeout=30.0) as client:
+            r = client.get(
+                f"{self._base_url}/node/list",
+                params={'queryType': 'private'},
+                headers={'accessKey': access_key},
+            )
+            r.raise_for_status()
+            data = r.json()
+        items = (data.get('data') or {}).get('items') or []
+        for item in items:
+            if str(item.get('nodeId')) == str(node_id):
+                if item.get('status') == NODE_STATUS_READY:
+                    return {
+                        'node_id': node_id,
+                        'ip': item.get('ip'),
+                        'password': item.get('nodePwd'),
+                    }
+                return None
+        return None
 
     def destroy_node(
         self,
