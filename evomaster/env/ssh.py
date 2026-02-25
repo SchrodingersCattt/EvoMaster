@@ -229,32 +229,40 @@ class SSHEnv(BaseEnv):
         """Execute a single command over SSH (non-interactive, non-tmux).
 
         Analogous to ``DockerEnv.docker_exec``.
+
+        Network/connection exceptions (socket.timeout, SSHException, OSError) are
+        propagated to the caller instead of being swallowed, so upper layers can
+        detect a broken connection rather than hanging forever.
         """
         self._ensure_connected()
         assert self._ssh_client is not None
 
         timeout = timeout or self.config.session_config.timeout
 
-        try:
-            _stdin, stdout, stderr = self._ssh_client.exec_command(
-                command, timeout=timeout
-            )
-            exit_code = stdout.channel.recv_exit_status()
-            out = stdout.read().decode('utf-8', errors='replace')
-            err = stderr.read().decode('utf-8', errors='replace')
-            return {
-                'stdout': out,
-                'stderr': err,
-                'exit_code': exit_code,
-                'output': out + err,
-            }
-        except Exception as exc:
-            return {
-                'stdout': '',
-                'stderr': str(exc),
-                'exit_code': -1,
-                'output': str(exc),
-            }
+        _stdin, stdout, stderr = self._ssh_client.exec_command(
+            command, timeout=timeout
+        )
+        channel = stdout.channel
+        channel.settimeout(timeout)
+
+        deadline = time.monotonic() + timeout
+        while not channel.exit_status_ready():
+            if time.monotonic() > deadline:
+                channel.close()
+                raise TimeoutError(
+                    f'SSH command timed out after {timeout}s: {command[:120]}'
+                )
+            time.sleep(0.1)
+
+        exit_code = channel.recv_exit_status()
+        out = stdout.read().decode('utf-8', errors='replace')
+        err = stderr.read().decode('utf-8', errors='replace')
+        return {
+            'stdout': out,
+            'stderr': err,
+            'exit_code': exit_code,
+            'output': out + err,
+        }
 
     # ------------------------------------------------------------------
     # tmux (same mechanism as DockerEnv)
@@ -313,7 +321,12 @@ class SSHEnv(BaseEnv):
         )
 
     def tmux_send_keys(self, keys: str, enter: bool = False) -> None:
-        """Send keys to the tmux session."""
+        """Send keys to the tmux session.
+
+        Raises ``RuntimeError`` if the tmux session no longer exists (e.g. the
+        remote process crashed), so callers are not left polling for a PS1
+        prompt that will never arrive.
+        """
         if not self._tmux_session:
             raise RuntimeError('tmux session not initialized')
 
@@ -321,23 +334,65 @@ class SSHEnv(BaseEnv):
         cmd = f"tmux send-keys -t {self._tmux_session} '{escaped}'"
         if enter:
             cmd += ' C-m'
-        self.ssh_exec(cmd)
+        result = self.ssh_exec(cmd)
+        if result.get('exit_code', 0) != 0:
+            raise RuntimeError(
+                f"tmux send-keys failed (exit {result['exit_code']}): "
+                f"{result.get('stderr', '').strip()}"
+            )
 
-    def get_tmux_logs(self) -> str:
-        """Read the tmux log file via SFTP (fast, no exec overhead)."""
+    def get_tmux_logs(self, timeout: float = 10.0) -> str:
+        """Read the tmux log file via SFTP (fast, no exec overhead).
+
+        SFTP channels have no native per-operation timeout, so the read is
+        wrapped in a daemon thread with ``join(timeout)``.  If the thread
+        does not finish in time the method falls back to ``ssh_exec`` (which
+        has its own deadline), keeping the caller from hanging indefinitely.
+        """
         if not self._tmux_log_path:
             return ''
         self._ensure_connected()
         assert self._sftp is not None
-        try:
-            with self._sftp_lock:
-                with self._sftp.open(self._tmux_log_path, 'r') as f:
-                    return f.read().decode('utf-8', errors='replace')
-        except FileNotFoundError:
-            return ''
-        except Exception:
-            result = self.ssh_exec(f"cat {self._tmux_log_path} 2>/dev/null || echo ''")
+
+        container: dict[str, Any] = {}
+
+        def _read() -> None:
+            try:
+                with self._sftp_lock:
+                    with self._sftp.open(self._tmux_log_path, 'r') as f:  # type: ignore[union-attr]
+                        container['data'] = f.read().decode('utf-8', errors='replace')
+            except FileNotFoundError:
+                container['data'] = ''
+            except Exception as exc:
+                container['error'] = exc
+
+        t = threading.Thread(target=_read, daemon=True)
+        t.start()
+        t.join(timeout)
+
+        if t.is_alive():
+            self.logger.warning(
+                'get_tmux_logs: SFTP read timed out after %.1fs, falling back to ssh_exec',
+                timeout,
+            )
+            result = self.ssh_exec(
+                f"cat {self._tmux_log_path} 2>/dev/null || echo ''",
+                timeout=int(timeout),
+            )
             return result.get('stdout', '')
+
+        if 'error' in container:
+            self.logger.debug(
+                'get_tmux_logs: SFTP error (%s), falling back to ssh_exec',
+                container['error'],
+            )
+            result = self.ssh_exec(
+                f"cat {self._tmux_log_path} 2>/dev/null || echo ''",
+                timeout=int(timeout),
+            )
+            return result.get('stdout', '')
+
+        return container.get('data', '')
 
     # ------------------------------------------------------------------
     # File operations (SFTP)
