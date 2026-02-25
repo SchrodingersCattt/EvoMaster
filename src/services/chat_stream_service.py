@@ -101,10 +101,11 @@ def prepare_send_message(
     session_id: str,
     req: ChatSendRequest,
     user_id: str | None,
+    org_id: str | None = None,
 ) -> SendStreamContext | None:
     """
     为发送消息做准备：确保会话、尝试占用 run、更新 Bohrium 凭证、写入用户消息、创建队列与 stop_ev。
-    若该会话已有任务在运行则返回 None（调用方应返回 409）。
+    若该会话已有任务在运行则返回 None（调用方应返回 409）。org_id 由上游 Header X-Org-Id 注入。
     """
     sid = session_id.strip()
     svc.ensure_session(sid, user_id=user_id)
@@ -118,6 +119,7 @@ def prepare_send_message(
     if (
         req.bohrium_access_key
         or req.bohrium_project_id
+        or org_id is not None
         or req.bohrium_user_id is not None
     ):
         bohrium_creds = svc.SESSIONS[sid].get('bohrium_credentials') or {}
@@ -129,6 +131,8 @@ def prepare_send_message(
                 bohrium_creds['project_id'] = int(req.bohrium_project_id)
             except (TypeError, ValueError):
                 pass
+        if org_id is not None:
+            bohrium_creds['org_id'] = str(org_id).strip()
         if req.bohrium_user_id is not None:
             bohrium_creds['user_id'] = (
                 req.bohrium_user_id

@@ -10,12 +10,14 @@ from pathlib import Path
 from typing import Any
 
 from evomaster.agent.agent import Agent
+from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
+
 from .async_execution_policy import AsyncExecutionPolicy
 from .callback import MatToolCallbacks, ToolCallbackPipeline
-from .job_registry import JobRegistry
 from .execution import BatchExecutor, ExecutionTask
+from .job_registry import JobRegistry
 from .tool_guard import ToolGuard
-from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
+
 
 class MatMasterAgent(Agent):
     """Agent that ends the run when the finish tool is called with task_completed=true or partial.
@@ -30,10 +32,10 @@ class MatMasterAgent(Agent):
         direct_max_workers: int = 4,
         rate_limit: float | None = None,
         config_dict: dict | None = None,
-        mode_profile: str = "direct",
+        mode_profile: str = 'direct',
         **kwargs,
     ):
-        self._system_prompt_file_configured = bool(kwargs.get("system_prompt_file"))
+        self._system_prompt_file_configured = bool(kwargs.get('system_prompt_file'))
         super().__init__(*args, **kwargs)
         # Stateful guard for loop prevention + validation gate.
         self._tool_guard = ToolGuard(self.logger, config_dict)
@@ -43,8 +45,9 @@ class MatMasterAgent(Agent):
         # Full config dict for async tool registry (prompt injection)
         self._full_config_dict: dict = config_dict or {}
         # Mode profile controls prompt-level execution contract (direct/planner).
-        self._mode_profile: str = (mode_profile or "direct").strip().lower()
+        self._mode_profile: str = (mode_profile or 'direct').strip().lower()
         from .async_tool_registry import AsyncToolRegistry
+
         self._async_tool_registry = AsyncToolRegistry(self._full_config_dict)
         self._async_execution_policy = AsyncExecutionPolicy(self._async_tool_registry)
         # Runtime-tracked async jobs: source of truth for finish-attempt gate.
@@ -63,7 +66,8 @@ class MatMasterAgent(Agent):
 
     def _get_system_prompt(self) -> str:
         """Use generated system prompt (tool list + date), then append working directory, tool rules, and skills.
-        Date and OS/Shell are appended last so they appear at the end of the prompt (and in log tail)."""
+        Date and OS/Shell are appended last so they appear at the end of the prompt (and in log tail).
+        """
         from ..prompts.build_prompt import build_mat_master_system_prompt
 
         # Build registry from config for dynamic prompt injection
@@ -71,7 +75,8 @@ class MatMasterAgent(Agent):
 
         template_text = (
             self._system_prompt
-            if self._system_prompt_file_configured and bool(getattr(self, "_system_prompt", ""))
+            if self._system_prompt_file_configured
+            and bool(getattr(self, '_system_prompt', ''))
             else None
         )
         base, current_date, os_type, shell_type = build_mat_master_system_prompt(
@@ -87,18 +92,26 @@ class MatMasterAgent(Agent):
 
         # Inject tool rules (fix once, apply every run) so repeated tool errors are avoided.
         # Placeholders like {{ASYNC_SOFTWARE_LIST}} are replaced with registry values.
-        _tool_rules_path = Path(__file__).resolve().parent.parent / "prompts" / "tool_rules.txt"
+        _tool_rules_path = (
+            Path(__file__).resolve().parent.parent / 'prompts' / 'tool_rules.txt'
+        )
         if _tool_rules_path.exists():
-            tool_rules = _tool_rules_path.read_text(encoding="utf-8").strip()
+            tool_rules = _tool_rules_path.read_text(encoding='utf-8').strip()
             tool_rules = registry.replace_placeholders(tool_rules)
-            prompt += "\n\n" + tool_rules
+            prompt += '\n\n' + tool_rules
 
         # Mandatory citation and output format for survey/manuscript — agent MUST follow this
-        _citation_format_path = Path(__file__).resolve().parent.parent / "skills" / "_common" / "reference" / "citation_and_output_format.md"
+        _citation_format_path = (
+            Path(__file__).resolve().parent.parent
+            / 'skills'
+            / '_common'
+            / 'reference'
+            / 'citation_and_output_format.md'
+        )
         if _citation_format_path.exists():
-            prompt += "\n\n# Citation and output format (mandatory for literature surveys and manuscripts)\n\n"
-            prompt += _citation_format_path.read_text(encoding="utf-8").strip()
-            prompt += "\n\nYou MUST follow the above format when writing survey reports or manuscript sections: use [n](url) for every citation, include a References section with URL for each [n], and obey General / Citation / References section / Terminology rules."
+            prompt += '\n\n# Citation and output format (mandatory for literature surveys and manuscripts)\n\n'
+            prompt += _citation_format_path.read_text(encoding='utf-8').strip()
+            prompt += '\n\nYou MUST follow the above format when writing survey reports or manuscript sections: use [n](url) for every citation, include a References section with URL for each [n], and obey General / Citation / References section / Terminology rules.'
 
         if self.skill_registry is not None:
             skills_info = self.skill_registry.get_meta_info_context()
@@ -119,11 +132,13 @@ You can use the 'use_skill' tool to:
         specs = super()._get_tool_specs()
         return self._async_execution_policy.filter_tool_specs_for_llm(specs)
 
-    def _precheck_finish_gates(self, requested_task_completed: str) -> tuple[list[str], dict[str, Any]]:
+    def _precheck_finish_gates(
+        self, requested_task_completed: str
+    ) -> tuple[list[str], dict[str, Any]]:
         """Validate finish gates before executing the finish tool."""
         blocked_msgs: list[str] = []
         gate_info: dict[str, Any] = {}
-        if requested_task_completed not in ("true", "partial"):
+        if requested_task_completed not in ('true', 'partial'):
             return blocked_msgs, gate_info
         self._job_registry.refresh_pending()
         can_finish, gate_info = self._job_registry.can_finish()
@@ -131,17 +146,17 @@ You can use the 'use_skill' tool to:
         survey_ok, survey_reason = self._tool_guard.can_finish_survey()
         if not can_finish:
             blocked_msgs.append(
-                "[finish_attempt_gate] Blocked: pending async jobs still running. "
-                "Continue monitoring until pending_jobs_check passes."
+                '[finish_attempt_gate] Blocked: pending async jobs still running. '
+                'Continue monitoring until pending_jobs_check passes.'
             )
         if not manuscript_ok:
             blocked_msgs.append(
-                "[finish_attempt_gate] Blocked: manuscript validation gate is failing. "
+                '[finish_attempt_gate] Blocked: manuscript validation gate is failing. '
                 f"{manuscript_reason} Re-run manuscript-scribe validation/assembly and fix issues before finishing."
             )
         if not survey_ok:
             blocked_msgs.append(
-                "[finish_attempt_gate] Blocked: survey evidence gate is failing. "
+                '[finish_attempt_gate] Blocked: survey evidence gate is failing. '
                 f"{survey_reason} Increase retrieval depth and refresh evidence before finishing."
             )
         return blocked_msgs, gate_info
@@ -151,25 +166,27 @@ You can use the 'use_skill' tool to:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _format_bash_observation(observation: str, info: dict[str, Any]) -> dict[str, Any]:
+    def _format_bash_observation(
+        observation: str, info: dict[str, Any]
+    ) -> dict[str, Any]:
         """Build structured JSON object for ``execute_bash`` results.
 
         Includes a ``status`` field (``"success"`` / ``"error"``) so the LLM
         can reliably branch on command outcome.
         """
-        exit_code = info.get("exit_code", -1)
-        has_error = "error" in info
+        exit_code = info.get('exit_code', -1)
+        has_error = 'error' in info
         if has_error:
-            status = "error"
+            status = 'error'
         elif exit_code != 0 and exit_code != -1:
-            status = "error"
+            status = 'error'
         else:
-            status = "success"
+            status = 'success'
         return {
-            "status": status,
-            "output": observation,
-            "exit_code": exit_code,
-            "working_dir": info.get("working_dir", ""),
+            'status': status,
+            'output': observation,
+            'exit_code': exit_code,
+            'working_dir': info.get('working_dir', ''),
         }
 
     @staticmethod
@@ -179,35 +196,38 @@ You can use the 'use_skill' tool to:
             return value
         text = value.strip()
         if not text:
-            return ""
+            return ''
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             return value
 
     def _format_tool_observation(
-        self, tool_name: str, observation: str, info: dict[str, Any],
+        self,
+        tool_name: str,
+        observation: str,
+        info: dict[str, Any],
     ) -> str:
         """Return JSON text for every tool observation."""
-        if tool_name == "execute_bash":
+        if tool_name == 'execute_bash':
             payload = self._format_bash_observation(observation, info)
         else:
-            status = "error" if "error" in info else "success"
+            status = 'error' if 'error' in info else 'success'
             # For use_skill(action=run_script), propagate non-zero script exit code
             # to outer status so tool-level status matches business outcome.
             if (
-                tool_name == "use_skill"
-                and info.get("action") == "run_script"
-                and isinstance(info.get("exit_code"), int)
-                and info["exit_code"] != 0
+                tool_name == 'use_skill'
+                and info.get('action') == 'run_script'
+                and isinstance(info.get('exit_code'), int)
+                and info['exit_code'] != 0
             ):
-                status = "error"
+                status = 'error'
             payload = {
-                "status": status,
-                "observation": self._to_json_value(observation),
+                'status': status,
+                'observation': self._to_json_value(observation),
             }
             if info:
-                payload["info"] = info
+                payload['info'] = info
         return json.dumps(payload, ensure_ascii=False, indent=2, default=str)
 
     # ------------------------------------------------------------------
@@ -238,9 +258,9 @@ You can use the 'use_skill' tool to:
             tool = self.tools.get_tool(tool_name)
             if tool is None:
                 error_msg = f"Unknown tool: {tool_name}"
-                self._log_tool_end(tool_name, error_msg, {"error": "tool_not_found"})
+                self._log_tool_end(tool_name, error_msg, {'error': 'tool_not_found'})
                 obs, inf = self._tool_callback_pipeline.run_after(
-                    tool_call, error_msg, {"error": "tool_not_found"}
+                    tool_call, error_msg, {'error': 'tool_not_found'}
                 )
                 return self._format_tool_observation(tool_name, obs, inf), inf
 
@@ -250,12 +270,14 @@ You can use the 'use_skill' tool to:
             except Exception as e:
                 tb_str = _tb.format_exc()
                 error_msg = f"Tool execution error: {e}\n\nTraceback:\n{tb_str}"
-                self.logger.error("Tool execution failed:\n%s", tb_str)
-                self._log_tool_end(tool_name, error_msg, {"error": str(e)})
-                observation, info = error_msg, {"error": str(e)}
+                self.logger.error('Tool execution failed:\n%s', tb_str)
+                self._log_tool_end(tool_name, error_msg, {'error': str(e)})
+                observation, info = error_msg, {'error': str(e)}
 
             observation, info = self._tool_callback_pipeline.run_after(
-                tool_call, observation, info,
+                tool_call,
+                observation,
+                info,
             )
             return self._format_tool_observation(tool_name, observation, info), info
 
@@ -263,14 +285,15 @@ You can use the 'use_skill' tool to:
             # Catch-all: callback pipeline or any other unexpected error
             tb_str = _tb.format_exc()
             error_msg = f"Tool execution error: {exc}\n\nTraceback:\n{tb_str}"
-            self.logger.error("_execute_tool failed:\n%s", tb_str)
+            self.logger.error('_execute_tool failed:\n%s', tb_str)
             return self._format_tool_observation(
-                "internal_error", error_msg, {"error": str(exc)},
-            ), {"error": str(exc)}
+                'internal_error',
+                error_msg,
+                {'error': str(exc)},
+            ), {'error': str(exc)}
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
         """Optional hook after assistant message is added. Override in subclasses (e.g. streaming)."""
-        pass
 
     def _on_tool_call_start(self, tool_call) -> None:
         """Optional hook called after before-callbacks have patched tool_call
@@ -278,11 +301,9 @@ You can use the 'use_skill' tool to:
 
         Override in subclasses (e.g. StreamingMatMasterAgent) to emit
         ``tool_call`` events with the callback-resolved arguments."""
-        pass
 
     def _on_tool_message(self, msg: ToolMessage) -> None:
         """Optional hook after each tool message is added. Override in subclasses (e.g. streaming)."""
-        pass
 
     def _execute_tools_parallel(
         self,
@@ -307,8 +328,8 @@ You can use the 'use_skill' tool to:
                 ExecutionTask(
                     task_id=str(idx),
                     func=self._execute_tool,
-                    kwargs={"tool_call": tc},
-                    meta={"tool_call_index": idx},
+                    kwargs={'tool_call': tc},
+                    meta={'tool_call_index': idx},
                 )
             )
 
@@ -320,11 +341,13 @@ You can use the 'use_skill' tool to:
         ordered: list[tuple[Any, str, dict[str, Any]]] = []
         for idx, res in enumerate(results):
             tc = tool_calls[idx]
-            if res.status == "success":
+            if res.status == 'success':
                 ordered.append((tc, res.output, res.info))
             else:
                 # On failure, surface the error message as the observation
-                ordered.append((tc, res.output or res.error or "Unknown error", res.info))
+                ordered.append(
+                    (tc, res.output or res.error or 'Unknown error', res.info)
+                )
         return ordered
 
     def _step(self) -> bool:
@@ -343,7 +366,7 @@ You can use the 'use_skill' tool to:
         )
 
         if not assistant_message.tool_calls:
-            if hasattr(self, "enable_tools") and not self.enable_tools:
+            if hasattr(self, 'enable_tools') and not self.enable_tools:
                 self.trajectory.add_step(step_record)
                 self._append_trajectory_entry(dialog_for_query, step_record)
                 return True
@@ -358,7 +381,7 @@ You can use the 'use_skill' tool to:
         finish_call = None
         regular_calls = []
         for tool_call in assistant_message.tool_calls:
-            if tool_call.function.name == "finish":
+            if tool_call.function.name == 'finish':
                 finish_call = tool_call
             else:
                 regular_calls.append(tool_call)
@@ -370,11 +393,18 @@ You can use the 'use_skill' tool to:
             loop_blocked: list[tuple[Any, str]] = []  # (tool_call, warning_msg)
             pending_jobs_exist = bool(self._job_registry.pending_jobs())
             for tc in regular_calls:
-                if pending_jobs_exist and not self._async_execution_policy.is_call_allowed_while_pending(tc):
-                    loop_blocked.append((
-                        tc,
-                        self._async_execution_policy.pending_gate_message(),
-                    ))
+                if (
+                    pending_jobs_exist
+                    and not self._async_execution_policy.is_call_allowed_while_pending(
+                        tc
+                    )
+                ):
+                    loop_blocked.append(
+                        (
+                            tc,
+                            self._async_execution_policy.pending_gate_message(),
+                        )
+                    )
                     self._on_tool_call_start(tc)
                     self._tool_guard.record_tool_call(tc)
                     continue
@@ -388,7 +418,13 @@ You can use the 'use_skill' tool to:
                 self._tool_guard.record_tool_call(tc)
 
             # Execute non-blocked calls in parallel
-            results = self._execute_tools_parallel(exec_calls, max_workers=self._direct_max_workers) if exec_calls else []
+            results = (
+                self._execute_tools_parallel(
+                    exec_calls, max_workers=self._direct_max_workers
+                )
+                if exec_calls
+                else []
+            )
 
             # Merge results: first the executed ones, then the loop-blocked ones (in original order)
             all_results: list[tuple[Any, str, dict[str, Any]]] = []
@@ -397,7 +433,7 @@ You can use the 'use_skill' tool to:
             for tc in regular_calls:
                 if any(tc is btc for btc, _ in loop_blocked):
                     btc, warn_msg = next(block_iter)
-                    all_results.append((btc, warn_msg, {"loop_blocked": True}))
+                    all_results.append((btc, warn_msg, {'loop_blocked': True}))
                 else:
                     all_results.append(next(exec_iter))
 
@@ -408,9 +444,17 @@ You can use the 'use_skill' tool to:
                     content=observation,
                     tool_call_id=tool_call.id,
                     name=tool_call.function.name,
-                    meta={"info": info},
+                    meta={'info': info},
+                )
+                self.logger.info(
+                    '[flow] _step: about to _on_tool_message tool_name=%s',
+                    tool_call.function.name,
                 )
                 self._on_tool_message(tool_message)
+                self.logger.info(
+                    '[flow] _step: after _on_tool_message tool_name=%s',
+                    tool_call.function.name,
+                )
                 step_record.tool_responses.append(tool_message)
 
                 # For LLM dialog: truncate if too long to prevent context overflow
@@ -419,14 +463,14 @@ You can use the 'use_skill' tool to:
                 if len(observation) > MAX_TOOL_OUTPUT:
                     observation_for_llm = (
                         observation[: MAX_TOOL_OUTPUT // 2]
-                        + "\n\n... [output truncated due to length] ...\n\n"
+                        + '\n\n... [output truncated due to length] ...\n\n'
                         + observation[-MAX_TOOL_OUTPUT // 2 :]
                     )
                     dialog_message = ToolMessage(
                         content=observation_for_llm,
                         tool_call_id=tool_call.id,
                         name=tool_call.function.name,
-                        meta={"info": info},
+                        meta={'info': info},
                     )
                     self.current_dialog.add_message(dialog_message)
                 else:
@@ -434,27 +478,35 @@ You can use the 'use_skill' tool to:
 
         # Handle finish tool (always last, sequential)
         if finish_call:
-            self.logger.debug("Processing tool call: finish")
+            self.logger.debug('Processing tool call: finish')
             finish_args: dict[str, Any] = {}
             try:
                 finish_args = json.loads(finish_call.function.arguments)
-                self.logger.info("=" * 80)
-                self.logger.info("Finish Tool Arguments: task_completed=%s", finish_args.get("task_completed"))
-                self.logger.info("=" * 80)
+                self.logger.info('=' * 80)
+                self.logger.info(
+                    'Finish Tool Arguments: task_completed=%s',
+                    finish_args.get('task_completed'),
+                )
+                self.logger.info('=' * 80)
             except Exception:
                 pass
-            requested_task_completed = str(finish_args.get("task_completed", "false"))
-            blocked_msgs, gate_info = self._precheck_finish_gates(requested_task_completed)
+            requested_task_completed = str(finish_args.get('task_completed', 'false'))
+            blocked_msgs, gate_info = self._precheck_finish_gates(
+                requested_task_completed
+            )
 
             if blocked_msgs:
-                observation = "\n\n".join(blocked_msgs)
-                info = {"task_completed": requested_task_completed, "finish_blocked": True}
+                observation = '\n\n'.join(blocked_msgs)
+                info = {
+                    'task_completed': requested_task_completed,
+                    'finish_blocked': True,
+                }
                 info.update(gate_info)
                 should_finish = False
             else:
                 observation, info = self._execute_tool(finish_call)
-                task_completed = info.get("task_completed", "false")
-                if task_completed in ("true", "partial"):
+                task_completed = info.get('task_completed', 'false')
+                if task_completed in ('true', 'partial'):
                     should_finish = True
 
             # Full content for streaming (yield) and trajectory recording
@@ -462,7 +514,7 @@ You can use the 'use_skill' tool to:
                 content=observation,
                 tool_call_id=finish_call.id,
                 name=finish_call.function.name,
-                meta={"info": info},
+                meta={'info': info},
             )
             self._on_tool_message(tool_message)
             step_record.tool_responses.append(tool_message)
@@ -472,14 +524,14 @@ You can use the 'use_skill' tool to:
             if len(observation) > MAX_TOOL_OUTPUT:
                 observation_for_llm = (
                     observation[: MAX_TOOL_OUTPUT // 2]
-                    + "\n\n... [output truncated due to length] ...\n\n"
+                    + '\n\n... [output truncated due to length] ...\n\n'
                     + observation[-MAX_TOOL_OUTPUT // 2 :]
                 )
                 dialog_message = ToolMessage(
                     content=observation_for_llm,
                     tool_call_id=finish_call.id,
                     name=finish_call.function.name,
-                    meta={"info": info},
+                    meta={'info': info},
                 )
                 self.current_dialog.add_message(dialog_message)
             else:

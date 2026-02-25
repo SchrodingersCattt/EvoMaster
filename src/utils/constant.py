@@ -38,3 +38,13 @@ BOHRIUM_OPENAPI_BASE_URL = os.getenv(
         else 'https://open.bohrium.com/openapi/v1'
     ),
 )
+
+# Bohrium Core API（如 ak/list 根据 user_id + org_id 获取 access_key）
+BOHRIUM_CORE_BASE_URL = os.getenv(
+    'BOHRIUM_CORE_BASE_URL',
+    (
+        f'https://bohrium-core{_URL_PART}.dp.tech'
+        if _URL_PART
+        else 'https://bohrium-core.dp.tech'
+    ),
+)
