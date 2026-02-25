@@ -176,6 +176,7 @@ class ChatStreamService:
         session_id: str,
         req: ChatSendRequest,
         user_id: str | None,
+        org_id: str | None = None,
     ) -> SendStreamContext | None:
         """
         为发送消息做准备：确保会话、尝试占用 run、更新 Bohrium 凭证、写入用户消息、创建队列与 stop_ev。
@@ -193,6 +194,7 @@ class ChatStreamService:
         if (
             req.bohrium_access_key
             or req.bohrium_project_id
+            or org_id is not None
             or req.bohrium_user_id is not None
         ):
             bohrium_creds = svc.SESSIONS[sid].get('bohrium_credentials') or {}
@@ -204,6 +206,8 @@ class ChatStreamService:
                     bohrium_creds['project_id'] = int(req.bohrium_project_id)
                 except (TypeError, ValueError):
                     pass
+            if org_id is not None:
+                bohrium_creds['org_id'] = str(org_id).strip()
             if req.bohrium_user_id is not None:
                 bohrium_creds['user_id'] = (
                     req.bohrium_user_id

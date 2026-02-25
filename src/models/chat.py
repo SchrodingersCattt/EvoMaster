@@ -3,7 +3,7 @@
 ag-ui 协议（前后端约定）：
 - 服务端 -> 客户端：SSE，event 固定为 "ag-ui"，data 为 JSON 字符串，字段：
   source: "System"|"User"|"MatMaster"|"Planner", type: 事件类型, content: 内容, session_id: 会话 id
-  事件类型示例: status, query, thought, tool_call, tool_result, finish, error, cancelled, planner_ask, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等（bohrium_node 的 content 含 node_id, status: 'created'|'ready'|'destroyed', message，ready 时另有 ip）
+  事件类型示例: status, query, thought, tool_call, tool_result, finish, error, cancelled, planner_ask, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等（bohrium_node 的 content 含 node_id, status: 'created'|'ready'|'connected'|'destroyed', message，ready/connected 时另有 ip）
 - 客户端 -> 服务端：REST
   POST /chat/sessions/{session_id}/stream  Body 可选：不传或 content 为空→仅历史+ping；有 content→发送并返回本次 SSE 流
   POST /chat/sessions/{session_id}/cancel  取消当前运行
@@ -161,7 +161,9 @@ class ChatSendRequest(BaseModel):
         None  # 可选，OSS 链接列表，前端展示与 content 分开，传给 agent 时拼成 content + URLs
     )
     mode: str = 'direct'  # "direct" | "planner"
-    bohrium_access_key: str | None = None  # 可选的 Bohrium access key
+    bohrium_access_key: str | None = (
+        None  # 可选的 Bohrium access key（不传则后端用 user_id+X-Org-Id 调 ak/list 获取）
+    )
     bohrium_project_id: int | str | None = None  # 可选的 Bohrium project id
     bohrium_user_id: int | str | None = (
         None  # 可选的 Bohrium user id（MCP 计算类工具需要）
