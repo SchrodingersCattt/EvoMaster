@@ -11,6 +11,7 @@ import queue
 import re
 import shlex
 import tempfile
+import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path, PurePosixPath
@@ -339,11 +340,20 @@ class MatToolCallbacks:
                 tmp_path = tmp.name
             try:
                 self.logger.info(
+                    '[autodownload] _download_single tmp written size=%s dest=%s',
+                    len(data),
+                    dest,
+                )
+                t0 = time.monotonic()
+                self.logger.info(
                     '[autodownload] _download_single session.upload start dest=%s', dest
                 )
                 self._session.upload(tmp_path, dest)
+                elapsed = time.monotonic() - t0
                 self.logger.info(
-                    '[autodownload] _download_single session.upload done dest=%s', dest
+                    '[autodownload] _download_single session.upload done dest=%s elapsed=%.2fs',
+                    dest,
+                    elapsed,
                 )
             finally:
                 Path(tmp_path).unlink(missing_ok=True)
