@@ -10,6 +10,7 @@ import io
 import logging
 import os
 import stat
+import threading
 import time
 from pathlib import PurePosixPath
 from typing import Any
@@ -58,6 +59,7 @@ class SSHEnv(BaseEnv):
         self.config: SSHEnvConfig = config
         self._ssh_client: paramiko.SSHClient | None = None
         self._sftp: paramiko.SFTPClient | None = None
+        self._sftp_lock = threading.Lock()
         self._tmux_session: str | None = None
         self._tmux_log_path: str | None = None
 
@@ -326,8 +328,9 @@ class SSHEnv(BaseEnv):
         self._ensure_connected()
         assert self._sftp is not None
         try:
-            with self._sftp.open(self._tmux_log_path, 'r') as f:
-                return f.read().decode('utf-8', errors='replace')
+            with self._sftp_lock:
+                with self._sftp.open(self._tmux_log_path, 'r') as f:
+                    return f.read().decode('utf-8', errors='replace')
         except FileNotFoundError:
             return ''
         except Exception:
@@ -340,12 +343,32 @@ class SSHEnv(BaseEnv):
 
     def upload_file(self, local_path: str, remote_path: str) -> None:
         """Upload a local file to the remote host via SFTP."""
+        self.logger.info(
+            '[upload_file] start local_path=%s remote_path=%s',
+            local_path,
+            remote_path[:80] + '...' if len(remote_path) > 80 else remote_path,
+        )
+        t0 = time.monotonic()
         self._ensure_connected()
+        self.logger.info(
+            '[upload_file] _ensure_connected done elapsed=%.2fs', time.monotonic() - t0
+        )
         assert self._sftp is not None
 
         remote_dir = str(PurePosixPath(remote_path).parent)
+        t1 = time.monotonic()
         self.ssh_exec(f"mkdir -p '{remote_dir}'")
-        self._sftp.put(local_path, remote_path)
+        self.logger.info(
+            '[upload_file] mkdir done dir=%s elapsed=%.2fs',
+            remote_dir[:60],
+            time.monotonic() - t1,
+        )
+        t2 = time.monotonic()
+        with self._sftp_lock:
+            self._sftp.put(local_path, remote_path)
+        self.logger.info(
+            '[upload_file] sftp.put done elapsed=%.2fs', time.monotonic() - t2
+        )
 
     def upload_directory(
         self,
@@ -397,29 +420,30 @@ class SSHEnv(BaseEnv):
         """Download a remote file into memory via SFTP."""
         self._ensure_connected()
         assert self._sftp is not None
-
-        st = self._sftp.stat(remote_path)
-        if st.st_mode is not None and stat.S_ISDIR(st.st_mode):
-            raise RuntimeError(
-                f"Cannot download directory: {remote_path}. "
-                'Use exec_bash to list directory contents instead.'
-            )
-        buf = io.BytesIO()
-        self._sftp.getfo(remote_path, buf)
-        return buf.getvalue()
+        with self._sftp_lock:
+            st = self._sftp.stat(remote_path)
+            if st.st_mode is not None and stat.S_ISDIR(st.st_mode):
+                raise RuntimeError(
+                    f"Cannot download directory: {remote_path}. "
+                    'Use exec_bash to list directory contents instead.'
+                )
+            buf = io.BytesIO()
+            self._sftp.getfo(remote_path, buf)
+            return buf.getvalue()
 
     def read_file_content(self, remote_path: str, encoding: str = 'utf-8') -> str:
         """Read a remote text file via SFTP."""
         self._ensure_connected()
         assert self._sftp is not None
-        try:
-            with self._sftp.open(remote_path, 'r') as f:
-                raw = f.read()
-            if isinstance(raw, bytes):
-                return raw.decode(encoding)
-            return raw
-        except FileNotFoundError:
-            raise RuntimeError(f"File not found: {remote_path}")
+        with self._sftp_lock:
+            try:
+                with self._sftp.open(remote_path, 'r') as f:
+                    raw = f.read()
+                if isinstance(raw, bytes):
+                    return raw.decode(encoding)
+                return raw
+            except FileNotFoundError:
+                raise RuntimeError(f"File not found: {remote_path}")
 
     def write_file_content(
         self, remote_path: str, content: str, encoding: str = 'utf-8'
@@ -430,35 +454,41 @@ class SSHEnv(BaseEnv):
 
         remote_dir = str(PurePosixPath(remote_path).parent)
         self.ssh_exec(f"mkdir -p '{remote_dir}'")
-        with self._sftp.open(remote_path, 'w') as f:
-            f.write(content.encode(encoding) if isinstance(content, str) else content)
+        with self._sftp_lock:
+            with self._sftp.open(remote_path, 'w') as f:
+                f.write(
+                    content.encode(encoding) if isinstance(content, str) else content
+                )
 
     def path_exists(self, remote_path: str) -> bool:
         """Check if a remote path exists."""
         self._ensure_connected()
         assert self._sftp is not None
-        try:
-            self._sftp.stat(remote_path)
-            return True
-        except FileNotFoundError:
-            return False
+        with self._sftp_lock:
+            try:
+                self._sftp.stat(remote_path)
+                return True
+            except FileNotFoundError:
+                return False
 
     def is_file(self, remote_path: str) -> bool:
         """Check if a remote path is a regular file."""
         self._ensure_connected()
         assert self._sftp is not None
-        try:
-            st = self._sftp.stat(remote_path)
-            return st.st_mode is not None and stat.S_ISREG(st.st_mode)
-        except FileNotFoundError:
-            return False
+        with self._sftp_lock:
+            try:
+                st = self._sftp.stat(remote_path)
+                return st.st_mode is not None and stat.S_ISREG(st.st_mode)
+            except FileNotFoundError:
+                return False
 
     def is_directory(self, remote_path: str) -> bool:
         """Check if a remote path is a directory."""
         self._ensure_connected()
         assert self._sftp is not None
-        try:
-            st = self._sftp.stat(remote_path)
-            return st.st_mode is not None and stat.S_ISDIR(st.st_mode)
-        except FileNotFoundError:
-            return False
+        with self._sftp_lock:
+            try:
+                st = self._sftp.stat(remote_path)
+                return st.st_mode is not None and stat.S_ISDIR(st.st_mode)
+            except FileNotFoundError:
+                return False
