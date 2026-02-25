@@ -27,6 +27,7 @@ from src.services.stream_service import (
     ChatStreamService,
     get_stream_service,
 )
+from src.services.user_service import UserService
 from src.services.workspace_service import WorkspaceService, get_workspace_service
 from src.utils.exceptions import (
     BadRequestErrorResponse,
@@ -34,7 +35,6 @@ from src.utils.exceptions import (
     ForbiddenErrorResponse,
     NotFoundErrorResponse,
 )
-from src.utils.user import optional_user_id, require_user_id
 
 router = APIRouter()
 
@@ -50,7 +50,7 @@ logger.setLevel(logging.INFO)
 
 @router.get('/list', response_model=SessionListApiResponse)
 def list_sessions(
-    user_id: str = Depends(require_user_id),
+    user_id: str = Depends(UserService.require_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
 ):
     sessions = chat_svc.list_sessions(user_id=user_id)
@@ -74,9 +74,10 @@ def get_active_sessions_count(
 
 @router.post('/{session_id}/stream')
 async def chat_stream(
+    request: Request,
     session_id: str,
     req: ChatSendRequest | None = Body(None),
-    user_id: str | None = Depends(optional_user_id),
+    user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
     stream_svc: ChatStreamService = Depends(get_stream_service),
 ):
@@ -104,8 +105,9 @@ async def chat_stream(
                 msg='当日免费额度已用完。请填写问卷申请额度，审核通过后再试。',
             )
 
-    # 发送消息并返回本次运行的 SSE 流（此时 req 必存在且 content 非空）
-    ctx = stream_svc.prepare_send_message(sid, req, user_id)
+    # 发送消息并返回本次运行的 SSE 流（此时 req 必存在且 content 非空）；org_id 从上游 Header X-Org-Id 获取
+    org_id = UserService.get_org_id(request)
+    ctx = stream_svc.prepare_send_message(sid, req, user_id, org_id=org_id)
     if ctx is None:
         raise ConflictErrorResponse(
             msg='该会话已有任务在运行，请等待完成或先取消后再发新消息',
@@ -125,7 +127,7 @@ async def chat_stream(
 async def planner_reply(
     session_id: str,
     req: ChatPlannerReplyRequest = Body(...),
-    user_id: str | None = Depends(optional_user_id),
+    user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
     stream_svc: ChatStreamService = Depends(get_stream_service),
     events_svc: ChatEventsService = Depends(get_events_service),
@@ -155,7 +157,7 @@ async def planner_reply(
 @router.get('/{session_id}/share', response_model=ShareStatusApiResponse)
 def get_share_status(
     session_id: str,
-    user_id: str | None = Depends(optional_user_id),
+    user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
 ):
     """查看分享状态。已分享时会话任何人可查看；未分享时需为会话所有者。"""
@@ -171,7 +173,7 @@ def get_share_status(
 def set_share_status(
     session_id: str,
     body: ShareSetRequest,
-    user_id: str = Depends(require_user_id),
+    user_id: str = Depends(UserService.require_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
 ):
     """设置分享状态。仅会话所有者可设置。开启后，stream 等接口可不鉴权访问。"""
@@ -187,7 +189,7 @@ def set_share_status(
 @router.delete('/{session_id}', response_model=BaseResponse)
 def delete_session(
     session_id: str,
-    user_id: str = Depends(require_user_id),
+    user_id: str = Depends(UserService.require_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
 ):
     """删除会话。仅会话所有者可删除；关联的聊天事件会随会话级联删除。"""

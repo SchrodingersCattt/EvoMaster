@@ -14,13 +14,16 @@ from typing import Any, Awaitable, Callable
 
 from evomaster.core import get_playground_class
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
+from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_dir_to_oss
 from src.services.bohrium_node_service import get_bohrium_node_service
 from src.services.quota_service import use_quota
 from src.services.sessions_service import SESSIONS, get_sessions_service
+from src.services.user_service import UserService
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 # 支持多用户并发：agent 运行在线程池中
 _AGENT_MAX_WORKERS = int(os.environ.get('CHAT_AGENT_MAX_WORKERS', '4'))
@@ -205,6 +208,7 @@ class AgentRunService:
             None
         ]
         _last_workspace_check_time: list[float] = [0.0]
+        _ssh_attached = False
 
         def event_callback(source: str, event_type: str, content: Any) -> None:
             payload = {
@@ -223,37 +227,92 @@ class AgentRunService:
                         )
                     except Exception as e:
                         logger.error(f'保存事件到数据库失败: {e}', exc_info=True)
+            if event_type == 'tool_result':
+                logger.info(
+                    'run_agent_sync: tool_result before send_cb session_id=%s',
+                    session_id,
+                )
             future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
             try:
                 future.result(timeout=5)
             except Exception:
                 pass
+            if event_type == 'tool_result':
+                logger.info(
+                    'run_agent_sync: tool_result after send_cb session_id=%s',
+                    session_id,
+                )
             # tool 执行后：仅当距上次检查已过防抖时间时扫目录，若快照与上次上传不一致（真有新/改/删）才上传
             if event_type == 'tool_result':
+                # 兜底：用 root logger 打一条，确保任意配置下都能看到
+                logging.info(
+                    '[run_agent_sync] tool_result callback entered session_id=%s task_id=%s _ssh_attached=%s',
+                    session_id,
+                    task_id,
+                    _ssh_attached,
+                )
+                logger.info(
+                    'run_agent_sync: event_callback tool_result received session_id=%s task_id=%s _ssh_attached=%s',
+                    session_id,
+                    task_id,
+                    _ssh_attached,
+                )
+                # 当前 run 使用远程节点时，工作目录在节点上，本地 workspace 无新文件，跳过上传避免阻塞
+                if _ssh_attached:
+                    logger.info(
+                        'run_agent_sync: skip workspace upload (SSH attached, workspace on node) session_id=%s',
+                        session_id,
+                    )
+                    return
                 now = time.monotonic()
                 if (
                     now - _last_workspace_check_time[0]
                 ) < _WORKSPACE_CHECK_DEBOUNCE_SECONDS:
+                    logger.debug(
+                        'run_agent_sync: skip workspace upload (debounce) session_id=%s',
+                        session_id,
+                    )
                     return
                 _last_workspace_check_time[0] = now
                 workspace_path = self._get_run_workspace_path(
                     RUN_ID_WEB, task_id=task_id
                 )
                 if not workspace_path or not workspace_path.is_dir():
+                    logger.debug(
+                        'run_agent_sync: skip workspace upload (no path or not dir) session_id=%s path=%s',
+                        session_id,
+                        workspace_path,
+                    )
                     return
                 current_snapshot = self._get_workspace_snapshot(workspace_path)
                 if (
                     _last_workspace_snapshot[0] is not None
                     and current_snapshot == _last_workspace_snapshot[0]
                 ):
+                    logger.debug(
+                        'run_agent_sync: skip workspace upload (snapshot unchanged) session_id=%s',
+                        session_id,
+                    )
                     return
+                logger.info(
+                    'run_agent_sync: workspace upload to OSS starting session_id=%s task_id=%s path=%s',
+                    session_id,
+                    task_id,
+                    workspace_path,
+                )
                 if self._upload_workspace_to_oss(
                     session_id=session_id,
                     task_id=task_id,
                     event_callback=event_callback,
                 ):
                     _last_workspace_snapshot[0] = current_snapshot
+                logger.info(
+                    'run_agent_sync: workspace upload to OSS done session_id=%s task_id=%s',
+                    session_id,
+                    task_id,
+                )
 
+        pg_for_run = None
         try:
             if not self._playground_init_done.is_set():
                 logger.info(
@@ -283,6 +342,7 @@ class AgentRunService:
                 pg = get_playground_class('mat_master', config_path=config_path)
                 pg.set_run_dir(run_dir, task_id=task_id)
                 pg.setup()
+            pg_for_run = pg
 
             mode = (mode or 'direct').strip().lower() or 'direct'
             pg.set_mode(mode)
@@ -325,16 +385,97 @@ class AgentRunService:
             if bohrium_creds and base.session:
                 base.session._bohrium_credentials = bohrium_creds
 
-            # stream 开始 run 时若有 Bohrium 凭证则自动创建节点，run 结束时销毁
+            # stream 开始 run 时若有 Bohrium 凭证则获取/创建节点；有 user_id+org_id 时走复用表（run 结束只更新 last_used_at）
             if isinstance(bohrium_creds, dict):
-                access_key = (bohrium_creds.get('access_key') or '').strip()
                 project_id = bohrium_creds.get('project_id')
+                if project_id is not None:
+                    project_id = int(project_id)
+                access_key = (bohrium_creds.get('access_key') or '').strip()
+                user_id_for_ak = self._sessions_service.get_session_user_id(session_id)
+                org_id = (bohrium_creds.get('org_id') or '').strip()
+                if not access_key and user_id_for_ak and org_id:
+                    access_key = (
+                        UserService.get_bohrium_access_key(user_id_for_ak, org_id) or ''
+                    )
                 if access_key and project_id is not None:
                     try:
                         node_svc = get_bohrium_node_service()
-                        node_info = node_svc.create_node(access_key, int(project_id))
-                        node_id = node_info.get('node_id')
-                        if node_id is not None:
+                        node_id = None
+                        node_ip = None
+                        node_pwd = None
+                        use_reuse_table = bool(user_id_for_ak and org_id)
+                        if not use_reuse_table and (user_id_for_ak or org_id):
+                            logger.info(
+                                'run_agent_sync: skip reuse table (missing user_id or org_id); '
+                                'user_id=%s org_id=%r — 请确保请求带 X-User-Id 且上游带 X-Org-Id',
+                                user_id_for_ak,
+                                org_id or '(empty)',
+                            )
+                        if use_reuse_table:
+                            nodes_table = get_bohrium_nodes_table()
+                            row = nodes_table.find_one_for_reuse(
+                                user_id_for_ak, org_id, project_id
+                            )
+                            if row:
+                                node_id = int(row['node_id'])
+                                node_info = node_svc.get_node_info(access_key, node_id)
+                                if node_info and node_info.get('ip'):
+                                    node_ip = node_info.get('ip')
+                                    node_pwd = node_info.get('password')
+                                    logger.info(
+                                        'run_agent_sync: reusing Bohrium node node_id=%s ip=%s',
+                                        node_id,
+                                        node_ip,
+                                    )
+                                else:
+                                    nodes_table.delete_by_node(
+                                        user_id_for_ak,
+                                        org_id,
+                                        project_id,
+                                        node_id,
+                                    )
+                                    node_id = None
+                        if node_id is None or node_ip is None:
+                            node_info = node_svc.create_node(access_key, project_id)
+                            node_id = node_info.get('node_id')
+                            if node_id is not None:
+                                event_callback(
+                                    'System',
+                                    'bohrium_node',
+                                    {
+                                        'node_id': node_id,
+                                        'status': 'created',
+                                        'message': '节点已创建，正在等待就绪...',
+                                    },
+                                )
+                                node_info = node_svc.wait_until_ready(
+                                    access_key, node_id
+                                )
+                                node_ip = node_info.get('ip')
+                                node_pwd = node_info.get('password')
+                                if use_reuse_table and user_id_for_ak and org_id:
+                                    try:
+                                        get_bohrium_nodes_table().insert_node(
+                                            user_id_for_ak,
+                                            org_id,
+                                            project_id,
+                                            node_id,
+                                        )
+                                        logger.info(
+                                            'run_agent_sync: inserted node into evo_bohrium_nodes '
+                                            'user_id=%s org_id=%s project_id=%s node_id=%s',
+                                            user_id_for_ak,
+                                            org_id,
+                                            project_id,
+                                            node_id,
+                                        )
+                                    except Exception as insert_err:
+                                        logger.warning(
+                                            'run_agent_sync: insert_node failed (table missing?): %s',
+                                            insert_err,
+                                            exc_info=True,
+                                        )
+                        if node_id is not None and node_ip:
                             if session_id not in SESSIONS:
                                 SESSIONS[session_id] = {}
                             SESSIONS[session_id]['bohrium_node_id'] = node_id
@@ -343,19 +484,32 @@ class AgentRunService:
                                 'bohrium_node',
                                 {
                                     'node_id': node_id,
-                                    'status': 'created',
-                                    'message': '节点已创建，正在等待就绪...',
+                                    'status': 'ready',
+                                    'ip': node_ip,
+                                    'message': 'Bohrium 节点已就绪',
                                 },
                             )
-                            node_info = node_svc.wait_until_ready(access_key, node_id)
+                            pg.attach_ssh_session(
+                                host=node_ip,
+                                password=node_pwd,
+                                working_dir='/personal/workspace',
+                                session_id=session_id,
+                            )
+                            if base.session:
+                                base.session._bohrium_credentials = bohrium_creds
+                            _ssh_attached = True
+                            logger.info(
+                                'run_agent_sync: SSH session attached to Bohrium node ip=%s',
+                                node_ip,
+                            )
                             event_callback(
                                 'System',
                                 'bohrium_node',
                                 {
                                     'node_id': node_id,
-                                    'status': 'ready',
-                                    'ip': node_info.get('ip'),
-                                    'message': 'Bohrium 节点已就绪',
+                                    'status': 'connected',
+                                    'ip': node_ip,
+                                    'message': f'已连接到 Bohrium 节点 {node_ip}',
                                 },
                             )
                     except Exception as e:
@@ -434,10 +588,39 @@ class AgentRunService:
             event_callback('System', 'error', str(e))
             raise
         finally:
-            # 自动销毁本 run 创建的 Bohrium 节点（在 end 之前）
+            # 若本 run 连接了 Bohrium 节点 SSH，先断开并恢复默认 session，再销毁节点
+            if _ssh_attached and pg_for_run is not None:
+                try:
+                    pg_for_run.detach_session()
+                    pg_for_run._setup_session()
+                    logger.info(
+                        'run_agent_sync: SSH session detached, default session restored'
+                    )
+                except Exception as e:
+                    logger.warning('run_agent_sync: session restore failed: %s', e)
+            # 复用表场景：只更新 last_used_at，不销毁；否则销毁本 run 使用的节点
             session_data = SESSIONS.get(session_id, {})
             node_id = session_data.pop('bohrium_node_id', None)
-            if node_id is not None:
+            creds = session_data.get('bohrium_credentials') or {}
+            org_id = (creds.get('org_id') or '').strip()
+            project_id = creds.get('project_id')
+            user_id = self._sessions_service.get_session_user_id(session_id)
+            if node_id is not None and user_id and org_id and project_id is not None:
+                try:
+                    get_bohrium_nodes_table().update_last_used_at(
+                        user_id, org_id, int(project_id), int(node_id)
+                    )
+                    logger.info(
+                        'run_agent_sync: updated last_used_at for node_id=%s (reuse table)',
+                        node_id,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        'run_agent_sync: update_last_used_at failed node_id=%s: %s',
+                        node_id,
+                        e,
+                    )
+            elif node_id is not None:
                 try:
                     event_callback(
                         'System',
@@ -450,12 +633,9 @@ class AgentRunService:
                     )
                 except Exception:
                     pass
-                creds = session_data.get('bohrium_credentials') or {}
                 access_key = (creds.get('access_key') or '').strip()
-                project_id = creds.get('project_id')
                 if access_key and project_id is not None:
                     try:
-                        user_id = self._sessions_service.get_session_user_id(session_id)
                         creator_id = 0
                         if user_id is not None:
                             try:
