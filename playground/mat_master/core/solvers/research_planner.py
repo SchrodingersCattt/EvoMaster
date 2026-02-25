@@ -1261,7 +1261,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
         # High-cost confirmation
         if step.get("requires_human_confirm") or step.get("compute_cost") == "High":
             ans = self._ask_human(f"Step {step_id} is HIGH COST. Proceed? (y/n)")
-            if ans.strip().lower() != "y":
+            if ans.strip().lower() not in ("y", "yes", "go"):
                 result_info["status"] = "skipped"
                 result_info["result_summary"] = "skipped_by_user"
                 return result_info
