@@ -591,7 +591,11 @@ class MonitorJobParams(BaseToolParams):
     )
     workspace: str = Field(
         default='.',
-        description='Workspace directory for result downloads. Defaults to current directory.',
+        description=(
+            'Workspace directory for result downloads. '
+            'Defaults to the session workspace (session-isolated run directory). '
+            'Only override if you need results in a specific path.'
+        ),
     )
     bohr_job_id: str | None = Field(
         default=None,
@@ -626,6 +630,16 @@ class MonitorJobTool(BaseTool):
 
         assert isinstance(params, MonitorJobParams)
 
+        # Resolve workspace: fall back to the session's configured workspace so that
+        # downloads are isolated to the session's run directory, not the process CWD.
+        workspace = params.workspace
+        if not workspace or workspace == '.':
+            from evomaster.agent.session.ssh import SSHSession
+            if isinstance(session, SSHSession):
+                workspace = session.config.working_dir or '/personal/workspace'
+            else:
+                workspace = getattr(session.config, 'workspace_path', None) or '.'
+
         # Inject access_key from session._bohrium_credentials if not explicitly provided
         access_key = params.access_key
         if not access_key:
@@ -638,7 +652,7 @@ class MonitorJobTool(BaseTool):
         result = _run_lifecycle(
             job_id=params.job_id,
             software=params.software,
-            workspace=params.workspace,
+            workspace=workspace,
             session=session,
             poll_interval=params.poll_interval,
             max_retries=params.max_retries,
