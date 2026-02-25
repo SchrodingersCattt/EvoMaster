@@ -119,6 +119,44 @@ class MatMasterPlayground(BasePlayground):
         self.tools.register(get_peek_file_tool())
         self.logger.info("Registered %d memory tools and peek_file", len(memory_tools))
 
+    def sync_skills_to_remote(
+        self,
+        remote_base: str = "/personal/workspace/.evomaster",
+    ) -> None:
+        """Upload 3-tier skills (core + mat_master + evomaster pkg) to the remote node."""
+        from evomaster.agent.session import SSHSession
+
+        if not isinstance(self.session, SSHSession):
+            self.logger.debug("sync_skills_to_remote: skipped (not an SSH session)")
+            return
+
+        env = self.session._env
+        exclude = {"__pycache__", ".git", "node_modules", ".mypy_cache", ".pytest_cache"}
+
+        config_dict = self.config.model_dump()
+        skills_config = config_dict.get("skills", {})
+        skills_root_rel = skills_config.get("skills_root", "evomaster/skills")
+        skills_root = Path(skills_root_rel)
+        if not skills_root.is_absolute():
+            skills_root = _project_root() / skills_root
+        if skills_root.is_dir():
+            env.upload_directory(str(skills_root), f"{remote_base}/{skills_root_rel}", exclude=exclude)
+
+        mat_skills_root = _project_root() / "playground" / "mat_master" / "skills"
+        if mat_skills_root.is_dir():
+            env.upload_directory(
+                str(mat_skills_root),
+                f"{remote_base}/playground/mat_master/skills",
+                exclude=exclude,
+            )
+
+        evomaster_pkg = _project_root() / "evomaster"
+        if evomaster_pkg.is_dir():
+            env.upload_directory(str(evomaster_pkg), f"{remote_base}/evomaster", exclude=exclude)
+
+        self.session.remote_project_root = remote_base
+        self.logger.info("sync_skills_to_remote: done, remote_project_root=%s", remote_base)
+
     def setup(self) -> None:
         """Override: build MatMasterSkillRegistry and pass to tools/agents."""
         self.logger.info("Setting up Mat Master playground...")

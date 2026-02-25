@@ -717,6 +717,11 @@ def _run_agent_sync(
                         _ssh_attached = True
                         logger.info("SSH session attached to Bohrium node host=%s", ssh_host)
                         event_callback("System", "status", f"已连接到 Bohrium 节点 {ssh_host}")
+                        try:
+                            pg.sync_skills_to_remote()
+                            event_callback("System", "status", "Skills 已同步到远程节点")
+                        except Exception as e:
+                            logger.warning("sync_skills_to_remote failed: %s", e, exc_info=True)
             except Exception as e:
                 logger.warning("Auto create Bohrium node failed: %s", e, exc_info=True)
                 event_callback("System", "status", f"自动创建 Bohrium 节点失败: {e}，继续使用当前环境运行")
