@@ -1,0 +1,23 @@
+# Remote 节点镜像
+# 构建: docker build -f Dockerfile.remote -t remote-node .
+FROM registry.dp.tech/dptech/ubuntu:ubuntu24.04-py3.12
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 安装 tmux
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tmux \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 Python 依赖
+RUN pip install --no-cache-dir \
+    ase \
+    pymatgen \
+    dpdata \
+    scipy \
+    numpy \
+    matplotlib \
+    python-docx \
+    requests
+
+WORKDIR /root
