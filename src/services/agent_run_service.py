@@ -502,6 +502,19 @@ class AgentRunService:
                                 'run_agent_sync: SSH session attached to Bohrium node ip=%s',
                                 node_ip,
                             )
+                            try:
+                                pg.sync_skills_to_remote()
+                                event_callback(
+                                    'System',
+                                    'status',
+                                    'Skills 已同步到远程节点',
+                                )
+                            except Exception as sync_err:
+                                logger.warning(
+                                    'sync_skills_to_remote failed: %s',
+                                    sync_err,
+                                    exc_info=True,
+                                )
                             event_callback(
                                 'System',
                                 'bohrium_node',
