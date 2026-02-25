@@ -142,11 +142,11 @@ class MatMasterPlayground(BasePlayground):
         if not skills_root.is_absolute():
             skills_root = _project_root() / skills_root
         if skills_root.is_dir():
-            env.upload_directory(str(skills_root), f"{remote_base}/{skills_root_rel}", exclude=exclude)
+            env.upload_directory_tarball(str(skills_root), f"{remote_base}/{skills_root_rel}", exclude=exclude)
 
         mat_skills_root = _project_root() / "playground" / "mat_master" / "skills"
         if mat_skills_root.is_dir():
-            env.upload_directory(
+            env.upload_directory_tarball(
                 str(mat_skills_root),
                 f"{remote_base}/playground/mat_master/skills",
                 exclude=exclude,

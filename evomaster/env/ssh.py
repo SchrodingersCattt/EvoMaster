@@ -10,9 +10,11 @@ import io
 import logging
 import os
 import stat
+import tarfile
+import tempfile
 import threading
 import time
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from pydantic import Field
@@ -341,34 +343,41 @@ class SSHEnv(BaseEnv):
     # File operations (SFTP)
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # File upload helpers
+    # ------------------------------------------------------------------
+
     def upload_file(self, local_path: str, remote_path: str) -> None:
-        """Upload a local file to the remote host via SFTP."""
-        self.logger.info(
-            '[upload_file] start local_path=%s remote_path=%s',
-            local_path,
-            remote_path[:80] + '...' if len(remote_path) > 80 else remote_path,
-        )
+        """Upload a single local file to the remote host via SFTP."""
         t0 = time.monotonic()
         self._ensure_connected()
-        self.logger.info(
-            '[upload_file] _ensure_connected done elapsed=%.2fs', time.monotonic() - t0
-        )
         assert self._sftp is not None
-
-        remote_dir = str(PurePosixPath(remote_path).parent)
-        t1 = time.monotonic()
-        self.ssh_exec(f"mkdir -p '{remote_dir}'")
-        self.logger.info(
-            '[upload_file] mkdir done dir=%s elapsed=%.2fs',
-            remote_dir[:60],
-            time.monotonic() - t1,
-        )
-        t2 = time.monotonic()
+        self.ssh_exec(f"mkdir -p '{PurePosixPath(remote_path).parent}'")
         with self._sftp_lock:
             self._sftp.put(local_path, remote_path)
-        self.logger.info(
-            '[upload_file] sftp.put done elapsed=%.2fs', time.monotonic() - t2
+        logger.info(
+            'upload_file: %s -> %s elapsed=%.2fs',
+            local_path,
+            remote_path,
+            time.monotonic() - t0,
         )
+
+    @staticmethod
+    def _walk_filtered(
+        local_root: Path, exclude: set[str]
+    ) -> list[tuple[Path, str]]:
+        """Walk *local_root* and return ``(abs_path, arcname)`` pairs,
+        skipping directories and files whose names are in *exclude*."""
+        result: list[tuple[Path, str]] = []
+        for root, dirs, files in os.walk(local_root):
+            dirs[:] = [d for d in dirs if d not in exclude]
+            for fname in files:
+                if fname in exclude:
+                    continue
+                abs_path = Path(root) / fname
+                arcname = abs_path.relative_to(local_root).as_posix()
+                result.append((abs_path, arcname))
+        return result
 
     def upload_directory(
         self,
@@ -376,45 +385,94 @@ class SSHEnv(BaseEnv):
         remote_dir: str,
         exclude: set[str] | None = None,
     ) -> int:
-        """Recursively upload a local directory tree to the remote host via SFTP.
+        """Recursively upload a local directory tree via per-file SFTP puts.
 
-        Returns the number of files uploaded.
+        Prefer :meth:`upload_directory_tarball` for large trees.
         """
-        from pathlib import Path
-
         self._ensure_connected()
         assert self._sftp is not None
 
-        exclude = exclude or set()
         local_root = Path(local_dir)
         if not local_root.is_dir():
             raise FileNotFoundError(f"Local directory not found: {local_dir}")
 
+        entries = self._walk_filtered(local_root, exclude or set())
         created_dirs: set[str] = set()
         count = 0
+        for abs_path, arcname in entries:
+            remote_file = f"{remote_dir}/{arcname}"
+            parent = str(PurePosixPath(remote_file).parent)
+            if parent not in created_dirs:
+                self.ssh_exec(f"mkdir -p '{parent}'")
+                created_dirs.add(parent)
+            try:
+                self._sftp.put(str(abs_path), remote_file)
+                count += 1
+            except Exception as exc:
+                logger.warning('upload_directory: skip %s: %s', remote_file, exc)
 
-        for root, dirs, files in os.walk(local_root):
-            dirs[:] = [d for d in dirs if d not in exclude]
-            rel = Path(root).relative_to(local_root).as_posix()
-            remote_sub = f"{remote_dir}/{rel}" if rel != "." else remote_dir
-
-            if remote_sub not in created_dirs:
-                self.ssh_exec(f"mkdir -p '{remote_sub}'")
-                created_dirs.add(remote_sub)
-
-            for fname in files:
-                if fname in exclude:
-                    continue
-                local_file = os.path.join(root, fname)
-                remote_file = f"{remote_sub}/{fname}"
-                try:
-                    self._sftp.put(local_file, remote_file)
-                    count += 1
-                except Exception as exc:
-                    logger.warning("upload_directory: skip %s -> %s: %s", local_file, remote_file, exc)
-
-        logger.info("upload_directory: %s -> %s (%d files)", local_dir, remote_dir, count)
+        logger.info('upload_directory: %s -> %s (%d files)', local_dir, remote_dir, count)
         return count
+
+    def upload_directory_tarball(
+        self,
+        local_dir: str,
+        remote_dir: str,
+        exclude: set[str] | None = None,
+    ) -> int:
+        """Upload a local directory as a single tarball (pack → put → extract).
+
+        Much faster than :meth:`upload_directory` for large trees because it
+        replaces N×(ssh_exec + sftp.put) with 1×sftp.put + 1×ssh_exec.
+        """
+        self._ensure_connected()
+        assert self._sftp is not None
+
+        local_root = Path(local_dir)
+        if not local_root.is_dir():
+            raise FileNotFoundError(f"Local directory not found: {local_dir}")
+
+        t0 = time.monotonic()
+        entries = self._walk_filtered(local_root, exclude or set())
+
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode='w:gz') as tar:
+            for abs_path, arcname in entries:
+                tar.add(str(abs_path), arcname=arcname)
+        tar_bytes = buf.getvalue()
+        logger.info(
+            'upload_directory_tarball: packed %d files (%.1f KB) in %.2fs',
+            len(entries),
+            len(tar_bytes) / 1024,
+            time.monotonic() - t0,
+        )
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.tar.gz') as tmp:
+            tmp.write(tar_bytes)
+            tmp_path = tmp.name
+
+        remote_tmp = f"/tmp/_evo_upload_{int(time.monotonic() * 1000)}.tar.gz"
+        try:
+            t1 = time.monotonic()
+            with self._sftp_lock:
+                self._sftp.put(tmp_path, remote_tmp)
+            logger.info('upload_directory_tarball: sftp.put %.2fs', time.monotonic() - t1)
+
+            t2 = time.monotonic()
+            self.ssh_exec(f"mkdir -p '{remote_dir}' && tar -xzf '{remote_tmp}' -C '{remote_dir}'")
+            logger.info('upload_directory_tarball: extract %.2fs', time.monotonic() - t2)
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+            self.ssh_exec(f"rm -f '{remote_tmp}'")
+
+        logger.info(
+            'upload_directory_tarball: %s -> %s (%d files) total=%.2fs',
+            local_dir,
+            remote_dir,
+            len(entries),
+            time.monotonic() - t0,
+        )
+        return len(entries)
 
     def download_file(self, remote_path: str, timeout: int | None = None) -> bytes:
         """Download a remote file into memory via SFTP."""
