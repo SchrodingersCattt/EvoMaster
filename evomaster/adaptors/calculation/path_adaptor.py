@@ -290,14 +290,16 @@ def _is_local_path(value: Any) -> bool:
 
 
 def _workspace_path_to_local(value: str, workspace_root: Path) -> Path:
-    """Map /workspace/... or relative path to actual local Path under workspace_root."""
+    """Map workspace-prefixed, workspace_root-prefixed, or relative path to local Path."""
     value = value.strip().replace('\\', '/')
-    if value.startswith('/workspace/'):
-        rel = value[len('/workspace/'):].lstrip('/')
-        return (workspace_root / rel).resolve()
-    if value.startswith('/workspace'):
-        rel = value[len('/workspace'):].lstrip('/')
-        return (workspace_root / (rel or '.')).resolve()
+    ws_str = str(workspace_root).replace('\\', '/').rstrip('/')
+    # Try stripping known prefixes (most specific first).
+    for prefix in (ws_str, '/workspace'):
+        if value.startswith(prefix + '/'):
+            rel = value[len(prefix) + 1:].lstrip('/')
+            return (workspace_root / rel).resolve()
+        if value == prefix:
+            return workspace_root.resolve()
     path = Path(value)
     if not path.is_absolute():
         return (workspace_root / path).resolve()
