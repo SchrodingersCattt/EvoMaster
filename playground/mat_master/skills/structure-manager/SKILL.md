@@ -8,6 +8,8 @@ skill_type: operator
 
 Handles downloading structure files from URLs, validating atomic structures (CIF, POSCAR, XYZ), and converting between file formats (dpdata). Database search and structure building are done via MCP tools.
 
+Requires: pymatgen, numpy (assess_structure.py); dpdata (convert_format.py); requests (fetch_web_structure.py).
+
 ## Workflow
 
 1. **Acquisition** (use MCP):
@@ -33,7 +35,7 @@ Handles downloading structure files from URLs, validating atomic structures (CIF
     * **Output JSON**: `{"is_valid": true, "dimensionality": "2D-Slab", "formula": "Au4", "warnings": ["Vacuum padding < 10A"]}`
     * **Logic**:
         * **Bulk vs Slab**: Vacuum gap > 15Å in one direction -> Slab; in 3 directions -> Molecule.
-        * **Sanity**: Fails if `min_dist < 0.7 * covalent_radii_sum`.
+        * **Sanity**: Fails if `min_dist < 0.5 Å` (hard overlap cutoff, PBC-aware).
 
 ### 3. Format Conversion
 * **convert_format.py** (dpdata-based)
