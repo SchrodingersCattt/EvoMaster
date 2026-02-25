@@ -284,7 +284,7 @@ class MatToolCallbacks:
             return abs_path
         try:
             if self._is_remote:
-                ws = workspace.rstrip('/')
+                ws = workspace.replace('\\', '/').rstrip('/')
                 norm = abs_path.replace('\\', '/')
                 if norm.startswith(ws + '/'):
                     return norm[len(ws) + 1:]
@@ -316,6 +316,7 @@ class MatToolCallbacks:
         if not workspace:
             return None
         if self._is_remote:
+            workspace = workspace.replace('\\', '/')
             subdir = self._download_subdir
             if subdir:
                 return f"{workspace.rstrip('/')}/{subdir}"
