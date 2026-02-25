@@ -1,7 +1,7 @@
 # Calculation (bohr-agent-sdk) adaptor: path to OSS/HTTP for MCP tools.
 # Servers must use storage type oss/http for outputs; this adaptor uploads input paths to OSS,
 # and downloads OSS result files to workspace.
-# Job service: Bohrium OpenAPI job status query / result retrieval for job-manager skill.
+# Job service: Bohrium OpenAPI job status query / result retrieval (used by monitor_job built-in tool).
 
 from .path_adaptor import CalculationPathAdaptor, get_calculation_path_adaptor
 from .oss_io import upload_file_to_oss, download_oss_to_local

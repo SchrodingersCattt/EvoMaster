@@ -4,8 +4,8 @@ Analyzes task -> routes to SkillEvolutionExp / WorkerExp by capability.
 Mode is decoupled from Exp: any task can trigger any enabled capability.
 Routing is deterministic: SKILL_EVOLUTION | STANDARD_EXECUTION.
 
-Note: Resilient calculation logic (submit / monitor / diagnose / retry) has been
-moved to the **job-manager** skill. The agent invokes it via use_skill within
+Note: Resilient calculation logic (submit / monitor / diagnose / retry) is now
+handled by the **monitor_job** built-in tool. The agent invokes it within
 STANDARD_EXECUTION; a separate RESILIENT_CALC route is no longer needed.
 """
 
@@ -93,7 +93,7 @@ def _parse_route(response: str) -> str:
                 return "evo"
             if "STANDARD_EXECUTION" in decision:
                 return "default"
-            # Legacy: treat RESILIENT_CALC as STANDARD_EXECUTION (handled by job-manager skill)
+            # Legacy: treat RESILIENT_CALC as STANDARD_EXECUTION (monitor_job handles the lifecycle)
             if "RESILIENT_CALC" in decision:
                 return "default"
         except (json.JSONDecodeError, AttributeError, KeyError, TypeError):
@@ -117,13 +117,13 @@ def _build_router_system(registry: AsyncToolRegistry) -> str:
 
 SYSTEM CONSTRAINTS:
 1. Local Environment: The local sandbox supports Python scripting, data manipulation, and lightweight simulations (e.g., ASE, Pymatgen). It does NOT provide {block}, {sw} run services locally.
-2. Remote Delegation: Heavy calculations ({sw}) are submitted via MCP tools ({sm}) and monitored via the job-manager skill. This is handled within STANDARD_EXECUTION; no separate routing is needed.
+2. Remote Delegation: Heavy calculations ({sw}) are submitted via MCP tools ({sm}) and monitored via the monitor_job tool. This is handled within STANDARD_EXECUTION; no separate routing is needed.
 3. Tool Availability: Use the provided 'Available Tools' list to decide if a programmatic capability is missing (SKILL_EVOLUTION) or can be fulfilled by existing tools and skills (STANDARD_EXECUTION). Always check the full tool list before concluding a tool is missing.
 4. Characterization routing baseline: NMR/XRD/electron-microscopy requests should default to STANDARD_EXECUTION when dedicated MCP tools exist (e.g., mat_nmr_NMR_search_tool, mat_nmr_NMR_predict_tool, mat_nmr_NMR_reverse_predict_tool, mat_xrd_xrd_phase_identification, mat_electron_microscope_get_electron_microscope_recognize). Do NOT choose SKILL_EVOLUTION for these unless the user requests a clearly missing capability.
 
 ROUTING CATEGORIES:
-A. [SKILL_EVOLUTION]: Choose this IF AND ONLY IF the task requires a programmatic tool or specific Python capability that is strictly absent from the 'Available Tools' list, necessitating the generation of a new script. Do NOT choose this if a matching tool already exists (e.g., mat_binary_calc_run_cp2k for CP2K tasks, job-manager for monitoring calculation jobs).
-B. [STANDARD_EXECUTION]: Choose this for all other tasks. This includes literature searches, structure generation, data extraction, local Python scripting, remote calculation submission and monitoring (via MCP tools + job-manager skill), and utilizing existing MCP tools.
+A. [SKILL_EVOLUTION]: Choose this IF AND ONLY IF the task requires a programmatic tool or specific Python capability that is strictly absent from the 'Available Tools' list, necessitating the generation of a new script. Do NOT choose this if a matching tool already exists (e.g., mat_binary_calc_run_cp2k for CP2K tasks, monitor_job for monitoring calculation jobs).
+B. [STANDARD_EXECUTION]: Choose this for all other tasks. This includes literature searches, structure generation, data extraction, local Python scripting, remote calculation submission and monitoring (via MCP tools + monitor_job tool), and utilizing existing MCP tools.
 
 OUTPUT FORMAT:
 You must output a strictly valid JSON object with exactly two keys. Do not include markdown formatting or explanatory text outside the JSON.
@@ -138,7 +138,7 @@ class DirectSolver(BaseExp):
 
     与 Mode 解耦：不绑定具体 Exp，根据能力和任务描述路由。
     路由为确定性二分类：SKILL_EVOLUTION（技能进化）| STANDARD_EXECUTION（本地/同步/远程计算）。
-    远程计算的弹性监控由 job-manager skill 在 STANDARD_EXECUTION 内部处理。
+    远程计算的弹性监控由内置工具 monitor_job 在 STANDARD_EXECUTION 内部处理。
     """
 
     def __init__(self, agent, config):
