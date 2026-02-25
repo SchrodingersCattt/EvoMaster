@@ -34,7 +34,7 @@ _DPA_MODEL_ALIAS_MAP: dict[str, str] = {
 }
 
 _OSS_URL_RE = re.compile(r"https?://[^\s,'\"<>)}\]]+")
-_DEFAULT_DOWNLOAD_SUBDIR = '_tmp/mat_oss_downloads'
+_DEFAULT_DOWNLOAD_SUBDIR = 'oss_downloaded_files'
 _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024
 _SKIP_DOWNLOAD_TOKENS = (
     'trajectory',
@@ -266,10 +266,47 @@ class MatToolCallbacks:
                     return str(candidate)
                 i += 1
 
+    def _to_workspace_rel_path(self, abs_path: str) -> str:
+        """Convert an absolute download path to a workspace-relative path.
+
+        Returns a POSIX-style relative path (e.g. ``oss_downloaded_files/Pt_bulk.cif``)
+        so the agent can pass it directly to calculation tools and the path
+        adaptor resolves it correctly via ``workspace_root / rel``.
+
+        Falls back to the original *abs_path* if the workspace root cannot be
+        determined or the path is not under the workspace.
+        """
+        workspace = (
+            getattr(getattr(self.agent.session, 'config', None), 'workspace_path', None)
+            or ''
+        )
+        if not workspace:
+            return abs_path
+        try:
+            if self._is_remote:
+                ws = workspace.replace('\\', '/').rstrip('/')
+                norm = abs_path.replace('\\', '/')
+                if norm.startswith(ws + '/'):
+                    return norm[len(ws) + 1:]
+                if norm == ws:
+                    return '.'
+            else:
+                ws_path = Path(workspace).resolve()
+                file_path = Path(abs_path).resolve()
+                rel = file_path.relative_to(ws_path)
+                return rel.as_posix()
+        except (ValueError, TypeError):
+            pass
+        return abs_path
+
     def _resolve_download_dir(self) -> str | None:
         """Derive download directory (string) from the agent's workspace config.
 
-        For remote sessions the returned path is POSIX (e.g. ``/workspace/_tmp/…``).
+        When ``_download_subdir`` is empty, files are placed directly in the
+        workspace root so that the agent can reference them by filename alone
+        and the path adaptor can resolve them correctly.
+
+        For remote sessions the returned path is POSIX (e.g. ``/personal/workspace/…``).
         For local sessions it is an absolute local path.
         """
         workspace = (
@@ -279,8 +316,14 @@ class MatToolCallbacks:
         if not workspace:
             return None
         if self._is_remote:
-            return f"{workspace.rstrip('/')}/{self._download_subdir}"
-        return str((Path(workspace).resolve() / self._download_subdir).resolve())
+            workspace = workspace.replace('\\', '/')
+            subdir = self._download_subdir
+            if subdir:
+                return f"{workspace.rstrip('/')}/{subdir}"
+            return workspace.rstrip('/')
+        if self._download_subdir:
+            return str((Path(workspace).resolve() / self._download_subdir).resolve())
+        return str(Path(workspace).resolve())
 
     def _ensure_download_dir(self, download_dir: str) -> None:
         """Create *download_dir* if it does not exist."""
@@ -1164,8 +1207,9 @@ class MatToolCallbacks:
             '[Auto-download callback] Downloaded OSS artifacts to workspace:',
         ]
         for item in downloaded:
+            rel = self._to_workspace_rel_path(item['local_path'])
             note_lines.append(f"- {item['url']}")
-            note_lines.append(f"  local_path: {item['local_path']}")
+            note_lines.append(f"  workspace_path: {rel}")
         new_obs = (observation or '') + '\n' + '\n'.join(note_lines)
         new_info = dict(info or {})
         new_info['auto_downloaded_files'] = downloaded
@@ -1240,8 +1284,9 @@ class MatToolCallbacks:
             '[Characterization callback] Downloaded result artifacts to workspace:',
         ]
         for item in downloaded:
+            rel = self._to_workspace_rel_path(item['local_path'])
             note_lines.append(f"- {item['url']}")
-            note_lines.append(f"  local_path: {item['local_path']}")
+            note_lines.append(f"  workspace_path: {rel}")
 
         new_obs = (observation or '') + '\n' + '\n'.join(note_lines)
         new_info = dict(info or {})
