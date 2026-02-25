@@ -124,12 +124,20 @@ class SSHSession(BaseSession):
                         'exit_code': 1,
                     }
 
-            if command.startswith('C-') and len(command) == 3:
-                self._env.tmux_send_keys(command, enter=False)
-            elif command == '':
-                pass
-            else:
-                self._env.tmux_send_keys(command, enter=True)
+            try:
+                if command.startswith('C-') and len(command) == 3:
+                    self._env.tmux_send_keys(command, enter=False)
+                elif command == '':
+                    pass
+                else:
+                    self._env.tmux_send_keys(command, enter=True)
+            except (RuntimeError, TimeoutError, OSError) as exc:
+                return {
+                    'stdout': f'[SSH error sending input: {exc}]',
+                    'stderr': str(exc),
+                    'exit_code': -1,
+                    'output': f'[SSH error sending input: {exc}]',
+                }
         else:
             if self._prev_command_status != 'completed' and command != '':
                 return {
@@ -139,15 +147,43 @@ class SSHSession(BaseSession):
                 }
 
             if command != '':
-                self._env.tmux_send_keys(command, enter=True)
+                try:
+                    self._env.tmux_send_keys(command, enter=True)
+                except (RuntimeError, TimeoutError, OSError) as exc:
+                    return {
+                        'stdout': f'[SSH error sending command: {exc}]',
+                        'stderr': str(exc),
+                        'exit_code': -1,
+                        'output': f'[SSH error sending command: {exc}]',
+                    }
 
         # Poll for completion
         start_time = time.time()
         poll_interval = 0.5
         self._prev_command_status = 'timeout'
+        _consecutive_failures = 0
+        _MAX_CONSECUTIVE_FAILURES = 5
 
         while time.time() - start_time < timeout:
-            logs = self._env.get_tmux_logs()
+            try:
+                logs = self._env.get_tmux_logs()
+                _consecutive_failures = 0
+            except (TimeoutError, OSError, RuntimeError) as exc:
+                _consecutive_failures += 1
+                self.logger.warning(
+                    'get_tmux_logs failed (%d/%d): %s',
+                    _consecutive_failures,
+                    _MAX_CONSECUTIVE_FAILURES,
+                    exc,
+                )
+                if _consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                    raise RuntimeError(
+                        f'SSH connection appears broken after '
+                        f'{_consecutive_failures} consecutive failures'
+                    ) from exc
+                time.sleep(poll_interval)
+                continue
+
             matches = list(PS1_PATTERN.finditer(logs))
             ps1_count = len(matches)
 
