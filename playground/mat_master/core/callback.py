@@ -266,6 +266,39 @@ class MatToolCallbacks:
                     return str(candidate)
                 i += 1
 
+    def _to_workspace_rel_path(self, abs_path: str) -> str:
+        """Convert an absolute download path to a workspace-relative path.
+
+        Returns a POSIX-style relative path (e.g. ``oss_downloaded_files/Pt_bulk.cif``)
+        so the agent can pass it directly to calculation tools and the path
+        adaptor resolves it correctly via ``workspace_root / rel``.
+
+        Falls back to the original *abs_path* if the workspace root cannot be
+        determined or the path is not under the workspace.
+        """
+        workspace = (
+            getattr(getattr(self.agent.session, 'config', None), 'workspace_path', None)
+            or ''
+        )
+        if not workspace:
+            return abs_path
+        try:
+            if self._is_remote:
+                ws = workspace.rstrip('/')
+                norm = abs_path.replace('\\', '/')
+                if norm.startswith(ws + '/'):
+                    return norm[len(ws) + 1:]
+                if norm == ws:
+                    return '.'
+            else:
+                ws_path = Path(workspace).resolve()
+                file_path = Path(abs_path).resolve()
+                rel = file_path.relative_to(ws_path)
+                return rel.as_posix()
+        except (ValueError, TypeError):
+            pass
+        return abs_path
+
     def _resolve_download_dir(self) -> str | None:
         """Derive download directory (string) from the agent's workspace config.
 
@@ -1173,8 +1206,9 @@ class MatToolCallbacks:
             '[Auto-download callback] Downloaded OSS artifacts to workspace:',
         ]
         for item in downloaded:
+            rel = self._to_workspace_rel_path(item['local_path'])
             note_lines.append(f"- {item['url']}")
-            note_lines.append(f"  local_path: {item['local_path']}")
+            note_lines.append(f"  workspace_path: {rel}")
         new_obs = (observation or '') + '\n' + '\n'.join(note_lines)
         new_info = dict(info or {})
         new_info['auto_downloaded_files'] = downloaded
@@ -1249,8 +1283,9 @@ class MatToolCallbacks:
             '[Characterization callback] Downloaded result artifacts to workspace:',
         ]
         for item in downloaded:
+            rel = self._to_workspace_rel_path(item['local_path'])
             note_lines.append(f"- {item['url']}")
-            note_lines.append(f"  local_path: {item['local_path']}")
+            note_lines.append(f"  workspace_path: {rel}")
 
         new_obs = (observation or '') + '\n' + '\n'.join(note_lines)
         new_info = dict(info or {})
