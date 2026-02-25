@@ -34,7 +34,7 @@ _DPA_MODEL_ALIAS_MAP: dict[str, str] = {
 }
 
 _OSS_URL_RE = re.compile(r"https?://[^\s,'\"<>)}\]]+")
-_DEFAULT_DOWNLOAD_SUBDIR = '_tmp/mat_oss_downloads'
+_DEFAULT_DOWNLOAD_SUBDIR = 'oss_downloaded_files'
 _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024
 _SKIP_DOWNLOAD_TOKENS = (
     'trajectory',
@@ -269,7 +269,11 @@ class MatToolCallbacks:
     def _resolve_download_dir(self) -> str | None:
         """Derive download directory (string) from the agent's workspace config.
 
-        For remote sessions the returned path is POSIX (e.g. ``/workspace/_tmp/…``).
+        When ``_download_subdir`` is empty, files are placed directly in the
+        workspace root so that the agent can reference them by filename alone
+        and the path adaptor can resolve them correctly.
+
+        For remote sessions the returned path is POSIX (e.g. ``/personal/workspace/…``).
         For local sessions it is an absolute local path.
         """
         workspace = (
@@ -279,8 +283,13 @@ class MatToolCallbacks:
         if not workspace:
             return None
         if self._is_remote:
-            return f"{workspace.rstrip('/')}/{self._download_subdir}"
-        return str((Path(workspace).resolve() / self._download_subdir).resolve())
+            subdir = self._download_subdir
+            if subdir:
+                return f"{workspace.rstrip('/')}/{subdir}"
+            return workspace.rstrip('/')
+        if self._download_subdir:
+            return str((Path(workspace).resolve() / self._download_subdir).resolve())
+        return str(Path(workspace).resolve())
 
     def _ensure_download_dir(self, download_dir: str) -> None:
         """Create *download_dir* if it does not exist."""
