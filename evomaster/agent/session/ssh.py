@@ -10,35 +10,38 @@ import re
 import time
 from typing import Any, Literal
 
-_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\r")
-
 from pydantic import Field
 
-from evomaster.env.ssh import SSHEnv, SSHEnvConfig
 from evomaster.env.docker import PS1_PATTERN, BashMetadata
+from evomaster.env.ssh import SSHEnv, SSHEnvConfig
 
 from .base import BaseSession, SessionConfig
+
+_ANSI_RE = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]|\r')
 
 
 class SSHSessionConfig(SessionConfig):
     """SSH Session 配置"""
-    host: str = Field(description="远端主机 IP 或域名")
-    port: int = Field(default=22, description="SSH 端口")
-    username: str = Field(default="root", description="SSH 用户名")
-    password: str | None = Field(default=None, description="SSH 密码")
-    key_file: str | None = Field(default=None, description="SSH 私钥文件路径")
-    key_data: str | None = Field(default=None, description="SSH 私钥内容（从环境变量注入）")
-    passphrase: str | None = Field(default=None, description="私钥密码")
-    working_dir: str = Field(default="/workspace", description="远端工作目录")
-    connect_timeout: int = Field(default=10, description="SSH 连接超时（秒）")
-    keepalive_interval: int = Field(default=30, description="心跳间隔（秒）")
-    max_retries: int = Field(default=3, description="连接失败最大重试次数")
+
+    host: str = Field(description='远端主机 IP 或域名')
+    port: int = Field(default=22, description='SSH 端口')
+    username: str = Field(default='root', description='SSH 用户名')
+    password: str | None = Field(default=None, description='SSH 密码')
+    key_file: str | None = Field(default=None, description='SSH 私钥文件路径')
+    key_data: str | None = Field(
+        default=None, description='SSH 私钥内容（从环境变量注入）'
+    )
+    passphrase: str | None = Field(default=None, description='私钥密码')
+    working_dir: str = Field(default='/workspace', description='远端工作目录')
+    connect_timeout: int = Field(default=10, description='SSH 连接超时（秒）')
+    keepalive_interval: int = Field(default=30, description='心跳间隔（秒）')
+    max_retries: int = Field(default=3, description='连接失败最大重试次数')
 
     def __repr_args__(self):
         """Hide sensitive fields from repr/logs."""
         for k, v in super().__repr_args__():
-            if k in ("password", "key_data", "passphrase") and v is not None:
-                yield k, "***"
+            if k in ('password', 'key_data', 'passphrase') and v is not None:
+                yield k, '***'
             else:
                 yield k, v
 
@@ -52,16 +55,16 @@ class SSHSession(BaseSession):
 
     def __init__(self, config: SSHSessionConfig | None = None):
         super().__init__(config)
-        self.config: SSHSessionConfig = config or SSHSessionConfig(host="localhost")
+        self.config: SSHSessionConfig = config or SSHSessionConfig(host='localhost')
         env_config = SSHEnvConfig(session_config=self.config)
         self._env = SSHEnv(env_config)
         self._last_ps1_count: int = 0
-        self._prev_command_status: Literal["completed", "timeout"] = "completed"
+        self._prev_command_status: Literal['completed', 'timeout'] = 'completed'
 
     def open(self) -> None:
         """建立 SSH 连接并初始化 tmux shell。"""
         if self._is_open:
-            self.logger.warning("Session already open")
+            self.logger.warning('Session already open')
             return
 
         if not self._env.is_ready:
@@ -72,7 +75,9 @@ class SSHSession(BaseSession):
         self._last_ps1_count = len(matches)
 
         self._is_open = True
-        self.logger.info("SSH session opened (%s:%s)", self.config.host, self.config.port)
+        self.logger.info(
+            'SSH session opened (%s:%s)', self.config.host, self.config.port
+        )
 
     def close(self) -> None:
         """关闭 SSH 连接（不关闭远端容器）。"""
@@ -83,7 +88,7 @@ class SSHSession(BaseSession):
             self._env.teardown()
 
         self._is_open = False
-        self.logger.info("SSH session closed")
+        self.logger.info('SSH session closed')
 
     # ------------------------------------------------------------------
     # exec_bash — same tmux+PS1 mechanism as DockerSession
@@ -97,48 +102,48 @@ class SSHSession(BaseSession):
     ) -> dict[str, Any]:
         """通过 tmux 执行 bash 命令（持久环境，状态保持）。"""
         if not self._is_open:
-            raise RuntimeError("Session not open")
+            raise RuntimeError('Session not open')
 
         timeout = timeout or self.config.timeout
         command = command.strip()
 
         # is_input mode
         if is_input:
-            if self._prev_command_status == "completed":
-                if command == "":
+            if self._prev_command_status == 'completed':
+                if command == '':
                     return {
-                        "stdout": "ERROR: No previous running command to retrieve logs from.",
-                        "stderr": "",
-                        "exit_code": 1,
+                        'stdout': 'ERROR: No previous running command to retrieve logs from.',
+                        'stderr': '',
+                        'exit_code': 1,
                     }
                 else:
                     return {
-                        "stdout": "ERROR: No previous running command to interact with.",
-                        "stderr": "",
-                        "exit_code": 1,
+                        'stdout': 'ERROR: No previous running command to interact with.',
+                        'stderr': '',
+                        'exit_code': 1,
                     }
 
-            if command.startswith("C-") and len(command) == 3:
+            if command.startswith('C-') and len(command) == 3:
                 self._env.tmux_send_keys(command, enter=False)
-            elif command == "":
+            elif command == '':
                 pass
             else:
                 self._env.tmux_send_keys(command, enter=True)
         else:
-            if self._prev_command_status != "completed" and command != "":
+            if self._prev_command_status != 'completed' and command != '':
                 return {
-                    "stdout": "[Previous command is still running. Use is_input=true to interact.]",
-                    "stderr": "",
-                    "exit_code": 1,
+                    'stdout': '[Previous command is still running. Use is_input=true to interact.]',
+                    'stderr': '',
+                    'exit_code': 1,
                 }
 
-            if command != "":
+            if command != '':
                 self._env.tmux_send_keys(command, enter=True)
 
         # Poll for completion
         start_time = time.time()
         poll_interval = 0.5
-        self._prev_command_status = "timeout"
+        self._prev_command_status = 'timeout'
 
         while time.time() - start_time < timeout:
             logs = self._env.get_tmux_logs()
@@ -146,7 +151,7 @@ class SSHSession(BaseSession):
             ps1_count = len(matches)
 
             if ps1_count > self._last_ps1_count:
-                self._prev_command_status = "completed"
+                self._prev_command_status = 'completed'
                 break
 
             time.sleep(poll_interval)
@@ -156,18 +161,18 @@ class SSHSession(BaseSession):
         matches = list(PS1_PATTERN.finditer(logs))
         ps1_count = len(matches)
 
-        output = ""
+        output = ''
         exit_code = -1
-        working_dir = ""
+        working_dir = ''
 
         if ps1_count > self._last_ps1_count:
             if self._last_ps1_count > 0:
                 prev_match = matches[self._last_ps1_count - 1]
                 curr_match = matches[ps1_count - 1]
-                output = logs[prev_match.end():curr_match.start()]
+                output = logs[prev_match.end() : curr_match.start()]
             else:
                 curr_match = matches[ps1_count - 1]
-                output = logs[:curr_match.start()]
+                output = logs[: curr_match.start()]
 
             try:
                 metadata = BashMetadata.from_json(matches[-1].group(1))
@@ -180,23 +185,23 @@ class SSHSession(BaseSession):
         else:
             if self._last_ps1_count > 0 and matches:
                 prev_match = matches[self._last_ps1_count - 1]
-                output = logs[prev_match.end():]
+                output = logs[prev_match.end() :]
 
-        output = _ANSI_RE.sub("", output).strip()
+        output = _ANSI_RE.sub('', output).strip()
         if command and output.startswith(command):
-            output = output[len(command):].strip()
+            output = output[len(command) :].strip()
 
         result: dict[str, Any] = {
-            "stdout": output,
-            "stderr": "",
-            "exit_code": exit_code,
-            "working_dir": working_dir,
-            "output": output,
+            'stdout': output,
+            'stderr': '',
+            'exit_code': exit_code,
+            'working_dir': working_dir,
+            'output': output,
         }
 
-        if self._prev_command_status == "timeout":
-            result["stdout"] += f"\n[Command timed out after {timeout}s]"
-            result["exit_code"] = -1
+        if self._prev_command_status == 'timeout':
+            result['stdout'] += f"\n[Command timed out after {timeout}s]"
+            result['exit_code'] = -1
 
         return result
 
@@ -206,35 +211,37 @@ class SSHSession(BaseSession):
 
     def upload(self, local_path: str, remote_path: str) -> None:
         if not self._is_open:
-            raise RuntimeError("Session not open")
+            raise RuntimeError('Session not open')
         self._env.upload_file(local_path, remote_path)
 
-    def read_file(self, remote_path: str, encoding: str = "utf-8") -> str:
+    def read_file(self, remote_path: str, encoding: str = 'utf-8') -> str:
         if not self._is_open:
-            raise RuntimeError("Session not open")
+            raise RuntimeError('Session not open')
         return self._env.read_file_content(remote_path, encoding)
 
-    def write_file(self, remote_path: str, content: str, encoding: str = "utf-8") -> None:
+    def write_file(
+        self, remote_path: str, content: str, encoding: str = 'utf-8'
+    ) -> None:
         if not self._is_open:
-            raise RuntimeError("Session not open")
+            raise RuntimeError('Session not open')
         self._env.write_file_content(remote_path, content, encoding)
 
     def download(self, remote_path: str, timeout: int | None = None) -> bytes:
         if not self._is_open:
-            raise RuntimeError("Session not open")
+            raise RuntimeError('Session not open')
         return self._env.download_file(remote_path, timeout)
 
     def path_exists(self, remote_path: str) -> bool:
         if not self._is_open:
-            raise RuntimeError("Session not open")
+            raise RuntimeError('Session not open')
         return self._env.path_exists(remote_path)
 
     def is_file(self, remote_path: str) -> bool:
         if not self._is_open:
-            raise RuntimeError("Session not open")
+            raise RuntimeError('Session not open')
         return self._env.is_file(remote_path)
 
     def is_directory(self, remote_path: str) -> bool:
         if not self._is_open:
-            raise RuntimeError("Session not open")
+            raise RuntimeError('Session not open')
         return self._env.is_directory(remote_path)
