@@ -161,6 +161,7 @@ class MCPTool(BaseTool):
                     access_key=access_key,
                     project_id=project_id,
                     user_id=user_id,
+                    session=session,
                 )
 
             # 3. 调用 MCP 工具（异步转同步）
