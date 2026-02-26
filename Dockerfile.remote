@@ -4,9 +4,11 @@ FROM registry.dp.tech/dptech/ubuntu:ubuntu24.04-py3.12
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 安装 tmux
+# 安装 tmux、wget、curl
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tmux \
+    wget \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 Python 依赖
@@ -14,7 +16,6 @@ RUN pip install --no-cache-dir \
     ase \
     pymatgen \
     dpdata \
-    scipy \
     numpy \
     matplotlib \
     python-docx \

@@ -188,14 +188,11 @@ You can use the 'use_skill' tool to:
         def _is_oss_url(url: str) -> bool:
             try:
                 from urllib.parse import urlparse
+
                 host = urlparse(url).netloc.lower()
             except Exception:
                 return False
-            return (
-                'aliyuncs.com' in host
-                or '.oss-' in host
-                or host.startswith('oss-')
-            )
+            return 'aliyuncs.com' in host or '.oss-' in host or host.startswith('oss-')
 
         # Collect all OSS URLs from trajectory tool responses, preserving order
         seen: set[str] = set()
@@ -210,7 +207,9 @@ You can use the 'use_skill' tool to:
                             seen.add(url)
                             oss_urls.append(url)
         except Exception as e:
-            self.logger.warning('_generate_finish_report: failed to extract OSS URLs: %s', e)
+            self.logger.warning(
+                '_generate_finish_report: failed to extract OSS URLs: %s', e
+            )
 
         # Build the Markdown report
         now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
@@ -381,6 +380,9 @@ You can use the 'use_skill' tool to:
                 self._log_tool_end(tool_name, error_msg, {'error': str(e)})
                 observation, info = error_msg, {'error': str(e)}
 
+            # finish 工具从源头返回 dict，直接透传（不经过 run_after / _format_tool_observation，避免 callbacks 假定 observation 为 str）
+            if tool_name == 'finish' and isinstance(observation, dict):
+                return observation, info
             observation, info = self._tool_callback_pipeline.run_after(
                 tool_call,
                 observation,
@@ -603,7 +605,13 @@ You can use the 'use_skill' tool to:
             )
 
             if blocked_msgs:
-                observation = '\n\n'.join(blocked_msgs)
+                observation = {
+                    'status': 'success',
+                    'message': '\n\n'.join(blocked_msgs),
+                    'task_completed': requested_task_completed,
+                    'finish_blocked': True,
+                    **gate_info,
+                }
                 info = {
                     'task_completed': requested_task_completed,
                     'finish_blocked': True,
@@ -621,9 +629,9 @@ You can use the 'use_skill' tool to:
                     )
                     if report_url:
                         info['report_url'] = report_url
-                        observation += f'\n\n**Finish report**: {report_url}'
+                        observation['report_url'] = report_url
 
-            # Full content for streaming (yield) and trajectory recording
+            # Full content for streaming (yield) and trajectory recording：统一为 dict
             tool_message = ToolMessage(
                 content=observation,
                 tool_call_id=finish_call.id,
@@ -633,23 +641,26 @@ You can use the 'use_skill' tool to:
             self._on_tool_message(tool_message)
             step_record.tool_responses.append(tool_message)
 
-            # For LLM dialog: truncate if too long to prevent context overflow
+            # For LLM dialog: 序列化为字符串，过长时截断
             MAX_TOOL_OUTPUT = 30000
-            if len(observation) > MAX_TOOL_OUTPUT:
-                observation_for_llm = (
-                    observation[: MAX_TOOL_OUTPUT // 2]
+            content_for_llm = (
+                json.dumps(observation, ensure_ascii=False)
+                if isinstance(observation, dict)
+                else observation
+            )
+            if len(content_for_llm) > MAX_TOOL_OUTPUT:
+                content_for_llm = (
+                    content_for_llm[: MAX_TOOL_OUTPUT // 2]
                     + '\n\n... [output truncated due to length] ...\n\n'
-                    + observation[-MAX_TOOL_OUTPUT // 2 :]
+                    + content_for_llm[-MAX_TOOL_OUTPUT // 2 :]
                 )
-                dialog_message = ToolMessage(
-                    content=observation_for_llm,
-                    tool_call_id=finish_call.id,
-                    name=finish_call.function.name,
-                    meta={'info': info},
-                )
-                self.current_dialog.add_message(dialog_message)
-            else:
-                self.current_dialog.add_message(tool_message)
+            dialog_message = ToolMessage(
+                content=content_for_llm,
+                tool_call_id=finish_call.id,
+                name=finish_call.function.name,
+                meta={'info': info},
+            )
+            self.current_dialog.add_message(dialog_message)
 
         self.trajectory.add_step(step_record)
         self._append_trajectory_entry(dialog_for_query, step_record)
