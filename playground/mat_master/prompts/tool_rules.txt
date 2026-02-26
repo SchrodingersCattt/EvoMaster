@@ -117,6 +117,7 @@
   1. **Failed steps / calculations**: Every failure with error reason. Do NOT omit or hide.
   2. **Approximations and simplifications**: Every compromise made (software substitution, coarser settings, fallback strategies used, steps skipped, screening vs production, MLP vs DFT, etc.).
   3. **All original unprocessed results**: List each step's raw output item by item — numerical values, file paths/URLs, job IDs, warnings, anomalies.
+  4. **All OSS output links (MANDATORY)**: In the finish message, include a dedicated "## Output Files" section listing **every** OSS URL (https://...aliyuncs.com/... or any https:// link returned by a tool as a file result) that appeared in any tool result during the task. One URL per line with a brief description. Do NOT omit any link. If none, write "No OSS output files." The system generates a downloadable report from these links automatically.
 - Be factual and objective; do not downplay failures or exaggerate successes.
 
 ## Final document delivery (mode-aware)

@@ -162,6 +162,113 @@ You can use the 'use_skill' tool to:
         return blocked_msgs, gate_info
 
     # ------------------------------------------------------------------
+    # Finish report generation
+    # ------------------------------------------------------------------
+
+    def _generate_finish_report(
+        self,
+        finish_message: str,
+        task_completed: str,
+    ) -> str | None:
+        """Generate a Markdown finish report, upload it to OSS, and return the URL.
+
+        OSS URLs are extracted from every tool response in the trajectory so that
+        the report is a complete record of all file outputs — regardless of whether
+        the session is local, Docker, or SSH (no workspace filesystem access needed).
+
+        Returns the OSS URL of the uploaded report, or None if upload fails.
+        """
+        import os
+        import re
+        import tempfile
+        from datetime import datetime, timezone
+
+        _OSS_URL_RE = re.compile(r'https?://[^\s,\'"<>)}\]]+')
+
+        def _is_oss_url(url: str) -> bool:
+            try:
+                from urllib.parse import urlparse
+                host = urlparse(url).netloc.lower()
+            except Exception:
+                return False
+            return (
+                'aliyuncs.com' in host
+                or '.oss-' in host
+                or host.startswith('oss-')
+            )
+
+        # Collect all OSS URLs from trajectory tool responses, preserving order
+        seen: set[str] = set()
+        oss_urls: list[str] = []
+        try:
+            for step in self.trajectory.steps:
+                for tr in step.tool_responses:
+                    content = tr.content or ''
+                    for url in _OSS_URL_RE.findall(content):
+                        url = url.rstrip('.,;)')
+                        if _is_oss_url(url) and url not in seen:
+                            seen.add(url)
+                            oss_urls.append(url)
+        except Exception as e:
+            self.logger.warning('_generate_finish_report: failed to extract OSS URLs: %s', e)
+
+        # Build the Markdown report
+        now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+        lines = [
+            '# Task Finish Report',
+            '',
+            f'**Generated**: {now_str}',
+            f'**Status**: `{task_completed}`',
+            '',
+            '## Summary',
+            '',
+            finish_message.strip() if finish_message else '*(no message)*',
+            '',
+            '## Output Files',
+            '',
+        ]
+        if oss_urls:
+            for url in oss_urls:
+                lines.append(f'- {url}')
+        else:
+            lines.append('No OSS output files.')
+        lines.append('')
+
+        md_content = '\n'.join(lines)
+
+        # Write to a local temp file, upload, then delete
+        tmp_path = None
+        try:
+            from src.dao.oss_io import upload_file_to_oss
+
+            fd, tmp_path = tempfile.mkstemp(suffix='_finish_report.md')
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                    f.write(md_content)
+            except Exception:
+                try:
+                    os.close(fd)
+                except Exception:
+                    pass
+                raise
+
+            report_url = upload_file_to_oss(
+                tmp_path,
+                key_prefix='matmaster_evo/finish_reports',
+            )
+            self.logger.info('Finish report uploaded: %s', report_url)
+            return report_url
+        except Exception as e:
+            self.logger.warning('_generate_finish_report: OSS upload failed: %s', e)
+            return None
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+    # ------------------------------------------------------------------
     # Observation formatting (MatMaster-only)
     # ------------------------------------------------------------------
 
@@ -508,6 +615,13 @@ You can use the 'use_skill' tool to:
                 task_completed = info.get('task_completed', 'false')
                 if task_completed in ('true', 'partial'):
                     should_finish = True
+                    report_url = self._generate_finish_report(
+                        finish_message=info.get('message', ''),
+                        task_completed=task_completed,
+                    )
+                    if report_url:
+                        info['report_url'] = report_url
+                        observation += f'\n\n**Finish report**: {report_url}'
 
             # Full content for streaming (yield) and trajectory recording
             tool_message = ToolMessage(
