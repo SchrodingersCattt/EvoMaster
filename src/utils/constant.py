@@ -53,6 +53,7 @@ BOHRIUM_CORE_BASE_URL = os.getenv(
 BOHRIUM_ENV_DEFAULT_IMAGE_IDS: dict[str, int] = {
     'test': 48925,
     'uat': 1509,
+    'prod': 121443,
 }
 BOHRIUM_DEFAULT_IMAGE_ID = (
     BOHRIUM_ENV_DEFAULT_IMAGE_IDS.get(CURRENT_ENV)
