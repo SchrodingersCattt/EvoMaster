@@ -15,13 +15,21 @@ Path detection uses three layers (in order):
 Model alias resolution: short model names like ``"DPA2.4-7M"`` are automatically
 resolved to their full OSS URLs by matching against URLs found in the parameter's
 description text.
+
+Remote session support: when a ``session`` is provided to ``resolve_args()`` and the
+session is non-local (SSH/Docker), file existence and download are performed via the
+session's ``is_file`` / ``download`` methods rather than the local filesystem.
 """
 
 import logging
 import re
+import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, Optional, Set
 from urllib.parse import urlparse
+
+if TYPE_CHECKING:
+    from evomaster.agent.session import BaseSession
 
 from evomaster.env import get_bohrium_storage_config, inject_bohrium_executor
 
@@ -306,10 +314,63 @@ def _workspace_path_to_local(value: str, workspace_root: Path) -> Path:
     return path
 
 
-def _resolve_one(value: str, workspace_root: Path) -> str:
-    """If value is a local path, upload to OSS and return the OSS URL."""
+def _is_remote_session(session: Optional['BaseSession']) -> bool:
+    """Return True when *session* is a non-local session (SSH / Docker)."""
+    if session is None:
+        return False
+    return 'Local' not in type(session).__name__
+
+
+def _resolve_one(
+    value: str,
+    workspace_root: Path,
+    session: Optional['BaseSession'] = None,
+) -> str:
+    """If value is a local path, upload to OSS and return the OSS URL.
+
+    When *session* is a non-local session (SSH/Docker), file existence and
+    content are fetched via the session's ``is_file`` / ``download`` methods
+    so that files on the remote data disk can be uploaded without first
+    copying them to the agent machine.
+    """
     if not _is_local_path(value):
         return value
+
+    if _is_remote_session(session):
+        # Build the remote absolute path the same way as the local case.
+        remote_path = str(
+            _workspace_path_to_local(value, workspace_root)
+        ).replace('\\', '/')
+        try:
+            if not session.is_file(remote_path):  # type: ignore[union-attr]
+                raise FileNotFoundError(
+                    f"Path argument file not found on remote: {remote_path}. "
+                    "For calculation MCP tools, input files must exist in the "
+                    "remote workspace so they can be uploaded to OSS."
+                )
+            data = session.download(remote_path)  # type: ignore[union-attr]
+        except FileNotFoundError:
+            raise
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to read remote file {remote_path} for OSS upload: {e}"
+            ) from e
+
+        suffix = Path(remote_path).suffix or ''
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(data)
+            tmp_path = Path(tmp.name)
+        try:
+            return upload_file_to_oss(tmp_path, tmp_path.parent)
+        except Exception as e:
+            raise RuntimeError(
+                f"Cannot pass remote file to calculation MCP: OSS upload required "
+                f"but failed for {remote_path}. Set OSS_ENDPOINT, OSS_BUCKET_NAME, "
+                "OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET in .env."
+            ) from e
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
     path = _workspace_path_to_local(value, workspace_root)
     if not path.exists():
         raise FileNotFoundError(
@@ -447,12 +508,16 @@ class CalculationPathAdaptor:
         access_key: str | None = None,
         project_id: int | str | None = None,
         user_id: int | str | None = None,
+        session: Optional['BaseSession'] = None,
     ) -> Dict[str, Any]:
         """Inject executor, storage and resolve Path-typed args → OSS URL.
 
         Path detection:
         1. Schema ``"format": "path"`` (primary).
         2. Description ``param_name (Path):`` (fallback when SDK strips format).
+
+        When *session* is a non-local session (SSH/Docker), remote files are
+        fetched via SFTP and uploaded to OSS without touching the local filesystem.
         """
         out = dict(args)
         remote_name = tool_name
@@ -527,9 +592,9 @@ class CalculationPathAdaptor:
                 continue
             val = out[key]
             if isinstance(val, list):
-                out[key] = [_resolve_one(str(v), workspace_root) for v in val]
+                out[key] = [_resolve_one(str(v), workspace_root, session) for v in val]
             else:
-                out[key] = _resolve_one(str(val), workspace_root)
+                out[key] = _resolve_one(str(val), workspace_root, session)
         return out
 
 
