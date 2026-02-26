@@ -48,3 +48,13 @@ BOHRIUM_CORE_BASE_URL = os.getenv(
         else 'https://bohrium-core.dp.tech'
     ),
 )
+
+# Bohrium 节点默认镜像 ID，按环境区分（创建节点时未指定且无 BOHRIUM_IMAGE_ID 时使用）
+BOHRIUM_ENV_DEFAULT_IMAGE_IDS: dict[str, int] = {
+    'test': 48925,
+    'uat': 1509,
+}
+BOHRIUM_DEFAULT_IMAGE_ID = (
+    BOHRIUM_ENV_DEFAULT_IMAGE_IDS.get(CURRENT_ENV)
+    or BOHRIUM_ENV_DEFAULT_IMAGE_IDS['test']
+)
