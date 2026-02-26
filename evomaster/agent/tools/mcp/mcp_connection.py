@@ -6,9 +6,12 @@
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from contextlib import AsyncExitStack
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
@@ -87,8 +90,25 @@ class MCPConnection(ABC):
 
         Returns:
             工具执行结果
+
+        Raises:
+            RuntimeError: MCP 服务器返回 isError=True 时抛出
         """
         result = await self.session.call_tool(tool_name, arguments=arguments)
+        _logger.debug(
+            "MCP raw result: tool=%s isError=%s content=%s",
+            tool_name,
+            getattr(result, 'isError', 'N/A'),
+            result.content,
+        )
+        if getattr(result, 'isError', False):
+            parts = []
+            for item in (result.content or []):
+                if hasattr(item, 'text'):
+                    parts.append(item.text)
+                else:
+                    parts.append(str(item))
+            raise RuntimeError('\n'.join(parts) or 'MCP tool returned isError=True')
         return result.content
 
 
