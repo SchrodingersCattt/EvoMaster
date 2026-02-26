@@ -97,6 +97,8 @@ SESSION_ID_DEMO = "demo_session"
 RUN_ID_WEB = "mat_master_web"
 # Per-session cancel: session_id -> Event, read by agent thread
 _run_stop_events: dict[str, threading.Event] = {}
+# Pending cancel: session_ids that requested cancel before run registered (race fix)
+_pending_cancel: set[str] = set()
 
 
 class ChatRequest(BaseModel):
@@ -837,6 +839,7 @@ def _run_agent_sync(
         if run_done is not None:
             run_done.set()
         _run_stop_events.pop(session_id, None)
+        _pending_cancel.discard(session_id)
 
 
 @app.websocket("/ws/chat")
@@ -888,8 +891,12 @@ async def websocket_endpoint(websocket: WebSocket):
 
             if data.get("type") == "cancel":
                 sid = data.get("session_id")
-                if sid and sid in _run_stop_events:
-                    _run_stop_events[sid].set()
+                if sid:
+                    if sid in _run_stop_events:
+                        _run_stop_events[sid].set()
+                    else:
+                        # Run not started yet (e.g. during "Initializing..."); record so run exits immediately
+                        _pending_cancel.add(sid)
                 await send_json(
                     {"source": "System", "type": "status", "content": "Cancelling...", "session_id": sid}
                 )
@@ -924,6 +931,9 @@ async def websocket_endpoint(websocket: WebSocket):
 
             stop_ev = threading.Event()
             _run_stop_events[session_id] = stop_ev
+            if session_id in _pending_cancel:
+                stop_ev.set()
+                _pending_cancel.discard(session_id)
             bak = (data.get("bohrium_access_key") or "").strip() or None
             bpid = data.get("bohrium_project_id")
             # Fallback: when frontend doesn't send creds, use env vars
