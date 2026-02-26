@@ -27,12 +27,11 @@ class FinishToolParams(BaseToolParams):
     - Any next steps for the user
     - Explanation if you're unable to complete the task
     - Any follow-up questions if more information is needed
-    - An "## Output Files" section that lists EVERY OSS URL
-      (https://...aliyuncs.com/... or any https:// link returned by a tool)
-      that appeared in any tool result during this task, one URL per line.
-      Do NOT omit any OSS link — include all of them even if they appear
-      redundant or intermediate. If no OSS URLs were produced, write
-      "No OSS output files." in that section.
+    - A "## Execution Details" section with one "###" subsection per step/tool call.
+      Under each subsection: numerical results, job IDs, warnings, and output files
+      as "- [filename](url)" list items (never bare URLs). Each OSS link must appear
+      exactly once, under the step that produced it. Do NOT add a separate
+      "Output Files" or "All OSS links" section.
 
     The task_completed field should be set to True if you believed you have completed the task, and False otherwise.
     """

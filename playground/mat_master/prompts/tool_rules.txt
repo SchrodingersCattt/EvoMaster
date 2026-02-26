@@ -113,11 +113,32 @@
   4. **Always record** the failure and human decision (or timeout) for the final report.
 
 ## Final report: honest disclosure (MANDATORY for any multi-step or calculation task)
-- The final report/summary MUST include these sections (use clear headings):
-  1. **Failed steps / calculations**: Every failure with error reason. Do NOT omit or hide.
-  2. **Approximations and simplifications**: Every compromise made (software substitution, coarser settings, fallback strategies used, steps skipped, screening vs production, MLP vs DFT, etc.).
-  3. **All original unprocessed results**: List each step's raw output item by item — numerical values, file paths/URLs, job IDs, warnings, anomalies.
-  4. **All OSS output links (MANDATORY)**: In the finish message, include a dedicated "## Output Files" section listing **every** OSS URL (https://...aliyuncs.com/... or any https:// link returned by a tool as a file result) that appeared in any tool result during the task. One URL per line with a brief description. Do NOT omit any link. If none, write "No OSS output files." The system generates a downloadable report from these links automatically.
+The outputted content should be in this template:
+```
+## Execution Details
+
+### Step 1: mat_sg_build_bulk_structure_by_template
+- Result: ...
+- Files: - [Fe_fcc.cif](https://...)
+
+### Step 2: mat_sg_build_surface_slab
+- Result: ...
+- Files: - [MgO_100_slab.cif](https://...)
+
+### Failed steps
+No failed steps. / Failed steps are...
+
+### Approximations
+- ...
+```
+Important:
+- The finish message MUST include a `## Execution Details` section with `###` subsections:
+  1. **Per-step subsections** (one per meaningful step/tool call, titled with the step/tool name):
+     - Numerical values (energies, band gaps, forces, etc.), job IDs and statuses, warnings/anomalies.
+     - Output files from this step as `- [filename](url)` list items. Never use bare URLs. Each OSS link appears exactly **once** here — do NOT repeat it in any other section.
+  2. **Failed steps / calculations**: Every failure with error reason. Do NOT omit or hide.
+  3. **Approximations and simplifications**: Every compromise made (software substitution, coarser settings, fallback strategies, steps skipped, screening vs production, MLP vs DFT, etc.).
+- Do NOT add a separate "Output Files" or "All OSS links" section — file links belong inside each step's subsection only.
 - Be factual and objective; do not downplay failures or exaggerate successes.
 
 ## Final document delivery (mode-aware)
