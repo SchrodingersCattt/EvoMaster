@@ -113,12 +113,13 @@ class StreamingMatMasterAgent(MatMasterAgent):
             msg.name,
             getattr(msg, 'tool_call_id', None),
         )
-        payload: dict = {'id': msg.tool_call_id, 'name': msg.name, 'result': msg.content or ''}
-        # For the finish tool, surface report_url as a top-level structured field
-        if msg.name == 'finish':
-            report_url = (msg.meta or {}).get('info', {}).get('report_url')
-            if report_url:
-                payload['report_url'] = report_url
+        result = (
+            msg.content
+            if isinstance(msg.content, dict)
+            else {'message': msg.content or ''}
+        )
+        payload: dict = {'id': msg.tool_call_id, 'name': msg.name, 'result': result}
+        # report_url 已在 result 内（agent 写入 observation['report_url']），不再重复写顶层
         self._emit('ToolExecutor', 'tool_result', payload)
         logging.info(
             '[flow] StreamingMatMasterAgent._on_tool_message done name=%s',

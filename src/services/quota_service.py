@@ -14,6 +14,7 @@ import aiohttp
 from src.utils.constant import MATMASTER_TOOLS_SERVER
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 async def check_quota(user_id: str) -> int:
@@ -28,6 +29,7 @@ async def check_quota(user_id: str) -> int:
     """
     url = f'{MATMASTER_TOOLS_SERVER.rstrip("/")}/api/v1/quota/info'
     headers = {'X-User-Id': user_id}
+    logger.info('check_quota request: url=%s headers=%s', url, headers)
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=headers) as resp:
             resp.raise_for_status()
@@ -35,8 +37,17 @@ async def check_quota(user_id: str) -> int:
             inner = (data or {}).get('data') or {}
             remaining = inner.get('remaining')
             if remaining is not None and isinstance(remaining, (int, float)):
-                return max(0, int(remaining))
-            return 0
+                remaining = max(0, int(remaining))
+            else:
+                remaining = 0
+            logger.info(
+                'check_quota response: user_id=%s status=%s data=%s remaining=%s',
+                user_id,
+                resp.status,
+                data,
+                remaining,
+            )
+            return remaining
 
 
 async def use_quota(user_id: str) -> None:

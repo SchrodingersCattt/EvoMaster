@@ -38,12 +38,31 @@ class ChatSessionsService:
         row = self.table.get_session(session_id)
         if not row:
             # 新会话尚未创建，仅允许已登录用户访问（会由 ensure_session 创建）
-            return user_id is not None
+            allowed = user_id is not None
+            if not allowed:
+                logger.info(
+                    'can_access_session: session_id=%s denied (session not in DB, user_id missing)',
+                    session_id,
+                )
+            return allowed
         if row.get('is_shared'):
             return True
         if user_id is None:
+            logger.info(
+                'can_access_session: session_id=%s denied (not shared, no user_id)',
+                session_id,
+            )
             return False
-        return row.get('user_id') == user_id
+        owner = row.get('user_id')
+        if owner != user_id:
+            logger.info(
+                'can_access_session: session_id=%s denied (not owner: owner=%s user_id=%s)',
+                session_id,
+                owner,
+                user_id,
+            )
+            return False
+        return True
 
     def ensure_session(self, session_id: str, user_id: str | None = None) -> None:
         """确保会话存在：DB 有记录且内存有 SESSIONS 槽（仅存 bohrium_credentials 等运行时数据）。"""
@@ -70,6 +89,39 @@ class ChatSessionsService:
         部署/重启后调用：上一进程若被强制终止，stream 可能未执行 release，导致 DB 残留 active。
         """
         return self.table.reset_all_active_to_idle()
+
+    def get_session_status(self, session_id: str) -> str:
+        """
+        获取会话运行状态（来自 DB，部署/重启后与 reset_stale_active_sessions 一致）。
+        用于流开头推送 session_status 事件，便于前端在重连后根据 idle 结束“未结束的 stream”状态。
+        """
+        row = self.table.get_session(session_id)
+        if not row:
+            return 'idle'
+        return str(row.get('status') or 'idle').strip() or 'idle'
+
+    def get_session_status_payload(self, session_id: str) -> dict:
+        """
+        获取会话状态及关联信息，用于 session_status 事件（status、last_task_id 等）。
+        返回值含 source, type, status, session_id；可选 last_task_id。
+        """
+        row = self.table.get_session(session_id)
+        status = 'idle'
+        last_task_id = None
+        if row:
+            status = str(row.get('status') or 'idle').strip() or 'idle'
+            lt = row.get('last_task_id')
+            if lt is not None and str(lt).strip():
+                last_task_id = str(lt).strip()
+        out = {
+            'source': 'System',
+            'type': 'session_status',
+            'status': status,
+            'session_id': session_id.strip(),
+        }
+        if last_task_id is not None:
+            out['last_task_id'] = last_task_id
+        return out
 
     def get_session_user_id(self, session_id: str) -> str | None:
         """获取会话所属用户 ID；会话不存在或无 user_id 时返回 None。"""

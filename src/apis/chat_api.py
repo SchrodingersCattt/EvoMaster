@@ -83,7 +83,19 @@ async def chat_stream(
 ):
     """ag-ui：统一流接口。会话已分享时可不鉴权；未分享时需登录且为会话所有者。"""
     sid = session_id.strip()
+    has_content = req is not None and bool((req.content or '').strip())
+    logger.info(
+        'stream request: session_id=%s user_id=%s has_content=%s',
+        sid,
+        user_id,
+        has_content,
+    )
     if not chat_svc.can_access_session(sid, user_id):
+        logger.warning(
+            'stream 403: can_access_session denied session_id=%s user_id=%s',
+            sid,
+            user_id,
+        )
         raise ForbiddenErrorResponse(msg='无权限访问该会话')
     chat_svc.ensure_session(sid, user_id=user_id)
     user_prompt = (req.content or '').strip() if req else ''
@@ -100,7 +112,39 @@ async def chat_stream(
     assert req is not None
     if user_id:
         remaining = await check_quota(user_id)
+        logger.info(
+            'stream quota check: session_id=%s user_id=%s remaining=%s',
+            sid,
+            user_id,
+            remaining,
+        )
         if remaining <= 0:
+            # 403 时打出请求详情便于 UAT 排查
+            req_headers = dict(request.headers) if request else {}
+            safe_headers = {}
+            for k, v in req_headers.items():
+                k_lower = k.lower()
+                if k_lower == 'authorization':
+                    safe_headers[k] = '(present)' if v else '(absent)'
+                elif k_lower in ('x-user-id', 'x-org-id', 'content-type'):
+                    safe_headers[k] = v[:128] + '...' if len(v) > 128 else v
+            body_summary = {
+                'content_len': len(req.content or ''),
+                'files_count': len(req.files) if req.files else 0,
+                'has_bohrium_user_id': getattr(req, 'bohrium_user_id', None)
+                is not None,
+            }
+            logger.warning(
+                'stream 403: quota exhausted session_id=%s user_id=%s remaining=%s '
+                'path=%s method=%s headers=%s body_summary=%s',
+                sid,
+                user_id,
+                remaining,
+                request.url.path if request else None,
+                request.method if request else None,
+                safe_headers,
+                body_summary,
+            )
             raise ForbiddenErrorResponse(
                 msg='当日免费额度已用完。请填写问卷申请额度，审核通过后再试。',
             )
