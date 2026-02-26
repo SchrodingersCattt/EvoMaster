@@ -46,6 +46,29 @@ _SKIP_DOWNLOAD_TOKENS = (
     'stderr',
 )
 
+def is_error_artifact_url(url: str) -> bool:
+    """Return True for OSS URLs that are malformed error artifacts, not real outputs.
+
+    MCP tools occasionally return URLs when a job fails, e.g.:
+    - Filename is '.' or '..' (tar entries for current/parent dir).
+    - Filename starts with '..' or '._' (e.g. '..tgz', '._1.tgz' broken archives).
+    Normal output files like 'results.tgz' are NOT filtered.
+
+    Used both in the auto-download callback and the finish-report generator.
+    """
+    try:
+        path = urlparse(url).path
+        segments = path.rstrip('/').split('/')
+        last_seg = segments[-1] if segments else ''
+        if not last_seg:
+            return True  # trailing slash or empty path
+        if last_seg in ('.', '..'):
+            return True  # directory entries, not real files
+        return last_seg.startswith('..') or last_seg.startswith('._')
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Characterization file-transfer constants
 # ---------------------------------------------------------------------------
@@ -1118,11 +1141,11 @@ class MatToolCallbacks:
             '[autodownload] after_autodownload_oss_results ensure_download_dir done'
         )
 
-        # De-duplicate and filter
+        # De-duplicate and filter (skip trajectory/trace files and error bundles)
         targets: list[str] = []
         seen: set[str] = set()
         for url in urls:
-            if url in seen or self._should_skip_download(url):
+            if url in seen or self._should_skip_download(url) or is_error_artifact_url(url):
                 continue
             seen.add(url)
             targets.append(url)

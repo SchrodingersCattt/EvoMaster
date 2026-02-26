@@ -6,14 +6,19 @@ System prompt uses file-first loading with runtime composition fallback.
 from __future__ import annotations
 
 import json
+import os
+import re
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 from evomaster.agent.agent import Agent
 from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
 
 from .async_execution_policy import AsyncExecutionPolicy
-from .callback import MatToolCallbacks, ToolCallbackPipeline
+from .callback import MatToolCallbacks, ToolCallbackPipeline, is_error_artifact_url
 from .execution import BatchExecutor, ExecutionTask
 from .job_registry import JobRegistry
 from .tool_guard import ToolGuard
@@ -178,34 +183,58 @@ You can use the 'use_skill' tool to:
 
         Returns the OSS URL of the uploaded report, or None if upload fails.
         """
-        import os
-        import re
-        import tempfile
-        from datetime import datetime, timezone
-
         _OSS_URL_RE = re.compile(r'https?://[^\s,\'"<>)}\]]+')
 
         def _is_oss_url(url: str) -> bool:
             try:
-                from urllib.parse import urlparse
-
                 host = urlparse(url).netloc.lower()
             except Exception:
                 return False
             return 'aliyuncs.com' in host or '.oss-' in host or host.startswith('oss-')
 
-        # Collect all OSS URLs from trajectory tool responses, preserving order
-        seen: set[str] = set()
-        oss_urls: list[str] = []
+        _LITERAL_ESCAPE_RE = re.compile(r'(\\[nrt\\])+$')
+
+        def _clean_url(url: str) -> str:
+            # Strip literal escape sequences first (e.g. the two chars \ + n)
+            url = _LITERAL_ESCAPE_RE.sub('', url)
+            # Then strip real whitespace / punctuation
+            return url.rstrip('.,;)\\\n\r\t ')
+
+        def _url_filename(url: str) -> str:
+            try:
+                return unquote(urlparse(url).path.split('/')[-1]) or url
+            except Exception:
+                return url
+
+        # Collect OSS URLs grouped by tool call, preserving step order.
+        # Each entry: (tool_name, [(url, filename), ...])
+        # Skip finish tool responses to avoid re-collecting URLs the LLM echoed.
+        seen_urls: set[str] = set()
+        # tool_call_id -> tool_name mapping built from assistant messages
+        id_to_tool: dict[str, str] = {}
+        # ordered list of (tool_name, url) for grouping
+        tool_url_pairs: list[tuple[str, str]] = []
         try:
             for step in self.trajectory.steps:
+                if step.assistant_message and step.assistant_message.tool_calls:
+                    for tc in step.assistant_message.tool_calls:
+                        id_to_tool[tc.id] = tc.function.name
                 for tr in step.tool_responses:
+                    if getattr(tr, 'name', None) == 'finish':
+                        continue
+                    tool_name = id_to_tool.get(tr.tool_call_id, tr.name or 'unknown')
                     content = tr.content or ''
-                    for url in _OSS_URL_RE.findall(content):
-                        url = url.rstrip('.,;)')
-                        if _is_oss_url(url) and url not in seen:
-                            seen.add(url)
-                            oss_urls.append(url)
+                    if isinstance(content, dict):
+                        content = json.dumps(content, ensure_ascii=False)
+                    for raw_url in _OSS_URL_RE.findall(content):
+                        url = _clean_url(raw_url)
+                        if (
+                            _is_oss_url(url)
+                            and not is_error_artifact_url(url)
+                            and url not in seen_urls
+                        ):
+                            seen_urls.add(url)
+                            tool_url_pairs.append((tool_name, url))
         except Exception as e:
             self.logger.warning(
                 '_generate_finish_report: failed to extract OSS URLs: %s', e
@@ -223,12 +252,21 @@ You can use the 'use_skill' tool to:
             '',
             finish_message.strip() if finish_message else '*(no message)*',
             '',
-            '## Output Files',
+            '## Generated OSS Files',
             '',
         ]
-        if oss_urls:
-            for url in oss_urls:
-                lines.append(f'- {url}')
+        if tool_url_pairs:
+            # Group consecutive entries by tool name for a natural reading flow
+            current_tool: str | None = None
+            for tool_name, url in tool_url_pairs:
+                if tool_name != current_tool:
+                    if current_tool is not None:
+                        lines.append('')
+                    lines.append(f'**{tool_name}**')
+                    lines.append('')
+                    current_tool = tool_name
+                filename = _url_filename(url)
+                lines.append(f'- [{filename}]({url})')
         else:
             lines.append('No OSS output files.')
         lines.append('')
@@ -238,7 +276,7 @@ You can use the 'use_skill' tool to:
         # Write to a local temp file, upload, then delete
         tmp_path = None
         try:
-            from src.dao.oss_io import upload_file_to_oss
+            from src.dao.oss_io import upload_file_to_oss  # noqa: PLC0415
 
             fd, tmp_path = tempfile.mkstemp(suffix='_finish_report.md')
             try:
