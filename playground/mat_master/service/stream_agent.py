@@ -113,11 +113,13 @@ class StreamingMatMasterAgent(MatMasterAgent):
             msg.name,
             getattr(msg, 'tool_call_id', None),
         )
-        self._emit(
-            'ToolExecutor',
-            'tool_result',
-            {'id': msg.tool_call_id, 'name': msg.name, 'result': msg.content or ''},
-        )
+        payload: dict = {'id': msg.tool_call_id, 'name': msg.name, 'result': msg.content or ''}
+        # For the finish tool, surface report_url as a top-level structured field
+        if msg.name == 'finish':
+            report_url = (msg.meta or {}).get('info', {}).get('report_url')
+            if report_url:
+                payload['report_url'] = report_url
+        self._emit('ToolExecutor', 'tool_result', payload)
         logging.info(
             '[flow] StreamingMatMasterAgent._on_tool_message done name=%s',
             msg.name,
