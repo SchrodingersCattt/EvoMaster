@@ -13,12 +13,11 @@ from typing import Any
 
 import httpx
 
-from src.utils.constant import BOHRIUM_OPENAPI_BASE_URL
+from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_OPENAPI_BASE_URL
 
 logger = logging.getLogger(__name__)
 
-# 与 start.sh 一致：镜像、磁盘、自动关机时间等
-DEFAULT_IMAGE_ID = 48917
+# 与 start.sh 一致：磁盘、自动关机时间等
 DEFAULT_DISK_SIZE = 40
 DEFAULT_TURNOFF_AFTER = 24
 # 默认机器类型对应 SKU（与 start.sh 中 case 一致）
@@ -62,7 +61,9 @@ class BohriumNodeService:
         返回 {"node_id": int, "ip": str|None, "password": str|None}，未就绪时 ip/password 可能为空。
         """
         name = name or os.environ.get('BOHRIUM_NODE_NAME', 'matmaster-session')
-        image_id = image_id or int(os.environ.get('BOHRIUM_IMAGE_ID', DEFAULT_IMAGE_ID))
+        image_id = image_id or int(
+            os.environ.get('BOHRIUM_IMAGE_ID', BOHRIUM_DEFAULT_IMAGE_ID)
+        )
         sku_id = sku_id or int(os.environ.get('BOHRIUM_SKU_ID', DEFAULT_SKU_ID))
         disk_size = disk_size or int(
             os.environ.get('BOHRIUM_DISK_SIZE', DEFAULT_DISK_SIZE)

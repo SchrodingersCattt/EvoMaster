@@ -143,6 +143,9 @@ class ChatStreamService:
         sid = session_id.strip()
         event_queue = self._queues.register_subscriber(sid)
         try:
+            # 部署/重启后重连时，先推送当前会话状态（含 last_task_id 等），便于前端根据 idle 结束“未结束的 stream”状态
+            payload = self._sessions_service.get_session_status_payload(sid)
+            yield self.sse_format(payload)
             events = self._events_service.get_session_events(sid)
             if events:
                 events = self._inject_elapsed_for_history(events)
@@ -286,6 +289,10 @@ class ChatStreamService:
         loop = asyncio.get_event_loop()
         start_time_ms = int(time.time() * 1000)
 
+        # 流开头推送当前会话状态（含 last_task_id 等），便于部署/重启后前端根据 session_status 结束“未结束的 stream”状态
+        payload = self._sessions_service.get_session_status_payload(sid)
+        payload['stream_started_at'] = start_time_ms
+        yield self.sse_format(payload)
         history = self._events_service.get_session_events(sid) or []
         history = self._inject_elapsed_for_history(history)
         for event in history:
