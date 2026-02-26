@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Constants (mirrors run_resilient_job.py)
+# Constants for lifecycle states and diagnosis
 # ---------------------------------------------------------------------------
 
 TERMINAL_SUCCESS = frozenset(

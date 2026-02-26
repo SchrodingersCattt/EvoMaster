@@ -349,7 +349,7 @@ def download_job_file(
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# PUBLIC API  (imported by run_resilient_job.py via __init__)
+# PUBLIC API
 # ═══════════════════════════════════════════════════════════════════════
 
 def query_job_status(
