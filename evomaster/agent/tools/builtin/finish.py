@@ -36,36 +36,48 @@ class FinishToolParams(BaseToolParams):
 
     The task_completed field should be set to True if you believed you have completed the task, and False otherwise.
     """
-    
-    name: ClassVar[str] = "finish"
 
-    message: str = Field(description="Final message to send to the user")
-    task_completed: Literal["true", "false", "partial"] = Field(
-        description="Whether you have completed the task."
+    name: ClassVar[str] = 'finish'
+
+    message: str = Field(description='Final message to send to the user')
+    task_completed: Literal['true', 'false', 'partial'] = Field(
+        description='Whether you have completed the task.'
     )
 
 
 class FinishTool(BaseTool):
     """完成工具"""
-    
-    name: ClassVar[str] = "finish"
+
+    name: ClassVar[str] = 'finish'
     params_class: ClassVar[type[BaseToolParams]] = FinishToolParams
 
-    def execute(self, session: BaseSession, args_json: str) -> tuple[str, dict[str, Any]]:
-        """标记任务完成"""
+    def execute(
+        self, session: BaseSession, args_json: str
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """标记任务完成。返回 (result_dict, info)，result_dict 供前端/SSE 直接使用。"""
         try:
             params = self.parse_params(args_json)
         except Exception as e:
-            return f"Parameter validation error: {str(e)}", {"error": str(e)}
-        
+            err = {
+                'status': 'error',
+                'error': str(e),
+                'message': f"Parameter validation error: {str(e)}",
+            }
+            return err, {'error': str(e)}
+
         assert isinstance(params, FinishToolParams)
-        
+
         # 记录完成信息
         self.logger.info(f"Task finished. Completed: {params.task_completed}")
         self.logger.info(f"Final message: {params.message[:200]}...")
-        
-        return f"Task marked as {params.task_completed}. Message: {params.message}", {
-            "task_completed": params.task_completed,
-            "message": params.message,
-        }
 
+        result: dict[str, Any] = {
+            'status': 'success',
+            'message': params.message,
+            'task_completed': params.task_completed,
+        }
+        info: dict[str, Any] = {
+            'task_completed': params.task_completed,
+            'message': params.message,
+        }
+        return result, info

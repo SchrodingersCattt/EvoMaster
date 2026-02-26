@@ -47,12 +47,12 @@ class ChatSessionsTable(BaseTable):
                 return cursor.rowcount > 0
 
     def get_session(self, session_id: str) -> Optional[Dict]:
-        """获取会话信息"""
+        """获取会话信息（含 status、last_task_id 等）。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     f'''
-                    SELECT session_id, user_id, status, is_shared, created_at, updated_at
+                    SELECT session_id, user_id, status, is_shared, last_task_id, created_at, updated_at
                     FROM {self.table_name}
                     WHERE session_id = %s
                     ''',
