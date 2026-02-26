@@ -18,7 +18,7 @@ from evomaster.agent.agent import Agent
 from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
 
 from .async_execution_policy import AsyncExecutionPolicy
-from .callback import MatToolCallbacks, ToolCallbackPipeline
+from .callback import MatToolCallbacks, ToolCallbackPipeline, is_error_artifact_url
 from .execution import BatchExecutor, ExecutionTask
 from .job_registry import JobRegistry
 from .tool_guard import ToolGuard
@@ -192,7 +192,12 @@ You can use the 'use_skill' tool to:
                 return False
             return 'aliyuncs.com' in host or '.oss-' in host or host.startswith('oss-')
 
+        _LITERAL_ESCAPE_RE = re.compile(r'(\\[nrt\\])+$')
+
         def _clean_url(url: str) -> str:
+            # Strip literal escape sequences first (e.g. the two chars \ + n)
+            url = _LITERAL_ESCAPE_RE.sub('', url)
+            # Then strip real whitespace / punctuation
             return url.rstrip('.,;)\\\n\r\t ')
 
         def _url_filename(url: str) -> str:
@@ -223,7 +228,11 @@ You can use the 'use_skill' tool to:
                         content = json.dumps(content, ensure_ascii=False)
                     for raw_url in _OSS_URL_RE.findall(content):
                         url = _clean_url(raw_url)
-                        if _is_oss_url(url) and url not in seen_urls:
+                        if (
+                            _is_oss_url(url)
+                            and not is_error_artifact_url(url)
+                            and url not in seen_urls
+                        ):
                             seen_urls.add(url)
                             tool_url_pairs.append((tool_name, url))
         except Exception as e:
@@ -243,7 +252,7 @@ You can use the 'use_skill' tool to:
             '',
             finish_message.strip() if finish_message else '*(no message)*',
             '',
-            '## Output Files',
+            '## Generated OSS Files',
             '',
         ]
         if tool_url_pairs:
