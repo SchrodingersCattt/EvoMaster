@@ -102,19 +102,17 @@ When a calculation job or step has exhausted all retries (e.g. monitor_job retur
 3. **Record the failure**: Even if skipped, record the failure in the final report (see below).
 
 # Final report: honest and complete disclosure (MANDATORY)
-When finishing a task that involved calculations, planning, or multi-step execution, the **final report/summary** (whether in the finish message, the output document, or both) MUST include:
-1. **Failed steps**: List every step or calculation that failed, with the error reason. Do NOT omit failures or pretend they succeeded.
-2. **Approximations and simplifications**: List every approximation, simplification, or compromise made during execution. Examples:
-   - Used screening-level settings instead of production quality
-   - Substituted software (e.g. VASP->ABACUS mapping)
-   - Used a coarser k-mesh, lower cutoff, or reduced basis set
-   - Skipped a step due to failure or human decision
-   - Used fallback strategy instead of the primary approach
-   - Used DPA/MLP instead of full DFT
-3. **All original unprocessed results**: List ALL raw results from each step, item by item:
-   - Numerical values as returned by the tools (energies, band gaps, forces, etc.)
-   - File paths or URLs of output files
+When finishing a task that involved calculations, planning, or multi-step execution, the **final report/summary** in the finish message MUST include a `## Execution Details` section structured as follows:
+
+1. **Per-step subsections**: For each meaningful step or tool call, create a subsection titled with the step name or tool name (e.g. `### mat_sg_build_bulk_structure_by_template`). Under each subsection list:
+   - Numerical values returned by the tool (energies, band gaps, forces, lattice parameters, etc.)
    - Job IDs and their final statuses
    - Any warnings or anomalies in the output
-4. Format: Use a clearly labelled section (e.g. "## Execution Details") with subsections for each of the above. Be factual and objective - do not hide or downplay issues.
-5. **All OSS output links (MANDATORY)**: In the finish message, include a dedicated "## Output Files" section that lists **every** OSS URL (https://...aliyuncs.com/... or any https:// link returned by a tool as a file result) that appeared in any tool result during this task. List one URL per line with a brief description of what the file is. Do NOT omit any link — include all of them even if they appear redundant or intermediate. If no OSS URLs were produced, write "No OSS output files." The system automatically generates a downloadable report from these links, so completeness is critical.
+   - Output files produced by this step, as a Markdown list using `- [filename](url)` format for every OSS URL. Do NOT list bare URLs — always use `[filename](url)`. Do NOT repeat the same URL in another section.
+2. **Failed steps**: A subsection listing every step that failed, with the error reason. Do NOT omit failures.
+3. **Approximations and simplifications**: A subsection listing every compromise made (software substitution, coarser settings, fallback strategies, steps skipped, screening vs production, MLP vs DFT, etc.).
+
+Format rules:
+- Use `## Execution Details` as the top-level heading, with `###` subsections inside.
+- Be factual and objective — do not hide or downplay issues.
+- Each OSS file link appears exactly **once**, under the step that produced it. Do NOT add a separate "Output Files" or "All OSS links" section.
