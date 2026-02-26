@@ -7,8 +7,6 @@ This policy centralizes:
 
 from __future__ import annotations
 
-import json
-from typing import Any
 
 
 class AsyncExecutionPolicy:
@@ -81,14 +79,6 @@ class AsyncExecutionPolicy:
             return True
         if name == "monitor_job":
             return True
-        if name == "use_skill":
-            try:
-                args = json.loads(tool_call.function.arguments or "{}")
-            except json.JSONDecodeError:
-                return False
-            skill_name = str(args.get("skill_name", "")).strip().lower()
-            action = str(args.get("action", "")).strip().lower()
-            return skill_name == "job-manager" and action in {"run_script", "get_info", "get_reference"}
         return False
 
     @staticmethod

@@ -106,7 +106,7 @@
 - Do not write sections from memory only; ground content in retrieved material and cite it. When citing papers use: In [year], [first author] et al. [did what / found that ...]; [n](url).
 
 ## Retry exhaustion: ask human before giving up (MANDATORY)
-- When **job-manager** returns `exhausted_retries: true` or a step/calculation fails after all built-in retries:
+- When **monitor_job** returns `exhausted_retries: true` or a step/calculation fails after all built-in retries:
   1. Call **ask_human** (use_skill with skill_name=ask-human) with a clear question: describe the failure, list what was tried, and ask whether to (a) provide modified parameters/suggestions, (b) skip this step, or (c) abort.
   2. **Timeout default = skip**: If no human response, default to **skip** (do NOT append more retries, do NOT block). The default tendency is to NOT add more attempts.
   3. If the human provides modified parameters or suggestions, apply them and retry once. If that also fails, skip and continue.

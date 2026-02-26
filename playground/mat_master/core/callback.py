@@ -182,7 +182,7 @@ class MatToolCallbacks:
         pipeline.register_before(self.before_normalize_skill_script_args)
         pipeline.register_before(self.before_resolve_skill_reference_name)
         pipeline.register_before(self.before_resolve_dpa_model_alias)
-        pipeline.register_before(self.before_patch_job_manager_bohr_id)
+        pipeline.register_before(self.before_patch_monitor_job_bohr_id)
         pipeline.register_before(self.before_upload_nmr_predict_files)
         # MCP business-error detection runs FIRST among after-callbacks so that
         # downstream hooks (track_async_submit, autodownload, etc.) can
@@ -649,13 +649,16 @@ class MatToolCallbacks:
             resolved,
         )
 
-    def before_patch_job_manager_bohr_id(self, tool_call: Any) -> None:
-        """Auto-fill missing bohr_job_id for monitor_job calls (and legacy job-manager use_skill).
+    def before_patch_monitor_job_bohr_id(self, tool_call: Any) -> None:
+        """Auto-fill missing bohr_job_id for monitor_job calls.
 
         Avoids fragile failures when the LLM remembers job_id but forgets
         bohr_job_id, which is required/safer for some async backends.
         """
         tool_name = tool_call.function.name or ''
+        if tool_name != 'monitor_job':
+            return
+
         args_str = tool_call.function.arguments or ''
         try:
             args = json.loads(args_str) if args_str else {}
@@ -664,63 +667,19 @@ class MatToolCallbacks:
         if not isinstance(args, dict):
             return
 
-        # ── monitor_job (structured tool) ──────────────────────────────────
-        if tool_name == 'monitor_job':
-            if args.get('bohr_job_id'):
-                return
-            job_id = args.get('job_id')
-            if not job_id:
-                return
-            bohr_map = self._collect_submit_job_map()
-            bohr_job_id = bohr_map.get(job_id)
-            if not bohr_job_id:
-                return
-            args['bohr_job_id'] = bohr_job_id
-            tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
-            self.logger.info(
-                'before_tool: patched monitor_job bohr_job_id for job_id=%s',
-                job_id,
-            )
+        if args.get('bohr_job_id'):
             return
-
-        # ── Legacy: use_skill + job-manager (kept for backward compatibility) ──
-        if tool_name != 'use_skill':
-            return
-        if args.get('skill_name') != 'job-manager':
-            return
-        if args.get('action') != 'run_script':
-            return
-        if args.get('script_name') != 'run_resilient_job.py':
-            return
-
-        script_args = args.get('script_args')
-        if not isinstance(script_args, str) or not script_args.strip():
-            return
-        if '--bohr_job_id' in script_args:
-            return
-
-        try:
-            tokens = shlex.split(script_args)
-        except ValueError:
-            return
-
-        job_id = None
-        for i, tok in enumerate(tokens):
-            if tok == '--job_id' and i + 1 < len(tokens):
-                job_id = tokens[i + 1]
-                break
+        job_id = args.get('job_id')
         if not job_id:
             return
-
         bohr_map = self._collect_submit_job_map()
         bohr_job_id = bohr_map.get(job_id)
         if not bohr_job_id:
             return
-
-        args['script_args'] = f'{script_args} --bohr_job_id "{bohr_job_id}"'
+        args['bohr_job_id'] = bohr_job_id
         tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
         self.logger.info(
-            'before_tool: patched job-manager args with bohr_job_id for job_id=%s',
+            'before_tool: patched monitor_job bohr_job_id for job_id=%s',
             job_id,
         )
 

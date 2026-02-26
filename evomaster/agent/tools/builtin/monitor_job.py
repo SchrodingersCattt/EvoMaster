@@ -1,4 +1,4 @@
-"""monitor_job — built-in tool replacing the job-manager skill script.
+"""monitor_job — built-in tool for resilient remote calculation job lifecycle.
 
 Runs entirely inside the agent backend process so it can import
 evomaster.adaptors.calculation.job_service without shipping source code to
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Constants (mirrors run_resilient_job.py)
+# Constants for lifecycle states and diagnosis
 # ---------------------------------------------------------------------------
 
 TERMINAL_SUCCESS = frozenset(
