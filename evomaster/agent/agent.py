@@ -148,6 +148,7 @@ class BaseAgent(ABC):
         try:
             # 执行循环
             for turn in range(self.config.max_turns):
+                setattr(self, "_cancelled_from_step", False)
                 if stop_event and stop_event.is_set():
                     self.logger.info("Task cancelled by user.")
                     self.trajectory.finish("cancelled", {"reason": "stop_event"})
@@ -159,6 +160,10 @@ class BaseAgent(ABC):
                 self.logger.info("=" * 80)
 
                 should_finish = self._step()
+                if getattr(self, "_cancelled_from_step", False):
+                    self.logger.info("Task cancelled by user.")
+                    self.trajectory.finish("cancelled", {"reason": "stop_event"})
+                    break
                 if should_finish:
                     self.logger.info("=" * 80)
                     self.logger.info("✅ Agent finished task")
@@ -227,12 +232,16 @@ class BaseAgent(ABC):
             是否应该结束（True 表示结束）
         """
         self._step_count += 1
+        stop_event = getattr(self, "_stop_event", None)
 
         # 准备对话（可能需要截断）
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
 
         # 查询模型（使用 LLM）
         assistant_message = self.llm.query(dialog_for_query)
+        if stop_event and stop_event.is_set():
+            setattr(self, "_cancelled_from_step", True)
+            return True
 
         self.current_dialog.add_message(assistant_message)
 
@@ -263,6 +272,9 @@ class BaseAgent(ABC):
         # 处理工具调用
         should_finish = False
         for tool_call in assistant_message.tool_calls:
+            if stop_event and stop_event.is_set():
+                setattr(self, "_cancelled_from_step", True)
+                return True
             self.logger.debug(f"Processing tool call: {tool_call.function.name}")
 
             # 检查是否是 finish 工具
