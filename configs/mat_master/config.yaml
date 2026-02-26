@@ -221,7 +221,7 @@ mcp:
           batch_type: "OpenAPI"
           context_type: "OpenAPI"
           remote_profile:
-            image_address: "registry.dp.tech/dptech/dpa-calculator:10fe4948"
+            image_address: "registry.dp.tech/dptech/dpa-calculator:9ef99f94"
             platform: "ali"
             machine_type: "c16_m64_1 * NVIDIA 4090"
             app_key: "agent"
@@ -297,7 +297,7 @@ mcp:
             batch_type: "OpenAPI"
             context_type: "OpenAPI"
             remote_profile:
-              image_address: "registry.dp.tech/dptech/abinit:9.10.3"
+              image_address: "registry.dp.tech/dptech/abinit:deve_9.10.3"
               platform: "ali"
               machine_type: "c32_m128_cpu"
               app_key: "agent"
