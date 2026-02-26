@@ -17,13 +17,14 @@ from src.models.root import RootResponse
 from src.services.agent_run_service import get_agent_run_service, init_playground
 from src.services.sessions_service import get_sessions_service
 from src.services.user_service import get_user_service
-from src.utils.constant import DB_CONFIG
+from src.utils.constant import CURRENT_ENV, DB_CONFIG
 from src.utils.exceptions import BaseErrorResponse
 from src.utils.logger import LoggingConfig, setup_logging
 
 log_config = LoggingConfig.get_main_app_config()
 setup_logging(**log_config)
 logger = logging.getLogger(__name__)
+logger.info('SERVICE_ENV=%s', CURRENT_ENV)
 
 
 @asynccontextmanager
@@ -162,17 +163,18 @@ async def log_requests(request: Request, call_next):
         return response
     finally:
         cost_ms = (time.perf_counter() - start) * 1000
-        logger.info(
-            '%s %s %s - %s user_id=%s query=%s path_params=%s body=%s',
-            request.method,
-            request.url.path,
-            getattr(locals().get('response', None), 'status_code', None),
-            f'{cost_ms:.2f}ms',
-            user_id,
-            query,
-            path_params,
-            body_for_log,
-        )
+        if request.url.path != '/api/health':
+            logger.info(
+                '%s %s %s - %s user_id=%s query=%s path_params=%s body=%s',
+                request.method,
+                request.url.path,
+                getattr(locals().get('response', None), 'status_code', None),
+                f'{cost_ms:.2f}ms',
+                user_id,
+                query,
+                path_params,
+                body_for_log,
+            )
 
 
 @app.exception_handler(BaseErrorResponse)
