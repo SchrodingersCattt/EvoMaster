@@ -6,16 +6,16 @@ skill_type: operator
 
 # Log Diagnostics Skill
 
-Used by the **job-manager** skill (internally) and the agent to diagnose failed calculations without feeding full logs to the LLM.
+Used by the **monitor_job** built-in tool (internally) and the agent to diagnose failed calculations without feeding full logs to the LLM.
 
 ## Scripts
 
-- **extract_error.py** — Reads a log file path; outputs a single line error code (e.g. `scf_diverged`, `kpoints_error`, `grid_too_coarse`). The job-manager skill calls this automatically when a monitored job fails.
+- **extract_error.py** — Reads a log file path; outputs a single line error code (e.g. `scf_diverged`, `kpoints_error`, `grid_too_coarse`). The `monitor_job` tool calls this automatically when a monitored job fails.
 
 ## When to use
 
-- **Automatically**: The `job-manager` skill imports `extract_error.py` internally during its diagnose step. You do NOT need to call this separately when using job-manager.
-- **Manually**: After a job status is `Failed` or `Error` and you are NOT using job-manager: run this script on the job's OUTCAR or stderr to get the error code.
+- **Automatically**: The `monitor_job` built-in tool imports `extract_error.py` internally during its diagnose step. You do NOT need to call this separately when using `monitor_job`.
+- **Manually**: After a job status is `Failed` or `Error` and you are NOT using `monitor_job`: run this script on the job's OUTCAR or stderr to get the error code.
 - Do **not** pass the entire log content to the agent; use this script to return only the code so that token usage stays low.
 
 ## Error codes (VASP / ABACUS)

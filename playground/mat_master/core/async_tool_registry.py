@@ -216,8 +216,8 @@ class AsyncToolRegistry:
             for prefix, names in by_server.items()
         )
 
-    def job_manager_software_arg(self) -> str:
-        """For ``--software`` help: ``"sg, dpa, abacus, lammps, ..."``"""
+    def monitor_job_software_arg(self) -> str:
+        """For ``software`` help: ``"sg, dpa, abacus, lammps, ..."``"""
         return ", ".join(self.software_names_lower)
 
     # ── CRP snippets ──────────────────────────────────────────────────────
@@ -260,7 +260,7 @@ class AsyncToolRegistry:
             f"3. **Submit**: Call the appropriate MCP submit tool ({sm}). Note the returned job_id.\n"
             f"4. **Monitor & Resilience**: Call `monitor_job(job_id=\"<ID>\", software=\"<SW>\", "
             f"workspace=\"<PATH>\")`. "
-            f"Supported software values: {self.job_manager_software_arg()}. "
+            f"Supported software values: {self.monitor_job_software_arg()}. "
             f"For dpdispatcher-based jobs (ABACUS, etc.) also pass bohr_job_id=extra_info.bohr_job_id "
             f"from the submit response. "
             f"This tool blocks until the job succeeds or fails, handles status polling, result downloading, "
@@ -312,7 +312,7 @@ class AsyncToolRegistry:
 
             {{ASYNC_SOFTWARE_LIST}}       - DPA, ABACUS, LAMMPS, ...
             {{ASYNC_SERVER_MAPPING}}      - mat_dpa_* for DPA; ...
-            {{ASYNC_JOB_MANAGER_SW}}      - dpa, abacus, lammps, ...
+            {{ASYNC_MONITOR_JOB_SW}}      - dpa, abacus, lammps, ...
             {{CRP_BLOCK_LIST}}            - VASP, Gaussian, CASTEP, Wien2k
             {{CRP_ALLOW_LIST}}            - ABACUS, LAMMPS, DPA, ...
             {{CRP_PREFERRED_DFT}}         - ABACUS
@@ -325,7 +325,7 @@ class AsyncToolRegistry:
         replacements = {
             "{{ASYNC_SOFTWARE_LIST}}":   self.software_list_str(),
             "{{ASYNC_SERVER_MAPPING}}":  self.server_mapping_str(),
-            "{{ASYNC_JOB_MANAGER_SW}}":  self.job_manager_software_arg(),
+            "{{ASYNC_MONITOR_JOB_SW}}":  self.monitor_job_software_arg(),
             "{{CRP_BLOCK_LIST}}":        self.crp_block_str(),
             "{{CRP_ALLOW_LIST}}":        self.crp_allow_str(),
             "{{CRP_PREFERRED_DFT}}":     ts.get("preferred_dft", "ABACUS"),

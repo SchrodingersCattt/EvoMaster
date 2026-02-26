@@ -123,10 +123,9 @@ mat_master:
   capabilities:
     skill_evolution:
       enabled: true
-  # 鲁棒计算配置（被 monitor_job 内置工具使用，不再是 Exp）
-  # 注意：fix 策略现已内置于 monitor_job.py 的 FIX_STRATEGIES 中。
-  # 此处保留供未来外部覆盖使用。
-  job_manager:
+  # 鲁棒计算配置（被 monitor_job 内置工具使用）
+  # fix 策略内置于 monitor_job.py 的 FIX_STRATEGIES 中；此处保留供未来外部覆盖使用。
+  monitor_job:
     max_retries: 3
     poll_interval_seconds: 60
   # 技能进化能力配置（被 SkillEvolutionExp 使用）

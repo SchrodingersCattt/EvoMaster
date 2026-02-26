@@ -1,4 +1,4 @@
-"""monitor_job — built-in tool replacing the job-manager skill script.
+"""monitor_job — built-in tool for resilient remote calculation job lifecycle.
 
 Runs entirely inside the agent backend process so it can import
 evomaster.adaptors.calculation.job_service without shipping source code to
