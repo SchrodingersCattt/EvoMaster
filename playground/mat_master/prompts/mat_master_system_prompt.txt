@@ -117,3 +117,4 @@ When finishing a task that involved calculations, planning, or multi-step execut
    - Job IDs and their final statuses
    - Any warnings or anomalies in the output
 4. Format: Use a clearly labelled section (e.g. "## Execution Details") with subsections for each of the above. Be factual and objective - do not hide or downplay issues.
+5. **All OSS output links (MANDATORY)**: In the finish message, include a dedicated "## Output Files" section that lists **every** OSS URL (https://...aliyuncs.com/... or any https:// link returned by a tool as a file result) that appeared in any tool result during this task. List one URL per line with a brief description of what the file is. Do NOT omit any link — include all of them even if they appear redundant or intermediate. If no OSS URLs were produced, write "No OSS output files." The system automatically generates a downloadable report from these links, so completeness is critical.
