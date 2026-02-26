@@ -5,7 +5,7 @@ Usage:
   python extract_error.py <log_file_path>
 
 Output: single line with canonical error code (e.g. scf_diverged, kpoints_error).
-Used by job-manager skill internally and for manual diagnosis.
+Used by the monitor_job built-in tool internally and for manual diagnosis.
 """
 
 import re
