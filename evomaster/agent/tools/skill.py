@@ -377,26 +377,9 @@ class SkillTool(BaseTool):
                     except ValueError:
                         cmd += ' ' + script_args.strip()
 
-        # job-manager/run_resilient_job.py 需要 Bohrium 鉴权：从 session 注入前端传入的 access_key
-        if (
-            skill.meta_info.name == 'job-manager'
-            and script_name == 'run_resilient_job.py'
-        ):
-            bohrium_creds = getattr(session, '_bohrium_credentials', None) or {}
-            access_key = (bohrium_creds.get('access_key') or '').strip()
-            if access_key:
-                cmd += ' ' + shlex.quote('--access_key') + ' ' + shlex.quote(access_key)
-
         # 使用 session 的 bash 工具执行脚本
         try:
             timeout: int | None = None
-            # job-manager is expected to block for long-running remote jobs.
-            # Use a larger timeout to avoid false failures that cause tool drift.
-            if (
-                skill.meta_info.name == 'job-manager'
-                and script_name == 'run_resilient_job.py'
-            ):
-                timeout = 60 * 60  # 1 hour
             result = session.exec_bash(cmd, timeout=timeout)
             stdout = result.get('stdout', '')
             stderr = result.get('stderr', '')
