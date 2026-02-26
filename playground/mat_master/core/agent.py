@@ -7,18 +7,16 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlparse
 
 from evomaster.agent.agent import Agent
 from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
 
 from .async_execution_policy import AsyncExecutionPolicy
-from .callback import MatToolCallbacks, ToolCallbackPipeline, is_error_artifact_url
+from .callback import MatToolCallbacks, ToolCallbackPipeline
 from .execution import BatchExecutor, ExecutionTask
 from .job_registry import JobRegistry
 from .tool_guard import ToolGuard
@@ -170,108 +168,45 @@ You can use the 'use_skill' tool to:
     # Finish report generation
     # ------------------------------------------------------------------
 
+    def _normalise_finish_message(self, raw: str) -> str:
+        """Make finish message canonical: fix literal \\n, ensure URLs get a line break before them."""
+        if not raw:
+            return raw
+        text = raw.strip()
+        # Literal backslash-n etc. -> real newline so message is well-formed
+        text = text.replace('\\n', '\n').replace('\\r', '\r')
+        # Ensure each bare URL line has a blank line before it so markdown doesn't glue them
+        out: list[str] = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith('http://') or stripped.startswith('https://'):
+                if out and out[-1].strip():
+                    out.append('')
+                out.append(line)
+            else:
+                out.append(line)
+        return '\n'.join(out)
+
     def _generate_finish_report(
         self,
         finish_message: str,
         task_completed: str,
-    ) -> str | None:
-        """Generate a Markdown finish report, upload it to OSS, and return the URL.
+    ) -> tuple[str | None, str]:
+        """Save the finish message as a Markdown report, upload to OSS, return (report_url, normalised_message).
 
-        OSS URLs are extracted from every tool response in the trajectory so that
-        the report is a complete record of all file outputs — regardless of whether
-        the session is local, Docker, or SSH (no workspace filesystem access needed).
-
-        Returns the OSS URL of the uploaded report, or None if upload fails.
+        The report is just the normalised message (same as .message). No separate
+        trajectory-based content. Returns the normalised message so the caller
+        can use it for info['message'] and observation.
         """
-        _OSS_URL_RE = re.compile(r'https?://[^\s,\'"<>)}\]]+')
+        normalised = self._normalise_finish_message(finish_message or '')
 
-        def _is_oss_url(url: str) -> bool:
-            try:
-                host = urlparse(url).netloc.lower()
-            except Exception:
-                return False
-            return 'aliyuncs.com' in host or '.oss-' in host or host.startswith('oss-')
-
-        _LITERAL_ESCAPE_RE = re.compile(r'(\\[nrt\\])+$')
-
-        def _clean_url(url: str) -> str:
-            # Strip literal escape sequences first (e.g. the two chars \ + n)
-            url = _LITERAL_ESCAPE_RE.sub('', url)
-            # Then strip real whitespace / punctuation
-            return url.rstrip('.,;)\\\n\r\t ')
-
-        def _url_filename(url: str) -> str:
-            try:
-                return unquote(urlparse(url).path.split('/')[-1]) or url
-            except Exception:
-                return url
-
-        # Collect OSS URLs grouped by tool call, preserving step order.
-        # Each entry: (tool_name, [(url, filename), ...])
-        # Skip finish tool responses to avoid re-collecting URLs the LLM echoed.
-        seen_urls: set[str] = set()
-        # tool_call_id -> tool_name mapping built from assistant messages
-        id_to_tool: dict[str, str] = {}
-        # ordered list of (tool_name, url) for grouping
-        tool_url_pairs: list[tuple[str, str]] = []
-        try:
-            for step in self.trajectory.steps:
-                if step.assistant_message and step.assistant_message.tool_calls:
-                    for tc in step.assistant_message.tool_calls:
-                        id_to_tool[tc.id] = tc.function.name
-                for tr in step.tool_responses:
-                    if getattr(tr, 'name', None) == 'finish':
-                        continue
-                    tool_name = id_to_tool.get(tr.tool_call_id, tr.name or 'unknown')
-                    content = tr.content or ''
-                    if isinstance(content, dict):
-                        content = json.dumps(content, ensure_ascii=False)
-                    for raw_url in _OSS_URL_RE.findall(content):
-                        url = _clean_url(raw_url)
-                        if (
-                            _is_oss_url(url)
-                            and not is_error_artifact_url(url)
-                            and url not in seen_urls
-                        ):
-                            seen_urls.add(url)
-                            tool_url_pairs.append((tool_name, url))
-        except Exception as e:
-            self.logger.warning(
-                '_generate_finish_report: failed to extract OSS URLs: %s', e
-            )
-
-        # Build the Markdown report
         now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
-        lines = [
-            '# Task Finish Report',
-            '',
-            f'**Generated**: {now_str}',
-            f'**Status**: `{task_completed}`',
-            '',
-            '## Summary',
-            '',
-            finish_message.strip() if finish_message else '*(no message)*',
-            '',
-            '## Generated OSS Files',
-            '',
-        ]
-        if tool_url_pairs:
-            # Group consecutive entries by tool name for a natural reading flow
-            current_tool: str | None = None
-            for tool_name, url in tool_url_pairs:
-                if tool_name != current_tool:
-                    if current_tool is not None:
-                        lines.append('')
-                    lines.append(f'**{tool_name}**')
-                    lines.append('')
-                    current_tool = tool_name
-                filename = _url_filename(url)
-                lines.append(f'- [{filename}]({url})')
-        else:
-            lines.append('No OSS output files.')
-        lines.append('')
-
-        md_content = '\n'.join(lines)
+        header = (
+            '# Task Finish Report\n\n'
+            f'**Generated**: {now_str}  \n'
+            f'**Status**: `{task_completed}`\n\n---\n\n'
+        )
+        md_content = header + (normalised or '*(no message)*')
 
         # Write to a local temp file, upload, then delete
         tmp_path = None
@@ -294,10 +229,10 @@ You can use the 'use_skill' tool to:
                 key_prefix='matmaster_evo/finish_reports',
             )
             self.logger.info('Finish report uploaded: %s', report_url)
-            return report_url
+            return report_url, normalised
         except Exception as e:
             self.logger.warning('_generate_finish_report: OSS upload failed: %s', e)
-            return None
+            return None, normalised
         finally:
             if tmp_path and os.path.exists(tmp_path):
                 try:
@@ -661,10 +596,12 @@ You can use the 'use_skill' tool to:
                 task_completed = info.get('task_completed', 'false')
                 if task_completed in ('true', 'partial'):
                     should_finish = True
-                    report_url = self._generate_finish_report(
+                    report_url, normalised_message = self._generate_finish_report(
                         finish_message=info.get('message', ''),
                         task_completed=task_completed,
                     )
+                    info['message'] = normalised_message
+                    observation['message'] = normalised_message
                     if report_url:
                         info['report_url'] = report_url
                         observation['report_url'] = report_url
