@@ -105,12 +105,18 @@
 - Before calling manuscript-scribe write_section or init_manuscript, run literature search (mat_sn_search-papers-normal, mat_sn_scholar-search, mat_sn_web-search) for the section topic unless the user already provided source files.
 - Do not write sections from memory only; ground content in retrieved material and cite it. When citing papers use: In [year], [first author] et al. [did what / found that ...]; [n](url).
 
-## Retry exhaustion: ask human before giving up (MANDATORY)
-- When **monitor_job** returns `exhausted_retries: true` or a step/calculation fails after all built-in retries:
-  1. Call **ask_human** (use_skill with skill_name=ask-human) with a clear question: describe the failure, list what was tried, and ask whether to (a) provide modified parameters/suggestions, (b) skip this step, or (c) abort.
-  2. **Timeout default = skip**: If no human response, default to **skip** (do NOT append more retries, do NOT block). The default tendency is to NOT add more attempts.
-  3. If the human provides modified parameters or suggestions, apply them and retry once. If that also fails, skip and continue.
-  4. **Always record** the failure and human decision (or timeout) for the final report.
+## Calculation job failure: diagnose, fix, or abort (MANDATORY)
+- When **monitor_job** returns `status='failed'`:
+  1. Read the `log_tail` field in the response — it contains the last section of the job log.
+     If `log_file_is_remote=true`, the log is on the remote session; `log_tail` is already included.
+  2. Analyze the log to identify a specific, actionable root cause.
+  3a. **If you can identify the cause**: fix input files/parameters, re-submit via MCP,
+      then call monitor_job with the new job_id.
+  3b. **If you CANNOT identify the cause** from the log:
+      call ask_human(mode="timeout") — include the failure description and the relevant log lines.
+      Do NOT re-submit without a diagnosed fix. Blind re-submission causes an infinite retry loop.
+  4. **On ask_human timeout** (no human reply): abort the task.
+     Call finish with task_completed=false and record the failure reason in the message.
 
 ## Final report: honest disclosure (MANDATORY for any multi-step or calculation task)
 The outputted content should be in this template:

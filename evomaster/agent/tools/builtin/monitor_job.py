@@ -7,11 +7,14 @@ the remote Bohrium node.
 Workflow
 --------
 1. Poll Bohrium OpenAPI until the job reaches a terminal state.
+   Transient failures (network errors, API blips) are confirmed over
+   ``_MAX_FAILURE_CONFIRMS`` consecutive checks before being treated as real.
 2. On success: download result files via the NAS file-token API.
    - Local session  → write directly to ``workspace/calculation_results/``.
    - SSH session    → download to a temp dir on the backend, then SFTP-push
                       each file to the container's ``workspace/``, then clean up.
-3. On failure: diagnose the error log and return a fix strategy.
+3. On confirmed failure: read the log tail and return it with the result so
+   the LLM agent can diagnose the root cause and decide next steps.
 
 Files larger than ``_AUTO_DOWNLOAD_MAX_BYTES`` (100 MB) are skipped; their
 paths are listed in ``download_skipped`` so the user can fetch them manually
@@ -25,7 +28,6 @@ import logging
 import os
 import re
 import shutil
-import sys
 import tempfile
 import time
 from pathlib import Path, PurePosixPath
@@ -41,7 +43,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Constants for lifecycle states and diagnosis
+# Constants for lifecycle states
 # ---------------------------------------------------------------------------
 
 TERMINAL_SUCCESS = frozenset(
@@ -50,48 +52,12 @@ TERMINAL_SUCCESS = frozenset(
 TERMINAL_FAILURE = frozenset({'Failed', 'Error', 'Cancelled', 'failed', 'error', 'cancelled'})
 UNKNOWN_STATUSES = frozenset({'Unknown', 'unknown'})
 
-FIX_STRATEGIES: dict[str, dict[str, Any]] = {
-    'scf_diverged': {
-        'action': 'update_parameter',
-        'description': 'SCF not converging — reduce mixing, switch algorithm',
-        'params': {'ALGO': 'All', 'AMIX': '0.1', 'BMIX': '0.0001'},
-    },
-    'scf_diagonalization_error': {
-        'action': 'update_parameter',
-        'description': 'Diagonalization failure — switch to more robust algorithm',
-        'params': {'ALGO': 'Normal', 'PREC': 'Accurate'},
-    },
-    'kpoints_error': {
-        'action': 'reduce_kpoints',
-        'description': 'K-point / IBZKPT error — reduce k-mesh density by half',
-        'factor': 0.5,
-    },
-    'grid_too_coarse': {
-        'action': 'increase_cutoff',
-        'description': 'FFT grid too coarse — increase energy cutoff',
-        'increment': 50,
-    },
-    'lost_atoms': {
-        'action': 'reduce_timestep',
-        'description': 'Lost atoms in MD — halve the timestep',
-        'factor': 0.5,
-    },
-    'out_of_range': {
-        'action': 'reduce_timestep',
-        'description': 'Out of range — halve the timestep',
-        'factor': 0.5,
-    },
-    'walltime_exceeded': {
-        'action': 'increase_walltime',
-        'description': 'Job killed by walltime — double the walltime limit',
-        'factor': 2.0,
-    },
-    'oom_error': {
-        'action': 'reduce_parallelism',
-        'description': 'Out of memory — reduce parallelism or memory per node',
-        'suggestion': 'Reduce NCORE/NPAR or split into smaller systems',
-    },
-}
+# Number of consecutive failure/error status responses required before treating
+# a job as truly failed.  Filters out transient network blips and API errors.
+_MAX_FAILURE_CONFIRMS = 3
+
+# Maximum characters to include in log_tail returned to the agent.
+_LOG_TAIL_MAX_CHARS = 5000
 
 LOG_PATTERNS: dict[str, list[str]] = {
     'vasp': ['OUTCAR', 'vasp.out', '*.out'],
@@ -108,41 +74,32 @@ LOG_PATTERNS: dict[str, list[str]] = {
 _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024  # 100 MB
 
 # ---------------------------------------------------------------------------
-# Log diagnostics (inline — avoids importing the skill script)
+# Log helpers
 # ---------------------------------------------------------------------------
 
-def _find_log_diagnostics_scripts() -> Path | None:
-    """Locate log-diagnostics/scripts/ relative to the mat_master skills tree."""
-    # Try to find from evomaster package location upward to project root
-    pkg = Path(__file__).resolve().parent.parent.parent.parent  # project root
-    candidate = pkg / 'playground' / 'mat_master' / 'skills' / 'log-diagnostics' / 'scripts'
-    return candidate if candidate.is_dir() else None
-
-
-def _diagnose_log(log_path: str, software: str = '') -> str:
-    diag_dir = _find_log_diagnostics_scripts()
-    if diag_dir is None:
-        return 'unknown_error'
-    if str(diag_dir) not in sys.path:
-        sys.path.insert(0, str(diag_dir))
+def _read_log_tail(log_path: str | None) -> str | None:
+    """Return the last ``_LOG_TAIL_MAX_CHARS`` characters of a local log file."""
+    if not log_path:
+        return None
     try:
-        from extract_error import (  # type: ignore[import-untyped]
-            analyze_lammps_log,
-            analyze_vasp_log,
-        )
-        sw = software.lower()
-        lower = log_path.lower()
-        if sw == 'dpa':
-            return 'unknown_error'
-        if sw in ('vasp', 'abacus', 'abinit', 'qe') or any(
-            tok in lower for tok in ('outcar', 'vasp', 'abacus', 'abinit', 'qe')
-        ):
-            return analyze_vasp_log(log_path)
-        if sw == 'lammps' or 'lammps' in lower:
-            return analyze_lammps_log(log_path)
-        return analyze_vasp_log(log_path)
+        with open(log_path, 'r', errors='ignore') as f:
+            content = f.read()
+        return content[-_LOG_TAIL_MAX_CHARS:] if len(content) > _LOG_TAIL_MAX_CHARS else content
+    except OSError:
+        return None
+
+
+def _read_log_tail_remote(session: 'BaseSession', log_path: str | None) -> str | None:
+    """Return the last ``_LOG_TAIL_MAX_CHARS`` characters of a remote log file."""
+    if not log_path:
+        return None
+    try:
+        content = session._env.read_file_content(log_path)
+        if not isinstance(content, str):
+            content = str(content)
+        return content[-_LOG_TAIL_MAX_CHARS:] if len(content) > _LOG_TAIL_MAX_CHARS else content
     except Exception:
-        return 'unknown_error'
+        return None
 
 
 def _find_log_file_local(workspace: str, software: str) -> str | None:
@@ -351,7 +308,6 @@ def _run_lifecycle(
     workspace: str,
     session: 'BaseSession',
     poll_interval: int = 30,
-    max_retries: int = 5,
     bohr_job_id: str | None = None,
     download_tag: str | None = None,
     access_key: str | None = None,
@@ -362,203 +318,173 @@ def _run_lifecycle(
     is_ssh = isinstance(session, SSHSession)
 
     current_job_id = job_id
-    retries = 0
     max_polls = 720
     unknown_count = 0
     max_unknown = 3
+    failure_confirm_count = 0
 
-    while retries <= max_retries:
-        polls = 0
-        while polls < max_polls:
-            status = str(
-                query_job_status(
-                    current_job_id,
-                    bohr_job_id=bohr_job_id,
-                    software=None,
-                    access_key=access_key,
-                )
+    polls = 0
+    while polls < max_polls:
+        status = str(
+            query_job_status(
+                current_job_id,
+                bohr_job_id=bohr_job_id,
+                software=None,
+                access_key=access_key,
+            )
+        )
+
+        # -- Success --
+        if status in TERMINAL_SUCCESS:
+            raw_results = get_job_results(
+                current_job_id,
+                bohr_job_id=bohr_job_id,
+                software=None,
+                access_key=access_key,
+            )
+            results = raw_results if isinstance(raw_results, dict) else {'raw': raw_results}
+            resolved_bid = bohr_job_id or (
+                results.get('bohr_job_id')
+                if isinstance(results.get('bohr_job_id'), str)
+                else None
             )
 
-            # -- Success --
-            if status in TERMINAL_SUCCESS:
-                raw_results = get_job_results(
-                    current_job_id,
-                    bohr_job_id=bohr_job_id,
-                    software=None,
-                    access_key=access_key,
-                )
-                results = raw_results if isinstance(raw_results, dict) else {'raw': raw_results}
-                resolved_bid = bohr_job_id or (
-                    results.get('bohr_job_id')
-                    if isinstance(results.get('bohr_job_id'), str)
-                    else None
-                )
+            download_info: dict[str, Any] = {}
+            if workspace and resolved_bid:
+                tag_raw = (download_tag or str(resolved_bid) or 'unknown_job').strip()
+                safe_job = re.sub(r'[^\w.\-]', '_', tag_raw)[:80] or 'unknown_job'
+                run_stamp = time.strftime('%Y%m%d_%H%M%S')
+                subdir_name = f'run_{safe_job}_{run_stamp}'
 
-                download_info: dict[str, Any] = {}
-                if workspace and resolved_bid:
-                    tag_raw = (download_tag or str(resolved_bid) or 'unknown_job').strip()
-                    safe_job = re.sub(r'[^\w.\-]', '_', tag_raw)[:80] or 'unknown_job'
-                    run_stamp = time.strftime('%Y%m%d_%H%M%S')
-                    subdir_name = f'run_{safe_job}_{run_stamp}'
-
-                    if is_ssh:
-                        # Download to backend temp dir, then SFTP push to container
-                        tmp_root = Path(tempfile.mkdtemp(prefix='monitor_job_'))
-                        try:
-                            dl_info = _download_results_to_local_dir(
-                                tmp_root, resolved_bid, access_key
-                            )
-                            remote_calc_dir = (
-                                f'{workspace}/calculation_results/{subdir_name}'
-                            )
-                            pushed = _sftp_push_directory(session, tmp_root, remote_calc_dir)
-                            dl_info['remote_download_dir'] = remote_calc_dir
-                            dl_info['remote_files'] = pushed
-                            # Replace local paths with remote paths in 'downloaded'
-                            dl_info['downloaded'] = pushed
-                            download_info['results_txt_downloads'] = dl_info
-                        finally:
-                            shutil.rmtree(tmp_root, ignore_errors=True)
-                    else:
-                        local_calc_dir = (
-                            Path(workspace) / 'calculation_results' / subdir_name
-                        ).resolve()
+                if is_ssh:
+                    # Download to backend temp dir, then SFTP push to container
+                    tmp_root = Path(tempfile.mkdtemp(prefix='monitor_job_'))
+                    try:
                         dl_info = _download_results_to_local_dir(
-                            local_calc_dir, resolved_bid, access_key
+                            tmp_root, resolved_bid, access_key
                         )
+                        remote_calc_dir = (
+                            f'{workspace}/calculation_results/{subdir_name}'
+                        )
+                        pushed = _sftp_push_directory(session, tmp_root, remote_calc_dir)
+                        dl_info['remote_download_dir'] = remote_calc_dir
+                        dl_info['remote_files'] = pushed
+                        # Replace local paths with remote paths in 'downloaded'
+                        dl_info['downloaded'] = pushed
                         download_info['results_txt_downloads'] = dl_info
+                    finally:
+                        shutil.rmtree(tmp_root, ignore_errors=True)
+                else:
+                    local_calc_dir = (
+                        Path(workspace) / 'calculation_results' / subdir_name
+                    ).resolve()
+                    dl_info = _download_results_to_local_dir(
+                        local_calc_dir, resolved_bid, access_key
+                    )
+                    download_info['results_txt_downloads'] = dl_info
 
-                total_downloaded: list[str] = []
-                total_errors: list[str] = []
-                for section in download_info.values():
-                    if isinstance(section, dict):
-                        total_downloaded.extend(section.get('downloaded') or [])
-                        total_errors.extend(section.get('download_errors') or [])
+            total_downloaded: list[str] = []
+            total_errors: list[str] = []
+            for section in download_info.values():
+                if isinstance(section, dict):
+                    total_downloaded.extend(section.get('downloaded') or [])
+                    total_errors.extend(section.get('download_errors') or [])
 
-                if total_errors and not total_downloaded:
-                    return {
-                        'status': 'failed',
-                        'job_id': current_job_id,
-                        'bohr_job_id': resolved_bid,
-                        'retries': retries,
-                        'results': results,
-                        'downloads': download_info,
-                        'message': (
-                            f'Job {current_job_id} finished but all result downloads failed '
-                            f'({len(total_errors)} errors). Check download_errors for details.'
-                        ),
-                    }
-
-                out_status = 'success' if not total_errors else 'partial_success'
+            if total_errors and not total_downloaded:
                 return {
-                    'status': out_status,
+                    'status': 'failed',
                     'job_id': current_job_id,
                     'bohr_job_id': resolved_bid,
-                    'retries': retries,
                     'results': results,
                     'downloads': download_info,
                     'message': (
-                        f'Job {current_job_id} completed successfully.'
-                        if out_status == 'success'
-                        else f'Job {current_job_id} completed but {len(total_errors)} file(s) failed to download.'
+                        f'Job {current_job_id} finished but all result downloads failed '
+                        f'({len(total_errors)} errors). Check download_errors for details.'
                     ),
                 }
 
-            # -- Failure --
-            if status in TERMINAL_FAILURE or status.startswith('Error:'):
-                break
-
-            # -- Unknown --
-            if status in UNKNOWN_STATUSES:
-                unknown_count += 1
-                if unknown_count >= max_unknown:
-                    return {
-                        'status': 'unknown',
-                        'job_id': current_job_id,
-                        'bohr_job_id': bohr_job_id,
-                        'retries': retries,
-                        'message': (
-                            f"Job status returned 'Unknown' {unknown_count} times. "
-                            'Possible causes: (1) Bohrium access_key not set or invalid — '
-                            'check BOHRIUM_ACCESS_KEY in .env; (2) job ID could not be resolved '
-                            '— for ABACUS / dpdispatcher jobs, pass bohr_job_id explicitly '
-                            '(from extra_info.bohr_job_id in the submit response).'
-                        ),
-                    }
-                time.sleep(min(poll_interval, 10))
-                continue
-
-            # -- Still running --
-            unknown_count = 0
-            time.sleep(poll_interval)
-            polls += 1
-
-        # ── Failed — diagnose ──
-        if is_ssh:
-            log_path = _find_log_file_remote(session, workspace, software)
-            if log_path:
-                try:
-                    log_content = session._env.read_file_content(log_path)
-                    tmp_log = Path(tempfile.mktemp(suffix='.log'))
-                    tmp_log.write_text(log_content, encoding='utf-8', errors='replace')
-                    error_code = _diagnose_log(str(tmp_log), software=software)
-                    tmp_log.unlink(missing_ok=True)
-                except Exception:
-                    error_code = 'unknown_error'
-            else:
-                error_code = 'unknown_error'
-        else:
-            log_path = _find_log_file_local(workspace, software)
-            error_code = _diagnose_log(log_path, software=software) if log_path else 'unknown_error'
-
-        fix = FIX_STRATEGIES.get(error_code)
-        if not fix:
+            out_status = 'success' if not total_errors else 'partial_success'
             return {
-                'status': 'failed',
+                'status': out_status,
                 'job_id': current_job_id,
-                'bohr_job_id': bohr_job_id,
-                'retries': retries,
-                'error_code': error_code,
-                'log_file': log_path if not is_ssh else None,
+                'bohr_job_id': resolved_bid,
+                'results': results,
+                'downloads': download_info,
                 'message': (
-                    f"Job {current_job_id} failed with error '{error_code}'. "
-                    'No built-in fix strategy. Review the log file and fix manually.'
+                    f'Job {current_job_id} completed successfully.'
+                    if out_status == 'success'
+                    else f'Job {current_job_id} completed but {len(total_errors)} file(s) failed to download.'
                 ),
             }
 
-        retries += 1
-        if retries > max_retries:
-            break
+        # -- Failure (with confirmation to filter transient API/network errors) --
+        if status in TERMINAL_FAILURE or status.startswith('Error:'):
+            failure_confirm_count += 1
+            logger.warning(
+                'monitor_job: failure status=%s (confirm %d/%d) job_id=%s',
+                status, failure_confirm_count, _MAX_FAILURE_CONFIRMS, current_job_id,
+            )
+            if failure_confirm_count >= _MAX_FAILURE_CONFIRMS:
+                break  # Confirmed failure — proceed to log-tail and return
+            time.sleep(min(poll_interval, 10))
+            continue
 
-        return {
-            'status': 'needs_fix',
-            'job_id': current_job_id,
-            'bohr_job_id': bohr_job_id,
-            'retries': retries,
-            'error_code': error_code,
-            'fix_strategy': fix,
-            'log_file': log_path if not is_ssh else None,
-            'message': (
-                f"Job {current_job_id} failed with '{error_code}' (retry {retries}/{max_retries}). "
-                f"Suggested fix: {fix['description']}. "
-                'Apply the fix to input files, re-submit via MCP, then call monitor_job again with the new job_id.'
-            ),
-        }
+        # -- Unknown --
+        if status in UNKNOWN_STATUSES:
+            unknown_count += 1
+            if unknown_count >= max_unknown:
+                return {
+                    'status': 'unknown',
+                    'job_id': current_job_id,
+                    'bohr_job_id': bohr_job_id,
+                    'message': (
+                        f"Job status returned 'Unknown' {unknown_count} times. "
+                        'Possible causes: (1) Bohrium access_key not set or invalid — '
+                        'check BOHRIUM_ACCESS_KEY in .env; (2) job ID could not be resolved '
+                        '— for ABACUS / dpdispatcher jobs, pass bohr_job_id explicitly '
+                        '(from extra_info.bohr_job_id in the submit response).'
+                    ),
+                }
+            time.sleep(min(poll_interval, 10))
+            continue
 
+        # -- Still running: reset failure counter --
+        failure_confirm_count = 0
+        unknown_count = 0
+        time.sleep(poll_interval)
+        polls += 1
+
+    # ── Confirmed failed — read log tail for LLM diagnosis ──
+    if is_ssh:
+        log_path = _find_log_file_remote(session, workspace, software)
+        log_tail = _read_log_tail_remote(session, log_path)
+    else:
+        log_path = _find_log_file_local(workspace, software)
+        log_tail = _read_log_tail(log_path)
+
+    log_hint = (
+        f"{log_path} (remote)" if log_path and is_ssh
+        else log_path
+        if log_path
+        else 'not found — use execute_bash to search in the workspace'
+    )
     return {
         'status': 'failed',
         'job_id': current_job_id,
         'bohr_job_id': bohr_job_id,
-        'retries': retries,
-        'exhausted_retries': True,
+        'log_file': log_path,
+        'log_file_is_remote': is_ssh,
+        'log_tail': log_tail,
         'message': (
-            f'Job {current_job_id} failed after {retries} retries (limit: {max_retries}). '
-            'All built-in fix strategies have been attempted. '
-            'Consider asking the human user (ask-human skill) whether to: '
-            '(1) provide modified parameters or suggestions, '
-            '(2) skip this calculation, or '
-            '(3) abort. '
-            'Default behaviour if no human response: skip this calculation and continue.'
+            f"Job {current_job_id} failed (confirmed after {failure_confirm_count} checks). "
+            f"Log file: {log_hint}\n"
+            "The last section of the log is included in 'log_tail'. "
+            "Analyze it to identify the root cause, fix input files, re-submit via MCP, "
+            "then call monitor_job with the new job_id. "
+            'If you cannot identify the cause, call ask_human(mode="timeout") '
+            "with the failure description and relevant log lines. "
+            "On timeout with no human reply: abort the task "
+            "(call finish with task_completed=false)."
         ),
     }
 
@@ -571,13 +497,15 @@ class MonitorJobParams(BaseToolParams):
     """Monitor a submitted remote calculation job (DPA, ABACUS, LAMMPS, CP2K, QE, ABINIT, ORCA,
     Gaussian, etc.) until it reaches a terminal state.
 
-    Polls the Bohrium OpenAPI for job status, downloads result files on success, and diagnoses
-    errors on failure. Call ONCE after submitting a job via MCP — this tool blocks until the job
-    completes or all retries are exhausted.
+    Polls the Bohrium OpenAPI for job status and downloads result files on success.
+    Transient API/network errors are confirmed over multiple checks before being
+    treated as a real failure.
 
     On success: returns status + downloaded file paths.
-    On failure: returns error_code + fix_strategy. Apply the fix, re-submit via MCP, and call
-    monitor_job again with the new job_id.
+    On failure: returns status='failed' + log_tail (last section of the job log).
+    The agent should read log_tail to diagnose the root cause, fix input files,
+    re-submit via MCP, and call monitor_job again with the new job_id.
+    If the cause cannot be identified, call ask_human(mode="timeout").
     """
 
     name: ClassVar[str] = 'monitor_job'
@@ -605,7 +533,6 @@ class MonitorJobParams(BaseToolParams):
         ),
     )
     poll_interval: int = Field(default=30, description='Seconds between status checks.')
-    max_retries: int = Field(default=5, description='Maximum diagnosis-and-retry cycles.')
     access_key: str | None = Field(
         default=None,
         description='Bohrium access key. Falls back to BOHRIUM_ACCESS_KEY env var.',
@@ -655,7 +582,6 @@ class MonitorJobTool(BaseTool):
             workspace=workspace,
             session=session,
             poll_interval=params.poll_interval,
-            max_retries=params.max_retries,
             bohr_job_id=params.bohr_job_id,
             download_tag=params.download_tag,
             access_key=access_key,
