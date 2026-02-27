@@ -393,6 +393,8 @@ export default function ChatPanel({
   askHumanInput,
   setAskHumanInput,
   sendAskHumanReply,
+  askHumanMode = "timeout",
+  askHumanTimeoutSec = 20,
   readOnly = false,
   jumpToLogIndex,
   onJumpHandled,
@@ -420,6 +422,8 @@ export default function ChatPanel({
   askHumanInput: string;
   setAskHumanInput: (v: string) => void;
   sendAskHumanReply: (content: string) => void;
+  askHumanMode?: "timeout" | "block";
+  askHumanTimeoutSec?: number;
   readOnly?: boolean;
   jumpToLogIndex?: number | null;
   onJumpHandled?: () => void;
@@ -436,6 +440,26 @@ export default function ChatPanel({
   const isRunning = running && currentSessionId === runningSessionId;
   const canSend = status === "connected" && !isRunning;
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null);
+
+  // Countdown timer for timeout-mode ask-human dialog
+  const [countdown, setCountdown] = useState<number | null>(null);
+  useEffect(() => {
+    if (askHumanQuestion === null || askHumanMode !== "timeout") {
+      setCountdown(null);
+      return;
+    }
+    setCountdown(askHumanTimeoutSec);
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [askHumanQuestion, askHumanMode, askHumanTimeoutSec]);
 
   // Smart auto-scroll: only scroll to bottom after updates if user was already near bottom.
   const NEAR_BOTTOM_THRESHOLD_PX = 50;
@@ -554,9 +578,29 @@ export default function ChatPanel({
 
         {!readOnly && askHumanQuestion !== null && (
           <div className="flex-shrink-0 mx-4 mb-2 p-3 rounded-lg border border-amber-300 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/30">
-            <div className="text-xs font-medium text-amber-700 dark:text-amber-400 mb-2">
-              Agent needs your input
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                Agent needs your input
+              </div>
+              {askHumanMode === "timeout" && countdown !== null && (
+                <div className="text-xs text-amber-600 dark:text-amber-400 tabular-nums">
+                  {countdown > 0 ? `Auto-skip in ${countdown}s` : "Timed out"}
+                </div>
+              )}
+              {askHumanMode === "block" && (
+                <div className="text-xs text-amber-600 dark:text-amber-400">
+                  Waiting for your reply…
+                </div>
+              )}
             </div>
+            {askHumanMode === "timeout" && countdown !== null && (
+              <div className="w-full h-1 rounded-full bg-amber-200 dark:bg-amber-800 mb-2 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-amber-500 dark:bg-amber-400 transition-all duration-1000 ease-linear"
+                  style={{ width: `${Math.max(0, (countdown / askHumanTimeoutSec) * 100)}%` }}
+                />
+              </div>
+            )}
             <div className="text-sm text-zinc-700 dark:text-zinc-300 mb-2 whitespace-pre-wrap">
               {askHumanQuestion}
             </div>

@@ -52,6 +52,8 @@ export default function MatMasterView({
   const [plannerInput, setPlannerInput] = useState("");
   const [askHumanQuestion, setAskHumanQuestion] = useState<string | null>(null);
   const [askHumanInput, setAskHumanInput] = useState("");
+  const [askHumanMode, setAskHumanMode] = useState<"timeout" | "block">("timeout");
+  const [askHumanTimeoutSec, setAskHumanTimeoutSec] = useState<number>(20);
   const [filePath, setFilePath] = useState("");
   const [reconnectTrigger, setReconnectTrigger] = useState(0);
   const [sessionFilesLogsKey, setSessionFilesLogsKey] = useState(0);
@@ -103,14 +105,30 @@ export default function MatMasterView({
           }
           if (msg.type === "ask_human" || msg.type === "confirmation_request") {
             let q = "";
+            let evtMode: "timeout" | "block" = "timeout";
+            let evtTimeout = 20;
             if (typeof msg.content === "string") {
               q = msg.content;
             } else if (msg.content && typeof msg.content === "object") {
-              const c = msg.content as { question?: string; context?: string };
+              const c = msg.content as {
+                question?: string;
+                context?: string;
+                mode?: string;
+                timeout_seconds?: number;
+              };
               q = c.question || "";
               if (c.context) q += "\n\n" + c.context;
+              if (c.mode === "block") evtMode = "block";
+              if (typeof c.timeout_seconds === "number") evtTimeout = c.timeout_seconds;
             }
             setAskHumanQuestion(q || "The agent is asking for your input.");
+            setAskHumanInput("");
+            setAskHumanMode(evtMode);
+            setAskHumanTimeoutSec(evtTimeout);
+          }
+          if (msg.type === "confirmation_timeout") {
+            // Backend timed out — close the dialog
+            setAskHumanQuestion(null);
             setAskHumanInput("");
           }
           if (msg.type === "finish" || msg.type === "error" || msg.type === "cancelled") {
@@ -330,6 +348,8 @@ export default function MatMasterView({
             askHumanInput={askHumanInput}
             setAskHumanInput={setAskHumanInput}
             sendAskHumanReply={sendAskHumanReply}
+            askHumanMode={askHumanMode}
+            askHumanTimeoutSec={askHumanTimeoutSec}
             readOnly={isReadOnly}
             jumpToLogIndex={jumpToLogIndex}
             onJumpHandled={() => setJumpToLogIndex(null)}

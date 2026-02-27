@@ -971,11 +971,12 @@ class MatToolCallbacks:
         When ``ask.py`` finishes it outputs a JSON ``{"question": "...", "context": "..."}``.
         This callback:
         1. Detects the ask-human skill by checking the tool call arguments.
-          2. Emits a unified ``confirmation_request`` event (preferred), falling
-              back to legacy ``ask_human`` if the confirmation manager isn't set.
-          3. Blocks until the user replies via the unified queue (or legacy
-              ``_ask_human_queue``) or a timeout (5 min) is reached.
-          4. Returns the user's reply as the new observation.
+        2. Short-circuits immediately if ask_human.enabled=false in config.
+        3. Reads per-call mode (timeout|block) and timeout_seconds from skill args.
+        4. Emits a unified ``confirmation_request`` event via ConfirmationManager.
+        5. For timeout mode: returns a system notice on timeout so the LLM can
+           decide next steps (skip/abort) rather than receiving a fake user reply.
+        6. Falls back to legacy ``ask_human`` queue path if no ConfirmationManager.
 
         If the agent has no ``_ask_human_queue`` (e.g. non-web mode), it returns
         a message indicating that interactive input is unavailable.
@@ -990,14 +991,25 @@ class MatToolCallbacks:
         if not isinstance(args, dict) or args.get('skill_name') != 'ask-human':
             return observation, info
 
-        # Extract the question from the script output
+        # --- Global enabled check ---
+        ah_cfg = getattr(self.agent, '_ask_human_config', {})
+        cfg_enabled = ah_cfg.get('enabled', True)
+        cfg_timeout = ah_cfg.get('timeout_seconds', 20)
+
+        if not cfg_enabled:
+            self.logger.info('ask-human: interactive input disabled (ask_human.enabled=false).')
+            return (
+                '⚠️ Interactive input is disabled in this environment. '
+                'Please decide autonomously: skip this step, retry with modified parameters, or abort.',
+                info,
+            )
+
+        # --- Extract question from script output ---
         question = ''
         context = ''
-        # The script outputs a JSON line; try to parse it from stdout.
         script_stdout = observation
-        # Strip the "Script output:\n" prefix if present
         if script_stdout.startswith('Script output:\n'):
-            script_stdout = script_stdout[len('Script output:\n') :]
+            script_stdout = script_stdout[len('Script output:\n'):]
         for line in script_stdout.strip().splitlines():
             line = line.strip()
             if not line:
@@ -1009,40 +1021,50 @@ class MatToolCallbacks:
                     context = payload.get('context', context)
                     break
             except (json.JSONDecodeError, TypeError):
-                # Fallback: treat the whole output as the question
                 if not question:
                     question = line
 
         if not question:
             question = 'The agent is asking for your input.'
 
-        # Preferred path: use unified confirmation manager if available
+        # --- Per-call parameters from skill args ---
+        from playground.mat_master.service.confirm import ConfirmMode
+        call_mode_str = args.get('mode', 'timeout')
+        try:
+            call_mode = ConfirmMode(call_mode_str)
+        except ValueError:
+            call_mode = ConfirmMode.TIMEOUT
+        call_timeout = args.get('timeout_seconds') or cfg_timeout
+
+        # --- Preferred path: ConfirmationManager ---
         confirm_mgr = getattr(self.agent, '_confirm_manager', None)
         if confirm_mgr is not None:
             try:
-                actions = ["provide_params", "skip", "abort"]
                 reply = confirm_mgr.request(
                     question=question,
-                    context=context or "",
-                    actions=actions,
+                    mode=call_mode,
+                    timeout_sec=call_timeout,
+                    context=context or None,
+                    actions=["provide_params", "skip", "abort"],
                     origin="ask_human",
                     source_override="MatMaster",
                 )
-                if not reply:
-                    self.logger.warning('ask-human: confirmation timed out (300s).')
-                    return (
-                        '⚠️ User did not reply within 5 minutes. Proceeding without input.',
-                        info,
-                    )
-                self.logger.info('ask-human: received unified confirmation reply (%d chars).', len(reply))
-                return f"User replied: {reply}", info
+                if reply is not None:
+                    self.logger.info('ask-human: received reply (%d chars).', len(reply))
+                    return f"User replied: {reply}", info
+                # reply is None: timeout mode expired (default_reply was None for LLM path)
+                self.logger.warning('ask-human: confirmation timed out (%ds).', call_timeout)
+                return (
+                    f'⚠️ No user response within {call_timeout}s. '
+                    'Please decide autonomously: skip this step, retry with modified parameters, or abort.',
+                    info,
+                )
             except Exception:
-                # Fall through to legacy path
                 pass
 
-        # Legacy path: emit ask_human and block on _ask_human_queue
+        # --- Legacy path: emit ask_human and block on _ask_human_queue ---
         emit_fn = getattr(self.agent, 'event_callback', None)
-        ask_payload = {'question': question}
+        ask_payload: dict = {'question': question}
         if context:
             ask_payload['context'] = context
         if callable(emit_fn):
@@ -1064,13 +1086,15 @@ class MatToolCallbacks:
                 info,
             )
 
-        self.logger.info('ask-human: waiting for user reply (timeout=300s)...')
+        wait_timeout = None if call_mode == ConfirmMode.BLOCK else call_timeout
+        self.logger.info('ask-human: waiting for user reply (mode=%s, timeout=%s)...', call_mode.value, wait_timeout)
         try:
-            reply = reply_queue.get(timeout=300)
+            reply = reply_queue.get(timeout=wait_timeout)
         except queue.Empty:
-            self.logger.warning('ask-human: user reply timed out after 300s.')
+            self.logger.warning('ask-human: user reply timed out after %ss.', call_timeout)
             return (
-                '⚠️ User did not reply within 5 minutes. Proceeding without input.',
+                f'⚠️ No user response within {call_timeout}s. '
+                'Please decide autonomously: skip this step, retry with modified parameters, or abort.',
                 info,
             )
 
