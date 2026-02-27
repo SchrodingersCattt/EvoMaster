@@ -62,7 +62,8 @@ class AsyncExecutionPolicy:
                 continue
 
             if not self._registry.is_async_tool(matched_prefix, remote_name):
-                filtered.append(spec)
+                if not remote_name.startswith("submit_"):
+                    filtered.append(spec)
                 continue
 
             if remote_name.startswith("submit_"):
