@@ -46,10 +46,8 @@ EXEMPT_MANUSCRIPT_SCRIPTS = frozenset({
     "append_chunk.py",
     "polish_text.py",
     "init_manuscript.py",
-    "run_pipeline.py",
     "export_docx.py",
     "export_latex.py",
-    "assemble_manuscript.py",
 })
 
 logger = logging.getLogger(__name__)

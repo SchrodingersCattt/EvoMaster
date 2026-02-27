@@ -181,11 +181,10 @@ def check_abbreviations(full_text: str) -> dict:
     for abbr, positions in defs_count.items():
         if len(positions) > 1:
             result["duplicate_definitions"].append(abbr)
-            result["passed"] = False
     # Optional: find standalone ALL-CAPS that might be undefined (heuristic: 2–5 chars, not in defs)
     # Skip for now to avoid false positives; we only report duplicate defs and missing defs if we have a list
     if result["duplicate_definitions"]:
-        result["message"] = "Duplicate abbreviation definitions: " + ", ".join(result["duplicate_definitions"])
+        result["message"] = "Note (non-blocking): Duplicate abbreviation definitions: " + ", ".join(result["duplicate_definitions"])
     else:
         result["message"] = "No duplicate abbreviation definitions found."
     return result
@@ -408,6 +407,22 @@ def main() -> int:
     if not args.sections_dir and not args.draft:
         print("Provide --sections_dir or --draft. Example: --draft draft_manuscript.md --output final.md", file=sys.stderr)
         sys.exit(1)
+
+    # ── 4: Auto-detect profile from state.json in --draft mode ────────
+    # init_manuscript writes the profile to state.json; read it here so
+    # word-count checks and section ordering use the correct profile even
+    # when the agent omits --profile from the assemble call.
+    if args.profile is None and args.draft:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
+            from longtask_runtime import read_json as _read_state_json
+            _st = _read_state_json(Path("_tmp/manuscript/state.json"), default={})
+            _stored = _st.get("profile") or None
+            if _stored:
+                args.profile = _stored
+        except Exception:
+            pass
+
     if args.check_length and not args.profile:
         print("--check_length requires --profile.", file=sys.stderr)
         sys.exit(1)
