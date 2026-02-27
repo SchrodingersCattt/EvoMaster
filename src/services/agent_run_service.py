@@ -10,7 +10,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any, Callable
 
 from evomaster.core import get_playground_class
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
@@ -46,10 +46,13 @@ class AgentRunService:
         self._sessions_service = sessions_service or get_sessions_service()
         self._executor = ThreadPoolExecutor(max_workers=_AGENT_MAX_WORKERS)
         self._cached_pg = None
+        self._playgrounds: dict[str, Any] = (
+            {}
+        )  # session_id -> pg，按 session 隔离，避免 B 的 run 覆盖 A 的 working_dir/SSH
         self._playground_init_done = threading.Event()
 
     def init_playground_sync(self) -> None:
-        """同步初始化 playground（tools、MCP、agent），结果缓存在 self._cached_pg。"""
+        """同步初始化默认 playground（tools、MCP、agent），结果缓存在 self._cached_pg；实际 run 按 session_id 用 _get_or_create_playground。"""
         try:
             config_path = _project_root / 'configs' / 'mat_master' / 'config.yaml'
             if not config_path.exists():
@@ -66,6 +69,23 @@ class AgentRunService:
             self._cached_pg = None
         finally:
             self._playground_init_done.set()
+
+    def _get_or_create_playground(self, session_id: str) -> Any:
+        """按 session_id 返回或创建 playground，避免多用户共用同一 pg 导致 working_dir/SSH 串台。"""
+        if session_id in self._playgrounds:
+            return self._playgrounds[session_id]
+        self._playground_init_done.wait(timeout=300)
+        config_path = _project_root / 'configs' / 'mat_master' / 'config.yaml'
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config not found: {config_path}")
+        pg = get_playground_class('mat_master', config_path=config_path)
+        run_dir = _project_root / 'runs' / RUN_ID_WEB
+        run_dir.mkdir(parents=True, exist_ok=True)
+        pg.set_run_dir(run_dir, task_id=session_id)
+        pg.setup()
+        self._playgrounds[session_id] = pg
+        logger.debug('run_agent_sync: playground created for session_id=%s', session_id)
+        return pg
 
     def get_executor(self) -> ThreadPoolExecutor:
         """返回用于运行 agent 的线程池，供 run_in_executor 使用。"""
@@ -116,17 +136,20 @@ class AgentRunService:
     def _planner_ask_and_wait(
         self,
         prompt: str,
-        send_cb: Callable[[dict], Awaitable[None]],
+        send_cb: Callable[[dict], Any],
         loop: asyncio.AbstractEventLoop,
         reply_queue: queue.Queue,
     ) -> str:
         """发送 planner_ask 到前端并阻塞等待 reply_queue 中的用户回复。"""
         payload = {'source': 'Planner', 'type': 'planner_ask', 'content': prompt}
-        future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
-        try:
-            future.result(timeout=5)
-        except Exception:
-            pass
+        if asyncio.iscoroutinefunction(send_cb):
+            future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
+            try:
+                future.result(timeout=5)
+            except Exception:
+                pass
+        else:
+            send_cb(payload)
         try:
             return reply_queue.get(timeout=300)
         except queue.Empty:
@@ -183,7 +206,7 @@ class AgentRunService:
         self,
         session_id: str,
         user_prompt: str,
-        send_cb: Callable[[dict], Awaitable[None]],
+        send_cb: Callable[[dict], Any],
         loop: asyncio.AbstractEventLoop,
         stop_event: threading.Event,
         mode: str,
@@ -232,11 +255,19 @@ class AgentRunService:
                     'run_agent_sync: tool_result before send_cb session_id=%s',
                     session_id,
                 )
-            future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
-            try:
-                future.result(timeout=5)
-            except Exception:
-                pass
+            if asyncio.iscoroutinefunction(send_cb):
+                future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
+                try:
+                    future.result(timeout=5)
+                except Exception as e:
+                    logger.warning(
+                        'run_agent_sync: send_cb timeout or error (event may be in DB but not pushed), session_id=%s type=%s: %s',
+                        session_id,
+                        event_type,
+                        e,
+                    )
+            else:
+                send_cb(payload)
             if event_type == 'tool_result':
                 logger.info(
                     'run_agent_sync: tool_result after send_cb session_id=%s',
@@ -324,25 +355,15 @@ class AgentRunService:
             run_dir = _project_root / 'runs' / RUN_ID_WEB
             task_id = task_id or ('ws_' + uuid.uuid4().hex[:16])
 
-            if self._cached_pg is not None:
-                pg = self._cached_pg
-                pg.set_run_dir(run_dir, task_id=task_id)
-                logger.info(
-                    'run_agent_sync: using cached playground, run_dir=%s task_id=%s',
-                    run_dir,
-                    task_id,
-                )
-            else:
-                logger.info(
-                    'run_agent_sync: creating fresh playground (cached init failed)'
-                )
-                config_path = _project_root / 'configs' / 'mat_master' / 'config.yaml'
-                if not config_path.exists():
-                    raise FileNotFoundError(f"Config not found: {config_path}")
-                pg = get_playground_class('mat_master', config_path=config_path)
-                pg.set_run_dir(run_dir, task_id=task_id)
-                pg.setup()
+            pg = self._get_or_create_playground(session_id)
+            pg.set_run_dir(run_dir, task_id=task_id)
             pg_for_run = pg
+            logger.debug(
+                'run_agent_sync: using playground for session_id=%s run_dir=%s task_id=%s',
+                session_id,
+                run_dir,
+                task_id,
+            )
 
             mode = (mode or 'direct').strip().lower() or 'direct'
             pg.set_mode(mode)
@@ -702,6 +723,8 @@ class AgentRunService:
                 session_id,
                 task_id,
             )
+            # run 结束后该 session 的后续请求仅为读历史/workspace（DB/OSS），不再需要 pg，及时释放避免内存常驻
+            self._playgrounds.pop(session_id, None)
 
 
 @lru_cache

@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -58,6 +60,20 @@ class MatMasterAgent(Agent):
         # Tool callback pipeline
         self._tool_callback_pipeline = ToolCallbackPipeline(self.logger)
         self._register_default_tool_callbacks()
+        # 工具执行结果自动落盘：匹配这些前缀的工具，每次执行后把 observation 写入 _tmp/tool_outputs/<tool_name>/
+        _mat = (config_dict or {}).get('mat_master') or {}
+        _exec = _mat.get('execution') or {}
+        self._tool_output_auto_save_patterns: list[str] = _exec.get(
+            'tool_output_auto_save_patterns', ['mat_sn_']
+        )
+        if not isinstance(self._tool_output_auto_save_patterns, list):
+            self._tool_output_auto_save_patterns = ['mat_sn_']
+        self._tool_output_save_counter = 0
+
+    def _initialize(self, task) -> None:
+        """Override: reset tool output save counter for each new task."""
+        super()._initialize(task)
+        self._tool_output_save_counter = 0
 
     def _get_async_tool_registry(self):
         """Get async registry derived from full config dict."""
@@ -313,6 +329,46 @@ You can use the 'use_skill' tool to:
     # Tool execution
     # ------------------------------------------------------------------
 
+    def _auto_save_tool_output(self, tool_name: str, observation: str) -> str | None:
+        """将匹配模式的工具执行结果自动写入 session 工作区 _tmp/tool_outputs/<tool_name>/。
+
+        通过 session.write_file 写入，本地 session 写本地目录，SSH session 写远程节点，与 agent 实际工作目录一致。
+        返回写入文件的相对路径（供拼进 observation 提示 agent），失败或未匹配时返回 None。
+        """
+        if not observation or not isinstance(observation, str):
+            return None
+        if not any(
+            tool_name.startswith(p) for p in self._tool_output_auto_save_patterns
+        ):
+            return None
+        try:
+            workspace = getattr(self.session.config, 'workspace_path', '') or getattr(
+                self.session, 'working_dir', ''
+            )
+            if not workspace:
+                return None
+            base = workspace.rstrip('/')
+            safe_name = re.sub(r'[^\w\-.]', '_', tool_name)
+            self._tool_output_save_counter += 1
+            suffix = uuid.uuid4().hex[:8]
+            step = getattr(self, '_step_count', 0)
+            ext = (
+                '.json'
+                if (
+                    observation.strip().startswith('{')
+                    or observation.strip().startswith('[')
+                )
+                else '.txt'
+            )
+            rel = f'_tmp/tool_outputs/{safe_name}/step_{step}_{suffix}{ext}'
+            remote_path = f'{base}/{rel}'
+            self.session.write_file(remote_path, observation, encoding='utf-8')
+            self.logger.info('Auto-saved tool output to %s', rel)
+            return rel
+        except Exception as e:
+            self.logger.warning('Auto-save tool output failed: %s', e)
+            return None
+
     def _execute_tool(self, tool_call) -> tuple[str, dict[str, Any]]:
         """Execute tool with MAT callbacks.
 
@@ -352,6 +408,19 @@ You can use the 'use_skill' tool to:
                 self.logger.error('Tool execution failed:\n%s', tb_str)
                 self._log_tool_end(tool_name, error_msg, {'error': str(e)})
                 observation, info = error_msg, {'error': str(e)}
+
+            # 工具结果自动落盘：匹配配置前缀的工具（如 mat_sn_*）成功时将 observation 写入 _tmp/tool_outputs/
+            if (
+                isinstance(observation, str)
+                and isinstance(info, dict)
+                and 'error' not in info
+            ):
+                saved_path = self._auto_save_tool_output(tool_name, observation)
+                if saved_path:
+                    observation = (
+                        observation.rstrip() + f"\n\n[Auto-saved to: {saved_path}]"
+                    )
+                    info = {**info, 'auto_saved_path': saved_path}
 
             # finish 工具从源头返回 dict，直接透传（不经过 run_after / _format_tool_observation，避免 callbacks 假定 observation 为 str）
             if tool_name == 'finish' and isinstance(observation, dict):
