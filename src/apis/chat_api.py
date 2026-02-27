@@ -167,6 +167,20 @@ async def chat_stream(
     )
 
 
+@router.post('/{session_id}/stop', response_model=BaseResponse)
+def stop_session(
+    session_id: str,
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """终止该会话当前正在运行的任务。有权限访问即可调用；多 worker 时通过 Redis 广播，始终返回 200。"""
+    sid = session_id.strip()
+    if not chat_svc.can_access_session(sid, user_id):
+        raise ForbiddenErrorResponse(msg='无权限访问该会话')
+    chat_svc.stop_session_run(sid)
+    return BaseResponse(msg='ok')
+
+
 @router.post('/{session_id}/planner_reply', response_model=BaseResponse)
 async def planner_reply(
     session_id: str,
