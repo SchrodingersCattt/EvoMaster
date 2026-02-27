@@ -1,86 +1,117 @@
 ---
 name: deep-survey
-description: "Executes a COMPREHENSIVE literature review saved to a file. Use for: 'Survey the latest progress in Perovskite stability', 'Summarize methods for calculating melting points', or any request that needs a long-form review report. For one-off quick lookups or short answers in chat, use MCP search tools (e.g. mat_sn_web-search, mat_sn_search-papers-normal) instead—do NOT invoke this skill."
+description: "Retrieves literature evidence and optionally produces a written review report. depth=brief outputs collected.json (evidence skeleton, 3-5 retrieval calls) for use by downstream skills such as lit-data-organizer or manuscript-scribe. depth=deep produces a full 5-section review report (10-15+ calls). Use deep-survey when you need systematic literature coverage—not for quick one-off lookups or short chat answers."
 skill_type: operator
 ---
 
 # Deep Survey Skill
 
-A systematic researcher that generates **detailed review reports saved as Markdown files**. Distinguish from on-the-fly retrieval: use this skill only when the user explicitly wants a **written report** or **comprehensive survey**, not for quick factual answers in chat.
+A systematic researcher that collects literature evidence and, for `standard`/`deep` depth, generates **detailed review reports saved as Markdown files**.
 
-## When to use (deep survey) vs on-the-fly
+**When NOT to use**: If the user only wants a quick factual answer in chat (not a file), use MCP search tools directly (`mat_sn_web-search`, `mat_sn_search-papers-normal`) and answer in chat. Invoke deep-survey only when the output is a **file** or when another skill (e.g. composition-optimization) needs structured evidence.
+
+## Depth tiers
+
+| depth | Retrieval calls | Output | Use when |
+|-------|----------------|--------|----------|
+| `brief` | 3-5 | `collected.json` — evidence skeleton with cards per facet | Sub-step within composition-optimization, manuscript writing, or lit-data-organizer feed |
+| `standard` | 6-8 | Concise MD report (Executive Summary + References) | User wants a short survey file, or as an intermediate step |
+| `deep` | 10-15+ | Full 5-section report (Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References) | Standalone comprehensive review request |
+
+See **reference/search_facets_and_rounds.md** for depth-specific facet counts and retrieval budgets.
+
+## When to use deep-survey vs on-the-fly
 
 | User intent | Use | Do not use |
 |-------------|-----|------------|
-| "Give me a comprehensive review on X" | **deep-survey** (`run_survey.py`) | — |
-| "Survey the latest progress in Perovskite stability" | **deep-survey** | — |
-| "Summarize methods for calculating melting points" (output to file) | **deep-survey** | — |
+| "Give me a comprehensive review on X" | **deep-survey** `--depth deep` | — |
+| "Survey the latest progress in Perovskite stability" | **deep-survey** `--depth deep` | — |
+| "Collect literature evidence for my paper on X" | **deep-survey** `--depth brief` | — |
+| "Summarize methods for calculating melting points" (output to file) | **deep-survey** `--depth standard` or `deep` | — |
 | "What are the common failures in VASP relaxation?" (answer in chat) | MCP paper/search tools, short answer | deep-survey |
 | "Quick: what is X?" / one-off definition lookup | MCP web/search, short answer | deep-survey |
 
-**Rule**: If the expected output is a **file** (e.g. `survey_TOPIC.md`) or a long-form report, use this skill. If the expected output is a **short reply in chat**, use MCP search tools and answer directly.
+## Workflow by depth
 
-## Workflow (expand facets, then repeatedly retrieve)
+### brief
 
-When routing to **serious writing** (this skill), do **not** do a single shallow search. You must **expand the query into multiple facets** and **repeatedly call** retrieval tools (paper search, web search) for each facet. See **reference/search_facets_and_rounds.md** for facet types and minimum call counts.
+1. **Plan**: Identify 1-2 key facets from the topic.
+2. **Retrieve**: Run 3-5 `mat_sn_*` calls across those facets.
+3. **Output**: Populate `collected.json` (see `reference/collected_json_schema.md` for schema). Write each evidence card: `{source_title, source_url, year, first_author, facet, claim, data_points}`.
+4. **Done** — no Markdown report. Pass `collected.json` to the calling skill (e.g. `lit-data-organizer`, `manuscript-scribe`).
+
+### standard
+
+1. **Plan**: Identify 2-3 facets; plan 2-3 query variants per facet.
+2. **Retrieve**: Run 6-8 `mat_sn_*` calls (paper search + web search per facet).
+3. **Write** (LLM): Using retrieval results, write **Executive Summary** (1-2 paragraphs) and **References** into the survey file using `write_section` or `str_replace_editor`. Do not leave (TBD) in delivered file.
+4. **Output**: `_tmp/surveys/survey_<topic>.md` — concise report.
+
+### deep
+
+When routing to **serious writing** (this depth), expand the query into multiple facets and repeatedly call retrieval tools. See **reference/search_facets_and_rounds.md** for facet types and minimum call counts.
 
 1. **Plan (expand facets)**:
-   * Analyze the topic and break it into **3–5 facets** (e.g. definition, mechanism, methods, reviews, caveats; see reference).
-   * For each facet, plan **2–4 query variants** (keywords, synonyms, or alternate language; e.g. "X review", "X mechanism").
-   * **Minimum**: enough queries so that total **retrieval tool calls** are at least **6–15** (e.g. 3–5 facets × 2–3 searches per facet). For deep surveys, use more rounds.
+   - Analyze the topic and break it into **3-5 facets** (e.g. definition, mechanism, methods, reviews, caveats; see reference).
+   - For each facet, plan **2-4 query variants** (keywords, synonyms, or alternate language; e.g. "X review", "X mechanism").
+   - Target: enough queries so total **retrieval tool calls** are at least **10-15**.
 2. **Execute loop (repeated retrieval)**:
-   * **For each facet and each query variant**: Call MCP retrieval tools (`mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `mat_sn_web-search`, etc.) **repeatedly**—do not stop after one or two searches. Prefer **English** for search queries when possible.
-   * After each search: filter for relevance; keep only hits clearly related to that facet and user intent. Before writing, consider each source’s quality (authority, relevance, recency).
-   * **Web search returns snippets only**: When using web search results, **parse/fetch full page content** (e.g. mat_doc_* extract from webpage) for relevant URLs before using in the report; do not rely on snippets alone.
-   * **Download**: For high-relevance papers, fetch full text where possible (e.g. structure-manager `fetch_web_structure.py` for known URLs, or MCP document extraction).
-   * **Read**: Use RAG skill (`rag/scripts/search.py`) or PDF/document tools to extract key findings (Method, Result, Metrics). Optionally use `summarize_paper.py` for section-focused extraction.
-3. **Write the report (LLM)**: Using the retrieval results in context, **you (the LLM)** write each section into the survey file: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References. Use **manuscript-scribe** `write_section` (with `--content_file` for long sections) or **str_replace_editor** to replace each (TBD) with full content. The script only creates the outline; all substantive content is written by you from the search results.
+   - **For each facet and each query variant**: Call MCP retrieval tools (`mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `mat_sn_web-search`, etc.) **repeatedly**. Prefer **English** for search queries when possible.
+   - After each search: filter for relevance; keep only hits clearly related to that facet and user intent. Before writing, consider each source's quality (authority, relevance, recency).
+   - **Web search returns snippets only**: parse/fetch full page content (e.g. `mat_doc_*` extract from webpage) for relevant URLs; do not rely on snippets alone.
+   - **Download**: For high-relevance papers, fetch full text where possible.
+3. **Write the report (LLM)**: Write all five sections — Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References — using **manuscript-scribe** `write_section` (with `--content_file` for long sections) or **str_replace_editor**.
+4. **Full-length retention**: Write each section's full text to a file first (e.g. `_tmp/surveys/section_Executive_Summary.md`), then call `write_section` with `--content_file <path>`. Do **not** pass long section body via `--content` (it may be truncated).
 
-**Full-length retention**: To avoid truncation, **always** write each section’s full text to a file first (e.g. create or str_replace_editor to `_tmp/surveys/section_Executive_Summary.md`, `section_State_of_the_Art.md`, etc.), then call `write_section` with `--content_file <path>`. Do **not** pass long section body via `--content` (it may be truncated). This keeps the full-length report in both the section files and the final survey file.
+**Note on `manuscript-scribe` delegation**: For `deep` mode, deep-survey may delegate report writing to manuscript-scribe's `write_section` tool. This is a one-way delegation: deep-survey → manuscript-scribe. manuscript-scribe does not trigger deep-survey.
 
-## Output format (artifact)
+## Output format (artifact — for standard/deep)
 
 Reports must follow **../_common/reference/citation_and_output_format.md** (citation format, plain text/Markdown, units, abbreviations). The artifact file should contain:
 
-* **Executive Summary** — at least **2–3 paragraphs**; do not reduce to one short paragraph.
-* **Key Methodologies** — table plus optional narrative; enough rows to cover the main methods (not just 3–4 lines).
-* **State of the Art** — **multiple subsections** (e.g. by material, theme, or timeline); **detailed discussion** with several paragraphs or many bullets per theme; cite multiple papers per subsection. Do not deliver 1–2 sentences per topic.
-* **Gap Analysis** — at least several elaborated points (2–4 sentences each), not one-line bullets only.
-* **References** (mandatory): each cited work must list **URL** (from search: use doi as `https://doi.org/<DOI>` or the paper’s url field). Use `[n](url)` in the body; in References list [n], full citation, and URL. If the user asks for links/URLs/链接, do not omit them.
-* **Citation sentence format** (follow Science Navigator style): when citing a paper, use the pattern **In [year], [first author] et al. [found that / reported that ...] by [method]; key findings include [...]. [n](url)**. For comparison: **Compare with [first author] et al., who [support/contradict] [...]. [n](url)**. Do not cite by title only; include year, first author, and what was done/found.
+- **Executive Summary** — at least **2-3 paragraphs** (deep); 1-2 paragraphs (standard).
+- **Key Methodologies** — (deep only) table plus optional narrative.
+- **State of the Art** — (deep only) **multiple subsections** with **detailed discussion**.
+- **Gap Analysis** — (deep only) several elaborated points (2-4 sentences each).
+- **References** (mandatory): each cited work must list **URL** (`https://doi.org/<DOI>` or paper url). Use `[n](url)` in body; list [n], full citation, and URL in References section.
+- **Citation sentence format**: In [year], [first author] et al. [found that / reported that ...]; key findings include [...]. [n](url).
 
-**Length**: The report must be a **full-length review**, not a short summary. Develop every section fully from the retrieval results. Do not deliver a 1–2 page brief when the user asked for a 综述/调研.
+**Concept rigor (mandatory for deep)**: Define every key concept; explain every symbol in formulas; state how concepts relate; use examples where helpful.
 
-**Concept explanation and conceptual rigor (mandatory)**: Do not skip definitions or conceptual links. (1) **Definitions**: Give a solid, precise definition for every key concept before or when using it. (2) **Formulas**: If you include an equation, **explain every physical quantity/symbol** (e.g. "where *E* is …, *k* is …"). (3) **Concept relationships**: State how concepts relate—dependence, contrast, hierarchy—do not list concepts in isolation. (4) **Examples (optional)**: Where helpful, illustrate with concrete examples from retrieval (e.g. a specific material, method, or result). These requirements are essential for academic survey quality; lack of definitions or unexplained symbols is not acceptable.
+**Length (deep)**: Must be a **full-length review** — not a 1-2 page brief. Develop every section fully from retrieval results.
 
 ## Scripts
 
 ### `run_survey.py`
 
-Creates the survey **outline** (section headers + TBD) and a search plan. **You (the LLM)** fill all content: after running 6–15+ retrieval calls, use `write_section` or `str_replace_editor` to write Executive Summary, Key Methodologies, State of the Art, Gap Analysis, and References from the retrieval results. No Python report generation—content is LLM-written.
+Creates the survey **outline** (section headers + TBD) for `standard`/`deep`, or the evidence skeleton (`collected.json`) for `brief`. The LLM fills all content via retrieval calls.
 
-* **Usage**: `python run_survey.py --topic "DPA-2 for Alloys" --depth deep --output survey_dpa.md` (or `--title` as alias for `--topic`).
-* **Then**: Run retrieval (mat_sn_*), then write each section into the survey file with manuscript-scribe or str_replace_editor. Do not leave (TBD) in the delivered file.
+- **Usage**:
+  - `python run_survey.py --topic "DPA-2 for Alloys" --depth deep --output survey_dpa.md`
+  - `python run_survey.py --topic "Perovskite stability" --depth brief`
+  - `python run_survey.py --title "My Survey" --depth standard --output survey.md`
+- **Then**: Run retrieval calls at the appropriate tier, then write content. Do not leave (TBD) in the delivered file.
 
 ### `summarize_paper.py`
 
 Section-focused extraction from a single paper (PDF or text).
 
-* **Usage**: `python summarize_paper.py --pdf "paper.pdf" --focus "methodology"`
-* **Logic**: Extract specific sections (Methods/Exp) rather than generic summary; output JSON or text for inclusion in the survey report.
+- **Usage**: `python summarize_paper.py --pdf "paper.pdf" --focus "methodology"`
+- **Logic**: Extract specific sections (Methods/Exp) rather than generic summary; output JSON or text for inclusion in the survey report.
 
 ### `write_survey_report.py`
 
-Compiles collected findings into the final structured Markdown report (Executive Summary, Methodologies, State of the Art, Gap Analysis, References). Can be called by `run_survey.py` or after manual collection.
+Compiles collected findings into the final structured Markdown report.
 
-* **Usage**: `python write_survey_report.py --input "collected.json" --output "_tmp/surveys/survey_xyz.md" --topic "Perovskite stability"`
+- **Usage**: `python write_survey_report.py --input "collected.json" --output "_tmp/surveys/survey_xyz.md" --topic "Perovskite stability"`
 
 ## When to use (summary)
 
-* "Give me a comprehensive review on..." → `run_survey.py`
-* "Survey the latest progress in X" → `run_survey.py`
-* "Summarize methods for Y" (long-form to file) → `run_survey.py` (topic: Y methods)
-* "What are the common failures in VASP relaxation?" (short answer) → Use MCP search + answer in chat; do **not** use this skill unless the user asks for a written report. When you do answer from search (any output): every cited source must have a URL—use [n](url) in text and list References with URL after the discussion.
+- "Give me a comprehensive review on..." → `run_survey.py --depth deep`
+- "Survey the latest progress in X" → `run_survey.py --depth deep`
+- "Collect literature evidence for my paper" → `run_survey.py --depth brief` → downstream skill reads `collected.json`
+- "Summarize methods for Y" (short file) → `run_survey.py --depth standard`
+- "What are the common failures in VASP relaxation?" (short answer) → MCP search + answer in chat; do **not** use this skill.
 
 ## Tool (via use_skill)
 
@@ -88,13 +119,13 @@ Compiles collected findings into the final structured Markdown report (Executive
 
 ## Rules
 
-* **LLM writes content**: The script only creates the outline. **You** must write Executive Summary, Key Methodologies, State of the Art, Gap Analysis, and References (using write_section or str_replace_editor) from the retrieval results. Do not deliver a file that still contains (TBD).
-* **Substantial length**: Write a **full-length review**, not a brief. Executive Summary ≥2–3 paragraphs; State of the Art with multiple subsections and detailed discussion (many paragraphs/bullets); Key Methodologies and Gap Analysis fully developed. Do not deliver a very short (e.g. 1–2 page) report.
-* **Full-length retention**: For every section, write the full body to a file first (e.g. create/edit `_tmp/surveys/section_<Name>.md`), then call write_section with `--content_file` that path. Never pass long section text in `--content` (it gets truncated). This ensures the full-length report is retained in the survey file.
-* **Delivery**: When the report is complete, **first output the full final report** in your reply (message text) so the user sees it in the chat/frontend; then ensure it is saved to the survey .md file and call finish. Do not only write to file and say "Saved to path".
-* **Concept rigor**: Every key concept must have a **solid definition**; every **formula** must have **every symbol explained**; state **how concepts relate** to each other; optionally use **examples** from retrieval. Do not leave definitions or formula variables unexplained.
-* **Expand facets, repeated retrieval**: For serious writing (this skill), **expand the query into multiple facets** and **repeatedly call** retrieval tools (paper search, web search)—**at least 6–15 retrieval calls** across facets; never a single shallow search. See reference/search_facets_and_rounds.md.
-* Prefer academic sources (peer-reviewed papers, scholar results) for literature/review tasks; treat web-only hits as supplementary.
-* After each search, filter by relevance; do not pass irrelevant URLs to extraction.
-* **User uploads (mandatory)**: If the user uploads files or the task says to read literature in the current directory, you MUST **fully parse/read every such file** before writing any section. Do **not** start writing the survey report until all uploaded/workspace PDFs (and other docs) have been completely read. For PDFs, use MCP document tools (mat_doc_extract_material_data_from_pdf or mat_doc_submit_* / mat_doc_get_job_results) to extract full text and read it; do not skip or only skim.
-* Always write the report to a **file**; do not attempt to stream the full review in chat (token limit). In chat, report: "Survey completed. Saved to &lt;path&gt;. Please open the file."
+- **Choose depth explicitly**: Pass `--depth brief|standard|deep` based on context. Default is `deep`.
+- **LLM writes content**: The script only creates the outline/skeleton. **You** must fill content from retrieval results. Do not deliver a file that still contains (TBD).
+- **brief is for downstream use**: `depth=brief` produces `collected.json`; it is not a human-readable report. Use `standard` or `deep` when the user wants a readable document.
+- **Retrieval minimum is depth-dependent**: brief: 3-5 calls; standard: 6-8 calls; deep: 10-15+ calls. Do not apply the deep minimum universally.
+- **Full-length retention (standard/deep)**: For every section, write the full body to a file first, then call `write_section` with `--content_file`. Never pass long section text in `--content`.
+- **Delivery**: When the report is complete, first output the full final report in your reply so the user sees it; then ensure it is saved to the .md file and call finish.
+- **Concept rigor (deep)**: Every key concept must have a solid definition; every formula must have every symbol explained; state how concepts relate.
+- **User uploads (mandatory)**: If the user uploads files, you MUST fully parse/read every such file before writing any section.
+- Always write the report to a **file**; do not stream the full review in chat.
+- **One-way delegation**: deep-survey may call manuscript-scribe `write_section` for report assembly. manuscript-scribe does NOT call deep-survey.

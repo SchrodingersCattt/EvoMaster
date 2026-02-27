@@ -1,14 +1,21 @@
 """
-Create a survey outline and optional search plan. All report content is written by the LLM:
-agent runs 6–15+ retrieval calls (mat_sn_*), then uses write_section / str_replace_editor to fill
-Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References.
+Create a survey outline and optional search plan.
+
+depth=brief  → outputs collected.json (structured evidence skeleton); 3-5 retrieval calls expected.
+depth=standard → outputs a concise Markdown outline (Executive Summary + References); 6-8 calls expected.
+depth=deep   → full 5-section outline + search plan; 10-15+ calls expected (default, original behaviour).
+
+All report content is always written by the LLM: the agent runs retrieval calls (mat_sn_*), then uses
+write_section / str_replace_editor to fill in the sections.
 
 Usage:
   python run_survey.py --topic "DPA-2 for Alloys" --depth deep --output survey_dpa.md
+  python run_survey.py --topic "Perovskite stability" --depth brief --output collected.json
   python run_survey.py --title "My Survey" --output survey.md
 """
 
 import argparse
+import json
 import re
 from pathlib import Path
 
@@ -41,10 +48,21 @@ def sanitize_topic(topic: str) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Create survey outline and search plan; LLM fills content.")
+    ap = argparse.ArgumentParser(
+        description="Create survey outline / evidence skeleton; LLM fills content via retrieval."
+    )
     ap.add_argument("--topic", default=None, help="Survey topic")
     ap.add_argument("--title", dest="topic_alias", default=None, help="Alias for --topic")
-    ap.add_argument("--depth", default="deep", choices=["quick", "deep"])
+    ap.add_argument(
+        "--depth",
+        default="deep",
+        choices=["brief", "standard", "deep"],
+        help=(
+            "brief: output collected.json (evidence skeleton, 3-5 retrieval calls); "
+            "standard: concise MD outline (Executive Summary + References, 6-8 calls); "
+            "deep: full 5-section outline + search plan (10-15+ calls, default)."
+        ),
+    )
     ap.add_argument("--output", default=None)
     ap.add_argument("--write_plan", action="store_true")
     args = ap.parse_args()
@@ -56,15 +74,58 @@ def main() -> None:
 
     base = _project_tmp() / "surveys"
     base.mkdir(parents=True, exist_ok=True)
+
+    # ------------------------------------------------------------------ brief
+    if args.depth == "brief":
+        out_name = args.output or f"collected_{sanitize_topic(topic)}.json"
+        out_path = base / out_name
+        skeleton = {
+            "topic": topic,
+            "depth": "brief",
+            "facets": DEFAULT_FACETS[:2],
+            "evidence_cards": [],
+            "_instructions": (
+                "Fill evidence_cards via 3-5 mat_sn_* retrieval calls. "
+                "Each card: {source_title, source_url, year, first_author, facet, claim, data_points}."
+            ),
+        }
+        out_path.write_text(json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(
+            f"Evidence skeleton: {out_path}. "
+            "Run 3-5 mat_sn_* retrieval calls and populate evidence_cards in this file."
+        )
+        return
+
+    # --------------------------------------------------------------- standard
+    if args.depth == "standard":
+        out_name = args.output or f"survey_{sanitize_topic(topic)}.md"
+        out_path = base / out_name
+        outline = f"""# Survey: {topic}
+
+## Executive Summary
+(TBD — LLM writes from retrieval results; 1-2 paragraphs)
+
+## References
+(TBD)
+"""
+        out_path.write_text(outline, encoding="utf-8")
+        print(
+            f"Survey outline (standard): {out_path}. "
+            "Run 6-8 mat_sn_* retrieval calls, then fill Executive Summary and References "
+            "with write_section / str_replace_editor."
+        )
+        return
+
+    # ------------------------------------------------------------------- deep
+    write_plan = args.write_plan or (args.depth == "deep")
     out_name = args.output or f"survey_{sanitize_topic(topic)}.md"
     out_path = base / out_name
 
-    write_plan = args.write_plan or (args.depth == "deep")
     if write_plan:
         plan_path = base / f"{sanitize_topic(topic)}_plan.md"
         plan_path.write_text(
             f"# Search plan: {topic}\n\n"
-            "Run 6–15+ retrieval calls (mat_sn_search-papers-enhanced, mat_sn_web-search). "
+            "Run 10-15+ retrieval calls (mat_sn_search-papers-enhanced, mat_sn_web-search). "
             "Then use manuscript-scribe write_section or str_replace_editor to write Executive Summary, "
             "Key Methodologies, State of the Art, Gap Analysis, and References from the retrieval results.\n\n"
             + "\n".join(f"## {f}" for f in DEFAULT_FACETS),
@@ -90,7 +151,10 @@ def main() -> None:
 (TBD)
 """
     out_path.write_text(outline, encoding="utf-8")
-    print(f"Survey outline: {out_path}. Fill sections with write_section / str_replace_editor from retrieval results.")
+    print(
+        f"Survey outline: {out_path}. "
+        "Fill sections with write_section / str_replace_editor from retrieval results."
+    )
 
 
 if __name__ == "__main__":

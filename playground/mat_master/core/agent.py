@@ -201,7 +201,45 @@ You can use the 'use_skill' tool to:
                 out.append(line)
             else:
                 out.append(line)
-        return '\n'.join(out)
+        return self._add_file_uri_prefix('\n'.join(out))
+
+    @staticmethod
+    def _add_file_uri_prefix(text: str) -> str:
+        """Convert bare absolute Unix paths to file:// URIs in non-code text.
+
+        Skips fenced code blocks and inline code spans so that command examples
+        and code snippets are left unchanged.  Existing http/https/ftp/file URLs
+        are preserved as-is to avoid double-conversion.
+        """
+        # Split on fenced code blocks (``` ... ```) and inline code (`...`).
+        # Odd-indexed parts are inside code — leave them untouched.
+        parts = re.split(r'(```[\s\S]*?```|`[^`\n]+`)', text)
+        result: list[str] = []
+        for i, part in enumerate(parts):
+            if i % 2 == 1:
+                result.append(part)
+                continue
+            # Temporarily stash existing URLs so they are never re-processed.
+            stashed: list[str] = []
+
+            def _stash(m: re.Match) -> str:  # noqa: E731
+                stashed.append(m.group(0))
+                return f'\x00URL{len(stashed) - 1:04d}\x00'
+
+            proc = re.sub(r'(?:https?|ftp|file)://[^\s\)\]\,;"\'<>]+', _stash, part)
+            # Convert bare absolute Unix paths (starting with /) to file:// URIs.
+            # The negative lookbehind avoids touching paths already part of a URL
+            # or preceded by word characters / colons (e.g. inside JSON keys).
+            proc = re.sub(
+                r'(?<![a-zA-Z0-9_.:-])(/[^\s\)\]\,;"\'<>*#]+)',
+                r'file://\1',
+                proc,
+            )
+            # Restore stashed URLs.
+            for idx, url in enumerate(stashed):
+                proc = proc.replace(f'\x00URL{idx:04d}\x00', url)
+            result.append(proc)
+        return ''.join(result)
 
     def _generate_finish_report(
         self,

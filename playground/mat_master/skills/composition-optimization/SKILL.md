@@ -1,7 +1,7 @@
 ---
 name: composition-optimization
 description: Orchestrates multi-component composition optimization for target properties. Use when users ask for alloy/composition search, DART GA optimization, seed composition design, or composition-only requests that must be converted to explicit structures. Handles branches for missing initial data (deep-survey + lit-data-organizer), optional surrogate models, and composition-to-structure heuristics required by DPA.
-skill_type: operator
+skill_type: orchestrator
 ---
 
 # Composition Optimization Skill
@@ -33,8 +33,9 @@ A routing skill for composition-design workflows with explicit decision branches
 2. **Prepare initial candidates**
    - If user provided candidate compositions, clean and standardize them.
    - If not provided:
-     - If user asks for comprehensive report/file output, use `deep-survey`.
-     - Build a canonical evidence table with `lit-data-organizer` before sampling seeds.
+     - If user asks for a comprehensive report or file output: call `deep-survey` with `--depth standard` (concise survey file + evidence).
+     - If only seed data is needed (no report): call `deep-survey` with `--depth brief` (outputs `collected.json` only; 3-5 calls).
+     - Build a canonical evidence table with `lit-data-organizer` (feed it the `collected.json` from deep-survey) before sampling seeds.
 
 3. **Route by surrogate-model availability**
    - If a surrogate model is provided and DART GA tool is available, run GA optimization.
@@ -56,16 +57,18 @@ A routing skill for composition-design workflows with explicit decision branches
 
 ## Decision contract
 
-| Inputs | Required path |
-|---|---|
-| Initial data: Yes, Surrogate: Yes | Normalize -> optional structure check -> run DART GA |
-| Initial data: Yes, Surrogate: No | Normalize -> structure generation/validation if needed -> screening/fallback (no forced DART GA) |
-| Initial data: No, Surrogate: Yes | Collect evidence -> lit-data-organizer -> seeds -> composition->structure if needed -> run DART GA |
-| Initial data: No, Surrogate: No | Collect evidence -> lit-data-organizer -> seeds -> composition->structure if needed -> screening/fallback |
+| Inputs | deep-survey depth | Required path |
+|---|---|---|
+| Initial data: Yes, Surrogate: Yes | — | Normalize -> optional structure check -> run DART GA |
+| Initial data: Yes, Surrogate: No | — | Normalize -> structure generation/validation if needed -> screening/fallback (no forced DART GA) |
+| Initial data: No, report requested, Surrogate: Yes | `--depth standard` | Collect evidence (survey file) -> lit-data-organizer -> seeds -> composition->structure if needed -> run DART GA |
+| Initial data: No, no report, Surrogate: Yes | `--depth brief` | Collect evidence (collected.json) -> lit-data-organizer -> seeds -> composition->structure if needed -> run DART GA |
+| Initial data: No, report requested, Surrogate: No | `--depth standard` | Collect evidence (survey file) -> lit-data-organizer -> seeds -> composition->structure if needed -> screening/fallback |
+| Initial data: No, no report, Surrogate: No | `--depth brief` | Collect evidence (collected.json) -> lit-data-organizer -> seeds -> composition->structure if needed -> screening/fallback |
 
 ## Tool usage notes
 
-- This skill is guidance-only (operator type); it has no runnable scripts. Do NOT call `action=run_script` for this skill.
+- This skill is guidance-only (orchestrator type); it has no runnable scripts. Do NOT call `action=run_script` for this skill.
 - To load the workflow, call `use_skill` with `action=get_info`.
 - DART GA tool names are server-prefixed at runtime; prefer:
   - `mat_compdart_submit_run_dart_ga` if registered

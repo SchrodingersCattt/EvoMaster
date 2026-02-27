@@ -1,5 +1,15 @@
 # Search Facets and Repeated Retrieval (Deep Survey)
 
+## Depth-tier quick reference
+
+| depth | Facets | Total retrieval calls | Output |
+|-------|--------|-----------------------|--------|
+| `brief` | 1-2 | 3-5 | `collected.json` (evidence skeleton) |
+| `standard` | 2-3 | 6-8 | Concise MD report (Executive Summary + References) |
+| `deep` | 3-5 | 10-15+ | Full 5-section report |
+
+Use this table to calibrate retrieval effort. The sections below describe how to **expand facets** and **repeatedly call** retrieval tools — the guidance applies to all depths, scaled to the tier above.
+
 When the task is **serious writing** (comprehensive survey / long-form report), retrieval must be **expanded by facets** and **repeated**: many tool calls across multiple aspects of the query, not one or two shallow searches.
 
 ## 1. Expand the query into facets
