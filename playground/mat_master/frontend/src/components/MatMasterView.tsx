@@ -101,7 +101,7 @@ export default function MatMasterView({
           } else {
             setPlannerAsk(null);
           }
-          if (msg.type === "ask_human") {
+          if (msg.type === "ask_human" || msg.type === "confirmation_request") {
             let q = "";
             if (typeof msg.content === "string") {
               q = msg.content;
