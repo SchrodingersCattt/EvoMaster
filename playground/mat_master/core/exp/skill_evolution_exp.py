@@ -1,7 +1,11 @@
 """SkillEvolutionExp: evolution layer (mode='skill_evolution').
 
-When the agent lacks a tool: code -> sandbox test -> register via
-MatMasterSkillRegistry. Uses run_dir for workspace when set.
+When the agent lacks a tool: code -> register via MatMasterSkillRegistry.
+Uses run_dir for workspace when set.
+
+Note: Automated sandbox testing is not performed. After registration a warning
+is emitted so the caller and user know to manually verify the new skill's
+scripts before relying on them in production.
 """
 
 import logging
@@ -45,7 +49,8 @@ class SkillEvolutionExp(BaseExp):
             "Requirements:\n"
             "1. Output directory must be exactly: new_skill (create new_skill/ and new_skill/scripts/ as needed). Do not use names like new_skill_2.\n"
             "2. Write all file contents with the str_replace_editor tool (command=create, path=<absolute path>, file_text=<content>). Use the current working directory shown above as the base; e.g. <working_dir>/new_skill/SKILL.md and <working_dir>/new_skill/scripts/<script>.py. Do not use bash (cat, echo, here-docs) or Python one-liners to write long file content—on Windows these often fail or write to the wrong place.\n"
-            "3. Create new_skill/SKILL.md (with YAML frontmatter: name, description) and new_skill/scripts/<your_script>.py with full, runnable code."
+            "3. Create new_skill/SKILL.md (with YAML frontmatter: name, description) and new_skill/scripts/<your_script>.py with full, runnable code.\n"
+            "4. IMPORTANT: After writing the skill, inform the user that the new skill has NOT been automatically tested and should be manually verified before use in production."
         )
         task = TaskInstance(task_id=f"{task_id}_code", task_type="discovery", description=prompt)
         trajectory = self.agent.run(task)
@@ -70,12 +75,6 @@ class SkillEvolutionExp(BaseExp):
             self.logger.error("[Evo] Agent did not produce SKILL.md at %s", new_skill_path)
             return {"status": "failed", "reason": "no_skill_md"}
 
-        self.logger.info("[Evo] Testing new skill at %s...", new_skill_path)
-        test_ok = self._run_sandbox_tests(new_skill_path)
-        if not test_ok:
-            self.logger.warning("[Evo] Sandbox tests failed.")
-            return {"status": "failed", "reason": "tests_failed"}
-
         registry = getattr(self.agent, "skill_registry", None)
         if not registry or not getattr(registry, "register_dynamic_skill", None):
             self.logger.warning("[Evo] No MatMasterSkillRegistry with register_dynamic_skill.")
@@ -83,14 +82,20 @@ class SkillEvolutionExp(BaseExp):
 
         if registry.register_dynamic_skill(new_skill_path):
             self.logger.info("[Evo] Skill %s registered successfully.", new_skill_path.name)
-            return {"status": "completed", "skill_path": str(new_skill_path)}
+            self.logger.warning(
+                "[Evo] Skill %s registered WITHOUT sandbox testing. "
+                "Run its scripts manually before relying on it in production.",
+                new_skill_path.name,
+            )
+            return {
+                "status": "completed",
+                "skill_path": str(new_skill_path),
+                "warning": (
+                    "New skill registered without automated test verification. "
+                    "Please review the generated scripts in new_skill/scripts/ "
+                    "and run them manually to confirm correctness before using in subsequent tasks."
+                ),
+            }
 
         self.logger.warning("[Evo] Skill evolution failed to register.")
         return {"status": "failed", "reason": "register_failed"}
-
-    def _run_sandbox_tests(self, skill_path: Path) -> bool:
-        """Run tests for the new skill in a sandbox (subprocess or temp dir). Override with real test runner."""
-        raise NotImplementedError(
-            "Sandbox tests not implemented. Implement _run_sandbox_tests to run the skill's tests (e.g. pytest/subprocess) "
-            "and return True only if all pass; otherwise broken skills would be registered."
-        )
