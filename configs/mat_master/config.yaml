@@ -203,6 +203,8 @@ mcp:
         - make_defect_structure
         - make_doped_structure
         - make_amorphous_structure
+        - make_crosslinked_structure
+        - build_polymer_chain
         - build_molecule_structures_from_smiles
         - add_cell_for_molecules
         - build_surface_slab
