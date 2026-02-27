@@ -802,10 +802,12 @@ def _run_agent_sync(
             # Attach unified confirmation manager for planner/ask-human
             try:
                 from playground.mat_master.service.confirm import ConfirmationManager
+                ah_cfg = (getattr(pg, 'config', None) or {}).get('mat_master', {}).get('ask_human', {})
+                agent._ask_human_config = ah_cfg
                 agent._confirm_manager = ConfirmationManager(
                     emitter=event_callback,
                     reply_queue=ask_human_queue,
-                    timeout_sec=300,
+                    default_timeout_sec=ah_cfg.get('timeout_seconds', 20),
                 )
             except Exception:
                 pass
