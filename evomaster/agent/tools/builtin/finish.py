@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from ..base import BaseTool, BaseToolParams
 
@@ -42,6 +42,18 @@ class FinishToolParams(BaseToolParams):
     task_completed: Literal['true', 'false', 'partial'] = Field(
         description='Whether you have completed the task.'
     )
+
+    @field_validator('task_completed', mode='before')
+    @classmethod
+    def _normalize_task_completed(cls, v: Any) -> str:
+        """Accept bool from JSON/LLM and normalize to 'true'/'false'/'partial'."""
+        if v is True:
+            return 'true'
+        if v is False:
+            return 'false'
+        if isinstance(v, str) and v.lower() in ('true', 'false', 'partial'):
+            return v.lower()
+        return v
 
 
 class FinishTool(BaseTool):
