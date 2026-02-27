@@ -36,6 +36,14 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from pydantic import Field
 
 from ..base import BaseTool, BaseToolParams
+from evomaster.adaptors.calculation.job_service import (
+    download_job_file,
+    get_file_token,
+    get_job_results,
+    iterate_job_files,
+    query_job_status,
+)
+from evomaster.agent.session.ssh import SSHSession
 
 if TYPE_CHECKING:
     from evomaster.agent.session import BaseSession
@@ -117,7 +125,6 @@ def _find_log_file_local(workspace: str, software: str) -> str | None:
 def _find_log_file_remote(session: 'BaseSession', workspace: str, software: str) -> str | None:
     """Return path of the most-recently-modified log on the remote node, or None."""
     try:
-        from evomaster.agent.session.ssh import SSHSession
         if not isinstance(session, SSHSession):
             return None
         patterns = LOG_PATTERNS.get(software.lower(), ['*.log', '*.out', '*.json'])
@@ -148,12 +155,6 @@ def _download_results_to_local_dir(
     Returns a dict with 'downloaded', 'download_dir', and optionally
     'download_skipped' / 'download_errors' / 'referenced_files'.
     """
-    from evomaster.adaptors.calculation.job_service import (
-        download_job_file,
-        get_file_token,
-        iterate_job_files,
-    )
-
     download_dir.mkdir(parents=True, exist_ok=True)
 
     # Step 1: fetch results.txt
@@ -281,7 +282,6 @@ def _sftp_push_directory(session: 'BaseSession', local_dir: Path, remote_dir: st
 
     Returns list of remote paths uploaded.
     """
-    from evomaster.agent.session.ssh import SSHSession
     if not isinstance(session, SSHSession):
         return []
     env = session._env
@@ -312,9 +312,6 @@ def _run_lifecycle(
     download_tag: str | None = None,
     access_key: str | None = None,
 ) -> dict[str, Any]:
-    from evomaster.adaptors.calculation.job_service import get_job_results, query_job_status
-    from evomaster.agent.session.ssh import SSHSession
-
     is_ssh = isinstance(session, SSHSession)
 
     current_job_id = job_id
@@ -455,16 +452,35 @@ def _run_lifecycle(
         polls += 1
 
     # ── Confirmed failed — read log tail for LLM diagnosis ──
-    if is_ssh:
-        log_path = _find_log_file_remote(session, workspace, software)
-        log_tail = _read_log_tail_remote(session, log_path)
-    else:
-        log_path = _find_log_file_local(workspace, software)
-        log_tail = _read_log_tail(log_path)
+    # Priority 1: download 'log' from Bohrium (works for both local and SSH sessions,
+    # since all MCP-submitted jobs run on Bohrium regardless of agent session type).
+    log_tail: str | None = None
+    log_path: str | None = None
+
+    if bohr_job_id:
+        try:
+            _tmp_log = Path(tempfile.mktemp(suffix='.log'))
+            download_job_file('log', bohr_job_id, _tmp_log, access_key=access_key)
+            log_tail = _read_log_tail(str(_tmp_log))
+            log_path = f'bohrium://jobs/{bohr_job_id}/log'
+            try:
+                _tmp_log.unlink()
+            except OSError:
+                pass
+        except Exception:
+            pass
+
+    # Priority 2: fallback to local workspace or remote SSH node
+    if log_tail is None:
+        if is_ssh:
+            log_path = _find_log_file_remote(session, workspace, software)
+            log_tail = _read_log_tail_remote(session, log_path)
+        else:
+            log_path = _find_log_file_local(workspace, software)
+            log_tail = _read_log_tail(log_path)
 
     log_hint = (
-        f"{log_path} (remote)" if log_path and is_ssh
-        else log_path
+        log_path
         if log_path
         else 'not found — use execute_bash to search in the workspace'
     )
@@ -561,7 +577,6 @@ class MonitorJobTool(BaseTool):
         # downloads are isolated to the session's run directory, not the process CWD.
         workspace = params.workspace
         if not workspace or workspace == '.':
-            from evomaster.agent.session.ssh import SSHSession
             if isinstance(session, SSHSession):
                 workspace = session.config.working_dir or '/personal/workspace'
             else:
