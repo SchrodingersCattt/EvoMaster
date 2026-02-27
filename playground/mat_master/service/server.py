@@ -799,6 +799,16 @@ def _run_agent_sync(
         agent._stop_event = stop_event
         if ask_human_queue is not None:
             agent._ask_human_queue = ask_human_queue
+            # Attach unified confirmation manager for planner/ask-human
+            try:
+                from playground.mat_master.service.confirm import ConfirmationManager
+                agent._confirm_manager = ConfirmationManager(
+                    emitter=event_callback,
+                    reply_queue=ask_human_queue,
+                    timeout_sec=300,
+                )
+            except Exception:
+                pass
 
         pg.agent = agent
         exp = pg._create_exp()
@@ -874,6 +884,16 @@ async def websocket_endpoint(websocket: WebSocket):
                     if sid not in SESSIONS:
                         SESSIONS[sid] = {"history": [], "task_ids": [], "last_task_id": None}
                     payload = {"source": "User", "type": "ask_human_reply", "content": content, "session_id": sid}
+                    SESSIONS[sid]["history"].append(payload)
+                    await send_json(payload)
+                elif msg_type == "confirmation_reply":
+                    content = data.get("content", "")
+                    # Use the same queue for unified confirmation
+                    ask_human_queue.put(content)
+                    sid = data.get("session_id") or SESSION_ID_DEMO
+                    if sid not in SESSIONS:
+                        SESSIONS[sid] = {"history": [], "task_ids": [], "last_task_id": None}
+                    payload = {"source": "User", "type": "confirmation_reply", "content": content, "session_id": sid}
                     SESSIONS[sid]["history"].append(payload)
                     await send_json(payload)
                 else:
