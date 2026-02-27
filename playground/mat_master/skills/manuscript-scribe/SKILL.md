@@ -31,7 +31,7 @@ To list all profiles with details: `init_manuscript.py --list_formats`
 - Computational study output (DFT, MD, phonons, etc.): use `computational_report`
 - Patent application: use `patent`
 - Thesis chapter: use `thesis_section`
-- Literature review / survey: use `review` (but run deep-survey first for retrieval)
+- Literature review / survey: use `review` (caller must supply retrieval results via collected.json or content files; this skill does not trigger deep-survey)
 - Standard paper: use `generic` or `Nature`
 - Default to `generic` if unclear.
 

@@ -2,6 +2,9 @@
 name: lit-data-organizer
 description: Normalize multi-source literature evidence into a single canonical table and export CSV/JSONL. Use when users ask for literature data tables, material-property comparison matrices, dataset-style aggregation from PDF/web sources, or Pareto/plot-ready structured metrics that must be deduplicated, source-traceable, and conflict-aware.
 skill_type: operator
+prerequisites:
+  - tool: mat_doc_extract_material_data_from_pdf
+    reason: PDFs must be pre-extracted before ingestion; raw PDFs cannot be passed directly to this skill
 ---
 
 # Lit Data Organizer Skill
