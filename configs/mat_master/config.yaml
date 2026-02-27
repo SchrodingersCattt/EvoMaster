@@ -132,7 +132,6 @@ mat_master:
     timeout_seconds: 20
 
   # 鲁棒计算配置（被 monitor_job 内置工具使用）
-  # fix 策略内置于 monitor_job.py 的 FIX_STRATEGIES 中；此处保留供未来外部覆盖使用。
   monitor_job:
     max_retries: 3
     poll_interval_seconds: 60

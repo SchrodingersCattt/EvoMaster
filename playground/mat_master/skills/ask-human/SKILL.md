@@ -35,4 +35,4 @@ Allows the agent to pause and ask the human a question, then continue with the u
 - When a decision requires human preference or confirmation.
 - When a parameter is missing and must be supplied by the user.
 - When the agent needs explicit approval before a destructive or costly action — use `mode="block"` in that case.
-- After `monitor_job` returns `exhausted_retries: true` — use `mode="timeout"` and handle a no-reply gracefully by skipping the calculation.
+- After `monitor_job` returns `status='failed'` and you cannot identify the root cause from `log_tail` — use `mode="timeout"`, describe the failure and paste the relevant log lines. On timeout, abort the task with finish(task_completed=false).

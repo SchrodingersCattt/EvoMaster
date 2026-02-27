@@ -92,15 +92,6 @@ you MUST first call the compliance-guardian skill: use_skill with action='run_sc
 
 {{MAT_FINAL_DOC_RULE}}
 
-# Retry exhaustion: ask human before giving up
-When a calculation job or step has exhausted all retries (e.g. monitor_job returns `exhausted_retries: true`, or a step keeps failing):
-1. **Call ask_human** (use_skill with skill_name=ask-human) to ask the user whether to:
-   - Provide modified parameters or suggestions for a new attempt
-   - Skip this calculation/step and continue with the rest
-   - Abort the task entirely
-2. **Timeout default**: If the user does not respond within a reasonable time, **default to skip** (do NOT append, do NOT block). The default tendency is to NOT add more attempts - skip and continue.
-3. **Record the failure**: Even if skipped, record the failure in the final report (see below).
-
 # Final report: honest and complete disclosure (MANDATORY)
 When finishing a task that involved calculations, planning, or multi-step execution, the **final report/summary** in the finish message MUST include a `## Execution Details` section structured as follows:
 
