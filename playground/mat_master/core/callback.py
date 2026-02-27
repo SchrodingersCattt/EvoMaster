@@ -971,11 +971,11 @@ class MatToolCallbacks:
         When ``ask.py`` finishes it outputs a JSON ``{"question": "...", "context": "..."}``.
         This callback:
         1. Detects the ask-human skill by checking the tool call arguments.
-        2. Emits an ``ask_human`` event via the agent's ``event_callback``
-           (StreamingMatMasterAgent) so the frontend can display the question.
-        3. Blocks on ``agent._ask_human_queue`` until the user replies or a
-           timeout (5 min) is reached.
-        4. Returns the user's reply as the new observation.
+          2. Emits a unified ``confirmation_request`` event (preferred), falling
+              back to legacy ``ask_human`` if the confirmation manager isn't set.
+          3. Blocks until the user replies via the unified queue (or legacy
+              ``_ask_human_queue``) or a timeout (5 min) is reached.
+          4. Returns the user's reply as the new observation.
 
         If the agent has no ``_ask_human_queue`` (e.g. non-web mode), it returns
         a message indicating that interactive input is unavailable.
@@ -1016,23 +1016,42 @@ class MatToolCallbacks:
         if not question:
             question = 'The agent is asking for your input.'
 
-        # Emit ask_human event to the frontend
+        # Preferred path: use unified confirmation manager if available
+        confirm_mgr = getattr(self.agent, '_confirm_manager', None)
+        if confirm_mgr is not None:
+            try:
+                actions = ["provide_params", "skip", "abort"]
+                reply = confirm_mgr.request(
+                    question=question,
+                    context=context or "",
+                    actions=actions,
+                    origin="ask_human",
+                    source_override="MatMaster",
+                )
+                if not reply:
+                    self.logger.warning('ask-human: confirmation timed out (300s).')
+                    return (
+                        '⚠️ User did not reply within 5 minutes. Proceeding without input.',
+                        info,
+                    )
+                self.logger.info('ask-human: received unified confirmation reply (%d chars).', len(reply))
+                return f"User replied: {reply}", info
+            except Exception:
+                # Fall through to legacy path
+                pass
+
+        # Legacy path: emit ask_human and block on _ask_human_queue
         emit_fn = getattr(self.agent, 'event_callback', None)
+        ask_payload = {'question': question}
+        if context:
+            ask_payload['context'] = context
         if callable(emit_fn):
-            ask_payload = {'question': question}
-            if context:
-                ask_payload['context'] = context
             emit_fn('MatMaster', 'ask_human', ask_payload)
         else:
-            # For non-streaming agents, try the _emit helper
             _emit = getattr(self.agent, '_emit', None)
             if callable(_emit):
-                ask_payload = {'question': question}
-                if context:
-                    ask_payload['context'] = context
                 _emit('MatMaster', 'ask_human', ask_payload)
 
-        # Block waiting for the user's reply
         reply_queue: queue.Queue | None = getattr(self.agent, '_ask_human_queue', None)
         if reply_queue is None:
             self.logger.warning(

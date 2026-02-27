@@ -665,6 +665,20 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         return plan
 
     def _ask_human(self, prompt: str) -> str:
+        # Preferred: unified confirmation manager via agent
+        confirm_mgr = getattr(self.agent, '_confirm_manager', None)
+        if confirm_mgr is not None:
+            try:
+                reply = confirm_mgr.request(
+                    question=prompt,
+                    origin="planner",
+                    actions=["go", "abort", "revise"],
+                    source_override="Planner",
+                )
+                if reply is not None:
+                    return (reply or "").strip()
+            except Exception:
+                pass
         if self._input_fn is not None:
             return (self._input_fn(prompt) or "").strip()
         print(f"\033[93m[Planner] {prompt}\033[0m")
