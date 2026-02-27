@@ -195,7 +195,7 @@ class MatMasterPlayground(BasePlayground):
                 mat_skills_root,
             )
         else:
-            # Always load local mat_master skills (log-diagnostics, ask-human) even when skills.enabled is False
+            # Always load local mat_master skills (ask-human, etc.) even when skills.enabled is False
             from evomaster.skills import SkillRegistry
 
             empty_root = Path(__file__).resolve().parent.parent / "memory"
