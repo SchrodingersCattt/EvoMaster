@@ -24,7 +24,9 @@ from pathlib import Path
 
 # Allow importing format_profiles when script is run from any cwd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
 from format_profiles import FORMAT_PROFILES, all_profiles_summary, get_profile
+from longtask_runtime import now_iso, write_json
 
 
 def _build_outline(title: str, profile: dict) -> str:
@@ -150,6 +152,20 @@ def main() -> None:
     body = _build_outline(args.title, profile)
     out_path.write_text(body, encoding="utf-8")
     print(f"Manuscript initialized: {out_path} (template: {args.template})")
+
+    # Persist profile to state.json so downstream write_section / assemble_manuscript
+    # can auto-detect it without requiring --profile on every call.
+    state_path = Path("_tmp/manuscript/state.json")
+    write_json(state_path, {
+        "task_type": "manuscript",
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+        "stage": "init_manuscript",
+        "profile": args.template,
+        "draft": str(out_path),
+        "attempts": 1,
+    })
+    print(f"Profile '{args.template}' persisted to {state_path}.")
 
 
 if __name__ == "__main__":

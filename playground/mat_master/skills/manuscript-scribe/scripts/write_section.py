@@ -34,6 +34,7 @@ from longtask_runtime import (
     build_result,
     emit_result,
     init_or_load_state,
+    read_json as _read_state_json,
 )
 
 try:
@@ -120,6 +121,16 @@ def main() -> None:
     )
     args = ap.parse_args()
 
+    # ── 3a: Auto-detect profile from state.json when --profile not given ──
+    # This allows write_section to inherit the profile set by init_manuscript
+    # without requiring the agent to pass --profile on every call.
+    if args.profile is None:
+        try:
+            _st = _read_state_json(_default_state_path(), default={})
+            args.profile = _st.get("profile") or None
+        except Exception:
+            pass
+
     # ── Section-name resolution via format_profiles ──────────────────
     if args.profile and _resolve_section is not None:
         try:
@@ -162,17 +173,19 @@ def main() -> None:
         state_path = Path(args.state) if args.state else _default_state_path()
         result_path = state_path.parent / "result.json"
         events_path = state_path.parent / "events.jsonl"
+        _extra: dict = {
+            "section": args.section,
+            "draft_path": str(draft_path),
+            "warnings": ["under_minimum_words"] if is_under else [],
+        }
+        if args.profile is not None:
+            _extra["profile"] = args.profile
         init_or_load_state(
             state_path=state_path,
             task_type="manuscript",
             stage="write_section",
             resume=args.resume,
-            extra={
-                "section": args.section,
-                "profile": args.profile,
-                "draft_path": str(draft_path),
-                "warnings": ["under_minimum_words"] if is_under else [],
-            },
+            extra=_extra,
         )
         append_event(
             events_path=events_path,
@@ -216,17 +229,19 @@ def main() -> None:
         state_path = Path(args.state) if args.state else _default_state_path()
         result_path = state_path.parent / "result.json"
         events_path = state_path.parent / "events.jsonl"
+        _extra2: dict = {
+            "section": args.section,
+            "draft_path": str(draft_path),
+            "warnings": ["under_minimum_words"] if is_under else [],
+        }
+        if args.profile is not None:
+            _extra2["profile"] = args.profile
         init_or_load_state(
             state_path=state_path,
             task_type="manuscript",
             stage="write_section",
             resume=args.resume,
-            extra={
-                "section": args.section,
-                "profile": args.profile,
-                "draft_path": str(draft_path),
-                "warnings": ["under_minimum_words"] if is_under else [],
-            },
+            extra=_extra2,
         )
         append_event(
             events_path=events_path,
@@ -293,17 +308,19 @@ def main() -> None:
     state_path = Path(args.state) if args.state else _default_state_path()
     result_path = state_path.parent / "result.json"
     events_path = state_path.parent / "events.jsonl"
+    _extra3: dict = {
+        "section": args.section,
+        "draft_path": str(draft_path),
+        "warnings": ["under_minimum_words"] if is_under else [],
+    }
+    if args.profile is not None:
+        _extra3["profile"] = args.profile
     init_or_load_state(
         state_path=state_path,
         task_type="manuscript",
         stage="write_section",
         resume=args.resume,
-        extra={
-            "section": args.section,
-            "profile": args.profile,
-            "draft_path": str(draft_path),
-            "warnings": ["under_minimum_words"] if is_under else [],
-        },
+        extra=_extra3,
     )
     append_event(
         events_path=events_path,

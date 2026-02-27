@@ -202,6 +202,7 @@ class MatToolCallbacks:
     def register(self, pipeline: ToolCallbackPipeline) -> None:
         """Register all MAT callbacks in execution order."""
         # Normalisation callbacks run first so downstream hooks see clean args.
+        pipeline.register_before(self.before_normalize_skill_name)
         pipeline.register_before(self.before_normalize_skill_script_args)
         pipeline.register_before(self.before_resolve_skill_reference_name)
         pipeline.register_before(self.before_resolve_dpa_model_alias)
@@ -534,6 +535,46 @@ class MatToolCallbacks:
         if len(s) >= 2 and s[0] == s[-1] and s[0] in ("'", '"'):
             s = s[1:-1].strip()
         return s
+
+    @staticmethod
+    def _snake_to_kebab(name: str) -> str:
+        """Convert snake_case to kebab-case (replaces underscores with hyphens)."""
+        return name.replace('_', '-')
+
+    def before_normalize_skill_name(self, tool_call: Any) -> None:
+        """Rewrite snake_case skill_name to kebab-case when LLM hallucinates the format.
+
+        Skills are registered under kebab-case (e.g. deep-survey). If the LLM passes
+        skill_name='deep_survey', the registry lookup fails with skill_not_found.
+        This callback converts underscores to hyphens when the kebab form exists.
+        """
+        if (tool_call.function.name or '') != 'use_skill':
+            return
+        args_str = tool_call.function.arguments or ''
+        try:
+            args = json.loads(args_str) if args_str else {}
+        except (json.JSONDecodeError, TypeError):
+            return
+        if not isinstance(args, dict):
+            return
+        skill_name = args.get('skill_name')
+        if not isinstance(skill_name, str) or '_' not in skill_name:
+            return
+        kebab = self._snake_to_kebab(skill_name)
+        if kebab == skill_name:
+            return
+        registry = getattr(self.agent, 'skill_registry', None)
+        if registry is None:
+            return
+        if registry.get_skill(kebab) is None:
+            return
+        args['skill_name'] = kebab
+        tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
+        self.logger.warning(
+            'before_tool: normalized skill_name snake_case -> kebab-case: %r -> %r',
+            skill_name,
+            kebab,
+        )
 
     def before_normalize_skill_script_args(self, tool_call: Any) -> None:
         """Unwrap redundant outer quotes around ``script_args``.
