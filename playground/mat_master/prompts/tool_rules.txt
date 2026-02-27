@@ -3,6 +3,7 @@
 ## Mode contract
 - **Direct mode**: prioritize speed and concise responses. Avoid heavy multi-stage writing/data pipelines unless user explicitly requests a long-form file deliverable.
 - **Planner mode**: prioritize long-horizon quality and robustness. For long-form writing/data tasks, use staged workflow + validation/fix loops and checkpoint/resume semantics.
+- **Multi-batch aggregation** (e.g. SN over several time intervals → one big CSV): mat_sn_* tool results are **auto-saved** under the workspace at `_tmp/tool_outputs/mat_sn_*/` (each call writes a file; the path is shown in the tool response). The **final** CSV must be produced by **merging from files** (read those auto-saved files or your own batch CSVs with a script), not from conversation content (see "Multi-batch literature or data aggregation" below).
 
 ## Web search and retrieval
 - Web search returns **snippets only**. When answering from web results, **parse/fetch full content** first (e.g. mat_doc_* extract from webpage, or other parsing); do not answer from snippets alone.
@@ -40,12 +41,25 @@
 - **Validation**: After obtaining any new structure (from URL, MCP, or user upload), use use_skill with skill_name=structure-manager, script_name=assess_structure.py, script_args="--file <path>". This checks dimensionality, sanity, and formula.
 - **Database search** and **structure building** (SMILES, prototypes) use MCP tools (mat_sg_*, mat_struct_db_*), NOT structure-manager.
 
+## tasker-polar-surface skill (polar surface / 切面)
+- When the user asks to **cut or build a surface slab from bulk** (e.g. 切面、切 slab、从体相切出表面、surface slab construction, oxide/ionic surface like MgO/TiO2/ZnO), you MUST first call `use_skill` with `skill_name=tasker-polar-surface`, `action=get_info` to load the Tasker polar surface workflow, then **classify** Type 1 vs 2/3. **Type 1**: you may use `mat_sg_build_surface_slab`. **Type 2/3**: do **NOT** use `mat_sg_build_surface_slab`; build the slab yourself (see below) and then validate.
+- **Classification source**: Prefer the skill's `reference/tasker_lookup.yaml` and `reference.md`. If (formula, miller) is **not** in the lookup table, **search literature on the fly** with mat_sn_* (e.g. "Tasker polar surface <formula> <hkl>", "<formula> <miller> slab polar"), infer Type 1/2/3, then proceed.
+- **Type 2/3 — 现场搓 slab**: Search web/literature for layer count, vacuum, and termination (e.g. "<formula> <hkl> symmetric slab layers"). Then use **execute_bash** to write and run Python (pymatgen or ASE) that builds the slab from bulk + miller + n_layers + vacuum (symmetric termination when possible) and writes POSCAR/CIF. No pre-packaged script required. **Mandatory after build**: run `check_slab_tasker.py` on the output file and structure-manager `assess_structure.py`; do not finish until both pass.
+- **After any slab build** (Type 1 from mat_sg_build_surface_slab or Type 2/3 from script/bash): you MUST run `use_skill` … `check_slab_tasker.py` with `--file <slab_path> --tasker_type 1|2|3` (and when known `--formula`, `--miller`). Do **not** trust build parameters alone.
+- If `check_slab_tasker.py` returns non-zero exit code or JSON `compliant: false`, do **not** call `finish` until you have either re-built a compliant slab and re-run the script, or explicitly reported the failure (paste the script's `reason`) to the user and offered to correct.
+
 ## lit-data-organizer skill (literature table normalization)
 - When the user asks to **organize literature results into a structured table/dataset** (e.g. "material-property table", CSV/JSONL export, comparison matrix, multi-source consolidation), you MUST use `use_skill` with `skill_name=lit-data-organizer`, `action=run_script`, `script_name=build_lit_table.py` before final reporting.
 - When the user requests **Pareto analysis or plotting based on literature metrics**, you MUST first build the canonical table with `lit-data-organizer`; plotting scripts must read that generated table instead of hard-coded values.
 - Do not fabricate numeric values for missing fields. Keep missing values empty/NA and include source traceability columns.
 - For PDF-derived inputs, still follow the PDF-first rule: parse with `mat_doc_*` first, then pass structured outputs to `lit-data-organizer`.
 - For long runs, prefer staged/resumable execution: pass `--state _tmp/lit_data/state.json --resume` and use `--stage` (`normalize`, `dedup`, `conflict`, `export`, `all`) for recovery.
+
+## Multi-batch literature or data aggregation (intermediate files + merge) [MANDATORY]
+- **Auto-saved tool outputs**: Each mat_sn_* call (e.g. mat_sn_search-papers-enhanced) has its result **automatically saved** under the workspace at `_tmp/tool_outputs/mat_sn_<tool_suffix>/` (path appears in the tool response as "Auto-saved to: ..."). You do not need to manually write each batch to CSV before the next SN call.
+- **Final CSV must come from files**. Do NOT generate the final aggregated CSV from conversation content (context is truncated after many calls; you would only get a small subset). Instead, produce the final CSV by **running a script** (execute_bash) that reads from disk: either (a) the auto-saved files under `_tmp/tool_outputs/mat_sn_*/` (parse each JSON/text and merge paper lists), or (b) batch CSVs you wrote (e.g. batch_001.csv, …) and concatenate/dedup. The script should output one final CSV with one row per paper.
+- **Merge examples**: (a) From auto-saved: Python script that globs `_tmp/tool_outputs/mat_sn_*/*.json`, loads each, extracts papers, dedup by doi, writes final.csv. (b) From batch CSVs: `head -1 batch_001.csv > final.csv && tail -n +2 -q batch_*.csv >> final.csv` or pandas `pd.concat([pd.read_csv(f) for f in sorted(glob.glob('batch_*.csv'))]).drop_duplicates(subset=['doi']).to_csv('final.csv', index=False)`.
+- If the user asks for "每次...整理为一个 csv 保存" and "最终...整理一个大的 csv": use the auto-saved files (or write batch CSVs if you prefer); the final big CSV must be produced by a merge script reading from those files, not from memory. The final CSV must have one row per paper from all batches.
 
 ## composition-optimization skill (composition search orchestration)
 - When the user asks for **composition optimization** (alloy/HEA composition design, GA-based composition search, run_dart_ga-style optimization), you MUST first call `use_skill` with `skill_name=composition-optimization`, `action=get_info` to load the branch workflow before selecting tools.

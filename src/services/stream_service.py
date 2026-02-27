@@ -309,8 +309,12 @@ class ChatStreamService:
             }
         )
 
-        async def send_cb(payload: dict):
-            self._send_cb(sid, ctx.request_event_queue, payload)
+        def send_cb(payload: dict):
+            """同步回调：用 call_soon_threadsafe 把事件投递到 event loop，不等待。
+            避免因 SSE 写阻塞导致 run_coroutine_threadsafe 超时、事件已落库但未推送到前端。"""
+            loop.call_soon_threadsafe(
+                self._send_cb, sid, ctx.request_event_queue, payload
+            )
 
         future = loop.run_in_executor(
             self._agent_run_service.get_executor(),

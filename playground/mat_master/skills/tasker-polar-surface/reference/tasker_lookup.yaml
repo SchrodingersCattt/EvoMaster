@@ -1,0 +1,54 @@
+# Tasker polar surface lookup: material + surface -> recommended type and literature note.
+# Used to cross-check script results with known classifications and references.
+# Source: Tasker, P. W. (1979). J. Phys. C: Solid State Phys. 12, 4977.
+# Format: formula (normalized), miller as (h k l) string, tasker_type, optional ref/note.
+
+entries:
+  - formula: MgO
+    miller: "1 0 0"
+    tasker_type: 1
+    note: "Rocksalt (100); neutral layers. Standard for surface energy."
+    ref: "Tasker 1979"
+  - formula: NiO
+    miller: "1 0 0"
+    tasker_type: 1
+    note: "Rocksalt (100); same as MgO."
+    ref: "Tasker 1979"
+  - formula: TiO2
+    miller: "1 1 0"
+    tasker_type: 1
+    note: "Rutile (110); stoichiometric layers, bridging O."
+    ref: "Tasker 1979; common in calculations"
+  - formula: ZnO
+    miller: "1 0 -1 0"
+    tasker_type: 1
+    note: "Non-polar prism; stoichiometric."
+    ref: "Tasker 1979"
+  - formula: ZnO
+    miller: "0 0 0 1"
+    tasker_type: 3
+    note: "Polar basal; O- and Zn-terminated. Use symmetric slab or document stabilization."
+    ref: "Tasker 1979"
+  - formula: ZnO
+    miller: "0 0 0 -1"
+    tasker_type: 3
+    note: "Same as (0001); polar."
+    ref: "Tasker 1979"
+  - formula: Al2O3
+    miller: "0 0 0 1"
+    tasker_type: 3
+    note: "Corundum (0001); polar; symmetric slab or passivation."
+    ref: "Common in literature"
+  - formula: GaN
+    miller: "0 0 0 1"
+    tasker_type: 3
+    note: "Wurtzite basal; polar."
+    ref: "Tasker 1979; III-V surfaces"
+  - formula: InN
+    miller: "0 0 0 1"
+    tasker_type: 3
+    note: "Wurtzite basal; polar."
+    ref: "Tasker 1979"
+
+# Normalization: formula should be normalized (e.g. MgO not Mg1O1).
+# Miller: 3-index for cubic/ortho, 4-index for hexagonal (e.g. 1 0 -1 0 for prism).
