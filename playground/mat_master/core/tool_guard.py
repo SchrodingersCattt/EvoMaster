@@ -36,9 +36,20 @@ EXEMPT_TOOL_SUFFIXES = frozenset({
     "query_job_status",
     "get_job_status",
 })
-EXEMPT_SKILL_NAMES = frozenset({
-    "deep-survey",
-    "manuscript-scribe",
+
+# Scripts that legitimately produce different output each call (content varies)
+# and therefore should bypass duplicate-call loop detection.
+# validate_content.py and similar scripts are NOT listed here so loop detection
+# can catch runaway identical invocations.
+EXEMPT_MANUSCRIPT_SCRIPTS = frozenset({
+    "write_section.py",
+    "append_chunk.py",
+    "polish_text.py",
+    "init_manuscript.py",
+    "run_pipeline.py",
+    "export_docx.py",
+    "export_latex.py",
+    "assemble_manuscript.py",
 })
 
 logger = logging.getLogger(__name__)
@@ -210,8 +221,13 @@ class ToolGuard:
         if name == "use_skill":
             args = ToolGuard._parse_tool_args(tool_call)
             skill = str(args.get("skill_name", "")).strip().lower()
-            if skill in EXEMPT_SKILL_NAMES:
+            script = str(args.get("script_name", "")).strip().lower()
+            # Exempt write/export scripts whose content legitimately differs each call.
+            # validate_content.py and other review scripts are NOT exempt so that
+            # identical repeated calls are caught by loop detection.
+            if skill in {"manuscript-scribe", "deep-survey"} and script in EXEMPT_MANUSCRIPT_SCRIPTS:
                 return True
+            return False
         return False
 
     @staticmethod
