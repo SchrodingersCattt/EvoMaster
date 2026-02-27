@@ -106,11 +106,18 @@ def _parse_route(response: str) -> str:
     return "default"
 
 
-def _build_router_system(registry: AsyncToolRegistry) -> str:
+def _build_router_system(registry: AsyncToolRegistry, skills_str: str = "") -> str:
     """Build ROUTER_SYSTEM prompt with software names from registry (no hardcoding)."""
     sw = registry.software_list_str()
     sm = registry.server_mapping_str()
     block = registry.crp_block_str()
+    skills_constraint = ""
+    if skills_str:
+        skills_constraint = (
+            f"\n5. Skills (callable via use_skill): The following skills are available and do NOT "
+            f"require SKILL_EVOLUTION: {skills_str}. Any task that can be accomplished by calling "
+            f"use_skill with one of these skills MUST be routed to STANDARD_EXECUTION."
+        )
     return f"""You are a deterministic task routing module for MatMaster. Your sole function is to classify the user's task into one of two execution modes based on strict system constraints.
 
 {LANGUAGE_RULE}
@@ -119,11 +126,11 @@ SYSTEM CONSTRAINTS:
 1. Local Environment: The local sandbox supports Python scripting, data manipulation, and lightweight simulations (e.g., ASE, Pymatgen). It does NOT provide {block}, {sw} run services locally.
 2. Remote Delegation: Heavy calculations ({sw}) are submitted via MCP tools ({sm}) and monitored via the monitor_job tool. This is handled within STANDARD_EXECUTION; no separate routing is needed.
 3. Tool Availability: Use the provided 'Available Tools' list to decide if a programmatic capability is missing (SKILL_EVOLUTION) or can be fulfilled by existing tools and skills (STANDARD_EXECUTION). Always check the full tool list before concluding a tool is missing.
-4. Characterization routing baseline: NMR/XRD/electron-microscopy requests should default to STANDARD_EXECUTION when dedicated MCP tools exist (e.g., mat_nmr_NMR_search_tool, mat_nmr_NMR_predict_tool, mat_nmr_NMR_reverse_predict_tool, mat_xrd_xrd_phase_identification, mat_electron_microscope_get_electron_microscope_recognize). Do NOT choose SKILL_EVOLUTION for these unless the user requests a clearly missing capability.
+4. Characterization routing baseline: NMR/XRD/electron-microscopy requests should default to STANDARD_EXECUTION when dedicated MCP tools exist (e.g., mat_nmr_NMR_search_tool, mat_nmr_NMR_predict_tool, mat_nmr_NMR_reverse_predict_tool, mat_xrd_xrd_phase_identification, mat_electron_microscope_get_electron_microscope_recognize). Do NOT choose SKILL_EVOLUTION for these unless the user requests a clearly missing capability.{skills_constraint}
 
 ROUTING CATEGORIES:
-A. [SKILL_EVOLUTION]: Choose this IF AND ONLY IF the task requires a programmatic tool or specific Python capability that is strictly absent from the 'Available Tools' list, necessitating the generation of a new script. Do NOT choose this if a matching tool already exists (e.g., mat_binary_calc_run_cp2k for CP2K tasks, monitor_job for monitoring calculation jobs).
-B. [STANDARD_EXECUTION]: Choose this for all other tasks. This includes literature searches, structure generation, data extraction, local Python scripting, remote calculation submission and monitoring (via MCP tools + monitor_job tool), and utilizing existing MCP tools.
+A. [SKILL_EVOLUTION]: Choose this IF AND ONLY IF the task requires a programmatic tool or specific Python capability that is strictly absent from BOTH the 'Available Tools' list AND the 'Available Skills' list, necessitating the generation of a new script. Do NOT choose this if a matching tool or skill already exists.
+B. [STANDARD_EXECUTION]: Choose this for all other tasks. This includes literature searches, structure generation, data extraction, local Python scripting, remote calculation submission and monitoring (via MCP tools + monitor_job tool), utilizing existing MCP tools, and any task achievable via use_skill with an available skill.
 
 OUTPUT FORMAT:
 You must output a strictly valid JSON object with exactly two keys. Do not include markdown formatting or explanatory text outside the JSON.
@@ -162,13 +169,26 @@ class DirectSolver(BaseExp):
             tools_preview.append("...")
         available_tools_str = ", ".join(tools_preview) if tools_preview else "(none)"
 
+        # Extract skills from the agent's skill_registry so the router knows what
+        # is callable via use_skill and does NOT require SKILL_EVOLUTION.
+        skills_str = ""
+        registry = getattr(self.agent, "skill_registry", None)
+        if registry is not None:
+            try:
+                names = [s.meta_info.name for s in registry.get_all_skills()]
+                if names:
+                    skills_str = ", ".join(names[:40])
+            except Exception:
+                pass
+
         user_content = f'''INPUT DATA:
 Task: "{task_description[:800]}"
 Available Tools: {available_tools_str}
+Available Skills (callable via use_skill): {skills_str if skills_str else "(none)"}
 
 Output the JSON object only (decision + rationale).'''
 
-        router_system = _build_router_system(self._registry)
+        router_system = _build_router_system(self._registry, skills_str=skills_str)
         dialog = Dialog(
             messages=[
                 SystemMessage(content=router_system),
