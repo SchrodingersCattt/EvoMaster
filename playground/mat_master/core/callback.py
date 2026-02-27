@@ -9,8 +9,8 @@ from __future__ import annotations
 import json
 import queue
 import re
-import shlex
 import tempfile
+import threading
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -45,6 +45,7 @@ _SKIP_DOWNLOAD_TOKENS = (
     'stdout',
     'stderr',
 )
+
 
 def is_error_artifact_url(url: str) -> bool:
     """Return True for OSS URLs that are malformed error artifacts, not real outputs.
@@ -198,6 +199,8 @@ class MatToolCallbacks:
         self.agent = agent
         self.logger = agent.logger
         self._download_subdir = download_subdir
+        self._ensured_download_dirs: set[str] = set()
+        self._ensure_dir_lock = threading.Lock()
 
     def register(self, pipeline: ToolCallbackPipeline) -> None:
         """Register all MAT callbacks in execution order."""
@@ -311,7 +314,7 @@ class MatToolCallbacks:
                 ws = workspace.replace('\\', '/').rstrip('/')
                 norm = abs_path.replace('\\', '/')
                 if norm.startswith(ws + '/'):
-                    return norm[len(ws) + 1:]
+                    return norm[len(ws) + 1 :]
                 if norm == ws:
                     return '.'
             else:
@@ -350,16 +353,42 @@ class MatToolCallbacks:
         return str(Path(workspace).resolve())
 
     def _ensure_download_dir(self, download_dir: str) -> None:
-        """Create *download_dir* if it does not exist."""
-        if self._is_remote:
-            self.logger.info(
-                '[autodownload] _ensure_download_dir remote mkdir start dir=%s',
-                download_dir,
-            )
-            self._session.exec_bash(f"mkdir -p '{download_dir}'")
-            self.logger.info('[autodownload] _ensure_download_dir remote mkdir done')
-        else:
-            Path(download_dir).mkdir(parents=True, exist_ok=True)
+        """Create *download_dir* if it does not exist.
+
+        For remote sessions, only runs mkdir once per path (per agent lifecycle)
+        to avoid redundant exec_bash and session contention when multiple tools
+        run in parallel. Uses a short timeout (30s) so a stuck remote does not
+        block for the default 300s.
+        """
+        with self._ensure_dir_lock:
+            if download_dir in self._ensured_download_dirs:
+                self.logger.debug(
+                    '[autodownload] _ensure_download_dir already ensured dir=%s',
+                    download_dir,
+                )
+                return
+            if self._is_remote:
+                self.logger.info(
+                    '[autodownload] _ensure_download_dir remote mkdir start dir=%s',
+                    download_dir,
+                )
+                try:
+                    self._session.exec_bash(
+                        f"mkdir -p '{download_dir}'",
+                        timeout=30,
+                    )
+                except Exception as e:
+                    self.logger.warning(
+                        '[autodownload] _ensure_download_dir remote mkdir failed: %s',
+                        e,
+                    )
+                    return
+                self.logger.info(
+                    '[autodownload] _ensure_download_dir remote mkdir done'
+                )
+            else:
+                Path(download_dir).mkdir(parents=True, exist_ok=True)
+            self._ensured_download_dirs.add(download_dir)
 
     def _download_single(self, url: str, download_dir: str) -> str | None:
         """Download a single URL to *download_dir*. Returns dest path string or None.
@@ -1038,7 +1067,9 @@ class MatToolCallbacks:
         cfg_timeout = ah_cfg.get('timeout_seconds', 20)
 
         if not cfg_enabled:
-            self.logger.info('ask-human: interactive input disabled (ask_human.enabled=false).')
+            self.logger.info(
+                'ask-human: interactive input disabled (ask_human.enabled=false).'
+            )
             return (
                 '⚠️ Interactive input is disabled in this environment. '
                 'Please decide autonomously: skip this step, retry with modified parameters, or abort.',
@@ -1050,7 +1081,7 @@ class MatToolCallbacks:
         context = ''
         script_stdout = observation
         if script_stdout.startswith('Script output:\n'):
-            script_stdout = script_stdout[len('Script output:\n'):]
+            script_stdout = script_stdout[len('Script output:\n') :]
         for line in script_stdout.strip().splitlines():
             line = line.strip()
             if not line:
@@ -1070,6 +1101,7 @@ class MatToolCallbacks:
 
         # --- Per-call parameters from skill args ---
         from playground.mat_master.service.confirm import ConfirmMode
+
         call_mode_str = args.get('mode', 'timeout')
         try:
             call_mode = ConfirmMode(call_mode_str)
@@ -1086,15 +1118,19 @@ class MatToolCallbacks:
                     mode=call_mode,
                     timeout_sec=call_timeout,
                     context=context or None,
-                    actions=["provide_params", "skip", "abort"],
-                    origin="ask_human",
-                    source_override="MatMaster",
+                    actions=['provide_params', 'skip', 'abort'],
+                    origin='ask_human',
+                    source_override='MatMaster',
                 )
                 if reply is not None:
-                    self.logger.info('ask-human: received reply (%d chars).', len(reply))
+                    self.logger.info(
+                        'ask-human: received reply (%d chars).', len(reply)
+                    )
                     return f"User replied: {reply}", info
                 # reply is None: timeout mode expired (default_reply was None for LLM path)
-                self.logger.warning('ask-human: confirmation timed out (%ds).', call_timeout)
+                self.logger.warning(
+                    'ask-human: confirmation timed out (%ds).', call_timeout
+                )
                 return (
                     f'⚠️ No user response within {call_timeout}s. '
                     'Please decide autonomously: skip this step, retry with modified parameters, or abort.',
@@ -1128,11 +1164,17 @@ class MatToolCallbacks:
             )
 
         wait_timeout = None if call_mode == ConfirmMode.BLOCK else call_timeout
-        self.logger.info('ask-human: waiting for user reply (mode=%s, timeout=%s)...', call_mode.value, wait_timeout)
+        self.logger.info(
+            'ask-human: waiting for user reply (mode=%s, timeout=%s)...',
+            call_mode.value,
+            wait_timeout,
+        )
         try:
             reply = reply_queue.get(timeout=wait_timeout)
         except queue.Empty:
-            self.logger.warning('ask-human: user reply timed out after %ss.', call_timeout)
+            self.logger.warning(
+                'ask-human: user reply timed out after %ss.', call_timeout
+            )
             return (
                 f'⚠️ No user response within {call_timeout}s. '
                 'Please decide autonomously: skip this step, retry with modified parameters, or abort.',
@@ -1229,7 +1271,11 @@ class MatToolCallbacks:
         targets: list[str] = []
         seen: set[str] = set()
         for url in urls:
-            if url in seen or self._should_skip_download(url) or is_error_artifact_url(url):
+            if (
+                url in seen
+                or self._should_skip_download(url)
+                or is_error_artifact_url(url)
+            ):
                 continue
             seen.add(url)
             targets.append(url)
