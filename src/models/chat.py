@@ -7,7 +7,7 @@ ag-ui 协议（前后端约定）：
   session_status：流开头推送，含 status: 'idle'|'active'，可选 last_task_id；便于部署/重启后前端根据 idle 结束“未结束的 stream”状态。bohrium_node 的 content 含 node_id, status: 'created'|'ready'|'skills_synced'|'connected'|'destroyed', message，ready/skills_synced/connected 时另有 ip。
 - 客户端 -> 服务端：REST
   POST /chat/sessions/{session_id}/stream  Body 可选：不传或 content 为空→仅历史+ping；有 content→发送并返回本次 SSE 流
-  POST /chat/sessions/{session_id}/cancel  取消当前运行
+  POST /chat/sessions/{session_id}/stop  终止当前运行
   POST /chat/sessions/{session_id}/planner_reply Body: ChatPlannerReplyRequest
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
