@@ -112,10 +112,10 @@ _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024  # 100 MB
 # ---------------------------------------------------------------------------
 
 def _find_log_diagnostics_scripts() -> Path | None:
-    """Locate log_diagnostics/scripts/ relative to the mat_master skills tree."""
+    """Locate log-diagnostics/scripts/ relative to the mat_master skills tree."""
     # Try to find from evomaster package location upward to project root
     pkg = Path(__file__).resolve().parent.parent.parent.parent  # project root
-    candidate = pkg / 'playground' / 'mat_master' / 'skills' / 'log_diagnostics' / 'scripts'
+    candidate = pkg / 'playground' / 'mat_master' / 'skills' / 'log-diagnostics' / 'scripts'
     return candidate if candidate.is_dir() else None
 
 
@@ -554,7 +554,7 @@ def _run_lifecycle(
         'message': (
             f'Job {current_job_id} failed after {retries} retries (limit: {max_retries}). '
             'All built-in fix strategies have been attempted. '
-            'Consider asking the human user (ask_human skill) whether to: '
+            'Consider asking the human user (ask-human skill) whether to: '
             '(1) provide modified parameters or suggestions, '
             '(2) skip this calculation, or '
             '(3) abort. '
