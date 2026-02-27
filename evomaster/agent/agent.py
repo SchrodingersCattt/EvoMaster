@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -15,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
-from .context import ContextConfig, ContextManager
 from evomaster.utils.types import (
     AssistantMessage,
     Dialog,
@@ -26,19 +24,22 @@ from evomaster.utils.types import (
     UserMessage,
 )
 
+from .context import ContextConfig, ContextManager
+
 if TYPE_CHECKING:
+    from evomaster.skills import SkillRegistry
     from evomaster.utils import BaseLLM
+
     from .session import BaseSession
     from .tools import ToolRegistry
-    from evomaster.skills import SkillRegistry
 
 
 class AgentConfig(BaseModel):
     """Agent 配置"""
-    max_turns: int = Field(default=100, description="最大执行轮数")
+
+    max_turns: int = Field(default=100, description='最大执行轮数')
     context_config: ContextConfig = Field(
-        default_factory=ContextConfig,
-        description="上下文管理配置"
+        default_factory=ContextConfig, description='上下文管理配置'
     )
 
 
@@ -56,8 +57,8 @@ class BaseAgent(ABC):
     - _get_user_prompt(task): 获取用户提示词
     """
 
-    VERSION: str = "1.0"
-    
+    VERSION: str = '1.0'
+
     # 类级别的轨迹文件路径和锁（所有agent实例共享）
     _trajectory_file_path: Path | None = None
     _trajectory_file_lock = threading.Lock()
@@ -98,8 +99,8 @@ class BaseAgent(ABC):
 
         # 输出配置
         self.output_config = output_config or {}
-        self.show_in_console = self.output_config.get("show_in_console", False)
-        self.log_to_file = self.output_config.get("log_to_file", False)
+        self.show_in_console = self.output_config.get('show_in_console', False)
+        self.log_to_file = self.output_config.get('log_to_file', False)
 
         # 配置目录（用于加载提示词文件）
         self.config_dir = Path(config_dir) if config_dir else None
@@ -122,7 +123,7 @@ class BaseAgent(ABC):
         # 存储初始系统提示词和用户提示词（用于重置）
         self._initial_system_prompt: str | None = None
         self._initial_user_prompt: str | None = None
-        
+
         # Agent名称（用于标识不同的agent）
         self._agent_name: str | None = None
 
@@ -137,9 +138,8 @@ class BaseAgent(ABC):
         Returns:
             执行轨迹
         """
-        from evomaster.utils.types import Trajectory
 
-        stop_event = stop_event or getattr(self, "_stop_event", None)
+        stop_event = stop_event or getattr(self, '_stop_event', None)
         self.logger.info(f"Starting task: {task.task_id}")
 
         # 初始化
@@ -148,42 +148,42 @@ class BaseAgent(ABC):
         try:
             # 执行循环
             for turn in range(self.config.max_turns):
-                setattr(self, "_cancelled_from_step", False)
+                setattr(self, '_cancelled_from_step', False)
                 if stop_event and stop_event.is_set():
-                    self.logger.info("Task cancelled by user.")
-                    self.trajectory.finish("cancelled", {"reason": "stop_event"})
+                    self.logger.info('Task cancelled by user.')
+                    self.trajectory.finish('cancelled', {'reason': 'stop_event'})
                     break
 
                 # 清晰显示当前步骤
-                self.logger.info("=" * 80)
+                self.logger.info('=' * 80)
                 self.logger.info(f"📍 Step [{turn + 1}/{self.config.max_turns}]")
-                self.logger.info("=" * 80)
+                self.logger.info('=' * 80)
 
                 should_finish = self._step()
-                if getattr(self, "_cancelled_from_step", False):
-                    self.logger.info("Task cancelled by user.")
-                    self.trajectory.finish("cancelled", {"reason": "stop_event"})
+                if getattr(self, '_cancelled_from_step', False):
+                    self.logger.info('Task cancelled by user.')
+                    self.trajectory.finish('cancelled', {'reason': 'stop_event'})
                     break
                 if should_finish:
-                    self.logger.info("=" * 80)
-                    self.logger.info("✅ Agent finished task")
-                    self.logger.info("=" * 80)
-                    self.trajectory.finish("completed")
+                    self.logger.info('=' * 80)
+                    self.logger.info('✅ Agent finished task')
+                    self.logger.info('=' * 80)
+                    self.trajectory.finish('completed')
                     break
             else:
                 if stop_event and stop_event.is_set():
-                    self.trajectory.finish("cancelled", {"reason": "stop_event"})
+                    self.trajectory.finish('cancelled', {'reason': 'stop_event'})
                 else:
-                    self.logger.warning("=" * 80)
-                    self.logger.warning("⚠️  Reached max turns limit")
-                    self.logger.warning("=" * 80)
-                    self.trajectory.finish("failed", {"reason": "max_turns_exceeded"})
+                    self.logger.warning('=' * 80)
+                    self.logger.warning('⚠️  Reached max turns limit')
+                    self.logger.warning('=' * 80)
+                    self.trajectory.finish('failed', {'reason': 'max_turns_exceeded'})
 
         except Exception as e:
-            self.logger.error("=" * 80)
+            self.logger.error('=' * 80)
             self.logger.error(f"❌ Agent execution failed: {e}")
-            self.logger.error("=" * 80)
-            self.trajectory.finish("failed", {"reason": str(e)})
+            self.logger.error('=' * 80)
+            self.trajectory.finish('failed', {'reason': str(e)})
             raise
 
         return self.trajectory
@@ -200,9 +200,9 @@ class BaseAgent(ABC):
         self.trajectory = Trajectory(
             task_id=task.task_id,
             meta={
-                "agent_version": self.VERSION,
-                "task_type": task.task_type,
-            }
+                'agent_version': self.VERSION,
+                'task_type': task.task_type,
+            },
         )
 
         # 获取初始提示词
@@ -232,7 +232,7 @@ class BaseAgent(ABC):
             是否应该结束（True 表示结束）
         """
         self._step_count += 1
-        stop_event = getattr(self, "_stop_event", None)
+        stop_event = getattr(self, '_stop_event', None)
 
         # 准备对话（可能需要截断）
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
@@ -240,7 +240,7 @@ class BaseAgent(ABC):
         # 查询模型（使用 LLM）
         assistant_message = self.llm.query(dialog_for_query)
         if stop_event and stop_event.is_set():
-            setattr(self, "_cancelled_from_step", True)
+            setattr(self, '_cancelled_from_step', True)
             return True
 
         self.current_dialog.add_message(assistant_message)
@@ -273,27 +273,34 @@ class BaseAgent(ABC):
         should_finish = False
         for tool_call in assistant_message.tool_calls:
             if stop_event and stop_event.is_set():
-                setattr(self, "_cancelled_from_step", True)
+                setattr(self, '_cancelled_from_step', True)
                 return True
             self.logger.debug(f"Processing tool call: {tool_call.function.name}")
 
             # 检查是否是 finish 工具
-            if tool_call.function.name == "finish":
+            if tool_call.function.name == 'finish':
                 # 打印 finish 工具的参数（最终答案）
                 try:
                     import json
+
                     finish_args = json.loads(tool_call.function.arguments)
-                    self.logger.info("=" * 80)
-                    self.logger.info("📝 Finish Tool Arguments:")
+                    self.logger.info('=' * 80)
+                    self.logger.info('📝 Finish Tool Arguments:')
                     for key, value in finish_args.items():
                         # 截断过长的值用于显示
                         value_str = str(value)
                         if len(value_str) > 2000:
-                            value_str = value_str[:1000] + "\n... [truncated] ...\n" + value_str[-1000:]
+                            value_str = (
+                                value_str[:1000]
+                                + '\n... [truncated] ...\n'
+                                + value_str[-1000:]
+                            )
                         self.logger.info(f"  {key}: {value_str}")
-                    self.logger.info("=" * 80)
-                except Exception as e:
-                    self.logger.info(f"📝 Finish Tool Raw Args: {tool_call.function.arguments}")
+                    self.logger.info('=' * 80)
+                except Exception:
+                    self.logger.info(
+                        f"📝 Finish Tool Raw Args: {tool_call.function.arguments}"
+                    )
                 should_finish = True
                 break
 
@@ -304,9 +311,9 @@ class BaseAgent(ABC):
             MAX_TOOL_OUTPUT = 30000
             if len(observation) > MAX_TOOL_OUTPUT:
                 observation = (
-                    observation[:MAX_TOOL_OUTPUT // 2]
-                    + "\n\n... [output truncated due to length] ...\n\n"
-                    + observation[-MAX_TOOL_OUTPUT // 2:]
+                    observation[: MAX_TOOL_OUTPUT // 2]
+                    + '\n\n... [output truncated due to length] ...\n\n'
+                    + observation[-MAX_TOOL_OUTPUT // 2 :]
                 )
 
             # 创建工具响应消息
@@ -314,7 +321,7 @@ class BaseAgent(ABC):
                 content=observation,
                 tool_call_id=tool_call.id,
                 name=tool_call.function.name,
-                meta={"info": info}
+                meta={'info': info},
             )
 
             self.current_dialog.add_message(tool_message)
@@ -344,79 +351,85 @@ class BaseAgent(ABC):
         tool = self.tools.get_tool(tool_name)
         if tool is None:
             error_msg = f"Unknown tool: {tool_name}"
-            self._log_tool_end(tool_name, error_msg, {"error": "tool_not_found"})
-            return error_msg, {"error": "tool_not_found"}
+            self._log_tool_end(tool_name, error_msg, {'error': 'tool_not_found'})
+            return error_msg, {'error': 'tool_not_found'}
 
         try:
             # 执行工具
             observation, info = tool.execute(self.session, tool_args)
-            
+
             # 记录工具调用结束
             self._log_tool_end(tool_name, observation, info)
-            
+
             return observation, info
         except Exception as e:
             error_msg = f"Tool execution error: {str(e)}"
             self.logger.error(f"Tool execution failed: {e}", exc_info=True)
-            self._log_tool_end(tool_name, error_msg, {"error": str(e)})
+            self._log_tool_end(tool_name, error_msg, {'error': str(e)})
             # Note: errors are only returned as observation (ToolMessage in dialog); there is no automatic mem_save of tool errors.
-            return error_msg, {"error": str(e)}
+            return error_msg, {'error': str(e)}
 
     def _log_tool_start(self, tool_name: str, tool_args: str) -> None:
         """记录工具调用开始"""
         if self.log_to_file:
-            self.logger.info("=" * 80)
+            self.logger.info('=' * 80)
             self.logger.info(f"Tool Call Start: {tool_name}")
             self.logger.info(f"Arguments: {tool_args}")
-            self.logger.info("=" * 80)
-        
+            self.logger.info('=' * 80)
+
         if self.show_in_console:
             print(f"\n[Tool Call] {tool_name}")
             if tool_args:
                 # 尝试格式化JSON参数
                 try:
                     import json
-                    args_dict = json.loads(tool_args)
-                    print(f"  Arguments: {json.dumps(args_dict, indent=2, ensure_ascii=False)}")
-                except:
-                    print(f"  Arguments: {tool_args}")
-            print("-" * 60)
 
-    def _log_tool_end(self, tool_name: str, observation: str, info: dict[str, Any]) -> None:
+                    args_dict = json.loads(tool_args)
+                    print(
+                        f"  Arguments: {json.dumps(args_dict, indent=2, ensure_ascii=False)}"
+                    )
+                except BaseException:
+                    print(f"  Arguments: {tool_args}")
+            print('-' * 60)
+
+    def _log_tool_end(
+        self, tool_name: str, observation: str, info: dict[str, Any]
+    ) -> None:
         """记录工具调用结束"""
         # 截断过长的输出：超过5000字符时，保留前2500和最后2500
         obs_display = observation
         if len(obs_display) > 5000:
-            obs_display = obs_display[:2500] + "\n... [truncated] ...\n" + obs_display[-2500:]
-        
+            obs_display = (
+                obs_display[:2500] + '\n... [truncated] ...\n' + obs_display[-2500:]
+            )
+
         if self.log_to_file:
-            self.logger.info("=" * 80)
+            self.logger.info('=' * 80)
             self.logger.info(f"Tool Call End: {tool_name}")
             self.logger.info(f"Output: {obs_display}")
             if info:
                 self.logger.info(f"Info: {info}")
-            self.logger.info("=" * 80)
-        
+            self.logger.info('=' * 80)
+
         if self.show_in_console:
             print(f"\n[Tool Output] {tool_name}")
-            print("-" * 60)
+            print('-' * 60)
             print(obs_display)
-            print("-" * 60)
+            print('-' * 60)
 
     def _handle_no_tool_call(self) -> None:
         """处理没有工具调用的情况"""
         # 添加用户消息提示继续
         prompt = (
-            "Please continue working on the task.\n"
-            "When you have completed the task, use the finish tool.\n"
-            "IMPORTANT: You should not ask for human help."
+            'Please continue working on the task.\n'
+            'When you have completed the task, use the finish tool.\n'
+            'IMPORTANT: You should not ask for human help.'
         )
         self.current_dialog.add_message(UserMessage(content=prompt))
 
-
     def _get_tool_specs(self) -> list:
         """获取工具规格列表
-        
+
         只有在 enable_tools=True 时才返回工具规格列表。
         如果 enable_tools=False，返回空列表（工具仍然注册，但不会出现在提示词中）。
         """
@@ -452,8 +465,8 @@ class BaseAgent(ABC):
         if not prompt_path.is_absolute():
             if self.config_dir is None:
                 raise ValueError(
-                    "config_dir not set. Cannot resolve relative path. "
-                    "Please provide config_dir in __init__ or use absolute path."
+                    'config_dir not set. Cannot resolve relative path. '
+                    'Please provide config_dir in __init__ or use absolute path.'
                 )
             prompt_path = self.config_dir / prompt_file
 
@@ -465,7 +478,7 @@ class BaseAgent(ABC):
             )
 
         try:
-            with open(prompt_path, 'r', encoding='utf-8') as f:
+            with open(prompt_path, encoding='utf-8') as f:
                 prompt_content = f.read()
 
             # 如果提供了format_kwargs，进行格式化
@@ -492,8 +505,8 @@ class BaseAgent(ABC):
         """
         if self._initial_system_prompt is None:
             raise ValueError(
-                "Cannot reset context: initial prompts not set. "
-                "Please initialize the agent first or set _initial_system_prompt manually."
+                'Cannot reset context: initial prompts not set. '
+                'Please initialize the agent first or set _initial_system_prompt manually.'
             )
 
         # 重新创建对话
@@ -509,7 +522,7 @@ class BaseAgent(ABC):
         # 重置步骤计数
         self._step_count = 0
 
-        self.logger.info("Context reset to initial state")
+        self.logger.info('Context reset to initial state')
 
     def add_user_message(self, content: str) -> None:
         """添加用户消息到当前对话
@@ -518,15 +531,15 @@ class BaseAgent(ABC):
             content: 用户消息内容
         """
         if self.current_dialog is None:
-            raise ValueError(
-                "No active dialog. Please initialize the agent first."
-            )
+            raise ValueError('No active dialog. Please initialize the agent first.')
 
         user_message = UserMessage(content=content)
         self.current_dialog.add_message(user_message)
         self.logger.debug(f"Added user message: {content[:50]}...")
 
-    def add_assistant_message(self, content: str, tool_calls: list | None = None) -> None:
+    def add_assistant_message(
+        self, content: str, tool_calls: list | None = None
+    ) -> None:
         """添加助手消息到当前对话
 
         Args:
@@ -534,13 +547,13 @@ class BaseAgent(ABC):
             tool_calls: 工具调用列表（可选）
         """
         if self.current_dialog is None:
-            raise ValueError(
-                "No active dialog. Please initialize the agent first."
-            )
+            raise ValueError('No active dialog. Please initialize the agent first.')
 
-        assistant_message = AssistantMessage(content=content, tool_calls=tool_calls or [])
+        assistant_message = AssistantMessage(
+            content=content, tool_calls=tool_calls or []
+        )
         self.current_dialog.add_message(assistant_message)
-        content_preview = content[:50] if content else "(empty)"
+        content_preview = content[:50] if content else '(empty)'
         self.logger.debug(f"Added assistant message: {content_preview}...")
 
     def add_tool_message(
@@ -559,9 +572,7 @@ class BaseAgent(ABC):
             meta: 元数据（可选）
         """
         if self.current_dialog is None:
-            raise ValueError(
-                "No active dialog. Please initialize the agent first."
-            )
+            raise ValueError('No active dialog. Please initialize the agent first.')
 
         tool_message = ToolMessage(
             content=content,
@@ -599,7 +610,7 @@ class BaseAgent(ABC):
         if self.current_dialog is None:
             return []
         return self.current_dialog.messages.copy()
-    
+
     @classmethod
     def set_trajectory_file_path(cls, trajectory_file_path: str | Path) -> None:
         """设置轨迹文件路径（类级别，所有agent实例共享）
@@ -623,16 +634,18 @@ class BaseAgent(ABC):
         """
         cls._current_exp_name = exp_name
         cls._current_exp_index = exp_index
-    
+
     def set_agent_name(self, name: str) -> None:
         """设置Agent名称（用于标识不同的agent）
-        
+
         Args:
             name: Agent名称
         """
         self._agent_name = name
-    
-    def _append_trajectory_entry(self, dialog_for_query: Dialog, step_record: "StepRecord") -> None:
+
+    def _append_trajectory_entry(
+        self, dialog_for_query: Dialog, step_record: StepRecord
+    ) -> None:
         """追加轨迹条目到轨迹文件
 
         每次step完成后，将prompt、response和tool_responses追加保存到轨迹文件。
@@ -663,7 +676,7 @@ class BaseAgent(ABC):
                 existing_data = []
                 if self._trajectory_file_path.exists():
                     try:
-                        with open(self._trajectory_file_path, 'r', encoding='utf-8') as f:
+                        with open(self._trajectory_file_path, encoding='utf-8') as f:
                             existing_data = json.load(f)
                     except (json.JSONDecodeError, FileNotFoundError):
                         # 如果文件损坏或不存在，从空列表开始
@@ -671,84 +684,126 @@ class BaseAgent(ABC):
 
                 # 构建新的轨迹条目
                 # 格式与现有轨迹格式保持一致，但保存的是每次LLM调用的信息
-                task_id = self.trajectory.task_id if self.trajectory else "unknown"
-                status = self.trajectory.status if self.trajectory else "running"
+                task_id = self.trajectory.task_id if self.trajectory else 'unknown'
+                status = self.trajectory.status if self.trajectory else 'running'
 
                 # 将dialog_for_query转换为字典格式
-                prompt_dict = dialog_for_query.model_dump() if hasattr(dialog_for_query, 'model_dump') else {
-                    "messages": [
-                        {
-                            "role": msg.role.value if hasattr(msg.role, 'value') else str(msg.role),
-                            "content": msg.content if hasattr(msg, 'content') else str(msg)
-                        }
-                        for msg in dialog_for_query.messages
-                    ],
-                    "tools": dialog_for_query.tools if hasattr(dialog_for_query, 'tools') else []
-                }
+                prompt_dict = (
+                    dialog_for_query.model_dump()
+                    if hasattr(dialog_for_query, 'model_dump')
+                    else {
+                        'messages': [
+                            {
+                                'role': (
+                                    msg.role.value
+                                    if hasattr(msg.role, 'value')
+                                    else str(msg.role)
+                                ),
+                                'content': (
+                                    msg.content if hasattr(msg, 'content') else str(msg)
+                                ),
+                            }
+                            for msg in dialog_for_query.messages
+                        ],
+                        'tools': (
+                            dialog_for_query.tools
+                            if hasattr(dialog_for_query, 'tools')
+                            else []
+                        ),
+                    }
+                )
 
                 # 从step_record中获取assistant_message
                 assistant_message = step_record.assistant_message
 
                 # 将assistant_message转换为字典格式
-                response_dict = assistant_message.model_dump() if hasattr(assistant_message, 'model_dump') else {
-                    "role": assistant_message.role.value if hasattr(assistant_message.role, 'value') else str(assistant_message.role),
-                    "content": assistant_message.content if hasattr(assistant_message, 'content') else "",
-                    "tool_calls": [
-                        {
-                            "id": tc.id if hasattr(tc, 'id') else "",
-                            "function": {
-                                "name": tc.function.name if hasattr(tc.function, 'name') else "",
-                                "arguments": tc.function.arguments if hasattr(tc.function, 'arguments') else ""
-                            }
-                        }
-                        for tc in (assistant_message.tool_calls or [])
-                    ] if hasattr(assistant_message, 'tool_calls') and assistant_message.tool_calls else []
-                }
+                response_dict = (
+                    assistant_message.model_dump()
+                    if hasattr(assistant_message, 'model_dump')
+                    else {
+                        'role': (
+                            assistant_message.role.value
+                            if hasattr(assistant_message.role, 'value')
+                            else str(assistant_message.role)
+                        ),
+                        'content': (
+                            assistant_message.content
+                            if hasattr(assistant_message, 'content')
+                            else ''
+                        ),
+                        'tool_calls': (
+                            [
+                                {
+                                    'id': tc.id if hasattr(tc, 'id') else '',
+                                    'function': {
+                                        'name': (
+                                            tc.function.name
+                                            if hasattr(tc.function, 'name')
+                                            else ''
+                                        ),
+                                        'arguments': (
+                                            tc.function.arguments
+                                            if hasattr(tc.function, 'arguments')
+                                            else ''
+                                        ),
+                                    },
+                                }
+                                for tc in (assistant_message.tool_calls or [])
+                            ]
+                            if hasattr(assistant_message, 'tool_calls')
+                            and assistant_message.tool_calls
+                            else []
+                        ),
+                    }
+                )
 
                 # 将tool_responses转换为字典格式
                 tool_responses_list = []
                 for tr in step_record.tool_responses:
-                    tr_dict = tr.model_dump() if hasattr(tr, 'model_dump') else {
-                        "role": "tool",
-                        "content": tr.content if hasattr(tr, 'content') else "",
-                        "tool_call_id": tr.tool_call_id if hasattr(tr, 'tool_call_id') else "",
-                        "name": tr.name if hasattr(tr, 'name') else ""
-                    }
+                    tr_dict = (
+                        tr.model_dump()
+                        if hasattr(tr, 'model_dump')
+                        else {
+                            'role': 'tool',
+                            'content': tr.content if hasattr(tr, 'content') else '',
+                            'tool_call_id': (
+                                tr.tool_call_id if hasattr(tr, 'tool_call_id') else ''
+                            ),
+                            'name': tr.name if hasattr(tr, 'name') else '',
+                        }
+                    )
                     tool_responses_list.append(tr_dict)
 
                 # 构建轨迹条目，格式与现有轨迹格式保持一致
                 entry = {
-                    "task_id": f"{task_id}_{self._agent_name or 'agent'}_step_{self._step_count}",
-                    "exp_name": self._current_exp_name,      # exp阶段名称
-                    "exp_index": self._current_exp_index,    # exp迭代序号
-                    "status": status,
-                    "steps": self._step_count,
-                    "trajectory": {
-                        "task_id": task_id,
-                        "agent_name": self._agent_name or "unknown",
-                        "step": self._step_count,
-                        "dialogs": [prompt_dict],  # 保存本次调用的prompt
-                        "steps": [
+                    'task_id': f"{task_id}_{self._agent_name or 'agent'}_step_{self._step_count}",
+                    'exp_name': self._current_exp_name,  # exp阶段名称
+                    'exp_index': self._current_exp_index,  # exp迭代序号
+                    'status': status,
+                    'steps': self._step_count,
+                    'trajectory': {
+                        'task_id': task_id,
+                        'agent_name': self._agent_name or 'unknown',
+                        'step': self._step_count,
+                        'dialogs': [prompt_dict],  # 保存本次调用的prompt
+                        'steps': [
                             {
-                                "step_id": self._step_count,
-                                "assistant_message": response_dict,  # 保存本次调用的response
-                                "tool_responses": tool_responses_list,  # 保存工具响应
-                                "meta": {}
+                                'step_id': self._step_count,
+                                'assistant_message': response_dict,  # 保存本次调用的response
+                                'tool_responses': tool_responses_list,  # 保存工具响应
+                                'meta': {},
                             }
                         ],
-                        "start_time": None,
-                        "end_time": None,
-                        "status": status,
-                        "result": {
-                            "prompt": prompt_dict,
-                            "response": response_dict
+                        'start_time': None,
+                        'end_time': None,
+                        'status': status,
+                        'result': {'prompt': prompt_dict, 'response': response_dict},
+                        'meta': {
+                            'agent_version': self.VERSION,
+                            'agent_name': self._agent_name or 'unknown',
+                            'step': self._step_count,
                         },
-                        "meta": {
-                            "agent_version": self.VERSION,
-                            "agent_name": self._agent_name or "unknown",
-                            "step": self._step_count
-                        }
-                    }
+                    },
                 }
 
                 # 追加新条目
@@ -756,11 +811,15 @@ class BaseAgent(ABC):
 
                 # 写回文件
                 with open(self._trajectory_file_path, 'w', encoding='utf-8') as f:
-                    json.dump(existing_data, f, indent=2, default=str, ensure_ascii=False)
+                    json.dump(
+                        existing_data, f, indent=2, default=str, ensure_ascii=False
+                    )
 
         except Exception as e:
             # 如果保存失败，只记录日志，不中断执行
-            self.logger.warning(f"Failed to append trajectory entry: {e}", exc_info=True)
+            self.logger.warning(
+                f"Failed to append trajectory entry: {e}", exc_info=True
+            )
 
     @abstractmethod
     def _get_system_prompt(self) -> str:
@@ -768,7 +827,6 @@ class BaseAgent(ABC):
 
         子类必须实现此方法。
         """
-        pass
 
     @abstractmethod
     def _get_user_prompt(self, task: TaskInstance) -> str:
@@ -779,7 +837,6 @@ class BaseAgent(ABC):
         Args:
             task: 任务实例
         """
-        pass
 
 
 class Agent(BaseAgent):
@@ -818,27 +875,34 @@ class Agent(BaseAgent):
             config_dir: 配置目录路径，用于加载提示词文件
             enable_tools: 是否在提示词中包含工具信息（默认 True）。如果为 False，工具仍然注册但不会出现在提示词中，Agent 将不会调用工具
         """
-        super().__init__(llm, session, tools, config, skill_registry, output_config, config_dir=config_dir, enable_tools=enable_tools)
+        super().__init__(
+            llm,
+            session,
+            tools,
+            config,
+            skill_registry,
+            output_config,
+            config_dir=config_dir,
+            enable_tools=enable_tools,
+        )
 
         # 存储提示词
         self._system_prompt: str | None = None
         self._user_prompt: str | None = None
         self._prompt_format_kwargs = prompt_format_kwargs or {}
-        
+
         # 加载系统提示词（优先级：system_prompt_file > 默认）
         if system_prompt_file:
             self._system_prompt = self.load_prompt_from_file(
-                system_prompt_file,
-                format_kwargs=self._prompt_format_kwargs
+                system_prompt_file, format_kwargs=self._prompt_format_kwargs
             )
         else:
             self._system_prompt = self._default_system_prompt()
-        
+
         # 加载用户提示词（可选）
         if user_prompt_file:
             self._user_prompt = self.load_prompt_from_file(
-                user_prompt_file,
-                format_kwargs=self._prompt_format_kwargs
+                user_prompt_file, format_kwargs=self._prompt_format_kwargs
             )
 
     def _default_system_prompt(self) -> str:
@@ -905,12 +969,12 @@ You can use the 'use_skill' tool to:
                     task_type=task.task_type,
                     description=task.description,
                     input_data=task.input_data,
-                    **self._prompt_format_kwargs
+                    **self._prompt_format_kwargs,
                 )
             except KeyError:
                 # 如果格式化失败，直接返回（可能没有占位符）
                 return self._user_prompt
-        
+
         # 默认用户提示词
         return f"""Please complete the following task:
 
@@ -924,7 +988,7 @@ Additional Information:
 
     def _get_tool_specs(self) -> list:
         """获取工具规格列表
-        
+
         覆盖基类方法，但逻辑与基类相同（已移至基类）。
         保留此方法以保持向后兼容性。
         """
