@@ -123,6 +123,14 @@ mat_master:
   capabilities:
     skill_evolution:
       enabled: true
+  # ask-human 交互配置
+  # enabled=false 时全局禁用交互，所有 ask-human 调用短路返回，不发任何事件（适合 CI/批量运行）
+  # timeout_seconds 为 timeout 模式的默认等待秒数，可被每次调用的 per-call 参数覆盖
+  # mode (timeout/block) 由各调用方按业务语义决定，不在此处全局配置
+  ask_human:
+    enabled: true
+    timeout_seconds: 20
+
   # 鲁棒计算配置（被 monitor_job 内置工具使用）
   # fix 策略内置于 monitor_job.py 的 FIX_STRATEGIES 中；此处保留供未来外部覆盖使用。
   monitor_job:

@@ -11,7 +11,6 @@ import logging
 import re
 import shutil
 import sys
-import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -664,54 +663,61 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         plan = self._enforce_manuscript_plan_consistency(plan, goal)
         return plan
 
-    def _ask_human(self, prompt: str) -> str:
-        # Preferred: unified confirmation manager via agent
+    def _ask_human(
+        self,
+        prompt: str,
+        *,
+        mode: str = "block",
+        timeout_sec: int = 300,
+        default: str = "",
+    ) -> str:
+        """Ask the human a question via ConfirmationManager.
+
+        Args:
+            prompt: The question to display.
+            mode: "block" waits indefinitely; "timeout" waits up to timeout_sec
+                  then returns default.
+            timeout_sec: Seconds to wait in timeout mode.
+            default: Value returned when timeout mode expires without a reply.
+        """
+        from playground.mat_master.service.confirm import ConfirmMode
+        try:
+            confirm_mode = ConfirmMode(mode)
+        except ValueError:
+            confirm_mode = ConfirmMode.BLOCK
+
+        self._emit("Planner", "thought",
+                   f"[Ask Human] (mode={mode}"
+                   + (f", timeout={timeout_sec}s, default='{default}'" if confirm_mode == ConfirmMode.TIMEOUT else "")
+                   + f"): {prompt}")
+
         confirm_mgr = getattr(self.agent, '_confirm_manager', None)
         if confirm_mgr is not None:
             try:
                 reply = confirm_mgr.request(
                     question=prompt,
+                    mode=confirm_mode,
+                    timeout_sec=timeout_sec,
+                    default_reply=default or None,
                     origin="planner",
                     actions=["go", "abort", "revise"],
                     source_override="Planner",
                 )
                 if reply is not None:
-                    return (reply or "").strip()
+                    return reply.strip()
+                # TIMEOUT mode expired and default_reply was None/empty
+                self.logger.info("[Planner] ask_human timed out (%ds), using default='%s'", timeout_sec, default)
+                self._emit("Planner", "thought",
+                           f"[Ask Human] No response within {timeout_sec}s — defaulting to '{default}'.")
+                return default
             except Exception:
                 pass
+
+        # Fallback: stdin or input_fn
         if self._input_fn is not None:
-            return (self._input_fn(prompt) or "").strip()
+            return (self._input_fn(prompt) or default).strip()
         print(f"\033[93m[Planner] {prompt}\033[0m")
-        return sys.stdin.readline().strip()
-
-    def _ask_human_with_timeout(self, prompt: str, timeout: int = 120, default: str = "skip") -> str:
-        """Ask the human a question with a timeout. Returns *default* if no answer within *timeout* seconds.
-
-        This is used for retry-exhaustion scenarios where the default behaviour
-        is to NOT append / skip, so that the workflow is not blocked indefinitely.
-        """
-        self._emit("Planner", "thought",
-                    f"[Ask Human] (timeout {timeout}s, default='{default}'): {prompt}")
-        result_container: list[str] = []
-
-        def _ask():
-            try:
-                ans = self._ask_human(prompt + f"\n(Auto-'{default}' in {timeout}s if no response)")
-                result_container.append(ans)
-            except Exception:
-                pass
-
-        t = threading.Thread(target=_ask, daemon=True)
-        t.start()
-        t.join(timeout=timeout)
-
-        if result_container:
-            ans = result_container[0].strip()
-            if ans:
-                return ans
-        self.logger.info("[Planner] ask_human timed out (%ds), using default='%s'", timeout, default)
-        self._emit("Planner", "thought", f"[Ask Human] No response within {timeout}s — defaulting to '{default}'.")
-        return default
+        return sys.stdin.readline().strip() or default
 
     def _plan_report_text(self, plan: dict[str, Any]) -> str:
         """Build plain-text plan report (no ANSI) for frontend."""
@@ -1274,7 +1280,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
 
         # High-cost confirmation
         if step.get("requires_human_confirm") or step.get("compute_cost") == "High":
-            ans = self._ask_human(f"Step {step_id} is HIGH COST. Proceed? (y/n)")
+            ans = self._ask_human(f"Step {step_id} is HIGH COST. Proceed? (y/n)", mode="block")
             if ans.strip().lower() not in ("y", "yes", "go"):
                 result_info["status"] = "skipped"
                 result_info["result_summary"] = "skipped_by_user"
@@ -1722,7 +1728,10 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 step_lines.append("-" * 50)
                 print("-" * 50)
                 self._emit("Planner", "thought", "\n".join(step_lines))
-                ans = self._ask_human("Type 'go' to execute, 'abort' to quit, or describe changes to revise the plan.")
+                ans = self._ask_human(
+                    "Type 'go' to execute, 'abort' to quit, or describe changes to revise the plan.",
+                    mode="block",
+                )
                 ans_lower = ans.strip().lower()
                 if ans_lower == "go":
                     break
@@ -1891,7 +1900,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             if step_result["status"] == "failed" and not should_replan:
                 step_id = step_result.get("step_id", "?")
                 summary = step_result.get("result_summary", "unknown error")[:200]
-                ans = self._ask_human_with_timeout(
+                ans = self._ask_human(
                     f"Step {step_id} failed: {summary}\n"
                     f"Options:\n"
                     f"  'skip'    — skip this step and continue with the next\n"
@@ -1899,7 +1908,8 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                     f"  'abort'   — abort the mission\n"
                     f"  Or describe modifications/suggestions.\n"
                     f"(Default: 'skip' — skip this step and continue)",
-                    timeout=120,
+                    mode="timeout",
+                    timeout_sec=120,
                     default="skip",
                 )
                 ans_lower = ans.strip().lower()
@@ -2126,14 +2136,15 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                     self.logger.warning("[Planner] Max replan limit (%d) reached", self.max_replans)
                     self._emit("Planner", "thought",
                                f"[Planner] Replan limit ({self.max_replans}) reached. Asking human for guidance...")
-                    ans = self._ask_human_with_timeout(
+                    ans = self._ask_human(
                         f"Replan limit ({self.max_replans}) reached. Options:\n"
                         f"  'continue' — force continue with current plan\n"
                         f"  'retry'    — allow one more replan attempt\n"
                         f"  'abort'    — abort the mission\n"
                         f"  Or describe changes/suggestions for the remaining plan.\n"
                         f"(Default: 'continue' — skip replanning, proceed with current plan)",
-                        timeout=120,
+                        mode="timeout",
+                        timeout_sec=120,
                         default="continue",
                     )
                     ans_lower = ans.strip().lower()
