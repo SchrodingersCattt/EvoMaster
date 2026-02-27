@@ -26,7 +26,7 @@ class SkillToolParams(BaseToolParams):
 
     name: ClassVar[str] = 'use_skill'
 
-    skill_name: str = Field(description='技能名称')
+    skill_name: str = Field(description='技能名称，使用 kebab-case（如 deep-survey）')
     action: str = Field(
         description="要执行的操作：'get_info' 获取完整信息，'get_reference' 获取参考文档，'run_script' 运行脚本"
     )
