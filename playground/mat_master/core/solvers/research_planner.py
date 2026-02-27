@@ -799,7 +799,7 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         step_id = step.get("step_id", 0)
         step_dir = workspaces / f"step_{step_id}"
         step_dir.mkdir(parents=True, exist_ok=True)
-        solver.set_run_dir(step_dir)
+        solver.set_run_dir(workspaces)
         try:
             solver.run(f"Execute fallback: {fallback}", task_id=f"fallback_{step_id}")
             return True
@@ -1347,7 +1347,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
         self._emit("Planner", "exp_run", "DirectSolver")
         step_prompt = f"Achieve: {intent}. If that fails: {fallback}"
         try:
-            solver.set_run_dir(step_dir)
+            solver.set_run_dir(workspaces)
             result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
             summary = self._summarize_solver_result(result, max_len=1000)
             result_info["result_summary"] = summary[:200]
