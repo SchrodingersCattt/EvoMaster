@@ -338,12 +338,36 @@ You can use the 'use_skill' tool to:
     def _format_tool_observation(
         self,
         tool_name: str,
-        observation: str,
+        observation: Any,
         info: dict[str, Any],
     ) -> str:
         """Return JSON text for every tool observation."""
+        # 调试：format 前 observation 类型与预览（便于排查 observation 被转成 str 的位置）
+        obs_type = type(observation).__name__
+        if isinstance(observation, dict):
+            self.logger.debug(
+                '[observation] before _format_tool_observation tool=%s type=%s keys=%s',
+                tool_name,
+                obs_type,
+                list(observation.keys())[:8],
+            )
+        elif isinstance(observation, str):
+            self.logger.debug(
+                '[observation] before _format_tool_observation tool=%s type=%s len=%s head=%s',
+                tool_name,
+                obs_type,
+                len(observation),
+                (observation[:80] + '...') if len(observation) > 80 else observation,
+            )
+        else:
+            self.logger.debug(
+                '[observation] before _format_tool_observation tool=%s type=%s',
+                tool_name,
+                obs_type,
+            )
         if tool_name == 'execute_bash':
-            payload = self._format_bash_observation(observation, info)
+            obs_str = observation if isinstance(observation, str) else str(observation)
+            payload = self._format_bash_observation(obs_str, info)
         else:
             status = 'error' if 'error' in info else 'success'
             # For use_skill(action=run_script), propagate non-zero script exit code
@@ -628,9 +652,23 @@ You can use the 'use_skill' tool to:
 
             for tool_call, observation, info in all_results:
                 self._tool_guard.update_after_tool(tool_call, observation, info)
-                # Full content for streaming (yield) and trajectory recording
+                # 从源头就传结构化 result：解析 JSON 作为 content，tool_result 事件的 result/observation 即为字典
+                if isinstance(observation, dict):
+                    result_content: Any = observation
+                else:
+                    obs_str = (
+                        observation
+                        if isinstance(observation, str)
+                        else str(observation)
+                    )
+                    try:
+                        result_content = json.loads(obs_str)
+                        if not isinstance(result_content, dict):
+                            result_content = {'message': obs_str}
+                    except (json.JSONDecodeError, TypeError):
+                        result_content = {'message': obs_str}
                 tool_message = ToolMessage(
-                    content=observation,
+                    content=result_content,
                     tool_call_id=tool_call.id,
                     name=tool_call.function.name,
                     meta={'info': info},
@@ -646,14 +684,18 @@ You can use the 'use_skill' tool to:
                 )
                 step_record.tool_responses.append(tool_message)
 
-                # For LLM dialog: truncate if too long to prevent context overflow
-                # (naive mid-string split may break JSON, but LLM only needs gist)
+                # For LLM dialog: 始终用字符串，过长时截断
+                observation_str = (
+                    observation
+                    if isinstance(observation, str)
+                    else json.dumps(observation, ensure_ascii=False, default=str)
+                )
                 MAX_TOOL_OUTPUT = 30000
-                if len(observation) > MAX_TOOL_OUTPUT:
+                if len(observation_str) > MAX_TOOL_OUTPUT:
                     observation_for_llm = (
-                        observation[: MAX_TOOL_OUTPUT // 2]
+                        observation_str[: MAX_TOOL_OUTPUT // 2]
                         + '\n\n... [output truncated due to length] ...\n\n'
-                        + observation[-MAX_TOOL_OUTPUT // 2 :]
+                        + observation_str[-MAX_TOOL_OUTPUT // 2 :]
                     )
                     dialog_message = ToolMessage(
                         content=observation_for_llm,
@@ -663,7 +705,13 @@ You can use the 'use_skill' tool to:
                     )
                     self.current_dialog.add_message(dialog_message)
                 else:
-                    self.current_dialog.add_message(tool_message)
+                    dialog_message = ToolMessage(
+                        content=observation_str,
+                        tool_call_id=tool_call.id,
+                        name=tool_call.function.name,
+                        meta={'info': info},
+                    )
+                    self.current_dialog.add_message(dialog_message)
 
         # Handle finish tool (always last, sequential)
         if finish_call:
