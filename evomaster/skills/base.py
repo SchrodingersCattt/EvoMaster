@@ -124,11 +124,13 @@ class BaseSkill(ABC):
         Returns:
             参考文档内容
         """
-        # 尝试多个可能的路径
+        # 尝试多个可能的路径，最后 fallback 到 _common/reference/
         possible_paths = [
             self.skill_path / reference_name,
             self.skill_path / "references" / reference_name,
             self.skill_path / "reference" / reference_name,
+            self.skill_path.parent / "_common" / "reference" / reference_name,
+            self.skill_path.parent / "_common" / reference_name,
         ]
 
         for ref_path in possible_paths:
