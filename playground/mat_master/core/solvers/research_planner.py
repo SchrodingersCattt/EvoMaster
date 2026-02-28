@@ -817,15 +817,11 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
                 alternatives = plan.get("plan_report", {}).get("alternatives", []) or []
             if not alternatives:
                 return False
-            alts_text = "
-".join(f"  - {a}" for a in alternatives)
+            alts_text = "\n".join(f"  - {a}" for a in alternatives)
             fallback_prompt = (
                 f"Step {step_id} failed and has no specific fallback strategy. "
-                f"The original plan listed these high-level alternatives for the overall task:
-"
-                f"{alts_text}
-
-"
+                f"The original plan listed these high-level alternatives for the overall task:\n"
+                f"{alts_text}\n\n"
                 "Consider whether any of these alternatives can be applied to recover from "
                 f"the failure at step {step_id}. Attempt the most appropriate recovery action."
             )
