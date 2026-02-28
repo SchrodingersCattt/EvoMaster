@@ -20,6 +20,10 @@ from src.models.chat import (
     WorkspaceListApiResponse,
     WorkspaceListData,
 )
+from src.services.context_injection_service import (
+    ContextInjectionService,
+    get_context_injection_service,
+)
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.quota_service import check_quota
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
@@ -80,6 +84,7 @@ async def chat_stream(
     user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
     stream_svc: ChatStreamService = Depends(get_stream_service),
+    context_svc: ContextInjectionService = Depends(get_context_injection_service),
 ):
     """ag-ui：统一流接口。会话已分享时可不鉴权；未分享时需登录且为会话所有者。"""
     sid = session_id.strip()
@@ -156,10 +161,23 @@ async def chat_stream(
         raise ConflictErrorResponse(
             msg='该会话已有任务在运行，请等待完成或先取消后再发新消息',
         )
-    # 给 agent 的 prompt：正文 + 附件 URL 列表（前端展示仍用 ctx.user_msg 的 content / files 分开）
-    agent_prompt = (req.content or '').strip()
+    # 给 agent 的 prompt：正文 + 附件 URL 列表 +（可选）会话历史注入
+    base_prompt = (req.content or '').strip()
     if req.files:
-        agent_prompt += '\n\n[Attached files]\n' + '\n'.join(req.files)
+        base_prompt += '\n\n[Attached files]\n' + '\n'.join(req.files)
+    mode = (req.mode or 'direct').strip().lower() or 'direct'
+    agent_prompt, inject_meta = await context_svc.build_augmented_prompt(
+        sid,
+        base_prompt,
+        mode=mode,
+        attached_files=req.files or [],
+    )
+    if inject_meta.get('history_lines_count'):
+        logger.info(
+            'history context injected: session_id=%s lines=%s',
+            sid,
+            inject_meta.get('history_lines_count'),
+        )
     return StreamingResponse(
         stream_svc.generate_send_stream(sid, agent_prompt, ctx),
         media_type='text/event-stream',
