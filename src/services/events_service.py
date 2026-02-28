@@ -37,11 +37,21 @@ class ChatEventsService:
         if source == 'User' and event_type == 'query' and payload.get('files'):
             content = {'content': content, 'files': list(payload['files'])}
         task_id = payload.get('task_id')
-        self.table.add_event(session_id, source, event_type, content, task_id)
+        invocation_id = payload.get('invocation_id')
+        self.table.add_event(
+            session_id, source, event_type, content, task_id, invocation_id
+        )
 
     def get_session_events(self, session_id: str) -> list:
         """返回某会话的历史消息列表（从数据库读取）。"""
         return self.table.get_session_events(session_id)
+
+    def get_last_user_query(self, session_id: str):
+        """
+        获取该会话最后一次用户输入（User/query），用于部署中断后提示重跑。
+        返回 None 或 dict：content, files, mode, task_id。
+        """
+        return self.table.get_last_user_query(session_id)
 
 
 @lru_cache
