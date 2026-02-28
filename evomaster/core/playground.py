@@ -613,7 +613,7 @@ class BasePlayground:
             return
 
         env = self.session._env
-        exclude = {"__pycache__", ".git", "node_modules", ".mypy_cache", ".pytest_cache", "SKILL.md"}
+        exclude = {"__pycache__", ".git", "node_modules", ".mypy_cache", ".pytest_cache"}
 
         config_dict = self.config.model_dump()
         skills_config = config_dict.get("skills", {})

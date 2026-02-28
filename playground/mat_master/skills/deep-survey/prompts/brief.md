@@ -36,7 +36,7 @@ Write each retrieved evidence item as a card in `collected.json`. Schema:
 }
 ```
 
-Full schema reference: `reference/collected_json_schema.md`
+Full schema reference: `use_skill action=get_reference skill_name="deep-survey" reference_name="collected_json_schema.md"`
 
 **Required fields**: `source_title`, `source_url`, `year`, `first_author`, `facet`, `claim`.  
 `data_points` is optional but strongly preferred — list any specific numbers, conditions, or measurements.
@@ -59,7 +59,7 @@ Full schema reference: `reference/collected_json_schema.md`
 
 ## Citation format
 
-Follow `../_common/reference/citation_and_output_format.md` for any in-text citations if a brief summary note is added.
+Follow the citation and output format rules already in your system prompt (`citation_and_output_format.md`) for any in-text citations if a brief summary note is added.
 
 ---
 

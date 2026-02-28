@@ -18,7 +18,7 @@ A systematic researcher that collects literature evidence and, for `standard`/`d
 | `standard` | 6-8 | Concise MD report (Executive Summary + References) | User wants a short survey file, or as an intermediate step |
 | `deep` | 10-15+ | Full 5-section report (Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References) | Standalone comprehensive review request |
 
-See **reference/search_facets_and_rounds.md** for depth-specific facet counts and retrieval budgets.
+For depth-specific facet counts and retrieval budgets, fetch: `use_skill action=get_reference skill_name="deep-survey" reference_name="search_facets_and_rounds.md"`.
 
 ## When to use deep-survey vs on-the-fly
 
@@ -41,11 +41,11 @@ Quick orientation (authoritative detail is in the per-depth prompt files):
 - **standard**: 6-8 retrieval calls → concise Markdown report (Executive Summary + References).
 - **deep**: 10-15+ retrieval calls → full 5-section review (Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References).
 
-See **reference/search_facets_and_rounds.md** for depth-specific facet counts and retrieval budgets.
+For depth-specific facet counts and retrieval budgets, fetch: `use_skill action=get_reference skill_name="deep-survey" reference_name="search_facets_and_rounds.md"`.
 
 ## Output and citation format
 
-All reports follow **../_common/reference/citation_and_output_format.md** (citation format, Markdown structure, units, abbreviation rules). This is the single source of truth for citation format — do not duplicate these rules in section content.
+All reports follow the **citation and output format rules already injected into your system prompt** (`citation_and_output_format.md`): citation format, Markdown structure, units, abbreviation rules. This is the single source of truth for citation format — do not duplicate these rules in section content.
 
 **Note on `manuscript-scribe` delegation**: For `deep` mode, deep-survey may delegate report writing to manuscript-scribe's `write_section` tool. One-way only: deep-survey → manuscript-scribe. manuscript-scribe does not trigger deep-survey.
 

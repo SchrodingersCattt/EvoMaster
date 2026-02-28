@@ -62,7 +62,7 @@ Full guide: `use_skill action=get_reference reference_name="de_aigc_style_guide.
 
 ## Citation format
 
-Follow `../_common/reference/citation_and_output_format.md` for citation style, URL requirements, and reference list format.
+Follow the citation and output format rules already in your system prompt (`citation_and_output_format.md`) for citation style, URL requirements, and reference list format.
 
 ---
 

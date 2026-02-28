@@ -129,6 +129,7 @@ class BaseSkill(ABC):
             self.skill_path / reference_name,
             self.skill_path / "references" / reference_name,
             self.skill_path / "reference" / reference_name,
+            self.skill_path / "prompts" / reference_name,
             self.skill_path.parent / "_common" / "reference" / reference_name,
             self.skill_path.parent / "_common" / reference_name,
         ]
