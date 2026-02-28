@@ -30,13 +30,8 @@ logger.info('SERVICE_ENV=%s', CURRENT_ENV)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
-    # 部署/重启后清理：上一进程若被终止，stream 可能未执行 release，DB 中会残留 active 会话
-    try:
-        n = get_sessions_service().reset_stale_active_sessions()
-        if n:
-            logger.info('Lifespan: reset %d stale active session(s) to idle.', n)
-    except Exception as e:
-        logger.warning('Lifespan: reset stale active sessions skipped: %s', e)
+    # 不再在启动时全局把 active 置为 idle：以便客户端重连时在 subscribe 流里能检测到
+    # 「DB 为 active 但本进程未在跑」的 stale 会话，推送 run_interrupted 并可选重跑。
     # MatMaster Chat：提前初始化 playground，首条 /chat/send 无需等待
     try:
         await init_playground()

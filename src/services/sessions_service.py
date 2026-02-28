@@ -228,6 +228,18 @@ class ChatSessionsService:
             self._sessions_in_run.discard(session_id)
         self.table.set_session_status(session_id, 'idle')
 
+    def is_session_running_on_this_pod(self, session_id: str) -> bool:
+        """当前进程是否正在跑该 session 的 agent（仅内存状态）。"""
+        with self._sessions_run_lock:
+            return session_id.strip() in self._sessions_in_run
+
+    def reset_session_status_to_idle_in_db(self, session_id: str) -> None:
+        """
+        仅将 DB 中该会话状态置为 idle，不碰内存。用于：部署/重启后，另一 pod 上的 run 已死，
+        本 pod 在 subscribe 时发现 DB 仍为 active 则视为 stale，先重置 DB 再推送 run_interrupted。
+        """
+        self.table.set_session_status(session_id.strip(), 'idle')
+
     def set_session_last_task(
         self, session_id: str, task_id: str, user_id: str | None = None
     ) -> None:

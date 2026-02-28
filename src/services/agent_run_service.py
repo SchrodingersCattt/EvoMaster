@@ -14,11 +14,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from evomaster.core import get_playground_class
+from evomaster.utils.types import TaskInstance
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_dir_to_oss
 from src.services.bohrium_node_service import get_bohrium_node_service
+from src.services.chat_history import ChatHistoryConverter
 from src.services.quota_service import use_quota
 from src.services.sessions_service import SESSIONS, get_sessions_service
 from src.services.user_service import UserService
@@ -34,6 +36,11 @@ if _AGENT_MAX_WORKERS < 1:
 # 检测到 workspace 有变更后，至少间隔多少秒再做一次「扫描+比对」（避免每次 tool 都扫目录）
 _WORKSPACE_CHECK_DEBOUNCE_SECONDS = float(
     os.environ.get('CHAT_WORKSPACE_CHECK_DEBOUNCE_SECONDS', '2')
+)
+
+# 多轮对话历史：最多取最近 N 条事件，避免 context 过长
+_DIALOG_HISTORY_MAX_EVENTS = int(
+    os.environ.get('CHAT_DIALOG_HISTORY_MAX_EVENTS', '500')
 )
 
 _project_root = Path(__file__).resolve().parent.parent.parent
@@ -215,6 +222,7 @@ class AgentRunService:
         mode: str,
         planner_reply_queue: queue.Queue,
         task_id: str,
+        invocation_id: str | None = None,
     ) -> None:
         """在后台线程中执行 agent，由 stream 层 run_in_executor(executor, self.run_agent_sync, ...) 调用。"""
         prompt_preview = (
@@ -244,12 +252,19 @@ class AgentRunService:
                 'session_id': session_id,
                 'task_id': task_id,
             }
+            if invocation_id is not None:
+                payload['invocation_id'] = invocation_id
             if event_type != 'log_line':
                 events_table = get_chat_events_table()
                 if events_table:
                     try:
                         events_table.add_event(
-                            session_id, source, event_type, content, task_id
+                            session_id,
+                            source,
+                            event_type,
+                            content,
+                            task_id,
+                            invocation_id=invocation_id,
                         )
                     except Exception as e:
                         logger.error(f'保存事件到数据库失败: {e}', exc_info=True)
@@ -610,7 +625,44 @@ class AgentRunService:
             )
             event_callback('MatMaster', 'exp_run', exp_name)
 
-            exp.run(task_description=user_prompt, task_id=task_id)
+            # 多轮对话：从 DB 取历史事件，转为 dialog_history，通过 task.meta 传入
+            history_events = []
+            try:
+                events_table = get_chat_events_table()
+                if events_table:
+                    all_events = events_table.get_session_events(session_id) or []
+                    if (
+                        all_events
+                        and all_events[-1].get('source') == 'User'
+                        and all_events[-1].get('type') == 'query'
+                    ):
+                        history_events = all_events[:-1]
+                    else:
+                        history_events = all_events
+                    if len(history_events) > _DIALOG_HISTORY_MAX_EVENTS:
+                        history_events = history_events[-_DIALOG_HISTORY_MAX_EVENTS:]
+            except Exception as e:
+                logger.debug(
+                    'run_agent_sync: get_session_events for history failed: %s', e
+                )
+            dialog_history = (
+                ChatHistoryConverter.events_to_dialog_messages(history_events)
+                if history_events
+                else []
+            )
+            if dialog_history:
+                logger.debug(
+                    'run_agent_sync: multi-turn dialog_history session_id=%s messages=%s',
+                    session_id,
+                    len(dialog_history),
+                )
+            task = TaskInstance(
+                task_id=task_id,
+                task_type='discovery',
+                description=user_prompt,
+                meta={'dialog_history': dialog_history},
+            )
+            exp.run(task=task)
             if stop_event.is_set():
                 logger.info(
                     'run_agent_sync: task cancelled by user session_id=%s task_id=%s',

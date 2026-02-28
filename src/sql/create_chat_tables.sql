@@ -24,10 +24,12 @@ CREATE TABLE IF NOT EXISTS `evo_chat_events` (
     `type` VARCHAR(50) NOT NULL COMMENT '事件类型：status|query|thought|tool_call|tool_result|finish|error|cancelled|planner_ask|planner_reply|exp_run|log_line等',
     `content` JSON NOT NULL COMMENT '事件内容（JSON格式）',
     `task_id` VARCHAR(255) NULL COMMENT '关联的任务ID',
+    `invocation_id` VARCHAR(64) NULL COMMENT '本轮调用唯一标识，前端区分轮次',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX `idx_session_id` (`session_id`),
     INDEX `idx_session_created` (`session_id`, `created_at`),
     INDEX `idx_task_id` (`task_id`),
+    INDEX `idx_invocation_id` (`invocation_id`),
     FOREIGN KEY (`session_id`) REFERENCES `evo_chat_sessions`(`session_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='聊天事件表';
 
