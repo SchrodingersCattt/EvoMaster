@@ -50,9 +50,10 @@ def llm_polish(text: str, section_name: str) -> str:
         return simple_polish(text)
     model = os.environ.get("LITELLM_MODEL") or os.environ.get("OPENAI_MODEL") or "gpt-4o-mini"
     client = OpenAI(api_key=api_key, base_url=base_url.rstrip("/") if base_url else None)
-    # Patent Claims/Descriptions: skip De-AIGC passes (claims language is intentionally
-    # formal/repetitive by convention). Apply standard grammar pass only.
-    is_patent_claims = section_name.lower() in ("claims", "detailed description")
+    # Patent Claims only: skip De-AIGC passes (claims language is intentionally
+    # formal/repetitive by convention). All other sections including Detailed Description
+    # follow De-AIGC rules normally (see prompts/patent.md).
+    is_patent_claims = section_name.lower() == "claims"
     if is_patent_claims:
         system = """You are a patent copy-editor. Revise the given patent section for grammar and clarity only.
 - Fix grammar errors and unclear antecedents.

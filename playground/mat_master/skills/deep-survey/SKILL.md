@@ -93,7 +93,7 @@ Compiles collected findings into the final structured Markdown report.
 - **brief is for downstream use**: `depth=brief` produces `collected.json`; it is not a human-readable report. Use `standard` or `deep` when the user wants a readable document.
 - **Retrieval minimum is depth-dependent**: brief: 3-5 calls; standard: 6-8 calls; deep: 10-15+ calls. Do not apply the deep minimum universally.
 - **Full-length retention (standard/deep)**: For every section, write the full body to a file first, then call `write_section` with `--content_file`. Never pass long section text in `--content`.
-- **Delivery**: When the report is complete, first output the full final report in your reply so the user sees it; then ensure it is saved to the .md file and call finish.
+- **Delivery**: Save the report to the .md file and call finish. For `deep` tier, also output the full report in your reply so the user sees it (see `prompts/deep.md`); for `standard`, report the file path only.
 - **Concept rigor (deep)**: Every key concept must have a solid definition; every formula must have every symbol explained; state how concepts relate.
 - **User uploads (mandatory)**: If the user uploads files, you MUST fully parse/read every such file before writing any section.
 - Always write the report to a **file**; do not stream the full review in chat.
