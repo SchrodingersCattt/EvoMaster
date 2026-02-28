@@ -9,6 +9,7 @@ scripts before relying on them in production.
 """
 
 import logging
+import shutil
 from pathlib import Path
 
 from evomaster.core.exp import BaseExp
@@ -42,14 +43,20 @@ class SkillEvolutionExp(BaseExp):
         """Evolve a new skill for the given requirement (task_description)."""
         self.logger.info("[Evo] Attempting to evolve skill for: %s", task_description[:80])
 
+        # Single source of truth for output directory name.
+        # Using task_id as suffix ensures uniqueness when two skill_evolution steps
+        # run in the same planner session (shared workspace).
+        output_dir = f"new_skill_{task_id}"
+
         prompt = (
             f"I need a new tool to handle this requirement: {task_description}\n"
             "Please write a Python script and a SKILL.md following EvoMaster standards.\n"
             "The script should be standalone and testable.\n\n"
             "Requirements:\n"
-            "1. Output directory must be exactly: new_skill (create new_skill/ and new_skill/scripts/ as needed). Do not use names like new_skill_2.\n"
-            "2. Write all file contents with the str_replace_editor tool (command=create, path=<absolute path>, file_text=<content>). Use the current working directory shown above as the base; e.g. <working_dir>/new_skill/SKILL.md and <working_dir>/new_skill/scripts/<script>.py. Do not use bash (cat, echo, here-docs) or Python one-liners to write long file content—on Windows these often fail or write to the wrong place.\n"
-            "3. Create new_skill/SKILL.md (with YAML frontmatter: name, description) and new_skill/scripts/<your_script>.py with full, runnable code.\n"
+            f"1. Output directory must be exactly: {output_dir} (create {output_dir}/ and {output_dir}/scripts/ as needed). Do not use a different name.\n"
+            "2. Write all file contents with the str_replace_editor tool (command=create, path=<absolute path>, file_text=<content>). Use the current working directory shown above as the base; "
+            f"e.g. <working_dir>/{output_dir}/SKILL.md and <working_dir>/{output_dir}/scripts/<script>.py. Do not use bash (cat, echo, here-docs) or Python one-liners to write long file content—on Windows these often fail or write to the wrong place.\n"
+            f"3. Create {output_dir}/SKILL.md (with YAML frontmatter: name, description) and {output_dir}/scripts/<your_script>.py with full, runnable code.\n"
             "4. IMPORTANT: After writing the skill, inform the user that the new skill has NOT been automatically tested and should be manually verified before use in production."
         )
         task = TaskInstance(task_id=f"{task_id}_code", task_type="discovery", description=prompt)
@@ -67,9 +74,9 @@ class SkillEvolutionExp(BaseExp):
         else:
             run_dir = Path(self.run_dir) if self.run_dir else Path(".")
             workspace = run_dir / "workspaces" / f"{task_id}_code"
-        new_skill_path = workspace / "new_skill"
+        new_skill_path = workspace / output_dir
         if not new_skill_path.is_dir():
-            new_skill_path = workspace / "workspace" / "new_skill"
+            new_skill_path = workspace / "workspace" / output_dir
 
         if not (new_skill_path / "SKILL.md").exists():
             self.logger.error("[Evo] Agent did not produce SKILL.md at %s", new_skill_path)
@@ -91,11 +98,34 @@ class SkillEvolutionExp(BaseExp):
                 "status": "completed",
                 "skill_path": str(new_skill_path),
                 "warning": (
-                    "New skill registered without automated test verification. "
-                    "Please review the generated scripts in new_skill/scripts/ "
+                    f"New skill registered without automated test verification. "
+                    f"Please review the generated scripts in {output_dir}/scripts/ "
                     "and run them manually to confirm correctness before using in subsequent tasks."
                 ),
             }
 
         self.logger.warning("[Evo] Skill evolution failed to register.")
         return {"status": "failed", "reason": "register_failed"}
+
+    def _copy_to_user_skills(
+        self, skill_path: Path, skill_name: str, user_skills_root: Path
+    ) -> str:
+        """Copy a newly evolved skill into the user's persistent skill library.
+
+        This is a pure file operation -- no ask-human logic here.  The caller
+        (ResearchPlanner._execute_step) is responsible for deciding whether to
+        persist and for asking the user if needed.
+
+        Args:
+            skill_path: Path to the skill directory (in workspace).
+            skill_name: Skill name from SKILL.md frontmatter (used as subdir name).
+            user_skills_root: Root of the user skill library (e.g. ~/.evomaster-skills).
+
+        Returns:
+            String path of the destination directory.
+        """
+        user_skills_root.mkdir(parents=True, exist_ok=True)
+        dest = user_skills_root / skill_name
+        shutil.copytree(str(skill_path), str(dest), dirs_exist_ok=True)
+        self.logger.info("[Evo] Skill '%s' persisted to %s", skill_name, dest)
+        return str(dest)
