@@ -58,11 +58,15 @@ Do NOT attempt to read PDF files with view, peek_file, execute_bash (cat/strings
 # User-uploaded files (mandatory: read all before writing)
 When the task involves **user-uploaded files** (e.g. PDFs or documents in the workspace, or "read the papers in the current directory"): you MUST **fully read or parse every uploaded file** before writing any report, survey, or review. Do **not** start writing sections until all such files have been completely parsed. Use the mat_doc MCP tools above for PDFs. Read the full extracted content. If you skip or only skim uploaded PDFs and then write the report, the task is incomplete.
 
-# Literature survey / state-of-the-art / review
-For literature survey, review, or comprehensive report **when the user asks for a report/file**: use the **deep-survey** skill (use_skill action=get_info first, then follow its workflow). The skill's SKILL.md specifies facet expansion, minimum retrieval rounds, section structure, citation format, and full-length requirements. Parse all user-uploaded files (via mat_doc_* MCP tools) **before** writing any section. Do not produce a review by writing from memory alone; the survey must be grounded in deep-survey retrieval.
+# Literature survey / state-of-the-art / review (direct mode)
+For literature survey, review, or comprehensive report **when the user asks for a report/file**: use the **deep-survey** skill (use_skill action=get_info first, then follow its workflow). The skill routes to per-depth prompt files (brief/standard/deep) for the complete workflow. Parse all user-uploaded files (via mat_doc_* MCP tools) **before** writing any section. Do not produce a review by writing from memory alone.
 
-# Long-form writing (manuscript / report)
-For manuscript or long-form report writing **when the user asks for a paper/report file**, use the **manuscript-scribe** skill (use_skill action=get_info first, then follow its workflow). The skill's SKILL.md contains format profiles, validation steps, export options, typographic rules, and citation format. If validation/assembly reports FAILED, continue fixing and re-validating; do not call finish yet.
+**Routing note (Planner mode)**: In Planner mode, planner_system_prompt.txt (Section IV-B) is the source of truth for skill routing, depth selection, and per-section decomposition. The executor follows the step goal as written by the planner.
+
+# Long-form writing (manuscript / report) (direct mode)
+For manuscript or long-form report writing **when the user asks for a paper/report file**, use the **manuscript-scribe** skill (use_skill action=get_info first, then follow its workflow). The skill uses format profiles (use research_paper for standard papers; see prompts/<profile>.md for profile-specific guidance). If validation/assembly reports FAILED, continue fixing and re-validating; do not call finish yet.
+
+**Routing note (Planner mode)**: In Planner mode, follow the planner step goal directly. The planner handles per-section decomposition, profile selection, and quality gate sequencing.
 
 # Structure download and validation
 - **Download from URL** (CIF, POSCAR, XYZ): MUST use **structure-manager** skill (fetch_web_structure.py). Do not use wget/curl/requests directly.
