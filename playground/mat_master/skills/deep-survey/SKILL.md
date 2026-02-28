@@ -31,54 +31,23 @@ See **reference/search_facets_and_rounds.md** for depth-specific facet counts an
 | "What are the common failures in VASP relaxation?" (answer in chat) | MCP paper/search tools, short answer | deep-survey |
 | "Quick: what is X?" / one-off definition lookup | MCP web/search, short answer | deep-survey |
 
-## Workflow by depth
+## Depth-specific workflow
 
-### brief
+**After selecting depth, immediately read `prompts/<depth>.md`** (i.e. `prompts/brief.md`, `prompts/standard.md`, or `prompts/deep.md`) for the complete workflow, output rules, and quality requirements for that tier. Do not rely on memory for per-depth instructions.
 
-1. **Plan**: Identify 1-2 key facets from the topic.
-2. **Retrieve**: Run 3-5 `mat_sn_*` calls across those facets.
-3. **Output**: Populate `collected.json` (see `reference/collected_json_schema.md` for schema). Write each evidence card: `{source_title, source_url, year, first_author, facet, claim, data_points}`.
-4. **Done** — no Markdown report. Pass `collected.json` to the calling skill (e.g. `lit-data-organizer`, `manuscript-scribe`).
+Quick orientation (authoritative detail is in the per-depth prompt files):
 
-### standard
+- **brief**: 3-5 retrieval calls → `collected.json` evidence skeleton only; no Markdown report.
+- **standard**: 6-8 retrieval calls → concise Markdown report (Executive Summary + References).
+- **deep**: 10-15+ retrieval calls → full 5-section review (Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References).
 
-1. **Plan**: Identify 2-3 facets; plan 2-3 query variants per facet.
-2. **Retrieve**: Run 6-8 `mat_sn_*` calls (paper search + web search per facet).
-3. **Write** (LLM): Using retrieval results, write **Executive Summary** (1-2 paragraphs) and **References** into the survey file using `write_section` or `str_replace_editor`. Do not leave (TBD) in delivered file.
-4. **Output**: `_tmp/surveys/survey_<topic>.md` — concise report.
+See **reference/search_facets_and_rounds.md** for depth-specific facet counts and retrieval budgets.
 
-### deep
+## Output and citation format
 
-When routing to **serious writing** (this depth), expand the query into multiple facets and repeatedly call retrieval tools. See **reference/search_facets_and_rounds.md** for facet types and minimum call counts.
+All reports follow **../_common/reference/citation_and_output_format.md** (citation format, Markdown structure, units, abbreviation rules). This is the single source of truth for citation format — do not duplicate these rules in section content.
 
-1. **Plan (expand facets)**:
-   - Analyze the topic and break it into **3-5 facets** (e.g. definition, mechanism, methods, reviews, caveats; see reference).
-   - For each facet, plan **2-4 query variants** (keywords, synonyms, or alternate language; e.g. "X review", "X mechanism").
-   - Target: enough queries so total **retrieval tool calls** are at least **10-15**.
-2. **Execute loop (repeated retrieval)**:
-   - **For each facet and each query variant**: Call MCP retrieval tools (`mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `mat_sn_web-search`, etc.) **repeatedly**. Prefer **English** for search queries when possible.
-   - After each search: filter for relevance; keep only hits clearly related to that facet and user intent. Before writing, consider each source's quality (authority, relevance, recency).
-   - **Web search returns snippets only**: parse/fetch full page content (e.g. `mat_doc_*` extract from webpage) for relevant URLs; do not rely on snippets alone.
-   - **Download**: For high-relevance papers, fetch full text where possible.
-3. **Write the report (LLM)**: Write all five sections — Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References — using **manuscript-scribe** `write_section` (with `--content_file` for long sections) or **str_replace_editor**.
-4. **Full-length retention**: Write each section's full text to a file first (e.g. `_tmp/surveys/section_Executive_Summary.md`), then call `write_section` with `--content_file <path>`. Do **not** pass long section body via `--content` (it may be truncated).
-
-**Note on `manuscript-scribe` delegation**: For `deep` mode, deep-survey may delegate report writing to manuscript-scribe's `write_section` tool. This is a one-way delegation: deep-survey → manuscript-scribe. manuscript-scribe does not trigger deep-survey.
-
-## Output format (artifact — for standard/deep)
-
-Reports must follow **../_common/reference/citation_and_output_format.md** (citation format, plain text/Markdown, units, abbreviations). The artifact file should contain:
-
-- **Executive Summary** — at least **2-3 paragraphs** (deep); 1-2 paragraphs (standard).
-- **Key Methodologies** — (deep only) table plus optional narrative.
-- **State of the Art** — (deep only) **multiple subsections** with **detailed discussion**.
-- **Gap Analysis** — (deep only) several elaborated points (2-4 sentences each).
-- **References** (mandatory): each cited work must list **URL** (`https://doi.org/<DOI>` or paper url). Use `[n](url)` in body; list [n], full citation, and URL in References section.
-- **Citation sentence format**: In [year], [first author] et al. [found that / reported that ...]; key findings include [...]. [n](url).
-
-**Concept rigor (mandatory for deep)**: Define every key concept; explain every symbol in formulas; state how concepts relate; use examples where helpful.
-
-**Length (deep)**: Must be a **full-length review** — not a 1-2 page brief. Develop every section fully from retrieval results.
+**Note on `manuscript-scribe` delegation**: For `deep` mode, deep-survey may delegate report writing to manuscript-scribe's `write_section` tool. One-way only: deep-survey → manuscript-scribe. manuscript-scribe does not trigger deep-survey.
 
 ## Scripts
 

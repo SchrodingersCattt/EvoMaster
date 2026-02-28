@@ -16,8 +16,7 @@ The skill supports multiple document types via **format profiles**. Always selec
 
 | Profile | Sections | Use Case | Min words |
 |---|---|---|---|
-| `generic` | Abstract, Introduction, Methods, Results, Discussion, References | Standard academic paper | 3000 |
-| `Nature` | Abstract, Introduction, Results, Discussion, Methods, References | Nature-style paper (Methods last) | 3000 |
+| `research_paper` | Abstract, Introduction, Methods, Results, Discussion, References | Standard academic paper (default IMRaD order; Nature-style variant: Methods after Discussion) | 3000 |
 | `grant` | Summary/Abstract, Significance, Approach, Preliminary Results, Timeline, References | Grant proposal | 2500 |
 | `computational_report` | Methods, Results and Discussion, References | Lean DFT/MD/simulation write-up | 800 |
 | `patent` | Technical Field, Background Art, Summary of Invention, Detailed Description, Claims, Abstract | Patent application | 3000 |
@@ -32,8 +31,10 @@ To list all profiles with details: `init_manuscript.py --list_formats`
 - Patent application: use `patent`
 - Thesis chapter: use `thesis_section`
 - Literature review / survey: use `review` (caller must supply retrieval results via collected.json or content files; this skill does not trigger deep-survey)
-- Standard paper: use `generic` or `Nature`
-- Default to `generic` if unclear.
+- Standard paper: use `research_paper`. For Nature-style ordering (Methods after Discussion), still use `research_paper` — the section order can be resequenced at assembly time.
+- Default to `research_paper` if unclear.
+
+**Profile-specific writing rules**: After selecting a profile, check if `prompts/<profile>.md` exists in this skill's folder; if so, read it for profile-specific writing guidance (De-AIGC rules, formula requirements, claims conventions, etc.) before drafting any section.
 
 ## Step 0: Information retrieval (mandatory before any writing)
 
@@ -125,15 +126,8 @@ Academic writing must not skip definitions or leave formulas unexplained.
 
 The export scripts (`export_docx.py`, `export_latex.py`) apply many of these automatically, but the **LLM must produce correctly formatted Markdown** for the conversion to work.
 
-### Content & expression (especially computational reports)
-- **No raw input keywords or variable names** (`RUN_TYPE ENERGY`, `EPS_SCF`, `CUTOFF 600`, `&DFT ... &END DFT`). Use physical descriptions: "single-point total-energy calculation", "self-consistent convergence threshold", "plane-wave cutoff of 600 Ry", "projected density of states".
-- **No file names or paths** (`cp2k.inp`, `output.log`, `*.pdos`, `HOCO_CUBE.cube`). Use "the input file", "the output log", "the PDOS data", "the orbital cube file".
-- **Mechanism-oriented narrative**: Build toward physical interpretation — e.g. use HOCO/LUCO spatial separation and PDOS decomposition to support a charge-transfer assignment (MLCT, MLLCT, etc.), not just list numbers.
-
-### Terminology & periodic systems
+### Terminology
 - **Define every abbreviation** at first use: "density functional theory (DFT)", "projected density of states (PDOS)". After the definition, use only the abbreviation.
-- **Periodic systems**: Use **HOCO / LUCO** (highest occupied / lowest unoccupied crystal orbital), NOT HOMO / LUMO. At first use, add: "In periodic systems these are crystal orbitals rather than molecular orbitals, denoted HOCO and LUCO."
-- **Band-edge terminology**: Use "valence-band maximum (VBM)" and "conduction-band minimum (CBM)" for periodic solids, not "HOMO energy" / "LUMO energy".
 
 ### Physical quantities & font conventions in Markdown
 - **Italic for scalar physical quantities**: `*U*`, `*E*`, `*k*`, `*T*`, `*V*`. Bold for vectors: `**F**`, `**k**`.
@@ -194,12 +188,12 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 ### `init_manuscript.py`
 
 * **Required**: `--title` (no default). Always pass it to avoid script error.
-* **Usage**: `python init_manuscript.py --title "My Paper" --template "Nature"`  
-  Or with section files: `python init_manuscript.py --title "My Paper" --template "generic" --sections_dir sections/`  
+* **Usage**: `python init_manuscript.py --title "My Paper" --template "research_paper"`  
+  Or with section files: `python init_manuscript.py --title "My Paper" --template "research_paper" --sections_dir sections/`  
   List profiles: `python init_manuscript.py --list_formats`
 * **use_skill example**: script_name=init_manuscript.py, script_args="--title \"My Paper\" --template computational_report"
 * **Effect**: Creates a draft outline based on the selected format profile. With `--sections_dir`, creates empty section files under `sections/` and writes `_profile.json` with profile metadata so downstream scripts can auto-detect the profile.
-* **Templates**: generic, Nature, grant, computational_report, patent, review, technical_report, thesis_section.
+* **Templates**: research_paper, grant, computational_report, patent, review, technical_report, thesis_section.
 
 ### `write_section.py` (workhorse)
 
@@ -219,7 +213,7 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 ### `validate_content.py` (quality gate)
 
 * **Usage**:  
-  `python validate_content.py --draft draft.md --profile generic`  
+  `python validate_content.py --draft draft.md --profile research_paper`  
   `python validate_content.py --sections_dir sections/ --profile computational_report --planner_mode --report report.json`
 * **Logic**:
   1. **Word counts**: Per-section and overall against profile minimums. With `--planner_mode`, thresholds are 1.5x.
@@ -233,7 +227,7 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 ### `assemble_manuscript.py` (concatenate + review)
 
 * **Usage**:  
-  `python assemble_manuscript.py --sections_dir sections/ --output draft_manuscript.md --validate --profile generic --check_length`  
+  `python assemble_manuscript.py --sections_dir sections/ --output draft_manuscript.md --validate --profile research_paper --check_length`  
   Or from a single draft: `python assemble_manuscript.py --draft draft_manuscript.md --output final.md --validate`
 * **Logic**:
   1. **Concatenate**: Merge section files (in profile section order, or default) or use the single draft as-is.
@@ -242,17 +236,17 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
   4. **Check 2 – Abbreviations**: Extract all "Full Name (ABBR)"; report duplicate definitions.
   5. **Check 3 – References**: Extract all [n] from body and References section; ensure 1:1 correspondence; with `--validate`, check URLs via HTTP HEAD.
   6. **Check 4 – Content validation** (with `--check_length --profile`): Run full word-count and content validation.
-* **--profile**: Use the profile's section order instead of the default (Abstract, Intro, Methods, Results, Discussion, References).
+* **--profile**: Use the profile's section order instead of the default (Abstract, Intro, Methods, Results, Discussion, References). For `research_paper`, the default order is IMRaD; for Nature-style ordering, resequence sections at assembly time.
 * **Output**: Writes the assembled manuscript to `--output` and prints reports; optionally writes `--report report.json`.
 * **Status contract**: Emits `LONGTASK_RESULT_JSON` with `status=completed` (pass) or `status=retryable_error` (consistency/content issues to fix).
 
 ### `run_pipeline.py` (resumable stage orchestrator)
 
 * **Usage**:
-  - Initialize: `python run_pipeline.py --stage init --title "My Paper" --profile generic --state _tmp/manuscript/state.json`
+  - Initialize: `python run_pipeline.py --stage init --title "My Paper" --profile research_paper --state _tmp/manuscript/state.json`
   - Checkpoint: `python run_pipeline.py --stage checkpoint --next_stage draft --state _tmp/manuscript/state.json --resume`
-  - Validate stage: `python run_pipeline.py --stage validate --profile generic --draft draft.md --planner_mode --state _tmp/manuscript/state.json --resume`
-  - Assemble stage: `python run_pipeline.py --stage assemble --profile generic --draft draft.md --output final.md --export all --state _tmp/manuscript/state.json --resume`
+  - Validate stage: `python run_pipeline.py --stage validate --profile research_paper --draft draft.md --planner_mode --state _tmp/manuscript/state.json --resume`
+  - Assemble stage: `python run_pipeline.py --stage assemble --profile research_paper --draft draft.md --output final.md --export all --state _tmp/manuscript/state.json --resume`
   - Status: `python run_pipeline.py --stage status --state _tmp/manuscript/state.json --resume`
 * **Logic**: Persists `state.json` + `events.jsonl`, proxies validate/assemble stages, and emits structured status for resume-friendly orchestration.
 
@@ -303,8 +297,8 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 * "Write up the DFT calculation results." → `init_manuscript.py --template computational_report`, then `write_section.py` for Methods and Results and Discussion.
 * "Draft a patent for this material." → `init_manuscript.py --template patent`, then write each section.
 * "Write a thesis chapter on X." → `init_manuscript.py --template thesis_section`, then write each section.
-* "Assemble the sections and check references." → `assemble_manuscript.py --sections_dir sections/ --output draft.md --validate --profile generic`
-* "Validate my draft length." → `validate_content.py --draft draft.md --profile generic`
+* "Assemble the sections and check references." → `assemble_manuscript.py --sections_dir sections/ --output draft.md --validate --profile research_paper`
+* "Validate my draft length." → `validate_content.py --draft draft.md --profile research_paper`
 * "The Results section is too colloquial." → `polish_text.py --use_llm`.
 * "Export to Word." → Automatically done by `assemble_manuscript.py --export all` (or standalone `export_docx.py`).
 * "Export to LaTeX." → Automatically done by `assemble_manuscript.py --export all` (or standalone `export_latex.py`).
@@ -320,10 +314,28 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 
 - **run_script** with **script_name**: `init_manuscript.py`, `write_section.py`, `append_chunk.py`, `validate_content.py`, `assemble_manuscript.py`, `run_pipeline.py`, `polish_text.py`, `export_docx.py`, or `export_latex.py`; **script_args** as in Usage above.
 
+## De-AIGC Writing Rules (mandatory for all profiles except patent Claims/Descriptions sections)
+
+Full reference: `use_skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
+
+**Core rules (apply at every writing step):**
+1. Lead with the real problem, not broad context.
+2. Prefer concrete verbs over abstract labels (`integrate A with B`, not `establish a framework`).
+3. Calibrate claims to evidence — match confidence to what is directly shown.
+4. Remove filler openers: delete `Notably,`, `Significantly,`, `It is worth noting that`, `Importantly,`, `In this context,`.
+5. Replace vague statistics with named ones (MAD, RMSD, STD); add boundary conditions.
+6. Goal text per sentence: one main point only; split compound observations.
+
+**High-risk openers to delete on sight**: `It is well known that`, `This section reviews`, `It should be noted that`, `Paves the way for`, `Groundbreaking`, `Unprecedented`, `This work fosters`, `Showcasing`, `Highlighting`.
+
+**After drafting each section**, run the 5-pass De-AIGC checklist (claim calibration → specificity upgrade → compression → redundancy removal → tone scan). See full guide for pattern rewrites and rewrite frames.
+
+**Patent exception**: De-AIGC rules apply to Background Art, Technical Field, and Detailed Description. Claims language is intentionally formal/repetitive — do NOT apply De-AIGC passes to Claims section. See `prompts/patent.md`.
+
 ## Rules
 
 * **Retrieval first**: Before any init_manuscript or write_section call, run literature search (mat_sn_* paper and web search) for the topic; do not write from memory only. Exception: `computational_report` with user-provided parameters.
-* **Required args**: init_manuscript.py always needs --title; pass it in script_args (e.g. script_args="--title \"My Paper\" --template generic"). assemble_manuscript.py always needs **--output** and one of **--draft** or **--sections_dir** (e.g. script_args="--draft draft_manuscript.md --output final.md").
+* **Required args**: init_manuscript.py always needs --title; pass it in script_args (e.g. script_args="--title \"My Paper\" --template research_paper"). assemble_manuscript.py always needs **--output** and one of **--draft** or **--sections_dir** (e.g. script_args="--draft draft_manuscript.md --output final.md").
 * **Long section content (critical)**: Section content passed via **--content** in script_args can be truncated by the tool layer (e.g. ~500–1000 chars). For any section longer than a short paragraph (lists, multiple refs, 2+ paragraphs), **write the content to a file first** (e.g. with str_replace_editor or execute_bash), then call `write_section.py --section "SectionName" --content_file path/to/section.md --draft draft_manuscript.md`. Do not rely on long --content strings for Summary, State-of-the-Art, or References.
 * **Chunked writing**: Use multiple `write_section.py` calls per section (first call creates, further calls use `--append`) or build the full section in a file then pass with `--content_file`; the script does not expand short text.
 * **Long-task state (recommended)**: Use `--state _tmp/manuscript/state.json --resume` on write/validate/assemble stages for deterministic resume.
