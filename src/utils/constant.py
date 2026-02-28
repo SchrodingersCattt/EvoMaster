@@ -63,3 +63,17 @@ BOHRIUM_DEFAULT_IMAGE_ID = (
     BOHRIUM_ENV_DEFAULT_IMAGE_IDS.get(CURRENT_ENV)
     or BOHRIUM_ENV_DEFAULT_IMAGE_IDS['test']
 )
+
+# 会话历史注入（用于多轮上下文连续性）
+_ENV_TRUE_VALUES = ('1', 'true', 'yes', 'on')
+CTX_INJECTION_ENABLED = (
+    os.getenv('CTX_INJECTION_ENABLED', 'true').strip().lower() in _ENV_TRUE_VALUES
+)
+CTX_HISTORY_MAX_LINES = int(os.getenv('CTX_HISTORY_MAX_LINES', '20'))
+CTX_HISTORY_MAX_CHARS = int(os.getenv('CTX_HISTORY_MAX_CHARS', '4000'))
+CTX_TOTAL_PROMPT_MAX_CHARS = int(os.getenv('CTX_TOTAL_PROMPT_MAX_CHARS', '12000'))
+CTX_MAX_TOKENS_LIMIT = int(os.getenv('CTX_MAX_TOKENS_LIMIT', '128000'))
+CTX_EVENT_WINDOW = int(os.getenv('CTX_EVENT_WINDOW', '200'))
+CTX_FILTER_NOISE_ENABLED = (
+    os.getenv('CTX_FILTER_NOISE_ENABLED', 'true').strip().lower() in _ENV_TRUE_VALUES
+)
