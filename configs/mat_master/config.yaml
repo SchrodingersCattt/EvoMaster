@@ -141,6 +141,13 @@ mat_master:
   # 技能进化能力配置（被 SkillEvolutionExp 使用）
   skill_evolution:
     dynamic_skills_root: "playground/mat_master/skills/dynamic"
+    # 用户永久 skill 库（跨 session 保留）
+    # local_user_skills_root: 本机加载路径，~ 会被展开；remote 会同步到 remote_user_skills_root
+    local_user_skills_root: "~/.evomaster-skills"
+    # remote_user_skills_root: SSH 节点上的目标路径（不在 remote_base 下，是用户级持久目录）
+    remote_user_skills_root: "/personal/.evomaster-skills"
+    # persist_new_skills: "ask" 询问是否保存（超时默认保存）| "always" 始终保存 | "never" 从不保存
+    persist_new_skills: "ask"
     sandbox: "subprocess"
 
 # ============================================

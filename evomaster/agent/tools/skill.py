@@ -313,21 +313,45 @@ class SkillTool(BaseTool):
         # 解析项目根（含 evomaster 的目录），供 Python 脚本设置 PYTHONPATH
         project_root = self._get_skill_project_root(skill)
 
-        # SSH-aware: when remote_project_root is set, remap local paths to remote POSIX paths
+        # SSH-aware: remap local paths to remote POSIX paths for SSH execution.
+        # Two mapping strategies:
+        #   1. Project-scoped skills (mat / core / dynamic): remap via remote_project_root
+        #   2. User skills (~/.evomaster-skills): remap via remote_user_skills_root
+        #      These paths have no evomaster/ ancestor so _get_skill_project_root returns None.
         remote_root = getattr(session, 'remote_project_root', None)
-        use_remote = remote_root is not None and project_root is not None
+        remote_user_root = getattr(session, 'remote_user_skills_root', None)
+        local_user_root = getattr(session, 'local_user_skills_root', None)
 
-        if use_remote:
-            from pathlib import PurePosixPath
+        use_remote = False
+        remote_script = None
+        pythonpath_remote = None
+
+        from pathlib import PurePosixPath as _PPP
+        if remote_root is not None and project_root is not None:
+            # Strategy 1: project-scoped skill
+            use_remote = True
             try:
                 rel = script_path.relative_to(project_root).as_posix()
             except ValueError:
                 rel = script_path.name
-            remote_script = str(PurePosixPath(remote_root) / rel)
+            remote_script = str(_PPP(remote_root) / rel)
+            pythonpath_remote = remote_root
+        elif remote_user_root and local_user_root:
+            # Strategy 2: user skill -- no evomaster/ ancestor, remap via user roots
+            try:
+                from pathlib import Path as _Path
+                rel = script_path.relative_to(_Path(local_user_root)).as_posix()
+                use_remote = True
+                remote_script = str(_PPP(remote_user_root) / rel)
+                pythonpath_remote = remote_user_root
+            except ValueError:
+                pass  # not a user skill path, fall through to local execution
+
+        if use_remote and remote_script is not None:
             suffix = script_path.suffix
 
             if suffix == '.py':
-                cmd = f"PYTHONPATH={shlex.quote(remote_root)} python {shlex.quote(remote_script)}"
+                cmd = f"PYTHONPATH={shlex.quote(pythonpath_remote)} python {shlex.quote(remote_script)}"
             elif suffix == '.sh':
                 cmd = f"bash {shlex.quote(remote_script)}"
             elif suffix == '.js':

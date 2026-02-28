@@ -90,6 +90,7 @@ When USER_INTENT is to **reproduce, replicate, or follow** the methodology of an
 - **goal**: Clear, single objective (e.g. "Pre-optimize the Si structure to equilibrium", "Use the **deep-survey** skill to produce a survey report on ...").
   - **Anti-slop rule**: Goal text must be specific and actionable. Do NOT generate vague goals like "investigate the topic", "gather information about X", or "look into Y". Each goal must name the **target output artifact** (file path, JSON file, table, report) and the **intended depth/scope** (e.g. depth=deep, 10+ papers, convergence threshold). Vague goals produce unverifiable steps.
 - **step_type**: "normal" (default) or "skill_evolution" (only when this step is "create a new tool/capability").
+- **persist_skill** (optional, boolean, only for `skill_evolution` steps): Set to `true` when the user explicitly asks to save / keep / store the new skill permanently. Omit or set to `false` otherwise (the user will be prompted automatically).
 - In general, do not specify tool names in goals. The executor will select appropriate tools. **Exceptions** where you SHOULD name tools in the goal text (to ensure correct routing):
   - **deep-survey** / **manuscript-scribe** skills: as described in IV-B.
   - **lit-data-organizer** skill: when the deliverable requires literature data table/dataset normalization or Pareto-ready tabulation.
@@ -131,6 +132,7 @@ Output exactly one JSON object. No markdown wrapper, no explanation outside the 
       "compute_intensity": "LOW" | "MEDIUM" | "HIGH",
       "requires_confirmation": false,
       "fallback_strategy": "string (CRITICAL: what to do if this step fails?)",
+      "persist_skill": true,
       "conditional_branch": {"if_success": 3, "if_fail": 4},
       "depends_on": [1, 2]
     }
@@ -154,7 +156,7 @@ Output exactly one JSON object. No markdown wrapper, no explanation outside the 
   }
 }
 
-Rules: When status is APPROVED, execution_graph must have at least one step; step_id consecutive from 1. For compute_intensity "HIGH", requires_confirmation must be true. **plan_report** is REQUIRED when status is APPROVED: fill summary, cost_assessment (overall + per_step + notes), risks (at least one per high-cost or uncertain step), and alternatives (at least 2-3 options). Fields `conditional_branch` and `depends_on` are OPTIONAL — omit them for simple sequential plans; include only when the workflow genuinely requires branching or dependency logic.
+Rules: When status is APPROVED, execution_graph must have at least one step; step_id consecutive from 1. For compute_intensity "HIGH", requires_confirmation must be true. **plan_report** is REQUIRED when status is APPROVED: fill summary, cost_assessment (overall + per_step + notes), risks (at least one per high-cost or uncertain step), and alternatives (at least 2-3 options). Fields `conditional_branch`, `depends_on`, and `persist_skill` are OPTIONAL — omit them when not applicable. `persist_skill` is only meaningful on `skill_evolution` steps and should only be set when the user explicitly asks to save the new skill.
 
 # EXAMPLE (APPROVED, GOAL-ORIENTED)
 Given RUNTIME_CONTEXT with Has_GPU: true, License_Keys: ["ABACUS","DPA"], Target_Fidelity: "Production", USER_INTENT: "Calculate band gap of silicon."
