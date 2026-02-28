@@ -4,6 +4,13 @@ Used in MatMasterPlayground.setup(): we build MatMasterSkillRegistry (which
 wraps evomaster SkillRegistry + optional dynamic root), then pass it to
 _setup_tools and _create_agent. Dynamic skills (e.g. from SkillEvolutionExp)
 are loaded from playground/mat_master/skills/dynamic/ and merged for lookup.
+
+Skill tiers (priority high → low):
+  1. dynamic   – ephemeral, registered at runtime via register_dynamic_skill()
+  2. user      – persistent personal library (~/.evomaster-skills), loaded at
+                 startup from local_user_skills_root config key
+  3. mat       – bundled mat_master skills (playground/mat_master/skills/)
+  4. core      – base evomaster skills (evomaster/skills/)
 """
 
 from __future__ import annotations
@@ -17,12 +24,14 @@ if TYPE_CHECKING:
 
 
 class MatMasterSkillRegistry:
-    """Composite skill registry: core skills + dynamic skills.
+    """Composite skill registry: core skills + user skills + dynamic skills.
 
     - core_registry: SkillRegistry(evomaster/skills) or similar.
     - dynamic_root: optional Path for playground/mat_master/skills/dynamic/.
       If set, we load OperatorSkill from each subdir with SKILL.md and
       merge with core for get_skill / get_all_skills / get_meta_info_context.
+    - user_skills_root: optional Path to the user's personal skill library
+      (e.g. ~/.evomaster-skills). Loaded at startup; survives across sessions.
     """
 
     def __init__(
@@ -30,15 +39,20 @@ class MatMasterSkillRegistry:
         core_registry: SkillRegistry,
         dynamic_root: Path | None = None,
         mat_skills_root: Path | None = None,
+        user_skills_root: Path | None = None,
     ):
         self.core_registry = core_registry
         self.dynamic_root = Path(dynamic_root) if dynamic_root else None
         self.mat_skills_root = Path(mat_skills_root) if mat_skills_root else None
+        self.user_skills_root = Path(user_skills_root) if user_skills_root else None
         self.logger = logging.getLogger(self.__class__.__name__)
         self._dynamic_skills: dict[str, BaseSkill] = {}
+        self._user_skills: dict[str, BaseSkill] = {}
         self._mat_skills: dict[str, BaseSkill] = {}
         if self.mat_skills_root and self.mat_skills_root.exists():
             self._load_skills_from(self.mat_skills_root, self._mat_skills)
+        if self.user_skills_root and self.user_skills_root.exists():
+            self._load_skills_from(self.user_skills_root, self._user_skills)
         if self.dynamic_root and self.dynamic_root.exists():
             self._load_skills_from(self.dynamic_root, self._dynamic_skills)
 
@@ -79,27 +93,53 @@ class MatMasterSkillRegistry:
             self.logger.warning("Failed to register dynamic skill from %s: %s", path, e)
             return False
 
+    def register_user_skill(self, skill_path: Path) -> bool:
+        """Load one skill from skill_path and add to user layer.
+
+        Call after a new skill has been persisted to user_skills_root so it is
+        immediately available this session without a restart.
+        Returns True if loaded successfully.
+        """
+        from evomaster.skills import OperatorSkill
+
+        path = Path(skill_path)
+        if not (path / "SKILL.md").exists():
+            self.logger.warning("No SKILL.md at %s", path)
+            return False
+        try:
+            skill = OperatorSkill(path)
+            self._user_skills[skill.meta_info.name] = skill
+            self.logger.info("Registered user skill: %s", skill.meta_info.name)
+            return True
+        except Exception as e:
+            self.logger.warning("Failed to register user skill from %s: %s", path, e)
+            return False
+
     def get_skill(self, name: str) -> BaseSkill | None:
-        """Look up skill: dynamic first, then mat_skills, then core."""
+        """Look up skill: dynamic first, then user, then mat_skills, then core."""
         if name in self._dynamic_skills:
             return self._dynamic_skills[name]
+        if name in self._user_skills:
+            return self._user_skills[name]
         if name in self._mat_skills:
             return self._mat_skills[name]
         return self.core_registry.get_skill(name)
 
     def get_all_skills(self) -> list[BaseSkill]:
-        """All skills: core + mat_skills + dynamic (later overwrites same name)."""
+        """All skills: core + mat_skills + user + dynamic (later overwrites same name)."""
         by_name: dict[str, BaseSkill] = {}
         for s in self.core_registry.get_all_skills():
             by_name[s.meta_info.name] = s
         for n, s in self._mat_skills.items():
+            by_name[n] = s
+        for n, s in self._user_skills.items():
             by_name[n] = s
         for n, s in self._dynamic_skills.items():
             by_name[n] = s
         return list(by_name.values())
 
     def get_meta_info_context(self) -> str:
-        """Meta info for context: merged core + dynamic."""
+        """Meta info for context: merged core + mat + user + dynamic."""
         lines = ["# Available Skills\n"]
         for skill in self.get_all_skills():
             lines.append(skill.to_context_string())
@@ -107,13 +147,18 @@ class MatMasterSkillRegistry:
         return "\n".join(lines)
 
     def search_skills(self, query: str) -> list[BaseSkill]:
-        """Search in core, mat_skills, and dynamic."""
+        """Search in core, mat_skills, user_skills, and dynamic."""
         results = list(self.core_registry.search_skills(query))
         seen = {s.meta_info.name for s in results}
         query_lower = query.lower()
-        for skill in list(self._mat_skills.values()) + list(self._dynamic_skills.values()):
+        for skill in (
+            list(self._mat_skills.values())
+            + list(self._user_skills.values())
+            + list(self._dynamic_skills.values())
+        ):
             if skill.meta_info.name in seen:
                 continue
             if query_lower in skill.meta_info.name.lower() or query_lower in skill.meta_info.description.lower():
                 results.append(skill)
+                seen.add(skill.meta_info.name)
         return results

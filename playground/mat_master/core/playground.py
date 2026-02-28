@@ -125,7 +125,14 @@ class MatMasterPlayground(BasePlayground):
         self,
         remote_base: str = "/personal/workspace/.evomaster",
     ) -> None:
-        """Upload 3-tier skills (core + mat_master + evomaster pkg) to the remote node."""
+        """Upload skills (core + mat_master + user) to the remote node.
+
+        User skills land at remote_user_skills_root (default /personal/.evomaster-skills),
+        which is separate from remote_base so they persist as a user-level directory across
+        different project syncs.  session.remote_user_skills_root and
+        session.local_user_skills_root are set so that skill.py can remap user skill
+        script paths for SSH execution.
+        """
         from evomaster.agent.session import SSHSession
 
         if not isinstance(self.session, SSHSession):
@@ -152,8 +159,24 @@ class MatMasterPlayground(BasePlayground):
                 exclude=exclude,
             )
 
+        # Upload user skills to their own persistent remote directory
+        skill_evolution_cfg = (config_dict.get("mat_master") or {}).get("skill_evolution") or {}
+        local_user_root_raw = skill_evolution_cfg.get("local_user_skills_root", "~/.evomaster-skills")
+        local_user_root = Path(local_user_root_raw).expanduser()
+        remote_user_root = skill_evolution_cfg.get("remote_user_skills_root", "/personal/.evomaster-skills")
+        if local_user_root.is_dir():
+            env.upload_directory_tarball(str(local_user_root), remote_user_root, exclude=exclude)
+            self.logger.info("sync_skills_to_remote: user skills synced to %s", remote_user_root)
+
+        # Store mapping attributes on session for SSH path remapping in skill.py
         self.session.remote_project_root = remote_base
-        self.logger.info("sync_skills_to_remote: done, remote_project_root=%s", remote_base)
+        self.session.remote_user_skills_root = remote_user_root
+        self.session.local_user_skills_root = str(local_user_root)
+        self.logger.info(
+            "sync_skills_to_remote: done, remote_project_root=%s, remote_user_skills_root=%s",
+            remote_base,
+            remote_user_root,
+        )
 
     def setup(self) -> None:
         """Override: build MatMasterSkillRegistry and pass to tools/agents."""
@@ -170,6 +193,11 @@ class MatMasterPlayground(BasePlayground):
         mat_skills_root = _project_root() / "playground" / "mat_master" / "skills"
         skill_registry = None
 
+        # Resolve user skills root (shared by both enabled/disabled branches)
+        skill_evolution_cfg = mat_master_config.get("skill_evolution") or {}
+        local_user_skills_root_raw = skill_evolution_cfg.get("local_user_skills_root", "~/.evomaster-skills")
+        local_user_skills_root = Path(local_user_skills_root_raw).expanduser()
+
         if skills_config.get("enabled", False):
             from evomaster.skills import SkillRegistry
 
@@ -180,19 +208,20 @@ class MatMasterPlayground(BasePlayground):
             self.logger.info("Loaded %d core skills", len(core_registry.get_all_skills()))
 
             dynamic_root = None
-            skill_evolution = mat_master_config.get("skill_evolution") or {}
-            dynamic_rel = skill_evolution.get("dynamic_skills_root")
+            dynamic_rel = skill_evolution_cfg.get("dynamic_skills_root")
             if dynamic_rel:
                 dynamic_root = _project_root() / dynamic_rel
             skill_registry = MatMasterSkillRegistry(
                 core_registry,
                 dynamic_root=dynamic_root,
                 mat_skills_root=mat_skills_root,
+                user_skills_root=local_user_skills_root,
             )
             self.logger.info(
-                "MatMasterSkillRegistry ready (dynamic_root=%s, mat_skills_root=%s)",
+                "MatMasterSkillRegistry ready (dynamic_root=%s, mat_skills_root=%s, user_skills_root=%s)",
                 dynamic_root,
                 mat_skills_root,
+                local_user_skills_root,
             )
         else:
             # Always load local mat_master skills (ask-human, etc.) even when skills.enabled is False
@@ -204,10 +233,12 @@ class MatMasterPlayground(BasePlayground):
                 core_registry,
                 dynamic_root=None,
                 mat_skills_root=mat_skills_root,
+                user_skills_root=local_user_skills_root,
             )
             self.logger.info(
-                "MatMasterSkillRegistry (local only, mat_skills_root=%s)",
+                "MatMasterSkillRegistry (local only, mat_skills_root=%s, user_skills_root=%s)",
                 mat_skills_root,
+                local_user_skills_root,
             )
 
         self._skill_registry = skill_registry

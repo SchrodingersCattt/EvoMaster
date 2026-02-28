@@ -1358,6 +1358,56 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                     result_info["new_skill_registered"] = True
                     result_info["skill_path"] = str(skill_path or "")
                     result_info["result_summary"] = str(skill_path or evo_result)[:200]
+
+                    # --- Skill Persistence Decision ---
+                    # Decide whether to copy this skill to the user's permanent library.
+                    # persist_skill flag in the step dict means the user explicitly asked to save.
+                    # persist_new_skills config controls the default behaviour:
+                    #   "always" -> always save, "never" -> skip, "ask" -> prompt (default save).
+                    try:
+                        _mm_cfg = _get_mat_master_config(self.config)
+                        _evo_cfg = _mm_cfg.get("skill_evolution") or {}
+                        _persist_mode = _evo_cfg.get("persist_new_skills", "ask")
+                        _persist_flag = bool(step.get("persist_skill", False))
+                        _should_persist = _persist_flag or _persist_mode == "always"
+
+                        if not _should_persist and _persist_mode == "ask" and skill_path:
+                            _ans = self._ask_human(
+                                f"New skill created at {skill_path}.\n"
+                                "Save to personal library (~/.evomaster-skills)? (y/n, default: y)",
+                                mode="timeout",
+                                timeout_sec=30,
+                                default="y",
+                            )
+                            _should_persist = _ans.strip().lower() not in ("n", "no")
+
+                        if _should_persist and skill_path:
+                            from pathlib import Path as _Path
+                            _skill_p = _Path(skill_path)
+                            _local_user_root = _Path(
+                                _evo_cfg.get("local_user_skills_root", "~/.evomaster-skills")
+                            ).expanduser()
+                            # Read skill name from SKILL.md; fall back to directory name
+                            _skill_name = _skill_p.name
+                            _skill_md = _skill_p / "SKILL.md"
+                            if _skill_md.exists():
+                                try:
+                                    import re as _re
+                                    _text = _skill_md.read_text(encoding="utf-8")
+                                    _m = _re.search(r'^name:\s*(.+)$', _text, _re.MULTILINE)
+                                    if _m:
+                                        _skill_name = _m.group(1).strip()
+                                except Exception:
+                                    pass
+                            _persisted = evo_exp._copy_to_user_skills(_skill_p, _skill_name, _local_user_root)
+                            result_info["persisted_path"] = _persisted
+                            # Register into the live registry so the agent can use it this session
+                            _registry = getattr(self.agent, "skill_registry", None)
+                            if _registry and hasattr(_registry, "register_user_skill"):
+                                _registry.register_user_skill(_Path(_persisted))
+                            print(f"\033[96m[Autonomy] Skill persisted to {_persisted}\033[0m")
+                    except Exception as _pe:
+                        self.logger.warning("[Planner] Skill persist step failed (non-fatal): %s", _pe)
                 else:
                     print("\033[93m[Autonomy] Evolution failed. Triggering fallback.\033[0m")
                     if self._execute_fallback(step, solver, workspaces, state.get('plan') if isinstance(state, dict) else None):

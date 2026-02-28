@@ -683,6 +683,13 @@ class BasePlayground:
             env.upload_directory(str(skills_root), remote_skills, exclude=exclude)
 
         self.session.remote_project_root = remote_base
+        # Default no-op values for user skill path remapping used by skill.py.
+        # Subclasses that support user skills (e.g. MatMasterPlayground) will
+        # override these with the actual paths after uploading user skills.
+        if not hasattr(self.session, 'remote_user_skills_root'):
+            self.session.remote_user_skills_root = None
+        if not hasattr(self.session, 'local_user_skills_root'):
+            self.session.local_user_skills_root = None
         self.logger.info(
             'sync_skills_to_remote: done, remote_project_root=%s', remote_base
         )
