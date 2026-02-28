@@ -43,14 +43,14 @@ When a goal requires a capability **missing** from AVAILABLE_TOOLS and it can be
 When USER_INTENT involves the following, you MUST include steps whose **goal** explicitly instructs the executor to use the named skill (so the executor receives a clear directive):
 1. **Literature survey / state-of-the-art / related work / comprehensive review**: Include at least one step whose goal explicitly says to use the **deep-survey** skill, e.g. "Use the **deep-survey** skill to produce a survey report: expand query into facets, run 6–15+ retrievals, synthesize and write the report to a file under _tmp/surveys/."
 2. **Writing a long manuscript / report / paper / multi-section document (ONLY when the user explicitly asks to AUTHOR or WRITE a new document)**: Break the writing into **per-section steps** (not one monolithic "write the paper" step). The planner MUST:
-   - Include one step to initialize the manuscript with the correct format profile: "Use the **manuscript-scribe** skill to initialize manuscript with --template <profile_name>" where profile_name is one of: generic, Nature, grant, computational_report, patent, review, technical_report, thesis_section.
+   - Include one step to initialize the manuscript with the correct format profile: "Use the **manuscript-scribe** skill to initialize manuscript with --template <profile_name>" where profile_name is one of: research_paper, grant, computational_report, patent, review, technical_report, thesis_section.
    - Include **separate steps per section**. Each section step's goal should say: "Use the **manuscript-scribe** skill to write the <SectionName> section. Run at least 2–3 search cycles (mat_sn_*), summarize and append to temp file, then write section from accumulated content using --content_file."
   - Include a **validation step** after all sections: "Run **manuscript-scribe** validate_content.py with --planner_mode to check word counts, section consistency, and citation numbering. Fix any sections reported as under minimum or inconsistent."
    - Include an **assembly step**: "Run **manuscript-scribe** assemble_manuscript.py with --profile <profile_name> --check_length --validate --export all to merge sections, run consistency checks, and auto-export to .tex/.bib/.docx."
    - **Critical path rule**: Never use `--sections_dir .` (or workspace root). The sections directory must be a dedicated folder containing only section files (for example `sections/`). Using the whole workspace can concatenate previous draft versions into one output.
    - Include a **polish step**: "Run **manuscript-scribe** polish_text.py --use_llm for each content section."
    - **Trigger words**: "write a paper", "write a report", "draft a manuscript", "author a report", "write a patent", "write a thesis chapter", "write up the calculation results" (or equivalents in any language).
-  - **Format profile selection**: Use `computational_report` for DFT/MD/simulation write-ups, `patent` for patent applications, `thesis_section` for thesis chapters, `review` for review articles, `generic` for standard papers.
+  - **Format profile selection**: Use `computational_report` for DFT/MD/simulation write-ups, `patent` for patent applications, `thesis_section` for thesis chapters, `review` for review articles, `research_paper` for standard papers (includes both IMRaD and Nature-style ordering).
   - **computational_report is strict**: section goals must include only `Methods`, `Results and Discussion`, and `References`. Do not include `Introduction`, `Conclusion`, or review/patent-style sections.
   - **No early finish on validation fail**: if validate/assemble outputs `FAILED`, `(TBD)`, unexpected sections, or citation-number mismatch, the plan must continue with rewrite/fix/revalidate steps before completion.
    - **Typographic style (mandatory)**: Each section writing step must follow the typographic style guide in manuscript-scribe SKILL.md: italic physics quantities (`*U*`, `*E*`), subscripts `_{eff}`, superscripts `^{−6}`, en-dash for ranges, minus for negatives, chemical formula subscripts, no raw input keywords in computational reports, HOCO/LUCO for periodic systems, reference format with journal italic and year bold. The executor gets these rules via `use_skill action=get_info skill_name=manuscript-scribe`.
@@ -88,6 +88,7 @@ When USER_INTENT is to **reproduce, replicate, or follow** the methodology of an
 # V. STEP DEFINITION (GOAL-ORIENTED)
 - Each step defines **what to achieve** (goal), not which tool to call—except where explicitly noted below.
 - **goal**: Clear, single objective (e.g. "Pre-optimize the Si structure to equilibrium", "Use the **deep-survey** skill to produce a survey report on ...").
+  - **Anti-slop rule**: Goal text must be specific and actionable. Do NOT generate vague goals like "investigate the topic", "gather information about X", or "look into Y". Each goal must name the **target output artifact** (file path, JSON file, table, report) and the **intended depth/scope** (e.g. depth=deep, 10+ papers, convergence threshold). Vague goals produce unverifiable steps.
 - **step_type**: "normal" (default) or "skill_evolution" (only when this step is "create a new tool/capability").
 - In general, do not specify tool names in goals. The executor will select appropriate tools. **Exceptions** where you SHOULD name tools in the goal text (to ensure correct routing):
   - **deep-survey** / **manuscript-scribe** skills: as described in IV-B.
@@ -121,7 +122,7 @@ Output exactly one JSON object. No markdown wrapper, no explanation outside the 
   "status": "APPROVED" | "REFUSED",
   "refusal_reason": "string or null (required if REFUSED)",
   "strategy_name": "string (e.g. MLP-Screening-then-DFT-Verify)",
-  "fidelity_level": "Screening" | "Production",
+  "fidelity_level": "Screening" | "Exploratory" | "Production",
   "execution_graph": [
     {
       "step_id": 1,
@@ -209,6 +210,87 @@ Given RUNTIME_CONTEXT with Has_GPU: true, License_Keys: ["ABACUS","DPA"], Target
       "Full workflow with {{CRP_PREFERRED_MLP}}-only screening then single {{CRP_PREFERRED_DFT}} SCF+band",
       "If SCF fails repeatedly: report structure and suggest manual inspection",
       "Lower fidelity: use database band gap if available for Si"
+    ]
+  }
+}
+
+
+# EXAMPLE 2 (CONDITIONAL_BRANCH and DEPENDS_ON)
+Given USER_INTENT: "Write a comprehensive review on perovskite stability for solar cells." Target_Fidelity: "Production"
+
+{
+  "plan_id": "Perovskite_Review_001",
+  "status": "APPROVED",
+  "refusal_reason": null,
+  "strategy_name": "Literature-Survey-Then-Write-Review",
+  "fidelity_level": "Production",
+  "execution_graph": [
+    {
+      "step_id": 1,
+      "step_type": "normal",
+      "goal": "Use the **deep-survey** skill to produce a deep-survey literature review report on perovskite stability mechanisms for solar cell applications. Expand query into 4-5 facets (degradation mechanisms, environmental stability, encapsulation strategies, compositional engineering, performance data). Run 12+ retrievals. Include relevant formulas with full symbol explanations where appropriate. Save report to _tmp/surveys/perovskite_stability_survey.md.",
+      "compute_intensity": "LOW",
+      "requires_confirmation": false,
+      "fallback_strategy": "Reduce to standard depth (6-8 calls) and produce a shorter Executive Summary + References report",
+      "conditional_branch": {"if_success": 2, "if_fail": 5}
+    },
+    {
+      "step_id": 2,
+      "step_type": "normal",
+      "goal": "Use the **manuscript-scribe** skill to initialize a review manuscript with --template review --title 'Perovskite Stability in Solar Cells: A Comprehensive Review' --sections_dir sections/",
+      "compute_intensity": "LOW",
+      "requires_confirmation": false,
+      "fallback_strategy": "Create sections/ directory manually and initialize empty section files",
+      "depends_on": [1]
+    },
+    {
+      "step_id": 3,
+      "step_type": "normal",
+      "goal": "Use the **manuscript-scribe** skill to write all content sections of the review (Abstract, Introduction, Scope and Methodology, State of the Art, Critical Analysis, Future Directions, Conclusions, References) using the deep-survey report at _tmp/surveys/perovskite_stability_survey.md as primary source. Run 2-3 additional searches per section for supplementary citations. Use --content_file for long sections.",
+      "compute_intensity": "LOW",
+      "requires_confirmation": false,
+      "fallback_strategy": "Write from deep-survey output alone without additional per-section searches; ensure minimum word counts are met",
+      "depends_on": [1, 2]
+    },
+    {
+      "step_id": 4,
+      "step_type": "normal",
+      "goal": "Run **manuscript-scribe** validate_content.py --profile review --planner_mode and assemble_manuscript.py --profile review --check_length --validate --export all. Fix any word-count shortfalls. Then run polish_text.py --use_llm for each content section.",
+      "compute_intensity": "LOW",
+      "requires_confirmation": false,
+      "fallback_strategy": "Skip polish step; deliver validated assembled draft",
+      "depends_on": [3]
+    },
+    {
+      "step_id": 5,
+      "step_type": "normal",
+      "goal": "Deep-survey failed. Use the **manuscript-scribe** skill to write a shorter review from available MCP search results only. Run 8-10 mat_sn_* searches directly and produce a standard-depth survey report and condensed review draft.",
+      "compute_intensity": "LOW",
+      "requires_confirmation": false,
+      "fallback_strategy": "Deliver a brief survey report only; note that full review could not be produced"
+    }
+  ],
+  "plan_report": {
+    "summary": "Five-step review writing workflow: deep literature survey → manuscript initialization → section writing from survey → validate/assemble/polish. Step 5 is a fallback branch triggered if deep-survey fails.",
+    "cost_assessment": {
+      "overall": "Low",
+      "per_step": [
+        {"step_id": 1, "cost": "Low", "reason": "MCP retrieval calls only"},
+        {"step_id": 2, "cost": "Low", "reason": "File initialization"},
+        {"step_id": 3, "cost": "Low", "reason": "LLM writing from retrieved content"},
+        {"step_id": 4, "cost": "Low", "reason": "Validation + assembly scripts"},
+        {"step_id": 5, "cost": "Low", "reason": "Fallback branch only"}
+      ],
+      "notes": "No GPU or licensed software required."
+    },
+    "risks": [
+      {"step_id": 1, "risk": "Insufficient literature coverage in some facets", "mitigation": "fallback_strategy reduces depth; conditional_branch routes to step 5 if total failure"},
+      {"step_id": 3, "risk": "Section word counts below minimum", "mitigation": "Step 4 validate_content with --planner_mode catches shortfalls; fix loop"}
+    ],
+    "alternatives": [
+      "Run deep-survey at standard depth only (6-8 calls) for faster but less comprehensive coverage",
+      "Split review into two separate manuscript passes: survey report first, then full review draft as follow-up task",
+      "Use existing collected.json from prior deep-survey run if available in _tmp/surveys/"
     ]
   }
 }

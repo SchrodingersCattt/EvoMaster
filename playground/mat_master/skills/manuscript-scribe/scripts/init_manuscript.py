@@ -2,15 +2,15 @@
 Create a new manuscript draft with a standard outline driven by format profiles.
 
 Available profiles (use --list_formats to see all):
-  generic, Nature, grant, computational_report, patent, review,
+  research_paper, grant, computational_report, patent, review,
   technical_report, thesis_section
 
 With --sections_dir, creates one file per section for later assembly and writes
 a _profile.json so downstream scripts can auto-detect the profile.
 
 Usage:
-  python init_manuscript.py --title "My Paper" --template "Nature"
-  python init_manuscript.py --title "My Paper" --template "generic" --sections_dir sections/
+  python init_manuscript.py --title "My Paper" --template "research_paper"
+  python init_manuscript.py --title "My Paper" --template "research_paper" --sections_dir sections/
   python init_manuscript.py --title "Computation Report" --template "computational_report"
   python init_manuscript.py --list_formats
 
@@ -90,7 +90,7 @@ def main() -> None:
     ap.add_argument("--title", default=None, help="Paper or grant title (required unless --list_formats)")
     ap.add_argument(
         "--template",
-        default="generic",
+        default="research_paper",
         choices=list(FORMAT_PROFILES),
         help=f"Format profile (choices: {', '.join(sorted(FORMAT_PROFILES))})",
     )

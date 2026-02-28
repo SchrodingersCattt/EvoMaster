@@ -75,10 +75,26 @@ def main() -> None:
     base = _project_tmp() / "surveys"
     base.mkdir(parents=True, exist_ok=True)
 
+    def _resolve_output(output_arg: str | None, default_name: str) -> Path:
+        """Resolve --output to a Path.
+
+        If the caller already provided a path containing a directory separator
+        (e.g. ``_tmp/surveys/foo.md``), treat it as relative to CWD so the
+        path is not doubled by prepending ``_tmp/surveys/`` again.
+        Only bare filenames (no separator) get the automatic ``_tmp/surveys/``
+        prefix.
+        """
+        if output_arg is None:
+            return base / default_name
+        if "/" in output_arg or "\\" in output_arg:
+            p = Path(output_arg)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            return p
+        return base / output_arg
+
     # ------------------------------------------------------------------ brief
     if args.depth == "brief":
-        out_name = args.output or f"collected_{sanitize_topic(topic)}.json"
-        out_path = base / out_name
+        out_path = _resolve_output(args.output, f"collected_{sanitize_topic(topic)}.json")
         skeleton = {
             "topic": topic,
             "depth": "brief",
@@ -98,8 +114,7 @@ def main() -> None:
 
     # --------------------------------------------------------------- standard
     if args.depth == "standard":
-        out_name = args.output or f"survey_{sanitize_topic(topic)}.md"
-        out_path = base / out_name
+        out_path = _resolve_output(args.output, f"survey_{sanitize_topic(topic)}.md")
         outline = f"""# Survey: {topic}
 
 ## Executive Summary
@@ -118,8 +133,7 @@ def main() -> None:
 
     # ------------------------------------------------------------------- deep
     write_plan = args.write_plan or (args.depth == "deep")
-    out_name = args.output or f"survey_{sanitize_topic(topic)}.md"
-    out_path = base / out_name
+    out_path = _resolve_output(args.output, f"survey_{sanitize_topic(topic)}.md")
 
     if write_plan:
         plan_path = base / f"{sanitize_topic(topic)}_plan.md"

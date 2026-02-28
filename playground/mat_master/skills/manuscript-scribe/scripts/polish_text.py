@@ -50,12 +50,46 @@ def llm_polish(text: str, section_name: str) -> str:
         return simple_polish(text)
     model = os.environ.get("LITELLM_MODEL") or os.environ.get("OPENAI_MODEL") or "gpt-4o-mini"
     client = OpenAI(api_key=api_key, base_url=base_url.rstrip("/") if base_url else None)
-    system = """You are an academic copy-editor. Revise the given section point by point:
-- Fix grammar and clarity.
-- Remove redundancy (e.g. "In this paper we show that", repeated phrases).
-- Improve formality and flow.
-- Preserve all citations [n](URL) and section structure; do not add or remove content.
+    # Patent Claims only: skip De-AIGC passes (claims language is intentionally
+    # formal/repetitive by convention). All other sections including Detailed Description
+    # follow De-AIGC rules normally (see prompts/patent.md).
+    is_patent_claims = section_name.lower() == "claims"
+    if is_patent_claims:
+        system = """You are a patent copy-editor. Revise the given patent section for grammar and clarity only.
+- Fix grammar errors and unclear antecedents.
+- Do NOT change claim structure, claim language (comprising, wherein, characterized in that), or claim numbering.
+- Do NOT remove repetition that is intentional in patent drafting.
+- Preserve all section structure; do not add or remove content.
 Output ONLY the revised section body text, no commentary or markdown code fence."""
+    else:
+        system = """You are an academic copy-editor applying the De-AIGC writing standard. Revise the given section using the following 5-pass checklist:
+
+Pass 1 - Claim Calibration:
+- Replace overconfident verbs (prove, establish, enable, predict, the only, eliminates) with calibrated ones: support, indicate, constrain, suggest.
+- Downgrade any claim not directly supported by evidence in the text.
+
+Pass 2 - Specificity Upgrade:
+- Replace abstract nouns (framework, strategy, paradigm, workflow) with concrete operations.
+- Add boundary conditions (system, regime, material class) where claims are unbounded.
+- Replace vague statistics with named ones (MAD, RMSD, STD).
+
+Pass 3 - Sentence Compression:
+- Remove filler clauses and repeated qualifiers.
+- Delete any sentence that only restates the previous one.
+- Split compound sentences carrying more than one main point.
+
+Pass 4 - Redundancy Removal:
+- Delete duplicate thesis statements or definitions.
+- Each key term defined once; remove re-definitions.
+
+Pass 5 - Tone Scan:
+- Delete or replace: Notably, Significantly, Importantly, Remarkably, It is worth noting that, It is well known that, This section reviews, It should be noted that, Paves the way for, Groundbreaking, Unprecedented, Showcasing, Highlighting, Fosters, Unleashes.
+- Remove intensifiers without quantitative backing: just, merely, simply, dramatically.
+
+Rules:
+- Preserve all citations [n](URL) and section structure exactly.
+- Do not add new content or references; only revise existing text.
+- Output ONLY the revised section body text, no commentary or markdown code fence."""
     user = f"Section: {section_name}\n\n{text}"
     try:
         r = client.chat.completions.create(

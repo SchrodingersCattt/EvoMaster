@@ -38,15 +38,29 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 FORMAT_PROFILES: dict[str, dict[str, Any]] = {
-    # ── Standard academic paper ───────────────────────────────────────────
-    "generic": {
-        "description": "Standard academic research paper",
+    # ── Standard academic research paper ─────────────────────────────────
+    # Default section order: Abstract, Introduction, Methods, Results,
+    # Discussion, References.
+    # Nature-style variant: omit Methods here; add it after Discussion.
+    # To use the Nature variant, pass --nature_order flag to init_manuscript.py
+    # or specify sections explicitly; the section metadata is identical.
+    "research_paper": {
+        "description": "Standard academic research paper (default IMRaD order; Nature-style variant: Methods after Discussion)",
         "sections": [
             "Abstract",
             "Introduction",
             "Methods",
             "Results",
             "Discussion",
+            "References",
+        ],
+        # Nature-style alternate section order (Methods after Discussion)
+        "sections_nature_variant": [
+            "Abstract",
+            "Introduction",
+            "Results",
+            "Discussion",
+            "Methods",
             "References",
         ],
         "overall_min_words": 3000,
@@ -57,16 +71,18 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
                 "required_elements": ["objective", "methods", "key_findings"],
                 "writing_hint": (
                     "Concise summary of the entire paper: state the problem, "
-                    "methods used, main results, and significance in one paragraph."
+                    "methods used, main results, and significance in one paragraph. "
+                    "Nature-style variant: keep ≤200 words; focus on problem and main finding."
                 ),
             },
             "Introduction": {
-                "min_words": 500,
+                "min_words": 400,
                 "required_elements": ["background", "gap", "objective"],
                 "writing_hint": (
                     "Start broad (field context), narrow to the specific gap in "
                     "knowledge, then state the objective/contribution of this work. "
-                    "Cite relevant prior work throughout."
+                    "Cite relevant prior work throughout. "
+                    "Nature-style variant: keep concise; get to the point quickly."
                 ),
             },
             "Methods": {
@@ -75,7 +91,8 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
                 "writing_hint": (
                     "Describe the approach in enough detail for reproducibility: "
                     "materials/models, computational or experimental setup, key "
-                    "parameters, and analysis techniques. Cite methods references."
+                    "parameters, and analysis techniques. Cite methods references. "
+                    "Nature-style variant: this section is placed after Discussion."
                 ),
             },
             "Results": {
@@ -84,11 +101,12 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
                 "writing_hint": (
                     "Present findings with supporting data (figures, tables). "
                     "Describe trends and observations objectively. Reference each "
-                    "figure/table explicitly."
+                    "figure/table explicitly. "
+                    "Nature-style variant: light interpretation may be combined here."
                 ),
             },
             "Discussion": {
-                "min_words": 500,
+                "min_words": 400,
                 "required_elements": ["interpretation", "comparison", "implications"],
                 "writing_hint": (
                     "Interpret results in the context of prior work. Compare with "
@@ -102,66 +120,6 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
                     "Numbered list matching in-text [n](url) citations. Each entry: "
                     "Authors, Title, *Journal*, Year, URL."
                 ),
-            },
-        },
-    },
-    # ── Nature-style paper (Methods after Discussion) ─────────────────────
-    "Nature": {
-        "description": "Nature journal format (Methods placed after Discussion)",
-        "sections": [
-            "Abstract",
-            "Introduction",
-            "Results",
-            "Discussion",
-            "Methods",
-            "References",
-        ],
-        "overall_min_words": 3000,
-        "section_meta": {
-            "Abstract": {
-                "min_words": 150,
-                "max_words": 200,
-                "required_elements": ["objective", "key_findings"],
-                "writing_hint": (
-                    "Very concise (Nature limit ~150 words). State the problem, "
-                    "approach, and main finding."
-                ),
-            },
-            "Introduction": {
-                "min_words": 400,
-                "required_elements": ["background", "gap", "objective"],
-                "writing_hint": (
-                    "Brief context and motivation. Nature introductions are shorter "
-                    "than typical papers; get to the point quickly."
-                ),
-            },
-            "Results": {
-                "min_words": 600,
-                "required_elements": ["data", "observations"],
-                "writing_hint": (
-                    "Combined results presentation with light interpretation. "
-                    "Reference figures and extended data."
-                ),
-            },
-            "Discussion": {
-                "min_words": 400,
-                "required_elements": ["interpretation", "significance"],
-                "writing_hint": (
-                    "Broader implications, comparison with prior work, future outlook. "
-                    "Keep concise."
-                ),
-            },
-            "Methods": {
-                "min_words": 400,
-                "required_elements": ["approach", "parameters"],
-                "writing_hint": (
-                    "Detailed methods for reproducibility. In Nature format this "
-                    "section appears after Discussion."
-                ),
-            },
-            "References": {
-                "min_words": 0,
-                "writing_hint": "Numbered list; each entry must have a URL.",
             },
         },
     },
