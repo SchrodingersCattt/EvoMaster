@@ -100,7 +100,7 @@ def main() -> None:
     ap.add_argument(
         "--profile",
         default=None,
-        help="Format profile name (e.g. generic, computational_report). "
+        help="Format profile name (e.g. research_paper, computational_report). "
              "Used for section-name validation and word-count minimums.",
     )
     ap.add_argument(
