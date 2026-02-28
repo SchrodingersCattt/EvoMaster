@@ -90,7 +90,7 @@ def main() -> None:
     ap.add_argument("--title", default=None, help="Paper or grant title (required unless --list_formats)")
     ap.add_argument(
         "--template",
-        default="generic",
+        default="research_paper",
         choices=list(FORMAT_PROFILES),
         help=f"Format profile (choices: {', '.join(sorted(FORMAT_PROFILES))})",
     )

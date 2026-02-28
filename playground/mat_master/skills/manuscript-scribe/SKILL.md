@@ -314,7 +314,7 @@ Full format details: use_skill get_reference with reference_name="citation_and_r
 
 - **run_script** with **script_name**: `init_manuscript.py`, `write_section.py`, `append_chunk.py`, `validate_content.py`, `assemble_manuscript.py`, `run_pipeline.py`, `polish_text.py`, `export_docx.py`, or `export_latex.py`; **script_args** as in Usage above.
 
-## De-AIGC Writing Rules (mandatory for all profiles except patent Claims/Descriptions sections)
+## De-AIGC Writing Rules (mandatory for all profiles except the patent Claims section)
 
 Full reference: `use_skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
 
@@ -330,7 +330,7 @@ Full reference: `use_skill action=get_reference reference_name="de_aigc_style_gu
 
 **After drafting each section**, run the 5-pass De-AIGC checklist (claim calibration → specificity upgrade → compression → redundancy removal → tone scan). See full guide for pattern rewrites and rewrite frames.
 
-**Patent exception**: De-AIGC rules apply to Background Art, Technical Field, and Detailed Description. Claims language is intentionally formal/repetitive — do NOT apply De-AIGC passes to Claims section. See `prompts/patent.md`.
+**Patent exception**: De-AIGC rules apply to all sections **except Claims**. Claims language is intentionally formal/repetitive ("comprising", "wherein") — do NOT apply De-AIGC passes to the Claims section. All other sections (Technical Field, Background Art, Summary, Detailed Description, Abstract) follow De-AIGC rules normally. See `prompts/patent.md`.
 
 ## Rules
 

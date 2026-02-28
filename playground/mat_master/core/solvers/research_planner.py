@@ -65,10 +65,8 @@ def _load_pre_check_system_prompt(config_dir=None) -> str:
     )
 
 
-# Lazy-loaded so config_dir can be injected at class instantiation time.
-# ResearchPlanner.__init__ calls _load_pre_check_system_prompt(self._config_dir)
-# and stores the result in self._pre_check_system.
-PRE_CHECK_SYSTEM = _load_pre_check_system_prompt()
+# Pre-check prompt is loaded per-instance in ResearchPlanner.__init__ via
+# _load_pre_check_system_prompt(self._config_dir) and stored as self._pre_check_system.
 
 
 def _get_mat_master_config(config) -> dict:
@@ -245,7 +243,7 @@ class ResearchPlanner(BaseExp):
         planner_cfg = mat.get("planner") or {}
         self._config_dir = Path(config_dir).resolve() if config_dir else None
         self._planner_prompt_file = str(planner_cfg.get("system_prompt_file", "prompts/planner_system_prompt.txt"))
-        self._pre_check_system = _load_pre_check_system_prompt(self._config_dir).format(language_rule=LANGUAGE_RULE)
+        self._pre_check_system = _load_pre_check_system_prompt(self._config_dir).replace("{language_rule}", LANGUAGE_RULE)
         self.state_file = planner_cfg.get("state_file", "research_state.json")
         self.max_steps = planner_cfg.get("max_steps", 20)
         self.human_check = planner_cfg.get("human_check_step", True)
