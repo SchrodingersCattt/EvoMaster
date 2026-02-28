@@ -181,7 +181,7 @@ The export scripts (`export_docx.py`, `export_latex.py`) apply many of these aut
 - **References section**: Must list **exactly** the same numbers as in the text, in order. Each entry must include the index [n], full citation (Authors, Title, *Journal*, Year), and the **original source URL**. No extra or missing entries.
 - **Consistency**: At assembly time, the script checks that every in-text [n] has a matching [n] in References and that reference URLs are valid.
 
-Full format details: use_skill get_reference with reference_name="citation_and_references.md" (not the skill name).
+Full format details are in `citation_and_output_format.md`, which is already injected into your system prompt. You do not need to fetch it separately.
 
 ## Scripts
 
@@ -340,7 +340,7 @@ Full reference: `use_skill action=get_reference reference_name="de_aigc_style_gu
 * **Chunked writing**: Use multiple `write_section.py` calls per section (first call creates, further calls use `--append`) or build the full section in a file then pass with `--content_file`; the script does not expand short text.
 * **Long-task state (recommended)**: Use `--state _tmp/manuscript/state.json --resume` on write/validate/assemble stages for deterministic resume.
 * **Profile**: Always pass `--profile <name>` to init_manuscript, write_section, validate_content, and assemble_manuscript. Use `computational_report` for DFT/MD write-ups, `patent` for patent apps, `thesis_section` for thesis chapters, etc.
-* Citations: **text + hyperlink** to original source; References section must match in-text [n] exactly (see reference/citation_and_references.md).
+* Citations: **text + hyperlink** to original source; References section must match in-text [n] exactly (see `citation_and_output_format.md` already in your system prompt).
 * Always write long content to **files**; one section per call for `write_section.py`.
 * **User uploads (mandatory)**: If the user uploads files or provides documents in the workspace, you MUST **fully parse/read every such file** before writing any section. Do **not** start writing until all uploaded/workspace PDFs (and other docs) have been completely read. For PDFs, use MCP document tools (mat_doc_*) for full-text extraction; do not skip or only skim.
 * Before finalizing, run `validate_content.py` then `assemble_manuscript.py` with `--validate` and address term, abbreviation, reference, and word-count checks.

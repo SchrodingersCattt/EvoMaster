@@ -13,7 +13,7 @@ Produce a full-length, multi-section review report. This is the most rigorous ti
 ## Workflow
 
 ### Step 1 — Plan facets
-- Analyze the topic and break it into **3-5 facets** (e.g. definition/background, mechanisms, methods/approaches, state of the art, gaps/challenges; see `reference/search_facets_and_rounds.md` for typed facet examples).
+- Analyze the topic and break it into **3-5 facets** (e.g. definition/background, mechanisms, methods/approaches, state of the art, gaps/challenges; for typed facet examples fetch `use_skill action=get_reference skill_name="deep-survey" reference_name="search_facets_and_rounds.md"`).
 - For each facet, plan **2-4 query variants** (keywords, synonyms, alternate language, "X review", "X mechanism").
 - Target total: **10-15+ retrieval tool calls**.
 
