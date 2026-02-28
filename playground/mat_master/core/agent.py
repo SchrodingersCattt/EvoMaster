@@ -201,16 +201,25 @@ You can use the 'use_skill' tool to:
                 out.append(line)
             else:
                 out.append(line)
-        return self._add_file_uri_prefix('\n'.join(out))
+        workspace = getattr(self.session.config, 'workspace_path', '') or ''
+        workspace_abs = str(Path(workspace).absolute()) if workspace else ''
+        return self._add_file_uri_prefix('\n'.join(out), workspace_path=workspace_abs)
 
     @staticmethod
-    def _add_file_uri_prefix(text: str) -> str:
-        """Convert bare absolute Unix paths to file:// URIs in non-code text.
+    def _add_file_uri_prefix(text: str, workspace_path: str = '') -> str:
+        """Convert local paths to file:// URIs in non-code text.
 
-        Skips fenced code blocks and inline code spans so that command examples
-        and code snippets are left unchanged.  Existing http/https/ftp/file URLs
-        are preserved as-is to avoid double-conversion.
+        Handles two cases:
+        - Bare absolute Unix paths (e.g. /personal/workspace/a.csv) anywhere in text.
+        - Relative paths inside markdown link targets (e.g. [f](_tmp/a.json)), resolved
+          against workspace_path when provided.
+
+        Skips fenced code blocks and inline code spans.  Existing http/https/ftp/file
+        URLs are preserved as-is to avoid double-conversion.
         """
+        _SCHEME_OR_ANCHOR = re.compile(
+            r'^(?:https?|ftp|file|mailto)://|^#', re.IGNORECASE
+        )
         # Split on fenced code blocks (``` ... ```) and inline code (`...`).
         # Odd-indexed parts are inside code — leave them untouched.
         parts = re.split(r'(```[\s\S]*?```|`[^`\n]+`)', text)
@@ -235,6 +244,20 @@ You can use the 'use_skill' tool to:
                 r'file://\1',
                 proc,
             )
+            # Convert relative paths inside markdown link targets to file:// URIs.
+            # Absolute targets are already handled above; only relative ones remain.
+            # Targets starting with a known scheme, '#', or '/' are left unchanged.
+            # Targets containing \x00 are stash placeholders (already-stashed URLs)
+            # and must be skipped to avoid treating them as relative paths.
+            def _fix_md_link(m: re.Match) -> str:  # noqa: E731
+                link_text, target = m.group(1), m.group(2)
+                if '\x00' in target or _SCHEME_OR_ANCHOR.match(target) or target.startswith('/'):
+                    return m.group(0)
+                if workspace_path:
+                    return f'[{link_text}](file://{workspace_path.rstrip("/")}/{target})'
+                return m.group(0)
+
+            proc = re.sub(r'\[([^\]]*)\]\(([^)\s]+)\)', _fix_md_link, proc)
             # Restore stashed URLs.
             for idx, url in enumerate(stashed):
                 proc = proc.replace(f'\x00URL{idx:04d}\x00', url)
@@ -395,7 +418,7 @@ You can use the 'use_skill' tool to:
         """将匹配模式的工具执行结果自动写入 session 工作区 _tmp/tool_outputs/<tool_name>/。
 
         通过 session.write_file 写入，本地 session 写本地目录，SSH session 写远程节点，与 agent 实际工作目录一致。
-        返回写入文件的相对路径（供拼进 observation 提示 agent），失败或未匹配时返回 None。
+        返回写入文件的绝对路径（供拼进 observation 提示 agent），失败或未匹配时返回 None。
         """
         if not observation or not isinstance(observation, str):
             return None
@@ -425,8 +448,8 @@ You can use the 'use_skill' tool to:
             rel = f'_tmp/tool_outputs/{safe_name}/step_{step}_{suffix}{ext}'
             remote_path = f'{base}/{rel}'
             self.session.write_file(remote_path, observation, encoding='utf-8')
-            self.logger.info('Auto-saved tool output to %s', rel)
-            return rel
+            self.logger.info('Auto-saved tool output to %s', remote_path)
+            return remote_path
         except Exception as e:
             self.logger.warning('Auto-save tool output failed: %s', e)
             return None
