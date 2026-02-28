@@ -45,39 +45,30 @@ def _get_async_registry(config) -> AsyncToolRegistry:
     return AsyncToolRegistry(d)
 
 
-_PRE_CHECK_SYSTEM_TEMPLATE = """You are a pre-planning readiness assessor for a Computational Research Planner.
+def _load_pre_check_system_prompt(config_dir=None) -> str:
+    """Load pre-check system prompt from file, falling back to minimal inline template."""
+    candidates = []
+    if config_dir is not None:
+        playground_base = Path(str(config_dir).replace("configs", "playground", 1))
+        candidates.append((playground_base / "prompts" / "pre_check_system_prompt.txt").resolve())
+        candidates.append((Path(config_dir) / "prompts" / "pre_check_system_prompt.txt").resolve())
+    local_base = Path(__file__).resolve().parent.parent.parent
+    candidates.append((local_base / "prompts" / "pre_check_system_prompt.txt").resolve())
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.read_text(encoding="utf-8")
+    # Fallback: minimal inline template
+    return (
+        "You are a pre-planning readiness assessor. Output JSON with keys: "
+        "ready_to_plan (bool), prerequisites (list), reasoning (str). "
+        "Do NOT generate the plan itself. Only assess readiness."
+    )
 
-{language_rule}
 
-Your job is to analyze the user's task and workspace to determine whether the planner has enough information to create a good execution plan right now, or whether preliminary work is needed first.
-
-ASSESSMENT CRITERIA:
-1. **Uploaded files**: Are there PDFs, papers, or data files referenced or present in the workspace that must be parsed/read BEFORE a plan can be made? (e.g. "reproduce this paper" requires parsing the PDF first to know what methods, parameters, and structures are involved.)
-2. **Task clarity**: Is the task description specific enough to decompose into concrete steps? Or is it too vague (e.g. "do some calculations" with no target material or property)?
-3. **Required context**: Does the planner need to know specific structures, parameters, methods, or properties from external sources (papers, databases) before it can plan?
-
-OUTPUT FORMAT:
-Return a strictly valid JSON object with these keys:
-{{
-    "ready_to_plan": true | false,
-    "prerequisites": [
-        {{
-            "type": "parse_pdf" | "parse_files" | "search_info" | "clarify_task",
-            "description": "What needs to be done and why",
-            "target": "file path or search query if applicable"
-        }}
-    ],
-    "reasoning": "Brief explanation of your assessment"
-}}
-
-RULES:
-- If the task is straightforward (e.g. "calculate band gap of Si", "search for X structures") and no files need pre-processing: set ready_to_plan=true, prerequisites=[].
-- If there are PDF/paper files that the user asks to reproduce/analyze/read, or if the task says to follow a paper/literature: set ready_to_plan=false and include parse_pdf prerequisites.
-- If the task mentions files to process but doesn't specify which files exist, check the workspace file listing.
-- Be conservative: when in doubt about whether pre-processing is needed, recommend it.
-- Do NOT generate the plan itself. Only assess readiness."""
-
-PRE_CHECK_SYSTEM = _PRE_CHECK_SYSTEM_TEMPLATE.format(language_rule=LANGUAGE_RULE)
+# Lazy-loaded so config_dir can be injected at class instantiation time.
+# ResearchPlanner.__init__ calls _load_pre_check_system_prompt(self._config_dir)
+# and stores the result in self._pre_check_system.
+PRE_CHECK_SYSTEM = _load_pre_check_system_prompt()
 
 
 def _get_mat_master_config(config) -> dict:
@@ -254,6 +245,7 @@ class ResearchPlanner(BaseExp):
         planner_cfg = mat.get("planner") or {}
         self._config_dir = Path(config_dir).resolve() if config_dir else None
         self._planner_prompt_file = str(planner_cfg.get("system_prompt_file", "prompts/planner_system_prompt.txt"))
+        self._pre_check_system = _load_pre_check_system_prompt(self._config_dir).format(language_rule=LANGUAGE_RULE)
         self.state_file = planner_cfg.get("state_file", "research_state.json")
         self.max_steps = planner_cfg.get("max_steps", 20)
         self.human_check = planner_cfg.get("human_check_step", True)
@@ -453,7 +445,14 @@ class ResearchPlanner(BaseExp):
         crp_cfg = mat.get("crp", {})
         active_licenses = crp_cfg.get("licenses", [])
         task_lower = task_description.lower()
-        fidelity = "Screening" if any(w in task_lower for w in ["quick", "fast", "screen", "rough", "coarse", "preliminary"]) else "Production"
+        _SCREENING_KW = ["quick", "fast", "screen", "rough", "coarse", "preliminary", "快速", "粗略"]
+        _EXPLORATORY_KW = ["初步", "探索", "exploratory", "试试", "try out", "pilot"]
+        if any(w in task_lower for w in _SCREENING_KW):
+            fidelity = "Screening"
+        elif any(w in task_lower for w in _EXPLORATORY_KW):
+            fidelity = "Exploratory"
+        else:
+            fidelity = "Production"
         context_data = {
             "RUNTIME_CONTEXT": {
                 "Hardware": {
@@ -791,17 +790,51 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         if text:
             self._emit("Planner", "thought", text)
 
-    def _execute_fallback(self, step: dict[str, Any], solver: DirectSolver, workspaces: Path) -> bool:
-        """Run fallback_strategy for this step; returns True if fallback ran successfully."""
+    def _execute_fallback(
+        self,
+        step: dict[str, Any],
+        solver: DirectSolver,
+        workspaces: Path,
+        plan: dict[str, Any] | None = None,
+    ) -> bool:
+        """Run fallback_strategy for this step; returns True if fallback ran successfully.
+
+        If fallback_logic is empty/None, the plan-level alternatives from
+        plan_report.alternatives are appended as context hints to the solver prompt
+        so the LLM can decide whether any of them is applicable.
+        """
         fallback = step.get("fallback_logic") or step.get("fallback_strategy") or ""
-        if not fallback or fallback.strip().lower() == "none":
-            return False
         step_id = step.get("step_id", 0)
+
+        # Build the fallback prompt: prefer step-level fallback_logic; supplement with
+        # plan-level alternatives when step-level logic is absent.
+        if fallback and fallback.strip().lower() != "none":
+            fallback_prompt = f"Execute fallback strategy: {fallback}"
+        else:
+            # No step-level fallback — use plan-level alternatives as context hints
+            alternatives: list[str] = []
+            if plan and isinstance(plan, dict):
+                alternatives = plan.get("plan_report", {}).get("alternatives", []) or []
+            if not alternatives:
+                return False
+            alts_text = "
+".join(f"  - {a}" for a in alternatives)
+            fallback_prompt = (
+                f"Step {step_id} failed and has no specific fallback strategy. "
+                f"The original plan listed these high-level alternatives for the overall task:
+"
+                f"{alts_text}
+
+"
+                "Consider whether any of these alternatives can be applied to recover from "
+                f"the failure at step {step_id}. Attempt the most appropriate recovery action."
+            )
+
         step_dir = workspaces / f"step_{step_id}"
         step_dir.mkdir(parents=True, exist_ok=True)
         solver.set_run_dir(workspaces)
         try:
-            solver.run(f"Execute fallback: {fallback}", task_id=f"fallback_{step_id}")
+            solver.run(fallback_prompt, task_id=f"fallback_{step_id}")
             return True
         except Exception as e:
             self.logger.warning("Fallback failed for step %s: %s", step_id, e)
@@ -869,6 +902,12 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
             return "technical_report"
         if any(k in t for k in ("grant", "基金")):
             return "grant"
+        if any(k in t for k in (
+            "paper", "article", "research", "manuscript",
+            "nature", "generic", "imrad",
+            "论文", "文章", "研究报告",
+        )):
+            return "research_paper"
         return None
 
     @staticmethod
@@ -1303,7 +1342,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             if not _HAS_EVOLUTION:
                 self.logger.warning("[Planner] skill_evolution requested but SkillEvolutionExp not available.")
                 print("\033[91m[Planner] Skill Evolution not available. Attempting fallback.\033[0m")
-                if self._execute_fallback(step, solver, workspaces):
+                if self._execute_fallback(step, solver, workspaces, state.get('plan') if isinstance(state, dict) else None):
                     result_info["fallback_succeeded"] = True
                     result_info["result_summary"] = "fallback_after_evo_unavailable"
                 else:
@@ -1327,7 +1366,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                     result_info["result_summary"] = str(skill_path or evo_result)[:200]
                 else:
                     print("\033[93m[Autonomy] Evolution failed. Triggering fallback.\033[0m")
-                    if self._execute_fallback(step, solver, workspaces):
+                    if self._execute_fallback(step, solver, workspaces, state.get('plan') if isinstance(state, dict) else None):
                         result_info["fallback_succeeded"] = True
                         result_info["result_summary"] = "fallback_after_evo_failed"
                     else:
@@ -1335,7 +1374,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                         result_info["result_summary"] = f"evo_failed_no_fallback: {str(evo_result)[:150]}"
             except Exception as e:
                 self.logger.error("[Planner] Skill evolution step %s failed: %s", step_id, e)
-                if self._execute_fallback(step, solver, workspaces):
+                if self._execute_fallback(step, solver, workspaces, state.get('plan') if isinstance(state, dict) else None):
                     result_info["fallback_succeeded"] = True
                     result_info["result_summary"] = "fallback_after_evo_exception"
                 else:
@@ -1405,7 +1444,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
         except Exception as e:
             self.logger.error("[Planner] Step %s failed: %s", step_id, e)
             print("\033[93m[Planner] Step failed. Attempting fallback...\033[0m")
-            if self._execute_fallback(step, solver, workspaces):
+            if self._execute_fallback(step, solver, workspaces, state.get('plan') if isinstance(state, dict) else None):
                 result_info["fallback_succeeded"] = True
                 if self._is_quality_critical_step(intent):
                     result_info["status"] = "failed"
@@ -1465,7 +1504,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
 
         dialog = Dialog(
             messages=[
-                SystemMessage(content=PRE_CHECK_SYSTEM),
+                SystemMessage(content=self._pre_check_system),
                 UserMessage(content=user_content),
             ],
             tools=[],
