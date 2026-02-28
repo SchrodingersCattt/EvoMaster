@@ -969,7 +969,11 @@ class MatToolCallbacks:
         if 'error' in info:
             return observation, info
 
-        parsed = self._try_parse_observation_json(observation)
+        parsed = (
+            observation
+            if isinstance(observation, dict)
+            else self._try_parse_observation_json(observation)
+        )
         if parsed is None:
             return observation, info
 
@@ -1193,16 +1197,17 @@ class MatToolCallbacks:
     def after_autodownload_oss_results(
         self,
         tool_call: Any,
-        observation: str,
+        observation: str | dict[str, Any],
         info: dict[str, Any],
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[str | dict[str, Any], dict[str, Any]]:
         """Auto-download OSS artifacts for any mat_* tool."""
         tool_name = tool_call.function.name or ''
         if not tool_name.startswith('mat_'):
             return observation, info
-        urls = [
-            u for u in _OSS_URL_RE.findall(observation or '') if self._is_oss_url(u)
-        ]
+        obs_str = (
+            observation if isinstance(observation, str) else json.dumps(observation)
+        )
+        urls = [u for u in _OSS_URL_RE.findall(obs_str or '') if self._is_oss_url(u)]
         if not urls:
             return observation, info
 
@@ -1281,9 +1286,15 @@ class MatToolCallbacks:
             rel = self._to_workspace_rel_path(item['local_path'])
             note_lines.append(f"- {item['url']}")
             note_lines.append(f"  workspace_path: {rel}")
-        new_obs = (observation or '') + '\n' + '\n'.join(note_lines)
         new_info = dict(info or {})
         new_info['auto_downloaded_files'] = downloaded
+        new_info['auto_download_note'] = '\n'.join(note_lines)
+
+        # 保留 observation 为 dict，不改成字符串，这样 tool_result 里 observation 仍是对象
+        if isinstance(observation, dict):
+            return observation, new_info
+        base = observation if isinstance(observation, str) else json.dumps(observation)
+        new_obs = (base or '') + '\n' + '\n'.join(note_lines)
         return new_obs, new_info
 
     def after_download_characterization_results(
@@ -1309,7 +1320,11 @@ class MatToolCallbacks:
         if info.get('error') is not None:
             return observation, info
 
-        parsed = self._try_parse_observation_json(observation)
+        parsed = (
+            observation
+            if isinstance(observation, dict)
+            else self._try_parse_observation_json(observation)
+        )
         if parsed is None:
             return observation, info
 
@@ -1359,7 +1374,8 @@ class MatToolCallbacks:
             note_lines.append(f"- {item['url']}")
             note_lines.append(f"  workspace_path: {rel}")
 
-        new_obs = (observation or '') + '\n' + '\n'.join(note_lines)
+        base = observation if isinstance(observation, str) else json.dumps(observation)
+        new_obs = (base or '') + '\n' + '\n'.join(note_lines)
         new_info = dict(info or {})
         existing = list(new_info.get('auto_downloaded_files', []))
         new_info['auto_downloaded_files'] = existing + downloaded
@@ -1379,7 +1395,11 @@ class MatToolCallbacks:
 
         n_papers = ''
         try:
-            obj = json.loads(observation)
+            obj = (
+                observation
+                if isinstance(observation, dict)
+                else json.loads(observation)
+            )
             if (
                 isinstance(obj, dict)
                 and 'data' in obj

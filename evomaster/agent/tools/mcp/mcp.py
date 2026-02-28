@@ -18,10 +18,9 @@ from ..base import BaseTool, ToolError
 # misses them (e.g. ``str(ClosedResourceError())`` → ``""``).
 _SESSION_ERROR_TYPES: tuple[type[Exception], ...] = ()
 try:
-    from anyio import (
-        ClosedResourceError as _ClosedResourceError,
-        BrokenResourceError as _BrokenResourceError,
-    )
+    from anyio import BrokenResourceError as _BrokenResourceError
+    from anyio import ClosedResourceError as _ClosedResourceError
+
     _SESSION_ERROR_TYPES = (_ClosedResourceError, _BrokenResourceError)
 except ImportError:
     pass
@@ -115,7 +114,7 @@ class MCPTool(BaseTool):
 
     def execute(
         self, session: BaseSession, args_json: str
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[str | dict[str, Any] | list[Any], dict[str, Any]]:
         """执行 MCP 工具
 
         Args:
@@ -124,7 +123,7 @@ class MCPTool(BaseTool):
 
         Returns:
             (observation, info) 元组
-            - observation: 返回给 Agent 的观察结果
+            - observation: 返回给 Agent 的观察结果，可为 str 或结构化 dict/list（单条 JSON 时保留）
             - info: 额外信息（包含 MCP 元数据）
         """
         try:
@@ -232,12 +231,16 @@ class MCPTool(BaseTool):
                 if attempt < max_attempts - 1 and self._is_session_error(e):
                     self.logger.warning(
                         "MCP session error for '%s', requesting reconnect (attempt %d/%d): %s",
-                        self._tool_name, attempt + 1, max_attempts, err_desc,
+                        self._tool_name,
+                        attempt + 1,
+                        max_attempts,
+                        err_desc,
                     )
                     if self._try_reconnect():
                         continue  # 重连成功，用新 connection 重试
                     self.logger.error(
-                        "MCP reconnect failed for '%s', giving up.", self._tool_name,
+                        "MCP reconnect failed for '%s', giving up.",
+                        self._tool_name,
                     )
                 raise ToolError(f"Failed to call MCP tool: {err_desc}")
 
@@ -262,8 +265,12 @@ class MCPTool(BaseTool):
         combined = (type(exc).__name__ + ' ' + str(exc)).lower()
         return any(
             ind in combined
-            for ind in ('closedresourceerror', 'brokenresourceerror',
-                        'closedresource', 'brokenresource')
+            for ind in (
+                'closedresourceerror',
+                'brokenresourceerror',
+                'closedresource',
+                'brokenresource',
+            )
         )
 
     def _try_reconnect(self, timeout: float = 30.0) -> bool:
@@ -306,7 +313,8 @@ class MCPTool(BaseTool):
             finished = done_event.wait(timeout=timeout)
             if not finished:
                 self.logger.warning(
-                    "MCP reconnection timed out for server '%s'", server_name,
+                    "MCP reconnection timed out for server '%s'",
+                    server_name,
                 )
                 return False
 
@@ -320,13 +328,14 @@ class MCPTool(BaseTool):
             if conn is not None and getattr(conn, 'session', None) is not None:
                 self.logger.info(
                     "MCP server '%s' reconnected, retrying tool '%s'",
-                    server_name, self._tool_name,
+                    server_name,
+                    self._tool_name,
                 )
                 return True
 
             self.logger.warning(
                 "MCP reconnect for '%s' completed but connection session is "
-                "still invalid (session=%s)",
+                'still invalid (session=%s)',
                 server_name,
                 getattr(conn, 'session', 'N/A'),
             )
@@ -336,25 +345,30 @@ class MCPTool(BaseTool):
             self.logger.warning("Reconnect attempt failed for '%s': %s", server_name, e)
             return False
 
-    def _format_mcp_result(self, result: Any) -> str:
-        """格式化 MCP 工具返回结果
+    def _format_mcp_result(self, result: Any) -> str | dict[str, Any] | list[Any]:
+        """格式化 MCP 工具返回结果，尽量保留结构化数据（dict/list）。
 
-        MCP 返回的是 content 列表，需要提取文本内容。
-        支持多种 content 类型：text, json, image 等。
+        MCP 返回的是 content 列表。若只有一条且为 JSON 文本，则解析为 dict/list 返回；
+        否则拼接为字符串。这样如 mat_struct_db_fetch_structures_from_db 等工具可在
+        tool_result 中保留 observation 为字典。
 
         Args:
-            result: MCP 工具返回的原始结果
+            result: MCP 工具返回的原始结果（多为 content 列表）
 
         Returns:
-            格式化后的字符串
+            格式化结果：str、dict 或 list
         """
+        self.logger.debug(
+            '[observation] _format_mcp_result input tool=%s result_type=%s result_len=%s',
+            self._tool_name,
+            type(result).__name__,
+            len(result) if isinstance(result, (list, str)) else 'N/A',
+        )
         if isinstance(result, list):
             # MCP 返回的是 content 列表
-            parts = []
+            parts: list[str] = []
             for item in result:
-                # 处理不同类型的 content
                 if hasattr(item, 'text'):
-                    # Pydantic 模型
                     parts.append(item.text)
                 elif isinstance(item, dict):
                     if 'text' in item:
@@ -362,18 +376,49 @@ class MCPTool(BaseTool):
                     elif 'type' in item and item['type'] == 'text':
                         parts.append(item.get('text', ''))
                     else:
-                        # 其他类型的 content，转为 JSON
                         parts.append(json.dumps(item, indent=2))
                 else:
                     parts.append(str(item))
-            return '\n'.join(parts) if parts else ''
-        elif isinstance(result, str):
+            if not parts:
+                return ''
+            # 仅当恰好一条且为 JSON 时保留为 dict/list，便于下游 tool_result 使用
+            if len(parts) == 1:
+                text = parts[0].strip()
+                if text.startswith('{') or text.startswith('['):
+                    try:
+                        parsed = json.loads(text)
+                        if isinstance(parsed, (dict, list)):
+                            self.logger.debug(
+                                '[observation] _format_mcp_result returning dict/list keys=%s',
+                                (
+                                    list(parsed.keys())[:6]
+                                    if isinstance(parsed, dict)
+                                    else len(parsed)
+                                ),
+                            )
+                            return parsed
+                    except json.JSONDecodeError:
+                        pass
+            self.logger.debug(
+                '[observation] _format_mcp_result returning str (parts=%s)',
+                len(parts),
+            )
+            return '\n'.join(parts)
+        if isinstance(result, dict):
             return result
-        elif result is None:
+        if isinstance(result, str):
+            stripped = result.strip()
+            if (stripped.startswith('{') or stripped.startswith('[')) and stripped:
+                try:
+                    parsed = json.loads(result)
+                    if isinstance(parsed, (dict, list)):
+                        return parsed
+                except json.JSONDecodeError:
+                    pass
+            return result
+        if result is None:
             return ''
-        else:
-            # 其他类型，转为 JSON
-            return json.dumps(result, indent=2, default=str)
+        return json.dumps(result, indent=2, default=str)
 
     def get_tool_spec(self) -> ToolSpec:
         """获取工具规格（用于 LLM function calling）
