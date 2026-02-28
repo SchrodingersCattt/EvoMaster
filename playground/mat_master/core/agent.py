@@ -15,11 +15,12 @@ from pathlib import Path
 from typing import Any
 
 from evomaster.agent.agent import Agent
-from evomaster.utils.types import AssistantMessage, StepRecord, ToolMessage
+from evomaster.utils.types import AssistantMessage, StepRecord, SystemMessage, ToolMessage
 
 from .async_execution_policy import AsyncExecutionPolicy
 from .callback import MatToolCallbacks, ToolCallbackPipeline
 from .execution import BatchExecutor, ExecutionTask
+from .execution_journal import ExecutionJournal
 from .job_registry import JobRegistry
 from .tool_guard import ToolGuard
 
@@ -69,11 +70,21 @@ class MatMasterAgent(Agent):
         if not isinstance(self._tool_output_auto_save_patterns, list):
             self._tool_output_auto_save_patterns = ['mat_sn_']
         self._tool_output_save_counter = 0
+        self._execution_journal = ExecutionJournal()
 
     def _initialize(self, task) -> None:
-        """Override: reset tool output save counter for each new task."""
+        """Override: reset counters and set up execution journal for each new task."""
         super()._initialize(task)
         self._tool_output_save_counter = 0
+        # Reset journal for the new task and bind it to the task-scoped file.
+        self._execution_journal = ExecutionJournal()
+        workspace = getattr(self.session.config, 'workspace_path', '') or ''
+        if workspace:
+            task_id = getattr(self.trajectory, 'task_id', None) or 'unknown'
+            journal_name = f'execution_journal_{task_id}.jsonl'
+            self._execution_journal.set_path(
+                os.path.join(workspace, '_tmp', journal_name)
+            )
 
     def _get_async_tool_registry(self):
         """Get async registry derived from full config dict."""
@@ -209,8 +220,9 @@ You can use the 'use_skill' tool to:
     def _add_file_uri_prefix(text: str, workspace_path: str = '') -> str:
         """Convert local paths to file:// URIs in non-code text.
 
-        Handles two cases:
+        Handles three cases:
         - Bare absolute Unix paths (e.g. /personal/workspace/a.csv) anywhere in text.
+        - Bare absolute Windows paths (e.g. C:\\Users\\foo\\a.csv) anywhere in text.
         - Relative paths inside markdown link targets (e.g. [f](_tmp/a.json)), resolved
           against workspace_path when provided.
 
@@ -220,6 +232,13 @@ You can use the 'use_skill' tool to:
         _SCHEME_OR_ANCHOR = re.compile(
             r'^(?:https?|ftp|file|mailto)://|^#', re.IGNORECASE
         )
+        # Matches Windows absolute paths: letter + colon + slash or backslash
+        _WIN_ABS = re.compile(r'^[A-Za-z]:[/\\]')
+
+        def _win_path_to_uri(path: str) -> str:
+            """Convert a Windows absolute path to a file:/// URI."""
+            return 'file:///' + path.replace('\\', '/')
+
         # Split on fenced code blocks (``` ... ```) and inline code (`...`).
         # Odd-indexed parts are inside code — leave them untouched.
         parts = re.split(r'(```[\s\S]*?```|`[^`\n]+`)', text)
@@ -244,17 +263,33 @@ You can use the 'use_skill' tool to:
                 r'file://\1',
                 proc,
             )
+            # Convert bare absolute Windows paths (e.g. C:\foo\bar.csv or C:/foo/bar.csv).
+            # Lookbehind: not preceded by word chars or colon to avoid false positives.
+            proc = re.sub(
+                r'(?<![a-zA-Z0-9_.])([A-Za-z]:[/\\][^\s\)\]\,;"\'<>*#]+)',
+                lambda m: _win_path_to_uri(m.group(1)),
+                proc,
+            )
             # Convert relative paths inside markdown link targets to file:// URIs.
-            # Absolute targets are already handled above; only relative ones remain.
-            # Targets starting with a known scheme, '#', or '/' are left unchanged.
+            # Absolute targets (Unix, Windows, scheme, anchor) are already handled above
+            # or detected here and skipped.
             # Targets containing \x00 are stash placeholders (already-stashed URLs)
             # and must be skipped to avoid treating them as relative paths.
             def _fix_md_link(m: re.Match) -> str:  # noqa: E731
                 link_text, target = m.group(1), m.group(2)
-                if '\x00' in target or _SCHEME_OR_ANCHOR.match(target) or target.startswith('/'):
+                if (
+                    '\x00' in target
+                    or _SCHEME_OR_ANCHOR.match(target)
+                    or target.startswith('/')
+                    or _WIN_ABS.match(target)
+                ):
                     return m.group(0)
                 if workspace_path:
-                    return f'[{link_text}](file://{workspace_path.rstrip("/")}/{target})'
+                    # Normalise workspace_path to forward slashes for the URI
+                    ws = workspace_path.rstrip('/').rstrip('\\').replace('\\', '/')
+                    # workspace_path may itself be a Windows path — use file:///
+                    prefix = 'file:///' if re.match(r'^[A-Za-z]:/', ws) else 'file://'
+                    return f'[{link_text}]({prefix}{ws}/{target})'
                 return m.group(0)
 
             proc = re.sub(r'\[([^\]]*)\]\(([^)\s]+)\)', _fix_md_link, proc)
@@ -276,6 +311,14 @@ You can use the 'use_skill' tool to:
         can use it for info['message'] and observation.
         """
         normalised = self._normalise_finish_message(finish_message or '')
+
+        # Safety net: if the LLM omitted the Execution Details section and the
+        # journal has entries, auto-append a structured per-step section.
+        # Zero extra LLM calls.
+        if '## Execution Details' not in normalised and self._execution_journal.entries:
+            details_md = self._execution_journal.get_execution_details_md()
+            if details_md:
+                normalised = normalised.rstrip() + '\n\n' + details_md
 
         now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
         header = (
@@ -507,6 +550,16 @@ You can use the 'use_skill' tool to:
                     )
                     info = {**info, 'auto_saved_path': saved_path}
 
+            # Record tool outcome in the execution journal (skip finish — handled separately).
+            if tool_name != 'finish':
+                self._execution_journal.record(
+                    step=self._step_count,
+                    tool=tool_name,
+                    status='error' if 'error' in info else 'success',
+                    info=info,
+                    observation=observation if isinstance(observation, str) else '',
+                )
+
             # finish 工具从源头返回 dict，直接透传（不经过 run_after / _format_tool_observation，避免 callbacks 假定 observation 为 str）
             if tool_name == 'finish' and isinstance(observation, dict):
                 return observation, info
@@ -586,11 +639,47 @@ You can use the 'use_skill' tool to:
                 )
         return ordered
 
+    # Marker embedded in periodic reminder system messages so they can be
+    # identified and replaced on the next injection cycle.
+    _REMINDER_MARKER = '\x00EXEC_STATE_REMINDER\x00'
+    _REMINDER_INTERVAL = 5  # inject / refresh every N steps
+
+    def _build_execution_reminder(self) -> str:
+        """Build the periodic execution-state reminder injected into the dialog."""
+        n = self._step_count
+        task_text = (self._initial_user_prompt or '').strip()
+        if len(task_text) > 500:
+            task_text = task_text[:500] + '…'
+        compact = self._execution_journal.get_compact_summary()
+        return (
+            f'{self._REMINDER_MARKER}'
+            f'[EXECUTION STATE REMINDER — Step {n}]\n\n'
+            f'ORIGINAL TASK:\n{task_text}\n\n'
+            f'PROGRESS ({len(self._execution_journal.entries)} tool calls):\n{compact}\n\n'
+            'ACTIVE RULES:\n'
+            '- All workspace file links must use [filename](path) format.\n'
+            '- Finish message must include "## Execution Details" per-step subsections.\n'
+            '- Do not use fallback strategies unless the primary approach explicitly fails.'
+        )
+
     def _step(self) -> bool:
         """Override: for finish tool, execute it and set should_finish when task_completed is true or partial."""
         self._step_count += 1
         # Keep async monitor state fresh across turns.
         self._job_registry.refresh_pending()
+
+        # Inject / refresh periodic execution-state reminder every N steps.
+        if self._step_count > 1 and self._step_count % self._REMINDER_INTERVAL == 0:
+            self.current_dialog.messages = [
+                m for m in self.current_dialog.messages
+                if not (
+                    getattr(m, 'role', None) is not None
+                    and getattr(m.role, 'value', m.role) == 'system'
+                    and self._REMINDER_MARKER in (getattr(m, 'content', '') or '')
+                )
+            ]
+            reminder = self._build_execution_reminder()
+            self.current_dialog.add_message(SystemMessage(content=reminder))
 
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
         assistant_message = self.llm.query(dialog_for_query)
