@@ -281,8 +281,9 @@ class AsyncToolRegistry:
         sm = self.server_mapping_str()
         return (
             f"# Execution Environment Constraints\n"
-            f"1. The local sandbox is ephemeral and computationally restricted (ASE, Pymatgen, data processing "
-            f"only). No {sw} binaries are available locally.\n"
+            f"1. The local environment supports Python data processing (ASE, Pymatgen, etc.). "
+            f"General Python packages may be installed via pip if missing. "
+            f"However, no {sw} binaries are available locally.\n"
             f"2. Heavy calculations MUST be submitted via MCP tools ({sm}). "
             f"Never run these codes via execute_bash."
         )
