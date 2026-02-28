@@ -6,8 +6,9 @@
 import json
 import logging
 from pathlib import Path
+from typing import Any, Optional
+
 from evomaster.utils.types import TaskInstance
-from typing import Any
 
 
 class BaseExp:
@@ -51,40 +52,46 @@ class BaseExp:
         """
         self.run_dir = Path(run_dir)
 
-    def run(self, task_description: str, task_id: str = "exp_001") -> dict:
-        """运行一次实验
+    def run(
+        self,
+        task_description: str = '',
+        task_id: str = 'exp_001',
+        task: Optional[TaskInstance] = None,
+    ) -> dict:
+        """运行一次实验。
+
+        若传入 task，则直接使用（可带 task.meta 如 dialog_history）；否则用 task_description 与 task_id 构造任务。
 
         Args:
-            task_description: 任务描述
-            task_id: 任务 ID
+            task_description: 任务描述（task 为 None 时使用）
+            task_id: 任务 ID（task 为 None 时使用）
+            task: 可选，已有 TaskInstance（传入时忽略 task_description、task_id）
 
         Returns:
             运行结果字典
         """
-        # 创建任务实例
-        task = TaskInstance(
-            task_id=task_id,
-            task_type="discovery",
-            description=task_description,
-        )
-
-        # 运行 Agent
-        self.logger.debug(f"Running task: {task_id}")
-        trajectory = self.agent.run(task)
-
-        # 保存结果
+        if task is not None:
+            run_task = task
+        else:
+            run_task = TaskInstance(
+                task_id=task_id,
+                task_type='discovery',
+                description=task_description,
+            )
+        run_task_id = run_task.task_id
+        self.logger.debug(f"Running task: {run_task_id}")
+        trajectory = self.agent.run(run_task)
         result = {
-            "task_id": task_id,
-            "status": trajectory.status,
-            "steps": len(trajectory.steps),
-            "trajectory": trajectory,
+            'task_id': run_task_id,
+            'status': trajectory.status,
+            'steps': len(trajectory.steps),
+            'trajectory': trajectory,
         }
         self.results.append(result)
-
         return {
-            "trajectory": trajectory,
-            "status": trajectory.status,
-            "steps": len(trajectory.steps),
+            'trajectory': trajectory,
+            'status': trajectory.status,
+            'steps': len(trajectory.steps),
         }
 
     def save_results(self, output_file: str):
@@ -95,18 +102,19 @@ class BaseExp:
         """
         output_data = []
         for result in self.results:
-            output_data.append({
-                "task_id": result["task_id"],
-                "status": result["status"],
-                "steps": result["steps"],
-                "trajectory": result["trajectory"].model_dump(),
-            })
+            output_data.append(
+                {
+                    'task_id': result['task_id'],
+                    'status': result['status'],
+                    'steps': result['steps'],
+                    'trajectory': result['trajectory'].model_dump(),
+                }
+            )
 
-        with open(output_file, "w") as f:
+        with open(output_file, 'w') as f:
             json.dump(output_data, f, indent=2, default=str, ensure_ascii=False)
 
         self.logger.info(f"Results saved to {output_file}")
-
 
     def _extract_agent_response(self, trajectory: Any) -> str:
         """从轨迹中提取Agent的最终回答
@@ -118,15 +126,15 @@ class BaseExp:
             Agent的回答文本
         """
         if not trajectory or not trajectory.dialogs:
-            return ""
+            return ''
 
         # 获取最后一个对话
         last_dialog = trajectory.dialogs[-1]
-        
+
         # 查找最后一个助手消息
         for message in reversed(last_dialog.messages):
             if hasattr(message, 'role') and message.role.value == 'assistant':
                 if hasattr(message, 'content') and message.content:
                     return message.content
-        
-        return ""
+
+        return ''

@@ -3,8 +3,9 @@
 ag-ui 协议（前后端约定）：
 - 服务端 -> 客户端：SSE，event 固定为 "ag-ui"，data 为 JSON 字符串，字段：
   source: "System"|"User"|"MatMaster"|"Planner", type: 事件类型, content: 内容, session_id: 会话 id
-  事件类型示例: session_status, status, query, thought, tool_call, tool_result, finish, error, cancelled, planner_ask, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等。
-  session_status：流开头推送，含 status: 'idle'|'active'，可选 last_task_id；便于部署/重启后前端根据 idle 结束“未结束的 stream”状态。bohrium_node 的 content 含 node_id, status: 'created'|'ready'|'skills_synced'|'connected'|'destroyed', message，ready/skills_synced/connected 时另有 ip。
+  事件类型示例: session_status, status, query, thought, tool_call, tool_result, finish, error, cancelled, run_interrupted, planner_ask, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等。
+  session_status：流开头推送，含 status: 'idle'|'active'，可选 last_task_id；便于部署/重启后前端根据 idle 结束“未结束的 stream”状态。
+  run_interrupted：部署/重启导致上一轮在别的 pod 上被中断时推送；含 reason: 'deploy'、content 说明文案、可选 last_user_content；后端会自动在新 pod 上重跑上次任务，前端可仅做展示或根据 reason 结束“未结束的 stream”状态。bohrium_node 的 content 含 node_id, status: 'created'|'ready'|'skills_synced'|'connected'|'destroyed', message，ready/skills_synced/connected 时另有 ip。
 - 客户端 -> 服务端：REST
   POST /chat/sessions/{session_id}/stream  Body 可选：不传或 content 为空→仅历史+ping；有 content→发送并返回本次 SSE 流
   POST /chat/sessions/{session_id}/stop  终止当前运行
@@ -187,6 +188,9 @@ class AgUiEvent(BaseModel):
     type: str  # status | query | thought | tool_call | tool_result | finish | error | cancelled | planner_ask | ...
     content: Any
     session_id: Optional[str] = None
+    invocation_id: Optional[str] = (
+        None  # 本轮调用的唯一标识，前端用于区分第几轮（仅发送流/当轮事件带此字段）
+    )
 
     class Config:
         extra = 'allow'
