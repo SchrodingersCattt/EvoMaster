@@ -43,6 +43,12 @@ async def lifespan(app: FastAPI):
         logger.info('MatMaster chat playground initialized in lifespan.')
     except Exception as e:
         logger.warning('MatMaster chat playground init skipped in lifespan: %s', e)
+    # 多 worker 时：Redis 订阅线程，使任意 worker 收到的 stop 能通知到跑 run 的 worker
+    try:
+        if get_sessions_service().start_redis_stop_subscriber():
+            logger.info('Redis stop subscriber started in lifespan.')
+    except Exception as e:
+        logger.warning('Redis stop subscriber start skipped: %s', e)
     yield
     # 优雅退出：最多等待 30s 让当前 agent 任务结束，再关闭线程池
     try:

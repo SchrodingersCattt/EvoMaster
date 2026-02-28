@@ -1,6 +1,7 @@
 """Agent 执行服务：playground 初始化、线程池、run_agent_sync。"""
 
 import asyncio
+import importlib
 import logging
 import os
 import queue
@@ -54,6 +55,7 @@ class AgentRunService:
     def init_playground_sync(self) -> None:
         """同步初始化默认 playground（tools、MCP、agent），结果缓存在 self._cached_pg；实际 run 按 session_id 用 _get_or_create_playground。"""
         try:
+            importlib.import_module('playground.mat_master.core.playground')
             config_path = _project_root / 'configs' / 'mat_master' / 'config.yaml'
             if not config_path.exists():
                 raise FileNotFoundError(f"Config not found: {config_path}")
@@ -75,6 +77,7 @@ class AgentRunService:
         if session_id in self._playgrounds:
             return self._playgrounds[session_id]
         self._playground_init_done.wait(timeout=300)
+        importlib.import_module('playground.mat_master.core.playground')
         config_path = _project_root / 'configs' / 'mat_master' / 'config.yaml'
         if not config_path.exists():
             raise FileNotFoundError(f"Config not found: {config_path}")
@@ -366,7 +369,8 @@ class AgentRunService:
             )
 
             mode = (mode or 'direct').strip().lower() or 'direct'
-            pg.set_mode(mode)
+            if getattr(pg, 'set_mode', None) is not None:
+                pg.set_mode(mode)
             logger.info(
                 'run_agent_sync: mode=%s planner_enabled=%s',
                 mode,

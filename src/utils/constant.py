@@ -20,6 +20,10 @@ DB_CONFIG = {
     'autocommit': False,
 }
 
+# Redis（多 worker 时用于跨进程停止会话：Pub/Sub）
+# 未配置则 stop 仅在本进程生效。配 REDIS_URL，例：redis://:密码@host:6379/0
+REDIS_URL = (os.getenv('REDIS_URL') or '').strip() or None
+
 BI_URL = os.getenv('BI_URL', 'https://account.test.dp.tech')
 
 # 配额服务（与 MatMaster 一致：matmaster-tools-server）
