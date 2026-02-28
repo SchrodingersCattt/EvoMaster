@@ -287,10 +287,17 @@ class SkillTool(BaseTool):
             (observation, info) 元组
         """
         if not script_name:
-            return (
-                "Error: script_name is required for action='run_script'",
-                {'error': 'missing_parameter'},
-            )
+            # Single-script skill: infer script_name so LLM can omit it (e.g. ask-human/ask.py).
+            scripts = skill.available_scripts
+            if len(scripts) == 1:
+                script_name = scripts[0].name
+            else:
+                available = ', '.join(s.name for s in scripts) if scripts else '(none)'
+                return (
+                    f"Error: script_name is required for action='run_script'. "
+                    f"Skill '{skill.meta_info.name}' has scripts: {available}.",
+                    {'error': 'missing_parameter'},
+                )
 
         # 获取脚本路径
         script_path = skill.get_script_path(script_name)
