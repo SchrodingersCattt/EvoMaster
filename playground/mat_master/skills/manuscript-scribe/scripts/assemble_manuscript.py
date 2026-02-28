@@ -8,7 +8,7 @@ Assemble section files (or a single draft) into one manuscript and run checks:
 Usage:
   python assemble_manuscript.py --sections_dir sections/ --output draft_manuscript.md
   python assemble_manuscript.py --draft draft_manuscript.md --output final.md --validate
-  python assemble_manuscript.py --draft draft.md --output final.md --profile generic --check_length
+  python assemble_manuscript.py --draft draft.md --output final.md --profile research_paper --check_length
 
 Output: Writes assembled Markdown and a validation report (JSON or text).
 """
@@ -374,7 +374,7 @@ def main() -> int:
     ap.add_argument(
         "--profile",
         default=None,
-        help="Format profile name (e.g. generic, computational_report). "
+        help="Format profile name (e.g. research_paper, computational_report). "
              "When set, uses the profile's section order instead of the default.",
     )
     ap.add_argument(

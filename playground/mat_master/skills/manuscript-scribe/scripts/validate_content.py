@@ -7,9 +7,9 @@ Run this **before** assemble_manuscript.py to catch short or incomplete sections
 or pass --profile to assemble_manuscript.py to run checks at assembly time.
 
 Usage:
-  python validate_content.py --draft draft.md --profile generic
+  python validate_content.py --draft draft.md --profile research_paper
   python validate_content.py --sections_dir sections/ --profile computational_report
-  python validate_content.py --draft draft.md --profile generic --planner_mode --report report.json
+  python validate_content.py --draft draft.md --profile research_paper --planner_mode --report report.json
 
 Output: Prints validation summary; optionally writes JSON report to --report.
 """
@@ -568,7 +568,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Validate manuscript content against a format profile.")
     ap.add_argument("--draft", default=None, help="Path to single draft file")
     ap.add_argument("--sections_dir", default=None, help="Directory of section .md files")
-    ap.add_argument("--profile", required=True, help="Format profile name (e.g. generic, computational_report)")
+    ap.add_argument("--profile", required=True, help="Format profile name (e.g. research_paper, computational_report)")
     ap.add_argument("--planner_mode", action="store_true", help="Enforce stricter minimums (1.5x base)")
     ap.add_argument("--report", default=None, help="Write JSON report to this path")
     ap.add_argument(
