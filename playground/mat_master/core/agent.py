@@ -15,7 +15,15 @@ from pathlib import Path
 from typing import Any
 
 from evomaster.agent.agent import Agent
-from evomaster.utils.types import AssistantMessage, StepRecord, SystemMessage, ToolMessage
+from evomaster.utils.types import (
+    AssistantMessage,
+    Dialog,
+    StepRecord,
+    SystemMessage,
+    ToolMessage,
+    Trajectory,
+    UserMessage,
+)
 
 from .async_execution_policy import AsyncExecutionPolicy
 from .callback import MatToolCallbacks, ToolCallbackPipeline
@@ -74,6 +82,47 @@ class MatMasterAgent(Agent):
 
     def _initialize(self, task) -> None:
         """Override: reset counters and set up execution journal for each new task."""
+        """Override: 支持 task.meta['dialog_history'] 多轮对话；否则与基类一致并重置 tool output 计数。"""
+        history_raw = task.meta.get('dialog_history') if task.meta else None
+        if isinstance(history_raw, list) and len(history_raw) > 0:
+            self.trajectory = Trajectory(
+                task_id=task.task_id,
+                meta={
+                    'agent_version': self.VERSION,
+                    'task_type': getattr(task, 'task_type', 'general'),
+                },
+            )
+            system_prompt = self._get_system_prompt()
+            self._initial_system_prompt = system_prompt
+            self._initial_user_prompt = task.description or ''
+            history_messages = []
+            for d in history_raw:
+                if not isinstance(d, dict):
+                    continue
+                role = (d.get('role') or '').strip().lower()
+                try:
+                    if role == 'user':
+                        history_messages.append(UserMessage.model_validate(d))
+                    elif role == 'assistant':
+                        history_messages.append(AssistantMessage.model_validate(d))
+                    elif role == 'tool':
+                        history_messages.append(ToolMessage.model_validate(d))
+                except Exception as e:
+                    self.logger.warning(
+                        'dialog_history skip invalid message role=%s: %s', role, e
+                    )
+            self.current_dialog = Dialog(
+                messages=[
+                    SystemMessage(content=system_prompt),
+                    *history_messages,
+                    UserMessage(content=task.description or ''),
+                ],
+                tools=self._get_tool_specs(),
+            )
+            self.trajectory.dialogs.append(self.current_dialog)
+            self._step_count = 0
+            self._tool_output_save_counter = 0
+            return
         super()._initialize(task)
         self._tool_output_save_counter = 0
         # Reset journal for the new task and bind it to the task-scoped file.
@@ -250,9 +299,11 @@ You can use the 'use_skill' tool to:
             # Temporarily stash existing URLs so they are never re-processed.
             stashed: list[str] = []
 
-            def _stash(m: re.Match) -> str:  # noqa: E731
-                stashed.append(m.group(0))
-                return f'\x00URL{len(stashed) - 1:04d}\x00'
+            def _stash(
+                m: re.Match, _s: list[str] = stashed
+            ) -> str:  # noqa: E731  bind loop var for B023
+                _s.append(m.group(0))
+                return f'\x00URL{len(_s) - 1:04d}\x00'
 
             proc = re.sub(r'(?:https?|ftp|file)://[^\s\)\]\,;"\'<>]+', _stash, part)
             # Convert bare absolute Unix paths (starting with /) to file:// URIs.
@@ -270,6 +321,7 @@ You can use the 'use_skill' tool to:
                 lambda m: _win_path_to_uri(m.group(1)),
                 proc,
             )
+
             # Convert relative paths inside markdown link targets to file:// URIs.
             # Absolute targets (Unix, Windows, scheme, anchor) are already handled above
             # or detected here and skipped.
@@ -671,7 +723,8 @@ You can use the 'use_skill' tool to:
         # Inject / refresh periodic execution-state reminder every N steps.
         if self._step_count > 1 and self._step_count % self._REMINDER_INTERVAL == 0:
             self.current_dialog.messages = [
-                m for m in self.current_dialog.messages
+                m
+                for m in self.current_dialog.messages
                 if not (
                     getattr(m, 'role', None) is not None
                     and getattr(m.role, 'value', m.role) == 'system'

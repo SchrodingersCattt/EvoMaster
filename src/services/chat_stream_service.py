@@ -142,7 +142,7 @@ def prepare_send_message(
         if bohrium_creds:
             svc.SESSIONS[sid]['bohrium_credentials'] = bohrium_creds
 
-    task_id = 'sse_' + uuid.uuid4().hex[:8]
+    task_id = 'sse_' + uuid.uuid4().hex[:16]
     svc.set_session_last_task(sid, task_id, user_id=user_id)
     user_prompt = (req.content or '').strip()
     user_msg = {
