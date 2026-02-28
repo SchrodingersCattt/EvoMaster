@@ -1,19 +1,76 @@
-import importlib
 import logging
-import sys
 import threading
 from functools import lru_cache
-from pathlib import Path
+from typing import Optional
 
 from src.dao.chat_sessions_table import ChatSessionsTable, get_chat_sessions_table
+from src.dao.redis_dao import get_redis_dao
+from src.utils.constant import REDIS_URL
 
 logger = logging.getLogger(__name__)
 
-_project_root = Path(__file__).resolve().parent.parent.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
+# Redis 跨 worker 停止：channel 名，消息体为 session_id
+REDIS_STOP_CHANNEL = 'matmaster_chat:stop'
 
-importlib.import_module('playground.mat_master.core.playground')
+
+class RedisStopSubscriber:
+    """Redis 停止订阅：在独立线程中监听 channel，收到 session_id 后调用本进程的 stop_session_run。"""
+
+    def __init__(self) -> None:
+        self._thread: Optional[threading.Thread] = None
+        self._started = False
+        self._lock = threading.Lock()
+
+    def _run(self) -> None:
+        client = get_redis_dao().create_client()
+        if client is None:
+            return
+        pubsub = None
+        try:
+            pubsub = client.pubsub()
+            pubsub.subscribe(REDIS_STOP_CHANNEL)
+            logger.info('Redis stop subscriber started, channel=%s', REDIS_STOP_CHANNEL)
+            for message in pubsub.listen():
+                if message.get('type') != 'message':
+                    continue
+                sid = (message.get('data') or '').strip()
+                if not sid:
+                    continue
+                try:
+                    if get_sessions_service().stop_session_run(sid):
+                        logger.info('Redis stop: set event for session_id=%s', sid)
+                except Exception as e:
+                    logger.warning(
+                        'Redis stop: handle session_id=%s failed: %s', sid, e
+                    )
+        except Exception as e:
+            logger.warning('Redis stop subscriber exited: %s', e)
+        finally:
+            if pubsub is not None:
+                try:
+                    pubsub.close()
+                except Exception:
+                    pass
+
+    def start(self) -> bool:
+        """启动订阅线程。若未配置 Redis 或已启动则返回 False/True。"""
+        with self._lock:
+            if self._started:
+                return True
+            if not REDIS_URL:
+                logger.debug('Redis not configured, stop subscriber not started')
+                return False
+            if get_redis_dao().get_publish_client() is None:
+                return False
+            self._thread = threading.Thread(
+                target=self._run,
+                name='redis-stop-subscriber',
+                daemon=True,
+            )
+            self._thread.start()
+            self._started = True
+        return True
+
 
 # 仅存会话级运行时数据（如 bohrium_credentials）。history / task_ids / last_task_id 已持久化在 DB。
 SESSIONS: dict[str, dict] = {}
@@ -25,8 +82,9 @@ class ChatSessionsService:
         # 同一 session 同时只允许一个 agent 在跑，避免双开导致状态混乱
         self._sessions_in_run: set[str] = set()
         self._sessions_run_lock = threading.Lock()
-        # session_id -> 当前 run 的 stop Event，cancel_run 会 set 该 event
+        # session_id -> 当前 run 的 stop Event，stop_session_run 会 set 该 event
         self._run_stop_events: dict[str, threading.Event] = {}
+        self._redis_stop_subscriber = RedisStopSubscriber()
 
     def can_access_session(self, session_id: str, user_id: str | None) -> bool:
         """
@@ -178,8 +236,29 @@ class ChatSessionsService:
         self.table.set_session_last_task(session_id, task_id)
 
     def set_stop_event(self, session_id: str, stop_event: threading.Event) -> None:
-        """注册会话的取消事件，cancel_run(session_id) 会 set 该 event。"""
+        """注册会话的取消事件，stop_session_run(session_id) 会 set 该 event。"""
         self._run_stop_events[session_id] = stop_event
+
+    def stop_session_run(self, session_id: str) -> bool:
+        """
+        请求终止该会话当前正在运行的 agent。
+        先通过 Redis 广播（多 worker 时其他进程可收到），再在本进程 set stop event。
+        若有活跃 run 则设置 stop event 并返回 True；否则返回 False。
+        """
+        sid = session_id.strip()
+        get_redis_dao().publish(REDIS_STOP_CHANNEL, sid)
+        ev = self._run_stop_events.get(sid)
+        if ev is None:
+            return False
+        ev.set()
+        return True
+
+    def start_redis_stop_subscriber(self) -> bool:
+        """
+        启动 Redis 停止订阅线程（每个 worker 一个）。若未配置 Redis 则不启动。
+        在 app lifespan 中调用一次即可。
+        """
+        return self._redis_stop_subscriber.start()
 
     def clear_stop_event(self, session_id: str) -> None:
         """run 结束时移除该会话的 stop event。"""
