@@ -119,4 +119,10 @@ def inject_bohrium_executor(
         resources = executor.setdefault('resources', {})
         envs = resources.setdefault('envs', {})
         envs['BOHRIUM_PROJECT_ID'] = cred['project_id']
+    elif executor.get('type') == 'local':
+        # bohr-agent-sdk LocalExecutor 使用 executor.env 作为运行时环境变量；仅传 ak 与 project_id
+        env = executor.setdefault('env', {})
+        env['BOHRIUM_PROJECT_ID'] = str(cred['project_id'])
+        if cred.get('access_key'):
+            env['BOHRIUM_ACCESS_KEY'] = str(cred['access_key'])
     return executor
