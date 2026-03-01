@@ -509,13 +509,13 @@ You can use the 'use_skill' tool to:
     # Tool execution
     # ------------------------------------------------------------------
 
-    def _auto_save_tool_output(self, tool_name: str, observation: str) -> str | None:
+    def _auto_save_tool_output(self, tool_name: str, observation: Any) -> str | None:
         """将匹配模式的工具执行结果自动写入 session 工作区 _tmp/tool_outputs/<tool_name>/。
 
-        通过 session.write_file 写入，本地 session 写本地目录，SSH session 写远程节点，与 agent 实际工作目录一致。
-        返回写入文件的绝对路径（供拼进 observation 提示 agent），失败或未匹配时返回 None。
+        支持 str/dict/list 等常见类型；非字符串 observation 会在写盘前 json.dumps，
+        但返回值仍保持原始对象，前端展示不受影响。
         """
-        if not observation or not isinstance(observation, str):
+        if observation is None:
             return None
         if not any(
             tool_name.startswith(p) for p in self._tool_output_auto_save_patterns
@@ -532,17 +532,23 @@ You can use the 'use_skill' tool to:
             self._tool_output_save_counter += 1
             suffix = uuid.uuid4().hex[:8]
             step = getattr(self, '_step_count', 0)
-            ext = (
-                '.json'
-                if (
-                    observation.strip().startswith('{')
-                    or observation.strip().startswith('[')
+            payload: str
+            if isinstance(observation, str):
+                stripped = observation.strip()
+                ext = (
+                    '.json'
+                    if stripped.startswith('{') or stripped.startswith('[')
+                    else '.txt'
                 )
-                else '.txt'
-            )
+                payload = observation
+            else:
+                ext = '.json'
+                payload = json.dumps(
+                    observation, ensure_ascii=False, indent=2, default=str
+                )
             rel = f'_tmp/tool_outputs/{safe_name}/step_{step}_{suffix}{ext}'
             remote_path = f'{base}/{rel}'
-            self.session.write_file(remote_path, observation, encoding='utf-8')
+            self.session.write_file(remote_path, payload, encoding='utf-8')
             self.logger.info('Auto-saved tool output to %s', remote_path)
             return remote_path
         except Exception as e:
@@ -590,16 +596,13 @@ You can use the 'use_skill' tool to:
                 observation, info = error_msg, {'error': str(e)}
 
             # 工具结果自动落盘：匹配配置前缀的工具（如 mat_sn_*）成功时将 observation 写入 _tmp/tool_outputs/
-            if (
-                isinstance(observation, str)
-                and isinstance(info, dict)
-                and 'error' not in info
-            ):
+            if isinstance(info, dict) and 'error' not in info:
                 saved_path = self._auto_save_tool_output(tool_name, observation)
                 if saved_path:
-                    observation = (
-                        observation.rstrip() + f"\n\n[Auto-saved to: {saved_path}]"
-                    )
+                    if isinstance(observation, str):
+                        observation = (
+                            observation.rstrip() + f"\n\n[Auto-saved to: {saved_path}]"
+                        )
                     info = {**info, 'auto_saved_path': saved_path}
 
             # Record tool outcome in the execution journal (skip finish — handled separately).
