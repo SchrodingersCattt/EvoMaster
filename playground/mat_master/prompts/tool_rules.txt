@@ -132,6 +132,14 @@
   4. **On ask_human timeout** (no human reply): abort the task.
      Call finish with task_completed=false and record the failure reason in the message.
 
+## monitor_job: task_intent parameter (MANDATORY)
+- When calling **monitor_job**, you MUST pass the `task_intent` parameter.
+- **Simply use the user's original query** as `task_intent`. Example:
+  - User query: "石墨烯建模并进行5ps nvt md"
+  - Call: `monitor_job(..., task_intent="石墨烯建模并进行5ps nvt md")`
+- This helps the LLM judge whether the job has completed successfully or failed abnormally.
+- **Never omit `task_intent`** — always pass the user's original request.
+
 ## Final report: honest disclosure (MANDATORY for any multi-step or calculation task)
 The outputted content should be in this template:
 ```
