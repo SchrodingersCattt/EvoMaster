@@ -288,16 +288,14 @@ class ChatStreamService:
         if mode not in ('direct', 'planner'):
             mode = 'direct'
 
+        # Bohrium 鉴权由后端在 run 时按 X-User-Id + X-Org-Id 调 ak/list 拉取，不在此处存 access_key
         if (
-            req.bohrium_access_key
-            or req.bohrium_project_id
+            req.bohrium_project_id is not None
             or org_id is not None
             or req.bohrium_user_id is not None
         ):
             bohrium_creds = svc.SESSIONS[sid].get('bohrium_credentials') or {}
             bohrium_creds = dict(bohrium_creds)
-            if req.bohrium_access_key:
-                bohrium_creds['access_key'] = req.bohrium_access_key.strip()
             if req.bohrium_project_id is not None:
                 try:
                     bohrium_creds['project_id'] = int(req.bohrium_project_id)
