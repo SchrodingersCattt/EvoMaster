@@ -154,6 +154,12 @@ async def chat_stream(
 
     # 发送消息并返回本次运行的 SSE 流（此时 req 必存在且 content 非空）；org_id 从上游 Header X-Org-Id 获取
     org_id = UserService.get_org_id(request)
+    logger.info(
+        'stream prepare: session_id=%s user_id=%s has_org_id=%s',
+        sid,
+        user_id,
+        bool(org_id),
+    )
     ctx = stream_svc.prepare_send_message(sid, req, user_id, org_id=org_id)
     if ctx is None:
         logger.warning(
