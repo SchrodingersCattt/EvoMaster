@@ -422,21 +422,34 @@ class AgentRunService:
 
             session_data = SESSIONS.get(session_id, {})
             bohrium_creds = session_data.get('bohrium_credentials')
-            if bohrium_creds and base.session:
-                base.session._bohrium_credentials = bohrium_creds
+            # 运行时凭据：不沿用内存中的 access_key，统一由后端按 X-User-Id + X-Org-Id 拉取
+            run_creds = dict(bohrium_creds) if isinstance(bohrium_creds, dict) else {}
+            run_creds.pop('access_key', None)
+            user_id_for_ak = self._sessions_service.get_session_user_id(session_id)
+            org_id = (run_creds.get('org_id') or '').strip()
+            if user_id_for_ak and org_id:
+                run_creds['access_key'] = (
+                    UserService.get_bohrium_access_key(user_id_for_ak, org_id) or ''
+                )
+            if run_creds and base.session:
+                base.session._bohrium_credentials = run_creds
+            # 便于排查「工具拿不到 ak」：run 开始时是否具备 user_id/org_id 及是否拉取到 ak
+            if run_creds:
+                has_ak = bool((run_creds.get('access_key') or '').strip())
+                logger.info(
+                    'run_agent_sync: bohrium creds session_id=%s has_user_id=%s has_org_id=%s has_ak=%s',
+                    session_id,
+                    bool(user_id_for_ak),
+                    bool(org_id),
+                    has_ak,
+                )
 
             # stream 开始 run 时若有 Bohrium 凭证则获取/创建节点；有 user_id+org_id 时走复用表（run 结束只更新 last_used_at）
-            if isinstance(bohrium_creds, dict):
-                project_id = bohrium_creds.get('project_id')
+            if run_creds:
+                project_id = run_creds.get('project_id')
                 if project_id is not None:
                     project_id = int(project_id)
-                access_key = (bohrium_creds.get('access_key') or '').strip()
-                user_id_for_ak = self._sessions_service.get_session_user_id(session_id)
-                org_id = (bohrium_creds.get('org_id') or '').strip()
-                if not access_key and user_id_for_ak and org_id:
-                    access_key = (
-                        UserService.get_bohrium_access_key(user_id_for_ak, org_id) or ''
-                    )
+                access_key = (run_creds.get('access_key') or '').strip()
                 if access_key and project_id is not None:
                     try:
                         node_svc = get_bohrium_node_service()
@@ -535,8 +548,9 @@ class AgentRunService:
                                 working_dir='/personal/workspace',
                                 session_id=session_id,
                             )
-                            if base.session:
-                                base.session._bohrium_credentials = bohrium_creds
+                            # 保持 run 开始时注入的 run_creds（含 access_key），勿用 SESSIONS 的 bohrium_creds 覆盖
+                            if base.session and run_creds:
+                                base.session._bohrium_credentials = run_creds
                             _ssh_attached = True
                             logger.info(
                                 'run_agent_sync: SSH session attached to Bohrium node ip=%s',
@@ -714,6 +728,10 @@ class AgentRunService:
             org_id = (creds.get('org_id') or '').strip()
             project_id = creds.get('project_id')
             user_id = self._sessions_service.get_session_user_id(session_id)
+            # 销毁节点时 access_key 不再存于 SESSIONS，按需拉取
+            access_key = (creds.get('access_key') or '').strip()
+            if not access_key and user_id and org_id:
+                access_key = UserService.get_bohrium_access_key(user_id, org_id) or ''
             if node_id is not None and user_id and org_id and project_id is not None:
                 try:
                     get_bohrium_nodes_table().update_last_used_at(
@@ -742,7 +760,6 @@ class AgentRunService:
                     )
                 except Exception:
                     pass
-                access_key = (creds.get('access_key') or '').strip()
                 if access_key and project_id is not None:
                     try:
                         creator_id = 0

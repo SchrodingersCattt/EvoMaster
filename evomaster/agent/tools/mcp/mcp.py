@@ -149,6 +149,12 @@ class MCPTool(BaseTool):
                     access_key = bohrium_creds.get('access_key')
                     project_id = bohrium_creds.get('project_id')
                     user_id = bohrium_creds.get('user_id')
+                if not (access_key and str(access_key).strip()):
+                    self.logger.warning(
+                        'MCP tool %s: no access_key in session._bohrium_credentials '
+                        '(run may lack X-User-Id/X-Org-Id or ak/list returned empty)',
+                        self._tool_name,
+                    )
 
                 args = path_adaptor.resolve_args(
                     workspace_path,

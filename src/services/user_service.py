@@ -166,6 +166,11 @@ class UserService:
                 continue
             ak = item.get('access_key') or item.get('ak') or item.get('accessKey')
             if ak and isinstance(ak, str) and ak.strip():
+                logger.info(
+                    'get_bohrium_access_key: ok user_id=%s org_id=%s',
+                    user_id,
+                    org_id,
+                )
                 return ak.strip()
         logger.debug(
             'get_bohrium_access_key: no valid ak in items user_id=%s org_id=%s',
