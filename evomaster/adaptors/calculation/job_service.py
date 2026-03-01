@@ -470,3 +470,67 @@ def get_job_results(
     except Exception as exc:
         logger.error("get_job_results(%s) failed: %s", bid, exc, exc_info=True)
         return {"error": str(exc)}
+
+
+def terminate_job(
+    bohr_job_id: str,
+    *,
+    access_key: str | None = None,
+) -> tuple[bool, dict[str, Any]]:
+    """Terminate a Bohrium job using the OpenAPI kill endpoint.
+
+    Args:
+        bohr_job_id: The Bohrium job ID to terminate
+        access_key: Optional access key, defaults to env MATERIALS_ACCESS_KEY
+
+    Returns:
+        Tuple of (success: bool, result: dict)
+    """
+    bid = (bohr_job_id or "").strip()
+    if not bid:
+        return False, {"error": "bohr_job_id is required"}
+
+    ak = _get_access_key(access_key)
+    
+    # 正确的 kill API endpoint: POST /openapi/v1/sandbox/kill/{job_id}?accessKey=xxx
+    url = f"{_openapi_host()}/openapi/v1/sandbox/kill/{bid}?accessKey={ak}"
+    
+    try:
+        req = Request(url, method="POST")
+        with urlopen(req, timeout=30) as response:
+            body = response.read().decode("utf-8")
+            result = json.loads(body)
+        
+        code = result.get("code")
+        if code == 0:
+            return True, {
+                "bohr_job_id": bid,
+                "result": "terminate_requested",
+                "response": result,
+                "endpoint": url,
+            }
+        else:
+            return False, {
+                "bohr_job_id": bid,
+                "result": "terminate_failed",
+                "error": f"API returned code={code}, msg={result.get('msg')}",
+                "response": result,
+            }
+    except HTTPError as exc:
+        return False, {
+            "bohr_job_id": bid,
+            "result": "terminate_failed",
+            "error": f"HTTP error {exc.code}: {exc.reason}",
+        }
+    except URLError as exc:
+        return False, {
+            "bohr_job_id": bid,
+            "result": "terminate_failed",
+            "error": f"URL error: {exc.reason}",
+        }
+    except Exception as exc:
+        return False, {
+            "bohr_job_id": bid,
+            "result": "terminate_failed",
+            "error": f"Unexpected error: {exc}",
+        }
