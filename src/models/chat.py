@@ -163,9 +163,6 @@ class ChatSendRequest(BaseModel):
         None  # 可选，OSS 链接列表，前端展示与 content 分开，传给 agent 时拼成 content + URLs
     )
     mode: str = 'direct'  # "direct" | "planner"
-    bohrium_access_key: str | None = (
-        None  # 可选的 Bohrium access key（不传则后端用 user_id+X-Org-Id 调 ak/list 获取）
-    )
     bohrium_project_id: int | str | None = None  # 可选的 Bohrium project id
     bohrium_user_id: int | str | None = (
         None  # 可选的 Bohrium user id（MCP 计算类工具需要）

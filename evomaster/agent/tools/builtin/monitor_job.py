@@ -35,7 +35,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field
 
-from ..base import BaseTool, BaseToolParams
 from evomaster.adaptors.calculation.job_service import (
     download_job_file,
     get_file_token,
@@ -44,6 +43,8 @@ from evomaster.adaptors.calculation.job_service import (
     query_job_status,
 )
 from evomaster.agent.session.ssh import SSHSession
+
+from ..base import BaseTool, BaseToolParams
 
 if TYPE_CHECKING:
     from evomaster.agent.session import BaseSession
@@ -55,9 +56,20 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 TERMINAL_SUCCESS = frozenset(
-    {'Done', 'Success', 'Finished', 'Completed', 'done', 'success', 'finished', 'completed'}
+    {
+        'Done',
+        'Success',
+        'Finished',
+        'Completed',
+        'done',
+        'success',
+        'finished',
+        'completed',
+    }
 )
-TERMINAL_FAILURE = frozenset({'Failed', 'Error', 'Cancelled', 'failed', 'error', 'cancelled'})
+TERMINAL_FAILURE = frozenset(
+    {'Failed', 'Error', 'Cancelled', 'failed', 'error', 'cancelled'}
+)
 UNKNOWN_STATUSES = frozenset({'Unknown', 'unknown'})
 
 # Number of consecutive failure/error status responses required before treating
@@ -85,19 +97,24 @@ _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024  # 100 MB
 # Log helpers
 # ---------------------------------------------------------------------------
 
+
 def _read_log_tail(log_path: str | None) -> str | None:
     """Return the last ``_LOG_TAIL_MAX_CHARS`` characters of a local log file."""
     if not log_path:
         return None
     try:
-        with open(log_path, 'r', errors='ignore') as f:
+        with open(log_path, errors='ignore') as f:
             content = f.read()
-        return content[-_LOG_TAIL_MAX_CHARS:] if len(content) > _LOG_TAIL_MAX_CHARS else content
+        return (
+            content[-_LOG_TAIL_MAX_CHARS:]
+            if len(content) > _LOG_TAIL_MAX_CHARS
+            else content
+        )
     except OSError:
         return None
 
 
-def _read_log_tail_remote(session: 'BaseSession', log_path: str | None) -> str | None:
+def _read_log_tail_remote(session: BaseSession, log_path: str | None) -> str | None:
     """Return the last ``_LOG_TAIL_MAX_CHARS`` characters of a remote log file."""
     if not log_path:
         return None
@@ -105,7 +122,11 @@ def _read_log_tail_remote(session: 'BaseSession', log_path: str | None) -> str |
         content = session._env.read_file_content(log_path)
         if not isinstance(content, str):
             content = str(content)
-        return content[-_LOG_TAIL_MAX_CHARS:] if len(content) > _LOG_TAIL_MAX_CHARS else content
+        return (
+            content[-_LOG_TAIL_MAX_CHARS:]
+            if len(content) > _LOG_TAIL_MAX_CHARS
+            else content
+        )
     except Exception:
         return None
 
@@ -122,7 +143,9 @@ def _find_log_file_local(workspace: str, software: str) -> str | None:
     return None
 
 
-def _find_log_file_remote(session: 'BaseSession', workspace: str, software: str) -> str | None:
+def _find_log_file_remote(
+    session: BaseSession, workspace: str, software: str
+) -> str | None:
     """Return path of the most-recently-modified log on the remote node, or None."""
     try:
         if not isinstance(session, SSHSession):
@@ -141,9 +164,11 @@ def _find_log_file_remote(session: 'BaseSession', workspace: str, software: str)
         pass
     return None
 
+
 # ---------------------------------------------------------------------------
 # Download helpers
 # ---------------------------------------------------------------------------
+
 
 def _download_results_to_local_dir(
     download_dir: Path,
@@ -160,7 +185,9 @@ def _download_results_to_local_dir(
     # Step 1: fetch results.txt
     results_txt_local = download_dir / 'result_0_results.txt'
     try:
-        download_job_file('results.txt', bohr_job_id, results_txt_local, access_key=access_key)
+        download_job_file(
+            'results.txt', bohr_job_id, results_txt_local, access_key=access_key
+        )
     except Exception as exc:
         return {
             'status': 'failed',
@@ -227,7 +254,7 @@ def _download_results_to_local_dir(
     def _to_rel(remote_path: str) -> str:
         p = remote_path.replace('\\', '/').strip()
         if root_prefix and p.startswith(root_prefix):
-            return p[len(root_prefix):].lstrip('/')
+            return p[len(root_prefix) :].lstrip('/')
         return p
 
     # Step 4: get file sizes for size-gating
@@ -260,7 +287,9 @@ def _download_results_to_local_dir(
         segment = re.sub(r'[^\w.\-]', '_', segment) or f'artifact_{i}'
         dest = download_dir / f'result_{i}_{segment}'
         try:
-            path = download_job_file(_to_rel(rp), bohr_job_id, dest, access_key=access_key)
+            path = download_job_file(
+                _to_rel(rp), bohr_job_id, dest, access_key=access_key
+            )
             downloaded.append(path.resolve().as_posix())
         except Exception as exc:
             errors.append(f'{rp}: {exc}')
@@ -277,7 +306,9 @@ def _download_results_to_local_dir(
     return info
 
 
-def _sftp_push_directory(session: 'BaseSession', local_dir: Path, remote_dir: str) -> list[str]:
+def _sftp_push_directory(
+    session: BaseSession, local_dir: Path, remote_dir: str
+) -> list[str]:
     """Upload all files in *local_dir* to *remote_dir* on the SSH node.
 
     Returns list of remote paths uploaded.
@@ -295,18 +326,25 @@ def _sftp_push_directory(session: 'BaseSession', local_dir: Path, remote_dir: st
             env.upload_file(str(local_file), remote_path)
             pushed.append(remote_path)
         except Exception as exc:
-            logger.warning('monitor_job: SFTP push failed %s → %s: %s', local_file, remote_path, exc)
+            logger.warning(
+                'monitor_job: SFTP push failed %s → %s: %s',
+                local_file,
+                remote_path,
+                exc,
+            )
     return pushed
+
 
 # ---------------------------------------------------------------------------
 # Core lifecycle (backend-native version of run_lifecycle)
 # ---------------------------------------------------------------------------
 
+
 def _run_lifecycle(
     job_id: str,
     software: str,
     workspace: str,
-    session: 'BaseSession',
+    session: BaseSession,
     poll_interval: int = 30,
     bohr_job_id: str | None = None,
     download_tag: str | None = None,
@@ -339,7 +377,9 @@ def _run_lifecycle(
                 software=None,
                 access_key=access_key,
             )
-            results = raw_results if isinstance(raw_results, dict) else {'raw': raw_results}
+            results = (
+                raw_results if isinstance(raw_results, dict) else {'raw': raw_results}
+            )
             resolved_bid = bohr_job_id or (
                 results.get('bohr_job_id')
                 if isinstance(results.get('bohr_job_id'), str)
@@ -363,7 +403,9 @@ def _run_lifecycle(
                         remote_calc_dir = (
                             f'{workspace}/calculation_results/{subdir_name}'
                         )
-                        pushed = _sftp_push_directory(session, tmp_root, remote_calc_dir)
+                        pushed = _sftp_push_directory(
+                            session, tmp_root, remote_calc_dir
+                        )
                         dl_info['remote_download_dir'] = remote_calc_dir
                         dl_info['remote_files'] = pushed
                         # Replace local paths with remote paths in 'downloaded'
@@ -419,7 +461,10 @@ def _run_lifecycle(
             failure_confirm_count += 1
             logger.warning(
                 'monitor_job: failure status=%s (confirm %d/%d) job_id=%s',
-                status, failure_confirm_count, _MAX_FAILURE_CONFIRMS, current_job_id,
+                status,
+                failure_confirm_count,
+                _MAX_FAILURE_CONFIRMS,
+                current_job_id,
             )
             if failure_confirm_count >= _MAX_FAILURE_CONFIRMS:
                 break  # Confirmed failure — proceed to log-tail and return
@@ -495,12 +540,12 @@ def _run_lifecycle(
             f"Job {current_job_id} failed (confirmed after {failure_confirm_count} checks). "
             f"Log file: {log_hint}\n"
             "The last section of the log is included in 'log_tail'. "
-            "Analyze it to identify the root cause, fix input files, re-submit via MCP, "
-            "then call monitor_job with the new job_id. "
+            'Analyze it to identify the root cause, fix input files, re-submit via MCP, '
+            'then call monitor_job with the new job_id. '
             'If you cannot identify the cause, call ask_human(mode="timeout") '
-            "with the failure description and relevant log lines. "
-            "On timeout with no human reply: abort the task "
-            "(call finish with task_completed=false)."
+            'with the failure description and relevant log lines. '
+            'On timeout with no human reply: abort the task '
+            '(call finish with task_completed=false).'
         ),
     }
 
@@ -508,6 +553,7 @@ def _run_lifecycle(
 # ---------------------------------------------------------------------------
 # Tool definition
 # ---------------------------------------------------------------------------
+
 
 class MonitorJobParams(BaseToolParams):
     """Monitor a submitted remote calculation job (DPA, ABACUS, LAMMPS, CP2K, QE, ABINIT, ORCA,
@@ -565,7 +611,9 @@ class MonitorJobTool(BaseTool):
     name: ClassVar[str] = 'monitor_job'
     params_class: ClassVar[type[BaseToolParams]] = MonitorJobParams
 
-    def execute(self, session: 'BaseSession', args_json: str) -> tuple[str, dict[str, Any]]:
+    def execute(
+        self, session: BaseSession, args_json: str
+    ) -> tuple[str, dict[str, Any]]:
         try:
             params = self.parse_params(args_json)
         except Exception as exc:
@@ -587,7 +635,7 @@ class MonitorJobTool(BaseTool):
         if not access_key:
             creds = getattr(session, '_bohrium_credentials', None)
             if isinstance(creds, dict):
-                access_key = creds.get('access_key') or creds.get('bohrium_access_key')
+                access_key = creds.get('access_key')
             if not access_key:
                 access_key = os.environ.get('BOHRIUM_ACCESS_KEY')
 
