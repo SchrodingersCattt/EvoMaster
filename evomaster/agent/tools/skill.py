@@ -422,6 +422,30 @@ class SkillTool(BaseTool):
             if exit_code != 0:
                 output += f"\n\nExit code: {exit_code}"
 
+            # Auto-inject per-mode prompt: scan script_args tokens and append the
+            # first prompts/<token>.md that exists. No config file needed — the
+            # convention is that argparse choices values match prompt file names.
+            prompts_dir = skill.skill_path / "prompts"
+            if prompts_dir.exists() and script_args:
+                try:
+                    tokens = shlex.split(script_args.strip())
+                except ValueError:
+                    tokens = script_args.strip().split()
+                for token in tokens:
+                    candidate = prompts_dir / f"{token}.md"
+                    if candidate.exists():
+                        try:
+                            prompt_content = candidate.read_text(encoding="utf-8")
+                            output += (
+                                f"\n\n{'=' * 60}\n"
+                                f"MANDATORY WORKFLOW (auto-loaded: prompts/{token}.md):\n"
+                                f"{'=' * 60}\n\n"
+                                f"{prompt_content}"
+                            )
+                        except Exception:
+                            pass
+                        break  # inject only the first match
+
             return (
                 output,
                 {

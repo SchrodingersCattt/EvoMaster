@@ -108,7 +108,9 @@ def main() -> None:
         out_path.write_text(json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8")
         print(
             f"Evidence skeleton: {out_path}. "
-            "Run 3-5 mat_sn_* retrieval calls and populate evidence_cards in this file."
+            "Run 3-5 mat_sn_* retrieval calls, then run: "
+            f"collect_evidence.py --collected_json {out_path} "
+            "to auto-populate evidence_cards."
         )
         return
 
@@ -124,10 +126,28 @@ def main() -> None:
 (TBD)
 """
         out_path.write_text(outline, encoding="utf-8")
+
+        collected_path = base / f"collected_{sanitize_topic(topic)}.json"
+        skeleton = {
+            "topic": topic,
+            "depth": "standard",
+            "facets": DEFAULT_FACETS[:3],
+            "evidence_cards": [],
+            "_instructions": (
+                "Fill evidence_cards via 6-8 mat_sn_* retrieval calls. "
+                "Each card: {source_title, source_url, year, first_author, facet, claim, data_points}."
+            ),
+        }
+        collected_path.write_text(json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8")
+
         print(
             f"Survey outline (standard): {out_path}. "
-            "Run 6-8 mat_sn_* retrieval calls, then fill Executive Summary and References "
-            "with write_section / str_replace_editor."
+            f"Evidence skeleton: {collected_path}. "
+            "Run 6-8 mat_sn_* retrieval calls. "
+            "After retrieval, run: "
+            f"collect_evidence.py --collected_json {collected_path} "
+            "to auto-populate evidence_cards. "
+            "Then fill Executive Summary and References with write_section / str_replace_editor."
         )
         return
 
@@ -165,9 +185,28 @@ def main() -> None:
 (TBD)
 """
     out_path.write_text(outline, encoding="utf-8")
+
+    collected_path = base / f"collected_{sanitize_topic(topic)}.json"
+    skeleton = {
+        "topic": topic,
+        "depth": "deep",
+        "facets": DEFAULT_FACETS,
+        "evidence_cards": [],
+        "_instructions": (
+            "Fill evidence_cards via 10-15+ mat_sn_* retrieval calls. "
+            "Each card: {source_title, source_url, year, first_author, facet, claim, data_points}."
+        ),
+    }
+    collected_path.write_text(json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8")
+
     print(
         f"Survey outline: {out_path}. "
-        "Fill sections with write_section / str_replace_editor from retrieval results."
+        f"Evidence skeleton: {collected_path}. "
+        "Run 10-15+ mat_sn_* retrieval calls. "
+        "After ALL retrieval is complete, run: "
+        f"collect_evidence.py --collected_json {collected_path} "
+        "to auto-populate evidence_cards. "
+        "Then fill sections with write_section / str_replace_editor from the collected evidence."
     )
 
 
