@@ -100,3 +100,4 @@ Compiles collected findings into the final structured Markdown report.
 - **User uploads (mandatory)**: If the user uploads files, you MUST fully parse/read every such file before writing any section.
 - Always write the report to a **file**; do not stream the full review in chat.
 - **One-way delegation**: deep-survey may call manuscript-scribe `write_section` for report assembly. manuscript-scribe does NOT call deep-survey.
+- **Evidence card persistence (all depths, mandatory)**: After ALL retrieval calls complete, you MUST populate `evidence_cards` in `collected_<topic>.json` before writing any report sections or calling `lit-data-organizer`. Each card: `{source_title, source_url, year, first_author, facet, claim, data_points}`. An empty `evidence_cards` array after retrieval is a rule violation.
