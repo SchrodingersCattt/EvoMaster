@@ -1,33 +1,44 @@
 ---
 name: structure-manager
-description: "Skill for DOWNLOADING structures from a URL, VALIDATING atomic structures, and CONVERTING between file formats. Use when: 1) Download a CIF/POSCAR from a direct URL (fetch_web_structure.py). 2) Check validity (assess_structure.py: sanity check, dimensionality, formula). 3) Convert between formats: CIF/POSCAR/LAMMPS/XYZ/etc. (convert_format.py). Structure DB search and building (SMILES/prototypes) use MCP tools; no Materials Project API or local DB scripts."
+description: "Skill for obtaining, validating, and converting atomic structures. Capabilities: (1) Download a CIF/POSCAR from a direct file URL (fetch_web_structure.py --url). (2) Scan an HTML page for structure file links and download (fetch_web_structure.py --page) — works for CCDC entries, journal SI pages, repository landing pages, etc. (3) Validate any structure file: dimensionality, sanity, formula (assess_structure.py). (4) Convert between formats: CIF/POSCAR/LAMMPS/XYZ/etc. (convert_format.py). Structure DB search and building (SMILES/prototypes) use MCP tools; no Materials Project API or local DB scripts."
 skill_type: operator
 ---
 
 # Structure Manager Skill
 
-Handles downloading structure files from URLs, validating atomic structures (CIF, POSCAR, XYZ), and converting between file formats (dpdata). Database search and structure building are done via MCP tools.
+Handles downloading structure files (from direct URLs or HTML pages), validating atomic structures (CIF, POSCAR, XYZ), and converting between file formats (dpdata).
 
-Requires: pymatgen, numpy (assess_structure.py); dpdata (convert_format.py); requests (fetch_web_structure.py).
+Requires: pymatgen, numpy (assess_structure.py); dpdata (convert_format.py); requests (fetch_web_structure.py); beautifulsoup4 (optional, --page only: pip install beautifulsoup4).
 
-## Workflow
+## Acquisition Capabilities
 
-1. **Acquisition** (use MCP):
-   * **Database search**: Use MCP structure/database tools to search for structures (no Materials Project API or local search script).
-   * **Build**: Use MCP Structure Generator for SMILES or crystal prototypes.
-   * **Download from URL**: When you have a direct link, use `fetch_web_structure.py` to download the file.
-2. **Validation (Mandatory)**:
-   * **Assess**: ALWAYS run `assess_structure.py` on any new structure. It returns:
-       * **Dimensionality**: 0D (Molecule), 1D (Wire), 2D (Slab), 3D (Bulk).
-       * **Sanity**: Checks for overlapping atoms (< 0.5 Å), unreasonable bond lengths.
-       * **Formula**: Chemical composition.
+The following are available for obtaining structures. Choose based on what identifier or context you have; if one path fails or returns no results, try another.
+
+- **Structure database (MCP)**: `mat_struct_db_*` — search by formula, composition, material ID, prototype.
+- **Structure generation (MCP)**: `mat_sg_*` — build from SMILES, Wyckoff positions, prototype templates, surfaces, supercells, defects.
+- **Direct file download**: `fetch_web_structure.py --url <link>` — HTTP GET a CIF/POSCAR from a known direct file URL.
+- **Web page link extraction**: `fetch_web_structure.py --page <page_url>` — fetch an HTML page, extract all links whose path ends with a structure file extension (.cif/.vasp/.xyz/.res/.pdb/.mol2/.sdf), and download. Auto-downloads if exactly one match is found; returns the candidate list if multiple matches are found so you can pick one and call `--url`.
+
+## Validation (Mandatory)
+
+Always run `assess_structure.py` on any new structure regardless of how it was obtained. It returns:
+- **Dimensionality**: 0D (Molecule), 1D (Wire), 2D (Slab), 3D (Bulk).
+- **Sanity**: checks for overlapping atoms (< 0.5 Å), unreasonable bond lengths.
+- **Formula**: chemical composition.
 
 ## Scripts
 
-### 1. Download
+### 1. Download / Page Extraction
 * **fetch_web_structure.py**
-    * **Usage**: `python fetch_web_structure.py --url "http://.../file.cif"`
-    * **Description**: Downloads a structure file from a direct URL. Use MCP browser/search to find the URL first; this script does not call any external DB API (no Materials Project, etc.).
+    * `--url <url>` — download a direct structure file link.
+        * Usage: `python fetch_web_structure.py --url "https://example.com/file.cif"`
+    * `--page <url>` — fetch an HTML page and extract structure file links.
+        * Usage: `python fetch_web_structure.py --page "https://www.ccdc.cam.ac.uk/structures/..."`
+        * If exactly 1 link found: auto-downloads and returns `{"success": true, "file": "..."}`.
+        * If multiple links found: returns `{"success": false, "reason": "multiple_candidates", "candidates": [...]}` — pick one href and call `--url`.
+        * If no structure links found: returns `{"success": false, "reason": "no_structure_links", "page_links_sample": [...]}` — inspect the sample to decide next step (sub-page, MCP browser for JS-rendered pages, ask user, etc.).
+        * Requires beautifulsoup4. If missing: `{"success": false, "reason": "missing_dependency", "install": "pip install beautifulsoup4"}`.
+    * All output is JSON to stdout.
 
 ### 2. Validation
 * **assess_structure.py** (Sanity Check & Dimensionality)
@@ -57,19 +68,20 @@ Requires: pymatgen, numpy (assess_structure.py); dpdata (convert_format.py); req
 
 ## When to use
 
-* "Search for / get me the crystal structure of X." -> Use MCP structure/database tools (not this skill).
-* "I have a CIF URL, download it." -> `fetch_web_structure.py`
-* "Check if this structure is reasonable." -> `assess_structure.py`
-* "Convert this CIF to POSCAR." / "Convert POSCAR to LAMMPS data." -> `convert_format.py`
-* "Build from SMILES or prototype." -> Use MCP Structure Generator.
+* "Get / search for the crystal structure of X" → use MCP database tools (`mat_struct_db_*`).
+* "Build from SMILES or prototype" → use MCP structure generator (`mat_sg_*`).
+* "I have a direct CIF/POSCAR URL, download it" → `fetch_web_structure.py --url`.
+* "Get the structure from a CCDC/ICSD/journal SI/repository page" → `fetch_web_structure.py --page`.
+* "Check if this structure is reasonable" → `assess_structure.py`.
+* "Convert this CIF to POSCAR" / "Convert POSCAR to LAMMPS data" → `convert_format.py`.
 
 ## Tool (via use_skill)
 
-- **run_script** with **script_name**: `fetch_web_structure.py`, `assess_structure.py`, or `convert_format.py`; **script_args**: e.g. `--url "https://.../file.cif"`, `--file structure.cif`, or `--input POSCAR --output data.lmp --output-fmt lammps/lmp --type-map O H`.
+- **run_script** with **script_name**: `fetch_web_structure.py`, `assess_structure.py`, or `convert_format.py`; **script_args**: as in the usage examples above.
 
 ## Rules
 
-* **Do not** use Materials Project API or any DB API from this skill; structure search is via MCP.
-* Always run `assess_structure.py` after obtaining a new structure (from URL or MCP).
+* Always run `assess_structure.py` after obtaining any new structure (from URL, page, or MCP).
 * If `assess_structure` reports "Slab" for a task intended to be "Bulk", warn the user.
 * For LAMMPS conversions, **always** provide `--type-map`. If the source .lmp uses a non-atomic atom_style, **always** provide `--atom-style`.
+* `fetch_web_structure.py --page` requires beautifulsoup4. On `missing_dependency` response, install it on the remote session before retrying.
