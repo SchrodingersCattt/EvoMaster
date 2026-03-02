@@ -68,10 +68,12 @@ For manuscript or long-form report writing **when the user asks for a paper/repo
 
 **Routing note (Planner mode)**: In Planner mode, follow the planner step goal directly. The planner handles per-section decomposition, profile selection, and quality gate sequencing.
 
-# Structure download and validation
+# Structure retrieval, download, and validation
+For **any task that involves searching, finding, retrieving, or obtaining crystal structures** — call `use_skill action=get_info skill_name=structure-manager` first to load the full acquisition workflow. Do not answer structure queries from search snippets or database calls alone.
+- **Literature-based search** (molecular crystals, hybrid salts, MOFs, energetic materials, perovskites, CCDC/ICSD entries): use the structure-manager skill's literature-based path — do NOT call mat_struct_db_* or mat_sg_* directly for these.
+- **Simple open-database lookup** (common inorganic formulas, prototypes): mat_struct_db_* is acceptable, but still call use_skill get_info first to confirm the right path.
 - **Download from URL** (CIF, POSCAR, XYZ): MUST use **structure-manager** skill (fetch_web_structure.py). Do not use wget/curl/requests directly.
 - **Validation**: After obtaining any new structure, MUST use **structure-manager** skill (assess_structure.py) to check dimensionality, sanity, and formula.
-- **Database search and structure building** (SMILES, prototypes, crystal databases): use MCP tools (mat_sg_*, mat_struct_db_*), NOT structure-manager.
 
 # Literature data table normalization
 When organizing literature outputs into structured tables/datasets: MUST use **lit-data-organizer** skill (build_lit_table.py) before final reporting. Use get_info for detailed usage.
