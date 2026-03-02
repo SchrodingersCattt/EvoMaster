@@ -7,8 +7,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import threading
 from typing import TYPE_CHECKING, Any
+
+# 连接 + list_tools 单次超时（秒），避免 SSE/HTTP 不可达时启动卡死；可通过 MCP_CONNECT_TIMEOUT 覆盖
+# 15s × 3 次重试 ≈ 45s 后跳过该服务；内网多数几秒内响应
+MCP_CONNECT_TIMEOUT = float(os.environ.get('MCP_CONNECT_TIMEOUT', '15'))
 
 if TYPE_CHECKING:
     from ..base import ToolRegistry
@@ -84,34 +89,38 @@ class MCPToolManager:
         # 等待重连完成的线程级 Event 列表（由 request_reconnect 添加，runner 完成后 set）
         self._reconnect_waiters: dict[str, list[threading.Event]] = {}
 
-    def _build_tools(self, server_name: str, connection: Any, tools_info: list[dict]) -> None:
+    def _build_tools(
+        self, server_name: str, connection: Any, tools_info: list[dict]
+    ) -> None:
         from .mcp import MCPTool
 
         include_only = self.tool_include_only.get(server_name)
         if include_only is not None:
-            tools_info = [t for t in tools_info if t.get("name") in include_only]
-            self.logger.info(f"Filtered to {len(tools_info)} tools for server '{server_name}' (include_only: {include_only})")
+            tools_info = [t for t in tools_info if t.get('name') in include_only]
+            self.logger.info(
+                f"Filtered to {len(tools_info)} tools for server '{server_name}' (include_only: {include_only})"
+            )
 
         server_tools: dict[str, MCPTool] = {}
         # First pass: build name → description for base tools (used by submit_* below)
         base_descriptions: dict[str, str] = {}
         for tool_info in tools_info:
-            name = tool_info.get("name", "")
-            desc = tool_info.get("description", "")
-            if not name.startswith("submit_") and desc:
+            name = tool_info.get('name', '')
+            desc = tool_info.get('description', '')
+            if not name.startswith('submit_') and desc:
                 base_descriptions[name] = desc
 
         for tool_info in tools_info:
-            original_name = tool_info["name"]
+            original_name = tool_info['name']
             prefixed_name = f"{server_name}_{original_name}"
 
-            description = tool_info.get("description", "")
+            description = tool_info.get('description', '')
             # SDK-generated submit_* tools have a generic stub description
             # ("Submit a job").  Propagate the base tool's full docstring
             # so path_adaptor can parse (Path) annotations from it.
-            if original_name.startswith("submit_"):
-                base_name = original_name[len("submit_"):]
-                base_desc = base_descriptions.get(base_name, "")
+            if original_name.startswith('submit_'):
+                base_name = original_name[len('submit_') :]
+                base_desc = base_descriptions.get(base_name, '')
                 if base_desc and len(base_desc) > len(description):
                     description = base_desc
 
@@ -119,13 +128,17 @@ class MCPToolManager:
                 mcp_connection=connection,
                 tool_name=prefixed_name,
                 tool_description=description,
-                input_schema=tool_info.get("input_schema", {}),
+                input_schema=tool_info.get('input_schema', {}),
                 remote_tool_name=original_name,
             )
             mcp_tool._mcp_server = server_name
             mcp_tool._mcp_loop = self.loop  # 你原来注入 loop 的逻辑保留
             mcp_tool._mcp_manager = self  # 用于断线重连
-            if self.path_adaptor_servers and self.path_adaptor_factory and server_name in self.path_adaptor_servers:
+            if (
+                self.path_adaptor_servers
+                and self.path_adaptor_factory
+                and server_name in self.path_adaptor_servers
+            ):
                 mcp_tool._path_adaptor = self.path_adaptor_factory()
 
             server_tools[prefixed_name] = mcp_tool
@@ -177,7 +190,9 @@ class MCPToolManager:
 
         if self.loop is None:
             # 方案A必须要求 manager.loop 已经被设置到一个长期运行的 loop
-            raise RuntimeError("MCPToolManager.loop is None. Set a long-running event loop before add_server().")
+            raise RuntimeError(
+                'MCPToolManager.loop is None. Set a long-running event loop before add_server().'
+            )
 
         self.logger.info(f"Adding MCP server: {name} ({transport})")
 
@@ -191,7 +206,14 @@ class MCPToolManager:
 
             try:
                 import httpx
-                _retry_exc = (httpx.ReadError, httpx.ConnectError, httpx.ReadTimeout, httpx.ConnectTimeout)
+
+                _retry_exc = (
+                    httpx.ReadError,
+                    httpx.ConnectError,
+                    httpx.ReadTimeout,
+                    httpx.ConnectTimeout,
+                    asyncio.TimeoutError,
+                )
             except ImportError:
                 _retry_exc = (OSError, asyncio.TimeoutError)
 
@@ -203,29 +225,49 @@ class MCPToolManager:
                 reconnect_evt.clear()
 
                 for attempt in range(1, 4):
+                    conn_ctx = None
+                    conn = None
                     try:
-                        async with create_connection(transport=transport, **connection_kwargs) as conn:
-                            self.connections[name] = conn
+                        conn_ctx = create_connection(
+                            transport=transport, **connection_kwargs
+                        )
+                        conn = await asyncio.wait_for(
+                            conn_ctx.__aenter__(),
+                            timeout=MCP_CONNECT_TIMEOUT,
+                        )
+                        try:
+                            tools_info = await asyncio.wait_for(
+                                conn.list_tools(),
+                                timeout=MCP_CONNECT_TIMEOUT,
+                            )
+                        except Exception:
+                            await conn_ctx.__aexit__(None, None, None)
+                            raise
 
-                            tools_info = await conn.list_tools()
+                        self.connections[name] = conn
 
-                            if first_connect:
-                                self.logger.info(f"Found {len(tools_info)} tools from MCP server '{name}'")
-                                self._build_tools(name, conn, tools_info)
-                                if self._registered_registry:
-                                    for tool in self.tools_by_server[name].values():
-                                        self._registered_registry.register(tool)
-                            else:
-                                self.logger.info(f"Reconnected MCP server '{name}', {len(tools_info)} tools")
-                                self._update_tool_connections(name, conn)
+                        if first_connect:
+                            self.logger.info(
+                                f"Found {len(tools_info)} tools from MCP server '{name}'"
+                            )
+                            self._build_tools(name, conn, tools_info)
+                            if self._registered_registry:
+                                for tool in self.tools_by_server[name].values():
+                                    self._registered_registry.register(tool)
+                        else:
+                            self.logger.info(
+                                f"Reconnected MCP server '{name}', {len(tools_info)} tools"
+                            )
+                            self._update_tool_connections(name, conn)
 
-                            ready_evt.set()
-                            first_connect = False
+                        ready_evt.set()
+                        first_connect = False
 
-                            # 通知所有等待重连的线程
-                            self._notify_reconnect_waiters(name)
+                        # 通知所有等待重连的线程
+                        self._notify_reconnect_waiters(name)
 
-                            # 等待 stop 或 reconnect 信号
+                        # 等待 stop 或 reconnect 信号（无超时，长连接）
+                        while True:
                             stop_task = asyncio.create_task(stop_evt.wait())
                             recon_task = asyncio.create_task(reconnect_evt.wait())
                             _done, pending = await asyncio.wait(
@@ -240,25 +282,33 @@ class MCPToolManager:
                                     pass
 
                             if stop_evt.is_set():
+                                await conn_ctx.__aexit__(None, None, None)
                                 return  # 正常关闭
-                            # else: 收到重连信号，退出 async with 以释放旧连接
-                        break  # 成功退出 context，跳出重试循环
+                            # 收到重连信号，释放当前连接后重试
+                            await conn_ctx.__aexit__(None, None, None)
+                            break  # 跳出内层 while，继续 for attempt 下一轮以重连
                     except _retry_exc as e:
                         if attempt < 3:
                             self.logger.warning(
                                 "MCP server '%s' connection failed (attempt %s/3), retrying in 2s: %s",
-                                name, attempt, e,
+                                name,
+                                attempt,
+                                e,
                             )
                             await asyncio.sleep(2)
                         else:
-                            self.logger.error("MCP server '%s' failed after 3 attempts: %s", name, e)
+                            self.logger.error(
+                                "MCP server '%s' failed after 3 attempts: %s", name, e
+                            )
                             # 通知等待者失败
                             self._notify_reconnect_waiters(name)
                             if first_connect:
                                 ready_evt.set()
                                 raise
                             # 非首次连接：等待后重试整个 while 循环
-                            self.logger.info(f"Will retry reconnection for '{name}' in 5s")
+                            self.logger.info(
+                                f"Will retry reconnection for '{name}' in 5s"
+                            )
                             await asyncio.sleep(5)
                     except BaseException:
                         self._notify_reconnect_waiters(name)
@@ -268,12 +318,11 @@ class MCPToolManager:
         # ✅ 必须保证 runner task 在 self.loop 里创建
         if asyncio.get_running_loop() is not self.loop:
             raise RuntimeError(
-                "add_server() must be called inside MCP loop. "
-                "Use run_coroutine_threadsafe(...) to submit it to manager.loop."
+                'add_server() must be called inside MCP loop. '
+                'Use run_coroutine_threadsafe(...) to submit it to manager.loop.'
             )
 
         task = asyncio.create_task(runner())
-
 
         self._server_tasks[name] = task
 
@@ -289,7 +338,6 @@ class MCPToolManager:
             raise exc
         self.logger.info(f"Successfully added MCP server '{name}'")
 
-
     def register_tools(self, tool_registry: ToolRegistry) -> None:
         """将所有 MCP 工具注册到 ToolRegistry
 
@@ -303,13 +351,15 @@ class MCPToolManager:
             for tool_name, tool in tools.items():
                 tool_registry.register(tool)
                 total_count += 1
-                self.logger.debug(f"Registered MCP tool: {tool_name} (from {server_name})")
+                self.logger.debug(
+                    f"Registered MCP tool: {tool_name} (from {server_name})"
+                )
 
         self.logger.info(f"Registered {total_count} MCP tools to ToolRegistry")
 
     async def remove_server(self, server_name: str) -> None:
         if asyncio.get_running_loop() is not self.loop:
-            raise RuntimeError("remove_server() must be called inside MCP loop.")
+            raise RuntimeError('remove_server() must be called inside MCP loop.')
         if server_name not in self._server_tasks:
             raise ValueError(f"MCP server '{server_name}' not found")
 
@@ -375,14 +425,14 @@ class MCPToolManager:
 
         server_tools = {}
         for tool_info in tools_info:
-            original_name = tool_info["name"]
+            original_name = tool_info['name']
             prefixed_name = f"{server_name}_{original_name}"
 
             mcp_tool = MCPTool(
                 mcp_connection=connection,
                 tool_name=prefixed_name,
-                tool_description=tool_info.get("description", ""),
-                input_schema=tool_info.get("input_schema", {}),
+                tool_description=tool_info.get('description', ''),
+                input_schema=tool_info.get('input_schema', {}),
             )
             mcp_tool._mcp_server = server_name
 
@@ -396,14 +446,16 @@ class MCPToolManager:
             for tool in server_tools.values():
                 self._registered_registry.register(tool)
 
-        self.logger.info(f"Reloaded {len(server_tools)} tools from server '{server_name}'")
+        self.logger.info(
+            f"Reloaded {len(server_tools)} tools from server '{server_name}'"
+        )
 
     async def cleanup(self) -> None:
         """清理所有 MCP 连接"""
-        self.logger.info("Cleaning up MCP connections")
-        
+        self.logger.info('Cleaning up MCP connections')
+
         if asyncio.get_running_loop() is not self.loop:
-            raise RuntimeError("cleanup() must be called inside MCP loop.")
+            raise RuntimeError('cleanup() must be called inside MCP loop.')
 
         failed: list[str] = []
 
@@ -422,7 +474,7 @@ class MCPToolManager:
         self.tools_by_server.clear()
         self._registered_registry = None
 
-        self.logger.info("MCP cleanup complete")
+        self.logger.info('MCP cleanup complete')
 
     def get_tool_names(self) -> list[str]:
         """获取所有 MCP 工具名称
@@ -461,18 +513,15 @@ class MCPToolManager:
             统计信息字典
         """
         stats = {
-            "total_servers": len(self.connections),
-            "total_tools": len(self.get_tool_names()),
-            "servers": {}
+            'total_servers': len(self.connections),
+            'total_tools': len(self.get_tool_names()),
+            'servers': {},
         }
 
         for server_name, tools in self.tools_by_server.items():
-            server_stats = {
-                "tool_count": len(tools),
-                "tools": {}
-            }
+            server_stats = {'tool_count': len(tools), 'tools': {}}
             for tool_name, tool in tools.items():
-                server_stats["tools"][tool_name] = tool.get_stats()
-            stats["servers"][server_name] = server_stats
+                server_stats['tools'][tool_name] = tool.get_stats()
+            stats['servers'][server_name] = server_stats
 
         return stats
