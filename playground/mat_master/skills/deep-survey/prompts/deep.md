@@ -31,6 +31,22 @@ After completing each facet's retrieval, **pause and evaluate**:
 
 Adjust the remaining plan before proceeding to the next facet.
 
+### Step 2.5 — Persist evidence cards (mandatory)
+
+After completing ALL retrieval, run `collect_evidence.py` to automatically extract evidence cards from the raw tool outputs and write them to `collected_<topic>.json`. This happens **before** writing the narrative report sections.
+
+```
+use_skill action=run_script skill_name="deep-survey" script_name="collect_evidence.py"
+  script_args="--collected_json _tmp/surveys/collected_<topic>.json"
+```
+
+Replace `<topic>` with the actual topic slug used in Step 1 (e.g. `collected_DPA2_Alloys.json`).
+
+- The script reads all `_tmp/tool_outputs/mat_sn_*/` output files automatically — you do not need to list them.
+- It deduplicates by URL and merges into any existing cards.
+- Output confirms: `{"status":"ok","cards_added":<n>,"cards_total":<n>,"collected_json_path":"..."}`.
+- This `collected.json` is the structured evidence artifact for downstream use (lit-data-organizer, plotting, further analysis). It is produced regardless of whether the caller needs it — evidence persistence is unconditional.
+
 ### Step 3 — Write the report (LLM)
 
 Write all five sections fully. Write each section's full body to a file first (e.g. `_tmp/surveys/section_Executive_Summary.md`), then call `write_section` with `--content_file`. Do NOT pass long section text in `--content` (may be truncated).
@@ -63,6 +79,7 @@ Write all five sections fully. Write each section's full body to a file first (e
 - Assemble all sections into `_tmp/surveys/survey_<topic>.md`.
 - Do NOT leave any `(TBD)` in the delivered file.
 - When the report is complete: output the full final report in your reply so the user sees it, then confirm the file path.
+- **If using `manuscript-scribe` to assemble the report**, use `--profile literature_review` (matches this skill's 5-section structure exactly: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References).
 
 ---
 

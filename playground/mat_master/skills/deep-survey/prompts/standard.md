@@ -22,6 +22,22 @@ Produce a concise, readable Markdown survey report: Executive Summary + Referenc
 - Web search returns snippets: fetch full page for high-relevance URLs (`mat_doc_*`).
 - Filter for relevance and source quality (authority, recency).
 
+### Step 2.5 — Persist evidence cards (mandatory)
+
+After completing ALL retrieval, run `collect_evidence.py` to automatically extract evidence cards from the raw tool outputs and write them to `collected_<topic>.json`. This happens **before** writing the narrative report.
+
+```
+use_skill action=run_script skill_name="deep-survey" script_name="collect_evidence.py"
+  script_args="--collected_json _tmp/surveys/collected_<topic>.json"
+```
+
+Replace `<topic>` with the actual topic slug used in Step 1 (e.g. `collected_Perovskite_stability.json`).
+
+- The script reads all `_tmp/tool_outputs/mat_sn_*/` output files automatically — you do not need to list them.
+- It deduplicates by URL and merges into any existing cards.
+- Output confirms: `{"status":"ok","cards_added":<n>,"cards_total":<n>,"collected_json_path":"..."}`.
+- This `collected.json` is the structured evidence artifact for downstream use (lit-data-organizer, plotting, further analysis). Produce it unconditionally.
+
 ### Step 3 — Write the report (LLM)
 
 #### Executive Summary
@@ -41,6 +57,7 @@ Produce a concise, readable Markdown survey report: Executive Summary + Referenc
 ### Step 4 — Output
 - Save report to `_tmp/surveys/survey_<topic>.md`.
 - Do NOT leave any `(TBD)` in the delivered file.
+- **If using `manuscript-scribe` to assemble the report**, use `--profile literature_review` (matches this skill's 5-section structure: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References).
 
 ---
 
