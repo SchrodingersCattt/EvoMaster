@@ -36,10 +36,8 @@
 - **Auto-download**: mat_sg_* / mat_struct_db_* tool results are **automatically downloaded** to local workspace by a callback. You do NOT need to download them manually — use the `local_path` values appended to the tool output directly.
 - For other final deliverables (report/manuscript) returned as OSS URLs: prefer downloading a local copy when size is reasonable. If too large, keep the OSS URL and explain. Trajectory/trace/log-dump files can be skipped unless the user explicitly asks.
 
-## structure-manager skill (download, validate & convert)
-- Provides: download from a direct file URL or an HTML page (fetch_web_structure.py --url / --page), validation (assess_structure.py), format conversion (convert_format.py).
-- Structure **database search** and **generation** (SMILES, prototypes) use MCP tools (mat_sg_*, mat_struct_db_*).
-- After obtaining any new structure (any method), ALWAYS validate with assess_structure.py.
+## structure-manager skill
+- For any crystal structure task — search, retrieve, download, validate, convert — call `use_skill get_info skill_name=structure-manager` first. Do not answer structure queries from search snippets alone.
 
 ## tasker-polar-surface skill (polar surface / 切面)
 - When the user asks to **cut or build a surface slab from bulk** (e.g. 切面、切 slab、从体相切出表面、surface slab construction, oxide/ionic surface like MgO/TiO2/ZnO), you MUST first call `use_skill` with `skill_name=tasker-polar-surface`, `action=get_info` to load the Tasker polar surface workflow, then **classify** Type 1 vs 2/3. **Type 1**: you may use `mat_sg_build_surface_slab`. **Type 2/3**: do **NOT** use `mat_sg_build_surface_slab`; build the slab yourself (see below) and then validate.
