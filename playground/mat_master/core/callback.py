@@ -1063,7 +1063,10 @@ class MatToolCallbacks:
             question = 'The agent is asking for your input.'
 
         # --- Per-call parameters from skill args ---
-        from playground.mat_master.service.confirm import ConfirmMode
+        from playground.mat_master.service.confirm import (
+            REPLY_CANCELLED,
+            ConfirmMode,
+        )
 
         call_mode_str = args.get('mode', 'timeout')
         try:
@@ -1085,6 +1088,12 @@ class MatToolCallbacks:
                     origin='ask_human',
                     source_override='MatMaster',
                 )
+                if reply is REPLY_CANCELLED:
+                    self.logger.info('ask-human: user cancelled (stop requested).')
+                    return (
+                        '⚠️ User cancelled. Please abort or skip this step.',
+                        info,
+                    )
                 if reply is not None:
                     self.logger.info(
                         'ask-human: received reply (%d chars).', len(reply)
@@ -1144,6 +1153,12 @@ class MatToolCallbacks:
                 info,
             )
 
+        if reply is None:
+            self.logger.info('ask-human: user cancelled (stop requested).')
+            return (
+                '⚠️ User cancelled. Please abort or skip this step.',
+                info,
+            )
         self.logger.info('ask-human: received user reply (%d chars).', len(reply))
         return f"User replied: {reply}", info
 

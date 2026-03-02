@@ -9,7 +9,7 @@ ag-ui 协议（前后端约定）：
 - 客户端 -> 服务端：REST
   POST /chat/sessions/{session_id}/stream  Body 可选：不传或 content 为空→仅历史+ping；有 content→发送并返回本次 SSE 流
   POST /chat/sessions/{session_id}/stop  终止当前运行
-  POST /chat/sessions/{session_id}/planner_reply Body: ChatPlannerReplyRequest
+  POST /chat/sessions/{session_id}/confirmation_reply Body: ChatPlannerReplyRequest（planner_ask / confirmation_request 统一回复）
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
@@ -170,7 +170,7 @@ class ChatSendRequest(BaseModel):
 
 
 class ChatPlannerReplyRequest(BaseModel):
-    """POST /chat/sessions/{session_id}/planner_reply Planner 模式下用户回复"""
+    """POST /chat/sessions/{session_id}/confirmation_reply 用户确认回复（planner_ask / ask_human 统一）"""
 
     content: str
 
