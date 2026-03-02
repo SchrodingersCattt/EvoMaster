@@ -51,6 +51,7 @@ docker-build:
   script:
     - echo $SERVER_NAME
     - echo $DOCKER_IMAGE
+    - git rev-parse HEAD > ${CI_PROJECT_DIR}/.build-version
     - |
       cat > /root/.docker/config.json <<EOF
       {
