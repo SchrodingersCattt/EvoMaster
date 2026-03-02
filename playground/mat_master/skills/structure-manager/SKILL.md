@@ -18,6 +18,7 @@ The following are available for obtaining structures. Choose based on what ident
 - **Structure generation (MCP)**: `mat_sg_*` — build from SMILES, Wyckoff positions, prototype templates, surfaces, supercells, defects.
 - **Direct file download**: `fetch_web_structure.py --url <link>` — HTTP GET a CIF/POSCAR from a known direct file URL.
 - **Web page link extraction**: `fetch_web_structure.py --page <page_url>` — fetch an HTML page, extract all links whose path ends with a structure file extension (.cif/.vasp/.xyz/.res/.pdb/.mol2/.sdf), and download. Auto-downloads if exactly one match is found; returns the candidate list if multiple matches are found so you can pick one and call `--url`.
+- **Structure identification (gated databases)**: When the structure resides in a copyrighted or access-gated database (CCDC, ICSD, etc.), report the database identifier (CCDC REFCODE / deposition number, ICSD collection code, etc.) and crystallographic parameters extracted from literature (space group, lattice constants, formula, Z). Do not attempt to download from these databases or reconstruct the structure with MCP tools — the result would likely be silently wrong.
 
 ## Validation (Mandatory)
 
@@ -71,7 +72,8 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 * "Get / search for the crystal structure of X" → use MCP database tools (`mat_struct_db_*`).
 * "Build from SMILES or prototype" → use MCP structure generator (`mat_sg_*`).
 * "I have a direct CIF/POSCAR URL, download it" → `fetch_web_structure.py --url`.
-* "Get the structure from a CCDC/ICSD/journal SI/repository page" → `fetch_web_structure.py --page`.
+* "Get the structure from a journal SI or open repository page" → `fetch_web_structure.py --page`.
+* "Get the crystal structure of X" where X is in CCDC/ICSD → report database identifier (REFCODE / collection code) + crystallographic parameters (space group, lattice constants, formula, Z) from literature; do not attempt to download or reconstruct.
 * "Check if this structure is reasonable" → `assess_structure.py`.
 * "Convert this CIF to POSCAR" / "Convert POSCAR to LAMMPS data" → `convert_format.py`.
 
@@ -85,3 +87,4 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 * If `assess_structure` reports "Slab" for a task intended to be "Bulk", warn the user.
 * For LAMMPS conversions, **always** provide `--type-map`. If the source .lmp uses a non-atomic atom_style, **always** provide `--atom-style`.
 * `fetch_web_structure.py --page` requires beautifulsoup4. On `missing_dependency` response, install it on the remote session before retrying.
+* For structures in copyrighted/gated databases (CCDC, ICSD, etc.), do NOT attempt to scrape the CIF or reconstruct the structure with `mat_sg_*`. Report the database identifier and crystallographic parameters from literature instead. Attempting to rebuild complex structures (molecular perovskites, MOFs, co-crystals) from incomplete parameters produces silently wrong results.
