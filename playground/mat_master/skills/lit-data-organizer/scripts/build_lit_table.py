@@ -62,8 +62,10 @@ CANONICAL_FIELDS = [
 
 
 DEFAULT_ALIASES: dict[str, list[str]] = {
-    "source_id": ["source_id", "source.id", "doc_id", "paper_id", "id"],
+    # mat_sn_search-papers-enhanced: doi, paperId
+    "source_id": ["source_id", "source.id", "doc_id", "paper_id", "id", "doi", "paperId"],
     "source_type": ["source_type", "source.type", "origin_type"],
+    # mat_sn_search-papers-enhanced: enName, zhName; mat_sn_web-search: title
     "source_title": [
         "source_title",
         "source.title",
@@ -71,7 +73,10 @@ DEFAULT_ALIASES: dict[str, list[str]] = {
         "document_title",
         "paper_title",
         "name",
+        "enName",
+        "zhName",
     ],
+    # mat_sn_search-papers-enhanced: paperUrl; mat_sn_web-search: link
     "source_url_or_path": [
         "source_url_or_path",
         "source_url",
@@ -81,15 +86,29 @@ DEFAULT_ALIASES: dict[str, list[str]] = {
         "file_path",
         "pdf_path",
         "source",
+        "paperUrl",
+        "link",
     ],
     "topic": ["topic", "subject", "domain", "field"],
     "claim_text": ["claim_text", "claim", "finding", "result_claim", "statement"],
+    # mat_sn_web-search: snippet
     "quote_text": ["quote_text", "quote", "evidence_text", "snippet", "text"],
-    "summary_text": ["summary_text", "summary", "abstract", "note"],
+    # mat_sn_search-papers-enhanced: enAbstract, zhAbstract; mat_sn_web-search: snippet
+    "summary_text": [
+        "summary_text",
+        "summary",
+        "abstract",
+        "note",
+        "enAbstract",
+        "zhAbstract",
+        "snippet",
+        "pieces",
+    ],
     "evidence_span": ["evidence_span", "span", "page_span", "locator", "section", "paragraph", "page"],
     "tags": ["tags", "keywords", "labels", "facet"],
     "confidence": ["confidence", "score", "confidence_score"],
-    "created_at": ["created_at", "timestamp", "date", "published_at", "year"],
+    # mat_sn_search-papers-enhanced: coverDateStart, year (from evidence_cards)
+    "created_at": ["created_at", "timestamp", "date", "published_at", "year", "coverDateStart"],
     "material_name": ["material_name", "material", "compound", "compound_name"],
     "formula": ["formula", "chemical_formula", "composition.formula"],
     "composition": ["composition", "metal_composition", "alloy_composition"],
@@ -311,6 +330,44 @@ def _extract_records(payload: Any) -> list[dict[str, Any]]:
         if isinstance(value, list):
             return [item for item in value if isinstance(item, dict)]
     return [payload]
+
+
+def _auto_discover_tool_outputs(input_paths: list[Path]) -> list[Path]:
+    """Discover mat_sn_* auto-saved JSON files when the primary inputs yielded 0 records.
+
+    Looks for _tmp/tool_outputs/ by walking up from each input path, then falls
+    back to the current working directory. Returns deduplicated discovered paths.
+    """
+    discovered: list[Path] = []
+    seen: set[str] = set()
+
+    def _find_tool_outputs_dir(start: Path) -> Path | None:
+        """Traverse up to find _tmp/tool_outputs/ directory."""
+        for parent in [start] + list(start.parents):
+            candidate = parent / "_tmp" / "tool_outputs"
+            if candidate.is_dir():
+                return candidate
+        return None
+
+    search_roots: list[Path | None] = [
+        _find_tool_outputs_dir(p.parent) for p in input_paths
+    ]
+    # also try CWD
+    search_roots.append(_find_tool_outputs_dir(Path.cwd()))
+
+    for tool_outputs_dir in search_roots:
+        if not tool_outputs_dir or not tool_outputs_dir.is_dir():
+            continue
+        for subdir in sorted(tool_outputs_dir.iterdir()):
+            if not subdir.is_dir() or not subdir.name.startswith("mat_sn_"):
+                continue
+            for json_file in sorted(subdir.glob("*.json")):
+                key = str(json_file.resolve())
+                if key not in seen:
+                    seen.add(key)
+                    discovered.append(json_file)
+
+    return discovered
 
 
 def _load_schema(path: str | None) -> dict[str, Any]:
@@ -687,6 +744,34 @@ def main() -> None:
                 resume=args.resume,
             )
             raw_count = int(state.get("ingest_stats", {}).get("raw_records", 0) or 0)
+
+            # Fallback: if primary inputs yielded 0 records, auto-discover raw
+            # mat_sn_* tool outputs from _tmp/tool_outputs/ and re-ingest them.
+            # This handles the case where collected.json has empty evidence_cards.
+            if len(normalized_rows) == 0:
+                fallback_paths = _auto_discover_tool_outputs(input_paths)
+                if fallback_paths:
+                    print(
+                        json.dumps({
+                            "info": "Primary inputs yielded 0 records; auto-discovering raw tool outputs.",
+                            "fallback_files_found": len(fallback_paths),
+                        }, ensure_ascii=False)
+                    )
+                    fallback_rows, state = _ingest_and_cache_normalized_rows(
+                        input_paths=fallback_paths,
+                        source_type=args.source_type,
+                        schema_cfg=schema_cfg,
+                        state=state,
+                        state_path=state_path,
+                        resume=False,
+                    )
+                    if fallback_rows:
+                        normalized_rows = fallback_rows
+                        raw_count = int(
+                            state.get("ingest_stats", {}).get("raw_records", 0) or 0
+                        )
+                        input_paths = fallback_paths
+
             _save_rows(normalized_path, normalized_rows)
             state["normalized_rows_file"] = str(normalized_path)
             write_json(state_path, state)

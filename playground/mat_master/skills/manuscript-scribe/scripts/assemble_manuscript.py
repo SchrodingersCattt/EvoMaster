@@ -514,16 +514,36 @@ def main() -> int:
         require_references=references_required,
     )
 
+    # Check 4: Placeholder (TBD) sections
+    tbd_sections = [
+        name
+        for name, text in extract_sections_from_draft(combined).items()
+        if _is_placeholder_body(text)
+    ]
+    check4 = {
+        "passed": len(tbd_sections) == 0,
+        "placeholder_sections": tbd_sections,
+        "message": (
+            f"Placeholder sections (still TBD): {', '.join(tbd_sections)}"
+            if tbd_sections
+            else "No placeholder sections found."
+        ),
+    }
+
     report: dict = {
         "technical_terms": check1,
         "abbreviations": check2,
         "references": check3,
-        "overall_passed": check1["passed"] and check2["passed"] and check3["passed"],
+        "placeholder_sections": check4,
+        "overall_passed": (
+            check1["passed"] and check2["passed"] and check3["passed"] and check4["passed"]
+        ),
     }
     print("\n--- Consistency Checks ---")
     print("1. Technical terms:", check1["message"])
     print("2. Abbreviations:", check2["message"])
     print("3. References:", check3["message"])
+    print("4. Placeholder sections:", check4["message"])
 
     # ── Optional: content validation via validate_content ──────────────
     if args.check_length and profile is not None:

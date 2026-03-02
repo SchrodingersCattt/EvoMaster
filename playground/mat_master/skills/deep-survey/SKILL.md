@@ -61,7 +61,7 @@ Creates the survey **outline** (section headers + TBD) for `standard`/`deep`, or
   - `python run_survey.py --topic "DPA-2 for Alloys" --depth deep --output survey_dpa.md`
   - `python run_survey.py --topic "Perovskite stability" --depth brief`
   - `python run_survey.py --title "My Survey" --depth standard --output survey.md`
-- **Then**: Run retrieval calls at the appropriate tier, populate `evidence_cards` in the skeleton, then write report content. Do not leave (TBD) in the delivered file.
+- **Then**: Run retrieval calls. After retrieval is complete, call `collect_evidence.py` to auto-populate `evidence_cards`. Then write report content. Do not leave (TBD) in the delivered file.
 
 ### `summarize_paper.py`
 
@@ -69,6 +69,17 @@ Section-focused extraction from a single paper (PDF or text).
 
 - **Usage**: `python summarize_paper.py --pdf "paper.pdf" --focus "methodology"`
 - **Logic**: Extract specific sections (Methods/Exp) rather than generic summary; output JSON or text for inclusion in the survey report.
+
+### `collect_evidence.py`
+
+Converts raw `mat_sn_*` tool outputs into `evidence_cards` and writes them to `collected.json`. **Call this after all retrieval is done — do not manually populate evidence_cards.**
+
+- **Usage**:
+  - `python collect_evidence.py --collected_json _tmp/surveys/collected_MyTopic.json`
+  - `python collect_evidence.py --collected_json _tmp/surveys/collected_MyTopic.json --tool_outputs_dir _tmp/tool_outputs`
+  - `python collect_evidence.py --topic "MyTopic"` *(auto-derives collected_json path and tool_outputs_dir)*
+- **Supported sources**: `mat_sn_search-papers-enhanced` (`data[]`) and `mat_sn_web-search` (`results[]`).
+- **Output**: Prints `{"status":"ok","cards_added":<n>,"cards_total":<n>,"collected_json_path":"..."}`.
 
 ### `write_survey_report.py`
 
@@ -100,4 +111,4 @@ Compiles collected findings into the final structured Markdown report.
 - **User uploads (mandatory)**: If the user uploads files, you MUST fully parse/read every such file before writing any section.
 - Always write the report to a **file**; do not stream the full review in chat.
 - **One-way delegation**: deep-survey may call manuscript-scribe `write_section` for report assembly. manuscript-scribe does NOT call deep-survey.
-- **Evidence card persistence (all depths, mandatory)**: After ALL retrieval calls complete, you MUST populate `evidence_cards` in `collected_<topic>.json` before writing any report sections or calling `lit-data-organizer`. Each card: `{source_title, source_url, year, first_author, facet, claim, data_points}`. An empty `evidence_cards` array after retrieval is a rule violation.
+- **Evidence card persistence (all depths, mandatory)**: After ALL retrieval calls complete, run `collect_evidence.py` to auto-populate `evidence_cards` in `collected_<topic>.json`. Do NOT manually write evidence_cards — the script reads raw tool outputs and handles everything. Call it before writing any report sections or calling `lit-data-organizer`. An empty `evidence_cards` array after retrieval (without having called `collect_evidence.py`) is a rule violation.
