@@ -185,17 +185,25 @@ def stop_session(
     session_id: str,
     user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
+    stream_svc: ChatStreamService = Depends(get_stream_service),
 ):
-    """终止该会话当前正在运行的任务。有权限访问即可调用；多 worker 时通过 Redis 广播，始终返回 200。"""
+    """终止该会话当前正在运行的任务。有权限访问即可调用；多 worker 时通过 Redis 广播，始终返回 200。
+    若当前正在等待用户确认（planner_ask / confirmation_request），会向回复队列投递取消哨兵以立即唤醒阻塞线程。"""
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg='无权限访问该会话')
+    reply_queue = stream_svc.get_reply_queue(sid)
+    if reply_queue is not None:
+        try:
+            reply_queue.put_cancel()
+        except Exception:
+            pass
     chat_svc.stop_session_run(sid)
     return BaseResponse(msg='ok')
 
 
-@router.post('/{session_id}/planner_reply', response_model=BaseResponse)
-async def planner_reply(
+@router.post('/{session_id}/confirmation_reply', response_model=BaseResponse)
+async def confirmation_reply(
     session_id: str,
     req: ChatPlannerReplyRequest = Body(...),
     user_id: str | None = Depends(UserService.optional_user_id),
@@ -203,24 +211,29 @@ async def planner_reply(
     stream_svc: ChatStreamService = Depends(get_stream_service),
     events_svc: ChatEventsService = Depends(get_events_service),
 ):
-    """Planner 模式下：收到 planner_ask 后，调用本接口传入用户回复，agent 会继续执行。"""
+    """统一确认回复：收到 planner_ask 或 confirmation_request（ask_human）时，调用本接口传入用户回复，agent 会继续执行。"""
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg='无权限访问该会话')
-    reply_queue = stream_svc.get_planner_reply_queue(sid)
+    reply_queue = stream_svc.get_reply_queue(sid)
     if reply_queue is None:
         raise ConflictErrorResponse(
-            msg='当前无活跃的 planner 任务，或任务已结束',
+            msg='当前无活跃任务，或任务已结束',
         )
     content = (req.content or '').strip()
-    reply_queue.put(content)
-    stream_svc.broadcast_planner_reply(sid, content)
+    # 先广播 confirmation_reply，再 put_content 唤醒 agent，保证订阅流上顺序为 confirmation_request -> confirmation_reply -> tool_result
+    stream_svc.broadcast_reply(sid, content)
+    reply_queue.put_content(content)
     payload = {
         'source': 'User',
-        'type': 'planner_reply',
+        'type': 'confirmation_reply',
         'content': content,
         'session_id': sid,
     }
+    run_ctx = stream_svc.get_run_context(sid)
+    if run_ctx:
+        payload['task_id'] = run_ctx.get('task_id')
+        payload['invocation_id'] = run_ctx.get('invocation_id')
     events_svc.add_history_event(sid, payload, user_id=user_id)
     return BaseResponse(msg='ok')
 

@@ -11,10 +11,11 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Protocol, runtime_checkable
 
 from evomaster.core import get_playground_class
 from evomaster.utils.types import TaskInstance
+from playground.mat_master.service.confirm import ConfirmationManager
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.dao.chat_events_table import get_chat_events_table
@@ -45,6 +46,19 @@ _DIALOG_HISTORY_MAX_EVENTS = int(
 
 _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
+
+
+@runtime_checkable
+class ReplyQueueLike(Protocol):
+    """确认回复队列抽象：支持写入回复/取消，阻塞获取。get 返回 None 表示取消。"""
+
+    def put_content(self, content: str) -> None: ...
+
+    def put_cancel(self) -> None: ...
+
+    def get(self, timeout: float | None = None) -> str | None:
+        """阻塞获取回复。返回 None 表示取消；超时抛出 queue.Empty。"""
+        ...
 
 
 class AgentRunService:
@@ -148,7 +162,7 @@ class AgentRunService:
         prompt: str,
         send_cb: Callable[[dict], Any],
         loop: asyncio.AbstractEventLoop,
-        reply_queue: queue.Queue,
+        reply_queue: ReplyQueueLike,
     ) -> str:
         """发送 planner_ask 到前端并阻塞等待 reply_queue 中的用户回复。"""
         payload = {'source': 'Planner', 'type': 'planner_ask', 'content': prompt}
@@ -161,7 +175,10 @@ class AgentRunService:
         else:
             send_cb(payload)
         try:
-            return reply_queue.get(timeout=300)
+            reply = reply_queue.get(timeout=300)
+            if reply is None:
+                return 'abort'
+            return reply
         except queue.Empty:
             return 'abort'
 
@@ -220,11 +237,13 @@ class AgentRunService:
         loop: asyncio.AbstractEventLoop,
         stop_event: threading.Event,
         mode: str,
-        planner_reply_queue: queue.Queue,
+        reply_queue: ReplyQueueLike | None,
         task_id: str,
         invocation_id: str | None = None,
     ) -> None:
-        """在后台线程中执行 agent，由 stream 层 run_in_executor(executor, self.run_agent_sync, ...) 调用。"""
+        """在后台线程中执行 agent，由 stream 层 run_in_executor(executor, self.run_agent_sync, ...) 调用。
+        reply_queue 供 planner_ask 与 confirmation_request（ask_human）共用，POST /confirmation_reply 写入。
+        """
         prompt_preview = (
             (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
         )
@@ -387,14 +406,14 @@ class AgentRunService:
             if getattr(pg, 'set_mode', None) is not None:
                 pg.set_mode(mode)
             logger.info(
-                'run_agent_sync: mode=%s planner_enabled=%s',
+                'run_agent_sync: mode=%s reply_queue=%s',
                 mode,
-                mode == 'planner' and planner_reply_queue is not None,
+                'set' if reply_queue else 'none',
             )
 
-            if mode == 'planner' and planner_reply_queue is not None:
+            if mode == 'planner' and reply_queue is not None:
                 pg._planner_input_fn = lambda prompt: self._planner_ask_and_wait(
-                    prompt, send_cb, loop, planner_reply_queue
+                    prompt, send_cb, loop, reply_queue
                 )
             pg._planner_output_callback = event_callback
 
@@ -627,6 +646,27 @@ class AgentRunService:
             )
             agent.set_agent_name(getattr(base, '_agent_name', 'default'))
             agent._stop_event = stop_event
+            if reply_queue is not None:
+                agent._ask_human_queue = reply_queue
+                try:
+                    mat_master_block = (
+                        config_dict.get('mat_master')
+                        if isinstance(config_dict, dict)
+                        else None
+                    )
+                    ah_cfg = (
+                        mat_master_block.get('ask_human')
+                        if isinstance(mat_master_block, dict)
+                        else {}
+                    ) or {}
+                    agent._ask_human_config = ah_cfg
+                    agent._confirm_manager = ConfirmationManager(
+                        emitter=event_callback,
+                        reply_queue=reply_queue,
+                        default_timeout_sec=ah_cfg.get('timeout_seconds', 20),
+                    )
+                except Exception:
+                    pass
 
             pg.agent = agent
             exp = pg._create_exp()

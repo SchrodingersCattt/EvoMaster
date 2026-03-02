@@ -980,7 +980,13 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         step_dir.mkdir(parents=True, exist_ok=True)
         solver.set_run_dir(workspaces)
         try:
-            solver.run(fallback_prompt, task_id=f"fallback_{step_id}")
+            fallback_task = self._build_task_with_dialog_history(
+                fallback_prompt, f"fallback_{step_id}"
+            )
+            if fallback_task is not None:
+                solver.run(task=fallback_task)
+            else:
+                solver.run(fallback_prompt, task_id=f"fallback_{step_id}")
             return True
         except Exception as e:
             self.logger.warning('Fallback failed for step %s: %s', step_id, e)
@@ -1016,6 +1022,31 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
             state['longtask_initialized'] = False
         state = self._ensure_longtask_artifacts(state, task_id, task_description)
         return state
+
+    def _build_task_with_dialog_history(
+        self, description: str, task_id: str
+    ) -> Optional[TaskInstance]:
+        """Build a TaskInstance with dialog_history so the agent sees multi-turn context.
+
+        When this run was started with task.meta['dialog_history'] (e.g. from chat API),
+        we inject that history plus the current round user message, so solver.run(task=...)
+        gives the agent full conversation context before the current step/prereq prompt.
+        """
+        t = getattr(self, '_task_with_history', None)
+        if t is None or not getattr(t, 'meta', None):
+            return None
+        base_history = list((t.meta or {}).get('dialog_history') or [])
+        current_user_msg = (t.description or '').strip()
+        if current_user_msg:
+            base_history = base_history + [
+                UserMessage(content=current_user_msg).model_dump()
+            ]
+        return TaskInstance(
+            task_id=task_id,
+            task_type='discovery',
+            description=description,
+            meta={'dialog_history': base_history},
+        )
 
     def _is_goal_achieved(self, state: dict[str, Any]) -> bool:
         """Check if the research goal has been met.
@@ -1711,7 +1742,13 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
         step_prompt = f"Achieve: {intent}. If that fails: {fallback}"
         try:
             solver.set_run_dir(workspaces)
-            result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
+            step_task = self._build_task_with_dialog_history(
+                step_prompt, f"{task_id}_step_{step_id}"
+            )
+            if step_task is not None:
+                result = solver.run(task=step_task)
+            else:
+                result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
             summary = self._summarize_solver_result(result, max_len=1000)
             result_info['result_summary'] = summary[:200]
             if self._is_quality_critical_step(intent):
@@ -1936,7 +1973,13 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 )
 
             try:
-                result = solver.run(prompt, task_id=f"{task_id}_precheck_{i}")
+                precheck_task = self._build_task_with_dialog_history(
+                    prompt, f"{task_id}_precheck_{i}"
+                )
+                if precheck_task is not None:
+                    result = solver.run(task=precheck_task)
+                else:
+                    result = solver.run(prompt, task_id=f"{task_id}_precheck_{i}")
                 summary = self._summarize_solver_result(result, max_len=2000)
                 collected_context.append(
                     f"[Prerequisite {i + 1}: {prereq_type}] {description}\nResult: {summary}"
@@ -2643,6 +2686,9 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         if task is not None:
             task_description = task.description or ''
             task_id = task.task_id
+            self._task_with_history = task
+        else:
+            self._task_with_history = None
         # Initialize state (loads persisted state or creates fresh)
         state = self._initialize_state(task_description, task_id)
 
@@ -2740,6 +2786,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 if s.get('status') == 'done'
             ),
         )
+        self._task_with_history = None
         self._solver = None  # cleanup
 
         # Build comprehensive execution summary
