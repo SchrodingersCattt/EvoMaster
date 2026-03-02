@@ -17,6 +17,10 @@ from src.services.agent_run_service import (
     AgentRunService,
     get_agent_run_service,
 )
+from src.services.deploy_state_service import (
+    DeployStateService,
+    get_deploy_state_service,
+)
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.utils.constant import AG_UI_EVENT
@@ -99,11 +103,13 @@ class ChatStreamService:
         sessions_service: ChatSessionsService | None = None,
         events_service: ChatEventsService | None = None,
         agent_run_service: AgentRunService | None = None,
+        deploy_state_service: DeployStateService | None = None,
     ) -> None:
         self._queues = queue_manager or StreamQueueManager()
         self._sessions_service = sessions_service or get_sessions_service()
         self._events_service = events_service or get_events_service()
         self._agent_run_service = agent_run_service or get_agent_run_service()
+        self._deploy_state_service = deploy_state_service or get_deploy_state_service()
 
     @staticmethod
     def sse_format(payload: dict) -> str:
@@ -134,6 +140,21 @@ class ChatStreamService:
             out.append(ev)
         return out
 
+    @staticmethod
+    def _build_run_interrupted_message(
+        reason: str, previous_version: str | None, current_version: str | None
+    ) -> str:
+        if reason == 'restart':
+            return '上一轮任务因服务重启中断，正在自动重新执行。'
+        if previous_version and current_version:
+            return (
+                '上一轮任务因服务升级'
+                f'（{previous_version} -> {current_version}）中断，正在自动重新执行。'
+            )
+        if current_version:
+            return f'上一轮任务因服务升级到 {current_version} 中断，正在自动重新执行。'
+        return '上一轮任务因服务部署/重启中断，正在自动重新执行。'
+
     async def generate_subscribe_stream(
         self, session_id: str
     ) -> AsyncGenerator[str, None]:
@@ -149,22 +170,31 @@ class ChatStreamService:
         try:
             payload = self._sessions_service.get_session_status_payload(sid)
             # 部署/重启后：DB 仍为 active 但本进程没有该 session 的 run → 视为上一轮在别的 pod 上被中断
-            if payload.get(
+            is_stale = payload.get(
                 'status'
             ) == 'active' and not self._sessions_service.is_session_running_on_this_pod(
                 sid
-            ):
-                logger.info(
-                    'run_interrupted: stale session detected (deploy/restart), '
-                    'resetting to idle and will auto retry session_id=%s',
-                    sid,
-                )
+            )
+            if is_stale:
                 self._sessions_service.reset_session_status_to_idle_in_db(sid)
                 payload = self._sessions_service.get_session_status_payload(sid)
                 last_query = self._events_service.get_last_user_query(sid)
                 yield self.sse_format(payload)
-                run_interrupted_content = (
-                    '上一轮任务因服务部署/重启中断，正在自动重新执行。'
+                reason, reason_meta = (
+                    self._deploy_state_service.classify_restart_reason(sid)
+                )
+                current_version = reason_meta.get('current_version')
+                previous_version = reason_meta.get('previous_version')
+                logger.info(
+                    'run_interrupted: stale session detected reason=%s '
+                    'session_id=%s prev=%s curr=%s',
+                    reason,
+                    sid,
+                    previous_version,
+                    current_version,
+                )
+                run_interrupted_content = self._build_run_interrupted_message(
+                    reason, previous_version, current_version
                 )
                 last_user_content = (last_query or {}).get('content', '')
                 run_interrupted_payload = {
@@ -172,22 +202,35 @@ class ChatStreamService:
                     'type': 'run_interrupted',
                     'content': run_interrupted_content,
                     'session_id': sid,
-                    'reason': 'deploy',
+                    'reason': reason,
                     'last_user_content': last_user_content,
                 }
+                if current_version:
+                    run_interrupted_payload['current_version'] = current_version
+                if previous_version:
+                    run_interrupted_payload['previous_version'] = previous_version
+                if reason_meta.get('note'):
+                    run_interrupted_payload['reason_note'] = reason_meta['note']
                 yield self.sse_format(run_interrupted_payload)
                 # 入库，便于历史/导出（如 CSV）中有重启记录；task_id 指向被中断的那一轮
                 interrupted_task_id = payload.get('last_task_id')
+                history_content = {
+                    'message': run_interrupted_content,
+                    'reason': reason,
+                    'last_user_content': last_user_content,
+                }
+                if current_version:
+                    history_content['current_version'] = current_version
+                if previous_version:
+                    history_content['previous_version'] = previous_version
+                if reason_meta.get('note'):
+                    history_content['reason_note'] = reason_meta['note']
                 self._events_service.add_history_event(
                     sid,
                     {
                         'source': 'System',
                         'type': 'run_interrupted',
-                        'content': {
-                            'message': run_interrupted_content,
-                            'reason': 'deploy',
-                            'last_user_content': last_user_content,
-                        },
+                        'content': history_content,
                         'session_id': sid,
                         'task_id': interrupted_task_id,
                     },
@@ -315,6 +358,7 @@ class ChatStreamService:
         task_id = 'sse_' + uuid.uuid4().hex[:16]
         invocation_id = 'inv_' + uuid.uuid4().hex[:16]
         self._sessions_service.set_session_last_task(sid, task_id, user_id=user_id)
+        self._deploy_state_service.record_session_version(sid)
         user_content = (req.content or '').strip()
         user_msg = {
             'source': 'User',
@@ -457,4 +501,5 @@ def get_stream_service() -> ChatStreamService:
         sessions_service=get_sessions_service(),
         events_service=get_events_service(),
         agent_run_service=get_agent_run_service(),
+        deploy_state_service=get_deploy_state_service(),
     )
