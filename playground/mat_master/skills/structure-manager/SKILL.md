@@ -1,6 +1,6 @@
 ---
 name: structure-manager
-description: "Skill for obtaining, validating, and converting atomic structures. Capabilities: (1) Download a CIF/POSCAR from a direct file URL (fetch_web_structure.py --url). (2) Scan an HTML page for structure file links and download (fetch_web_structure.py --page) — works for CCDC entries, journal SI pages, repository landing pages, etc. (3) Validate any structure file: dimensionality, sanity, formula (assess_structure.py). (4) Convert between formats: CIF/POSCAR/LAMMPS/XYZ/etc. (convert_format.py). Structure DB search and building (SMILES/prototypes) use MCP tools; no Materials Project API or local DB scripts."
+description: "Skill for searching, obtaining, validating, and converting atomic structures. Capabilities: (1) Literature-based structure search — search papers (mat_sn_*), fetch full pages (mat_doc_extract_info_from_webpage), extract crystal data (space group, lattice, CCDC/ICSD ID), attempt CIF download or report identifiers. (2) Download a CIF/POSCAR from a direct file URL (fetch_web_structure.py --url). (3) Scan an HTML page for structure file links and download (fetch_web_structure.py --page). (4) Validate: dimensionality, sanity, formula (assess_structure.py). (5) Convert between formats: CIF/POSCAR/LAMMPS/XYZ/etc. (convert_format.py). For any structure retrieval beyond a trivial open-DB formula lookup, call use_skill get_info first."
 skill_type: operator
 ---
 
@@ -14,11 +14,18 @@ Requires: pymatgen, numpy (assess_structure.py); dpdata (convert_format.py); req
 
 The following are available for obtaining structures. Choose based on what identifier or context you have; if one path fails or returns no results, try another.
 
+- **Literature-based search**: When the target structure is not in an open database, or the material class is unlikely to be there (molecular crystals, hybrid salts, MOFs, co-crystals, energetic perovskites, etc.):
+  1. Search literature with `mat_sn_search-papers-enhanced` / `mat_sn_web-search` to locate papers reporting the structure.
+  2. For high-relevance URLs (paper HTML, SI page, open repository), fetch full page content with `mat_doc_extract_info_from_webpage` to extract: space group, lattice constants (a, b, c, α, β, γ), formula, Z, CCDC/ICSD identifiers, DOI. Do **not** rely on search snippets alone — crystal parameters are almost never in abstracts.
+  3. If a direct CIF/POSCAR download link is found in the full page, use `fetch_web_structure.py --url`. If an HTML page with structure file links is found, use `fetch_web_structure.py --page`.
+  4. If the structure is in a gated database (CCDC, ICSD) and no open CIF exists, report identifiers + crystal parameters (see "Structure identification" capability below).
+  5. If full-page fetch fails (paywall, Cloudflare-protected, JS-only render), what you have from snippets + DOI is still a valid partial result — report it honestly and set `task_completed=partial`.
+
 - **Structure database (MCP)**: `mat_struct_db_*` — search by formula, composition, material ID, prototype.
 - **Structure generation (MCP)**: `mat_sg_*` — build from SMILES, Wyckoff positions, prototype templates, surfaces, supercells, defects.
 - **Direct file download**: `fetch_web_structure.py --url <link>` — HTTP GET a CIF/POSCAR from a known direct file URL.
 - **Web page link extraction**: `fetch_web_structure.py --page <page_url>` — fetch an HTML page, extract all links whose path ends with a structure file extension (.cif/.vasp/.xyz/.res/.pdb/.mol2/.sdf), and download. Auto-downloads if exactly one match is found; returns the candidate list if multiple matches are found so you can pick one and call `--url`.
-- **Structure identification (gated databases)**: When the structure resides in a copyrighted or access-gated database (CCDC, ICSD, etc.), report the database identifier (CCDC REFCODE / deposition number, ICSD collection code, etc.) and crystallographic parameters extracted from literature (space group, lattice constants, formula, Z). Do not attempt to download from these databases or reconstruct the structure with MCP tools — the result would likely be silently wrong.
+- **Structure identification (gated databases)**: When the structure resides in a copyrighted or access-gated database (CCDC, ICSD, etc.), extract and report from literature: database identifier (CCDC REFCODE / deposition number, ICSD collection code), space group, lattice constants (a, b, c, α, β, γ), formula, Z, source DOI/URL. Do not attempt to download from these databases or reconstruct the structure with MCP tools — the result would likely be silently wrong. **Delivery**: 1–3 structures → list inline in the finish message; 4+ → save to a JSON file (keys: `identifier`, `database`, `space_group`, `lattice`, `formula`, `Z`, `source_doi`) and reference the file path. Set `task_completed=partial`.
 
 ## Validation (Mandatory)
 
@@ -69,7 +76,7 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 
 ## When to use
 
-* "Get / search for the crystal structure of X" → use MCP database tools (`mat_struct_db_*`).
+* "Get / search / find / retrieve the crystal structure of X" → Try MCP database tools (`mat_struct_db_*`) first for simple inorganic formulas. If not found, or if the material is complex (organic, hybrid, molecular crystal, MOF, co-crystal, energetic salt, etc.), use the literature-based search path: `mat_sn_*` → `mat_doc_extract_info_from_webpage` → `fetch_web_structure.py` / report identifiers.
 * "Build from SMILES or prototype" → use MCP structure generator (`mat_sg_*`).
 * "I have a direct CIF/POSCAR URL, download it" → `fetch_web_structure.py --url`.
 * "Get the structure from a journal SI or open repository page" → `fetch_web_structure.py --page`.
@@ -83,8 +90,6 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 
 ## Rules
 
-* Always run `assess_structure.py` after obtaining any new structure (from URL, page, or MCP).
-* If `assess_structure` reports "Slab" for a task intended to be "Bulk", warn the user.
+* After obtaining any new structure (any method), run `assess_structure.py`. If it reports "Slab" for a Bulk task, warn the user.
 * For LAMMPS conversions, **always** provide `--type-map`. If the source .lmp uses a non-atomic atom_style, **always** provide `--atom-style`.
-* `fetch_web_structure.py --page` requires beautifulsoup4. On `missing_dependency` response, install it on the remote session before retrying.
-* For structures in copyrighted/gated databases (CCDC, ICSD, etc.), do NOT attempt to scrape the CIF or reconstruct the structure with `mat_sg_*`. Report the database identifier and crystallographic parameters from literature instead. Attempting to rebuild complex structures (molecular perovskites, MOFs, co-crystals) from incomplete parameters produces silently wrong results.
+* On `missing_dependency` from any script, install the package on the remote session before retrying.

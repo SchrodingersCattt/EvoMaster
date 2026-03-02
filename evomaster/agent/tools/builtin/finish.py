@@ -33,7 +33,10 @@ class FinishToolParams(BaseToolParams):
       exactly once, under the step that produced it. Do NOT add a separate
       "Output Files" or "All OSS links" section.
 
-    The task_completed field should be set to True if you believed you have completed the task, and False otherwise.
+    The task_completed field:
+    - 'true': task fully completed and all requested artifacts delivered (e.g. CIF file obtained).
+    - 'false': task could not be completed (error, missing info, etc.).
+    - 'partial': task partially completed — meaningful results were found but a key artifact could not be delivered. Use this when, for example, a crystal structure is identified from literature but no CIF file could be obtained (e.g. structure is in CCDC/ICSD); the user must retrieve the file themselves. Do NOT use 'true' in this case.
     """
 
     name: ClassVar[str] = 'finish'
