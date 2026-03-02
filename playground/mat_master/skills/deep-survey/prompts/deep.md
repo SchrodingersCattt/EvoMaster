@@ -31,6 +31,29 @@ After completing each facet's retrieval, **pause and evaluate**:
 
 Adjust the remaining plan before proceeding to the next facet.
 
+### Step 2.5 — Persist evidence cards (mandatory)
+
+After completing all retrieval, write structured evidence cards to the `collected_<topic>.json` skeleton that `run_survey.py` created in `_tmp/surveys/`. This happens **before** writing the narrative report sections.
+
+For each retrieved source that passes the relevance filter, append one card to `evidence_cards`:
+
+```json
+{
+  "source_title": "Full paper/source title",
+  "source_url": "https://doi.org/... or direct URL (REQUIRED)",
+  "year": 2024,
+  "first_author": "LastName",
+  "facet": "facet name matching one of the skeleton's facets[]",
+  "claim": "One-sentence specific finding or measurement",
+  "data_points": {"property": "value", "unit": "...", "conditions": "..."}
+}
+```
+
+- `data_points` is optional but strongly preferred — capture any concrete numbers, conditions, or measurements.
+- Every card must have a `source_url`. Use `https://doi.org/<DOI>` for papers without a direct URL.
+- Write the updated file back to `_tmp/surveys/collected_<topic>.json` using `str_replace_editor` or `execute_bash`.
+- This `collected.json` is the structured evidence artifact for downstream use (lit-data-organizer, plotting, further analysis). It is produced regardless of whether the caller needs it — evidence persistence is unconditional.
+
 ### Step 3 — Write the report (LLM)
 
 Write all five sections fully. Write each section's full body to a file first (e.g. `_tmp/surveys/section_Executive_Summary.md`), then call `write_section` with `--content_file`. Do NOT pass long section text in `--content` (may be truncated).

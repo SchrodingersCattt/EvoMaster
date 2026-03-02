@@ -51,6 +51,7 @@
 ## lit-data-organizer skill (literature table normalization)
 - When the user asks to **organize literature results into a structured table/dataset** (e.g. "material-property table", CSV/JSONL export, comparison matrix, multi-source consolidation), you MUST use `use_skill` with `skill_name=lit-data-organizer`, `action=run_script`, `script_name=build_lit_table.py` before final reporting.
 - When the user requests **Pareto analysis or plotting based on literature metrics**, you MUST first build the canonical table with `lit-data-organizer`; plotting scripts must read that generated table instead of hard-coded values.
+- **Evidence persistence (mandatory)**: When any `deep-survey` run (any depth) produces a `collected_<topic>.json`, OR when multiple `mat_sn_*` calls are made during a composition-optimization or data-aggregation workflow, you MUST pass the structured evidence through `lit-data-organizer` (build_lit_table.py) to produce a canonical table. This applies regardless of whether the user explicitly asked for a table — evidence persistence is mandatory whenever retrieval is performed. Pass the collected.json via `--input_json <path>`.
 - Do not fabricate numeric values for missing fields. Keep missing values empty/NA and include source traceability columns.
 - For PDF-derived inputs, still follow the PDF-first rule: parse with `mat_doc_*` first, then pass structured outputs to `lit-data-organizer`.
 - For long runs, prefer staged/resumable execution: pass `--state _tmp/lit_data/state.json --resume` and use `--stage` (`normalize`, `dedup`, `conflict`, `export`, `all`) for recovery.
@@ -63,7 +64,8 @@
 
 ## composition-optimization skill (composition search orchestration)
 - When the user asks for **composition optimization** (alloy/HEA composition design, GA-based composition search, run_dart_ga-style optimization), you MUST first call `use_skill` with `skill_name=composition-optimization`, `action=get_info` to load the branch workflow before selecting tools.
-- If the user did **not** provide initial candidate data, gather evidence and normalize candidates (deep-survey only when long-form report is requested; then `lit-data-organizer` for canonical table) before optimization.
+- If the user did **not** provide initial candidate data, gather evidence via `deep-survey` and normalize through `lit-data-organizer` before optimization.
+- If the user **did** provide initial candidate data but literature retrieval is also performed (e.g. to explain mechanisms, screen additional elements, or augment seeds), persist the retrieved evidence through `lit-data-organizer` before proceeding — the canonical table is a reusable artifact regardless of whether it is consumed downstream.
 - If a surrogate model is available and a DART GA tool is registered (prefer `mat_compdart_submit_run_dart_ga`; fallback: another tool ending with `_run_dart_ga`), you may run GA optimization. If surrogate model is absent, do not force DART GA.
 - If only composition/formula is given (no explicit structure), you MUST run composition->structure heuristic generation via `mat_struct_db_*` / `mat_sg_*` and validate with `structure-manager` (`assess_structure.py`) before DPA calculations.
 - DPA-related downstream steps require explicit structure definition (lattice, coordinates, atom types/species mapping). Do not submit incomplete structural inputs.

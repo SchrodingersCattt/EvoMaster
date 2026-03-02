@@ -1,6 +1,6 @@
 ---
 name: deep-survey
-description: "Retrieves literature evidence and optionally produces a written review report. depth=brief outputs collected.json (evidence skeleton, 3-5 retrieval calls) for use by downstream skills such as lit-data-organizer or manuscript-scribe. depth=deep produces a full 5-section review report (10-15+ calls). Use deep-survey when you need systematic literature coverage—not for quick one-off lookups or short chat answers."
+description: "Retrieves literature evidence and always produces collected.json (structured evidence skeleton) regardless of depth. depth=brief outputs collected.json only (3-5 retrieval calls). depth=standard outputs collected.json + concise MD report (6-8 calls). depth=deep outputs collected.json + full 5-section review report (10-15+ calls). Use deep-survey when you need systematic literature coverage—not for quick one-off lookups or short chat answers."
 skill_type: operator
 ---
 
@@ -12,11 +12,13 @@ A systematic researcher that collects literature evidence and, for `standard`/`d
 
 ## Depth tiers
 
+All depths produce `collected.json` (structured evidence skeleton). The difference is whether a Markdown report is also written.
+
 | depth | Retrieval calls | Output | Use when |
 |-------|----------------|--------|----------|
-| `brief` | 3-5 | `collected.json` — evidence skeleton with cards per facet | Sub-step within composition-optimization, manuscript writing, or lit-data-organizer feed |
-| `standard` | 6-8 | Concise MD report (Executive Summary + References) | User wants a short survey file, or as an intermediate step |
-| `deep` | 10-15+ | Full 5-section report (Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References) | Standalone comprehensive review request |
+| `brief` | 3-5 | `collected.json` only — evidence skeleton; no report | Sub-step within composition-optimization, or when only structured evidence is needed |
+| `standard` | 6-8 | `collected.json` + Concise MD report (Executive Summary + References) | User wants a short survey file, or as an intermediate step with evidence persistence |
+| `deep` | 10-15+ | `collected.json` + Full 5-section report (Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References) | Standalone comprehensive review request |
 
 For depth-specific facet counts and retrieval budgets, fetch: `use_skill action=get_reference skill_name="deep-survey" reference_name="search_facets_and_rounds.md"`.
 
@@ -38,8 +40,8 @@ For depth-specific facet counts and retrieval budgets, fetch: `use_skill action=
 Quick orientation (authoritative detail is in the per-depth prompt files):
 
 - **brief**: 3-5 retrieval calls → `collected.json` evidence skeleton only; no Markdown report.
-- **standard**: 6-8 retrieval calls → concise Markdown report (Executive Summary + References).
-- **deep**: 10-15+ retrieval calls → full 5-section review (Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References).
+- **standard**: 6-8 retrieval calls → `collected.json` + concise Markdown report (Executive Summary + References).
+- **deep**: 10-15+ retrieval calls → `collected.json` + full 5-section review (Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References).
 
 For depth-specific facet counts and retrieval budgets, fetch: `use_skill action=get_reference skill_name="deep-survey" reference_name="search_facets_and_rounds.md"`.
 
@@ -53,13 +55,13 @@ All reports follow the **citation and output format rules already injected into 
 
 ### `run_survey.py`
 
-Creates the survey **outline** (section headers + TBD) for `standard`/`deep`, or the evidence skeleton (`collected.json`) for `brief`. The LLM fills all content via retrieval calls.
+Creates the survey **outline** (section headers + TBD) for `standard`/`deep`, or the evidence skeleton (`collected.json`) for `brief`. For all depths, also creates a `collected_<topic>.json` skeleton in `_tmp/surveys/`. The LLM fills all content via retrieval calls.
 
 - **Usage**:
   - `python run_survey.py --topic "DPA-2 for Alloys" --depth deep --output survey_dpa.md`
   - `python run_survey.py --topic "Perovskite stability" --depth brief`
   - `python run_survey.py --title "My Survey" --depth standard --output survey.md`
-- **Then**: Run retrieval calls at the appropriate tier, then write content. Do not leave (TBD) in the delivered file.
+- **Then**: Run retrieval calls at the appropriate tier, populate `evidence_cards` in the skeleton, then write report content. Do not leave (TBD) in the delivered file.
 
 ### `summarize_paper.py`
 
@@ -90,7 +92,7 @@ Compiles collected findings into the final structured Markdown report.
 
 - **Choose depth explicitly**: Pass `--depth brief|standard|deep` based on context. Default is `deep`.
 - **LLM writes content**: The script only creates the outline/skeleton. **You** must fill content from retrieval results. Do not deliver a file that still contains (TBD).
-- **brief is for downstream use**: `depth=brief` produces `collected.json`; it is not a human-readable report. Use `standard` or `deep` when the user wants a readable document.
+- **All depths produce `collected.json`**: `depth=brief` produces only `collected.json` (no report); `standard` and `deep` produce both a Markdown report and `collected.json`. Use `standard` or `deep` when the user wants a readable document.
 - **Retrieval minimum is depth-dependent**: brief: 3-5 calls; standard: 6-8 calls; deep: 10-15+ calls. Do not apply the deep minimum universally.
 - **Full-length retention (standard/deep)**: For every section, write the full body to a file first, then call `write_section` with `--content_file`. Never pass long section text in `--content`.
 - **Delivery**: Save the report to the .md file and call finish. For `deep` tier, also output the full report in your reply so the user sees it (see `prompts/deep.md`); for `standard`, report the file path only.

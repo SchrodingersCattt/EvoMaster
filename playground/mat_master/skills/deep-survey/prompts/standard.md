@@ -22,6 +22,28 @@ Produce a concise, readable Markdown survey report: Executive Summary + Referenc
 - Web search returns snippets: fetch full page for high-relevance URLs (`mat_doc_*`).
 - Filter for relevance and source quality (authority, recency).
 
+### Step 2.5 — Persist evidence cards (mandatory)
+
+After completing all retrieval, write structured evidence cards to the `collected_<topic>.json` skeleton that `run_survey.py` created in `_tmp/surveys/`. This happens **before** writing the narrative report.
+
+For each retrieved source that passes the relevance filter, append one card to `evidence_cards`:
+
+```json
+{
+  "source_title": "Full paper/source title",
+  "source_url": "https://doi.org/... or direct URL (REQUIRED)",
+  "year": 2024,
+  "first_author": "LastName",
+  "facet": "facet name matching one of the skeleton's facets[]",
+  "claim": "One-sentence specific finding or measurement",
+  "data_points": {"property": "value", "unit": "...", "conditions": "..."}
+}
+```
+
+- Every card must have a `source_url`. Use `https://doi.org/<DOI>` for papers without a direct URL.
+- Write the updated file back to `_tmp/surveys/collected_<topic>.json` using `str_replace_editor` or `execute_bash`.
+- This `collected.json` is the structured evidence artifact for downstream use (lit-data-organizer, plotting, further analysis). Produce it unconditionally.
+
 ### Step 3 — Write the report (LLM)
 
 #### Executive Summary
