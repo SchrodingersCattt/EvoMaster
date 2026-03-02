@@ -17,9 +17,10 @@ The following are available for obtaining structures. Choose based on what ident
 - **Literature-based search**: When the target structure is not in an open database, or the material class is unlikely to be there (molecular crystals, hybrid salts, MOFs, co-crystals, energetic perovskites, etc.):
   1. Search literature with `mat_sn_search-papers-enhanced` / `mat_sn_web-search` to locate papers reporting the structure.
   2. For high-relevance URLs (paper HTML, SI page, open repository), fetch full page content with `mat_doc_extract_info_from_webpage` to extract: space group, lattice constants (a, b, c, α, β, γ), formula, Z, CCDC/ICSD identifiers, DOI. Do **not** rely on search snippets alone — crystal parameters are almost never in abstracts.
-  3. If a direct CIF/POSCAR download link is found in the full page, use `fetch_web_structure.py --url`. If an HTML page with structure file links is found, use `fetch_web_structure.py --page`.
-  4. If the structure is in a gated database (CCDC, ICSD) and no open CIF exists, report identifiers + crystal parameters (see "Structure identification" capability below).
-  5. If full-page fetch fails (paywall, Cloudflare-protected, JS-only render), what you have from snippets + DOI is still a valid partial result — report it honestly and set `task_completed=partial`.
+  3. If `mat_doc_extract_info_from_webpage` returns 403/paywall on a DOI URL, try alternative open-access URLs for the same paper (SI page, preprint, free full-text mirror) before falling back to snippets.
+  4. If a direct CIF/POSCAR download link is found in the full page, use `fetch_web_structure.py --url`. If an HTML page with structure file links is found, use `fetch_web_structure.py --page`.
+  5. If the structure is in a gated database (CCDC, ICSD) and no open CIF exists, report identifiers + crystal parameters (see "Structure identification" capability below).
+  6. If all full-page fetches fail, what you have from snippets + DOI is still a valid partial result — report it honestly and set `task_completed=partial`.
 
 - **Structure database (MCP)**: `mat_struct_db_*` — search by formula, composition, material ID, prototype.
 - **Structure generation (MCP)**: `mat_sg_*` — build from SMILES, Wyckoff positions, prototype templates, surfaces, supercells, defects.
@@ -90,6 +91,7 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 
 ## Rules
 
+* If no CIF/POSCAR file is delivered to the user, `task_completed` must be `partial`, never `true` — even if you found crystal parameters from literature.
 * After obtaining any new structure (any method), run `assess_structure.py`. If it reports "Slab" for a Bulk task, warn the user.
 * For LAMMPS conversions, **always** provide `--type-map`. If the source .lmp uses a non-atomic atom_style, **always** provide `--atom-style`.
 * On `missing_dependency` from any script, install the package on the remote session before retrying.
