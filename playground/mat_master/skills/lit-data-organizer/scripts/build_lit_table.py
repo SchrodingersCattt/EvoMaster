@@ -87,14 +87,14 @@ DEFAULT_ALIASES: dict[str, list[str]] = {
     "quote_text": ["quote_text", "quote", "evidence_text", "snippet", "text"],
     "summary_text": ["summary_text", "summary", "abstract", "note"],
     "evidence_span": ["evidence_span", "span", "page_span", "locator", "section", "paragraph", "page"],
-    "tags": ["tags", "keywords", "labels"],
+    "tags": ["tags", "keywords", "labels", "facet"],
     "confidence": ["confidence", "score", "confidence_score"],
     "created_at": ["created_at", "timestamp", "date", "published_at", "year"],
     "material_name": ["material_name", "material", "compound", "compound_name"],
     "formula": ["formula", "chemical_formula", "composition.formula"],
     "composition": ["composition", "metal_composition", "alloy_composition"],
     "phase_or_polymorph": ["phase_or_polymorph", "phase", "polymorph", "crystal_form"],
-    "independent_vars": ["independent_vars", "features", "inputs", "independent_variables"],
+    "independent_vars": ["independent_vars", "features", "inputs", "independent_variables", "data_points"],
     "property_name": ["property_name", "target_name", "property", "measurement_name"],
     "property_value": ["property_value", "target_value", "value", "measurement_value"],
     "property_unit": ["property_unit", "unit", "units"],
@@ -306,7 +306,7 @@ def _extract_records(payload: Any) -> list[dict[str, Any]]:
     if not isinstance(payload, dict):
         return []
 
-    for key in ("lit_evidence_table", "records", "items", "data", "results"):
+    for key in ("evidence_cards", "lit_evidence_table", "records", "items", "data", "results"):
         value = payload.get(key)
         if isinstance(value, list):
             return [item for item in value if isinstance(item, dict)]
