@@ -32,16 +32,19 @@ Reply contract (websocket -> server):
 - fields: { "content": str, "origin": str, "session_id": str }
 """
 
-from __future__ import annotations
-
 import queue
 from enum import Enum
 from typing import Callable, Iterable, Optional
 
+# 用户点击「停止」时由 API 投入 reply_queue，使阻塞在 get() 的线程立即返回
+CANCEL_SENTINEL = object()
+# request() 收到 CANCEL_SENTINEL 时返回此值，供 callback 区分「取消」与「超时」
+REPLY_CANCELLED = object()
+
 
 class ConfirmMode(str, Enum):
-    TIMEOUT = "timeout"
-    BLOCK = "block"
+    TIMEOUT = 'timeout'
+    BLOCK = 'block'
 
 
 class ConfirmationManager:
@@ -57,7 +60,11 @@ class ConfirmationManager:
         # emitter(source, event_type, content)
         self._emit = emitter
         self._reply_queue = reply_queue
-        self._default_timeout = int(default_timeout_sec) if default_timeout_sec and default_timeout_sec > 0 else 20
+        self._default_timeout = (
+            int(default_timeout_sec)
+            if default_timeout_sec and default_timeout_sec > 0
+            else 20
+        )
 
     def request(
         self,
@@ -92,37 +99,46 @@ class ConfirmationManager:
             The user's reply string, or default_reply (TIMEOUT mode timeout),
             or None (BLOCK mode if container released without reply).
         """
-        effective_timeout = timeout_sec if timeout_sec is not None else self._default_timeout
+        effective_timeout = (
+            timeout_sec if timeout_sec is not None else self._default_timeout
+        )
 
         payload: dict = {
-            "question": question,
-            "mode": mode.value,
+            'question': question,
+            'mode': mode.value,
         }
         if mode == ConfirmMode.TIMEOUT:
-            payload["timeout_seconds"] = effective_timeout
+            payload['timeout_seconds'] = effective_timeout
         if context:
-            payload["context"] = context
+            payload['context'] = context
         if actions:
-            payload["actions"] = list(actions)
+            payload['actions'] = list(actions)
         if origin:
-            payload["origin"] = origin
+            payload['origin'] = origin
 
-        source = source_override or ("Planner" if origin == "planner" else "MatMaster")
+        source = source_override or ('Planner' if origin == 'planner' else 'MatMaster')
         try:
-            self._emit(source, "confirmation_request", payload)
+            self._emit(source, 'confirmation_request', payload)
         except Exception:
             pass
 
         wait_timeout = None if mode == ConfirmMode.BLOCK else effective_timeout
         try:
-            return self._reply_queue.get(timeout=wait_timeout)
+            reply = self._reply_queue.get(timeout=wait_timeout)
+            if reply is None:
+                return REPLY_CANCELLED
+            return reply
         except queue.Empty:
             # Only TIMEOUT mode reaches here
             try:
-                self._emit(source, "confirmation_timeout", {
-                    "question": question,
-                    "default_reply": default_reply or "",
-                })
+                self._emit(
+                    source,
+                    'confirmation_timeout',
+                    {
+                        'question': question,
+                        'default_reply': default_reply or '',
+                    },
+                )
             except Exception:
                 pass
             return default_reply

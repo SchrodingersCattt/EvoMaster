@@ -1,4 +1,5 @@
-"""Chat 流式接口业务逻辑：SSE 队列管理、仅订阅流、发送消息流。"""
+"""Chat 流式接口业务逻辑：SSE 队列管理、仅订阅流、发送消息流。
+确认回复队列：无 Redis 用进程内 queue；有 Redis 用 redis_dao 的 run_active + reply list，多 worker 可写。"""
 
 import asyncio
 import json
@@ -9,41 +10,145 @@ import time
 import uuid
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Callable
 
+from src.dao.redis_dao import (
+    CONFIRMATION_CANCEL_VALUE,
+    get_redis_dao,
+)
 from src.models.chat import ChatSendRequest
 from src.services import sessions_service as svc
 from src.services.agent_run_service import (
     AgentRunService,
+    ReplyQueueLike,
     get_agent_run_service,
+)
+from src.services.deploy_state_service import (
+    DeployStateService,
+    get_deploy_state_service,
 )
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
-from src.utils.constant import AG_UI_EVENT
+from src.utils.constant import AG_UI_EVENT, REDIS_URL
 
 logger = logging.getLogger(__name__)
 
+# 进程内队列用的取消哨兵（get 时转为 None）
+_CANCEL_SENTINEL = object()
+
+
+class InMemoryReplyQueue:
+    """进程内队列封装，实现 ReplyQueueLike。"""
+
+    def __init__(self, q: queue.Queue) -> None:
+        self._q = q
+
+    def put_content(self, content: str) -> None:
+        self._q.put(content)
+
+    def put_cancel(self) -> None:
+        self._q.put(_CANCEL_SENTINEL)
+
+    def get(self, timeout: float | None = None) -> str | None:
+        try:
+            v = self._q.get(timeout=timeout)
+        except queue.Empty:
+            raise
+        if v is _CANCEL_SENTINEL:
+            return None
+        return v
+
+
+class RedisReplyQueue:
+    """基于 Redis List 的回复队列，任意 worker 可 put_content/put_cancel，执行 run 的 worker 可 get。"""
+
+    def __init__(self, session_id: str) -> None:
+        self._session_id = session_id.strip()
+        self._dao = get_redis_dao()
+
+    def put_content(self, content: str) -> None:
+        self._dao.rpush_confirmation_reply(self._session_id, content)
+
+    def put_cancel(self) -> None:
+        self._dao.rpush_confirmation_reply(self._session_id, CONFIRMATION_CANCEL_VALUE)
+
+    def get(self, timeout: float | None = None) -> str | None:
+        # timeout=None 表示 BLOCK 模式，Redis BLPOP timeout=0 表示一直阻塞
+        sec = 0 if timeout is None else int(timeout) if timeout >= 0 else 300
+        value = self._dao.blpop_confirmation_reply(self._session_id, sec)
+        if value is None:
+            raise queue.Empty
+        if value == CONFIRMATION_CANCEL_VALUE:
+            return None
+        return value
+
+
+class ReplyQueueNotifyOnGet:
+    """包装 ReplyQueueLike：在 get() 返回用户回复时调用 on_reply(content)。
+    用于在「执行 agent 的 worker」上注入 confirmation_reply，保证多 worker 下顺序正确（POST 可能打到其他 worker）。
+    """
+
+    def __init__(self, inner: ReplyQueueLike, on_reply: Callable[[str], None]) -> None:
+        self._inner = inner
+        self._on_reply = on_reply
+
+    def put_content(self, content: str) -> None:
+        self._inner.put_content(content)
+
+    def put_cancel(self) -> None:
+        self._inner.put_cancel()
+
+    def get(self, timeout: float | None = None) -> str | None:
+        result = self._inner.get(timeout=timeout)
+        if result is not None and self._on_reply:
+            logger.info(
+                'ReplyQueueNotifyOnGet.get: got user reply len=%s, scheduling inject',
+                len(result),
+            )
+            self._on_reply(result)
+        return result
+
 
 class StreamQueueManager:
-    """流式接口的队列管理：SSE 订阅队列的注册/注销与广播；Planner 模式下 session -> planner_reply 队列。"""
+    """流式接口的队列管理：SSE 订阅队列的注册/注销与广播；当前 run 的确认回复队列（planner_ask / confirmation_request 共用）。"""
 
     def __init__(self) -> None:
         # session_id -> 该会话下所有 SSE 连接的队列，agent 事件会广播到这些队列
         self._sse_queues: dict[str, list[asyncio.Queue]] = {}
-        # session_id -> 当前 run 的 planner_reply 队列（POST /planner_reply 写入）
-        self._planner_reply_queues: dict[str, queue.Queue] = {}
+        # session_id -> 当前 run 的确认回复队列（仅无 Redis 时使用；有 Redis 时由 get_reply_queue 按 run_active 返回 RedisReplyQueue）
+        self._reply_queues: dict[str, ReplyQueueLike] = {}
+        # session_id -> 当前 run 的 request_event_queue（供 broadcast_reply 时注入 confirmation_reply，保证发送流内事件顺序）
+        self._request_event_queues: dict[str, tuple[asyncio.Queue, str, str]] = {}
 
-    def set_planner_reply_queue(self, session_id: str, q: queue.Queue) -> None:
-        """注册该会话当前 run 的 planner_reply 队列。"""
-        self._planner_reply_queues[session_id.strip()] = q
+    def set_reply_queue(self, session_id: str, q: ReplyQueueLike) -> None:
+        """注册该会话当前 run 的确认回复队列（仅 in-memory 路径调用）。"""
+        self._reply_queues[session_id.strip()] = q
 
-    def get_planner_reply_queue(self, session_id: str) -> queue.Queue | None:
-        """供 POST /planner_reply 写入使用；无活跃 planner run 时返回 None。"""
-        return self._planner_reply_queues.get(session_id.strip())
+    def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
+        """供 POST /confirmation_reply 写入使用；无活跃 run 时返回 None。"""
+        return self._reply_queues.get(session_id.strip())
 
-    def clear_planner_reply_queue(self, session_id: str) -> None:
-        """run 结束后清除，避免后续误写入。"""
-        self._planner_reply_queues.pop(session_id.strip(), None)
+    def set_request_event_queue(
+        self,
+        session_id: str,
+        queue: asyncio.Queue,
+        task_id: str,
+        invocation_id: str,
+    ) -> None:
+        """注册当前 run 的 request_event_queue，便于 confirmation_reply 按序注入发送流。"""
+        self._request_event_queues[session_id.strip()] = (queue, task_id, invocation_id)
+
+    def get_request_event_queue(
+        self, session_id: str
+    ) -> tuple[asyncio.Queue, str, str] | None:
+        """返回 (queue, task_id, invocation_id)，无则 None。"""
+        return self._request_event_queues.get(session_id.strip())
+
+    def clear_reply_queue(self, session_id: str) -> None:
+        """run 结束后从内存表移除；有 Redis 时由 ChatStreamService.clear_reply_queue 负责 Redis 清理。"""
+        sid = session_id.strip()
+        self._reply_queues.pop(sid, None)
+        self._request_event_queues.pop(sid, None)
 
     def register_subscriber(self, session_id: str) -> asyncio.Queue:
         """为会话注册一个 SSE 订阅队列，返回该队列。"""
@@ -86,7 +191,7 @@ class SendStreamContext:
     mode: str
     user_msg: dict
     request_event_queue: asyncio.Queue
-    planner_reply_queue: queue.Queue
+    reply_queue: ReplyQueueLike  # planner_ask / confirmation_request 共用，POST /confirmation_reply 写入
     stop_ev: threading.Event
 
 
@@ -99,11 +204,13 @@ class ChatStreamService:
         sessions_service: ChatSessionsService | None = None,
         events_service: ChatEventsService | None = None,
         agent_run_service: AgentRunService | None = None,
+        deploy_state_service: DeployStateService | None = None,
     ) -> None:
         self._queues = queue_manager or StreamQueueManager()
         self._sessions_service = sessions_service or get_sessions_service()
         self._events_service = events_service or get_events_service()
         self._agent_run_service = agent_run_service or get_agent_run_service()
+        self._deploy_state_service = deploy_state_service or get_deploy_state_service()
 
     @staticmethod
     def sse_format(payload: dict) -> str:
@@ -134,6 +241,21 @@ class ChatStreamService:
             out.append(ev)
         return out
 
+    @staticmethod
+    def _build_run_interrupted_message(
+        reason: str, previous_version: str | None, current_version: str | None
+    ) -> str:
+        if reason == 'restart':
+            return '上一轮任务因服务重启中断，正在自动重新执行。'
+        if previous_version and current_version:
+            return (
+                '上一轮任务因服务升级'
+                f'（{previous_version} -> {current_version}）中断，正在自动重新执行。'
+            )
+        if current_version:
+            return f'上一轮任务因服务升级到 {current_version} 中断，正在自动重新执行。'
+        return '上一轮任务因服务部署/重启中断，正在自动重新执行。'
+
     async def generate_subscribe_stream(
         self, session_id: str
     ) -> AsyncGenerator[str, None]:
@@ -149,22 +271,31 @@ class ChatStreamService:
         try:
             payload = self._sessions_service.get_session_status_payload(sid)
             # 部署/重启后：DB 仍为 active 但本进程没有该 session 的 run → 视为上一轮在别的 pod 上被中断
-            if payload.get(
+            is_stale = payload.get(
                 'status'
             ) == 'active' and not self._sessions_service.is_session_running_on_this_pod(
                 sid
-            ):
-                logger.info(
-                    'run_interrupted: stale session detected (deploy/restart), '
-                    'resetting to idle and will auto retry session_id=%s',
-                    sid,
-                )
+            )
+            if is_stale:
                 self._sessions_service.reset_session_status_to_idle_in_db(sid)
                 payload = self._sessions_service.get_session_status_payload(sid)
                 last_query = self._events_service.get_last_user_query(sid)
                 yield self.sse_format(payload)
-                run_interrupted_content = (
-                    '上一轮任务因服务部署/重启中断，正在自动重新执行。'
+                reason, reason_meta = (
+                    self._deploy_state_service.classify_restart_reason(sid)
+                )
+                current_version = reason_meta.get('current_version')
+                previous_version = reason_meta.get('previous_version')
+                logger.info(
+                    'run_interrupted: stale session detected reason=%s '
+                    'session_id=%s prev=%s curr=%s',
+                    reason,
+                    sid,
+                    previous_version,
+                    current_version,
+                )
+                run_interrupted_content = self._build_run_interrupted_message(
+                    reason, previous_version, current_version
                 )
                 last_user_content = (last_query or {}).get('content', '')
                 run_interrupted_payload = {
@@ -172,22 +303,35 @@ class ChatStreamService:
                     'type': 'run_interrupted',
                     'content': run_interrupted_content,
                     'session_id': sid,
-                    'reason': 'deploy',
+                    'reason': reason,
                     'last_user_content': last_user_content,
                 }
+                if current_version:
+                    run_interrupted_payload['current_version'] = current_version
+                if previous_version:
+                    run_interrupted_payload['previous_version'] = previous_version
+                if reason_meta.get('note'):
+                    run_interrupted_payload['reason_note'] = reason_meta['note']
                 yield self.sse_format(run_interrupted_payload)
                 # 入库，便于历史/导出（如 CSV）中有重启记录；task_id 指向被中断的那一轮
                 interrupted_task_id = payload.get('last_task_id')
+                history_content = {
+                    'message': run_interrupted_content,
+                    'reason': reason,
+                    'last_user_content': last_user_content,
+                }
+                if current_version:
+                    history_content['current_version'] = current_version
+                if previous_version:
+                    history_content['previous_version'] = previous_version
+                if reason_meta.get('note'):
+                    history_content['reason_note'] = reason_meta['note']
                 self._events_service.add_history_event(
                     sid,
                     {
                         'source': 'System',
                         'type': 'run_interrupted',
-                        'content': {
-                            'message': run_interrupted_content,
-                            'reason': 'deploy',
-                            'last_user_content': last_user_content,
-                        },
+                        'content': history_content,
                         'session_id': sid,
                         'task_id': interrupted_task_id,
                     },
@@ -219,8 +363,9 @@ class ChatStreamService:
                             loop,
                             ctx.stop_ev,
                             ctx.mode,
-                            ctx.planner_reply_queue,
+                            ctx.reply_queue,
                             ctx.task_id,
+                            ctx.invocation_id,
                         )
                         logger.info(
                             'run_interrupted: auto retry started session_id=%s',
@@ -315,6 +460,7 @@ class ChatStreamService:
         task_id = 'sse_' + uuid.uuid4().hex[:16]
         invocation_id = 'inv_' + uuid.uuid4().hex[:16]
         self._sessions_service.set_session_last_task(sid, task_id, user_id=user_id)
+        self._deploy_state_service.record_session_version(sid)
         user_content = (req.content or '').strip()
         user_msg = {
             'source': 'User',
@@ -330,10 +476,17 @@ class ChatStreamService:
         self._events_service.add_history_event(sid, user_msg, user_id=user_id)
 
         request_event_queue: asyncio.Queue = asyncio.Queue()
-        planner_reply_queue: queue.Queue = queue.Queue()
+        if REDIS_URL:
+            dao = get_redis_dao()
+            dao.delete_confirmation_reply_list(sid)
+            dao.set_confirmation_run_active(sid)
+            dao.set_confirmation_run_context(sid, task_id, invocation_id)
+            reply_queue: ReplyQueueLike = RedisReplyQueue(sid)
+        else:
+            reply_queue = InMemoryReplyQueue(queue.Queue())
+            self._queues.set_reply_queue(sid, reply_queue)
         stop_ev = threading.Event()
         self._sessions_service.set_stop_event(sid, stop_ev)
-        self._queues.set_planner_reply_queue(sid, planner_reply_queue)
 
         return SendStreamContext(
             task_id=task_id,
@@ -341,25 +494,49 @@ class ChatStreamService:
             mode=mode,
             user_msg=user_msg,
             request_event_queue=request_event_queue,
-            planner_reply_queue=planner_reply_queue,
+            reply_queue=reply_queue,
             stop_ev=stop_ev,
         )
 
-    def get_planner_reply_queue(self, session_id: str) -> queue.Queue | None:
-        """供 POST /planner_reply 写入使用；无活跃 planner run 时返回 None。"""
-        return self._queues.get_planner_reply_queue(session_id)
+    def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
+        """供 POST /confirmation_reply 写入使用；无活跃 run 时返回 None。多 worker 时由 Redis run_active 判定。"""
+        if REDIS_URL and get_redis_dao().is_confirmation_run_active(session_id):
+            return RedisReplyQueue(session_id)
+        return self._queues.get_reply_queue(session_id)
 
-    def broadcast_planner_reply(self, session_id: str, content: str) -> None:
-        """将用户 planner_reply 广播到该会话所有 SSE 订阅，便于前端展示。"""
-        self._queues.broadcast(
-            session_id,
-            {
-                'source': 'User',
-                'type': 'planner_reply',
-                'content': content,
-                'session_id': session_id.strip(),
-            },
-        )
+    def get_run_context(self, session_id: str) -> dict | None:
+        """当前 run 的 task_id / invocation_id（同 worker 从内存取，多 worker 从 Redis 取）。供写入历史等用。"""
+        run_ctx = self._queues.get_request_event_queue(session_id)
+        if run_ctx is not None:
+            _, task_id, invocation_id = run_ctx
+            return {'task_id': task_id, 'invocation_id': invocation_id}
+        if REDIS_URL:
+            return get_redis_dao().get_confirmation_run_context(session_id)
+        return None
+
+    def broadcast_reply(self, session_id: str, content: str) -> None:
+        """将用户确认回复广播到该会话所有 SSE 订阅（planner_ask / confirmation_request 统一用 confirmation_reply）。
+        发送流内的 confirmation_reply 由 ReplyQueueNotifyOnGet 在 agent 的 get() 返回时注入，保证顺序且多 worker 下也正确。
+        broadcast 的 payload 带上 task_id/invocation_id（同 worker 从内存取，多 worker 从 Redis 取），便于前端去重或排序。
+        """
+        sid = session_id.strip()
+        payload = {
+            'source': 'User',
+            'type': 'confirmation_reply',
+            'content': content,
+            'session_id': sid,
+        }
+        run_ctx = self._queues.get_request_event_queue(session_id)
+        if run_ctx is not None:
+            _, task_id, invocation_id = run_ctx
+            payload['task_id'] = task_id
+            payload['invocation_id'] = invocation_id
+        elif REDIS_URL:
+            ctx = get_redis_dao().get_confirmation_run_context(session_id)
+            if ctx:
+                payload['task_id'] = ctx.get('task_id')
+                payload['invocation_id'] = ctx.get('invocation_id')
+        self._queues.broadcast(session_id, payload)
 
     def _send_cb(
         self,
@@ -420,6 +597,38 @@ class ChatStreamService:
                 self._send_cb, sid, ctx.request_event_queue, payload
             )
 
+        def _inject_confirmation_reply(content: str) -> None:
+            """在 event loop 中执行：将 confirmation_reply 注入本连接 request_event_queue，保证顺序在 tool_result 前（多 worker 下也成立）。"""
+            payload = {
+                'source': 'User',
+                'type': 'confirmation_reply',
+                'content': content,
+                'session_id': sid,
+                'task_id': ctx.task_id,
+                'invocation_id': ctx.invocation_id,
+            }
+            try:
+                ctx.request_event_queue.put_nowait(payload)
+                logger.info(
+                    'confirmation_reply injected into request_event_queue session_id=%s task_id=%s',
+                    sid,
+                    ctx.task_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    'confirmation_reply inject failed session_id=%s: %s',
+                    sid,
+                    e,
+                )
+
+        def _on_reply(content: str) -> None:
+            loop.call_soon_threadsafe(_inject_confirmation_reply, content)
+
+        reply_queue_for_agent = ReplyQueueNotifyOnGet(ctx.reply_queue, _on_reply)
+
+        self._queues.set_request_event_queue(
+            sid, ctx.request_event_queue, ctx.task_id, ctx.invocation_id
+        )
         future = loop.run_in_executor(
             self._agent_run_service.get_executor(),
             self._agent_run_service.run_agent_sync,
@@ -429,7 +638,7 @@ class ChatStreamService:
             loop,
             ctx.stop_ev,
             mode,
-            ctx.planner_reply_queue,
+            reply_queue_for_agent,
             ctx.task_id,
             ctx.invocation_id,
         )
@@ -448,7 +657,17 @@ class ChatStreamService:
                     break
             await future
         finally:
-            self._queues.clear_planner_reply_queue(sid)
+            if REDIS_URL:
+                RedisReplyQueue(sid).put_cancel()
+                get_redis_dao().delete_confirmation_run_active(sid)
+            else:
+                q = self._queues.get_reply_queue(sid)
+                if q is not None:
+                    try:
+                        q.put_cancel()
+                    except Exception:
+                        pass
+            self._queues.clear_reply_queue(sid)
 
 
 @lru_cache
@@ -457,4 +676,5 @@ def get_stream_service() -> ChatStreamService:
         sessions_service=get_sessions_service(),
         events_service=get_events_service(),
         agent_run_service=get_agent_run_service(),
+        deploy_state_service=get_deploy_state_service(),
     )
