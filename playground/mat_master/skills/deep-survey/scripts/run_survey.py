@@ -108,7 +108,9 @@ def main() -> None:
         out_path.write_text(json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8")
         print(
             f"Evidence skeleton: {out_path}. "
-            "Run 3-5 mat_sn_* retrieval calls and populate evidence_cards in this file."
+            "Run 3-5 mat_sn_* retrieval calls, then run: "
+            f"collect_evidence.py --collected_json {out_path} "
+            "to auto-populate evidence_cards."
         )
         return
 
@@ -141,8 +143,11 @@ def main() -> None:
         print(
             f"Survey outline (standard): {out_path}. "
             f"Evidence skeleton: {collected_path}. "
-            "Run 6-8 mat_sn_* retrieval calls, populate evidence_cards in the skeleton, "
-            "then fill Executive Summary and References with write_section / str_replace_editor."
+            "Run 6-8 mat_sn_* retrieval calls. "
+            "After retrieval, run: "
+            f"collect_evidence.py --collected_json {collected_path} "
+            "to auto-populate evidence_cards. "
+            "Then fill Executive Summary and References with write_section / str_replace_editor."
         )
         return
 
@@ -197,8 +202,11 @@ def main() -> None:
     print(
         f"Survey outline: {out_path}. "
         f"Evidence skeleton: {collected_path}. "
-        "Fill sections with write_section / str_replace_editor from retrieval results. "
-        "Populate evidence_cards in the skeleton alongside writing the report."
+        "Run 10-15+ mat_sn_* retrieval calls. "
+        "After ALL retrieval is complete, run: "
+        f"collect_evidence.py --collected_json {collected_path} "
+        "to auto-populate evidence_cards. "
+        "Then fill sections with write_section / str_replace_editor from the collected evidence."
     )
 
 

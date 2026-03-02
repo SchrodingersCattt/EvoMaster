@@ -580,6 +580,61 @@ FORMAT_PROFILES: dict[str, dict[str, Any]] = {
             },
         },
     },
+    # ------------------------------------------------------------------ literature_review
+    "literature_review": {
+        "description": (
+            "Literature review / deep-survey output (5-section structure "
+            "matching deep-survey skill output exactly)"
+        ),
+        "sections": [
+            "Executive Summary",
+            "Key Methodologies",
+            "State of the Art",
+            "Gap Analysis",
+            "References",
+        ],
+        "overall_min_words": 4000,
+        "section_meta": {
+            "Executive Summary": {
+                "min_words": 200,
+                "required_elements": ["objective", "key_findings"],
+                "writing_hint": (
+                    "3-5 paragraphs: field overview, key developments, "
+                    "main methods, open challenges."
+                ),
+            },
+            "Key Methodologies": {
+                "min_words": 300,
+                "required_elements": ["methods"],
+                "writing_hint": (
+                    "Table + narrative: method / key features / "
+                    "typical applications / references."
+                ),
+            },
+            "State of the Art": {
+                "min_words": 1500,
+                "required_elements": ["prior_work", "themes"],
+                "writing_hint": (
+                    "Multiple subsections by theme. "
+                    "Quantitative comparisons, not just a list. 20+ sources."
+                ),
+            },
+            "Gap Analysis": {
+                "min_words": 300,
+                "required_elements": ["gaps"],
+                "writing_hint": (
+                    "Ranked gaps by impact. "
+                    "Each gap: 2-4 sentences with evidence and citation."
+                ),
+            },
+            "References": {
+                "min_words": 0,
+                "writing_hint": (
+                    "Numbered list [n] Authors. Title. *Journal*, **Year**. URL."
+                ),
+            },
+        },
+    },
 }
 
 

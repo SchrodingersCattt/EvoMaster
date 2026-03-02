@@ -53,6 +53,7 @@ A routing skill for composition-design workflows with explicit decision branches
    - Provide ranked candidate compositions and associated structures.
    - Include source/provenance of each candidate (user input, DB, generated heuristic, literature evidence).
    - Explicitly disclose assumptions and approximations.
+   - If using `manuscript-scribe` to produce the survey report, use `--profile literature_review` (matches deep-survey's 5-section output structure exactly).
 
 ## Decision contract
 

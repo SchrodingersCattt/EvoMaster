@@ -24,24 +24,18 @@ Produce a concise, readable Markdown survey report: Executive Summary + Referenc
 
 ### Step 2.5 — Persist evidence cards (mandatory)
 
-After completing all retrieval, write structured evidence cards to the `collected_<topic>.json` skeleton that `run_survey.py` created in `_tmp/surveys/`. This happens **before** writing the narrative report.
+After completing ALL retrieval, run `collect_evidence.py` to automatically extract evidence cards from the raw tool outputs and write them to `collected_<topic>.json`. This happens **before** writing the narrative report.
 
-For each retrieved source that passes the relevance filter, append one card to `evidence_cards`:
-
-```json
-{
-  "source_title": "Full paper/source title",
-  "source_url": "https://doi.org/... or direct URL (REQUIRED)",
-  "year": 2024,
-  "first_author": "LastName",
-  "facet": "facet name matching one of the skeleton's facets[]",
-  "claim": "One-sentence specific finding or measurement",
-  "data_points": {"property": "value", "unit": "...", "conditions": "..."}
-}
+```
+use_skill action=run_script skill_name="deep-survey" script_name="collect_evidence.py"
+  script_args="--collected_json _tmp/surveys/collected_<topic>.json"
 ```
 
-- Every card must have a `source_url`. Use `https://doi.org/<DOI>` for papers without a direct URL.
-- Write the updated file back to `_tmp/surveys/collected_<topic>.json` using `str_replace_editor` or `execute_bash`.
+Replace `<topic>` with the actual topic slug used in Step 1 (e.g. `collected_Perovskite_stability.json`).
+
+- The script reads all `_tmp/tool_outputs/mat_sn_*/` output files automatically — you do not need to list them.
+- It deduplicates by URL and merges into any existing cards.
+- Output confirms: `{"status":"ok","cards_added":<n>,"cards_total":<n>,"collected_json_path":"..."}`.
 - This `collected.json` is the structured evidence artifact for downstream use (lit-data-organizer, plotting, further analysis). Produce it unconditionally.
 
 ### Step 3 — Write the report (LLM)
@@ -63,6 +57,7 @@ For each retrieved source that passes the relevance filter, append one card to `
 ### Step 4 — Output
 - Save report to `_tmp/surveys/survey_<topic>.md`.
 - Do NOT leave any `(TBD)` in the delivered file.
+- **If using `manuscript-scribe` to assemble the report**, use `--profile literature_review` (matches this skill's 5-section structure: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References).
 
 ---
 

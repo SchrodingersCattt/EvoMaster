@@ -8,7 +8,8 @@ from __future__ import annotations
 
 MANUSCRIPT_FAIL_MARKERS: tuple[str, ...] = (
     "overall: failed",
-    "still tbd",
+    "still tbd",           # matches Check 4 output ("still TBD" lowercased)
+    "placeholder sections", # direct match for Check 4 header line
     "empty sections",
     "missing sections",
     "missing required elements",

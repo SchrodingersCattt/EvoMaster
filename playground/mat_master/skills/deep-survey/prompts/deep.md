@@ -33,25 +33,18 @@ Adjust the remaining plan before proceeding to the next facet.
 
 ### Step 2.5 — Persist evidence cards (mandatory)
 
-After completing all retrieval, write structured evidence cards to the `collected_<topic>.json` skeleton that `run_survey.py` created in `_tmp/surveys/`. This happens **before** writing the narrative report sections.
+After completing ALL retrieval, run `collect_evidence.py` to automatically extract evidence cards from the raw tool outputs and write them to `collected_<topic>.json`. This happens **before** writing the narrative report sections.
 
-For each retrieved source that passes the relevance filter, append one card to `evidence_cards`:
-
-```json
-{
-  "source_title": "Full paper/source title",
-  "source_url": "https://doi.org/... or direct URL (REQUIRED)",
-  "year": 2024,
-  "first_author": "LastName",
-  "facet": "facet name matching one of the skeleton's facets[]",
-  "claim": "One-sentence specific finding or measurement",
-  "data_points": {"property": "value", "unit": "...", "conditions": "..."}
-}
+```
+use_skill action=run_script skill_name="deep-survey" script_name="collect_evidence.py"
+  script_args="--collected_json _tmp/surveys/collected_<topic>.json"
 ```
 
-- `data_points` is optional but strongly preferred — capture any concrete numbers, conditions, or measurements.
-- Every card must have a `source_url`. Use `https://doi.org/<DOI>` for papers without a direct URL.
-- Write the updated file back to `_tmp/surveys/collected_<topic>.json` using `str_replace_editor` or `execute_bash`.
+Replace `<topic>` with the actual topic slug used in Step 1 (e.g. `collected_DPA2_Alloys.json`).
+
+- The script reads all `_tmp/tool_outputs/mat_sn_*/` output files automatically — you do not need to list them.
+- It deduplicates by URL and merges into any existing cards.
+- Output confirms: `{"status":"ok","cards_added":<n>,"cards_total":<n>,"collected_json_path":"..."}`.
 - This `collected.json` is the structured evidence artifact for downstream use (lit-data-organizer, plotting, further analysis). It is produced regardless of whether the caller needs it — evidence persistence is unconditional.
 
 ### Step 3 — Write the report (LLM)
@@ -86,6 +79,7 @@ Write all five sections fully. Write each section's full body to a file first (e
 - Assemble all sections into `_tmp/surveys/survey_<topic>.md`.
 - Do NOT leave any `(TBD)` in the delivered file.
 - When the report is complete: output the full final report in your reply so the user sees it, then confirm the file path.
+- **If using `manuscript-scribe` to assemble the report**, use `--profile literature_review` (matches this skill's 5-section structure exactly: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References).
 
 ---
 
