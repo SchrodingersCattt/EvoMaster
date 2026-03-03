@@ -832,6 +832,10 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         confirm_mgr = getattr(self.agent, '_confirm_manager', None)
         if confirm_mgr is not None:
             try:
+                from playground.mat_master.service.confirm import REPLY_CANCELLED
+            except Exception:
+                REPLY_CANCELLED = None  # type: ignore[assignment]
+            try:
                 reply = confirm_mgr.request(
                     question=prompt,
                     mode=confirm_mode,
@@ -841,6 +845,9 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
                     actions=['go', 'abort', 'revise'],
                     source_override='Planner',
                 )
+                if reply is REPLY_CANCELLED:
+                    # User clicked stop/cancel while waiting — treat as abort signal
+                    return 'abort'
                 if reply is not None:
                     return reply.strip()
                 # TIMEOUT mode expired and default_reply was None/empty
