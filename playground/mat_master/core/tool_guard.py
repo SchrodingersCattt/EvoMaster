@@ -1,6 +1,7 @@
-"""Stateful tool-call guard: loop prevention, validation gate, manuscript gate.
+"""Stateful tool-call guard: loop prevention, validation gate, manuscript gate,
+structure-retrieval gate.
 
-Three independent concerns, each with its own state and public method:
+Four independent concerns, each with its own state and public method:
 
 1. **Loop detection** (``evaluate`` / ``record_tool_call``): Blocks repeated
    calls with identical arguments within a sliding window.
@@ -9,6 +10,11 @@ Three independent concerns, each with its own state and public method:
 3. **Manuscript gate** (``can_finish_manuscript``): Blocks ``finish`` when
    manuscript sections were written but never validated, or when the last
    validation failed.
+4. **Structure-retrieval gate** (``can_finish_structure_retrieval`` /
+   ``update_structure_retrieval``): Classifies mat_struct_db_* candidates by
+   confidence (fallback_level), enforces ``task_completed=partial`` when no
+   CIF is delivered, and blocks low-value repeated retrieval when the stop
+   condition is already met.
 """
 
 from __future__ import annotations
@@ -18,7 +24,7 @@ import logging
 import re
 import sys
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .constants import MANUSCRIPT_FAIL_MARKERS
@@ -51,6 +57,54 @@ EXEMPT_MANUSCRIPT_SCRIPTS = frozenset({
 })
 
 logger = logging.getLogger(__name__)
+
+
+# ── Structure-retrieval gate parameters ───────────────────────
+# fallback_level > 0 → element-fallback result, treated as candidate (not accepted)
+STRUCT_FALLBACK_ACCEPTED_LEVEL = 0
+# After this many consecutive retrieval calls with no new accepted candidate, block further db calls.
+STRUCT_RETRIEVAL_STALL_LIMIT = 3
+
+
+@dataclass
+class StructCandidateRecord:
+    """Record of a single mat_struct_db_* retrieval result."""
+    formula: str = ""
+    material_id: str = ""
+    fallback_level: int = 0
+    accepted: bool = False
+    rejection_reason: str = ""
+
+
+@dataclass
+class StructRetrievalState:
+    """Tracks structure retrieval progress for a single task run."""
+    # Set from concept-alignment artifact when available
+    target_terms: list[str] = field(default_factory=list)
+    requested_count: int = 0          # 0 = no explicit count requested
+    # Counters
+    accepted_count: int = 0
+    candidate_count: int = 0          # fallback-level results
+    rejected_count: int = 0
+    # Stall tracking (consecutive db calls that produced no new accepted item)
+    db_calls_since_last_accept: int = 0
+    # Whether any structure file (CIF/POSCAR) was delivered to the user
+    structure_file_delivered: bool = False
+    # Running list for diagnostics
+    records: list[StructCandidateRecord] = field(default_factory=list)
+
+    def stop_condition_met(self) -> bool:
+        """True when enough validated structures have been collected."""
+        if self.requested_count > 0 and self.accepted_count >= self.requested_count:
+            return True
+        return False
+
+    def stalled(self) -> bool:
+        """True when no new accepted item for STRUCT_RETRIEVAL_STALL_LIMIT calls."""
+        return (
+            self.accepted_count == 0
+            and self.db_calls_since_last_accept >= STRUCT_RETRIEVAL_STALL_LIMIT
+        )
 
 
 @dataclass
@@ -91,6 +145,8 @@ class ToolGuard:
         self._survey_min_retrieval_calls = max(1, self._survey_min_retrieval_calls)
         self._survey_retrieval_count: int = 0
         self._survey_writes: int = 0
+        # Structure-retrieval gate
+        self._struct_retrieval: StructRetrievalState = StructRetrievalState()
 
     def reset_loop_history(self) -> None:
         """Clear loop-detection state so a new planner step starts fresh.
@@ -344,6 +400,177 @@ class ToolGuard:
             )
         return True, ""
 
+    # ── structure-retrieval gate ────────────────────────────────
+
+    def init_structure_retrieval(
+        self,
+        target_terms: list[str] | None = None,
+        requested_count: int = 0,
+    ) -> None:
+        """Initialise (or re-initialise) the structure-retrieval tracking state.
+
+        Call this at task start when a concept-alignment artifact is available, so
+        the guard knows the target concept and when to stop retrieval.
+
+        Args:
+            target_terms: Normalised terms that a retrieved structure must match
+                (material name, formula aliases, CCDC/ICSD prefix, etc.).  If
+                empty, target-consistency checks are skipped.
+            requested_count: How many validated structures the task requested.
+                0 means no explicit count; stop-condition based on count is
+                disabled.
+        """
+        self._struct_retrieval = StructRetrievalState(
+            target_terms=[t.lower().strip() for t in (target_terms or []) if t],
+            requested_count=max(0, int(requested_count)),
+        )
+        self.logger.debug(
+            "StructRetrievalState initialised: target_terms=%s requested_count=%d",
+            self._struct_retrieval.target_terms,
+            self._struct_retrieval.requested_count,
+        )
+
+    def update_structure_retrieval(
+        self,
+        observation: str,
+        info: dict[str, Any],
+    ) -> None:
+        """Parse a mat_struct_db_* observation and classify the result.
+
+        ``fallback_level > 0`` → element-based fallback → candidate only (not
+        accepted).  A level-0 result is accepted only if it passes a loose
+        target-consistency check against ``_struct_retrieval.target_terms``.
+
+        Also tracks whether any structure file was delivered.
+        """
+        sr = self._struct_retrieval
+
+        # Track structure-file delivery (CIF/POSCAR downloaded to local_path)
+        if not sr.structure_file_delivered:
+            text = (observation or "").lower()
+            if any(ext in text for ext in (".cif", ".vasp", "poscar", ".xyz", ".res")):
+                sr.structure_file_delivered = True
+
+        # Parse fallback_level and formula from observation
+        fallback_level: int = 0
+        formula: str = ""
+        material_id: str = ""
+        try:
+            parsed = json.loads(observation) if observation else {}
+            if isinstance(parsed, dict):
+                inner = parsed.get("observation", parsed)
+                if isinstance(inner, str):
+                    try:
+                        inner = json.loads(inner)
+                    except Exception:
+                        inner = {}
+                if isinstance(inner, dict):
+                    fallback_level = int(inner.get("fallback_level", 0) or 0)
+                    # structures may be a list; pull first entry
+                    structs = inner.get("structures") or inner.get("results") or []
+                    if isinstance(structs, list) and structs:
+                        first = structs[0] if isinstance(structs[0], dict) else {}
+                        formula = str(first.get("formula", "") or first.get("reduced_formula", ""))
+                        material_id = str(first.get("material_id", "") or first.get("id", ""))
+                    elif isinstance(inner.get("formula"), str):
+                        formula = inner["formula"]
+        except Exception:
+            pass
+
+        sr.candidate_count += 1
+        sr.db_calls_since_last_accept += 1
+
+        # Acceptance decision
+        rejection_reason = ""
+        accepted = False
+
+        if fallback_level > STRUCT_FALLBACK_ACCEPTED_LEVEL:
+            rejection_reason = (
+                f"fallback_level={fallback_level} (element-based match, "
+                "not a direct hit for the requested formula/compound)"
+            )
+        elif sr.target_terms:
+            # Loose target-consistency: at least one target term must appear in
+            # formula or material_id string (case-insensitive).
+            haystack = (formula + " " + material_id).lower()
+            if not any(term in haystack for term in sr.target_terms):
+                rejection_reason = (
+                    f"target-consistency check failed: formula='{formula}' "
+                    f"does not match target_terms={sr.target_terms}"
+                )
+        if not rejection_reason:
+            accepted = True
+
+        record = StructCandidateRecord(
+            formula=formula,
+            material_id=material_id,
+            fallback_level=fallback_level,
+            accepted=accepted,
+            rejection_reason=rejection_reason,
+        )
+        sr.records.append(record)
+
+        if accepted:
+            sr.accepted_count += 1
+            sr.db_calls_since_last_accept = 0
+            self.logger.info(
+                "[struct-retrieval] Accepted candidate: formula='%s' id='%s' fallback=%d",
+                formula, material_id, fallback_level,
+            )
+        else:
+            sr.rejected_count += 1
+            self.logger.info(
+                "[struct-retrieval] Rejected candidate: formula='%s' fallback=%d reason='%s'",
+                formula, fallback_level, rejection_reason,
+            )
+
+    def can_finish_structure_retrieval(
+        self, requested_task_completed: str
+    ) -> tuple[bool, str]:
+        """Gate for ``finish`` on structure-retrieval runs.
+
+        Rules:
+        - If ``task_completed=true`` but no structure file was delivered →
+          downgrade to ``partial`` (blocked with message).
+        - If ``task_completed=true`` and ``requested_count > 0`` but
+          ``accepted_count < requested_count`` → require partial.
+
+        Returns ``(can_finish_as_requested, reason_if_blocked)``.
+        """
+        sr = self._struct_retrieval
+
+        # Only gate when the retrieval state has been actively used.
+        if sr.candidate_count == 0 and not sr.structure_file_delivered:
+            return True, ""
+
+        if requested_task_completed == "true":
+            if not sr.structure_file_delivered:
+                reason = (
+                    "Structure-retrieval gate: no CIF/POSCAR file was delivered. "
+                    "Set task_completed='partial' and include any found identifiers "
+                    "(CCDC REFCODE, ICSD code, DOI, space group, lattice constants) "
+                    "in the finish message."
+                )
+                return False, reason
+
+        return True, ""
+
+    def _is_struct_db_retrieval_blocked(self, tool_call) -> bool:
+        """Return True if another mat_struct_db_* call should be blocked because
+        the stop condition is already met or retrieval has stalled."""
+        name = str(tool_call.function.name or "")
+        if not name.startswith("mat_struct_db_"):
+            return False
+        sr = self._struct_retrieval
+        if sr.stop_condition_met():
+            self.logger.info(
+                "[struct-retrieval] Blocking mat_struct_db_* call: "
+                "stop condition met (accepted=%d >= requested=%d).",
+                sr.accepted_count, sr.requested_count,
+            )
+            return True
+        return False
+
     # ── input-validation gate (submit blocking) ────────────────
 
     def _submit_block_reason(self, tool_call) -> tuple[str | None, str]:
@@ -402,6 +629,21 @@ class ToolGuard:
                     ),
                     info={"reason": "windows_heredoc_blocked"},
                 )
+
+        # Structure-retrieval stop gate: block mat_struct_db_* when done
+        if self._is_struct_db_retrieval_blocked(tool_call):
+            sr = self._struct_retrieval
+            return GuardDecision(
+                blocked=True,
+                message=(
+                    f"⚠️ STRUCTURE RETRIEVAL STOP GATE: {sr.accepted_count} validated structures "
+                    f"have been collected (requested: {sr.requested_count}). "
+                    "Further mat_struct_db_* calls are BLOCKED — the stop condition is satisfied.\n\n"
+                    "ACTION REQUIRED: call finish with task_completed='partial' (or 'true' if a "
+                    "CIF/POSCAR was delivered) and report all accepted structures."
+                ),
+                info={"reason": "struct_retrieval_stop", "accepted_count": sr.accepted_count},
+            )
 
         # Input-validation gate
         submit_reason, software = self._submit_block_reason(tool_call)
@@ -481,6 +723,21 @@ class ToolGuard:
         if tool_name in _SURVEY_RETRIEVAL_TOOLS:
             if self._observation_has_content(observation):
                 self._survey_retrieval_count += 1
+
+        # ── structure-retrieval gate tracking ─────────────────
+        if tool_name.startswith("mat_struct_db_"):
+            self.update_structure_retrieval(observation, info or {})
+
+        # Track structure-file delivery from structure-manager scripts
+        if tool_name == "use_skill":
+            skill = str(args.get("skill_name", "")).strip().lower()
+            script = str(args.get("script_name", "")).strip().lower()
+            if skill == "structure-manager" and script in {
+                "fetch_web_structure.py", "assess_structure.py",
+            }:
+                text_lower = (observation or "").lower()
+                if any(ext in text_lower for ext in (".cif", ".vasp", "poscar", ".xyz", ".res")):
+                    self._struct_retrieval.structure_file_delivered = True
 
     @staticmethod
     def _observation_has_content(observation: str) -> bool:

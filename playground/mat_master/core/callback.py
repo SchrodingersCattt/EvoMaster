@@ -218,6 +218,7 @@ class MatToolCallbacks:
         pipeline.register_after(self.after_track_async_submit)
         pipeline.register_after(self.after_autodownload_oss_results)
         pipeline.register_after(self.after_download_characterization_results)
+        pipeline.register_after(self.after_normalize_struct_db_metadata)
         pipeline.register_after(self.after_survey_reminder)
 
     # ------------------------------------------------------------------
@@ -1432,3 +1433,76 @@ class MatToolCallbacks:
             'mat_sn_search-papers-enhanced or mat_sn_web-search again.]'
         )
         return observation + reminder, info
+
+    def after_normalize_struct_db_metadata(
+        self,
+        tool_call: Any,
+        observation: str,
+        info: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        """Normalize mat_struct_db_* retrieval metadata for downstream guard use.
+
+        Extracts ``fallback_level``, ``query_used``, and ``candidate_count`` from
+        the tool output and exposes them in ``info`` so that the guard and other
+        callbacks have a stable API, regardless of which mat_struct_db_* variant
+        was called.
+
+        Also appends a human-readable annotation to the observation when
+        ``fallback_level > 0`` so the LLM is aware that the result is NOT a
+        direct match.
+        """
+        tool_name = tool_call.function.name or ''
+        if not tool_name.startswith('mat_struct_db_'):
+            return observation, info
+        if info.get('error') is not None:
+            return observation, info
+
+        # Parse fallback_level from observation
+        fallback_level: int = 0
+        query_used: str = ''
+        candidate_count: int = 0
+        try:
+            obs_obj = (
+                observation
+                if isinstance(observation, dict)
+                else json.loads(observation)
+            )
+            if isinstance(obs_obj, dict):
+                inner = obs_obj.get('observation', obs_obj)
+                if isinstance(inner, str):
+                    try:
+                        inner = json.loads(inner)
+                    except Exception:
+                        inner = {}
+                if isinstance(inner, dict):
+                    fallback_level = int(inner.get('fallback_level', 0) or 0)
+                    query_used = str(inner.get('query_used', '') or '')
+                    structs = inner.get('structures') or inner.get('results') or []
+                    candidate_count = len(structs) if isinstance(structs, list) else 0
+        except Exception:
+            pass
+
+        # Expose in info for guard and later callbacks
+        new_info = dict(info)
+        new_info['retrieval_confidence'] = 'direct' if fallback_level == 0 else 'fallback'
+        new_info['fallback_level'] = fallback_level
+        new_info['query_used'] = query_used
+        new_info['candidate_count'] = candidate_count
+
+        # Warn the LLM when fallback is active
+        if fallback_level > 0:
+            annotation = (
+                f'\n\n⚠️ [struct-db-metadata] fallback_level={fallback_level}: '
+                'This result is an ELEMENT-BASED FALLBACK, not a direct match for '
+                'the requested compound. The structures returned may not correspond '
+                'to the target material. Do NOT treat these as confirmed results — '
+                'use the literature-based search path instead.'
+            )
+            obs_str = (
+                json.dumps(observation, ensure_ascii=False)
+                if isinstance(observation, dict)
+                else str(observation)
+            )
+            return obs_str + annotation, new_info
+
+        return observation, new_info

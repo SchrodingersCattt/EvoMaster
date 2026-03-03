@@ -17,11 +17,22 @@ Return a strictly valid JSON object with these keys:
         {
             "type": "parse_pdf" | "parse_files" | "search_info" | "clarify_task",
             "description": "What needs to be done and why",
-            "target": "file path or search query if applicable"
+            "target": "file path or search query if applicable",
+            "concept_alignment": {
+                "inclusion_criteria": ["list of must-have properties/classes"],
+                "exclusion_criteria": ["list of must-not properties/classes"],
+                "target_count": 0
+            },
+            "target_count": 0
         }
     ],
     "reasoning": "Brief explanation of your assessment"
 }
+
+Notes on search_info prerequisites:
+- `concept_alignment.inclusion_criteria`: properties or class constraints a result MUST satisfy (e.g. "is an energetic material", "contains perovskite structure type").
+- `concept_alignment.exclusion_criteria`: things that disqualify a result (e.g. "not energetic", "no crystal structure data").
+- `target_count`: how many validated items satisfying the criteria the search should collect before stopping (0 = no explicit limit). Set to the N from the task when the user asks for "N examples" or "N structures".
 
 RULES:
 - If the task is straightforward (e.g. "calculate band gap of Si", "search for X structures") and no files need pre-processing: set ready_to_plan=true, prerequisites=[].
