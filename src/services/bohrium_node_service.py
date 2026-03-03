@@ -172,6 +172,58 @@ class BohriumNodeService:
                 return None
         return None
 
+    def restart_node(
+        self,
+        access_key: str,
+        node_id: int,
+        project_id: int,
+        *,
+        creator_id: int = 0,
+        device: str = 'container',
+        turnoff_after: int | None = None,
+        disk_size: int | None = None,
+        sku_id: int | None = None,
+    ) -> None:
+        """
+        重启已关机的节点。POST /node/restart/{node_id}，body 与前端重启请求一致。
+        若节点不存在或接口返回失败则抛出异常，调用方可根据需要 fallback 到创建新节点。
+        """
+        turnoff_after = turnoff_after or int(
+            os.environ.get('BOHRIUM_TURNOFF_AFTER', DEFAULT_TURNOFF_AFTER)
+        )
+        disk_size = disk_size or int(
+            os.environ.get('BOHRIUM_DISK_SIZE', DEFAULT_DISK_SIZE)
+        )
+        sku_id = sku_id or int(os.environ.get('BOHRIUM_SKU_ID', DEFAULT_SKU_ID))
+        body = {
+            'creatorId': creator_id,
+            'projectId': project_id,
+            'device': device,
+            'turnoffAfter': turnoff_after,
+            'diskSize': disk_size,
+            'skuId': sku_id,
+            'isNotebook': False,
+            'datasets': [],
+        }
+        url = f"{self._base_url}/node/restart/{node_id}"
+        with httpx.Client(timeout=60.0) as client:
+            r = client.post(
+                url,
+                headers={
+                    'accessKey': access_key,
+                    'content-type': 'application/json',
+                },
+                json=body,
+            )
+            r.raise_for_status()
+            data = r.json() if r.content else {}
+        code = data.get('code')
+        if code != 0:
+            raise RuntimeError(
+                f"Bohrium restart node failed: code={code}, response={data}"
+            )
+        logger.info('Bohrium node restart requested node_id=%s', node_id)
+
     def destroy_node(
         self,
         access_key: str,
