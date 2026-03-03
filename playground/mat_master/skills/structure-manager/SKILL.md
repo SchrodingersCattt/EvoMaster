@@ -92,6 +92,7 @@ Always run `assess_structure.py` on any new structure regardless of how it was o
 ## Rules
 
 * If no CIF/POSCAR file is delivered to the user, `task_completed` must be `partial`, never `true` — even if you found crystal parameters from literature.
+* Structure identification must include database identifiers (CCDC REFCODE / ICSD collection code) when the structure has been deposited. If the paper you fetched does not contain them, search for the original experimental paper that first reported the structure.
 * After obtaining any new structure (any method), run `assess_structure.py`. If it reports "Slab" for a Bulk task, warn the user.
 * For LAMMPS conversions, **always** provide `--type-map`. If the source .lmp uses a non-atomic atom_style, **always** provide `--atom-style`.
 * On `missing_dependency` from any script, install the package on the remote session before retrying.
