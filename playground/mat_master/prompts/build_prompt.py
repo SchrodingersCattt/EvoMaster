@@ -34,7 +34,7 @@ TOOL_GROUPS = [
     (
         'mat_doc',
         'Document Parser',
-        'Extract information from PDFs and web pages; tools like mat_doc_extract_material_data_from_pdf, mat_doc_submit_*, mat_doc_get_job_results, mat_doc_extract_info_from_webpage. Prefer mat_doc_* for PDF parsing (registered MCP).',
+        'Extract information from PDFs and web pages; PDF tool: mat_doc_extract_material_data_from_pdf (registered MCP, sync). Webpage tool: extract_info_from_webpage (built-in, no server required).',
     ),
     ('mat_dpa', 'DPA Calculator', 'DPA-related calculations; tools like mat_dpa_*'),
     (

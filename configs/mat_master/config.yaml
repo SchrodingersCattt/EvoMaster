@@ -176,6 +176,8 @@ mcp:
   # Per-server tool filter: only register these tools (original names). Omitted servers register all tools.
   tool_include_only:
     mat_sn: ["web-search", "search-papers-enhanced"]
+    mat_doc:
+      - extract_material_data_from_pdf
     mat_nmr:
       - "NMR_search_tool"
       - "NMR_predict_tool"
@@ -249,7 +251,8 @@ mcp:
       sync_tools: []
     mat_doc:
       executor: null
-      sync_tools: []
+      sync_tools:
+        - extract_material_data_from_pdf
     mat_nmr:
       executor: null
       sync_tools:
