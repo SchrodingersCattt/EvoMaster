@@ -635,17 +635,20 @@ def _planner_ask_and_wait(
     loop: asyncio.AbstractEventLoop,
     reply_queue: queue.Queue,
 ) -> str:
-    """Send planner_ask to client and block until planner_reply is put in reply_queue."""
+    """Send planner_ask to client and block indefinitely until a planner_reply arrives.
+
+    This is the fallback input_fn path used when ConfirmationManager is unavailable.
+    We never time-out and return 'abort' here; the plan confirmation gate must stay
+    open until the human explicitly replies (go / abort / revise).
+    """
     payload = {"source": "Planner", "type": "planner_ask", "content": prompt}
     future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
     try:
         future.result(timeout=5)
     except Exception:
         pass
-    try:
-        return reply_queue.get(timeout=300)
-    except queue.Empty:
-        return "abort"
+    # Block indefinitely — no timeout, no implicit abort.
+    return reply_queue.get()
 
 
 def _run_agent_sync(

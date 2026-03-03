@@ -66,6 +66,12 @@ class MatMasterAgent(Agent):
         self._async_execution_policy = AsyncExecutionPolicy(self._async_tool_registry)
         # Runtime-tracked async jobs: source of truth for finish-attempt gate.
         self._job_registry = JobRegistry(self.logger)
+        # Finish-block safety cap: after N consecutive blocks, force-pass quality gates.
+        _mat = (config_dict or {}).get('mat_master') or {}
+        _planner = _mat.get('planner') or {}
+        _quality = _planner.get('quality_gates') or {}
+        self._finish_block_max: int = max(1, int(_quality.get('finish_block_max', 3)))
+        self._finish_block_count: int = 0
         # Tool callback pipeline
         self._tool_callback_pipeline = ToolCallbackPipeline(self.logger)
         self._register_default_tool_callbacks()
@@ -214,30 +220,67 @@ You can use the 'use_skill' tool to:
     def _precheck_finish_gates(
         self, requested_task_completed: str
     ) -> tuple[list[str], dict[str, Any]]:
-        """Validate finish gates before executing the finish tool."""
+        """Validate finish gates before executing the finish tool.
+
+        Quality gates (manuscript, survey) are subject to a safety cap: after
+        ``finish_block_max`` consecutive blocks the gates are force-passed so
+        the agent never loops indefinitely.  Async-job gates are **not** capped
+        because orphan jobs can leak resources.
+        """
         blocked_msgs: list[str] = []
         gate_info: dict[str, Any] = {}
         if requested_task_completed not in ('true', 'partial'):
             return blocked_msgs, gate_info
+
         self._job_registry.refresh_pending()
         can_finish, gate_info = self._job_registry.can_finish()
-        manuscript_ok, manuscript_reason = self._tool_guard.can_finish_manuscript()
-        survey_ok, survey_reason = self._tool_guard.can_finish_survey()
+
+        # Async-job gate is never force-passed (risk of orphan jobs).
         if not can_finish:
             blocked_msgs.append(
                 '[finish_attempt_gate] Blocked: pending async jobs still running. '
                 'Continue monitoring until pending_jobs_check passes.'
             )
-        if not manuscript_ok:
-            blocked_msgs.append(
-                '[finish_attempt_gate] Blocked: manuscript validation gate is failing. '
-                f"{manuscript_reason} Re-run manuscript-scribe validation/assembly and fix issues before finishing."
+
+        # Quality gates: skip checking once the safety cap is reached.
+        force_pass = self._finish_block_count >= self._finish_block_max
+        if force_pass:
+            self.logger.warning(
+                '[finish_attempt_gate] Quality gates force-passed after %d '
+                'consecutive blocks (cap=%d).',
+                self._finish_block_count,
+                self._finish_block_max,
             )
-        if not survey_ok:
-            blocked_msgs.append(
-                '[finish_attempt_gate] Blocked: survey evidence gate is failing. '
-                f"{survey_reason} Increase retrieval depth and refresh evidence before finishing."
+            gate_info['finish_force_passed'] = True
+        else:
+            manuscript_ok, manuscript_reason = self._tool_guard.can_finish_manuscript()
+            survey_ok, survey_reason = self._tool_guard.can_finish_survey()
+            struct_ok, struct_reason = self._tool_guard.can_finish_structure_retrieval(
+                requested_task_completed
             )
+            if not manuscript_ok:
+                blocked_msgs.append(
+                    '[finish_attempt_gate] Blocked: manuscript validation gate is failing. '
+                    f"{manuscript_reason} Re-run manuscript-scribe validation/assembly and fix issues before finishing."
+                )
+            if not survey_ok:
+                blocked_msgs.append(
+                    '[finish_attempt_gate] Blocked: survey evidence gate is failing. '
+                    f"{survey_reason} Increase retrieval depth and refresh evidence before finishing."
+                )
+            if not struct_ok:
+                blocked_msgs.append(
+                    '[finish_attempt_gate] Blocked: structure-retrieval completeness gate. '
+                    f"{struct_reason}"
+                )
+
+        if blocked_msgs:
+            self._finish_block_count += 1
+            gate_info['finish_block_count'] = self._finish_block_count
+            gate_info['finish_block_max'] = self._finish_block_max
+        else:
+            self._finish_block_count = 0
+
         return blocked_msgs, gate_info
 
     # ------------------------------------------------------------------
