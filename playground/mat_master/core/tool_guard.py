@@ -472,13 +472,30 @@ class ToolGuard:
                 if script in {"run_survey.py", "write_section.py"} and int(info.get("exit_code", 0) or 0) == 0:
                     self._survey_writes += 1
 
-        if tool_name in {"mat_sn_search-papers-enhanced", "mat_sn_web-search"}:
-            if self._observation_is_success(observation):
+        _SURVEY_RETRIEVAL_TOOLS = {
+            "mat_sn_search-papers-enhanced",
+            "mat_sn_web-search",
+            "extract_info_from_webpage",
+            "mat_struct_db_fetch_structures_from_db",
+        }
+        if tool_name in _SURVEY_RETRIEVAL_TOOLS:
+            if self._observation_has_content(observation):
                 self._survey_retrieval_count += 1
 
     @staticmethod
-    def _observation_is_success(observation: str) -> bool:
-        text = observation or ""
+    def _observation_has_content(observation: str) -> bool:
+        """Return True when the tool observation looks like a successful retrieval.
+
+        Recognises:
+        - ``{"status": "success", ...}`` (mat_sn_* tools)
+        - ``{"code": 0, ...}`` (mat_struct_db_*)
+        - ``{"webpage_detailed_contents ...": {...}, ...}`` (extract_info_from_webpage)
+        - Any non-empty dict/string that does NOT contain an error marker.
+        """
+        text = (observation or "").strip()
+        if not text:
+            return False
+        _ERROR_MARKERS = {"error", "timed out", "failed", "exception"}
         try:
             parsed = json.loads(text)
             if isinstance(parsed, dict):
@@ -490,10 +507,16 @@ class ToolGuard:
                     inner_status = str(inner.get("status", "")).strip().lower()
                     if inner_status:
                         return inner_status == "success"
+                if parsed.get("code") == 0:
+                    return True
+                if any(k.startswith("webpage_detailed_contents") for k in parsed):
+                    return not any(
+                        m in text.lower()[:500] for m in _ERROR_MARKERS
+                    )
+                return bool(parsed)
         except Exception:
             pass
-        # Conservative: only count as success when explicit "success" is found.
-        return False
+        return len(text) > 20 and not any(m in text.lower()[:500] for m in _ERROR_MARKERS)
 
     # ── private: decision builders ─────────────────────────────
 
