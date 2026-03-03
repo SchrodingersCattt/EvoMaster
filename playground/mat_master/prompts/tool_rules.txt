@@ -6,7 +6,7 @@
 - **Multi-batch aggregation** (e.g. SN over several time intervals → one big CSV): mat_sn_* tool results are **auto-saved** under the workspace at `_tmp/tool_outputs/mat_sn_*/` (each call writes a file; the path is shown in the tool response). The **final** CSV must be produced by **merging from files** (read those auto-saved files or your own batch CSVs with a script), not from conversation content (see "Multi-batch literature or data aggregation" below).
 
 ## Web search and retrieval
-- Web search returns **snippets only**. When answering from web results, **parse/fetch full content** first (e.g. mat_doc_* extract from webpage, or other parsing); do not answer from snippets alone.
+- Web search returns **snippets only**. When answering from web results, **parse/fetch full content** first (e.g. `extract_info_from_webpage` built-in tool, or other parsing); do not answer from snippets alone.
 - **Retrieval: prefer English** query terms when using mat_sn_*; before answering, consider each source’s quality (authority, relevance, recency).
 
 ## Characterization MCP routing (MANDATORY)
@@ -25,7 +25,7 @@
 - **Academic writing (survey/manuscript)**: Concept rigor is **mandatory**—definitions for key concepts, every symbol in formulas explained, how concepts relate to each other; optionally examples from retrieval. Do not leave concepts undefined or symbols unexplained.
 
 ## PDF parsing: always use MCP tools first
-- For **any PDF file**, you MUST call mat_doc_extract_material_data_from_pdf (sync) or mat_doc_submit_extract_material_data_from_pdf + mat_doc_get_job_results (async) **before** trying any other method (view, peek_file, Python libraries). mat_doc tools are purpose-built for PDF and return structured extraction. Only fall back to other methods if mat_doc tools explicitly fail.
+- For **any PDF file**, you MUST call mat_doc_extract_material_data_from_pdf **before** trying any other method (view, peek_file, Python libraries). mat_doc tools are purpose-built for PDF and return structured extraction. Only fall back to other methods if mat_doc tools explicitly fail.
 
 ## Mat MCP tools: file inputs are OSS URLs (MANDATORY, runtime-enforced)
 - mat_* MCP tools require URL-based file inputs; local files are not directly visible on remote runners.

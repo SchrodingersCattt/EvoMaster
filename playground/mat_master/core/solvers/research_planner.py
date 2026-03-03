@@ -1950,8 +1950,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             if prereq_type == 'parse_pdf':
                 prompt = (
                     f"Parse the following PDF file and extract all relevant information for planning a research task. "
-                    f"Use mat_doc_extract_material_data_from_pdf or mat_doc_submit_extract_material_data_from_pdf + "
-                    f"mat_doc_get_job_results (MCP tools) as the primary method. "
+                    f"Use mat_doc_extract_material_data_from_pdf (MCP tool) as the primary method. "
                     f"Extract: crystal structures, computational methods, software used, key parameters "
                     f"(k-mesh, cutoff, functional, pseudopotentials), target properties/results. "
                     f"File: {target}. "

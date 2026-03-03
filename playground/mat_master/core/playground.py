@@ -117,9 +117,11 @@ class MatMasterPlayground(BasePlayground):
         memory_tools = get_memory_tools(self.memory_service)
         self.tools.register_many(memory_tools)
         self.tools.register(get_peek_file_tool())
+        from ..tools import get_extract_webpage_tool
+        self.tools.register(get_extract_webpage_tool())
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
         self.tools.register(MonitorJobTool())
-        self.logger.info("Registered %d memory tools, peek_file, monitor_job", len(memory_tools))
+        self.logger.info("Registered %d memory tools, peek_file, extract_info_from_webpage, monitor_job", len(memory_tools))
 
     def sync_skills_to_remote(
         self,
