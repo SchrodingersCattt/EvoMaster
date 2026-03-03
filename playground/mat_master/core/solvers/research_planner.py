@@ -1969,9 +1969,44 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                     f"For PDFs, use mat_doc MCP tools first. Summarize key findings."
                 )
             elif prereq_type == 'search_info':
+                # Extract concept-alignment fields from the prereq dict if present
+                concept_alignment = prereq.get('concept_alignment') or {}
+                inclusion = concept_alignment.get('inclusion_criteria', [])
+                exclusion = concept_alignment.get('exclusion_criteria', [])
+                target_count = int(concept_alignment.get('target_count') or prereq.get('target_count') or 0)
+                max_attempts = int(concept_alignment.get('max_attempts') or 8)
+
+                # Register concept-alignment with the guard so acceptance /
+                # stop-condition checks are grounded.
+                if hasattr(self.agent, '_tool_guard'):
+                    # Build target_terms from description + target keywords
+                    raw_terms = [
+                        t.strip()
+                        for t in (description + " " + target).replace(",", " ").split()
+                        if len(t.strip()) >= 3
+                    ]
+                    self.agent._tool_guard.init_structure_retrieval(
+                        target_terms=raw_terms,
+                        requested_count=target_count,
+                    )
+
+                # Build a focused, bounded prompt for the search_info prereq
+                inclusion_str = "; ".join(inclusion) if inclusion else "(none specified)"
+                exclusion_str = "; ".join(exclusion) if exclusion else "(none specified)"
+                count_hint = (
+                    f" Stop as soon as {target_count} validated items matching the criteria are found."
+                    if target_count > 0
+                    else ""
+                )
                 prompt = (
-                    f"Search for the following information needed before planning: {description}. "
-                    f"Target: {target}. Use mat_sn tools for literature search if needed. Summarize findings concisely."
+                    f"Search for the following information needed before planning: {description}.\n"
+                    f"Target: {target}.\n"
+                    f"Inclusion criteria: {inclusion_str}.\n"
+                    f"Exclusion criteria: {exclusion_str}.\n"
+                    f"Use mat_sn tools for literature/web search. Fetch full page content for high-relevance "
+                    f"URLs (do not rely on snippets alone). Maximum search attempts: {max_attempts}."
+                    f"{count_hint}\n"
+                    f"Summarize all confirmed findings concisely; note which items could not be verified."
                 )
             else:
                 prompt = (

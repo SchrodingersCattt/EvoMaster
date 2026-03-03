@@ -255,6 +255,9 @@ You can use the 'use_skill' tool to:
         else:
             manuscript_ok, manuscript_reason = self._tool_guard.can_finish_manuscript()
             survey_ok, survey_reason = self._tool_guard.can_finish_survey()
+            struct_ok, struct_reason = self._tool_guard.can_finish_structure_retrieval(
+                requested_task_completed
+            )
             if not manuscript_ok:
                 blocked_msgs.append(
                     '[finish_attempt_gate] Blocked: manuscript validation gate is failing. '
@@ -264,6 +267,11 @@ You can use the 'use_skill' tool to:
                 blocked_msgs.append(
                     '[finish_attempt_gate] Blocked: survey evidence gate is failing. '
                     f"{survey_reason} Increase retrieval depth and refresh evidence before finishing."
+                )
+            if not struct_ok:
+                blocked_msgs.append(
+                    '[finish_attempt_gate] Blocked: structure-retrieval completeness gate. '
+                    f"{struct_reason}"
                 )
 
         if blocked_msgs:
