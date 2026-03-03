@@ -147,11 +147,8 @@ class BohriumNodeService:
             f"Bohrium node node_id={node_id} did not become ready within {timeout}s"
         )
 
-    def get_node_info(self, access_key: str, node_id: int) -> dict[str, Any] | None:
-        """
-        单次调用 node/list 获取该节点信息。若 status=2（就绪）返回 {node_id, ip, password}，否则返回 None。
-        用于复用表中有 node_id 时快速判断是否可直接用，不轮询。
-        """
+    def _fetch_node_list(self, access_key: str) -> list[dict[str, Any]]:
+        """请求 node/list 返回 items，供 get_node_info / get_node_detail 复用。"""
         with httpx.Client(timeout=30.0) as client:
             r = client.get(
                 f"{self._base_url}/node/list",
@@ -160,14 +157,52 @@ class BohriumNodeService:
             )
             r.raise_for_status()
             data = r.json()
-        items = (data.get('data') or {}).get('items') or []
+        return (data.get('data') or {}).get('items') or []
+
+    def get_node_detail(self, access_key: str, node_id: int) -> dict[str, Any] | None:
+        """
+        单次调用 node/list 获取该节点原始信息（不论是否就绪）。
+        返回包含 image_id 等字段的节点信息，若节点不在列表中返回 None。
+        用于连接前校验节点镜像是否与当前期望一致。
+        """
+        items = self._fetch_node_list(access_key)
+        for item in items:
+            if str(item.get('nodeId')) == str(node_id):
+                image_id = item.get('imageId') or item.get('image_id')
+                if image_id is not None:
+                    try:
+                        image_id = int(image_id)
+                    except (TypeError, ValueError):
+                        image_id = None
+                return {
+                    'node_id': node_id,
+                    'status': item.get('status'),
+                    'ip': item.get('ip'),
+                    'password': item.get('nodePwd'),
+                    'image_id': image_id,
+                }
+        return None
+
+    def get_node_info(self, access_key: str, node_id: int) -> dict[str, Any] | None:
+        """
+        单次调用 node/list 获取该节点信息。若 status=2（就绪）返回 {node_id, ip, password, image_id}，否则返回 None。
+        用于复用表中有 node_id 时快速判断是否可直接用，不轮询。
+        """
+        items = self._fetch_node_list(access_key)
         for item in items:
             if str(item.get('nodeId')) == str(node_id):
                 if item.get('status') == NODE_STATUS_READY:
+                    image_id = item.get('imageId') or item.get('image_id')
+                    if image_id is not None:
+                        try:
+                            image_id = int(image_id)
+                        except (TypeError, ValueError):
+                            image_id = None
                     return {
                         'node_id': node_id,
                         'ip': item.get('ip'),
                         'password': item.get('nodePwd'),
+                        'image_id': image_id,
                     }
                 return None
         return None
