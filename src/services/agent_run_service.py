@@ -500,13 +500,52 @@ class AgentRunService:
                                         node_ip,
                                     )
                                 else:
-                                    nodes_table.delete_by_node(
-                                        user_id_for_ak,
-                                        org_id,
-                                        project_id,
-                                        node_id,
-                                    )
-                                    node_id = None
+                                    # 节点存在但未就绪（如已关机）：先尝试重启，失败再删表并新建
+                                    try:
+                                        creator_id = 0
+                                        if user_id_for_ak:
+                                            try:
+                                                creator_id = int(user_id_for_ak)
+                                            except (TypeError, ValueError):
+                                                creator_id = 0
+                                        node_svc.restart_node(
+                                            access_key,
+                                            node_id,
+                                            project_id,
+                                            creator_id=creator_id,
+                                        )
+                                        event_callback(
+                                            'System',
+                                            'bohrium_node',
+                                            {
+                                                'node_id': node_id,
+                                                'status': 'created',
+                                                'message': '节点已重启，正在等待就绪...',
+                                            },
+                                        )
+                                        node_info = node_svc.wait_until_ready(
+                                            access_key, node_id
+                                        )
+                                        node_ip = node_info.get('ip')
+                                        node_pwd = node_info.get('password')
+                                        logger.info(
+                                            'run_agent_sync: restarted Bohrium node node_id=%s ip=%s',
+                                            node_id,
+                                            node_ip,
+                                        )
+                                    except Exception as restart_err:
+                                        logger.warning(
+                                            'run_agent_sync: restart node_id=%s failed, will create new: %s',
+                                            node_id,
+                                            restart_err,
+                                        )
+                                        nodes_table.delete_by_node(
+                                            user_id_for_ak,
+                                            org_id,
+                                            project_id,
+                                            node_id,
+                                        )
+                                        node_id = None
                         if node_id is None or node_ip is None:
                             node_info = node_svc.create_node(access_key, project_id)
                             node_id = node_info.get('node_id')
