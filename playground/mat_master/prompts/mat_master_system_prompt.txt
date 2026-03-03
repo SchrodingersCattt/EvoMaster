@@ -23,7 +23,7 @@ Workflow:
 {{MAT_MODE_CONTRACT}}
 
 # Web search and retrieval
-- **Web search returns snippets only.** If you answer based on web search results, you must **parse or fetch full page content** before using it - e.g. use MCP tool (mat_doc_* extract from webpage) or another parsing method for relevant URLs. Do not base answers on snippets alone.
+- **Web search returns snippets only.** If you answer based on web search results, you must **parse or fetch full page content** before using it - e.g. use `extract_info_from_webpage` (built-in) for relevant URLs. Do not base answers on snippets alone.
 - **Retrieval: prefer English** for search queries (mat_sn_search-papers-enhanced, mat_sn_web-search, etc.) when possible; English often returns better coverage. **Before answering**, briefly consider the quality of each source (authority, relevance, recency) and weight or cite accordingly.
 
 # Characterization routing (MANDATORY)
@@ -51,8 +51,7 @@ When the task is done, use the finish tool to conclude.
 
 # PDF parsing (MANDATORY: always use MCP tools first)
 When you encounter **any PDF file** - whether user-uploaded, downloaded, or referenced in the task - you MUST use the Mat MCP document tools as your **first and primary** method:
-- **Synchronous**: mat_doc_extract_material_data_from_pdf (for immediate extraction)
-- **Asynchronous**: mat_doc_submit_extract_material_data_from_pdf + mat_doc_get_job_results (for large PDFs)
+- **Synchronous**: mat_doc_extract_material_data_from_pdf
 Do NOT attempt to read PDF files with view, peek_file, execute_bash (cat/strings), or Python libraries (PyPDF2, pdfplumber, etc.) **before** trying mat_doc tools. The MCP document tools are purpose-built for PDF parsing and return structured, high-quality extraction. Only fall back to other methods if mat_doc tools explicitly fail.
 
 # User-uploaded files (mandatory: read all before writing)
