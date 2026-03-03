@@ -228,7 +228,7 @@ mcp:
           batch_type: "OpenAPI"
           context_type: "OpenAPI"
           remote_profile:
-            image_address: "registry.dp.tech/dptech/dpa-calculator:a86b37cc"
+            image_address: "registry.dp.tech/dptech/dpa-calculator:49a6dcf3"
             platform: "ali"
             machine_type: "c16_m64_1 * NVIDIA 4090"
             app_key: "agent"
