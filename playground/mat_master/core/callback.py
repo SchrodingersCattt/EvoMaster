@@ -31,6 +31,7 @@ AfterToolCallback = Callable[[Any, str, dict[str, Any]], tuple[str, dict[str, An
 _DPA_MODEL_ALIAS_MAP: dict[str, str] = {
     'DPA2.4-7M': 'https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/cd12300a-d3e6-4de9-9783-dd9899376cae/dpa-2.4-7M.pt',
     'DPA3.1-3M': 'https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/18b8f35e-69f5-47de-92ef-af8ef2c13f54/DPA-3.1-3M.pt',
+    'DPA3.2-5M': 'https://dp-storage-test2.oss-cn-zhangjiakou.aliyuncs.com/bohrium-test/bohrium/feedback/attachment/01KF3BF3TX9GVTC96Q0PCV01H3/DPA-3.2-5M.pt',
 }
 
 _OSS_URL_RE = re.compile(r"https?://[^\s,'\"<>)}\]]+")
