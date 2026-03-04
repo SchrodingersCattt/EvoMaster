@@ -172,6 +172,14 @@ python run.py --agent minimal --task task.txt
 python run.py --agent minimal --interactive
 ```
 
+### 配置您的Bohrium鉴权
+- access key:
+![alt text](docs/images/ak-1.png)
+![alt text](docs/images/ak-2.png)
+
+- User ID:
+![alt text](docs/images/userID.png)
+
 ## 📋 示例
 
 ### 单智能体（Minimal）
