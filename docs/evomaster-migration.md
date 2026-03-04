@@ -9,7 +9,7 @@
 | 步骤 | 状态 |
 |------|------|
 | 阶段 1.1 配置模型 | **已完成** |
-| 阶段 1.2 配置兼容（YAML / 加载层） | 未完成 |
+| 阶段 1.2 配置兼容（YAML / 加载层） | **已完成** |
 | 阶段 1.3 验收 | 未完成 |
 | 阶段 2 | 未完成 |
 | 阶段 3 | 未完成 |
@@ -37,7 +37,7 @@
 - `get_agent_config(name=None)` 支持无参调用，且无参时返回 `config.agent` 或「第一个」agent（上游应为 `get_agent_config(name: str)`，必须传 name）。
 - `get_agent_tools_config` / `get_agent_skills_config` 缺失时返回默认 dict/[] 及简写处理（上游类型或默认约定可能不同，收尾时以官方实现为准）。
 
-### 1.2 配置兼容（YAML / 加载层）**[未完成]**
+### 1.2 配置兼容（YAML / 加载层）**[已完成]**
 
 - 在配置加载或 getter 中增加一层转换：若某 agent 配置中仅有 `enable_tools: true/false`，则自动转换为 `tools: { builtin: ["*"] }` 或 `tools: { builtin: [] }`，这样现有所有使用 `enable_tools` 的 YAML 无需一次性修改。
 
