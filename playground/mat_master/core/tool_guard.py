@@ -1,20 +1,21 @@
-"""Stateful tool-call guard: loop prevention, validation gate, manuscript gate,
-structure-retrieval gate.
+"""Stateful tool-call guard: loop prevention, manuscript gate,
+structure-retrieval gate, prepare gate.
 
 Four independent concerns, each with its own state and public method:
 
 1. **Loop detection** (``evaluate`` / ``record_tool_call``): Blocks repeated
    calls with identical arguments within a sliding window.
-2. **Input-validation gate** (``_submit_block_reason``): Blocks ``submit_*``
-   calls until ``validate_input.py`` passes for that (file, software) pair.
-3. **Manuscript gate** (``can_finish_manuscript``): Blocks ``finish`` when
+2. **Manuscript gate** (``can_finish_manuscript``): Blocks ``finish`` when
    manuscript sections were written but never validated, or when the last
    validation failed.
-4. **Structure-retrieval gate** (``can_finish_structure_retrieval`` /
+3. **Structure-retrieval gate** (``can_finish_structure_retrieval`` /
    ``update_structure_retrieval``): Classifies mat_struct_db_* candidates by
    confidence (fallback_level), enforces ``task_completed=partial`` when no
    CIF is delivered, and blocks low-value repeated retrieval when the stop
    condition is already met.
+4. **Prepare gate** (``evaluate``): Blocks ``mat_binary_calc_prepare_*`` when
+   ``input_file`` was created by ``str_replace_editor`` instead of sourced
+   via ``input-manual-helper get_reference``.
 """
 
 from __future__ import annotations
@@ -128,9 +129,6 @@ class ToolGuard:
         self._peek_manual_call_count: int = 0
         self._peek_manual_nohit_counts: dict[str, int] = {}
 
-        # Input-validation gate: (normalised_file, normalised_software) → passed?
-        self._validate_status_by_key: dict[tuple[str, str], bool] = {}
-
         # Manuscript gate (three-state):
         #   _manuscript_writes > 0  →  "some section was written; validation needed"
         #   _manuscript_validated is None  →  "never validated"
@@ -147,12 +145,13 @@ class ToolGuard:
         self._survey_writes: int = 0
         # Structure-retrieval gate
         self._struct_retrieval: StructRetrievalState = StructRetrievalState()
+        # Input-file origin tracking (prepare_* gate)
+        self._str_replace_created_paths: set[str] = set()
 
     def reset_loop_history(self) -> None:
         """Clear loop-detection state so a new planner step starts fresh.
 
-        Preserves ``_validate_status_by_key`` (input-file validations remain
-        valid) and ``_manuscript_*`` state (manuscript gate spans the whole run).
+        Preserves ``_manuscript_*`` state (manuscript gate spans the whole run).
         """
         self._recent_tool_fps.clear()
         self._recent_sem_fps.clear()
@@ -212,6 +211,11 @@ class ToolGuard:
             "orca": "orca", "pyatb": "pyatb", "quantum_espresso": "quantum_espresso",
         }
         return mapping.get(token, token)
+
+    @staticmethod
+    def _infer_prepare_software(tool_name: str) -> str:
+        m = re.match(r"^mat_binary_calc_prepare_(.+?)_job$", tool_name or "")
+        return m.group(1).lower() if m else ""
 
     # ── fingerprinting ─────────────────────────────────────────
 
@@ -569,27 +573,6 @@ class ToolGuard:
             return True
         return False
 
-    # ── input-validation gate (submit blocking) ────────────────
-
-    def _submit_block_reason(self, tool_call) -> tuple[str | None, str]:
-        name = tool_call.function.name
-        software = self._infer_binary_submit_software(name)
-        if not software:
-            return None, ""
-
-        args = self._parse_tool_args(tool_call)
-        input_file = self._normalize_input_path(args.get("input_file"))
-        if not input_file:
-            return "missing_input_file", software
-
-        key = (input_file, software)
-        validated = self._validate_status_by_key.get(key)
-        if validated is None:
-            return "not_validated", software
-        if validated is False:
-            return "validate_failed", software
-        return None, software
-
     # ── loop detection core ────────────────────────────────────
 
     def _is_loop(self, tool_call) -> tuple[bool, dict[str, Any]]:
@@ -643,10 +626,22 @@ class ToolGuard:
                 info={"reason": "struct_retrieval_stop", "accepted_count": sr.accepted_count},
             )
 
-        # Input-validation gate
-        submit_reason, software = self._submit_block_reason(tool_call)
-        if submit_reason:
-            return self._build_submit_block(tool_call, submit_reason, software)
+        # prepare_* gate: block hand-written input files
+        if re.match(r"^mat_binary_calc_prepare_", tool_call.function.name or ""):
+            args = self._parse_tool_args(tool_call)
+            inp = self._normalize_input_path(args.get("input_file"))
+            if inp and inp in self._str_replace_created_paths:
+                sw = self._infer_prepare_software(tool_call.function.name)
+                return GuardDecision(
+                    blocked=True,
+                    message=(
+                        f"⚠️ PREPARE GATE: `input_file` was created by `str_replace_editor` "
+                        f"and cannot be passed to `{tool_call.function.name}` directly.\n\n"
+                        f"Use `use_skill input-manual-helper get_reference` to obtain a "
+                        f"validated template, then call the prepare tool with that reference path."
+                    ),
+                    info={"reason": "prepare_hand_written_input", "software": sw, "path": inp},
+                )
 
         # Loop detection
         is_loop, loop_info = self._is_loop(tool_call)
@@ -682,19 +677,6 @@ class ToolGuard:
             else:
                 self._peek_manual_nohit_counts.pop(sem_fp, None)
 
-        # ── validate_input gate tracking ─────────────────────
-        if (
-            tool_call.function.name == "use_skill"
-            and args.get("script_name") == "validate_input.py"
-        ):
-            script_args = args.get("script_args", "") or ""
-            input_file = self._extract_flag_value(script_args, "input_file")
-            software = self._extract_flag_value(script_args, "software")
-            nf = self._normalize_input_path(input_file)
-            ns = self._normalize_software_name(software)
-            if nf and ns:
-                self._validate_status_by_key[(nf, ns)] = (info.get("exit_code") == 0)
-
         # ── manuscript gate tracking ─────────────────────────
         if tool_call.function.name == "use_skill":
             skill = str(args.get("skill_name", "")).strip().lower()
@@ -711,6 +693,14 @@ class ToolGuard:
             if skill == "deep-survey":
                 if script in {"run_survey.py", "write_section.py"} and int(info.get("exit_code", 0) or 0) == 0:
                     self._survey_writes += 1
+
+        # ── prepare_* gate: track str_replace_editor-created paths ──
+        if tool_name == "str_replace_editor":
+            cmd = str(args.get("command", "")).strip().lower()
+            if cmd in {"create", "write"}:
+                p = self._normalize_input_path(args.get("path"))
+                if p:
+                    self._str_replace_created_paths.add(p)
 
         _SURVEY_RETRIEVAL_TOOLS = {
             "mat_sn_search-papers-enhanced",
@@ -774,43 +764,6 @@ class ToolGuard:
         return len(text) > 20 and not any(m in text.lower()[:500] for m in _ERROR_MARKERS)
 
     # ── private: decision builders ─────────────────────────────
-
-    def _build_submit_block(
-        self, tool_call, reason: str, software: str,
-    ) -> GuardDecision:
-        args = self._parse_tool_args(tool_call)
-        input_file = args.get("input_file", "<unknown>")
-        sw_disp = self._display_software(software)
-        self.logger.warning(
-            "VALIDATION GATE BLOCKED: tool='%s' input_file='%s' reason=%s software=%s",
-            tool_call.function.name, input_file, reason, software,
-        )
-        messages = {
-            "not_validated": (
-                "⚠️ VALIDATION GATE BLOCKED: Submission is blocked because this input file has not passed "
-                "`validate_input.py` yet.\n\n"
-                "ACTION REQUIRED:\n"
-                f"1. Run `use_skill` with `validate_input.py --input_file \"{input_file}\" --software {sw_disp}`.\n"
-                "2. Fix all validation errors.\n"
-                "3. Re-run validation until exit_code=0, then submit."
-            ),
-            "validate_failed": (
-                "⚠️ VALIDATION GATE BLOCKED: Submission is blocked because the latest "
-                "`validate_input.py` result for this input file is FAIL.\n\n"
-                "ACTION REQUIRED:\n"
-                "1. Read validation errors.\n"
-                "2. Fix the input file.\n"
-                "3. Re-run validation until exit_code=0, then submit."
-            ),
-        }
-        msg = messages.get(reason, (
-            "⚠️ VALIDATION GATE BLOCKED: Submission is blocked because input_file is missing or invalid.\n"
-            "Provide a valid input_file and pass validation first."
-        ))
-        return GuardDecision(
-            blocked=True, message=msg,
-            info={"reason": reason, "software": software},
-        )
 
     def _build_loop_block(
         self, tool_call, loop_info: dict[str, Any],
