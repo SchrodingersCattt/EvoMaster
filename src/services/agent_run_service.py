@@ -501,6 +501,13 @@ class AgentRunService:
                                     return node_image_id != expected_image_id
 
                                 node_info = node_svc.get_node_info(access_key, node_id)
+                                logger.info(
+                                    'run_agent_sync: node image check (ready) node_id=%s '
+                                    'node_image_id=%s expected_image_id=%s',
+                                    node_id,
+                                    node_info.get('image_id') if node_info else None,
+                                    expected_image_id,
+                                )
                                 if node_info and node_info.get('ip'):
                                     if _node_image_outdated(node_info.get('image_id')):
                                         logger.info(
@@ -549,6 +556,17 @@ class AgentRunService:
                                     # 节点存在但未就绪（如已关机）：先查镜像是否与当前一致，不一致则销毁并用新镜像建节点
                                     node_detail = node_svc.get_node_detail(
                                         access_key, node_id
+                                    )
+                                    logger.info(
+                                        'run_agent_sync: node image check (not ready) node_id=%s '
+                                        'node_image_id=%s expected_image_id=%s',
+                                        node_id,
+                                        (
+                                            node_detail.get('image_id')
+                                            if node_detail
+                                            else None
+                                        ),
+                                        expected_image_id,
                                     )
                                     if (
                                         node_detail is not None
