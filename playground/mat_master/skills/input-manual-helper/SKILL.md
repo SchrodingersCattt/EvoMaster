@@ -1,70 +1,59 @@
 ---
 name: input-manual-helper
-description: "Write/validate input files for CP2K, QE, ABINIT, LAMMPS, ORCA, etc. Flow: query strategy → rough draft → hand to prepare_* MCP tools for final input → validate once and refine only if needed. Do not hardcode MCP capabilities; use tool schema as source of truth."
+description: "Parameter-dispatch engine for CP2K, QE, ABINIT, LAMMPS, ORCA. LLM outputs overrides and paths; prepare_* MCP tools generate inputs. Route by engine capability; validate by physical-sense review. Structure files must be pymatgen-instanceable."
 skill_type: operator
 ---
 
 # Input Manual Helper Skill
 
-Write or validate input files for computational software (CP2K, QE, ABINIT, LAMMPS, ORCA, VASP, Gaussian, etc.). The workflow is principle-based: produce a rough draft from references, delegate to the appropriate prepare_* MCP tool for path/asset binding and (where supported) workflow generation, then validate and refine only when necessary.
+Generate or adapt input files for computational software by **dispatching parameters and paths** to the appropriate prepare_* MCP tool. Do not hand-write or text-edit input file contents for software that has a prepare_* tool; use overrides and structure_file/template paths instead.
 
-## Workflow (three phases)
+## Routing by engine
 
-### 1. Draft
+| Engine | Route type | input_file | structure_file |
+|--------|------------|------------|----------------|
+| ABINIT (program=abinit) | Direct generation | Optional | Must be pymatgen-readable |
+| QE pw.x | Direct generation | Optional | Must be pymatgen-readable |
+| CP2K | Placeholder injection | **Required** (use cp2k/minimal_periodic.inp if user provides none) | pymatgen-readable |
+| ORCA | Placeholder injection | **Required** (use orca/minimal_molecule.inp if user provides none) | pymatgen-readable |
+| LAMMPS | Data decoupled | Optional | pymatgen-readable (prepare generates .data) |
 
-Use a **query strategy** to obtain a rough input:
+Use the MCP tool schema as the source of truth for parameters; the table above is context only.
 
-- Run `list_references.py` (optionally `--software X`) to discover available templates.
-- Fetch templates via `get_reference` (e.g. `reference_name='cp2k/task_opt.inp'`) and merge/adapt as needed (coordinates, cell, elements, k-points, placeholders for structure/pseudo paths).
-- Prefer templates over constructing complex blocks from the manual. Placeholders for paths or assets are fine; the prepare tool will resolve them.
+## Structure file format
 
-For software with no template, draft from domain knowledge and minimal manual lookup; avoid repeatedly querying the manual line-by-line to build the whole file.
+`structure_file` must be in a format pymatgen can instantiate: e.g. CIF (`.cif`), VASP POSCAR/CONTCAR (no extension or `.vasp`), XYZ (`.xyz`), Materials Project JSON. LAMMPS `.data` is produced by prepare_lammps_job from the structure file; do not pass .data as structure_file. Do not use proprietary or single-software-only formats as the generic structure input.
 
-### 2. Finalize
+## Workflow
 
-Call the **prepare_* MCP tool** for the target software (e.g. mat_binary_calc_prepare_cp2k_job, prepare_abinit_job, prepare_lammps_job). Capabilities and parameters are defined by the MCP server — **always check the tool’s schema/description**; do not assume a fixed list of features.
-
-- **Workflow-aware tools**: Some prepare tools can generate full multi-step inputs (e.g. DFPT, NLO/SHG, phonons) via a workflow parameter (e.g. `workflow_type`). Before calling, check the tool schema for such parameters and use them instead of manually assembling multiple datasets or input files.
-
-### 3. Validate & refine
-
-Run **one** validation pass (e.g. `validate_input.py --input_file <path> --software X`). Refine only if:
-
-- Exit code is non-zero or the report shows errors; or
-- The user has stated extra constraints that are not yet reflected.
-
-Use the validation report (line numbers and messages) to fix the file or adjust prepare parameters and re-run prepare/validate until pass.
-
-**Validation fallback**: If `validate_input.py` reports "Manual is empty" or "No parser available" for a given software, the manual or parser for that code is not yet set up. Do not block the flow: treat the MCP prepare tool output and domain knowledge as the quality source, and note the limitation. Do not retry validation in a loop when the manual is known to be missing.
+1. **Choose software and task type** — Determine which prepare_* tool applies from the routing table and MCP schema.
+2. **Resolve template** — For CP2K/ORCA, obtain an input template: user-provided path or get_reference (e.g. `cp2k/minimal_periodic.inp`, `orca/minimal_molecule.inp`, or a task/method template from list_references.py).
+3. **Confirm structure_file** — Ensure the structure path exists and is pymatgen-instanceable; do not assume formats the engine cannot read.
+4. **Build overrides** — Set physical parameters (cutoff, functional, k-points, etc.) via the overrides dict exposed by the prepare_* schema; do not inject them by editing the template text.
+5. **Call prepare_*** — Invoke the prepare_* MCP tool with input_file (template path), structure_file (when applicable), and overrides.
+6. **Validate once** — Run `validate_input.py --input_file <path> --software <name>`. Validation is **physical-sense review**: check that key parameters are in a reasonable range, functional matches the system, and required sections are present. If something looks wrong, use ask_human(mode="timeout"); on timeout, treat as pass and proceed. The script exits 0 so submit is allowed.
 
 ## Scripts
 
-- **list_references.py** — Discover reference templates by software; use for the draft phase.
-- **get_reference** (via use_skill) — Fetch template content by name (e.g. `cp2k/task_opt.inp`, `abinit/gs_scf.abi`, `lammps/msst_shock.lammps`).
-- **validate_input.py** — Validate prepared input; exit 0 = pass, 1 = errors. Use after the prepare step.
-- **peek_manual.py** — Targeted manual lookup when validation flags a section or when a specific parameter is uncertain. Use sparingly; avoid building whole sections from repeated manual queries.
-- **list_manuals.py** — List available manual JSON files (`software|path`).
+- **list_references.py** — List available reference templates by software.
+- **get_reference** (via use_skill) — Fetch template content by name (e.g. `cp2k/minimal_periodic.inp`, `orca/minimal_molecule.inp`, `abinit/gs_scf.abi`, `lammps/gcmc_adsorption.lammps`).
+- **validate_input.py** — Run after prepare. Reads the prepared file and exits 0; you perform a physical-sense review. If doubtful, ask_human; on timeout, pass. Do not skip this step when submitting jobs for software covered by the validation gate.
 
-## Reference templates
+## Physical checks to consider (not a procedure)
 
-Templates live under `references/<software>/`. Run `list_references.py` to see what is available.
+- Cutoff energy and grid settings appropriate for the basis and system size.
+- Functional choice consistent with the system (e.g. hybrid for band gaps, meta-GGA when needed).
+- K-point sampling consistent with cell size and symmetry.
+- Required blocks or keywords present and not contradictory (e.g. SCF convergence, geometry/MD settings).
 
-### CP2K naming
+Use domain judgment; do not follow a fixed checklist.
 
-- **task_*** — What to calculate (e.g. SCF, GEO_OPT, BAND). Pair with a **method_*** for non-PBE functionals.
-- **method_*** — How (XC, ADMM, HF blocks). Merge into a task_ template.
-- **No prefix** — Standalone; use as-is.
+## Knowledge source
 
-Do not construct &HF, &SCREENING, &ADMM, &GW, etc. from the manual; get them from method_* templates.
-
-### Other software
-
-ABINIT, LAMMPS, ORCA, Gaussian, PSI4, etc. have standalone or minimal templates; see `_co_templates.json` hints. For ABINIT NLO/SHG, use the base GS template and pass `workflow_type='nlo'` to prepare_abinit_job instead of hand-editing multiple datasets.
+When a parameter or keyword is uncertain, use **official documentation** with a site-restricted search (e.g. site:manual.cp2k.org, site:docs.lammps.org). Do not re-query the same path that already returned no useful result.
 
 ## Principles
 
-- **Do not** use `peek_file` on manual JSONs (large); use `peek_manual.py`.
-- **Do not** skip validation when the manual/parser exists; run it once after prepare.
-- **Do not** assume prepare tools are fixed in capability; read the current MCP tool schema.
-- **Do not** repeatedly query the manual for the same section that returns "No params found"; use templates or domain knowledge instead.
-- When the manual is incomplete or missing, rely on prepare output and domain knowledge rather than blocking on validation.
+- **Do not** directly edit .inp, .in, .abi, or other input file text for software that has a prepare_* MCP tool; use overrides and template/structure paths only.
+- **Do not** assume prepare tools have fixed capabilities; read the current MCP tool schema.
+- **Gaussian / PSI4**: No prepare_* tool yet; use reference templates as the final input and do not apply the prepare-only workflow or the validation gate to them.
