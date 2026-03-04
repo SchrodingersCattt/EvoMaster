@@ -4,11 +4,14 @@ FROM registry.dp.tech/dptech/ubuntu:ubuntu24.04-py3.12
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 安装 tmux、wget、curl
+# 安装基础工具与运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tmux \
     wget \
     curl \
+    ca-certificates \
+    libgfortran5 \
+    libquadmath0 \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 Python 依赖
@@ -20,5 +23,24 @@ RUN pip install --no-cache-dir \
     matplotlib \
     python-docx \
     requests
+
+# -----------------------------
+# 安装 VASPKIT（不依赖仓库内 tar 包，在线下载并解压）
+# 默认使用 SourceForge 下载地址，可通过 build-arg 覆盖：
+#   docker build -f Dockerfile.remote \
+#     --build-arg VASPKIT_VERSION=1.5.1 \
+#     --build-arg VASPKIT_TARBALL_URL="https://sourceforge.net/projects/vaspkit/files/Binaries/vaspkit.1.5.1.linux.x64.tar.gz/download" \
+#     -t remote-node .
+# -----------------------------
+ARG VASPKIT_VERSION=1.5.1
+ARG VASPKIT_TARBALL_URL="https://sourceforge.net/projects/vaspkit/files/Binaries/vaspkit.1.5.1.linux.x64.tar.gz/download"
+RUN wget -O /tmp/vaspkit.tar.gz "${VASPKIT_TARBALL_URL}" \
+    && tar -xzf /tmp/vaspkit.tar.gz -C /home \
+    && rm -f /tmp/vaspkit.tar.gz \
+    && test -x "/home/vaspkit.${VASPKIT_VERSION}.linux.x64/bin/vaspkit" \
+    && ln -sfn "/home/vaspkit.${VASPKIT_VERSION}.linux.x64" /opt/vaspkit \
+    && ln -sf /opt/vaspkit/bin/vaspkit /usr/local/bin/vaspkit
+
+ENV PATH="/opt/vaspkit/bin:/usr/local/bin:${PATH}"
 
 WORKDIR /root
