@@ -325,7 +325,7 @@ mcp:
             batch_type: "OpenAPI"
             context_type: "OpenAPI"
             remote_profile:
-              image_address: "registry.dp.tech/dptech/abinit:deve_9.10.3"
+              image_address: "registry.dp.tech/dptech/dp/native/prod-19853/abinit:v9.10.3_pp"
               platform: "ali"
               machine_type: "c32_m128_cpu"
               app_key: "agent"
@@ -343,7 +343,13 @@ mcp:
               app_key: "agent"
           resources:
             envs: {}
-      sync_tools: []
+      sync_tools:
+        - prepare_abinit_job
+        - prepare_cp2k_job
+        - prepare_qe_job
+        - prepare_lammps_job
+        - prepare_orca_job
+        - prepare_pyatb_job
 
 # ============================================
 # Skills（约束 Mat 工具调用方式，注入 meta 到上下文）

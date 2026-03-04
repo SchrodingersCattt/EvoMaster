@@ -1,0 +1,27 @@
+# LAMMPS reference: MSST (Multi-Scale Shock Technique) shock simulation
+# Replace __STRUCTURE_FILE__ (read_data path), pair_style/coeff, and shockvel as needed.
+# fix msst: dir = shock direction (x|y|z), shockvel = piston velocity (distance/time), q = cell mass, mu = viscosity, tscale = T rescaling.
+
+units metal
+atom_style atomic
+boundary p p p
+
+read_data __STRUCTURE_FILE__
+
+pair_style __PAIR_STYLE__
+pair_coeff __PAIR_COEFF__
+
+# Initial velocity (optional; or use velocity create)
+velocity all create 300 12345 dist gaussian
+
+# MSST fix: z direction, shockvel in Angstrom/ps (adjust q, mu, tscale as needed)
+fix fmsst all msst z 2.0 q 200 mu 3.0e2 tscale 0.01
+
+# Output
+thermo 100
+thermo_style custom step temp vol press pe ke etotal
+dump 1 all custom 500 msst.lammpstrj id type x y z
+
+run 10000
+
+unfix fmsst
