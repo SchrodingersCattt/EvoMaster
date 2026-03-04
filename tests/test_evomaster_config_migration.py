@@ -1,6 +1,7 @@
-"""阶段 1.3 验收：现有 YAML（enable_tools）经新加载逻辑后行为与 v0.0.2 tools 一致。"""
+"""阶段 1.3 / 2.4 验收：配置与 Playground 多 Agent 行为。"""
 
 from evomaster.config import ConfigManager
+from evomaster.core.playground import BasePlayground
 
 
 def test_stage_1_3_acceptance_enable_tools_normalized_to_tools():
@@ -26,3 +27,41 @@ def test_stage_1_3_acceptance_enable_tools_normalized_to_tools():
 
     first = mgr.get_agent_config()
     assert 'tools' in first
+
+
+def test_stage_2_4_multi_agent_stored_in_agents_slots():
+    """阶段 2.4 验收：多 agent 模式下每个 agent 正确存入 self.agents，self.agent 为其中之一。"""
+    # 使用 minimal_multi_agent 配置（含 planning / coding 两个 agent）
+    config_dir = 'configs/minimal_multi_agent'
+
+    class MockSession:
+        is_open = True
+
+    class MockAgent:
+        def set_agent_name(self, name):
+            pass
+
+    class PlaygroundForTest(BasePlayground):
+        def _setup_session(self):
+            self.session = MockSession()
+
+        def _create_agent(
+            self,
+            name,
+            agent_config=None,
+            enable_tools=True,
+            llm_config_dict=None,
+            skill_registry=None,
+            tool_config=None,
+            llm_config=None,
+            skill_config=None,
+        ):
+            return MockAgent()
+
+    pg = PlaygroundForTest(config_dir=config_dir)
+    pg.setup()
+
+    assert 'planning_agent' in pg.agents
+    assert 'coding_agent' in pg.agents
+    assert pg.agent is not None
+    assert pg.agent in (pg.agents['planning_agent'], pg.agents['coding_agent'])
