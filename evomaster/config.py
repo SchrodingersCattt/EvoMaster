@@ -303,6 +303,15 @@ class ConfigManager:
         self._config = EvoMasterConfig(**config_dict)
         return self._config
 
+    @staticmethod
+    def _require_dict(value: Any, field_name: str) -> dict[str, Any]:
+        """确保配置项为字典类型，与上游错误信息一致。"""
+        if not isinstance(value, dict):
+            raise TypeError(
+                f"Config field '{field_name}' must be a dict, got {type(value).__name__}"
+            )
+        return value
+
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置项
 
@@ -339,15 +348,13 @@ class ConfigManager:
             LLM 配置字典
         """
         config = self.load()
-
+        llm_root = self._require_dict(config.llm, 'llm')
         if name is None:
-            name = config.llm.get('default', 'openai')
-
-        llm_config = config.llm.get(name)
+            name = llm_root.get('default', 'openai')
+        llm_config = llm_root.get(name)
         if llm_config is None:
             raise ValueError(f"LLM config '{name}' not found")
-
-        return llm_config
+        return self._require_dict(llm_config, f'llm.{name}')
 
     def get_agent_config(self, name: str) -> dict[str, Any]:
         """获取指定名称的 Agent 配置（与上游一致，必须显式传 name）
@@ -362,9 +369,10 @@ class ConfigManager:
             ValueError: 当 config.agents 中不存在该 name 时
         """
         config = self.load()
-        if name not in config.agents:
-            raise ValueError(f"Agent config '{name}' not found in agents")
-        return config.agents[name]
+        agents = self._require_dict(config.agents, 'agents')
+        if name not in agents:
+            raise ValueError(f"Agent config '{name}' not found")
+        return self._require_dict(agents[name], f'agents.{name}')
 
     def get_agents_config(self) -> dict[str, Any]:
         """获取全部 Agent 配置（v0.0.2 多 agent 配置）
@@ -373,7 +381,12 @@ class ConfigManager:
             agents 字典，key 为 agent 名称，value 为对应配置字典
         """
         config = self.load()
-        return config.agents
+        agents = self._require_dict(config.agents, 'agents')
+        if not agents:
+            raise ValueError(
+                "No agents configuration found. Add 'agents' section to config.yaml"
+            )
+        return agents
 
     def get_agent_llm_config(self, name: str) -> dict[str, Any]:
         """获取指定 agent 所绑定的 LLM 配置
@@ -389,7 +402,8 @@ class ConfigManager:
         agent_config = self.get_agent_config(name)
         llm_name = agent_config.get('llm')
         if llm_name is None:
-            llm_name = self.load().llm.get('default', 'openai')
+            llm_root = self._require_dict(self.load().llm, 'llm')
+            llm_name = llm_root.get('default', 'openai')
         return self.get_llm_config(llm_name)
 
     def get_agent_tools_config(self, name: str) -> dict[str, Any]:
