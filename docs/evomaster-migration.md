@@ -159,7 +159,7 @@
 - **enable_tools 兼容逻辑**：阶段 1.4 已将所有 YAML 改为 `tools:`；本仓无 `_normalize_agent_config_tools()`，`get_agent_tools_config` 仅做缺省与简写（`"default"`/True → builtin `["*"]`），与上游一致。
 - **顶层 `agent`**：**[已完成]** 上游 EvoMaster 仅保留 `agents`，无顶层 `agent` 且未标弃用。本仓已与上游对齐：从 `EvoMasterConfig` 删除 `agent` 字段；BasePlayground / MatMasterPlayground 单 agent 分支已移除，无 `agent` 时直接报错提示使用 `agents: { default: ... }`。无兼容逻辑。
 - **get_agent_config(name)**：**[已完成]** 已改为仅支持 `get_agent_config(name: str)`，移除无参重载及「无参时返回 config.agent 或第一个 agent」的逻辑；调用方（如测试）已改为显式传入 agent 名称。
-- **get_agent_tools_config / get_agent_skills_config**：若上游返回 `ToolConfig` 等强类型，将本仓库的返回类型与默认值改为与上游一致；移除仅为兼容旧配置的简写（若上游无对应简写）。**[未完成]**
+- **get_agent_tools_config / get_agent_skills_config**：**[已完成]** 与上游一致：`get_agent_tools_config` 按上游规则解析（键缺失→默认、None/[]→空、`"default"`→默认、dict 时解析 builtin/mcp 及 `*`→`mcp_config.json`）；`get_agent_skills_config` 返回 `{"skills": list[str]}`，支持 `skills: "*"` 简写；Playground 调用处已改为使用 `skill_config.get("skills", [])` 及传 dict。
 
 ### 其他兼容层
 

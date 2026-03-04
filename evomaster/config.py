@@ -393,48 +393,96 @@ class ConfigManager:
         return self.get_llm_config(llm_name)
 
     def get_agent_tools_config(self, name: str) -> dict[str, Any]:
-        """获取指定 agent 的 tools 配置（v0.0.2 风格）
+        """获取指定 agent 的 tools 配置（与上游一致）
 
-        返回该 agent 配置中的 tools 字段；若缺失则返回默认
-        { "builtin": ["*"], "mcp": "" }。
-
-        Args:
-            name: Agent 名称
-
-        Returns:
-            tools 配置字典（含 builtin、mcp 等）
+        YAML 支持：不配置 / "default" / 空值 / [] / { builtin, mcp }；
+        返回标准化 dict {"builtin": list[str], "mcp": str}，mcp 为空字符串表示不启用。
         """
+        _DEFAULT = {'builtin': ['*'], 'mcp': ''}
+        _EMPTY = {'builtin': [], 'mcp': ''}
+
         agent_config = self.get_agent_config(name)
-        tools = agent_config.get('tools')
-        if tools is None:
-            return {'builtin': ['*'], 'mcp': ''}
-        if isinstance(tools, dict):
-            return tools
-        # 兼容 "tools": "default" 等简写
-        if tools == 'default' or tools is True:
-            return {'builtin': ['*'], 'mcp': ''}
-        return {'builtin': [], 'mcp': ''}
+        if 'tools' not in agent_config:
+            return _DEFAULT.copy()
+        raw_tools = agent_config['tools']
+        if raw_tools is None:
+            return _EMPTY.copy()
+        if isinstance(raw_tools, list) and len(raw_tools) == 0:
+            return _EMPTY.copy()
+        if isinstance(raw_tools, str):
+            if raw_tools == 'default':
+                return _DEFAULT.copy()
+            raise ValueError(
+                f"Config field 'agents.{name}.tools' string value must be 'default', got {raw_tools!r}"
+            )
+        if not isinstance(raw_tools, dict):
+            raise TypeError(
+                f"Config field 'agents.{name}.tools' must be dict, 'default', [], or omitted, "
+                f"got {type(raw_tools).__name__}"
+            )
 
-    def get_agent_skills_config(self, name: str) -> list[str] | Any:
-        """获取指定 agent 的 skills 配置（v0.0.2 风格）
+        raw_builtin = raw_tools.get('builtin')
+        if raw_builtin is None:
+            builtin = ['*']
+        elif isinstance(raw_builtin, str) and raw_builtin == '*':
+            builtin = ['*']
+        elif isinstance(raw_builtin, list) and all(
+            isinstance(s, str) for s in raw_builtin
+        ):
+            builtin = raw_builtin
+        else:
+            raise TypeError(
+                f"Config field 'agents.{name}.tools.builtin' must be list[str] or '*', "
+                f"got {type(raw_builtin).__name__}"
+            )
 
-        返回该 agent 配置中的 skills 字段；若缺失则返回空列表。
+        raw_mcp = raw_tools.get('mcp')
+        if raw_mcp is None:
+            mcp = ''
+        elif isinstance(raw_mcp, str):
+            mcp = 'mcp_config.json' if raw_mcp == '*' else raw_mcp
+        elif isinstance(raw_mcp, list):
+            if len(raw_mcp) == 0:
+                mcp = ''
+            elif raw_mcp == ['*']:
+                mcp = 'mcp_config.json'
+            else:
+                raise ValueError(
+                    f"Config field 'agents.{name}.tools.mcp' list value must be ['*'] or [], got {raw_mcp!r}"
+                )
+        else:
+            raise TypeError(
+                f"Config field 'agents.{name}.tools.mcp' must be str, ['*'], [], or omitted, "
+                f"got {type(raw_mcp).__name__}"
+            )
+        return {'builtin': builtin, 'mcp': mcp}
 
-        Args:
-            name: Agent 名称
+    def get_agent_skills_config(self, name: str) -> dict[str, Any]:
+        """获取指定 agent 的 skills 配置（与上游一致）
 
-        Returns:
-            skills 列表（如 ["rag", "pdf"] 或 ["*"]），或空列表
+        返回标准化 dict {"skills": list[str]}；支持 skills: "*" 简写为 ["*"]。
         """
-        agent_config = self.get_agent_config(name)
-        skills = agent_config.get('skills')
-        if skills is None:
-            return []
-        if isinstance(skills, list):
-            return skills
-        if skills == '*' or skills == ['*']:
-            return ['*']
-        return []
+        agent_cfg = self.get_agent_config(name)
+        if not isinstance(agent_cfg, dict):
+            raise TypeError(
+                f"Agent config '{name}' must be a dict, got {type(agent_cfg).__name__}"
+            )
+        raw_skills = agent_cfg.get('skills')
+        if raw_skills is None:
+            return {'skills': []}
+        if raw_skills == '*':
+            raw_skills = ['*']
+        if not isinstance(raw_skills, list) or not all(
+            isinstance(skill, str) for skill in raw_skills
+        ):
+            raise TypeError(
+                f"Config field 'agents.{name}.skills' must be list[str], '*' or omitted"
+            )
+        if '*' in raw_skills and raw_skills != ['*']:
+            raise ValueError(
+                f"Config field 'agents.{name}.skills' cannot mix '*' with specific skill names"
+            )
+        return {'skills': raw_skills}
 
     def get_session_config(self, session_type: str = 'docker') -> dict[str, Any]:
         """获取 Session 配置
