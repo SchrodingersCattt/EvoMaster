@@ -25,6 +25,7 @@ from src.services.chat_history import ChatHistoryConverter
 from src.services.quota_service import use_quota
 from src.services.sessions_service import SESSIONS, get_sessions_service
 from src.services.user_service import UserService
+from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -488,25 +489,153 @@ class AgentRunService:
                             row = nodes_table.find_one_for_reuse(
                                 user_id_for_ak, org_id, project_id
                             )
+                            expected_image_id = BOHRIUM_DEFAULT_IMAGE_ID
                             if row:
                                 node_id = int(row['node_id'])
+
+                                def _node_image_outdated(
+                                    node_image_id: int | None,
+                                ) -> bool:
+                                    if node_image_id is None:
+                                        return False
+                                    return node_image_id != expected_image_id
+
                                 node_info = node_svc.get_node_info(access_key, node_id)
                                 if node_info and node_info.get('ip'):
-                                    node_ip = node_info.get('ip')
-                                    node_pwd = node_info.get('password')
-                                    logger.info(
-                                        'run_agent_sync: reusing Bohrium node node_id=%s ip=%s',
-                                        node_id,
-                                        node_ip,
-                                    )
+                                    if _node_image_outdated(node_info.get('image_id')):
+                                        logger.info(
+                                            'run_agent_sync: reuse skipped, node image outdated '
+                                            'node_id=%s node_image_id=%s expected=%s, destroy and create new',
+                                            node_id,
+                                            node_info.get('image_id'),
+                                            expected_image_id,
+                                        )
+                                        nodes_table.delete_by_node(
+                                            user_id_for_ak,
+                                            org_id,
+                                            project_id,
+                                            node_id,
+                                        )
+                                        try:
+                                            creator_id = 0
+                                            if user_id_for_ak:
+                                                try:
+                                                    creator_id = int(user_id_for_ak)
+                                                except (TypeError, ValueError):
+                                                    creator_id = 0
+                                            node_svc.destroy_node(
+                                                access_key,
+                                                node_id,
+                                                project_id,
+                                                creator_id=creator_id,
+                                            )
+                                        except Exception as destroy_err:
+                                            logger.warning(
+                                                'run_agent_sync: destroy outdated node_id=%s failed: %s',
+                                                node_id,
+                                                destroy_err,
+                                            )
+                                        node_id = None
+                                        node_info = None
+                                    else:
+                                        node_ip = node_info.get('ip')
+                                        node_pwd = node_info.get('password')
+                                        logger.info(
+                                            'run_agent_sync: reusing Bohrium node node_id=%s ip=%s',
+                                            node_id,
+                                            node_ip,
+                                        )
                                 else:
-                                    nodes_table.delete_by_node(
-                                        user_id_for_ak,
-                                        org_id,
-                                        project_id,
-                                        node_id,
+                                    # 节点存在但未就绪（如已关机）：先查镜像是否与当前一致，不一致则销毁并用新镜像建节点
+                                    node_detail = node_svc.get_node_detail(
+                                        access_key, node_id
                                     )
-                                    node_id = None
+                                    if (
+                                        node_detail is not None
+                                        and _node_image_outdated(
+                                            node_detail.get('image_id')
+                                        )
+                                    ):
+                                        logger.info(
+                                            'run_agent_sync: node image outdated node_id=%s '
+                                            'node_image_id=%s expected=%s, destroy and create new',
+                                            node_id,
+                                            node_detail.get('image_id'),
+                                            expected_image_id,
+                                        )
+                                        nodes_table.delete_by_node(
+                                            user_id_for_ak,
+                                            org_id,
+                                            project_id,
+                                            node_id,
+                                        )
+                                        try:
+                                            creator_id = 0
+                                            if user_id_for_ak:
+                                                try:
+                                                    creator_id = int(user_id_for_ak)
+                                                except (TypeError, ValueError):
+                                                    creator_id = 0
+                                            node_svc.destroy_node(
+                                                access_key,
+                                                node_id,
+                                                project_id,
+                                                creator_id=creator_id,
+                                            )
+                                        except Exception as destroy_err:
+                                            logger.warning(
+                                                'run_agent_sync: destroy outdated node_id=%s failed: %s',
+                                                node_id,
+                                                destroy_err,
+                                            )
+                                        node_id = None
+                                    else:
+                                        # 镜像一致或无法获取镜像：尝试重启
+                                        try:
+                                            creator_id = 0
+                                            if user_id_for_ak:
+                                                try:
+                                                    creator_id = int(user_id_for_ak)
+                                                except (TypeError, ValueError):
+                                                    creator_id = 0
+                                            node_svc.restart_node(
+                                                access_key,
+                                                node_id,
+                                                project_id,
+                                                creator_id=creator_id,
+                                            )
+                                            event_callback(
+                                                'System',
+                                                'bohrium_node',
+                                                {
+                                                    'node_id': node_id,
+                                                    'status': 'created',
+                                                    'message': '节点已重启，正在等待就绪...',
+                                                },
+                                            )
+                                            node_info = node_svc.wait_until_ready(
+                                                access_key, node_id
+                                            )
+                                            node_ip = node_info.get('ip')
+                                            node_pwd = node_info.get('password')
+                                            logger.info(
+                                                'run_agent_sync: restarted Bohrium node node_id=%s ip=%s',
+                                                node_id,
+                                                node_ip,
+                                            )
+                                        except Exception as restart_err:
+                                            logger.warning(
+                                                'run_agent_sync: restart node_id=%s failed, will create new: %s',
+                                                node_id,
+                                                restart_err,
+                                            )
+                                            nodes_table.delete_by_node(
+                                                user_id_for_ak,
+                                                org_id,
+                                                project_id,
+                                                node_id,
+                                            )
+                                            node_id = None
                         if node_id is None or node_ip is None:
                             node_info = node_svc.create_node(access_key, project_id)
                             node_id = node_info.get('node_id')
