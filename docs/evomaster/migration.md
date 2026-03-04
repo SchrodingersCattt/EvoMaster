@@ -173,5 +173,5 @@
 
 ## 与 AGENTS.md 的对应关系
 
-- 本迁移方案与 [AGENTS.md](../AGENTS.md) 中「EvoMaster 上游仓库与本项目的关系」一致：同步/升级上游时按本方案分阶段实施，并参考上游 [v0.0.1 → v0.0.2 迁移指南](https://github.com/sjtu-sai-agents/EvoMaster/blob/main/docs/migration/MIGRATION_GUIDE_v0.0.1_to_v0.0.2.md)。
+- 本迁移方案与 [AGENTS.md](../../AGENTS.md) 中「EvoMaster 上游仓库与本项目的关系」一致：同步/升级上游时按本方案分阶段实施，并参考上游 [v0.0.1 → v0.0.2 迁移指南](https://github.com/sjtu-sai-agents/EvoMaster/blob/main/docs/migration/MIGRATION_GUIDE_v0.0.1_to_v0.0.2.md)。
 - 目标为与上游完全一致时，在阶段 1～4 完成后执行本文档中的「收尾」步骤；当前收尾已完成，差异仅剩设计选择与可选细节。

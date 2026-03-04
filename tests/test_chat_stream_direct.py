@@ -71,17 +71,14 @@ def test_chat_stream_direct_runs_real_agent_and_returns_sse():
     mock_sessions = _mock_sessions_table()
     mock_events = _mock_events_table()
 
+    # 在 dao 层 patch get_*_table，使 sessions/events/agent_run 等所有调用方共用 mock；避免 patch 解析时 src.services 未加载子模块
     patches = [
         patch(
-            'src.services.sessions_service.get_chat_sessions_table',
+            'src.dao.chat_sessions_table.get_chat_sessions_table',
             return_value=mock_sessions,
         ),
         patch(
-            'src.services.agent_run_service.get_chat_events_table',
-            return_value=mock_events,
-        ),
-        patch(
-            'src.services.events_service.get_chat_events_table',
+            'src.dao.chat_events_table.get_chat_events_table',
             return_value=mock_events,
         ),
         patch(
@@ -102,7 +99,7 @@ def test_chat_stream_direct_runs_real_agent_and_returns_sse():
             side_effect=lambda *a, **kw: MockLLM(),
         ),
         patch(
-            'src.services.agent_run_service.get_bohrium_nodes_table',
+            'src.dao.bohrium_nodes_table.get_bohrium_nodes_table',
             return_value=_mock_bohrium_nodes_table(),
         ),
         # 无 Redis 时 record_session_version 会连库超时 ~75s，mock 掉
