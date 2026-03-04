@@ -325,7 +325,7 @@ mcp:
             batch_type: "OpenAPI"
             context_type: "OpenAPI"
             remote_profile:
-              image_address: "registry.dp.tech/dptech/abinit:deve_9.10.3"
+              image_address: "registry.dp.tech/dptech/dp/native/prod-19853/abinit:v9.10.3_pp"
               platform: "ali"
               machine_type: "c32_m128_cpu"
               app_key: "agent"
