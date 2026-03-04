@@ -33,15 +33,16 @@ MATMASTER_TOOLS_SERVER = os.getenv(
     f'https://matmaster-tools-server{_URL_PART}.bohrium.com',
 )
 
-# Bohrium 节点 Open API（创建/列表/删除节点），test 环境走 openapi.test.dp.tech
-BOHRIUM_OPENAPI_BASE_URL = os.getenv(
+# Bohrium Open API 的 host（不含版本路径），请求时拼接 /openapi/v1 或 /openapi/v2
+# 如 https://openapi.test.dp.tech；node 接口用 v1，image 接口用 v2
+BOHRIUM_OPENAPI_HOST = os.getenv(
     'BOHRIUM_BASE_URL',
     (
-        f'https://openapi{_URL_PART}.dp.tech/openapi/v1'
+        f'https://openapi{_URL_PART}.dp.tech'
         if _URL_PART
-        else 'https://open.bohrium.com/openapi/v1'
+        else 'https://open.bohrium.com'
     ),
-)
+).rstrip('/')
 
 # Bohrium Core API（如 ak/list 根据 user_id + org_id 获取 access_key）
 BOHRIUM_CORE_BASE_URL = os.getenv(
@@ -55,7 +56,7 @@ BOHRIUM_CORE_BASE_URL = os.getenv(
 
 # Bohrium 节点默认镜像 ID，按环境区分（创建节点时未指定且无 BOHRIUM_IMAGE_ID 时使用）
 BOHRIUM_ENV_DEFAULT_IMAGE_IDS: dict[str, int] = {
-    'test': 48943,
+    'test': 48944,
     'uat': 1509,
     'prod': 121443,
 }

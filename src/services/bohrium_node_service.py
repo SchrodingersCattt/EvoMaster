@@ -2,7 +2,7 @@
 
 参考 ~/Downloads/start.sh：通过 Open API 创建节点，轮询 list 直到 status=2 就绪，
 run 结束时调用删除接口释放节点。删除接口若与文档不一致，可通过环境变量覆盖。
-base URL 由 constant.py 的 BOHRIUM_OPENAPI_BASE_URL 提供（按 SERVICE_ENV 区分 test/prod）。
+host 由 constant.py 的 BOHRIUM_OPENAPI_HOST 提供（不含 /openapi/v1），请求时拼接版本路径。
 """
 
 import logging
@@ -13,7 +13,7 @@ from typing import Any
 
 import httpx
 
-from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_OPENAPI_BASE_URL
+from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_OPENAPI_HOST
 
 logger = logging.getLogger(__name__)
 
@@ -32,18 +32,8 @@ POLL_TIMEOUT = 600  # 10 分钟
 class BohriumNodeService:
     """Bohrium 节点创建、就绪等待、销毁。"""
 
-    def __init__(
-        self,
-        base_url: str | None = None,
-        node_delete_path: str | None = None,
-    ) -> None:
-        self._base_url = (
-            base_url or os.environ.get('BOHRIUM_BASE_URL') or BOHRIUM_OPENAPI_BASE_URL
-        ).rstrip('/')
-        # 删除接口：node/del/{nodeId}，可设 BOHRIUM_NODE_DELETE_PATH 覆盖（不含 nodeId，如 node/del）
-        self._delete_path = node_delete_path or os.environ.get(
-            'BOHRIUM_NODE_DELETE_PATH', 'node/del'
-        )
+    def __init__(self) -> None:
+        self._host = BOHRIUM_OPENAPI_HOST.rstrip('/')
 
     def create_node(
         self,
@@ -84,7 +74,7 @@ class BohriumNodeService:
         }
         with httpx.Client(timeout=60.0) as client:
             r = client.post(
-                f"{self._base_url}/node/add",
+                f"{self._host}/openapi/v1/node/add",
                 headers={
                     'accessKey': access_key,
                     'content-type': 'application/json',
@@ -120,7 +110,7 @@ class BohriumNodeService:
         with httpx.Client(timeout=30.0) as client:
             while time.monotonic() < deadline:
                 r = client.get(
-                    f"{self._base_url}/node/list",
+                    f"{self._host}/openapi/v1/node/list",
                     params={'queryType': 'private'},
                     headers={'accessKey': access_key},
                 )
@@ -151,13 +141,55 @@ class BohriumNodeService:
         """请求 node/list 返回 items，供 get_node_info / get_node_detail 复用。"""
         with httpx.Client(timeout=30.0) as client:
             r = client.get(
-                f"{self._base_url}/node/list",
+                f"{self._host}/openapi/v1/node/list",
                 params={'queryType': 'private'},
                 headers={'accessKey': access_key},
             )
             r.raise_for_status()
             data = r.json()
         return (data.get('data') or {}).get('items') or []
+
+    def get_image_name_by_id(
+        self,
+        access_key: str,
+        image_id: int,
+        *,
+        name_query: str | None = None,
+    ) -> str | None:
+        """
+        通过 OpenAPI v2 image/private 列表根据镜像 id 解析出镜像名称（name 字段）。
+        用于节点复用校验：node/list 只返回 imageName，用期望的 image_id 查到此 name 后与节点 imageName 比较。
+        """
+        name_query = (
+            name_query or os.environ.get('BOHRIUM_IMAGE_NAME_QUERY', 'matmaster')
+        ).strip() or 'matmaster'
+        url = f"{self._host}/openapi/v2/image/private"
+        params = {
+            'type': 'image',
+            'device': 'container',
+            'current': 1,
+            'pageSize': 50,
+            'page': 1,
+            'name': name_query,
+        }
+        try:
+            with httpx.Client(timeout=30.0) as client:
+                r = client.get(url, params=params, headers={'accessKey': access_key})
+                r.raise_for_status()
+                data = r.json()
+            if data.get('code') != 0:
+                return None
+            items = (data.get('data') or {}).get('items') or []
+            for item in items:
+                if item.get('id') == image_id:
+                    name = item.get('name')
+                    return (
+                        name.strip() if isinstance(name, str) and name.strip() else None
+                    )
+            return None
+        except Exception as e:
+            logger.warning('get_image_name_by_id image_id=%s failed: %s', image_id, e)
+            return None
 
     def get_node_detail(self, access_key: str, node_id: int) -> dict[str, Any] | None:
         """
@@ -174,12 +206,18 @@ class BohriumNodeService:
                         image_id = int(image_id)
                     except (TypeError, ValueError):
                         image_id = None
+                image_name = item.get('imageName') or item.get('image_name')
+                if isinstance(image_name, str):
+                    image_name = image_name.strip() or None
+                else:
+                    image_name = None
                 return {
                     'node_id': node_id,
                     'status': item.get('status'),
                     'ip': item.get('ip'),
                     'password': item.get('nodePwd'),
                     'image_id': image_id,
+                    'image_name': image_name,
                 }
         return None
 
@@ -198,11 +236,17 @@ class BohriumNodeService:
                             image_id = int(image_id)
                         except (TypeError, ValueError):
                             image_id = None
+                    image_name = item.get('imageName') or item.get('image_name')
+                    if isinstance(image_name, str):
+                        image_name = image_name.strip() or None
+                    else:
+                        image_name = None
                     return {
                         'node_id': node_id,
                         'ip': item.get('ip'),
                         'password': item.get('nodePwd'),
                         'image_id': image_id,
+                        'image_name': image_name,
                     }
                 return None
         return None
@@ -240,7 +284,7 @@ class BohriumNodeService:
             'isNotebook': False,
             'datasets': [],
         }
-        url = f"{self._base_url}/node/restart/{node_id}"
+        url = f"{self._host}/openapi/v1/node/restart/{node_id}"
         with httpx.Client(timeout=60.0) as client:
             r = client.post(
                 url,
@@ -271,8 +315,7 @@ class BohriumNodeService:
         """
         销毁节点。POST node/del/{nodeId}，body 含 creatorId（创建者用户 id）、device、projectId。
         """
-        path = self._delete_path.rstrip('/')
-        url = f"{self._base_url}/{path}/{node_id}"
+        url = f"{self._host}/openapi/v1/node/del/{node_id}"
         body = {
             'creatorId': creator_id,
             'device': device,
