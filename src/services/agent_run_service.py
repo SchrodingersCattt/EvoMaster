@@ -771,6 +771,7 @@ class AgentRunService:
                 output_config=base.output_config,
                 config_dir=pg.config_dir,
                 enable_tools=base.enable_tools,
+                enabled_tool_names=getattr(base, 'enabled_tool_names', None),
                 config_dict=config_dict,
             )
             agent.set_agent_name(getattr(base, '_agent_name', 'default'))

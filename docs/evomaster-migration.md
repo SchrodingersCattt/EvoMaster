@@ -21,8 +21,8 @@
 | 阶段 3.3 引用替换 | **已完成** |
 | 阶段 3.4 验收 | **已完成** |
 | 阶段 4.1 MatMaster | 未完成 |
-| 阶段 4.2 minimal_multi_agent / minimal_kaggle | 未完成 |
-| 阶段 4.3 agent_run_service 与 server | 未完成 |
+| 阶段 4.2 minimal_multi_agent / minimal_kaggle | **已完成** |
+| 阶段 4.3 agent_run_service 与 server | **已完成** |
 | 阶段 4.4 验收 | 未完成 |
 | 与上游完全对齐（收尾） | 未完成 |
 
@@ -134,14 +134,14 @@
 - **per-agent skill_config（上游 v0.0.2）**：`_setup_agents` 中按 `get_agent_skills_config(name)` 为每个 agent 生成 skill 子集（`create_subset` 或全量），传入 `_create_agent` 的 `skill_registry`；Agent 的 prompt 中仅展示该 agent 的 skills。配置中无 `skills` 且全局 `skills.enabled` 时仍用全量 registry 兼容。
 - 保留自定义 MCP、SSH、MatMasterSkillRegistry；Exp 从 `self.agent` 取值。
 
-### 4.2 minimal_multi_agent、minimal_kaggle **[进行中]**
+### 4.2 minimal_multi_agent、minimal_kaggle **[已完成]**
 
-- **minimal_multi_agent**：**[已完成]** 已改为调用 `_setup_agents`，并从 `self.agents.get("planning_agent")` / `self.agents.get("coding_agent")` 赋回子类属性，Exp 行为不变。`AgentSlots` 已新增 `get(name, default=None)`。
-- **minimal_kaggle**：**未完成**，仍自行循环 `_create_agent` 并 `setattr(self, name + "_agent", agent)`。若需与 4.2 一致，可同样改为先 `_setup_agents`，再按名从 `self.agents.get("draft_agent")` 等赋回各属性。
+- **minimal_multi_agent**：已改为调用 `_setup_agents`，并从 `self.agents.get("planning_agent")` / `self.agents.get("coding_agent")` 赋回子类属性，Exp 行为不变。
+- **minimal_kaggle**：已改为先校验所需 agent 配置存在，再调用 `_setup_agents(skill_registry)`，然后从 `self.agents.get("draft_agent")` 等赋回 `draft_agent`、`debug_agent`、`improve_agent`、`reseach_agent`、`knowledge_promotion_agent`、`metric_agent`；skills 在 `skills.enabled` 时加载并传入 `_setup_tools` / `_setup_agents`。
 
-### 4.3 agent_run_service 与 server **[未完成]**
+### 4.3 agent_run_service 与 server **[已完成]**
 
-- 克隆或重建 agent 时，不再依赖 `base.enable_tools`，改为使用 `enabled_tool_names` 或从 `tool_config` 推导，保证克隆出的 agent 与配置一致。
+- 克隆 agent 时已传入 `enabled_tool_names=getattr(base, 'enabled_tool_names', None)`，与 base 保持一致：`src/services/agent_run_service.py`、`playground/mat_master/service/server.py` 中构造 `StreamingMatMasterAgent` 时均增加该参数。
 
 ### 4.4 验收 **[未完成]**
 
