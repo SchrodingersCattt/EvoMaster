@@ -26,6 +26,35 @@ from evomaster.skills import SkillRegistry
 from .exp import BaseExp
 
 
+class AgentSlots:
+    """多 Agent 槽位容器，支持 dict 式访问与属性访问（如 self.agents.planning_agent）。"""
+
+    def __init__(self):
+        self._slots: dict[str, object] = {}
+
+    def __setitem__(self, name: str, agent: object) -> None:
+        self._slots[name] = agent
+
+    def __getitem__(self, name: str) -> object:
+        return self._slots[name]
+
+    def __getattr__(self, name: str) -> object:
+        if name.startswith('_'):
+            raise AttributeError(name)
+        if name in self._slots:
+            return self._slots[name]
+        raise AttributeError(f"{type(self).__name__!r} has no attribute {name!r}")
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._slots
+
+    def get_random_agent(self) -> object | None:
+        """返回任意一个已注册的 agent（兼容单 agent 调用方）。"""
+        if not self._slots:
+            return None
+        return next(iter(self._slots.values()))
+
+
 class BasePlayground:
     """Playground 基类
 
@@ -82,6 +111,7 @@ class BasePlayground:
         # 组件存储
         self.session = None
         self.agent = None
+        self.agents = AgentSlots()
         self.tools = None
 
     def _start_loop_in_thread(self) -> threading.Thread:
@@ -448,6 +478,43 @@ class BasePlayground:
 
         return agent
 
+    def _setup_agents(self, skill_registry: SkillRegistry | None = None) -> None:
+        """遍历 config.agents，为每个 agent 创建实例并注册到 self.agents；并设 self.agent 为第一个（兼容）。"""
+        agents_config = self.config_manager.get_agents_config()
+        if not agents_config:
+            return
+        llm_config_dict = (
+            getattr(self, '_llm_config_dict', None) or self._setup_llm_config()
+        )
+        if skill_registry is None:
+            config_dict = self.config.model_dump()
+            skills_config = config_dict.get('skills', {})
+            if skills_config.get('enabled', False):
+                from pathlib import Path
+
+                skills_root = Path(skills_config.get('skills_root', 'evomaster/skills'))
+                skill_registry = SkillRegistry(skills_root)
+        for agent_name, agent_config in agents_config.items():
+            tool_config = self.config_manager.get_agent_tools_config(agent_name)
+            builtin = tool_config.get('builtin', ['*'])
+            enable_tools = bool(builtin)
+            agent = self._create_agent(
+                name=agent_name,
+                agent_config=agent_config,
+                enable_tools=enable_tools,
+                llm_config_dict=llm_config_dict,
+                skill_registry=skill_registry,
+            )
+            slot_name = (
+                f"{agent_name}_agent"
+                if not agent_name.endswith('_agent')
+                else agent_name
+            )
+            self.agents[slot_name] = agent
+            self.logger.info(f"{agent_name.capitalize()} Agent created")
+        self.agent = self.agents.get_random_agent()
+        self.logger.info('Multi-agent playground setup complete')
+
     def setup(self) -> None:
         """初始化所有组件
 
@@ -493,26 +560,12 @@ class BasePlayground:
         # 5. 创建 Agent(s)
         agents_config = getattr(self.config, 'agents', None)
         if agents_config:
-            # 多 agent 模式
             if not isinstance(agents_config, dict) or not agents_config:
                 raise ValueError(
                     "Invalid 'agents' configuration. "
                     'Expected a non-empty dictionary with agent names as keys.'
                 )
-
-            # 创建多个 agent
-            for agent_name, agent_config in agents_config.items():
-                enable_tools = agent_config.get('enable_tools', True)
-                self.agent = self._create_agent(
-                    name=agent_name,
-                    agent_config=agent_config,
-                    enable_tools=enable_tools,
-                    llm_config_dict=llm_config_dict,
-                    skill_registry=skill_registry,  # 传递 skill_registry
-                )
-                self.logger.info(f"{agent_name.capitalize()} Agent created")
-
-            self.logger.info('Multi-agent playground setup complete')
+            self._setup_agents(skill_registry=skill_registry)
         else:
             # 单 agent 模式（向后兼容）
             # skill_registry 已经在上面加载了，这里不需要重复加载
