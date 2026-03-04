@@ -215,8 +215,8 @@
 
 ## 可选：后续可跟进的上游能力
 
-- **并行实验**：ResourceAllocator、`setup_exp_workspace`、`execute_parallel_tasks()` 等，在需要时再引入。
-- **多模态**：TaskInstance.images、`encode_image_to_base64`、`build_multimodal_content` 等，可按需单独合入。
+- **并行实验**：**[已接入]** 已提供 `BasePlayground.setup_exp_workspace(task_id)`、`BasePlayground.execute_parallel_tasks(tasks, max_workers)`（当前串行执行，进程级并行请用 `run.run_tasks_parallel`）。ResourceAllocator 等可按需再引入。
+- **多模态**：**[已接入]** TaskInstance 已增加 `images: list[str]`；BaseExp.run(..., images=...)、Playground.run(..., images=...) 已支持；新增 `evomaster.utils.multimodal`：`encode_image_to_base64`、`build_multimodal_content`；Agent 初始化时根据 task.images 构建多模态 UserMessage（text + image_url 块）；BaseMessage.content 支持 `list[dict]` 多模态块；Dialog.get_messages_for_api() 与 context 计费已支持多模态 content。
 
 ---
 

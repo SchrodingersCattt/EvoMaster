@@ -46,7 +46,7 @@ from evomaster.config import (  # 配置基类; Env 配置; Skill 配置; Tool �
 )
 
 # 从 utils 模块导出工具类和类型
-from evomaster.utils import (  # LLM; Types
+from evomaster.utils import (  # LLM; Types; Multimodal
     AnthropicLLM,
     AssistantMessage,
     BaseLLM,
@@ -66,7 +66,9 @@ from evomaster.utils import (  # LLM; Types
     ToolSpec,
     Trajectory,
     UserMessage,
+    build_multimodal_content,
     create_llm,
+    encode_image_to_base64,
 )
 
 __all__ = [
@@ -98,6 +100,9 @@ __all__ = [
     'BaseTool',
     'ToolRegistry',
     'create_default_registry',
+    # Utils - Multimodal
+    'encode_image_to_base64',
+    'build_multimodal_content',
     # Utils - LLM
     'BaseLLM',
     'LLMConfig',
