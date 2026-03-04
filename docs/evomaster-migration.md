@@ -100,11 +100,12 @@
 
 **目标**：将 KnowledgeSkill / OperatorSkill 统一为 Skill，SkillRegistry 支持按名称过滤与 create_subset；与 v0.0.2 的 Skill 模型对齐。
 
-### 3.1 类型统一（`evomaster/skills/base.py`）**[未完成]**
+### 3.1 类型统一（`evomaster/skills/base.py`）**[已完成]**
 
-- 将 `OperatorSkill` 重命名为 `Skill`（或保留 `OperatorSkill` 作为 `Skill` 的别名以兼容现有 import）。
-- `KnowledgeSkill`：要么合并为 `Skill` 的一种（用属性区分），要么保留为 `Skill` 子类；确保对外 API 逐步收敛到「仅使用 Skill」。
-- `SkillMetaInfo`：移除或弃用 `skill_type` 在配置/序列化中的依赖，与 v0.0.2 行为一致；若内部仍需要区分，可用可选字段或子类。
+- 将 `OperatorSkill` 对外统一为 `Skill`，保留 `OperatorSkill` 作为别名以兼容现有 import（`Skill = OperatorSkill`）。
+- `KnowledgeSkill` 保留为 `BaseSkill` 子类，与 `Skill`（Operator）并列；对外 API 可逐步使用 `Skill` 指代可执行技能。
+- `SkillMetaInfo.skill_type` 改为可选（`str | None`）；解析时 frontmatter 优先，否则用子类 ClassVar，与 v0.0.2 对齐。
+- `evomaster/skills/__init__.py` 已导出 `Skill`。
 
 ### 3.2 SkillRegistry **[未完成]**
 
