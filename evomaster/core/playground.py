@@ -397,20 +397,28 @@ class BasePlayground:
     def _create_agent(
         self,
         name: str,
-        agent_config: dict,
+        agent_config: dict | None = None,
         enable_tools: bool = True,
         llm_config_dict: dict | None = None,
         skill_registry: SkillRegistry | None = None,
+        tool_config: dict | None = None,
+        llm_config: dict | None = None,
+        skill_config: list | None = None,
     ):
         """创建 Agent 实例
 
-        每个 Agent 使用独立的 LLM 实例，确保日志记录独立。
+        支持 v0.0.2 新签名（tool_config/llm_config/skill_config）与旧签名（enable_tools/llm_config_dict）
+        并存：新参数优先，缺省时由旧参数或配置管理器补齐。
 
         Args:
             name: Agent 名称
-            agent_config: Agent 配置字典
-            enable_tools: 是否启用工具调用
-            llm_config_dict: LLM 配置字典（如果为 None，则从配置管理器获取）
+            agent_config: Agent 配置字典，None 时从 get_agent_config(name) 获取
+            enable_tools: 是否启用工具（旧签名）；当 tool_config 提供时由 tool_config 推导覆盖
+            llm_config_dict: LLM 配置字典（旧签名）
+            skill_registry: Skills 注册中心（旧签名）
+            tool_config: 工具配置（新签名），含 builtin/mcp；提供时用于推导 enable_tools
+            llm_config: LLM 配置（新签名），优先于 llm_config_dict
+            skill_config: 本 agent 的 skills 列表（新签名），当前仅占位，未传入 Agent
 
         Returns:
             Agent 实例
@@ -419,19 +427,24 @@ class BasePlayground:
         from evomaster.agent.context import ContextConfig
         from evomaster.utils import LLMConfig, create_llm
 
-        # 提取 Agent 配置
+        if agent_config is None:
+            agent_config = self.config_manager.get_agent_config(name)
+        if llm_config is None:
+            llm_config = llm_config_dict
+        if llm_config is None:
+            llm_config = self.config_manager.get_agent_llm_config(name)
+        if tool_config is not None:
+            builtin = tool_config.get('builtin', ['*'])
+            enable_tools = bool(builtin)
+        _ = skill_config  # 占位，后续 per-agent skills 时使用
+
         max_turns = agent_config.get('max_turns', 20)
         context_config_dict = agent_config.get('context', {})
         context_config = ContextConfig(**context_config_dict)
         agent_cfg = AgentConfig(max_turns=max_turns, context_config=context_config)
 
-        # 获取输出配置
         output_config = self._get_output_config()
-
-        # 为每个 Agent 创建独立的 LLM 实例
-        if llm_config_dict is None:
-            llm_config_dict = self._setup_llm_config()
-        llm = create_llm(LLMConfig(**llm_config_dict), output_config=output_config)
+        llm = create_llm(LLMConfig(**llm_config), output_config=output_config)
         self.logger.debug(f"Created independent LLM instance for {name} agent")
 
         # 获取提示词文件路径
@@ -483,9 +496,6 @@ class BasePlayground:
         agents_config = self.config_manager.get_agents_config()
         if not agents_config:
             return
-        llm_config_dict = (
-            getattr(self, '_llm_config_dict', None) or self._setup_llm_config()
-        )
         if skill_registry is None:
             config_dict = self.config.model_dump()
             skills_config = config_dict.get('skills', {})
@@ -496,13 +506,12 @@ class BasePlayground:
                 skill_registry = SkillRegistry(skills_root)
         for agent_name, agent_config in agents_config.items():
             tool_config = self.config_manager.get_agent_tools_config(agent_name)
-            builtin = tool_config.get('builtin', ['*'])
-            enable_tools = bool(builtin)
+            llm_config = self.config_manager.get_agent_llm_config(agent_name)
             agent = self._create_agent(
                 name=agent_name,
                 agent_config=agent_config,
-                enable_tools=enable_tools,
-                llm_config_dict=llm_config_dict,
+                tool_config=tool_config,
+                llm_config=llm_config,
                 skill_registry=skill_registry,
             )
             slot_name = (
