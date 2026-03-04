@@ -121,6 +121,19 @@ class StreamingMatMasterAgent(MatMasterAgent):
         payload: dict = {'id': msg.tool_call_id, 'name': msg.name, 'result': result}
         # report_url 已在 result 内（agent 写入 observation['report_url']），不再重复写顶层
         self._emit('ToolExecutor', 'tool_result', payload)
+
+        # Model-visible hinting: when webpage tool indicates blocked domains,
+        # emit an extra thought to push the agent to stop retrying and conclude.
+        try:
+            if msg.name == 'extract_info_from_webpage':
+                guidance = None
+                if isinstance(result, dict):
+                    guidance = result.get('web_fetch_guidance')
+                if guidance:
+                    agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
+                    self._emit(agent_name, 'thought', str(guidance))
+        except Exception:
+            pass
         logging.info(
             '[flow] StreamingMatMasterAgent._on_tool_message done name=%s',
             msg.name,
