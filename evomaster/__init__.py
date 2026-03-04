@@ -6,7 +6,7 @@ EvoMaster 是一个用于迭代完成科学实验任务的 Agent 系统，
 核心组件（三层架构）：
 - agent: 智能体（包含 Session、Tools）
 - env: 环境（集群调度、Docker 沙箱）
-- skills: 技能（Knowledge、Operator）
+- skills: 技能（Skill 统一类型，与上游 v0.0.2 一致）
 """
 
 __version__ = '0.1.0'
@@ -26,7 +26,7 @@ from evomaster.agent import (
 )
 
 # 从 config 模块导出配置管理
-from evomaster.config import (  # 配置基类; Env 配置; Skill 配置; Tool 配置（v0.0.2 per-agent）; 日志配置; 顶层配置; 配置管理器
+from evomaster.config import (
     BaseConfig,
     ClusterConfig,
     ClusterPoolConfig,
@@ -34,11 +34,8 @@ from evomaster.config import (  # 配置基类; Env 配置; Skill 配置; Tool �
     DockerEnvConfig,
     EnvConfig,
     EvoMasterConfig,
-    KnowledgeSkillConfig,
     LoggingConfig,
-    OperatorSkillConfig,
     SchedulerConfig,
-    SkillConfig,
     ToolConfig,
     get_config,
     get_config_manager,
@@ -117,9 +114,6 @@ __all__ = [
     'ClusterPoolConfig',
     'DockerEnvConfig',
     'SchedulerConfig',
-    'SkillConfig',
-    'KnowledgeSkillConfig',
-    'OperatorSkillConfig',
     'ToolConfig',
     'LoggingConfig',
     'EvoMasterConfig',

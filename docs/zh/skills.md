@@ -1,56 +1,37 @@
 # Skills 模块
 
-Skills 模块为 EvoMaster 提供技能系统，支持知识和操作能力。
+Skills 模块为 EvoMaster 提供技能系统（与上游 v0.0.2 一致：统一为 **Skill** 类型，不再区分 Knowledge/Operator）。
 
 ## 概述
 
 ```
 evomaster/skills/
-├── base.py           # BaseSkill, SkillRegistry
-├── knowledge/        # Knowledge 技能
-│   └── {skill_name}/
-│       ├── SKILL.md     # 技能定义
-│       └── references/  # 参考文档
-└── rag/              # RAG 操作技能
+├── base.py           # BaseSkill, Skill, SkillRegistry
+├── rag/              # RAG 技能
+│   ├── SKILL.md
+│   ├── scripts/
+│   │   ├── database.py
+│   │   ├── encode.py
+│   │   └── search.py
+│   └── references/
+├── pdf/
+│   └── ...
+└── {skill_name}/     # 每个含 SKILL.md 的子目录被加载为一个 Skill
     ├── SKILL.md
-    ├── scripts/
-    │   ├── database.py
-    │   ├── encode.py
-    │   └── search.py
+    ├── scripts/      # 可选；存在则通过 run_script 暴露
     └── references/
 ```
 
-## 技能类型
-
-EvoMaster 支持两种类型的技能：
-
-### Knowledge Skills
-
-Knowledge 技能只包含信息，没有可执行脚本：
-- **Level 1 (meta_info)**：~100 tokens，始终在上下文中
-- **Level 2 (full_info)**：500-2000 tokens，按需加载
-
-### Operator Skills
-
-Operator 技能包含可执行脚本：
-- **Level 1 (meta_info)**：~100 tokens，始终在上下文中
-- **Level 2 (full_info)**：500-2000 tokens，按需加载
-- **Level 3 (scripts)**：可执行代码，通过工具调用运行
+所有技能均从 **skills_root 的子目录**中加载（含 SKILL.md 即视为一个技能），统一实例化为 **Skill**。
 
 ## SkillMetaInfo
 
-从 SKILL.md frontmatter 解析的元数据。
+从 SKILL.md frontmatter 解析的元数据。无 skill_type 字段（与上游一致）。
 
 ```python
 class SkillMetaInfo(BaseModel):
-    """技能元信息（Level 1）
-
-    从 SKILL.md 的 YAML frontmatter 解析得到。
-    始终在上下文中，帮助 Agent 决定是否使用该技能。
-    """
     name: str = Field(description="技能名称")
     description: str = Field(description="技能描述，包含使用场景")
-    skill_type: str = Field(description="技能类型：knowledge 或 operator")
     license: str | None = Field(default=None, description="许可证信息")
 ```
 
@@ -62,168 +43,52 @@ class SkillMetaInfo(BaseModel):
 class BaseSkill(ABC):
     """技能基类
 
-    Skills 是 EvoMaster 的技能组件，包含：
-    - Level 1 (meta_info)：技能元信息（~100 tokens），始终在上下文
-    - Level 2 (full_info)：完整信息（500-2000 tokens），按需加载
-    - Level 3 (scripts)：可执行代码（仅 Operator 类型）
+    - Level 1 (meta_info)：~100 tokens，始终在上下文
+    - Level 2 (full_info)：500-2000 tokens，按需加载
+    - Level 3 (scripts)：可选；仅 Skill 可有 scripts
     """
-
-    skill_type: ClassVar[str] = "base"
-
-    def __init__(self, skill_path: Path):
-        """初始化 Skill
-
-        Args:
-            skill_path: 技能目录路径
-        """
-
-    def get_full_info(self) -> str:
-        """获取完整信息（Level 2）
-
-        从 SKILL.md body 部分提取，按需加载。
-
-        Returns:
-            完整的技能信息文本
-        """
-
-    def get_reference(self, reference_name: str) -> str:
-        """获取参考文档内容
-
-        Args:
-            reference_name: 参考文档名称（如 "forms.md", "reference/api.md"）
-
-        Returns:
-            参考文档内容
-        """
-
+    def __init__(self, skill_path: Path): ...
+    def get_full_info(self) -> str: ...
+    def get_reference(self, reference_name: str) -> str: ...
     @abstractmethod
-    def to_context_string(self) -> str:
-        """转换为上下文字符串
-
-        返回应该添加到 Agent 上下文中的字符串。
-        """
+    def to_context_string(self) -> str: ...
 ```
 
-## KnowledgeSkill
+## Skill
 
-Knowledge 类型技能实现。
+唯一的具体技能类型（与上游 v0.0.2 一致）。加载出的技能均为 **Skill** 实例。
 
-```python
-class KnowledgeSkill(BaseSkill):
-    """Knowledge 类型 Skill
-
-    只包含知识信息，没有可执行脚本。
-    - Level 1：meta_info（始终在上下文）
-    - Level 2：full_info（按需加载）
-    """
-
-    skill_type: ClassVar[str] = "knowledge"
-
-    def to_context_string(self) -> str:
-        """返回上下文的 meta_info 描述"""
-        return f"[Knowledge: {self.meta_info.name}] {self.meta_info.description}"
-```
-
-## OperatorSkill
-
-Operator 类型技能实现。
+- **Level 1 (meta_info)**：始终在上下文
+- **Level 2 (full_info)**：按需加载（来自 job_submit.md 或 SKILL.md 正文）
+- **Level 3 (scripts)**：可选 `scripts/` 目录；存在则列出脚本，可通过 `use_skill` 的 `run_script` 执行
 
 ```python
-class OperatorSkill(BaseSkill):
-    """Operator 类型 Skill
-
-    包含可执行的操作脚本。
-    - Level 1：meta_info（始终在上下文）
-    - Level 2：full_info（按需加载）
-    - Level 3：scripts（可执行脚本）
-    """
-
-    skill_type: ClassVar[str] = "operator"
-
+class Skill(BaseSkill):
     def __init__(self, skill_path: Path):
         super().__init__(skill_path)
         self.scripts_dir = self.skill_path / "scripts"
         self.available_scripts = self._scan_scripts()
 
-    def _scan_scripts(self) -> list[Path]:
-        """扫描 scripts 目录获取可执行脚本
-
-        Returns:
-            脚本路径列表（.py, .sh, .js）
-        """
-
-    def get_script_path(self, script_name: str) -> Path | None:
-        """按名称获取脚本路径
-
-        Args:
-            script_name: 脚本名称
-
-        Returns:
-            脚本路径，如果不存在则返回 None
-        """
-
+    def get_script_path(self, script_name: str) -> Path | None: ...
     def to_context_string(self) -> str:
-        """返回 meta_info 和可用脚本列表"""
-        scripts_info = ", ".join([s.name for s in self.available_scripts])
-        return f"[Operator: {self.meta_info.name}] {self.meta_info.description} (Scripts: {scripts_info})"
+        # 返回如 "[Skill: rag] ... (Scripts: encode.py, search.py)"
 ```
 
 ## SkillRegistry
 
-管理所有可用技能的注册表。
+从 skills_root 下含 SKILL.md 的子目录加载所有技能；支持按名称过滤与 create_subset。
 
 ```python
 class SkillRegistry:
-    """技能注册中心
+    def __init__(self, skills_root: Path, skills: list[str] | None = None, *, _initial_skills: dict | None = None):
+        """skills_root: 根目录；每个含 SKILL.md 的子目录对应一个 Skill。skills: 可选名称过滤。"""
 
-    管理所有可用的 Skills，支持：
-    - 自动发现和加载
-    - 按需检索
-    - 提供 meta_info 供 Agent 选择
-    """
-
-    def __init__(self, skills_root: Path):
-        """初始化 SkillRegistry
-
-        Args:
-            skills_root: skills 根目录（包含 knowledge/ 和 operator/ 子目录）
-        """
-
-    def get_skill(self, name: str) -> BaseSkill | None:
-        """按名称获取技能
-
-        Args:
-            name: 技能名称
-
-        Returns:
-            Skill 对象，如果不存在则返回 None
-        """
-
-    def get_all_skills(self) -> list[BaseSkill]:
-        """获取所有技能"""
-
-    def get_knowledge_skills(self) -> list[KnowledgeSkill]:
-        """获取所有 Knowledge 技能"""
-
-    def get_operator_skills(self) -> list[OperatorSkill]:
-        """获取所有 Operator 技能"""
-
+    def get_skill(self, name: str) -> BaseSkill | None: ...
+    def get_all_skills(self) -> list[BaseSkill]: ...
+    def create_subset(self, skill_names: list[str]) -> SkillRegistry: ...
     def get_meta_info_context(self) -> str:
-        """获取所有技能的 meta_info，用于添加到 Agent 上下文
-
-        Returns:
-            包含所有技能 meta_info 的字符串
-        """
-
-    def search_skills(self, query: str) -> list[BaseSkill]:
-        """按关键词搜索技能
-
-        Args:
-            query: 搜索关键词
-
-        Returns:
-            匹配的技能列表
-        """
+        """所有技能的 meta_info，供 Agent 上下文使用（单一区块，不再区分 Knowledge/Operator）。"""
+    def search_skills(self, query: str) -> list[BaseSkill]: ...
 ```
 
 ## SKILL.md 格式

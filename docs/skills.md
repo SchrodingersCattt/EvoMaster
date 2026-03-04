@@ -1,229 +1,95 @@
 # Skills Module
 
-The Skills module provides the skill system for EvoMaster, enabling knowledge and operator capabilities.
+The Skills module provides the skill system for EvoMaster (aligned with upstream v0.0.2: single **Skill** type, no Knowledge/Operator split).
 
 ## Overview
 
 ```
 evomaster/skills/
-├── base.py           # BaseSkill, SkillRegistry
-├── knowledge/        # Knowledge skills
-│   └── {skill_name}/
-│       ├── SKILL.md     # Skill definition
-│       └── references/  # Reference documents
-└── rag/              # RAG operator skill
+├── base.py           # BaseSkill, Skill, SkillRegistry
+├── rag/              # RAG skill
+│   ├── SKILL.md
+│   ├── scripts/
+│   │   ├── database.py
+│   │   ├── encode.py
+│   │   └── search.py
+│   └── references/
+├── pdf/
+│   └── ...
+└── {skill_name}/     # Each subdir with SKILL.md is loaded as one Skill
     ├── SKILL.md
-    ├── scripts/
-    │   ├── database.py
-    │   ├── encode.py
-    │   └── search.py
+    ├── scripts/      # Optional; if present, scripts are exposed for run_script
     └── references/
 ```
 
-## Skill Types
-
-EvoMaster supports two types of skills:
-
-### Knowledge Skills
-
-Knowledge skills contain only information, no executable scripts:
-- **Level 1 (meta_info)**: ~100 tokens, always in context
-- **Level 2 (full_info)**: 500-2000 tokens, loaded on demand
-
-### Operator Skills
-
-Operator skills include executable scripts:
-- **Level 1 (meta_info)**: ~100 tokens, always in context
-- **Level 2 (full_info)**: 500-2000 tokens, loaded on demand
-- **Level 3 (scripts)**: Executable code, run via tool call
+Skills are loaded from **subdirectories of `skills_root`** that contain a `SKILL.md` file. Each is instantiated as a **Skill** (same type for all).
 
 ## SkillMetaInfo
 
-Metadata parsed from SKILL.md frontmatter.
+Metadata parsed from SKILL.md frontmatter. No `skill_type` field (aligned with upstream).
 
 ```python
 class SkillMetaInfo(BaseModel):
-    """Skill metadata (Level 1)
-
-    Parsed from SKILL.md YAML frontmatter.
-    Always in context to help Agent decide whether to use the skill.
-    """
     name: str = Field(description="Skill name")
     description: str = Field(description="Skill description with usage scenarios")
-    skill_type: str = Field(description="Skill type: knowledge or operator")
     license: str | None = Field(default=None, description="License info")
 ```
 
 ## BaseSkill
 
-Abstract base class for all skills.
+Abstract base class for skills.
 
 ```python
 class BaseSkill(ABC):
     """Skill base class
 
-    Skills are EvoMaster components containing:
-    - Level 1 (meta_info): Skill metadata (~100 tokens), always in context
-    - Level 2 (full_info): Complete info (500-2000 tokens), loaded on demand
-    - Level 3 (scripts): Executable code (Operator type only)
+    - Level 1 (meta_info): ~100 tokens, always in context
+    - Level 2 (full_info): 500-2000 tokens, loaded on demand
+    - Level 3 (scripts): Optional; only Skill has scripts
     """
 
-    skill_type: ClassVar[str] = "base"
-
-    def __init__(self, skill_path: Path):
-        """Initialize Skill
-
-        Args:
-            skill_path: Skill directory path
-        """
-
-    def get_full_info(self) -> str:
-        """Get complete info (Level 2)
-
-        Extracted from SKILL.md body, loaded on demand.
-
-        Returns:
-            Complete skill info text
-        """
-
-    def get_reference(self, reference_name: str) -> str:
-        """Get reference document content
-
-        Args:
-            reference_name: Reference name (e.g., "forms.md", "reference/api.md")
-
-        Returns:
-            Reference document content
-        """
-
+    def __init__(self, skill_path: Path): ...
+    def get_full_info(self) -> str: ...
+    def get_reference(self, reference_name: str) -> str: ...
     @abstractmethod
-    def to_context_string(self) -> str:
-        """Convert to context string
-
-        Returns string that should be added to Agent context.
-        """
+    def to_context_string(self) -> str: ...
 ```
 
-## KnowledgeSkill
+## Skill
 
-Knowledge type skill implementation.
+Single concrete skill type (aligned with upstream v0.0.2). All loaded skills are **Skill** instances.
 
-```python
-class KnowledgeSkill(BaseSkill):
-    """Knowledge type Skill
-
-    Contains only knowledge info, no executable scripts.
-    - Level 1: meta_info (always in context)
-    - Level 2: full_info (loaded on demand)
-    """
-
-    skill_type: ClassVar[str] = "knowledge"
-
-    def to_context_string(self) -> str:
-        """Returns meta_info description for context"""
-        return f"[Knowledge: {self.meta_info.name}] {self.meta_info.description}"
-```
-
-## OperatorSkill
-
-Operator type skill implementation.
+- **Level 1 (meta_info)**: Always in context
+- **Level 2 (full_info)**: Loaded on demand (from job_submit.md or SKILL.md body)
+- **Level 3 (scripts)**: Optional `scripts/` directory; if present, scripts are listed and runnable via `use_skill` action `run_script`
 
 ```python
-class OperatorSkill(BaseSkill):
-    """Operator type Skill
-
-    Contains executable operation scripts.
-    - Level 1: meta_info (always in context)
-    - Level 2: full_info (loaded on demand)
-    - Level 3: scripts (executable scripts)
-    """
-
-    skill_type: ClassVar[str] = "operator"
-
+class Skill(BaseSkill):
     def __init__(self, skill_path: Path):
         super().__init__(skill_path)
         self.scripts_dir = self.skill_path / "scripts"
         self.available_scripts = self._scan_scripts()
 
-    def _scan_scripts(self) -> list[Path]:
-        """Scan scripts directory for executable scripts
-
-        Returns:
-            List of script paths (.py, .sh, .js)
-        """
-
-    def get_script_path(self, script_name: str) -> Path | None:
-        """Get script path by name
-
-        Args:
-            script_name: Script name
-
-        Returns:
-            Script path, or None if not exists
-        """
-
+    def get_script_path(self, script_name: str) -> Path | None: ...
     def to_context_string(self) -> str:
-        """Returns meta_info with available scripts list"""
-        scripts_info = ", ".join([s.name for s in self.available_scripts])
-        return f"[Operator: {self.meta_info.name}] {self.meta_info.description} (Scripts: {scripts_info})"
+        # Returns e.g. "[Skill: rag] ... (Scripts: encode.py, search.py)"
 ```
 
 ## SkillRegistry
 
-Skill registry for managing all available skills.
+Loads all skills from `skills_root` subdirs that have SKILL.md; supports name filter and `create_subset`.
 
 ```python
 class SkillRegistry:
-    """Skill registry center
+    def __init__(self, skills_root: Path, skills: list[str] | None = None, *, _initial_skills: dict | None = None):
+        """skills_root: root dir; each subdir with SKILL.md becomes one Skill. skills: optional name filter."""
 
-    Manages all available Skills, supporting:
-    - Auto-discovery and loading
-    - On-demand retrieval
-    - Providing meta_info for Agent selection
-    """
-
-    def __init__(self, skills_root: Path):
-        """Initialize SkillRegistry
-
-        Args:
-            skills_root: Skills root directory (contains knowledge/ and operator/ subdirs)
-        """
-
-    def get_skill(self, name: str) -> BaseSkill | None:
-        """Get skill by name
-
-        Args:
-            name: Skill name
-
-        Returns:
-            Skill object, or None if not exists
-        """
-
-    def get_all_skills(self) -> list[BaseSkill]:
-        """Get all skills"""
-
-    def get_knowledge_skills(self) -> list[KnowledgeSkill]:
-        """Get all Knowledge skills"""
-
-    def get_operator_skills(self) -> list[OperatorSkill]:
-        """Get all Operator skills"""
-
+    def get_skill(self, name: str) -> BaseSkill | None: ...
+    def get_all_skills(self) -> list[BaseSkill]: ...
+    def create_subset(self, skill_names: list[str]) -> SkillRegistry: ...
     def get_meta_info_context(self) -> str:
-        """Get all skills' meta_info for Agent context
-
-        Returns:
-            String containing all skills' meta_info
-        """
-
-    def search_skills(self, query: str) -> list[BaseSkill]:
-        """Search skills by keyword
-
-        Args:
-            query: Search keyword
-
-        Returns:
-            List of matching skills
-        """
+        """All skills' meta_info for Agent context (single section, no Knowledge/Operator split)."""
+    def search_skills(self, query: str) -> list[BaseSkill]: ...
 ```
 
 ## SKILL.md Format
