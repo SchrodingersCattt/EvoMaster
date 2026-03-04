@@ -1,225 +1,99 @@
 # EvoMaster
-<p align="center">
-  【<a href="./README.md">English</a> | <a href="./README-zh.md">简体中文</a>】
-</p>
 
-<div align="center">
+[English](README.md) | [简体中文](README-zh.md)
 
-**构建通向自主科研（Autonomous Scientific Research）的通用智能体基座**
-
-*让科学智能体开发更简单、模块化且功能强大，加速“AI for Science”的变革进程。*
-
-[项目介绍](#introduction) • [核心特性](#key-features) • [SciMaster 生态](#scimaster-series) • [路线图](#roadmap)
-
-</div>
+EvoMaster是用于构建科学智能体的框架，提供MCP工具、技能与多智能体协作能力，便于专注领域逻辑。本仓库中的主要应用为**MatMaster**，面向材料科学的智能体，带Web前端。
 
 ---
 
-## 📢代码即将发布
+## MatMaster-Evo
 
-> **注意：** EvoMaster 的源代码正处于发布前的筹备阶段。为了确保最佳的开发体验，我们正在对文档进行最后完善，并对代码逻辑进行优化。请关注我们的 [路线图](#roadmap) 以获取发布时间表。
+MatMaster是面向材料研究的科学智能体，前端为Next.js，后端为FastAPI。开发时通过一键脚本同时启动前后端。
 
----
+### 启动前端调试（前后端一体）
 
-## <a id="introduction"></a>📖 项目介绍
+在项目根目录下执行：
 
-**EvoMaster** 是一个轻量级但功能强大的框架，专为研究人员和开发者设计，旨在助力大家快速构建属于自己的科学智能体（Scientific Agents）。
+```bash
+cd playground/mat_master/
+bash start_dev.sh
+```
 
-尽管大型语言模型（LLMs）已展现出惊人的推理能力，但将其应用于复杂的科学领域往往需要繁琐的工程化工作——包括管理工具调用、技能组合、记忆存储以及多智能体协同等。EvoMaster 正是为了弥合这一差距而生。它提供了一套高度兼容且可扩展的基础设施，通过封装底层的复杂性，让你能专注于解决核心的科学问题。
+然后在浏览器访问`http://<主机>:<FRONTEND_PORT>`（默认`http://127.0.0.1:50004`）。后端API端口为`BACKEND_PORT`（默认`50001`；在Windows/Git Bash下脚本会改用`8000`，除非已设置`BACKEND_PORT`）。
 
-无论你是想构建一个用于规划合成路径的化学家智能体，还是一个用于分析蛋白质结构的生物学家智能体，EvoMaster 都能作为下一代科学发现的基础设施，为你提供坚实支撑。
+### `start_dev.sh`涉及的环境变量
 
-## <a id="key-features"></a>✨ 核心特性
-
-### 1. ♾️ 通用兼容性
-
-EvoMaster 旨在与其他技术实现无缝协作。它支持并适配当前智能体领域的主流技术栈。
-
-* **多智能体协作 (Multi-Agent Collaboration)：** 快速管理多个智能体之间的交互与协作。
-* **工具与技能 (Tool Usage & Skills)：** 原生支持[MCP](https://www.anthropic.com/news/model-context-protocol)工具调用及动态 [技能（Skills）](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview) 加载。
-
-### 2. ⚡ 极速开发
-
-代码复杂度不应成为创新的阻碍。EvoMaster 的设计理念是便携与易用。
-
-* **极简样例代码：** 仅需 **约 100 行代码** 即可启动一个自定义智能体。
-* **模块化设计：** 即插即用的组件设计，让你无需重写核心逻辑即可快速进行定制化开发。
-
-### 3. 🔬 SciMaster 生态系统
-
-无需从零开始。EvoMaster 让你能够直接访问最先进的科学智能体，并将其架构应用到新的领域中。
-
-* **开箱即用：** 快速部署 **[SciMaster](https://scimaster.bohrium.com/chat/)** 系列中的成熟智能体。
-* **领域迁移：** 轻松将成功的SciMaster系列智能体迁移至生物学、材料科学等其他科学领域。
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `BACKEND_PORT` | `50001`（Windows下为`8000`） | 后端FastAPI端口。 |
+| `FRONTEND_PORT` | `50004` | 前端Next.js开发服务端口。 |
+| `PUBLIC_HOST` | 本机IP或`127.0.0.1` | 供前端请求的API/WS所用主机。需从其他机器访问时设置（如`PUBLIC_HOST=your-host.example.com`）。 |
+| `NEXT_PUBLIC_API_URL` | `http://<PUBLIC_HOST>:<BACKEND_PORT>` | 若设置，则前端使用该地址作为API根地址。 |
+| `NEXT_PUBLIC_WS_URL` | `ws://<PUBLIC_HOST>:<BACKEND_PORT>/ws/chat` | 未设置时由脚本根据API地址自动推导。 |
 
 ---
 
-## <a id="scimaster-series"></a>🌌 SciMaster 生态
+## Bohrium鉴权
 
-EvoMaster 是前沿科学智能体 **SciMaster** 背后的驱动引擎。代码发布后，你将能够运行并修改这些业界知名的研究型智能体：
+MatMaster及计算类MCP工具需要Bohrium鉴权。请复制环境变量模板并填写：
 
-| 智能体名称 | 领域 / 专长 | 论文 / 链接 |
-| --- | --- | --- |
-| **ML-Master 2.0** | 自主机器学习 (Autonomous Machine Learning) | [ArXiv:2601.10402](https://arxiv.org/abs/2601.10402) |
-| **ML-Master** | 自主机器学习 (Autonomous Machine Learning) | [ArXiv:2506.16499](https://arxiv.org/abs/2506.16499) |
-| **X-Master** | 通用科学智能体 (General Scientific Agent) | [ArXiv:2507.05241](https://arxiv.org/abs/2507.05241) |
-| **PhysMaster** | 物理研究与推理 (Physics Research & Reasoning) | [ArXiv:2512.19799](https://arxiv.org/abs/2512.19799) |
+```bash
+cp .env.template .env
+```
 
-(更多 SciMaster 系列智能体敬请期待...)
+在`.env`中至少配置：
+
+| 变量 | 说明 |
+|------|------|
+| `BOHRIUM_ACCESS_KEY` | Bohrium访问密钥。控制台路径：**个人中心 → Access Key**（创建或复制）。图示见[Access Key (ak-1, ak-2)](docs/images/ak-1.png)、[ak-2](docs/images/ak-2.png)。 |
+| `BOHRIUM_USER_ID` | 用户ID。控制台路径：**个人中心 → 账号**。图示见[User ID](docs/images/userID.png)。 |
+
+完整使用计算/存储时还可配置：`BOHRIUM_PROJECT_ID`、`BOHRIUM_EMAIL`、`BOHRIUM_PASSWORD`。`SERVICE_ENV`指定Bohrium环境（`prod`/`uat`/`test`），鉴权信息从对应站点获取（如test环境为 https://www.test.bohrium.com/）。
 
 ---
 
-## <a id="roadmap"></a>🗺️ 路线图
-
-我们将分阶段开源 EvoMaster 及其生态系统，以确保代码质量和稳定性。
-
-[ ] **第一阶段：核心框架 (预计时间：2026年2月底)**
-
-* 发布 `EvoMaster` 基础框架代码。
-* 提供基础文档及简易智能体示例。
-
-[ ] **第二阶段：智能体矩阵 (预计时间：2026年3月底)**
-
-* 基于 EvoMaster 开源 **SciMaster 系列**（ML-Master 2.0, PhysMaster 等）的实现代码。
-
-[ ] **第三阶段：Bohrium 工具库 (未来规划)**
-
-* 集成 **[Bohrium Tool Library](https://www.bohrium.com/)**。
-* 原生支持便捷访问托管在 Bohrium 平台上的 **30,000+** 个科学工具和 API。
-
-
-
-## 🏗️ 项目架构
+## 项目结构
 
 ```
 EvoMaster/
-├── evomaster/              # 核心库
-│   ├── agent/              # Agent 组件（Agent, Session, Tools）
-│   ├── core/               # 工作流（Exp, Playground）
-│   ├── env/                # 环境（Docker, Local）
-│   ├── skills/             # 技能系统（Knowledge, Operator）
-│   └── utils/              # 工具（LLM, Types）
-├── playground/             # Playground 实现
-│   ├── minimal/            # 基础单智能体
-│   ├── minimal_kaggle/     # Kaggle 自动化
-│   ├── minimal_multi_agent/# Planning + Coding 多智能体
-│   ├── minimal_skill_task/ # RAG 工作流
-│   └── x_master/           # X-Master 四阶段工作流
-├── configs/                # 配置文件
-└── docs/                   # 文档
+├── evomaster/           # 核心库（agent、session、tools、skills、LLM）
+├── playground/
+│   └── mat_master/      # MatMaster应用（前端 + 服务 + start_dev.sh）
+├── configs/             # 智能体/配置YAML
+└── docs/                # 文档
 ```
 
-## 📚 文档
+---
 
-| 文档 | 描述 |
-|------|------|
-| [架构概述](./docs/zh/architecture.md) | 系统架构和设计 |
-| [Agent 模块](./docs/zh/agent.md) | Agent, Context, Session 接口 |
-| [Core 模块](./docs/zh/core.md) | BaseExp, BasePlayground 接口 |
-| [Tools 模块](./docs/zh/tools.md) | 工具系统和 MCP 集成 |
-| [Skills 模块](./docs/zh/skills.md) | 技能系统接口 |
-| [LLM 模块](./docs/zh/llm.md) | LLM 抽象层 |
+## CLI（可选）
 
-## 🎮 Playgrounds
+不启动Web时，可通过命令行运行智能体。
 
-| Playground | 描述 | 文档 |
-|------------|------|------|
-| `minimal` | 基础单智能体 | [README](./playground/minimal/README_CN.md) |
-| `minimal_kaggle` | Kaggle 竞赛自动化 | [README](./playground/minimal_kaggle/README_CN.md) |
-| `minimal_multi_agent` | Planning + Coding 多智能体 | [README](./playground/minimal_multi_agent/README_CN.md) |
-| `minimal_skill_task` | RAG 分析→搜索→总结工作流 | [README](./playground/minimal_skill_task/README_CN.md) |
-| `x_master` | 四阶段并行工作流 | [README](./playground/x_master/README_CN.md) |
-
-## 🚀 快速开始
-
-### 基本使用
-
-### 使用您的 API Key
-
-打开位于 `configs/[playground name]` 的配置文件并填写相应的空白处。例如，如果您想使用 Deepseek-V3.2 运行 `minimal_multi_agent`，请打开 `configs/minimal_kaggle/deepseek-v3.2-example.yaml` 并修改如下内容：
+**准备：** 安装依赖`pip install -r requirements.txt`（或`uv sync`），并在`.env`或`configs/`下YAML中配置LLM与Bohrium。
 
 ```bash
-  local_sglang:
-    provider: "deepseek"
-    model: "deepseek-v3.2"
-    api_key: "您的API_KEY"
-    base_url: "http://192.168.2.110:18889/v1"
+# 默认智能体与任务
+python run.py --agent minimal --task "你的任务"
 
-```
+# 指定配置
+python run.py --agent minimal --config configs/minimal/config.yaml --task "你的任务"
 
-如果您的模型 API 支持 OpenAI 格式，也可以使用 `openai` 配置。请记得**同时修改**后续 Agent 的 LLM配置。
-
-```bash
-cd EvoMaster
-python run.py --agent minimal --task "你的任务描述"
-```
-
-### 使用自定义配置
-
-```bash
-python run.py --agent minimal --config configs/minimal/config.yaml --task "你的任务描述"
-```
-
-### 从文件读取任务
-
-```bash
+# 从文件读取任务
 python run.py --agent minimal --task task.txt
-```
 
-### 交互模式
-
-```bash
+# 交互模式
 python run.py --agent minimal --interactive
 ```
 
-### 配置您的Bohrium鉴权
-- access key:
-![alt text](docs/images/ak-1.png)
-![alt text](docs/images/ak-2.png)
-
-- User ID:
-![alt text](docs/images/userID.png)
-
-## 📋 示例
-
-### 单智能体（Minimal）
-```bash
-python run.py --agent minimal --config configs/minimal/deepseek-v3.2-example.yaml --task "Discover a pattern: Given sequence 1, 4, 9, 16, 25... find the formula"
-```
-
-### 多智能体系统
-```bash
-python run.py --agent minimal_multi_agent --config configs/minimal_multi_agent/deepseek-v3.2-example.yaml --task "Write a Python program that implements the following features: Read a text file (create a sample file if it doesn't exist). Count the occurrences of each word in the file. Sort the results by frequency in descending order. Save the results to a new file named word_count.txt. Output the top 10 most common words to the terminal."
-```
-
-### X-Master 工作流
-```bash
-python run.py --agent x_master --task "Which condition of Arrhenius's sixth impossibility theorem do critical-level views violate?\n\nAnswer Choices:\nA. Egalitarian Dominance\nB. General Non-Extreme Priority\nC. Non-Elitism\nD. Weak Non-Sadism\nE. Weak Quality Addition"
-```
-
-### Kaggle 自动化
-```bash
-pip install -r playground/minimal_kaggle/requirements.txt
-python run.py --agent minimal_kaggle --config configs/minimal_kaggle/deepseek-v3.2-example.yaml --task playground/minimal_kaggle/data/public/description.md
-```
-
-## 📦 安装
+指定playground配置示例：
 
 ```bash
-# 克隆仓库
-git clone https://github.com/sjtu-sai-agents/EvoMaster.git
-cd EvoMaster
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 在 configs/ 中配置 LLM API 密钥
+python run.py --agent minimal_multi_agent --config configs/minimal_multi_agent/deepseek-v3.2-example.yaml --task "在此描述任务"
 ```
-## 🤝 引用
 
-如果你在研究中使用了 EvoMaster 或 SciMaster 系列智能体，欢迎给我们一个 Star 和引用（BibTeX 将在论文正式发布后更新）。
+---
 
-## 📬 联系方式
+## 链接
 
-* **SciMaster 平台:** [https://scimaster.bohrium.com/chat/](https://scimaster.bohrium.com/chat/)
-* **Bohrium 平台:** [https://www.bohrium.com/](https://www.bohrium.com/)
+- [SciMaster](https://scimaster.bohrium.com/chat/)
+- [Bohrium](https://www.bohrium.com/)
