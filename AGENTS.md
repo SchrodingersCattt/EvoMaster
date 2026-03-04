@@ -96,7 +96,7 @@ import sys  # 不要插在常量或代码中间
 ### 与本仓库直接相关的约定
 
 - **evomaster 目录**：本仓库的 `evomaster/` 来源于上游，但已包含本项目定制（如 `evomaster/adaptors/calculation/`、与 Bohrium/MCP 相关的逻辑）。修改 `evomaster/` 时需注意与上游的差异，避免破坏后续合并或参考上游时的可对照性。
-- **同步/升级上游**：若从上游拉取新特性（如 v0.0.2 的 per-agent 配置、AgentSlots、Skill 统一化等），需参考上游 [v0.0.1 → v0.0.2 迁移指南](https://github.com/sjtu-sai-agents/EvoMaster/blob/main/docs/migration/MIGRATION_GUIDE_v0.0.1_to_v0.0.2.md)。本仓库的**推荐迁移方案**（分阶段、带兼容层）已固化为 [docs/evomaster-migration.md](docs/evomaster-migration.md)。本仓库当前仍使用 `agent`/`agents` 配置、`enable_tools`、`KnowledgeSkill`/`OperatorSkill` 等 v0.0.1 风格，与 v0.0.2 存在配置与 API 差异，升级时按该文档分阶段做兼容或迁移。
+- **同步/升级上游**：若从上游拉取新特性（如 v0.0.2 的 per-agent 配置、AgentSlots、Skill 统一化等），需参考上游 [v0.0.1 → v0.0.2 迁移指南](https://github.com/sjtu-sai-agents/EvoMaster/blob/main/docs/migration/MIGRATION_GUIDE_v0.0.1_to_v0.0.2.md)。本仓库的**推荐迁移方案**（分阶段、带兼容层）已固化为 [docs/evomaster/migration.md](docs/evomaster/migration.md)。本仓库当前仍使用 `agent`/`agents` 配置、`enable_tools`、`KnowledgeSkill`/`OperatorSkill` 等 v0.0.1 风格，与 v0.0.2 存在配置与 API 差异，升级时按该文档分阶段做兼容或迁移。
 - **文档与引用**：涉及 Agent/Playground/Exp、Tools、Skills 等通用行为时，可引用上游 [EvoMaster 文档](https://github.com/sjtu-sai-agents/EvoMaster)（如 architecture、agent、tools、skills）；本仓库特有逻辑（如 MatMaster、calculation path adaptor）以本仓库代码与 AGENTS.md 为准。
 
 ---
