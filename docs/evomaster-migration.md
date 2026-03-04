@@ -187,7 +187,7 @@
 | **ToolConfig 类型** | 顶层 `tools`: `builtin: list[str]`, `mcp: list[str]` | 本仓 ToolConfig 为 `mcp: str`；per-agent 返回 `{"mcp": str}` 与上游一致 | 仅顶层是否存在及 mcp 类型不同，per-agent 解析已对齐。 |
 | **get_agents_config()** | `agents` 为空时 **raise ValueError** | **已对齐**：空时 `raise ValueError("No agents configuration found. Add 'agents' section to config.yaml")`。 | **[已完成]** |
 | **_require_dict** | ConfigManager 有静态方法 `_require_dict`，用于 llm/agents/session 等校验 | **已对齐**：已增加 `_require_dict`，并在 get_llm_config / get_agent_config / get_agents_config 等中使用。 | **[已完成]** |
-| **get_llm_config(None)** | 使用 `_require_dict(config.llm, "llm")` 后取 default | 允许 `name=None`，用 `config.llm.get('default','openai')`，未校验 config.llm 为 dict | 行为一致，仅缺类型校验。 |
+| **get_llm_config(None)** | 使用 `_require_dict(config.llm, "llm")` 后取 default | **已对齐**：get_llm_config 已用 _require_dict 校验 llm / llm.{name}。 | **[已完成]** |
 | **get_skill_config()** | 无 | 有，返回 SkillConfig | 本仓独有，供 skill 相关逻辑使用。 |
 
 ### Playground 层（evomaster/core/playground.py）
@@ -208,7 +208,7 @@
 ### 建议优先对齐（若追求与上游一致）
 
 1. **get_agents_config()**：**[已完成]** agents 为空时 `raise ValueError("No agents configuration found. Add 'agents' section to config.yaml")`。
-2. **ConfigManager._require_dict**：**[已完成]** 已增加静态方法 `_require_dict`，并在 get_llm_config、get_agent_config、get_agents_config、get_agent_llm_config 路径中按需使用，与上游错误信息一致。
+2. **ConfigManager._require_dict**：**[已完成]** 已增加静态方法 `_require_dict`，并在 get_llm_config、get_agent_config、get_agents_config、get_agent_llm_config、**get_session_config** 中按需使用，与上游错误信息一致。
 3. （可选）**setup/tools 模型**：若需“每个 agent 独立 tools 与 MCP”，再考虑改为在 _create_agent 内为每个 agent 调用 _setup_tools，并取消全局单一 self.tools；当前共用一个 self.tools 更省资源，与多数使用方式兼容。**未做，保持现状。**
 
 ---
