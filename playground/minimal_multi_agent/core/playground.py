@@ -94,8 +94,8 @@ class MultiAgentPlayground(BasePlayground):
             skill_registry = SkillRegistry(skills_root)
             self.logger.info(f"Loaded {len(skill_registry.get_all_skills())} skills")
 
-        # 4. 创建工具注册表并初始化 MCP 工具（传入 skill_registry）
-        self._setup_tools(skill_registry)
+        # 4. 初始化 MCP（每 agent 在 _create_agent 内通过 _create_tools_for_agent 获得独立 registry）
+        self._setup_mcp_tools()
 
         # 5. 创建多个 Agent（复用 base._setup_agents，再赋回子类属性供 Exp 使用）
         agents_config = getattr(self.config, 'agents', None)

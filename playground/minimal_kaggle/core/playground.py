@@ -69,7 +69,7 @@ class MinimalKagglePlayground(BasePlayground):
 
             skills_root = Path(skills_config.get('skills_root', 'evomaster/skills'))
             skill_registry = SkillRegistry(skills_root)
-        self._setup_tools(skill_registry)
+        self._setup_mcp_tools()
 
         agents_config = getattr(self.config, 'agents', None)
         if not agents_config or not isinstance(agents_config, dict):

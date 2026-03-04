@@ -11,7 +11,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from evomaster.agent import create_default_registry
+from evomaster.agent import create_registry
 from evomaster.agent.session import (
     BaseSession,
     DockerSession,
@@ -371,19 +371,164 @@ class BasePlayground:
         else:
             self.logger.debug('Session already open, reusing existing session')
 
-    def _setup_tools(self, skill_registry=None) -> None:
-        """创建工具注册表并初始化 MCP 工具（如果配置了）
+    def _create_tools_for_agent(
+        self,
+        skill_registry: SkillRegistry | None,
+        tool_config: dict,
+    ):
+        """为该 agent 创建独立的工具注册表（每 agent 独立 tools，与上游一致）。
 
         Args:
-            skill_registry: 可选的 SkillRegistry 实例，如果提供则注册 SkillTool
-        """
-        # 创建工具注册表（传入 skill_registry）
-        self.tools = create_default_registry(skill_registry)
+            skill_registry: 本 agent 的 Skill 注册中心（子集或全量）
+            tool_config: 本 agent 的 tools 配置，形如 {"builtin": list[str], "mcp": str}
 
-        # 初始化 MCP 工具（如果配置了）
+        Returns:
+            ToolRegistry 实例，供该 agent 独占使用
+        """
+
+        builtin = tool_config.get('builtin', ['*'])
+        registry = create_registry(builtin, skill_registry)
+        if tool_config.get('mcp') and getattr(self, 'mcp_manager', None):
+            self.mcp_manager.register_tools_into(registry)
+        return registry
+
+    def _setup_mcp_tools(self):
+        """初始化 MCP 连接与工具加载，不注册到任何全局 registry（每 agent 在 _create_tools_for_agent 中通过 register_tools_into 注入）。
+
+        Returns:
+            MCPToolManager 实例，若未配置 MCP 则返回 None
+        """
         self.mcp_manager = None
-        if hasattr(self.config, 'mcp') or hasattr(self.config, 'mcp_servers'):
-            self.mcp_manager = self._setup_mcp_tools()
+        if not (hasattr(self.config, 'mcp') or hasattr(self.config, 'mcp_servers')):
+            return None
+        manager = self._init_mcp_manager()
+        self.mcp_manager = manager
+        return manager
+
+    def _init_mcp_manager(self):
+        """创建 MCP 管理器并异步初始化所有服务器；不向任何 ToolRegistry 注册（由各 agent 的 _create_tools_for_agent 按需 register_tools_into）。"""
+        import asyncio
+        import json
+        from pathlib import Path
+
+        from evomaster.agent.tools import MCPToolManager
+
+        mcp_config = getattr(self.config, 'mcp', None)
+        if not mcp_config or not isinstance(mcp_config, dict):
+            return None
+        if not mcp_config.get('enabled', True):
+            self.logger.info('MCP is disabled in config')
+            return None
+
+        config_file = mcp_config.get('config_file', 'mcp_config.json')
+        config_path = Path(config_file)
+        if not config_path.is_absolute():
+            config_path = self.config_manager.config_dir / config_path
+        if not config_path.exists():
+            self.logger.warning(f"MCP config file not found: {config_path}")
+            return None
+
+        self.logger.info(f"Loading MCP config from: {config_path}")
+        try:
+            with open(config_path, encoding='utf-8') as f:
+                mcp_servers_config = json.load(f)
+        except Exception as e:
+            self.logger.error(f"Failed to load MCP config: {e}")
+            return None
+
+        PLACEHOLDER = '__EVOMASTER_WORKSPACES__'
+
+        def _deep_replace(obj, old: str, new: str):
+            if isinstance(obj, str):
+                return obj.replace(old, new)
+            if isinstance(obj, list):
+                return [_deep_replace(x, old, new) for x in obj]
+            if isinstance(obj, dict):
+                return {k: _deep_replace(v, old, new) for k, v in obj.items()}
+            return obj
+
+        try:
+            if self.run_dir is not None:
+                ws_root = str((Path(self.run_dir) / 'workspaces').resolve())
+                mcp_servers_config = _deep_replace(
+                    mcp_servers_config, PLACEHOLDER, ws_root
+                )
+                self.logger.info(f"[MCP] Replaced {PLACEHOLDER} -> {ws_root}")
+        except Exception as e:
+            self.logger.warning(f"[MCP] Failed to replace placeholder paths: {e}")
+
+        servers = self._parse_mcp_servers(mcp_servers_config)
+        if not servers:
+            self.logger.warning('No valid MCP servers found in config')
+            return None
+
+        self.logger.info('Setting up MCP tools...')
+        manager = MCPToolManager()
+        if mcp_config.get('path_adaptor') == 'calculation':
+            from evomaster.adaptors.calculation import get_calculation_path_adaptor
+
+            calc_servers = mcp_config.get('calculation_servers')
+            if calc_servers:
+                manager.path_adaptor_servers = set(calc_servers)
+            else:
+                manager.path_adaptor_servers = {
+                    s.get('name') for s in servers if s.get('name')
+                }
+            manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(
+                mcp_config
+            )
+            self.logger.info(
+                'Path adaptor enabled for servers: %s', manager.path_adaptor_servers
+            )
+
+        async def init_mcp_servers():
+            for server_config in servers:
+                try:
+                    await manager.add_server(**server_config)
+                except Exception as e:
+                    server_name = server_config.get('name', 'unknown')
+                    self.logger.error(
+                        f"Failed to add MCP server {server_name}: {e}",
+                        exc_info=True,
+                    )
+                    sub_exceptions = getattr(e, 'exceptions', None)
+                    if sub_exceptions is not None:
+                        for i, sub in enumerate(sub_exceptions):
+                            tb_str = ''.join(
+                                traceback.format_exception(
+                                    type(sub), sub, getattr(sub, '__traceback__', None)
+                                )
+                            ).strip()
+                            self.logger.error(
+                                f"  MCP sub-exception [{i}]: {type(sub).__name__}: {sub}\n{tb_str}",
+                            )
+                    elif getattr(e, '__cause__', None) is not None:
+                        cause = e.__cause__
+                        tb_str = ''.join(
+                            traceback.format_exception(
+                                type(cause),
+                                cause,
+                                getattr(cause, '__traceback__', None),
+                            )
+                        ).strip()
+                        self.logger.error(
+                            f"  MCP exception cause: {type(cause).__name__}: {cause}\n{tb_str}",
+                        )
+
+        if self._mcp_loop is None or self._mcp_loop.is_closed():
+            self._mcp_loop = asyncio.new_event_loop()
+            self._mcp_thread = self._start_loop_in_thread()
+
+        manager.loop = self._mcp_loop
+        future = asyncio.run_coroutine_threadsafe(init_mcp_servers(), self._mcp_loop)
+        future.result()
+
+        tool_count = len(manager.get_tool_names())
+        server_count = len(manager.get_server_names())
+        self.logger.info(
+            f"MCP manager initialized: {tool_count} tools from {server_count} servers"
+        )
+        return manager
 
     def _get_output_config(self) -> dict:
         """获取 LLM 输出配置
@@ -470,13 +615,12 @@ class BasePlayground:
         # 获取提示词格式化参数（如果有）
         prompt_format_kwargs = agent_config.get('prompt_format_kwargs', {})
 
-        # 创建 Agent
-        # 注意：无论 enable_tools 是什么值，都传递 tools 给 Agent
-        # enable_tools 只控制工具信息是否出现在提示词中；enabled_tool_names 限制暴露给 LLM 的工具子集
+        # 创建 Agent（每 agent 独立 tools registry）
+        tools = self._create_tools_for_agent(skill_registry, tool_config)
         agent = Agent(
             llm=llm,
             session=self.session,
-            tools=self.tools,  # 始终传递 tools，工具始终注册
+            tools=tools,
             system_prompt_file=system_prompt_file,
             user_prompt_file=user_prompt_file,
             prompt_format_kwargs=prompt_format_kwargs,
@@ -587,8 +731,8 @@ class BasePlayground:
             skill_registry = SkillRegistry(skills_root)
             self.logger.info(f"Loaded {len(skill_registry.get_all_skills())} skills")
 
-        # 4. 创建工具注册表并初始化 MCP 工具（传入 skill_registry）
-        self._setup_tools(skill_registry)
+        # 4. 初始化 MCP 连接（每 agent 在 _create_agent 内通过 _create_tools_for_agent 获得独立 registry）
+        self._setup_mcp_tools()
 
         # 5. 创建 Agent(s)
         agents_config = getattr(self.config, 'agents', None)
@@ -744,169 +888,6 @@ class BasePlayground:
         self.logger.info(
             'sync_skills_to_remote: done, remote_project_root=%s', remote_base
         )
-
-    def _setup_mcp_tools(self):
-        """初始化 MCP 工具
-
-        从 MCP 配置文件（JSON 格式）读取服务器列表，初始化连接并注册工具。
-
-        Returns:
-            MCPToolManager 实例，如果配置无效则返回 None
-        """
-        import asyncio
-        import json
-        from pathlib import Path
-
-        from evomaster.agent.tools import MCPToolManager
-
-        # 1. 检查 MCP 配置
-        mcp_config = getattr(self.config, 'mcp', None)
-        if not mcp_config:
-            self.logger.debug('MCP not configured, skipping')
-            return None
-
-        # 2. 检查配置格式
-        if not isinstance(mcp_config, dict):
-            self.logger.error('Invalid MCP config format, expected dict')
-            return None
-
-        # 3. 检查是否启用
-        if not mcp_config.get('enabled', True):
-            self.logger.info('MCP is disabled in config')
-            return None
-
-        # 4. 获取配置文件路径
-        config_file = mcp_config.get('config_file', 'mcp_config.json')
-
-        # 5. 解析配置文件路径
-        config_path = Path(config_file)
-        if not config_path.is_absolute():
-            config_path = self.config_manager.config_dir / config_path
-
-        if not config_path.exists():
-            self.logger.warning(f"MCP config file not found: {config_path}")
-            return None
-
-        # 5. 加载 MCP 配置
-        self.logger.info(f"Loading MCP config from: {config_path}")
-        try:
-            with open(config_path, encoding='utf-8') as f:
-                mcp_servers_config = json.load(f)
-        except Exception as e:
-            self.logger.error(f"Failed to load MCP config: {e}")
-            return None
-
-        # --- PATCH: replace placeholder paths in MCP config (global) ---
-        PLACEHOLDER = '__EVOMASTER_WORKSPACES__'
-
-        def _deep_replace(obj, old: str, new: str):
-            """Recursively replace `old` -> `new` in any string inside dict/list structures."""
-            if isinstance(obj, str):
-                return obj.replace(old, new)
-            if isinstance(obj, list):
-                return [_deep_replace(x, old, new) for x in obj]
-            if isinstance(obj, dict):
-                return {k: _deep_replace(v, old, new) for k, v in obj.items()}
-            return obj
-
-        try:
-            if self.run_dir is not None:
-                ws_root = str((Path(self.run_dir) / 'workspaces').resolve())
-                mcp_servers_config = _deep_replace(
-                    mcp_servers_config, PLACEHOLDER, ws_root
-                )
-                self.logger.info(f"[MCP] Replaced {PLACEHOLDER} -> {ws_root}")
-            else:
-                self.logger.debug(
-                    f"[MCP] run_dir is None, skip placeholder replace: {PLACEHOLDER}"
-                )
-        except Exception as e:
-            self.logger.warning(f"[MCP] Failed to replace placeholder paths: {e}")
-
-        # 6. 解析服务器配置
-        servers = self._parse_mcp_servers(mcp_servers_config)
-        if not servers:
-            self.logger.warning('No valid MCP servers found in config')
-            return None
-
-        # 7. 初始化 MCP 管理器
-        self.logger.info('Setting up MCP tools...')
-        manager = MCPToolManager()
-        if mcp_config.get('path_adaptor') == 'calculation':
-            from evomaster.adaptors.calculation import get_calculation_path_adaptor
-
-            calc_servers = mcp_config.get('calculation_servers')
-            if calc_servers:
-                manager.path_adaptor_servers = set(calc_servers)
-            else:
-                manager.path_adaptor_servers = {
-                    s.get('name') for s in servers if s.get('name')
-                }
-            # Pass mcp_config so adaptor gets calculation_executors (executor template + sync_tools per server)
-            manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(
-                mcp_config
-            )
-            self.logger.info(
-                'Path adaptor enabled for servers: %s', manager.path_adaptor_servers
-            )
-
-        # 8. 异步初始化 MCP 服务器
-        async def init_mcp_servers():
-            for server_config in servers:
-                try:
-                    await manager.add_server(**server_config)
-                except Exception as e:
-                    server_name = server_config.get('name', 'unknown')
-                    self.logger.error(
-                        f"Failed to add MCP server {server_name}: {e}",
-                        exc_info=True,
-                    )
-                    # 展开 TaskGroup/ExceptionGroup 的子异常，便于排查连接失败等根因
-                    sub_exceptions = getattr(e, 'exceptions', None)
-                    if sub_exceptions is not None:
-                        for i, sub in enumerate(sub_exceptions):
-                            tb_str = ''.join(
-                                traceback.format_exception(
-                                    type(sub), sub, getattr(sub, '__traceback__', None)
-                                )
-                            ).strip()
-                            self.logger.error(
-                                f"  MCP sub-exception [{i}]: {type(sub).__name__}: {sub}\n{tb_str}",
-                            )
-                    elif getattr(e, '__cause__', None) is not None:
-                        cause = e.__cause__
-                        tb_str = ''.join(
-                            traceback.format_exception(
-                                type(cause),
-                                cause,
-                                getattr(cause, '__traceback__', None),
-                            )
-                        ).strip()
-                        self.logger.error(
-                            f"  MCP exception cause: {type(cause).__name__}: {cause}\n{tb_str}",
-                        )
-
-        # 创建并保存一个“长期存在”的 loop，专门给 MCP 用
-        if self._mcp_loop is None or self._mcp_loop.is_closed():
-            self._mcp_loop = asyncio.new_event_loop()
-            self._mcp_thread = self._start_loop_in_thread()
-
-        manager.loop = self._mcp_loop
-
-        # ✅ 往 mcp_loop 提交协程
-        future = asyncio.run_coroutine_threadsafe(init_mcp_servers(), self._mcp_loop)
-        future.result()  # 阻塞等待初始化完成（同步代码里只能这么等）
-
-        # 9. 注册 MCP 工具到主工具注册表
-        manager.register_tools(self.tools)
-
-        tool_count = len(manager.get_tool_names())
-        server_count = len(manager.get_server_names())
-        self.logger.info(
-            f"MCP tools setup complete: {tool_count} tools from {server_count} servers"
-        )
-
-        return manager
 
     def _parse_mcp_servers(self, mcp_config: dict) -> list[dict]:
         """解析 MCP 服务器配置
