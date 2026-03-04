@@ -10,7 +10,7 @@
 |------|------|
 | 阶段 1.1 配置模型 | **已完成** |
 | 阶段 1.2 配置兼容（YAML / 加载层） | **已完成** |
-| 阶段 1.3 验收 | 未完成 |
+| 阶段 1.3 验收 | **已完成** |
 | 阶段 1.4 现有 YAML 迁移到 v0.0.2 写法 | 未完成 |
 | 阶段 2 | 未完成 |
 | 阶段 3 | 未完成 |
@@ -42,10 +42,11 @@
 
 - 在配置加载或 getter 中增加一层转换：若某 agent 配置中仅有 `enable_tools: true/false`，则自动转换为 `tools: { builtin: ["*"] }` 或 `tools: { builtin: [] }`，这样现有所有使用 `enable_tools` 的 YAML 无需一次性修改。
 
-### 1.3 验收 **[未完成]**
+### 1.3 验收 **[已完成]**
 
 - 现有 configs 下的 YAML 无需改动即可通过新加载逻辑得到与当前行为一致的配置。
 - 新写的 YAML 可使用 `tools:`、per-agent `skills:` 等 v0.0.2 格式。
+- 验收方式：运行 `pytest tests/test_evomaster_config_migration.py -v`（需 Python ≥3.10）。
 
 ### 1.4 现有 YAML 迁移到 v0.0.2 写法 **[未完成]**
 
