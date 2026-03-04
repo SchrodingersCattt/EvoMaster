@@ -48,6 +48,10 @@ class AgentSlots:
     def __contains__(self, name: str) -> bool:
         return name in self._slots
 
+    def get(self, name: str, default: object = None) -> object:
+        """按名称获取 agent，不存在时返回 default。"""
+        return self._slots.get(name, default)
+
     def get_random_agent(self) -> object | None:
         """返回任意一个已注册的 agent（兼容单 agent 调用方）。"""
         if not self._slots:
@@ -418,7 +422,7 @@ class BasePlayground:
             skill_registry: Skills 注册中心（旧签名）
             tool_config: 工具配置（新签名），含 builtin/mcp；提供时用于推导 enable_tools
             llm_config: LLM 配置（新签名），优先于 llm_config_dict
-            skill_config: 本 agent 的 skills 列表（新签名），当前仅占位，未传入 Agent
+            skill_config: 本 agent 的 skills 列表（新签名）；由 _setup_agents 按此生成 per-agent skill_registry 并传入
 
         Returns:
             Agent 实例
@@ -441,7 +445,7 @@ class BasePlayground:
                 enabled_tool_names = None  # 全部暴露
             else:
                 enabled_tool_names = list(builtin)
-        _ = skill_config  # 占位，后续 per-agent skills 时使用
+        # skill_config 已在 _setup_agents 中用于生成 per-agent skill_registry，此处传入的 skill_registry 即子集或全量
 
         max_turns = agent_config.get('max_turns', 20)
         context_config_dict = agent_config.get('context', {})
@@ -498,13 +502,13 @@ class BasePlayground:
         return agent
 
     def _setup_agents(self, skill_registry: SkillRegistry | None = None) -> None:
-        """遍历 config.agents，为每个 agent 创建实例并注册到 self.agents；并设 self.agent 为第一个（兼容）。"""
+        """遍历 config.agents，为每个 agent 创建实例并注册到 self.agents；per-agent skill_config 决定该 agent 的 skill 子集（上游 v0.0.2）。"""
         agents_config = self.config_manager.get_agents_config()
         if not agents_config:
             return
+        config_dict = self.config.model_dump()
+        skills_config = config_dict.get('skills', {})
         if skill_registry is None:
-            config_dict = self.config.model_dump()
-            skills_config = config_dict.get('skills', {})
             if skills_config.get('enabled', False):
                 from pathlib import Path
 
@@ -513,12 +517,25 @@ class BasePlayground:
         for agent_name, agent_config in agents_config.items():
             tool_config = self.config_manager.get_agent_tools_config(agent_name)
             llm_config = self.config_manager.get_agent_llm_config(agent_name)
+            skill_config = self.config_manager.get_agent_skills_config(agent_name)
+            # per-agent skill（上游 v0.0.2）：有 skill_config 时用子集或全量；无配置但全局 enabled 时用全量
+            agent_skill_registry: SkillRegistry | None = None
+            if skill_registry is not None:
+                if skill_config:
+                    agent_skill_registry = (
+                        skill_registry
+                        if '*' in skill_config
+                        else skill_registry.create_subset(skill_config)
+                    )
+                elif skills_config.get('enabled', False):
+                    agent_skill_registry = skill_registry
             agent = self._create_agent(
                 name=agent_name,
                 agent_config=agent_config,
                 tool_config=tool_config,
                 llm_config=llm_config,
-                skill_registry=skill_registry,
+                skill_config=skill_config,
+                skill_registry=agent_skill_registry,
             )
             slot_name = (
                 f"{agent_name}_agent"
@@ -555,12 +572,20 @@ class BasePlayground:
         # 2. 创建 Session（如果尚未创建）
         self._setup_session()
 
-        # 3. 加载 Skills（如果启用）- 在多 agent 和单 agent 模式下都需要
+        # 3. 加载 Skills（全局启用或任意 agent 配置了 skills 时加载全量 registry，供 per-agent 子集用）
         skill_registry = None
         config_dict = self.config.model_dump()
         skills_config = config_dict.get('skills', {})
-        if skills_config.get('enabled', False):
-            self.logger.info('Skills enabled, loading skill registry...')
+        agents_config_for_skills = self.config_manager.get_agents_config() or {}
+        need_skills = skills_config.get('enabled', False) or (
+            bool(agents_config_for_skills)
+            and any(
+                self.config_manager.get_agent_skills_config(name)
+                for name in agents_config_for_skills
+            )
+        )
+        if need_skills:
+            self.logger.info('Loading skill registry (global or per-agent skills)...')
             from pathlib import Path
 
             from evomaster.skills import SkillRegistry

@@ -127,16 +127,17 @@
 
 **目标**：MatMaster、minimal_multi_agent、minimal_kaggle 等改用 `self.agents` 与新区配置；agent_run_service / server 中克隆 agent 时使用 `enabled_tool_names` 或 `tool_config`。
 
-### 4.1 MatMaster（`playground/mat_master/`）**[进行中]**
+### 4.1 MatMaster（`playground/mat_master/`）**[已完成]**
 
-- 多 agent 时已改为调用 `_setup_agents(skill_registry)`，由 base 填充 `self.agents` 并设 `self.agent`，不再在子类中循环覆盖 `self.agent`。
-- `_create_agent` 已支持基类新签名：`tool_config`、`llm_config`；由 `tool_config` 推导 `enable_tools` 与 `enabled_tool_names`，并传入 `MatMasterAgent`。
-- 保留自定义 MCP、SSH、MatMasterSkillRegistry；Exp 仍从 `self.agent` 取值（与 base 兼容）。
+- 多 agent 时已改为调用 `_setup_agents(skill_registry)`，由 base 填充 `self.agents` 并设 `self.agent`。
+- `_create_agent` 已支持 `tool_config`、`llm_config`、`skill_config`，并推导 `enable_tools`、`enabled_tool_names` 传入 `MatMasterAgent`。
+- **per-agent skill_config（上游 v0.0.2）**：`_setup_agents` 中按 `get_agent_skills_config(name)` 为每个 agent 生成 skill 子集（`create_subset` 或全量），传入 `_create_agent` 的 `skill_registry`；Agent 的 prompt 中仅展示该 agent 的 skills。配置中无 `skills` 且全局 `skills.enabled` 时仍用全量 registry 兼容。
+- 保留自定义 MCP、SSH、MatMasterSkillRegistry；Exp 从 `self.agent` 取值。
 
-### 4.2 minimal_multi_agent、minimal_kaggle **[未完成]**
+### 4.2 minimal_multi_agent、minimal_kaggle **[进行中]**
 
-- 从「子类自己维护多个 agent 属性（如 planning_agent、coding_agent）」改为使用 `self.agents` 的槽位；或短期在 BasePlayground 的 `_setup_agents()` 中同时填充 `self.agents` 与子类期望的 `self.planning_agent` 等，做过渡兼容。
-- Exp 中改为从 `self.agents.planning_agent`、`self.agents.coding_agent` 等取值，或保持现有属性名但由 base 在 setup 时统一赋值。
+- **minimal_multi_agent**：**[已完成]** 已改为调用 `_setup_agents`，并从 `self.agents.get("planning_agent")` / `self.agents.get("coding_agent")` 赋回子类属性，Exp 行为不变。`AgentSlots` 已新增 `get(name, default=None)`。
+- **minimal_kaggle**：**未完成**，仍自行循环 `_create_agent` 并 `setattr(self, name + "_agent", agent)`。若需与 4.2 一致，可同样改为先 `_setup_agents`，再按名从 `self.agents.get("draft_agent")` 等赋回各属性。
 
 ### 4.3 agent_run_service 与 server **[未完成]**
 
