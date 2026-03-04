@@ -81,6 +81,26 @@ import sys  # 不要插在常量或代码中间
 
 ---
 
+## EvoMaster 上游仓库与本项目的关系
+
+**EvoMaster**（[sjtu-sai-agents/EvoMaster](https://github.com/sjtu-sai-agents/EvoMaster)）是科学计算 Agent 的通用基础设施框架（SciMaster 系列背后的引擎）。本仓库（matmaster-evo）在**嵌入/复刻**其核心库的基础上，增加了 MatMaster 业务 Playground、Bohrium 集成与 MCP calculation 适配等。
+
+### 角色与版本
+
+| 维度 | 本项目（matmaster-evo） | EvoMaster 上游 |
+|------|-------------------------|----------------|
+| 定位 | 下游应用：基于 EvoMaster 的 evomaster 核心 + 自研 playground、服务端、MCP 适配 | 上游框架：Agent/Playground/Exp、Tools、Skills、Session 等通用实现 |
+| 当前基于版本 | v0.0.1 架构与 API | 上游已发布 v0.0.2（配置与多 Agent 等有较大变更） |
+| 代码对应 | 项目内 `evomaster/` 目录对应上游的 `evomaster/`；本仓库另有 `playground/mat_master/`、`src/`、`evomaster/adaptors/` 等自有代码 | 上游 `evomaster/` + `playground/minimal*`、`playground/x_master` 等 |
+
+### 与本仓库直接相关的约定
+
+- **evomaster 目录**：本仓库的 `evomaster/` 来源于上游，但已包含本项目定制（如 `evomaster/adaptors/calculation/`、与 Bohrium/MCP 相关的逻辑）。修改 `evomaster/` 时需注意与上游的差异，避免破坏后续合并或参考上游时的可对照性。
+- **同步/升级上游**：若从上游拉取新特性（如 v0.0.2 的 per-agent 配置、AgentSlots、Skill 统一化等），需参考上游 [v0.0.1 → v0.0.2 迁移指南](https://github.com/sjtu-sai-agents/EvoMaster/blob/main/docs/migration/MIGRATION_GUIDE_v0.0.1_to_v0.0.2.md)。本仓库的**推荐迁移方案**（分阶段、带兼容层）已固化为 [docs/evomaster-migration.md](docs/evomaster-migration.md)。本仓库当前仍使用 `agent`/`agents` 配置、`enable_tools`、`KnowledgeSkill`/`OperatorSkill` 等 v0.0.1 风格，与 v0.0.2 存在配置与 API 差异，升级时按该文档分阶段做兼容或迁移。
+- **文档与引用**：涉及 Agent/Playground/Exp、Tools、Skills 等通用行为时，可引用上游 [EvoMaster 文档](https://github.com/sjtu-sai-agents/EvoMaster)（如 architecture、agent、tools、skills）；本仓库特有逻辑（如 MatMaster、calculation path adaptor）以本仓库代码与 AGENTS.md 为准。
+
+---
+
 ## 其他约定
 
 - **维护本文件**：在对话或开发过程中，若产生新的、值得固化的约定或逻辑（如架构决策、命名/用法约定、废弃说明等），应适时补充到 AGENTS.md，便于后续遵守。
