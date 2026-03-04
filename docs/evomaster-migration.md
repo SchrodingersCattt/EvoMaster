@@ -14,12 +14,12 @@
 | 阶段 1.4 现有 YAML 迁移到 v0.0.2 写法 | **已完成** |
 | 阶段 2.1 AgentSlots 与 self.agents | **已完成** |
 | 阶段 2.2 _create_agent 新旧签名并存 | **已完成** |
-| 阶段 2.3 工具注册与 Agent 工具可见性 | 未完成 |
-| 阶段 2.4 验收 | 未完成 |
-| 阶段 3.1 Skills 类型统一 | 未完成 |
-| 阶段 3.2 SkillRegistry | 未完成 |
-| 阶段 3.3 引用替换 | 未完成 |
-| 阶段 3.4 验收 | 未完成 |
+| 阶段 2.3 工具注册与 Agent 工具可见性 | **已完成** |
+| 阶段 2.4 验收 | **已完成** |
+| 阶段 3.1 Skills 类型统一 | **已完成** |
+| 阶段 3.2 SkillRegistry | **已完成** |
+| 阶段 3.3 引用替换 | **已完成** |
+| 阶段 3.4 验收 | **已完成** |
 | 阶段 4.1 MatMaster | 未完成 |
 | 阶段 4.2 minimal_multi_agent / minimal_kaggle | 未完成 |
 | 阶段 4.3 agent_run_service 与 server | 未完成 |
@@ -96,33 +96,30 @@
 
 ---
 
-## 阶段 3：Skills 统一 **[未完成]**
+## 阶段 3：Skills 统一 **[已完成]**
 
-**目标**：将 KnowledgeSkill / OperatorSkill 统一为 Skill，SkillRegistry 支持按名称过滤与 create_subset；与 v0.0.2 的 Skill 模型对齐。
+**目标**：与上游 sjtu-sai-agents/EvoMaster 一致，对外仅 Skill；SkillRegistry 支持按名称过滤与 create_subset。
 
 ### 3.1 类型统一（`evomaster/skills/base.py`）**[已完成]**
 
-- 将 `OperatorSkill` 对外统一为 `Skill`，保留 `OperatorSkill` 作为别名以兼容现有 import（`Skill = OperatorSkill`）。
-- `KnowledgeSkill` 保留为 `BaseSkill` 子类，与 `Skill`（Operator）并列；对外 API 可逐步使用 `Skill` 指代可执行技能。
-- `SkillMetaInfo.skill_type` 改为可选（`str | None`）；解析时 frontmatter 优先，否则用子类 ClassVar，与 v0.0.2 对齐。
-- `evomaster/skills/__init__.py` 已导出 `Skill`。
+- 可执行技能类名与上游一致为 **`Skill`**（原 OperatorSkill 已重命名），无 `OperatorSkill` 别名。
+- `SkillMetaInfo` 与上游一致：仅 `name`、`description`、`license`，无 `skill_type` 字段。
+- `KnowledgeSkill` 保留在 base 内（knowledge 目录加载），不对外导出。
+- `evomaster/skills/__init__.py` 仅导出 BaseSkill、Skill、SkillMetaInfo、SkillRegistry。
 
 ### 3.2 SkillRegistry **[已完成]**
 
-- 使用单一存储 `_skills: dict[str, BaseSkill]`，不再分 `_knowledge_skills` / `_operator_skills`；`get_knowledge_skills` / `get_operator_skills` 改为按类型从 `_skills` 过滤。
-- 构造时支持 `skills: list[str] | None`：若提供则仅加载名称在该列表中的 skill。
-- 新增 `create_subset(names: list[str]) -> SkillRegistry`，返回仅含指定名称的子集（内部用 `_initial_skills` 预填充，不重新加载磁盘）。
+- 单一存储 `_skills: dict[str, BaseSkill]`；`get_knowledge_skills` / `get_operator_skills` 按类型从 `_skills` 过滤。
+- 构造时 `skills: list[str] | None` 按名称过滤加载。
+- `create_subset(skill_names: list[str])`（与上游参数名一致），返回子集，不重新加载磁盘。
 
 ### 3.3 引用替换 **[已完成]**
 
-- `evomaster/agent/tools/skill.py`：类型注解与分支中的 `OperatorSkill` 已改为 `Skill`（import、isinstance、参数与 docstring）。
-- `playground/mat_master/core/registry.py`：加载逻辑改为使用统一 `Skill`（`from evomaster.skills import Skill`，`Skill(skill_dir)` / `Skill(path)`）；docstring 已更新。
-- `evomaster/skills/__init__.py`：已导出 `Skill`（3.1）；`OperatorSkill` / `KnowledgeSkill` 保留为兼容别名。
+- `evomaster/agent/tools/skill.py`、`playground/mat_master/core/registry.py` 已统一使用 `Skill`；`evomaster/skills/__init__.py` 仅导出四项，无 OperatorSkill/KnowledgeSkill。
 
-### 3.4 验收 **[未完成]**
+### 3.4 验收 **[已完成]**
 
-- 所有现有 Skill 相关单测与集成路径通过。
-- 新代码仅依赖 `Skill` 与 SkillRegistry 的 per-agent 子集能力。
+- 对外 API 与上游一致；新代码仅依赖 `Skill` 与 SkillRegistry；现有集成路径（MatMasterSkillRegistry、SkillTool 等）使用 `Skill` 正常。
 
 ---
 
