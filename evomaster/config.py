@@ -106,42 +106,6 @@ class EnvConfig(BaseConfig):
 
 
 # ============================================
-# Skill 配置
-# ============================================
-
-
-class KnowledgeSkillConfig(BaseConfig):
-    """Knowledge Skill 配置"""
-
-    retrieval: dict[str, Any] = Field(
-        default_factory=lambda: {
-            'enabled': True,
-            'embedding_model': 'text-embedding-ada-002',
-            'top_k': 5,
-            'similarity_threshold': 0.7,
-        },
-        description='检索配置',
-    )
-
-
-class OperatorSkillConfig(BaseConfig):
-    """Operator Skill 配置"""
-
-    load_meta_info: bool = Field(default=True, description='是否加载 meta_info')
-    lazy_load_full_info: bool = Field(
-        default=True, description='是否延迟加载 full_info'
-    )
-
-
-class SkillConfig(BaseConfig):
-    """Skill 配置"""
-
-    skill_dir: str = Field(default='./evomaster/skills', description='Skill 目录')
-    knowledge: KnowledgeSkillConfig = Field(default_factory=KnowledgeSkillConfig)
-    operator: OperatorSkillConfig = Field(default_factory=OperatorSkillConfig)
-
-
-# ============================================
 # Tool 配置（v0.0.2 风格）
 # ============================================
 
@@ -213,9 +177,6 @@ class EvoMasterConfig(BaseConfig):
         default_factory=ToolConfig,
         description='Tools 配置（builtin/mcp 列表）',
     )
-
-    # Skill 配置
-    skill: SkillConfig = Field(default_factory=SkillConfig, description='Skill 配置')
 
     # Skills 加载（Playground 用：enabled=true 时加载 SkillRegistry，skills_root 为技能目录）
     skills: dict[str, Any] = Field(
@@ -531,15 +492,6 @@ class ConfigManager:
         """
         config = self.load()
         return config.env
-
-    def get_skill_config(self) -> SkillConfig:
-        """获取 Skill 配置
-
-        Returns:
-            Skill 配置对象
-        """
-        config = self.load()
-        return config.skill
 
     def get_logging_config(self) -> LoggingConfig:
         """获取日志配置
