@@ -145,6 +145,14 @@ Open the config file at `configs/[playground name]` and fill in the correspondin
 ```
 You can also use the `openai` config if your API supports OpenAI's format. Remember to modify the llm configuration of the following Agent at the same time
 
+### Configure your Bohrium Auth
+- How to get your access key:
+![alt text](docs/images/ak-1.png)
+![alt text](docs/images/ak-2.png)
+
+- How to get your user ID:
+![alt text](docs/images/userID.png)
+
 ### Basic Usage
 
 ```bash
