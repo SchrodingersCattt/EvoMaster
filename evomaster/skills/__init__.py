@@ -1,19 +1,17 @@
 """EvoMaster Skills 模块
 
-Skills 是 EvoMaster 的技能组件，包含：
-- Knowledge Skill: 知识技能（只有 meta_info 和 full_info 两个层级）
-- Operator Skill / Skill: 操作技能（有 meta_info、full_info、tool 源码三个层级），v0.0.2 对外统一使用 Skill
+与上游 sjtu-sai-agents/EvoMaster 一致：
+- 仅导出 BaseSkill、Skill、SkillMetaInfo、SkillRegistry
+- 类名 Skill（可执行技能）、SkillMetaInfo 无 skill_type 字段、create_subset(skill_names)
 
 技能层级：
 1. 第一层级 meta_info: 技能元信息
 2. 第二层级 full_info: 完整信息
-3. 第三层级 tool: 工具源码（仅 Operator/Skill）
+3. 第三层级 scripts: 可执行脚本
 """
 
 from .base import (
     BaseSkill,
-    KnowledgeSkill,
-    OperatorSkill,
     Skill,
     SkillMetaInfo,
     SkillRegistry,
@@ -21,8 +19,6 @@ from .base import (
 
 __all__ = [
     'BaseSkill',
-    'KnowledgeSkill',
-    'OperatorSkill',
     'Skill',
     'SkillMetaInfo',
     'SkillRegistry',

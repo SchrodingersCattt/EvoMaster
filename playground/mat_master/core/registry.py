@@ -28,7 +28,7 @@ class MatMasterSkillRegistry:
 
     - core_registry: SkillRegistry(evomaster/skills) or similar.
     - dynamic_root: optional Path for playground/mat_master/skills/dynamic/.
-      If set, we load OperatorSkill from each subdir with SKILL.md and
+      If set, we load Skill from each subdir with SKILL.md and
       merge with core for get_skill / get_all_skills / get_meta_info_context.
     - user_skills_root: optional Path to the user's personal skill library
       (e.g. ~/.evomaster-skills). Loaded at startup; survives across sessions.
@@ -57,20 +57,20 @@ class MatMasterSkillRegistry:
             self._load_skills_from(self.dynamic_root, self._dynamic_skills)
 
     def _load_skills_from(self, root: Path, out: dict) -> None:
-        """Load OperatorSkill from each subdir of root that has SKILL.md into out."""
-        from evomaster.skills import OperatorSkill
+        """Load Skill from each subdir of root that has SKILL.md into out."""
+        from evomaster.skills import Skill
 
         for skill_dir in root.iterdir():
             if not skill_dir.is_dir():
                 continue
-            if not (skill_dir / "SKILL.md").exists():
+            if not (skill_dir / 'SKILL.md').exists():
                 continue
             try:
-                skill = OperatorSkill(skill_dir)
+                skill = Skill(skill_dir)
                 out[skill.meta_info.name] = skill
-                self.logger.info("Loaded skill: %s", skill.meta_info.name)
+                self.logger.info('Loaded skill: %s', skill.meta_info.name)
             except Exception as e:
-                self.logger.warning("Failed to load skill from %s: %s", skill_dir, e)
+                self.logger.warning('Failed to load skill from %s: %s', skill_dir, e)
 
     def register_dynamic_skill(self, skill_path: Path) -> bool:
         """Load one skill from skill_path and add to dynamic layer.
@@ -78,19 +78,19 @@ class MatMasterSkillRegistry:
         Call after SkillEvolutionExp writes a new skill to disk.
         Returns True if loaded successfully.
         """
-        from evomaster.skills import OperatorSkill
+        from evomaster.skills import Skill
 
         path = Path(skill_path)
-        if not (path / "SKILL.md").exists():
-            self.logger.warning("No SKILL.md at %s", path)
+        if not (path / 'SKILL.md').exists():
+            self.logger.warning('No SKILL.md at %s', path)
             return False
         try:
-            skill = OperatorSkill(path)
+            skill = Skill(path)
             self._dynamic_skills[skill.meta_info.name] = skill
-            self.logger.info("Registered dynamic skill: %s", skill.meta_info.name)
+            self.logger.info('Registered dynamic skill: %s', skill.meta_info.name)
             return True
         except Exception as e:
-            self.logger.warning("Failed to register dynamic skill from %s: %s", path, e)
+            self.logger.warning('Failed to register dynamic skill from %s: %s', path, e)
             return False
 
     def register_user_skill(self, skill_path: Path) -> bool:
@@ -100,19 +100,19 @@ class MatMasterSkillRegistry:
         immediately available this session without a restart.
         Returns True if loaded successfully.
         """
-        from evomaster.skills import OperatorSkill
+        from evomaster.skills import Skill
 
         path = Path(skill_path)
-        if not (path / "SKILL.md").exists():
-            self.logger.warning("No SKILL.md at %s", path)
+        if not (path / 'SKILL.md').exists():
+            self.logger.warning('No SKILL.md at %s', path)
             return False
         try:
-            skill = OperatorSkill(path)
+            skill = Skill(path)
             self._user_skills[skill.meta_info.name] = skill
-            self.logger.info("Registered user skill: %s", skill.meta_info.name)
+            self.logger.info('Registered user skill: %s', skill.meta_info.name)
             return True
         except Exception as e:
-            self.logger.warning("Failed to register user skill from %s: %s", path, e)
+            self.logger.warning('Failed to register user skill from %s: %s', path, e)
             return False
 
     def get_skill(self, name: str) -> BaseSkill | None:
@@ -140,11 +140,11 @@ class MatMasterSkillRegistry:
 
     def get_meta_info_context(self) -> str:
         """Meta info for context: merged core + mat + user + dynamic."""
-        lines = ["# Available Skills\n"]
+        lines = ['# Available Skills\n']
         for skill in self.get_all_skills():
             lines.append(skill.to_context_string())
-            lines.append("")
-        return "\n".join(lines)
+            lines.append('')
+        return '\n'.join(lines)
 
     def search_skills(self, query: str) -> list[BaseSkill]:
         """Search in core, mat_skills, user_skills, and dynamic."""
@@ -158,7 +158,10 @@ class MatMasterSkillRegistry:
         ):
             if skill.meta_info.name in seen:
                 continue
-            if query_lower in skill.meta_info.name.lower() or query_lower in skill.meta_info.description.lower():
+            if (
+                query_lower in skill.meta_info.name.lower()
+                or query_lower in skill.meta_info.description.lower()
+            ):
                 results.append(skill)
                 seen.add(skill.meta_info.name)
         return results

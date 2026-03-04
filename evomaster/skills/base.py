@@ -21,15 +21,11 @@ class SkillMetaInfo(BaseModel):
     """Skill 元信息（Level 1）
 
     从 SKILL.md 的 YAML frontmatter 解析得到。
-    这部分信息总是在上下文中，帮助 Agent 决定是否使用该 skill。
-    skill_type 可选，未提供时由 Skill 子类决定，与 v0.0.2 对齐。
+    与上游一致：仅 name、description、license。
     """
 
     name: str = Field(description='技能名称')
     description: str = Field(description='技能描述，包含使用场景和触发条件')
-    skill_type: str | None = Field(
-        default=None, description='技能类型：knowledge 或 operator，可选'
-    )
     license: str | None = Field(default=None, description='许可证信息')
 
 
@@ -91,11 +87,9 @@ class BaseSkill(ABC):
                 key, value = line.split(':', 1)
                 frontmatter_data[key.strip()] = value.strip()
 
-        # 创建 SkillMetaInfo（skill_type 可选：frontmatter 优先，否则用子类 ClassVar）
         return SkillMetaInfo(
             name=frontmatter_data.get('name', self.skill_path.name),
             description=frontmatter_data.get('description', ''),
-            skill_type=frontmatter_data.get('skill_type') or self.skill_type,
             license=frontmatter_data.get('license'),
         )
 
@@ -174,10 +168,10 @@ class KnowledgeSkill(BaseSkill):
         return f"[Knowledge: {self.meta_info.name}] {self.meta_info.description}"
 
 
-class OperatorSkill(BaseSkill):
-    """Operator 类型 Skill
+class Skill(BaseSkill):
+    """Skill 具体实现（与上游一致）
 
-    Operator Skill 包含可执行的操作脚本。
+    包含可执行脚本的技能：
     - Level 1: meta_info（总在上下文）
     - Level 2: full_info（按需加载）
     - Level 3: scripts（可执行脚本）
@@ -223,20 +217,13 @@ class OperatorSkill(BaseSkill):
         return None
 
     def to_context_string(self) -> str:
-        """转换为上下文字符串
-
-        对于 Operator Skill，返回 meta_info 的描述和可用脚本列表。
-        """
+        """转换为上下文字符串（与上游一致：前缀 [Skill: ...]）"""
         scripts_info = (
             ', '.join([s.name for s in self.available_scripts])
             if self.available_scripts
             else 'No scripts'
         )
-        return f"[Operator: {self.meta_info.name}] {self.meta_info.description} (Scripts: {scripts_info})"
-
-
-# v0.0.2：对外统一使用 Skill，OperatorSkill 保留为别名以兼容现有 import
-Skill = OperatorSkill
+        return f"[Skill: {self.meta_info.name}] {self.meta_info.description} (Scripts: {scripts_info})"
 
 
 class SkillRegistry:
@@ -245,7 +232,7 @@ class SkillRegistry:
     管理所有可用的 Skills，支持：
     - 自动发现和加载 skills
     - 构造时 skills: list[str] | None 按名称过滤加载
-    - create_subset(names) 返回仅含指定名称的子集（不重新加载）
+    - create_subset(skill_names) 返回仅含指定名称的子集（与上游一致，不重新加载）
     - 按需检索 skill、提供 meta_info 供 Agent 选择
     """
 
@@ -301,7 +288,7 @@ class SkillRegistry:
             for skill_dir in operator_dir.iterdir():
                 if skill_dir.is_dir() and (skill_dir / 'SKILL.md').exists():
                     try:
-                        skill = OperatorSkill(skill_dir)
+                        skill = Skill(skill_dir)
                         if _accept(skill.meta_info.name):
                             self._skills[skill.meta_info.name] = skill
                             self.logger.info(
@@ -324,13 +311,13 @@ class SkillRegistry:
         """获取所有 Knowledge skills"""
         return [s for s in self._skills.values() if isinstance(s, KnowledgeSkill)]
 
-    def get_operator_skills(self) -> list[OperatorSkill]:
-        """获取所有 Operator skills"""
-        return [s for s in self._skills.values() if isinstance(s, OperatorSkill)]
+    def get_operator_skills(self) -> list[Skill]:
+        """获取所有可执行类型 skills（Skill）。"""
+        return [s for s in self._skills.values() if isinstance(s, Skill)]
 
-    def create_subset(self, names: list[str]) -> SkillRegistry:
-        """返回仅包含指定名称的 skill 的子集注册表（不重新加载磁盘）。"""
-        subset = {k: v for k, v in self._skills.items() if k in names}
+    def create_subset(self, skill_names: list[str]) -> SkillRegistry:
+        """返回仅包含指定名称的 skill 的子集注册表（与上游参数名一致，不重新加载磁盘）。"""
+        subset = {k: v for k, v in self._skills.items() if k in skill_names}
         return SkillRegistry(
             self.skills_root,
             _initial_skills=subset,

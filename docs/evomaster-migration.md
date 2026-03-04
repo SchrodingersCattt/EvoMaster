@@ -113,11 +113,11 @@
 - 构造时支持 `skills: list[str] | None`：若提供则仅加载名称在该列表中的 skill。
 - 新增 `create_subset(names: list[str]) -> SkillRegistry`，返回仅含指定名称的子集（内部用 `_initial_skills` 预填充，不重新加载磁盘）。
 
-### 3.3 引用替换 **[未完成]**
+### 3.3 引用替换 **[已完成]**
 
-- `evomaster/agent/tools/skill.py`：将所有 `OperatorSkill` / `KnowledgeSkill` 类型注解与分支改为 `Skill`（或兼容别名）。
-- `playground/mat_master/core/registry.py`：加载逻辑改为使用统一 `Skill` 及 Registry 的按名过滤/子集接口。
-- `evomaster/skills/__init__.py`：导出 `Skill`；可视情况保留 `OperatorSkill`/`KnowledgeSkill` 为别名或弃用。
+- `evomaster/agent/tools/skill.py`：类型注解与分支中的 `OperatorSkill` 已改为 `Skill`（import、isinstance、参数与 docstring）。
+- `playground/mat_master/core/registry.py`：加载逻辑改为使用统一 `Skill`（`from evomaster.skills import Skill`，`Skill(skill_dir)` / `Skill(path)`）；docstring 已更新。
+- `evomaster/skills/__init__.py`：已导出 `Skill`（3.1）；`OperatorSkill` / `KnowledgeSkill` 保留为兼容别名。
 
 ### 3.4 验收 **[未完成]**
 
