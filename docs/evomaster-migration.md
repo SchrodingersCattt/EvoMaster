@@ -81,10 +81,11 @@
 - **新签名**：`_create_agent(name, agent_config=None, llm_config=None, tool_config=None, skill_config=None)`；内部用 `tool_config` 推导 `enabled_tool_names`，并传给 Agent。
 - **旧签名**：保留 `enable_tools`、`llm_config_dict`、`skill_registry` 参数；在实现中将其转换为 `tool_config` / `llm_config` / `skill_config` 后调用新逻辑，便于 MatMaster 等子类逐步迁移。
 
-### 2.3 工具注册与 Agent 工具可见性 **[未完成]**
+### 2.3 工具注册与 Agent 工具可见性 **[已完成]**
 
 - 在 `evomaster/agent/tools/base.py` 中实现 `create_registry(builtin_names: list[str], skill_registry=None)`；当 `builtin_names=["*"]` 时行为与当前 `create_default_registry(skill_registry)` 一致。
-- Agent 增加 `enabled_tool_names` 参数（或从 `tool_config` 推导）：仅将列表中的工具暴露给 LLM，与「代码中可调用的工具」解耦；所有工具仍注册到 registry。
+- `ToolRegistry.get_tool_specs(names=None)`：支持按 `names` 过滤（`None` 或含 `"*"` 返回全部，空列表返回空，否则返回指定名称的工具规格）。
+- Agent 增加 `enabled_tool_names` 参数（或从 `tool_config` 推导）：仅将列表中的工具暴露给 LLM，与「代码中可调用的工具」解耦；所有工具仍注册到 registry。`_create_agent` 在传入 `tool_config` 时推导 `enabled_tool_names` 并传给 Agent。
 
 ### 2.4 验收 **[未完成]**
 

@@ -433,9 +433,14 @@ class BasePlayground:
             llm_config = llm_config_dict
         if llm_config is None:
             llm_config = self.config_manager.get_agent_llm_config(name)
+        enabled_tool_names: list[str] | None = None
         if tool_config is not None:
             builtin = tool_config.get('builtin', ['*'])
             enable_tools = bool(builtin)
+            if '*' in builtin or not builtin:
+                enabled_tool_names = None  # 全部暴露
+            else:
+                enabled_tool_names = list(builtin)
         _ = skill_config  # 占位，后续 per-agent skills 时使用
 
         max_turns = agent_config.get('max_turns', 20)
@@ -471,7 +476,7 @@ class BasePlayground:
 
         # 创建 Agent
         # 注意：无论 enable_tools 是什么值，都传递 tools 给 Agent
-        # enable_tools 只控制工具信息是否出现在提示词中，不影响工具注册
+        # enable_tools 只控制工具信息是否出现在提示词中；enabled_tool_names 限制暴露给 LLM 的工具子集
         agent = Agent(
             llm=llm,
             session=self.session,
@@ -484,6 +489,7 @@ class BasePlayground:
             output_config=output_config,
             config_dir=self.config_dir,
             enable_tools=enable_tools,  # 控制工具信息是否出现在提示词中
+            enabled_tool_names=enabled_tool_names,
         )
 
         # 设置Agent名称（用于轨迹文件中标识不同的agent）
