@@ -15,11 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openbabel \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Python 依赖
+# 安装 Python 依赖（dpdata 的 mol/sdf 格式依赖 rdkit）
 RUN pip install --no-cache-dir \
     ase \
     pymatgen \
     dpdata \
+    rdkit \
     numpy \
     matplotlib \
     python-docx \
@@ -53,4 +54,3 @@ RUN set -eux \
 ENV PATH="/opt/vaspkit/bin:/usr/local/bin:${PATH}"
 
 WORKDIR /root
-

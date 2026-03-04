@@ -489,26 +489,38 @@ class AgentRunService:
                             row = nodes_table.find_one_for_reuse(
                                 user_id_for_ak, org_id, project_id
                             )
-                            expected_image_id = BOHRIUM_DEFAULT_IMAGE_ID
+                            expected_image_name = node_svc.get_image_name_by_id(
+                                access_key, BOHRIUM_DEFAULT_IMAGE_ID
+                            )
                             if row:
                                 node_id = int(row['node_id'])
 
                                 def _node_image_outdated(
-                                    node_image_id: int | None,
+                                    node_image_name: str | None,
                                 ) -> bool:
-                                    if node_image_id is None:
+                                    # 任一方 name 为空时不做淘汰，避免无限销毁/重建
+                                    if not expected_image_name or not node_image_name:
                                         return False
-                                    return node_image_id != expected_image_id
+                                    return node_image_name != expected_image_name
 
                                 node_info = node_svc.get_node_info(access_key, node_id)
+                                logger.info(
+                                    'run_agent_sync: node image check (ready) node_id=%s '
+                                    'node_image_name=%s expected_image_name=%s',
+                                    node_id,
+                                    node_info.get('image_name') if node_info else None,
+                                    expected_image_name,
+                                )
                                 if node_info and node_info.get('ip'):
-                                    if _node_image_outdated(node_info.get('image_id')):
+                                    if _node_image_outdated(
+                                        node_info.get('image_name'),
+                                    ):
                                         logger.info(
                                             'run_agent_sync: reuse skipped, node image outdated '
-                                            'node_id=%s node_image_id=%s expected=%s, destroy and create new',
+                                            'node_id=%s node_image_name=%s expected_image_name=%s, destroy and create new',
                                             node_id,
-                                            node_info.get('image_id'),
-                                            expected_image_id,
+                                            node_info.get('image_name'),
+                                            expected_image_name,
                                         )
                                         nodes_table.delete_by_node(
                                             user_id_for_ak,
@@ -550,18 +562,29 @@ class AgentRunService:
                                     node_detail = node_svc.get_node_detail(
                                         access_key, node_id
                                     )
+                                    logger.info(
+                                        'run_agent_sync: node image check (not ready) node_id=%s '
+                                        'node_image_name=%s expected_image_name=%s',
+                                        node_id,
+                                        (
+                                            node_detail.get('image_name')
+                                            if node_detail
+                                            else None
+                                        ),
+                                        expected_image_name,
+                                    )
                                     if (
                                         node_detail is not None
                                         and _node_image_outdated(
-                                            node_detail.get('image_id')
+                                            node_detail.get('image_name'),
                                         )
                                     ):
                                         logger.info(
                                             'run_agent_sync: node image outdated node_id=%s '
-                                            'node_image_id=%s expected=%s, destroy and create new',
+                                            'node_image_name=%s expected_image_name=%s, destroy and create new',
                                             node_id,
-                                            node_detail.get('image_id'),
-                                            expected_image_id,
+                                            node_detail.get('image_name'),
+                                            expected_image_name,
                                         )
                                         nodes_table.delete_by_node(
                                             user_id_for_ak,
