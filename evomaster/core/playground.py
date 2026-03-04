@@ -568,7 +568,7 @@ class BasePlayground:
         skill_registry = None
         config_dict = self.config.model_dump()
         skills_config = config_dict.get('skills', {})
-        agents_config_for_skills = self.config_manager.get_agents_config() or {}
+        agents_config_for_skills = self.config_manager.get_agents_config()
         need_skills = skills_config.get('enabled', False) or (
             bool(agents_config_for_skills)
             and any(

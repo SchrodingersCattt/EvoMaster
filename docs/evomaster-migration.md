@@ -163,7 +163,7 @@
 
 ### 其他兼容层
 
-- 阶段 2 中保留的 `self.agent`、无参兼容等，在业务全部迁到 `self.agents` 后移除。**[未完成，可选]**
+- **`self.agent`**：与上游已对齐（上游也在 _setup_agents 末尾设 `self.agent = self.agents.get_random_agent()` 做向后兼容）。此处「可选」指：若将来业务全部改用 `self.agents` 取 agent，可**选择**移除 `self.agent` 做简化，非未对齐项。
 - **_[已完成]_**
   - `_create_agent` 旧签名已移除：去掉参数 `enable_tools`、`llm_config_dict`；缺省时从 `get_agent_tools_config(name)` / `get_agent_llm_config(name)` 补齐。
   - 调用方已全部迁至新签名：BasePlayground、MatMasterPlayground、x_master、minimal_skill_task 及测试 mock 均使用 `tool_config`/`llm_config`/`skill_config`/`skill_registry`。
@@ -172,6 +172,44 @@
 
 - 配置模型、ConfigManager API 与上游 [EvoMaster config](https://github.com/sjtu-sai-agents/EvoMaster) 一致；无本仓库独有的兼容分支。
 - 验收方式：在 **Python ≥3.10** 下运行 `pytest tests/test_evomaster_config_migration.py -v` 通过即可（Python 3.9 因 typing 语法会报错，属环境限制）。
+
+---
+
+## 与上游当前差异梳理
+
+以下为与上游 [EvoMaster main](https://github.com/sjtu-sai-agents/EvoMaster) 对比后仍存在的差异，便于后续按需对齐或保留本仓扩展。
+
+### 配置层（evomaster/config.py）
+
+| 项 | 上游 | 本仓 | 说明 |
+|----|------|------|------|
+| **EvoMasterConfig 顶层字段** | `llm`, `agents`, `session`, `env`, **`tools`(ToolConfig)**, `skills`, `logging`, `llm_output`, `project_root`, `workspace`, `results_dir`, `debug` | 无顶层 `tools`；多 **`skill`(SkillConfig)**、**`mcp`(dict)** | 本仓 `skill`/`mcp` 为业务扩展（如 mat_master 用 mcp.tool_include_only）；上游顶层 `tools` 为全局 ToolConfig，本仓 per-agent tools 已由 get_agent_tools_config 覆盖。 |
+| **ToolConfig 类型** | 顶层 `tools`: `builtin: list[str]`, `mcp: list[str]` | 本仓 ToolConfig 为 `mcp: str`；per-agent 返回 `{"mcp": str}` 与上游一致 | 仅顶层是否存在及 mcp 类型不同，per-agent 解析已对齐。 |
+| **get_agents_config()** | `agents` 为空时 **raise ValueError** | **已对齐**：空时 `raise ValueError("No agents configuration found. Add 'agents' section to config.yaml")`。 | **[已完成]** |
+| **_require_dict** | ConfigManager 有静态方法 `_require_dict`，用于 llm/agents/session 等校验 | **已对齐**：已增加 `_require_dict`，并在 get_llm_config / get_agent_config / get_agents_config 等中使用。 | **[已完成]** |
+| **get_llm_config(None)** | 使用 `_require_dict(config.llm, "llm")` 后取 default | 允许 `name=None`，用 `config.llm.get('default','openai')`，未校验 config.llm 为 dict | 行为一致，仅缺类型校验。 |
+| **get_skill_config()** | 无 | 有，返回 SkillConfig | 本仓独有，供 skill 相关逻辑使用。 |
+
+### Playground 层（evomaster/core/playground.py）
+
+| 项 | 上游 | 本仓 | 说明 |
+|----|------|------|------|
+| **setup() 流程** | `_setup_session()` → `_setup_agents()`；**无**先验的全局 _setup_tools | 先 `_setup_llm_config` → `_setup_session` → 按需加载 skill_registry → **全局 _setup_tools(skill_registry)** → `_setup_agents()` | 上游在 **每个** _create_agent 内调用 _setup_tools(skill_config, tool_config)，每个 agent 有**独立 tools**；本仓**共用一个 self.tools**，通过 enabled_tool_names 控制暴露。若要对齐需改为 per-agent 创建 tools。 |
+| **_create_agent 的 skill_registry** | 无该参数；内部用 `_resolve_skill_registry(skill_config)` 得到 | 由 _setup_agents 从 skill_config 生成 **skill_registry** 并传入 | 语义一致，仅“在基类内解析”与“调用方解析后传入”之别。 |
+| **enabled_tool_names** | `builtin if builtin else []`（如 `["*"]` 时传 `["*"]`） | `None` 表示全部，否则 `list(builtin)` | Agent 侧本仓约定 `None`=全部，与上游传 `["*"]` 等价。 |
+| **self.agent** | 在 _setup_agents 末尾 `self.agent = self.agents.get_random_agent()` 做向后兼容 | 同 | 已对齐。 |
+
+### 本仓独有（可保留）
+
+- **config_path** 支持：Playground/ConfigManager 支持通过 `config_path` 指定单文件，与上游一致。
+- **skill / mcp / get_skill_config**：本仓业务需要，可保留。
+- **load_dotenv(..., override=True)**：本仓使用 override，上游未传；影响小，可选对齐。
+
+### 建议优先对齐（若追求与上游一致）
+
+1. **get_agents_config()**：**[已完成]** agents 为空时 `raise ValueError("No agents configuration found. Add 'agents' section to config.yaml")`。
+2. **ConfigManager._require_dict**：**[已完成]** 已增加静态方法 `_require_dict`，并在 get_llm_config、get_agent_config、get_agents_config、get_agent_llm_config 路径中按需使用，与上游错误信息一致。
+3. （可选）**setup/tools 模型**：若需“每个 agent 独立 tools 与 MCP”，再考虑改为在 _create_agent 内为每个 agent 调用 _setup_tools，并取消全局单一 self.tools；当前共用一个 self.tools 更省资源，与多数使用方式兼容。**未做，保持现状。**
 
 ---
 
