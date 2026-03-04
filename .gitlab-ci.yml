@@ -8,6 +8,7 @@ variables:
 
 
 stages:
+  - build-remote-image
   - build
   - test
   - deploy-test
@@ -49,6 +50,8 @@ docker-build:
   stage: build
   image: $REGISTRY/public/ubuntu:gitlab-docker
   script:
+    # 若上一条流水线是 build-remote-image 的 push，拉取后即含新默认镜像 ID
+    - git pull origin "${CI_COMMIT_BRANCH}" || true
     - echo $SERVER_NAME
     - echo $DOCKER_IMAGE
     - git rev-parse HEAD > ${CI_PROJECT_DIR}/.build-version
@@ -78,11 +81,84 @@ docker-build:
     paths:
       - /cache
   rules:
+    # 本次 push 改了 remote 镜像相关文件时，本流水线只跑 build-remote-image，不跑 docker-build；由 push 触发的下一条流水线再 build/deploy
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+      when: never
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/ || $CI_COMMIT_TAG'
       when: on_success
   artifacts:
     reports:
       dotenv: ${CI_PROJECT_DIR}/build.env  # 保存变量到文件
+
+# Remote 节点镜像：Dockerfile.remote 变更时构建并 push 更新 constant.py；本流水线不跑 docker-build，由 push 触发的下一条流水线 build/deploy
+# 需在 CI/CD Variables 中配置 BOHRIUM_ACCESS_KEY（Masked）、BOHRIUM_PROJECT_ID
+build-remote-image:test:
+  stage: build-remote-image
+  image: $REGISTRY/public/ubuntu:gitlab-0.0.2
+  environment: test
+  variables:
+    REMOTE_IMAGE_ENV: test
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq jq > /dev/null || true
+    - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
+    - |
+      if [[ -z "${BOHRIUM_ACCESS_KEY:-}" ]]; then
+        echo "DEBUG: BOHRIUM_ACCESS_KEY is unset. Check: Variable key exact? Protected + branch test protected? Env scope = test or *?"
+        exit 1
+      fi
+      echo "DEBUG: BOHRIUM_ACCESS_KEY is set (length ${#BOHRIUM_ACCESS_KEY})"
+  script:
+    - "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /.*test$/
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+  tags:
+    - $RUNNER_ZJK_TAG
+
+build-remote-image:uat:
+  stage: build-remote-image
+  image: $REGISTRY/public/ubuntu:gitlab-0.0.2
+  environment: uat
+  variables:
+    REMOTE_IMAGE_ENV: uat
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq jq > /dev/null || true
+    - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
+  script:
+    - "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /.*uat$/
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+      when: manual
+  tags:
+    - $RUNNER_ZJK_TAG
+
+build-remote-image:prod:
+  stage: build-remote-image
+  image: $REGISTRY/public/ubuntu:gitlab-0.0.2
+  environment: production
+  variables:
+    REMOTE_IMAGE_ENV: prod
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq jq > /dev/null || true
+    - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
+  script:
+    - "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && ($CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /.*prod$/)
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+      when: manual
+  tags:
+    - $RUNNER_ZJK_TAG
 
 docker-cover-build:
   stage: build
@@ -154,6 +230,14 @@ test:
       - .cache/pip
   tags:
     - k8s-runner-ack
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+      when: never
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
+      when: on_success
 
 
 deploy-test:
@@ -188,7 +272,13 @@ deploy-test:
       - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
   retry: 2
   rules:
-    - if: '($CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/) &&  $CI_COMMIT_TAG == null'
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+      when: never
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/) && $CI_COMMIT_TAG == null'
+      when: on_success
 
 
 manual-uat:
