@@ -286,10 +286,8 @@ class ToolGuard:
 
     @staticmethod
     def _is_peek_manual_call(tool_call) -> bool:
-        if tool_call.function.name != "use_skill":
-            return False
-        args = ToolGuard._parse_tool_args(tool_call)
-        return "peek_manual" in str(args.get("script_name", ""))
+        # peek_manual.py was removed; input-manual-helper uses official docs only.
+        return False
 
     @staticmethod
     def _is_low_gain_manual_observation(observation: str) -> bool:

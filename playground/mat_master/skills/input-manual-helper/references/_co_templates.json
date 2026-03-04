@@ -1,71 +1,74 @@
 {
-  "_comment": "Co-template hints. Naming convention: task_* needs a method_* paired; no-prefix = complete standalone. When agent fetches a task_ template, remind it to also fetch a method_ template, and vice versa.",
+  "_comment": "Co-template hints. task_* may pair with method_* for non-PBE functionals. minimal_* are fallbacks when user provides no input_file; structure/basis/potential are filled by prepare_*.",
 
+  "cp2k/minimal_periodic.inp": {
+    "hint": "Minimal periodic CP2K template. Use when user provides no input_file. Structure, basis, potential are placeholders; prepare_cp2k_job overwrites them.",
+    "related": []
+  },
   "cp2k/task_band.inp": {
-    "hint": "This is a TASK template (PBE k-path only). You MUST also fetch a method_ template for the functional. Do NOT construct &HF/&SCREENING/&ADMM from the manual.",
-    "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_admm_hse06.inp", "cp2k/method_admm_b3lyp.inp", "cp2k/method_r2scan.inp"]
+    "hint": "TASK template (PBE k-path). Pair with a method_ template for the functional.",
+    "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_admm_hse06.inp", "cp2k/method_r2scan.inp"]
   },
   "cp2k/task_scf.inp": {
-    "hint": "This is a TASK template (basic PBE SCF). If your task needs a different functional, also fetch the corresponding method_ template.",
+    "hint": "TASK template (basic PBE SCF). For a different functional, fetch the corresponding method_ template.",
     "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_admm_hse06.inp", "cp2k/method_r2scan.inp", "cp2k/method_dft_plus_u.inp"]
   },
   "cp2k/task_opt.inp": {
-    "hint": "This is a TASK template (PBE geometry optimization). If your task needs a hybrid or meta-GGA functional, also fetch the corresponding method_ template.",
+    "hint": "TASK template (PBE geometry optimization). For hybrid or meta-GGA, fetch the corresponding method_ template.",
     "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_admm_hse06.inp", "cp2k/method_r2scan.inp"]
   },
   "cp2k/task_cellopt.inp": {
-    "hint": "This is a TASK template (PBE cell optimization). If your task needs a different functional, also fetch the corresponding method_ template.",
+    "hint": "TASK template (PBE cell optimization). For a different functional, fetch the corresponding method_ template.",
     "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_admm_hse06.inp", "cp2k/method_r2scan.inp"]
   },
   "cp2k/task_md_nvt.inp": {
-    "hint": "This is a TASK template (PBE NVT MD). If your task needs a different functional, also fetch a method_ template. For fast xTB MD, use xtb_aimd.inp instead.",
-    "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_r2scan.inp", "cp2k/xtb_aimd.inp"]
+    "hint": "TASK template (PBE NVT MD). For a different functional, fetch a method_ template.",
+    "related": ["cp2k/method_admm_pbe0.inp", "cp2k/method_r2scan.inp"]
   },
-
   "cp2k/method_admm_pbe0.inp": {
-    "hint": "This is a METHOD template (ADMM+PBE0). Merge the XC/ADMM/HF sections into a task_ template. Which task do you need?",
+    "hint": "METHOD template (ADMM+PBE0). Merge XC/ADMM/HF sections into a task_ template.",
     "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp", "cp2k/task_cellopt.inp"]
   },
   "cp2k/method_admm_hse06.inp": {
-    "hint": "This is a METHOD template (ADMM+HSE06). Merge the XC/ADMM/HF sections into a task_ template. Which task do you need?",
+    "hint": "METHOD template (ADMM+HSE06). Merge into a task_ template.",
     "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp", "cp2k/task_cellopt.inp"]
   },
-  "cp2k/method_admm_b3lyp.inp": {
-    "hint": "This is a METHOD template (ADMM+B3LYP). Merge the XC/ADMM/HF sections into a task_ template. Which task do you need?",
-    "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp"]
-  },
-  "cp2k/method_admm_m062x.inp": {
-    "hint": "This is a METHOD template (ADMM+M06-2X). Merge the XC/ADMM/HF sections into a task_ template. Which task do you need?",
-    "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp"]
-  },
   "cp2k/method_r2scan.inp": {
-    "hint": "This is a METHOD template (r2SCAN meta-GGA). Merge the XC sections into a task_ template. Which task do you need?",
+    "hint": "METHOD template (r2SCAN meta-GGA). Merge XC sections into a task_ template.",
     "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp"]
-  },
-  "cp2k/method_scan_libxc.inp": {
-    "hint": "This is a METHOD template (SCAN via LibXC). Merge the XC sections into a task_ template.",
-    "related": ["cp2k/task_band.inp", "cp2k/task_scf.inp", "cp2k/task_opt.inp"]
-  },
-  "cp2k/method_gapw_b97m_rv.inp": {
-    "hint": "This is a METHOD template (GAPW B97M-rV, molecular). Suitable for molecular systems only.",
-    "related": ["cp2k/task_opt.inp", "cp2k/task_scf.inp"]
   },
   "cp2k/method_dft_plus_u.inp": {
-    "hint": "This is a METHOD template (DFT+U). Merge the DFT+U sections into a task_ template.",
+    "hint": "METHOD template (DFT+U). Merge DFT+U sections into a task_ template.",
     "related": ["cp2k/task_scf.inp", "cp2k/task_opt.inp", "cp2k/task_band.inp"]
   },
 
-  "abinit/gs_scf.abi": {
-    "hint": "Base ground-state SCF template. For NLO/SHG (e.g. second harmonic generation), do NOT hand-edit multiple datasets. Call prepare_abinit_job with workflow_type='nlo'; the tool uses AbiPy to generate multi-dataset DFPT + optic.inp automatically.",
+  "orca/minimal_molecule.inp": {
+    "hint": "Minimal ORCA molecule template. Use when user provides no input_file. Coordinates are placeholder; prepare_orca_job overwrites them.",
+    "related": []
+  },
+  "orca/std_dft.inp": {
+    "hint": "Molecular DFT base template.",
+    "related": []
+  },
+  "orca/dlpno_ccsd_t_normal.inp": {
+    "hint": "DLPNO-CCSD(T) template (ORCA core scenario).",
+    "related": []
+  },
+  "orca/tddft_pbe0.inp": {
+    "hint": "TD-DFT template (PBE0).",
     "related": []
   },
 
+  "abinit/gs_scf.abi": {
+    "hint": "Base ground-state SCF. For NLO/SHG, call prepare_abinit_job with workflow_type='nlo'; do not hand-edit multiple datasets.",
+    "related": []
+  },
   "lammps/msst_shock.lammps": {
-    "hint": "MSST (Multi-Scale Shock Technique) shock simulation. Replace structure file, pair_style/coeff, and shockvel (piston velocity). Use prepare_lammps_job for path/potential binding.",
+    "hint": "MSST shock simulation. Use prepare_lammps_job for structure/potential binding.",
     "related": []
   },
   "lammps/gcmc_adsorption.lammps": {
-    "hint": "GCMC (Grand Canonical Monte Carlo) for adsorption. Replace structure file, T (temperature), mu (chemical potential eV). For molecular GCMC use atom_style full and molecule file. Use prepare_lammps_job for path binding.",
+    "hint": "GCMC adsorption. Use prepare_lammps_job for path binding.",
     "related": []
   }
 }
