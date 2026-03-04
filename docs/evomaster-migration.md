@@ -12,9 +12,18 @@
 | 阶段 1.2 配置兼容（YAML / 加载层） | **已完成** |
 | 阶段 1.3 验收 | **已完成** |
 | 阶段 1.4 现有 YAML 迁移到 v0.0.2 写法 | **已完成** |
-| 阶段 2 | 未完成 |
-| 阶段 3 | 未完成 |
-| 阶段 4 | 未完成 |
+| 阶段 2.1 AgentSlots 与 self.agents | **已完成** |
+| 阶段 2.2 _create_agent 新旧签名并存 | 未完成 |
+| 阶段 2.3 工具注册与 Agent 工具可见性 | 未完成 |
+| 阶段 2.4 验收 | 未完成 |
+| 阶段 3.1 Skills 类型统一 | 未完成 |
+| 阶段 3.2 SkillRegistry | 未完成 |
+| 阶段 3.3 引用替换 | 未完成 |
+| 阶段 3.4 验收 | 未完成 |
+| 阶段 4.1 MatMaster | 未完成 |
+| 阶段 4.2 minimal_multi_agent / minimal_kaggle | 未完成 |
+| 阶段 4.3 agent_run_service 与 server | 未完成 |
+| 阶段 4.4 验收 | 未完成 |
 | 与上游完全对齐（收尾） | 未完成 |
 
 ---
@@ -61,23 +70,23 @@
 
 **目标**：引入 AgentSlots、`_setup_agents()`，统一多 Agent 存储；工具注册支持按名称控制；Agent 支持 `enabled_tool_names`。
 
-### 2.1 AgentSlots 与 self.agents（`evomaster/core/playground.py`）
+### 2.1 AgentSlots 与 self.agents（`evomaster/core/playground.py`）**[已完成]**
 
 - 引入 `AgentSlots` 容器类，支持 `dict` 式访问与属性访问（如 `self.agents.planning_agent`）。
 - 在 `BasePlayground` 中：用 `self.agents` 存储多个 agent；在 `_setup_agents()` 中遍历 `agents` 配置，为每个 agent 创建实例并注册到 `self.agents`。
 - 保留向后兼容：例如 `self.agent = self.agents.get_random_agent()` 或取第一个/默认 agent，确保只依赖单 agent 的调用方（如部分 Exp、`_create_exp()`）仍可用。
 
-### 2.2 _create_agent 新旧签名并存
+### 2.2 _create_agent 新旧签名并存 **[未完成]**
 
 - **新签名**：`_create_agent(name, agent_config=None, llm_config=None, tool_config=None, skill_config=None)`；内部用 `tool_config` 推导 `enabled_tool_names`，并传给 Agent。
 - **旧签名**：保留 `enable_tools`、`llm_config_dict`、`skill_registry` 参数；在实现中将其转换为 `tool_config` / `llm_config` / `skill_config` 后调用新逻辑，便于 MatMaster 等子类逐步迁移。
 
-### 2.3 工具注册与 Agent 工具可见性
+### 2.3 工具注册与 Agent 工具可见性 **[未完成]**
 
 - 在 `evomaster/agent/tools/base.py` 中实现 `create_registry(builtin_names: list[str], skill_registry=None)`；当 `builtin_names=["*"]` 时行为与当前 `create_default_registry(skill_registry)` 一致。
 - Agent 增加 `enabled_tool_names` 参数（或从 `tool_config` 推导）：仅将列表中的工具暴露给 LLM，与「代码中可调用的工具」解耦；所有工具仍注册到 registry。
 
-### 2.4 验收
+### 2.4 验收 **[未完成]**
 
 - BasePlayground 多 agent 模式下，每个 agent 均正确存入 `self.agents`，不再出现「只保留最后一个」的情况。
 - 仍使用旧 `_create_agent(..., enable_tools=..., llm_config_dict=...)` 的子类无需修改即可通过兼容层工作。
@@ -89,23 +98,23 @@
 
 **目标**：将 KnowledgeSkill / OperatorSkill 统一为 Skill，SkillRegistry 支持按名称过滤与 create_subset；与 v0.0.2 的 Skill 模型对齐。
 
-### 3.1 类型统一（`evomaster/skills/base.py`）
+### 3.1 类型统一（`evomaster/skills/base.py`）**[未完成]**
 
 - 将 `OperatorSkill` 重命名为 `Skill`（或保留 `OperatorSkill` 作为 `Skill` 的别名以兼容现有 import）。
 - `KnowledgeSkill`：要么合并为 `Skill` 的一种（用属性区分），要么保留为 `Skill` 子类；确保对外 API 逐步收敛到「仅使用 Skill」。
 - `SkillMetaInfo`：移除或弃用 `skill_type` 在配置/序列化中的依赖，与 v0.0.2 行为一致；若内部仍需要区分，可用可选字段或子类。
 
-### 3.2 SkillRegistry
+### 3.2 SkillRegistry **[未完成]**
 
 - 使用单一存储（如统一 `_skills: dict[str, Skill]`），支持构造时 `skills: list[str] | None` 按名称过滤加载；新增 `create_subset(names: list[str])` 方法。
 
-### 3.3 引用替换
+### 3.3 引用替换 **[未完成]**
 
 - `evomaster/agent/tools/skill.py`：将所有 `OperatorSkill` / `KnowledgeSkill` 类型注解与分支改为 `Skill`（或兼容别名）。
 - `playground/mat_master/core/registry.py`：加载逻辑改为使用统一 `Skill` 及 Registry 的按名过滤/子集接口。
 - `evomaster/skills/__init__.py`：导出 `Skill`；可视情况保留 `OperatorSkill`/`KnowledgeSkill` 为别名或弃用。
 
-### 3.4 验收
+### 3.4 验收 **[未完成]**
 
 - 所有现有 Skill 相关单测与集成路径通过。
 - 新代码仅依赖 `Skill` 与 SkillRegistry 的 per-agent 子集能力。
@@ -116,21 +125,21 @@
 
 **目标**：MatMaster、minimal_multi_agent、minimal_kaggle 等改用 `self.agents` 与新区配置；agent_run_service / server 中克隆 agent 时使用 `enabled_tool_names` 或 `tool_config`。
 
-### 4.1 MatMaster（`playground/mat_master/`）
+### 4.1 MatMaster（`playground/mat_master/`）**[未完成]**
 
 - 在保留自定义 MCP、SSH、MatMasterSkillRegistry 的前提下，改为从 `self.agents` 获取 agent（或通过 `agents.declare(...)` 后使用）。
 - 创建 agent 时逐步改为传入 `tool_config` / `llm_config` / `skill_config`；若短期仍传 `enable_tools`，通过兼容层转换为 `tool_config`。
 
-### 4.2 minimal_multi_agent、minimal_kaggle
+### 4.2 minimal_multi_agent、minimal_kaggle **[未完成]**
 
 - 从「子类自己维护多个 agent 属性（如 planning_agent、coding_agent）」改为使用 `self.agents` 的槽位；或短期在 BasePlayground 的 `_setup_agents()` 中同时填充 `self.agents` 与子类期望的 `self.planning_agent` 等，做过渡兼容。
 - Exp 中改为从 `self.agents.planning_agent`、`self.agents.coding_agent` 等取值，或保持现有属性名但由 base 在 setup 时统一赋值。
 
-### 4.3 agent_run_service 与 server
+### 4.3 agent_run_service 与 server **[未完成]**
 
 - 克隆或重建 agent 时，不再依赖 `base.enable_tools`，改为使用 `enabled_tool_names` 或从 `tool_config` 推导，保证克隆出的 agent 与配置一致。
 
-### 4.4 验收
+### 4.4 验收 **[未完成]**
 
 - 所有 Playground 与线上/测试流程行为与迁移前一致或符合预期。
 - 配置可完全采用 v0.0.2 的 `tools:`、per-agent `skills:` 等形式。
