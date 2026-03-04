@@ -407,7 +407,7 @@ class BasePlayground:
         skill_registry: SkillRegistry | None = None,
         tool_config: dict | None = None,
         llm_config: dict | None = None,
-        skill_config: list | None = None,
+        skill_config: dict | None = None,
     ):
         """创建 Agent 实例
 
@@ -422,7 +422,7 @@ class BasePlayground:
             skill_registry: Skills 注册中心（旧签名）
             tool_config: 工具配置（新签名），含 builtin/mcp；提供时用于推导 enable_tools
             llm_config: LLM 配置（新签名），优先于 llm_config_dict
-            skill_config: 本 agent 的 skills 列表（新签名）；由 _setup_agents 按此生成 per-agent skill_registry 并传入
+            skill_config: 本 agent 的 skills 配置（新签名），dict 形如 {"skills": list[str]}；由 _setup_agents 按此生成 per-agent skill_registry 并传入
 
         Returns:
             Agent 实例
@@ -518,14 +518,15 @@ class BasePlayground:
             tool_config = self.config_manager.get_agent_tools_config(agent_name)
             llm_config = self.config_manager.get_agent_llm_config(agent_name)
             skill_config = self.config_manager.get_agent_skills_config(agent_name)
-            # per-agent skill（上游 v0.0.2）：有 skill_config 时用子集或全量；无配置但全局 enabled 时用全量
+            skills_list = skill_config.get('skills', [])
+            # per-agent skill（上游 v0.0.2）：有 skills 时用子集或全量；无配置但全局 enabled 时用全量
             agent_skill_registry: SkillRegistry | None = None
             if skill_registry is not None:
-                if skill_config:
+                if skills_list:
                     agent_skill_registry = (
                         skill_registry
-                        if '*' in skill_config
-                        else skill_registry.create_subset(skill_config)
+                        if '*' in skills_list
+                        else skill_registry.create_subset(skills_list)
                     )
                 elif skills_config.get('enabled', False):
                     agent_skill_registry = skill_registry
@@ -580,7 +581,7 @@ class BasePlayground:
         need_skills = skills_config.get('enabled', False) or (
             bool(agents_config_for_skills)
             and any(
-                self.config_manager.get_agent_skills_config(name)
+                self.config_manager.get_agent_skills_config(name).get('skills')
                 for name in agents_config_for_skills
             )
         )
