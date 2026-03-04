@@ -13,7 +13,7 @@
 | 阶段 1.3 验收 | **已完成** |
 | 阶段 1.4 现有 YAML 迁移到 v0.0.2 写法 | **已完成** |
 | 阶段 2.1 AgentSlots 与 self.agents | **已完成** |
-| 阶段 2.2 _create_agent 新旧签名并存 | 未完成 |
+| 阶段 2.2 _create_agent 新旧签名并存 | **已完成** |
 | 阶段 2.3 工具注册与 Agent 工具可见性 | 未完成 |
 | 阶段 2.4 验收 | 未完成 |
 | 阶段 3.1 Skills 类型统一 | 未完成 |
@@ -76,7 +76,7 @@
 - 在 `BasePlayground` 中：用 `self.agents` 存储多个 agent；在 `_setup_agents()` 中遍历 `agents` 配置，为每个 agent 创建实例并注册到 `self.agents`。
 - 保留向后兼容：例如 `self.agent = self.agents.get_random_agent()` 或取第一个/默认 agent，确保只依赖单 agent 的调用方（如部分 Exp、`_create_exp()`）仍可用。
 
-### 2.2 _create_agent 新旧签名并存 **[未完成]**
+### 2.2 _create_agent 新旧签名并存 **[已完成]**
 
 - **新签名**：`_create_agent(name, agent_config=None, llm_config=None, tool_config=None, skill_config=None)`；内部用 `tool_config` 推导 `enabled_tool_names`，并传给 Agent。
 - **旧签名**：保留 `enable_tools`、`llm_config_dict`、`skill_registry` 参数；在实现中将其转换为 `tool_config` / `llm_config` / `skill_config` 后调用新逻辑，便于 MatMaster 等子类逐步迁移。
