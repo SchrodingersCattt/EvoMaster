@@ -10,12 +10,19 @@ import json
 import logging
 import re
 import time as _time
+from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, ClassVar
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
 from pydantic import Field
+
+try:
+    import fitz  # PyMuPDF
+except Exception:  # pragma: no cover
+    fitz = None
 
 from evomaster.agent.tools.base import BaseTool, BaseToolParams
 
@@ -28,6 +35,46 @@ _HEADERS = {
     )
 }
 logger = logging.getLogger(__name__)
+
+
+_DEFAULT_DOMAIN_FAILURE_THRESHOLD = 3
+
+
+def _extract_domain(url: str) -> str:
+    try:
+        parsed = urlparse(url)
+        return (parsed.hostname or '').strip().lower()
+    except Exception:
+        return ''
+
+
+@dataclass
+class _DomainCircuitState:
+    """Run-scoped circuit breaker state for webpage domains."""
+
+    failure_threshold: int = _DEFAULT_DOMAIN_FAILURE_THRESHOLD
+    failures: dict[str, int] = field(default_factory=dict)
+    open_circuits: dict[str, str] = field(default_factory=dict)
+
+    def is_open(self, domain: str) -> bool:
+        return bool(domain) and domain in self.open_circuits
+
+    def record_failure(self, domain: str, reason: str) -> tuple[bool, int]:
+        if not domain:
+            return False, 0
+        n = int(self.failures.get(domain, 0)) + 1
+        self.failures[domain] = n
+        if n >= int(self.failure_threshold):
+            self.open_circuits.setdefault(domain, reason or 'unknown')
+            return True, n
+        return False, n
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            'failure_threshold': int(self.failure_threshold),
+            'failures': dict(self.failures),
+            'open_circuits': dict(self.open_circuits),
+        }
 
 
 def _fetch_webpage_content(url: str) -> str:
@@ -46,8 +93,10 @@ def _fetch_webpage_content(url: str) -> str:
     )
 
     if is_pdf:
-        import fitz  # PyMuPDF
-
+        if fitz is None:
+            raise RuntimeError(
+                'PyMuPDF (fitz) is not available; cannot extract PDF content.'
+            )
         doc = fitz.open(stream=response.content, filetype="pdf")
         text = "".join(page.get_text() for page in doc)
         doc.close()
@@ -95,6 +144,11 @@ class ExtractWebpageTool(BaseTool):
     name: ClassVar[str] = "extract_info_from_webpage"
     params_class: ClassVar[type[BaseToolParams]] = ExtractWebpageToolParams
 
+    def __init__(self) -> None:
+        super().__init__()
+        # Per-run state kept on the tool instance (no globals).
+        self._domain_circuit = _DomainCircuitState()
+
     def execute(self, session: Any, args_json: str) -> tuple[str, dict]:
         try:
             params = self.parse_params(args_json)
@@ -112,14 +166,100 @@ class ExtractWebpageTool(BaseTool):
             start = _time.time()
             results: dict[str, Any] = {}
 
+            # Best-effort config override (kept permissive to avoid breaking sessions).
+            try:
+                cfg = getattr(session, 'config', None)
+                cfg_dict = getattr(cfg, 'config_dict', None)
+                if isinstance(cfg_dict, dict):
+                    mm = cfg_dict.get('mat_master') or {}
+                    web = mm.get('web') or {}
+                    thr = web.get('domain_failure_threshold')
+                    if thr is not None:
+                        self._domain_circuit.failure_threshold = max(1, int(thr))
+            except Exception:
+                pass
+
             def _process(u: str):
                 t0 = _time.time()
                 try:
+                    domain = _extract_domain(u)
+                    if self._domain_circuit.is_open(domain):
+                        reason = self._domain_circuit.open_circuits.get(domain, 'blocked')
+                        return u, None, _time.time() - t0, {
+                            'blocked': True,
+                            'domain': domain,
+                            'reason': reason,
+                            'message': (
+                                'Domain circuit is open due to repeated failures; '
+                                'skip further fetches for this domain.'
+                            ),
+                        }
                     content = _fetch_webpage_content(u)
                     return u, content, _time.time() - t0, None
+                except requests.HTTPError as exc:
+                    status = None
+                    try:
+                        status = int(getattr(getattr(exc, 'response', None), 'status_code', None) or 0)
+                    except Exception:
+                        status = None
+                    domain = _extract_domain(u)
+                    if status in (401, 403):
+                        reason = 'forbidden'
+                    elif status == 404:
+                        reason = 'not_found'
+                    elif status == 429:
+                        reason = 'rate_limited'
+                    else:
+                        reason = 'http_error'
+                    opened, count = self._domain_circuit.record_failure(domain, reason)
+                    logger.warning(
+                        'Web fetch failed url=%s status=%s domain=%s reason=%s count=%d opened=%s',
+                        u,
+                        status,
+                        domain,
+                        reason,
+                        count,
+                        opened,
+                    )
+                    return u, None, _time.time() - t0, {
+                        'error_class': 'HTTPError',
+                        'http_status': status,
+                        'domain': domain,
+                        'reason': reason,
+                        'domain_failure_count': count,
+                        'domain_circuit_opened': opened,
+                        'message': str(exc),
+                    }
+                except requests.Timeout as exc:
+                    domain = _extract_domain(u)
+                    opened, count = self._domain_circuit.record_failure(domain, 'timeout')
+                    logger.warning(
+                        'Web fetch timeout url=%s domain=%s count=%d opened=%s',
+                        u,
+                        domain,
+                        count,
+                        opened,
+                    )
+                    return u, None, _time.time() - t0, {
+                        'error_class': 'Timeout',
+                        'domain': domain,
+                        'reason': 'timeout',
+                        'domain_failure_count': count,
+                        'domain_circuit_opened': opened,
+                        'message': str(exc),
+                    }
                 except Exception as exc:
+                    domain = _extract_domain(u)
+                    opened, count = self._domain_circuit.record_failure(domain, 'exception')
                     logger.error("Failed to fetch %s: %s", u, exc, exc_info=True)
-                    return u, None, _time.time() - t0, str(exc)
+                    return u, None, _time.time() - t0, {
+                        'error_class': type(exc).__name__,
+                        'domain': domain,
+                        'reason': 'exception',
+                        'domain_failure_count': count,
+                        'domain_circuit_opened': opened,
+                        'message': str(exc),
+                    }
 
             workers = min(30, len(urls))
             with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -140,6 +280,15 @@ class ExtractWebpageTool(BaseTool):
             total = round(_time.time() - start, 3)
             results["total_processing_time_seconds"] = total
             results["time_saving_json_seconds"] = 0.0
+
+            # Provide circuit summary and guidance to avoid infinite paywall retries.
+            results["web_fetch_circuit"] = self._domain_circuit.summary()
+            if self._domain_circuit.open_circuits:
+                results["web_fetch_guidance"] = (
+                    'Some domains are blocked (paywall/forbidden/not-found/rate-limit). '
+                    'Do NOT keep retrying those domains; use alternative open sources '
+                    '(e.g., arXiv/PMC/Crossref metadata) or proceed with caveats and finish.'
+                )
 
             obs = json.dumps(results, ensure_ascii=False)
             return obs, {"result": results}
