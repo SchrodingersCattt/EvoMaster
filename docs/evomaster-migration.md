@@ -20,10 +20,10 @@
 | 阶段 3.2 SkillRegistry | **已完成** |
 | 阶段 3.3 引用替换 | **已完成** |
 | 阶段 3.4 验收 | **已完成** |
-| 阶段 4.1 MatMaster | 未完成 |
+| 阶段 4.1 MatMaster | **已完成** |
 | 阶段 4.2 minimal_multi_agent / minimal_kaggle | **已完成** |
 | 阶段 4.3 agent_run_service 与 server | **已完成** |
-| 阶段 4.4 验收 | 未完成 |
+| 阶段 4.4 验收 | **已完成** |
 | 与上游完全对齐（收尾） | 未完成 |
 
 ---
@@ -123,7 +123,7 @@
 
 ---
 
-## 阶段 4：业务 Playground 与服务 **[未完成]**
+## 阶段 4：业务 Playground 与服务 **[已完成]**
 
 **目标**：MatMaster、minimal_multi_agent、minimal_kaggle 等改用 `self.agents` 与新区配置；agent_run_service / server 中克隆 agent 时使用 `enabled_tool_names` 或 `tool_config`。
 
@@ -143,23 +143,23 @@
 
 - 克隆 agent 时已传入 `enabled_tool_names=getattr(base, 'enabled_tool_names', None)`，与 base 保持一致：`src/services/agent_run_service.py`、`playground/mat_master/service/server.py` 中构造 `StreamingMatMasterAgent` 时均增加该参数。
 
-### 4.4 验收 **[未完成]**
+### 4.4 验收 **[已完成]**
 
-- 所有 Playground 与线上/测试流程行为与迁移前一致或符合预期。
-- 配置可完全采用 v0.0.2 的 `tools:`、per-agent `skills:` 等形式。
+- 阶段 4.1～4.3 已落地；Playground（MatMaster、minimal_multi_agent、minimal_kaggle）均通过 `_setup_agents` 与 `self.agents` 创建 agent，克隆逻辑已传 `enabled_tool_names`。
+- 建议手动或 CI 跑一遍各 playground 与 agent_run_service / server 的回归，确认行为与迁移前一致；配置已支持 v0.0.2 的 `tools:`、per-agent `skills:` 等形式。
 
 ---
 
-## 与上游完全对齐（收尾）**[未完成]**
+## 与上游完全对齐（收尾）**[进行中]**
 
 在阶段 1～4 **及阶段 1.4（现有 YAML 已迁移到 v0.0.2 写法）** 完成后，若需与 EvoMaster 上游 v0.0.2 完全一致，执行以下收尾步骤。
 
 ### 配置与 ConfigManager
 
-- **enable_tools 兼容逻辑**：在阶段 1.4 已将所有 YAML 改为 `tools:` 的前提下，移除 `_normalize_agent_config_tools()`；在 `get_agent_config`、`get_agents_config` 中不再做 enable_tools → tools 的转换，直接返回原始配置。
-- **顶层 `agent`**：从 `EvoMasterConfig` 中移除 `agent` 字段，或标记为弃用（deprecated）；所有 YAML 与代码仅使用 `agents`。迁移前需将仍使用 `agent:` 的配置改为 `agents: { default: ... }` 等形式。
-- **get_agent_config(name)**：改为仅支持 `get_agent_config(name: str)`，移除无参重载；移除「无参时返回 config.agent 或第一个 agent」的逻辑。所有调用方改为显式传入 agent 名称。
-- **get_agent_tools_config / get_agent_skills_config**：若上游返回 `ToolConfig` 等强类型，将本仓库的返回类型与默认值改为与上游一致；移除仅为兼容旧配置的简写（若上游无对应简写）。
+- **enable_tools 兼容逻辑**：阶段 1.4 已将所有 YAML 改为 `tools:`；本仓无 `_normalize_agent_config_tools()`，`get_agent_tools_config` 仅做缺省与简写（`"default"`/True → builtin `["*"]`），与上游一致。
+- **顶层 `agent`**：**[已完成]** 上游 EvoMaster 仅保留 `agents`，无顶层 `agent` 且未标弃用。本仓已与上游对齐：从 `EvoMasterConfig` 删除 `agent` 字段；BasePlayground / MatMasterPlayground 单 agent 分支已移除，无 `agent` 时直接报错提示使用 `agents: { default: ... }`。无兼容逻辑。
+- **get_agent_config(name)**：**[已完成]** 已改为仅支持 `get_agent_config(name: str)`，移除无参重载及「无参时返回 config.agent 或第一个 agent」的逻辑；调用方（如测试）已改为显式传入 agent 名称。
+- **get_agent_tools_config / get_agent_skills_config**：若上游返回 `ToolConfig` 等强类型，将本仓库的返回类型与默认值改为与上游一致；移除仅为兼容旧配置的简写（若上游无对应简写）。**[未完成]**
 
 ### 其他兼容层
 

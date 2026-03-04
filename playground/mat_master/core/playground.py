@@ -280,40 +280,10 @@ class MatMasterPlayground(BasePlayground):
         if agents_config and isinstance(agents_config, dict) and agents_config:
             self._setup_agents(skill_registry=skill_registry)
         else:
-            agent_config_dict = getattr(self.config, 'agent', None)
-            if not agent_config_dict:
-                raise ValueError(
-                    'No agent configuration found. '
-                    "Please add either 'agent' or 'agents' section to config.yaml"
-                )
-            system_prompt_file = getattr(self.config, 'system_prompt_file', None)
-            user_prompt_file = getattr(self.config, 'user_prompt_file', None)
-            if system_prompt_file:
-                agent_config_dict = (
-                    dict(agent_config_dict)
-                    if not isinstance(agent_config_dict, dict)
-                    else agent_config_dict.copy()
-                )
-                agent_config_dict['system_prompt_file'] = system_prompt_file
-            if user_prompt_file:
-                if not isinstance(agent_config_dict, dict):
-                    agent_config_dict = (
-                        dict(agent_config_dict)
-                        if hasattr(agent_config_dict, 'copy')
-                        else {}
-                    )
-                else:
-                    agent_config_dict = agent_config_dict.copy()
-                agent_config_dict['user_prompt_file'] = user_prompt_file
-            enable_tools = agent_config_dict.get('enable_tools', True)
-            self.agent = self._create_agent(
-                name='default',
-                agent_config=agent_config_dict,
-                enable_tools=enable_tools,
-                llm_config_dict=llm_config_dict,
-                skill_registry=skill_registry,
+            raise ValueError(
+                'No agents configuration found. '
+                'Please add "agents" section to config.yaml (e.g. agents: { default: ... })'
             )
-            self.logger.info('Single-agent playground setup complete')
 
     def _create_exp(self):
         """Return solver by --mode: direct | planner.
