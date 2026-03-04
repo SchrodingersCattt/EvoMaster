@@ -528,6 +528,14 @@ def _download_results_to_local_dir(
         }
 
     # Step 2: extract referenced file paths
+    _SHELL_CMD_MARKERS = frozenset(
+        {'&&', '||', '; ', 'mpirun', 'source ', 'export ', ' -n ', ' | '}
+    )
+
+    def _looks_like_shell_cmd(s: str) -> bool:
+        """Return True when s looks like a shell command rather than a file path."""
+        return any(m in s for m in _SHELL_CMD_MARKERS)
+
     def _extract_path_from_py_reduce(v: Any) -> str | None:
         if not isinstance(v, dict):
             return None
@@ -555,7 +563,8 @@ def _download_results_to_local_dir(
     for v in parsed.values():
         if isinstance(v, str) and v.strip():
             if '/' in v or '\\' in v or '.' in v:
-                referenced_files.append(v.replace('\\', '/').strip())
+                if not _looks_like_shell_cmd(v):
+                    referenced_files.append(v.replace('\\', '/').strip())
             continue
         extracted = _extract_path_from_py_reduce(v)
         if extracted:
