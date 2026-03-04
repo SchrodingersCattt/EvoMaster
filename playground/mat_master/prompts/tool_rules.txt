@@ -71,13 +71,12 @@
 - **No local surrogate probing before first CompDART call**: when user already provides a surrogate model URL/path for DART GA, pass it directly as `targets[*].model_path` to `mat_compdart_submit_run_dart_ga` (or `_run_dart_ga` fallback). Do NOT use `execute_bash`/`peek_file` to download/unzip/inspect `.pt`/`.zip` model files before first CompDART attempt, unless the CompDART tool explicitly returns a model-format error requiring conversion.
 
 ## input-manual-helper (input file writing & validation)
-- When writing any software input file, use the input-manual-helper skill. The SOP is in the skill description — run `list_references.py` to discover templates, fetch them, merge, adapt, validate.
-- CP2K templates use prefix naming (`task_*`, `method_*`, standalone). The agent discovers these dynamically via `list_references.py --software cp2k`.
+- When writing any software input file, use the input-manual-helper skill. Flow: use a query strategy (list_references.py, get_reference) to produce a **rough draft**, then call the appropriate **prepare_* MCP tool** (mat_binary_calc) to get the final input; run **validate_input.py** once and refine only if validation fails or the user has extra constraints.
+- **Prepare tools**: Capabilities and parameters of prepare_* tools are defined by the mat_binary_calc server’s tool schema — do not enumerate them in rules; always check the tool description/schema when choosing and calling a prepare tool. Some tools support workflow parameters (e.g. workflow_type) that generate multi-step inputs; use those instead of hand-assembling when available.
+- Prefer templates and MCP prepare output for draft and final input; use the manual (peek_manual.py) for **targeted** lookup after validation flags an issue or when a specific parameter is uncertain. Avoid repeatedly querying the same section that returns "No params found"; use reference templates or domain knowledge instead.
 - **Do NOT** use peek_file on manual JSONs. Use peek_manual.py instead.
-- **Do NOT** skip validation. Every written input file MUST pass `validate_input.py`.
-- **TOTAL QUERY BUDGET**: HARD LIMIT of **12 peek_manual.py calls per task**. Use batch queries (`--sections "S1,S2,S3"`).
-- **Anti-loop rule**: If peek_manual.py returns "No params found" for a section, do NOT retry more than 2 times. Use reference templates or domain knowledge instead.
-- **CP2K keyword vs subsection**: Keywords = single line `KEY value` (no `&`). Subsections = block `&SEC ... &END SEC`. Mixing them causes ABORT. When in doubt, check the reference template or use `peek_manual.py --search KEYWORD`.
+- **Do NOT** skip validation when a manual/parser exists; run validate_input.py after the prepare step. If it reports "Manual is empty" or "No parser available", do not block — treat prepare output and domain knowledge as the quality source.
+- **CP2K keyword vs subsection**: Keywords = single line `KEY value` (no `&`). Subsections = block `&SEC ... &END SEC`. Mixing them causes ABORT. When in doubt, check the reference template or peek_manual.py --search KEYWORD.
 
 ## use_skill run_script
 - Always pass all required script arguments. Missing args cause exit code 2 and waste tokens.

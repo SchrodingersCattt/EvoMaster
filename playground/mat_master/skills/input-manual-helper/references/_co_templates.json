@@ -53,5 +53,19 @@
   "cp2k/method_dft_plus_u.inp": {
     "hint": "This is a METHOD template (DFT+U). Merge the DFT+U sections into a task_ template.",
     "related": ["cp2k/task_scf.inp", "cp2k/task_opt.inp", "cp2k/task_band.inp"]
+  },
+
+  "abinit/gs_scf.abi": {
+    "hint": "Base ground-state SCF template. For NLO/SHG (e.g. second harmonic generation), do NOT hand-edit multiple datasets. Call prepare_abinit_job with workflow_type='nlo'; the tool uses AbiPy to generate multi-dataset DFPT + optic.inp automatically.",
+    "related": []
+  },
+
+  "lammps/msst_shock.lammps": {
+    "hint": "MSST (Multi-Scale Shock Technique) shock simulation. Replace structure file, pair_style/coeff, and shockvel (piston velocity). Use prepare_lammps_job for path/potential binding.",
+    "related": []
+  },
+  "lammps/gcmc_adsorption.lammps": {
+    "hint": "GCMC (Grand Canonical Monte Carlo) for adsorption. Replace structure file, T (temperature), mu (chemical potential eV). For molecular GCMC use atom_style full and molecule file. Use prepare_lammps_job for path binding.",
+    "related": []
   }
 }

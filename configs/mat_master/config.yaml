@@ -343,7 +343,13 @@ mcp:
               app_key: "agent"
           resources:
             envs: {}
-      sync_tools: []
+      sync_tools:
+        - prepare_abinit_job
+        - prepare_cp2k_job
+        - prepare_qe_job
+        - prepare_lammps_job
+        - prepare_orca_job
+        - prepare_pyatb_job
 
 # ============================================
 # Skills（约束 Mat 工具调用方式，注入 meta 到上下文）
