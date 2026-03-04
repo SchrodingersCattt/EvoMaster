@@ -402,27 +402,20 @@ class BasePlayground:
         self,
         name: str,
         agent_config: dict | None = None,
-        enable_tools: bool = True,
-        llm_config_dict: dict | None = None,
         skill_registry: SkillRegistry | None = None,
         tool_config: dict | None = None,
         llm_config: dict | None = None,
         skill_config: dict | None = None,
     ):
-        """创建 Agent 实例
-
-        支持 v0.0.2 新签名（tool_config/llm_config/skill_config）与旧签名（enable_tools/llm_config_dict）
-        并存：新参数优先，缺省时由旧参数或配置管理器补齐。
+        """创建 Agent 实例（v0.0.2 签名：tool_config/llm_config/skill_config，缺省时从 config 补齐）
 
         Args:
             name: Agent 名称
             agent_config: Agent 配置字典，None 时从 get_agent_config(name) 获取
-            enable_tools: 是否启用工具（旧签名）；当 tool_config 提供时由 tool_config 推导覆盖
-            llm_config_dict: LLM 配置字典（旧签名）
-            skill_registry: Skills 注册中心（旧签名）
-            tool_config: 工具配置（新签名），含 builtin/mcp；提供时用于推导 enable_tools
-            llm_config: LLM 配置（新签名），优先于 llm_config_dict
-            skill_config: 本 agent 的 skills 配置（新签名），dict 形如 {"skills": list[str]}；由 _setup_agents 按此生成 per-agent skill_registry 并传入
+            skill_registry: 本 agent 的 Skill 注册中心（子集或全量）
+            tool_config: 工具配置，含 builtin/mcp；None 时从 get_agent_tools_config(name) 获取
+            llm_config: LLM 配置；None 时从 get_agent_llm_config(name) 获取
+            skill_config: 本 agent 的 skills 配置，dict 形如 {"skills": list[str]}
 
         Returns:
             Agent 实例
@@ -434,18 +427,16 @@ class BasePlayground:
         if agent_config is None:
             agent_config = self.config_manager.get_agent_config(name)
         if llm_config is None:
-            llm_config = llm_config_dict
-        if llm_config is None:
             llm_config = self.config_manager.get_agent_llm_config(name)
+        if tool_config is None:
+            tool_config = self.config_manager.get_agent_tools_config(name)
+        builtin = tool_config.get('builtin', ['*'])
+        enable_tools = bool(builtin)
         enabled_tool_names: list[str] | None = None
-        if tool_config is not None:
-            builtin = tool_config.get('builtin', ['*'])
-            enable_tools = bool(builtin)
-            if '*' in builtin or not builtin:
-                enabled_tool_names = None  # 全部暴露
-            else:
-                enabled_tool_names = list(builtin)
-        # skill_config 已在 _setup_agents 中用于生成 per-agent skill_registry，此处传入的 skill_registry 即子集或全量
+        if '*' in builtin or not builtin:
+            enabled_tool_names = None
+        else:
+            enabled_tool_names = list(builtin)
 
         max_turns = agent_config.get('max_turns', 20)
         context_config_dict = agent_config.get('context', {})

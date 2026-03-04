@@ -50,8 +50,6 @@ def test_stage_2_4_multi_agent_stored_in_agents_slots():
             self,
             name,
             agent_config=None,
-            enable_tools=True,
-            llm_config_dict=None,
             skill_registry=None,
             tool_config=None,
             llm_config=None,
