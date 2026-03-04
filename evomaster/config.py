@@ -24,6 +24,20 @@ except ImportError:
 _ENV_PATTERN = re.compile(r'\$\{([A-Za-z0-9_]+)\}')
 
 
+def _normalize_agent_config_tools(agent_config: dict[str, Any]) -> dict[str, Any]:
+    """将 enable_tools 转为 tools（v0.0.2 风格），不修改原 dict。
+
+    若配置中仅有 enable_tools 且无 tools，则返回副本并添加 tools 键；
+    否则返回副本（不删除 enable_tools，便于兼容旧逻辑）。
+    """
+    out = dict(agent_config)
+    if 'tools' in out:
+        return out
+    enable = out.get('enable_tools', True)
+    out['tools'] = {'builtin': ['*'] if enable else [], 'mcp': ''}
+    return out
+
+
 def _substitute_env(value: Any) -> Any:
     """递归将配置中的 ${VAR} 替换为 os.environ.get(\"VAR\", \"\")。"""
     if isinstance(value, str):
@@ -371,23 +385,25 @@ class ConfigManager:
         if name is None:
             # 兼容：仅有 agents 时返回第一个 agent 的配置，便于单 agent 调用方
             if config.agent:
-                return config.agent
+                return _normalize_agent_config_tools(config.agent)
             if config.agents:
                 first_name = next(iter(config.agents))
-                return config.agents[first_name]
-            return config.agent
+                return _normalize_agent_config_tools(config.agents[first_name])
+            return _normalize_agent_config_tools(config.agent)
         if name not in config.agents:
             raise ValueError(f"Agent config '{name}' not found in agents")
-        return config.agents[name]
+        return _normalize_agent_config_tools(config.agents[name])
 
     def get_agents_config(self) -> dict[str, Any]:
         """获取全部 Agent 配置（v0.0.2 多 agent 配置）
+
+        返回的每个 agent 配置已做 enable_tools → tools 的规范化。
 
         Returns:
             agents 字典，key 为 agent 名称，value 为对应配置字典
         """
         config = self.load()
-        return config.agents
+        return {k: _normalize_agent_config_tools(v) for k, v in config.agents.items()}
 
     def get_agent_llm_config(self, name: str) -> dict[str, Any]:
         """获取指定 agent 所绑定的 LLM 配置
