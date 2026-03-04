@@ -15,7 +15,7 @@ from .base import BaseTool, BaseToolParams
 
 if TYPE_CHECKING:
     from evomaster.agent.session import BaseSession
-    from evomaster.skills import OperatorSkill, SkillRegistry
+    from evomaster.skills import Skill, SkillRegistry
 
 
 class SkillToolParams(BaseToolParams):
@@ -85,12 +85,12 @@ class SkillTool(BaseTool):
                     {'error': 'skill_not_found'},
                 )
 
-            # 只支持 Operator 类型的 skill
-            from evomaster.skills import OperatorSkill
+            # 只支持可执行类型 Skill（Operator）
+            from evomaster.skills import Skill
 
-            if not isinstance(skill, OperatorSkill):
+            if not isinstance(skill, Skill):
                 return (
-                    f"Error: Skill '{params.skill_name}' is not an Operator skill",
+                    f"Error: Skill '{params.skill_name}' is not an executable (Operator) skill",
                     {'error': 'invalid_skill_type'},
                 )
 
@@ -122,7 +122,7 @@ class SkillTool(BaseTool):
             return f"Error: {str(e)}", {'error': str(e)}
 
     @staticmethod
-    def _get_skill_project_root(skill: OperatorSkill | Path | str) -> Path | None:
+    def _get_skill_project_root(skill: Skill | Path | str) -> Path | None:
         """从给定路径向上查找含 evomaster 的项目根，供 PYTHONPATH 使用。"""
         try:
             if isinstance(skill, (Path, str)):
@@ -139,11 +139,11 @@ class SkillTool(BaseTool):
             pass
         return None
 
-    def _get_info(self, skill: OperatorSkill) -> tuple[str, dict[str, Any]]:
+    def _get_info(self, skill: Skill) -> tuple[str, dict[str, Any]]:
         """获取技能的完整信息
 
         Args:
-            skill: OperatorSkill 实例
+            skill: Skill 实例
 
         Returns:
             (observation, info) 元组
@@ -155,12 +155,12 @@ class SkillTool(BaseTool):
         )
 
     def _get_reference(
-        self, skill: OperatorSkill, reference_name: str | None
+        self, skill: Skill, reference_name: str | None
     ) -> tuple[str, dict[str, Any]]:
         """获取技能的参考文档
 
         Args:
-            skill: OperatorSkill 实例
+            skill: Skill 实例
             reference_name: 参考文档名称
 
         Returns:
@@ -206,7 +206,7 @@ class SkillTool(BaseTool):
 
     def _get_co_template_hint(
         self,
-        skill: OperatorSkill,
+        skill: Skill,
         reference_name: str,
     ) -> str | None:
         """Check for co-template hints and return a formatted reminder.
@@ -271,7 +271,7 @@ class SkillTool(BaseTool):
     def _run_script(
         self,
         session: BaseSession,
-        skill: OperatorSkill,
+        skill: Skill,
         script_name: str | None,
         script_args: str | None,
     ) -> tuple[str, dict[str, Any]]:
@@ -279,7 +279,7 @@ class SkillTool(BaseTool):
 
         Args:
             session: 环境会话
-            skill: OperatorSkill 实例
+            skill: Skill 实例
             script_name: 脚本名称
             script_args: 脚本参数
 
@@ -327,6 +327,7 @@ class SkillTool(BaseTool):
         pythonpath_remote = None
 
         from pathlib import PurePosixPath as _PPP
+
         if remote_root is not None and project_root is not None:
             # Strategy 1: project-scoped skill
             use_remote = True
@@ -340,6 +341,7 @@ class SkillTool(BaseTool):
             # Strategy 2: user skill -- no evomaster/ ancestor, remap via user roots
             try:
                 from pathlib import Path as _Path
+
                 rel = script_path.relative_to(_Path(local_user_root)).as_posix()
                 use_remote = True
                 remote_script = str(_PPP(remote_user_root) / rel)
@@ -425,7 +427,7 @@ class SkillTool(BaseTool):
             # Auto-inject per-mode prompt: scan script_args tokens and append the
             # first prompts/<token>.md that exists. No config file needed — the
             # convention is that argparse choices values match prompt file names.
-            prompts_dir = skill.skill_path / "prompts"
+            prompts_dir = skill.skill_path / 'prompts'
             if prompts_dir.exists() and script_args:
                 try:
                     tokens = shlex.split(script_args.strip())
@@ -435,7 +437,7 @@ class SkillTool(BaseTool):
                     candidate = prompts_dir / f"{token}.md"
                     if candidate.exists():
                         try:
-                            prompt_content = candidate.read_text(encoding="utf-8")
+                            prompt_content = candidate.read_text(encoding='utf-8')
                             output += (
                                 f"\n\n{'=' * 60}\n"
                                 f"MANDATORY WORKFLOW (auto-loaded: prompts/{token}.md):\n"
