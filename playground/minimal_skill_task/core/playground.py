@@ -50,7 +50,7 @@ class MinimalSkillTaskPlayground(BasePlayground):
             skills_root = Path(skills_config.get('skills_root', 'evomaster/skills'))
             skill_registry = SkillRegistry(skills_root)
             self.logger.info(f"Loaded {len(skill_registry.get_all_skills())} skills")
-        self._setup_tools(skill_registry)
+        self._setup_mcp_tools()
 
         agents_config = getattr(self.config, 'agents', {})
         if not agents_config:

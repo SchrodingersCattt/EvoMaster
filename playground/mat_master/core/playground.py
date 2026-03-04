@@ -112,24 +112,25 @@ class MatMasterPlayground(BasePlayground):
             p = (_project_root() / p).resolve()
         return p
 
-    def _setup_tools(self, skill_registry=None) -> None:
-        """Override: call base then register memory tools (mem_save, mem_recall) and peek_file."""
-        super()._setup_tools(skill_registry)
+    def _create_tools_for_agent(self, skill_registry, tool_config):
+        """Override: 在基类 registry 上增加 memory、peek_file、extract_webpage、monitor_job（每 agent 独立 tools）。"""
+        registry = super()._create_tools_for_agent(skill_registry, tool_config)
         if self.run_dir is not None:
             self.memory_service.run_dir = Path(self.run_dir)
         memory_tools = get_memory_tools(self.memory_service)
-        self.tools.register_many(memory_tools)
-        self.tools.register(get_peek_file_tool())
+        registry.register_many(memory_tools)
+        registry.register(get_peek_file_tool())
         from ..tools import get_extract_webpage_tool
 
-        self.tools.register(get_extract_webpage_tool())
+        registry.register(get_extract_webpage_tool())
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
 
-        self.tools.register(MonitorJobTool())
+        registry.register(MonitorJobTool())
         self.logger.info(
-            'Registered %d memory tools, peek_file, extract_info_from_webpage, monitor_job',
+            'Registered %d memory tools, peek_file, extract_info_from_webpage, monitor_job (per-agent registry)',
             len(memory_tools),
         )
+        return registry
 
     def sync_skills_to_remote(
         self,
@@ -274,7 +275,10 @@ class MatMasterPlayground(BasePlayground):
             )
 
         self._skill_registry = skill_registry
-        self._setup_tools(skill_registry)
+        # 初始化 MCP（每 agent 在 _create_agent 内通过 _create_tools_for_agent 获得独立 registry）
+        self._setup_mcp_tools()
+        if self.mcp_manager is not None:
+            self.logger.info('MCP manager ready (tools will be attached per-agent)')
 
         agents_config = getattr(self.config, 'agents', None)
         if agents_config and isinstance(agents_config, dict) and agents_config:
@@ -384,10 +388,11 @@ class MatMasterPlayground(BasePlayground):
         _mat_master_cfg = _full_config_dict.get('mat_master') or {}
         _exec_cfg = _mat_master_cfg.get('execution') or {}
 
+        tools = self._create_tools_for_agent(skill_registry, tool_config)
         agent = MatMasterAgent(
             llm=llm,
             session=self.session,
-            tools=self.tools,
+            tools=tools,
             system_prompt_file=system_prompt_file,
             user_prompt_file=user_prompt_file,
             prompt_format_kwargs=prompt_format_kwargs,
@@ -548,7 +553,7 @@ class MatMasterPlayground(BasePlayground):
         future = asyncio.run_coroutine_threadsafe(init_mcp_servers(), self._mcp_loop)
         future.result()
 
-        manager.register_tools(self.tools)
+        # 每 agent 独立 tools：不在此处 register_tools；各 agent 在 _create_tools_for_agent 中通过 register_tools_into 注入
 
         # ── 异步工具不限超时 ──────────────────────────────────────────────
         # 使用 AsyncToolRegistry（从 calculation_executors 推导）标记异步工具，
@@ -577,6 +582,7 @@ class MatMasterPlayground(BasePlayground):
         tool_count = len(manager.get_tool_names())
         server_count = len(manager.get_server_names())
         self.logger.info(
-            f"MCP tools setup complete: {tool_count} tools from {server_count} servers"
+            f"MCP manager initialized: {tool_count} tools from {server_count} servers (per-agent attach)"
         )
+        self.mcp_manager = manager
         return manager

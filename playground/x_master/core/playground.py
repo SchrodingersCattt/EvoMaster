@@ -88,8 +88,8 @@ class XMasterPlayground(BasePlayground):
         # 2. 创建 Session（所有Agent共享）
         self._setup_session()
 
-        # 3. 创建工具注册表
-        self._setup_tools()
+        # 3. 初始化 MCP（每 agent 在 _create_agent 内通过 _create_tools_for_agent 获得独立 registry）
+        self._setup_mcp_tools()
 
         # 4. 从配置中获取工作流参数
         self._load_workflow_config()

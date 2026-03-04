@@ -137,9 +137,9 @@
 
 | 类别 | 说明 |
 |------|------|
-| **已对齐** | 顶层 `tools`(ToolConfig)、ToolConfig 类型、get_agents_config 空抛错、_require_dict、get_llm_config/get_agent_config 校验、get_agent_tools_config/get_agent_skills_config 规则、顶层 agent 移除、_create_agent 新签名、self.agent 兼容设值。 |
+| **已对齐** | 顶层 `tools`(ToolConfig)、ToolConfig 类型、get_agents_config 空抛错、_require_dict、get_llm_config/get_agent_config 校验、get_agent_tools_config/get_agent_skills_config 规则、顶层 agent 移除、_create_agent 新签名、self.agent 兼容设值、**每 agent 独立 tools**（_create_tools_for_agent + register_tools_into）。 |
 | **本仓独有** | `get_skill_config()`、`skill`/`mcp` 配置（业务扩展）；`config_path` 与上游一致，保留。 |
-| **设计差异** | **Tools 模型**：上游在 _create_agent 内为每个 agent 调 _setup_tools（每 agent 独立 tools）；本仓**共用一个 self.tools**，通过 `enabled_tool_names` 控制暴露。若需「不同 agent 不同 MCP/工具集」再考虑 per-agent tools。 |
+| **Tools 模型** | **已对齐**：每 agent 在 _create_agent 内通过 _create_tools_for_agent(skill_registry, tool_config) 获得独立 ToolRegistry；MCP 连接全局初始化一次，通过 register_tools_into(registry) 按需注入到各 agent 的 registry；子类（如 MatMasterPlayground）可覆盖 _create_tools_for_agent 增加 playground 级工具。 |
 | **实现细节** | `enabled_tool_names`：本仓 `None`=全部，上游传 `["*"]`，Agent 侧等价；`load_dotenv(..., override=True)` 本仓已用，上游未传，影响小。 |
 
 验收：在 Python ≥3.10 下 `pytest tests/test_evomaster_config_migration.py -v` 通过。
@@ -153,11 +153,9 @@
 - **并行实验**：`BasePlayground.setup_exp_workspace(task_id)`、`execute_parallel_tasks(tasks, max_workers)`（当前串行；进程级并行用 `run.run_tasks_parallel`）。
 - **多模态**：TaskInstance 含 `images: list[str]`；BaseExp.run(..., images=...)、Playground.run(..., images=...)；`evomaster.utils.multimodal`（encode_image_to_base64、build_multimodal_content）；Agent 初始化时按 task.images 构建多模态 UserMessage；BaseMessage.content 支持 list[dict]；Dialog.get_messages_for_api 与 context 计费支持多模态。
 
-### 未接入（按需实施）
+### 已接入（与上游一致）
 
-| 项 | 说明 |
-|----|------|
-| 每 agent 独立 tools | 上游每 agent 一套 tools；本仓共用 self.tools。若需不同 agent 不同 MCP/工具集再考虑。 |
+- **每 agent 独立 tools**：BasePlayground 不再使用全局 `self.tools`；在 _create_agent 内调用 _create_tools_for_agent(skill_registry, tool_config) 为每个 agent 创建独立 ToolRegistry（builtin + skill_tool + 按 tool_config.mcp 注入的 MCP 工具）；MCPToolManager 提供 register_tools_into(registry) 向指定 registry 注入工具；MatMasterPlayground 等子类通过覆盖 _create_tools_for_agent 增加 memory、peek_file 等。
 
 ### 可选对齐（影响小）
 

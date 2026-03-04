@@ -339,13 +339,26 @@ class MCPToolManager:
         self.logger.info(f"Successfully added MCP server '{name}'")
 
     def register_tools(self, tool_registry: ToolRegistry) -> None:
-        """将所有 MCP 工具注册到 ToolRegistry
+        """将所有 MCP 工具注册到 ToolRegistry，并设为当前生命周期关联的 registry（用于 remove_server/reload 时 unregister）。
 
         Args:
             tool_registry: 目标工具注册表
         """
         self._registered_registry = tool_registry
+        self._register_tools_into_impl(tool_registry)
 
+    def register_tools_into(self, tool_registry: ToolRegistry) -> None:
+        """将当前已加载的 MCP 工具注册到指定 ToolRegistry，不修改 _registered_registry。
+
+        用于「每 agent 独立 tools」：同一 MCP 连接可向多个 agent 的 registry 注入工具，
+        每个 agent 拥有自己的 registry 实例。
+
+        Args:
+            tool_registry: 目标工具注册表
+        """
+        self._register_tools_into_impl(tool_registry)
+
+    def _register_tools_into_impl(self, tool_registry: ToolRegistry) -> None:
         total_count = 0
         for server_name, tools in self.tools_by_server.items():
             for tool_name, tool in tools.items():
@@ -354,7 +367,6 @@ class MCPToolManager:
                 self.logger.debug(
                     f"Registered MCP tool: {tool_name} (from {server_name})"
                 )
-
         self.logger.info(f"Registered {total_count} MCP tools to ToolRegistry")
 
     async def remove_server(self, server_name: str) -> None:
