@@ -107,9 +107,11 @@
 - `SkillMetaInfo.skill_type` 改为可选（`str | None`）；解析时 frontmatter 优先，否则用子类 ClassVar，与 v0.0.2 对齐。
 - `evomaster/skills/__init__.py` 已导出 `Skill`。
 
-### 3.2 SkillRegistry **[未完成]**
+### 3.2 SkillRegistry **[已完成]**
 
-- 使用单一存储（如统一 `_skills: dict[str, Skill]`），支持构造时 `skills: list[str] | None` 按名称过滤加载；新增 `create_subset(names: list[str])` 方法。
+- 使用单一存储 `_skills: dict[str, BaseSkill]`，不再分 `_knowledge_skills` / `_operator_skills`；`get_knowledge_skills` / `get_operator_skills` 改为按类型从 `_skills` 过滤。
+- 构造时支持 `skills: list[str] | None`：若提供则仅加载名称在该列表中的 skill。
+- 新增 `create_subset(names: list[str]) -> SkillRegistry`，返回仅含指定名称的子集（内部用 `_initial_skills` 预填充，不重新加载磁盘）。
 
 ### 3.3 引用替换 **[未完成]**
 
