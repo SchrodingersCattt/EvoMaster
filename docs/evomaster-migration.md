@@ -11,6 +11,7 @@
 | 阶段 1.1 配置模型 | **已完成** |
 | 阶段 1.2 配置兼容（YAML / 加载层） | **已完成** |
 | 阶段 1.3 验收 | 未完成 |
+| 阶段 1.4 现有 YAML 迁移到 v0.0.2 写法 | 未完成 |
 | 阶段 2 | 未完成 |
 | 阶段 3 | 未完成 |
 | 阶段 4 | 未完成 |
@@ -45,6 +46,13 @@
 
 - 现有 configs 下的 YAML 无需改动即可通过新加载逻辑得到与当前行为一致的配置。
 - 新写的 YAML 可使用 `tools:`、per-agent `skills:` 等 v0.0.2 格式。
+
+### 1.4 现有 YAML 迁移到 v0.0.2 写法 **[未完成]**
+
+- 将 `configs/` 下所有仍使用 `enable_tools: true/false` 的 agent 配置改为 `tools: { builtin: ["*"] }` 或 `tools: { builtin: [] }` 等 v0.0.2 写法。
+- 若有 per-agent 的 skills 需求，在对应 agent 下增加 `skills: ["*"]` 或 `skills: ["rag", "pdf"]` 等；若暂无需求可省略或写空列表。
+- 迁移完成后，确认仓库内无 YAML 再依赖 `enable_tools`（可全文搜索 `enable_tools` 校验）。
+- **目的**：完成此步后，在「与上游完全对齐（收尾）」中即可安全移除 `_normalize_agent_config_tools` 及 getter 里对 `enable_tools` 的兼容逻辑，与上游完全一致。
 
 ---
 
@@ -130,10 +138,11 @@
 
 ## 与上游完全对齐（收尾）**[未完成]**
 
-在阶段 1～4 完成后，若需与 EvoMaster 上游 v0.0.2 完全一致，执行以下收尾步骤。
+在阶段 1～4 **及阶段 1.4（现有 YAML 已迁移到 v0.0.2 写法）** 完成后，若需与 EvoMaster 上游 v0.0.2 完全一致，执行以下收尾步骤。
 
 ### 配置与 ConfigManager
 
+- **enable_tools 兼容逻辑**：在阶段 1.4 已将所有 YAML 改为 `tools:` 的前提下，移除 `_normalize_agent_config_tools()`；在 `get_agent_config`、`get_agents_config` 中不再做 enable_tools → tools 的转换，直接返回原始配置。
 - **顶层 `agent`**：从 `EvoMasterConfig` 中移除 `agent` 字段，或标记为弃用（deprecated）；所有 YAML 与代码仅使用 `agents`。迁移前需将仍使用 `agent:` 的配置改为 `agents: { default: ... }` 等形式。
 - **get_agent_config(name)**：改为仅支持 `get_agent_config(name: str)`，移除无参重载；移除「无参时返回 config.agent 或第一个 agent」的逻辑。所有调用方改为显式传入 agent 名称。
 - **get_agent_tools_config / get_agent_skills_config**：若上游返回 `ToolConfig` 等强类型，将本仓库的返回类型与默认值改为与上游一致；移除仅为兼容旧配置的简写（若上游无对应简写）。
