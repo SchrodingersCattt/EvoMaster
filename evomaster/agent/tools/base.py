@@ -12,23 +12,23 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
-    from evomaster.utils.types import FunctionSpec, ToolSpec
     from evomaster.agent.session import BaseSession
     from evomaster.skills import SkillRegistry
+    from evomaster.utils.types import ToolSpec
 
 
 class ToolError(Exception):
     """工具执行错误"""
-    
-    def __init__(self, message: str):
-        self.message = message
-        super().__init__(message)
+
+    def __init__(self, *args: str) -> None:
+        super().__init__(*args)
+        self.message = args[0] if args else ''
 
 
 class ToolParameterError(ToolError):
     """工具参数错误"""
-    
-    def __init__(self, param_name: str, value: Any, hint: str = ""):
+
+    def __init__(self, param_name: str, value: Any, hint: str = '', /) -> None:
         self.param_name = param_name
         self.value = value
         message = f"Invalid parameter `{param_name}`: {value}"
@@ -39,6 +39,7 @@ class ToolParameterError(ToolError):
 
 def _remove_unused_schema_info(schema: dict, model: type[BaseModel]) -> None:
     """移除 schema 中不需要的信息，使其更简洁"""
+
     def _remove_recursive(schema: dict, keys: list[str]):
         for key in keys:
             schema.pop(key, None)
@@ -46,18 +47,18 @@ def _remove_unused_schema_info(schema: dict, model: type[BaseModel]) -> None:
             if isinstance(v, dict):
                 _remove_recursive(v, keys)
 
-    _remove_recursive(schema, ["default", "title", "additionalProperties"])
-    schema.pop("description", None)
+    _remove_recursive(schema, ['default', 'title', 'additionalProperties'])
+    schema.pop('description', None)
 
 
 class BaseToolParams(BaseModel):
     """工具参数基类
-    
+
     所有工具参数类应继承此类，并定义：
     - name: ClassVar[str] - 工具名称（暴露给 LLM）
     - __doc__: 工具描述（作为 function description）
     """
-    
+
     name: ClassVar[str]
     model_config = ConfigDict(
         json_schema_extra=_remove_unused_schema_info,
@@ -66,42 +67,43 @@ class BaseToolParams(BaseModel):
 
 class BaseTool(ABC):
     """工具基类
-    
+
     每个工具需要：
     1. 定义参数类（继承 BaseToolParams）
     2. 实现 execute 方法
     """
-    
+
     # 工具名称
     name: ClassVar[str]
-    
+
     # 参数类
     params_class: ClassVar[type[BaseToolParams]]
-    
+
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
 
     @abstractmethod
-    def execute(self, session: BaseSession, args_json: str) -> tuple[str, dict[str, Any]]:
+    def execute(
+        self, session: BaseSession, args_json: str
+    ) -> tuple[str, dict[str, Any]]:
         """执行工具
-        
+
         Args:
             session: 环境会话
             args_json: 参数 JSON 字符串
-            
+
         Returns:
             (observation, info) 元组
             - observation: 返回给 Agent 的观察结果
             - info: 额外信息
         """
-        pass
 
     def parse_params(self, args_json: str) -> BaseToolParams:
         """解析参数
-        
+
         Args:
             args_json: JSON 字符串格式的参数
-            
+
         Returns:
             解析后的参数对象
         """
@@ -112,29 +114,31 @@ class BaseTool(ABC):
         from evomaster.utils.types import FunctionSpec, ToolSpec
 
         return ToolSpec(
-            type="function",
+            type='function',
             function=FunctionSpec(
                 name=self.name,
-                description=(self.params_class.__doc__ or "").strip().replace("\n    ", "\n"),
+                description=(self.params_class.__doc__ or '')
+                .strip()
+                .replace('\n    ', '\n'),
                 parameters=self.params_class.model_json_schema(),
                 strict=None,
-            )
+            ),
         )
 
 
 class ToolRegistry:
     """工具注册中心
-    
+
     管理所有可用工具，支持动态注册和获取。
     """
-    
+
     def __init__(self):
         self._tools: dict[str, BaseTool] = {}
         self.logger = logging.getLogger(self.__class__.__name__)
 
     def register(self, tool: BaseTool) -> None:
         """注册工具
-        
+
         Args:
             tool: 工具实例
         """
@@ -156,10 +160,10 @@ class ToolRegistry:
 
     def get_tool(self, name: str) -> BaseTool | None:
         """获取工具
-        
+
         Args:
             name: 工具名称
-            
+
         Returns:
             工具实例，不存在则返回 None
         """
@@ -173,9 +177,19 @@ class ToolRegistry:
         """获取所有工具名称"""
         return list(self._tools.keys())
 
-    def get_tool_specs(self) -> list[ToolSpec]:
-        """获取所有工具的规格列表（用于 LLM）"""
-        return [tool.get_tool_spec() for tool in self._tools.values()]
+    def get_tool_specs(self, names: list[str] | None = None) -> list[ToolSpec]:
+        """获取工具的规格列表（用于 LLM）。
+
+        Args:
+            names: 若为 None 或含 \"*\"，返回全部；否则只返回名称在 names 中的工具。
+        """
+        if names is not None and '*' not in names and len(names) == 0:
+            return []
+        if names is None or '*' in names:
+            return [tool.get_tool_spec() for tool in self._tools.values()]
+        return [
+            self._tools[name].get_tool_spec() for name in names if name in self._tools
+        ]
 
     def __contains__(self, name: str) -> bool:
         return name in self._tools
@@ -194,7 +208,8 @@ class ToolRegistry:
             MCP 工具列表
         """
         return [
-            tool for tool in self._tools.values()
+            tool
+            for tool in self._tools.values()
             if getattr(tool, '_is_mcp_tool', False)
         ]
 
@@ -205,7 +220,8 @@ class ToolRegistry:
             内置工具列表
         """
         return [
-            tool for tool in self._tools.values()
+            tool
+            for tool in self._tools.values()
             if not getattr(tool, '_is_mcp_tool', False)
         ]
 
@@ -219,7 +235,8 @@ class ToolRegistry:
             该服务器的工具列表
         """
         return [
-            tool for tool in self._tools.values()
+            tool
+            for tool in self._tools.values()
             if getattr(tool, '_mcp_server', None) == server_name
         ]
 
@@ -237,28 +254,41 @@ class ToolRegistry:
         return sorted(list(servers))
 
 
-
-def create_default_registry(skill_registry: SkillRegistry | None = None) -> ToolRegistry:
-    """创建默认的工具注册中心，包含所有内置工具
+def create_registry(
+    builtin_names: list[str],
+    skill_registry: SkillRegistry | None = None,
+) -> ToolRegistry:
+    """创建工具注册中心，按名称注册内置工具（v0.0.2 风格）。
 
     Args:
-        skill_registry: 可选的 SkillRegistry 实例，如果提供则注册 SkillTool
+        builtin_names: 要注册的内置工具名列表；[\"*\"] 表示全部内置工具。
+        skill_registry: 可选的 SkillRegistry 实例，若提供则注册 SkillTool。
     """
-    from .builtin import BashTool, EditorTool, ThinkTool, FinishTool
+    from .builtin import BashTool, EditorTool, FinishTool, ThinkTool
 
-    registry = ToolRegistry()
-    tools = [
+    builtin_list: list[BaseTool] = [
         BashTool(),
         EditorTool(),
         ThinkTool(),
         FinishTool(),
     ]
+    name_to_tool = {t.name: t for t in builtin_list}
+    if '*' in builtin_names:
+        tools = list(name_to_tool.values())
+    else:
+        tools = [name_to_tool[n] for n in builtin_names if n in name_to_tool]
 
-    # 如果提供了 skill_registry，注册 SkillTool
+    registry = ToolRegistry()
+    registry.register_many(tools)
     if skill_registry is not None:
         from .skill import SkillTool
-        tools.append(SkillTool(skill_registry))
 
-    registry.register_many(tools)
+        registry.register(SkillTool(skill_registry))
     return registry
 
+
+def create_default_registry(
+    skill_registry: SkillRegistry | None = None,
+) -> ToolRegistry:
+    """创建默认的工具注册中心，包含所有内置工具（等价于 create_registry([\"*\"], skill_registry)）。"""
+    return create_registry(['*'], skill_registry)
