@@ -328,30 +328,27 @@ class MatMasterPlayground(BasePlayground):
         self,
         name: str,
         agent_config: dict,
-        enable_tools: bool = True,
-        llm_config_dict: dict | None = None,
         skill_registry=None,
         tool_config: dict | None = None,
         llm_config: dict | None = None,
-        skill_config: list | None = None,
+        skill_config: dict | None = None,
     ):
-        """创建 Mat Master 专用 Agent（MatMasterAgent）；支持基类新签名 tool_config/llm_config/skill_config（skill_registry 已由 base 按 skill_config 生成）。"""
+        """创建 Mat Master 专用 Agent（MatMasterAgent）；签名与基类 v0.0.2 一致。"""
         from evomaster.agent import AgentConfig
         from evomaster.agent.context import ContextConfig
         from evomaster.utils import LLMConfig, create_llm
 
         if llm_config is None:
-            llm_config = llm_config_dict
-        if llm_config is None:
-            llm_config = self._setup_llm_config()
+            llm_config = self.config_manager.get_agent_llm_config(name)
+        if tool_config is None:
+            tool_config = self.config_manager.get_agent_tools_config(name)
+        builtin = tool_config.get('builtin', ['*'])
+        enable_tools = bool(builtin)
         enabled_tool_names = None
-        if tool_config is not None:
-            builtin = tool_config.get('builtin', ['*'])
-            enable_tools = bool(builtin)
-            if '*' in builtin or not builtin:
-                enabled_tool_names = None
-            else:
-                enabled_tool_names = list(builtin)
+        if '*' in builtin or not builtin:
+            enabled_tool_names = None
+        else:
+            enabled_tool_names = list(builtin)
 
         base_max_turns = agent_config.get('max_turns', 20)
         full_cfg = self.config.model_dump() or {}

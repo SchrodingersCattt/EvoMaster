@@ -24,7 +24,7 @@
 | 阶段 4.2 minimal_multi_agent / minimal_kaggle | **已完成** |
 | 阶段 4.3 agent_run_service 与 server | **已完成** |
 | 阶段 4.4 验收 | **已完成** |
-| 与上游完全对齐（收尾） | 未完成 |
+| 与上游完全对齐（收尾） | **已完成** |
 
 ---
 
@@ -150,7 +150,7 @@
 
 ---
 
-## 与上游完全对齐（收尾）**[进行中]**
+## 与上游完全对齐（收尾）**[已完成]**
 
 在阶段 1～4 **及阶段 1.4（现有 YAML 已迁移到 v0.0.2 写法）** 完成后，若需与 EvoMaster 上游 v0.0.2 完全一致，执行以下收尾步骤。
 
@@ -163,12 +163,15 @@
 
 ### 其他兼容层
 
-- 阶段 2 中保留的 `self.agent`、无参兼容等，在业务全部迁到 `self.agents` 后移除。
-- 阶段 2 中 `_create_agent` 的旧签名（`enable_tools`、`llm_config_dict`、`skill_registry`）在调用方全部迁移后移除。
+- 阶段 2 中保留的 `self.agent`、无参兼容等，在业务全部迁到 `self.agents` 后移除。**[未完成，可选]**
+- **_[已完成]_**
+  - `_create_agent` 旧签名已移除：去掉参数 `enable_tools`、`llm_config_dict`；缺省时从 `get_agent_tools_config(name)` / `get_agent_llm_config(name)` 补齐。
+  - 调用方已全部迁至新签名：BasePlayground、MatMasterPlayground、x_master、minimal_skill_task 及测试 mock 均使用 `tool_config`/`llm_config`/`skill_config`/`skill_registry`。
 
 ### 验收
 
 - 配置模型、ConfigManager API 与上游 [EvoMaster config](https://github.com/sjtu-sai-agents/EvoMaster) 一致；无本仓库独有的兼容分支。
+- 验收方式：在 **Python ≥3.10** 下运行 `pytest tests/test_evomaster_config_migration.py -v` 通过即可（Python 3.9 因 typing 语法会报错，属环境限制）。
 
 ---
 
