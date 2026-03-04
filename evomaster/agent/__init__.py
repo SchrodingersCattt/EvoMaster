@@ -9,80 +9,83 @@ Agent 是 EvoMaster 的智能体组件，包含：
 """
 
 from evomaster.utils.types import (
+    AssistantMessage,
+    Dialog,
+    FunctionCall,
+    FunctionSpec,
     Message,
     MessageRole,
-    SystemMessage,
-    UserMessage,
-    AssistantMessage,
-    ToolMessage,
-    ToolCall,
-    FunctionCall,
-    ToolSpec,
-    FunctionSpec,
-    Dialog,
     StepRecord,
-    Trajectory,
+    SystemMessage,
     TaskInstance,
+    ToolCall,
+    ToolMessage,
+    ToolSpec,
+    Trajectory,
+    UserMessage,
 )
-from .context import ContextManager, ContextConfig, TruncationStrategy
-from .agent import BaseAgent, Agent, AgentConfig
+
+from .agent import Agent, AgentConfig, BaseAgent
+from .context import ContextConfig, ContextManager, TruncationStrategy
 
 # Session 子模块
 from .session import (
     BaseSession,
-    SessionConfig,
     DockerSession,
     DockerSessionConfig,
+    SessionConfig,
 )
 
 # Tools 子模块
 from .tools import (
     BaseTool,
-    ToolRegistry,
-    ToolError,
-    create_default_registry,
     BashTool,
     EditorTool,
-    ThinkTool,
     FinishTool,
+    ThinkTool,
+    ToolError,
+    ToolRegistry,
+    create_default_registry,
+    create_registry,
 )
 
 __all__ = [
     # Types
-    "Message",
-    "MessageRole",
-    "SystemMessage",
-    "UserMessage",
-    "AssistantMessage",
-    "ToolMessage",
-    "ToolCall",
-    "FunctionCall",
-    "ToolSpec",
-    "FunctionSpec",
-    "Dialog",
-    "StepRecord",
-    "Trajectory",
-    "TaskInstance",
+    'Message',
+    'MessageRole',
+    'SystemMessage',
+    'UserMessage',
+    'AssistantMessage',
+    'ToolMessage',
+    'ToolCall',
+    'FunctionCall',
+    'ToolSpec',
+    'FunctionSpec',
+    'Dialog',
+    'StepRecord',
+    'Trajectory',
+    'TaskInstance',
     # Context
-    "ContextManager",
-    "ContextConfig",
-    "TruncationStrategy",
+    'ContextManager',
+    'ContextConfig',
+    'TruncationStrategy',
     # Agent
-    "BaseAgent",
-    "Agent",
-    "AgentConfig",
+    'BaseAgent',
+    'Agent',
+    'AgentConfig',
     # Session
-    "BaseSession",
-    "SessionConfig",
-    "DockerSession",
-    "DockerSessionConfig",
+    'BaseSession',
+    'SessionConfig',
+    'DockerSession',
+    'DockerSessionConfig',
     # Tools
-    "BaseTool",
-    "ToolRegistry",
-    "ToolError",
-    "create_default_registry",
-    "BashTool",
-    "EditorTool",
-    "ThinkTool",
-    "FinishTool",
+    'BaseTool',
+    'ToolRegistry',
+    'ToolError',
+    'create_default_registry',
+    'create_registry',
+    'BashTool',
+    'EditorTool',
+    'ThinkTool',
+    'FinishTool',
 ]

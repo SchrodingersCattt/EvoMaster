@@ -51,7 +51,10 @@ agents:
   general:
     llm: "litellm"
     max_turns: 200
-    enable_tools: true
+    tools:
+      builtin: ["*"]
+      # 设为 "*" 才会把 MCP 工具（mat_sn_*、mat_doc_*、structure-manager 等）注入到该 agent；空字符串则不注册
+      mcp: "*"
 
     context:
       max_tokens: 128000

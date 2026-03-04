@@ -38,11 +38,15 @@ class ToolCall(BaseModel):
 
 
 class BaseMessage(BaseModel):
-    """消息基类"""
+    """消息基类
+
+    content 支持：str（纯文本）、list[dict]（多模态内容块，如 [{"type":"text","text":"..."},{"type":"image_url","image_url":{"url":"data:image/..."}}]）、dict（如 finish 工具结果）。
+    """
 
     role: MessageRole = Field(description='消息角色')
-    content: str | dict[str, Any] | None = Field(
-        default=None, description='消息内容（工具结果可为 dict，如 finish）'
+    content: str | list[dict[str, Any]] | dict[str, Any] | None = Field(
+        default=None,
+        description='消息内容：str 纯文本；list 多模态块；dict 如工具结果',
     )
     meta: dict[str, Any] = Field(default_factory=dict, description='元数据')
 
@@ -106,16 +110,20 @@ class Dialog(BaseModel):
         self.messages.append(message)
 
     def get_messages_for_api(self) -> list[dict[str, Any]]:
-        """获取用于 API 调用的消息格式。content 为 dict 时序列化为 JSON 字符串。"""
+        """获取用于 API 调用的消息格式。
+
+        content 为 list（多模态块）时直接传递；为 dict 时序列化为 JSON 字符串；为 str 时直接传递。
+        """
         result = []
         for msg in self.messages:
             msg_dict: dict[str, Any] = {'role': msg.role.value}
             if msg.content is not None:
-                msg_dict['content'] = (
-                    json.dumps(msg.content, ensure_ascii=False)
-                    if isinstance(msg.content, dict)
-                    else msg.content
-                )
+                if isinstance(msg.content, list):
+                    msg_dict['content'] = msg.content
+                elif isinstance(msg.content, dict):
+                    msg_dict['content'] = json.dumps(msg.content, ensure_ascii=False)
+                else:
+                    msg_dict['content'] = msg.content
             if isinstance(msg, AssistantMessage) and msg.tool_calls:
                 msg_dict['tool_calls'] = [tc.model_dump() for tc in msg.tool_calls]
             if isinstance(msg, ToolMessage):
@@ -176,4 +184,8 @@ class TaskInstance(BaseModel):
     task_type: str = Field(default='general', description='任务类型')
     description: str = Field(default='', description='任务描述')
     input_data: dict[str, Any] = Field(default_factory=dict, description='输入数据')
+    images: list[str] = Field(
+        default_factory=list,
+        description='图片文件路径列表（支持 PNG/JPG），用于多模态任务',
+    )
     meta: dict[str, Any] = Field(default_factory=dict, description='元数据')

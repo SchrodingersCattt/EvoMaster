@@ -8,7 +8,13 @@
 - mcp/: MCP 协议工具支持
 """
 
-from .base import BaseTool, ToolRegistry, ToolError, create_default_registry
+from .base import (
+    BaseTool,
+    ToolError,
+    ToolRegistry,
+    create_default_registry,
+    create_registry,
+)
 
 # 内置工具
 from .builtin import (
@@ -16,43 +22,43 @@ from .builtin import (
     BashToolParams,
     EditorTool,
     EditorToolParams,
-    ThinkTool,
-    ThinkToolParams,
     FinishTool,
     FinishToolParams,
+    ThinkTool,
+    ThinkToolParams,
 )
 
 # MCP 工具
 from .mcp import (
+    MCPConnection,
     MCPTool,
     MCPToolManager,
-    MCPConnection,
     create_connection,
 )
-
 from .skill import SkillTool, SkillToolParams
 
 __all__ = [
     # Base
-    "BaseTool",
-    "ToolRegistry",
-    "ToolError",
-    "create_default_registry",
+    'BaseTool',
+    'ToolRegistry',
+    'ToolError',
+    'create_default_registry',
+    'create_registry',
     # Builtin Tools
-    "BashTool",
-    "BashToolParams",
-    "EditorTool",
-    "EditorToolParams",
-    "ThinkTool",
-    "ThinkToolParams",
-    "FinishTool",
-    "FinishToolParams",
-    #Skill Tools
-    "SkillTool",
-    "SkillToolParams",
+    'BashTool',
+    'BashToolParams',
+    'EditorTool',
+    'EditorToolParams',
+    'ThinkTool',
+    'ThinkToolParams',
+    'FinishTool',
+    'FinishToolParams',
+    # Skill Tools
+    'SkillTool',
+    'SkillToolParams',
     # MCP Tools
-    "MCPTool",
-    "MCPToolManager",
-    "MCPConnection",
-    "create_connection",
+    'MCPTool',
+    'MCPToolManager',
+    'MCPConnection',
+    'create_connection',
 ]

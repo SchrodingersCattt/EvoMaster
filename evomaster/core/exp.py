@@ -57,15 +57,17 @@ class BaseExp:
         task_description: str = '',
         task_id: str = 'exp_001',
         task: Optional[TaskInstance] = None,
+        images: Optional[list[str]] = None,
     ) -> dict:
         """运行一次实验。
 
-        若传入 task，则直接使用（可带 task.meta 如 dialog_history）；否则用 task_description 与 task_id 构造任务。
+        若传入 task，则直接使用（可带 task.meta 如 dialog_history）；否则用 task_description、task_id、images 构造任务。
 
         Args:
             task_description: 任务描述（task 为 None 时使用）
             task_id: 任务 ID（task 为 None 时使用）
-            task: 可选，已有 TaskInstance（传入时忽略 task_description、task_id）
+            task: 可选，已有 TaskInstance（传入时忽略 task_description、task_id、images）
+            images: 可选，图片文件路径列表（多模态任务）
 
         Returns:
             运行结果字典
@@ -77,6 +79,7 @@ class BaseExp:
                 task_id=task_id,
                 task_type='discovery',
                 description=task_description,
+                images=images or [],
             )
         run_task_id = run_task.task_id
         self.logger.debug(f"Running task: {run_task_id}")

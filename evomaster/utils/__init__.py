@@ -7,57 +7,60 @@
 """
 
 from .llm import (
+    AnthropicLLM,
     BaseLLM,
     LLMConfig,
     LLMResponse,
     OpenAILLM,
-    AnthropicLLM,
     create_llm,
 )
-
-from .types import (
-    # Message 类型
-    MessageRole,
-    BaseMessage,
-    SystemMessage,
-    UserMessage,
+from .multimodal import (
+    build_multimodal_content,
+    encode_image_to_base64,
+)
+from .types import (  # Message 类型; Function/Tool 定义; Dialog 和 Trajectory
     AssistantMessage,
-    ToolMessage,
-    Message,
-    # Function/Tool 定义
-    FunctionCall,
-    ToolCall,
-    FunctionSpec,
-    ToolSpec,
-    # Dialog 和 Trajectory
+    BaseMessage,
     Dialog,
+    FunctionCall,
+    FunctionSpec,
+    Message,
+    MessageRole,
     StepRecord,
-    Trajectory,
+    SystemMessage,
     TaskInstance,
+    ToolCall,
+    ToolMessage,
+    ToolSpec,
+    Trajectory,
+    UserMessage,
 )
 
 __all__ = [
+    # Multimodal
+    'encode_image_to_base64',
+    'build_multimodal_content',
     # LLM
-    "BaseLLM",
-    "LLMConfig",
-    "LLMResponse",
-    "OpenAILLM",
-    "AnthropicLLM",
-    "create_llm",
+    'BaseLLM',
+    'LLMConfig',
+    'LLMResponse',
+    'OpenAILLM',
+    'AnthropicLLM',
+    'create_llm',
     # Types
-    "MessageRole",
-    "BaseMessage",
-    "SystemMessage",
-    "UserMessage",
-    "AssistantMessage",
-    "ToolMessage",
-    "Message",
-    "FunctionCall",
-    "ToolCall",
-    "FunctionSpec",
-    "ToolSpec",
-    "Dialog",
-    "StepRecord",
-    "Trajectory",
-    "TaskInstance",
+    'MessageRole',
+    'BaseMessage',
+    'SystemMessage',
+    'UserMessage',
+    'AssistantMessage',
+    'ToolMessage',
+    'Message',
+    'FunctionCall',
+    'ToolCall',
+    'FunctionSpec',
+    'ToolSpec',
+    'Dialog',
+    'StepRecord',
+    'Trajectory',
+    'TaskInstance',
 ]
