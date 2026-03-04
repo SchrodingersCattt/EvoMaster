@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 
 import yaml
+
 from evomaster.core import BasePlayground, register_playground
 
 from ..memory import MemoryService, get_memory_tools
@@ -27,7 +28,7 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent.parent
 
 
-@register_playground("mat_master")
+@register_playground('mat_master')
 class MatMasterPlayground(BasePlayground):
     """Mat Master Playground
 
@@ -50,7 +51,7 @@ class MatMasterPlayground(BasePlayground):
             config_path: 配置文件完整路径（如果提供，会覆盖 config_dir）
         """
         if config_path is None and config_dir is None:
-            config_dir = _project_root() / "configs" / "mat_master"
+            config_dir = _project_root() / 'configs' / 'mat_master'
 
         super().__init__(config_dir=config_dir, config_path=config_path)
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -60,18 +61,20 @@ class MatMasterPlayground(BasePlayground):
 
     def set_mode(self, mode: str) -> None:
         """Set workflow mode from CLI: direct | planner (use --mode to switch)."""
-        raw = (mode or "").strip().lower() or None
+        raw = (mode or '').strip().lower() or None
         self._run_mode = raw
         if self._run_mode:
-            self.logger.info("Mat Master mode (from --mode): %s", self._run_mode)
+            self.logger.info('Mat Master mode (from --mode): %s', self._run_mode)
 
     def set_run_dir(self, run_dir, task_id=None):
         """Override: keep memory_service.run_dir in sync; sync session workspace to run_dir/workspaces/task_id so downloads and tool outputs go under the current session."""
         super().set_run_dir(run_dir, task_id=task_id)
         # Ensure root logger level allows file handler to receive INFO (evo only adds handler, root default is WARNING)
-        if run_dir and getattr(self, "log_file_handler", None) is not None:
+        if run_dir and getattr(self, 'log_file_handler', None) is not None:
             root = logging.getLogger()
-            level = getattr(logging, getattr(self.config.logging, "level", "INFO"), logging.INFO)
+            level = getattr(
+                logging, getattr(self.config.logging, 'level', 'INFO'), logging.INFO
+            )
             root.setLevel(level)
         self.memory_service.run_dir = Path(run_dir) if run_dir else None
         # When reusing cached pg, session was created at startup with a different workspace.
@@ -83,24 +86,24 @@ class MatMasterPlayground(BasePlayground):
                 ws_path = ws_override
                 ws_path.mkdir(parents=True, exist_ok=True)
             elif task_id:
-                ws_path = run_path / "workspaces" / task_id
+                ws_path = run_path / 'workspaces' / task_id
             else:
-                ws_path = run_path / "workspace"
+                ws_path = run_path / 'workspace'
             ws_str = str(ws_path)
-            if hasattr(self.session.config, "workspace_path"):
+            if hasattr(self.session.config, 'workspace_path'):
                 self.session.config.workspace_path = ws_str
-            if hasattr(self.session.config, "working_dir"):
+            if hasattr(self.session.config, 'working_dir'):
                 self.session.config.working_dir = ws_str
-            self.logger.debug("Session workspace updated to: %s", ws_str)
+            self.logger.debug('Session workspace updated to: %s', ws_str)
 
     def _get_workspace_root_override(self) -> Path | None:
-        raw = (os.environ.get("MAT_MASTER_WORKSPACE_ROOT") or "").strip()
+        raw = (os.environ.get('MAT_MASTER_WORKSPACE_ROOT') or '').strip()
         if not raw:
             try:
                 config_dict = self.config.model_dump()
             except Exception:
                 config_dict = {}
-            raw = (config_dict.get("mat_master") or {}).get("workspace_root") or ""
+            raw = (config_dict.get('mat_master') or {}).get('workspace_root') or ''
         raw = raw.strip()
         if not raw:
             return None
@@ -118,14 +121,19 @@ class MatMasterPlayground(BasePlayground):
         self.tools.register_many(memory_tools)
         self.tools.register(get_peek_file_tool())
         from ..tools import get_extract_webpage_tool
+
         self.tools.register(get_extract_webpage_tool())
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
+
         self.tools.register(MonitorJobTool())
-        self.logger.info("Registered %d memory tools, peek_file, extract_info_from_webpage, monitor_job", len(memory_tools))
+        self.logger.info(
+            'Registered %d memory tools, peek_file, extract_info_from_webpage, monitor_job',
+            len(memory_tools),
+        )
 
     def sync_skills_to_remote(
         self,
-        remote_base: str = "/personal/workspace/.evomaster",
+        remote_base: str = '/personal/workspace/.evomaster',
     ) -> None:
         """Upload skills (core + mat_master + user) to the remote node.
 
@@ -138,22 +146,30 @@ class MatMasterPlayground(BasePlayground):
         from evomaster.agent.session import SSHSession
 
         if not isinstance(self.session, SSHSession):
-            self.logger.debug("sync_skills_to_remote: skipped (not an SSH session)")
+            self.logger.debug('sync_skills_to_remote: skipped (not an SSH session)')
             return
 
         env = self.session._env
-        exclude = {"__pycache__", ".git", "node_modules", ".mypy_cache", ".pytest_cache"}
+        exclude = {
+            '__pycache__',
+            '.git',
+            'node_modules',
+            '.mypy_cache',
+            '.pytest_cache',
+        }
 
         config_dict = self.config.model_dump()
-        skills_config = config_dict.get("skills", {})
-        skills_root_rel = skills_config.get("skills_root", "evomaster/skills")
+        skills_config = config_dict.get('skills', {})
+        skills_root_rel = skills_config.get('skills_root', 'evomaster/skills')
         skills_root = Path(skills_root_rel)
         if not skills_root.is_absolute():
             skills_root = _project_root() / skills_root
         if skills_root.is_dir():
-            env.upload_directory_tarball(str(skills_root), f"{remote_base}/{skills_root_rel}", exclude=exclude)
+            env.upload_directory_tarball(
+                str(skills_root), f"{remote_base}/{skills_root_rel}", exclude=exclude
+            )
 
-        mat_skills_root = _project_root() / "playground" / "mat_master" / "skills"
+        mat_skills_root = _project_root() / 'playground' / 'mat_master' / 'skills'
         if mat_skills_root.is_dir():
             env.upload_directory_tarball(
                 str(mat_skills_root),
@@ -162,27 +178,37 @@ class MatMasterPlayground(BasePlayground):
             )
 
         # Upload user skills to their own persistent remote directory
-        skill_evolution_cfg = (config_dict.get("mat_master") or {}).get("skill_evolution") or {}
-        local_user_root_raw = skill_evolution_cfg.get("local_user_skills_root", "~/.evomaster-skills")
+        skill_evolution_cfg = (config_dict.get('mat_master') or {}).get(
+            'skill_evolution'
+        ) or {}
+        local_user_root_raw = skill_evolution_cfg.get(
+            'local_user_skills_root', '~/.evomaster-skills'
+        )
         local_user_root = Path(local_user_root_raw).expanduser()
-        remote_user_root = skill_evolution_cfg.get("remote_user_skills_root", "/personal/.evomaster-skills")
+        remote_user_root = skill_evolution_cfg.get(
+            'remote_user_skills_root', '/personal/.evomaster-skills'
+        )
         if local_user_root.is_dir():
-            env.upload_directory_tarball(str(local_user_root), remote_user_root, exclude=exclude)
-            self.logger.info("sync_skills_to_remote: user skills synced to %s", remote_user_root)
+            env.upload_directory_tarball(
+                str(local_user_root), remote_user_root, exclude=exclude
+            )
+            self.logger.info(
+                'sync_skills_to_remote: user skills synced to %s', remote_user_root
+            )
 
         # Store mapping attributes on session for SSH path remapping in skill.py
         self.session.remote_project_root = remote_base
         self.session.remote_user_skills_root = remote_user_root
         self.session.local_user_skills_root = str(local_user_root)
         self.logger.info(
-            "sync_skills_to_remote: done, remote_project_root=%s, remote_user_skills_root=%s",
+            'sync_skills_to_remote: done, remote_project_root=%s, remote_user_skills_root=%s',
             remote_base,
             remote_user_root,
         )
 
     def setup(self) -> None:
         """Override: build MatMasterSkillRegistry and pass to tools/agents."""
-        self.logger.info("Setting up Mat Master playground...")
+        self.logger.info('Setting up Mat Master playground...')
 
         llm_config_dict = self._setup_llm_config()
         self._llm_config_dict = llm_config_dict
@@ -190,27 +216,31 @@ class MatMasterPlayground(BasePlayground):
         self._setup_session()
 
         config_dict = self.config.model_dump()
-        skills_config = config_dict.get("skills", {})
-        mat_master_config = config_dict.get("mat_master") or {}
-        mat_skills_root = _project_root() / "playground" / "mat_master" / "skills"
+        skills_config = config_dict.get('skills', {})
+        mat_master_config = config_dict.get('mat_master') or {}
+        mat_skills_root = _project_root() / 'playground' / 'mat_master' / 'skills'
         skill_registry = None
 
         # Resolve user skills root (shared by both enabled/disabled branches)
-        skill_evolution_cfg = mat_master_config.get("skill_evolution") or {}
-        local_user_skills_root_raw = skill_evolution_cfg.get("local_user_skills_root", "~/.evomaster-skills")
+        skill_evolution_cfg = mat_master_config.get('skill_evolution') or {}
+        local_user_skills_root_raw = skill_evolution_cfg.get(
+            'local_user_skills_root', '~/.evomaster-skills'
+        )
         local_user_skills_root = Path(local_user_skills_root_raw).expanduser()
 
-        if skills_config.get("enabled", False):
+        if skills_config.get('enabled', False):
             from evomaster.skills import SkillRegistry
 
-            skills_root = Path(skills_config.get("skills_root", "evomaster/skills"))
+            skills_root = Path(skills_config.get('skills_root', 'evomaster/skills'))
             if not skills_root.is_absolute():
                 skills_root = _project_root() / skills_root
             core_registry = SkillRegistry(skills_root)
-            self.logger.info("Loaded %d core skills", len(core_registry.get_all_skills()))
+            self.logger.info(
+                'Loaded %d core skills', len(core_registry.get_all_skills())
+            )
 
             dynamic_root = None
-            dynamic_rel = skill_evolution_cfg.get("dynamic_skills_root")
+            dynamic_rel = skill_evolution_cfg.get('dynamic_skills_root')
             if dynamic_rel:
                 dynamic_root = _project_root() / dynamic_rel
             skill_registry = MatMasterSkillRegistry(
@@ -220,7 +250,7 @@ class MatMasterPlayground(BasePlayground):
                 user_skills_root=local_user_skills_root,
             )
             self.logger.info(
-                "MatMasterSkillRegistry ready (dynamic_root=%s, mat_skills_root=%s, user_skills_root=%s)",
+                'MatMasterSkillRegistry ready (dynamic_root=%s, mat_skills_root=%s, user_skills_root=%s)',
                 dynamic_root,
                 mat_skills_root,
                 local_user_skills_root,
@@ -229,7 +259,7 @@ class MatMasterPlayground(BasePlayground):
             # Always load local mat_master skills (ask-human, etc.) even when skills.enabled is False
             from evomaster.skills import SkillRegistry
 
-            empty_root = Path(__file__).resolve().parent.parent / "memory"
+            empty_root = Path(__file__).resolve().parent.parent / 'memory'
             core_registry = SkillRegistry(empty_root)
             skill_registry = MatMasterSkillRegistry(
                 core_registry,
@@ -238,7 +268,7 @@ class MatMasterPlayground(BasePlayground):
                 user_skills_root=local_user_skills_root,
             )
             self.logger.info(
-                "MatMasterSkillRegistry (local only, mat_skills_root=%s, user_skills_root=%s)",
+                'MatMasterSkillRegistry (local only, mat_skills_root=%s, user_skills_root=%s)',
                 mat_skills_root,
                 local_user_skills_root,
             )
@@ -246,46 +276,44 @@ class MatMasterPlayground(BasePlayground):
         self._skill_registry = skill_registry
         self._setup_tools(skill_registry)
 
-        agents_config = getattr(self.config, "agents", None)
+        agents_config = getattr(self.config, 'agents', None)
         if agents_config and isinstance(agents_config, dict) and agents_config:
-            for agent_name, agent_config in agents_config.items():
-                enable_tools = agent_config.get("enable_tools", True)
-                self.agent = self._create_agent(
-                    name=agent_name,
-                    agent_config=agent_config,
-                    enable_tools=enable_tools,
-                    llm_config_dict=llm_config_dict,
-                    skill_registry=skill_registry,
-                )
-                self.logger.info("%s Agent created", agent_name.capitalize())
-            self.logger.info("Multi-agent playground setup complete")
+            self._setup_agents(skill_registry=skill_registry)
         else:
-            agent_config_dict = getattr(self.config, "agent", None)
+            agent_config_dict = getattr(self.config, 'agent', None)
             if not agent_config_dict:
                 raise ValueError(
-                    "No agent configuration found. "
+                    'No agent configuration found. '
                     "Please add either 'agent' or 'agents' section to config.yaml"
                 )
-            system_prompt_file = getattr(self.config, "system_prompt_file", None)
-            user_prompt_file = getattr(self.config, "user_prompt_file", None)
+            system_prompt_file = getattr(self.config, 'system_prompt_file', None)
+            user_prompt_file = getattr(self.config, 'user_prompt_file', None)
             if system_prompt_file:
-                agent_config_dict = dict(agent_config_dict) if not isinstance(agent_config_dict, dict) else agent_config_dict.copy()
-                agent_config_dict["system_prompt_file"] = system_prompt_file
+                agent_config_dict = (
+                    dict(agent_config_dict)
+                    if not isinstance(agent_config_dict, dict)
+                    else agent_config_dict.copy()
+                )
+                agent_config_dict['system_prompt_file'] = system_prompt_file
             if user_prompt_file:
                 if not isinstance(agent_config_dict, dict):
-                    agent_config_dict = dict(agent_config_dict) if hasattr(agent_config_dict, "copy") else {}
+                    agent_config_dict = (
+                        dict(agent_config_dict)
+                        if hasattr(agent_config_dict, 'copy')
+                        else {}
+                    )
                 else:
                     agent_config_dict = agent_config_dict.copy()
-                agent_config_dict["user_prompt_file"] = user_prompt_file
-            enable_tools = agent_config_dict.get("enable_tools", True)
+                agent_config_dict['user_prompt_file'] = user_prompt_file
+            enable_tools = agent_config_dict.get('enable_tools', True)
             self.agent = self._create_agent(
-                name="default",
+                name='default',
                 agent_config=agent_config_dict,
                 enable_tools=enable_tools,
                 llm_config_dict=llm_config_dict,
                 skill_registry=skill_registry,
             )
-            self.logger.info("Single-agent playground setup complete")
+            self.logger.info('Single-agent playground setup complete')
 
     def _create_exp(self):
         """Return solver by --mode: direct | planner.
@@ -294,10 +322,10 @@ class MatMasterPlayground(BasePlayground):
         by the monitor_job built-in tool, not a top-level Exp. The agent invokes it
         naturally within either Direct or Planner mode.
         """
-        mode = getattr(self, "_run_mode", None) or "direct"
-        if mode == "planner":
-            input_fn = getattr(self, "_planner_input_fn", None)
-            output_callback = getattr(self, "_planner_output_callback", None)
+        mode = getattr(self, '_run_mode', None) or 'direct'
+        if mode == 'planner':
+            input_fn = getattr(self, '_planner_input_fn', None)
+            output_callback = getattr(self, '_planner_output_callback', None)
             exp = ResearchPlanner(
                 self.agent,
                 self.config,
@@ -318,8 +346,8 @@ class MatMasterPlayground(BasePlayground):
             self.setup()
             self._setup_trajectory_file(output_file)
             exp = self._create_exp()
-            self.logger.info("Running experiment...")
-            task_id = getattr(self, "task_id", None)
+            self.logger.info('Running experiment...')
+            task_id = getattr(self, 'task_id', None)
             if task_id:
                 return exp.run(task_description, task_id=task_id)
             return exp.run(task_description)
@@ -333,33 +361,46 @@ class MatMasterPlayground(BasePlayground):
         enable_tools: bool = True,
         llm_config_dict: dict | None = None,
         skill_registry=None,
+        tool_config: dict | None = None,
+        llm_config: dict | None = None,
     ):
-        """创建 Mat Master 专用 Agent（MatMasterAgent），其余与基类一致"""
+        """创建 Mat Master 专用 Agent（MatMasterAgent）；支持基类新签名 tool_config/llm_config。"""
         from evomaster.agent import AgentConfig
         from evomaster.agent.context import ContextConfig
         from evomaster.utils import LLMConfig, create_llm
 
-        base_max_turns = agent_config.get("max_turns", 20)
+        if llm_config is None:
+            llm_config = llm_config_dict
+        if llm_config is None:
+            llm_config = self._setup_llm_config()
+        enabled_tool_names = None
+        if tool_config is not None:
+            builtin = tool_config.get('builtin', ['*'])
+            enable_tools = bool(builtin)
+            if '*' in builtin or not builtin:
+                enabled_tool_names = None
+            else:
+                enabled_tool_names = list(builtin)
+
+        base_max_turns = agent_config.get('max_turns', 20)
         full_cfg = self.config.model_dump() or {}
-        mode = (self._run_mode or "direct").strip().lower()
-        mode_profiles = ((full_cfg.get("mat_master") or {}).get("mode_profiles") or {})
+        mode = (self._run_mode or 'direct').strip().lower()
+        mode_profiles = (full_cfg.get('mat_master') or {}).get('mode_profiles') or {}
         mode_cfg = mode_profiles.get(mode) if isinstance(mode_profiles, dict) else {}
         if not isinstance(mode_cfg, dict):
             mode_cfg = {}
-        max_turns = int(mode_cfg.get("agent_max_turns", base_max_turns))
-        context_config_dict = agent_config.get("context", {})
+        max_turns = int(mode_cfg.get('agent_max_turns', base_max_turns))
+        context_config_dict = agent_config.get('context', {})
         context_config = ContextConfig(**context_config_dict)
         agent_cfg = AgentConfig(max_turns=max_turns, context_config=context_config)
         output_config = self._get_output_config()
 
-        if llm_config_dict is None:
-            llm_config_dict = self._setup_llm_config()
-        llm = create_llm(LLMConfig(**llm_config_dict), output_config=output_config)
+        llm = create_llm(LLMConfig(**llm_config), output_config=output_config)
         self.logger.debug(f"Created independent LLM instance for {name} agent")
 
-        system_prompt_file = agent_config.get("system_prompt_file")
-        user_prompt_file = agent_config.get("user_prompt_file")
-        playground_base = Path(str(self.config_dir).replace("configs", "playground"))
+        system_prompt_file = agent_config.get('system_prompt_file')
+        user_prompt_file = agent_config.get('user_prompt_file')
+        playground_base = Path(str(self.config_dir).replace('configs', 'playground'))
         if system_prompt_file:
             prompt_path = Path(system_prompt_file)
             if not prompt_path.is_absolute():
@@ -368,12 +409,12 @@ class MatMasterPlayground(BasePlayground):
             prompt_path = Path(user_prompt_file)
             if not prompt_path.is_absolute():
                 user_prompt_file = str((playground_base / prompt_path).resolve())
-        prompt_format_kwargs = agent_config.get("prompt_format_kwargs", {})
+        prompt_format_kwargs = agent_config.get('prompt_format_kwargs', {})
 
         # Read execution-layer config for the unified BatchExecutor
         _full_config_dict = self.config.model_dump() or {}
-        _mat_master_cfg = _full_config_dict.get("mat_master") or {}
-        _exec_cfg = _mat_master_cfg.get("execution") or {}
+        _mat_master_cfg = _full_config_dict.get('mat_master') or {}
+        _exec_cfg = _mat_master_cfg.get('execution') or {}
 
         agent = MatMasterAgent(
             llm=llm,
@@ -387,10 +428,11 @@ class MatMasterPlayground(BasePlayground):
             output_config=output_config,
             config_dir=self.config_dir,
             enable_tools=enable_tools,
-            direct_max_workers=_exec_cfg.get("direct_max_workers", 4),
-            rate_limit=_exec_cfg.get("rate_limit"),
+            enabled_tool_names=enabled_tool_names,
+            direct_max_workers=_exec_cfg.get('direct_max_workers', 4),
+            rate_limit=_exec_cfg.get('rate_limit'),
             config_dict=_full_config_dict,
-            mode_profile=(self._run_mode or "direct"),
+            mode_profile=(self._run_mode or 'direct'),
         )
         agent.set_agent_name(name)
         return agent
@@ -404,36 +446,39 @@ class MatMasterPlayground(BasePlayground):
         from evomaster.agent.tools import MCPToolManager
 
         # 从当前使用的 config 文件直接读 mcp，确保 tool_include_only 一定来自 YAML
-        yaml_path = self.config_dir / (getattr(self.config_manager, "config_file", None) or "config.yaml")
+        yaml_path = self.config_dir / (
+            getattr(self.config_manager, 'config_file', None) or 'config.yaml'
+        )
         mcp_config = None
         if yaml_path.exists():
             try:
-                with open(yaml_path, "r", encoding="utf-8") as f:
+                with open(yaml_path, encoding='utf-8') as f:
                     raw = yaml.safe_load(f)
                 if isinstance(raw, dict):
-                    mcp_config = raw.get("mcp")
+                    mcp_config = raw.get('mcp')
             except Exception as e:
-                self.logger.debug("Read mcp from YAML: %s", e)
+                self.logger.debug('Read mcp from YAML: %s', e)
         if not mcp_config or not isinstance(mcp_config, dict):
-            mcp_config = (self.config.model_dump() or {}).get("mcp")
+            mcp_config = (self.config.model_dump() or {}).get('mcp')
         if not mcp_config or not isinstance(mcp_config, dict):
             if not mcp_config:
-                self.logger.debug("MCP not configured, skipping")
+                self.logger.debug('MCP not configured, skipping')
             else:
-                self.logger.error("Invalid MCP config format, expected dict")
+                self.logger.error('Invalid MCP config format, expected dict')
             return None
-        if not mcp_config.get("enabled", True):
-            self.logger.info("MCP is disabled in config")
+        if not mcp_config.get('enabled', True):
+            self.logger.info('MCP is disabled in config')
             return None
 
-        config_file = mcp_config.get("config_file", "mcp_config.json")
+        config_file = mcp_config.get('config_file', 'mcp_config.json')
         config_path = Path(config_file)
         if not config_path.is_absolute():
             config_path = self.config_manager.config_dir / config_path
 
         # 环境感知：根据 SERVICE_ENV 切换 MCP 配置文件（test → mcp_config.test.json）
-        if mcp_config.get("path_adaptor") == "calculation":
+        if mcp_config.get('path_adaptor') == 'calculation':
             from evomaster.adaptors.calculation import resolve_mcp_config_path
+
             config_path = resolve_mcp_config_path(config_path)
 
         if not config_path.exists():
@@ -442,13 +487,13 @@ class MatMasterPlayground(BasePlayground):
 
         self.logger.info(f"Loading MCP config from: {config_path}")
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding='utf-8') as f:
                 mcp_servers_config = json.load(f)
         except Exception as e:
             self.logger.error(f"Failed to load MCP config: {e}")
             return None
 
-        PLACEHOLDER = "__EVOMASTER_WORKSPACES__"
+        PLACEHOLDER = '__EVOMASTER_WORKSPACES__'
 
         def _deep_replace(obj, old: str, new: str):
             if isinstance(obj, str):
@@ -461,14 +506,18 @@ class MatMasterPlayground(BasePlayground):
 
         try:
             if self.run_dir is not None:
-                ws_root = str((Path(self.run_dir) / "workspaces").resolve())
-                mcp_servers_config = _deep_replace(mcp_servers_config, PLACEHOLDER, ws_root)
+                ws_root = str((Path(self.run_dir) / 'workspaces').resolve())
+                mcp_servers_config = _deep_replace(
+                    mcp_servers_config, PLACEHOLDER, ws_root
+                )
                 self.logger.info(f"[MCP] Replaced {PLACEHOLDER} -> {ws_root}")
             else:
-                self.logger.debug(f"[MCP] run_dir is None, skip placeholder replace: {PLACEHOLDER}")
+                self.logger.debug(
+                    f"[MCP] run_dir is None, skip placeholder replace: {PLACEHOLDER}"
+                )
                 if PLACEHOLDER in json.dumps(mcp_servers_config):
                     self.logger.warning(
-                        "[MCP] run_dir is None but config contains %s; MCP servers may fail or write to wrong paths.",
+                        '[MCP] run_dir is None but config contains %s; MCP servers may fail or write to wrong paths.',
                         PLACEHOLDER,
                     )
         except Exception as e:
@@ -476,36 +525,42 @@ class MatMasterPlayground(BasePlayground):
 
         servers = self._parse_mcp_servers(mcp_servers_config)
         if not servers:
-            self.logger.warning("No valid MCP servers found in config")
+            self.logger.warning('No valid MCP servers found in config')
             return None
 
-        self.logger.info("Setting up MCP tools...")
+        self.logger.info('Setting up MCP tools...')
         manager = MCPToolManager()
-        if mcp_config.get("path_adaptor") == "calculation":
+        if mcp_config.get('path_adaptor') == 'calculation':
             from evomaster.adaptors.calculation import get_calculation_path_adaptor
 
-            calc_servers = mcp_config.get("calculation_servers")
+            calc_servers = mcp_config.get('calculation_servers')
             if calc_servers:
                 manager.path_adaptor_servers = set(calc_servers)
             else:
-                manager.path_adaptor_servers = {s.get("name") for s in servers if s.get("name")}
-            manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(mcp_config)
-            self.logger.info("Path adaptor enabled for servers: %s", manager.path_adaptor_servers)
+                manager.path_adaptor_servers = {
+                    s.get('name') for s in servers if s.get('name')
+                }
+            manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(
+                mcp_config
+            )
+            self.logger.info(
+                'Path adaptor enabled for servers: %s', manager.path_adaptor_servers
+            )
 
         # mat_master：仅在此处设置 tool_include_only，基类 core 不包含此逻辑
-        include_only = mcp_config.get("tool_include_only")
+        include_only = mcp_config.get('tool_include_only')
         if include_only and isinstance(include_only, dict):
             manager.tool_include_only = {
                 k: list(v) if isinstance(v, (list, tuple)) else []
                 for k, v in include_only.items()
             }
             self.logger.info(
-                "MCP tool_include_only set for servers: %s (per-server allowlist applied)",
+                'MCP tool_include_only set for servers: %s (per-server allowlist applied)',
                 list(manager.tool_include_only.keys()),
             )
         else:
             self.logger.info(
-                "MCP tool_include_only not set or empty; all tools from each server will be registered"
+                'MCP tool_include_only not set or empty; all tools from each server will be registered'
             )
 
         async def init_mcp_servers():
@@ -513,7 +568,9 @@ class MatMasterPlayground(BasePlayground):
                 try:
                     await manager.add_server(**server_config)
                 except Exception as e:
-                    self.logger.error(f"Failed to add MCP server {server_config.get('name')}: {e}")
+                    self.logger.error(
+                        f"Failed to add MCP server {server_config.get('name')}: {e}"
+                    )
 
         if self._mcp_loop is None or self._mcp_loop.is_closed():
             self._mcp_loop = asyncio.new_event_loop()
@@ -531,24 +588,27 @@ class MatMasterPlayground(BasePlayground):
         # 避免 submit_*/calculate_*/run_* 等远程提交因 MCP 服务端处理慢而误报超时。
         try:
             from .async_tool_registry import AsyncToolRegistry
+
             config_dict = self.config.model_dump()
             registry = AsyncToolRegistry(config_dict)
             async_count = 0
             for server_name, server_tools in manager.tools_by_server.items():
-                for tool_name, mcp_tool in server_tools.items():
+                for _, mcp_tool in server_tools.items():
                     remote_name = getattr(mcp_tool, '_remote_tool_name', '') or ''
                     if registry.is_async_tool(server_name, remote_name):
                         mcp_tool._call_timeout = None
                         async_count += 1
             if async_count:
                 self.logger.info(
-                    "Async timeout override: %d MCP tools set to no-timeout (derived from calculation_executors)",
+                    'Async timeout override: %d MCP tools set to no-timeout (derived from calculation_executors)',
                     async_count,
                 )
         except Exception as e:
-            self.logger.warning("Failed to apply async timeout overrides: %s", e)
+            self.logger.warning('Failed to apply async timeout overrides: %s', e)
 
         tool_count = len(manager.get_tool_names())
         server_count = len(manager.get_server_names())
-        self.logger.info(f"MCP tools setup complete: {tool_count} tools from {server_count} servers")
+        self.logger.info(
+            f"MCP tools setup complete: {tool_count} tools from {server_count} servers"
+        )
         return manager

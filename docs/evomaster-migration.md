@@ -127,10 +127,11 @@
 
 **目标**：MatMaster、minimal_multi_agent、minimal_kaggle 等改用 `self.agents` 与新区配置；agent_run_service / server 中克隆 agent 时使用 `enabled_tool_names` 或 `tool_config`。
 
-### 4.1 MatMaster（`playground/mat_master/`）**[未完成]**
+### 4.1 MatMaster（`playground/mat_master/`）**[进行中]**
 
-- 在保留自定义 MCP、SSH、MatMasterSkillRegistry 的前提下，改为从 `self.agents` 获取 agent（或通过 `agents.declare(...)` 后使用）。
-- 创建 agent 时逐步改为传入 `tool_config` / `llm_config` / `skill_config`；若短期仍传 `enable_tools`，通过兼容层转换为 `tool_config`。
+- 多 agent 时已改为调用 `_setup_agents(skill_registry)`，由 base 填充 `self.agents` 并设 `self.agent`，不再在子类中循环覆盖 `self.agent`。
+- `_create_agent` 已支持基类新签名：`tool_config`、`llm_config`；由 `tool_config` 推导 `enable_tools` 与 `enabled_tool_names`，并传入 `MatMasterAgent`。
+- 保留自定义 MCP、SSH、MatMasterSkillRegistry；Exp 仍从 `self.agent` 取值（与 base 兼容）。
 
 ### 4.2 minimal_multi_agent、minimal_kaggle **[未完成]**
 
