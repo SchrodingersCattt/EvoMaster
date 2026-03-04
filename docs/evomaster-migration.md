@@ -11,7 +11,7 @@
 | 阶段 1.1 配置模型 | **已完成** |
 | 阶段 1.2 配置兼容（YAML / 加载层） | **已完成** |
 | 阶段 1.3 验收 | **已完成** |
-| 阶段 1.4 现有 YAML 迁移到 v0.0.2 写法 | 未完成 |
+| 阶段 1.4 现有 YAML 迁移到 v0.0.2 写法 | **已完成** |
 | 阶段 2 | 未完成 |
 | 阶段 3 | 未完成 |
 | 阶段 4 | 未完成 |
@@ -48,7 +48,7 @@
 - 新写的 YAML 可使用 `tools:`、per-agent `skills:` 等 v0.0.2 格式。
 - 验收方式：运行 `pytest tests/test_evomaster_config_migration.py -v`（需 Python ≥3.10）。
 
-### 1.4 现有 YAML 迁移到 v0.0.2 写法 **[未完成]**
+### 1.4 现有 YAML 迁移到 v0.0.2 写法 **[已完成]**
 
 - 将 `configs/` 下所有仍使用 `enable_tools: true/false` 的 agent 配置改为 `tools: { builtin: ["*"] }` 或 `tools: { builtin: [] }` 等 v0.0.2 写法。
 - 若有 per-agent 的 skills 需求，在对应 agent 下增加 `skills: ["*"]` 或 `skills: ["rag", "pdf"]` 等；若暂无需求可省略或写空列表。

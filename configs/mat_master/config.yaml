@@ -51,7 +51,9 @@ agents:
   general:
     llm: "litellm"
     max_turns: 200
-    enable_tools: true
+    tools:
+      builtin: ["*"]
+      mcp: ""
 
     context:
       max_tokens: 128000
