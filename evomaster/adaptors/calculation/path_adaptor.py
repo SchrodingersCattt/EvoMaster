@@ -586,13 +586,26 @@ class CalculationPathAdaptor:
         if not path_arg_names or not workspace_path:
             return out
 
+        def _is_null_or_empty_path(v: Any) -> bool:
+            if v is None:
+                return True
+            if isinstance(v, str) and v.strip().lower() in ('none', 'null', ''):
+                return True
+            return False
+
         workspace_root = Path(workspace_path).resolve()
         for key in sorted(path_arg_names):
             if key not in out:
                 continue
             val = out[key]
+            if _is_null_or_empty_path(val):
+                out[key] = None
+                continue
             if isinstance(val, list):
-                out[key] = [_resolve_one(str(v), workspace_root, session) for v in val]
+                out[key] = [
+                    None if _is_null_or_empty_path(v) else _resolve_one(str(v), workspace_root, session)
+                    for v in val
+                ]
             else:
                 out[key] = _resolve_one(str(val), workspace_root, session)
         return out

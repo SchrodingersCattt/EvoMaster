@@ -1,71 +1,59 @@
 ---
 name: input-manual-helper
-description: "Write/validate input files for CP2K/Gaussian/ORCA/VASP/LAMMPS/QE/etc. Step 1: run list_references.py to see available templates. Step 2: fetch templates via get_reference. CP2K naming: task_* (what) + method_* (how) + no-prefix (standalone). For non-PBE CP2K tasks, fetch BOTH task_* AND method_*. Step 3: merge & adapt. Step 4: validate_input.py. NEVER construct &HF/&SCREENING/&ADMM from peek_manual.py."
+description: "Parameter-dispatch engine for CP2K, QE, ABINIT, LAMMPS, ORCA. LLM outputs overrides and paths; prepare_* MCP tools generate inputs. Route by engine capability; validate by physical-sense review. Structure files must be pymatgen-instanceable."
 skill_type: operator
 ---
 
 # Input Manual Helper Skill
 
-Write or validate input files for computational software (VASP, Gaussian, CP2K, LAMMPS, ABACUS, ORCA, etc.).
+Generate or adapt input files for computational software by **dispatching parameters and paths** to the appropriate prepare_* MCP tool. Do not hand-write or text-edit input file contents for software that has a prepare_* tool; use overrides and structure_file/template paths instead.
 
-## Workflow (MANDATORY)
+## Routing by engine
 
-### Phase 1: Discover & Compose from Reference Templates (PRIMARY)
+| Engine | Route type | input_file | structure_file |
+|--------|------------|------------|----------------|
+| ABINIT (program=abinit) | Direct generation | Optional | Must be pymatgen-readable |
+| QE pw.x | Direct generation | Optional | Must be pymatgen-readable |
+| CP2K | Placeholder injection | **Required** (use cp2k/minimal_periodic.inp if user provides none) | pymatgen-readable |
+| ORCA | Placeholder injection | **Required** (use orca/minimal_molecule.inp if user provides none) | pymatgen-readable |
+| LAMMPS | Data decoupled | Optional | pymatgen-readable (prepare generates .data) |
 
-1. **Run `list_references.py`** to see available templates. Use `--software X` to filter.
-   - Output shows templates grouped by prefix: `task_*`, `method_*`, standalone.
+Use the MCP tool schema as the source of truth for parameters; the table above is context only.
 
-2. **Decompose the task** into features and pick templates by name:
-   - CP2K prefix naming: `task_*` = what to calculate, `method_*` = functional/method, no prefix = standalone.
-   - If the task needs a non-PBE functional, fetch BOTH a `task_*` AND a `method_*`.
-   - If there's an exact standalone match, just fetch that one.
+## Structure file format
 
-3. **Fetch templates** via `get_reference` for each selected template (e.g. `reference_name='cp2k/task_band.inp'`).
+`structure_file` must be in a format pymatgen can instantiate: e.g. CIF (`.cif`), VASP POSCAR/CONTCAR (no extension or `.vasp`), XYZ (`.xyz`), Materials Project JSON. LAMMPS `.data` is produced by prepare_lammps_job from the structure file; do not pass .data as structure_file. Do not use proprietary or single-software-only formats as the generic structure input.
 
-4. **Merge & adapt**: use `method_*` as base, graft `task_*` sections in. Replace coordinates, cell, elements, basis sets, k-paths, project name.
+## Workflow
 
-### Phase 2: Validate (MANDATORY)
-
-5. **Validate**: `validate_input.py --input_file <path> --software X`.
-
-6. **Consult manual only if needed**: `peek_manual.py` for specific parameters that validation flagged. Do NOT use it to write HF/ADMM/GW sections — the templates are authoritative.
-
-7. **Fix loop**: fix errors, re-validate (up to 3 iterations). Finish when exit code 0.
-
-### Anti-Pattern
-
-Do NOT fetch one template then query peek_manual.py to construct advanced CP2K sections (&HF, &SCREENING, &INTERACTION_POTENTIAL, &WF_CORRELATION, &GW, &RI_RPA). These are NOT in the manual JSON. Always get them from templates.
+1. **Choose software and task type** — Determine which prepare_* tool applies from the routing table and MCP schema.
+2. **Resolve template** — For CP2K/ORCA, obtain an input template: user-provided path or get_reference (e.g. `cp2k/minimal_periodic.inp`, `orca/minimal_molecule.inp`, or a task/method template from list_references.py).
+3. **Confirm structure_file** — Ensure the structure path exists and is pymatgen-instanceable; do not assume formats the engine cannot read.
+4. **Build overrides** — Set physical parameters (cutoff, functional, k-points, etc.) via the overrides dict exposed by the prepare_* schema; do not inject them by editing the template text.
+5. **Call prepare_*** — Invoke the prepare_* MCP tool with input_file (template path), structure_file (when applicable), and overrides.
+6. **Validate once** — Run `validate_input.py --input_file <path> --software <name>`. Validation is **physical-sense review**: check that key parameters are in a reasonable range, functional matches the system, and required sections are present. If something looks wrong, use ask_human(mode="timeout"); on timeout, treat as pass and proceed. The script exits 0 so submit is allowed.
 
 ## Scripts
 
-- **list_manuals.py** — List available manual JSON files. Output: `software|path` per line.
-- **list_references.py** — List available reference templates grouped by prefix. Use `--software X` to filter.
-- **peek_manual.py** — Smart manual reader (replaces raw peek_file on manual JSONs).
-  - `--software X --tree` — Section hierarchy overview.
-  - `--software X --sections "S1,S2,S3"` — Batch-query multiple sections.
-  - `--software X --search "KEYWORD"` — Search by keyword.
-- **validate_input.py** — Validate input file against manual. Exit 0 = pass, 1 = errors.
-  - Usage: `validate_input.py --input_file <path> --software X`
+- **list_references.py** — List available reference templates by software.
+- **get_reference** (via use_skill) — Fetch template content by name (e.g. `cp2k/minimal_periodic.inp`, `orca/minimal_molecule.inp`, `abinit/gs_scf.abi`, `lammps/gcmc_adsorption.lammps`).
+- **validate_input.py** — Run after prepare. Reads the prepared file and exits 0; you perform a physical-sense review. If doubtful, ask_human; on timeout, pass. Do not skip this step when submitting jobs for software covered by the validation gate.
 
-## Reference Templates
+## Physical checks to consider (not a procedure)
 
-Templates are in `references/<software>/`. Run `list_references.py` to discover them dynamically.
+- Cutoff energy and grid settings appropriate for the basis and system size.
+- Functional choice consistent with the system (e.g. hybrid for band gaps, meta-GGA when needed).
+- K-point sampling consistent with cell size and symmetry.
+- Required blocks or keywords present and not contradictory (e.g. SCF convergence, geometry/MD settings).
 
-### CP2K Naming Convention
+Use domain judgment; do not follow a fixed checklist.
 
-- **`task_*`** — Task skeleton (WHAT to calculate). Uses basic PBE. **Pair with `method_*`** for non-PBE functionals.
-- **`method_*`** — Method/functional (HOW to calculate). Contains XC, ADMM, HF sections. **Merge into a `task_*`**.
-- **No prefix** — Complete standalone. Use as-is.
+## Knowledge source
 
-ORCA, Gaussian, PSI4 templates are all standalone (no merging needed).
+When a parameter or keyword is uncertain, use **official documentation** with a site-restricted search (e.g. site:manual.cp2k.org, site:docs.lammps.org). Do not re-query the same path that already returned no useful result.
 
-## Expert Knowledge
+## Principles
 
-`data/sob_expert_knowledge.json` — expert tips on functional/basis/dispersion selection, ORCA method hierarchy, CP2K ADMM tips, PSI4 SAPT tips. Query via `peek_manual.py --software sob_expert_knowledge`.
-
-## Important
-
-- Do NOT use `peek_file` on manual JSONs (multi-MB). Use `peek_manual.py`.
-- Do NOT skip validation.
-- Do NOT construct advanced CP2K sections from the manual. Use `method_*` templates.
-- Do NOT call peek_manual.py repeatedly for sections that returned "No params found".
+- **Do not** directly edit .inp, .in, .abi, or other input file text for software that has a prepare_* MCP tool; use overrides and template/structure paths only.
+- **Do not** assume prepare tools have fixed capabilities; read the current MCP tool schema.
+- **Gaussian / PSI4**: No prepare_* tool yet; use reference templates as the final input and do not apply the prepare-only workflow or the validation gate to them.
