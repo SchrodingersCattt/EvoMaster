@@ -519,6 +519,18 @@ class MatMasterPlayground(BasePlayground):
             self.logger.info(
                 'Path adaptor enabled for servers: %s', manager.path_adaptor_servers
             )
+            # Per-server sync_tools: do not register submit_* when base tool is in sync_tools (sync version only).
+            executors = mcp_config.get('calculation_executors') or {}
+            manager.sync_tools_by_server = {
+                name: set(cfg.get('sync_tools') or [])
+                for name, cfg in executors.items()
+                if isinstance(cfg, dict) and cfg.get('sync_tools')
+            }
+            if manager.sync_tools_by_server:
+                self.logger.info(
+                    'MCP sync_tools_by_server set (submit_* excluded for sync tools): %s',
+                    list(manager.sync_tools_by_server.keys()),
+                )
 
         # mat_master：仅在此处设置 tool_include_only，基类 core 不包含此逻辑
         include_only = mcp_config.get('tool_include_only')

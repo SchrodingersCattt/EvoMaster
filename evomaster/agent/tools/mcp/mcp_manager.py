@@ -84,6 +84,10 @@ class MCPToolManager:
         # Example: {"mat_sn": ["web-search", "search-papers-enhanced"]} -> only those two from mat_sn.
         self.tool_include_only: dict[str, list[str]] = {}
 
+        # Optional per-server sync_tools: for calculation servers, submit_<name> is not registered when <name> is in this set (sync version only).
+        # Example: {"mat_sg": {"build_bulk_structure_by_wyckoff", ...}} -> mat_sg_submit_build_bulk_structure_by_wyckoff is not registered.
+        self.sync_tools_by_server: dict[str, set[str]] = {}
+
         # Reconnection support: runner 监听此事件以触发重连
         self._reconnect_events: dict[str, asyncio.Event] = {}
         # 等待重连完成的线程级 Event 列表（由 request_reconnect 添加，runner 完成后 set）
@@ -100,6 +104,26 @@ class MCPToolManager:
             self.logger.info(
                 f"Filtered to {len(tools_info)} tools for server '{server_name}' (include_only: {include_only})"
             )
+
+        sync_tools = self.sync_tools_by_server.get(server_name, set())
+        if sync_tools:
+            before = len(tools_info)
+            tools_info = [
+                t
+                for t in tools_info
+                if not (
+                    t.get('name', '').startswith('submit_')
+                    and t.get('name', '')[len('submit_') :] in sync_tools
+                )
+            ]
+            if len(tools_info) < before:
+                self.logger.info(
+                    "Filtered out submit_* for sync_tools on server '%s' (sync_tools=%s); %d -> %d tools",
+                    server_name,
+                    sync_tools,
+                    before,
+                    len(tools_info),
+                )
 
         server_tools: dict[str, MCPTool] = {}
         # First pass: build name → description for base tools (used by submit_* below)
