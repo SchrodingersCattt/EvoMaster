@@ -508,10 +508,11 @@ class ConfigManager:
             Session 配置字典
         """
         config = self.load()
-        session_config = config.session.get(session_type)
+        sessions = self._require_dict(config.session, 'session')
+        session_config = sessions.get(session_type)
         if session_config is None:
             raise ValueError(f"Session config '{session_type}' not found")
-        return session_config
+        return self._require_dict(session_config, f'session.{session_type}')
 
     def get_env_config(self) -> EnvConfig:
         """获取 Env 配置
