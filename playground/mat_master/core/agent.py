@@ -281,6 +281,20 @@ You can use the 'use_skill' tool to:
         else:
             self._finish_block_count = 0
 
+        # Guidance: if quality gates keep blocking and the run is likely stuck
+        # due to external web access limits (403/404/paywall), encourage the model
+        # to finish with task_completed='partial' and clear caveats instead of looping.
+        # NOTE: This does not force-pass any gate. It only adds info to help the LLM replan.
+        if blocked_msgs and requested_task_completed == 'true':
+            gate_info.setdefault(
+                'finish_hint',
+                (
+                    "If you are blocked by unavailable/paywalled web sources (403/404/etc.), "
+                    "switch to alternative open sources or finish with task_completed='partial' "
+                    "and include explicit limitations/caveats."
+                ),
+            )
+
         return blocked_msgs, gate_info
 
     # ------------------------------------------------------------------
