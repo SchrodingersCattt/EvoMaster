@@ -25,7 +25,8 @@ def test_stage_1_3_acceptance_enable_tools_normalized_to_tools():
     assert mgr.get_agent_tools_config('planning') == {'builtin': [], 'mcp': ''}
     assert mgr.get_agent_tools_config('coding') == {'builtin': ['*'], 'mcp': ''}
 
-    first = mgr.get_agent_config()
+    first_name = next(iter(agents))
+    first = mgr.get_agent_config(first_name)
     assert 'tools' in first
 
 

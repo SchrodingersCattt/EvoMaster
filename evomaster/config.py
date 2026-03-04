@@ -194,14 +194,9 @@ class EvoMasterConfig(BaseConfig):
     # LLM 配置（存储为字典，按需转换为 LLMConfig）
     llm: dict[str, Any] = Field(default_factory=dict, description='LLM 配置')
 
-    # Agent 配置（单 agent 模式，存储为字典）
-    agent: dict[str, Any] = Field(
-        default_factory=dict, description='Agent 配置（单 agent）'
-    )
-
-    # 多 Agent 配置（v0.0.2：agents 为 name -> 配置字典；与 agent 并存，YAML 可只写其一）
+    # Agent 配置（与上游一致：仅 agents，单 agent 时用 agents: { default: ... }）
     agents: dict[str, Any] = Field(
-        default_factory=dict, description='多 Agent 配置（name -> 配置字典）'
+        default_factory=dict, description='Agent 配置（name -> 配置字典）'
     )
 
     # Session 配置（存储为字典，按需转换为 SessionConfig）
@@ -354,28 +349,19 @@ class ConfigManager:
 
         return llm_config
 
-    def get_agent_config(self, name: str | None = None) -> dict[str, Any]:
-        """获取 Agent 配置
+    def get_agent_config(self, name: str) -> dict[str, Any]:
+        """获取指定名称的 Agent 配置（与上游一致，必须显式传 name）
 
         Args:
-            name: 若为 None，返回单 agent 配置（config.agent），兼容旧用法；
-                  若指定名称，从 config.agents 中返回该 agent 的配置。
+            name: Agent 名称，对应 config.agents 的 key
 
         Returns:
             Agent 配置字典
 
         Raises:
-            ValueError: 当 name 非 None 且 config.agents 中不存在该 name 时
+            ValueError: 当 config.agents 中不存在该 name 时
         """
         config = self.load()
-        if name is None:
-            # 兼容：仅有 agents 时返回第一个 agent 的配置，便于单 agent 调用方
-            if config.agent:
-                return config.agent
-            if config.agents:
-                first_name = next(iter(config.agents))
-                return config.agents[first_name]
-            return config.agent
         if name not in config.agents:
             raise ValueError(f"Agent config '{name}' not found in agents")
         return config.agents[name]
