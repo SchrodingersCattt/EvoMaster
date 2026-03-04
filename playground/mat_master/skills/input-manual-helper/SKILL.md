@@ -1,71 +1,70 @@
 ---
 name: input-manual-helper
-description: "Write/validate input files for CP2K/Gaussian/ORCA/VASP/LAMMPS/QE/etc. Step 1: run list_references.py to see available templates. Step 2: fetch templates via get_reference. CP2K naming: task_* (what) + method_* (how) + no-prefix (standalone). For non-PBE CP2K tasks, fetch BOTH task_* AND method_*. Step 3: merge & adapt. Step 4: validate_input.py. NEVER construct &HF/&SCREENING/&ADMM from peek_manual.py."
+description: "Write/validate input files for CP2K, QE, ABINIT, LAMMPS, ORCA, etc. Flow: query strategy → rough draft → hand to prepare_* MCP tools for final input → validate once and refine only if needed. Do not hardcode MCP capabilities; use tool schema as source of truth."
 skill_type: operator
 ---
 
 # Input Manual Helper Skill
 
-Write or validate input files for computational software (VASP, Gaussian, CP2K, LAMMPS, ABACUS, ORCA, etc.).
+Write or validate input files for computational software (CP2K, QE, ABINIT, LAMMPS, ORCA, VASP, Gaussian, etc.). The workflow is principle-based: produce a rough draft from references, delegate to the appropriate prepare_* MCP tool for path/asset binding and (where supported) workflow generation, then validate and refine only when necessary.
 
-## Workflow (MANDATORY)
+## Workflow (three phases)
 
-### Phase 1: Discover & Compose from Reference Templates (PRIMARY)
+### 1. Draft
 
-1. **Run `list_references.py`** to see available templates. Use `--software X` to filter.
-   - Output shows templates grouped by prefix: `task_*`, `method_*`, standalone.
+Use a **query strategy** to obtain a rough input:
 
-2. **Decompose the task** into features and pick templates by name:
-   - CP2K prefix naming: `task_*` = what to calculate, `method_*` = functional/method, no prefix = standalone.
-   - If the task needs a non-PBE functional, fetch BOTH a `task_*` AND a `method_*`.
-   - If there's an exact standalone match, just fetch that one.
+- Run `list_references.py` (optionally `--software X`) to discover available templates.
+- Fetch templates via `get_reference` (e.g. `reference_name='cp2k/task_opt.inp'`) and merge/adapt as needed (coordinates, cell, elements, k-points, placeholders for structure/pseudo paths).
+- Prefer templates over constructing complex blocks from the manual. Placeholders for paths or assets are fine; the prepare tool will resolve them.
 
-3. **Fetch templates** via `get_reference` for each selected template (e.g. `reference_name='cp2k/task_band.inp'`).
+For software with no template, draft from domain knowledge and minimal manual lookup; avoid repeatedly querying the manual line-by-line to build the whole file.
 
-4. **Merge & adapt**: use `method_*` as base, graft `task_*` sections in. Replace coordinates, cell, elements, basis sets, k-paths, project name.
+### 2. Finalize
 
-### Phase 2: Validate (MANDATORY)
+Call the **prepare_* MCP tool** for the target software (e.g. mat_binary_calc_prepare_cp2k_job, prepare_abinit_job, prepare_lammps_job). Capabilities and parameters are defined by the MCP server — **always check the tool’s schema/description**; do not assume a fixed list of features.
 
-5. **Validate**: `validate_input.py --input_file <path> --software X`.
+- **Workflow-aware tools**: Some prepare tools can generate full multi-step inputs (e.g. DFPT, NLO/SHG, phonons) via a workflow parameter (e.g. `workflow_type`). Before calling, check the tool schema for such parameters and use them instead of manually assembling multiple datasets or input files.
 
-6. **Consult manual only if needed**: `peek_manual.py` for specific parameters that validation flagged. Do NOT use it to write HF/ADMM/GW sections — the templates are authoritative.
+### 3. Validate & refine
 
-7. **Fix loop**: fix errors, re-validate (up to 3 iterations). Finish when exit code 0.
+Run **one** validation pass (e.g. `validate_input.py --input_file <path> --software X`). Refine only if:
 
-### Anti-Pattern
+- Exit code is non-zero or the report shows errors; or
+- The user has stated extra constraints that are not yet reflected.
 
-Do NOT fetch one template then query peek_manual.py to construct advanced CP2K sections (&HF, &SCREENING, &INTERACTION_POTENTIAL, &WF_CORRELATION, &GW, &RI_RPA). These are NOT in the manual JSON. Always get them from templates.
+Use the validation report (line numbers and messages) to fix the file or adjust prepare parameters and re-run prepare/validate until pass.
+
+**Validation fallback**: If `validate_input.py` reports "Manual is empty" or "No parser available" for a given software, the manual or parser for that code is not yet set up. Do not block the flow: treat the MCP prepare tool output and domain knowledge as the quality source, and note the limitation. Do not retry validation in a loop when the manual is known to be missing.
 
 ## Scripts
 
-- **list_manuals.py** — List available manual JSON files. Output: `software|path` per line.
-- **list_references.py** — List available reference templates grouped by prefix. Use `--software X` to filter.
-- **peek_manual.py** — Smart manual reader (replaces raw peek_file on manual JSONs).
-  - `--software X --tree` — Section hierarchy overview.
-  - `--software X --sections "S1,S2,S3"` — Batch-query multiple sections.
-  - `--software X --search "KEYWORD"` — Search by keyword.
-- **validate_input.py** — Validate input file against manual. Exit 0 = pass, 1 = errors.
-  - Usage: `validate_input.py --input_file <path> --software X`
+- **list_references.py** — Discover reference templates by software; use for the draft phase.
+- **get_reference** (via use_skill) — Fetch template content by name (e.g. `cp2k/task_opt.inp`, `abinit/gs_scf.abi`, `lammps/msst_shock.lammps`).
+- **validate_input.py** — Validate prepared input; exit 0 = pass, 1 = errors. Use after the prepare step.
+- **peek_manual.py** — Targeted manual lookup when validation flags a section or when a specific parameter is uncertain. Use sparingly; avoid building whole sections from repeated manual queries.
+- **list_manuals.py** — List available manual JSON files (`software|path`).
 
-## Reference Templates
+## Reference templates
 
-Templates are in `references/<software>/`. Run `list_references.py` to discover them dynamically.
+Templates live under `references/<software>/`. Run `list_references.py` to see what is available.
 
-### CP2K Naming Convention
+### CP2K naming
 
-- **`task_*`** — Task skeleton (WHAT to calculate). Uses basic PBE. **Pair with `method_*`** for non-PBE functionals.
-- **`method_*`** — Method/functional (HOW to calculate). Contains XC, ADMM, HF sections. **Merge into a `task_*`**.
-- **No prefix** — Complete standalone. Use as-is.
+- **task_*** — What to calculate (e.g. SCF, GEO_OPT, BAND). Pair with a **method_*** for non-PBE functionals.
+- **method_*** — How (XC, ADMM, HF blocks). Merge into a task_ template.
+- **No prefix** — Standalone; use as-is.
 
-ORCA, Gaussian, PSI4 templates are all standalone (no merging needed).
+Do not construct &HF, &SCREENING, &ADMM, &GW, etc. from the manual; get them from method_* templates.
 
-## Expert Knowledge
+### Other software
 
-`data/sob_expert_knowledge.json` — expert tips on functional/basis/dispersion selection, ORCA method hierarchy, CP2K ADMM tips, PSI4 SAPT tips. Query via `peek_manual.py --software sob_expert_knowledge`.
+ABINIT, LAMMPS, ORCA, Gaussian, PSI4, etc. have standalone or minimal templates; see `_co_templates.json` hints. For ABINIT NLO/SHG, use the base GS template and pass `workflow_type='nlo'` to prepare_abinit_job instead of hand-editing multiple datasets.
 
-## Important
+## Principles
 
-- Do NOT use `peek_file` on manual JSONs (multi-MB). Use `peek_manual.py`.
-- Do NOT skip validation.
-- Do NOT construct advanced CP2K sections from the manual. Use `method_*` templates.
-- Do NOT call peek_manual.py repeatedly for sections that returned "No params found".
+- **Do not** use `peek_file` on manual JSONs (large); use `peek_manual.py`.
+- **Do not** skip validation when the manual/parser exists; run it once after prepare.
+- **Do not** assume prepare tools are fixed in capability; read the current MCP tool schema.
+- **Do not** repeatedly query the manual for the same section that returns "No params found"; use templates or domain knowledge instead.
+- When the manual is incomplete or missing, rely on prepare output and domain knowledge rather than blocking on validation.

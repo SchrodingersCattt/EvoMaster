@@ -1,0 +1,29 @@
+# LAMMPS reference: GCMC (Grand Canonical Monte Carlo) for adsorption
+# Replace __STRUCTURE_FILE__, molecule file if used, T (temperature), mu (chemical potential eV), and pair settings.
+# fix gcmc: N = perform GCMC every N steps, X = number of exchange attempts per step, M = MC move steps, type = molecule type, seed = random seed, T = temp, mu = chemical potential (eV), displace = max displacement.
+# For molecular GCMC use atom_style full and molecule command; for atomic use atom_style atomic.
+
+units real
+atom_style full
+boundary p p p
+
+read_data __STRUCTURE_FILE__
+
+pair_style lj/cut 12.0
+pair_coeff 1 1 0.238 3.40
+pair_coeff 2 2 0.238 3.40
+pair_coeff 1 2 0.238 3.40
+
+# If using molecules (uncomment and set molecule file)
+# molecule mol1 __MOLECULE_FILE__
+# mass 2 16.0
+
+# GCMC fix: 100 steps between attempts, 100 exchanges per attempt, 0 insert/delete, type 1, seed, T (K), mu (eV), displace 0.1
+fix fgcmc all gcmc 100 100 0 1 12345 __T__ __MU__ 0.1
+
+thermo 500
+thermo_style custom step temp pe atoms
+
+run 100000
+
+unfix fgcmc

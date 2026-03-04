@@ -12547,60 +12547,60 @@
         "dtype": "STRING",
         "default_value": null,
         "unit": null,
-        "description": "Parameter from syntax"
+        "description": "Perform GCMC every N steps (e.g. 100)."
       },
       {
         "name": "X",
         "dtype": "STRING",
         "default_value": null,
         "unit": null,
-        "description": "Parameter from syntax"
+        "description": "Number of particle insert/delete/exchange attempts per GCMC step (e.g. 100)."
       },
       {
         "name": "M",
         "dtype": "STRING",
         "default_value": null,
         "unit": null,
-        "description": "Parameter from syntax"
+        "description": "Number of Monte Carlo displacement moves per step (e.g. 0 for insert/delete only)."
       },
       {
         "name": "type",
         "dtype": "STRING",
         "default_value": null,
         "unit": null,
-        "description": "Parameter from syntax"
+        "description": "Atom or molecule type index for insertion (1 to ntypes)."
       },
       {
         "name": "seed",
         "dtype": "STRING",
         "default_value": null,
         "unit": null,
-        "description": "Parameter from syntax"
+        "description": "Random seed (integer) for MC moves."
       },
       {
         "name": "T",
         "dtype": "STRING",
         "default_value": null,
-        "unit": null,
-        "description": "Parameter from syntax"
+        "unit": "K",
+        "description": "Temperature in Kelvin for grand canonical ensemble."
       },
       {
         "name": "mu",
         "dtype": "STRING",
         "default_value": null,
-        "unit": null,
-        "description": "Parameter from syntax"
+        "unit": "eV",
+        "description": "Chemical potential in eV for the inserted species."
       },
       {
         "name": "displace",
         "dtype": "STRING",
         "default_value": null,
         "unit": null,
-        "description": "Parameter from syntax"
+        "description": "Maximum displacement for MC moves (distance units)."
       }
     ],
     "parent_section": null,
-    "description": ""
+    "description": "Grand Canonical Monte Carlo: insert/delete particles at fixed T and chemical potential mu. N=interval, X=attempts per step, T=temp (K), mu=chemical potential (eV). Use atom_style full and molecule command for molecular GCMC."
   },
   {
     "name": "fix gjf",
@@ -14333,25 +14333,25 @@
         "dtype": "STRING",
         "default_value": null,
         "unit": null,
-        "description": "Parameter from syntax"
+        "description": "Shock direction: x, y, or z (axis of propagation)."
       },
       {
         "name": "shockvel",
         "dtype": "STRING",
         "default_value": null,
-        "unit": null,
-        "description": "Parameter from syntax"
+        "unit": "distance/time",
+        "description": "Piston (shock) velocity in distance/time units (e.g. Angstrom/ps for metal)."
       },
       {
         "name": "value",
         "dtype": "STRING",
         "default_value": null,
         "unit": null,
-        "description": "Parameter from syntax"
+        "description": "Keyword values: q (cell mass parameter), mu (artificial viscosity), tscale (temperature rescaling factor), etc. See LAMMPS fix msst doc."
       }
     ],
     "parent_section": null,
-    "description": ""
+    "description": "Multi-Scale Shock Technique: propagate shock along dir (x|y|z) at shockvel. Keywords: q=cell mass, mu=artificial viscosity, tscale=temperature rescaling. Use with velocity initialization and appropriate units."
   },
   {
     "name": "fix mvv dpd",

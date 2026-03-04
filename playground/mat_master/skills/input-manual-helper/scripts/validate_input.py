@@ -645,6 +645,7 @@ def parse_json_input(text: str) -> list[ParsedTag]:
 _SOFTWARE_PARADIGM: dict[str, str] = {
     "VASP": "KEY_VALUE",
     "ABACUS": "KEY_VALUE",
+    "ABINIT": "KEY_VALUE",
     "CP2K": "HIERARCHICAL_BLOCK",
     "LAMMPS": "KEYWORD_LINE",
     "QE": "NAMELIST",
