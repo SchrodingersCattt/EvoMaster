@@ -42,19 +42,20 @@ llm:
   default: "openai"
 
 # ============================================
-# Agent 配置
+# Agent 配置（v0.0.2：使用 agents，单 agent 时用 default）
 # ============================================
-agent:
-  # 基础配置
-  max_turns: 100
-  llm: "openai"  # 使用的 LLM 配置名称
+agents:
+  default:
+    # 基础配置
+    max_turns: 100
+    llm: "openai"  # 使用的 LLM 配置名称
 
-  # 上下文管理配置
-  context:
-    max_tokens: 128000
-    truncation_strategy: "latest_half"  # none, latest_half, sliding_window, summary
-    preserve_system_messages: true
-    preserve_recent_turns: 5
+    # 上下文管理配置
+    context:
+      max_tokens: 128000
+      truncation_strategy: "latest_half"  # none, latest_half, sliding_window, summary
+      preserve_system_messages: true
+      preserve_recent_turns: 5
 
 # ============================================
 # Session 配置
@@ -110,29 +111,6 @@ env:
     queue_timeout: 3600  # 队列超时时间（秒）
     retry_failed: true
     max_retries: 3
-
-# ============================================
-# Skill 配置
-# ============================================
-skill:
-  # Skill 目录
-  skill_dir: "./evomaster/skills"
-
-  # Knowledge Skill 配置
-  knowledge:
-    # 向量检索配置
-    retrieval:
-      enabled: true
-      embedding_model: "text-embedding-ada-002"
-      top_k: 5
-      similarity_threshold: 0.7
-
-  # Operator Skill 配置
-  operator:
-    # Meta info 常驻上下文
-    load_meta_info: true
-    # Full info 按需加载
-    lazy_load_full_info: true
 
 # ============================================
 # 日志配置

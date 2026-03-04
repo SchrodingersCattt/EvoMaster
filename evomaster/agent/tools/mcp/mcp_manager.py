@@ -84,6 +84,10 @@ class MCPToolManager:
         # Example: {"mat_sn": ["web-search", "search-papers-enhanced"]} -> only those two from mat_sn.
         self.tool_include_only: dict[str, list[str]] = {}
 
+        # Optional per-server sync_tools: for calculation servers, submit_<name> is not registered when <name> is in this set (sync version only).
+        # Example: {"mat_sg": {"build_bulk_structure_by_wyckoff", ...}} -> mat_sg_submit_build_bulk_structure_by_wyckoff is not registered.
+        self.sync_tools_by_server: dict[str, set[str]] = {}
+
         # Reconnection support: runner 监听此事件以触发重连
         self._reconnect_events: dict[str, asyncio.Event] = {}
         # 等待重连完成的线程级 Event 列表（由 request_reconnect 添加，runner 完成后 set）
@@ -100,6 +104,26 @@ class MCPToolManager:
             self.logger.info(
                 f"Filtered to {len(tools_info)} tools for server '{server_name}' (include_only: {include_only})"
             )
+
+        sync_tools = self.sync_tools_by_server.get(server_name, set())
+        if sync_tools:
+            before = len(tools_info)
+            tools_info = [
+                t
+                for t in tools_info
+                if not (
+                    t.get('name', '').startswith('submit_')
+                    and t.get('name', '')[len('submit_') :] in sync_tools
+                )
+            ]
+            if len(tools_info) < before:
+                self.logger.info(
+                    "Filtered out submit_* for sync_tools on server '%s' (sync_tools=%s); %d -> %d tools",
+                    server_name,
+                    sync_tools,
+                    before,
+                    len(tools_info),
+                )
 
         server_tools: dict[str, MCPTool] = {}
         # First pass: build name → description for base tools (used by submit_* below)
@@ -339,13 +363,26 @@ class MCPToolManager:
         self.logger.info(f"Successfully added MCP server '{name}'")
 
     def register_tools(self, tool_registry: ToolRegistry) -> None:
-        """将所有 MCP 工具注册到 ToolRegistry
+        """将所有 MCP 工具注册到 ToolRegistry，并设为当前生命周期关联的 registry（用于 remove_server/reload 时 unregister）。
 
         Args:
             tool_registry: 目标工具注册表
         """
         self._registered_registry = tool_registry
+        self._register_tools_into_impl(tool_registry)
 
+    def register_tools_into(self, tool_registry: ToolRegistry) -> None:
+        """将当前已加载的 MCP 工具注册到指定 ToolRegistry，不修改 _registered_registry。
+
+        用于「每 agent 独立 tools」：同一 MCP 连接可向多个 agent 的 registry 注入工具，
+        每个 agent 拥有自己的 registry 实例。
+
+        Args:
+            tool_registry: 目标工具注册表
+        """
+        self._register_tools_into_impl(tool_registry)
+
+    def _register_tools_into_impl(self, tool_registry: ToolRegistry) -> None:
         total_count = 0
         for server_name, tools in self.tools_by_server.items():
             for tool_name, tool in tools.items():
@@ -354,7 +391,6 @@ class MCPToolManager:
                 self.logger.debug(
                     f"Registered MCP tool: {tool_name} (from {server_name})"
                 )
-
         self.logger.info(f"Registered {total_count} MCP tools to ToolRegistry")
 
     async def remove_server(self, server_name: str) -> None:

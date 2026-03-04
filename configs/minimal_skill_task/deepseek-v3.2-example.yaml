@@ -46,7 +46,9 @@ agents:
   analyze:
     llm: "local_sglang"
     max_turns: 10
-    enable_tools: true
+    tools:
+      builtin: ["*"]
+      mcp: ""
 
     context:
       max_tokens: 128000
@@ -60,7 +62,9 @@ agents:
   plan:
     llm: "local_sglang"
     max_turns: 10
-    enable_tools: false
+    tools:
+      builtin: []
+      mcp: ""
 
     context:
       max_tokens: 128000
@@ -74,7 +78,9 @@ agents:
   search:
     llm: "local_sglang"
     max_turns: 30
-    enable_tools: true
+    tools:
+      builtin: ["*"]
+      mcp: ""
 
     context:
       max_tokens: 128000
@@ -88,7 +94,9 @@ agents:
   summarize:
     llm: "local_sglang"
     max_turns: 20
-    enable_tools: true
+    tools:
+      builtin: ["*"]
+      mcp: ""
 
     context:
       max_tokens: 128000

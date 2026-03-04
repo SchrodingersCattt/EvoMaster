@@ -9,8 +9,9 @@ import shutil
 import threading
 import traceback
 from pathlib import Path
+from typing import Any
 
-from evomaster.agent import create_default_registry
+from evomaster.agent import create_registry
 from evomaster.agent.session import (
     BaseSession,
     DockerSession,
@@ -24,6 +25,39 @@ from evomaster.config import ConfigManager
 from evomaster.skills import SkillRegistry
 
 from .exp import BaseExp
+
+
+class AgentSlots:
+    """多 Agent 槽位容器，支持 dict 式访问与属性访问（如 self.agents.planning_agent）。"""
+
+    def __init__(self):
+        self._slots: dict[str, object] = {}
+
+    def __setitem__(self, name: str, agent: object) -> None:
+        self._slots[name] = agent
+
+    def __getitem__(self, name: str) -> object:
+        return self._slots[name]
+
+    def __getattr__(self, name: str) -> object:
+        if name.startswith('_'):
+            raise AttributeError(name)
+        if name in self._slots:
+            return self._slots[name]
+        raise AttributeError(f"{type(self).__name__!r} has no attribute {name!r}")
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._slots
+
+    def get(self, name: str, default: object = None) -> object:
+        """按名称获取 agent，不存在时返回 default。"""
+        return self._slots.get(name, default)
+
+    def get_random_agent(self) -> object | None:
+        """返回任意一个已注册的 agent（兼容单 agent 调用方）。"""
+        if not self._slots:
+            return None
+        return next(iter(self._slots.values()))
 
 
 class BasePlayground:
@@ -82,6 +116,7 @@ class BasePlayground:
         # 组件存储
         self.session = None
         self.agent = None
+        self.agents = AgentSlots()
         self.tools = None
 
     def _start_loop_in_thread(self) -> threading.Thread:
@@ -336,19 +371,164 @@ class BasePlayground:
         else:
             self.logger.debug('Session already open, reusing existing session')
 
-    def _setup_tools(self, skill_registry=None) -> None:
-        """创建工具注册表并初始化 MCP 工具（如果配置了）
+    def _create_tools_for_agent(
+        self,
+        skill_registry: SkillRegistry | None,
+        tool_config: dict,
+    ):
+        """为该 agent 创建独立的工具注册表（每 agent 独立 tools，与上游一致）。
 
         Args:
-            skill_registry: 可选的 SkillRegistry 实例，如果提供则注册 SkillTool
-        """
-        # 创建工具注册表（传入 skill_registry）
-        self.tools = create_default_registry(skill_registry)
+            skill_registry: 本 agent 的 Skill 注册中心（子集或全量）
+            tool_config: 本 agent 的 tools 配置，形如 {"builtin": list[str], "mcp": str}
 
-        # 初始化 MCP 工具（如果配置了）
+        Returns:
+            ToolRegistry 实例，供该 agent 独占使用
+        """
+
+        builtin = tool_config.get('builtin', ['*'])
+        registry = create_registry(builtin, skill_registry)
+        if tool_config.get('mcp') and getattr(self, 'mcp_manager', None):
+            self.mcp_manager.register_tools_into(registry)
+        return registry
+
+    def _setup_mcp_tools(self):
+        """初始化 MCP 连接与工具加载，不注册到任何全局 registry（每 agent 在 _create_tools_for_agent 中通过 register_tools_into 注入）。
+
+        Returns:
+            MCPToolManager 实例，若未配置 MCP 则返回 None
+        """
         self.mcp_manager = None
-        if hasattr(self.config, 'mcp') or hasattr(self.config, 'mcp_servers'):
-            self.mcp_manager = self._setup_mcp_tools()
+        if not (hasattr(self.config, 'mcp') or hasattr(self.config, 'mcp_servers')):
+            return None
+        manager = self._init_mcp_manager()
+        self.mcp_manager = manager
+        return manager
+
+    def _init_mcp_manager(self):
+        """创建 MCP 管理器并异步初始化所有服务器；不向任何 ToolRegistry 注册（由各 agent 的 _create_tools_for_agent 按需 register_tools_into）。"""
+        import asyncio
+        import json
+        from pathlib import Path
+
+        from evomaster.agent.tools import MCPToolManager
+
+        mcp_config = getattr(self.config, 'mcp', None)
+        if not mcp_config or not isinstance(mcp_config, dict):
+            return None
+        if not mcp_config.get('enabled', True):
+            self.logger.info('MCP is disabled in config')
+            return None
+
+        config_file = mcp_config.get('config_file', 'mcp_config.json')
+        config_path = Path(config_file)
+        if not config_path.is_absolute():
+            config_path = self.config_manager.config_dir / config_path
+        if not config_path.exists():
+            self.logger.warning(f"MCP config file not found: {config_path}")
+            return None
+
+        self.logger.info(f"Loading MCP config from: {config_path}")
+        try:
+            with open(config_path, encoding='utf-8') as f:
+                mcp_servers_config = json.load(f)
+        except Exception as e:
+            self.logger.error(f"Failed to load MCP config: {e}")
+            return None
+
+        PLACEHOLDER = '__EVOMASTER_WORKSPACES__'
+
+        def _deep_replace(obj, old: str, new: str):
+            if isinstance(obj, str):
+                return obj.replace(old, new)
+            if isinstance(obj, list):
+                return [_deep_replace(x, old, new) for x in obj]
+            if isinstance(obj, dict):
+                return {k: _deep_replace(v, old, new) for k, v in obj.items()}
+            return obj
+
+        try:
+            if self.run_dir is not None:
+                ws_root = str((Path(self.run_dir) / 'workspaces').resolve())
+                mcp_servers_config = _deep_replace(
+                    mcp_servers_config, PLACEHOLDER, ws_root
+                )
+                self.logger.info(f"[MCP] Replaced {PLACEHOLDER} -> {ws_root}")
+        except Exception as e:
+            self.logger.warning(f"[MCP] Failed to replace placeholder paths: {e}")
+
+        servers = self._parse_mcp_servers(mcp_servers_config)
+        if not servers:
+            self.logger.warning('No valid MCP servers found in config')
+            return None
+
+        self.logger.info('Setting up MCP tools...')
+        manager = MCPToolManager()
+        if mcp_config.get('path_adaptor') == 'calculation':
+            from evomaster.adaptors.calculation import get_calculation_path_adaptor
+
+            calc_servers = mcp_config.get('calculation_servers')
+            if calc_servers:
+                manager.path_adaptor_servers = set(calc_servers)
+            else:
+                manager.path_adaptor_servers = {
+                    s.get('name') for s in servers if s.get('name')
+                }
+            manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(
+                mcp_config
+            )
+            self.logger.info(
+                'Path adaptor enabled for servers: %s', manager.path_adaptor_servers
+            )
+
+        async def init_mcp_servers():
+            for server_config in servers:
+                try:
+                    await manager.add_server(**server_config)
+                except Exception as e:
+                    server_name = server_config.get('name', 'unknown')
+                    self.logger.error(
+                        f"Failed to add MCP server {server_name}: {e}",
+                        exc_info=True,
+                    )
+                    sub_exceptions = getattr(e, 'exceptions', None)
+                    if sub_exceptions is not None:
+                        for i, sub in enumerate(sub_exceptions):
+                            tb_str = ''.join(
+                                traceback.format_exception(
+                                    type(sub), sub, getattr(sub, '__traceback__', None)
+                                )
+                            ).strip()
+                            self.logger.error(
+                                f"  MCP sub-exception [{i}]: {type(sub).__name__}: {sub}\n{tb_str}",
+                            )
+                    elif getattr(e, '__cause__', None) is not None:
+                        cause = e.__cause__
+                        tb_str = ''.join(
+                            traceback.format_exception(
+                                type(cause),
+                                cause,
+                                getattr(cause, '__traceback__', None),
+                            )
+                        ).strip()
+                        self.logger.error(
+                            f"  MCP exception cause: {type(cause).__name__}: {cause}\n{tb_str}",
+                        )
+
+        if self._mcp_loop is None or self._mcp_loop.is_closed():
+            self._mcp_loop = asyncio.new_event_loop()
+            self._mcp_thread = self._start_loop_in_thread()
+
+        manager.loop = self._mcp_loop
+        future = asyncio.run_coroutine_threadsafe(init_mcp_servers(), self._mcp_loop)
+        future.result()
+
+        tool_count = len(manager.get_tool_names())
+        server_count = len(manager.get_server_names())
+        self.logger.info(
+            f"MCP manager initialized: {tool_count} tools from {server_count} servers"
+        )
+        return manager
 
     def _get_output_config(self) -> dict:
         """获取 LLM 输出配置
@@ -367,20 +547,21 @@ class BasePlayground:
     def _create_agent(
         self,
         name: str,
-        agent_config: dict,
-        enable_tools: bool = True,
-        llm_config_dict: dict | None = None,
+        agent_config: dict | None = None,
         skill_registry: SkillRegistry | None = None,
+        tool_config: dict | None = None,
+        llm_config: dict | None = None,
+        skill_config: dict | None = None,
     ):
-        """创建 Agent 实例
-
-        每个 Agent 使用独立的 LLM 实例，确保日志记录独立。
+        """创建 Agent 实例（v0.0.2 签名：tool_config/llm_config/skill_config，缺省时从 config 补齐）
 
         Args:
             name: Agent 名称
-            agent_config: Agent 配置字典
-            enable_tools: 是否启用工具调用
-            llm_config_dict: LLM 配置字典（如果为 None，则从配置管理器获取）
+            agent_config: Agent 配置字典，None 时从 get_agent_config(name) 获取
+            skill_registry: 本 agent 的 Skill 注册中心（子集或全量）
+            tool_config: 工具配置，含 builtin/mcp；None 时从 get_agent_tools_config(name) 获取
+            llm_config: LLM 配置；None 时从 get_agent_llm_config(name) 获取
+            skill_config: 本 agent 的 skills 配置，dict 形如 {"skills": list[str]}
 
         Returns:
             Agent 实例
@@ -389,19 +570,27 @@ class BasePlayground:
         from evomaster.agent.context import ContextConfig
         from evomaster.utils import LLMConfig, create_llm
 
-        # 提取 Agent 配置
+        if agent_config is None:
+            agent_config = self.config_manager.get_agent_config(name)
+        if llm_config is None:
+            llm_config = self.config_manager.get_agent_llm_config(name)
+        if tool_config is None:
+            tool_config = self.config_manager.get_agent_tools_config(name)
+        builtin = tool_config.get('builtin', ['*'])
+        enable_tools = bool(builtin)
+        enabled_tool_names: list[str] | None = None
+        if '*' in builtin or not builtin:
+            enabled_tool_names = None
+        else:
+            enabled_tool_names = list(builtin)
+
         max_turns = agent_config.get('max_turns', 20)
         context_config_dict = agent_config.get('context', {})
         context_config = ContextConfig(**context_config_dict)
         agent_cfg = AgentConfig(max_turns=max_turns, context_config=context_config)
 
-        # 获取输出配置
         output_config = self._get_output_config()
-
-        # 为每个 Agent 创建独立的 LLM 实例
-        if llm_config_dict is None:
-            llm_config_dict = self._setup_llm_config()
-        llm = create_llm(LLMConfig(**llm_config_dict), output_config=output_config)
+        llm = create_llm(LLMConfig(**llm_config), output_config=output_config)
         self.logger.debug(f"Created independent LLM instance for {name} agent")
 
         # 获取提示词文件路径
@@ -426,13 +615,12 @@ class BasePlayground:
         # 获取提示词格式化参数（如果有）
         prompt_format_kwargs = agent_config.get('prompt_format_kwargs', {})
 
-        # 创建 Agent
-        # 注意：无论 enable_tools 是什么值，都传递 tools 给 Agent
-        # enable_tools 只控制工具信息是否出现在提示词中，不影响工具注册
+        # 创建 Agent（每 agent 独立 tools registry）
+        tools = self._create_tools_for_agent(skill_registry, tool_config)
         agent = Agent(
             llm=llm,
             session=self.session,
-            tools=self.tools,  # 始终传递 tools，工具始终注册
+            tools=tools,
             system_prompt_file=system_prompt_file,
             user_prompt_file=user_prompt_file,
             prompt_format_kwargs=prompt_format_kwargs,
@@ -441,12 +629,60 @@ class BasePlayground:
             output_config=output_config,
             config_dir=self.config_dir,
             enable_tools=enable_tools,  # 控制工具信息是否出现在提示词中
+            enabled_tool_names=enabled_tool_names,
         )
 
         # 设置Agent名称（用于轨迹文件中标识不同的agent）
         agent.set_agent_name(name)
 
         return agent
+
+    def _setup_agents(self, skill_registry: SkillRegistry | None = None) -> None:
+        """遍历 config.agents，为每个 agent 创建实例并注册到 self.agents；per-agent skill_config 决定该 agent 的 skill 子集（上游 v0.0.2）。"""
+        agents_config = self.config_manager.get_agents_config()
+        if not agents_config:
+            return
+        config_dict = self.config.model_dump()
+        skills_config = config_dict.get('skills', {})
+        if skill_registry is None:
+            if skills_config.get('enabled', False):
+                from pathlib import Path
+
+                skills_root = Path(skills_config.get('skills_root', 'evomaster/skills'))
+                skill_registry = SkillRegistry(skills_root)
+        for agent_name, agent_config in agents_config.items():
+            tool_config = self.config_manager.get_agent_tools_config(agent_name)
+            llm_config = self.config_manager.get_agent_llm_config(agent_name)
+            skill_config = self.config_manager.get_agent_skills_config(agent_name)
+            skills_list = skill_config.get('skills', [])
+            # per-agent skill（上游 v0.0.2）：有 skills 时用子集或全量；无配置但全局 enabled 时用全量
+            agent_skill_registry: SkillRegistry | None = None
+            if skill_registry is not None:
+                if skills_list:
+                    agent_skill_registry = (
+                        skill_registry
+                        if '*' in skills_list
+                        else skill_registry.create_subset(skills_list)
+                    )
+                elif skills_config.get('enabled', False):
+                    agent_skill_registry = skill_registry
+            agent = self._create_agent(
+                name=agent_name,
+                agent_config=agent_config,
+                tool_config=tool_config,
+                llm_config=llm_config,
+                skill_config=skill_config,
+                skill_registry=agent_skill_registry,
+            )
+            slot_name = (
+                f"{agent_name}_agent"
+                if not agent_name.endswith('_agent')
+                else agent_name
+            )
+            self.agents[slot_name] = agent
+            self.logger.info(f"{agent_name.capitalize()} Agent created")
+        self.agent = self.agents.get_random_agent()
+        self.logger.info('Multi-agent playground setup complete')
 
     def setup(self) -> None:
         """初始化所有组件
@@ -473,12 +709,20 @@ class BasePlayground:
         # 2. 创建 Session（如果尚未创建）
         self._setup_session()
 
-        # 3. 加载 Skills（如果启用）- 在多 agent 和单 agent 模式下都需要
+        # 3. 加载 Skills（全局启用或任意 agent 配置了 skills 时加载全量 registry，供 per-agent 子集用）
         skill_registry = None
         config_dict = self.config.model_dump()
         skills_config = config_dict.get('skills', {})
-        if skills_config.get('enabled', False):
-            self.logger.info('Skills enabled, loading skill registry...')
+        agents_config_for_skills = self.config_manager.get_agents_config()
+        need_skills = skills_config.get('enabled', False) or (
+            bool(agents_config_for_skills)
+            and any(
+                self.config_manager.get_agent_skills_config(name).get('skills')
+                for name in agents_config_for_skills
+            )
+        )
+        if need_skills:
+            self.logger.info('Loading skill registry (global or per-agent skills)...')
             from pathlib import Path
 
             from evomaster.skills import SkillRegistry
@@ -487,72 +731,23 @@ class BasePlayground:
             skill_registry = SkillRegistry(skills_root)
             self.logger.info(f"Loaded {len(skill_registry.get_all_skills())} skills")
 
-        # 4. 创建工具注册表并初始化 MCP 工具（传入 skill_registry）
-        self._setup_tools(skill_registry)
+        # 4. 初始化 MCP 连接（每 agent 在 _create_agent 内通过 _create_tools_for_agent 获得独立 registry）
+        self._setup_mcp_tools()
 
         # 5. 创建 Agent(s)
         agents_config = getattr(self.config, 'agents', None)
         if agents_config:
-            # 多 agent 模式
             if not isinstance(agents_config, dict) or not agents_config:
                 raise ValueError(
                     "Invalid 'agents' configuration. "
                     'Expected a non-empty dictionary with agent names as keys.'
                 )
-
-            # 创建多个 agent
-            for agent_name, agent_config in agents_config.items():
-                enable_tools = agent_config.get('enable_tools', True)
-                self.agent = self._create_agent(
-                    name=agent_name,
-                    agent_config=agent_config,
-                    enable_tools=enable_tools,
-                    llm_config_dict=llm_config_dict,
-                    skill_registry=skill_registry,  # 传递 skill_registry
-                )
-                self.logger.info(f"{agent_name.capitalize()} Agent created")
-
-            self.logger.info('Multi-agent playground setup complete')
+            self._setup_agents(skill_registry=skill_registry)
         else:
-            # 单 agent 模式（向后兼容）
-            # skill_registry 已经在上面加载了，这里不需要重复加载
-
-            agent_config_dict = getattr(self.config, 'agent', None)
-            if not agent_config_dict:
-                raise ValueError(
-                    'No agent configuration found. '
-                    "Please add either 'agent' or 'agents' section to config.yaml"
-                )
-
-            # 获取提示词文件路径（如果配置了）并添加到 agent_config_dict
-            system_prompt_file = getattr(self.config, 'system_prompt_file', None)
-            user_prompt_file = getattr(self.config, 'user_prompt_file', None)
-
-            # 将提示词文件路径添加到 agent_config_dict（如果存在）
-            if system_prompt_file:
-                agent_config_dict = agent_config_dict.copy()
-                agent_config_dict['system_prompt_file'] = system_prompt_file
-
-            if user_prompt_file:
-                if not isinstance(agent_config_dict, dict):
-                    agent_config_dict = (
-                        agent_config_dict.copy()
-                        if hasattr(agent_config_dict, 'copy')
-                        else dict(agent_config_dict)
-                    )
-                agent_config_dict['user_prompt_file'] = user_prompt_file
-
-            # 创建单个 agent
-            enable_tools = agent_config_dict.get('enable_tools', True)
-            self.agent = self._create_agent(
-                name='default',
-                agent_config=agent_config_dict,
-                enable_tools=enable_tools,
-                llm_config_dict=llm_config_dict,
-                skill_registry=skill_registry,
+            raise ValueError(
+                'No agents configuration found. '
+                'Please add "agents" section to config.yaml (e.g. agents: { default: ... })'
             )
-
-            self.logger.info('Single-agent playground setup complete')
 
     # ------------------------------------------------------------------
     # Dynamic session attach / detach
@@ -694,169 +889,6 @@ class BasePlayground:
             'sync_skills_to_remote: done, remote_project_root=%s', remote_base
         )
 
-    def _setup_mcp_tools(self):
-        """初始化 MCP 工具
-
-        从 MCP 配置文件（JSON 格式）读取服务器列表，初始化连接并注册工具。
-
-        Returns:
-            MCPToolManager 实例，如果配置无效则返回 None
-        """
-        import asyncio
-        import json
-        from pathlib import Path
-
-        from evomaster.agent.tools import MCPToolManager
-
-        # 1. 检查 MCP 配置
-        mcp_config = getattr(self.config, 'mcp', None)
-        if not mcp_config:
-            self.logger.debug('MCP not configured, skipping')
-            return None
-
-        # 2. 检查配置格式
-        if not isinstance(mcp_config, dict):
-            self.logger.error('Invalid MCP config format, expected dict')
-            return None
-
-        # 3. 检查是否启用
-        if not mcp_config.get('enabled', True):
-            self.logger.info('MCP is disabled in config')
-            return None
-
-        # 4. 获取配置文件路径
-        config_file = mcp_config.get('config_file', 'mcp_config.json')
-
-        # 5. 解析配置文件路径
-        config_path = Path(config_file)
-        if not config_path.is_absolute():
-            config_path = self.config_manager.config_dir / config_path
-
-        if not config_path.exists():
-            self.logger.warning(f"MCP config file not found: {config_path}")
-            return None
-
-        # 5. 加载 MCP 配置
-        self.logger.info(f"Loading MCP config from: {config_path}")
-        try:
-            with open(config_path, encoding='utf-8') as f:
-                mcp_servers_config = json.load(f)
-        except Exception as e:
-            self.logger.error(f"Failed to load MCP config: {e}")
-            return None
-
-        # --- PATCH: replace placeholder paths in MCP config (global) ---
-        PLACEHOLDER = '__EVOMASTER_WORKSPACES__'
-
-        def _deep_replace(obj, old: str, new: str):
-            """Recursively replace `old` -> `new` in any string inside dict/list structures."""
-            if isinstance(obj, str):
-                return obj.replace(old, new)
-            if isinstance(obj, list):
-                return [_deep_replace(x, old, new) for x in obj]
-            if isinstance(obj, dict):
-                return {k: _deep_replace(v, old, new) for k, v in obj.items()}
-            return obj
-
-        try:
-            if self.run_dir is not None:
-                ws_root = str((Path(self.run_dir) / 'workspaces').resolve())
-                mcp_servers_config = _deep_replace(
-                    mcp_servers_config, PLACEHOLDER, ws_root
-                )
-                self.logger.info(f"[MCP] Replaced {PLACEHOLDER} -> {ws_root}")
-            else:
-                self.logger.debug(
-                    f"[MCP] run_dir is None, skip placeholder replace: {PLACEHOLDER}"
-                )
-        except Exception as e:
-            self.logger.warning(f"[MCP] Failed to replace placeholder paths: {e}")
-
-        # 6. 解析服务器配置
-        servers = self._parse_mcp_servers(mcp_servers_config)
-        if not servers:
-            self.logger.warning('No valid MCP servers found in config')
-            return None
-
-        # 7. 初始化 MCP 管理器
-        self.logger.info('Setting up MCP tools...')
-        manager = MCPToolManager()
-        if mcp_config.get('path_adaptor') == 'calculation':
-            from evomaster.adaptors.calculation import get_calculation_path_adaptor
-
-            calc_servers = mcp_config.get('calculation_servers')
-            if calc_servers:
-                manager.path_adaptor_servers = set(calc_servers)
-            else:
-                manager.path_adaptor_servers = {
-                    s.get('name') for s in servers if s.get('name')
-                }
-            # Pass mcp_config so adaptor gets calculation_executors (executor template + sync_tools per server)
-            manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(
-                mcp_config
-            )
-            self.logger.info(
-                'Path adaptor enabled for servers: %s', manager.path_adaptor_servers
-            )
-
-        # 8. 异步初始化 MCP 服务器
-        async def init_mcp_servers():
-            for server_config in servers:
-                try:
-                    await manager.add_server(**server_config)
-                except Exception as e:
-                    server_name = server_config.get('name', 'unknown')
-                    self.logger.error(
-                        f"Failed to add MCP server {server_name}: {e}",
-                        exc_info=True,
-                    )
-                    # 展开 TaskGroup/ExceptionGroup 的子异常，便于排查连接失败等根因
-                    sub_exceptions = getattr(e, 'exceptions', None)
-                    if sub_exceptions is not None:
-                        for i, sub in enumerate(sub_exceptions):
-                            tb_str = ''.join(
-                                traceback.format_exception(
-                                    type(sub), sub, getattr(sub, '__traceback__', None)
-                                )
-                            ).strip()
-                            self.logger.error(
-                                f"  MCP sub-exception [{i}]: {type(sub).__name__}: {sub}\n{tb_str}",
-                            )
-                    elif getattr(e, '__cause__', None) is not None:
-                        cause = e.__cause__
-                        tb_str = ''.join(
-                            traceback.format_exception(
-                                type(cause),
-                                cause,
-                                getattr(cause, '__traceback__', None),
-                            )
-                        ).strip()
-                        self.logger.error(
-                            f"  MCP exception cause: {type(cause).__name__}: {cause}\n{tb_str}",
-                        )
-
-        # 创建并保存一个“长期存在”的 loop，专门给 MCP 用
-        if self._mcp_loop is None or self._mcp_loop.is_closed():
-            self._mcp_loop = asyncio.new_event_loop()
-            self._mcp_thread = self._start_loop_in_thread()
-
-        manager.loop = self._mcp_loop
-
-        # ✅ 往 mcp_loop 提交协程
-        future = asyncio.run_coroutine_threadsafe(init_mcp_servers(), self._mcp_loop)
-        future.result()  # 阻塞等待初始化完成（同步代码里只能这么等）
-
-        # 9. 注册 MCP 工具到主工具注册表
-        manager.register_tools(self.tools)
-
-        tool_count = len(manager.get_tool_names())
-        server_count = len(manager.get_server_names())
-        self.logger.info(
-            f"MCP tools setup complete: {tool_count} tools from {server_count} servers"
-        )
-
-        return manager
-
     def _parse_mcp_servers(self, mcp_config: dict) -> list[dict]:
         """解析 MCP 服务器配置
 
@@ -957,12 +989,101 @@ class BasePlayground:
 
         return trajectory_file
 
-    def run(self, task_description: str, output_file: str | None = None) -> dict:
+    def setup_exp_workspace(self, task_id: str) -> Path:
+        """为指定任务设置实验工作空间（run_dir/workspaces/{task_id}）。
+
+        需已调用 set_run_dir(run_dir)。创建 workspaces/{task_id} 并更新 session 的 workspace_path。
+
+        Args:
+            task_id: 任务 ID
+
+        Returns:
+            该任务的工作空间路径（run_dir/workspaces/task_id）
+        """
+        if not self.run_dir:
+            raise RuntimeError(
+                'set_run_dir() must be called before setup_exp_workspace()'
+            )
+        self.set_run_dir(self.run_dir, task_id=task_id)
+        return self.run_dir / 'workspaces' / task_id
+
+    def execute_parallel_tasks(
+        self,
+        tasks: list[dict[str, Any]],
+        max_workers: int = 4,
+        output_file: str | Path | None = None,
+    ) -> list[dict[str, Any]]:
+        """批量执行任务（当前为串行执行，保证与 run_dir/轨迹 一致；进程级并行请用 run.run_tasks_parallel）。
+
+        每个 task 为 dict，需含 "id"、"description"，可选 "images"（多模态图片路径列表）。
+
+        Args:
+            tasks: 任务列表，每项 {"id": str, "description": str, "images": list[str] 可选}
+            max_workers: 保留参数，与上游 API 一致；当前串行执行
+            output_file: 可选，单任务时轨迹保存路径；多任务时按 task_id 写入 run_dir/trajectories/{task_id}/
+
+        Returns:
+            结果列表，每项 {"task_id", "status", "steps", "trajectory", ...}
+        """
+        if not tasks:
+            return []
+        try:
+            self.setup()
+        except Exception as e:
+            self.logger.error(f"Setup failed: {e}")
+            return [
+                {
+                    'task_id': t.get('id', ''),
+                    'status': 'failed',
+                    'error': str(e),
+                    'steps': 0,
+                }
+                for t in tasks
+            ]
+        results = []
+        for task_spec in tasks:
+            task_id = task_spec.get('id', '')
+            description = task_spec.get('description', '')
+            images = task_spec.get('images') or []
+            try:
+                if self.run_dir:
+                    self.setup_exp_workspace(task_id)
+                self._setup_trajectory_file()
+                exp = self._create_exp()
+                result = exp.run(
+                    task_description=description,
+                    task_id=task_id,
+                    images=images,
+                )
+                result['task_id'] = task_id
+                results.append(result)
+            except Exception as e:
+                self.logger.error(f"Task {task_id} failed: {e}", exc_info=True)
+                results.append(
+                    {
+                        'task_id': task_id,
+                        'status': 'failed',
+                        'error': str(e),
+                        'steps': 0,
+                    }
+                )
+        self.cleanup()
+        return results
+
+    def run(
+        self,
+        task_description: str = '',
+        output_file: str | Path | None = None,
+        task_id: str = 'exp_001',
+        images: list[str] | None = None,
+    ) -> dict:
         """运行工作流
 
         Args:
             task_description: 任务描述
             output_file: 结果保存文件（可选，如果设置了 run_dir 则自动保存到 trajectories/）
+            task_id: 任务 ID（可选）
+            images: 图片路径列表（可选，多模态任务）
 
         Returns:
             运行结果
@@ -977,7 +1098,11 @@ class BasePlayground:
             exp = self._create_exp()
 
             self.logger.info('Running experiment...')
-            result = exp.run(task_description)
+            result = exp.run(
+                task_description=task_description,
+                task_id=task_id,
+                images=images,
+            )
 
             return result
 

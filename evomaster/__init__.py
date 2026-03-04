@@ -6,134 +6,119 @@ EvoMaster 是一个用于迭代完成科学实验任务的 Agent 系统，
 核心组件（三层架构）：
 - agent: 智能体（包含 Session、Tools）
 - env: 环境（集群调度、Docker 沙箱）
-- skills: 技能（Knowledge、Operator）
+- skills: 技能（Skill 统一类型，与上游 v0.0.2 一致）
 """
 
-__version__ = "0.1.0"
+__version__ = '0.1.0'
 
-# 从 agent 模块导出常用类
+# 从 agent 模块导出常用类（Types 如 Dialog/Message/Trajectory/TaskInstance 从 utils 统一导入，避免 F811）
 from evomaster.agent import (
-    # Agent
-    BaseAgent,
     Agent,
     AgentConfig,
-    # Types
-    Dialog,
-    Message,
-    Trajectory,
-    TaskInstance,
-    # Session
+    BaseAgent,
     BaseSession,
-    SessionConfig,
+    BaseTool,
     DockerSession,
     DockerSessionConfig,
-    # Tools
-    BaseTool,
+    SessionConfig,
     ToolRegistry,
     create_default_registry,
 )
 
-# 从 utils 模块导出工具类和类型
-from evomaster.utils import (
-    # LLM
-    BaseLLM,
-    LLMConfig,
-    LLMResponse,
-    OpenAILLM,
-    AnthropicLLM,
-    create_llm,
-    # Types
-    MessageRole,
-    SystemMessage,
-    UserMessage,
-    AssistantMessage,
-    ToolMessage,
-    Message,
-    FunctionCall,
-    ToolCall,
-    FunctionSpec,
-    ToolSpec,
-    Dialog,
-    StepRecord,
-    Trajectory,
-    TaskInstance,
-)
-
 # 从 config 模块导出配置管理
 from evomaster.config import (
-    # 配置基类
     BaseConfig,
-    # Env 配置
-    EnvConfig,
     ClusterConfig,
     ClusterPoolConfig,
-    DockerEnvConfig,
-    SchedulerConfig,
-    # Skill 配置
-    SkillConfig,
-    KnowledgeSkillConfig,
-    OperatorSkillConfig,
-    # 日志配置
-    LoggingConfig,
-    # 顶层配置
-    EvoMasterConfig,
-    # 配置管理器
     ConfigManager,
+    DockerEnvConfig,
+    EnvConfig,
+    EvoMasterConfig,
+    LoggingConfig,
+    SchedulerConfig,
+    ToolConfig,
+    get_config,
     get_config_manager,
     load_config,
-    get_config,
+)
+
+# 从 utils 模块导出工具类和类型
+from evomaster.utils import (  # LLM; Types; Multimodal
+    AnthropicLLM,
+    AssistantMessage,
+    BaseLLM,
+    Dialog,
+    FunctionCall,
+    FunctionSpec,
+    LLMConfig,
+    LLMResponse,
+    Message,
+    MessageRole,
+    OpenAILLM,
+    StepRecord,
+    SystemMessage,
+    TaskInstance,
+    ToolCall,
+    ToolMessage,
+    ToolSpec,
+    Trajectory,
+    UserMessage,
+    build_multimodal_content,
+    create_llm,
+    encode_image_to_base64,
 )
 
 __all__ = [
     # Agent
-    "BaseAgent",
-    "Agent",
-    "AgentConfig",
+    'BaseAgent',
+    'Agent',
+    'AgentConfig',
     # Types (from utils)
-    "MessageRole",
-    "SystemMessage",
-    "UserMessage",
-    "AssistantMessage",
-    "ToolMessage",
-    "Message",
-    "FunctionCall",
-    "ToolCall",
-    "FunctionSpec",
-    "ToolSpec",
-    "Dialog",
-    "StepRecord",
-    "Trajectory",
-    "TaskInstance",
+    'MessageRole',
+    'SystemMessage',
+    'UserMessage',
+    'AssistantMessage',
+    'ToolMessage',
+    'Message',
+    'FunctionCall',
+    'ToolCall',
+    'FunctionSpec',
+    'ToolSpec',
+    'Dialog',
+    'StepRecord',
+    'Trajectory',
+    'TaskInstance',
     # Session
-    "BaseSession",
-    "SessionConfig",
-    "DockerSession",
-    "DockerSessionConfig",
+    'BaseSession',
+    'SessionConfig',
+    'DockerSession',
+    'DockerSessionConfig',
     # Tools
-    "BaseTool",
-    "ToolRegistry",
-    "create_default_registry",
+    'BaseTool',
+    'ToolRegistry',
+    'create_default_registry',
+    # Utils - Multimodal
+    'encode_image_to_base64',
+    'build_multimodal_content',
     # Utils - LLM
-    "BaseLLM",
-    "LLMConfig",
-    "LLMResponse",
-    "OpenAILLM",
-    "AnthropicLLM",
-    "create_llm",
+    'BaseLLM',
+    'LLMConfig',
+    'LLMResponse',
+    'OpenAILLM',
+    'AnthropicLLM',
+    'create_llm',
     # Config
-    "BaseConfig",
-    "EnvConfig",
-    "ClusterConfig",
-    "ClusterPoolConfig",
-    "DockerEnvConfig",
-    "SchedulerConfig",
-    "SkillConfig",
-    "KnowledgeSkillConfig",
-    "OperatorSkillConfig",
-    "LoggingConfig",
-    "EvoMasterConfig",
-    "ConfigManager",
-    "get_config_manager",
-    "load_config",
-    "get_config",
+    'BaseConfig',
+    'EnvConfig',
+    'ClusterConfig',
+    'ClusterPoolConfig',
+    'DockerEnvConfig',
+    'SchedulerConfig',
+    'ToolConfig',
+    'LoggingConfig',
+    'EvoMasterConfig',
+    'ConfigManager',
+    'get_config_manager',
+    'load_config',
+    'get_config',
 ]
