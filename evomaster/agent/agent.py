@@ -216,11 +216,19 @@ class BaseAgent(ABC):
         self._initial_system_prompt = system_prompt
         self._initial_user_prompt = user_prompt
 
+        # 多模态：若有 task.images，将文本与图片构建为内容块列表
+        from evomaster.utils.multimodal import build_multimodal_content
+
+        user_content = build_multimodal_content(
+            user_prompt,
+            getattr(task, 'images', None) or [],
+        )
+
         # 创建对话
         self.current_dialog = Dialog(
             messages=[
                 SystemMessage(content=system_prompt),
-                UserMessage(content=user_prompt),
+                UserMessage(content=user_content),
             ],
             tools=self._get_tool_specs(),
         )

@@ -9,6 +9,7 @@ import shutil
 import threading
 import traceback
 from pathlib import Path
+from typing import Any
 
 from evomaster.agent import create_default_registry
 from evomaster.agent.session import (
@@ -1007,12 +1008,101 @@ class BasePlayground:
 
         return trajectory_file
 
-    def run(self, task_description: str, output_file: str | None = None) -> dict:
+    def setup_exp_workspace(self, task_id: str) -> Path:
+        """为指定任务设置实验工作空间（run_dir/workspaces/{task_id}）。
+
+        需已调用 set_run_dir(run_dir)。创建 workspaces/{task_id} 并更新 session 的 workspace_path。
+
+        Args:
+            task_id: 任务 ID
+
+        Returns:
+            该任务的工作空间路径（run_dir/workspaces/task_id）
+        """
+        if not self.run_dir:
+            raise RuntimeError(
+                'set_run_dir() must be called before setup_exp_workspace()'
+            )
+        self.set_run_dir(self.run_dir, task_id=task_id)
+        return self.run_dir / 'workspaces' / task_id
+
+    def execute_parallel_tasks(
+        self,
+        tasks: list[dict[str, Any]],
+        max_workers: int = 4,
+        output_file: str | Path | None = None,
+    ) -> list[dict[str, Any]]:
+        """批量执行任务（当前为串行执行，保证与 run_dir/轨迹 一致；进程级并行请用 run.run_tasks_parallel）。
+
+        每个 task 为 dict，需含 "id"、"description"，可选 "images"（多模态图片路径列表）。
+
+        Args:
+            tasks: 任务列表，每项 {"id": str, "description": str, "images": list[str] 可选}
+            max_workers: 保留参数，与上游 API 一致；当前串行执行
+            output_file: 可选，单任务时轨迹保存路径；多任务时按 task_id 写入 run_dir/trajectories/{task_id}/
+
+        Returns:
+            结果列表，每项 {"task_id", "status", "steps", "trajectory", ...}
+        """
+        if not tasks:
+            return []
+        try:
+            self.setup()
+        except Exception as e:
+            self.logger.error(f"Setup failed: {e}")
+            return [
+                {
+                    'task_id': t.get('id', ''),
+                    'status': 'failed',
+                    'error': str(e),
+                    'steps': 0,
+                }
+                for t in tasks
+            ]
+        results = []
+        for task_spec in tasks:
+            task_id = task_spec.get('id', '')
+            description = task_spec.get('description', '')
+            images = task_spec.get('images') or []
+            try:
+                if self.run_dir:
+                    self.setup_exp_workspace(task_id)
+                self._setup_trajectory_file()
+                exp = self._create_exp()
+                result = exp.run(
+                    task_description=description,
+                    task_id=task_id,
+                    images=images,
+                )
+                result['task_id'] = task_id
+                results.append(result)
+            except Exception as e:
+                self.logger.error(f"Task {task_id} failed: {e}", exc_info=True)
+                results.append(
+                    {
+                        'task_id': task_id,
+                        'status': 'failed',
+                        'error': str(e),
+                        'steps': 0,
+                    }
+                )
+        self.cleanup()
+        return results
+
+    def run(
+        self,
+        task_description: str = '',
+        output_file: str | Path | None = None,
+        task_id: str = 'exp_001',
+        images: list[str] | None = None,
+    ) -> dict:
         """运行工作流
 
         Args:
             task_description: 任务描述
             output_file: 结果保存文件（可选，如果设置了 run_dir 则自动保存到 trajectories/）
+            task_id: 任务 ID（可选）
+            images: 图片路径列表（可选，多模态任务）
 
         Returns:
             运行结果
@@ -1027,7 +1117,11 @@ class BasePlayground:
             exp = self._create_exp()
 
             self.logger.info('Running experiment...')
-            result = exp.run(task_description)
+            result = exp.run(
+                task_description=task_description,
+                task_id=task_id,
+                images=images,
+            )
 
             return result
 
