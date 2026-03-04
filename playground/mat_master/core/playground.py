@@ -363,8 +363,9 @@ class MatMasterPlayground(BasePlayground):
         skill_registry=None,
         tool_config: dict | None = None,
         llm_config: dict | None = None,
+        skill_config: list | None = None,
     ):
-        """创建 Mat Master 专用 Agent（MatMasterAgent）；支持基类新签名 tool_config/llm_config。"""
+        """创建 Mat Master 专用 Agent（MatMasterAgent）；支持基类新签名 tool_config/llm_config/skill_config（skill_registry 已由 base 按 skill_config 生成）。"""
         from evomaster.agent import AgentConfig
         from evomaster.agent.context import ContextConfig
         from evomaster.utils import LLMConfig, create_llm
