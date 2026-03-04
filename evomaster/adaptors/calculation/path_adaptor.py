@@ -44,11 +44,13 @@ logger = logging.getLogger(__name__)
 #   pydantic.FilePath     → "format": "file-path"
 #   pydantic.DirectoryPath→ "format": "directory-path"
 # ---------------------------------------------------------------------------
-_PATH_FORMATS: frozenset[str] = frozenset({
-    'path',
-    'file-path',
-    'directory-path',
-})
+_PATH_FORMATS: frozenset[str] = frozenset(
+    {
+        'path',
+        'file-path',
+        'directory-path',
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -58,16 +60,17 @@ def _has_remote_profile(executor_cfg: Any) -> bool:
     """Return True if executor config contains machine.remote_profile."""
     if not isinstance(executor_cfg, dict):
         return False
-    machine = executor_cfg.get("machine")
+    machine = executor_cfg.get('machine')
     if not isinstance(machine, dict):
         return False
-    remote_profile = machine.get("remote_profile")
+    remote_profile = machine.get('remote_profile')
     return isinstance(remote_profile, dict) and bool(remote_profile)
 
 
 # ---------------------------------------------------------------------------
 # Layer 1: schema-driven detection
 # ---------------------------------------------------------------------------
+
 
 def _has_path_format(prop_schema: dict) -> bool:
     """Return *True* if a single JSON-Schema property describes a Path type.
@@ -84,7 +87,10 @@ def _has_path_format(prop_schema: dict) -> bool:
         branches = prop_schema.get(branch_key)
         if branches and isinstance(branches, list):
             for branch in branches:
-                if isinstance(branch, dict) and branch.get('format', '') in _PATH_FORMATS:
+                if (
+                    isinstance(branch, dict)
+                    and branch.get('format', '') in _PATH_FORMATS
+                ):
                     return True
     return False
 
@@ -130,11 +136,11 @@ def _path_keys_from_schema(input_schema: Optional[Dict[str, Any]]) -> Set[str]:
 # Matches:  param_name (Path):   param_name (Optional[Path]):
 #           param_name (List[Path]):  param_name (Dict[str, Path]):
 _DOCSTRING_PATH_RE = re.compile(
-    r'(\w+)\s*\('                          # param_name (
+    r'(\w+)\s*\('  # param_name (
     r'\s*(?:Optional\[|List\[|Dict\[[\w,\s]*)?'  # optional wrapper
-    r'Path'                                # the keyword Path
-    r'(?:\])*'                             # closing brackets
-    r'\s*\)',                              # )
+    r'Path'  # the keyword Path
+    r'(?:\])*'  # closing brackets
+    r'\s*\)',  # )
 )
 
 
@@ -163,6 +169,7 @@ def _path_keys_from_description(description: Optional[str]) -> Set[str]:
 # ---------------------------------------------------------------------------
 # Layer 3: parameter-name heuristic
 # ---------------------------------------------------------------------------
+
 
 def _path_keys_from_param_names(input_schema: Optional[Dict[str, Any]]) -> Set[str]:
     """Heuristic: parameter names ending with ``_path`` likely accept file paths.
@@ -221,7 +228,9 @@ def _build_alias_map(description: Optional[str], param_name: str) -> Dict[str, s
         alias_map[_normalize(stem)] = url
 
     # Also pick up explicit dict keys like  'DPA2.4-7M': "url"
-    dict_re = re.compile(r"['\"]([^'\"]+)['\"]\s*:\s*['\"](" + r'https?://[^\'"]+' + r")['\"]")
+    dict_re = re.compile(
+        r"['\"]([^'\"]+)['\"]\s*:\s*['\"](" + r'https?://[^\'"]+' + r")['\"]"
+    )
     for alias, url in dict_re.findall(block):
         alias_map[_normalize(alias)] = url
 
@@ -266,13 +275,17 @@ def _resolve_model_aliases(
         norm = _normalize(val)
         # Exact normalised match
         if norm in alias_map:
-            logger.info("Model alias resolved: %s → %s (param=%s)", val, alias_map[norm], key)
+            logger.info(
+                'Model alias resolved: %s → %s (param=%s)', val, alias_map[norm], key
+            )
             out[key] = alias_map[norm]
             continue
         # Substring match (e.g. "DPA2.4-7M" matches "dpa247m" in the stem)
         for alias_norm, url in alias_map.items():
             if norm in alias_norm or alias_norm in norm:
-                logger.info("Model alias fuzzy-resolved: %s → %s (param=%s)", val, url, key)
+                logger.info(
+                    'Model alias fuzzy-resolved: %s → %s (param=%s)', val, url, key
+                )
                 out[key] = url
                 break
 
@@ -282,6 +295,7 @@ def _resolve_model_aliases(
 # ---------------------------------------------------------------------------
 # Path resolution helpers
 # ---------------------------------------------------------------------------
+
 
 def _is_local_path(value: Any) -> bool:
     if not value or not isinstance(value, str):
@@ -304,7 +318,7 @@ def _workspace_path_to_local(value: str, workspace_root: Path) -> Path:
     # Try stripping known prefixes (most specific first).
     for prefix in (ws_str, '/workspace'):
         if value.startswith(prefix + '/'):
-            rel = value[len(prefix) + 1:].lstrip('/')
+            rel = value[len(prefix) + 1 :].lstrip('/')
             return (workspace_root / rel).resolve()
         if value == prefix:
             return workspace_root.resolve()
@@ -338,15 +352,15 @@ def _resolve_one(
 
     if _is_remote_session(session):
         # Build the remote absolute path the same way as the local case.
-        remote_path = str(
-            _workspace_path_to_local(value, workspace_root)
-        ).replace('\\', '/')
+        remote_path = str(_workspace_path_to_local(value, workspace_root)).replace(
+            '\\', '/'
+        )
         try:
             if not session.is_file(remote_path):  # type: ignore[union-attr]
                 raise FileNotFoundError(
                     f"Path argument file not found on remote: {remote_path}. "
-                    "For calculation MCP tools, input files must exist in the "
-                    "remote workspace so they can be uploaded to OSS."
+                    'For calculation MCP tools, input files must exist in the '
+                    'remote workspace so they can be uploaded to OSS.'
                 )
             data = session.download(remote_path)  # type: ignore[union-attr]
         except FileNotFoundError:
@@ -366,7 +380,7 @@ def _resolve_one(
             raise RuntimeError(
                 f"Cannot pass remote file to calculation MCP: OSS upload required "
                 f"but failed for {remote_path}. Set OSS_ENDPOINT, OSS_BUCKET_NAME, "
-                "OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET in .env."
+                'OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET in .env.'
             ) from e
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -375,8 +389,8 @@ def _resolve_one(
     if not path.exists():
         raise FileNotFoundError(
             f"Path argument file not found: {path}. "
-            "For calculation MCP tools, input files must exist in workspace "
-            "so they can be uploaded to OSS and passed as URL."
+            'For calculation MCP tools, input files must exist in workspace '
+            'so they can be uploaded to OSS and passed as URL.'
         )
     if not path.is_file():
         raise ValueError(
@@ -388,13 +402,14 @@ def _resolve_one(
         raise RuntimeError(
             f"Cannot pass local file to calculation MCP: OSS upload required "
             f"but failed for {path}. Set OSS_ENDPOINT, OSS_BUCKET_NAME, "
-            "OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET in .env."
+            'OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET in .env.'
         ) from e
 
 
 # ---------------------------------------------------------------------------
 # Main adaptor class
 # ---------------------------------------------------------------------------
+
 
 class CalculationPathAdaptor:
     """Bohrium storage + per-server executor/sync_tools.
@@ -422,13 +437,13 @@ class CalculationPathAdaptor:
         sync_tools = server_cfg.get('sync_tools') or []
         if remote_tool_name in sync_tools:
             return None
-        executor_map = server_cfg.get("executor_map")
+        executor_map = server_cfg.get('executor_map')
         if executor_map and isinstance(executor_map, dict):
             tool_executor = executor_map.get(remote_tool_name)
             # Fallback: strip SDK-generated "submit_" prefix — the async
             # wrapper shares the same executor as the base tool.
-            if not tool_executor and remote_tool_name.startswith("submit_"):
-                tool_executor = executor_map.get(remote_tool_name[len("submit_"):])
+            if not tool_executor and remote_tool_name.startswith('submit_'):
+                tool_executor = executor_map.get(remote_tool_name[len('submit_') :])
             if tool_executor and isinstance(tool_executor, dict):
                 return inject_bohrium_executor(
                     tool_executor,
@@ -451,18 +466,18 @@ class CalculationPathAdaptor:
         server_cfg = self.calculation_executors.get(server_name)
         if not isinstance(server_cfg, dict):
             return False
-        sync_tools = set(server_cfg.get("sync_tools") or [])
+        sync_tools = set(server_cfg.get('sync_tools') or [])
         if remote_tool_name in sync_tools:
             return False
 
-        executor_map = server_cfg.get("executor_map")
+        executor_map = server_cfg.get('executor_map')
         if isinstance(executor_map, dict):
             tool_executor = executor_map.get(remote_tool_name)
-            if tool_executor is None and remote_tool_name.startswith("submit_"):
-                tool_executor = executor_map.get(remote_tool_name[len("submit_"):])
+            if tool_executor is None and remote_tool_name.startswith('submit_'):
+                tool_executor = executor_map.get(remote_tool_name[len('submit_') :])
             if _has_remote_profile(tool_executor):
                 return True
-        return _has_remote_profile(server_cfg.get("executor"))
+        return _has_remote_profile(server_cfg.get('executor'))
 
     @staticmethod
     def _validate_executor_profile(
@@ -474,20 +489,20 @@ class CalculationPathAdaptor:
         if not isinstance(executor, dict):
             raise ValueError(
                 f"Missing executor for async tool '{server_name}_{remote_tool_name}'. "
-                "Check calculation_executors config."
+                'Check calculation_executors config.'
             )
-        machine = executor.get("machine")
+        machine = executor.get('machine')
         if not isinstance(machine, dict):
             raise ValueError(
                 f"Executor missing 'machine' for '{server_name}_{remote_tool_name}'."
             )
-        remote_profile = machine.get("remote_profile")
+        remote_profile = machine.get('remote_profile')
         if not isinstance(remote_profile, dict):
             raise ValueError(
                 f"Executor missing 'machine.remote_profile' for '{server_name}_{remote_tool_name}'."
             )
-        machine_type = remote_profile.get("machine_type")
-        image_address = remote_profile.get("image_address")
+        machine_type = remote_profile.get('machine_type')
+        image_address = remote_profile.get('image_address')
         if not isinstance(machine_type, str) or not machine_type.strip():
             raise ValueError(
                 f"Executor missing remote_profile.machine_type for '{server_name}_{remote_tool_name}'."
@@ -522,18 +537,33 @@ class CalculationPathAdaptor:
         out = dict(args)
         remote_name = tool_name
         if server_name and tool_name.startswith(server_name + '_'):
-            remote_name = tool_name[len(server_name) + 1:]
+            remote_name = tool_name[len(server_name) + 1 :]
+
+        # Block submit_* when the base tool is in sync_tools (sync version only).
+        server_cfg = self.calculation_executors.get(server_name)
+        if isinstance(server_cfg, dict):
+            sync_tools = set(server_cfg.get('sync_tools') or [])
+            if remote_name.startswith('submit_'):
+                base_name = remote_name[len('submit_') :]
+                if base_name in sync_tools:
+                    raise ValueError(
+                        f"Tool '{tool_name}' is blocked: '{base_name}' is a sync tool. "
+                        f"Use sync interface: '{server_name}_{base_name}' instead of submit_*."
+                    )
 
         is_async_tool = self._is_async_remote_tool(server_name, remote_name)
-        if is_async_tool and not remote_name.startswith("submit_"):
+        if is_async_tool and not remote_name.startswith('submit_'):
             raise ValueError(
                 f"Async tool '{tool_name}' is blocked for LLM runtime. "
                 f"Use submit interface: '{server_name}_submit_*'."
             )
 
         # --- executor & storage injection ---
-        if "executor" in out:
-            logger.info("Ignoring user-provided executor for %s; using config executor.", tool_name)
+        if 'executor' in out:
+            logger.info(
+                'Ignoring user-provided executor for %s; using config executor.',
+                tool_name,
+            )
         out['executor'] = self._resolve_executor(
             server_name,
             remote_name,
@@ -543,7 +573,7 @@ class CalculationPathAdaptor:
         )
         if is_async_tool:
             self._validate_executor_profile(
-                out["executor"],
+                out['executor'],
                 server_name=server_name,
                 remote_tool_name=remote_name,
             )
@@ -556,23 +586,23 @@ class CalculationPathAdaptor:
         # --- Detect path-typed params ---
         # Layer 1: schema format (works when MCP SDK preserves Pydantic format)
         path_arg_names = _path_keys_from_schema(input_schema)
-        source = "schema"
+        source = 'schema'
 
         # Layer 2: description fallback (handles bohr-agent-sdk Path→str conversion)
         if not path_arg_names:
             path_arg_names = _path_keys_from_description(tool_description)
             if path_arg_names:
-                source = "description"
+                source = 'description'
 
         # Layer 3: param-name heuristic (names ending with _path)
         if not path_arg_names:
             path_arg_names = _path_keys_from_param_names(input_schema)
             if path_arg_names:
-                source = "param_name"
+                source = 'param_name'
 
         if path_arg_names:
             logger.debug(
-                "Tool %s: Path params detected via %s: %s",
+                'Tool %s: Path params detected via %s: %s',
                 remote_name,
                 source,
                 sorted(path_arg_names),
@@ -603,7 +633,11 @@ class CalculationPathAdaptor:
                 continue
             if isinstance(val, list):
                 out[key] = [
-                    None if _is_null_or_empty_path(v) else _resolve_one(str(v), workspace_root, session)
+                    (
+                        None
+                        if _is_null_or_empty_path(v)
+                        else _resolve_one(str(v), workspace_root, session)
+                    )
                     for v in val
                 ]
             else:
