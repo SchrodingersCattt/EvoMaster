@@ -142,22 +142,25 @@ class SkillConfig(BaseConfig):
 
 
 # ============================================
-# Tool 配置（v0.0.2 风格：per-agent 工具控制）
+# Tool 配置（v0.0.2 风格）
 # ============================================
 
 
+# 顶层 tools 配置（与上游一致：builtin/mcp 均为 list）
 class ToolConfig(BaseConfig):
-    """Per-agent 工具配置
-
-    builtin: 要启用的内置工具名列表，["*"] 表示全部；[] 表示不启用任何内置工具。
-    mcp: MCP 配置文件名或路径，空字符串表示不启用 MCP。
-    """
+    """全局 Tools 配置（顶层 config.tools，与上游 EvoMasterConfig.tools 一致）"""
 
     builtin: list[str] = Field(
-        default_factory=lambda: ['*'],
-        description="内置工具名列表，['*'] 表示全部",
+        default_factory=list,
+        description='Builtin 工具名列表',
     )
-    mcp: str = Field(default='', description='MCP 配置文件名或路径，空表示不启用')
+    mcp: list[str] = Field(
+        default_factory=list,
+        description='MCP 配置列表',
+    )
+
+
+# Per-agent 工具配置为 get_agent_tools_config() 返回的 dict，形如 {"builtin": list[str], "mcp": str}
 
 
 # ============================================
@@ -204,6 +207,12 @@ class EvoMasterConfig(BaseConfig):
 
     # Env 配置
     env: EnvConfig = Field(default_factory=EnvConfig, description='环境配置')
+
+    # Tools 配置（顶层，与上游一致）
+    tools: ToolConfig = Field(
+        default_factory=ToolConfig,
+        description='Tools 配置（builtin/mcp 列表）',
+    )
 
     # Skill 配置
     skill: SkillConfig = Field(default_factory=SkillConfig, description='Skill 配置')
