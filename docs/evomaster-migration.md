@@ -66,7 +66,7 @@
 
 ---
 
-## 阶段 2：Playground 与 Agent 创建 **[未完成]**
+## 阶段 2：Playground 与 Agent 创建 **[已完成]**
 
 **目标**：引入 AgentSlots、`_setup_agents()`，统一多 Agent 存储；工具注册支持按名称控制；Agent 支持 `enabled_tool_names`。
 
@@ -87,11 +87,12 @@
 - `ToolRegistry.get_tool_specs(names=None)`：支持按 `names` 过滤（`None` 或含 `"*"` 返回全部，空列表返回空，否则返回指定名称的工具规格）。
 - Agent 增加 `enabled_tool_names` 参数（或从 `tool_config` 推导）：仅将列表中的工具暴露给 LLM，与「代码中可调用的工具」解耦；所有工具仍注册到 registry。`_create_agent` 在传入 `tool_config` 时推导 `enabled_tool_names` 并传给 Agent。
 
-### 2.4 验收 **[未完成]**
+### 2.4 验收 **[已完成]**
 
 - BasePlayground 多 agent 模式下，每个 agent 均正确存入 `self.agents`，不再出现「只保留最后一个」的情况。
-- 仍使用旧 `_create_agent(..., enable_tools=..., llm_config_dict=...)` 的子类无需修改即可通过兼容层工作。
+- 仍使用旧 `_create_agent(..., enable_tools=..., llm_config_dict=...)` 的子类无需修改即可通过兼容层工作（如 minimal_multi_agent、mat_master、minimal_skill_task 等）。
 - 新 Playground 可使用 `tool_config`、`enabled_tool_names` 精确控制工具。
+- 验收测试：`tests/test_evomaster_config_migration.py::test_stage_2_4_multi_agent_stored_in_agents_slots`（需在 Python 3.10+ 或类型环境就绪时运行）。
 
 ---
 
