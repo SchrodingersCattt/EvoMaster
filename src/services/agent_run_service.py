@@ -389,6 +389,12 @@ class AgentRunService:
                 res = content if isinstance(content, dict) else {}
                 if (res.get('name') or '') == 'monitor_job':
                     result = res.get('result')
+                    status = result.get('status') if isinstance(result, dict) else None
+                    logger.info(
+                        'run_agent_sync: monitor_job tool_result session_id=%s status=%s',
+                        session_id,
+                        status,
+                    )
                     if (
                         isinstance(result, dict)
                         and (result.get('status') or '') == 'running'
@@ -444,6 +450,11 @@ class AgentRunService:
                                     e,
                                     exc_info=True,
                                 )
+                        else:
+                            logger.debug(
+                                'run_agent_sync: monitor_job suspend skipped (no Redis) session_id=%s',
+                                session_id,
+                            )
 
         pg_for_run = None
         try:
