@@ -1,11 +1,13 @@
-"""调试接口：进程内存 RSS 基线/差值（轻量）；tracemalloc 当前快照与 dump 到文件（diff 在进程外做）。仅建议在非生产或内网使用。"""
+"""调试接口：进程内存 RSS 基线/差值（轻量）；tracemalloc 快照以附件下载（不落盘，减轻 2G 压力）。仅建议在非生产或内网使用。"""
 
 import logging
 import os
+import tempfile
 import tracemalloc
 from typing import Any
 
 from fastapi import APIRouter, Query
+from fastapi.responses import JSONResponse, StreamingResponse
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +16,7 @@ router = APIRouter(tags=['debug'])
 # 进程 RSS 基线（字节），用于 /memory 的 diff
 _rss_baseline_bytes: int | None = None
 
-# tracemalloc 快照 dump 目录（可写），不设则用 /tmp/tracemalloc_dumps
+# diff-from-disk 读取的目录（仅当用户把下载的 dump 放回服务端时有用）
 _TRACEMALLOC_DUMP_DIR = os.getenv('TRACEMALLOC_DUMP_DIR', '/tmp/tracemalloc_dumps')
 
 
@@ -94,42 +96,66 @@ async def get_memory(
 async def tracemalloc_dump(
     tag: str = Query(
         ...,
-        description='快照标签，如 baseline / current / after_5_runs，用于文件名 {tag}.dump',
+        description='快照标签，如 baseline / current，响应为附件 {tag}.dump',
     ),
-) -> dict[str, Any]:
+):
     """
-    将当前 tracemalloc 快照写入文件。
-    用法：先 GET ?tag=baseline，跑几轮对话，再 GET ?tag=current；在 Pod 内可直接 GET /tracemalloc/diff-from-disk 得到「哪里分配」。
+    拍当前 tracemalloc 快照并直接以附件形式返回，不写入服务端磁盘，减轻 2G 内存/磁盘压力。
+    用法：GET ?tag=baseline 下载 baseline.dump，跑几轮对话，GET ?tag=current 下载 current.dump，
+    在本机执行 scripts/analyze_tracemalloc_diff.py baseline.dump current.dump 看「哪里分配」。
     """
     if not tracemalloc.is_tracing():
-        return {
-            'ok': False,
-            'message': 'tracemalloc 未启动',
-        }
+        return JSONResponse(
+            status_code=400,
+            content={'ok': False, 'message': 'tracemalloc 未启动'},
+        )
     safe_tag = (
         ''.join(c if c.isalnum() or c in '-_' else '_' for c in tag.strip())
         or 'snapshot'
     )
     try:
-        os.makedirs(_TRACEMALLOC_DUMP_DIR, exist_ok=True)
-        path = os.path.join(_TRACEMALLOC_DUMP_DIR, f'{safe_tag}.dump')
         snap = tracemalloc.take_snapshot()
-        snap.dump(path)
-        return {
-            'ok': True,
-            'path': path,
-            'message': f'已写入 {path}；再 dump 另一份后请求 GET /tracemalloc/diff-from-disk 即可',
-        }
+        tmp = tempfile.NamedTemporaryFile(
+            delete=True, suffix='.dump', prefix='tracemalloc_'
+        )
+        snap.dump(tmp.name)
+        tmp.seek(0)
+        size = os.path.getsize(tmp.name)
+
+        def iter_chunks():
+            try:
+                while True:
+                    chunk = tmp.read(65536)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                tmp.close()
+
+        return StreamingResponse(
+            iter_chunks(),
+            media_type='application/octet-stream',
+            headers={
+                'Content-Disposition': f'attachment; filename="{safe_tag}.dump"',
+                'Content-Length': str(size),
+            },
+        )
     except MemoryError as e:
         logger.warning('tracemalloc dump MemoryError: %s', e)
-        return {
-            'ok': False,
-            'error': 'memory_error',
-            'message': '快照时内存不足',
-        }
+        return JSONResponse(
+            status_code=500,
+            content={
+                'ok': False,
+                'error': 'memory_error',
+                'message': '快照时内存不足',
+            },
+        )
     except Exception as e:
         logger.exception('tracemalloc dump error: %s', e)
-        return {'ok': False, 'error': 'server_error', 'message': str(e)}
+        return JSONResponse(
+            status_code=500,
+            content={'ok': False, 'error': 'server_error', 'message': str(e)},
+        )
 
 
 @router.get('/tracemalloc/diff-from-disk')
