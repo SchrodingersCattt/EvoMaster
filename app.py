@@ -17,9 +17,11 @@ from src.models.root import RootResponse
 from src.services.agent_run_service import get_agent_run_service, init_playground
 from src.services.sessions_service import get_sessions_service
 from src.services.user_service import get_user_service
+from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.constant import CURRENT_ENV, DB_CONFIG
 from src.utils.exceptions import BaseErrorResponse
 from src.utils.logger import LoggingConfig, setup_logging
+from src.utils.worker_id import get_worker_id
 
 log_config = LoggingConfig.get_main_app_config()
 setup_logging(**log_config)
@@ -44,7 +46,33 @@ async def lifespan(app: FastAPI):
             logger.info('Redis stop subscriber started in lifespan.')
     except Exception as e:
         logger.warning('Redis stop subscriber start skipped: %s', e)
+    # worker 存活心跳：供 session run owner 区分「别的 pod 在跑」与「重启后旧 pid」
+    worker_heartbeat_task = None
+
+    async def _worker_heartbeat() -> None:
+        interval = 10.0
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                get_worker_registry_service().set_worker_alive(get_worker_id())
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.debug('Worker heartbeat skipped: %s', e)
+
+    try:
+        get_worker_registry_service().set_worker_alive(get_worker_id())
+        worker_heartbeat_task = asyncio.create_task(_worker_heartbeat())
+        logger.info('Worker heartbeat task started in lifespan.')
+    except Exception as e:
+        logger.warning('Worker heartbeat start skipped: %s', e)
     yield
+    if worker_heartbeat_task is not None:
+        worker_heartbeat_task.cancel()
+        try:
+            await worker_heartbeat_task
+        except asyncio.CancelledError:
+            pass
     # 优雅退出：最多等待 30s 让当前 agent 任务结束，再关闭线程池
     try:
         svc = get_agent_run_service()
