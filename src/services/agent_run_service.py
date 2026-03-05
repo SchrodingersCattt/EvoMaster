@@ -1043,7 +1043,7 @@ class AgentRunService:
                 meta={'dialog_history': dialog_history},
             )
             _agent_ref[0] = pg.agent
-            run_result = exp.run(task=task)
+            run_result = exp.run(task=task, append_result=False)
             if stop_event.is_set():
                 logger.info(
                     'run_agent_sync: task cancelled by user session_id=%s task_id=%s',
