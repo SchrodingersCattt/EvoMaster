@@ -105,8 +105,11 @@ _MONITOR_LLM_DECISION_PROMPT = """你是科学计算作业监控专家，分析�
   "decision": "continue" | "terminate",
   "reason": "简洁的中文原因（<30字）",
   "severity": "low" | "medium" | "high",
-  "confidence": 0.0-1.0
+  "confidence": 0.0-1.0,
+  "suggested_poll_interval_seconds": 30
 }}
+
+suggested_poll_interval_seconds（可选）：挂起恢复场景下建议的下次轮询间隔（秒），仅当 decision 为 continue 时生效。范围 30-300。长时间稳定运行（如 MD 已跑很久、SCF 迭代平稳）可建议 120-300 以降低轮询频率；刚启动或关键阶段可建议 30-60。不填或无效则使用默认 30。
 
 关键判断点：
 - 数值异常（NaN、Inf）→ terminate
@@ -204,6 +207,7 @@ def _parse_llm_decision(raw: str | None) -> dict[str, Any]:
         'reason': 'LLM 无明确终止信号，继续监控。',
         'severity': 'low',
         'confidence': 0.5,
+        'suggested_poll_interval_seconds': None,
         'raw': raw or '',
         'parse_error': None,
     }
@@ -235,12 +239,20 @@ def _parse_llm_decision(raw: str | None) -> dict[str, Any]:
         reason = (
             str(payload.get('reason') or parsed['reason']).strip() or parsed['reason']
         )
+        suggested_raw = payload.get('suggested_poll_interval_seconds')
+        try:
+            suggested = int(float(suggested_raw)) if suggested_raw is not None else None
+            if suggested is not None:
+                suggested = max(30, min(300, suggested))
+        except (TypeError, ValueError):
+            suggested = None
         parsed.update(
             {
                 'decision': decision,
                 'reason': reason,
                 'severity': severity,
                 'confidence': confidence,
+                'suggested_poll_interval_seconds': suggested,
                 'parse_error': None,
             }
         )
@@ -921,8 +933,22 @@ def _run_lifecycle(
     # ── Loop ended: either confirmed failure (break) or max_polls exceeded ──
     # If we exited because polls >= max_polls, job was still "Running".
     if failure_confirm_count < _MAX_FAILURE_CONFIRMS:
-        # 单次轮询上限（挂起恢复）：返回 running，由调度器定时恢复后再次调用
+        # 单次轮询上限（挂起恢复）：返回 running，由调度器定时恢复后再次调用；间隔可由 LLM 建议
         if max_polls_per_call is not None and polls >= max_polls:
+            effective_interval = poll_interval
+            if last_llm_decision and isinstance(
+                last_llm_decision.get('suggested_poll_interval_seconds'), (int, float)
+            ):
+                try:
+                    effective_interval = max(
+                        30,
+                        min(
+                            300,
+                            int(last_llm_decision['suggested_poll_interval_seconds']),
+                        ),
+                    )
+                except (TypeError, ValueError):
+                    pass
             return {
                 'status': 'running',
                 'job_id': current_job_id,
@@ -931,9 +957,9 @@ def _run_lifecycle(
                 'llm_decision_history': llm_decision_history,
                 'message': (
                     f"Job {current_job_id} still running after {polls} poll(s). "
-                    f"Re-call monitor_job with the same job_id in about {poll_interval} seconds to continue."
+                    f"Re-call monitor_job with the same job_id in about {effective_interval} seconds to continue."
                 ),
-                'poll_interval': poll_interval,
+                'poll_interval': effective_interval,
             }
         return {
             'status': 'timeout',
