@@ -19,11 +19,13 @@ llm:
     max_retries: 3
     retry_delay: 1.0
 
+  # Azure OpenAI：model 填你在 Azure 门户中的「部署名称」（可写 azure/部署名，如 azure/gpt-5 或 azure/gpt-5-chat）
   azure:
     provider: "openai"
-    model: "gpt-4o"
+    model: "azure/gpt-5"
     api_key: "${AZURE_API_KEY}"
     base_url: "${AZURE_API_BASE}"
+    api_version: "${AZURE_API_VERSION}"
     temperature: 0.7
     max_tokens: 16384
     timeout: 60
@@ -318,6 +320,18 @@ mcp:
             context_type: "OpenAPI"
             remote_profile:
               image_address: "registry.dp.tech/dptech/cp2k:2024.1"
+              platform: "ali"
+              machine_type: "c32_m128_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
+        run_pyscf:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260305"
               platform: "ali"
               machine_type: "c32_m128_cpu"
               app_key: "agent"
