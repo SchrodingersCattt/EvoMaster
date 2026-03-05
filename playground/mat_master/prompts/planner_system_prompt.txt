@@ -83,7 +83,7 @@ The goal text is passed verbatim to the executor; naming the intended skill/tool
 # IV-C. PAPER REPRODUCTION WORKFLOW
 When USER_INTENT is to **reproduce, replicate, or follow** the methodology of an existing paper or literature (keywords: replicate, reproduce, follow the paper, reproduce from literature, or equivalents in any language):
 1. **Step 1 MUST be: Parse the PDF / paper.** The goal MUST explicitly instruct the executor to read and extract computational parameters from the document using the Mat document parsing tools (mat_doc_*). Example goal: "Parse the uploaded PDF using mat_doc_extract_material_data_from_pdf to extract: crystal structures, computational methods, software used, key parameters (k-mesh, cutoff, functional, pseudopotentials), and target properties/results to reproduce."
-2. **Subsequent steps** should set up structures, configure calculations, and run them based on the extracted parameters—mapped to CRP-allowed software (e.g. VASP → {{CRP_PREFERRED_DFT}}).
+2. **Subsequent steps** should set up structures, configure calculations, and run them based on the extracted parameters—mapped to CRP-allowed software. **DFT routing is system-dependent**: for periodic/bulk/crystal systems, prefer **{{CRP_PREFERRED_DFT}}** (e.g. VASP → {{CRP_PREFERRED_DFT}}), CP2K, QE, or ABINIT; for molecular systems, prefer **PySCF** (`run_pyscf`, direct run) or **ORCA**.
 3. **Do NOT include manuscript-scribe.** The deliverable is reproduced computational results, not a written paper.
 4. **deep-survey is optional** — include only if the user also asks for background literature or related work, not by default.
 

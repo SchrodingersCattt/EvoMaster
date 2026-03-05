@@ -323,6 +323,18 @@ mcp:
               app_key: "agent"
           resources:
             envs: {}
+        run_pyscf:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260305"
+              platform: "ali"
+              machine_type: "c32_m128_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
         run_abinit:
           type: "dispatcher"
           machine:
