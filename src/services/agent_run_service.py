@@ -505,6 +505,9 @@ class AgentRunService:
                 )
 
         pg_for_run = None
+        _suspended_ref = [
+            False
+        ]  # 挂起时 finally 不发 end，由发送流从 Redis 收恢复 run 的 end
         try:
             if not self._playground_init_done.is_set():
                 logger.info(
@@ -1020,6 +1023,7 @@ class AgentRunService:
                 )
                 event_callback('System', 'cancelled', 'Task cancelled by user.')
             elif run_result.get('status') == 'suspended':
+                _suspended_ref[0] = True
                 logger.info(
                     'run_agent_sync: task suspended (monitor_job), session_id=%s task_id=%s',
                     session_id,
@@ -1133,18 +1137,20 @@ class AgentRunService:
                         )
             self._sessions_service.clear_stop_event(session_id)
             self._sessions_service.release_session_run(session_id)
-            try:
-                event_callback(
-                    'System',
-                    'end',
-                    'Task completed, SSE connection can be closed.',
-                )
-            except Exception:
-                pass
+            if not _suspended_ref[0]:
+                try:
+                    event_callback(
+                        'System',
+                        'end',
+                        'Task completed, SSE connection can be closed.',
+                    )
+                except Exception:
+                    pass
             logger.debug(
-                'run_agent_sync end: session_id=%s task_id=%s',
+                'run_agent_sync end: session_id=%s task_id=%s suspended=%s',
                 session_id,
                 task_id,
+                _suspended_ref[0],
             )
             # run 结束后该 session 的后续请求仅为读历史/workspace（DB/OSS），不再需要 pg，及时释放避免内存常驻
             self._playgrounds.pop(session_id, None)

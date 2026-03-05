@@ -33,6 +33,9 @@ from src.utils.constant import AG_UI_EVENT, REDIS_URL
 
 logger = logging.getLogger(__name__)
 
+# monitor_job 挂起后发送流从 Redis 收恢复 run 事件的最大等待时间（秒），超时后关闭流避免泄漏
+SUSPENDED_STREAM_MAX_WAIT = 1800  # 30 min
+
 # 进程内队列用的取消哨兵（get 时转为 None）
 _CANCEL_SENTINEL = object()
 
@@ -750,6 +753,100 @@ class ChatStreamService:
                 }
                 yield self.sse_format(out)
                 if payload.get('type') == 'end':
+                    break
+                if payload.get('type') == 'suspended':
+                    if not REDIS_URL:
+                        # 无 Redis 时无法收恢复 run 事件，直接结束流
+                        break
+                    # 挂起后从 Redis 收恢复 run 的事件，同一条 SSE 不断开直到收到 end 或超时
+                    redis_queue = asyncio.Queue()
+                    stop_event = threading.Event()
+                    channel = STREAM_CHANNEL_PREFIX + sid
+
+                    def _redis_subscribe_loop(
+                        _channel: str = channel,
+                        _stop_ev: threading.Event = stop_event,
+                        _ev_loop: asyncio.AbstractEventLoop = loop,
+                        _queue: asyncio.Queue = redis_queue,
+                    ) -> None:
+                        client = get_redis_dao().create_client()
+                        if not client:
+                            return
+                        pubsub = client.pubsub()
+                        try:
+                            pubsub.subscribe(_channel)
+                            while not _stop_ev.is_set():
+                                msg = pubsub.get_message(timeout=1.0)
+                                if msg and msg.get('type') == 'message':
+                                    try:
+                                        data = json.loads(msg['data'])
+                                        _ev_loop.call_soon_threadsafe(
+                                            _queue.put_nowait, data
+                                        )
+                                    except (json.JSONDecodeError, TypeError):
+                                        pass
+                        finally:
+                            try:
+                                pubsub.unsubscribe(_channel)
+                                pubsub.close()
+                            except Exception:
+                                pass
+
+                    sub_thread = threading.Thread(
+                        target=_redis_subscribe_loop,
+                        name=f'send-stream-resume-{sid[:8]}',
+                        daemon=True,
+                    )
+                    sub_thread.start()
+                    deadline = time.monotonic() + SUSPENDED_STREAM_MAX_WAIT
+                    try:
+                        while True:
+                            if time.monotonic() > deadline:
+                                yield self.sse_format(
+                                    {
+                                        'source': 'System',
+                                        'type': 'end',
+                                        'content': 'Resume stream timed out.',
+                                        'session_id': sid,
+                                        'elapsed_ms': int(time.time() * 1000)
+                                        - start_time_ms,
+                                        'stream_started_at': start_time_ms,
+                                        'invocation_id': ctx.invocation_id,
+                                    }
+                                )
+                                logger.info(
+                                    'generate_send_stream: suspended stream timeout session_id=%s',
+                                    sid,
+                                )
+                                break
+                            try:
+                                payload = await asyncio.wait_for(
+                                    redis_queue.get(), timeout=30.0
+                                )
+                            except asyncio.TimeoutError:
+                                yield self.sse_format(
+                                    {
+                                        'source': 'System',
+                                        'type': 'ping',
+                                        'content': '',
+                                        'session_id': sid,
+                                    }
+                                )
+                                continue
+                            elapsed_ms = int(time.time() * 1000) - start_time_ms
+                            out = {
+                                **payload,
+                                'elapsed_ms': elapsed_ms,
+                                'stream_started_at': start_time_ms,
+                                'invocation_id': payload.get('invocation_id')
+                                or ctx.invocation_id,
+                            }
+                            yield self.sse_format(out)
+                            if payload.get('type') == 'end':
+                                break
+                    finally:
+                        stop_event.set()
+                        sub_thread.join(timeout=2.0)
                     break
             await future
         finally:
