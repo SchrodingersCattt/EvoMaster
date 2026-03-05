@@ -440,12 +440,22 @@ class AgentRunService:
                     user_prompt_file = str((playground_base / p).resolve())
             prompt_format_kwargs = agent_config.get('prompt_format_kwargs', {})
 
-            session_data = SESSIONS.get(session_id, {})
-            bohrium_creds = session_data.get('bohrium_credentials')
-            # 运行时凭据：不沿用内存中的 access_key，统一由后端按 X-User-Id + X-Org-Id 拉取
-            run_creds = dict(bohrium_creds) if isinstance(bohrium_creds, dict) else {}
-            run_creds.pop('access_key', None)
+            # 运行时凭据：org_id / project_id / user_id 从库读，access_key 按 user_id+org_id 拉取，不常驻内存
+            row = self._sessions_service.get_session(session_id)
+            run_creds = {}
+            if row:
+                uid = row.get('user_id')
+                if uid is not None:
+                    run_creds['user_id'] = str(uid)
+                oid = row.get('org_id')
+                if oid is not None and str(oid).strip():
+                    run_creds['org_id'] = str(oid).strip()
+                pid = row.get('project_id')
+                if pid is not None:
+                    run_creds['project_id'] = int(pid)
             user_id_for_ak = self._sessions_service.get_session_user_id(session_id)
+            if run_creds.get('user_id') is None and user_id_for_ak is not None:
+                run_creds['user_id'] = user_id_for_ak
             org_id = (run_creds.get('org_id') or '').strip()
             if user_id_for_ak and org_id:
                 run_creds['access_key'] = (
@@ -719,7 +729,6 @@ class AgentRunService:
                                 working_dir='/personal/workspace',
                                 session_id=session_id,
                             )
-                            # 保持 run 开始时注入的 run_creds（含 access_key），勿用 SESSIONS 的 bohrium_creds 覆盖
                             if base.session and run_creds:
                                 base.session._bohrium_credentials = run_creds
                             _ssh_attached = True
@@ -914,16 +923,20 @@ class AgentRunService:
                     )
                 except Exception as e:
                     logger.warning('run_agent_sync: session restore failed: %s', e)
-            # 复用表场景：只更新 last_used_at，不销毁；否则销毁本 run 使用的节点
+            # 复用表场景：只更新 last_used_at，不销毁；否则销毁本 run 使用的节点（org_id/project_id 从库读）
             session_data = SESSIONS.get(session_id, {})
             node_id = session_data.pop('bohrium_node_id', None)
-            creds = session_data.get('bohrium_credentials') or {}
-            org_id = (creds.get('org_id') or '').strip()
-            project_id = creds.get('project_id')
+            row = self._sessions_service.get_session(session_id)
+            org_id = ''
+            project_id = None
+            if row:
+                org_id = (row.get('org_id') or '').strip()
+                project_id = row.get('project_id')
+                if project_id is not None:
+                    project_id = int(project_id)
             user_id = self._sessions_service.get_session_user_id(session_id)
-            # 销毁节点时 access_key 不再存于 SESSIONS，按需拉取
-            access_key = (creds.get('access_key') or '').strip()
-            if not access_key and user_id and org_id:
+            access_key = ''
+            if user_id and org_id:
                 access_key = UserService.get_bohrium_access_key(user_id, org_id) or ''
             if node_id is not None and user_id and org_id and project_id is not None:
                 try:

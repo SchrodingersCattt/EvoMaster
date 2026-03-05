@@ -72,7 +72,7 @@ class RedisStopSubscriber:
         return True
 
 
-# 仅存会话级运行时数据（如 bohrium_credentials）。history / task_ids / last_task_id 已持久化在 DB。
+# 仅存会话级运行时数据（如 bohrium_node_id）。history / task_ids / last_task_id、org_id / project_id 已持久化在 DB。
 SESSIONS: dict[str, dict] = {}
 
 
@@ -123,7 +123,7 @@ class ChatSessionsService:
         return True
 
     def ensure_session(self, session_id: str, user_id: str | None = None) -> None:
-        """确保会话存在：DB 有记录且内存有 SESSIONS 槽（仅存 bohrium_credentials 等运行时数据）。"""
+        """确保会话存在：DB 有记录且内存有 SESSIONS 槽（run 时存 bohrium_node_id 等）。"""
         if session_id in SESSIONS:
             return
         if user_id is not None:
@@ -132,7 +132,7 @@ class ChatSessionsService:
             row = self.table.get_session(session_id)
             if not row:
                 return
-        SESSIONS[session_id] = {'bohrium_credentials': None}
+        SESSIONS[session_id] = {}
 
     def list_sessions(self, user_id: str) -> list[dict]:
         return self.table.list_sessions(user_id=user_id) or []
@@ -181,6 +181,10 @@ class ChatSessionsService:
             out['last_task_id'] = last_task_id
         return out
 
+    def get_session(self, session_id: str) -> Optional[dict]:
+        """获取会话完整信息（含 org_id、project_id，用于 run_creds）。"""
+        return self.table.get_session(session_id)
+
     def get_session_user_id(self, session_id: str) -> str | None:
         """获取会话所属用户 ID；会话不存在或无 user_id 时返回 None。"""
         row = self.table.get_session(session_id)
@@ -188,6 +192,17 @@ class ChatSessionsService:
             return None
         uid = row.get('user_id')
         return str(uid) if uid is not None else None
+
+    def set_session_bohrium(
+        self,
+        session_id: str,
+        org_id: Optional[str] = None,
+        project_id: Optional[int] = None,
+    ) -> bool:
+        """更新会话的 org_id、project_id，以库为准。"""
+        return self.table.set_session_bohrium(
+            session_id, org_id=org_id, project_id=project_id
+        )
 
     def get_share_status(self, session_id: str) -> dict:
         """获取会话分享状态。返回 { \"enabled\": bool }，会话不存在返回 None。"""
