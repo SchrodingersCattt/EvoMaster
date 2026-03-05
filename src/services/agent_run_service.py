@@ -1029,11 +1029,7 @@ class AgentRunService:
                     session_id,
                     task_id,
                 )
-                event_callback(
-                    'System',
-                    'suspended',
-                    'Monitor job still running; will resume automatically.',
-                )
+                event_callback('System', 'suspended', '')
             else:
                 logger.info(
                     'run_agent_sync: task done session_id=%s task_id=%s',
