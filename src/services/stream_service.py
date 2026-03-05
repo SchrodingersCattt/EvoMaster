@@ -17,7 +17,6 @@ from src.dao.redis_dao import (
     get_redis_dao,
 )
 from src.models.chat import ChatSendRequest
-from src.services import sessions_service as svc
 from src.services.agent_run_service import (
     AgentRunService,
     ReplyQueueLike,
@@ -337,7 +336,7 @@ class ChatStreamService:
                     },
                     user_id=self._sessions_service.get_session_user_id(sid),
                 )
-                # 在新 pod 上自动重跑上次用户输入
+                # 在新 pod 上自动重跑上次用户输入；run_agent_sync 会从库读 org_id/project_id
                 if last_query and (last_query.get('content') or '').strip():
                     user_id = self._sessions_service.get_session_user_id(sid)
                     retry_req = ChatSendRequest(
@@ -433,29 +432,21 @@ class ChatStreamService:
         if mode not in ('direct', 'planner'):
             mode = 'direct'
 
-        # Bohrium 鉴权由后端在 run 时按 X-User-Id + X-Org-Id 调 ak/list 拉取，不在此处存 access_key
-        if (
-            req.bohrium_project_id is not None
-            or org_id is not None
-            or req.bohrium_user_id is not None
-        ):
-            bohrium_creds = svc.SESSIONS[sid].get('bohrium_credentials') or {}
-            bohrium_creds = dict(bohrium_creds)
-            if req.bohrium_project_id is not None:
-                try:
-                    bohrium_creds['project_id'] = int(req.bohrium_project_id)
-                except (TypeError, ValueError):
-                    pass
-            if org_id is not None:
-                bohrium_creds['org_id'] = str(org_id).strip()
-            if req.bohrium_user_id is not None:
-                bohrium_creds['user_id'] = (
-                    req.bohrium_user_id
-                    if isinstance(req.bohrium_user_id, str)
-                    else int(req.bohrium_user_id)
+        # Bohrium：org_id / project_id 直接入库，需要时从库读，不常驻内存
+        if req.bohrium_project_id is not None or org_id is not None:
+            try:
+                project_id_val = (
+                    int(req.bohrium_project_id)
+                    if req.bohrium_project_id is not None
+                    else None
                 )
-            if bohrium_creds:
-                svc.SESSIONS[sid]['bohrium_credentials'] = bohrium_creds
+            except (TypeError, ValueError):
+                project_id_val = None
+            self._sessions_service.set_session_bohrium(
+                sid,
+                org_id=org_id.strip() if org_id else None,
+                project_id=project_id_val,
+            )
 
         task_id = 'sse_' + uuid.uuid4().hex[:16]
         invocation_id = 'inv_' + uuid.uuid4().hex[:16]
