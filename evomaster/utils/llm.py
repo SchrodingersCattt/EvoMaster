@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from abc import ABC, abstractmethod
@@ -36,9 +37,10 @@ def truncate_content(content: str, max_length: int = 5000, head_length: int = 25
 class LLMConfig(BaseModel):
     """LLM 配置"""
     provider: Literal["openai", "anthropic","deepseek","openrouter"] = Field(description="LLM 提供商")
-    model: str = Field(description="模型名称")
+    model: str = Field(description="模型名称（OpenAI 为 model id；Azure 为部署名，可写 azure/部署名）")
     api_key: str = Field(description="API Key，必须在配置中提供")
     base_url: str | None = Field(default=None, description="API Base URL")
+    api_version: str | None = Field(default=None, description="Azure 专用：API 版本，如 2024-06-01")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="采样温度")
     max_tokens: int | None = Field(default=None, description="最大生成 token 数")
     timeout: int = Field(default=300, description="请求超时时间（秒）")
@@ -273,8 +275,11 @@ class BaseLLM(ABC):
             try:
                 return self._call(messages, tools, **kwargs)
             except Exception as e:
+                import traceback
+                traceback.print_exc()
                 last_error = e
                 self.logger.warning(
+                    f"traceback: {traceback.format_exc()}"
                     f"LLM call failed (attempt {attempt + 1}/{self.config.max_retries}): {e}"
                 )
 
@@ -297,14 +302,30 @@ class BaseLLM(ABC):
         return [spec.model_dump() for spec in tool_specs]
 
 
+def _is_azure_base_url(base_url: str | None) -> bool:
+    """判断 base_url 是否为 Azure OpenAI 端点"""
+    if not base_url:
+        return False
+    return "openai.azure.com" in base_url
+
+
+def _azure_deployment_name(model: str) -> str:
+    """从配置的 model 中取出 Azure 部署名（去掉 azure/ 前缀）"""
+    s = (model or "").strip()
+    if s.startswith("azure/"):
+        return s[6:].strip() or model
+    return s
+
+
 class OpenAILLM(BaseLLM):
     """OpenAI LLM 实现
 
-    支持 OpenAI API 和兼容接口（如 vLLM, Ollama 等）。
+    支持 OpenAI API、Azure OpenAI 和兼容接口（如 vLLM, Ollama 等）。
+    Azure 时使用 AzureOpenAI 客户端，自动走 /openai/deployments/<name>/chat/completions?api-version=...
     """
 
     def _setup(self) -> None:
-        """设置 OpenAI 客户端"""
+        """设置 OpenAI 或 Azure OpenAI 客户端"""
         try:
             from openai import OpenAI
         except ImportError:
@@ -316,12 +337,34 @@ class OpenAILLM(BaseLLM):
         if not self.config.api_key:
             raise ValueError("OpenAI API key must be provided in config")
 
-        # 创建客户端
-        client_kwargs = {"api_key": self.config.api_key}
-        if self.config.base_url:
-            client_kwargs["base_url"] = self.config.base_url
-
-        self.client = OpenAI(**client_kwargs)
+        base_url = (self.config.base_url or "").strip().rstrip("/")
+        if _is_azure_base_url(base_url):
+            # Azure OpenAI：使用 AzureOpenAI 客户端，否则会 404（需 /openai/deployments/.../chat/completions?api-version=）
+            try:
+                from openai import AzureOpenAI
+            except ImportError:
+                self.client = OpenAI(api_key=self.config.api_key, base_url=base_url)
+                self._use_azure_client = False
+                self.logger.warning(
+                    "Azure endpoint detected but AzureOpenAI not available; using OpenAI client (may 404)."
+                )
+            else:
+                api_version = (
+                    self.config.api_version
+                    or os.environ.get("AZURE_API_VERSION", "2024-06-01")
+                )
+                self.client = AzureOpenAI(
+                    api_key=self.config.api_key,
+                    azure_endpoint=base_url if "://" in base_url else f"https://{base_url}",
+                    api_version=api_version,
+                )
+                self._use_azure_client = True
+        else:
+            client_kwargs = {"api_key": self.config.api_key}
+            if base_url:
+                client_kwargs["base_url"] = base_url
+            self.client = OpenAI(**client_kwargs)
+            self._use_azure_client = False
 
     def _call(
         self,
@@ -329,17 +372,29 @@ class OpenAILLM(BaseLLM):
         tools: list[dict[str, Any]] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
-        """调用 OpenAI API"""
-        # 构建请求参数
+        """调用 OpenAI API 或 Azure OpenAI API"""
+        model = (
+            _azure_deployment_name(self.config.model)
+            if getattr(self, "_use_azure_client", False)
+            else self.config.model
+        )
+        use_azure = getattr(self, "_use_azure_client", False)
         request_params = {
-            "model": self.config.model,
+            "model": model,
             "messages": messages,
-            "temperature": kwargs.get("temperature", self.config.temperature),
             "timeout": kwargs.get("timeout", self.config.timeout)
         }
+        # 部分 Azure 模型仅支持 temperature=1，不传则用 API 默认
+        if not use_azure:
+            request_params["temperature"] = kwargs.get("temperature", self.config.temperature)
 
         if self.config.max_tokens:
-            request_params["max_tokens"] = kwargs.get("max_tokens", self.config.max_tokens)
+            val = kwargs.get("max_tokens", self.config.max_tokens)
+            # Azure 新模型要求用 max_completion_tokens，不能用 max_tokens
+            if getattr(self, "_use_azure_client", False):
+                request_params["max_completion_tokens"] = val
+            else:
+                request_params["max_tokens"] = val
 
         if tools:
             request_params["tools"] = tools
