@@ -72,6 +72,10 @@ class AgentRunService:
     def __init__(self, sessions_service=None):
         self._sessions_service = sessions_service or get_sessions_service()
         self._executor = ThreadPoolExecutor(max_workers=_AGENT_MAX_WORKERS)
+        # 独立单线程池供 monitor_job 恢复轮询使用，避免与 agent 争用导致 resume 迟迟不执行
+        self._poller_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix='monitor-job-poller'
+        )
         self._cached_pg = None
         self._playgrounds: dict[str, Any] = (
             {}
@@ -119,6 +123,10 @@ class AgentRunService:
     def get_executor(self) -> ThreadPoolExecutor:
         """返回用于运行 agent 的线程池，供 run_in_executor 使用。"""
         return self._executor
+
+    def get_poller_executor(self) -> ThreadPoolExecutor:
+        """返回仅用于 monitor_job 恢复轮询的线程池，不与 agent 争用。"""
+        return self._poller_executor
 
     def _get_run_workspace_path(
         self, run_id: str, task_id: str | None = None
@@ -1282,12 +1290,15 @@ async def init_playground() -> None:
 
 
 async def monitor_job_resume_poller_loop() -> None:
-    """后台轮询：到期的 monitor_job checkpoint 认领后提交恢复 run。未配置 Redis 时不启动。"""
+    """后台轮询：到期的 monitor_job checkpoint 认领后提交恢复 run。未配置 Redis 时不启动。
+    使用独立 poller 线程池执行轮询，避免与 agent 的 2 个 worker 争用导致 resume 无法及时提交。
+    """
     if not get_redis_dao().create_client():
         return
     svc = get_agent_run_service()
     loop = asyncio.get_event_loop()
-    executor = svc.get_executor()
+    agent_executor = svc.get_executor()
+    poller_executor = svc.get_poller_executor()
     interval = 10.0
     logger.info(
         'monitor_job resume poller started (interval=%ss) worker_id=%s',
@@ -1300,10 +1311,10 @@ async def monitor_job_resume_poller_loop() -> None:
             await asyncio.sleep(interval)
             tick_count += 1
             await loop.run_in_executor(
-                executor,
+                poller_executor,
                 svc.process_resume_checkpoints,
                 loop,
-                executor,
+                agent_executor,
             )
             if tick_count % 6 == 0:
                 logger.info(

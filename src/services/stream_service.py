@@ -787,7 +787,18 @@ class ChatStreamService:
                     break
                 if payload.get('type') == 'suspended':
                     if not REDIS_URL:
-                        # 无 Redis 时无法收恢复 run 事件，直接结束流
+                        # 无 Redis 时无法收恢复 run 事件，先推送说明再结束流
+                        yield self.sse_format(
+                            {
+                                'source': 'System',
+                                'type': 'end',
+                                'content': '任务已挂起；未配置 Redis 时无法在本连接接收恢复事件，请通过订阅或刷新查看后续进度。',
+                                'session_id': sid,
+                                'elapsed_ms': int(time.time() * 1000) - start_time_ms,
+                                'stream_started_at': start_time_ms,
+                                'invocation_id': ctx.invocation_id,
+                            }
+                        )
                         break
                     # 挂起后从 Redis 收恢复 run 的事件，同一条 SSE 不断开直到收到 end 或超时
                     redis_queue = asyncio.Queue()

@@ -105,8 +105,14 @@ async def lifespan(app: FastAPI):
     try:
         svc = get_agent_run_service()
         executor = svc.get_executor()
+        poller_executor = svc.get_poller_executor()
         logger.info('Shutting down: waiting for agent executor (max 30s)...')
         loop = asyncio.get_event_loop()
+        try:
+            poller_executor.shutdown(wait=True)
+            logger.info('Poller executor shut down. worker_id=%s', worker_id)
+        except Exception as e:
+            logger.warning('Poller executor shutdown skip: %s', e)
         try:
             await asyncio.wait_for(
                 loop.run_in_executor(None, lambda: executor.shutdown(wait=True)),
