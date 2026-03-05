@@ -14,10 +14,10 @@ from typing import AsyncGenerator, Callable
 
 from src.dao.redis_dao import (
     CONFIRMATION_CANCEL_VALUE,
+    STREAM_CHANNEL_PREFIX,
     get_redis_dao,
 )
 from src.models.chat import ChatSendRequest
-from src.services import sessions_service as svc
 from src.services.agent_run_service import (
     AgentRunService,
     ReplyQueueLike,
@@ -261,9 +261,12 @@ class ChatStreamService:
     ) -> AsyncGenerator[str, None]:
         """
         仅订阅模式：先推送当前会话状态与历史事件，再注册到订阅队列。
-        若本进程有该 session 的运行中任务，则循环等待新事件或 30s ping；若无运行中任务则发完历史后直接结束流，
-        前端可据此（流结束）退出「运行中」状态。
-        若 DB 为 active 但本进程未在跑该 session（部署/重启导致上一 run 在别的 pod 上被中断），
+        流会保持打开直到该 session 的 run 结束（本进程或其它 pod）：
+        - 若本进程在跑该 session，则从 event_queue 收事件并推送，收到 end 后结束流；
+        - 若 run 在别的 pod：有 Redis 时订阅 chat:stream:{session_id} 收实时事件并推送，收到 end 或 run 结束后结束流；
+          无 Redis 时轮询直到 run 结束（每 5s 发 ping 保活），再推送 session_status(idle) 后结束流。
+          避免刷新落到非执行 worker 时流提前关闭、前端误判为已结束（textarea 变为可输入）。
+        若 DB 为 active 但本进程未在跑该 session 且其它 pod 上也无该 run（部署/重启导致上一 run 已死），
         则重置为 idle、推送 run_interrupted（原因：部署），并自动在新 pod 上重跑上次任务。
         """
         sid = session_id.strip()
@@ -271,10 +274,11 @@ class ChatStreamService:
         try:
             payload = self._sessions_service.get_session_status_payload(sid)
             # 部署/重启后：DB 仍为 active 但本进程没有该 session 的 run → 视为上一轮在别的 pod 上被中断
-            is_stale = payload.get(
-                'status'
-            ) == 'active' and not self._sessions_service.is_session_running_on_this_pod(
-                sid
+            # 若 Redis 显示该 session 的 run 在别的 worker 上，则是「切会话后落到另一实例」，不是重启，不当作 stale
+            is_stale = (
+                payload.get('status') == 'active'
+                and not self._sessions_service.is_session_running_on_this_pod(sid)
+                and not self._sessions_service.is_session_run_on_another_pod(sid)
             )
             if is_stale:
                 self._sessions_service.reset_session_status_to_idle_in_db(sid)
@@ -337,7 +341,7 @@ class ChatStreamService:
                     },
                     user_id=self._sessions_service.get_session_user_id(sid),
                 )
-                # 在新 pod 上自动重跑上次用户输入
+                # 在新 pod 上自动重跑上次用户输入；run_agent_sync 会从库读 org_id/project_id
                 if last_query and (last_query.get('content') or '').strip():
                     user_id = self._sessions_service.get_session_user_id(sid)
                     retry_req = ChatSendRequest(
@@ -390,26 +394,124 @@ class ChatStreamService:
                 for event in events:
                     if event.get('type') != 'log_line':
                         yield self.sse_format(event)
-            # 若无运行中任务，发完历史后直接结束流，前端可据此退出「运行中」状态
-            while self._sessions_service.is_session_running_on_this_pod(sid):
-                try:
-                    payload = await asyncio.wait_for(event_queue.get(), timeout=30.0)
-                except asyncio.TimeoutError:
-                    yield self.sse_format(
-                        {
-                            'source': 'System',
-                            'type': 'ping',
-                            'content': '',
-                            'session_id': sid,
-                        }
-                    )
-                    continue
-                if payload is None:
-                    break
-                if payload.get('type') == 'end':
+            # 保持流打开直到本进程或其它 pod 上的 run 结束，避免刷新落到非执行 worker 时流提前关闭、前端误判为已结束
+            while self._sessions_service.is_session_running_on_this_pod(
+                sid
+            ) or self._sessions_service.is_session_run_on_another_pod(sid):
+                if self._sessions_service.is_session_running_on_this_pod(sid):
+                    try:
+                        payload = await asyncio.wait_for(
+                            event_queue.get(), timeout=30.0
+                        )
+                    except asyncio.TimeoutError:
+                        yield self.sse_format(
+                            {
+                                'source': 'System',
+                                'type': 'ping',
+                                'content': '',
+                                'session_id': sid,
+                            }
+                        )
+                        continue
+                    if payload is None:
+                        break
+                    if payload.get('type') == 'end':
+                        yield self.sse_format(payload)
+                        break
                     yield self.sse_format(payload)
-                    break
-                yield self.sse_format(payload)
+                else:
+                    # run 在别的 pod：有 Redis 时订阅 stream channel 收实时事件，否则轮询 + ping 保活
+                    if REDIS_URL:
+                        redis_queue = asyncio.Queue()
+                        stop_event = threading.Event()
+                        loop = asyncio.get_event_loop()
+                        channel = STREAM_CHANNEL_PREFIX + sid
+
+                        def _redis_subscribe_loop(
+                            _channel: str = channel,
+                            _stop_ev: threading.Event = stop_event,
+                            _ev_loop: asyncio.AbstractEventLoop = loop,
+                            _queue: asyncio.Queue = redis_queue,
+                        ) -> None:
+                            client = get_redis_dao().create_client()
+                            if not client:
+                                return
+                            pubsub = client.pubsub()
+                            try:
+                                pubsub.subscribe(_channel)
+                                while not _stop_ev.is_set():
+                                    msg = pubsub.get_message(timeout=1.0)
+                                    if msg and msg.get('type') == 'message':
+                                        try:
+                                            data = json.loads(msg['data'])
+                                            _ev_loop.call_soon_threadsafe(
+                                                _queue.put_nowait, data
+                                            )
+                                        except (json.JSONDecodeError, TypeError):
+                                            pass
+                            finally:
+                                try:
+                                    pubsub.unsubscribe(_channel)
+                                    pubsub.close()
+                                except Exception:
+                                    pass
+
+                        sub_thread = threading.Thread(
+                            target=_redis_subscribe_loop,
+                            name=f'stream-sub-{sid[:8]}',
+                            daemon=True,
+                        )
+                        sub_thread.start()
+                        try:
+                            while self._sessions_service.is_session_run_on_another_pod(
+                                sid
+                            ):
+                                try:
+                                    payload = await asyncio.wait_for(
+                                        redis_queue.get(), timeout=30.0
+                                    )
+                                except asyncio.TimeoutError:
+                                    yield self.sse_format(
+                                        {
+                                            'source': 'System',
+                                            'type': 'ping',
+                                            'content': '',
+                                            'session_id': sid,
+                                        }
+                                    )
+                                    continue
+                                if payload.get('type') == 'end':
+                                    yield self.sse_format(payload)
+                                    break
+                                yield self.sse_format(payload)
+                            else:
+                                payload = (
+                                    self._sessions_service.get_session_status_payload(
+                                        sid
+                                    )
+                                )
+                                yield self.sse_format(payload)
+                        finally:
+                            stop_event.set()
+                            sub_thread.join(timeout=2.0)
+                    else:
+                        await asyncio.sleep(5.0)
+                        if not self._sessions_service.is_session_run_on_another_pod(
+                            sid
+                        ):
+                            payload = self._sessions_service.get_session_status_payload(
+                                sid
+                            )
+                            yield self.sse_format(payload)
+                            break
+                        yield self.sse_format(
+                            {
+                                'source': 'System',
+                                'type': 'ping',
+                                'content': '',
+                                'session_id': sid,
+                            }
+                        )
         finally:
             self._queues.unregister_subscriber(sid, event_queue)
 
@@ -433,29 +535,21 @@ class ChatStreamService:
         if mode not in ('direct', 'planner'):
             mode = 'direct'
 
-        # Bohrium 鉴权由后端在 run 时按 X-User-Id + X-Org-Id 调 ak/list 拉取，不在此处存 access_key
-        if (
-            req.bohrium_project_id is not None
-            or org_id is not None
-            or req.bohrium_user_id is not None
-        ):
-            bohrium_creds = svc.SESSIONS[sid].get('bohrium_credentials') or {}
-            bohrium_creds = dict(bohrium_creds)
-            if req.bohrium_project_id is not None:
-                try:
-                    bohrium_creds['project_id'] = int(req.bohrium_project_id)
-                except (TypeError, ValueError):
-                    pass
-            if org_id is not None:
-                bohrium_creds['org_id'] = str(org_id).strip()
-            if req.bohrium_user_id is not None:
-                bohrium_creds['user_id'] = (
-                    req.bohrium_user_id
-                    if isinstance(req.bohrium_user_id, str)
-                    else int(req.bohrium_user_id)
+        # Bohrium：org_id / project_id 直接入库，需要时从库读，不常驻内存
+        if req.bohrium_project_id is not None or org_id is not None:
+            try:
+                project_id_val = (
+                    int(req.bohrium_project_id)
+                    if req.bohrium_project_id is not None
+                    else None
                 )
-            if bohrium_creds:
-                svc.SESSIONS[sid]['bohrium_credentials'] = bohrium_creds
+            except (TypeError, ValueError):
+                project_id_val = None
+            self._sessions_service.set_session_bohrium(
+                sid,
+                org_id=org_id.strip() if org_id else None,
+                project_id=project_id_val,
+            )
 
         task_id = 'sse_' + uuid.uuid4().hex[:16]
         invocation_id = 'inv_' + uuid.uuid4().hex[:16]
@@ -544,9 +638,11 @@ class ChatStreamService:
         request_event_queue: asyncio.Queue,
         payload: dict,
     ) -> None:
-        """供 run_agent_sync 的 send_cb 使用：写入本连接队列并广播到订阅队列。"""
+        """供 run_agent_sync 的 send_cb 使用：写入本连接队列并广播到订阅队列；有 Redis 时同时发布到 stream channel 供其它 pod 的 subscribe 流消费。"""
         request_event_queue.put_nowait(payload)
         self._queues.broadcast(session_id, payload)
+        if REDIS_URL:
+            get_redis_dao().publish_stream_event(session_id, payload)
 
     async def generate_send_stream(
         self,
