@@ -331,61 +331,7 @@ class AgentRunService:
                     task_id,
                     _ssh_attached,
                 )
-                # 当前 run 使用远程节点时，工作目录在节点上，本地 workspace 无新文件，跳过上传避免阻塞
-                if _ssh_attached:
-                    logger.info(
-                        'run_agent_sync: skip workspace upload (SSH attached, workspace on node) session_id=%s',
-                        session_id,
-                    )
-                    return
-                now = time.monotonic()
-                if (
-                    now - _last_workspace_check_time[0]
-                ) < _WORKSPACE_CHECK_DEBOUNCE_SECONDS:
-                    logger.debug(
-                        'run_agent_sync: skip workspace upload (debounce) session_id=%s',
-                        session_id,
-                    )
-                    return
-                _last_workspace_check_time[0] = now
-                workspace_path = self._get_run_workspace_path(
-                    RUN_ID_WEB, task_id=task_id
-                )
-                if not workspace_path or not workspace_path.is_dir():
-                    logger.debug(
-                        'run_agent_sync: skip workspace upload (no path or not dir) session_id=%s path=%s',
-                        session_id,
-                        workspace_path,
-                    )
-                    return
-                current_snapshot = self._get_workspace_snapshot(workspace_path)
-                if (
-                    _last_workspace_snapshot[0] is not None
-                    and current_snapshot == _last_workspace_snapshot[0]
-                ):
-                    logger.debug(
-                        'run_agent_sync: skip workspace upload (snapshot unchanged) session_id=%s',
-                        session_id,
-                    )
-                    return
-                logger.info(
-                    'run_agent_sync: workspace upload to OSS starting session_id=%s task_id=%s path=%s',
-                    session_id,
-                    task_id,
-                    workspace_path,
-                )
-                if self._upload_workspace_to_oss(
-                    session_id=session_id,
-                    task_id=task_id,
-                    event_callback=event_callback,
-                ):
-                    _last_workspace_snapshot[0] = current_snapshot
-                logger.info(
-                    'run_agent_sync: workspace upload to OSS done session_id=%s task_id=%s',
-                    session_id,
-                    task_id,
-                )
-                # monitor_job 挂起恢复：running 时写 checkpoint、登记恢复时间、请求挂起（需 Redis）
+                # monitor_job 挂起恢复：先处理（不依赖 workspace），避免被 _ssh_attached 的 return 跳过
                 res = content if isinstance(content, dict) else {}
                 if (res.get('name') or '') == 'monitor_job':
                     result = res.get('result')
@@ -455,6 +401,60 @@ class AgentRunService:
                                 'run_agent_sync: monitor_job suspend skipped (no Redis) session_id=%s',
                                 session_id,
                             )
+                # 当前 run 使用远程节点时，工作目录在节点上，本地 workspace 无新文件，跳过上传避免阻塞
+                if _ssh_attached:
+                    logger.info(
+                        'run_agent_sync: skip workspace upload (SSH attached, workspace on node) session_id=%s',
+                        session_id,
+                    )
+                    return
+                now = time.monotonic()
+                if (
+                    now - _last_workspace_check_time[0]
+                ) < _WORKSPACE_CHECK_DEBOUNCE_SECONDS:
+                    logger.debug(
+                        'run_agent_sync: skip workspace upload (debounce) session_id=%s',
+                        session_id,
+                    )
+                    return
+                _last_workspace_check_time[0] = now
+                workspace_path = self._get_run_workspace_path(
+                    RUN_ID_WEB, task_id=task_id
+                )
+                if not workspace_path or not workspace_path.is_dir():
+                    logger.debug(
+                        'run_agent_sync: skip workspace upload (no path or not dir) session_id=%s path=%s',
+                        session_id,
+                        workspace_path,
+                    )
+                    return
+                current_snapshot = self._get_workspace_snapshot(workspace_path)
+                if (
+                    _last_workspace_snapshot[0] is not None
+                    and current_snapshot == _last_workspace_snapshot[0]
+                ):
+                    logger.debug(
+                        'run_agent_sync: skip workspace upload (snapshot unchanged) session_id=%s',
+                        session_id,
+                    )
+                    return
+                logger.info(
+                    'run_agent_sync: workspace upload to OSS starting session_id=%s task_id=%s path=%s',
+                    session_id,
+                    task_id,
+                    workspace_path,
+                )
+                if self._upload_workspace_to_oss(
+                    session_id=session_id,
+                    task_id=task_id,
+                    event_callback=event_callback,
+                ):
+                    _last_workspace_snapshot[0] = current_snapshot
+                logger.info(
+                    'run_agent_sync: workspace upload to OSS done session_id=%s task_id=%s',
+                    session_id,
+                    task_id,
+                )
 
         pg_for_run = None
         try:
