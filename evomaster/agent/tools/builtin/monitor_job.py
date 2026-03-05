@@ -913,7 +913,9 @@ def _run_lifecycle(
         # -- Still running: reset failure counter --
         failure_confirm_count = 0
         unknown_count = 0
-        time.sleep(poll_interval)
+        # 已达本次轮询上限且将返回 running（挂起恢复）时不 sleep，尽快返回；否则 sleep 后再下一轮
+        if max_polls_per_call is None or (polls + 1) < max_polls:
+            time.sleep(poll_interval)
         polls += 1
 
     # ── Loop ended: either confirmed failure (break) or max_polls exceeded ──
