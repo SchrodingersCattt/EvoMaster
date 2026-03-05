@@ -47,19 +47,63 @@ class ChatSessionsTable(BaseTable):
                 return cursor.rowcount > 0
 
     def get_session(self, session_id: str) -> Optional[Dict]:
-        """获取会话信息（含 status、last_task_id 等）。"""
+        """获取会话信息（含 user_id、org_id、project_id、status 等）。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     f'''
-                    SELECT session_id, user_id, status, is_shared, last_task_id, created_at, updated_at
+                    SELECT session_id, user_id, org_id, project_id,
+                           status, is_shared, last_task_id, created_at, updated_at
                     FROM {self.table_name}
                     WHERE session_id = %s
                     ''',
                     (session_id,),
                 )
                 result = cursor.fetchone()
-                return result
+                if not result:
+                    return result
+                return dict(result)
+
+    def set_session_bohrium(
+        self,
+        session_id: str,
+        org_id: Optional[str] = None,
+        project_id: Optional[int] = None,
+    ) -> bool:
+        """更新会话的 org_id、project_id（仅更新非 None 的字段）。"""
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cursor:
+                    updates = []
+                    params = []
+                    if org_id is not None:
+                        updates.append('org_id = %s')
+                        params.append(
+                            org_id.strip() if isinstance(org_id, str) else org_id
+                        )
+                    if project_id is not None:
+                        updates.append('project_id = %s')
+                        params.append(int(project_id))
+                    if not updates:
+                        return True
+                    params.append(session_id)
+                    cursor.execute(
+                        f'''
+                        UPDATE {self.table_name}
+                        SET {', '.join(updates)}, updated_at = NOW()
+                        WHERE session_id = %s
+                        ''',
+                        tuple(params),
+                    )
+                    conn.commit()
+                    return True
+        except Error as e:
+            logger.warning(
+                'set_session_bohrium failed session_id=%s: %s',
+                session_id,
+                e,
+            )
+            return False
 
     def set_session_status(self, session_id: str, status: str) -> bool:
         """设置会话状态：idle=空闲/已结束，active=运行中"""
