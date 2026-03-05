@@ -64,6 +64,16 @@ async def get_tracemalloc(
     current = tracemalloc.take_snapshot()
     current_b, peak_b = tracemalloc.get_traced_memory()
 
+    if diff and _tracemalloc_baseline is None:
+        return {
+            'tracing': True,
+            'mode': 'diff',
+            'error': 'no_baseline',
+            'message': '请先请求 ?baseline=1 再执行对话，然后请求 ?diff=1；多 worker 时需在同一进程打基线与拉 diff',
+            'current_mb': round(current_b / (1024 * 1024), 2),
+            'peak_mb': round(peak_b / (1024 * 1024), 2),
+        }
+
     if diff and _tracemalloc_baseline is not None:
         # 与基线对比，看哪些分配增加了；带完整栈便于看到是 evomaster/agent 等哪条调用链
         diff_snap = current.compare_to(_tracemalloc_baseline, 'lineno')
