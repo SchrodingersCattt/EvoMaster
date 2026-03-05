@@ -29,12 +29,13 @@ from src.services.quota_service import use_quota
 from src.services.sessions_service import SESSIONS, get_sessions_service
 from src.services.user_service import UserService
 from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID
+from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# 支持多用户并发：agent 运行在线程池中
-_AGENT_MAX_WORKERS = int(os.environ.get('CHAT_AGENT_MAX_WORKERS', '4'))
+# 支持多用户并发：agent 运行在线程池中（默认 2 以降低内存占用，可设 CHAT_AGENT_MAX_WORKERS 覆盖）
+_AGENT_MAX_WORKERS = int(os.environ.get('CHAT_AGENT_MAX_WORKERS', '2'))
 if _AGENT_MAX_WORKERS < 1:
     _AGENT_MAX_WORKERS = 1
 
@@ -254,12 +255,13 @@ class AgentRunService:
             (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
         )
         logger.info(
-            'run_agent_sync start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s',
+            'run_agent_sync start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s worker_id=%s',
             session_id,
             task_id,
             mode,
             len(user_prompt),
             prompt_preview,
+            get_worker_id(),
         )
 
         # 仅在 workspace 真有新/改/删文件时才上传：用快照比对，并用短防抖避免每次 tool 都扫目录
@@ -436,10 +438,12 @@ class AgentRunService:
                                     if agent is not None:
                                         agent._suspend_requested = True
                                     logger.info(
-                                        'run_agent_sync: monitor_job suspend checkpoint_id=%s session_id=%s resume_at=%s',
+                                        'run_agent_sync: monitor_job suspend checkpoint_id=%s session_id=%s task_id=%s resume_at=%s worker_id=%s',
                                         checkpoint_id,
                                         session_id,
+                                        task_id,
                                         resume_at,
+                                        get_worker_id(),
                                     )
                             except Exception as e:
                                 logger.warning(
@@ -1152,6 +1156,13 @@ class AgentRunService:
                             exc_info=True,
                         )
             self._sessions_service.clear_stop_event(session_id)
+            logger.info(
+                'run_agent_sync end: session_id=%s task_id=%s suspended=%s worker_id=%s',
+                session_id,
+                task_id,
+                _suspended_ref[0],
+                get_worker_id(),
+            )
             self._sessions_service.release_session_run(session_id)
             if not _suspended_ref[0]:
                 try:
@@ -1162,12 +1173,6 @@ class AgentRunService:
                     )
                 except Exception:
                     pass
-            logger.debug(
-                'run_agent_sync end: session_id=%s task_id=%s suspended=%s',
-                session_id,
-                task_id,
-                _suspended_ref[0],
-            )
             # run 结束后该 session 的后续请求仅为读历史/workspace（DB/OSS），不再需要 pg，及时释放避免内存常驻
             self._playgrounds.pop(session_id, None)
 
@@ -1186,18 +1191,33 @@ class AgentRunService:
         due = redis_dao.zrange_due_resume_checkpoints(now)
         for checkpoint_id in due:
             if not redis_dao.try_claim_resume_lock(checkpoint_id):
+                logger.debug(
+                    'process_resume_checkpoints: skip checkpoint_id=%s reason=lock_not_claimed',
+                    checkpoint_id,
+                )
                 continue
             payload = redis_dao.get_checkpoint(checkpoint_id)
             if not payload:
                 redis_dao.zrem_resume_checkpoint(checkpoint_id)
+                logger.debug(
+                    'process_resume_checkpoints: skip checkpoint_id=%s reason=payload_missing',
+                    checkpoint_id,
+                )
                 continue
             session_id = (payload.get('session_id') or '').strip()
             task_id = payload.get('task_id') or ''
             invocation_id = payload.get('invocation_id')
+            resume_at = payload.get('resume_at')
             if not session_id:
                 redis_dao.zrem_resume_checkpoint(checkpoint_id)
                 continue
             if not self._sessions_service.try_acquire_session_run(session_id):
+                logger.info(
+                    'process_resume_checkpoints: skip checkpoint_id=%s session_id=%s reason=session_busy worker_id=%s',
+                    checkpoint_id,
+                    session_id,
+                    get_worker_id(),
+                )
                 continue
             stop_ev = threading.Event()
             self._sessions_service.set_stop_event(session_id, stop_ev)
@@ -1242,9 +1262,11 @@ class AgentRunService:
             )
             redis_dao.zrem_resume_checkpoint(checkpoint_id)
             logger.info(
-                'process_resume_checkpoints: submitted resume session_id=%s checkpoint_id=%s',
+                'process_resume_checkpoints: submitted resume session_id=%s checkpoint_id=%s resume_at=%s worker_id=%s',
                 session_id,
                 checkpoint_id,
+                resume_at,
+                get_worker_id(),
             )
 
 
@@ -1267,16 +1289,28 @@ async def monitor_job_resume_poller_loop() -> None:
     loop = asyncio.get_event_loop()
     executor = svc.get_executor()
     interval = 10.0
-    logger.info('monitor_job resume poller started (interval=%ss)', interval)
+    logger.info(
+        'monitor_job resume poller started (interval=%ss) worker_id=%s',
+        interval,
+        get_worker_id(),
+    )
+    tick_count = 0
     while True:
         try:
             await asyncio.sleep(interval)
+            tick_count += 1
             await loop.run_in_executor(
                 executor,
                 svc.process_resume_checkpoints,
                 loop,
                 executor,
             )
+            if tick_count % 6 == 0:
+                logger.info(
+                    'monitor_job resume poller alive tick=%s worker_id=%s',
+                    tick_count,
+                    get_worker_id(),
+                )
         except asyncio.CancelledError:
             break
         except Exception as e:

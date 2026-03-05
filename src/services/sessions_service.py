@@ -238,11 +238,23 @@ class ChatSessionsService:
                 return False
             self._sessions_in_run.add(session_id)
         self.table.set_session_status(session_id, 'active')
-        get_worker_registry_service().set_session_run_owner(session_id, get_worker_id())
+        worker_id = get_worker_id()
+        get_worker_registry_service().set_session_run_owner(session_id, worker_id)
+        logger.info(
+            'try_acquire_session_run: acquired session_id=%s worker_id=%s',
+            session_id,
+            worker_id,
+        )
         return True
 
     def release_session_run(self, session_id: str) -> None:
         """释放该 session 的“正在运行”占用（在 run 结束时调用）。"""
+        worker_id = get_worker_id()
+        logger.info(
+            'release_session_run: session_id=%s worker_id=%s',
+            session_id,
+            worker_id,
+        )
         with self._sessions_run_lock:
             self._sessions_in_run.discard(session_id)
         self.table.set_session_status(session_id, 'idle')
