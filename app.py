@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+import tracemalloc
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
@@ -37,6 +38,12 @@ logger.info('SERVICE_ENV=%s', CURRENT_ENV)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
+    # tracemalloc：供 /api/v1/debug/tracemalloc 查看分配与 diff（排查内存）
+    try:
+        tracemalloc.start(10)
+        logger.info('tracemalloc started (nframe=10) for /api/v1/debug/tracemalloc')
+    except Exception as e:
+        logger.warning('tracemalloc start skipped: %s', e)
     # 不再在启动时全局把 active 置为 idle：以便客户端重连时在 subscribe 流里能检测到
     # 「DB 为 active 但本进程未在跑」的 stale 会话，推送 run_interrupted 并可选重跑。
     # MatMaster Chat：提前初始化 playground，首条 /chat/send 无需等待
