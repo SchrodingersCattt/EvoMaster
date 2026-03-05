@@ -1191,6 +1191,15 @@ class AgentRunService:
                     )
                 except Exception:
                     pass
+            # run 结束后释放当前 agent 上的 trajectory/current_dialog，避免 pg.agent 长期持有大对象导致多轮对话内存阶梯增长（GC 未及时回收时）
+            if pg_for_run is not None:
+                try:
+                    a = getattr(pg_for_run, 'agent', None)
+                    if a is not None:
+                        a.trajectory = None
+                        a.current_dialog = None
+                except Exception:
+                    pass
             # run 真正结束（非 suspend）时释放；suspend 时仅单进程（无 Redis）保留以便 resume 复用，多 Pod（有 Redis）时 resume 可能落别的 Pod，不 pop 会泄漏
             if not _suspended_ref[0] or REDIS_URL:
                 self._playgrounds.pop(session_id, None)
