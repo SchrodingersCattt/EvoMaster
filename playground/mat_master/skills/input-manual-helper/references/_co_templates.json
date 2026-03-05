@@ -47,16 +47,20 @@
     "related": []
   },
   "orca/std_dft.inp": {
-    "hint": "Molecular DFT base template.",
+    "hint": "Molecular ground-state DFT base template (B3LYP/def2-TZVP, RIJCOSX). Use as starting point for single-point or geometry-optimisation jobs.",
     "related": []
+  },
+  "orca/stdft_wb97x-d3.inp": {
+    "hint": "Simplified TD-DFT (sTD-DFT) template using wB97X-D3/def2-SV(P). Covers excitations up to 7 eV with perturbative selection (PThresh/PTLimit). Suitable for UV/Vis spectra of medium-to-large molecules.",
+    "related": ["orca/tddft_pbe0.inp"]
   },
   "orca/dlpno_ccsd_t_normal.inp": {
     "hint": "DLPNO-CCSD(T) template (ORCA core scenario).",
     "related": []
   },
   "orca/tddft_pbe0.inp": {
-    "hint": "TD-DFT template (PBE0).",
-    "related": []
+    "hint": "Full TD-DFT template (PBE0/def2-SV(P), TDA disabled). For conventional excited-state calculations with a hybrid functional.",
+    "related": ["orca/stdft_wb97x-d3.inp"]
   },
 
   "abinit/gs_scf.abi": {
