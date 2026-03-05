@@ -20,6 +20,9 @@ CONFIRMATION_REPLY_LIST_KEY = 'chat:confirmation_reply:{session_id}'
 CONFIRMATION_CANCEL_VALUE = '__CANCEL__'
 CONFIRMATION_RUN_ACTIVE_TTL_SEC = 3600
 
+# 多 worker 时 run 所在 pod 向其它 pod 的 subscribe 流推送事件（Pub/Sub）
+STREAM_CHANNEL_PREFIX = 'chat:stream:'
+
 
 def _run_active_key(session_id: str) -> str:
     return CONFIRMATION_RUN_ACTIVE_KEY.format(session_id=session_id.strip())
@@ -61,6 +64,20 @@ class RedisDao:
             return True
         except Exception as e:
             logger.warning('Redis publish failed channel=%s: %s', channel, e)
+            return False
+
+    def publish_stream_event(self, session_id: str, payload: dict) -> bool:
+        """向该会话的 stream channel 发布一条事件（多 worker 时供非执行 pod 的 subscribe 流消费）。"""
+        channel = STREAM_CHANNEL_PREFIX + session_id.strip()
+        try:
+            message = json.dumps(payload, ensure_ascii=False)
+            return self.publish(channel, message)
+        except (TypeError, ValueError) as e:
+            logger.warning(
+                'Redis publish_stream_event json failed session_id=%s: %s',
+                session_id,
+                e,
+            )
             return False
 
     @staticmethod
