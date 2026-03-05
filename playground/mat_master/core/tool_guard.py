@@ -30,6 +30,11 @@ from typing import Any
 
 from .constants import MANUSCRIPT_FAIL_MARKERS
 
+try:
+    from evomaster.agent.tools.builtin.bash_safety import is_dangerous_bash_command
+except ImportError:
+    is_dangerous_bash_command = None  # evomaster not available in some test envs
+
 # ── Loop-detection parameters ──────────────────────────────────
 LOOP_WINDOW = 5          # sliding-window size for recent tool fingerprints
 LOOP_THRESHOLD = 2       # block after N identical calls inside the window
@@ -609,6 +614,18 @@ class ToolGuard:
                         "Use `str_replace_editor` to write files, then run the script with `execute_bash`."
                     ),
                     info={"reason": "windows_heredoc_blocked"},
+                )
+
+        # Dangerous command gate: block env, rm -rf /, etc.
+        if tool_call.function.name == "execute_bash" and is_dangerous_bash_command is not None:
+            args = self._parse_tool_args(tool_call)
+            command = str(args.get("command", "") or "")
+            is_dangerous, reason = is_dangerous_bash_command(command)
+            if is_dangerous:
+                return GuardDecision(
+                    blocked=True,
+                    message=f"⚠️ BLOCKED: {reason}",
+                    info={"reason": "dangerous_bash_command"},
                 )
 
         # Structure-retrieval stop gate: block mat_struct_db_* when done
