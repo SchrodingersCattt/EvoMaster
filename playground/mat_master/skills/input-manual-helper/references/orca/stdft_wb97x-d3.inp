@@ -1,9 +1,13 @@
-! PBE0 def2-SV(P) def2/J RIJCOSX tightSCF noautostart miniprint
+! wB97X-D3 def2-SV(P) def2/J RIJCOSX tightSCF noautostart miniprint
 %maxcore     1000
 %pal nprocs   32 end
 %tddft
-  nroots 10
-  TDA false
+  Mode sTDDFT
+  Ethresh 7.0
+  PThresh 1e-4
+  PTLimit 30
+  triplets false
+  maxcore 6000
 end
 * xyz   0   1
 O      0.00000000    0.00000000    0.11779000
