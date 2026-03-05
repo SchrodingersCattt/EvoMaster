@@ -2,6 +2,7 @@
 
 import asyncio
 import importlib
+import json
 import logging
 import os
 import queue
@@ -335,19 +336,45 @@ class AgentRunService:
                 res = content if isinstance(content, dict) else {}
                 if (res.get('name') or '') == 'monitor_job':
                     result = res.get('result')
-                    status = result.get('status') if isinstance(result, dict) else None
+                    info = res.get('info') or {}
+                    # status 优先从 tool 的 meta.info 取（monitor_job 返回的 info 含 status）；其次从 result 取；若 result 为 {'message': json_str} 则解析 JSON
+                    status = info.get('status') if isinstance(info, dict) else None
+                    if status is None and isinstance(result, dict):
+                        status = result.get('status')
+                    if status is None and isinstance(result, dict):
+                        raw = result.get('message')
+                        if isinstance(raw, str) and raw.strip().startswith('{'):
+                            try:
+                                parsed = json.loads(raw)
+                                if isinstance(parsed, dict):
+                                    status = parsed.get('status')
+                                    result = parsed
+                            except (json.JSONDecodeError, TypeError):
+                                pass
                     logger.info(
                         'run_agent_sync: monitor_job tool_result session_id=%s status=%s',
                         session_id,
                         status,
                     )
-                    if (
-                        isinstance(result, dict)
-                        and (result.get('status') or '') == 'running'
-                    ):
+                    if (status or '') == 'running':
                         redis_dao = get_redis_dao()
                         if redis_dao.create_client():
                             try:
+                                # result 可能仍是 {'message': json_str}，需解析以取 poll_interval/job_id
+                                run_result = result
+                                if (
+                                    isinstance(result, dict)
+                                    and 'poll_interval' not in result
+                                    and 'message' in result
+                                ):
+                                    raw = result.get('message')
+                                    if isinstance(raw, str) and raw.strip().startswith(
+                                        '{'
+                                    ):
+                                        try:
+                                            run_result = json.loads(raw)
+                                        except (json.JSONDecodeError, TypeError):
+                                            run_result = result
                                 events_table = get_chat_events_table()
                                 all_ev = (
                                     (events_table.get_session_events(session_id))
@@ -359,7 +386,14 @@ class AgentRunService:
                                         all_ev
                                     )
                                 )
-                                poll_interval = int(result.get('poll_interval') or 30)
+                                poll_interval = int(
+                                    (
+                                        run_result.get('poll_interval')
+                                        if isinstance(run_result, dict)
+                                        else None
+                                    )
+                                    or 30
+                                )
                                 poll_interval = max(10, min(300, poll_interval))
                                 checkpoint_id = uuid.uuid4().hex
                                 resume_at = time.time() + poll_interval
@@ -371,8 +405,22 @@ class AgentRunService:
                                     'resume_at': resume_at,
                                     'reason': 'monitor_job_running',
                                     'extra': {
-                                        'job_id': result.get('job_id'),
-                                        'bohr_job_id': result.get('bohr_job_id'),
+                                        'job_id': (
+                                            (
+                                                run_result.get('job_id')
+                                                if isinstance(run_result, dict)
+                                                else None
+                                            )
+                                            or info.get('job_id')
+                                        ),
+                                        'bohr_job_id': (
+                                            (
+                                                run_result.get('bohr_job_id')
+                                                if isinstance(run_result, dict)
+                                                else None
+                                            )
+                                            or info.get('bohr_job_id')
+                                        ),
                                         'poll_interval': poll_interval,
                                     },
                                 }
