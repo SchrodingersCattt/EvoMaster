@@ -65,17 +65,19 @@ async def get_tracemalloc(
     current_b, peak_b = tracemalloc.get_traced_memory()
 
     if diff and _tracemalloc_baseline is not None:
-        # 与基线对比，看哪些分配增加了
+        # 与基线对比，看哪些分配增加了；带完整栈便于看到是 evomaster/agent 等哪条调用链
         diff_snap = current.compare_to(_tracemalloc_baseline, 'lineno')
         top = []
         for s in diff_snap[:30]:
             if s.size_diff <= 0:
                 continue
+            frames = s.traceback.format()
             top.append(
                 {
                     'size_diff_kb': round(s.size_diff / 1024, 2),
                     'count_diff': s.count_diff,
-                    'traceback': '\n'.join(s.traceback.format()),
+                    'traceback': '\n'.join(frames),
+                    'traceback_frames': frames,
                 }
             )
         return {
@@ -84,6 +86,7 @@ async def get_tracemalloc(
             'top_increased': top,
             'current_mb': round(current_b / (1024 * 1024), 2),
             'peak_mb': round(peak_b / (1024 * 1024), 2),
+            'hint': '看 traceback_frames 里含 evomaster/src/playground 的帧，即本轮对话触发的业务侧分配链',
         }
 
     # 当前快照 top 分配
