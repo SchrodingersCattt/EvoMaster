@@ -14,7 +14,11 @@ from src.apis.api_router import api_router
 from src.base.base_res import BaseResponse
 from src.models.health import HealthResponse
 from src.models.root import RootResponse
-from src.services.agent_run_service import get_agent_run_service, init_playground
+from src.services.agent_run_service import (
+    get_agent_run_service,
+    init_playground,
+    monitor_job_resume_poller_loop,
+)
 from src.services.sessions_service import get_sessions_service
 from src.services.user_service import get_user_service
 from src.services.worker_registry_service import get_worker_registry_service
@@ -66,7 +70,18 @@ async def lifespan(app: FastAPI):
         logger.info('Worker heartbeat task started in lifespan.')
     except Exception as e:
         logger.warning('Worker heartbeat start skipped: %s', e)
+    monitor_job_poller_task = None
+    try:
+        monitor_job_poller_task = asyncio.create_task(monitor_job_resume_poller_loop())
+    except Exception as e:
+        logger.warning('Monitor job resume poller start skipped: %s', e)
     yield
+    if monitor_job_poller_task is not None:
+        monitor_job_poller_task.cancel()
+        try:
+            await monitor_job_poller_task
+        except asyncio.CancelledError:
+            pass
     if worker_heartbeat_task is not None:
         worker_heartbeat_task.cancel()
         try:
