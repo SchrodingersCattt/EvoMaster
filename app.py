@@ -22,6 +22,7 @@ from src.services.agent_run_service import (
 from src.services.sessions_service import get_sessions_service
 from src.services.user_service import get_user_service
 from src.services.worker_registry_service import get_worker_registry_service
+from src.utils.build_info import get_build_version
 from src.utils.constant import CURRENT_ENV, DB_CONFIG
 from src.utils.exceptions import BaseErrorResponse
 from src.utils.logger import LoggingConfig, setup_logging
@@ -41,7 +42,11 @@ async def lifespan(app: FastAPI):
     # MatMaster Chat：提前初始化 playground，首条 /chat/send 无需等待
     try:
         await init_playground()
-        logger.info('MatMaster chat playground initialized in lifespan.')
+        logger.info(
+            'MatMaster chat playground initialized in lifespan. worker_id=%s version=%s',
+            get_worker_id(),
+            get_build_version(),
+        )
     except Exception as e:
         logger.warning('MatMaster chat playground init skipped in lifespan: %s', e)
     # 多 worker 时：Redis 订阅线程，使任意 worker 收到的 stop 能通知到跑 run 的 worker
@@ -62,7 +67,9 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.debug('Worker heartbeat skipped: %s', e)
+                logger.warning(
+                    'Worker heartbeat skipped worker_id=%s: %s', get_worker_id(), e
+                )
 
     try:
         get_worker_registry_service().set_worker_alive(get_worker_id())
@@ -89,6 +96,12 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     # 优雅退出：最多等待 30s 让当前 agent 任务结束，再关闭线程池
+    worker_id = get_worker_id()
+    logger.info(
+        'Lifespan shutdown started worker_id=%s version=%s',
+        worker_id,
+        get_build_version(),
+    )
     try:
         svc = get_agent_run_service()
         executor = svc.get_executor()
@@ -99,13 +112,15 @@ async def lifespan(app: FastAPI):
                 loop.run_in_executor(None, lambda: executor.shutdown(wait=True)),
                 timeout=30.0,
             )
-            logger.info('Agent executor shut down.')
+            logger.info('Agent executor shut down. worker_id=%s', worker_id)
         except asyncio.TimeoutError:
             logger.warning(
-                'Agent executor shutdown timed out after 30s, proceeding with exit.'
+                'Agent executor shutdown timed out after 30s, proceeding with exit. worker_id=%s',
+                worker_id,
             )
     except Exception as e:
-        logger.warning('Graceful shutdown skip: %s', e)
+        logger.warning('Graceful shutdown skip worker_id=%s: %s', worker_id, e)
+    logger.info('Lifespan shutdown finished worker_id=%s', worker_id)
 
 
 app = FastAPI(

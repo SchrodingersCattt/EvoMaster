@@ -35,6 +35,11 @@ class DeployStateService:
             return
         try:
             client.hset(self._SESSION_VERSION_HASH, sid, self._current_version)
+            logger.info(
+                'record_session_version: session_id=%s version=%s',
+                sid,
+                self._current_version,
+            )
         except Exception as exc:
             logger.warning(
                 'DeployStateService.record_session_version failed sid=%s: %s',
@@ -75,10 +80,19 @@ class DeployStateService:
             'previous_version': previous_version,
         }
         if previous_version and previous_version == self._current_version:
-            return 'restart', detail
-        if previous_version is None:
-            detail['note'] = 'missing_previous_version'
-        return 'deploy', detail
+            reason = 'restart'
+        else:
+            reason = 'deploy'
+            if previous_version is None:
+                detail['note'] = 'missing_previous_version'
+        logger.info(
+            'classify_restart_reason: session_id=%s reason=%s previous_version=%s current_version=%s',
+            session_id.strip(),
+            reason,
+            previous_version,
+            self._current_version,
+        )
+        return reason, detail
 
 
 @lru_cache
