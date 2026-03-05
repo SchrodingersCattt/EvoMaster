@@ -2,9 +2,8 @@
 """
 离线分析 tracemalloc 快照 diff，找出「哪里」导致内存增长。
 
-用法（先通过 GET /api/v1/debug/tracemalloc/dump?tag=baseline 和 ?tag=current 得到两个 .dump 文件后）:
+用法（先 GET /api/v1/debug/tracemalloc/dump?tag=baseline 与 ?tag=current 下载两个 .dump 到本机后）:
   python scripts/analyze_tracemalloc_diff.py baseline.dump current.dump
-  python scripts/analyze_tracemalloc_diff.py /tmp/tracemalloc_dumps/baseline.dump /tmp/tracemalloc_dumps/current.dump
 
 输出：按 size_diff 排序的 top N 条，带文件和行号、traceback，便于定位泄漏点。
 """
