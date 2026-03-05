@@ -178,7 +178,7 @@ mcp:
     - "mat_electron_microscope"
   # Per-server tool filter: only register these tools (original names). Omitted servers register all tools.
   tool_include_only:
-    mat_sn: ["web-search", "search-papers-enhanced"]
+    mat_sn: ["search-papers-enhanced"]
     mat_doc:
       - extract_material_data_from_pdf
     mat_nmr:
