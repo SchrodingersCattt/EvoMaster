@@ -1,7 +1,7 @@
 """Stateful tool-call guard: loop prevention, manuscript gate,
-structure-retrieval gate, prepare gate.
+structure-retrieval gate, prepare gate, auth-failure stop, dangerous script gate.
 
-Four independent concerns, each with its own state and public method:
+Six independent concerns, each with its own state and public method:
 
 1. **Loop detection** (``evaluate`` / ``record_tool_call``): Blocks repeated
    calls with identical arguments within a sliding window.
@@ -16,6 +16,13 @@ Four independent concerns, each with its own state and public method:
 4. **Prepare gate** (``evaluate``): Blocks ``mat_binary_calc_prepare_*`` when
    ``input_file`` was created by ``str_replace_editor`` instead of sourced
    via ``input-manual-helper get_reference``.
+5. **Auth-failure stop gate** (``evaluate`` / ``update_after_tool``): After
+   AUTH_FAILURE_THRESHOLD consecutive authentication errors from mat_* MCP
+   tools, blocks further execute_bash and str_replace_editor calls to prevent
+   autonomous credential hunting.
+6. **Dangerous script gate** (``evaluate``): Scans Python file content on
+   str_replace_editor create and on execute_bash python <script> for dangerous
+   patterns (os.environ, credential hunting, etc.).
 """
 
 from __future__ import annotations
@@ -25,15 +32,26 @@ import logging
 import re
 import sys
 from collections import deque
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any
 
 from .constants import MANUSCRIPT_FAIL_MARKERS
 
 try:
-    from evomaster.agent.tools.builtin.bash_safety import is_dangerous_bash_command
+    from evomaster.agent.tools.builtin.bash_safety import (
+        is_dangerous_bash_command,
+        is_dangerous_python_content,
+    )
 except ImportError:
     is_dangerous_bash_command = None  # evomaster not available in some test envs
+    is_dangerous_python_content = None
+
+AUTH_FAILURE_MARKERS: tuple[str, ...] = (
+    "accesskey invalid", "authentication failed", "invalid credentials",
+    "unauthorized", "access denied", "akid", "401", "403",
+)
+AUTH_FAILURE_THRESHOLD = 2
 
 # ── Loop-detection parameters ──────────────────────────────────
 LOOP_WINDOW = 5          # sliding-window size for recent tool fingerprints
@@ -152,6 +170,9 @@ class ToolGuard:
         self._struct_retrieval: StructRetrievalState = StructRetrievalState()
         # Input-file origin tracking (prepare_* gate)
         self._str_replace_created_paths: set[str] = set()
+        # Auth-failure stop gate
+        self._auth_failure_count: int = 0
+        self._auth_failure_locked: bool = False
 
     def reset_loop_history(self) -> None:
         """Clear loop-detection state so a new planner step starts fresh.
@@ -173,6 +194,12 @@ class ToolGuard:
             return json.loads(args_str) if args_str else {}
         except (json.JSONDecodeError, TypeError):
             return {}
+
+    @staticmethod
+    def _extract_python_script_path(command: str) -> str | None:
+        """Extract script path from 'python <script.py>' or 'python3 <script.py>'."""
+        m = re.match(r"^\s*python3?\s+([^\s;|&]+\.py)\b", command.strip())
+        return m.group(1) if m else None
 
     @staticmethod
     def _normalize_input_path(path: str | None) -> str:
@@ -602,6 +629,22 @@ class ToolGuard:
 
     def evaluate(self, tool_call) -> GuardDecision:
         """Evaluate whether a tool call should be blocked."""
+        # Gate 1: Auth-failure lock (runs first)
+        if self._auth_failure_locked and tool_call.function.name in {
+            "execute_bash", "str_replace_editor"
+        }:
+            return GuardDecision(
+                blocked=True,
+                message=(
+                    "AUTH FAILURE STOP GATE: Authentication errors were detected "
+                    f"{self._auth_failure_count} time(s). Writing or executing scripts "
+                    "to locate alternative credentials is not allowed.\n\n"
+                    "ACTION REQUIRED: call finish with task_completed=false and report "
+                    "the authentication error so the user can fix the configuration."
+                ),
+                info={"reason": "auth_failure_locked"},
+            )
+
         # Windows heredoc gate
         if tool_call.function.name == "execute_bash" and sys.platform == "win32":
             args = self._parse_tool_args(tool_call)
@@ -616,6 +659,28 @@ class ToolGuard:
                     info={"reason": "windows_heredoc_blocked"},
                 )
 
+        # Gate 2: str_replace_editor file content scan
+        if (
+            tool_call.function.name == "str_replace_editor"
+            and is_dangerous_python_content is not None
+        ):
+            args = self._parse_tool_args(tool_call)
+            cmd = str(args.get("command", "")).strip().lower()
+            if cmd in {"create", "write"}:
+                file_text = str(args.get("file_text", "") or "")
+                if file_text:
+                    is_dangerous, reason = is_dangerous_python_content(file_text)
+                    if is_dangerous:
+                        return GuardDecision(
+                            blocked=True,
+                            message=(
+                                f"DANGEROUS SCRIPT CONTENT BLOCKED: {reason}\n\n"
+                                "Writing scripts that read environment variables or scan "
+                                "for credentials is not permitted."
+                            ),
+                            info={"reason": "dangerous_python_content"},
+                        )
+
         # Dangerous command gate: block env, rm -rf /, etc.
         if tool_call.function.name == "execute_bash" and is_dangerous_bash_command is not None:
             args = self._parse_tool_args(tool_call)
@@ -627,6 +692,34 @@ class ToolGuard:
                     message=f"⚠️ BLOCKED: {reason}",
                     info={"reason": "dangerous_bash_command"},
                 )
+            # Gate 3: execute_bash python script pre-execution scan
+            if is_dangerous_python_content is not None:
+                script_path = self._extract_python_script_path(command)
+                if script_path:
+                    script_norm = self._normalize_input_path(script_path)
+                    if script_norm in self._str_replace_created_paths:
+                        path_to_read = script_path
+                    else:
+                        path_to_read = next(
+                            (p for p in self._str_replace_created_paths if Path(p).name == Path(script_path).name),
+                            None,
+                        )
+                    if path_to_read:
+                        try:
+                            content = Path(path_to_read).read_text(encoding="utf-8", errors="ignore")
+                            is_dangerous, reason = is_dangerous_python_content(content)
+                            if is_dangerous:
+                                return GuardDecision(
+                                    blocked=True,
+                                    message=(
+                                        f"DANGEROUS SCRIPT EXECUTION BLOCKED: {reason}\n\n"
+                                        f"The script '{script_path}' contains dangerous patterns "
+                                        "and cannot be executed."
+                                    ),
+                                    info={"reason": "dangerous_python_script", "path": script_path},
+                                )
+                        except OSError:
+                            pass  # file unreadable — allow normal flow
 
         # Structure-retrieval stop gate: block mat_struct_db_* when done
         if self._is_struct_db_retrieval_blocked(tool_call):
@@ -743,6 +836,23 @@ class ToolGuard:
                 text_lower = (observation or "").lower()
                 if any(ext in text_lower for ext in (".cif", ".vasp", "poscar", ".xyz", ".res")):
                     self._struct_retrieval.structure_file_delivered = True
+
+        # ── Auth-failure stop gate tracking ─────────────────────
+        # Only track MCP tool failures (mat_* tools), not internal tools.
+        if tool_name.startswith("mat_") and not self._auth_failure_locked:
+            obs_lower = (observation or "").lower()
+            if any(marker in obs_lower for marker in AUTH_FAILURE_MARKERS):
+                self._auth_failure_count += 1
+                self.logger.warning(
+                    "[auth-failure-gate] Auth failure #%d detected in %s output.",
+                    self._auth_failure_count, tool_name,
+                )
+                if self._auth_failure_count >= AUTH_FAILURE_THRESHOLD:
+                    self._auth_failure_locked = True
+                    self.logger.warning(
+                        "[auth-failure-gate] LOCKED after %d auth failures.",
+                        self._auth_failure_count,
+                    )
 
     @staticmethod
     def _observation_has_content(observation: str) -> bool:

@@ -34,6 +34,36 @@ DANGEROUS_COMMAND_PATTERNS = [
 
 _COMPILED_PATTERNS = [re.compile(p, re.IGNORECASE) for p in DANGEROUS_COMMAND_PATTERNS]
 
+# Dangerous patterns for Python script file_text content
+DANGEROUS_PYTHON_CONTENT_PATTERNS = [
+    (r"\bos\.environ\b",              "reads environment variables (os.environ)"),
+    (r"\bos\.getenv\b",               "reads environment variables (os.getenv)"),
+    (r"/proc/self/environ",           "reads /proc/self/environ directly"),
+    (r"subprocess[^#\n]*\benv\b",     "runs 'env' via subprocess"),
+    (r"glob\s*\(.*?\.env",            "scans for .env files"),
+    (r"open\s*\(\s*['\"]\.env",       "reads .env file directly"),
+    # credential hunting
+    (r"(AK|SK|KEY|TOKEN|SECRET|CREDENTIAL|BEARER|ACCESS).{0,40}environ",
+     "searches environment for credential-like keys"),
+    (r"environ.{0,40}(AK|SK|KEY|TOKEN|SECRET|CREDENTIAL|BEARER|ACCESS)",
+     "filters environment variables for credentials"),
+]
+
+_PYTHON_CONTENT_COMPILED = [
+    (re.compile(p, re.IGNORECASE), msg) for p, msg in DANGEROUS_PYTHON_CONTENT_PATTERNS
+]
+
+
+def is_dangerous_python_content(content: str) -> Tuple[bool, str]:
+    """Scan Python source code for dangerous patterns (env dump, credential hunting).
+    Used by ToolGuard before creating or executing agent-written scripts."""
+    if not content or not isinstance(content, str):
+        return False, ""
+    for pat, msg in _PYTHON_CONTENT_COMPILED:
+        if pat.search(content):
+            return True, msg
+    return False, ""
+
 
 def is_dangerous_bash_command(command: str) -> Tuple[bool, str]:
     """Check if a bash command is dangerous and must not be executed.
