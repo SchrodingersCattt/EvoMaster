@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from pydantic import Field
 
 from ..base import BaseTool, BaseToolParams, ToolError
+from .bash_safety import is_dangerous_bash_command
 
 if TYPE_CHECKING:
     from evomaster.agent.session import BaseSession
@@ -69,6 +70,11 @@ class BashTool(BaseTool):
             return f"Parameter validation error: {str(e)}", {"error": str(e)}
         
         assert isinstance(params, BashToolParams)
+
+        # Block dangerous commands (env, rm -rf /, etc.)
+        is_dangerous, reason = is_dangerous_bash_command(params.command)
+        if is_dangerous:
+            return f"Blocked: {reason}", {"error": reason, "blocked": True}
         
         # 执行命令
         timeout = int(params.timeout) if params.timeout > 0 else None
