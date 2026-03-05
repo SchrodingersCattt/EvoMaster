@@ -38,10 +38,10 @@ logger.info('SERVICE_ENV=%s', CURRENT_ENV)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
-    # tracemalloc：供 /api/v1/debug/tracemalloc 查看分配与 diff（排查内存）
+    # tracemalloc：供 /api/v1/debug/tracemalloc 查看分配与 dump（排查内存）
     try:
         tracemalloc.start(10)
-        logger.info('tracemalloc started (nframe=10) for /api/v1/debug/tracemalloc')
+        logger.info('tracemalloc started (nframe=10)')
     except Exception as e:
         logger.warning('tracemalloc start skipped: %s', e)
     # 不再在启动时全局把 active 置为 idle：以便客户端重连时在 subscribe 流里能检测到
