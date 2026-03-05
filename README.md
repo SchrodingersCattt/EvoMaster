@@ -31,6 +31,8 @@ Then open the dashboard at `http://<host>:<FRONTEND_PORT>` (default `http://127.
 | `NEXT_PUBLIC_API_URL` | `http://<PUBLIC_HOST>:<BACKEND_PORT>` | Override the API base URL the frontend calls. |
 | `NEXT_PUBLIC_WS_URL` | `ws://<PUBLIC_HOST>:<BACKEND_PORT>/ws/chat` | Set automatically from `NEXT_PUBLIC_API_URL` if not provided. |
 
+**Local run without Redis:** Do not set `REDIS_URL` in `.env`. The backend will start in single-process mode: stop and stream work in-process only; monitor_job suspend/resume across time is disabled. This is enough for local dev and tracemalloc baseline/diff on one process.
+
 ---
 
 ## Bohrium authentication
