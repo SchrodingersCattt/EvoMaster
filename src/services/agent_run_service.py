@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime as dt
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Protocol, runtime_checkable
@@ -429,6 +430,8 @@ class AgentRunService:
                                 ) and redis_dao.zadd_resume_checkpoint(
                                     resume_at, checkpoint_id
                                 ):
+                                    _suspend_poll_interval_ref[0] = poll_interval
+                                    _suspend_resume_at_ref[0] = resume_at
                                     agent = _agent_ref[0]
                                     if agent is not None:
                                         agent._suspend_requested = True
@@ -508,6 +511,10 @@ class AgentRunService:
         _suspended_ref = [
             False
         ]  # 挂起时 finally 不发 end，由发送流从 Redis 收恢复 run 的 end
+        _suspend_poll_interval_ref = [
+            None
+        ]  # 挂起时写入，用于 suspended 事件里提示用户下次恢复时间
+        _suspend_resume_at_ref = [None]
         try:
             if not self._playground_init_done.is_set():
                 logger.info(
@@ -1029,7 +1036,20 @@ class AgentRunService:
                     session_id,
                     task_id,
                 )
-                event_callback('System', 'suspended', '')
+                # 把下次恢复时间吐给用户
+                content = ''
+                pi = _suspend_poll_interval_ref[0]
+                ra = _suspend_resume_at_ref[0]
+                if pi is not None and pi > 0:
+                    if pi < 60:
+                        content = f'将在约 {int(pi)} 秒后自动继续监控'
+                    else:
+                        content = f'将在约 {int(pi) // 60} 分钟后自动继续监控'
+                    if ra is not None:
+                        content += (
+                            f'（下次检查约 {dt.fromtimestamp(ra).strftime("%H:%M")}）'
+                        )
+                event_callback('System', 'suspended', content)
             else:
                 logger.info(
                     'run_agent_sync: task done session_id=%s task_id=%s',
