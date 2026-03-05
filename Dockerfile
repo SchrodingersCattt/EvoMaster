@@ -61,7 +61,7 @@ RUN mkdir -p /usr/share/fonts/truetype/noto && \
 EXPOSE 80
 
 # 创建启动脚本
-RUN echo '#!/bin/bash\n\nsource .venv/bin/activate\nexec gunicorn app:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:80 --preload' > /app/start.sh && \
+RUN echo '#!/bin/bash\n\nsource .venv/bin/activate\nexec gunicorn app:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:80 --preload' > /app/start.sh && \
     chmod +x /app/start.sh
 
 # 启动命令
