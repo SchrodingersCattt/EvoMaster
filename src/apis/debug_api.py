@@ -13,9 +13,10 @@ router = APIRouter(tags=['debug'])
 # 用于 diff 的基线快照（按需设置）
 _tracemalloc_baseline: tracemalloc.Snapshot | None = None
 
-# diff 时只返回前 N 条、且仅前几条带 traceback_frames，避免快照/序列化占满内存把服务干崩
-_DIFF_TOP_N = 12
-_DIFF_FRAMES_TOP_N = 3
+# diff 时只返回前 N 条；不再带 traceback_frames，减轻序列化与内存（2G 环境易 OOM）
+_DIFF_TOP_N = 5
+# 若当前 traced 内存超过此值（字节），拒绝执行 diff，直接返回，避免 compare_to 时 OOM
+_DIFF_MAX_TRACED_BYTES = 80 * 1024 * 1024  # 80 MiB
 
 
 def _snapshot_to_stats(
@@ -51,6 +52,8 @@ async def get_tracemalloc(
         }
 
     try:
+        current_b, peak_b = tracemalloc.get_traced_memory()
+
         if baseline:
             global _tracemalloc_baseline
             _tracemalloc_baseline = tracemalloc.take_snapshot()
@@ -61,9 +64,6 @@ async def get_tracemalloc(
                 'current_mb': round(current_b / (1024 * 1024), 2),
                 'peak_mb': round(peak_b / (1024 * 1024), 2),
             }
-
-        current = tracemalloc.take_snapshot()
-        current_b, peak_b = tracemalloc.get_traced_memory()
 
         if diff and _tracemalloc_baseline is None:
             return {
@@ -76,22 +76,31 @@ async def get_tracemalloc(
             }
 
         if diff and _tracemalloc_baseline is not None:
+            if current_b > _DIFF_MAX_TRACED_BYTES:
+                return {
+                    'tracing': True,
+                    'mode': 'diff',
+                    'error': 'memory_high',
+                    'message': '当前 traced 内存过高，为避免 OOM 已跳过 diff',
+                    'current_mb': round(current_b / (1024 * 1024), 2),
+                    'peak_mb': round(peak_b / (1024 * 1024), 2),
+                }
+            current = tracemalloc.take_snapshot()
+            current_b, peak_b = tracemalloc.get_traced_memory()
             diff_snap = current.compare_to(_tracemalloc_baseline, 'lineno')
             top = []
-            for i, s in enumerate(diff_snap):
+            for s in diff_snap:
                 if s.size_diff <= 0:
                     continue
                 if len(top) >= _DIFF_TOP_N:
                     break
-                frames = s.traceback.format()
-                entry: dict[str, Any] = {
-                    'size_diff_kb': round(s.size_diff / 1024, 2),
-                    'count_diff': s.count_diff,
-                    'traceback': '\n'.join(frames),
-                }
-                if i < _DIFF_FRAMES_TOP_N:
-                    entry['traceback_frames'] = frames
-                top.append(entry)
+                top.append(
+                    {
+                        'size_diff_kb': round(s.size_diff / 1024, 2),
+                        'count_diff': s.count_diff,
+                        'traceback': '\n'.join(s.traceback.format()),
+                    }
+                )
             return {
                 'tracing': True,
                 'mode': 'diff',
@@ -100,6 +109,8 @@ async def get_tracemalloc(
                 'peak_mb': round(peak_b / (1024 * 1024), 2),
             }
 
+        current = tracemalloc.take_snapshot()
+        current_b, peak_b = tracemalloc.get_traced_memory()
         return {
             'tracing': True,
             'mode': 'current',
