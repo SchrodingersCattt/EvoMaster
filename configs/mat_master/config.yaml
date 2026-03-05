@@ -211,6 +211,7 @@ mcp:
         - remove_solvents
         - build_bulk_structure_by_template
         - build_bulk_structure_by_wyckoff
+        - extract_molecules_from_crystal
         - make_supercell_structure
         - make_defect_structure
         - make_doped_structure
