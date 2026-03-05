@@ -10,7 +10,7 @@
 llm:
   litellm:
     provider: "openai"
-    model: "gemini-3-flash-preview"
+    model: "azure/gpt-5"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     # temperature: 0.7
@@ -19,11 +19,13 @@ llm:
     max_retries: 3
     retry_delay: 1.0
 
+  # Azure OpenAI：model 填你在 Azure 门户中的「部署名称」（可写 azure/部署名，如 azure/gpt-5 或 azure/gpt-5-chat）
   azure:
     provider: "openai"
-    model: "gpt-4o"
+    model: "azure/gpt-5"
     api_key: "${AZURE_API_KEY}"
     base_url: "${AZURE_API_BASE}"
+    api_version: "${AZURE_API_VERSION}"
     temperature: 0.7
     max_tokens: 16384
     timeout: 60
@@ -49,7 +51,7 @@ llm:
 # ============================================
 agents:
   general:
-    llm: "litellm"
+    llm: "azure"
     max_turns: 200
     tools:
       builtin: ["*"]
