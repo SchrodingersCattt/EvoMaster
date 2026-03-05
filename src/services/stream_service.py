@@ -270,10 +270,11 @@ class ChatStreamService:
         try:
             payload = self._sessions_service.get_session_status_payload(sid)
             # 部署/重启后：DB 仍为 active 但本进程没有该 session 的 run → 视为上一轮在别的 pod 上被中断
-            is_stale = payload.get(
-                'status'
-            ) == 'active' and not self._sessions_service.is_session_running_on_this_pod(
-                sid
+            # 若 Redis 显示该 session 的 run 在别的 worker 上，则是「切会话后落到另一实例」，不是重启，不当作 stale
+            is_stale = (
+                payload.get('status') == 'active'
+                and not self._sessions_service.is_session_running_on_this_pod(sid)
+                and not self._sessions_service.is_session_run_on_another_pod(sid)
             )
             if is_stale:
                 self._sessions_service.reset_session_status_to_idle_in_db(sid)

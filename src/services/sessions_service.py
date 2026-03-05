@@ -5,7 +5,9 @@ from typing import Optional
 
 from src.dao.chat_sessions_table import ChatSessionsTable, get_chat_sessions_table
 from src.dao.redis_dao import get_redis_dao
+from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.constant import REDIS_URL
+from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +228,7 @@ class ChatSessionsService:
         with self._sessions_run_lock:
             self._sessions_in_run.discard(session_id)
         self._run_stop_events.pop(session_id, None)
+        get_worker_registry_service().delete_session_run_owner(session_id)
         return self.table.delete_session(session_id, user_id)
 
     def try_acquire_session_run(self, session_id: str) -> bool:
@@ -235,6 +238,7 @@ class ChatSessionsService:
                 return False
             self._sessions_in_run.add(session_id)
         self.table.set_session_status(session_id, 'active')
+        get_worker_registry_service().set_session_run_owner(session_id, get_worker_id())
         return True
 
     def release_session_run(self, session_id: str) -> None:
@@ -242,11 +246,24 @@ class ChatSessionsService:
         with self._sessions_run_lock:
             self._sessions_in_run.discard(session_id)
         self.table.set_session_status(session_id, 'idle')
+        get_worker_registry_service().delete_session_run_owner(session_id)
 
     def is_session_running_on_this_pod(self, session_id: str) -> bool:
         """当前进程是否正在跑该 session 的 agent（仅内存状态）。"""
         with self._sessions_run_lock:
             return session_id.strip() in self._sessions_in_run
+
+    def is_session_run_on_another_pod(self, session_id: str) -> bool:
+        """
+        该会话的 run 是否在别的「仍存活的」worker 上。
+        Redis 中有 run owner 且 owner != 本进程，且该 owner 的存活 key 仍存在（未过期）。
+        重启后旧进程不再刷新存活 key，故不会误判为「在别的 pod 跑」。
+        """
+        registry = get_worker_registry_service()
+        owner = registry.get_session_run_owner(session_id.strip())
+        if owner is None or owner == get_worker_id():
+            return False
+        return registry.is_worker_alive(owner)
 
     def reset_session_status_to_idle_in_db(self, session_id: str) -> None:
         """
