@@ -107,10 +107,24 @@ def check_semantic_safety(plan: str) -> tuple[bool, str, str]:
         "synthesis recipe", "synthesis procedure", "how to synthesize",
         "formulation ratio", "ingredient list", "manufacturing process",
         "weaponiz", "improvised", "at home", "household chemicals",
+        "find alternative credentials",
+        "alternative credentials in the environment",
+        "scan for api key",
+        "locate access key",
+    ]
+    forbidden_patterns = [
+        r"search.*credential.*environ",
+        r"bypass.*licen",
+        r"crack.*software",
+        r"patch.*binary",
+        r"private pseudopotential",
     ]
 
     has_sensitive = any(k in plan_lower for k in sensitive_keywords)
-    has_forbidden = any(f in plan_lower for f in forbidden_intents)
+    has_forbidden = (
+        any(f in plan_lower for f in forbidden_intents)
+        or any(re.search(p, plan_lower) for p in forbidden_patterns)
+    )
     has_allowed = any(a in plan_lower for a in allowed_intents)
 
     if has_sensitive and has_forbidden and not has_allowed:
@@ -123,26 +137,7 @@ def check_semantic_safety(plan: str) -> tuple[bool, str, str]:
     return True, "", ""
 
 
-def _fix_argv() -> None:
-    """Fix argv when the caller wraps all arguments in a single quoted token.
-
-    The SkillTool layer uses shlex.split + shlex.quote to pass script_args.
-    When the LLM wraps the whole string in quotes, all arguments collapse into
-    one sys.argv entry.  Detect and re-split so positional args parse correctly.
-    """
-    import shlex as _shlex
-    if len(sys.argv) == 2 and " " in sys.argv[1] and not sys.argv[1].strip().startswith("{"):
-        try:
-            parts = _shlex.split(sys.argv[1])
-            if len(parts) > 1:
-                sys.argv[1:] = parts
-        except ValueError:
-            pass
-
-
 def main() -> None:
-    _fix_argv()
-
     if len(sys.argv) < 2:
         _audit_denied("Invalid arguments", "Provide plan_description and intended_command.", "", "")
         out = {"allowed": False, "reason": "Invalid arguments", "suggestion": "Provide plan_description and intended_command (or one JSON object)."}
@@ -152,18 +147,27 @@ def main() -> None:
     plan = ""
     command = ""
 
-    if len(sys.argv) == 2 and sys.argv[1].strip().startswith("{"):
+    if len(sys.argv) == 2:
+        arg = sys.argv[1].strip()
         try:
-            obj = json.loads(sys.argv[1])
+            obj = json.loads(arg)
             plan = obj.get("plan", "") or ""
             command = obj.get("command", "") or ""
         except json.JSONDecodeError:
-            plan = sys.argv[1]
+            import shlex
+            try:
+                parts = shlex.split(arg)
+                if len(parts) > 1:
+                    plan = parts[0]
+                    command = " ".join(parts[1:])
+                else:
+                    plan = arg
+            except ValueError:
+                plan = arg
     else:
-        plan = sys.argv[1] if len(sys.argv) > 1 else ""
+        plan = sys.argv[1] or ""
         command = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else ""
 
-    # Defensive: ensure plan/command are always str (never None)
     plan = plan or ""
     command = command or ""
 
