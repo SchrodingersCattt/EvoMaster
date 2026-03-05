@@ -14,11 +14,23 @@ Generate or adapt input files for computational software by **dispatching parame
 |--------|------------|------------|----------------|
 | ABINIT (program=abinit) | Direct generation | Optional | Must be pymatgen-readable |
 | QE pw.x | Direct generation | Optional | Must be pymatgen-readable |
-| CP2K | Placeholder injection | **Required** (use cp2k/minimal_periodic.inp if user provides none) | pymatgen-readable |
-| ORCA | Placeholder injection | **Required** (use orca/minimal_molecule.inp if user provides none) | pymatgen-readable |
+| CP2K | Placeholder injection | Optional (use cp2k/minimal_periodic.inp if user provides none) | pymatgen-readable |
+| ORCA | Flexible | Optional (see ORCA modes below) | pymatgen-readable |
 | LAMMPS | Data decoupled | Optional | pymatgen-readable (prepare generates .data) |
 
 Use the MCP tool schema as the source of truth for parameters; the table above is context only.
+
+### ORCA input modes
+
+ORCA's `prepare_orca_job` supports three input modes:
+
+| Mode | input_file | structure_file | Behaviour |
+|------|------------|----------------|-----------|
+| Template + structure | Provided (template with `{{COORD}}` placeholder) | Provided | Placeholder is replaced with actual coordinates |
+| Template only | Provided (template with inline coordinates) | Optional / omitted | Parameters and inline coords are modified in place |
+| Structure only | Omitted | Provided | Tool builds a minimal input from scratch using the structure; falls back to `orca/minimal_molecule.inp` as the base |
+
+When `input_file` is omitted, use `orca/minimal_molecule.inp` as the fallback template or let the tool build from scratch if the schema supports it. When the user supplies an existing `.inp` with inline coordinates (no placeholder), pass it as `input_file` without a separate `structure_file`.
 
 ## Structure file format
 
@@ -27,7 +39,7 @@ Use the MCP tool schema as the source of truth for parameters; the table above i
 ## Workflow
 
 1. **Choose software and task type** — Determine which prepare_* tool applies from the routing table and MCP schema.
-2. **Resolve template** — For CP2K/ORCA, obtain an input template: user-provided path or get_reference (e.g. `cp2k/minimal_periodic.inp`, `orca/minimal_molecule.inp`, or a task/method template from list_references.py).
+2. **Resolve template** — For CP2K, obtain an input template (user-provided or get_reference). For ORCA, determine the input mode: template+structure, template-only (inline coords), or structure-only (omit input_file). Use get_reference for a suitable ORCA template when needed (e.g. `orca/minimal_molecule.inp`, `orca/std_dft.inp`).
 3. **Confirm structure_file** — Ensure the structure path exists and is pymatgen-instanceable; do not assume formats the engine cannot read.
 4. **Build overrides** — Set physical parameters (cutoff, functional, k-points, etc.) via the overrides dict exposed by the prepare_* schema; do not inject them by editing the template text.
 5. **Call prepare_*** — Invoke the prepare_* MCP tool with input_file (template path), structure_file (when applicable), and overrides.
