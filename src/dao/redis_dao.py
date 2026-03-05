@@ -23,6 +23,13 @@ CONFIRMATION_RUN_ACTIVE_TTL_SEC = 3600
 # 多 worker 时 run 所在 pod 向其它 pod 的 subscribe 流推送事件（Pub/Sub）
 STREAM_CHANNEL_PREFIX = 'chat:stream:'
 
+# monitor_job 挂起恢复：到点恢复的 Sorted Set；checkpoint 内容 key；认领锁 key
+MONITOR_JOB_RESUME_ZSET_KEY = 'chat:monitor_job:resume_zset'
+MONITOR_JOB_CHECKPOINT_KEY_PREFIX = 'chat:monitor_job:checkpoint:'
+MONITOR_JOB_RESUME_LOCK_KEY_PREFIX = 'chat:monitor_job:resume_lock:'
+MONITOR_JOB_CHECKPOINT_TTL_SEC = 86400  # 24h
+MONITOR_JOB_RESUME_LOCK_TTL_SEC = 120
+
 
 def _run_active_key(session_id: str) -> str:
     return CONFIRMATION_RUN_ACTIVE_KEY.format(session_id=session_id.strip())
@@ -220,6 +227,127 @@ class RedisDao:
             return None
         _, value = result
         return value
+
+    # ---------- monitor_job 挂起恢复（Sorted Set + checkpoint + 认领锁）----------
+
+    def zadd_resume_checkpoint(self, resume_at: float, checkpoint_id: str) -> bool:
+        """将 checkpoint 登记到「到点恢复」Sorted Set。score=resume_at，member=checkpoint_id。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            client.zadd(MONITOR_JOB_RESUME_ZSET_KEY, {checkpoint_id: resume_at})
+            return True
+        except Exception as e:
+            logger.warning(
+                'Redis ZADD resume checkpoint failed checkpoint_id=%s: %s',
+                checkpoint_id,
+                e,
+            )
+            return False
+
+    def zrange_due_resume_checkpoints(self, max_score: float) -> list[str]:
+        """取出 score <= max_score 的 checkpoint_id 列表（到期的需恢复项）。"""
+        client = self.create_client()
+        if not client:
+            return []
+        try:
+            return client.zrangebyscore(
+                MONITOR_JOB_RESUME_ZSET_KEY, 0, max_score, start=0, num=50
+            )
+        except Exception as e:
+            logger.warning('Redis ZRANGEBYSCORE resume checkpoints failed: %s', e)
+            return []
+
+    def zrem_resume_checkpoint(self, checkpoint_id: str) -> bool:
+        """从 Sorted Set 中移除已处理的 checkpoint。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            client.zrem(MONITOR_JOB_RESUME_ZSET_KEY, checkpoint_id)
+            return True
+        except Exception as e:
+            logger.warning(
+                'Redis ZREM resume checkpoint failed checkpoint_id=%s: %s',
+                checkpoint_id,
+                e,
+            )
+            return False
+
+    def try_claim_resume_lock(self, checkpoint_id: str) -> bool:
+        """尝试认领该 checkpoint 的恢复权（多 Pod 下仅一个成功）。TTL 内不可重复认领。"""
+        client = self.create_client()
+        if not client:
+            return False
+        key = MONITOR_JOB_RESUME_LOCK_KEY_PREFIX + checkpoint_id
+        try:
+            return bool(
+                client.set(
+                    key,
+                    '1',
+                    nx=True,
+                    ex=MONITOR_JOB_RESUME_LOCK_TTL_SEC,
+                )
+            )
+        except Exception as e:
+            logger.warning(
+                'Redis SET NX resume lock failed checkpoint_id=%s: %s',
+                checkpoint_id,
+                e,
+            )
+            return False
+
+    def set_checkpoint(self, checkpoint_id: str, data: dict) -> bool:
+        """写入 checkpoint 内容（JSON）。TTL 24h。"""
+        client = self.create_client()
+        if not client:
+            return False
+        key = MONITOR_JOB_CHECKPOINT_KEY_PREFIX + checkpoint_id
+        try:
+            raw = json.dumps(data, ensure_ascii=False)
+            client.set(key, raw, ex=MONITOR_JOB_CHECKPOINT_TTL_SEC)
+            return True
+        except Exception as e:
+            logger.warning(
+                'Redis SET checkpoint failed checkpoint_id=%s: %s',
+                checkpoint_id,
+                e,
+            )
+            return False
+
+    def get_checkpoint(self, checkpoint_id: str) -> Optional[dict]:
+        """读取 checkpoint 内容。不存在或失败返回 None。"""
+        client = self.create_client()
+        if not client:
+            return None
+        key = MONITOR_JOB_CHECKPOINT_KEY_PREFIX + checkpoint_id
+        try:
+            raw = client.get(key)
+            if not raw:
+                return None
+            return json.loads(raw)
+        except Exception as e:
+            logger.warning(
+                'Redis GET checkpoint failed checkpoint_id=%s: %s',
+                checkpoint_id,
+                e,
+            )
+            return None
+
+    def delete_checkpoint(self, checkpoint_id: str) -> None:
+        """删除 checkpoint 内容（恢复成功后可选清理）。"""
+        client = self.create_client()
+        if not client:
+            return
+        try:
+            client.delete(MONITOR_JOB_CHECKPOINT_KEY_PREFIX + checkpoint_id)
+        except Exception as e:
+            logger.warning(
+                'Redis DELETE checkpoint failed checkpoint_id=%s: %s',
+                checkpoint_id,
+                e,
+            )
 
 
 @lru_cache(maxsize=1)
