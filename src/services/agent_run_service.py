@@ -109,12 +109,13 @@ class AgentRunService:
         """
         if session_id in self._playgrounds:
             return self._playgrounds[session_id]
-        # 单 worker 时只保留一个 playground 实例，复用 _cached_pg，不再创建第二个
+        # 单 worker 时复用 _cached_pg，但仍登记到 _playgrounds 以便 run 结束时 pop+cleanup 释放 MCP，避免每新会话内存阶梯增长
         if _AGENT_MAX_WORKERS == 1 and self._cached_pg is not None:
             logger.debug(
                 'run_agent_sync: reusing _cached_pg for session_id=%s (single-worker mode)',
                 session_id,
             )
+            self._playgrounds[session_id] = self._cached_pg
             return self._cached_pg
         self._playground_init_done.wait(timeout=300)
         importlib.import_module('playground.mat_master.core.playground')
@@ -1191,18 +1192,29 @@ class AgentRunService:
                     )
                 except Exception:
                     pass
-            # run 结束后释放当前 agent 上的 trajectory/current_dialog，避免 pg.agent 长期持有大对象导致多轮对话内存阶梯增长（GC 未及时回收时）
+            # run 结束后释放当前 agent 上的 trajectory/current_dialog 及大字符串，避免 pg.agent 长期持有导致多轮对话内存阶梯增长
             if pg_for_run is not None:
                 try:
                     a = getattr(pg_for_run, 'agent', None)
                     if a is not None:
                         a.trajectory = None
                         a.current_dialog = None
+                        a._initial_system_prompt = None
+                        a._initial_user_prompt = None
                 except Exception:
                     pass
             # run 真正结束（非 suspend）时释放；suspend 时仅单进程（无 Redis）保留以便 resume 复用，多 Pod（有 Redis）时 resume 可能落别的 Pod，不 pop 会泄漏
             if not _suspended_ref[0] or REDIS_URL:
-                self._playgrounds.pop(session_id, None)
+                pg = self._playgrounds.pop(session_id, None)
+                if pg is not None:
+                    try:
+                        pg.cleanup()
+                    except Exception as e:
+                        logger.warning(
+                            'playground cleanup on pop (MCP/session release): %s', e
+                        )
+                    if _AGENT_MAX_WORKERS == 1 and pg is self._cached_pg:
+                        self._cached_pg = None
 
     def process_resume_checkpoints(
         self,
