@@ -244,7 +244,8 @@ You can use the 'use_skill' tool to:
             gate_info['finish_force_passed'] = True
         else:
             manuscript_ok, manuscript_reason = self._tool_guard.can_finish_manuscript()
-            survey_ok, survey_reason = self._tool_guard.can_finish_survey()
+            workspace = getattr(self.session.config, 'workspace_path', '') or ''
+            survey_ok, survey_reason = self._tool_guard.can_finish_survey(workspace)
             struct_ok, struct_reason = self._tool_guard.can_finish_structure_retrieval(
                 requested_task_completed
             )

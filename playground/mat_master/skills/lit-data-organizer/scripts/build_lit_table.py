@@ -145,9 +145,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--source_type",
-        choices=["auto", "pdf", "web"],
+        choices=["auto", "pdf", "web", "survey"],
         default="auto",
-        help="Source type for ingested records.",
+        help="Source type for ingested records. Use 'survey' when input is survey contract JSON (or rely on source_kind in JSON).",
     )
     parser.add_argument(
         "--schema",
@@ -332,8 +332,23 @@ def _extract_records(payload: Any) -> list[dict[str, Any]]:
     return [payload]
 
 
+def _is_survey_input_from_metadata(input_paths: list[Path]) -> bool:
+    """True if any input JSON has source_kind == 'survey' (schema_version 2 contract)."""
+    for p in input_paths:
+        if not p.suffix.lower() == ".json" or not p.exists():
+            continue
+        try:
+            data = load_json(p)
+            if isinstance(data, dict) and data.get("source_kind") == "survey":
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def _auto_discover_tool_outputs(input_paths: list[Path]) -> list[Path]:
-    """Discover mat_sn_* auto-saved JSON files when the primary inputs yielded 0 records.
+    """Discover mat_sn_* auto-saved JSON files when the primary inputs yielded 0 records
+    or when supplementing survey-only input.
 
     Looks for _tmp/tool_outputs/ by walking up from each input path, then falls
     back to the current working directory. Returns deduplicated discovered paths.
@@ -771,6 +786,41 @@ def main() -> None:
                             state.get("ingest_stats", {}).get("raw_records", 0) or 0
                         )
                         input_paths = fallback_paths
+            # Supplement: when input is survey contract (source_kind in JSON) or
+            # caller passed --source_type survey, merge in _tmp/tool_outputs/mat_sn_*.
+            elif _is_survey_input_from_metadata(input_paths) or args.source_type == "survey":
+                supplement_paths = _auto_discover_tool_outputs(input_paths)
+                existing_resolved = {str(p.resolve()) for p in input_paths}
+                extra = [p for p in supplement_paths if str(p.resolve()) not in existing_resolved]
+                if extra:
+                    print(
+                        json.dumps({
+                            "info": "Survey-only input; supplementing with tool_outputs.",
+                            "supplement_files_found": len(extra),
+                        }, ensure_ascii=False)
+                    )
+                    supplement_rows, state = _ingest_and_cache_normalized_rows(
+                        input_paths=extra,
+                        source_type=args.source_type,
+                        schema_cfg=schema_cfg,
+                        state=state,
+                        state_path=state_path,
+                        resume=False,
+                    )
+                    if supplement_rows:
+                        seen_dedup = set()
+                        merged = []
+                        keys_use = dedup_keys or ["source_url_or_path", "quote_text"]
+                        for row in normalized_rows + supplement_rows:
+                            key = tuple(row.get(k) for k in keys_use)
+                            if key in seen_dedup:
+                                continue
+                            seen_dedup.add(key)
+                            merged.append(row)
+                        normalized_rows = merged
+                        raw_count = len(normalized_rows)
+                        state.setdefault("ingest_stats", {})["raw_records"] = raw_count
+                        state.setdefault("ingest_stats", {})["normalized_records"] = raw_count
 
             _save_rows(normalized_path, normalized_rows)
             state["normalized_rows_file"] = str(normalized_path)

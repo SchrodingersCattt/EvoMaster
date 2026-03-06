@@ -27,6 +27,7 @@ Six independent concerns, each with its own state and public method:
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
 import re
@@ -422,8 +423,12 @@ class ToolGuard:
             return False, self._manuscript_fail_reason or "Manuscript validation failed."
         return True, ""
 
-    def can_finish_survey(self) -> tuple[bool, str]:
-        """Gate for ``finish`` on survey/literature runs."""
+    def can_finish_survey(self, workspace: str = "") -> tuple[bool, str]:
+        """Gate for ``finish`` on survey/literature runs.
+
+        When workspace is set and retrieval count passes, also runs concept-coverage
+        check via survey_contract library (reads key_concepts from collected_*.json).
+        """
         if self._survey_writes == 0:
             return True, ""
         if self._survey_retrieval_count < self._survey_min_retrieval_calls:
@@ -432,6 +437,31 @@ class ToolGuard:
                 f"Observed retrieval calls: {self._survey_retrieval_count}, "
                 f"required minimum: {self._survey_min_retrieval_calls}."
             )
+        if workspace and workspace.strip():
+            _survey_contract_path = (
+                Path(__file__).resolve().parents[1]
+                / "skills"
+                / "deep-survey"
+                / "scripts"
+                / "survey_contract.py"
+            )
+            if _survey_contract_path.exists():
+                try:
+                    spec = importlib.util.spec_from_file_location(
+                        "survey_contract", _survey_contract_path
+                    )
+                    if spec and spec.loader:
+                        mod = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(mod)
+                        passed, reason = mod.check_concept_coverage_workspace(
+                            Path(workspace)
+                        )
+                        if not passed:
+                            return False, reason
+                except Exception as e:
+                    self.logger.warning(
+                        "Survey concept coverage check failed: %s", e
+                    )
         return True, ""
 
     # ── structure-retrieval gate ────────────────────────────────
@@ -736,8 +766,35 @@ class ToolGuard:
                 info={"reason": "struct_retrieval_stop", "accepted_count": sr.accepted_count},
             )
 
+        # Literature-phase-complete gate: when survey has started, block downstream
+        # (structure retrieval, calculation submit) until minimum retrieval calls are met.
+        tool_name = tool_call.function.name or ""
+        if (
+            self._survey_writes > 0
+            and self._survey_retrieval_count < self._survey_min_retrieval_calls
+            and (
+                tool_name.startswith("mat_struct_db_")
+                or re.match(r"^mat_binary_calc_submit_", tool_name)
+            )
+        ):
+            return GuardDecision(
+                blocked=True,
+                message=(
+                    "LITERATURE PHASE GATE: Survey evidence has been started but retrieval "
+                    f"depth is insufficient (observed: {self._survey_retrieval_count}, "
+                    f"required: {self._survey_min_retrieval_calls}). Complete more "
+                    "mat_sn_* retrieval calls and run collect_evidence (and assign_facet if needed) "
+                    "before structure retrieval or calculation submit."
+                ),
+                info={
+                    "reason": "literature_phase_incomplete",
+                    "survey_retrieval_count": self._survey_retrieval_count,
+                    "survey_min_retrieval_calls": self._survey_min_retrieval_calls,
+                },
+            )
+
         # prepare_* gate: block hand-written input files
-        if re.match(r"^mat_binary_calc_prepare_", tool_call.function.name or ""):
+        if re.match(r"^mat_binary_calc_prepare_", tool_name):
             args = self._parse_tool_args(tool_call)
             inp = self._normalize_input_path(args.get("input_file"))
             if inp and inp in self._str_replace_created_paths:
@@ -888,7 +945,9 @@ class ToolGuard:
                 return bool(parsed)
         except Exception:
             pass
-        return len(text) > 20 and not any(m in text.lower()[:500] for m in _ERROR_MARKERS)
+        # Do not count as success when observation is not parseable JSON (avoids
+        # inflating survey_retrieval_count from non-JSON or malformed responses).
+        return False
 
     # ── private: decision builders ─────────────────────────────
 

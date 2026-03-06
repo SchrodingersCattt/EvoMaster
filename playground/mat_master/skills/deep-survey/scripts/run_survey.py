@@ -47,6 +47,23 @@ def sanitize_topic(topic: str) -> str:
     return s or "survey"
 
 
+def _extract_key_concepts(topic: str) -> list[str]:
+    """Extract key concepts from topic for coverage contract (e.g. 'A vs B' -> [A, B])."""
+    if not topic or not isinstance(topic, str):
+        return []
+    t = topic.strip()
+    for sep in (" vs ", " versus ", " and ", " / "):
+        if sep in t.lower():
+            parts = re.split(re.escape(sep), t, flags=re.I)
+            concepts = [p.strip().split()[0] for p in parts if p.strip()]
+            if len(concepts) >= 2:
+                return concepts[:5]
+    words = re.findall(r"[a-zA-Z0-9\u4e00-\u9fff]+", t)
+    skip = {"the", "a", "an", "in", "on", "of", "for", "to", "and", "or"}
+    concepts = [w for w in words if w.lower() not in skip and len(w) > 1]
+    return concepts[:3] if concepts else []
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Create survey outline / evidence skeleton; LLM fills content via retrieval."
@@ -65,12 +82,23 @@ def main() -> None:
     )
     ap.add_argument("--output", default=None)
     ap.add_argument("--write_plan", action="store_true")
+    ap.add_argument(
+        "--key_concepts",
+        default=None,
+        help="Comma-separated key concepts to require in evidence (default: auto from topic)",
+    )
     args = ap.parse_args()
 
     topic = args.topic or args.topic_alias
     if not topic:
         ap.error("required: --topic or --title")
     topic = str(topic).strip()
+
+    key_concepts = (
+        [s.strip() for s in (args.key_concepts or "").split(",") if s.strip()]
+        if args.key_concepts
+        else _extract_key_concepts(topic)
+    )
 
     base = _project_tmp() / "surveys"
     base.mkdir(parents=True, exist_ok=True)
@@ -96,7 +124,10 @@ def main() -> None:
     if args.depth == "brief":
         out_path = _resolve_output(args.output, f"collected_{sanitize_topic(topic)}.json")
         skeleton = {
+            "schema_version": "2",
+            "source_kind": "survey",
             "topic": topic,
+            "key_concepts": key_concepts,
             "depth": "brief",
             "facets": DEFAULT_FACETS[:2],
             "evidence_cards": [],
@@ -129,7 +160,10 @@ def main() -> None:
 
         collected_path = base / f"collected_{sanitize_topic(topic)}.json"
         skeleton = {
+            "schema_version": "2",
+            "source_kind": "survey",
             "topic": topic,
+            "key_concepts": key_concepts,
             "depth": "standard",
             "facets": DEFAULT_FACETS[:3],
             "evidence_cards": [],
@@ -188,7 +222,10 @@ def main() -> None:
 
     collected_path = base / f"collected_{sanitize_topic(topic)}.json"
     skeleton = {
+        "schema_version": "2",
+        "source_kind": "survey",
         "topic": topic,
+        "key_concepts": key_concepts,
         "depth": "deep",
         "facets": DEFAULT_FACETS,
         "evidence_cards": [],

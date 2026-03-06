@@ -24,6 +24,8 @@ Produce a concise, readable Markdown survey report: Executive Summary + Referenc
 
 ### Step 2.5 — Persist evidence cards (mandatory)
 
+**Attention**: Ensure evidence covers all key concepts in the topic (e.g. for “A vs B”, both A and B should appear in at least some cards). If a key concept has almost no coverage, add retrieval or pass `--facet <facet>` when calling `collect_evidence.py`; finish may be blocked until key concepts are covered.
+
 After completing ALL retrieval, run `collect_evidence.py` to automatically extract evidence cards from the raw tool outputs and write them to `collected_<topic>.json`. This happens **before** writing the narrative report.
 
 ```
