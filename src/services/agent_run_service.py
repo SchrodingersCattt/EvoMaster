@@ -404,6 +404,7 @@ class AgentRunService:
                                 checkpoint_id = uuid.uuid4().hex
                                 resume_at = time.time() + poll_interval
                                 payload = {
+                                    'checkpoint_id': checkpoint_id,
                                     'session_id': session_id,
                                     'task_id': task_id,
                                     'invocation_id': invocation_id,
@@ -987,6 +988,11 @@ class AgentRunService:
                 user_prompt = (resume_checkpoint.get('extra') or {}).get(
                     'synthetic_prompt'
                 ) or '请继续监控作业，再次调用 monitor_job 查看状态。'
+                # 释放 payload 内 trajectory 引用，降低 resume 运行峰值内存（已复制到 dialog_history）
+                try:
+                    resume_checkpoint['trajectory'] = None
+                except Exception:
+                    pass
             else:
                 history_events = []
                 try:
@@ -1200,6 +1206,17 @@ class AgentRunService:
                     finally:
                         # 促回收，减轻多轮对话后基线台阶式上升（cgroup 能否回落还受 allocator 影响）
                         gc.collect()
+                # monitor_job resume 使用的 checkpoint 已在本 run 内消费，run 结束后删 Redis 以释放内存
+                if resume_checkpoint:
+                    cid = (resume_checkpoint.get('checkpoint_id') or '').strip()
+                    if cid:
+                        try:
+                            get_redis_dao().delete_checkpoint(cid)
+                        except Exception as e:
+                            logger.debug(
+                                'run_agent_sync: delete_checkpoint after run failed: %s',
+                                e,
+                            )
 
     def process_resume_checkpoints(
         self,
