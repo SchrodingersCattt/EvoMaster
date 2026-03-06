@@ -173,7 +173,6 @@ class MatMasterAgent(Agent):
         working_dir = self.session.config.workspace_path
         working_dir_abs = str(Path(working_dir).absolute())
         working_dir_info = f"\n\nYou must perform all operations in this working directory; do not change directory. All file operations and commands must be run under: {working_dir_abs}"
-        # base already includes tool_rules (built in build_prompt.build_mat_master_system_prompt)
         prompt = base + working_dir_info
 
         # Mandatory citation and output format for survey/manuscript — agent MUST follow this
