@@ -20,6 +20,8 @@ Workflow:
 3. Call the tools as needed and combine with local files and commands.
 4. Summarize results and use the finish tool when done.
 
+Tools are provided for convenience; every tool has limitations. When a tool is insufficient or unavailable, you are encouraged to install dependencies (e.g. pip), write scripts, and run commands yourself to achieve the goal.
+
 {{MAT_MODE_CONTRACT}}
 
 # Routing (important)
