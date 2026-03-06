@@ -12,10 +12,17 @@ import argparse
 import csv
 import hashlib
 import json
+import os
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
 from longtask_runtime import (
@@ -58,6 +65,8 @@ CANONICAL_FIELDS = [
     "uncertainty",
     "conflict_group_id",
     "conflict_note",
+    "enrich_note",
+    "enrich_keep",
 ]
 
 
@@ -123,6 +132,8 @@ DEFAULT_ALIASES: dict[str, list[str]] = {
     "uncertainty": ["uncertainty", "error_bar", "std", "sigma"],
     "conflict_group_id": ["conflict_group_id"],
     "conflict_note": ["conflict_note"],
+    "enrich_note": ["enrich_note"],
+    "enrich_keep": ["enrich_keep"],
 }
 
 
@@ -171,9 +182,30 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--stage",
-        choices=["all", "ingest", "normalize", "dedup", "conflict", "export", "status"],
+        choices=["all", "ingest", "normalize", "template", "fill", "enrich", "dedup", "conflict", "export", "status"],
         default="all",
         help="Run a specific stage or the full pipeline (default: all).",
+    )
+    parser.add_argument(
+        "--enrich",
+        action="store_true",
+        help="When stage is all or enrich: run LLM-based enrich (keep/drop, fill material/property, NA, notes).",
+    )
+    parser.add_argument(
+        "--enrich_model",
+        default=None,
+        help="Model for enrich stage (default: env LIT_ENRICH_MODEL or gpt-4o-mini).",
+    )
+    parser.add_argument(
+        "--enrich_batch",
+        type=int,
+        default=40,
+        help="Number of rows per LLM batch in enrich stage (default: 40).",
+    )
+    parser.add_argument(
+        "--enrich_survey",
+        default=None,
+        help="Path to collected_*.json for survey context (topic/key_concepts). Auto-detected from input if not set.",
     )
     parser.add_argument(
         "--state",
@@ -344,6 +376,304 @@ def _is_survey_input_from_metadata(input_paths: list[Path]) -> bool:
         except Exception:
             continue
     return False
+
+
+def _load_survey_context(
+    input_paths: list[Path],
+    explicit_survey_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Load topic and key_concepts from survey contract (collected_*.json with source_kind survey).
+
+    If explicit_survey_path is set, use that file only. Otherwise scan input_paths for
+    source_kind == 'survey'. Returns {"topic": str, "key_concepts": list[str]} or {} if none found.
+    """
+    paths_to_try: list[Path] = []
+    if explicit_survey_path:
+        p = Path(explicit_survey_path)
+        if p.exists():
+            paths_to_try.append(p)
+    if not paths_to_try:
+        for p in input_paths:
+            if p.suffix.lower() != ".json" or not p.exists():
+                continue
+            try:
+                data = load_json(p)
+                if isinstance(data, dict) and data.get("source_kind") == "survey":
+                    paths_to_try.append(p)
+                    break
+            except Exception:
+                continue
+    if not paths_to_try:
+        return {}
+    data = load_json(paths_to_try[0])
+    if not isinstance(data, dict):
+        return {}
+    topic = data.get("topic")
+    if topic is not None and not isinstance(topic, str):
+        topic = str(topic)
+    key_concepts = data.get("key_concepts")
+    if isinstance(key_concepts, list):
+        key_concepts = [str(c) for c in key_concepts if c is not None]
+    else:
+        key_concepts = []
+    return {"topic": topic or "", "key_concepts": key_concepts}
+
+
+def _call_llm_enrich_batch(system: str, user: str, model: str) -> str | None:
+    """Call OpenAI-compatible API for one enrich batch. Returns response content or None on failure."""
+    if OpenAI is None:
+        return None
+    base_url = os.environ.get("LITELLM_PROXY_API_BASE") or os.environ.get("OPENAI_API_BASE") or None
+    api_key = os.environ.get("LITELLM_PROXY_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return None
+    client = OpenAI(
+        api_key=api_key,
+        base_url=base_url.rstrip("/") if base_url else None,
+    )
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.2,
+        )
+        if resp.choices and resp.choices[0].message.content:
+            return resp.choices[0].message.content.strip()
+    except Exception:
+        pass
+    return None
+
+
+def _parse_enrich_batch_response(text: str, batch_start_idx: int) -> list[dict[str, Any]] | None:
+    """Parse LLM JSON array response. Returns list of dicts with idx, keep, material_name, etc., or None."""
+    if not text or not text.strip():
+        return None
+    # Strip markdown code fence if present
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
+        stripped = re.sub(r"\s*```\s*$", "", stripped)
+    try:
+        data = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, list):
+        return None
+    out = []
+    batch_len = len(data)
+    for i, item in enumerate(data):
+        if not isinstance(item, dict):
+            continue
+        raw_idx = item.get("idx")
+        if raw_idx is None:
+            idx = batch_start_idx + i
+        elif isinstance(raw_idx, int):
+            if batch_start_idx <= raw_idx < batch_start_idx + batch_len:
+                idx = raw_idx
+            elif 0 <= raw_idx < batch_len:
+                idx = batch_start_idx + raw_idx
+            else:
+                idx = batch_start_idx + i
+        else:
+            try:
+                idx = int(raw_idx)
+                if idx < batch_start_idx or idx >= batch_start_idx + batch_len:
+                    idx = batch_start_idx + i
+            except (TypeError, ValueError):
+                idx = batch_start_idx + i
+        out.append({
+            "idx": idx,
+            "keep": item.get("keep", True),
+            "material_name": _stringify(item.get("material_name")),
+            "property_name": _stringify(item.get("property_name")),
+            "property_value": _stringify(item.get("property_value")),
+            "property_unit": _stringify(item.get("property_unit")),
+            "enrich_note": _stringify(item.get("enrich_note")),
+        })
+    return out if out else None
+
+
+def build_template(
+    user_query: str,
+    survey_ctx: dict | None,
+    model: str | None,
+    enrich_columns: str | None,
+) -> list[dict]:
+    """LLM: from user_query (and optional survey_ctx, enrich_columns) produce skeleton rows (JSON array)."""
+    from openai import OpenAI
+    api_key = os.environ.get("LITELLM_PROXY_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    base_url = os.environ.get("LITELLM_PROXY_API_BASE") or os.environ.get("OPENAI_API_BASE")
+    if not api_key:
+        raise RuntimeError("LLM enrich requires LITELLM_PROXY_API_KEY or OPENAI_API_KEY.")
+    client = OpenAI(api_key=api_key, base_url=base_url or None)
+    model = model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    topic = (survey_ctx or {}).get("topic") or ""
+    key_concepts = (survey_ctx or {}).get("key_concepts") or []
+    cols_hint = ""
+    if enrich_columns:
+        cols_hint = f"Columns must include exactly these (comma-separated): {enrich_columns}."
+    system = (
+        "You output a single JSON array only. Each element is an object with keys from the canonical "
+        "literature table (material_name, property_name, property_value, property_unit, claim_text, "
+        "source_title, source_url_or_path, enrich_note, enrich_keep). Use empty string for unknown. "
+        "Rows represent expected entries (e.g. per material or per concept). " + cols_hint
+    )
+    user = f"User requirement:\n{user_query}\n\nSurvey topic: {topic}\nKey concepts: {key_concepts}\n\nOutput JSON array of skeleton row objects."
+    resp = client.chat.completions.create(model=model, messages=[{"role": "system", "content": system}, {"role": "user", "content": user}], temperature=0.2)
+    text = (resp.choices[0].message.content or "").strip()
+    # strip markdown code fence
+    if text.startswith("```"):
+        text = re.sub(r"^```\w*\n?", "", text)
+        text = re.sub(r"\n?```\s*$", "", text)
+    import json
+    arr = json.loads(text)
+    if not isinstance(arr, list):
+        raise ValueError("build_template: LLM did not return a JSON array.")
+    return arr
+
+
+def fill_from_evidence(
+    template_rows: list[dict],
+    evidence_rows: list[dict],
+    survey_ctx: dict | None,
+    model: str | None,
+    batch_size: int,
+) -> list[dict]:
+    """Merge evidence into template rows: LLM assigns each evidence to row(s) and fills columns; NA + enrich_note otherwise."""
+    from openai import OpenAI
+    api_key = os.environ.get("LITELLM_PROXY_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    base_url = os.environ.get("LITELLM_PROXY_API_BASE") or os.environ.get("OPENAI_API_BASE")
+    if not api_key:
+        raise RuntimeError("LLM fill requires LITELLM_PROXY_API_KEY or OPENAI_API_KEY.")
+    client = OpenAI(api_key=api_key, base_url=base_url or None)
+    model = model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    topic = (survey_ctx or {}).get("topic") or ""
+    key_concepts = (survey_ctx or {}).get("key_concepts") or []
+    result = [dict(r) for r in template_rows]
+    for i in range(0, len(evidence_rows), batch_size):
+        batch = evidence_rows[i : i + batch_size]
+        system = (
+            "You output a single JSON array of patch objects. Each patch: "
+            '{"template_row_idx": int, "claim_text": str, "source_title": str, "source_url_or_path": str, '
+            '"material_name": str, "property_name": str, "property_value": str, "property_unit": str, "enrich_note": str}. '
+            "Use 'NA' for unknown. Only include patches for evidence that matches a row."
+        )
+        ev_lines = []
+        for j, ev in enumerate(batch):
+            ev_lines.append(
+                f"[{i+j}] claim={ev.get('claim_text') or ev.get('claim') or ''} "
+                f"source={ev.get('source_title') or ''} url={ev.get('source_url_or_path') or ev.get('source_url') or ''}"
+            )
+        user = (
+            f"Survey topic: {topic}\nKey concepts: {key_concepts}\n\n"
+            f"Template rows (index 0..{len(result)-1}):\n"
+            + "\n".join(f"  {k}: {v.get('material_name','')} {v.get('property_name','')}" for k, v in enumerate(result[:50]))
+            + "\n\nEvidence batch:\n" + "\n".join(ev_lines)
+        )
+        try:
+            resp = client.chat.completions.create(model=model, messages=[{"role": "system", "content": system}, {"role": "user", "content": user}], temperature=0.2)
+            text = (resp.choices[0].message.content or "").strip()
+            if text.startswith("```"):
+                text = re.sub(r"^```\w*\n?", "", text)
+                text = re.sub(r"\n?```\s*$", "", text)
+            import json
+            patches = json.loads(text)
+            if not isinstance(patches, list):
+                continue
+            for p in patches:
+                idx = p.get("template_row_idx")
+                if idx is None or not (0 <= idx < len(result)):
+                    continue
+                row = result[idx]
+                for key in ("claim_text", "source_title", "source_url_or_path", "material_name", "property_name", "property_value", "property_unit", "enrich_note"):
+                    if p.get(key) not in (None, ""):
+                        row[key] = p[key]
+        except Exception:
+            for j in range(len(batch)):
+                if i + j < len(evidence_rows):
+                    # mark batch failed on last row touched or append note
+                    pass
+    return result
+
+
+def enrich_rows(
+    rows: list[dict[str, str]],
+    survey_ctx: dict[str, Any],
+    model: str,
+    batch_size: int,
+) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    """Run LLM-based enrich per batch: keep/drop, fill material/property/value/unit, NA, enrich_note.
+
+    Ensures each row has enrich_keep and enrich_note. keep=false from LLM sets enrich_keep to "false".
+    On batch parse/API failure, rows are left unchanged and enrich_keep stays "true" (so not dropped).
+    Returns (enriched rows, stats dict).
+    """
+    stats: dict[str, Any] = {"batches": 0, "batches_failed": 0, "rows_dropped": 0}
+    for field in ("enrich_note", "enrich_keep"):
+        for r in rows:
+            if field not in r:
+                r[field] = ""
+    for r in rows:
+        if r.get("enrich_keep") != "false":
+            r["enrich_keep"] = "true"
+
+    topic = survey_ctx.get("topic") or ""
+    key_concepts = survey_ctx.get("key_concepts") or []
+    kc_str = ", ".join(str(c) for c in key_concepts) if key_concepts else ""
+
+    system = """You are a materials science literature extraction assistant.
+Output ONLY a valid JSON array. No markdown, no explanation.
+Each element: {"idx": <int>, "keep": true|false, "material_name": "...", "property_name": "...", "property_value": "...", "property_unit": "...", "enrich_note": "..."}.
+Rules: If the record is irrelevant to the user request, set keep=false and leave others empty. Otherwise set keep=true; fill fields from the claim/source; use "NA" when unknown; put brief notes in enrich_note."""
+
+    for start in range(0, len(rows), batch_size):
+        batch = rows[start : start + batch_size]
+        stats["batches"] += 1
+        batch_records = [
+            {
+                "idx": start + i,
+                "claim": (r.get("claim_text") or r.get("quote_text") or "")[:800],
+                "source_title": (r.get("source_title") or "")[:300],
+            }
+            for i, r in enumerate(batch)
+        ]
+        user = f"""Request: {topic}. Key concepts: {kc_str or "any"}.
+
+Table columns: material_name, property_name, property_value, property_unit.
+For each record output: keep (true if relevant, false to drop), then fill the four columns; use "NA" if unknown; optional enrich_note.
+
+Records:
+{json.dumps(batch_records, ensure_ascii=False)}"""
+
+        content = _call_llm_enrich_batch(system, user, model)
+        parsed = _parse_enrich_batch_response(content, start) if content else None
+        if not parsed:
+            stats["batches_failed"] += 1
+            for r in batch:
+                r["enrich_note"] = (r.get("enrich_note") or "") + " [enrich batch failed]"
+            continue
+        idx_to_result = {p["idx"]: p for p in parsed}
+        for i, r in enumerate(batch):
+            row_idx = start + i
+            res = idx_to_result.get(row_idx)
+            if not res:
+                continue
+            keep = res.get("keep", True)
+            r["enrich_keep"] = "true" if keep else "false"
+            r["enrich_note"] = res.get("enrich_note") or ""
+            if keep:
+                for field in ("material_name", "property_name", "property_value", "property_unit"):
+                    val = res.get(field)
+                    if val is not None and str(val).strip():
+                        r[field] = str(val).strip()
+                    elif (r.get(field) or "").strip() == "":
+                        r[field] = "NA"
+
+    stats["rows_dropped"] = sum(1 for r in rows if r.get("enrich_keep") == "false")
+    return rows, stats
 
 
 def _auto_discover_tool_outputs(input_paths: list[Path]) -> list[Path]:
@@ -860,12 +1190,62 @@ def main() -> None:
                 return
             normalized_rows = _load_rows(normalized_path)
 
+        # Stage: enrich (optional; only when --enrich and stage is all or enrich)
+        rows_for_dedup: list[dict[str, str]] = normalized_rows
+        enrich_path = _rows_file_for(state_path, "enrich")
+        if args.enrich and args.stage in {"all", "enrich"}:
+            enrich_model = (
+                args.enrich_model
+                or os.environ.get("LIT_ENRICH_MODEL")
+                or "gpt-4o-mini"
+            )
+            survey_ctx = _load_survey_context(input_paths, args.enrich_survey)
+            enriched_rows, enrich_stats = enrich_rows(
+                list(normalized_rows),
+                survey_ctx,
+                enrich_model,
+                args.enrich_batch,
+            )
+            _save_rows(enrich_path, enriched_rows)
+            state["enrich_rows_file"] = str(enrich_path)
+            state["enrich_stats"] = enrich_stats
+            write_json(state_path, state)
+            rows_for_dedup = [r for r in enriched_rows if r.get("enrich_keep") != "false"]
+            append_event(
+                events_path=events_path,
+                status=STATUS_COMPLETED,
+                stage="enrich",
+                message="Enrich stage completed.",
+                payload=enrich_stats,
+            )
+            if args.stage == "enrich":
+                emit_result(
+                    build_result(
+                        status=STATUS_COMPLETED,
+                        stage="enrich",
+                        message="Stage 'enrich' completed.",
+                        result_path=result_path,
+                        payload={
+                            "enrich_rows_file": str(enrich_path),
+                            "enrich_stats": enrich_stats,
+                            "rows_for_dedup": len(rows_for_dedup),
+                        },
+                    )
+                )
+                return
+        elif args.enrich and args.stage in {"dedup", "conflict", "export"}:
+            if enrich_path.exists():
+                enriched_rows = _load_rows(enrich_path)
+                rows_for_dedup = [r for r in enriched_rows if r.get("enrich_keep") != "false"]
+
         # Stage: dedup/all
         deduped_path = _rows_file_for(state_path, "deduped")
         deduped_rows: list[dict[str, str]]
         dropped = 0
         if args.stage in {"all", "dedup"}:
-            deduped_rows, dropped = deduplicate_rows(normalized_rows, dedup_keys)
+            deduped_rows, dropped = if "rows_for_dedup" not in locals() or rows_for_dedup is None:
+        rows_for_dedup = normalized_rows
+    deduplicate_rows(rows_for_dedup, dedup_keys)
             _save_rows(deduped_path, deduped_rows)
             state["deduped_rows_file"] = str(deduped_path)
             state["dedup_stats"] = {
