@@ -30,10 +30,14 @@ Builds one canonical evidence table from structured literature outputs and expor
    - Apply deduplication by configurable keys.
    - Preserve conflicting measurements with explicit conflict metadata.
    - For long runs, use staged/resumable processing (`--state`, `--resume`, `--stage`).
-3. Enrich (optional, when `--enrich` is set)
-   - Run LLM in batches to decide keep/drop per row, fill material_name, property_name, property_value, property_unit (use "NA" when unknown), and optional enrich_note.
-   - Survey context (topic and key_concepts) is read from collected_*.json (survey contract) when available.
+3. Enrich (agent-side fill — no LLM in the script)
+   - After normalize completes, the agent reads `_tmp/lit_data/normalized_rows.json`, writes code to fill
+     material_name / property_name / property_value / property_unit / enrich_keep / enrich_note per row,
+     saves the result to `_tmp/lit_data/enrich_rows.json`, and updates `state["enrich_rows_file"]` in
+     `_tmp/lit_data/state.json`.
+   - Then call `--stage dedup --resume`; the script will auto-load `enrich_rows.json` via `state["enrich_rows_file"]`.
    - Rows with enrich_keep=false are excluded from dedup and export.
+   - Do NOT fabricate values. Do NOT use regex to extract identifiers. Leave unknown fields as "NA".
 4. Export
    - Export canonical rows to `csv` or `jsonl`.
    - Review stdout summary for counts, enrich stats (if used), and conflict statistics.
@@ -44,8 +48,8 @@ Builds one canonical evidence table from structured literature outputs and expor
   - Merge structured input files into one canonical table.
   - Supports field mapping overrides via an external schema config.
   - Supports conflict tagging and deduplication.
-  - Supports optional **enrich** stage (`--enrich`): LLM batch fill of material/property columns and keep/drop using survey topic and key_concepts; requires OpenAI-compatible API (e.g. OPENAI_API_KEY or LITELLM_PROXY_API_KEY).
-  - Supports staged execution (`ingest|normalize|enrich|dedup|conflict|export|all`) with checkpoint/resume.
+  - Enrich is agent-side: agent writes `enrich_rows.json` + updates `state["enrich_rows_file"]`, then calls `--stage dedup --resume`. Pass `--enrich_rows <path>` to override the state path explicitly.
+  - Supports staged execution (`ingest|normalize|dedup|conflict|export|all`) with checkpoint/resume.
 
 ## Tool Usage (via use_skill)
 
@@ -61,11 +65,8 @@ Builds one canonical evidence table from structured literature outputs and expor
   - `--dedup_keys key1,key2,...`
   - `--state _tmp/lit_data/state.json`
   - `--resume`
-  - `--stage ingest|normalize|enrich|dedup|conflict|export|all`
-  - `--enrich` — run LLM-based enrich stage (keep/drop, fill material/property columns; use when input is survey collected.json and you need a material-property table).
-  - `--enrich_model <model>` — model for enrich (default: env LIT_ENRICH_MODEL or gpt-4o-mini).
-  - `--enrich_batch <n>` — rows per LLM batch (default: 40).
-  - `--enrich_survey <path>` — path to collected_*.json for survey context; auto-detected from input if omitted.
+  - `--stage ingest|normalize|dedup|conflict|export|all`
+  - `--enrich_rows <path>` — explicit path to agent-generated enrich_rows.json (overrides state["enrich_rows_file"]).
 
 ## Long-task status contract
 
