@@ -35,7 +35,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # 支持多用户并发：agent 运行在线程池中（默认 2 以降低内存占用，可设 CHAT_AGENT_MAX_WORKERS 覆盖）
-# 设为 1 时仅保留一个 playground 实例（复用 _cached_pg），可显著降低内存，适合内存紧张的单 Pod
 _AGENT_MAX_WORKERS = int(os.environ.get('CHAT_AGENT_MAX_WORKERS', '2'))
 if _AGENT_MAX_WORKERS < 1:
     _AGENT_MAX_WORKERS = 1
@@ -77,46 +76,30 @@ class AgentRunService:
         self._poller_executor = ThreadPoolExecutor(
             max_workers=1, thread_name_prefix='monitor-job-poller'
         )
-        self._cached_pg = None
         self._playgrounds: dict[str, Any] = (
             {}
         )  # session_id -> pg，按 session 隔离，避免 B 的 run 覆盖 A 的 working_dir/SSH
         self._playground_init_done = threading.Event()
 
     def init_playground_sync(self) -> None:
-        """同步初始化默认 playground（tools、MCP、agent），结果缓存在 self._cached_pg；实际 run 按 session_id 用 _get_or_create_playground。"""
+        """预加载 playground 模块与配置，不创建 pg 实例；实际 run 按 session_id 在 _get_or_create_playground 中创建并在结束时 cleanup，避免长期持有导致内存增长。"""
         try:
             importlib.import_module('playground.mat_master.core.playground')
             config_path = _project_root / 'configs' / 'mat_master' / 'config.yaml'
             if not config_path.exists():
                 raise FileNotFoundError(f"Config not found: {config_path}")
-            pg = get_playground_class('mat_master', config_path=config_path)
             run_dir = _project_root / 'runs' / RUN_ID_WEB
             run_dir.mkdir(parents=True, exist_ok=True)
-            pg.set_run_dir(run_dir)
-            pg.setup()
-            self._cached_pg = pg
-            logger.info('MatMaster chat: playground (tools, MCP, agent) initialized.')
+            logger.info('MatMaster chat: playground module and config ready.')
         except Exception as e:
             logger.exception('MatMaster chat playground init failed: %s', e)
-            self._cached_pg = None
         finally:
             self._playground_init_done.set()
 
     def _get_or_create_playground(self, session_id: str) -> Any:
-        """按 session_id 返回或创建 playground，避免多用户共用同一 pg 导致 working_dir/SSH 串台。
-        单 worker 时复用 _cached_pg 以节省内存（同一时刻只有一个 run，caller 会 set_run_dir 隔离工作目录）。
-        """
+        """按 session_id 返回或创建 playground，避免多用户共用同一 pg 导致 working_dir/SSH 串台。run 结束时 pop+cleanup 释放。"""
         if session_id in self._playgrounds:
             return self._playgrounds[session_id]
-        # 单 worker 时复用 _cached_pg，但仍登记到 _playgrounds 以便 run 结束时 pop+cleanup 释放 MCP，避免每新会话内存阶梯增长
-        if _AGENT_MAX_WORKERS == 1 and self._cached_pg is not None:
-            logger.debug(
-                'run_agent_sync: reusing _cached_pg for session_id=%s (single-worker mode)',
-                session_id,
-            )
-            self._playgrounds[session_id] = self._cached_pg
-            return self._cached_pg
         self._playground_init_done.wait(timeout=300)
         importlib.import_module('playground.mat_master.core.playground')
         config_path = _project_root / 'configs' / 'mat_master' / 'config.yaml'
@@ -1213,8 +1196,6 @@ class AgentRunService:
                         logger.warning(
                             'playground cleanup on pop (MCP/session release): %s', e
                         )
-                    if _AGENT_MAX_WORKERS == 1 and pg is self._cached_pg:
-                        self._cached_pg = None
 
     def process_resume_checkpoints(
         self,
