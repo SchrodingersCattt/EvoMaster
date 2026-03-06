@@ -207,10 +207,15 @@ def collect_evidence(
     collected_json: Path,
     tool_outputs_dir: Path,
     topic: str | None = None,
+    facet: str | None = None,
 ) -> dict:
     """
     Scan tool_outputs_dir for mat_sn_* JSON files, extract evidence cards,
     merge into collected_json skeleton, and write it back.
+
+    If facet is provided, it must be one of skeleton["facets"]; all new cards
+    will get that facet. If not provided, new cards keep facet empty (can be
+    filled later by deprecated assign_facet.py for legacy workflows).
 
     Returns a summary dict.
     """
@@ -219,6 +224,16 @@ def collect_evidence(
     if not skeleton:
         t = topic or collected_json.stem.replace("collected_", "").replace("_", " ")
         skeleton = _make_skeleton(t)
+
+    if facet is not None and facet.strip():
+        facets = skeleton.get("facets") or DEFAULT_FACETS
+        if not isinstance(facets, list):
+            return {"status": "error", "message": "skeleton facets is not a list"}
+        if facet.strip() not in facets:
+            return {
+                "status": "error",
+                "message": f"facet '{facet}' is not in skeleton facets: {facets}",
+            }
 
     existing_cards: list[dict] = skeleton.get("evidence_cards", [])
     if not isinstance(existing_cards, list):
@@ -246,6 +261,10 @@ def collect_evidence(
                         continue
                     seen_urls.add(url_key)
                     new_cards.append(card)
+
+    if facet and facet.strip():
+        for c in new_cards:
+            c["facet"] = facet.strip()
 
     # Merge
     skeleton["evidence_cards"] = existing_cards + new_cards
@@ -292,6 +311,14 @@ def main() -> None:
         default=None,
         help="Survey topic (used to create skeleton if --collected_json does not exist).",
     )
+    ap.add_argument(
+        "--facet",
+        default=None,
+        help=(
+            "Assign this facet to all newly collected cards (must be one of skeleton facets). "
+            "Recommended when this batch of retrieval targets a single facet."
+        ),
+    )
     args = ap.parse_args()
 
     # Resolve collected_json path
@@ -318,8 +345,12 @@ def main() -> None:
             (p for p in candidates if p.exists()), candidates[0]
         )
 
-    summary = collect_evidence(collected_json, tool_outputs_dir, topic=args.topic)
+    summary = collect_evidence(
+        collected_json, tool_outputs_dir, topic=args.topic, facet=args.facet
+    )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
+    if summary.get("status") == "error":
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

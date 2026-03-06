@@ -1,12 +1,15 @@
-# collected.json Schema (deep-survey brief mode)
+# collected.json Schema (deep-survey)
 
-When `run_survey.py` is called with `--depth brief`, it outputs a `collected.json` file in `_tmp/surveys/`. This file serves as the structured evidence exchange format for downstream skills such as `lit-data-organizer` and `manuscript-scribe`.
+When `run_survey.py` is called (any `--depth`), it outputs a `collected_<topic>.json` file in `_tmp/surveys/`. This file is the **survey contract**: it carries explicit metadata so downstream tools (e.g. `build_lit_table.py`, finish gate) can decide behaviour from data instead of path heuristics.
 
-## Schema
+## Schema (schema_version 2)
 
 ```json
 {
+  "schema_version": "2",
+  "source_kind": "survey",
   "topic": "string — the survey topic",
+  "key_concepts": ["string — concept to require in evidence", "..."],
   "depth": "brief",
   "facets": ["string — facet name", "..."],
   "evidence_cards": [
@@ -29,10 +32,13 @@ When `run_survey.py` is called with `--depth brief`, it outputs a `collected.jso
 
 | Field | Required | Description |
 |---|---|---|
+| `schema_version` | yes (v2) | `"2"` — contract format; absent in legacy files |
+| `source_kind` | yes (v2) | `"survey"` — downstream tools use this instead of path guessing |
 | `topic` | yes | The survey topic as passed to `--topic` / `--title` |
-| `depth` | yes | Always `"brief"` for this output |
-| `facets` | yes | List of facets used for retrieval (1-2 for brief mode) |
-| `evidence_cards` | yes | List of evidence cards populated by the LLM from retrieval results |
+| `key_concepts` | yes (v2) | Concepts that must appear in evidence (from topic or `--key_concepts`); finish gate checks coverage against this |
+| `depth` | yes | `"brief"`, `"standard"`, or `"deep"` |
+| `facets` | yes | List of facets used for retrieval |
+| `evidence_cards` | yes | List of evidence cards populated from retrieval (e.g. via `collect_evidence.py`) |
 | `evidence_cards[].source_title` | yes | Title of the paper, article, or webpage |
 | `evidence_cards[].source_url` | yes | Canonical URL; prefer `https://doi.org/<DOI>` for papers |
 | `evidence_cards[].year` | yes | Publication year (integer) |
@@ -45,7 +51,10 @@ When `run_survey.py` is called with `--depth brief`, it outputs a `collected.jso
 
 ```json
 {
+  "schema_version": "2",
+  "source_kind": "survey",
   "topic": "Perovskite stability under moisture",
+  "key_concepts": ["Perovskite", "stability", "moisture"],
   "depth": "brief",
   "facets": ["Mechanism", "Methods"],
   "evidence_cards": [
