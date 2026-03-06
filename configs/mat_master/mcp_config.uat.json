@@ -27,7 +27,7 @@
     },
     "mat_struct_db": {
       "transport": "http",
-      "url": "http://chvz1424099.bohrium.tech:50001/mcp",
+      "url": "https://mrdice-uuid1772287253.appspace.uat.bohrium.com/mcp?token=25ec165908184cbf9b6df5c81d58efc7",
       "headers": {}
     },
     "mat_nmr": {
