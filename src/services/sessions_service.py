@@ -299,10 +299,16 @@ class ChatSessionsService:
         """
         请求终止该会话当前正在运行的 agent。
         先通过 Redis 广播（多 worker 时其他进程可收到），再在本进程 set stop event。
+        若启用队列模式且 run 在 Worker，则同时写 Redis stop key，供 Worker 轮询。
         若有活跃 run 则设置 stop event 并返回 True；否则返回 False。
         """
         sid = session_id.strip()
-        get_redis_dao().publish(REDIS_STOP_CHANNEL, sid)
+        redis_dao = get_redis_dao()
+        redis_dao.publish(REDIS_STOP_CHANNEL, sid)
+        # 队列模式：run 在 Worker，Worker 轮询 Redis stop key
+        ctx = redis_dao.get_confirmation_run_context(sid)
+        if ctx and ctx.get('task_id'):
+            redis_dao.set_stop_requested(sid, ctx.get('task_id', ''))
         ev = self._run_stop_events.get(sid)
         if ev is None:
             return False
