@@ -48,11 +48,29 @@ except ImportError:
     is_dangerous_bash_command = None  # evomaster not available in some test envs
     is_dangerous_python_content = None
 
-AUTH_FAILURE_MARKERS: tuple[str, ...] = (
-    "accesskey invalid", "authentication failed", "invalid credentials",
-    "unauthorized", "access denied", "akid", "401", "403",
+# Only STRONG markers trigger the auth-failure gate (system auth, not third-party 403).
+# 403 is excluded: often from anti-scraping, IP/subscription limits, not our credentials.
+AUTH_FAILURE_MARKERS_STRONG: tuple[str, ...] = (
+    "authentication failed",
+    "invalid api key",
+    "invalid accesskey",
+    "accesskey invalid",
+    "akid",
+    "invalid credentials",
+    "unauthorized",
 )
-AUTH_FAILURE_THRESHOLD = 2
+# 401 can indicate system auth; we do not increment on 401 alone to avoid third-party false positives.
+AUTH_FAILURE_MARKERS_WEAK: tuple[str, ...] = ("401",)
+# If observation contains these URL fragments, do not count as auth failure (third-party response).
+AUTH_FAILURE_THIRD_PARTY_DOMAINS: tuple[str, ...] = (
+    "pubs.acs.org",
+    "pmc.ncbi.nlm.nih.gov",
+    "springer.com",
+    "nature.com",
+    "sciencedirect.com",
+    "doi.org",
+)
+AUTH_FAILURE_THRESHOLD = 3
 
 # ── Loop-detection parameters ──────────────────────────────────
 LOOP_WINDOW = 5          # sliding-window size for recent tool fingerprints
@@ -896,9 +914,15 @@ class ToolGuard:
 
         # ── Auth-failure stop gate tracking ─────────────────────
         # Only track MCP tool failures (mat_* tools), not internal tools.
+        # Only STRONG markers count; ignore observations from third-party domains (e.g. 403 from publisher sites).
         if tool_name.startswith("mat_") and not self._auth_failure_locked:
             obs_lower = (observation or "").lower()
-            if any(marker in obs_lower for marker in AUTH_FAILURE_MARKERS):
+            from_third_party = any(
+                domain in obs_lower for domain in AUTH_FAILURE_THIRD_PARTY_DOMAINS
+            )
+            if not from_third_party and any(
+                marker in obs_lower for marker in AUTH_FAILURE_MARKERS_STRONG
+            ):
                 self._auth_failure_count += 1
                 self.logger.warning(
                     "[auth-failure-gate] Auth failure #%d detected in %s output.",
