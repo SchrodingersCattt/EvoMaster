@@ -87,6 +87,7 @@ LANGUAGE_RULE = (
 _DEFAULT_TEMPLATE_PATH = (
     Path(__file__).resolve().parent / 'mat_master_system_prompt.txt'
 )
+_TOOL_RULES_PATH = Path(__file__).resolve().parent / 'tool_rules.txt'
 
 
 def _format_tool_groups(groups: list[tuple[str, str, str]]) -> str:
@@ -189,11 +190,11 @@ def build_mat_master_system_prompt(
     mode_profile: str = 'direct',
     template_text: str | None = None,
 ) -> tuple[str, str, str, str]:
-    """Build the Mat Master system prompt.
+    """Build the Mat Master system prompt (constitution + tool affordance rules).
 
-    Returns (static_prompt, current_date, os_type, shell_type). Caller should append
-    "Today's date: {date} (OS: {os_type}, Shell: {shell_type})" at the very end of the
-    full system prompt so it appears in log tail.
+    Returns (static_prompt, current_date, os_type, shell_type). static_prompt already
+    includes the composed template and tool_rules.txt. Caller should append working
+    directory, citation format, skills meta, and "Today's date: ..." at the end.
 
     - current_date: e.g. '2026-02-07'; if not set, uses today (UTC).
     - tool_groups: default TOOL_GROUPS. For prompt caching, only the last line changes per day.
@@ -219,6 +220,11 @@ def build_mat_master_system_prompt(
         mode_profile=mode_profile,
         tool_groups=tool_groups,
     )
+    # Centralized assembly: append tool affordance rules (single source; placeholders replaced)
+    if _TOOL_RULES_PATH.exists():
+        tool_rules = _TOOL_RULES_PATH.read_text(encoding='utf-8').strip()
+        tool_rules = reg.replace_placeholders(tool_rules)
+        static = static + '\n\n' + tool_rules
     return static, current_date, os_type, shell_type
 
 
