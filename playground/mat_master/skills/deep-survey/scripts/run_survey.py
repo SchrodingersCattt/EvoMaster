@@ -87,6 +87,8 @@ def main() -> None:
         default=None,
         help="Comma-separated key concepts to require in evidence (default: auto from topic)",
     )
+    # Accept but ignore --state (lit-data-organizer uses it; agent may pass it by mistake).
+    ap.add_argument("--state", default=None, help=argparse.SUPPRESS)
     args = ap.parse_args()
 
     topic = args.topic or args.topic_alias
