@@ -175,16 +175,6 @@ class MatMasterAgent(Agent):
         working_dir_info = f"\n\nYou must perform all operations in this working directory; do not change directory. All file operations and commands must be run under: {working_dir_abs}"
         prompt = base + working_dir_info
 
-        # Inject tool rules (fix once, apply every run) so repeated tool errors are avoided.
-        # Placeholders like {{ASYNC_SOFTWARE_LIST}} are replaced with registry values.
-        _tool_rules_path = (
-            Path(__file__).resolve().parent.parent / 'prompts' / 'tool_rules.txt'
-        )
-        if _tool_rules_path.exists():
-            tool_rules = _tool_rules_path.read_text(encoding='utf-8').strip()
-            tool_rules = registry.replace_placeholders(tool_rules)
-            prompt += '\n\n' + tool_rules
-
         # Mandatory citation and output format for survey/manuscript — agent MUST follow this
         _citation_format_path = (
             Path(__file__).resolve().parent.parent
