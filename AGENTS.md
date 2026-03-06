@@ -106,4 +106,5 @@ import sys  # 不要插在常量或代码中间
 - **维护本文件**：在对话或开发过程中，若产生新的、值得固化的约定或逻辑（如架构决策、命名/用法约定、废弃说明等），应适时补充到 AGENTS.md，便于后续遵守。
 - **多 worker 支持**：新增或更改功能需要支持多 worker（多进程/多 Pod 部署）。避免依赖「请求一定落在执行该会话任务的同一进程」的假设；跨 worker 的协调应使用 Redis（或其它共享存储），事件顺序、用户回复等需在「执行 agent 的 worker」上完成注入或回调，而不是依赖「处理 HTTP 的 worker」与「跑任务的 worker」为同一进程。
 - **服务重启**：新增或修改功能时需考虑服务重启场景。进程内内存（如 `SESSIONS`）在重启后会清空；若逻辑依赖跨请求的状态（如会话级鉴权、当前 run 所用资源），应区分「需持久化」与「仅当次 run 有效」：前者落库或共享存储，后者可保留在内存，并确保重启后新请求能从 DB/共享存储恢复必要信息继续工作。
+- **monitor_job 挂起恢复**：为减少长轮询占用 Agent 线程池，`monitor_job` 支持「单次轮询 + 挂起恢复」。配置 Redis 后自动启用。逻辑：`monitor_job` 默认 `max_polls_per_call=1`，未终态时返回 `status=running`；`run_agent_sync` 的 event_callback 检测到后写 checkpoint 到 Redis、登记到 Sorted Set（score=resume_at）、设置 `agent._suspend_requested`，run 挂起并释放线程；后台 poller 每 10s 取到期 checkpoint、Redis 认领锁防重、`try_acquire_session_run` 后提交 `run_agent_sync(..., resume_checkpoint=payload)` 从 checkpoint 的 trajectory 继续执行。多 Pod 下认领锁保证同一 checkpoint 只被一个进程恢复。
 - （可在此补充项目的其他通用约定，如测试、提交信息、目录结构等。）

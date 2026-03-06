@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+import tracemalloc
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
@@ -14,10 +15,15 @@ from src.apis.api_router import api_router
 from src.base.base_res import BaseResponse
 from src.models.health import HealthResponse
 from src.models.root import RootResponse
-from src.services.agent_run_service import get_agent_run_service, init_playground
+from src.services.agent_run_service import (
+    get_agent_run_service,
+    init_playground,
+    monitor_job_resume_poller_loop,
+)
 from src.services.sessions_service import get_sessions_service
 from src.services.user_service import get_user_service
 from src.services.worker_registry_service import get_worker_registry_service
+from src.utils.build_info import get_build_version
 from src.utils.constant import CURRENT_ENV, DB_CONFIG
 from src.utils.exceptions import BaseErrorResponse
 from src.utils.logger import LoggingConfig, setup_logging
@@ -32,12 +38,22 @@ logger.info('SERVICE_ENV=%s', CURRENT_ENV)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
+    # tracemalloc：供 /api/v1/debug/tracemalloc 查看分配与 dump（排查内存）
+    try:
+        tracemalloc.start(10)
+        logger.info('tracemalloc started (nframe=10)')
+    except Exception as e:
+        logger.warning('tracemalloc start skipped: %s', e)
     # 不再在启动时全局把 active 置为 idle：以便客户端重连时在 subscribe 流里能检测到
     # 「DB 为 active 但本进程未在跑」的 stale 会话，推送 run_interrupted 并可选重跑。
     # MatMaster Chat：提前初始化 playground，首条 /chat/send 无需等待
     try:
         await init_playground()
-        logger.info('MatMaster chat playground initialized in lifespan.')
+        logger.info(
+            'MatMaster chat playground initialized in lifespan. worker_id=%s version=%s',
+            get_worker_id(),
+            get_build_version(),
+        )
     except Exception as e:
         logger.warning('MatMaster chat playground init skipped in lifespan: %s', e)
     # 多 worker 时：Redis 订阅线程，使任意 worker 收到的 stop 能通知到跑 run 的 worker
@@ -58,7 +74,9 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.debug('Worker heartbeat skipped: %s', e)
+                logger.warning(
+                    'Worker heartbeat skipped worker_id=%s: %s', get_worker_id(), e
+                )
 
     try:
         get_worker_registry_service().set_worker_alive(get_worker_id())
@@ -66,7 +84,18 @@ async def lifespan(app: FastAPI):
         logger.info('Worker heartbeat task started in lifespan.')
     except Exception as e:
         logger.warning('Worker heartbeat start skipped: %s', e)
+    monitor_job_poller_task = None
+    try:
+        monitor_job_poller_task = asyncio.create_task(monitor_job_resume_poller_loop())
+    except Exception as e:
+        logger.warning('Monitor job resume poller start skipped: %s', e)
     yield
+    if monitor_job_poller_task is not None:
+        monitor_job_poller_task.cancel()
+        try:
+            await monitor_job_poller_task
+        except asyncio.CancelledError:
+            pass
     if worker_heartbeat_task is not None:
         worker_heartbeat_task.cancel()
         try:
@@ -74,23 +103,37 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
     # 优雅退出：最多等待 30s 让当前 agent 任务结束，再关闭线程池
+    worker_id = get_worker_id()
+    logger.info(
+        'Lifespan shutdown started worker_id=%s version=%s',
+        worker_id,
+        get_build_version(),
+    )
     try:
         svc = get_agent_run_service()
         executor = svc.get_executor()
+        poller_executor = svc.get_poller_executor()
         logger.info('Shutting down: waiting for agent executor (max 30s)...')
         loop = asyncio.get_event_loop()
+        try:
+            poller_executor.shutdown(wait=True)
+            logger.info('Poller executor shut down. worker_id=%s', worker_id)
+        except Exception as e:
+            logger.warning('Poller executor shutdown skip: %s', e)
         try:
             await asyncio.wait_for(
                 loop.run_in_executor(None, lambda: executor.shutdown(wait=True)),
                 timeout=30.0,
             )
-            logger.info('Agent executor shut down.')
+            logger.info('Agent executor shut down. worker_id=%s', worker_id)
         except asyncio.TimeoutError:
             logger.warning(
-                'Agent executor shutdown timed out after 30s, proceeding with exit.'
+                'Agent executor shutdown timed out after 30s, proceeding with exit. worker_id=%s',
+                worker_id,
             )
     except Exception as e:
-        logger.warning('Graceful shutdown skip: %s', e)
+        logger.warning('Graceful shutdown skip worker_id=%s: %s', worker_id, e)
+    logger.info('Lifespan shutdown finished worker_id=%s', worker_id)
 
 
 app = FastAPI(

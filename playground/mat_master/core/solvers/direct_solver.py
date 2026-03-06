@@ -226,7 +226,9 @@ Output the JSON object only (decision + rationale).'''
         task_description: str = '',
         task_id: str = 'direct_task',
         task: Optional[TaskInstance] = None,
+        append_result: bool = True,
     ) -> dict[str, Any]:
+        """执行任务：按路由选择 SkillEvolutionExp 或 WorkerExp，透传 append_result 避免对话场景下 results 无限增长。"""
         if task is not None:
             desc = task.description or ''
             tid = task.task_id
@@ -243,7 +245,7 @@ Output the JSON object only (decision + rationale).'''
 
         self.logger.info('[Direct] Route %s: %s', route, (desc[:80] if desc else ''))
         if task is not None:
-            result = sub_exp.run(task=task)
+            result = sub_exp.run(task=task, append_result=append_result)
         else:
-            result = sub_exp.run(desc, task_id=tid)
+            result = sub_exp.run(desc, task_id=tid, append_result=append_result)
         return result

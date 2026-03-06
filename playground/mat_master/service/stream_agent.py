@@ -118,7 +118,14 @@ class StreamingMatMasterAgent(MatMasterAgent):
             if isinstance(msg.content, dict)
             else {'message': msg.content or ''}
         )
-        payload: dict = {'id': msg.tool_call_id, 'name': msg.name, 'result': result}
+        meta = getattr(msg, 'meta', None) or {}
+        info = meta.get('info') or {}
+        payload: dict = {
+            'id': msg.tool_call_id,
+            'name': msg.name,
+            'result': result,
+            'info': info,
+        }
         # report_url 已在 result 内（agent 写入 observation['report_url']），不再重复写顶层
         self._emit('ToolExecutor', 'tool_result', payload)
 

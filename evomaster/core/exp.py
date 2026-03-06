@@ -58,6 +58,7 @@ class BaseExp:
         task_id: str = 'exp_001',
         task: Optional[TaskInstance] = None,
         images: Optional[list[str]] = None,
+        append_result: bool = True,
     ) -> dict:
         """运行一次实验。
 
@@ -68,6 +69,8 @@ class BaseExp:
             task_id: 任务 ID（task 为 None 时使用）
             task: 可选，已有 TaskInstance（传入时忽略 task_description、task_id、images）
             images: 可选，图片文件路径列表（多模态任务）
+            append_result: 是否将本次 trajectory 追加到 self.results（默认 True）。
+                对话/流式等复用同一 Exp 的场景应传 False，避免 self.results 无限增长导致内存泄漏。
 
         Returns:
             运行结果字典
@@ -90,7 +93,8 @@ class BaseExp:
             'steps': len(trajectory.steps),
             'trajectory': trajectory,
         }
-        self.results.append(result)
+        if append_result:
+            self.results.append(result)
         return {
             'trajectory': trajectory,
             'status': trajectory.status,

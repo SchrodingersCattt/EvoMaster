@@ -105,12 +105,15 @@ _MONITOR_LLM_DECISION_PROMPT = """你是科学计算作业监控专家，分析�
   "decision": "continue" | "terminate",
   "reason": "简洁的中文原因（<30字）",
   "severity": "low" | "medium" | "high",
-  "confidence": 0.0-1.0
+  "confidence": 0.0-1.0,
+  "suggested_poll_interval_seconds": 30
 }}
+
+suggested_poll_interval_seconds（可选）：挂起恢复场景下建议的下次轮询间隔（秒），仅当 decision 为 continue 时生效。范围 30-300。长时间稳定运行（如 MD 已跑很久、SCF 迭代平稳）可建议 120-300 以降低轮询频率；刚启动或关键阶段可建议 30-60。不填或无效则使用默认 30。
 
 关键判断点：
 - 数值异常（NaN、Inf）→ terminate
-- 致命错误（Fatal Error、Segmentation Fault）→ terminate  
+- 致命错误（Fatal Error、Segmentation Fault）→ terminate
 - 死循环（长时间无进展）→ terminate
 - 任务已完成（达到目标步数/时间）→ terminate（正常完成）
 - 正常迭代收敛中 → continue
@@ -204,6 +207,7 @@ def _parse_llm_decision(raw: str | None) -> dict[str, Any]:
         'reason': 'LLM 无明确终止信号，继续监控。',
         'severity': 'low',
         'confidence': 0.5,
+        'suggested_poll_interval_seconds': None,
         'raw': raw or '',
         'parse_error': None,
     }
@@ -232,13 +236,23 @@ def _parse_llm_decision(raw: str | None) -> dict[str, Any]:
         except (TypeError, ValueError):
             confidence = 0.5
         confidence = max(0.0, min(1.0, confidence))
-        reason = str(payload.get('reason') or parsed['reason']).strip() or parsed['reason']
+        reason = (
+            str(payload.get('reason') or parsed['reason']).strip() or parsed['reason']
+        )
+        suggested_raw = payload.get('suggested_poll_interval_seconds')
+        try:
+            suggested = int(float(suggested_raw)) if suggested_raw is not None else None
+            if suggested is not None:
+                suggested = max(30, min(300, suggested))
+        except (TypeError, ValueError):
+            suggested = None
         parsed.update(
             {
                 'decision': decision,
                 'reason': reason,
                 'severity': severity,
                 'confidence': confidence,
+                'suggested_poll_interval_seconds': suggested,
                 'parse_error': None,
             }
         )
@@ -339,24 +353,28 @@ def run_monitor_decision_once(
     if bohr_job_id:
         # 尝试下载多个可能的日志文件并合并（扩展列表，覆盖更多场景）
         log_files = [
-            'log',                    # Bohrium 调度日志
-            'md_simulation.log',      # DPA MD 日志
-            'relaxation.log',         # DPA 弛豫日志
-            'output.log',             # 通用输出日志
-            'OUTCAR',                 # VASP
-            'OUT.ABACUS',             # ABACUS
-            'log.lammps',             # LAMMPS
-            'running_scf.log',        # ABACUS SCF
-            'running_md.log',         # ABACUS MD
+            'log',  # Bohrium 调度日志
+            'md_simulation.log',  # DPA MD 日志
+            'relaxation.log',  # DPA 弛豫日志
+            'output.log',  # 通用输出日志
+            'OUTCAR',  # VASP
+            'OUT.ABACUS',  # ABACUS
+            'log.lammps',  # LAMMPS
+            'running_scf.log',  # ABACUS SCF
+            'running_md.log',  # ABACUS MD
         ]
         combined_text = ''
         downloaded_files = []
-        
+
         for log_name in log_files:
             tmp_path: Path | None = None
             try:
-                tmp_path = Path(tempfile.mktemp(suffix=f'_{log_name.replace(".", "_")}'))
-                download_job_file(log_name, bohr_job_id, tmp_path, access_key=access_key)
+                tmp_path = Path(
+                    tempfile.mktemp(suffix=f'_{log_name.replace(".", "_")}')
+                )
+                download_job_file(
+                    log_name, bohr_job_id, tmp_path, access_key=access_key
+                )
                 # 读取完整文件内容（不截断）
                 text = tmp_path.read_text(encoding='utf-8', errors='ignore')
                 if text and text.strip():
@@ -374,7 +392,7 @@ def run_monitor_decision_once(
                     except OSError:
                         pass
                 continue
-        
+
         if combined_text:
             log_tail = combined_text
             log_file = f'bohrium://jobs/{bohr_job_id}/[{",".join(downloaded_files)}]'
@@ -388,7 +406,7 @@ def run_monitor_decision_once(
             log_file = f'{log_file},injected:{injected_path}'
         else:
             log_file = f'injected:{injected_path}'
-    
+
     # 在这里统一截断到最大长度（只保留最后 _LOG_TAIL_MAX_CHARS 个字符）
     snapshot = _build_monitor_snapshot(
         job_id=job_id,
@@ -412,6 +430,7 @@ def run_monitor_decision_once(
         'snapshot': snapshot,
         'decision': decision,
     }
+
 
 # ---------------------------------------------------------------------------
 # Log helpers
@@ -668,6 +687,7 @@ def _sftp_push_directory(
 # Progressive LLM decision schedule: 前密后疏（刚投递时频率高，随后逐渐拉长）
 # ---------------------------------------------------------------------------
 
+
 def _llm_decision_interval_at_poll(poll_index: int, base_interval: int) -> int:
     """Return the effective decision_check_interval at this poll (progressive schedule).
 
@@ -701,11 +721,16 @@ def _run_lifecycle(
     llm_model_alias: str | None = None,
     llm_timeout_seconds: int = _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS,
     decision_check_interval: int = 10,
+    max_polls_per_call: int | None = None,
 ) -> dict[str, Any]:
     is_ssh = isinstance(session, SSHSession)
 
     current_job_id = job_id
-    max_polls = 720
+    max_polls = (
+        min(720, max(1, int(max_polls_per_call)))
+        if max_polls_per_call is not None
+        else 720
+    )
     unknown_count = 0
     max_unknown = 3
     failure_confirm_count = 0
@@ -723,8 +748,14 @@ def _run_lifecycle(
             )
         )
 
-        if llm_decision_mode != 'off' and status not in TERMINAL_SUCCESS and status not in TERMINAL_FAILURE:
-            effective_interval = _llm_decision_interval_at_poll(polls, max(1, decision_check_interval))
+        if (
+            llm_decision_mode != 'off'
+            and status not in TERMINAL_SUCCESS
+            and status not in TERMINAL_FAILURE
+        ):
+            effective_interval = _llm_decision_interval_at_poll(
+                polls, max(1, decision_check_interval)
+            )
             if polls == 0 or polls % effective_interval == 0:
                 try:
                     decision_data = run_monitor_decision_once(
@@ -894,12 +925,42 @@ def _run_lifecycle(
         # -- Still running: reset failure counter --
         failure_confirm_count = 0
         unknown_count = 0
-        time.sleep(poll_interval)
+        # 已达本次轮询上限且将返回 running（挂起恢复）时不 sleep，尽快返回；否则 sleep 后再下一轮
+        if max_polls_per_call is None or (polls + 1) < max_polls:
+            time.sleep(poll_interval)
         polls += 1
 
-    # ── Loop ended: either confirmed failure (break) or max_polls exceeded (timeout) ──
-    # If we exited because polls >= max_polls, job was still "Running" — treat as timeout, not failure.
+    # ── Loop ended: either confirmed failure (break) or max_polls exceeded ──
+    # If we exited because polls >= max_polls, job was still "Running".
     if failure_confirm_count < _MAX_FAILURE_CONFIRMS:
+        # 单次轮询上限（挂起恢复）：返回 running，由调度器定时恢复后再次调用；间隔可由 LLM 建议
+        if max_polls_per_call is not None and polls >= max_polls:
+            effective_interval = poll_interval
+            if last_llm_decision and isinstance(
+                last_llm_decision.get('suggested_poll_interval_seconds'), (int, float)
+            ):
+                try:
+                    effective_interval = max(
+                        30,
+                        min(
+                            300,
+                            int(last_llm_decision['suggested_poll_interval_seconds']),
+                        ),
+                    )
+                except (TypeError, ValueError):
+                    pass
+            return {
+                'status': 'running',
+                'job_id': current_job_id,
+                'bohr_job_id': bohr_job_id,
+                'llm_decision': last_llm_decision,
+                'llm_decision_history': llm_decision_history,
+                'message': (
+                    f"Job {current_job_id} still running after {polls} poll(s). "
+                    f"Re-call monitor_job with the same job_id in about {effective_interval} seconds to continue."
+                ),
+                'poll_interval': effective_interval,
+            }
         return {
             'status': 'timeout',
             'job_id': current_job_id,
@@ -908,8 +969,8 @@ def _run_lifecycle(
             'llm_decision_history': llm_decision_history,
             'message': (
                 f"Job {current_job_id} still running after {polls} polls (max {max_polls}). "
-                "Monitor timed out; job may still be running on Bohrium. "
-                "Re-call monitor_job with the same job_id to continue, or check the job on Bohrium."
+                'Monitor timed out; job may still be running on Bohrium. '
+                'Re-call monitor_job with the same job_id to continue, or check the job on Bohrium.'
             ),
         }
 
@@ -1025,7 +1086,7 @@ class MonitorJobParams(BaseToolParams):
     llm_decision_mode: str = Field(
         default='auto_terminate',
         description=(
-            "LLM 决策模式：off(关闭) | advise(仅给建议，不终止) | auto_terminate(判定异常时尝试终止 Bohrium 作业)"
+            'LLM 决策模式：off(关闭) | advise(仅给建议，不终止) | auto_terminate(判定异常时尝试终止 Bohrium 作业)'
         ),
     )
     llm_model_alias: str | None = Field(
@@ -1048,6 +1109,14 @@ class MonitorJobParams(BaseToolParams):
             '任务目标/意图描述，用于帮助 LLM 判断任务是否完成或异常。'
             '**MANDATORY**: 直接传入用户的原始查询（ORIGINAL TASK）。'
             '例如：用户输入"石墨烯建模并进行5ps nvt md"，则传入 task_intent="石墨烯建模并进行5ps nvt md"。'
+        ),
+    )
+    max_polls_per_call: int | None = Field(
+        default=1,
+        description=(
+            '单次调用最多轮询次数。1 表示每次只查一次状态，未终态则返回 status=running，'
+            '由挂起恢复调度器在 poll_interval 秒后自动继续（推荐，避免长时间占用 worker）。'
+            'None 或 0 表示不限制，直到终态或总轮数上限（旧行为）。'
         ),
     )
 
@@ -1086,6 +1155,9 @@ class MonitorJobTool(BaseTool):
             if not access_key:
                 access_key = os.environ.get('BOHRIUM_ACCESS_KEY')
 
+        max_ppc = params.max_polls_per_call
+        if max_ppc is not None and max_ppc <= 0:
+            max_ppc = None
         result = _run_lifecycle(
             job_id=params.job_id,
             software=params.software,
@@ -1098,8 +1170,12 @@ class MonitorJobTool(BaseTool):
             task_intent=params.task_intent,
             llm_decision_mode=(params.llm_decision_mode or 'off').strip().lower(),
             llm_model_alias=params.llm_model_alias,
-            llm_timeout_seconds=max(5, int(params.llm_timeout_seconds or _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS)),
+            llm_timeout_seconds=max(
+                5,
+                int(params.llm_timeout_seconds or _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS),
+            ),
             decision_check_interval=max(1, int(params.decision_check_interval or 1)),
+            max_polls_per_call=max_ppc,
         )
 
         output = json.dumps(result, indent=2, ensure_ascii=False)

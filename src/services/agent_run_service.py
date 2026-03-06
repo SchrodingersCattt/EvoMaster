@@ -1,7 +1,9 @@
 """Agent 执行服务：playground 初始化、线程池、run_agent_sync。"""
 
 import asyncio
+import gc
 import importlib
+import json
 import logging
 import os
 import queue
@@ -9,6 +11,7 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime as dt
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Protocol, runtime_checkable
@@ -20,18 +23,20 @@ from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_dir_to_oss
+from src.dao.redis_dao import get_redis_dao
 from src.services.bohrium_node_service import get_bohrium_node_service
 from src.services.chat_history import ChatHistoryConverter
 from src.services.quota_service import use_quota
 from src.services.sessions_service import SESSIONS, get_sessions_service
 from src.services.user_service import UserService
-from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID
+from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, REDIS_URL
+from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# 支持多用户并发：agent 运行在线程池中
-_AGENT_MAX_WORKERS = int(os.environ.get('CHAT_AGENT_MAX_WORKERS', '4'))
+# 支持多用户并发：agent 运行在线程池中（默认 2 以降低内存占用，可设 CHAT_AGENT_MAX_WORKERS 覆盖）
+_AGENT_MAX_WORKERS = int(os.environ.get('CHAT_AGENT_MAX_WORKERS', '2'))
 if _AGENT_MAX_WORKERS < 1:
     _AGENT_MAX_WORKERS = 1
 
@@ -68,34 +73,32 @@ class AgentRunService:
     def __init__(self, sessions_service=None):
         self._sessions_service = sessions_service or get_sessions_service()
         self._executor = ThreadPoolExecutor(max_workers=_AGENT_MAX_WORKERS)
-        self._cached_pg = None
+        # 独立单线程池供 monitor_job 恢复轮询使用，避免与 agent 争用导致 resume 迟迟不执行
+        self._poller_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix='monitor-job-poller'
+        )
         self._playgrounds: dict[str, Any] = (
             {}
         )  # session_id -> pg，按 session 隔离，避免 B 的 run 覆盖 A 的 working_dir/SSH
         self._playground_init_done = threading.Event()
 
     def init_playground_sync(self) -> None:
-        """同步初始化默认 playground（tools、MCP、agent），结果缓存在 self._cached_pg；实际 run 按 session_id 用 _get_or_create_playground。"""
+        """预加载 playground 模块与配置，不创建 pg 实例；实际 run 按 session_id 在 _get_or_create_playground 中创建并在结束时 cleanup，避免长期持有导致内存增长。"""
         try:
             importlib.import_module('playground.mat_master.core.playground')
             config_path = _project_root / 'configs' / 'mat_master' / 'config.yaml'
             if not config_path.exists():
                 raise FileNotFoundError(f"Config not found: {config_path}")
-            pg = get_playground_class('mat_master', config_path=config_path)
             run_dir = _project_root / 'runs' / RUN_ID_WEB
             run_dir.mkdir(parents=True, exist_ok=True)
-            pg.set_run_dir(run_dir)
-            pg.setup()
-            self._cached_pg = pg
-            logger.info('MatMaster chat: playground (tools, MCP, agent) initialized.')
+            logger.info('MatMaster chat: playground module and config ready.')
         except Exception as e:
             logger.exception('MatMaster chat playground init failed: %s', e)
-            self._cached_pg = None
         finally:
             self._playground_init_done.set()
 
     def _get_or_create_playground(self, session_id: str) -> Any:
-        """按 session_id 返回或创建 playground，避免多用户共用同一 pg 导致 working_dir/SSH 串台。"""
+        """按 session_id 返回或创建 playground，避免多用户共用同一 pg 导致 working_dir/SSH 串台。run 结束时 pop+cleanup 释放。"""
         if session_id in self._playgrounds:
             return self._playgrounds[session_id]
         self._playground_init_done.wait(timeout=300)
@@ -115,6 +118,10 @@ class AgentRunService:
     def get_executor(self) -> ThreadPoolExecutor:
         """返回用于运行 agent 的线程池，供 run_in_executor 使用。"""
         return self._executor
+
+    def get_poller_executor(self) -> ThreadPoolExecutor:
+        """返回仅用于 monitor_job 恢复轮询的线程池，不与 agent 争用。"""
+        return self._poller_executor
 
     def _get_run_workspace_path(
         self, run_id: str, task_id: str | None = None
@@ -241,20 +248,23 @@ class AgentRunService:
         reply_queue: ReplyQueueLike | None,
         task_id: str,
         invocation_id: str | None = None,
+        resume_checkpoint: dict | None = None,
     ) -> None:
         """在后台线程中执行 agent，由 stream 层 run_in_executor(executor, self.run_agent_sync, ...) 调用。
         reply_queue 供 planner_ask 与 confirmation_request（ask_human）共用，POST /confirmation_reply 写入。
+        resume_checkpoint 非空时表示从 monitor_job 挂起恢复，使用 checkpoint 中的 trajectory 与 task_id 等。
         """
         prompt_preview = (
             (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
         )
         logger.info(
-            'run_agent_sync start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s',
+            'run_agent_sync start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s worker_id=%s',
             session_id,
             task_id,
             mode,
             len(user_prompt),
             prompt_preview,
+            get_worker_id(),
         )
 
         # 仅在 workspace 真有新/改/删文件时才上传：用快照比对，并用短防抖避免每次 tool 都扫目录
@@ -263,6 +273,8 @@ class AgentRunService:
         ]
         _last_workspace_check_time: list[float] = [0.0]
         _ssh_attached = False
+        # 供 event_callback 内挂起时设置 agent._suspend_requested（run 前会赋值为 pg.agent）
+        _agent_ref: list[Any] = [None]
 
         def event_callback(source: str, event_type: str, content: Any) -> None:
             payload = {
@@ -326,6 +338,128 @@ class AgentRunService:
                     task_id,
                     _ssh_attached,
                 )
+                # monitor_job 挂起恢复：先处理（不依赖 workspace），避免被 _ssh_attached 的 return 跳过
+                res = content if isinstance(content, dict) else {}
+                if (res.get('name') or '') == 'monitor_job':
+                    result = res.get('result')
+                    info = res.get('info') or {}
+                    # status 优先从 tool 的 meta.info 取（monitor_job 返回的 info 含 status）；其次从 result 取；若 result 为 {'message': json_str} 则解析 JSON
+                    status = info.get('status') if isinstance(info, dict) else None
+                    if status is None and isinstance(result, dict):
+                        status = result.get('status')
+                    if status is None and isinstance(result, dict):
+                        raw = result.get('message')
+                        if isinstance(raw, str) and raw.strip().startswith('{'):
+                            try:
+                                parsed = json.loads(raw)
+                                if isinstance(parsed, dict):
+                                    status = parsed.get('status')
+                                    result = parsed
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                    logger.info(
+                        'run_agent_sync: monitor_job tool_result session_id=%s status=%s',
+                        session_id,
+                        status,
+                    )
+                    if (status or '') == 'running':
+                        redis_dao = get_redis_dao()
+                        if redis_dao.create_client():
+                            try:
+                                # result 可能仍是 {'message': json_str}，需解析以取 poll_interval/job_id
+                                run_result = result
+                                if (
+                                    isinstance(result, dict)
+                                    and 'poll_interval' not in result
+                                    and 'message' in result
+                                ):
+                                    raw = result.get('message')
+                                    if isinstance(raw, str) and raw.strip().startswith(
+                                        '{'
+                                    ):
+                                        try:
+                                            run_result = json.loads(raw)
+                                        except (json.JSONDecodeError, TypeError):
+                                            run_result = result
+                                events_table = get_chat_events_table()
+                                all_ev = (
+                                    (events_table.get_session_events(session_id))
+                                    if events_table
+                                    else []
+                                ) or []
+                                trajectory = (
+                                    ChatHistoryConverter.events_to_dialog_messages(
+                                        all_ev
+                                    )
+                                )
+                                poll_interval = int(
+                                    (
+                                        run_result.get('poll_interval')
+                                        if isinstance(run_result, dict)
+                                        else None
+                                    )
+                                    or 30
+                                )
+                                poll_interval = max(10, min(300, poll_interval))
+                                checkpoint_id = uuid.uuid4().hex
+                                resume_at = time.time() + poll_interval
+                                payload = {
+                                    'checkpoint_id': checkpoint_id,
+                                    'session_id': session_id,
+                                    'task_id': task_id,
+                                    'invocation_id': invocation_id,
+                                    'trajectory': trajectory,
+                                    'resume_at': resume_at,
+                                    'reason': 'monitor_job_running',
+                                    'extra': {
+                                        'job_id': (
+                                            (
+                                                run_result.get('job_id')
+                                                if isinstance(run_result, dict)
+                                                else None
+                                            )
+                                            or info.get('job_id')
+                                        ),
+                                        'bohr_job_id': (
+                                            (
+                                                run_result.get('bohr_job_id')
+                                                if isinstance(run_result, dict)
+                                                else None
+                                            )
+                                            or info.get('bohr_job_id')
+                                        ),
+                                        'poll_interval': poll_interval,
+                                    },
+                                }
+                                if redis_dao.set_checkpoint(
+                                    checkpoint_id, payload
+                                ) and redis_dao.zadd_resume_checkpoint(
+                                    resume_at, checkpoint_id
+                                ):
+                                    _suspend_poll_interval_ref[0] = poll_interval
+                                    _suspend_resume_at_ref[0] = resume_at
+                                    agent = _agent_ref[0]
+                                    if agent is not None:
+                                        agent._suspend_requested = True
+                                    logger.info(
+                                        'run_agent_sync: monitor_job suspend checkpoint_id=%s session_id=%s task_id=%s resume_at=%s worker_id=%s',
+                                        checkpoint_id,
+                                        session_id,
+                                        task_id,
+                                        resume_at,
+                                        get_worker_id(),
+                                    )
+                            except Exception as e:
+                                logger.warning(
+                                    'run_agent_sync: monitor_job suspend failed: %s',
+                                    e,
+                                    exc_info=True,
+                                )
+                        else:
+                            logger.debug(
+                                'run_agent_sync: monitor_job suspend skipped (no Redis) session_id=%s',
+                                session_id,
+                            )
                 # 当前 run 使用远程节点时，工作目录在节点上，本地 workspace 无新文件，跳过上传避免阻塞
                 if _ssh_attached:
                     logger.info(
@@ -382,6 +516,13 @@ class AgentRunService:
                 )
 
         pg_for_run = None
+        _suspended_ref = [
+            False
+        ]  # 挂起时 finally 不发 end，由发送流从 Redis 收恢复 run 的 end
+        _suspend_poll_interval_ref = [
+            None
+        ]  # 挂起时写入，用于 suspended 事件里提示用户下次恢复时间
+        _suspend_resume_at_ref = [None]
         try:
             if not self._playground_init_done.is_set():
                 logger.info(
@@ -841,31 +982,45 @@ class AgentRunService:
             )
             event_callback('MatMaster', 'exp_run', exp_name)
 
-            # 多轮对话：从 DB 取历史事件，转为 dialog_history，通过 task.meta 传入
-            history_events = []
-            try:
-                events_table = get_chat_events_table()
-                if events_table:
-                    all_events = events_table.get_session_events(session_id) or []
-                    if (
-                        all_events
-                        and all_events[-1].get('source') == 'User'
-                        and all_events[-1].get('type') == 'query'
-                    ):
-                        history_events = all_events[:-1]
-                    else:
-                        history_events = all_events
-                    if len(history_events) > _DIALOG_HISTORY_MAX_EVENTS:
-                        history_events = history_events[-_DIALOG_HISTORY_MAX_EVENTS:]
-            except Exception as e:
-                logger.debug(
-                    'run_agent_sync: get_session_events for history failed: %s', e
+            # 多轮对话：恢复时用 checkpoint.trajectory，否则从 DB 取历史事件
+            if resume_checkpoint:
+                dialog_history = list(resume_checkpoint.get('trajectory') or [])
+                user_prompt = (resume_checkpoint.get('extra') or {}).get(
+                    'synthetic_prompt'
+                ) or '请继续监控作业，再次调用 monitor_job 查看状态。'
+                # 释放 payload 内 trajectory 引用，降低 resume 运行峰值内存（已复制到 dialog_history）
+                try:
+                    resume_checkpoint['trajectory'] = None
+                except Exception:
+                    pass
+            else:
+                history_events = []
+                try:
+                    events_table = get_chat_events_table()
+                    if events_table:
+                        all_events = events_table.get_session_events(session_id) or []
+                        if (
+                            all_events
+                            and all_events[-1].get('source') == 'User'
+                            and all_events[-1].get('type') == 'query'
+                        ):
+                            history_events = all_events[:-1]
+                        else:
+                            history_events = all_events
+                        if len(history_events) > _DIALOG_HISTORY_MAX_EVENTS:
+                            history_events = history_events[
+                                -_DIALOG_HISTORY_MAX_EVENTS:
+                            ]
+                except Exception as e:
+                    logger.debug(
+                        'run_agent_sync: get_session_events for history failed: %s',
+                        e,
+                    )
+                dialog_history = (
+                    ChatHistoryConverter.events_to_dialog_messages(history_events)
+                    if history_events
+                    else []
                 )
-            dialog_history = (
-                ChatHistoryConverter.events_to_dialog_messages(history_events)
-                if history_events
-                else []
-            )
             if dialog_history:
                 logger.debug(
                     'run_agent_sync: multi-turn dialog_history session_id=%s messages=%s',
@@ -878,7 +1033,8 @@ class AgentRunService:
                 description=user_prompt,
                 meta={'dialog_history': dialog_history},
             )
-            exp.run(task=task)
+            _agent_ref[0] = pg.agent
+            run_result = exp.run(task=task, append_result=False)
             if stop_event.is_set():
                 logger.info(
                     'run_agent_sync: task cancelled by user session_id=%s task_id=%s',
@@ -886,6 +1042,27 @@ class AgentRunService:
                     task_id,
                 )
                 event_callback('System', 'cancelled', 'Task cancelled by user.')
+            elif run_result.get('status') == 'suspended':
+                _suspended_ref[0] = True
+                logger.info(
+                    'run_agent_sync: task suspended (monitor_job), session_id=%s task_id=%s',
+                    session_id,
+                    task_id,
+                )
+                # 把下次恢复时间吐给用户
+                content = ''
+                pi = _suspend_poll_interval_ref[0]
+                ra = _suspend_resume_at_ref[0]
+                if pi is not None and pi > 0:
+                    if pi < 60:
+                        content = f'将在约 {int(pi)} 秒后自动继续监控'
+                    else:
+                        content = f'将在约 {int(pi) // 60} 分钟后自动继续监控'
+                    if ra is not None:
+                        content += (
+                            f'（下次检查约 {dt.fromtimestamp(ra).strftime("%H:%M")}）'
+                        )
+                event_callback('System', 'suspended', content)
             else:
                 logger.info(
                     'run_agent_sync: task done session_id=%s task_id=%s',
@@ -988,22 +1165,151 @@ class AgentRunService:
                             exc_info=True,
                         )
             self._sessions_service.clear_stop_event(session_id)
-            self._sessions_service.release_session_run(session_id)
-            try:
-                event_callback(
-                    'System',
-                    'end',
-                    'Task completed, SSE connection can be closed.',
-                )
-            except Exception:
-                pass
-            logger.debug(
-                'run_agent_sync end: session_id=%s task_id=%s',
+            logger.info(
+                'run_agent_sync end: session_id=%s task_id=%s suspended=%s worker_id=%s',
                 session_id,
                 task_id,
+                _suspended_ref[0],
+                get_worker_id(),
             )
-            # run 结束后该 session 的后续请求仅为读历史/workspace（DB/OSS），不再需要 pg，及时释放避免内存常驻
-            self._playgrounds.pop(session_id, None)
+            self._sessions_service.release_session_run(session_id)
+            if not _suspended_ref[0]:
+                try:
+                    event_callback(
+                        'System',
+                        'end',
+                        'Task completed, SSE connection can be closed.',
+                    )
+                except Exception:
+                    pass
+            # run 结束后释放当前 agent 上的 trajectory/current_dialog 及大字符串，避免 pg.agent 长期持有导致多轮对话内存阶梯增长
+            if pg_for_run is not None:
+                try:
+                    a = getattr(pg_for_run, 'agent', None)
+                    if a is not None:
+                        a.trajectory = None
+                        a.current_dialog = None
+                        a._initial_system_prompt = None
+                        a._initial_user_prompt = None
+                except Exception:
+                    pass
+            # run 真正结束（非 suspend）时释放；suspend 时仅单进程（无 Redis）保留以便 resume 复用，多 Pod（有 Redis）时 resume 可能落别的 Pod，不 pop 会泄漏
+            if not _suspended_ref[0] or REDIS_URL:
+                pg = self._playgrounds.pop(session_id, None)
+                if pg is not None:
+                    try:
+                        pg.cleanup()
+                    except Exception as e:
+                        logger.warning(
+                            'playground cleanup on pop (MCP/session release): %s', e
+                        )
+                    finally:
+                        # 促回收，减轻多轮对话后基线台阶式上升（cgroup 能否回落还受 allocator 影响）
+                        gc.collect()
+                # monitor_job resume 使用的 checkpoint 已在本 run 内消费，run 结束后删 Redis 以释放内存
+                if resume_checkpoint:
+                    cid = (resume_checkpoint.get('checkpoint_id') or '').strip()
+                    if cid:
+                        try:
+                            get_redis_dao().delete_checkpoint(cid)
+                        except Exception as e:
+                            logger.debug(
+                                'run_agent_sync: delete_checkpoint after run failed: %s',
+                                e,
+                            )
+
+    def process_resume_checkpoints(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        executor: ThreadPoolExecutor,
+    ) -> None:
+        """同步方法：取出到期的 monitor_job 恢复 checkpoint，认领后提交 run_agent_sync（resume）。
+        供 poller 在 run_in_executor 中调用；多 Pod 下通过 Redis 认领锁保证仅一个处理。
+        """
+        redis_dao = get_redis_dao()
+        if not redis_dao.create_client():
+            return
+        now = time.time()
+        due = redis_dao.zrange_due_resume_checkpoints(now)
+        for checkpoint_id in due:
+            if not redis_dao.try_claim_resume_lock(checkpoint_id):
+                logger.debug(
+                    'process_resume_checkpoints: skip checkpoint_id=%s reason=lock_not_claimed',
+                    checkpoint_id,
+                )
+                continue
+            payload = redis_dao.get_checkpoint(checkpoint_id)
+            if not payload:
+                redis_dao.zrem_resume_checkpoint(checkpoint_id)
+                logger.debug(
+                    'process_resume_checkpoints: skip checkpoint_id=%s reason=payload_missing',
+                    checkpoint_id,
+                )
+                continue
+            session_id = (payload.get('session_id') or '').strip()
+            task_id = payload.get('task_id') or ''
+            invocation_id = payload.get('invocation_id')
+            resume_at = payload.get('resume_at')
+            if not session_id:
+                redis_dao.zrem_resume_checkpoint(checkpoint_id)
+                continue
+            if not self._sessions_service.try_acquire_session_run(session_id):
+                logger.info(
+                    'process_resume_checkpoints: skip checkpoint_id=%s session_id=%s reason=session_busy worker_id=%s',
+                    checkpoint_id,
+                    session_id,
+                    get_worker_id(),
+                )
+                continue
+            stop_ev = threading.Event()
+            self._sessions_service.set_stop_event(session_id, stop_ev)
+            events_table = get_chat_events_table()
+
+            def _send_cb(
+                p: dict,
+                _sid: str = session_id,
+                _tbl: Any = events_table,
+            ) -> None:
+                if _tbl:
+                    try:
+                        _tbl.add_event(
+                            _sid,
+                            p.get('source', ''),
+                            p.get('type', ''),
+                            p.get('content'),
+                            task_id=p.get('task_id'),
+                            invocation_id=p.get('invocation_id'),
+                        )
+                    except Exception as e:
+                        logger.debug(
+                            'process_resume_checkpoints: add_event failed: %s', e
+                        )
+                get_redis_dao().publish_stream_event(_sid, p)
+
+            synthetic_prompt = (payload.get('extra') or {}).get(
+                'synthetic_prompt'
+            ) or '请继续监控作业，再次调用 monitor_job 查看状态。'
+            executor.submit(
+                self.run_agent_sync,
+                session_id,
+                synthetic_prompt,
+                _send_cb,
+                loop,
+                stop_ev,
+                'direct',
+                None,
+                task_id,
+                invocation_id,
+                payload,
+            )
+            redis_dao.zrem_resume_checkpoint(checkpoint_id)
+            logger.info(
+                'process_resume_checkpoints: submitted resume session_id=%s checkpoint_id=%s resume_at=%s worker_id=%s',
+                session_id,
+                checkpoint_id,
+                resume_at,
+                get_worker_id(),
+            )
 
 
 @lru_cache
@@ -1015,3 +1321,42 @@ async def init_playground() -> None:
     """启动时初始化 playground（在 lifespan 中调用）。"""
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, get_agent_run_service().init_playground_sync)
+
+
+async def monitor_job_resume_poller_loop() -> None:
+    """后台轮询：到期的 monitor_job checkpoint 认领后提交恢复 run。未配置 Redis 时不启动。
+    使用独立 poller 线程池执行轮询，避免与 agent 的 2 个 worker 争用导致 resume 无法及时提交。
+    """
+    if not get_redis_dao().create_client():
+        return
+    svc = get_agent_run_service()
+    loop = asyncio.get_event_loop()
+    agent_executor = svc.get_executor()
+    poller_executor = svc.get_poller_executor()
+    interval = 10.0
+    logger.info(
+        'monitor_job resume poller started (interval=%ss) worker_id=%s',
+        interval,
+        get_worker_id(),
+    )
+    tick_count = 0
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            tick_count += 1
+            await loop.run_in_executor(
+                poller_executor,
+                svc.process_resume_checkpoints,
+                loop,
+                agent_executor,
+            )
+            if tick_count % 6 == 0:
+                logger.info(
+                    'monitor_job resume poller alive tick=%s worker_id=%s',
+                    tick_count,
+                    get_worker_id(),
+                )
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.debug('monitor_job resume poller tick failed: %s', e)

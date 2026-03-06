@@ -4,7 +4,7 @@ FROM registry.dp.tech/public/python:3.13-slim
 RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
     sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
 
-# 安装 weasyprint 系统依赖及 curl、wget、unzip、git
+# 安装 weasyprint 系统依赖、curl/wget 等，及 jemalloc（LD_PRELOAD 后更积极向 OS 归还空闲内存，RSS 更易回落）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     unzip \
     git \
+    libjemalloc2 \
     && rm -rf /var/lib/apt/lists/*
 
 # 配置 pip 使用国内源
@@ -60,8 +61,9 @@ RUN mkdir -p /usr/share/fonts/truetype/noto && \
 # 暴露端口
 EXPOSE 80
 
-# 创建启动脚本
-RUN echo '#!/bin/bash\n\nsource .venv/bin/activate\nexec gunicorn app:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:80 --preload' > /app/start.sh && \
+# 创建启动脚本：可选 LD_PRELOAD jemalloc 使空闲内存更易归还 OS（RSS 更易回落）
+# -w 1：单进程，便于 tracemalloc baseline/diff 同进程、内存排查；需提高并发时可改为 -w 2 等
+RUN echo '#!/bin/bash\nset -e\nsource .venv/bin/activate\nJEMALLOC=/usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2\nif [ -f "$JEMALLOC" ]; then export LD_PRELOAD="$JEMALLOC"; fi\nexec gunicorn app:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:80 --preload' > /app/start.sh && \
     chmod +x /app/start.sh
 
 # 启动命令
