@@ -1,6 +1,7 @@
 """Agent 执行服务：playground 初始化、线程池、run_agent_sync。"""
 
 import asyncio
+import gc
 import importlib
 import json
 import logging
@@ -1196,6 +1197,9 @@ class AgentRunService:
                         logger.warning(
                             'playground cleanup on pop (MCP/session release): %s', e
                         )
+                    finally:
+                        # 促回收，减轻多轮对话后基线台阶式上升（cgroup 能否回落还受 allocator 影响）
+                        gc.collect()
 
     def process_resume_checkpoints(
         self,

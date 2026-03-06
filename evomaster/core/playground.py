@@ -1134,6 +1134,10 @@ class BasePlayground:
                     # 3) 等线程退出 run_forever
                     if t is not None and t.is_alive():
                         t.join(timeout=5)
+                        if t.is_alive():
+                            self.logger.warning(
+                                'MCP loop thread did not exit within 5s (possible zombie thread / memory not released)'
+                            )
 
                     # 4) 确认 loop 不跑了再 close
                     if not loop.is_closed():
