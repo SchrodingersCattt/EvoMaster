@@ -23,6 +23,11 @@ CONFIRMATION_RUN_ACTIVE_TTL_SEC = 3600
 # 多 worker 时 run 所在 pod 向其它 pod 的 subscribe 流推送事件（Pub/Sub）
 STREAM_CHANNEL_PREFIX = 'chat:stream:'
 
+# agent run 队列（API 入队，Worker BLPOP）；用户停止标记（Worker 轮询）
+AGENT_RUN_QUEUE_KEY = 'chat:agent_run_queue'
+AGENT_STOP_KEY_PREFIX = 'chat:stop:'
+AGENT_STOP_TTL_SEC = 3600
+
 # monitor_job 挂起恢复：到点恢复的 Sorted Set；checkpoint 内容 key；认领锁 key
 MONITOR_JOB_RESUME_ZSET_KEY = 'chat:monitor_job:resume_zset'
 MONITOR_JOB_CHECKPOINT_KEY_PREFIX = 'chat:monitor_job:checkpoint:'
@@ -41,6 +46,10 @@ def _run_context_key(session_id: str) -> str:
 
 def _reply_list_key(session_id: str) -> str:
     return CONFIRMATION_REPLY_LIST_KEY.format(session_id=session_id.strip())
+
+
+def _stop_key(session_id: str, task_id: str) -> str:
+    return AGENT_STOP_KEY_PREFIX + session_id.strip() + ':' + (task_id or '').strip()
 
 
 class RedisDao:
@@ -227,6 +236,88 @@ class RedisDao:
             return None
         _, value = result
         return value
+
+    # ---------- agent run 队列（API 入队，Worker BLPOP）----------
+
+    def lpush_agent_run_job(self, payload: dict) -> bool:
+        """将一次 run 任务入队。未配置 Redis 或失败返回 False。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            raw = json.dumps(payload, ensure_ascii=False)
+            client.lpush(AGENT_RUN_QUEUE_KEY, raw)
+            return True
+        except Exception as e:
+            logger.warning('Redis LPUSH agent_run_job failed: %s', e)
+            return False
+
+    def blpop_agent_run_job(self, timeout_sec: int = 30) -> Optional[dict]:
+        """阻塞取出一条 run 任务。超时返回 None；否则返回解析后的 dict。"""
+        client = self.create_client()
+        if not client:
+            return None
+        try:
+            result = client.blpop(AGENT_RUN_QUEUE_KEY, timeout=timeout_sec)
+        except Exception as e:
+            logger.warning('Redis BLPOP agent_run_job failed: %s', e)
+            return None
+        if result is None:
+            return None
+        _, raw = result
+        try:
+            return json.loads(raw)
+        except (TypeError, ValueError) as e:
+            logger.warning('Redis agent_run_job payload json load failed: %s', e)
+            return None
+
+    # ---------- 用户停止（Worker 轮询）----------
+
+    def set_stop_requested(self, session_id: str, task_id: str) -> bool:
+        """标记用户请求停止该 run。Worker 轮询 is_stop_requested。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            client.set(
+                _stop_key(session_id, task_id),
+                '1',
+                ex=AGENT_STOP_TTL_SEC,
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                'Redis set_stop_requested failed session_id=%s task_id=%s: %s',
+                session_id,
+                task_id,
+                e,
+            )
+            return False
+
+    def is_stop_requested(self, session_id: str, task_id: str) -> bool:
+        """是否已请求停止该 run。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            return client.exists(_stop_key(session_id, task_id)) > 0
+        except Exception:
+            return False
+
+    def delete_stop_requested(self, session_id: str, task_id: str) -> None:
+        """清除停止标记（run 结束后可选）。"""
+        client = self.create_client()
+        if not client:
+            return
+        try:
+            client.delete(_stop_key(session_id, task_id))
+        except Exception as e:
+            logger.warning(
+                'Redis delete_stop_requested failed session_id=%s task_id=%s: %s',
+                session_id,
+                task_id,
+                e,
+            )
 
     # ---------- monitor_job 挂起恢复（Sorted Set + checkpoint + 认领锁）----------
 

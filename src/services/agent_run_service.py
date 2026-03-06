@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime as dt
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from evomaster.core import get_playground_class
 from evomaster.utils.types import TaskInstance
@@ -242,17 +242,18 @@ class AgentRunService:
         session_id: str,
         user_prompt: str,
         send_cb: Callable[[dict], Any],
-        loop: asyncio.AbstractEventLoop,
-        stop_event: threading.Event,
+        loop: Optional[asyncio.AbstractEventLoop],
+        stop_event: Any,
         mode: str,
         reply_queue: ReplyQueueLike | None,
         task_id: str,
         invocation_id: str | None = None,
         resume_checkpoint: dict | None = None,
     ) -> None:
-        """在后台线程中执行 agent，由 stream 层 run_in_executor(executor, self.run_agent_sync, ...) 调用。
+        """在后台线程中执行 agent，由 stream 层 run_in_executor 或 Worker 进程调用。
+        loop 为 None 时（Worker）：send_cb 为同步调用，不投递到 asyncio；stop_event 可为带 is_set() 的 Redis 轮询对象。
         reply_queue 供 planner_ask 与 confirmation_request（ask_human）共用，POST /confirmation_reply 写入。
-        resume_checkpoint 非空时表示从 monitor_job 挂起恢复，使用 checkpoint 中的 trajectory 与 task_id 等。
+        resume_checkpoint 非空时表示从 monitor_job 挂起恢复。
         """
         prompt_preview = (
             (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
@@ -305,7 +306,7 @@ class AgentRunService:
                     'run_agent_sync: tool_result before send_cb session_id=%s',
                     session_id,
                 )
-            if asyncio.iscoroutinefunction(send_cb):
+            if loop is not None and asyncio.iscoroutinefunction(send_cb):
                 future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
                 try:
                     future.result(timeout=5)
@@ -1072,8 +1073,13 @@ class AgentRunService:
                 # 任务成功后扣减配额（与 MatMaster 一致）；异常向上抛，由外层统一处理
                 user_id = self._sessions_service.get_session_user_id(session_id)
                 if user_id:
-                    future = asyncio.run_coroutine_threadsafe(use_quota(user_id), loop)
-                    future.result(timeout=10)
+                    if loop is not None:
+                        future = asyncio.run_coroutine_threadsafe(
+                            use_quota(user_id), loop
+                        )
+                        future.result(timeout=10)
+                    else:
+                        asyncio.run(use_quota(user_id))
                 event_callback('System', 'finish', 'Done')
                 self._upload_workspace_to_oss(
                     session_id=session_id,
@@ -1289,27 +1295,66 @@ class AgentRunService:
             synthetic_prompt = (payload.get('extra') or {}).get(
                 'synthetic_prompt'
             ) or '请继续监控作业，再次调用 monitor_job 查看状态。'
-            executor.submit(
-                self.run_agent_sync,
-                session_id,
-                synthetic_prompt,
-                _send_cb,
-                loop,
-                stop_ev,
-                'direct',
-                None,
-                task_id,
-                invocation_id,
-                payload,
-            )
-            redis_dao.zrem_resume_checkpoint(checkpoint_id)
-            logger.info(
-                'process_resume_checkpoints: submitted resume session_id=%s checkpoint_id=%s resume_at=%s worker_id=%s',
-                session_id,
-                checkpoint_id,
-                resume_at,
-                get_worker_id(),
-            )
+            if redis_dao.create_client():
+                job = {
+                    'session_id': session_id,
+                    'task_id': task_id,
+                    'invocation_id': invocation_id,
+                    'user_prompt': synthetic_prompt,
+                    'mode': 'direct',
+                    'resume_checkpoint': payload,
+                }
+                if redis_dao.lpush_agent_run_job(job):
+                    redis_dao.zrem_resume_checkpoint(checkpoint_id)
+                    logger.info(
+                        'process_resume_checkpoints: enqueued resume session_id=%s checkpoint_id=%s worker_id=%s',
+                        session_id,
+                        checkpoint_id,
+                        get_worker_id(),
+                    )
+                else:
+                    executor.submit(
+                        self.run_agent_sync,
+                        session_id,
+                        synthetic_prompt,
+                        _send_cb,
+                        loop,
+                        stop_ev,
+                        'direct',
+                        None,
+                        task_id,
+                        invocation_id,
+                        payload,
+                    )
+                    redis_dao.zrem_resume_checkpoint(checkpoint_id)
+                    logger.info(
+                        'process_resume_checkpoints: lpush failed, submitted in-process session_id=%s checkpoint_id=%s worker_id=%s',
+                        session_id,
+                        checkpoint_id,
+                        get_worker_id(),
+                    )
+            else:
+                executor.submit(
+                    self.run_agent_sync,
+                    session_id,
+                    synthetic_prompt,
+                    _send_cb,
+                    loop,
+                    stop_ev,
+                    'direct',
+                    None,
+                    task_id,
+                    invocation_id,
+                    payload,
+                )
+                redis_dao.zrem_resume_checkpoint(checkpoint_id)
+                logger.info(
+                    'process_resume_checkpoints: submitted resume session_id=%s checkpoint_id=%s resume_at=%s worker_id=%s',
+                    session_id,
+                    checkpoint_id,
+                    resume_at,
+                    get_worker_id(),
+                )
 
 
 @lru_cache
