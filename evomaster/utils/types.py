@@ -155,7 +155,7 @@ class Trajectory(BaseModel):
     steps: list[StepRecord] = Field(default_factory=list, description='步骤记录')
     start_time: datetime = Field(default_factory=datetime.now, description='开始时间')
     end_time: datetime | None = Field(default=None, description='结束时间')
-    status: Literal['running', 'completed', 'failed', 'cancelled'] = Field(
+    status: Literal['running', 'completed', 'failed', 'cancelled', 'suspended'] = Field(
         default='running', description='执行状态'
     )
     result: dict[str, Any] = Field(default_factory=dict, description='执行结果')
@@ -167,10 +167,10 @@ class Trajectory(BaseModel):
 
     def finish(
         self,
-        status: Literal['completed', 'failed', 'cancelled'],
+        status: Literal['completed', 'failed', 'cancelled', 'suspended'],
         result: dict[str, Any] | None = None,
     ) -> None:
-        """完成轨迹记录"""
+        """完成轨迹记录（suspended 表示因 monitor_job 挂起，将定时恢复）。"""
         self.end_time = datetime.now()
         self.status = status
         if result:

@@ -40,6 +40,11 @@ class WorkerRegistryService:
                 worker_id,
                 ex=SESSION_RUN_OWNER_TTL_SEC,
             )
+            logger.info(
+                'set_session_run_owner: session_id=%s worker_id=%s',
+                sid,
+                worker_id,
+            )
             return True
         except Exception as e:
             logger.warning('set_session_run_owner failed session_id=%s: %s', sid, e)
@@ -70,6 +75,7 @@ class WorkerRegistryService:
             return
         try:
             client.delete(_session_run_owner_key(sid))
+            logger.info('delete_session_run_owner: session_id=%s', sid)
         except Exception as e:
             logger.warning('delete_session_run_owner failed session_id=%s: %s', sid, e)
 
