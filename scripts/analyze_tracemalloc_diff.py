@@ -4,8 +4,9 @@
 
 用法（先 GET /api/v1/debug/tracemalloc/dump?tag=baseline 与 ?tag=current 下载两个 .dump 到本机后）:
   python scripts/analyze_tracemalloc_diff.py baseline.dump current.dump
+  python scripts/analyze_tracemalloc_diff.py baseline.dump current.dump -b traceback   # 按完整调用栈分组，可看到 pydantic 等是哪个调用链创建的
 
-输出：按 size_diff 排序的 top N 条，带文件和行号、traceback，便于定位泄漏点。
+输出：按 size_diff 排序的 top N 条，带 traceback。默认按 lineno 分组；-b traceback 按调用栈分组便于定位具体对象来源。
 """
 
 import argparse
@@ -30,6 +31,13 @@ def main() -> None:
         default=30,
         help='Number of top entries to print (default: 30)',
     )
+    parser.add_argument(
+        '-b',
+        '--by',
+        choices=('lineno', 'traceback'),
+        default='lineno',
+        help="Group by 'lineno' (file:line) or 'traceback' (full call stack). Use traceback to see which call chain created the allocations (e.g. which code path into pydantic) (default: lineno)",
+    )
     args = parser.parse_args()
 
     try:
@@ -43,8 +51,8 @@ def main() -> None:
         print(f'Failed to load current {args.current_dump}: {e}', file=sys.stderr)
         sys.exit(1)
 
-    diff = current.compare_to(baseline, 'lineno')
-    print(f'[ Top {args.top} increased allocations ]\n')
+    diff = current.compare_to(baseline, args.by)
+    print(f'[ Top {args.top} increased allocations (group by {args.by}) ]\n')
     n = 0
     for s in diff:
         if s.size_diff <= 0:
