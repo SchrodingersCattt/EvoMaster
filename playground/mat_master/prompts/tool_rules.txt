@@ -1,9 +1,5 @@
 # Tool usage rules (fix once, apply every run)
-
-## Mode contract
-- **Direct mode**: prioritize speed and concise responses. Avoid heavy multi-stage writing/data pipelines unless user explicitly requests a long-form file deliverable.
-- **Planner mode**: prioritize long-horizon quality and robustness. For long-form writing/data tasks, use staged workflow + validation/fix loops and checkpoint/resume semantics.
-- **Multi-batch aggregation** (e.g. SN over several time intervals → one big CSV): mat_sn_* tool results are **auto-saved** under the workspace at `_tmp/tool_outputs/mat_sn_*/` (each call writes a file; the path is shown in the tool response). The **final** CSV must be produced by **merging from files** (read those auto-saved files or your own batch CSVs with a script), not from conversation content (see "Multi-batch literature or data aggregation" below).
+# Mode contract and final document delivery are injected by build_prompt; routing (technical Q&A vs writing) is in the executor system prompt.
 
 ## Web search and retrieval
 - Web search returns **snippets only**. When answering from web results, **parse/fetch full content** first (e.g. `extract_info_from_webpage` built-in tool, or other parsing); do not answer from snippets alone.
@@ -17,12 +13,6 @@
 - For **XRD phase identification** tasks, call `mat_xrd_xrd_phase_identification` first (use local scripts only for surrounding pre/post-processing or formatting).
 - For **TEM/SEM image morphology/particle analysis** tasks, call `mat_electron_microscope_get_electron_microscope_recognize` first.
 - Do not route these covered characterization tasks to skill-evolution by default. Only consider skill-evolution if the required capability is clearly outside the above tools.
-
-## Routing: technical Q&A vs writing (do not over-use writing skills)
-- If the user is only asking a **technical question** (e.g. what is X, how does Y work, how to fix a specific issue) and does **not** ask for a report/review/survey/written document/output to file: do **not** use deep-survey or manuscript-scribe. Do **1–2** mat_sn or mat_sn_web-search calls, answer in chat from the results, then call finish. Use writing skills only when the user clearly wants a **file** (review, survey report, paper, long-form document).
-- **Technical answers**: Must include detailed concept explanation (solid definitions); if formulas are used, explain every physical quantity; state concept relationships; optionally give examples from search results. If you cite any source, use [n](url) in text and list References (each with URL) after the answer.
-- **Every reference must have a URL**: In text use [n](url); References section (or list) must include the URL for each [n]. Applies to technical answers, deep-survey (including short output), and manuscript. No reference without URL.
-- **Academic writing (survey/manuscript)**: Concept rigor is **mandatory**—definitions for key concepts, every symbol in formulas explained, how concepts relate to each other; optionally examples from retrieval. Do not leave concepts undefined or symbols unexplained.
 
 ## PDF parsing: always use MCP tools first
 - For **any PDF file**, you MUST call mat_doc_extract_material_data_from_pdf **before** trying any other method (view, peek_file, Python libraries). mat_doc tools are purpose-built for PDF and return structured extraction. Only fall back to other methods if mat_doc tools explicitly fail.
@@ -140,35 +130,4 @@
 - This helps the LLM judge whether the job has completed successfully or failed abnormally.
 - **Never omit `task_intent`** — always pass the user's original request.
 
-## Final report: honest disclosure (MANDATORY for any multi-step or calculation task)
-The outputted content should be in this template:
-```
-## Execution Details
-
-### Step 1: mat_sg_build_bulk_structure_by_template
-- Result: ...
-- Files: - [Fe_fcc.cif](https://...)
-
-### Step 2: mat_sg_build_surface_slab
-- Result: ...
-- Files: - [MgO_100_slab.cif](https://...)
-
-### Failed steps
-No failed steps. / Failed steps are...
-
-### Approximations
-- ...
-```
-Important:
-- The finish message MUST include a `## Execution Details` section with `###` subsections:
-  1. **Per-step subsections** (one per meaningful step/tool call, titled with the step/tool name):
-     - Numerical values (energies, band gaps, forces, etc.), job IDs and statuses, warnings/anomalies.
-     - Output files from this step as `- [filename](url)` list items. Never use bare URLs. Each OSS link appears exactly **once** here — do NOT repeat it in any other section.
-  2. **Failed steps / calculations**: Every failure with error reason. Do NOT omit or hide.
-  3. **Approximations and simplifications**: Every compromise made (software substitution, coarser settings, fallback strategies, steps skipped, screening vs production, MLP vs DFT, etc.).
-- Do NOT add a separate "Output Files" or "All OSS links" section — file links belong inside each step's subsection only.
-- Be factual and objective; do not downplay failures or exaggerate successes.
-
-## Final document delivery (mode-aware)
-- **Planner mode**: for survey/manuscript/report deliverables, output the complete final document in chat, then ensure it is saved and call finish.
-- **Direct mode**: default to concise summary + file path; output full document in chat only when user explicitly asks for full text.
+# Final report format and final document delivery are defined in the executor system prompt (Execution Details) and in the mode contract injected by build_prompt.
