@@ -12,6 +12,8 @@ import argparse
 import csv
 import hashlib
 import json
+import os
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -58,6 +60,8 @@ CANONICAL_FIELDS = [
     "uncertainty",
     "conflict_group_id",
     "conflict_note",
+    "enrich_note",
+    "enrich_keep",
 ]
 
 
@@ -123,6 +127,8 @@ DEFAULT_ALIASES: dict[str, list[str]] = {
     "uncertainty": ["uncertainty", "error_bar", "std", "sigma"],
     "conflict_group_id": ["conflict_group_id"],
     "conflict_note": ["conflict_note"],
+    "enrich_note": ["enrich_note"],
+    "enrich_keep": ["enrich_keep"],
 }
 
 
@@ -145,9 +151,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--source_type",
-        choices=["auto", "pdf", "web"],
+        choices=["auto", "pdf", "web", "survey"],
         default="auto",
-        help="Source type for ingested records.",
+        help="Source type for ingested records. Use 'survey' when input is survey contract JSON (or rely on source_kind in JSON).",
     )
     parser.add_argument(
         "--schema",
@@ -171,9 +177,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--stage",
-        choices=["all", "ingest", "normalize", "dedup", "conflict", "export", "status"],
+        choices=["all", "ingest", "normalize", "template", "fill", "enrich", "dedup", "conflict", "export", "status"],
         default="all",
         help="Run a specific stage or the full pipeline (default: all).",
+    )
+    parser.add_argument(
+        "--enrich_rows",
+        default=None,
+        help="Path to agent-generated enrich_rows.json to load before dedup (overrides state[enrich_rows_file]).",
     )
     parser.add_argument(
         "--state",
@@ -332,8 +343,113 @@ def _extract_records(payload: Any) -> list[dict[str, Any]]:
     return [payload]
 
 
+def _is_survey_input_from_metadata(input_paths: list[Path]) -> bool:
+    """True if any input JSON has source_kind == 'survey' (schema_version 2 contract)."""
+    for p in input_paths:
+        if not p.suffix.lower() == ".json" or not p.exists():
+            continue
+        try:
+            data = load_json(p)
+            if isinstance(data, dict) and data.get("source_kind") == "survey":
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _load_survey_context(
+    input_paths: list[Path],
+    explicit_survey_path: str | Path | None = None,
+) -> dict[str, Any]:
+    """Load topic and key_concepts from survey contract (collected_*.json with source_kind survey).
+
+    If explicit_survey_path is set, use that file only. Otherwise scan input_paths for
+    source_kind == 'survey'. Returns {"topic": str, "key_concepts": list[str]} or {} if none found.
+    """
+    paths_to_try: list[Path] = []
+    if explicit_survey_path:
+        p = Path(explicit_survey_path)
+        if p.exists():
+            paths_to_try.append(p)
+    if not paths_to_try:
+        for p in input_paths:
+            if p.suffix.lower() != ".json" or not p.exists():
+                continue
+            try:
+                data = load_json(p)
+                if isinstance(data, dict) and data.get("source_kind") == "survey":
+                    paths_to_try.append(p)
+                    break
+            except Exception:
+                continue
+    if not paths_to_try:
+        return {}
+    data = load_json(paths_to_try[0])
+    if not isinstance(data, dict):
+        return {}
+    topic = data.get("topic")
+    if topic is not None and not isinstance(topic, str):
+        topic = str(topic)
+    key_concepts = data.get("key_concepts")
+    if isinstance(key_concepts, list):
+        key_concepts = [str(c) for c in key_concepts if c is not None]
+    else:
+        key_concepts = []
+    return {"topic": topic or "", "key_concepts": key_concepts}
+
+
+def _parse_enrich_batch_response(text: str, batch_start_idx: int) -> list[dict[str, Any]] | None:
+    """Parse LLM JSON array response. Returns list of dicts with idx, keep, material_name, etc., or None."""
+    if not text or not text.strip():
+        return None
+    # Strip markdown code fence if present
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
+        stripped = re.sub(r"\s*```\s*$", "", stripped)
+    try:
+        data = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, list):
+        return None
+    out = []
+    batch_len = len(data)
+    for i, item in enumerate(data):
+        if not isinstance(item, dict):
+            continue
+        raw_idx = item.get("idx")
+        if raw_idx is None:
+            idx = batch_start_idx + i
+        elif isinstance(raw_idx, int):
+            if batch_start_idx <= raw_idx < batch_start_idx + batch_len:
+                idx = raw_idx
+            elif 0 <= raw_idx < batch_len:
+                idx = batch_start_idx + raw_idx
+            else:
+                idx = batch_start_idx + i
+        else:
+            try:
+                idx = int(raw_idx)
+                if idx < batch_start_idx or idx >= batch_start_idx + batch_len:
+                    idx = batch_start_idx + i
+            except (TypeError, ValueError):
+                idx = batch_start_idx + i
+        out.append({
+            "idx": idx,
+            "keep": item.get("keep", True),
+            "material_name": _stringify(item.get("material_name")),
+            "property_name": _stringify(item.get("property_name")),
+            "property_value": _stringify(item.get("property_value")),
+            "property_unit": _stringify(item.get("property_unit")),
+            "enrich_note": _stringify(item.get("enrich_note")),
+        })
+    return out if out else None
+
+
 def _auto_discover_tool_outputs(input_paths: list[Path]) -> list[Path]:
-    """Discover mat_sn_* auto-saved JSON files when the primary inputs yielded 0 records.
+    """Discover mat_sn_* auto-saved JSON files when the primary inputs yielded 0 records
+    or when supplementing survey-only input.
 
     Looks for _tmp/tool_outputs/ by walking up from each input path, then falls
     back to the current working directory. Returns deduplicated discovered paths.
@@ -771,6 +887,41 @@ def main() -> None:
                             state.get("ingest_stats", {}).get("raw_records", 0) or 0
                         )
                         input_paths = fallback_paths
+            # Supplement: when input is survey contract (source_kind in JSON) or
+            # caller passed --source_type survey, merge in _tmp/tool_outputs/mat_sn_*.
+            elif _is_survey_input_from_metadata(input_paths) or args.source_type == "survey":
+                supplement_paths = _auto_discover_tool_outputs(input_paths)
+                existing_resolved = {str(p.resolve()) for p in input_paths}
+                extra = [p for p in supplement_paths if str(p.resolve()) not in existing_resolved]
+                if extra:
+                    print(
+                        json.dumps({
+                            "info": "Survey-only input; supplementing with tool_outputs.",
+                            "supplement_files_found": len(extra),
+                        }, ensure_ascii=False)
+                    )
+                    supplement_rows, state = _ingest_and_cache_normalized_rows(
+                        input_paths=extra,
+                        source_type=args.source_type,
+                        schema_cfg=schema_cfg,
+                        state=state,
+                        state_path=state_path,
+                        resume=False,
+                    )
+                    if supplement_rows:
+                        seen_dedup = set()
+                        merged = []
+                        keys_use = dedup_keys or ["source_url_or_path", "quote_text"]
+                        for row in normalized_rows + supplement_rows:
+                            key = tuple(row.get(k) for k in keys_use)
+                            if key in seen_dedup:
+                                continue
+                            seen_dedup.add(key)
+                            merged.append(row)
+                        normalized_rows = merged
+                        raw_count = len(normalized_rows)
+                        state.setdefault("ingest_stats", {})["raw_records"] = raw_count
+                        state.setdefault("ingest_stats", {})["normalized_records"] = raw_count
 
             _save_rows(normalized_path, normalized_rows)
             state["normalized_rows_file"] = str(normalized_path)
@@ -810,12 +961,27 @@ def main() -> None:
                 return
             normalized_rows = _load_rows(normalized_path)
 
+        # Stage: enrich — agent-side fill only; no LLM called here.
+        # The agent writes enrich_rows.json and updates state["enrich_rows_file"] before calling --stage dedup.
+        rows_for_dedup: list[dict[str, str]] = normalized_rows
+        enrich_rows_file = (
+            args.enrich_rows
+            or state.get("enrich_rows_file")
+        )
+        if enrich_rows_file:
+            enrich_path = Path(enrich_rows_file)
+            if enrich_path.exists():
+                enriched_rows = _load_rows(enrich_path)
+                rows_for_dedup = [r for r in enriched_rows if r.get("enrich_keep") != "false"]
+                state["enrich_rows_file"] = str(enrich_path)
+                write_json(state_path, state)
+
         # Stage: dedup/all
         deduped_path = _rows_file_for(state_path, "deduped")
         deduped_rows: list[dict[str, str]]
         dropped = 0
         if args.stage in {"all", "dedup"}:
-            deduped_rows, dropped = deduplicate_rows(normalized_rows, dedup_keys)
+            deduped_rows, dropped = deduplicate_rows(rows_for_dedup, dedup_keys)
             _save_rows(deduped_path, deduped_rows)
             state["deduped_rows_file"] = str(deduped_path)
             state["dedup_stats"] = {

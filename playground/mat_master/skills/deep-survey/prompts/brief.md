@@ -22,6 +22,9 @@ Produce a structured evidence skeleton (`collected.json`) for downstream skills 
 - Prefer sources with accessible URLs (DOI links or direct paper URLs).
 
 ### Step 3 — Populate collected.json
+
+**Attention**: Ensure evidence covers all key concepts in the topic (e.g. for “A vs B”, both A and B should appear in at least some cards). If one side is missing, add retrieval or pass `--facet <facet>` when calling `collect_evidence.py` so facets are set at ingest; finish may be blocked until coverage is sufficient.
+
 Write each retrieved evidence item as a card in `collected.json`. Schema:
 
 ```json

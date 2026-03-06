@@ -26,6 +26,19 @@ try:
 except ImportError:
     requests = None
 
+try:
+    from playground.mat_master.tools.webpage import BROWSER_HEADERS
+except ImportError:
+    BROWSER_HEADERS = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+    }
+
 STRUCTURE_EXTENSIONS = {".cif", ".poscar", ".vasp", ".xyz", ".res", ".pdb", ".mol2", ".sdf"}
 
 
@@ -57,7 +70,7 @@ def fetch_url(url: str, out_dir: Path) -> dict:
     if dep_err:
         return dep_err
     try:
-        r = requests.get(url, timeout=30, stream=True)
+        r = requests.get(url, headers=BROWSER_HEADERS, timeout=30, stream=True)
         if not r.ok:
             return {
                 "success": False,
@@ -92,7 +105,7 @@ def extract_page_links(page_url: str, out_dir: Path) -> dict:
         }
 
     try:
-        r = requests.get(page_url, timeout=30)
+        r = requests.get(page_url, headers=BROWSER_HEADERS, timeout=30)
         if not r.ok:
             return {
                 "success": False,
