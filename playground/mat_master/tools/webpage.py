@@ -10,6 +10,7 @@ import json
 import logging
 import re
 import time as _time
+from collections import defaultdict
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, ClassVar
@@ -27,16 +28,35 @@ except Exception:  # pragma: no cover
 from evomaster.agent.tools.base import BaseTool, BaseToolParams
 
 _MAX_CONTENT_LENGTH = 50_000
-_HEADERS = {
+
+# Browser-like headers to reduce 403/anti-bot; exported for reuse (e.g. structure-manager).
+BROWSER_HEADERS: dict[str, str] = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/91.0.4472.124 Safari/537.36"
-    )
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
 }
+
+# Alternate UA for single retry on 403/429 (no extra retries, no proxy).
+ALTERNATE_UA_HEADERS: dict[str, str] = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) "
+        "Gecko/20100101 Firefox/121.0"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+}
+
 logger = logging.getLogger(__name__)
 
-
+# 防 403/反爬：同域请求间隔(秒)、同域并发数、域名熔断阈值；写死在代码中，不读 config。
+REQUEST_DELAY_SECONDS = 0.5
+MAX_CONCURRENT_PER_DOMAIN = 1
 _DEFAULT_DOMAIN_FAILURE_THRESHOLD = 3
 
 
@@ -77,14 +97,33 @@ class _DomainCircuitState:
         }
 
 
-def _fetch_webpage_content(url: str) -> str:
+def _fetch_webpage_content(
+    url: str,
+    *,
+    session: requests.Session | None = None,
+    headers: dict[str, str] | None = None,
+) -> str:
     """Fetch and extract plain text from a URL.
 
     Handles HTML pages (via BeautifulSoup) and PDF responses (via PyMuPDF).
     Output is cleaned and truncated to `_MAX_CONTENT_LENGTH` characters.
+    Uses a Session per call if not provided (reuses TCP/cookies for redirects).
+    On 403/429, retries once after 1.5s with alternate User-Agent (Firefox).
     """
     logger.info("Fetching content from URL: %s", url)
-    response = requests.get(url, headers=_HEADERS, timeout=15)
+    hdrs = headers or BROWSER_HEADERS
+
+    def _do_get(h: dict[str, str]) -> requests.Response:
+        if session is not None:
+            return session.get(url, headers=h, timeout=15)
+        with requests.Session() as sess:
+            return sess.get(url, headers=h, timeout=15)
+
+    response = _do_get(hdrs)
+    if response.status_code in (403, 429):
+        logger.warning("Got %s for %s; retrying once with alternate UA.", response.status_code, url)
+        _time.sleep(1.5)
+        response = _do_get(ALTERNATE_UA_HEADERS)
     response.raise_for_status()
 
     content_type = response.headers.get("Content-Type", "").lower()
@@ -165,19 +204,7 @@ class ExtractWebpageTool(BaseTool):
 
             start = _time.time()
             results: dict[str, Any] = {}
-
-            # Best-effort config override (kept permissive to avoid breaking sessions).
-            try:
-                cfg = getattr(session, 'config', None)
-                cfg_dict = getattr(cfg, 'config_dict', None)
-                if isinstance(cfg_dict, dict):
-                    mm = cfg_dict.get('mat_master') or {}
-                    web = mm.get('web') or {}
-                    thr = web.get('domain_failure_threshold')
-                    if thr is not None:
-                        self._domain_circuit.failure_threshold = max(1, int(thr))
-            except Exception:
-                pass
+            request_delay = REQUEST_DELAY_SECONDS
 
             def _process(u: str):
                 t0 = _time.time()
@@ -194,7 +221,7 @@ class ExtractWebpageTool(BaseTool):
                                 'skip further fetches for this domain.'
                             ),
                         }
-                    content = _fetch_webpage_content(u)
+                    content = _fetch_webpage_content(u)  # uses BROWSER_HEADERS + Session
                     return u, content, _time.time() - t0, None
                 except requests.HTTPError as exc:
                     status = None
@@ -261,21 +288,38 @@ class ExtractWebpageTool(BaseTool):
                         'message': str(exc),
                     }
 
-            workers = min(30, len(urls))
+            # Group by domain to limit concurrency per domain (reduce 403/429).
+            by_domain: dict[str, list[str]] = defaultdict(list)
+            for u in urls:
+                by_domain[_extract_domain(u) or "__unknown__"].append(u)
+
+            def run_domain_urls(domain_urls: list[str]) -> list[tuple[str, Any, float, dict | None]]:
+                out: list[tuple[str, Any, float, dict | None]] = []
+                for u in domain_urls:
+                    if request_delay > 0:
+                        _time.sleep(request_delay)
+                    out.append(_process(u))
+                return out
+
+            num_domains = len(by_domain)
+            workers = min(max(1, num_domains), 32)
             with ThreadPoolExecutor(max_workers=workers) as executor:
-                futures = {executor.submit(_process, u): u for u in urls}
+                futures = {
+                    executor.submit(run_domain_urls, domain_urls): domain_urls
+                    for domain_urls in by_domain.values()
+                }
                 for future in as_completed(futures):
-                    u, content, elapsed, err = future.result()
-                    if err is not None:
-                        results[f"webpage_detailed_contents from {u}"] = {
-                            "error": err,
-                            "processing_time_seconds": round(elapsed, 3),
-                        }
-                    else:
-                        results[f"webpage_detailed_contents from {u}"] = {
-                            "content": content,
-                            "processing_time_seconds": round(elapsed, 3),
-                        }
+                    for u, content, elapsed, err in future.result():
+                        if err is not None:
+                            results[f"webpage_detailed_contents from {u}"] = {
+                                "error": err,
+                                "processing_time_seconds": round(elapsed, 3),
+                            }
+                        else:
+                            results[f"webpage_detailed_contents from {u}"] = {
+                                "content": content,
+                                "processing_time_seconds": round(elapsed, 3),
+                            }
 
             total = round(_time.time() - start, 3)
             results["total_processing_time_seconds"] = total

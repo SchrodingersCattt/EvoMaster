@@ -61,6 +61,7 @@ Creates the survey **outline** (section headers + TBD) for `standard`/`deep`, or
   - `python run_survey.py --topic "DPA-2 for Alloys" --depth deep --output survey_dpa.md`
   - `python run_survey.py --topic "Perovskite stability" --depth brief`
   - `python run_survey.py --title "My Survey" --depth standard --output survey.md`
+  - `python run_survey.py --topic "A vs B" --key_concepts "dipole,polarization"` *(optional: override key concepts for coverage check)*
 - **Then**: Run retrieval calls. After retrieval is complete, call `collect_evidence.py` to auto-populate `evidence_cards`. Then write report content. Do not leave (TBD) in the delivered file.
 
 ### `summarize_paper.py`
@@ -76,10 +77,19 @@ Converts raw `mat_sn_*` tool outputs into `evidence_cards` and writes them to `c
 
 - **Usage**:
   - `python collect_evidence.py --collected_json _tmp/surveys/collected_MyTopic.json`
+  - `python collect_evidence.py --collected_json _tmp/surveys/collected_MyTopic.json --facet "Mechanism"` *(recommended: assign facet at ingest so cards are tagged for this batch)*
   - `python collect_evidence.py --collected_json _tmp/surveys/collected_MyTopic.json --tool_outputs_dir _tmp/tool_outputs`
   - `python collect_evidence.py --topic "MyTopic"` *(auto-derives collected_json path and tool_outputs_dir)*
 - **Supported sources**: `mat_sn_search-papers-enhanced` (`data[]`) and `mat_sn_web-search` (`results[]`).
 - **Output**: Prints `{"status":"ok","cards_added":<n>,"cards_total":<n>,"collected_json_path":"..."}`.
+- **Survey contract**: `collected_*.json` is the survey contract (schema_version 2: `source_kind`, `key_concepts`). Downstream tools and the finish gate read these fields; do not rely on path heuristics.
+
+### `assign_facet.py` (deprecated)
+
+Backfill facet by keyword rules for **legacy** `collected_*.json` only. **Preferred**: use `collect_evidence.py --facet <facet>` when ingesting so cards get the correct facet at ingest time.
+
+- **Usage**: `python assign_facet.py --collected_json _tmp/surveys/collected_MyTopic.json` *(only for old workspaces or one-off repair)*
+- **Output**: Prints `{"status":"ok","assigned":<n>,"cards_total":<n>,"collected_json_path":"..."}`.
 
 ### `write_survey_report.py`
 
@@ -97,7 +107,7 @@ Compiles collected findings into the final structured Markdown report.
 
 ## Tool (via use_skill)
 
-- **run_script** with **script_name**: `run_survey.py`, `summarize_paper.py`, or `write_survey_report.py`; **script_args**: as in Usage above.
+- **run_script** with **script_name**: `run_survey.py`, `summarize_paper.py`, `collect_evidence.py`, or `write_survey_report.py`; **script_args**: as in Usage above. Use `assign_facet.py` only for legacy repair.
 
 ## Rules
 
@@ -112,3 +122,5 @@ Compiles collected findings into the final structured Markdown report.
 - Always write the report to a **file**; do not stream the full review in chat.
 - **One-way delegation**: deep-survey may call manuscript-scribe `write_section` for report assembly. manuscript-scribe does NOT call deep-survey.
 - **Evidence card persistence (all depths, mandatory)**: After ALL retrieval calls complete, run `collect_evidence.py` to auto-populate `evidence_cards` in `collected_<topic>.json`. Do NOT manually write evidence_cards — the script reads raw tool outputs and handles everything. Call it before writing any report sections or calling `lit-data-organizer`. An empty `evidence_cards` array after retrieval (without having called `collect_evidence.py`) is a rule violation.
+- **Facet and topic-concept coverage (attention)**: Pay attention to whether each evidence card is attributable to a facet and whether the topic’s key concepts (e.g. both sides of “A vs B”) are covered in the evidence. If a key concept has almost no coverage, add retrieval or re-run collect_evidence with the right facet; finish may be blocked until key concepts are covered. For legacy data only, `assign_facet.py` can backfill facets. Prefer `collect_evidence.py --facet <facet>` when ingesting.
+- **Contract before downstream**: `collected_*.json` is the survey contract (schema_version 2: `source_kind`, `key_concepts`). Use `collect_evidence.py --facet` when ingesting so downstream and gates can rely on facet and coverage; only use `assign_facet.py` for old workspaces.

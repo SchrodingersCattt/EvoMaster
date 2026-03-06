@@ -127,6 +127,9 @@ mat_master:
     max_steps: 20
     state_file: "research_state.json"
     system_prompt_file: "prompts/planner_system_prompt.txt"
+    # 质量门控：survey 完成前至少检索次数（与 plan 中 10-15+ 下界一致）
+    quality_gates:
+      survey_min_retrieval_calls: 10
   # 专项能力开关（DirectSolver 路由时据此决定是否走 EVO）
   capabilities:
     skill_evolution:
@@ -234,7 +237,7 @@ mcp:
           batch_type: "OpenAPI"
           context_type: "OpenAPI"
           remote_profile:
-            image_address: "registry.dp.tech/dptech/dpa-calculator:49a6dcf3"
+            image_address: "registry.dp.tech/dptech/dpa-calculator:cd96ac21"
             platform: "ali"
             machine_type: "c16_m64_1 * NVIDIA 4090"
             app_key: "agent"

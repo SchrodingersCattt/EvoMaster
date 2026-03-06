@@ -30,9 +30,17 @@ Builds one canonical evidence table from structured literature outputs and expor
    - Apply deduplication by configurable keys.
    - Preserve conflicting measurements with explicit conflict metadata.
    - For long runs, use staged/resumable processing (`--state`, `--resume`, `--stage`).
-3. Export
+3. Enrich (agent-side fill — no LLM in the script)
+   - After normalize completes, the agent reads `_tmp/lit_data/normalized_rows.json`, writes code to fill
+     material_name / property_name / property_value / property_unit / enrich_keep / enrich_note per row,
+     saves the result to `_tmp/lit_data/enrich_rows.json`, and updates `state["enrich_rows_file"]` in
+     `_tmp/lit_data/state.json`.
+   - Then call `--stage dedup --resume`; the script will auto-load `enrich_rows.json` via `state["enrich_rows_file"]`.
+   - Rows with enrich_keep=false are excluded from dedup and export.
+   - Do NOT fabricate values. Do NOT use regex to extract identifiers. Leave unknown fields as "NA".
+4. Export
    - Export canonical rows to `csv` or `jsonl`.
-   - Review stdout summary for counts and conflict statistics.
+   - Review stdout summary for counts, enrich stats (if used), and conflict statistics.
 
 ## Script
 
@@ -40,6 +48,7 @@ Builds one canonical evidence table from structured literature outputs and expor
   - Merge structured input files into one canonical table.
   - Supports field mapping overrides via an external schema config.
   - Supports conflict tagging and deduplication.
+  - Enrich is agent-side: agent writes `enrich_rows.json` + updates `state["enrich_rows_file"]`, then calls `--stage dedup --resume`. Pass `--enrich_rows <path>` to override the state path explicitly.
   - Supports staged execution (`ingest|normalize|dedup|conflict|export|all`) with checkpoint/resume.
 
 ## Tool Usage (via use_skill)
@@ -51,12 +60,13 @@ Builds one canonical evidence table from structured literature outputs and expor
 - Common arguments:
   - `--input_json <file1> [file2 ...]`
   - `--input_dir <directory>`
-  - `--source_type auto|pdf|web`
+  - `--source_type auto|pdf|web|survey`
   - `--schema <schema_config.json>`
   - `--dedup_keys key1,key2,...`
   - `--state _tmp/lit_data/state.json`
   - `--resume`
   - `--stage ingest|normalize|dedup|conflict|export|all`
+  - `--enrich_rows <path>` — explicit path to agent-generated enrich_rows.json (overrides state["enrich_rows_file"]).
 
 ## Long-task status contract
 
