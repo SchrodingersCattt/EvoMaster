@@ -35,20 +35,31 @@ def _release_port(port: int) -> None:
             )
             if out.returncode != 0:
                 return
+            pids_to_kill: set[str] = set()
             for line in out.stdout.splitlines():
                 if f":{port}" in line and "LISTENING" in line.upper():
                     parts = line.split()
-                    if parts:
-                        pid = parts[-1]
-                        if pid.isdigit():
-                            subprocess.run(
-                                ["taskkill", "/F", "/PID", pid],
-                                capture_output=True,
-                                timeout=5,
-                            )
-                            print(f"  -> Released port {port} (PID {pid})", flush=True)
-                            return
-            print(f"  -> Port {port} was free", flush=True)
+                    if parts and parts[-1].isdigit():
+                        pids_to_kill.add(parts[-1])
+            if not pids_to_kill:
+                print(f"  -> Port {port} was free", flush=True)
+                return
+            for pid in pids_to_kill:
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", pid],
+                    capture_output=True,
+                    timeout=5,
+                )
+            print(f"  -> Released port {port} (PIDs {', '.join(pids_to_kill)})", flush=True)
+            # Wait briefly until the port is actually free
+            import time
+            for _ in range(10):
+                time.sleep(0.3)
+                chk = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=3)
+                if chk.returncode == 0 and not any(
+                    f":{port}" in ln and "LISTENING" in ln.upper() for ln in chk.stdout.splitlines()
+                ):
+                    break
         else:
             # Prefer lsof then fuser
             out = subprocess.run(
@@ -120,11 +131,6 @@ def run(
     out("Releasing ports %s, %s (if in use)..." % (backend_port, frontend_port))
     _release_port(backend_port)
     _release_port(frontend_port)
-    try:
-        import time
-        time.sleep(1)
-    except Exception:
-        pass
 
     env = os.environ.copy()
     env["MAT_MASTER_RUN_DIR"] = str(work_dir)
