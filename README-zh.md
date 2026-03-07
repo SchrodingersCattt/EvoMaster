@@ -21,6 +21,26 @@ bash start_dev.sh
 
 然后在浏览器访问`http://<主机>:<FRONTEND_PORT>`（默认`http://127.0.0.1:50004`）。后端API端口为`BACKEND_PORT`（默认`50001`；在Windows/Git Bash下脚本会改用`8000`，除非已设置`BACKEND_PORT`）。
 
+### 指定工作目录启动（CLI）
+
+以可编辑方式安装项目后，可用**自定义工作目录**启动前后端：`work_dir` 作为**共享工作区**，前端文件树与 agent 输出都直接使用该目录（不再按 session 建 `workspaces/` 子目录），日志与运行数据也在此目录下。适合指向任意本地路径（如稿件或项目文件夹）。
+
+```bash
+pip install -e .
+matmaster run ./myproject
+```
+
+可在任意目录执行 `matmaster`；鉴权仍使用**仓库根目录的 `.env`**，无需在工作目录再放 `.env`。
+
+| 选项 | 默认值 | 说明 |
+|------|--------|------|
+| `work_dir` | （必填） | 共享工作区目录：文件树、agent 输出与日志均写入此处。 |
+| `--backend-port` | Windows 下 `8000`，其他 `50001` | 后端端口。 |
+| `--frontend-port` | `50004` | 前端端口。 |
+| `--public-host` | 自动检测 | API/WS 所用主机（如公网访问时设置）。 |
+
+**使用 uv 时：** 在仓库内执行 `uv run matmaster run /path/to/work_dir`；或先激活项目 venv（`source .venv/bin/activate` 或 Windows 下 `.venv\Scripts\activate`），之后在任意目录执行 `matmaster run work_dir`。
+
 ### `start_dev.sh`涉及的环境变量
 
 | 变量 | 默认值 | 说明 |

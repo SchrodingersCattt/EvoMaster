@@ -21,6 +21,26 @@ bash start_dev.sh
 
 Then open the dashboard at `http://<host>:<FRONTEND_PORT>` (default `http://127.0.0.1:50004`). Backend API runs on `BACKEND_PORT` (default `50001`; on Windows/Git Bash the script uses `8000` unless you set `BACKEND_PORT`).
 
+### Start with a custom work directory (CLI)
+
+Install the project in editable mode, then run the full stack (backend + frontend) with a **custom work directory** that is used as a **shared workspace**: the frontend file tree and agent outputs use `work_dir` directly (no per-session `workspaces/` subfolders). Logs and run data also go under `work_dir`. This lets you point MatMaster at any local path (e.g. a manuscript or project folder).
+
+```bash
+pip install -e .
+matmaster run ./myproject
+```
+
+You can run `matmaster` from any directory; authentication still comes from the **repository root `.env`** (no need to copy `.env` into the work dir).
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `work_dir` | (required) | Shared workspace directory: file tree, agent outputs, and logs all go here. |
+| `--backend-port` | `8000` (Windows) / `50001` (others) | Backend port. |
+| `--frontend-port` | `50004` | Frontend port. |
+| `--public-host` | Auto-detect | Host for API/WS URLs (e.g. for remote access). |
+
+**With uv:** From the repo, run `uv run matmaster run /path/to/work_dir`. Or activate the project venv (`source .venv/bin/activate` or `.venv\Scripts\activate` on Windows), then run `matmaster run work_dir` from any directory.
+
 ### Environment variables used by `start_dev.sh`
 
 | Variable | Default | Description |

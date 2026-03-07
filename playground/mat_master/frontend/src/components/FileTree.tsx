@@ -30,6 +30,7 @@ export default function FileTree({
 }) {
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [workspaceRoot, setWorkspaceRoot] = useState<string | null>(null);
   const [refetchTick, setRefetchTick] = useState(0);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; entry: FileEntry } | null>(null);
 
@@ -37,24 +38,36 @@ export default function FileTree({
     if (!sessionId) {
       setEntries([]);
       setTaskId(null);
+      setWorkspaceRoot(null);
       return;
     }
     const url = `${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/files${filePath ? `?path=${encodeURIComponent(filePath)}` : ""}`;
     fetch(url)
-      .then((r) => (r.ok ? r.json() : { entries: [], task_id: null }))
-      .then((d: { entries: FileEntry[]; task_id?: string | null }) => {
+      .then((r) => (r.ok ? r.json() : { entries: [], task_id: null, workspace_root: null }))
+      .then((d: { entries: FileEntry[]; task_id?: string | null; workspace_root?: string | null }) => {
         setEntries(d.entries || []);
         setTaskId(d.task_id ?? null);
+        setWorkspaceRoot(d.workspace_root ?? null);
       })
       .catch(() => {
         setEntries([]);
         setTaskId(null);
+        setWorkspaceRoot(null);
       });
   }, [sessionId, filePath]);
 
   useEffect(() => {
     fetchEntries();
   }, [fetchEntries, refetchTick, refreshSignal]);
+
+  // Refetch when tab becomes visible so that after restarting matmaster with a new work_dir we show the new path
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && sessionId) setRefetchTick((t) => t + 1);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [sessionId]);
 
   useEffect(() => {
     const close = () => setContextMenu(null);
@@ -183,10 +196,10 @@ export default function FileTree({
           </button>
         </div>
       )}
-      {taskId && (
+      {(workspaceRoot || taskId) && (
         <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1 flex items-center gap-1">
-          <span className="truncate flex-1 min-w-0" title={`runs/mat_master_web/workspaces/${taskId}`}>
-            workspaces/{taskId}
+          <span className="truncate flex-1 min-w-0" title={workspaceRoot ?? `workspaces/${taskId}`}>
+            {workspaceRoot ?? `workspaces/${taskId}`}
           </span>
           {compact && (
             <button
