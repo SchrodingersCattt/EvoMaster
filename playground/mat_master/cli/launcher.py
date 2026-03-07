@@ -128,6 +128,7 @@ def run(
 
     env = os.environ.copy()
     env["MAT_MASTER_RUN_DIR"] = str(work_dir)
+    env["MAT_MASTER_WORKSPACE_ROOT"] = str(work_dir)  # shared workspace: files go in work_dir directly
     env["NEXT_PUBLIC_API_URL"] = f"http://{host}:{backend_port}"
     env["NEXT_PUBLIC_WS_URL"] = f"ws://{host}:{backend_port}/ws/chat"
 
