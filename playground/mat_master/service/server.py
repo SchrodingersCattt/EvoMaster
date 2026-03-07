@@ -61,7 +61,7 @@ def _init_playground_sync() -> None:
         if not config_path.exists():
             raise FileNotFoundError(f"Config not found: {config_path}")
         pg = get_playground_class('mat_master', config_path=config_path)
-        run_dir = _project_root / 'runs' / RUN_ID_WEB
+        run_dir = _runs_dir() / _get_run_id_web()
         run_dir.mkdir(parents=True, exist_ok=True)
         pg.set_run_dir(run_dir)
         pg.setup()
@@ -188,19 +188,19 @@ def get_session_run_info(session_id: str):
         task_ids = data.get('task_ids') or []
         last_task_id = data.get('last_task_id')
         return {
-            'run_id': RUN_ID_WEB,
+            'run_id': _get_run_id_web(),
             'last_task_id': last_task_id,
             'task_ids': task_ids,
         }
     # 重启后仅存在磁盘的 workspace：用 session_id 作为 task_id 指向 workspaces/<session_id>
-    base = _get_run_workspace_path(RUN_ID_WEB, task_id=session_id)
+    base = _get_run_workspace_path(_get_run_id_web(), task_id=session_id)
     if base and base.is_dir():
         return {
-            'run_id': RUN_ID_WEB,
+            'run_id': _get_run_id_web(),
             'last_task_id': session_id,
             'task_ids': [session_id],
         }
-    return {'run_id': RUN_ID_WEB, 'last_task_id': None, 'task_ids': []}
+    return {'run_id': _get_run_id_web(), 'last_task_id': None, 'task_ids': []}
 
 
 @app.get('/api/sessions/{session_id}/files')
@@ -220,7 +220,7 @@ def list_session_files(session_id: str, path: str = ''):
             for e in entries:
                 e['path'] = f"{path.rstrip('/')}/{e['name']}"
         return {
-            'run_id': RUN_ID_WEB,
+            'run_id': _get_run_id_web(),
             'path': path or '.',
             'entries': entries,
             'workspace_root': ws,
@@ -232,7 +232,7 @@ def list_session_files(session_id: str, path: str = ''):
         base, task_id = _resolve_session_workspace(session_id, create=True)
     except HTTPException:
         return {
-            'run_id': RUN_ID_WEB,
+            'run_id': _get_run_id_web(),
             'path': path or '.',
             'entries': [],
             'workspace_root': None,
@@ -256,7 +256,7 @@ def list_session_files(session_id: str, path: str = ''):
             }
         )
     return {
-        'run_id': RUN_ID_WEB,
+        'run_id': _get_run_id_web(),
         'path': path or '.',
         'entries': entries,
         'workspace_root': str(base) if base else None,
@@ -416,7 +416,19 @@ def get_share_data(session_id: str):
 
 
 def _runs_dir() -> Path:
+    """Root directory for run dirs. When MAT_MASTER_RUN_DIR is set, returns its parent."""
+    override = os.environ.get('MAT_MASTER_RUN_DIR', '').strip()
+    if override:
+        return Path(override).expanduser().resolve().parent
     return _project_root / 'runs'
+
+
+def _get_run_id_web() -> str:
+    """Run id used for web mode (path segment and API). When MAT_MASTER_RUN_DIR is set, returns its basename."""
+    override = os.environ.get('MAT_MASTER_RUN_DIR', '').strip()
+    if override:
+        return Path(override).expanduser().resolve().name
+    return RUN_ID_WEB
 
 
 def _workspace_root_override() -> Path | None:
@@ -439,7 +451,7 @@ def _workspace_root_override() -> Path | None:
 
 def _list_workspace_ids() -> list[str]:
     """List all workspace folder names under runs/mat_master_web/workspaces/ (disk-only, so restart后也能回溯历史)."""
-    run_path = _runs_dir() / RUN_ID_WEB
+    run_path = _runs_dir() / _get_run_id_web()
     workspaces_dir = run_path / 'workspaces'
     if not workspaces_dir.is_dir():
         return []
@@ -488,7 +500,7 @@ def _resolve_session_workspace(
         if not override.is_dir():
             raise HTTPException(status_code=404, detail='Workspace root not found')
         return override, 'external'
-    run_path = _runs_dir() / RUN_ID_WEB
+    run_path = _runs_dir() / _get_run_id_web()
     if not run_path.is_dir():
         raise HTTPException(status_code=404, detail='Run not found')
     data = SESSIONS.get(session_id)
@@ -497,7 +509,7 @@ def _resolve_session_workspace(
         task_id = session_id
         if create:
             (run_path / 'workspaces' / task_id).mkdir(parents=True, exist_ok=True)
-    base = _get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
+    base = _get_run_workspace_path(_get_run_id_web(), task_id=task_id)
     if not base or not base.is_dir():
         raise HTTPException(status_code=404, detail='Workspace not found')
     return base, task_id
@@ -738,7 +750,7 @@ def _run_agent_sync(
 
     try:
         _playground_init_done.wait(timeout=300)
-        run_dir = _project_root / 'runs' / RUN_ID_WEB
+        run_dir = _runs_dir() / _get_run_id_web()
         task_id = task_id or ('ws_' + uuid.uuid4().hex[:8])
 
         if _cached_pg is not None:
