@@ -294,6 +294,20 @@ class ResearchPlanner(BaseExp):
         self.auto_replan = planner_cfg.get('auto_replan', True)
         self.replan_on_failure = planner_cfg.get('replan_on_failure', True)
         self.replan_on_new_skill = planner_cfg.get('replan_on_new_skill', True)
+
+        # Planner turn budget (global cap)
+        # Counts:
+        #   1) each planner LLM query (self.agent.llm.query)
+        #   2) each executed plan step
+        # Includes pre-check and replanning.
+        cfg_max_turns = planner_cfg.get('max_turns')
+        if cfg_max_turns is None:
+            cfg_max_turns = getattr(getattr(agent, 'config', None), 'max_turns', None)
+        try:
+            self._turn_budget_init: int = max(1, int(cfg_max_turns or 100))
+        except Exception:
+            self._turn_budget_init = 100
+        self._turn_budget_remaining: int = int(self._turn_budget_init)
         # Unified execution layer config (shared BatchExecutor)
         exec_cfg = mat.get('execution') or {}
         self._planner_max_workers: int = max(
@@ -326,6 +340,45 @@ class ResearchPlanner(BaseExp):
             ),
         }
 
+    def _consume_turns(self, state: dict[str, Any], task_id: str, n: int = 1) -> bool:
+        """Consume planner turn budget.
+
+        Returns False if budget would be exceeded; does not decrement in that case.
+        Also persists budget fields into state for resume safety.
+        """
+        try:
+            n_i = int(n)
+        except Exception:
+            n_i = 1
+        n_i = max(1, n_i)
+        if self._turn_budget_remaining - n_i < 0:
+            state['turn_budget_init'] = int(self._turn_budget_init)
+            state['turn_budget_remaining'] = int(self._turn_budget_remaining)
+            return False
+        self._turn_budget_remaining -= n_i
+        state['turn_budget_init'] = int(self._turn_budget_init)
+        state['turn_budget_remaining'] = int(self._turn_budget_remaining)
+        return True
+
+    def _fail_max_turns_exceeded(self, task_id: str, state: dict[str, Any]) -> dict[str, Any]:
+        """Mark state failed due to planner turn budget exhaustion and persist."""
+        state['phase'] = 'failed'
+        state['fail_reason'] = 'max_turns_exceeded'
+        state['turn_budget_init'] = int(self._turn_budget_init)
+        state['turn_budget_remaining'] = int(self._turn_budget_remaining)
+        self._emit(
+            'Planner',
+            'status',
+            {
+                'status': 'failed',
+                'reason': 'max_turns_exceeded',
+                'turn_budget_init': int(self._turn_budget_init),
+                'turn_budget_remaining': int(self._turn_budget_remaining),
+            },
+        )
+        self._save_state(task_id, state)
+        return state
+
     def _emit(self, source: str, event_type: str, content: Any) -> None:
         if source == 'Planner' and event_type == 'thought':
             content = _normalize_planner_thought(content)
@@ -353,10 +406,26 @@ class ResearchPlanner(BaseExp):
         if path.exists():
             try:
                 with open(path, encoding='utf-8') as f:
-                    return json.load(f)
+                    loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        # Restore budget on resume (if present)
+                        tb_init = loaded.get('turn_budget_init')
+                        tb_rem = loaded.get('turn_budget_remaining')
+                        try:
+                            if tb_init is not None:
+                                self._turn_budget_init = max(1, int(tb_init))
+                        except Exception:
+                            pass
+                        try:
+                            if tb_rem is not None:
+                                self._turn_budget_remaining = max(0, int(tb_rem))
+                        except Exception:
+                            pass
+                    return loaded
             except Exception as e:
                 self.logger.warning('Failed to load state: %s', e)
         return {
+            'task_id': task_id,
             'goal': '',
             'plan': None,
             'history': [],
@@ -364,6 +433,8 @@ class ResearchPlanner(BaseExp):
             'replan_count': 0,
             'execution_window': 0,
             'pre_check_context': '',
+            'turn_budget_init': int(self._turn_budget_init),
+            'turn_budget_remaining': int(self._turn_budget_remaining),
         }
 
     def _save_state(self, task_id: str, state: dict[str, Any]) -> None:
@@ -715,7 +786,7 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
                         )
         return plan
 
-    def _generate_plan(self, goal: str) -> dict[str, Any]:
+    def _generate_plan(self, goal: str, state: dict[str, Any] | None = None, task_id: str | None = None) -> dict[str, Any]:
         """Produce DEG via LLM with runtime context, normalize to steps, validate against CRP."""
         system = self._load_system_prompt()
         user = self._build_context_prompt(goal)
@@ -723,6 +794,13 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
             messages=[SystemMessage(content=system), UserMessage(content=user)],
             tools=[],
         )
+        if state is not None and task_id is not None:
+            if not self._consume_turns(state, task_id, 1):
+                self._fail_max_turns_exceeded(task_id, state)
+                return {
+                    'status': 'REFUSED',
+                    'refusal_reason': 'max_turns_exceeded',
+                }
         try:
             reply = self.agent.llm.query(dialog)
             # 将 Planner LLM 原始输出推送到前端
@@ -751,7 +829,13 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         return plan
 
     def _revise_plan(
-        self, goal: str, current_plan: dict[str, Any], user_feedback: str
+        self,
+        goal: str,
+        current_plan: dict[str, Any],
+        user_feedback: str,
+        *,
+        state: dict[str, Any] | None = None,
+        task_id: str | None = None,
     ) -> dict[str, Any]:
         """Revise plan from user feedback; same schema and validation as _generate_plan."""
         system = self._load_system_prompt()
@@ -762,6 +846,14 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
             messages=[SystemMessage(content=system), UserMessage(content=user)],
             tools=[],
         )
+        if state is not None and task_id is not None:
+            if not self._consume_turns(state, task_id, 1):
+                self._fail_max_turns_exceeded(task_id, state)
+                return {
+                    **current_plan,
+                    'status': 'REFUSED',
+                    'refusal_reason': 'max_turns_exceeded',
+                }
         try:
             reply = self.agent.llm.query(dialog)
             self._emit('Planner', 'thought', reply.content or '')
@@ -1437,7 +1529,7 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         return '\n'.join(lines)
 
     def _llm_replan_check(
-        self, state: dict[str, Any], step_result: dict[str, Any]
+        self, state: dict[str, Any], task_id: str, step_result: dict[str, Any]
     ) -> bool:
         """Lightweight LLM check: ask if the latest result warrants replanning."""
         if not self.auto_replan:
@@ -1471,6 +1563,9 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             tools=[],
         )
         try:
+            if not self._consume_turns(state, task_id, 1):
+                self._fail_max_turns_exceeded(task_id, state)
+                return False
             reply = self.agent.llm.query(dialog)
             raw = _extract_json_from_content(reply.content or '')
             if raw:
@@ -1512,11 +1607,12 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 'replan_reason', 'explicit replan requested by executor'
             )
         # 4. LLM-based heuristic (most expensive, checked last)
-        if self._llm_replan_check(state, step_result):
+        task_id = str(state.get('task_id') or '')
+        if task_id and self._llm_replan_check(state, task_id, step_result):
             return True, 'LLM heuristic detected plan deviation'
         return False, ''
 
-    def _replan_from_results(self, state: dict[str, Any], goal: str) -> dict[str, Any]:
+    def _replan_from_results(self, state: dict[str, Any], goal: str, task_id: str) -> dict[str, Any]:
         """Feed execution results back to planner LLM for mid-flight revision."""
         current_plan = state['plan']
         history_summary = self._summarize_history(state.get('history', []))
@@ -1534,7 +1630,13 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             f"You may add new steps (with step_id after the last existing step) or remove now-unnecessary steps.\n"
             f"Output the full revised plan as a single JSON object (same schema: execution_graph, fidelity_level). No other text."
         )
-        return self._revise_plan(goal, current_plan, revision_prompt)
+        return self._revise_plan(
+            goal,
+            current_plan,
+            revision_prompt,
+            state=state,
+            task_id=task_id,
+        )
 
     def _execute_single_step(
         self,
@@ -1567,6 +1669,15 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             'replan_requested': False,
             'replan_reason': '',
         }
+
+        # Planner turn budget: each executed plan step costs 1 turn.
+        # Charge early so we don't launch work when budget is already exhausted.
+        if not self._consume_turns(state, task_id, 1):
+            self._fail_max_turns_exceeded(task_id, state)
+            result_info['status'] = 'failed'
+            result_info['result_summary'] = 'max_turns_exceeded'
+            result_info['replan_requested'] = False
+            return result_info
 
         steps_list = state.get('plan', {}).get('steps', [])
         self._emit(
@@ -1870,7 +1981,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             self.logger.debug('Workspace scan failed (non-critical): %s', e)
         return files[:100]  # cap to avoid huge lists
 
-    def _assess_readiness(self, task_description: str) -> dict[str, Any]:
+    def _assess_readiness(self, task_description: str, state: dict[str, Any], task_id: str) -> dict[str, Any]:
         """Use LLM to assess whether the task is ready to plan or needs prerequisite work."""
         workspace_files = self._scan_workspace_files()
         files_str = (
@@ -1895,6 +2006,13 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             tools=[],
         )
         try:
+            if not self._consume_turns(state, task_id, 1):
+                self._fail_max_turns_exceeded(task_id, state)
+                return {
+                    'ready_to_plan': False,
+                    'prerequisites': [],
+                    'reasoning': 'max_turns_exceeded',
+                }
             reply = self.agent.llm.query(dialog)
             self._emit('Planner', 'thought', f"[Pre-check] {reply.content or ''}")
             raw = _extract_json_from_content(reply.content or '')
@@ -1930,6 +2048,10 @@ Assess whether this task can be planned immediately or needs preliminary work. O
 
         collected_context: list[str] = []
         for i, prereq in enumerate(prerequisites):
+            # Each prerequisite is treated as one executed step for planner budget.
+            if not self._consume_turns(state, task_id, 1):
+                self._fail_max_turns_exceeded(task_id, state)
+                break
             # Reset loop-detection per prerequisite so independent tasks don't
             # block each other.
             if hasattr(self.agent, '_tool_guard'):
@@ -2060,7 +2182,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         self.logger.info('[Planner] Pre-check: assessing readiness for: %s', goal[:80])
         self._emit('Planner', 'phase_change', {'from': 'init', 'to': 'pre_check'})
 
-        assessment = self._assess_readiness(goal)
+        assessment = self._assess_readiness(goal, state, task_id)
         prerequisites = assessment.get('prerequisites') or []
         reasoning = assessment.get('reasoning', '')
 
@@ -2158,7 +2280,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             )
 
         self.logger.info('[Planner] Designing flight plan for: %s', goal[:80])
-        plan = self._generate_plan(enriched_goal)
+        plan = self._generate_plan(enriched_goal, state=state, task_id=task_id)
 
         # ── Auto-revision loop for REFUSED plans ──
         max_auto_fix = 2
@@ -2201,7 +2323,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                     f"(e.g., 'mapped from VASP → ABACUS'). "
                     f"Return the revised plan in the same JSON schema."
                 )
-            plan = self._revise_plan(goal, plan, feedback)
+            plan = self._revise_plan(goal, plan, feedback, state=state, task_id=task_id)
 
         state['plan'] = plan
         if plan.get('status') == 'REFUSED':
@@ -2271,7 +2393,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 self.logger.info(
                     '[Planner] Revising plan from user feedback: %s', ans[:100]
                 )
-                plan = self._revise_plan(goal, plan, ans)
+                plan = self._revise_plan(goal, plan, ans, state=state, task_id=task_id)
                 state['plan'] = plan
                 self._save_state(task_id, state)
                 if plan.get('status') == 'REFUSED':
@@ -2290,7 +2412,9 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                         f"Fix the offending steps to use ONLY CRP-allowed software. "
                         f"Return the corrected plan JSON."
                     )
-                    plan = self._revise_plan(goal, plan, fix_feedback)
+                    plan = self._revise_plan(
+                        goal, plan, fix_feedback, state=state, task_id=task_id
+                    )
                     state['plan'] = plan
                     self._save_state(task_id, state)
                     if plan.get('status') == 'REFUSED':
@@ -2559,7 +2683,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         )
         old_steps = [s.copy() for s in state.get('plan', {}).get('steps', [])]
 
-        revised_plan = self._replan_from_results(state, goal)
+        revised_plan = self._replan_from_results(state, goal, task_id)
 
         if revised_plan.get('status') == 'REFUSED':
             self.logger.warning(
