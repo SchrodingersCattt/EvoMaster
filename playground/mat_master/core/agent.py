@@ -117,6 +117,7 @@ class MatMasterAgent(Agent):
                     self.logger.warning(
                         'dialog_history skip invalid message role=%s: %s', role, e
                     )
+            self._current_task_description = getattr(task, 'description', '') or ''
             self.current_dialog = Dialog(
                 messages=[
                     SystemMessage(content=system_prompt),
@@ -131,6 +132,7 @@ class MatMasterAgent(Agent):
             return
         super()._initialize(task)
         self._tool_output_save_counter = 0
+        self._current_task_description = getattr(task, 'description', '') or ''
         # Reset journal for the new task and bind it to the task-scoped file.
         self._execution_journal = ExecutionJournal()
         workspace = getattr(self.session.config, 'workspace_path', '') or ''
@@ -264,7 +266,6 @@ You can use the 'use_skill' tool to:
                     '[finish_attempt_gate] Blocked: structure-retrieval completeness gate. '
                     f"{struct_reason}"
                 )
-
         if blocked_msgs:
             self._finish_block_count += 1
             gate_info['finish_block_count'] = self._finish_block_count

@@ -17,7 +17,7 @@ Builds one canonical evidence table from structured literature outputs and expor
   - Structured PDF extraction outputs (obtain via `mat_doc_*` first).
   - Structured web search or webpage extraction outputs.
 - Output:
-  - A single canonical evidence table (`lit_evidence_table`) with one row per evidence card.
+  - A single canonical evidence table (`lit_evidence_table`) with one row per evidence card. This is the **intermediate** output. For business deliverables (e.g. `candidates.csv` with columns material_name, class, Ps, Pr, DOI, reference_URL), the agent should either map columns via `--schema` at export or add a follow-up step to produce the final CSV from the canonical table (see [business_export_candidates.md](references/business_export_candidates.md)).
 
 ## Workflow
 
@@ -89,3 +89,4 @@ Builds one canonical evidence table from structured literature outputs and expor
 ## References
 
 - Schema details: [canonical_evidence_schema.md](references/canonical_evidence_schema.md)
+- Business export (e.g. candidates.csv from canonical table): [business_export_candidates.md](references/business_export_candidates.md)
