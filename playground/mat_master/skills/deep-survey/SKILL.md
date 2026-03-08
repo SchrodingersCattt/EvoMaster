@@ -28,7 +28,8 @@ For depth-specific facet counts and retrieval budgets, fetch: `use_skill action=
 |-------------|-----|------------|
 | "Give me a comprehensive review on X" | **deep-survey** `--depth deep` | — |
 | "Survey the latest progress in Perovskite stability" | **deep-survey** `--depth deep` | — |
-| "Collect literature evidence for my paper on X" | **deep-survey** `--depth brief` | — |
+| "Collect literature evidence for my paper on X" | **deep-survey** `--depth brief` | Do not use `deep`; use `brief` for evidence-only. |
+| "Build candidates.csv / table from literature" | **deep-survey** `--depth brief` or `standard` → then **lit-data-organizer** | Do not use `deep` or long report as main deliverable. |
 | "Summarize methods for calculating melting points" (output to file) | **deep-survey** `--depth standard` or `deep` | — |
 | "What are the common failures in VASP relaxation?" (answer in chat) | MCP paper/search tools, short answer | deep-survey |
 | "Quick: what is X?" / one-off definition lookup | MCP web/search, short answer | deep-survey |
@@ -49,7 +50,7 @@ For depth-specific facet counts and retrieval budgets, fetch: `use_skill action=
 
 All reports follow the **citation and output format rules already injected into your system prompt** (`citation_and_output_format.md`): citation format, Markdown structure, units, abbreviation rules. This is the single source of truth for citation format — do not duplicate these rules in section content.
 
-**Note on `manuscript-scribe` delegation**: For `deep` mode, deep-survey may delegate report writing to manuscript-scribe's `write_section` tool. One-way only: deep-survey → manuscript-scribe. manuscript-scribe does not trigger deep-survey.
+**Note on `manuscript-scribe` delegation**: For `deep` mode, deep-survey may delegate report writing to manuscript-scribe's `write_section` tool. One-way only: deep-survey → manuscript-scribe. manuscript-scribe does not trigger deep-survey. **When you delegate to manuscript-scribe, you MUST use profile `literature_review`** (5-section structure: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References). Do **not** use the `review` profile (that is for full 6000+ word review articles with different section layout). For evidence-only or table-building workflows, prefer `brief` or `standard` depth and do not initialize manuscript-scribe at all unless the user explicitly asked for a written report.
 
 ## Scripts
 

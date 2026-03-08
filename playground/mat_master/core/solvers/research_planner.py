@@ -786,6 +786,66 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
                         )
         return plan
 
+    def _validate_plan_against_user_phase(
+        self,
+        plan: dict[str, Any],
+        goal: str,
+        *,
+        state: dict[str, Any] | None = None,
+        task_id: str | None = None,
+    ) -> tuple[bool, str]:
+        """Use LLM to judge whether the plan drifts beyond the user's requested scope."""
+        if plan.get('status') == 'REFUSED':
+            return True, ''
+        steps = plan.get('steps') or []
+        if not steps:
+            return True, ''
+        plan_json = json.dumps({'steps': steps}, ensure_ascii=False, indent=2)
+        prompt = f"""USER GOAL:
+{goal}
+
+PLAN:
+{plan_json}
+
+Question: Does this plan clearly drift into a later-phase report/manuscript deliverable instead of staying focused on the user's current requested phase?
+
+Return exactly one JSON object:
+{{
+  "passed": true,
+  "reason": ""
+}}
+
+Rules:
+- Be conservative. If the goal does not clearly define a current phase boundary, return passed=true.
+- Fail only when the plan clearly shifts the main deliverable away from the user's currently requested deliverables.
+- Do not invent missing deliverables or infer file names that are not explicitly stated.
+"""
+        dialog = Dialog(
+            messages=[
+                SystemMessage(
+                    content=f"You are a concise plan-alignment validator. Output only JSON.\n\n{LANGUAGE_RULE}"
+                ),
+                UserMessage(content=prompt),
+            ],
+            tools=[],
+        )
+        try:
+            if state is not None and task_id is not None:
+                if not self._consume_turns(state, task_id, 1):
+                    self._fail_max_turns_exceeded(task_id, state)
+                    return True, ''
+            reply = self.agent.llm.query(dialog)
+            raw = _extract_json_from_content(reply.content or '')
+            if not raw:
+                return True, ''
+            result = json.loads(raw)
+            passed = bool(result.get('passed', True))
+            reason = str(result.get('reason', '') or '')
+            return passed, reason
+        except Exception as e:
+            self.logger.debug('Plan scope validation skipped: %s', e)
+            return True, ''
+
     def _generate_plan(self, goal: str, state: dict[str, Any] | None = None, task_id: str | None = None) -> dict[str, Any]:
         """Produce DEG via LLM with runtime context, normalize to steps, validate against CRP."""
         system = self._load_system_prompt()
@@ -826,6 +886,23 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
             )
         plan = self._validate_plan_safety(plan)
         plan = self._enforce_manuscript_plan_consistency(plan, goal)
+        # Soft scope guard: keep runnable steps inside the user's current requested boundary
+        if plan.get('status') != 'REFUSED':
+            phase_ok, phase_reason = self._validate_plan_against_user_phase(
+                plan, goal, state=state, task_id=task_id
+            )
+            if not phase_ok and phase_reason:
+                self.logger.info(
+                    '[Planner] Scope validation: %s; requesting gentle revision.',
+                    phase_reason[:80],
+                )
+                plan = self._revise_plan(
+                    goal,
+                    plan,
+                    f"The current plan appears to go beyond the user's requested scope. {phase_reason} Revise the plan so executable steps stay within the user's current requested boundary, and move later-phase or out-of-scope work into plan_report notes instead of runnable steps.",
+                    state=state,
+                    task_id=task_id,
+                )
         return plan
 
     def _revise_plan(
@@ -1328,19 +1405,129 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
                     return True, f"manuscript validation failed ({marker})"
         return False, ''
 
-    _QUALITY_CRITICAL_HINTS: tuple[str, ...] = (
-        'deep-survey',
-        'run_survey',
-        'literature review',
-        'literature survey',
-        '综述报告',
-        '文献调研',
-    )
+    def _is_quality_critical_step(
+        self,
+        intent: str,
+        *,
+        state: dict[str, Any] | None = None,
+        task_id: str | None = None,
+    ) -> bool:
+        """Ask LLM whether this step needs document-quality gating.
 
-    @classmethod
-    def _is_quality_critical_step(cls, intent: str) -> bool:
-        text = (intent or '').lower()
-        return any(h in text for h in cls._QUALITY_CRITICAL_HINTS)
+        Conservative default: if the classifier cannot decide, do not apply the gate.
+        """
+        if not (intent or '').strip():
+            return False
+        prompt = f"""STEP INTENT:
+{intent}
+
+Question: Should this step be judged by long-form document quality criteria (survey/manuscript/report writing quality), rather than only by normal execution success?
+
+Return exactly one JSON object:
+{{
+  "apply_quality_gate": false,
+  "reason": ""
+}}
+
+Rules:
+- Return true only when the step's primary deliverable is clearly a written document whose quality must be reviewed.
+- Return false for data collection, extraction, normalization, scripts, tables, calculations, and generic execution steps.
+- Be conservative. If the intent is ambiguous, return false.
+"""
+        dialog = Dialog(
+            messages=[
+                SystemMessage(
+                    content=f"You are a strict step-quality classifier. Output only JSON.\n\n{LANGUAGE_RULE}"
+                ),
+                UserMessage(content=prompt),
+            ],
+            tools=[],
+        )
+        try:
+            if state is not None and task_id is not None:
+                if not self._consume_turns(state, task_id, 1):
+                    self._fail_max_turns_exceeded(task_id, state)
+                    return False
+            reply = self.agent.llm.query(dialog)
+            raw = _extract_json_from_content(reply.content or '')
+            if not raw:
+                return False
+            result = json.loads(raw)
+            return bool(result.get('apply_quality_gate', False))
+        except Exception as e:
+            self.logger.debug('Quality gate classification skipped: %s', e)
+            return False
+
+    def _build_step_prompt(self, intent: str, fallback: str) -> str:
+        """Build executor step prompt with explicit completion self-reporting."""
+        base = f"Achieve: {intent}. If that fails: {fallback}"
+        base += (
+            " At the end of the step, explicitly report one of: completed, partial, or blocked. "
+            "List the concrete outputs you produced or saved, and do not claim completion unless the requested deliverable was actually achieved."
+        )
+        return base
+
+    def _llm_verify_step_outcome(
+        self,
+        intent: str,
+        result_summary: str,
+        *,
+        state: dict[str, Any] | None = None,
+        task_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Use LLM to judge whether a step was completed from the reported outcome."""
+        prompt = f"""STEP INTENT:
+{intent}
+
+REPORTED STEP RESULT:
+{result_summary}
+
+Return exactly one JSON object:
+{{
+  "status": "completed",
+  "needs_replan": false,
+  "reason": ""
+}}
+
+Rules:
+- status must be one of: completed, partial, blocked, unclear.
+- Mark completed only if the reported result explicitly says the requested deliverable was achieved.
+- Mark blocked only if the result explicitly shows failure, fallback-only recovery, or inability to finish the requested deliverable.
+- Mark unclear when there is not enough evidence either way.
+- Set needs_replan=true only for blocked, or for partial when the step clearly cannot satisfy the plan without revision.
+- Do not infer missing files or hidden outputs that are not stated in the reported result.
+"""
+        dialog = Dialog(
+            messages=[
+                SystemMessage(
+                    content=f"You are a strict step completion validator. Output only JSON.\n\n{LANGUAGE_RULE}"
+                ),
+                UserMessage(content=prompt),
+            ],
+            tools=[],
+        )
+        default = {'status': 'unclear', 'needs_replan': False, 'reason': ''}
+        try:
+            if state is not None and task_id is not None:
+                if not self._consume_turns(state, task_id, 1):
+                    self._fail_max_turns_exceeded(task_id, state)
+                    return default
+            reply = self.agent.llm.query(dialog)
+            raw = _extract_json_from_content(reply.content or '')
+            if not raw:
+                return default
+            result = json.loads(raw)
+            status = str(result.get('status', 'unclear') or 'unclear').lower()
+            if status not in {'completed', 'partial', 'blocked', 'unclear'}:
+                status = 'unclear'
+            return {
+                'status': status,
+                'needs_replan': bool(result.get('needs_replan', False)),
+                'reason': str(result.get('reason', '') or ''),
+            }
+        except Exception as e:
+            self.logger.debug('Step LLM verifier skipped: %s', e)
+            return default
 
     @staticmethod
     def _extract_markdown_paths_from_text(text: str, workspace_dir: Path) -> list[Path]:
@@ -1426,8 +1613,10 @@ Analyze USER_INTENT against RUNTIME_CONTEXT and REQUEST_CONFIG. Generate the res
         intent: str,
         quality_files: list[Path],
         evidence_delta: int,
+        state: dict[str, Any] | None = None,
+        task_id: str | None = None,
     ) -> tuple[bool, str]:
-        if not self._is_quality_critical_step(intent):
+        if not self._is_quality_critical_step(intent, state=state, task_id=task_id):
             return False, ''
         if not quality_files:
             return (
@@ -1857,7 +2046,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
 
         # ---- Branch B: goal-oriented execution ----
         self._emit('Planner', 'exp_run', 'DirectSolver')
-        step_prompt = f"Achieve: {intent}. If that fails: {fallback}"
+        step_prompt = self._build_step_prompt(intent, fallback)
         try:
             solver.set_run_dir(workspaces)
             step_task = self._build_task_with_dialog_history(
@@ -1869,7 +2058,21 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
             summary = self._summarize_solver_result(result, max_len=1000)
             result_info['result_summary'] = summary[:200]
-            if self._is_quality_critical_step(intent):
+            llm_verifier = self._llm_verify_step_outcome(
+                intent,
+                summary,
+                state=state,
+                task_id=task_id,
+            )
+            result_info['llm_verifier'] = llm_verifier
+            if llm_verifier.get('needs_replan'):
+                result_info['status'] = 'failed'
+                result_info['replan_requested'] = True
+                result_info['replan_reason'] = (
+                    f"Step {step_id}: {llm_verifier.get('reason', 'step outcome requires replanning')}"
+                )
+                return result_info
+            if self._is_quality_critical_step(intent, state=state, task_id=task_id):
                 workspace_dir = self._task_workspace_dir(task_id)
                 quality_files = self._collect_quality_files(
                     step_dir, workspace_dir, summary
@@ -1899,6 +2102,8 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                     intent=intent,
                     quality_files=quality_files,
                     evidence_delta=max(0, evidence_delta),
+                    state=state,
+                    task_id=task_id,
                 )
                 if survey_failed:
                     result_info['status'] = 'failed'
@@ -1936,7 +2141,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 state.get('plan') if isinstance(state, dict) else None,
             ):
                 result_info['fallback_succeeded'] = True
-                if self._is_quality_critical_step(intent):
+                if self._is_quality_critical_step(intent, state=state, task_id=task_id):
                     result_info['status'] = 'failed'
                     result_info['result_summary'] = (
                         'fallback_used_for_quality_critical_step'
