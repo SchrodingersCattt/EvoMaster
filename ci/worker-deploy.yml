@@ -11,7 +11,15 @@ before_script:
   - |
     COMMIT_TAG=`echo $CI_COMMIT_TAG | awk -F '_' '{print $3}'`
     DOCKER_TAG=$CI_PIPELINE_ID$COMMIT_TAG
-    SERVER_NAME=matmaster-evo-worker
+    if [ -n "$CI_COMMIT_TAG" ]; then
+      SERVER_NAME=matmaster-evo-worker
+    elif [ "$CI_COMMIT_BRANCH" = "test" ]; then
+      SERVER_NAME=matmaster-evo-worker_test
+    elif [ "$CI_COMMIT_BRANCH" = "new_test" ]; then
+      SERVER_NAME=matmaster-evo-worker-new_test
+    else
+      SERVER_NAME=matmaster-evo-worker_${CI_COMMIT_BRANCH:-unknown}
+    fi
     DOCKER_IMAGE=$REGISTRY/flow/matmaster-evo-worker:${DOCKER_TAG}
     AUTHOR_NAME=$(git log -1 --pretty=format:"%an" --no-merges)
     export DOCKER_TAG SERVER_NAME DOCKER_IMAGE AUTHOR_NAME
