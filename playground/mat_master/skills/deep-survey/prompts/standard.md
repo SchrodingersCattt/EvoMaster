@@ -59,7 +59,7 @@ Replace `<topic>` with the actual topic slug used in Step 1 (e.g. `collected_Per
 ### Step 4 — Output
 - Save report to `_tmp/surveys/survey_<topic>.md`.
 - Do NOT leave any `(TBD)` in the delivered file.
-- **If using `manuscript-scribe` to assemble the report**, use `--profile literature_review` (matches this skill's 5-section structure: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References).
+- **If using `manuscript-scribe` to assemble the report**, use `--profile literature_review` only (and `--template literature_review` when initializing). Do NOT use `review` profile.
 
 ---
 

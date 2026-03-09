@@ -124,7 +124,21 @@ mat_master:
 
   # 规划模式配置（仅 --mode planner 时使用）
   planner:
+    # 1. Planner 全局回合预算 (Turn Budget)
+    # 用于限制整个任务（包含 pre-check, planning, replanning 和执行步骤）的总消耗。
+    # 计数规则：
+    #   - 每次 Planner 调用 LLM (规划/重规划/评估) 消耗 1 turn
+    #   - 每执行一个计划步骤 (Plan Step) 消耗 1 turn
+    # 预期行为：当总消耗达到此值，任务将以 max_turns_exceeded 状态停止。
+    # 为空时：fallback 到 agents.general.max_turns。
+    max_turns: 200
+
+    # 2. 单次计划步骤上限 (Max Steps)
+    # 限制 Planner 在单次规划中生成的“顶层步骤”数量。
+    # 预期行为：生成的 plan.steps 长度不会超过此值。
+    # 注意：这不限制执行过程中的 ReAct 回合数（由 agents.general.max_turns 限制）。
     max_steps: 20
+
     state_file: "research_state.json"
     system_prompt_file: "prompts/planner_system_prompt.txt"
     # 质量门控：survey 完成前至少检索次数（与 plan 中 10-15+ 下界一致）

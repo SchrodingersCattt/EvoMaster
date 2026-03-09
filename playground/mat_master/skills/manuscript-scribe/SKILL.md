@@ -30,7 +30,7 @@ To list all profiles with details: `init_manuscript.py --list_formats`
 - Computational study output (DFT, MD, phonons, etc.): use `computational_report`
 - Patent application: use `patent`
 - Thesis chapter: use `thesis_section`
-- Literature review / survey: use `review` (caller must supply retrieval results via collected.json or content files; this skill does not trigger deep-survey)
+- Literature review / survey: use `review` for full review articles (6000+ words). When the caller is **deep-survey** (5-section output: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References), use **`literature_review`** profile only, not `review`. This skill does not trigger deep-survey.
 - Standard paper: use `research_paper`. For Nature-style ordering (Methods after Discussion), still use `research_paper` — the section order can be resequenced at assembly time.
 - Default to `research_paper` if unclear.
 
