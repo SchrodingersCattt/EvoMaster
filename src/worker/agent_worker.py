@@ -8,6 +8,7 @@ import os
 import signal
 import sys
 import threading
+import time
 
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
@@ -92,6 +93,16 @@ def _run_worker_loop() -> None:
             acquired_ok, fail_reason = sessions_service.try_acquire_session_run(
                 session_id
             )
+            if not acquired_ok and fail_reason == 'db_update_failed':
+                logger.info(
+                    'Agent worker: db_update_failed, retry once after 2s session_id=%s task_id=%s',
+                    session_id,
+                    task_id,
+                )
+                time.sleep(2)
+                acquired_ok, fail_reason = sessions_service.try_acquire_session_run(
+                    session_id
+                )
             if not acquired_ok:
                 logger.warning(
                     'Agent worker: skip job session_id=%s task_id=%s reason=%s',
