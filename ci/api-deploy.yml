@@ -1,0 +1,73 @@
+# API 部署子流水线（由主流水线 trigger 触发，拥有独立 pipeline_id，避免与 Worker 的 deploy-test 唯一键冲突）
+# 父流水线需通过 trigger.variables 传入: DOCKER_IMAGE, SERVER_NAME, AUTHOR_NAME
+
+stages:
+  - deploy-test
+  - manual-uat
+  - deploy-uat
+
+.curl: &curl
+  >-
+  /busybox/curl --retry 3 --retry-delay 10 -s -X POST -H "Content-Type: application/json" -H "X-Gitlab-Token: ${secret}"  --data-binary """{
+  \"image\":\"$DOCKER_IMAGE\",
+  \"pipeline_id\":$CI_PIPELINE_ID,
+  \"tag\":\"$CI_COMMIT_TAG\",
+  \"branch\":\"$CI_COMMIT_BRANCH\",
+  \"server_name\":\"$SERVER_NAME\",
+  \"user\":\"$AUTHOR_NAME\",
+  \"commit_id\":\"$CI_COMMIT_SHA\",
+  \"step\":\"$CI_JOB_STAGE\",
+  \"project_id\":$CI_PROJECT_ID,
+  \"build_id\":$CI_JOB_ID,
+  \"step_status\":\"$CI_JOB_STATUS\",
+  \"gitlab_url\":\"$CI_PIPELINE_URL\",
+  \"deploy_name\":\"${DEVOPS_DEPLOY_NAME:-$CI_JOB_NAME}\"}""" ${devops} > result.json
+
+deploy-test:api:
+  stage: deploy-test
+  variables:
+    DEVOPS_DEPLOY_NAME: "deploy-test"
+  tags:
+    - $RUNNER_ZJK_TAG
+  script:
+    - echo 部署test环境 API
+    - echo "DOCKER_IMAGE=$DOCKER_IMAGE" && echo "SERVER_NAME=$SERVER_NAME"
+    - *curl
+    - echo "result.json内容如下:" && cat result.json
+    - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
+  retry: 2
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+      when: never
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/) && $CI_COMMIT_TAG == null'
+      when: on_success
+
+manual-uat:api:
+  stage: manual-uat
+  script:
+    - echo 触发飞书信息测试人员审核 API
+    - echo $DOCKER_IMAGE
+    - *curl
+    - cat result.json
+    - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
+  tags:
+    - $RUNNER_ZJK_TAG
+  rules:
+    - if: '$CI_COMMIT_TAG'
+
+deploy-uat:api:
+  stage: deploy-uat
+  script:
+    - echo 触发运维平台部署uat API
+    - echo $DOCKER_IMAGE
+    - *curl
+    - cat result.json
+    - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
+  tags:
+    - $RUNNER_ZJK_TAG
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
