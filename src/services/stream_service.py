@@ -248,15 +248,15 @@ class ChatStreamService:
         reason: str, previous_version: str | None, current_version: str | None
     ) -> str:
         if reason == 'restart':
-            return '上一轮任务因服务重启中断，正在自动重新执行。'
+            return '上一轮任务因服务重启中断，请重新发送以继续。'
         if previous_version and current_version:
             return (
                 '上一轮任务因服务升级'
-                f'（{previous_version} -> {current_version}）中断，正在自动重新执行。'
+                f'（{previous_version} -> {current_version}）中断，请重新发送以继续。'
             )
         if current_version:
-            return f'上一轮任务因服务升级到 {current_version} 中断，正在自动重新执行。'
-        return '上一轮任务因服务部署/重启中断，正在自动重新执行。'
+            return f'上一轮任务因服务升级到 {current_version} 中断，请重新发送以继续。'
+        return '上一轮任务因服务部署/重启中断，请重新发送以继续。'
 
     async def generate_subscribe_stream(
         self, session_id: str
@@ -318,13 +318,17 @@ class ChatStreamService:
                 get_worker_id(),
             )
             if is_stale:
-                self._sessions_service.reset_session_status_to_idle_in_db(sid)
-                payload = self._sessions_service.get_session_status_payload(sid)
-                last_query = self._events_service.get_last_user_query(sid)
-                yield self.sse_format(payload)
+                # 先区分原因再设状态：reason=restart 时会话状态设为 failed，否则设为 idle
                 reason, reason_meta = (
                     self._deploy_state_service.classify_restart_reason(sid)
                 )
+                if reason == 'restart':
+                    self._sessions_service.set_session_status(sid, 'failed')
+                else:
+                    self._sessions_service.reset_session_status_to_idle_in_db(sid)
+                payload = self._sessions_service.get_session_status_payload(sid)
+                last_query = self._events_service.get_last_user_query(sid)
+                yield self.sse_format(payload)
                 current_version = reason_meta.get('current_version')
                 previous_version = reason_meta.get('previous_version')
                 logger.info(
@@ -353,6 +357,9 @@ class ChatStreamService:
                     run_interrupted_payload['previous_version'] = previous_version
                 if reason_meta.get('note'):
                     run_interrupted_payload['reason_note'] = reason_meta['note']
+                # reason=restart 时按失败处理：便于前端直接结束流并展示为失败
+                if reason == 'restart':
+                    run_interrupted_payload['treat_as_failure'] = True
                 yield self.sse_format(run_interrupted_payload)
                 # 入库，便于历史/导出（如 CSV）中有重启记录；task_id 指向被中断的那一轮
                 interrupted_task_id = payload.get('last_task_id')
@@ -367,6 +374,8 @@ class ChatStreamService:
                     history_content['previous_version'] = previous_version
                 if reason_meta.get('note'):
                     history_content['reason_note'] = reason_meta['note']
+                if reason == 'restart':
+                    history_content['treat_as_failure'] = True
                 self._events_service.add_history_event(
                     sid,
                     {
@@ -378,6 +387,19 @@ class ChatStreamService:
                     },
                     user_id=self._sessions_service.get_session_user_id(sid),
                 )
+                # reason=restart 时按失败处理：直接结束流并推送 end，不再等待
+                if reason == 'restart':
+                    yield self.sse_format(
+                        {
+                            'source': 'System',
+                            'type': 'end',
+                            'content': run_interrupted_content,
+                            'session_id': sid,
+                            'end_reason': 'run_interrupted_restart',
+                            'treat_as_failure': True,
+                        }
+                    )
+                    return
                 # 不再自动重跑上次用户输入，由用户自行决定是否重新发送
             elif status == 'waiting' and not is_run_queued:
                 # DB 为 waiting 且 Redis 无 queued：若已有 run_owner 且存活则视为 active 不重置、继续流，否则重置为 idle 并结束流
