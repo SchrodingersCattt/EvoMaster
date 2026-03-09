@@ -278,6 +278,15 @@ class BaseLLM(ABC):
                 import traceback
                 traceback.print_exc()
                 last_error = e
+                
+                err_str = str(e).lower()
+                if "tokens" in err_str and ("exceed" in err_str or "limit" in err_str):
+                    self.logger.error(
+                        f"Context length exceeded: {e}. "
+                        f"No point retrying with the same oversized context."
+                    )
+                    raise
+                
                 self.logger.warning(
                     f"traceback: {traceback.format_exc()}"
                     f"LLM call failed (attempt {attempt + 1}/{self.config.max_retries}): {e}"
