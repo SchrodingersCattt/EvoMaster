@@ -725,7 +725,7 @@ class ChatStreamService:
         """
         sid = session_id.strip()
         mode = ctx.mode
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         start_time_ms = int(time.time() * 1000)
         logger.info(
             'generate_send_stream: start session_id=%s task_id=%s mode=%s',
@@ -952,7 +952,46 @@ class ChatStreamService:
                 )
                 try:
                     while True:
-                        payload = await ctx.request_event_queue.get()
+                        try:
+                            payload = await asyncio.wait_for(
+                                ctx.request_event_queue.get(), timeout=0.2
+                            )
+                        except asyncio.TimeoutError:
+                            # 给 event loop 机会处理 call_soon_threadsafe；若 agent 已结束仍未收到 end 则兜底 yield end（含 TestClient 等环境）
+                            if future.done():
+                                got_end = False
+                                while not ctx.request_event_queue.empty():
+                                    try:
+                                        payload = ctx.request_event_queue.get_nowait()
+                                    except asyncio.QueueEmpty:
+                                        break
+                                    elapsed_ms = int(time.time() * 1000) - start_time_ms
+                                    out = {
+                                        **payload,
+                                        'elapsed_ms': elapsed_ms,
+                                        'stream_started_at': start_time_ms,
+                                        'invocation_id': payload.get('invocation_id')
+                                        or ctx.invocation_id,
+                                    }
+                                    yield self.sse_format(out)
+                                    if payload.get('type') == 'end':
+                                        got_end = True
+                                        break
+                                if not got_end:
+                                    yield self.sse_format(
+                                        {
+                                            'source': 'System',
+                                            'type': 'end',
+                                            'content': 'Task completed, SSE connection can be closed.',
+                                            'session_id': sid,
+                                            'elapsed_ms': int(time.time() * 1000)
+                                            - start_time_ms,
+                                            'stream_started_at': start_time_ms,
+                                            'invocation_id': ctx.invocation_id,
+                                        }
+                                    )
+                                break
+                            continue
                         elapsed_ms = int(time.time() * 1000) - start_time_ms
                         out = {
                             **payload,
