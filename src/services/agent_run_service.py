@@ -809,6 +809,8 @@ class AgentRunService:
             )
             agent.set_agent_name(getattr(base, '_agent_name', 'default'))
             agent._stop_event = stop_event
+            if getattr(agent, 'session', None) is not None:
+                agent.session._stop_event = stop_event
             if reply_queue is not None:
                 agent._ask_human_queue = reply_queue
                 try:
