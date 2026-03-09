@@ -30,14 +30,15 @@ Builds one canonical evidence table from structured literature outputs and expor
    - Apply deduplication by configurable keys.
    - Preserve conflicting measurements with explicit conflict metadata.
    - For long runs, use staged/resumable processing (`--state`, `--resume`, `--stage`).
-3. Enrich (agent-side fill — no LLM in the script)
-   - After normalize completes, the agent reads `_tmp/lit_data/normalized_rows.json`, writes code to fill
-     material_name / property_name / property_value / property_unit / enrich_keep / enrich_note per row,
-     saves the result to `_tmp/lit_data/enrich_rows.json`, and updates `state["enrich_rows_file"]` in
-     `_tmp/lit_data/state.json`.
+3. Enrich (agent-side fill — structured extraction before dedup)
+   - After normalize completes, the agent reads `_tmp/lit_data/normalized_rows.json`.
+   - **Choose one enrichment strategy** (see [enrich_strategy.md](references/enrich_strategy.md)):
+     - **Pattern-based (regex)**: Fast, deterministic extraction from `quote_text` and `claim_text` for known field structures.
+     - **Semantic-based (LLM)**: Higher-cost semantic understanding for complex, ambiguous, or cross-reference resolution.
+   - Agent writes enriched rows to `_tmp/lit_data/enrich_rows.json` and updates `state["enrich_rows_file"]` in `_tmp/lit_data/state.json`.
    - Then call `--stage dedup --resume`; the script will auto-load `enrich_rows.json` via `state["enrich_rows_file"]`.
-   - Rows with enrich_keep=false are excluded from dedup and export.
-   - Do NOT fabricate values. Do NOT use regex to extract identifiers. Leave unknown fields as "NA".
+   - Rows with `enrich_keep=false` are excluded from dedup and export.
+   - **Rules**: Do NOT fabricate values. Leave unmatchable fields as "NA". Preserve confidence/uncertainty information.
 4. Export
    - Export canonical rows to `csv` or `jsonl`.
    - Review stdout summary for counts, enrich stats (if used), and conflict statistics.
@@ -89,4 +90,6 @@ Builds one canonical evidence table from structured literature outputs and expor
 ## References
 
 - Schema details: [canonical_evidence_schema.md](references/canonical_evidence_schema.md)
+- Enrich strategy guide: [enrich_strategy.md](references/enrich_strategy.md)
+- Pattern writing guide: [pattern_guide.md](references/pattern_guide.md)
 - Business export (e.g. candidates.csv from canonical table): [business_export_candidates.md](references/business_export_candidates.md)

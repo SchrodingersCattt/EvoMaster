@@ -42,6 +42,25 @@ The skill outputs one table shape only: `lit_evidence_table`.
 | `uncertainty` | string | Uncertainty/error expression. |
 | `conflict_group_id` | string | Group ID linking conflicting measurements. |
 | `conflict_note` | string | Human-readable reason for conflict preservation. |
+| `enrich_note` | string | Agent-generated note explaining enrichment method/quality. |
+| `enrich_keep` | string | `"true"` or `"false"` — whether to include row after enrichment. |
+
+## Enrichment Metadata
+
+The `enrich_note` and `enrich_keep` fields document the agent-side enrichment process:
+
+- **`enrich_note`** (string): Describes how enrichment was performed. Examples:
+  - `"pattern-based extraction"` — Used regex/keyword matching
+  - `"llm-based extraction"` — Used LLM semantic understanding
+  - `"hybrid (pattern + llm fallback)"` — Used patterns first, LLM for gaps
+  - `"filtered by inclusion rules"` — Row excluded by domain filters
+  - `"extraction failed"` — Enrichment process error
+
+- **`enrich_keep`** (string): Post-enrichment row filter. Values:
+  - `"true"` — Keep this row in final table
+  - `"false"` — Exclude this row (don't export)
+
+Rows with `enrich_keep="false"` are removed during the `dedup` stage and do not appear in the final export.
 
 ## Conflict Metadata Rules
 
@@ -74,12 +93,12 @@ Use `--schema <config.json>` with a JSON object:
 ## Generic CSV Row Example
 
 ```text
-source_id,source_type,source_title,source_url_or_path,topic,claim_text,quote_text,summary_text,evidence_span,tags,confidence,created_at,material_name,formula,composition,phase_or_polymorph,independent_vars,property_name,property_value,property_unit,property_role,test_method,conditions,uncertainty,conflict_group_id,conflict_note
-abc123,pdf,Document A,/path/doc_a.pdf,topic-a,Claim A,Quote A,Summary A,page:3,"tag1,tag2",0.82,2026-02-17T10:00:00+00:00,Material A,AxBy,,Phase I,"{""var1"":""v1""}",property_x,12.5,unit_x,dependent,method_1,"{""temperature"":300}",0.2,conflict-001,Conflicting measurements detected for the same material-property group across sources or methods.
+source_id,source_type,source_title,source_url_or_path,topic,claim_text,quote_text,summary_text,evidence_span,tags,confidence,created_at,material_name,formula,composition,phase_or_polymorph,independent_vars,property_name,property_value,property_unit,property_role,test_method,conditions,uncertainty,conflict_group_id,conflict_note,enrich_note,enrich_keep
+abc123,pdf,Document A,/path/doc_a.pdf,topic-a,Claim A,Quote A,Summary A,page:3,"tag1,tag2",0.82,2026-02-17T10:00:00+00:00,Material A,AxBy,,Phase I,"{""var1"":""v1""}",property_x,12.5,unit_x,dependent,method_1,"{""temperature"":300}",0.2,conflict-001,Conflicting measurements detected for the same material-property group across sources or methods.,pattern-based extraction,true
 ```
 
 ## Generic JSONL Row Example
 
 ```json
-{"source_id":"abc123","source_type":"web","source_title":"Source B","source_url_or_path":"https://example.org/item","topic":"topic-b","claim_text":"Claim B","quote_text":"Quote B","summary_text":"Summary B","evidence_span":"section:results","tags":"tagA,tagB","confidence":"0.76","created_at":"2026-02-17T10:00:00+00:00","material_name":"Material B","formula":"CxDy","composition":"","phase_or_polymorph":"","independent_vars":"{\"var2\":\"v2\"}","property_name":"property_y","property_value":"4.1","property_unit":"unit_y","property_role":"intermediate","test_method":"method_2","conditions":"{\"pressure\":1}","uncertainty":"","conflict_group_id":"","conflict_note":""}
+{"source_id":"abc123","source_type":"web","source_title":"Source B","source_url_or_path":"https://example.org/item","topic":"topic-b","claim_text":"Claim B","quote_text":"Quote B","summary_text":"Summary B","evidence_span":"section:results","tags":"tagA,tagB","confidence":"0.76","created_at":"2026-02-17T10:00:00+00:00","material_name":"Material B","formula":"CxDy","composition":"","phase_or_polymorph":"","independent_vars":"{\"var2\":\"v2\"}","property_name":"property_y","property_value":"4.1","property_unit":"unit_y","property_role":"intermediate","test_method":"method_2","conditions":"{\"pressure\":1}","uncertainty":"","conflict_group_id":"","conflict_note":"","enrich_note":"llm-based extraction","enrich_keep":"true"}
 ```
