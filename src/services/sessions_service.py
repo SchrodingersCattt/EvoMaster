@@ -154,22 +154,40 @@ class ChatSessionsService:
         """
         获取会话运行状态（来自 DB，部署/重启后与 reset_stale_active_sessions 一致）。
         用于流开头推送 session_status 事件，便于前端在重连后根据 idle 结束“未结束的 stream”状态。
+        waiting=已入队未接手；若 DB 为 waiting 但 Redis 已无 queued 标记（如 TTL 过期），则视为 idle 并重置 DB。
         """
         row = self.table.get_session(session_id)
         if not row:
             return 'idle'
-        return str(row.get('status') or 'idle').strip() or 'idle'
+        status = str(row.get('status') or 'idle').strip() or 'idle'
+        if (
+            status == 'waiting'
+            and REDIS_URL
+            and not get_redis_dao().is_session_run_queued(session_id)
+        ):
+            self.reset_session_status_to_idle_in_db(session_id)
+            return 'idle'
+        return status
 
     def get_session_status_payload(self, session_id: str) -> dict:
         """
         获取会话状态及关联信息，用于 session_status 事件（status、last_task_id 等）。
         返回值含 source, type, status, session_id；可选 last_task_id。
+        status 可为 idle | active | waiting（等待中=已入队未被 worker 接手）。
+        若 DB 为 waiting 但 Redis 已无 queued 标记，则重置为 idle。
         """
         row = self.table.get_session(session_id)
         status = 'idle'
         last_task_id = None
         if row:
             status = str(row.get('status') or 'idle').strip() or 'idle'
+            if (
+                status == 'waiting'
+                and REDIS_URL
+                and not get_redis_dao().is_session_run_queued(session_id)
+            ):
+                self.reset_session_status_to_idle_in_db(session_id)
+                status = 'idle'
             lt = row.get('last_task_id')
             if lt is not None and str(lt).strip():
                 last_task_id = str(lt).strip()
@@ -261,6 +279,10 @@ class ChatSessionsService:
             self._sessions_in_run.discard(session_id)
         self.table.set_session_status(session_id, 'idle')
         get_worker_registry_service().delete_session_run_owner(session_id)
+
+    def set_session_status(self, session_id: str, status: str) -> bool:
+        """设置会话状态（idle=空闲, active=运行中, waiting=已入队等待 worker 接手）。供入队等逻辑使用。"""
+        return self.table.set_session_status(session_id.strip(), status)
 
     def discard_session_run_from_this_pod(self, session_id: str) -> None:
         """仅从本进程 _sessions_in_run 移除，不改 DB 与 Redis run_owner。

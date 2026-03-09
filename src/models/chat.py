@@ -4,7 +4,7 @@ ag-ui 协议（前后端约定）：
 - 服务端 -> 客户端：SSE，event 固定为 "ag-ui"，data 为 JSON 字符串，字段：
   source: "System"|"User"|"MatMaster"|"Planner", type: 事件类型, content: 内容, session_id: 会话 id
   事件类型示例: session_status, status, query, thought, tool_call, tool_result, finish, error, cancelled, run_interrupted, planner_ask, planner_reply, exp_run, log_line, workspace_uploaded, workspace_upload_error, bohrium_node 等。
-  session_status：流开头推送，含 status: 'idle'|'active'，可选 last_task_id；便于部署/重启后前端根据 idle 结束“未结束的 stream”状态。
+  session_status：流开头推送，含 status: 'idle'|'active'|'waiting'（waiting=已入队未接手），可选 last_task_id；便于部署/重启后前端根据 idle 结束“未结束的 stream”状态。
   run_interrupted：部署/重启导致上一轮在别的 pod 上被中断时推送；reason 现区分 'deploy'（新版本部署）与 'restart'（同版本实例重启），并追加 current_version、previous_version（可选，缺失时表示未知），可选 last_user_content；若无法读取上一版本会提供 reason_note='missing_previous_version'。后端会自动在新 pod 上重跑上次任务，前端可仅做展示或根据 reason 结束“未结束的 stream”状态。bohrium_node 的 content 含 node_id, status: 'created'|'ready'|'skills_synced'|'connected'|'destroyed', message，ready/skills_synced/connected 时另有 ip。
 - 客户端 -> 服务端：REST
   POST /chat/sessions/{session_id}/stream  Body 可选：不传或 content 为空→仅历史+ping；有 content→发送并返回本次 SSE 流
@@ -38,7 +38,9 @@ class SessionItem(BaseModel):
     """会话列表项"""
 
     id: str
-    status: str = 'idle'  # idle=空闲/已结束，active=运行中（用于限流与前端展示）
+    status: str = (
+        'idle'  # idle=空闲/已结束，active=运行中，waiting=已入队等待 worker（用于限流与前端展示）
+    )
     history_length: int
     first_user_message: Optional[str] = None  # 第一条用户消息
 

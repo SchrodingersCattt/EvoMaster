@@ -379,6 +379,12 @@ class ChatStreamService:
                     user_id=self._sessions_service.get_session_user_id(sid),
                 )
                 # 不再自动重跑上次用户输入，由用户自行决定是否重新发送
+            elif status == 'waiting' and not is_run_queued:
+                # DB 为 waiting 但 Redis 已无 queued（如 TTL 过期），重置为 idle 并结束流
+                self._sessions_service.reset_session_status_to_idle_in_db(sid)
+                payload = self._sessions_service.get_session_status_payload(sid)
+                yield self.sse_format(payload)
+                return
             else:
                 yield self.sse_format(payload)
             events = self._events_service.get_session_events(sid)
@@ -762,6 +768,7 @@ class ChatStreamService:
                     )
                     return
                 get_redis_dao().set_session_run_queued(sid)
+                self._sessions_service.set_session_status(sid, 'waiting')
                 self._sessions_service.discard_session_run_from_this_pod(sid)
                 redis_queue = asyncio.Queue()
                 stop_event = threading.Event()
