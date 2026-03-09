@@ -1,0 +1,81 @@
+# API 镜像与部署：build / deploy-test / manual-uat / deploy-uat / manual-online
+
+.curl: &curl
+  >-
+  /busybox/curl --retry 3 --retry-delay 10 -s -X POST -H "Content-Type: application/json" -H "X-Gitlab-Token: ${secret}"  --data-binary """{
+  \"image\":\"$DOCKER_IMAGE\",
+  \"pipeline_id\":$CI_PIPELINE_ID,
+  \"tag\":\"$CI_COMMIT_TAG\",
+  \"branch\":\"$CI_COMMIT_BRANCH\",
+  \"server_name\":\"$SERVER_NAME\",
+  \"user\":\"$AUTHOR_NAME\",
+  \"commit_id\":\"$CI_COMMIT_SHA\",
+  \"step\":\"$CI_JOB_STAGE\",
+  \"project_id\":$CI_PROJECT_ID,
+  \"build_id\":$CI_JOB_ID,
+  \"step_status\":\"$CI_JOB_STATUS\",
+  \"gitlab_url\":\"$CI_PIPELINE_URL\",
+  \"deploy_name\":\"${DEVOPS_DEPLOY_NAME:-$CI_JOB_NAME}\"}""" ${devops} > result.json
+
+docker-build:api:
+  variables:
+    DOCKER_HOST: tcp://docker-build-service:32375
+  stage: build
+  image: $REGISTRY/public/ubuntu:gitlab-docker
+  script:
+    - git pull origin "${CI_COMMIT_BRANCH}" || true
+    - echo $SERVER_NAME && echo $DOCKER_IMAGE
+    - git rev-parse HEAD > ${CI_PROJECT_DIR}/.build-version
+    - |
+      cat > /root/.docker/config.json <<EOF
+      {
+      "auths": {
+        "registry.dp.tech": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        },
+        "dp-harbor-registry.cn-zhangjiakou.cr.aliyuncs.com": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        }
+      }
+      }
+      EOF
+    - >-
+      docker buildx build --progress=plain -f ${CI_PROJECT_DIR}/Dockerfile -t ${DOCKER_IMAGE} --cache-to type=inline,mode=max . --push
+    - *curl
+    - docker run --rm ${DOCKER_IMAGE} ls -la /app
+    - echo "DYNAMIC_IMAGE=${DOCKER_IMAGE}" >> ${CI_PROJECT_DIR}/build.env
+  retry: 2
+  tags:
+    - k8s-runner-ack
+  cache:
+    paths:
+      - /cache
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+      when: never
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/ || $CI_COMMIT_TAG'
+      when: on_success
+  artifacts:
+    reports:
+      dotenv: ${CI_PROJECT_DIR}/build.env
+
+# deploy-test / manual-uat / deploy-uat 已迁至子流水线 ci/api-deploy.yml（独立 pipeline_id）
+
+manual-online:api:
+  stage: manual-online
+  script:
+    - echo 触发飞书审批,运维通过后人工部署生产环境 API
+    - echo $DOCKER_IMAGE
+    - *curl
+    - cat result.json
+    - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
+  tags:
+    - $RUNNER_ZJK_TAG
+  needs:
+    - check-branch
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
