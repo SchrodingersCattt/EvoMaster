@@ -324,16 +324,19 @@ class RedisDao:
     # ---------- 用户停止（Worker 轮询）----------
 
     def set_stop_requested(self, session_id: str, task_id: str) -> bool:
-        """标记用户请求停止该 run。Worker 轮询 is_stop_requested。"""
+        """标记用户请求停止该 run。Worker 轮询 is_stop_requested。
+        同时写入 session 级 key（task_id 为空），便于 ctx 尚未就绪时 stop 仍能生效。
+        """
         client = self.create_client()
         if not client:
             return False
         try:
-            client.set(
-                _stop_key(session_id, task_id),
-                '1',
-                ex=AGENT_STOP_TTL_SEC,
-            )
+            key = _stop_key(session_id, task_id)
+            client.set(key, '1', ex=AGENT_STOP_TTL_SEC)
+            # 始终再写 session 级 key，供 Worker 在「仅按 session」时也能看到
+            session_key = _stop_key(session_id, '')
+            if session_key != key:
+                client.set(session_key, '1', ex=AGENT_STOP_TTL_SEC)
             return True
         except Exception as e:
             logger.warning(
@@ -345,22 +348,27 @@ class RedisDao:
             return False
 
     def is_stop_requested(self, session_id: str, task_id: str) -> bool:
-        """是否已请求停止该 run。"""
+        """是否已请求停止该 run。同时检查 task 级 key 与 session 级 key（ctx 未就绪时仅写 session 级）。"""
         client = self.create_client()
         if not client:
             return False
         try:
-            return client.exists(_stop_key(session_id, task_id)) > 0
+            if client.exists(_stop_key(session_id, task_id)) > 0:
+                return True
+            if (task_id or '').strip():
+                return client.exists(_stop_key(session_id, '')) > 0
+            return False
         except Exception:
             return False
 
     def delete_stop_requested(self, session_id: str, task_id: str) -> None:
-        """清除停止标记（run 结束后可选）。"""
+        """清除停止标记（run 结束后）。同时删除 task 级与 session 级 key。"""
         client = self.create_client()
         if not client:
             return
         try:
             client.delete(_stop_key(session_id, task_id))
+            client.delete(_stop_key(session_id, ''))
         except Exception as e:
             logger.warning(
                 'Redis delete_stop_requested failed session_id=%s task_id=%s: %s',
