@@ -61,7 +61,9 @@ def _mock_sessions_table():
     t = MagicMock()
     t.get_session.return_value = None
     t.create_session.return_value = None
-    t.set_session_status.return_value = None
+    t.set_session_status.return_value = (
+        True  # try_acquire_session_run 需其返回 True 才视为占用成功
+    )
     t.set_session_last_task.return_value = None
     t.list_sessions.return_value = []
     t.count_active_sessions.return_value = 0
