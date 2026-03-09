@@ -1,4 +1,4 @@
-FROM registry.dp.tech/public/python:3.13-slim
+FROM registry.dp.tech/public/python:3.13-slim AS builder
 
 # 配置 apt 使用清华大学镜像源
 RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
@@ -66,5 +66,12 @@ EXPOSE 80
 RUN echo '#!/bin/bash\nset -e\nsource .venv/bin/activate\nJEMALLOC=/usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2\nif [ -f "$JEMALLOC" ]; then export LD_PRELOAD="$JEMALLOC"; fi\nexec gunicorn app:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:80 --preload' > /app/start.sh && \
     chmod +x /app/start.sh
 
-# 启动命令
+# ---------- 多 target：API 与 Worker 不同 CMD（启动命令写在 Dockerfile） ----------
+# 构建：  API（默认）  docker build -t matmaster-evo:tag .  或  --target api
+#        Worker        docker build --target worker -t matmaster-evo-worker:tag .
+
+FROM builder AS worker
+CMD ["python", "-m", "src.worker.agent_worker"]
+
+FROM builder AS api
 CMD ["/app/start.sh"]

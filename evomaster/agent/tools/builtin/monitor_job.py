@@ -702,6 +702,20 @@ def _llm_decision_interval_at_poll(poll_index: int, base_interval: int) -> int:
     return max(1, base_interval)
 
 
+def _sleep_until_stop(seconds: float, stop_event: Any) -> bool:
+    """Sleep up to `seconds`; return True if stop was requested (caller should exit)."""
+    is_set = getattr(stop_event, 'is_set', None)
+    if not callable(is_set):
+        time.sleep(seconds)
+        return False
+    end = time.time() + seconds
+    while time.time() < end:
+        if stop_event.is_set():
+            return True
+        time.sleep(min(1.0, max(0.1, end - time.time())))
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Core lifecycle (backend-native version of run_lifecycle)
 # ---------------------------------------------------------------------------
@@ -722,6 +736,7 @@ def _run_lifecycle(
     llm_timeout_seconds: int = _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS,
     decision_check_interval: int = 10,
     max_polls_per_call: int | None = None,
+    stop_event: Any = None,
 ) -> dict[str, Any]:
     is_ssh = isinstance(session, SSHSession)
 
@@ -739,6 +754,14 @@ def _run_lifecycle(
     llm_decision_history: list[dict[str, Any]] = []
     last_llm_decision: dict[str, Any] | None = None
     while polls < max_polls:
+        if stop_event and getattr(stop_event, 'is_set', None) and stop_event.is_set():
+            return {
+                'status': 'cancelled',
+                'job_id': current_job_id,
+                'bohr_job_id': bohr_job_id,
+                'message': 'User requested stop.',
+                'llm_decision_history': llm_decision_history,
+            }
         status = str(
             query_job_status(
                 current_job_id,
@@ -898,7 +921,14 @@ def _run_lifecycle(
             )
             if failure_confirm_count >= _MAX_FAILURE_CONFIRMS:
                 break  # Confirmed failure — proceed to log-tail and return
-            time.sleep(min(poll_interval, 10))
+            if _sleep_until_stop(min(poll_interval, 10), stop_event):
+                return {
+                    'status': 'cancelled',
+                    'job_id': current_job_id,
+                    'bohr_job_id': bohr_job_id,
+                    'message': 'User requested stop.',
+                    'llm_decision_history': llm_decision_history,
+                }
             continue
 
         # -- Unknown --
@@ -919,7 +949,14 @@ def _run_lifecycle(
                         '(from extra_info.bohr_job_id in the submit response).'
                     ),
                 }
-            time.sleep(min(poll_interval, 10))
+            if _sleep_until_stop(min(poll_interval, 10), stop_event):
+                return {
+                    'status': 'cancelled',
+                    'job_id': current_job_id,
+                    'bohr_job_id': bohr_job_id,
+                    'message': 'User requested stop.',
+                    'llm_decision_history': llm_decision_history,
+                }
             continue
 
         # -- Still running: reset failure counter --
@@ -927,7 +964,14 @@ def _run_lifecycle(
         unknown_count = 0
         # 已达本次轮询上限且将返回 running（挂起恢复）时不 sleep，尽快返回；否则 sleep 后再下一轮
         if max_polls_per_call is None or (polls + 1) < max_polls:
-            time.sleep(poll_interval)
+            if _sleep_until_stop(poll_interval, stop_event):
+                return {
+                    'status': 'cancelled',
+                    'job_id': current_job_id,
+                    'bohr_job_id': bohr_job_id,
+                    'message': 'User requested stop.',
+                    'llm_decision_history': llm_decision_history,
+                }
         polls += 1
 
     # ── Loop ended: either confirmed failure (break) or max_polls exceeded ──
@@ -1112,11 +1156,10 @@ class MonitorJobParams(BaseToolParams):
         ),
     )
     max_polls_per_call: int | None = Field(
-        default=1,
+        default=None,
         description=(
-            '单次调用最多轮询次数。1 表示每次只查一次状态，未终态则返回 status=running，'
-            '由挂起恢复调度器在 poll_interval 秒后自动继续（推荐，避免长时间占用 worker）。'
-            'None 或 0 表示不限制，直到终态或总轮数上限（旧行为）。'
+            '单次调用最多轮询次数。None 表示不限制，轮询直到作业终态或总轮数上限（默认）。'
+            '设为正整数可限制单次调用的轮询次数（用于调试或缩短单次占用）。'
         ),
     )
 
@@ -1158,6 +1201,7 @@ class MonitorJobTool(BaseTool):
         max_ppc = params.max_polls_per_call
         if max_ppc is not None and max_ppc <= 0:
             max_ppc = None
+        stop_ev = getattr(session, '_stop_event', None)
         result = _run_lifecycle(
             job_id=params.job_id,
             software=params.software,
@@ -1176,6 +1220,7 @@ class MonitorJobTool(BaseTool):
             ),
             decision_check_interval=max(1, int(params.decision_check_interval or 1)),
             max_polls_per_call=max_ppc,
+            stop_event=stop_ev,
         )
 
         output = json.dumps(result, indent=2, ensure_ascii=False)

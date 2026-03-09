@@ -106,7 +106,7 @@ class ChatSessionsTable(BaseTable):
             return False
 
     def set_session_status(self, session_id: str, status: str) -> bool:
-        """设置会话状态：idle=空闲/已结束，active=运行中"""
+        """设置会话状态：idle=空闲/已结束，active=运行中，waiting=已入队等待 worker 接手"""
         try:
             with self.get_connection() as conn:
                 with conn.cursor() as cursor:
