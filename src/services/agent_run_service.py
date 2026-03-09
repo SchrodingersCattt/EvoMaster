@@ -738,13 +738,16 @@ class AgentRunService:
                                 'run_agent_sync: SSH session attached to Bohrium node ip=%s',
                                 node_ip,
                             )
-                            # 运行时清除节点上由平台注入的代理配置，避免 wget/curl 等卡住
+                            # 运行时清除节点上由平台注入的代理配置，避免 wget/curl/git 等卡住
                             try:
                                 if pg.session and hasattr(pg.session, 'exec_bash'):
                                     pg.session.exec_bash(
                                         'rm -f /root/speedUp.sh /speedUp.sh; '
                                         "echo 'use_proxy = no' > /root/.wgetrc; "
-                                        "echo '# proxy disabled' > /root/.curlrc",
+                                        "echo '# proxy disabled' > /root/.curlrc; "
+                                        'git config --global --unset http.proxy 2>/dev/null; '
+                                        'git config --global --unset https.proxy 2>/dev/null; '
+                                        'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY=;',
                                         timeout=15,
                                     )
                             except Exception as clear_err:
