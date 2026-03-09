@@ -24,7 +24,6 @@ def _mock_redis_dao():
     dao.delete_confirmation_reply_list.return_value = None
     dao.delete_confirmation_run_active.return_value = None
     dao.delete_stop_requested.return_value = None
-    dao.delete_checkpoint.return_value = None
     return dao
 
 

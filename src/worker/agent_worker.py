@@ -54,7 +54,6 @@ def _run_worker_loop() -> None:
         invocation_id = payload.get('invocation_id')
         user_prompt = payload.get('user_prompt') or ''
         mode = (payload.get('mode') or 'direct').strip().lower() or 'direct'
-        resume_checkpoint = payload.get('resume_checkpoint')
 
         if not session_id:
             logger.warning('Agent worker: skip job with empty session_id')
@@ -91,7 +90,6 @@ def _run_worker_loop() -> None:
                 reply_queue=reply_queue,
                 task_id=task_id,
                 invocation_id=invocation_id,
-                resume_checkpoint=resume_checkpoint,
             )
         except Exception as e:
             logger.exception(

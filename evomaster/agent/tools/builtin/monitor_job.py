@@ -1112,11 +1112,10 @@ class MonitorJobParams(BaseToolParams):
         ),
     )
     max_polls_per_call: int | None = Field(
-        default=1,
+        default=None,
         description=(
-            '单次调用最多轮询次数。1 表示每次只查一次状态，未终态则返回 status=running，'
-            '由挂起恢复调度器在 poll_interval 秒后自动继续（推荐，避免长时间占用 worker）。'
-            'None 或 0 表示不限制，直到终态或总轮数上限（旧行为）。'
+            '单次调用最多轮询次数。None 表示不限制，轮询直到作业终态或总轮数上限（默认）。'
+            '设为正整数可限制单次调用的轮询次数（用于调试或缩短单次占用）。'
         ),
     )
 
