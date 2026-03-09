@@ -71,8 +71,9 @@ def test_chat_stream_direct_runs_real_agent_and_returns_sse():
     mock_sessions = _mock_sessions_table()
     mock_events = _mock_events_table()
 
-    # 在 dao 层 patch get_*_table，使 sessions/events/agent_run 等所有调用方共用 mock；避免 patch 解析时 src.services 未加载子模块
+    # 强制走进程内 run_in_executor，否则 CI 若设了 REDIS_URL 会入队无 Worker 消费，永远收不到 end
     patches = [
+        patch('src.services.stream_service.REDIS_URL', None),
         patch(
             'src.dao.chat_sessions_table.get_chat_sessions_table',
             return_value=mock_sessions,
