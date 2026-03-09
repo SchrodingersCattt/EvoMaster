@@ -11,27 +11,25 @@ before_script:
   - |
     COMMIT_TAG=`echo $CI_COMMIT_TAG | awk -F '_' '{print $3}'`
     DOCKER_TAG=$CI_PIPELINE_ID$COMMIT_TAG
-    [ -z "$CI_COMMIT_TAG" ] && SERVER_NAME=$PROJECT_NAME || SERVER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
-    [ -z "$CI_COMMIT_TAG" ] && DOCKER_NAME=$(echo $PROJECT_NAME | awk -F '_' '{print $1}' ) || DOCKER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
-    SERVER_NAME_WORKER=${SERVER_NAME_WORKER:-matmaster-evo-worker}
-    DOCKER_IMAGE=$REGISTRY/flow/${DOCKER_NAME}:${DOCKER_TAG}
-    DOCKER_IMAGE_WORKER=$REGISTRY/flow/matmaster-evo-worker:${DOCKER_TAG}
+    SERVER_NAME=matmaster-evo-worker
+    DOCKER_IMAGE=$REGISTRY/flow/matmaster-evo-worker:${DOCKER_TAG}
     AUTHOR_NAME=$(git log -1 --pretty=format:"%an" --no-merges)
-    export DOCKER_TAG SERVER_NAME DOCKER_NAME SERVER_NAME_WORKER DOCKER_IMAGE DOCKER_IMAGE_WORKER AUTHOR_NAME
+    export DOCKER_TAG SERVER_NAME DOCKER_IMAGE AUTHOR_NAME
 
 stages:
   - deploy-test
   - manual-uat
   - deploy-uat
 
+# 与 API 子流水线一致：只用 SERVER_NAME / DOCKER_IMAGE，避免 SERVER_NAME_WORKER 等传不到 script
 .curl_worker: &curl_worker
   >-
   /busybox/curl --retry 3 --retry-delay 10 -s -X POST -H "Content-Type: application/json" -H "X-Gitlab-Token: ${secret}"  --data-binary """{
-  \"image\":\"$DOCKER_IMAGE_WORKER\",
+  \"image\":\"$DOCKER_IMAGE\",
   \"pipeline_id\":$CI_PIPELINE_ID,
   \"tag\":\"$CI_COMMIT_TAG\",
   \"branch\":\"$CI_COMMIT_BRANCH\",
-  \"server_name\":\"$SERVER_NAME_WORKER\",
+  \"server_name\":\"$SERVER_NAME\",
   \"user\":\"$AUTHOR_NAME\",
   \"commit_id\":\"$CI_COMMIT_SHA\",
   \"step\":\"$CI_JOB_STAGE\",
@@ -49,7 +47,7 @@ deploy-test:worker:
     - k8s-runner-zjk-svc
   script:
     - echo 部署test环境 Worker
-    - echo "DOCKER_IMAGE_WORKER=$DOCKER_IMAGE_WORKER" && echo "SERVER_NAME_WORKER=$SERVER_NAME_WORKER"
+    - echo "DOCKER_IMAGE=$DOCKER_IMAGE" && echo "SERVER_NAME=$SERVER_NAME"
     - *curl_worker
     - echo "result.json内容如下:" && cat result.json
     - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
@@ -67,7 +65,7 @@ manual-uat:worker:
   stage: manual-uat
   script:
     - echo 触发飞书信息测试人员审核 Worker
-    - echo $DOCKER_IMAGE_WORKER
+    - echo $DOCKER_IMAGE
     - *curl_worker
     - cat result.json
     - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
@@ -80,7 +78,7 @@ deploy-uat:worker:
   stage: deploy-uat
   script:
     - echo 触发运维平台部署uat Worker
-    - echo $DOCKER_IMAGE_WORKER
+    - echo $DOCKER_IMAGE
     - *curl_worker
     - cat result.json
     - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
