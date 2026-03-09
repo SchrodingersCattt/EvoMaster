@@ -3,7 +3,6 @@ variables:
   DOCKER_TLS_CERTDIR: ""
   RUNNER_ZJK_TAG: k8s-runner-zjk-svc
   REGISTRY: registry.dp.tech
-  COVER: "false"
   CHECK: main
 
 
@@ -43,17 +42,32 @@ services:
          \"gitlab_url\":\"$CI_PIPELINE_URL\",
          \"deploy_name\":\"$CI_JOB_NAME\"}""" ${devops} > result.json
 
+.curl_worker: &curl_worker
+         >-
+         /busybox/curl --retry 3 --retry-delay 10 -s -X POST -H "Content-Type: application/json" -H "X-Gitlab-Token: ${secret}"  --data-binary """{
+         \"image\":\"$DOCKER_IMAGE_WORKER\",
+         \"pipeline_id\":$CI_PIPELINE_ID,
+         \"tag\":\"$CI_COMMIT_TAG\",
+         \"branch\":\"$CI_COMMIT_BRANCH\",
+         \"server_name\":\"$SERVER_NAME_WORKER\",
+         \"user\":\"$AUTHOR_NAME\",
+         \"commit_id\":\"$CI_COMMIT_SHA\",
+         \"step\":\"$CI_JOB_STAGE\",
+         \"project_id\":$CI_PROJECT_ID,
+         \"build_id\":$CI_JOB_ID,
+         \"step_status\":\"$CI_JOB_STATUS\",
+         \"gitlab_url\":\"$CI_PIPELINE_URL\",
+         \"deploy_name\":\"$CI_JOB_NAME\"}""" ${devops} > result.json
 
-docker-build:
+
+docker-build:api:
   variables:
     DOCKER_HOST: tcp://docker-build-service:32375
   stage: build
   image: $REGISTRY/public/ubuntu:gitlab-docker
   script:
-    # 若上一条流水线是 build-remote-image 的 push，拉取后即含新默认镜像 ID
     - git pull origin "${CI_COMMIT_BRANCH}" || true
-    - echo $SERVER_NAME
-    - echo $DOCKER_IMAGE
+    - echo $SERVER_NAME && echo $DOCKER_IMAGE
     - git rev-parse HEAD > ${CI_PROJECT_DIR}/.build-version
     - |
       cat > /root/.docker/config.json <<EOF
@@ -72,8 +86,7 @@ docker-build:
       docker buildx build --progress=plain -f ${CI_PROJECT_DIR}/Dockerfile -t ${DOCKER_IMAGE} --cache-to type=inline,mode=max . --push
     - *curl
     - docker run --rm ${DOCKER_IMAGE} ls -la /app
-    - |
-      echo "DYNAMIC_IMAGE=${DOCKER_IMAGE}" >> ${CI_PROJECT_DIR}/build.env
+    - echo "DYNAMIC_IMAGE=${DOCKER_IMAGE}" >> ${CI_PROJECT_DIR}/build.env
   retry: 2
   tags:
     - k8s-runner-ack
@@ -81,7 +94,6 @@ docker-build:
     paths:
       - /cache
   rules:
-    # 本次 push 改了 remote 镜像相关文件时，本流水线只跑 build-remote-image，不跑 docker-build；由 push 触发的下一条流水线再 build/deploy
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
       changes:
         - Dockerfile.remote
@@ -91,7 +103,47 @@ docker-build:
       when: on_success
   artifacts:
     reports:
-      dotenv: ${CI_PROJECT_DIR}/build.env  # 保存变量到文件
+      dotenv: ${CI_PROJECT_DIR}/build.env
+
+docker-build:worker:
+  variables:
+    DOCKER_HOST: tcp://docker-build-service:32375
+  stage: build
+  image: $REGISTRY/public/ubuntu:gitlab-docker
+  needs:
+    - docker-build:api
+  script:
+    - |
+      cat > /root/.docker/config.json <<EOF
+      {
+      "auths": {
+        "registry.dp.tech": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        },
+        "dp-harbor-registry.cn-zhangjiakou.cr.aliyuncs.com": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        }
+      }
+      }
+      EOF
+    - echo $DOCKER_IMAGE_WORKER
+    - >-
+      docker buildx build --progress=plain -f ${CI_PROJECT_DIR}/Dockerfile --target worker -t ${DOCKER_IMAGE_WORKER} --cache-from ${DOCKER_IMAGE} . --push
+    - docker run --rm ${DOCKER_IMAGE_WORKER} python -c "import src.worker.agent_worker"
+  retry: 2
+  tags:
+    - k8s-runner-ack
+  cache:
+    paths:
+      - /cache
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+      when: never
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/ || $CI_COMMIT_TAG'
+      when: on_success
 
 # Remote 节点镜像：Dockerfile.remote 变更时构建并 push 更新 constant.py；本流水线不跑 docker-build，由 push 触发的下一条流水线 build/deploy
 # 需在 CI/CD Variables 中配置 BOHRIUM_ACCESS_KEY（Masked）、BOHRIUM_PROJECT_ID
@@ -160,37 +212,13 @@ build-remote-image:prod:
   tags:
     - $RUNNER_ZJK_TAG
 
-docker-cover-build:
-  stage: build
-  image: $REGISTRY/public/kaniko-project/executor:debug-0.0.5
-  script:
-    - echo "构建cover镜像"
-    - |
-      [ $COVER == "true" ] && DOCKER_IMAGE=$REGISTRY/flow/${DOCKER_NAME}:cover-${DOCKER_TAG}
-    - echo $DOCKER_IMAGE
-    - >-
-      /kaniko/executor
-      --context "${CI_PROJECT_DIR}"
-      --dockerfile=${CI_PROJECT_DIR}/build/docker/${DOCKER_NAME}/Dockerfile-cover
-      --destination=${DOCKER_IMAGE}
-      --build-arg BRANCH=$CI_COMMIT_BRANCH || exit 1
-    - *curl
-  retry: 2
-  tags:
-    - $RUNNER_ZJK_TAG
-  cache:
-    paths:
-      - .docker
-  rules:
-    - if: '($CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/) && $COVER == "true" '
-
 test:
   variables:
     DOCKER_HOST: tcp://docker-build-service:32375
   stage: test
   image: $REGISTRY/public/ubuntu:gitlab-docker  # 使用公共镜像
   dependencies:
-    - docker-build  # 显式依赖以获取 artifacts
+    - docker-build:api
   before_script:
     - |
       cat > /root/.docker/config.json <<EOF
@@ -240,35 +268,39 @@ test:
       when: on_success
 
 
-deploy-test:
+deploy-test:api:
   stage: deploy-test
+  needs:
+    - docker-build:api
   tags:
     - $RUNNER_ZJK_TAG
   script:
-      - echo 部署test 环境
-      - echo "COVER=$COVER"
-      - echo "DOCKER_IMAGE=$DOCKER_IMAGE"
-      - echo "DOCKER_NAME=$DOCKER_NAME"
-      - echo "DOCKER_TAG=$DOCKER_TAG"
-      - echo "SERVER_NAME=$SERVER_NAME"
-      - echo "AUTHOR_NAME=$AUTHOR_NAME"
-      - echo "CI_COMMIT_TAG=$CI_COMMIT_TAG"
-      - echo "CI_COMMIT_BRANCH=$CI_COMMIT_BRANCH"
-      - echo "CI_PIPELINE_ID=$CI_PIPELINE_ID"
-      - echo "CI_JOB_STAGE=$CI_JOB_STAGE"
-      - echo "CI_PROJECT_ID=$CI_PROJECT_ID"
-      - echo "CI_JOB_ID=$CI_JOB_ID"
-      - echo "CI_JOB_STATUS=$CI_JOB_STATUS"
-      - echo "CI_PIPELINE_URL=$CI_PIPELINE_URL"
-      - echo "CI_JOB_NAME=$CI_JOB_NAME"
-      - echo "devops=$devops"
-      - echo "secret=$secret"
-      - |
-        [ $COVER == "true" ] && DOCKER_IMAGE=$REGISTRY/flow/${DOCKER_NAME}:cover-${DOCKER_TAG}
-      - echo $DOCKER_IMAGE
+      - echo 部署test环境 API
+      - echo "DOCKER_IMAGE=$DOCKER_IMAGE" && echo "SERVER_NAME=$SERVER_NAME"
       - *curl
-      - echo "result.json内容如下:"
-      - cat result.json
+      - echo "result.json内容如下:" && cat result.json
+      - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
+  retry: 2
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+      when: never
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/) && $CI_COMMIT_TAG == null'
+      when: on_success
+
+deploy-test:worker:
+  stage: deploy-test
+  needs:
+    - docker-build:worker
+  tags:
+    - $RUNNER_ZJK_TAG
+  script:
+      - echo 部署test环境 Worker
+      - echo "DOCKER_IMAGE_WORKER=$DOCKER_IMAGE_WORKER" && echo "SERVER_NAME_WORKER=$SERVER_NAME_WORKER"
+      - *curl_worker
+      - echo "result.json内容如下:" && cat result.json
       - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
   retry: 2
   rules:
@@ -281,10 +313,10 @@ deploy-test:
       when: on_success
 
 
-manual-uat:
+manual-uat:api:
   stage: manual-uat
   script:
-    - echo 触发飞书信息测试人员审核
+    - echo 触发飞书信息测试人员审核 API
     - echo $DOCKER_IMAGE
     - *curl
     - cat result.json
@@ -294,13 +326,40 @@ manual-uat:
   rules:
     - if: '$CI_COMMIT_TAG'
 
+manual-uat:worker:
+  stage: manual-uat
+  script:
+    - echo 触发飞书信息测试人员审核 Worker
+    - echo $DOCKER_IMAGE_WORKER
+    - *curl_worker
+    - cat result.json
+    - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
+  tags:
+    - $RUNNER_ZJK_TAG
+  rules:
+    - if: '$CI_COMMIT_TAG'
 
-deploy-uat:
+
+deploy-uat:api:
   stage: deploy-uat
   script:
-    - echo 触发运维平台部署uat
+    - echo 触发运维平台部署uat API
     - echo $DOCKER_IMAGE
     - *curl
+    - cat result.json
+    - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
+  tags:
+    - $RUNNER_ZJK_TAG
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+
+deploy-uat:worker:
+  stage: deploy-uat
+  script:
+    - echo 触发运维平台部署uat Worker
+    - echo $DOCKER_IMAGE_WORKER
+    - *curl_worker
     - cat result.json
     - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
   tags:
@@ -335,14 +394,31 @@ check-branch:
   rules:
     - if: '$CI_COMMIT_TAG'
   needs:
-    - deploy-uat
+    - deploy-uat:api
+    - deploy-uat:worker
 
-manual-online:
+manual-online:api:
   stage: manual-online
   script:
-    - echo 触发飞书审批,运维通过后人工部署生产环境
+    - echo 触发飞书审批,运维通过后人工部署生产环境 API
     - echo $DOCKER_IMAGE
     - *curl
+    - cat result.json
+    - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
+  tags:
+    - $RUNNER_ZJK_TAG
+  needs:
+    - check-branch
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
+
+manual-online:worker:
+  stage: manual-online
+  script:
+    - echo 触发飞书审批,运维通过后人工部署生产环境 Worker
+    - echo $DOCKER_IMAGE_WORKER
+    - *curl_worker
     - cat result.json
     - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
   tags:
@@ -360,5 +436,7 @@ before_script:
     DOCKER_TAG=$CI_PIPELINE_ID$COMMIT_TAG
     [ -z "$CI_COMMIT_TAG" ] && SERVER_NAME=$PROJECT_NAME || SERVER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
     [ -z "$CI_COMMIT_TAG" ] && DOCKER_NAME=$(echo $PROJECT_NAME | awk -F '_' '{print $1}' ) || DOCKER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
+    SERVER_NAME_WORKER=${SERVER_NAME_WORKER:-matmaster-evo-worker}
   - DOCKER_IMAGE=$REGISTRY/flow/${DOCKER_NAME}:${DOCKER_TAG}
+  - DOCKER_IMAGE_WORKER=$REGISTRY/flow/matmaster-evo-worker:${DOCKER_TAG}
   - AUTHOR_NAME=$(git log -1 --pretty=format:"%an" --no-merges)
