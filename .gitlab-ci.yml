@@ -40,7 +40,7 @@ services:
          \"build_id\":$CI_JOB_ID,
          \"step_status\":\"$CI_JOB_STATUS\",
          \"gitlab_url\":\"$CI_PIPELINE_URL\",
-         \"deploy_name\":\"$CI_JOB_NAME\"}""" ${devops} > result.json
+         \"deploy_name\":\"${DEVOPS_DEPLOY_NAME:-$CI_JOB_NAME}\"}""" ${devops} > result.json
 
 .curl_worker: &curl_worker
          >-
@@ -57,7 +57,7 @@ services:
          \"build_id\":$CI_JOB_ID,
          \"step_status\":\"$CI_JOB_STATUS\",
          \"gitlab_url\":\"$CI_PIPELINE_URL\",
-         \"deploy_name\":\"$CI_JOB_NAME\"}""" ${devops} > result.json
+         \"deploy_name\":\"${DEVOPS_DEPLOY_NAME:-$CI_JOB_NAME}\"}""" ${devops} > result.json
 
 
 docker-build:api:
@@ -270,6 +270,9 @@ test:
 
 deploy-test:api:
   stage: deploy-test
+  variables:
+    # 与 deploy-test:worker 共用同一 deploy_name，满足 DevOps 只登记 "deploy-test" 的约定；通过 server_name/image 区分 API/Worker
+    DEVOPS_DEPLOY_NAME: "deploy-test"
   tags:
     - $RUNNER_ZJK_TAG
   script:
@@ -277,6 +280,7 @@ deploy-test:api:
       - echo "DOCKER_IMAGE=$DOCKER_IMAGE" && echo "SERVER_NAME=$SERVER_NAME"
       - *curl
       - echo "result.json内容如下:" && cat result.json
+      # code 10009 = 没有查询gitlab stage 步骤：需在 DevOps 侧登记本项目的 deploy-test 阶段或先注册 pipeline
       - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
   retry: 2
   rules:
@@ -290,6 +294,8 @@ deploy-test:api:
 
 deploy-test:worker:
   stage: deploy-test
+  variables:
+    DEVOPS_DEPLOY_NAME: "deploy-test"
   tags:
     - $RUNNER_ZJK_TAG
   script:
@@ -297,6 +303,7 @@ deploy-test:worker:
       - echo "DOCKER_IMAGE_WORKER=$DOCKER_IMAGE_WORKER" && echo "SERVER_NAME_WORKER=$SERVER_NAME_WORKER"
       - *curl_worker
       - echo "result.json内容如下:" && cat result.json
+      # code 10009 = 没有查询gitlab stage 步骤：需在 DevOps 侧登记本项目的 deploy-test 阶段或先注册 pipeline
       - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
   retry: 2
   rules:
