@@ -787,9 +787,18 @@ class AgentRunService:
                         )
                         event_callback(
                             'System',
-                            'status',
-                            f'自动创建 Bohrium 节点失败: {e}，继续使用当前环境运行',
+                            'bohrium_node',
+                            {
+                                'status': 'failed',
+                                'message': f'Bohrium 节点创建失败: {e}',
+                            },
                         )
+                        event_callback(
+                            'System',
+                            'error',
+                            f'Bohrium 节点创建失败: {e}',
+                        )
+                        return
 
             agent = StreamingMatMasterAgent(
                 event_callback=event_callback,
