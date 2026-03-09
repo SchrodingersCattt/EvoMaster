@@ -1,9 +1,5 @@
-# Worker 部署子流水线（由主流水线 trigger 触发，拥有独立 pipeline_id，避免与 API 的 deploy-test 唯一键冲突）
-# 父流水线需通过 trigger job 的 variables 传入: DOCKER_IMAGE_WORKER, SERVER_NAME_WORKER, AUTHOR_NAME, REGISTRY, RUNNER_ZJK_TAG
-
-variables:
-  RUNNER_ZJK_TAG: k8s-runner-zjk-svc
-  REGISTRY: registry.dp.tech
+# Worker 部署子流水线（由主流水线 trigger 触发，拥有独立 pipeline_id）
+# 与 scimaster-papermaster 一致：tag 写死为 k8s-runner-zjk-svc；父流水线通过 trigger job variables 传入 DOCKER_IMAGE_WORKER 等
 
 stages:
   - deploy-test
@@ -32,7 +28,7 @@ deploy-test:worker:
   variables:
     DEVOPS_DEPLOY_NAME: "deploy-test"
   tags:
-    - $RUNNER_ZJK_TAG
+    - k8s-runner-zjk-svc
   script:
     - echo 部署test环境 Worker
     - echo "DOCKER_IMAGE_WORKER=$DOCKER_IMAGE_WORKER" && echo "SERVER_NAME_WORKER=$SERVER_NAME_WORKER"
@@ -58,7 +54,7 @@ manual-uat:worker:
     - cat result.json
     - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
   tags:
-    - $RUNNER_ZJK_TAG
+    - k8s-runner-zjk-svc
   rules:
     - if: '$CI_COMMIT_TAG'
 
@@ -71,7 +67,7 @@ deploy-uat:worker:
     - cat result.json
     - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
   tags:
-    - $RUNNER_ZJK_TAG
+    - k8s-runner-zjk-svc
   rules:
     - if: '$CI_COMMIT_TAG'
       when: manual
