@@ -10,7 +10,7 @@
 llm:
   litellm:
     provider: "openai"
-    model: "gemini-3-flash-preview"
+    model: "claude-sonnet-4-6"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     # temperature: 0.7
@@ -35,7 +35,7 @@ llm:
   # 可选：DeepSeek，.env 提供 DEEPSEEK_API_KEY
   deepseek:
     provider: "deepseek"
-    model: "deepseek-chat"
+    model: "deepseek-reasoner"
     api_key: "${DEEPSEEK_API_KEY}"
     base_url: "https://api.deepseek.com"
     temperature: 0.7
