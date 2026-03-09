@@ -170,7 +170,7 @@ class Trajectory(BaseModel):
         status: Literal['completed', 'failed', 'cancelled', 'suspended'],
         result: dict[str, Any] | None = None,
     ) -> None:
-        """完成轨迹记录（suspended 表示因 monitor_job 挂起，将定时恢复）。"""
+        """完成轨迹记录（suspended 为历史遗留，当前未使用）。"""
         self.end_time = datetime.now()
         self.status = status
         if result:

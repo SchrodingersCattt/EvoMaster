@@ -154,22 +154,50 @@ class ChatSessionsService:
         """
         获取会话运行状态（来自 DB，部署/重启后与 reset_stale_active_sessions 一致）。
         用于流开头推送 session_status 事件，便于前端在重连后根据 idle 结束“未结束的 stream”状态。
+        waiting=已入队未接手；若 DB 为 waiting 但 Redis 已无 queued 标记，则视为 idle 并重置 DB；
+        若此时已有 run_owner 且存活，说明 worker 已接手，不重置并返回 active，避免「还在跑却显示 idle」。
         """
         row = self.table.get_session(session_id)
         if not row:
             return 'idle'
-        return str(row.get('status') or 'idle').strip() or 'idle'
+        status = str(row.get('status') or 'idle').strip() or 'idle'
+        if (
+            status == 'waiting'
+            and REDIS_URL
+            and not get_redis_dao().is_session_run_queued(session_id)
+        ):
+            registry = get_worker_registry_service()
+            owner = registry.get_session_run_owner(session_id)
+            if owner and registry.is_worker_alive(owner):
+                return 'active'
+            self.reset_session_status_to_idle_in_db(session_id)
+            return 'idle'
+        return status
 
     def get_session_status_payload(self, session_id: str) -> dict:
         """
         获取会话状态及关联信息，用于 session_status 事件（status、last_task_id 等）。
         返回值含 source, type, status, session_id；可选 last_task_id。
+        status 可为 idle | active | waiting（等待中=已入队未被 worker 接手）| failed（上一轮因 run_interrupted reason=restart 或 deploy 按失败结束）。
+        若 DB 为 waiting 但 Redis 已无 queued 标记：若有 run_owner 且存活则视为 active 不重置，否则重置为 idle。
         """
         row = self.table.get_session(session_id)
         status = 'idle'
         last_task_id = None
         if row:
             status = str(row.get('status') or 'idle').strip() or 'idle'
+            if (
+                status == 'waiting'
+                and REDIS_URL
+                and not get_redis_dao().is_session_run_queued(session_id)
+            ):
+                registry = get_worker_registry_service()
+                owner = registry.get_session_run_owner(session_id)
+                if owner and registry.is_worker_alive(owner):
+                    status = 'active'
+                else:
+                    self.reset_session_status_to_idle_in_db(session_id)
+                    status = 'idle'
             lt = row.get('last_task_id')
             if lt is not None and str(lt).strip():
                 last_task_id = str(lt).strip()
@@ -231,34 +259,66 @@ class ChatSessionsService:
         get_worker_registry_service().delete_session_run_owner(session_id)
         return self.table.delete_session(session_id, user_id)
 
-    def try_acquire_session_run(self, session_id: str) -> bool:
-        """若该 session 当前没有在跑的 agent 则占用并返回 True，否则返回 False。"""
+    def try_acquire_session_run(self, session_id: str) -> tuple[bool, str | None]:
+        """
+        若该 session 当前没有在跑的 agent 则占用并返回 (True, None)，否则返回 (False, reason)。
+        reason 为 'already_in_run'（本进程已有 run）或 'db_update_failed'（UPDATE 未命中行，通常为会话尚未落库或 Worker 与 API 不同库）。
+        """
         with self._sessions_run_lock:
             if session_id in self._sessions_in_run:
-                return False
+                return False, 'already_in_run'
             self._sessions_in_run.add(session_id)
-        self.table.set_session_status(session_id, 'active')
+        if not self.table.set_session_status(session_id, 'active'):
+            with self._sessions_run_lock:
+                self._sessions_in_run.discard(session_id)
+            logger.warning(
+                'try_acquire_session_run: set_session_status(active) failed session_id=%s '
+                '(session row may not exist: ensure API and Worker use same DB)',
+                session_id,
+            )
+            return False, 'db_update_failed'
         worker_id = get_worker_id()
         get_worker_registry_service().set_session_run_owner(session_id, worker_id)
+        if REDIS_URL:
+            get_redis_dao().delete_session_run_queued(session_id)
         logger.info(
             'try_acquire_session_run: acquired session_id=%s worker_id=%s',
             session_id,
             worker_id,
         )
-        return True
+        return True, None
 
-    def release_session_run(self, session_id: str) -> None:
-        """释放该 session 的“正在运行”占用（在 run 结束时调用）。"""
+    def release_session_run(self, session_id: str, run_success: bool = True) -> None:
+        """释放该 session 的“正在运行”占用（在 run 结束时调用）。
+        run_success=False 时会话状态置为 failed，否则置为 idle。"""
         worker_id = get_worker_id()
+        target_status = 'idle' if run_success else 'failed'
         logger.info(
-            'release_session_run: session_id=%s worker_id=%s',
+            'release_session_run: session_id=%s worker_id=%s status=%s',
             session_id,
             worker_id,
+            target_status,
         )
         with self._sessions_run_lock:
             self._sessions_in_run.discard(session_id)
-        self.table.set_session_status(session_id, 'idle')
+        self.table.set_session_status(session_id, target_status)
         get_worker_registry_service().delete_session_run_owner(session_id)
+
+    def set_session_status(self, session_id: str, status: str) -> bool:
+        """设置会话状态（idle=空闲, active=运行中, waiting=已入队等待 worker 接手）。供入队等逻辑使用。"""
+        return self.table.set_session_status(session_id.strip(), status)
+
+    def discard_session_run_from_this_pod(self, session_id: str) -> None:
+        """仅从本进程 _sessions_in_run 移除，不改 DB 与 Redis run_owner。
+        队列模式下 API 入队成功后调用，使 subscribe 流走「run 在别的 pod」分支并监听 Redis，避免流永不关闭。"""
+        sid = session_id.strip()
+        with self._sessions_run_lock:
+            self._sessions_in_run.discard(sid)
+        logger.info(
+            'discard_session_run_from_this_pod: session_id=%s worker_id=%s',
+            sid,
+            get_worker_id(),
+        )
 
     def is_session_running_on_this_pod(self, session_id: str) -> bool:
         """当前进程是否正在跑该 session 的 agent（仅内存状态）。"""
@@ -299,10 +359,22 @@ class ChatSessionsService:
         """
         请求终止该会话当前正在运行的 agent。
         先通过 Redis 广播（多 worker 时其他进程可收到），再在本进程 set stop event。
+        若启用队列模式且 run 在 Worker，则同时写 Redis stop key，供 Worker 轮询。
+        始终写入 Redis stop（至少 session 级），避免 ctx 尚未就绪或 task_id 为空时 stop 不生效。
         若有活跃 run 则设置 stop event 并返回 True；否则返回 False。
         """
         sid = session_id.strip()
-        get_redis_dao().publish(REDIS_STOP_CHANNEL, sid)
+        redis_dao = get_redis_dao()
+        redis_dao.publish(REDIS_STOP_CHANNEL, sid)
+        # 队列模式：run 在 Worker，Worker 轮询 Redis stop key；始终写至少 session 级，确保 stop 生效
+        ctx = redis_dao.get_confirmation_run_context(sid)
+        task_id = (ctx.get('task_id', '') or '').strip() if ctx else ''
+        if redis_dao.set_stop_requested(sid, task_id):
+            logger.debug(
+                'stop_session_run: set_stop_requested session_id=%s task_id=%s',
+                sid,
+                task_id or '(session-only)',
+            )
         ev = self._run_stop_events.get(sid)
         if ev is None:
             return False
