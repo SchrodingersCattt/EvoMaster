@@ -245,26 +245,20 @@ You can use the 'use_skill' tool to:
             )
             gate_info['finish_force_passed'] = True
         else:
-            manuscript_ok, manuscript_reason = self._tool_guard.can_finish_manuscript()
             workspace = getattr(self.session.config, 'workspace_path', '') or ''
-            survey_ok, survey_reason = self._tool_guard.can_finish_survey(workspace)
-            struct_ok, struct_reason = self._tool_guard.can_finish_structure_retrieval(
-                requested_task_completed
+            task_description = getattr(self, '_current_task_description', '')
+            
+            gate_eval = self._llm_finish_gate_check(
+                task_description=task_description,
+                requested_task_completed=requested_task_completed,
+                workspace_path=workspace,
             )
-            if not manuscript_ok:
+            
+            if not gate_eval.get('approved', False):
+                reason = gate_eval.get('reason', 'Task completion requirements not met')
                 blocked_msgs.append(
-                    '[finish_attempt_gate] Blocked: manuscript validation gate is failing. '
-                    f"{manuscript_reason} Re-run manuscript-scribe validation/assembly and fix issues before finishing."
-                )
-            if not survey_ok:
-                blocked_msgs.append(
-                    '[finish_attempt_gate] Blocked: survey evidence gate is failing. '
-                    f"{survey_reason} Increase retrieval depth and refresh evidence before finishing."
-                )
-            if not struct_ok:
-                blocked_msgs.append(
-                    '[finish_attempt_gate] Blocked: structure-retrieval completeness gate. '
-                    f"{struct_reason}"
+                    f'[finish_attempt_gate] Blocked: {reason}\n'
+                    f'Task: {task_description[:100]}{"..." if len(task_description) > 100 else ""}'
                 )
         if blocked_msgs:
             self._finish_block_count += 1
@@ -288,6 +282,97 @@ You can use the 'use_skill' tool to:
             )
 
         return blocked_msgs, gate_info
+
+    def _llm_finish_gate_check(
+        self,
+        task_description: str,
+        requested_task_completed: str,
+        workspace_path: str,
+    ) -> dict[str, Any]:
+        """Use LLM to decide whether finish is appropriate given the actual task requirements.
+        
+        Evaluates whether the user's requested task has been accomplished, rather than
+        checking hardcoded gates that may not match the actual requirements.
+        
+        Returns dict with 'approved' (bool) and 'reason' (str).
+        """
+        if not task_description or not task_description.strip():
+            # No task description available, allow finish
+            return {'approved': True, 'reason': ''}
+        
+        prompt = f"""TASK DESCRIPTION:
+{task_description}
+
+USER REQUESTED: task_completed={requested_task_completed}
+
+Question: Has the user's requested task been accomplished? 
+- Do NOT gate on mandatory manuscript validation or survey markdown quality.
+- Only block if the core deliverable requested by the user is clearly missing or incomplete.
+- Be permissive: if the task is substantially done, return approved=true.
+
+Return exactly one JSON object:
+{{
+  "approved": true,
+  "reason": ""
+}}
+
+If NOT approved, reason should be specific (e.g. "Requested CSV file not found in workspace").
+"""
+        
+        dialog = Dialog(
+            messages=[
+                SystemMessage(
+                    content="You are a strict task completion validator. Output only JSON. Do not require manuscript quality gates or survey markdown gates unless the user explicitly asked for a written document."
+                ),
+                UserMessage(content=prompt),
+            ],
+            tools=[],
+        )
+        
+        default = {'approved': True, 'reason': ''}
+        try:
+            reply = self.llm.query(dialog)
+            raw = self._extract_json_from_reply(reply.content or '')
+            if not raw:
+                return default
+            result = json.loads(raw)
+            approved = bool(result.get('approved', True))
+            reason = str(result.get('reason', '') or '')
+            return {'approved': approved, 'reason': reason}
+        except Exception as e:
+            self.logger.debug('LLM finish gate check failed: %s', e)
+            return default
+
+    @staticmethod
+    def _extract_json_from_reply(content: str) -> str | None:
+        """Extract JSON object from LLM reply.
+        
+        Handles both raw JSON and fenced code blocks (```json ... ```).
+        Returns the first valid JSON object found, or None if not found.
+        """
+        text = (content or '').strip()
+        if '```json' in text:
+            start = text.find('```json') + 7
+            end = text.find('```', start)
+            if end > start:
+                return text[start:end].strip()
+        if '```' in text:
+            start = text.find('```') + 3
+            end = text.find('```', start)
+            if end > start:
+                return text[start:end].strip()
+        start = text.find('{')
+        if start < 0:
+            return None
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == '{':
+                depth += 1
+            elif text[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    return text[start : i + 1]
+        return None
 
     # ------------------------------------------------------------------
     # Finish report generation

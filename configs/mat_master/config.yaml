@@ -10,7 +10,7 @@
 llm:
   litellm:
     provider: "openai"
-    model: "gemini-3-flash-preview"
+    model: "azure/gpt-5"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     # temperature: 0.7
