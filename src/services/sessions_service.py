@@ -154,7 +154,8 @@ class ChatSessionsService:
         """
         获取会话运行状态（来自 DB，部署/重启后与 reset_stale_active_sessions 一致）。
         用于流开头推送 session_status 事件，便于前端在重连后根据 idle 结束“未结束的 stream”状态。
-        waiting=已入队未接手；若 DB 为 waiting 但 Redis 已无 queued 标记（如 TTL 过期），则视为 idle 并重置 DB。
+        waiting=已入队未接手；若 DB 为 waiting 但 Redis 已无 queued 标记，则视为 idle 并重置 DB；
+        若此时已有 run_owner 且存活，说明 worker 已接手，不重置并返回 active，避免「还在跑却显示 idle」。
         """
         row = self.table.get_session(session_id)
         if not row:
@@ -165,6 +166,10 @@ class ChatSessionsService:
             and REDIS_URL
             and not get_redis_dao().is_session_run_queued(session_id)
         ):
+            registry = get_worker_registry_service()
+            owner = registry.get_session_run_owner(session_id)
+            if owner and registry.is_worker_alive(owner):
+                return 'active'
             self.reset_session_status_to_idle_in_db(session_id)
             return 'idle'
         return status
@@ -174,7 +179,7 @@ class ChatSessionsService:
         获取会话状态及关联信息，用于 session_status 事件（status、last_task_id 等）。
         返回值含 source, type, status, session_id；可选 last_task_id。
         status 可为 idle | active | waiting（等待中=已入队未被 worker 接手）。
-        若 DB 为 waiting 但 Redis 已无 queued 标记，则重置为 idle。
+        若 DB 为 waiting 但 Redis 已无 queued 标记：若有 run_owner 且存活则视为 active 不重置，否则重置为 idle。
         """
         row = self.table.get_session(session_id)
         status = 'idle'
@@ -186,8 +191,13 @@ class ChatSessionsService:
                 and REDIS_URL
                 and not get_redis_dao().is_session_run_queued(session_id)
             ):
-                self.reset_session_status_to_idle_in_db(session_id)
-                status = 'idle'
+                registry = get_worker_registry_service()
+                owner = registry.get_session_run_owner(session_id)
+                if owner and registry.is_worker_alive(owner):
+                    status = 'active'
+                else:
+                    self.reset_session_status_to_idle_in_db(session_id)
+                    status = 'idle'
             lt = row.get('last_task_id')
             if lt is not None and str(lt).strip():
                 last_task_id = str(lt).strip()
@@ -255,7 +265,14 @@ class ChatSessionsService:
             if session_id in self._sessions_in_run:
                 return False
             self._sessions_in_run.add(session_id)
-        self.table.set_session_status(session_id, 'active')
+        if not self.table.set_session_status(session_id, 'active'):
+            with self._sessions_run_lock:
+                self._sessions_in_run.discard(session_id)
+            logger.warning(
+                'try_acquire_session_run: set_session_status(active) failed session_id=%s',
+                session_id,
+            )
+            return False
         worker_id = get_worker_id()
         get_worker_registry_service().set_session_run_owner(session_id, worker_id)
         if REDIS_URL:

@@ -380,11 +380,20 @@ class ChatStreamService:
                 )
                 # 不再自动重跑上次用户输入，由用户自行决定是否重新发送
             elif status == 'waiting' and not is_run_queued:
-                # DB 为 waiting 但 Redis 已无 queued（如 TTL 过期），重置为 idle 并结束流
-                self._sessions_service.reset_session_status_to_idle_in_db(sid)
-                payload = self._sessions_service.get_session_status_payload(sid)
-                yield self.sse_format(payload)
-                return
+                # DB 为 waiting 且 Redis 无 queued：若已有 run_owner 且存活则视为 active 不重置、继续流，否则重置为 idle 并结束流
+                run_owner = get_worker_registry_service().get_session_run_owner(sid)
+                owner_alive = bool(
+                    run_owner
+                    and get_worker_registry_service().is_worker_alive(run_owner)
+                )
+                if owner_alive:
+                    payload = {**payload, 'status': 'active'}
+                    yield self.sse_format(payload)
+                else:
+                    self._sessions_service.reset_session_status_to_idle_in_db(sid)
+                    payload = self._sessions_service.get_session_status_payload(sid)
+                    yield self.sse_format(payload)
+                    return
             else:
                 yield self.sse_format(payload)
             events = self._events_service.get_session_events(sid)
