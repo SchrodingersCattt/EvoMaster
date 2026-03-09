@@ -62,11 +62,11 @@ class ContextManager:
         if self._token_counter:
             return self._token_counter.count_dialog(dialog)
 
-        # 简单估算：每 4 个字符约 1 个 token
+        # 保守估算：约1个字符 = 1 token（对中英文混合内容更准确）
         total_chars = sum(
             self._content_char_len(msg.content) for msg in dialog.messages
         )
-        return total_chars // 4
+        return int(total_chars / 1)
 
     @staticmethod
     def _content_char_len(content: str | list | dict | None) -> int:
