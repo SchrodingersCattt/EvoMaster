@@ -240,6 +240,8 @@ class ChatSessionsService:
         self.table.set_session_status(session_id, 'active')
         worker_id = get_worker_id()
         get_worker_registry_service().set_session_run_owner(session_id, worker_id)
+        if REDIS_URL:
+            get_redis_dao().delete_session_run_queued(session_id)
         logger.info(
             'try_acquire_session_run: acquired session_id=%s worker_id=%s',
             session_id,
@@ -259,6 +261,18 @@ class ChatSessionsService:
             self._sessions_in_run.discard(session_id)
         self.table.set_session_status(session_id, 'idle')
         get_worker_registry_service().delete_session_run_owner(session_id)
+
+    def discard_session_run_from_this_pod(self, session_id: str) -> None:
+        """仅从本进程 _sessions_in_run 移除，不改 DB 与 Redis run_owner。
+        队列模式下 API 入队成功后调用，使 subscribe 流走「run 在别的 pod」分支并监听 Redis，避免流永不关闭。"""
+        sid = session_id.strip()
+        with self._sessions_run_lock:
+            self._sessions_in_run.discard(sid)
+        logger.info(
+            'discard_session_run_from_this_pod: session_id=%s worker_id=%s',
+            sid,
+            get_worker_id(),
+        )
 
     def is_session_running_on_this_pod(self, session_id: str) -> bool:
         """当前进程是否正在跑该 session 的 agent（仅内存状态）。"""

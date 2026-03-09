@@ -466,10 +466,18 @@ class ChatStreamService:
                 for event in events:
                     if event.get('type') != 'log_line':
                         yield self.sse_format(event)
-            # 保持流打开直到本进程或其它 pod 上的 run 结束，避免刷新落到非执行 worker 时流提前关闭、前端误判为已结束
-            while self._sessions_service.is_session_running_on_this_pod(
-                sid
-            ) or self._sessions_service.is_session_run_on_another_pod(sid):
+
+            # 保持流打开直到本进程或其它 pod 上的 run 结束，或队列模式下「已入队未接手」结束；避免刷新落到非执行 worker 时流提前关闭、前端误判为已结束
+            def _run_still_active() -> bool:
+                if self._sessions_service.is_session_running_on_this_pod(sid):
+                    return True
+                if self._sessions_service.is_session_run_on_another_pod(sid):
+                    return True
+                if REDIS_URL and get_redis_dao().is_session_run_queued(sid):
+                    return True
+                return False
+
+            while _run_still_active():
                 if self._sessions_service.is_session_running_on_this_pod(sid):
                     try:
                         payload = await asyncio.wait_for(
@@ -491,7 +499,7 @@ class ChatStreamService:
                         yield self.sse_format(payload)
                         break
                     yield self.sse_format(payload)
-                else:
+                elif self._sessions_service.is_session_run_on_another_pod(sid):
                     # run 在别的 pod：有 Redis 时订阅 stream channel 收实时事件，否则轮询 + ping 保活
                     if REDIS_URL:
                         redis_queue = asyncio.Queue()
@@ -584,6 +592,17 @@ class ChatStreamService:
                                 'session_id': sid,
                             }
                         )
+                else:
+                    # 仅「已入队未接手」：ping 保活，等待 Worker 接手或 queued 超时
+                    await asyncio.sleep(5.0)
+                    yield self.sse_format(
+                        {
+                            'source': 'System',
+                            'type': 'ping',
+                            'content': '',
+                            'session_id': sid,
+                        }
+                    )
         finally:
             self._queues.unregister_subscriber(sid, event_queue)
 
@@ -821,6 +840,8 @@ class ChatStreamService:
                         }
                     )
                     return
+                get_redis_dao().set_session_run_queued(sid)
+                self._sessions_service.discard_session_run_from_this_pod(sid)
                 redis_queue = asyncio.Queue()
                 stop_event = threading.Event()
                 channel = STREAM_CHANNEL_PREFIX + sid
