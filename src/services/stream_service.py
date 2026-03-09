@@ -277,6 +277,7 @@ class ChatStreamService:
             payload = self._sessions_service.get_session_status_payload(sid)
             # 部署/重启后：DB 仍为 active 但本进程没有该 session 的 run → 视为上一轮在别的 pod 上被中断
             # 若 Redis 显示该 session 的 run 在别的 worker 上，则是「切会话后落到另一实例」，不是重启，不当作 stale
+            # 若任务已入队但 Worker 尚未接手（worker 满等情况），run_owner 可能仍为 API 进程且不刷新 worker_alive，此时也不应视为 stale
             status = payload.get('status')
             is_running_on_this_pod = (
                 self._sessions_service.is_session_running_on_this_pod(sid)
@@ -284,10 +285,14 @@ class ChatStreamService:
             is_run_on_another_pod = (
                 self._sessions_service.is_session_run_on_another_pod(sid)
             )
+            is_run_queued = bool(
+                REDIS_URL and get_redis_dao().is_session_run_queued(sid)
+            )
             is_stale = (
                 status == 'active'
                 and not is_running_on_this_pod
                 and not is_run_on_another_pod
+                and not is_run_queued
             )
             run_owner = (
                 get_worker_registry_service().get_session_run_owner(sid)
@@ -301,11 +306,12 @@ class ChatStreamService:
             )
             logger.info(
                 'subscribe: session_id=%s status=%s is_running_on_this_pod=%s '
-                'is_run_on_another_pod=%s is_stale=%s run_owner=%s owner_alive=%s worker_id=%s',
+                'is_run_on_another_pod=%s is_run_queued=%s is_stale=%s run_owner=%s owner_alive=%s worker_id=%s',
                 sid,
                 status,
                 is_running_on_this_pod,
                 is_run_on_another_pod,
+                is_run_queued,
                 is_stale,
                 run_owner,
                 owner_alive,
