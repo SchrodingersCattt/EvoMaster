@@ -150,17 +150,18 @@ test:
       when: on_success
 
 # 触发 API 部署子流水线（独立 pipeline_id，避免与 Worker 的 deploy_step 唯一键冲突）
+# 子流水线会继承本 job 的 variables（GitLab 会将其作为 trigger variables 传入下游）
 trigger-api-deploy:
   stage: deploy-test
+  variables:
+    DOCKER_IMAGE: $DOCKER_IMAGE
+    SERVER_NAME: $SERVER_NAME
+    AUTHOR_NAME: $AUTHOR_NAME
+    REGISTRY: $REGISTRY
+    RUNNER_ZJK_TAG: $RUNNER_ZJK_TAG
   trigger:
     include: ci/api-deploy.yml
     strategy: depend
-    variables:
-      DOCKER_IMAGE: $DOCKER_IMAGE
-      SERVER_NAME: $SERVER_NAME
-      AUTHOR_NAME: $AUTHOR_NAME
-      REGISTRY: $REGISTRY
-      RUNNER_ZJK_TAG: $RUNNER_ZJK_TAG
   rules:
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
       changes:
@@ -175,15 +176,15 @@ trigger-api-deploy:
 # 触发 Worker 部署子流水线（独立 pipeline_id）
 trigger-worker-deploy:
   stage: deploy-test
+  variables:
+    DOCKER_IMAGE_WORKER: $DOCKER_IMAGE_WORKER
+    SERVER_NAME_WORKER: $SERVER_NAME_WORKER
+    AUTHOR_NAME: $AUTHOR_NAME
+    REGISTRY: $REGISTRY
+    RUNNER_ZJK_TAG: $RUNNER_ZJK_TAG
   trigger:
     include: ci/worker-deploy.yml
     strategy: depend
-    variables:
-      DOCKER_IMAGE_WORKER: $DOCKER_IMAGE_WORKER
-      SERVER_NAME_WORKER: $SERVER_NAME_WORKER
-      AUTHOR_NAME: $AUTHOR_NAME
-      REGISTRY: $REGISTRY
-      RUNNER_ZJK_TAG: $RUNNER_ZJK_TAG
   rules:
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
       changes:
