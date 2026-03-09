@@ -114,52 +114,58 @@ def _run_worker_loop() -> None:
                 continue
 
             acquired = True
-            agent_run_service.run_agent_sync(
-                session_id=session_id,
-                user_prompt=user_prompt,
-                send_cb=send_cb,
-                loop=None,
-                stop_event=stop_ev,
-                mode=mode,
-                reply_queue=reply_queue,
-                task_id=task_id,
-                invocation_id=invocation_id,
-            )
-        except Exception as e:
-            logger.exception(
-                'Agent worker: run_agent_sync failed session_id=%s task_id=%s: %s',
-                session_id,
-                task_id,
-                e,
-            )
+            run_success = True
             try:
-                send_cb(
-                    {
-                        'source': 'System',
-                        'type': 'error',
-                        'content': str(e),
-                        'session_id': session_id,
-                        'task_id': task_id,
-                        'invocation_id': invocation_id,
-                    }
+                result = agent_run_service.run_agent_sync(
+                    session_id=session_id,
+                    user_prompt=user_prompt,
+                    send_cb=send_cb,
+                    loop=None,
+                    stop_event=stop_ev,
+                    mode=mode,
+                    reply_queue=reply_queue,
+                    task_id=task_id,
+                    invocation_id=invocation_id,
                 )
-                send_cb(
-                    {
-                        'source': 'System',
-                        'type': 'end',
-                        'content': '',
-                        'session_id': session_id,
-                        'task_id': task_id,
-                        'invocation_id': invocation_id,
-                    }
+                run_success = result is not False
+            except Exception as e:
+                run_success = False
+                logger.exception(
+                    'Agent worker: run_agent_sync failed session_id=%s task_id=%s: %s',
+                    session_id,
+                    task_id,
+                    e,
                 )
-            except Exception:
-                pass
+                try:
+                    send_cb(
+                        {
+                            'source': 'System',
+                            'type': 'error',
+                            'content': str(e),
+                            'session_id': session_id,
+                            'task_id': task_id,
+                            'invocation_id': invocation_id,
+                        }
+                    )
+                    send_cb(
+                        {
+                            'source': 'System',
+                            'type': 'end',
+                            'content': '',
+                            'session_id': session_id,
+                            'task_id': task_id,
+                            'invocation_id': invocation_id,
+                        }
+                    )
+                except Exception:
+                    pass
         finally:
             redis_dao.delete_confirmation_run_active(session_id)
             redis_dao.delete_stop_requested(session_id, task_id)
             if acquired:
-                sessions_service.release_session_run(session_id)
+                sessions_service.release_session_run(
+                    session_id, run_success=run_success
+                )
 
 
 def main() -> None:

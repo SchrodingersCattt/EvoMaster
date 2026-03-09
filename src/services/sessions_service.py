@@ -288,17 +288,20 @@ class ChatSessionsService:
         )
         return True, None
 
-    def release_session_run(self, session_id: str) -> None:
-        """释放该 session 的“正在运行”占用（在 run 结束时调用）。"""
+    def release_session_run(self, session_id: str, run_success: bool = True) -> None:
+        """释放该 session 的“正在运行”占用（在 run 结束时调用）。
+        run_success=False 时会话状态置为 failed，否则置为 idle。"""
         worker_id = get_worker_id()
+        target_status = 'idle' if run_success else 'failed'
         logger.info(
-            'release_session_run: session_id=%s worker_id=%s',
+            'release_session_run: session_id=%s worker_id=%s status=%s',
             session_id,
             worker_id,
+            target_status,
         )
         with self._sessions_run_lock:
             self._sessions_in_run.discard(session_id)
-        self.table.set_session_status(session_id, 'idle')
+        self.table.set_session_status(session_id, target_status)
         get_worker_registry_service().delete_session_run_owner(session_id)
 
     def set_session_status(self, session_id: str, status: str) -> bool:
