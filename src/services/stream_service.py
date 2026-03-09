@@ -784,7 +784,13 @@ class ChatStreamService:
                     'user_prompt': user_prompt,
                     'mode': mode,
                 }
+                # 先设为 waiting 再入队，避免 Worker 接手后 set active 被此处覆盖（竞态）
+                self._sessions_service.set_session_status(sid, 'waiting')
+                get_redis_dao().set_session_run_queued(sid)
+                self._sessions_service.discard_session_run_from_this_pod(sid)
                 if not get_redis_dao().lpush_agent_run_job(job):
+                    self._sessions_service.set_session_status(sid, 'idle')
+                    get_redis_dao().delete_session_run_queued(sid)
                     yield self.sse_format(
                         {
                             'source': 'System',
@@ -804,9 +810,6 @@ class ChatStreamService:
                         }
                     )
                     return
-                get_redis_dao().set_session_run_queued(sid)
-                self._sessions_service.set_session_status(sid, 'waiting')
-                self._sessions_service.discard_session_run_from_this_pod(sid)
                 redis_queue = asyncio.Queue()
                 stop_event = threading.Event()
                 channel = STREAM_CHANNEL_PREFIX + sid
