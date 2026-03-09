@@ -318,11 +318,11 @@ class ChatStreamService:
                 get_worker_id(),
             )
             if is_stale:
-                # 先区分原因再设状态：reason=restart 时会话状态设为 failed，否则设为 idle
+                # 先区分原因再设状态：reason=restart 或 deploy 时会话状态设为 failed，否则设为 idle
                 reason, reason_meta = (
                     self._deploy_state_service.classify_restart_reason(sid)
                 )
-                if reason == 'restart':
+                if reason in ('restart', 'deploy'):
                     self._sessions_service.set_session_status(sid, 'failed')
                 else:
                     self._sessions_service.reset_session_status_to_idle_in_db(sid)
@@ -357,8 +357,8 @@ class ChatStreamService:
                     run_interrupted_payload['previous_version'] = previous_version
                 if reason_meta.get('note'):
                     run_interrupted_payload['reason_note'] = reason_meta['note']
-                # reason=restart 时按失败处理：便于前端直接结束流并展示为失败
-                if reason == 'restart':
+                # reason=restart 或 deploy 时按失败处理：便于前端直接结束流并展示为失败
+                if reason in ('restart', 'deploy'):
                     run_interrupted_payload['treat_as_failure'] = True
                 yield self.sse_format(run_interrupted_payload)
                 # 入库，便于历史/导出（如 CSV）中有重启记录；task_id 指向被中断的那一轮
@@ -374,7 +374,7 @@ class ChatStreamService:
                     history_content['previous_version'] = previous_version
                 if reason_meta.get('note'):
                     history_content['reason_note'] = reason_meta['note']
-                if reason == 'restart':
+                if reason in ('restart', 'deploy'):
                     history_content['treat_as_failure'] = True
                 self._events_service.add_history_event(
                     sid,
@@ -387,15 +387,20 @@ class ChatStreamService:
                     },
                     user_id=self._sessions_service.get_session_user_id(sid),
                 )
-                # reason=restart 时按失败处理：直接结束流并推送 end，不再等待
-                if reason == 'restart':
+                # reason=restart 或 deploy 时按失败处理：直接结束流并推送 end，不再等待
+                if reason in ('restart', 'deploy'):
+                    end_reason = (
+                        'run_interrupted_restart'
+                        if reason == 'restart'
+                        else 'run_interrupted_deploy'
+                    )
                     yield self.sse_format(
                         {
                             'source': 'System',
                             'type': 'end',
                             'content': run_interrupted_content,
                             'session_id': sid,
-                            'end_reason': 'run_interrupted_restart',
+                            'end_reason': end_reason,
                             'treat_as_failure': True,
                         }
                     )

@@ -178,7 +178,7 @@ class ChatSessionsService:
         """
         获取会话状态及关联信息，用于 session_status 事件（status、last_task_id 等）。
         返回值含 source, type, status, session_id；可选 last_task_id。
-        status 可为 idle | active | waiting（等待中=已入队未被 worker 接手）| failed（上一轮因 run_interrupted reason=restart 按失败结束）。
+        status 可为 idle | active | waiting（等待中=已入队未被 worker 接手）| failed（上一轮因 run_interrupted reason=restart 或 deploy 按失败结束）。
         若 DB 为 waiting 但 Redis 已无 queued 标记：若有 run_owner 且存活则视为 active 不重置，否则重置为 idle。
         """
         row = self.table.get_session(session_id)
