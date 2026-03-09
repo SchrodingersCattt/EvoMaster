@@ -154,8 +154,6 @@ deploy-test:api:
     DEVOPS_DEPLOY_NAME: "deploy-test"
   tags:
     - k8s-runner-zjk-svc
-  needs:
-    - docker-build:api
   script:
     - echo 部署test环境 API
     - echo "DOCKER_IMAGE=$DOCKER_IMAGE" && echo "SERVER_NAME=$SERVER_NAME"
