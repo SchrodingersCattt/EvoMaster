@@ -1,33 +1,19 @@
+# 主流水线：仅 build-remote-image + 触发两条完全独立的子流水线（API / Worker）
+# 子流水线内自包含 build → deploy，同一条 pipeline_id，镜像 tag 一致
+
 variables:
-  DOCKER_HOST: tcp://docker:2375
-  DOCKER_TLS_CERTDIR: ""
   RUNNER_ZJK_TAG: k8s-runner-zjk-svc
   REGISTRY: registry.dp.tech
   CHECK: main
 
-
 stages:
   - build-remote-image
-  - build
-  - test
-  - deploy-test
-  - manual-uat
-  - deploy-uat
-  - check
-  - manual-online
-
+  - trigger
 
 include:
   - local: ".deploy-ci.yml"
-  - local: ".gitlab-ci-api.yml"
-  - local: ".gitlab-ci-worker.yml"
 
-
-image: $REGISTRY/public/ubuntu:gitlab-0.0.2
-services:
-  - $REGISTRY/public/docker:20.10.16-dind
-
-# Remote 节点镜像：Dockerfile.remote 变更时构建并 push 更新 constant.py；本流水线不跑 docker-build，由 push 触发的下一条流水线 build/deploy
+# Remote 节点镜像：Dockerfile.remote 变更时构建并 push 更新 constant.py
 # 需在 CI/CD Variables 中配置 BOHRIUM_ACCESS_KEY（Masked）、BOHRIUM_PROJECT_ID
 build-remote-image:test:
   stage: build-remote-image
@@ -94,71 +80,9 @@ build-remote-image:prod:
   tags:
     - $RUNNER_ZJK_TAG
 
-test:
-  variables:
-    DOCKER_HOST: tcp://docker-build-service:32375
-  stage: test
-  image: $REGISTRY/public/ubuntu:gitlab-docker  # 使用公共镜像
-  dependencies:
-    - docker-build:api
-  before_script:
-    - |
-      cat > /root/.docker/config.json <<EOF
-      {
-      "auths": {
-        "registry.dp.tech": {
-          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
-        },
-        "dp-harbor-registry.cn-zhangjiakou.cr.aliyuncs.com": {
-          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
-        }
-      }
-      }
-      EOF
-    # 拉取构建的镜像
-    - docker pull ${DYNAMIC_IMAGE}
-  script:
-    - docker rm -f testcov || true
-    - docker create --name testcov ${DYNAMIC_IMAGE} sh -c "
-      cd /app &&
-      python -V &&
-      . .venv/bin/activate &&
-      uv add pytest-cov pytest-xdist pytest-timer &&
-      pytest -n 8 --cov=./ --cov-report term-missing --cov-report html:/app/htmlcov -sv
-      "
-    - docker cp ${CI_PROJECT_DIR}/tests testcov:/app/tests
-    - docker cp ${CI_PROJECT_DIR}/pytest.ini testcov:/app/pytest.ini
-    - docker start -a testcov
-    - docker cp testcov:/app/htmlcov ${CI_PROJECT_DIR}/htmlcov
-    - docker rm testcov
-  coverage: /TOTAL.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/
-  artifacts:
-    paths:
-      - htmlcov/
-  cache:
-    paths:
-      - .cache/pip
-  tags:
-    - k8s-runner-ack
-  rules:
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
-      when: never
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
-      when: on_success
-
-# 触发 API 部署子流水线（独立 pipeline_id，避免与 Worker 的 deploy_step 唯一键冲突）
-# 子流水线会继承本 job 的 variables（GitLab 会将其作为 trigger variables 传入下游）
+# 触发 API 完整子流水线（build + test + deploy，独立 pipeline_id）
 trigger-api-deploy:
-  stage: deploy-test
-  variables:
-    DOCKER_IMAGE: $DOCKER_IMAGE
-    SERVER_NAME: $SERVER_NAME
-    AUTHOR_NAME: $AUTHOR_NAME
-    REGISTRY: $REGISTRY
-    RUNNER_ZJK_TAG: $RUNNER_ZJK_TAG
+  stage: trigger
   trigger:
     include: ci/api-deploy.yml
     strategy: depend
@@ -173,15 +97,9 @@ trigger-api-deploy:
     - if: '$CI_COMMIT_TAG'
       when: on_success
 
-# 触发 Worker 部署子流水线（独立 pipeline_id）
+# 触发 Worker 完整子流水线（build + deploy，独立 pipeline_id）
 trigger-worker-deploy:
-  stage: deploy-test
-  variables:
-    DOCKER_IMAGE_WORKER: $DOCKER_IMAGE_WORKER
-    SERVER_NAME_WORKER: $SERVER_NAME_WORKER
-    AUTHOR_NAME: $AUTHOR_NAME
-    REGISTRY: $REGISTRY
-    RUNNER_ZJK_TAG: $RUNNER_ZJK_TAG
+  stage: trigger
   trigger:
     include: ci/worker-deploy.yml
     strategy: depend
@@ -195,43 +113,3 @@ trigger-worker-deploy:
       when: on_success
     - if: '$CI_COMMIT_TAG'
       when: on_success
-
-check-branch:
-  stage: check
-  script:
-    - |
-      git fetch origin $CHECK
-      CURRENT_COMMIT=$(git rev-parse HEAD)
-      MASTER_COMMIT=$(git rev-parse origin/$CHECK)
-      echo "Current commit: $CURRENT_COMMIT"
-      echo "Master commit: $MASTER_COMMIT"
-      if git merge-base --is-ancestor $CURRENT_COMMIT $MASTER_COMMIT; then
-          echo -e "\\033[42mCurrent commit is merged into  $CHECK\\033[0m";
-      else
-          echo  -e "\\033[31mCurrent commit is not merged into  $CHECK\\033[0m";
-          exit 1;
-      fi
-      if git merge-base --is-ancestor $MASTER_COMMIT $CURRENT_COMMIT; then
-          echo -e "\\033[42mCurrent commit contains the latest  $CHECK commit\\033[0m";
-      else
-          echo -e "\\033[31mCurrent commit does not contain the latest  $CHECK commit\\033[0m";
-          exit 1;
-      fi
-  tags:
-    - $RUNNER_ZJK_TAG
-  rules:
-    - if: '$CI_COMMIT_TAG'
-  needs:
-    - trigger-api-deploy
-    - trigger-worker-deploy
-
-before_script:
-  - |
-    COMMIT_TAG=`echo $CI_COMMIT_TAG | awk -F '_' '{print $3}'`
-    DOCKER_TAG=$CI_PIPELINE_ID$COMMIT_TAG
-    [ -z "$CI_COMMIT_TAG" ] && SERVER_NAME=$PROJECT_NAME || SERVER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
-    [ -z "$CI_COMMIT_TAG" ] && DOCKER_NAME=$(echo $PROJECT_NAME | awk -F '_' '{print $1}' ) || DOCKER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
-    SERVER_NAME_WORKER=${SERVER_NAME_WORKER:-matmaster-evo-worker}
-  - DOCKER_IMAGE=$REGISTRY/flow/${DOCKER_NAME}:${DOCKER_TAG}
-  - DOCKER_IMAGE_WORKER=$REGISTRY/flow/matmaster-evo-worker:${DOCKER_TAG}
-  - AUTHOR_NAME=$(git log -1 --pretty=format:"%an" --no-merges)
