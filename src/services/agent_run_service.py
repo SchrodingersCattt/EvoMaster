@@ -261,6 +261,7 @@ class AgentRunService:
         ]
         _last_workspace_check_time: list[float] = [0.0]
         _ssh_attached = False
+        _task_completed = False
 
         def event_callback(source: str, event_type: str, content: Any) -> None:
             payload = {
@@ -272,6 +273,8 @@ class AgentRunService:
             }
             if invocation_id is not None:
                 payload['invocation_id'] = invocation_id
+            if event_type == 'end':
+                payload['task_completed'] = _task_completed
             if event_type != 'log_line':
                 events_table = get_chat_events_table()
                 if events_table:
@@ -886,6 +889,7 @@ class AgentRunService:
                 )
                 event_callback('System', 'cancelled', 'Task cancelled by user.')
             else:
+                _task_completed = True
                 logger.info(
                     'run_agent_sync: task done session_id=%s task_id=%s',
                     session_id,
