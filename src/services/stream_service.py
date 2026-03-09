@@ -555,7 +555,8 @@ class ChatStreamService:
         """
         sid = session_id.strip()
         self._sessions_service.ensure_session(sid, user_id=user_id)
-        if not self._sessions_service.try_acquire_session_run(sid):
+        acquired_ok, _ = self._sessions_service.try_acquire_session_run(sid)
+        if not acquired_ok:
             return None
 
         mode = (req.mode or 'direct').strip().lower() or 'direct'
