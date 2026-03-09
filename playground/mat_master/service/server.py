@@ -756,6 +756,7 @@ def _run_agent_sync(
         if _cached_pg is not None:
             pg = _cached_pg
             pg.set_run_dir(run_dir, task_id=task_id)
+            pg._setup_trajectory_file()
         else:
             from evomaster.core import get_playground_class
 
@@ -765,6 +766,7 @@ def _run_agent_sync(
             pg = get_playground_class('mat_master', config_path=config_path)
             pg.set_run_dir(run_dir, task_id=task_id)
             pg.setup()
+            pg._setup_trajectory_file()
 
         run_done = threading.Event()
 
