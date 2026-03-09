@@ -1,5 +1,22 @@
 # Worker 部署子流水线（由主流水线 trigger 触发，拥有独立 pipeline_id）
-# 与 scimaster-papermaster 一致：tag 写死为 k8s-runner-zjk-svc；父流水线通过 trigger job variables 传入 DOCKER_IMAGE_WORKER 等
+# GitLab：trigger 不保证传入「job 运行时变量」（如 before_script 里算出的 DOCKER_IMAGE_WORKER），故此处与主流水线一致自算
+# variables / image / before_script 与 .gitlab-ci.yml 保持一致，子流水线可独立运行
+
+variables:
+  REGISTRY: registry.dp.tech
+
+image: $REGISTRY/public/ubuntu:gitlab-0.0.2
+
+before_script:
+  - |
+    COMMIT_TAG=`echo $CI_COMMIT_TAG | awk -F '_' '{print $3}'`
+    DOCKER_TAG=$CI_PIPELINE_ID$COMMIT_TAG
+    [ -z "$CI_COMMIT_TAG" ] && SERVER_NAME=$PROJECT_NAME || SERVER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
+    [ -z "$CI_COMMIT_TAG" ] && DOCKER_NAME=$(echo $PROJECT_NAME | awk -F '_' '{print $1}' ) || DOCKER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
+    SERVER_NAME_WORKER=${SERVER_NAME_WORKER:-matmaster-evo-worker}
+  - DOCKER_IMAGE=$REGISTRY/flow/${DOCKER_NAME}:${DOCKER_TAG}
+  - DOCKER_IMAGE_WORKER=$REGISTRY/flow/matmaster-evo-worker:${DOCKER_TAG}
+  - AUTHOR_NAME=$(git log -1 --pretty=format:"%an" --no-merges)
 
 stages:
   - deploy-test
