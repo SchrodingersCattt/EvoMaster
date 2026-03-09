@@ -1,5 +1,9 @@
 # API 部署子流水线（由主流水线 trigger 触发，拥有独立 pipeline_id，避免与 Worker 的 deploy-test 唯一键冲突）
-# 父流水线需通过 trigger.variables 传入: DOCKER_IMAGE, SERVER_NAME, AUTHOR_NAME
+# 父流水线需通过 trigger job 的 variables 传入: DOCKER_IMAGE, SERVER_NAME, AUTHOR_NAME, REGISTRY, RUNNER_ZJK_TAG
+
+variables:
+  RUNNER_ZJK_TAG: k8s-runner-zjk-svc
+  REGISTRY: registry.dp.tech
 
 stages:
   - deploy-test
