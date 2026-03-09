@@ -1,22 +1,28 @@
 """Agent Worker 入口：从 Redis 队列 BLPOP 任务，执行 run_agent_sync；事件由 run_agent_sync 内 event_callback 写 DB，本处仅 publish 到 Redis。
 供独立 Worker Deployment 使用，与 API 共用同一代码库与镜像（Dockerfile --target worker）。
+Worker 需周期刷新 worker_alive，否则 API 在用户刷新页面时会误判 run 为 stale 并推送 run_interrupted。
 """
 
 import logging
 import os
 import signal
 import sys
+import threading
 
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
 from src.services.stream_service import RedisReplyQueue
+from src.services.worker_registry_service import get_worker_registry_service
+from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 # BLPOP 超时（秒），超时后继续循环，便于进程能响应 SIGTERM
 _BLPOP_TIMEOUT = int(os.environ.get('AGENT_WORKER_BLPOP_TIMEOUT', '30'))
+# 存活心跳间隔（秒），需小于 Redis WORKER_ALIVE_TTL_SEC(30)，否则 API 会误判本进程已死
+_WORKER_HEARTBEAT_INTERVAL = 10.0
 
 
 class RedisBackedStopEvent:
@@ -29,6 +35,17 @@ class RedisBackedStopEvent:
 
     def is_set(self) -> bool:
         return self._dao.is_stop_requested(self._session_id, self._task_id)
+
+
+def _worker_heartbeat_loop(stop_ev: threading.Event) -> None:
+    """后台线程：周期刷新本进程 worker_alive，使 API subscribe 时 is_worker_alive(owner) 为 True，避免刷新页面误判 stale。"""
+    while not stop_ev.wait(timeout=_WORKER_HEARTBEAT_INTERVAL):
+        try:
+            get_worker_registry_service().set_worker_alive(get_worker_id())
+        except Exception as e:
+            logger.warning(
+                'Agent worker heartbeat skipped worker_id=%s: %s', get_worker_id(), e
+            )
 
 
 def _run_worker_loop() -> None:
@@ -140,6 +157,21 @@ def main() -> None:
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, _on_sigterm)
+
+    # 心跳线程：使 API 能通过 is_worker_alive(owner) 识别本进程仍在跑，刷新页面时不误判 run_interrupted
+    _heartbeat_stop = threading.Event()
+    heartbeat_thread = threading.Thread(
+        target=_worker_heartbeat_loop,
+        args=(_heartbeat_stop,),
+        name='agent_worker_heartbeat',
+        daemon=True,
+    )
+    heartbeat_thread.start()
+    logger.info(
+        'Agent worker: heartbeat thread started interval=%.0fs worker_id=%s',
+        _WORKER_HEARTBEAT_INTERVAL,
+        get_worker_id(),
+    )
 
     logger.info(
         'Agent worker: starting BLPOP loop queue_key=%s', 'chat:agent_run_queue'

@@ -269,7 +269,7 @@ class ChatStreamService:
           无 Redis 时轮询直到 run 结束（每 5s 发 ping 保活），再推送 session_status(idle) 后结束流。
           避免刷新落到非执行 worker 时流提前关闭、前端误判为已结束（textarea 变为可输入）。
         若 DB 为 active 但本进程未在跑该 session 且其它 pod 上也无该 run（部署/重启导致上一 run 已死），
-        则重置为 idle、推送 run_interrupted（原因：部署），并自动在新 pod 上重跑上次任务。
+        则重置为 idle、推送 run_interrupted（原因：部署）；不自动重跑，由用户决定是否重新发送。
         """
         sid = session_id.strip()
         event_queue = self._queues.register_subscriber(sid)
@@ -372,89 +372,7 @@ class ChatStreamService:
                     },
                     user_id=self._sessions_service.get_session_user_id(sid),
                 )
-                # 在新 pod 上自动重跑上次用户输入；run_agent_sync 会从库读 org_id/project_id
-                if last_query and (last_query.get('content') or '').strip():
-                    user_id = self._sessions_service.get_session_user_id(sid)
-                    retry_req = ChatSendRequest(
-                        content=(last_query.get('content') or '').strip(),
-                        files=last_query.get('files') or None,
-                        mode=last_query.get('mode') or 'direct',
-                    )
-                    ctx = self.prepare_send_message(
-                        sid, retry_req, user_id, org_id=None
-                    )
-                    if ctx is not None:
-                        user_prompt = (last_query.get('content') or '').strip()
-                        if REDIS_URL:
-                            job = {
-                                'session_id': sid,
-                                'task_id': ctx.task_id,
-                                'invocation_id': ctx.invocation_id,
-                                'user_prompt': user_prompt,
-                                'mode': ctx.mode or 'direct',
-                            }
-                            if get_redis_dao().lpush_agent_run_job(job):
-                                logger.info(
-                                    'run_interrupted: auto retry enqueued session_id=%s',
-                                    sid,
-                                )
-                            else:
-                                loop = asyncio.get_event_loop()
-
-                                def send_cb(p: dict) -> None:
-                                    self._queues.broadcast(sid, p)
-
-                                loop.run_in_executor(
-                                    self._agent_run_service.get_executor(),
-                                    self._agent_run_service.run_agent_sync,
-                                    sid,
-                                    user_prompt,
-                                    send_cb,
-                                    loop,
-                                    ctx.stop_ev,
-                                    ctx.mode,
-                                    ctx.reply_queue,
-                                    ctx.task_id,
-                                    ctx.invocation_id,
-                                )
-                                logger.info(
-                                    'run_interrupted: auto retry started (queue failed) session_id=%s',
-                                    sid,
-                                )
-                        else:
-                            loop = asyncio.get_event_loop()
-
-                            def send_cb(p: dict) -> None:
-                                self._queues.broadcast(sid, p)
-
-                            loop.run_in_executor(
-                                self._agent_run_service.get_executor(),
-                                self._agent_run_service.run_agent_sync,
-                                sid,
-                                user_prompt,
-                                send_cb,
-                                loop,
-                                ctx.stop_ev,
-                                ctx.mode,
-                                ctx.reply_queue,
-                                ctx.task_id,
-                                ctx.invocation_id,
-                            )
-                            logger.info(
-                                'run_interrupted: auto retry started session_id=%s',
-                                sid,
-                            )
-                    else:
-                        logger.warning(
-                            'run_interrupted: auto retry skipped (prepare_send_message '
-                            'returned None, e.g. session already in run) session_id=%s',
-                            sid,
-                        )
-                else:
-                    logger.info(
-                        'run_interrupted: no last user query to retry session_id=%s',
-                        sid,
-                    )
+                # 不再自动重跑上次用户输入，由用户自行决定是否重新发送
             else:
                 yield self.sse_format(payload)
             events = self._events_service.get_session_events(sid)
