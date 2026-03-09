@@ -1269,27 +1269,9 @@ class AgentRunService:
                 continue
             stop_ev = threading.Event()
             self._sessions_service.set_stop_event(session_id, stop_ev)
-            events_table = get_chat_events_table()
 
-            def _send_cb(
-                p: dict,
-                _sid: str = session_id,
-                _tbl: Any = events_table,
-            ) -> None:
-                if _tbl:
-                    try:
-                        _tbl.add_event(
-                            _sid,
-                            p.get('source', ''),
-                            p.get('type', ''),
-                            p.get('content'),
-                            task_id=p.get('task_id'),
-                            invocation_id=p.get('invocation_id'),
-                        )
-                    except Exception as e:
-                        logger.debug(
-                            'process_resume_checkpoints: add_event failed: %s', e
-                        )
+            def _send_cb(p: dict, _sid: str = session_id) -> None:
+                # 不在此处写 DB：run_agent_sync 内 event_callback 已写，此处再写会导致同一条事件落库两次
                 get_redis_dao().publish_stream_event(_sid, p)
 
             synthetic_prompt = (payload.get('extra') or {}).get(
