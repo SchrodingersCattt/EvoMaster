@@ -270,8 +270,6 @@ test:
 
 deploy-test:api:
   stage: deploy-test
-  needs:
-    - docker-build:api
   tags:
     - $RUNNER_ZJK_TAG
   script:
@@ -292,8 +290,6 @@ deploy-test:api:
 
 deploy-test:worker:
   stage: deploy-test
-  needs:
-    - docker-build:worker
   tags:
     - $RUNNER_ZJK_TAG
   script:
