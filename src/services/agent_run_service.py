@@ -383,6 +383,7 @@ class AgentRunService:
                 )
 
         pg_for_run = None
+        run_result = None
         try:
             if not self._playground_init_done.is_set():
                 logger.info(
@@ -798,7 +799,16 @@ class AgentRunService:
                             'error',
                             f'Bohrium 节点创建失败: {e}',
                         )
-                        return
+                        # 发送 end 以便流结束、并落库（_task_completed 为 False 表示按失败论）
+                        try:
+                            event_callback(
+                                'System',
+                                'end',
+                                'Bohrium 节点创建失败，会话已结束.',
+                            )
+                        except Exception:
+                            pass
+                        return False
 
             agent = StreamingMatMasterAgent(
                 event_callback=event_callback,
@@ -922,6 +932,7 @@ class AgentRunService:
                     task_id=task_id,
                     event_callback=event_callback,
                 )
+            run_result = True
         except Exception as e:
             logger.exception(
                 'run_agent_sync: error session_id=%s task_id=%s err=%s',
@@ -1013,7 +1024,6 @@ class AgentRunService:
                 task_id,
                 get_worker_id(),
             )
-            self._sessions_service.release_session_run(session_id)
             try:
                 event_callback(
                     'System',
@@ -1044,6 +1054,8 @@ class AgentRunService:
                     )
                 finally:
                     gc.collect()
+
+        return run_result
 
 
 @lru_cache
