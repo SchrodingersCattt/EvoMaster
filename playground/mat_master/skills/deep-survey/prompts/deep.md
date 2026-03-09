@@ -81,7 +81,7 @@ Write all five sections fully. Write each section's full body to a file first (e
 - Assemble all sections into `_tmp/surveys/survey_<topic>.md`.
 - Do NOT leave any `(TBD)` in the delivered file.
 - When the report is complete: output the full final report in your reply so the user sees it, then confirm the file path.
-- **If using `manuscript-scribe` to assemble the report**, use `--profile literature_review` (matches this skill's 5-section structure exactly: Executive Summary, Key Methodologies, State of the Art, Gap Analysis, References).
+- **If using `manuscript-scribe` to assemble the report**, you MUST use `--profile literature_review` (and `--template literature_review` when initializing). This matches this skill's 5-section structure exactly. Do NOT use the `review` profile (that is a different, longer format).
 
 ---
 
