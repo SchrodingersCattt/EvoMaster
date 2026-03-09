@@ -1,4 +1,4 @@
-"""Agent Worker 入口：从 Redis 队列 BLPOP 任务，执行 run_agent_sync，事件写 DB 并 publish 到 Redis。
+"""Agent Worker 入口：从 Redis 队列 BLPOP 任务，执行 run_agent_sync；事件由 run_agent_sync 内 event_callback 写 DB，本处仅 publish 到 Redis。
 供独立 Worker Deployment 使用，与 API 共用同一代码库与镜像（Dockerfile --target worker）。
 """
 
@@ -7,7 +7,6 @@ import os
 import signal
 import sys
 
-from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
@@ -42,7 +41,6 @@ def _run_worker_loop() -> None:
 
     sessions_service = get_sessions_service()
     agent_run_service = get_agent_run_service()
-    events_table = get_chat_events_table()
 
     agent_run_service.init_playground_sync()
 
@@ -67,18 +65,7 @@ def _run_worker_loop() -> None:
         redis_dao.set_confirmation_run_context(session_id, task_id, invocation_id or '')
 
         def send_cb(p: dict, _sid: str = session_id) -> None:
-            if events_table:
-                try:
-                    events_table.add_event(
-                        _sid,
-                        p.get('source', ''),
-                        p.get('type', ''),
-                        p.get('content'),
-                        task_id=p.get('task_id'),
-                        invocation_id=p.get('invocation_id'),
-                    )
-                except Exception as e:
-                    logger.debug('agent_worker send_cb add_event failed: %s', e)
+            # 不在此处写 DB：run_agent_sync 内 event_callback 已写，此处再写会导致同一条事件落库两次
             redis_dao.publish_stream_event(_sid, p)
 
         reply_queue: RedisReplyQueue = RedisReplyQueue(session_id)
