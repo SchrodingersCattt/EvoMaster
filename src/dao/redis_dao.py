@@ -28,6 +28,10 @@ AGENT_RUN_QUEUE_KEY = 'chat:agent_run_queue'
 AGENT_STOP_KEY_PREFIX = 'chat:stop:'
 AGENT_STOP_TTL_SEC = 3600
 
+# 队列模式：API 入队后、Worker 接手前，subscribe 流用此标记保持打开，避免误判为「本进程在跑」导致流不关
+SESSION_RUN_QUEUED_KEY_PREFIX = 'matmaster_chat:session_run_queued:'
+SESSION_RUN_QUEUED_TTL_SEC = 300
+
 # monitor_job 挂起恢复：到点恢复的 Sorted Set；checkpoint 内容 key；认领锁 key
 MONITOR_JOB_RESUME_ZSET_KEY = 'chat:monitor_job:resume_zset'
 MONITOR_JOB_CHECKPOINT_KEY_PREFIX = 'chat:monitor_job:checkpoint:'
@@ -50,6 +54,10 @@ def _reply_list_key(session_id: str) -> str:
 
 def _stop_key(session_id: str, task_id: str) -> str:
     return AGENT_STOP_KEY_PREFIX + session_id.strip() + ':' + (task_id or '').strip()
+
+
+def _session_run_queued_key(session_id: str) -> str:
+    return SESSION_RUN_QUEUED_KEY_PREFIX + (session_id or '').strip()
 
 
 class RedisDao:
@@ -270,6 +278,55 @@ class RedisDao:
         except (TypeError, ValueError) as e:
             logger.warning('Redis agent_run_job payload json load failed: %s', e)
             return None
+
+    def set_session_run_queued(self, session_id: str) -> bool:
+        """队列模式：API 入队后设置，供 subscribe 流判断「任务已排队未接手」保持打开。Worker 接手时删除。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            client.set(
+                _session_run_queued_key(session_id),
+                '1',
+                ex=SESSION_RUN_QUEUED_TTL_SEC,
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                'Redis set_session_run_queued failed session_id=%s: %s',
+                session_id,
+                e,
+            )
+            return False
+
+    def delete_session_run_queued(self, session_id: str) -> None:
+        """Worker try_acquire 时删除，表示已接手。"""
+        client = self.create_client()
+        if not client:
+            return
+        try:
+            client.delete(_session_run_queued_key(session_id))
+        except Exception as e:
+            logger.warning(
+                'Redis delete_session_run_queued failed session_id=%s: %s',
+                session_id,
+                e,
+            )
+
+    def is_session_run_queued(self, session_id: str) -> bool:
+        """该会话是否处于「已入队、Worker 尚未接手」状态。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            return client.exists(_session_run_queued_key(session_id)) > 0
+        except Exception as e:
+            logger.warning(
+                'Redis is_session_run_queued failed session_id=%s: %s',
+                session_id,
+                e,
+            )
+            return False
 
     # ---------- 用户停止（Worker 轮询）----------
 
