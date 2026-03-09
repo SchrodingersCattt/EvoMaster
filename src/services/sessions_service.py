@@ -259,20 +259,24 @@ class ChatSessionsService:
         get_worker_registry_service().delete_session_run_owner(session_id)
         return self.table.delete_session(session_id, user_id)
 
-    def try_acquire_session_run(self, session_id: str) -> bool:
-        """若该 session 当前没有在跑的 agent 则占用并返回 True，否则返回 False。"""
+    def try_acquire_session_run(self, session_id: str) -> tuple[bool, str | None]:
+        """
+        若该 session 当前没有在跑的 agent 则占用并返回 (True, None)，否则返回 (False, reason)。
+        reason 为 'already_in_run'（本进程已有 run）或 'db_update_failed'（UPDATE 未命中行，通常为会话尚未落库或 Worker 与 API 不同库）。
+        """
         with self._sessions_run_lock:
             if session_id in self._sessions_in_run:
-                return False
+                return False, 'already_in_run'
             self._sessions_in_run.add(session_id)
         if not self.table.set_session_status(session_id, 'active'):
             with self._sessions_run_lock:
                 self._sessions_in_run.discard(session_id)
             logger.warning(
-                'try_acquire_session_run: set_session_status(active) failed session_id=%s',
+                'try_acquire_session_run: set_session_status(active) failed session_id=%s '
+                '(session row may not exist: ensure API and Worker use same DB)',
                 session_id,
             )
-            return False
+            return False, 'db_update_failed'
         worker_id = get_worker_id()
         get_worker_registry_service().set_session_run_owner(session_id, worker_id)
         if REDIS_URL:
@@ -282,7 +286,7 @@ class ChatSessionsService:
             session_id,
             worker_id,
         )
-        return True
+        return True, None
 
     def release_session_run(self, session_id: str) -> None:
         """释放该 session 的“正在运行”占用（在 run 结束时调用）。"""

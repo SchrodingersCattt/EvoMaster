@@ -86,17 +86,23 @@ def _run_worker_loop() -> None:
 
         reply_queue: RedisReplyQueue = RedisReplyQueue(session_id)
         stop_ev = RedisBackedStopEvent(session_id, task_id)
+        acquired = False
 
         try:
-            if not sessions_service.try_acquire_session_run(session_id):
+            acquired_ok, fail_reason = sessions_service.try_acquire_session_run(
+                session_id
+            )
+            if not acquired_ok:
                 logger.warning(
-                    'Agent worker: skip job session_id=%s task_id=%s reason=session_busy',
+                    'Agent worker: skip job session_id=%s task_id=%s reason=%s',
                     session_id,
                     task_id,
+                    fail_reason or 'unknown',
                 )
                 redis_dao.delete_confirmation_run_active(session_id)
                 continue
 
+            acquired = True
             agent_run_service.run_agent_sync(
                 session_id=session_id,
                 user_prompt=user_prompt,
@@ -141,7 +147,8 @@ def _run_worker_loop() -> None:
         finally:
             redis_dao.delete_confirmation_run_active(session_id)
             redis_dao.delete_stop_requested(session_id, task_id)
-            sessions_service.release_session_run(session_id)
+            if acquired:
+                sessions_service.release_session_run(session_id)
 
 
 def main() -> None:
