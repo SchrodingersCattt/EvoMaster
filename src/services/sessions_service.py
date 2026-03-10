@@ -136,8 +136,18 @@ class ChatSessionsService:
                 return
         SESSIONS[session_id] = {}
 
-    def list_sessions(self, user_id: str) -> list[dict]:
-        return self.table.list_sessions(user_id=user_id) or []
+    def list_sessions(
+        self,
+        user_id: str,
+        limit: int | None = 20,
+        offset: int | None = 0,
+    ) -> tuple[list[dict], int]:
+        """返回 (sessions, total)。limit 默认 20，最大 100；不传或 0 表示使用默认。"""
+        sessions = (
+            self.table.list_sessions(user_id=user_id, limit=limit, offset=offset) or []
+        )
+        total = self.table.count_sessions_by_user(user_id)
+        return sessions, total
 
     def get_active_sessions_count(self) -> int:
         """返回所有用户的活跃会话数量（status='active'），不限于当前用户。"""

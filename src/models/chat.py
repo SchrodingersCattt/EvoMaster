@@ -16,9 +16,16 @@ ag-ui 协议（前后端约定）：
 
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.base.base_res import BaseResponse
+
+
+class SessionListQuery(BaseModel):
+    """GET /chat/sessions/list 查询参数（分页）"""
+
+    limit: int = Field(default=20, ge=1, le=100, description='每页条数')
+    offset: int = Field(default=0, ge=0, description='偏移量')
 
 
 class SessionItem(BaseModel):
@@ -33,9 +40,11 @@ class SessionItem(BaseModel):
 
 
 class SessionListResponse(BaseModel):
-    """GET /api/sessions 列表数据（放在 data 字段内）"""
+    """GET /chat/sessions/list 列表数据（放在 data 字段内）；分页时含 total、has_more。"""
 
     sessions: List[SessionItem]
+    total: Optional[int] = None  # 总分页条数，仅分页时返回
+    has_more: Optional[bool] = None  # 是否有更多，仅分页时返回
 
 
 class SessionListApiResponse(BaseResponse[SessionListResponse]):
