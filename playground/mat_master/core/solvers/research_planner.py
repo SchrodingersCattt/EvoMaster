@@ -360,7 +360,9 @@ class ResearchPlanner(BaseExp):
         state['turn_budget_remaining'] = int(self._turn_budget_remaining)
         return True
 
-    def _fail_max_turns_exceeded(self, task_id: str, state: dict[str, Any]) -> dict[str, Any]:
+    def _fail_max_turns_exceeded(
+        self, task_id: str, state: dict[str, Any]
+    ) -> dict[str, Any]:
         """Mark state failed due to planner turn budget exhaustion and persist."""
         state['phase'] = 'failed'
         state['fail_reason'] = 'max_turns_exceeded'
@@ -846,7 +848,9 @@ Rules:
             self.logger.debug('Plan scope validation skipped: %s', e)
             return True, ''
 
-    def _generate_plan(self, goal: str, state: dict[str, Any] | None = None, task_id: str | None = None) -> dict[str, Any]:
+    def _generate_plan(
+        self, goal: str, state: dict[str, Any] | None = None, task_id: str | None = None
+    ) -> dict[str, Any]:
         """Produce DEG via LLM with runtime context, normalize to steps, validate against CRP."""
         system = self._load_system_prompt()
         user = self._build_context_prompt(goal)
@@ -1462,8 +1466,8 @@ Rules:
         """Build executor step prompt with explicit completion self-reporting."""
         base = f"Achieve: {intent}. If that fails: {fallback}"
         base += (
-            " At the end of the step, explicitly report one of: completed, partial, or blocked. "
-            "List the concrete outputs you produced or saved, and do not claim completion unless the requested deliverable was actually achieved."
+            ' At the end of the step, explicitly report one of: completed, partial, or blocked. '
+            'List the concrete outputs you produced or saved, and do not claim completion unless the requested deliverable was actually achieved.'
         )
         return base
 
@@ -1801,7 +1805,9 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             return True, 'LLM heuristic detected plan deviation'
         return False, ''
 
-    def _replan_from_results(self, state: dict[str, Any], goal: str, task_id: str) -> dict[str, Any]:
+    def _replan_from_results(
+        self, state: dict[str, Any], goal: str, task_id: str
+    ) -> dict[str, Any]:
         """Feed execution results back to planner LLM for mid-flight revision."""
         current_plan = state['plan']
         history_summary = self._summarize_history(state.get('history', []))
@@ -2186,7 +2192,9 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             self.logger.debug('Workspace scan failed (non-critical): %s', e)
         return files[:100]  # cap to avoid huge lists
 
-    def _assess_readiness(self, task_description: str, state: dict[str, Any], task_id: str) -> dict[str, Any]:
+    def _assess_readiness(
+        self, task_description: str, state: dict[str, Any], task_id: str
+    ) -> dict[str, Any]:
         """Use LLM to assess whether the task is ready to plan or needs prerequisite work."""
         workspace_files = self._scan_workspace_files()
         files_str = (
@@ -2300,7 +2308,11 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 concept_alignment = prereq.get('concept_alignment') or {}
                 inclusion = concept_alignment.get('inclusion_criteria', [])
                 exclusion = concept_alignment.get('exclusion_criteria', [])
-                target_count = int(concept_alignment.get('target_count') or prereq.get('target_count') or 0)
+                target_count = int(
+                    concept_alignment.get('target_count')
+                    or prereq.get('target_count')
+                    or 0
+                )
                 max_attempts = int(concept_alignment.get('max_attempts') or 8)
 
                 # Register concept-alignment with the guard so acceptance /
@@ -2309,7 +2321,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                     # Build target_terms from description + target keywords
                     raw_terms = [
                         t.strip()
-                        for t in (description + " " + target).replace(",", " ").split()
+                        for t in (description + ' ' + target).replace(',', ' ').split()
                         if len(t.strip()) >= 3
                     ]
                     self.agent._tool_guard.init_structure_retrieval(
@@ -2318,12 +2330,16 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                     )
 
                 # Build a focused, bounded prompt for the search_info prereq
-                inclusion_str = "; ".join(inclusion) if inclusion else "(none specified)"
-                exclusion_str = "; ".join(exclusion) if exclusion else "(none specified)"
+                inclusion_str = (
+                    '; '.join(inclusion) if inclusion else '(none specified)'
+                )
+                exclusion_str = (
+                    '; '.join(exclusion) if exclusion else '(none specified)'
+                )
                 count_hint = (
                     f" Stop as soon as {target_count} validated items matching the criteria are found."
                     if target_count > 0
-                    else ""
+                    else ''
                 )
                 prompt = (
                     f"Search for the following information needed before planning: {description}.\n"
@@ -3051,8 +3067,12 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         task_description: str = '',
         task_id: str = 'planner_task',
         task: Optional[TaskInstance] = None,
+        append_result: bool = True,
     ) -> dict[str, Any]:
-        """State-machine driven execution: PreCheck → Planning → PreFlight → Executing ⇄ Replanning → Completed."""
+        """State-machine driven execution: PreCheck → Planning → PreFlight → Executing ⇄ Replanning → Completed.
+
+        append_result: 是否将本次结果追加到 self.results（默认 True）。对话/流式等复用同一 Exp 的场景应传 False。
+        """
         if task is not None:
             task_description = task.description or ''
             task_id = task.task_id

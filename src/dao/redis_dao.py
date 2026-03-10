@@ -23,12 +23,14 @@ CONFIRMATION_RUN_ACTIVE_TTL_SEC = 3600
 # 多 worker 时 run 所在 pod 向其它 pod 的 subscribe 流推送事件（Pub/Sub）
 STREAM_CHANNEL_PREFIX = 'chat:stream:'
 
-# monitor_job 挂起恢复：到点恢复的 Sorted Set；checkpoint 内容 key；认领锁 key
-MONITOR_JOB_RESUME_ZSET_KEY = 'chat:monitor_job:resume_zset'
-MONITOR_JOB_CHECKPOINT_KEY_PREFIX = 'chat:monitor_job:checkpoint:'
-MONITOR_JOB_RESUME_LOCK_KEY_PREFIX = 'chat:monitor_job:resume_lock:'
-MONITOR_JOB_CHECKPOINT_TTL_SEC = 86400  # 24h
-MONITOR_JOB_RESUME_LOCK_TTL_SEC = 120
+# agent run 队列（API 入队，Worker BLPOP）；用户停止标记（Worker 轮询）
+AGENT_RUN_QUEUE_KEY = 'chat:agent_run_queue'
+AGENT_STOP_KEY_PREFIX = 'chat:stop:'
+AGENT_STOP_TTL_SEC = 3600
+
+# 队列模式：API 入队后、Worker 接手前，subscribe 流用此标记保持打开，避免误判为「本进程在跑」导致流不关
+SESSION_RUN_QUEUED_KEY_PREFIX = 'matmaster_chat:session_run_queued:'
+SESSION_RUN_QUEUED_TTL_SEC = 300
 
 
 def _run_active_key(session_id: str) -> str:
@@ -41,6 +43,14 @@ def _run_context_key(session_id: str) -> str:
 
 def _reply_list_key(session_id: str) -> str:
     return CONFIRMATION_REPLY_LIST_KEY.format(session_id=session_id.strip())
+
+
+def _stop_key(session_id: str, task_id: str) -> str:
+    return AGENT_STOP_KEY_PREFIX + session_id.strip() + ':' + (task_id or '').strip()
+
+
+def _session_run_queued_key(session_id: str) -> str:
+    return SESSION_RUN_QUEUED_KEY_PREFIX + (session_id or '').strip()
 
 
 class RedisDao:
@@ -228,124 +238,142 @@ class RedisDao:
         _, value = result
         return value
 
-    # ---------- monitor_job 挂起恢复（Sorted Set + checkpoint + 认领锁）----------
+    # ---------- agent run 队列（API 入队，Worker BLPOP）----------
 
-    def zadd_resume_checkpoint(self, resume_at: float, checkpoint_id: str) -> bool:
-        """将 checkpoint 登记到「到点恢复」Sorted Set。score=resume_at，member=checkpoint_id。"""
+    def lpush_agent_run_job(self, payload: dict) -> bool:
+        """将一次 run 任务入队。未配置 Redis 或失败返回 False。"""
         client = self.create_client()
         if not client:
             return False
         try:
-            client.zadd(MONITOR_JOB_RESUME_ZSET_KEY, {checkpoint_id: resume_at})
+            raw = json.dumps(payload, ensure_ascii=False)
+            client.lpush(AGENT_RUN_QUEUE_KEY, raw)
             return True
         except Exception as e:
-            logger.warning(
-                'Redis ZADD resume checkpoint failed checkpoint_id=%s: %s',
-                checkpoint_id,
-                e,
-            )
+            logger.warning('Redis LPUSH agent_run_job failed: %s', e)
             return False
 
-    def zrange_due_resume_checkpoints(self, max_score: float) -> list[str]:
-        """取出 score <= max_score 的 checkpoint_id 列表（到期的需恢复项）。"""
-        client = self.create_client()
-        if not client:
-            return []
-        try:
-            return client.zrangebyscore(
-                MONITOR_JOB_RESUME_ZSET_KEY, 0, max_score, start=0, num=50
-            )
-        except Exception as e:
-            logger.warning('Redis ZRANGEBYSCORE resume checkpoints failed: %s', e)
-            return []
-
-    def zrem_resume_checkpoint(self, checkpoint_id: str) -> bool:
-        """从 Sorted Set 中移除已处理的 checkpoint。"""
-        client = self.create_client()
-        if not client:
-            return False
-        try:
-            client.zrem(MONITOR_JOB_RESUME_ZSET_KEY, checkpoint_id)
-            return True
-        except Exception as e:
-            logger.warning(
-                'Redis ZREM resume checkpoint failed checkpoint_id=%s: %s',
-                checkpoint_id,
-                e,
-            )
-            return False
-
-    def try_claim_resume_lock(self, checkpoint_id: str) -> bool:
-        """尝试认领该 checkpoint 的恢复权（多 Pod 下仅一个成功）。TTL 内不可重复认领。"""
-        client = self.create_client()
-        if not client:
-            return False
-        key = MONITOR_JOB_RESUME_LOCK_KEY_PREFIX + checkpoint_id
-        try:
-            return bool(
-                client.set(
-                    key,
-                    '1',
-                    nx=True,
-                    ex=MONITOR_JOB_RESUME_LOCK_TTL_SEC,
-                )
-            )
-        except Exception as e:
-            logger.warning(
-                'Redis SET NX resume lock failed checkpoint_id=%s: %s',
-                checkpoint_id,
-                e,
-            )
-            return False
-
-    def set_checkpoint(self, checkpoint_id: str, data: dict) -> bool:
-        """写入 checkpoint 内容（JSON）。TTL 24h。"""
-        client = self.create_client()
-        if not client:
-            return False
-        key = MONITOR_JOB_CHECKPOINT_KEY_PREFIX + checkpoint_id
-        try:
-            raw = json.dumps(data, ensure_ascii=False)
-            client.set(key, raw, ex=MONITOR_JOB_CHECKPOINT_TTL_SEC)
-            return True
-        except Exception as e:
-            logger.warning(
-                'Redis SET checkpoint failed checkpoint_id=%s: %s',
-                checkpoint_id,
-                e,
-            )
-            return False
-
-    def get_checkpoint(self, checkpoint_id: str) -> Optional[dict]:
-        """读取 checkpoint 内容。不存在或失败返回 None。"""
+    def blpop_agent_run_job(self, timeout_sec: int = 30) -> Optional[dict]:
+        """阻塞取出一条 run 任务。超时返回 None；否则返回解析后的 dict。"""
         client = self.create_client()
         if not client:
             return None
-        key = MONITOR_JOB_CHECKPOINT_KEY_PREFIX + checkpoint_id
         try:
-            raw = client.get(key)
-            if not raw:
-                return None
+            result = client.blpop(AGENT_RUN_QUEUE_KEY, timeout=timeout_sec)
+        except Exception as e:
+            logger.warning('Redis BLPOP agent_run_job failed: %s', e)
+            return None
+        if result is None:
+            return None
+        _, raw = result
+        try:
             return json.loads(raw)
-        except Exception as e:
-            logger.warning(
-                'Redis GET checkpoint failed checkpoint_id=%s: %s',
-                checkpoint_id,
-                e,
-            )
+        except (TypeError, ValueError) as e:
+            logger.warning('Redis agent_run_job payload json load failed: %s', e)
             return None
 
-    def delete_checkpoint(self, checkpoint_id: str) -> None:
-        """删除 checkpoint 内容（恢复成功后可选清理）。"""
+    def set_session_run_queued(self, session_id: str) -> bool:
+        """队列模式：API 入队后设置，供 subscribe 流判断「任务已排队未接手」保持打开。Worker 接手时删除。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            client.set(
+                _session_run_queued_key(session_id),
+                '1',
+                ex=SESSION_RUN_QUEUED_TTL_SEC,
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                'Redis set_session_run_queued failed session_id=%s: %s',
+                session_id,
+                e,
+            )
+            return False
+
+    def delete_session_run_queued(self, session_id: str) -> None:
+        """Worker try_acquire 时删除，表示已接手。"""
         client = self.create_client()
         if not client:
             return
         try:
-            client.delete(MONITOR_JOB_CHECKPOINT_KEY_PREFIX + checkpoint_id)
+            client.delete(_session_run_queued_key(session_id))
         except Exception as e:
             logger.warning(
-                'Redis DELETE checkpoint failed checkpoint_id=%s: %s',
-                checkpoint_id,
+                'Redis delete_session_run_queued failed session_id=%s: %s',
+                session_id,
+                e,
+            )
+
+    def is_session_run_queued(self, session_id: str) -> bool:
+        """该会话是否处于「已入队、Worker 尚未接手」状态。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            return client.exists(_session_run_queued_key(session_id)) > 0
+        except Exception as e:
+            logger.warning(
+                'Redis is_session_run_queued failed session_id=%s: %s',
+                session_id,
+                e,
+            )
+            return False
+
+    # ---------- 用户停止（Worker 轮询）----------
+
+    def set_stop_requested(self, session_id: str, task_id: str) -> bool:
+        """标记用户请求停止该 run。Worker 轮询 is_stop_requested。
+        同时写入 session 级 key（task_id 为空），便于 ctx 尚未就绪时 stop 仍能生效。
+        """
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            key = _stop_key(session_id, task_id)
+            client.set(key, '1', ex=AGENT_STOP_TTL_SEC)
+            # 始终再写 session 级 key，供 Worker 在「仅按 session」时也能看到
+            session_key = _stop_key(session_id, '')
+            if session_key != key:
+                client.set(session_key, '1', ex=AGENT_STOP_TTL_SEC)
+            return True
+        except Exception as e:
+            logger.warning(
+                'Redis set_stop_requested failed session_id=%s task_id=%s: %s',
+                session_id,
+                task_id,
+                e,
+            )
+            return False
+
+    def is_stop_requested(self, session_id: str, task_id: str) -> bool:
+        """是否已请求停止该 run。同时检查 task 级 key 与 session 级 key（ctx 未就绪时仅写 session 级）。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            if client.exists(_stop_key(session_id, task_id)) > 0:
+                return True
+            if (task_id or '').strip():
+                return client.exists(_stop_key(session_id, '')) > 0
+            return False
+        except Exception:
+            return False
+
+    def delete_stop_requested(self, session_id: str, task_id: str) -> None:
+        """清除停止标记（run 结束后）。同时删除 task 级与 session 级 key。"""
+        client = self.create_client()
+        if not client:
+            return
+        try:
+            client.delete(_stop_key(session_id, task_id))
+            client.delete(_stop_key(session_id, ''))
+        except Exception as e:
+            logger.warning(
+                'Redis delete_stop_requested failed session_id=%s task_id=%s: %s',
+                session_id,
+                task_id,
                 e,
             )
 
