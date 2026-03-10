@@ -62,18 +62,9 @@ def _notify_card_impl(
     *,
     template: str = CARD_TEMPLATE_BLUE,
 ) -> None:
-    """发送飞书 interactive 卡片：标题栏（含颜色）+ 正文（lark_md 加粗标签）。"""
+    """发送飞书 interactive 卡片：标题栏（含颜色）+ 正文一行一字段（**标签**: 值），紧凑排版。"""
     title_with_env = _env_prefix().rstrip() + ' ' + title
-    elements = [
-        {
-            'tag': 'div',
-            'text': {
-                'tag': 'lark_md',
-                'content': f'**{label}**\n{value}',
-            },
-        }
-        for label, value in content_rows
-    ]
+    content = '\n'.join(f'**{label}**: {value}' for label, value in content_rows)
     body = {
         'msg_type': 'interactive',
         'card': {
@@ -82,7 +73,12 @@ def _notify_card_impl(
                 'title': {'tag': 'plain_text', 'content': title_with_env},
                 'template': template,
             },
-            'elements': elements,
+            'elements': [
+                {
+                    'tag': 'div',
+                    'text': {'tag': 'lark_md', 'content': content},
+                },
+            ],
         },
     }
     _send(body)
