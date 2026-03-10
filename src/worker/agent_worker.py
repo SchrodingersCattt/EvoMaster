@@ -203,17 +203,18 @@ def _run_worker_loop() -> None:
             _current_session_id = session_id
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
-            notify_post_async(
-                'Worker 开始执行',
-                [
-                    ('session_id', session_id),
-                    ('用户', session_user_display),
-                    ('worker', get_worker_id()),
-                    ('执行中', str(active_count)),
-                    ('排队数', str(queue_len)),
-                ],
-                template=CARD_TEMPLATE_BLUE,
-            )
+            if queue_len >= 1:
+                notify_post_async(
+                    'Worker 开始执行',
+                    [
+                        ('session_id', session_id),
+                        ('用户', session_user_display),
+                        ('worker', get_worker_id()),
+                        ('执行中', str(active_count)),
+                        ('排队数', str(queue_len)),
+                    ],
+                    template=CARD_TEMPLATE_BLUE,
+                )
             run_success = True
             try:
                 result = agent_run_service.run_agent_sync(
@@ -272,18 +273,21 @@ def _run_worker_loop() -> None:
                 )
                 queue_len = redis_dao.llen_agent_run_queue()
                 active_count = get_worker_registry_service().count_active_runs()
-                notify_post_async(
-                    'Worker 执行完成',
-                    [
-                        ('session_id', session_id),
-                        ('用户', session_user_display),
-                        ('worker', get_worker_id()),
-                        ('结果', '成功' if run_success else '失败'),
-                        ('执行中', str(active_count)),
-                        ('排队数', str(queue_len)),
-                    ],
-                    template=CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED,
-                )
+                if queue_len >= 1:
+                    notify_post_async(
+                        'Worker 执行完成',
+                        [
+                            ('session_id', session_id),
+                            ('用户', session_user_display),
+                            ('worker', get_worker_id()),
+                            ('结果', '成功' if run_success else '失败'),
+                            ('执行中', str(active_count)),
+                            ('排队数', str(queue_len)),
+                        ],
+                        template=(
+                            CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
+                        ),
+                    )
         if _drain_requested:
             logger.info(
                 'Agent worker: drain requested, current job finished, exiting loop. session_id=%s worker_id=%s',
