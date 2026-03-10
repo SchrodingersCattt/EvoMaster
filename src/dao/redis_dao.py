@@ -272,6 +272,17 @@ class RedisDao:
             logger.warning('Redis agent_run_job payload json load failed: %s', e)
             return None
 
+    def llen_agent_run_queue(self) -> int:
+        """当前 agent run 队列中等待的任务数（供飞书通知等使用）。未配置 Redis 或失败返回 0。"""
+        client = self.create_client()
+        if not client:
+            return 0
+        try:
+            return int(client.llen(AGENT_RUN_QUEUE_KEY))  # type: ignore[no-any-return]
+        except Exception as e:
+            logger.warning('Redis LLEN agent_run_queue failed: %s', e)
+            return 0
+
     def set_session_run_queued(self, session_id: str) -> bool:
         """队列模式：API 入队后设置，供 subscribe 流判断「任务已排队未接手」保持打开。Worker 接手时删除。"""
         client = self.create_client()
