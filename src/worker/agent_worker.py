@@ -15,6 +15,7 @@ from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
 from src.services.stream_service import RedisReplyQueue
 from src.services.worker_registry_service import get_worker_registry_service
+from src.utils.build_info import get_build_version
 from src.utils.logger import LoggingConfig, setup_logging
 from src.utils.worker_id import get_worker_id
 
@@ -41,6 +42,57 @@ class RedisBackedStopEvent:
 
     def is_set(self) -> bool:
         return self._dao.is_stop_requested(self._session_id, self._task_id)
+
+
+def _publish_run_interrupted_deploy(session_id: str) -> None:
+    """SIGTERM 时若当前有 run，向该 session 的 stream 推送 run_interrupted(deploy) + end，前端可立即得知因部署中断。"""
+    sid = session_id.strip()
+    if not sid:
+        return
+    redis_dao = get_redis_dao()
+    if not redis_dao.get_publish_client():
+        return
+    previous_version = get_build_version()
+    content = (
+        f'上一轮任务因服务升级（{previous_version} -> 新版本）中断，请重新发送以继续。'
+        if previous_version
+        else '上一轮任务因服务部署中断，请重新发送以继续。'
+    )
+    run_interrupted_payload = {
+        'source': 'System',
+        'type': 'run_interrupted',
+        'content': content,
+        'session_id': sid,
+        'reason': 'deploy',
+        'treat_as_failure': True,
+    }
+    if previous_version:
+        run_interrupted_payload['previous_version'] = previous_version
+    run_interrupted_payload['reason_note'] = 'worker_sigterm'
+    try:
+        redis_dao.publish_stream_event(sid, run_interrupted_payload)
+        redis_dao.publish_stream_event(
+            sid,
+            {
+                'source': 'System',
+                'type': 'end',
+                'content': content,
+                'session_id': sid,
+                'end_reason': 'run_interrupted_deploy',
+                'treat_as_failure': True,
+            },
+        )
+        logger.info(
+            'Agent worker: published run_interrupted(deploy)+end for session_id=%s worker_id=%s',
+            sid,
+            get_worker_id(),
+        )
+    except Exception as e:
+        logger.warning(
+            'Agent worker: publish run_interrupted failed session_id=%s: %s',
+            sid,
+            e,
+        )
 
 
 def _worker_heartbeat_loop(stop_ev: threading.Event) -> None:
@@ -206,6 +258,9 @@ def main() -> None:
 
     def _on_sigterm(_signum: int, _frame: object) -> None:
         global _drain_requested
+        sid = _current_session_id
+        if sid:
+            _publish_run_interrupted_deploy(sid)
         _drain_requested = True
         logger.info(
             'Agent worker: received SIGTERM, drain requested; will exit after current job or when idle. worker_id=%s',
