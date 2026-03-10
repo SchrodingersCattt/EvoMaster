@@ -5,7 +5,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 
 class JsonFormatter(logging.Formatter):
@@ -87,55 +87,30 @@ class LoggingConfig:
         }
 
     @classmethod
-    def get_proxy_config(cls) -> Dict[str, Any]:
-        """Get logging configuration for proxy server."""
+    def get_worker_config(cls) -> Dict[str, Any]:
+        """Get logging configuration for agent worker."""
         return {
-            'log_level': os.getenv('PROXY_LOG_LEVEL', cls.DEFAULT_LOG_LEVEL),
-            'log_file': os.path.join(
-                os.getenv('LOG_DIR', cls.DEFAULT_LOG_DIR), 'bohrium-agents-proxy.log'
-            ),
-            'max_bytes': int(os.getenv('LOG_MAX_BYTES', cls.DEFAULT_MAX_BYTES)),
-            'backup_count': int(
-                os.getenv('LOG_BACKUP_COUNT', cls.DEFAULT_BACKUP_COUNT)
-            ),
-            'console_output': os.getenv('PROXY_LOG_CONSOLE', 'true').lower() == 'true',
-            'json_format': os.getenv('PROXY_LOG_JSON_FORMAT', 'false').lower()
-                           == 'true',
-        }
-
-    @classmethod
-    def get_agent_config(cls, agent_name: str) -> Dict[str, Any]:
-        """Get logging configuration for specific agent."""
-        return {
-            'log_level': os.getenv(
-                f"{agent_name.upper()}_LOG_LEVEL", cls.DEFAULT_LOG_LEVEL
-            ),
+            'log_level': os.getenv('LOG_LEVEL', cls.DEFAULT_LOG_LEVEL),
             'log_file': os.path.join(
                 os.getenv('LOG_DIR', cls.DEFAULT_LOG_DIR),
-                f"bohrium-agents-{agent_name}.log",
+                'matmaster-evo-worker.log',
             ),
             'max_bytes': int(os.getenv('LOG_MAX_BYTES', cls.DEFAULT_MAX_BYTES)),
             'backup_count': int(
                 os.getenv('LOG_BACKUP_COUNT', cls.DEFAULT_BACKUP_COUNT)
             ),
-            'console_output': os.getenv(
-                f"{agent_name.upper()}_LOG_CONSOLE", 'true'
-            ).lower()
-                              == 'true',
-            'json_format': os.getenv(
-                f"{agent_name.upper()}_LOG_JSON_FORMAT", 'false'
-            ).lower()
-                           == 'true',
+            'console_output': os.getenv('LOG_CONSOLE', 'true').lower() == 'true',
+            'json_format': os.getenv('LOG_JSON_FORMAT', 'false').lower() == 'true',
         }
 
 
 def setup_logging(
-        log_level: str = None,
-        log_file: str = None,
-        max_bytes: int = None,
-        backup_count: int = None,
-        console_output: bool = True,
-        json_format: bool = False,
+    log_level: str = None,
+    log_file: str = None,
+    max_bytes: int = None,
+    backup_count: int = None,
+    console_output: bool = True,
+    json_format: bool = False,
 ) -> None:
     """Set up logging configuration with rotation support.
 
