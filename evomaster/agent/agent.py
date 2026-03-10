@@ -167,12 +167,6 @@ class BaseAgent(ABC):
                     self.logger.info('Task cancelled by user.')
                     self.trajectory.finish('cancelled', {'reason': 'stop_event'})
                     break
-                if getattr(self, '_suspend_requested', False):
-                    self.logger.info(
-                        'Task suspended (monitor_job running), will resume later.'
-                    )
-                    self.trajectory.finish('suspended', {'reason': 'monitor_job'})
-                    break
                 if should_finish:
                     self.logger.info('=' * 80)
                     self.logger.info('✅ Agent finished task')
