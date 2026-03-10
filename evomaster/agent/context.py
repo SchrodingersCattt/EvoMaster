@@ -62,11 +62,16 @@ class ContextManager:
         if self._token_counter:
             return self._token_counter.count_dialog(dialog)
 
-        # 保守估算：约 1.5 个字符 = 1 token（对中英文混合内容更准确）
+        # 保守估算：约3个字符 = 1 token（对中英文混合内容更准确）
+        # Bug fix: 计算所有消息的完整字符数（包括 tool_calls 参数）
         total_chars = sum(
             self._content_char_len(msg.content) for msg in dialog.messages
         )
-        return int(total_chars / 1.5)
+
+        # Bug fix: 计算工具定义的字符数（每次 API 调用都会发送）
+        total_chars += self._tools_char_len(dialog.tools)
+
+        return int(total_chars / 3)
 
     @staticmethod
     def _content_char_len(content: str | list | dict | None) -> int:
@@ -108,6 +113,9 @@ class ContextManager:
         """保留最新一半的历史
 
         保留系统消息和用户初始消息，然后保留最近一半的对话。
+        确保截断后的消息序列始终合法（tool 消息前必有 assistant）。
+        
+        按 turn 为单位截断：一个 turn = 1 个 assistant + 其所有 tool 消息。
         """
         messages = dialog.messages
 
@@ -124,18 +132,25 @@ class ContextManager:
         num_to_preserve = num_to_truncate // 2
         preserve_start = num_messages - num_to_preserve
 
-        # 确保从 assistant 消息开始
-        while (
-            preserve_start < num_messages
-            and messages[preserve_start].role.value != 'assistant'
-        ):
-            preserve_start += 1
+        # 如果 preserve_start 指向的是 tool 消息，需要调整到一个合法的 turn 边界
+        if preserve_start < num_messages and messages[preserve_start].role.value == 'tool':
+            # 往前找到这个 tool 所属的 assistant 消息
+            turn_start = preserve_start
+            while (
+                turn_start > assistant_start
+                and messages[turn_start].role.value != 'assistant'
+            ):
+                turn_start -= 1
+            # 现在 turn_start 指向该 tool 所属的 assistant
+            # 从这个 assistant 开始保留整个 turn（包括所有 tool 消息）
+            preserve_start = turn_start
 
-        if preserve_start >= num_messages:
-            # 无法截断，返回原对话
+        # 如果往前找到了 assistant_start 还没找到 assistant
+        # 说明无法有效截断，返回原对话
+        if preserve_start <= assistant_start:
             return dialog
 
-        # 构建新对话
+        # 构建新对话：保留 system/user 前缀 + 从找到的 assistant 开始的后续消息
         new_messages = messages[:assistant_start] + messages[preserve_start:]
 
         return Dialog(
