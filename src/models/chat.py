@@ -14,25 +14,11 @@ ag-ui 协议（前后端约定）：
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
-from typing import Any, List, Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel
 
 from src.base.base_res import BaseResponse
-
-
-class ChatRequest(BaseModel):
-    """发起/就绪请求"""
-
-    prompt: str = ''
-    workspace: str = './workspace'
-
-
-class ChatStartResponse(BaseModel):
-    """POST /api/start 响应"""
-
-    status: str = 'ready'
-    session_id: str
 
 
 class SessionItem(BaseModel):
@@ -64,53 +50,6 @@ class ActiveSessionsCountData(BaseModel):
 
 class ActiveSessionsCountApiResponse(BaseResponse[ActiveSessionsCountData]):
     """GET /chat/sessions/active_count 规范响应：code, msg, data"""
-
-
-class RunInfoResponse(BaseModel):
-    """GET /api/sessions/{id}/run_info 响应"""
-
-    run_id: str
-    last_task_id: Optional[str] = None
-    task_ids: List[str] = []
-
-
-class FileEntry(BaseModel):
-    """文件/目录项"""
-
-    name: str
-    path: str
-    dir: bool
-
-
-class SessionFilesResponse(BaseModel):
-    """GET /api/sessions/{id}/files 响应"""
-
-    run_id: str
-    path: str
-    entries: List[FileEntry]
-    workspace_root: Optional[str] = None
-    task_id: Optional[str] = None
-
-
-class RunItem(BaseModel):
-    """Run 列表项"""
-
-    id: str
-    label: str
-
-
-class RunListResponse(BaseModel):
-    """GET /api/runs 响应"""
-
-    runs: List[RunItem]
-
-
-class RunFilesResponse(BaseModel):
-    """GET /api/runs/{id}/files 响应"""
-
-    run_id: str
-    path: str
-    entries: List[FileEntry]
 
 
 # ---------- Workspace OSS 列表 ----------
@@ -176,25 +115,3 @@ class ChatPlannerReplyRequest(BaseModel):
     """POST /chat/sessions/{session_id}/confirmation_reply 用户确认回复（planner_ask / ask_human 统一）"""
 
     content: str
-
-
-# ---------- ag-ui 协议：服务端 -> 客户端 (SSE event data) ----------
-
-
-class AgUiEvent(BaseModel):
-    """SSE event 固定为 "ag-ui"，data 为本结构 JSON"""
-
-    source: str  # System | User | MatMaster | Planner
-    type: str  # status | query | thought | tool_call | tool_result | finish | error | cancelled | planner_ask | ...
-    content: Any
-    session_id: Optional[str] = None
-    invocation_id: Optional[str] = (
-        None  # 本轮调用的唯一标识，前端用于区分第几轮（仅发送流/当轮事件带此字段）
-    )
-
-    class Config:
-        extra = 'allow'
-
-
-# 兼容别名
-ChatEventPayload = dict[str, Any]
