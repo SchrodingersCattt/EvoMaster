@@ -16,6 +16,7 @@ from src.services.sessions_service import get_sessions_service
 from src.services.stream_service import RedisReplyQueue
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.build_info import get_build_version
+from src.utils.feishu_notifier import notify_async
 from src.utils.logger import LoggingConfig, setup_logging
 from src.utils.worker_id import get_worker_id
 
@@ -188,6 +189,10 @@ def _run_worker_loop() -> None:
 
             acquired = True
             _current_session_id = session_id
+            queue_len = redis_dao.llen_agent_run_queue()
+            notify_async(
+                f'[MatMaster] Worker 开始执行 session_id={session_id[:12]}... task_id={task_id[:8] if task_id else "-"}...，当前排队数: {queue_len}'
+            )
             run_success = True
             try:
                 result = agent_run_service.run_agent_sync(
@@ -243,6 +248,10 @@ def _run_worker_loop() -> None:
             if acquired:
                 sessions_service.release_session_run(
                     session_id, run_success=run_success
+                )
+                queue_len = redis_dao.llen_agent_run_queue()
+                notify_async(
+                    f'[MatMaster] Worker 执行完成 session_id={session_id[:12]}... {"成功" if run_success else "失败"}，当前排队数: {queue_len}'
                 )
         if _drain_requested:
             logger.info(
