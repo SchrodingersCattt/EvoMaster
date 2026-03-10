@@ -973,8 +973,14 @@ class AgentRunService:
                         future.result(timeout=10)
                     else:
                         asyncio.run(use_quota(user_id))
-                    # 飞书私聊：按 user_id 查邮箱并异步发任务完成通知（未配置或无邮箱则 no-op）
-                    notify_task_completed_dm_async(user_id, session_id, task_id)
+                    # 飞书私聊：按 user_id 查邮箱并异步发任务完成通知（文案与群通知对齐）
+                    notify_task_completed_dm_async(
+                        user_id,
+                        session_id,
+                        task_id,
+                        user_display=UserService.get_user_display_name(user_id),
+                        worker_id=get_worker_id(),
+                    )
                 event_callback('System', 'finish', 'Done')
                 self._upload_workspace_to_oss(
                     session_id=session_id,
