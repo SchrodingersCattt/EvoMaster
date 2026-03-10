@@ -102,6 +102,10 @@ class WorkerRegistryService:
             logger.warning('count_active_runs failed: %s', e)
             return 0
 
+    def count_queued_runs(self) -> int:
+        """当前在 agent run 队列中排队等待 Worker 接手的任务数。未配置 Redis 或失败返回 0。"""
+        return get_redis_dao().llen_agent_run_queue()
+
     def set_worker_alive(self, worker_id: str) -> bool:
         """刷新本进程存活标记（lifespan 里周期调用）。TTL 较短，重启后旧进程不再刷新即失效。"""
         client = get_redis_dao().create_client()
