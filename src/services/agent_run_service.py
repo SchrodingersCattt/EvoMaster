@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from evomaster.core import get_playground_class
+from evomaster.utils import LLMConfig, create_llm
 from evomaster.utils.types import TaskInstance
 from playground.mat_master.service.confirm import ConfirmationManager
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
@@ -237,10 +238,14 @@ class AgentRunService:
         reply_queue: ReplyQueueLike | None,
         task_id: str,
         invocation_id: str | None = None,
+        llm_override: str | None = None,
+        model_override: str | None = None,
     ) -> None:
         """在后台线程中执行 agent，由 stream 层 run_in_executor 或 Worker 进程调用。
         loop 为 None 时（Worker）：send_cb 为同步调用，不投递到 asyncio；stop_event 可为带 is_set() 的 Redis 轮询对象。
         reply_queue 供 planner_ask 与 confirmation_request（ask_human）共用，POST /confirmation_reply 写入。
+        llm_override：本轮使用的 LLM 配置块名（如 litellm/azure/deepseek），不传则用 agent 默认。
+        model_override：本轮使用的模型名（如 gemini-3-flash-preview、azure/gpt-5），覆盖所选 LLM 配置里的 model。
         """
         prompt_preview = (
             (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
@@ -813,9 +818,47 @@ class AgentRunService:
                             pass
                         return False
 
+            # 本轮模型：支持 llm_override（换配置块）和 model_override（覆盖 model 字段，如 gemini-3-flash-preview / azure/gpt-5）
+            run_llm = base.llm
+            if llm_override or model_override:
+                cfg = None
+                if llm_override:
+                    try:
+                        cfg = pg.config_manager.get_llm_config(llm_override)
+                    except Exception as e:
+                        logger.warning(
+                            'run_agent_sync: llm_override=%s failed (%s), use default session_id=%s',
+                            llm_override,
+                            e,
+                            session_id,
+                        )
+                if cfg is None and not llm_override:
+                    # 仅指定 model 时，从当前 agent 的 LLM 配置取 base 再覆盖 model
+                    try:
+                        cfg = base.llm.config.model_dump()
+                    except Exception:
+                        cfg = {}
+                if cfg and isinstance(cfg, dict):
+                    if model_override:
+                        cfg = {**cfg, 'model': model_override}
+                    try:
+                        run_llm = create_llm(LLMConfig(**cfg))
+                        logger.info(
+                            'run_agent_sync: llm=%s model=%s session_id=%s task_id=%s',
+                            llm_override or 'default',
+                            cfg.get('model', 'default'),
+                            session_id,
+                            task_id,
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            'run_agent_sync: create_llm failed (%s), use base session_id=%s',
+                            e,
+                            session_id,
+                        )
             agent = StreamingMatMasterAgent(
                 event_callback=event_callback,
-                llm=base.llm,
+                llm=run_llm,
                 session=base.session,
                 tools=base.tools,
                 system_prompt_file=system_prompt_file,

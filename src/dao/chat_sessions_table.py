@@ -199,13 +199,30 @@ class ChatSessionsTable(BaseTable):
                 conn.commit()
                 return cursor.rowcount or 0
 
-    def list_sessions(self, user_id: str) -> List[Dict]:
-        """获取会话列表，只返回该用户的会话，包含第一条用户消息"""
+    def count_sessions_by_user(self, user_id: str) -> int:
+        """获取该用户的会话总数（用于分页）。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
-                # 使用子查询获取第一条用户消息，并带上会话 status
                 cursor.execute(
-                    f'''
+                    f'SELECT COUNT(*) as n FROM {self.table_name} WHERE user_id = %s',
+                    (user_id,),
+                )
+                row = cursor.fetchone()
+                return int(row['n']) if row else 0
+
+    def list_sessions(
+        self,
+        user_id: str,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[Dict]:
+        """获取会话列表，只返回该用户的会话，包含第一条用户消息。支持 limit/offset 分页。"""
+        limit = max(1, min(100, limit)) if limit is not None else 50
+        offset = max(0, offset) if offset is not None else 0
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                # 使用子查询获取第一条用户消息，并带上会话 status；分页在应用层排序后做会破坏顺序，故在 SQL 中用子查询分页
+                sql = f'''
                     SELECT s.session_id,
                            s.status,
                            COUNT(e.id) as history_length,
@@ -221,9 +238,9 @@ class ChatSessionsTable(BaseTable):
                     WHERE s.user_id = %s
                     GROUP BY s.session_id, s.status
                     ORDER BY s.created_at DESC
-                    ''',
-                    (user_id,),
-                )
+                    LIMIT %s OFFSET %s
+                '''
+                cursor.execute(sql, (user_id, limit, offset))
                 results = cursor.fetchall()
                 sessions = []
                 for row in results:

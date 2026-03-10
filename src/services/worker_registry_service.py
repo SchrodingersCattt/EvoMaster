@@ -28,23 +28,34 @@ class WorkerRegistryService:
 
     def set_session_run_owner(self, session_id: str, worker_id: str) -> bool:
         """记录该会话当前 run 所在 worker。acquire 时调用；未配置 Redis 或失败返回 False。"""
+        return self._set_session_run_owner_impl(session_id, worker_id, log=True)
+
+    def refresh_session_run_owner(self, session_id: str, worker_id: str) -> bool:
+        """仅刷新 session_run_owner 的 TTL（Worker 心跳中周期调用），避免长任务超过 TTL 后 key 过期、API 误判 stale。不打 info 日志。"""
+        return self._set_session_run_owner_impl(session_id, worker_id, log=False)
+
+    def _set_session_run_owner_impl(
+        self, session_id: str, worker_id: str, *, log: bool = True
+    ) -> bool:
         client = get_redis_dao().create_client()
         if not client:
             return False
         sid = (session_id or '').strip()
-        if not sid:
+        wid = (worker_id or '').strip()
+        if not sid or not wid:
             return False
         try:
             client.set(
                 _session_run_owner_key(sid),
-                worker_id,
+                wid,
                 ex=SESSION_RUN_OWNER_TTL_SEC,
             )
-            logger.info(
-                'set_session_run_owner: session_id=%s worker_id=%s',
-                sid,
-                worker_id,
-            )
+            if log:
+                logger.info(
+                    'set_session_run_owner: session_id=%s worker_id=%s',
+                    sid,
+                    wid,
+                )
             return True
         except Exception as e:
             logger.warning('set_session_run_owner failed session_id=%s: %s', sid, e)

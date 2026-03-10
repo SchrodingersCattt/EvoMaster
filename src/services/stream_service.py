@@ -195,6 +195,8 @@ class SendStreamContext:
     request_event_queue: asyncio.Queue
     reply_queue: ReplyQueueLike  # planner_ask / confirmation_request 共用，POST /confirmation_reply 写入
     stop_ev: threading.Event
+    llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
+    model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
 
 
 class ChatStreamService:
@@ -590,6 +592,11 @@ class ChatStreamService:
         if mode not in ('direct', 'planner'):
             mode = 'direct'
 
+        llm = (req.llm or '').strip() or None
+        model = (
+            req.model or ''
+        ).strip() or None  # 本轮模型名，如 gemini-3-flash-preview / azure/gpt-5
+
         # Bohrium：org_id / project_id 直接入库，需要时从库读，不常驻内存
         if req.bohrium_project_id is not None or org_id is not None:
             try:
@@ -643,6 +650,8 @@ class ChatStreamService:
             request_event_queue=request_event_queue,
             reply_queue=reply_queue,
             stop_ev=stop_ev,
+            llm=llm,
+            model=model,
         )
 
     def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
@@ -783,6 +792,8 @@ class ChatStreamService:
                     'invocation_id': ctx.invocation_id,
                     'user_prompt': user_prompt,
                     'mode': mode,
+                    'llm': ctx.llm,
+                    'model': ctx.model,
                 }
                 # 先设为 waiting 再入队，避免 Worker 接手后 set active 被此处覆盖（竞态）
                 self._sessions_service.set_session_status(sid, 'waiting')
@@ -895,6 +906,8 @@ class ChatStreamService:
                     reply_queue_for_agent,
                     ctx.task_id,
                     ctx.invocation_id,
+                    ctx.llm,
+                    ctx.model,
                 )
                 try:
                     while True:
