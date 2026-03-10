@@ -248,8 +248,8 @@ class BaseAgent(ABC):
         # 准备对话（可能需要截断）
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
 
-        # 查询模型（使用 LLM）
-        assistant_message = self.llm.query(dialog_for_query)
+        # 查询模型（使用 LLM，带上下文窗口超限自动恢复）
+        assistant_message = self._query_with_context_recovery(dialog_for_query)
         if stop_event and stop_event.is_set():
             self._cancelled_from_step = True
             return True
@@ -427,6 +427,38 @@ class BaseAgent(ABC):
             print('-' * 60)
             print(obs_display)
             print('-' * 60)
+
+    def _query_with_context_recovery(self, dialog_for_query) -> Any:
+        """查询 LLM，若遇到上下文窗口超限错误则强制截断后重试（最多 3 次）。"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                return self.llm.query(dialog_for_query)
+            except Exception as e:
+                err_msg = str(e).lower()
+                is_context_error = any(
+                    kw in err_msg
+                    for kw in (
+                        'context_length_exceeded',
+                        'context window',
+                        'maximum context length',
+                        'reduce the length',
+                        'too many tokens',
+                        'tokens exceed',
+                    )
+                )
+                if not is_context_error or attempt == max_retries - 1:
+                    raise
+                self.logger.warning(
+                    f"Context window exceeded (attempt {attempt + 1}/{max_retries}), "
+                    f"force-truncating and retrying..."
+                )
+                # 强制截断：直接调用 truncate（跳过 should_truncate 检查）
+                truncated = self.context_manager.truncate(dialog_for_query)
+                if len(truncated.messages) >= len(dialog_for_query.messages):
+                    # 无法继续截断，直接抛出
+                    raise
+                dialog_for_query = truncated
 
     def _handle_no_tool_call(self) -> None:
         """处理没有工具调用的情况"""

@@ -113,6 +113,32 @@ _DPA_MODEL_ALIAS_NORM_MAP = {
     _normalize_alias(k): v for k, v in _DPA_MODEL_ALIAS_MAP.items()
 }
 
+_SN_TOP_LEVEL_FIELDS_TO_REMOVE: frozenset[str] = frozenset({
+    "userId",
+    "globalId",
+})
+
+_SN_PAPER_FIELDS_TO_REMOVE: frozenset[str] = frozenset({
+    "zhName",
+    "zhAbstract",
+    "paperId",
+    "publicationId",
+    "publicationCover",
+    "graphicalAbstract",
+    "languageType",
+    "impactScore",
+    "popularity",
+    "good",
+    "goodFlag",
+    "readFlag",
+    "addFlag",
+    "openAccess",
+    "pdfFlag",
+    "title",
+    "authorDetails",
+    "alltext",
+})
+
 
 def _extract_artifact_urls(obj: Any, keys: frozenset[str]) -> list[str]:
     """Recursively extract HTTP(S) URLs from known artifact-key values in a JSON object."""
@@ -220,6 +246,7 @@ class MatToolCallbacks:
         pipeline.register_after(self.after_autodownload_oss_results)
         pipeline.register_after(self.after_download_characterization_results)
         pipeline.register_after(self.after_normalize_struct_db_metadata)
+        pipeline.register_after(self.after_clean_sn_response)
         pipeline.register_after(self.after_survey_reminder)
 
     # ------------------------------------------------------------------
@@ -1397,6 +1424,63 @@ class MatToolCallbacks:
         existing = list(new_info.get('auto_downloaded_files', []))
         new_info['auto_downloaded_files'] = existing + downloaded
         return new_obs, new_info
+
+    def after_clean_sn_response(
+        self,
+        tool_call: Any,
+        observation: str | dict,
+        info: dict[str, Any],
+    ) -> tuple[str | dict, dict[str, Any]]:
+        """Strip UI/internal/Chinese-translation fields from mat_sn_* tool responses.
+
+        Removes ~40-60% of token bloat from Science Navigator responses by dropping:
+        - Chinese title/abstract duplicates (zhName, zhAbstract)
+        - Internal Bohrium IDs and counters (paperId, publicationId, popularity, good, …)
+        - UI-only state flags (goodFlag, readFlag, addFlag, pdfFlag, …)
+        - Image URLs (publicationCover, graphicalAbstract)
+        - Verbose authorDetails objects (simple authors[] list is kept)
+        - Always-empty alltext field
+        - Top-level internal fields (userId, globalId)
+        """
+        tool_name: str = getattr(getattr(tool_call, "function", None), "name", "") or ""
+        if not tool_name.startswith("mat_sn_"):
+            return observation, info
+        if info.get("error") is not None:
+            return observation, info
+
+        # observation may be a dict or a JSON string
+        obj: dict | None = None
+        was_string = False
+        if isinstance(observation, dict):
+            obj = observation
+        elif isinstance(observation, str):
+            try:
+                obj = json.loads(observation)
+                was_string = True
+            except (json.JSONDecodeError, ValueError):
+                return observation, info
+
+        if not isinstance(obj, dict):
+            return observation, info
+
+        # Remove top-level internal fields
+        for field in _SN_TOP_LEVEL_FIELDS_TO_REMOVE:
+            obj.pop(field, None)
+
+        # Clean per-paper records in data[]
+        papers = obj.get("data")
+        if isinstance(papers, list):
+            for paper in papers:
+                if isinstance(paper, dict):
+                    for field in _SN_PAPER_FIELDS_TO_REMOVE:
+                        paper.pop(field, None)
+
+        if was_string:
+            observation = json.dumps(obj, ensure_ascii=False)
+        else:
+            observation = obj
+
+        return observation, info
 
     def after_survey_reminder(
         self,
