@@ -17,6 +17,7 @@ from src.services.stream_service import RedisReplyQueue
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.build_info import get_build_version
+from src.utils.feishu_dm import notify_task_started_dm_async
 from src.utils.feishu_notifier import (
     CARD_TEMPLATE_BLUE,
     CARD_TEMPLATE_GREEN,
@@ -215,6 +216,8 @@ def _run_worker_loop() -> None:
                     ],
                     template=CARD_TEMPLATE_BLUE,
                 )
+            if session_user_id:
+                notify_task_started_dm_async(session_user_id, session_id, task_id)
             run_success = True
             try:
                 result = agent_run_service.run_agent_sync(
