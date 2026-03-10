@@ -15,6 +15,7 @@ from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
 from src.services.stream_service import RedisReplyQueue
 from src.services.worker_registry_service import get_worker_registry_service
+from src.utils.logger import LoggingConfig, setup_logging
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,8 @@ logger.setLevel(logging.INFO)
 _BLPOP_TIMEOUT = int(os.environ.get('AGENT_WORKER_BLPOP_TIMEOUT', '30'))
 # 存活心跳间隔（秒），需小于 Redis WORKER_ALIVE_TTL_SEC(30)，否则 API 会误判本进程已死
 _WORKER_HEARTBEAT_INTERVAL = 10.0
+# 当前正在跑的 session_id（由主循环设置/清除），供心跳线程刷新 run_owner TTL，避免长任务超过 SESSION_RUN_OWNER_TTL 后 API 误判 stale
+_current_session_id: str | None = None
 
 
 class RedisBackedStopEvent:
@@ -39,10 +42,17 @@ class RedisBackedStopEvent:
 
 
 def _worker_heartbeat_loop(stop_ev: threading.Event) -> None:
-    """后台线程：周期刷新本进程 worker_alive，使 API subscribe 时 is_worker_alive(owner) 为 True，避免刷新页面误判 stale。"""
+    """后台线程：周期刷新本进程 worker_alive 与当前 session 的 run_owner TTL，使 API subscribe 时 is_worker_alive(owner) 为 True，
+    且长任务不会因 SESSION_RUN_OWNER_TTL（2h）过期导致 run_owner 丢失、误判 stale 并推送 run_interrupted。"""
     while not stop_ev.wait(timeout=_WORKER_HEARTBEAT_INTERVAL):
         try:
             get_worker_registry_service().set_worker_alive(get_worker_id())
+            # 刷新当前 run 的 session_run_owner TTL，避免超过 2h 后 key 过期、API 侧 run_owner=None 触发 run_interrupted
+            sid = _current_session_id
+            if sid:
+                get_worker_registry_service().refresh_session_run_owner(
+                    sid, get_worker_id()
+                )
         except Exception as e:
             logger.warning(
                 'Agent worker heartbeat skipped worker_id=%s: %s', get_worker_id(), e
@@ -50,6 +60,7 @@ def _worker_heartbeat_loop(stop_ev: threading.Event) -> None:
 
 
 def _run_worker_loop() -> None:
+    global _current_session_id
     redis_dao = get_redis_dao()
     if not redis_dao.create_client():
         logger.error(
@@ -72,6 +83,8 @@ def _run_worker_loop() -> None:
         invocation_id = payload.get('invocation_id')
         user_prompt = payload.get('user_prompt') or ''
         mode = (payload.get('mode') or 'direct').strip().lower() or 'direct'
+        llm_override = (payload.get('llm') or '').strip() or None
+        model_override = (payload.get('model') or '').strip() or None
 
         if not session_id:
             logger.warning('Agent worker: skip job with empty session_id')
@@ -114,6 +127,7 @@ def _run_worker_loop() -> None:
                 continue
 
             acquired = True
+            _current_session_id = session_id
             run_success = True
             try:
                 result = agent_run_service.run_agent_sync(
@@ -126,6 +140,8 @@ def _run_worker_loop() -> None:
                     reply_queue=reply_queue,
                     task_id=task_id,
                     invocation_id=invocation_id,
+                    llm_override=llm_override,
+                    model_override=model_override,
                 )
                 run_success = result is not False
             except Exception as e:
@@ -160,6 +176,8 @@ def _run_worker_loop() -> None:
                 except Exception:
                     pass
         finally:
+            if acquired:
+                _current_session_id = None
             redis_dao.delete_confirmation_run_active(session_id)
             redis_dao.delete_stop_requested(session_id, task_id)
             if acquired:
@@ -169,10 +187,7 @@ def _run_worker_loop() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(
-        format='%(asctime)s %(levelname)s [%(name)s] %(message)s',
-        level=logging.INFO,
-    )
+    setup_logging(**LoggingConfig.get_worker_config())
 
     def _on_sigterm(_signum: int, _frame: object) -> None:
         logger.info(

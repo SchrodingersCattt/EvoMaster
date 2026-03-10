@@ -14,25 +14,18 @@ ag-ui 协议（前后端约定）：
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
-from typing import Any, List, Literal, Optional
+from typing import List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.base.base_res import BaseResponse
 
 
-class ChatRequest(BaseModel):
-    """发起/就绪请求"""
+class SessionListQuery(BaseModel):
+    """GET /chat/sessions/list 查询参数（分页）"""
 
-    prompt: str = ''
-    workspace: str = './workspace'
-
-
-class ChatStartResponse(BaseModel):
-    """POST /api/start 响应"""
-
-    status: str = 'ready'
-    session_id: str
+    limit: int = Field(default=20, ge=1, le=100, description='每页条数')
+    offset: int = Field(default=0, ge=0, description='偏移量')
 
 
 class SessionItem(BaseModel):
@@ -47,9 +40,11 @@ class SessionItem(BaseModel):
 
 
 class SessionListResponse(BaseModel):
-    """GET /api/sessions 列表数据（放在 data 字段内）"""
+    """GET /chat/sessions/list 列表数据（放在 data 字段内）；分页时含 total、has_more。"""
 
     sessions: List[SessionItem]
+    total: Optional[int] = None  # 总分页条数，仅分页时返回
+    has_more: Optional[bool] = None  # 是否有更多，仅分页时返回
 
 
 class SessionListApiResponse(BaseResponse[SessionListResponse]):
@@ -64,53 +59,6 @@ class ActiveSessionsCountData(BaseModel):
 
 class ActiveSessionsCountApiResponse(BaseResponse[ActiveSessionsCountData]):
     """GET /chat/sessions/active_count 规范响应：code, msg, data"""
-
-
-class RunInfoResponse(BaseModel):
-    """GET /api/sessions/{id}/run_info 响应"""
-
-    run_id: str
-    last_task_id: Optional[str] = None
-    task_ids: List[str] = []
-
-
-class FileEntry(BaseModel):
-    """文件/目录项"""
-
-    name: str
-    path: str
-    dir: bool
-
-
-class SessionFilesResponse(BaseModel):
-    """GET /api/sessions/{id}/files 响应"""
-
-    run_id: str
-    path: str
-    entries: List[FileEntry]
-    workspace_root: Optional[str] = None
-    task_id: Optional[str] = None
-
-
-class RunItem(BaseModel):
-    """Run 列表项"""
-
-    id: str
-    label: str
-
-
-class RunListResponse(BaseModel):
-    """GET /api/runs 响应"""
-
-    runs: List[RunItem]
-
-
-class RunFilesResponse(BaseModel):
-    """GET /api/runs/{id}/files 响应"""
-
-    run_id: str
-    path: str
-    entries: List[FileEntry]
 
 
 # ---------- Workspace OSS 列表 ----------
@@ -166,6 +114,12 @@ class ChatSendRequest(BaseModel):
         None  # 可选，OSS 链接列表，前端展示与 content 分开，传给 agent 时拼成 content + URLs
     )
     mode: str = 'direct'  # "direct" | "planner"
+    llm: Optional[str] = (
+        None  # 可选，本轮使用的 LLM 配置块（如 litellm/azure/deepseek），不传则用 agent 默认
+    )
+    model: Optional[str] = (
+        None  # 可选，本轮使用的模型名（如 gemini-3-flash-preview、azure/gpt-5），覆盖所选 LLM 配置里的 model
+    )
     bohrium_project_id: int | str | None = None  # 可选的 Bohrium project id
     bohrium_user_id: int | str | None = (
         None  # 可选的 Bohrium user id（MCP 计算类工具需要）
@@ -176,25 +130,3 @@ class ChatPlannerReplyRequest(BaseModel):
     """POST /chat/sessions/{session_id}/confirmation_reply 用户确认回复（planner_ask / ask_human 统一）"""
 
     content: str
-
-
-# ---------- ag-ui 协议：服务端 -> 客户端 (SSE event data) ----------
-
-
-class AgUiEvent(BaseModel):
-    """SSE event 固定为 "ag-ui"，data 为本结构 JSON"""
-
-    source: str  # System | User | MatMaster | Planner
-    type: str  # status | query | thought | tool_call | tool_result | finish | error | cancelled | planner_ask | ...
-    content: Any
-    session_id: Optional[str] = None
-    invocation_id: Optional[str] = (
-        None  # 本轮调用的唯一标识，前端用于区分第几轮（仅发送流/当轮事件带此字段）
-    )
-
-    class Config:
-        extra = 'allow'
-
-
-# 兼容别名
-ChatEventPayload = dict[str, Any]

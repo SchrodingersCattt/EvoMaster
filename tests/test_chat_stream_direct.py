@@ -66,6 +66,7 @@ def _mock_sessions_table():
     )
     t.set_session_last_task.return_value = None
     t.list_sessions.return_value = []
+    t.count_sessions_by_user.return_value = 0
     t.count_active_sessions.return_value = 0
     t.reset_all_active_to_idle.return_value = 0
     t.set_share_status.return_value = False

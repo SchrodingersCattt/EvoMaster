@@ -12,6 +12,7 @@ from src.models.chat import (
     ChatSendRequest,
     SessionItem,
     SessionListApiResponse,
+    SessionListQuery,
     SessionListResponse,
     ShareSetRequest,
     ShareStatusApiResponse,
@@ -50,13 +51,20 @@ logger.setLevel(logging.INFO)
 
 @router.get('/list', response_model=SessionListApiResponse)
 def list_sessions(
+    query: SessionListQuery = Depends(),
     user_id: str = Depends(UserService.require_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
 ):
-    sessions = chat_svc.list_sessions(user_id=user_id)
+    """会话列表，分页：首屏传 limit=20&offset=0，「加载更多」时增大 offset。"""
+    sessions, total = chat_svc.list_sessions(
+        user_id=user_id, limit=query.limit, offset=query.offset
+    )
+    has_more = query.offset + len(sessions) < total
     return SessionListApiResponse(
         data=SessionListResponse(
-            sessions=[SessionItem.model_validate(s) for s in sessions]
+            sessions=[SessionItem.model_validate(s) for s in sessions],
+            total=total,
+            has_more=has_more,
         ),
     )
 
