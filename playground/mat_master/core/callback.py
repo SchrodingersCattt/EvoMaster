@@ -236,6 +236,7 @@ class MatToolCallbacks:
         pipeline.register_before(self.before_resolve_skill_reference_name)
         pipeline.register_before(self.before_resolve_dpa_model_alias)
         pipeline.register_before(self.before_patch_monitor_job_bohr_id)
+        pipeline.register_before(self.before_normalize_sn_search_words_parameter)
         pipeline.register_before(self.before_upload_nmr_predict_files)
         # MCP business-error detection runs FIRST among after-callbacks so that
         # downstream hooks (track_async_submit, autodownload, etc.) can
@@ -913,6 +914,52 @@ class MatToolCallbacks:
         if changed:
             args['smiles_list'] = new_list
             tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
+
+    def before_normalize_sn_search_words_parameter(self, tool_call: Any) -> None:
+        """Convert 'words' parameter from string to native list for mat_sn_search-papers-enhanced.
+
+        LLMs may pass words as a stringified JSON array (e.g. '["term1", "term2"]')
+        instead of a native list. This causes servlet error -102 when the MCP tool
+        attempts to process it. This callback detects and converts stringified lists
+        back to native Python lists so the tool receives the correct format.
+        """
+        tool_name = tool_call.function.name or ''
+        if tool_name != 'mat_sn_search-papers-enhanced':
+            return
+
+        args_str = tool_call.function.arguments or ''
+        try:
+            args = json.loads(args_str) if args_str else {}
+        except (json.JSONDecodeError, TypeError):
+            return
+        if not isinstance(args, dict):
+            return
+
+        words = args.get('words')
+        if words is None:
+            return
+
+        # If words is already a list, nothing to do
+        if isinstance(words, list):
+            return
+
+        # If words is a string that looks like a JSON array, parse it
+        if isinstance(words, str):
+            cleaned = words.strip()
+            if cleaned.startswith('[') and cleaned.endswith(']'):
+                try:
+                    parsed = json.loads(cleaned)
+                    if isinstance(parsed, list):
+                        args['words'] = parsed
+                        tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
+                        self.logger.info(
+                            'before_tool: converted words from string to list for mat_sn_search-papers-enhanced: %r -> %r',
+                            words,
+                            parsed,
+                        )
+                        return
+                except (json.JSONDecodeError, TypeError):
+                    pass
 
     # ------------------------------------------------------------------
     # After callbacks

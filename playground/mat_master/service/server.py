@@ -41,6 +41,10 @@ if str(_project_root) not in sys.path:
 # Register mat_master playground (same as run.py auto_import_playgrounds), so get_playground_class returns MatMasterPlayground
 importlib.import_module('playground.mat_master.core.playground')
 
+from evomaster.utils.types import TaskInstance
+from src.services.chat_history import ChatHistoryConverter
+
+_DIALOG_HISTORY_MAX_EVENTS = int(os.environ.get('CHAT_DIALOG_HISTORY_MAX_EVENTS', '500'))
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +83,7 @@ async def lifespan(app: FastAPI):
     """Startup: load tools in a thread so server is ready only after tools are loaded."""
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, _init_playground_sync)
+    _load_persisted_sessions()
     yield
     if _cached_pg is not None:
         s = _get_session()
@@ -150,7 +155,6 @@ async def start_task(req: ChatRequest):
     if SESSION_ID_DEMO not in SESSIONS:
         SESSIONS[SESSION_ID_DEMO] = {
             'history': [],
-            'task_ids': [],
             'last_task_id': None,
         }
     return {'status': 'ready', 'session_id': SESSION_ID_DEMO}
@@ -160,8 +164,10 @@ async def start_task(req: ChatRequest):
 def list_sessions():
     """List session ids (in-memory + 本地 workspaces 目录下的所有文件夹，重启后仍可回溯历史)."""
     disk_ids = _list_workspace_ids()
+    state_ids = _list_state_ids()
+    all_disk_ids = list(dict.fromkeys(disk_ids + state_ids))  # dedup, preserve order
     in_memory = list(SESSIONS.keys())
-    disk_only = [wid for wid in disk_ids if wid not in SESSIONS]
+    disk_only = [wid for wid in all_disk_ids if wid not in SESSIONS]
     all_ids = in_memory + disk_only
     sessions = []
     for sid in all_ids:
@@ -182,24 +188,18 @@ def get_session_history(session_id: str):
 
 @app.get('/api/sessions/{session_id}/run_info')
 def get_session_run_info(session_id: str):
-    """Return run_id and task_ids for this session (内存无则用磁盘 workspace 目录对应 task_id，便于回溯历史)."""
+    """Return run_id and task_ids for this session."""
     data = SESSIONS.get(session_id)
     if data:
-        task_ids = data.get('task_ids') or []
         last_task_id = data.get('last_task_id')
         return {
             'run_id': _get_run_id_web(),
             'last_task_id': last_task_id,
-            'task_ids': task_ids,
+            'task_ids': [last_task_id] if last_task_id else [],
         }
-    # 重启后仅存在磁盘的 workspace：用 session_id 作为 task_id 指向 workspaces/<session_id>
     base = _get_run_workspace_path(_get_run_id_web(), task_id=session_id)
     if base and base.is_dir():
-        return {
-            'run_id': _get_run_id_web(),
-            'last_task_id': session_id,
-            'task_ids': [session_id],
-        }
+        return {'run_id': _get_run_id_web(), 'last_task_id': session_id, 'task_ids': [session_id]}
     return {'run_id': _get_run_id_web(), 'last_task_id': None, 'task_ids': []}
 
 
@@ -465,6 +465,80 @@ def _list_workspace_ids() -> list[str]:
             pairs.append((p.name, mtime))
     pairs.sort(key=lambda x: x[1], reverse=True)
     return [name for name, _ in pairs]
+
+
+def _state_dir() -> Path:
+    """Root directory for session state (.state/)."""
+    return _runs_dir() / _get_run_id_web() / '.state'
+
+
+def _session_state_dir(session_id: str) -> Path:
+    """Directory for a specific session state."""
+    return _state_dir() / session_id
+
+
+def _list_state_ids() -> list[str]:
+    """List all session IDs that have persisted state in .state/."""
+    state_root = _state_dir()
+    if not state_root.is_dir():
+        return []
+    return [p.name for p in state_root.iterdir() if p.is_dir()]
+
+
+def _persist_history_event(session_id: str, payload: dict) -> None:
+    """Append one event to .state/<session_id>/history.jsonl."""
+    try:
+        d = _session_state_dir(session_id)
+        d.mkdir(parents=True, exist_ok=True)
+        with (d / 'history.jsonl').open('a', encoding='utf-8') as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
+
+
+def _persist_meta(session_id: str, data: dict) -> None:
+    """Write .state/<session_id>/meta.json (last_task_id etc)."""
+    try:
+        d = _session_state_dir(session_id)
+        d.mkdir(parents=True, exist_ok=True)
+        meta = {'last_task_id': data.get('last_task_id')}
+        (d / 'meta.json').write_text(
+            json.dumps(meta, ensure_ascii=False), encoding='utf-8'
+        )
+    except Exception:
+        pass
+
+
+def _load_persisted_sessions() -> None:
+    """On startup: read .state/*/history.jsonl + meta.json into SESSIONS."""
+    state_root = _state_dir()
+    if not state_root.is_dir():
+        return
+    for sid_dir in state_root.iterdir():
+        if not sid_dir.is_dir():
+            continue
+        sid = sid_dir.name
+        history = []
+        history_file = sid_dir / 'history.jsonl'
+        if history_file.exists():
+            for line in history_file.read_text(encoding='utf-8').splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        history.append(json.loads(line))
+                    except Exception:
+                        pass
+        meta = {}
+        meta_file = sid_dir / 'meta.json'
+        if meta_file.exists():
+            try:
+                meta = json.loads(meta_file.read_text(encoding='utf-8'))
+            except Exception:
+                pass
+        SESSIONS[sid] = {
+            'history': history,
+            'last_task_id': meta.get('last_task_id'),
+        }
 
 
 def _get_run_workspace_path(run_id: str, task_id: str | None = None) -> Path | None:
@@ -739,9 +813,10 @@ def _run_agent_sync(
             'session_id': session_id,
         }
         if session_id not in SESSIONS:
-            SESSIONS[session_id] = {'history': [], 'task_ids': [], 'last_task_id': None}
+            SESSIONS[session_id] = {'history': [], 'last_task_id': None}
         if event_type != 'log_line':
             SESSIONS[session_id]['history'].append(payload)
+            _persist_history_event(session_id, payload)
         future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
         try:
             future.result(timeout=5)
@@ -918,7 +993,22 @@ def _run_agent_sync(
         exp.set_run_dir(run_dir)
         event_callback('MatMaster', 'exp_run', exp.__class__.__name__)
 
-        exp.run(task_description=user_prompt, task_id=task_id)
+        # Multi-turn: build dialog_history from prior in-memory events
+        all_events = list(SESSIONS.get(session_id, {}).get('history', []))
+        prior_events = all_events[:-1] if all_events and all_events[-1].get('type') == 'query' else all_events
+        if len(prior_events) > _DIALOG_HISTORY_MAX_EVENTS:
+            prior_events = prior_events[-_DIALOG_HISTORY_MAX_EVENTS:]
+        dialog_history = ChatHistoryConverter.events_to_dialog_messages(prior_events) if prior_events else []
+        if dialog_history:
+            logger.debug('multi-turn dialog_history session_id=%s messages=%s', session_id, len(dialog_history))
+        
+        task = TaskInstance(
+            task_id=task_id,
+            task_type='discovery',
+            description=user_prompt,
+            meta={'dialog_history': dialog_history},
+        )
+        exp.run(task=task)
         if stop_event.is_set():
             event_callback('System', 'cancelled', 'Task cancelled by user.')
         else:
@@ -986,7 +1076,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     if sid not in SESSIONS:
                         SESSIONS[sid] = {
                             'history': [],
-                            'task_ids': [],
                             'last_task_id': None,
                         }
                     payload = {
@@ -996,6 +1085,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         'session_id': sid,
                     }
                     SESSIONS[sid]['history'].append(payload)
+                    _persist_history_event(sid, payload)
                     await send_json(payload)
                 elif msg_type == 'ask_human_reply':
                     content = data.get('content', '')
@@ -1004,7 +1094,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     if sid not in SESSIONS:
                         SESSIONS[sid] = {
                             'history': [],
-                            'task_ids': [],
                             'last_task_id': None,
                         }
                     payload = {
@@ -1014,6 +1103,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         'session_id': sid,
                     }
                     SESSIONS[sid]['history'].append(payload)
+                    _persist_history_event(sid, payload)
                     await send_json(payload)
                 elif msg_type == 'confirmation_reply':
                     content = data.get('content', '')
@@ -1023,7 +1113,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     if sid not in SESSIONS:
                         SESSIONS[sid] = {
                             'history': [],
-                            'task_ids': [],
                             'last_task_id': None,
                         }
                     payload = {
@@ -1033,6 +1122,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         'session_id': sid,
                     }
                     SESSIONS[sid]['history'].append(payload)
+                    _persist_history_event(sid, payload)
                     await send_json(payload)
                 else:
                     await command_queue.put(data)
@@ -1085,14 +1175,12 @@ async def websocket_endpoint(websocket: WebSocket):
             if session_id not in SESSIONS:
                 SESSIONS[session_id] = {
                     'history': [],
-                    'task_ids': [],
                     'last_task_id': None,
                 }
             # Keep a stable workspace per session so uploads are visible before first run.
             task_id = SESSIONS[session_id].get('last_task_id') or session_id
-            if task_id not in SESSIONS[session_id].setdefault('task_ids', []):
-                SESSIONS[session_id]['task_ids'].append(task_id)
             SESSIONS[session_id]['last_task_id'] = task_id
+            _persist_meta(session_id, SESSIONS[session_id])
             user_msg = {
                 'source': 'User',
                 'type': 'query',
@@ -1101,6 +1189,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 'session_id': session_id,
             }
             SESSIONS[session_id]['history'].append(user_msg)
+            _persist_history_event(session_id, user_msg)
             await send_json(user_msg)
 
             await send_json(
