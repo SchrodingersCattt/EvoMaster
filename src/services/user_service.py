@@ -6,7 +6,7 @@ from functools import lru_cache
 import httpx
 from fastapi import HTTPException, Request, status
 
-from src.utils.constant import BI_URL, BOHRIUM_CORE_BASE_URL
+from src.utils.constant import ACCOUNT_API_BASE_URL, BOHRIUM_CORE_BASE_URL
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -68,7 +68,7 @@ class UserService:
         """Get user email by user_id from BI API."""
         try:
             params = {'businessLine': business_line}
-            url = f"{BI_URL.rstrip('/')}/account_api/users/{user_id}"
+            url = f"{ACCOUNT_API_BASE_URL}/account_api/users/{user_id}"
             with httpx.Client(timeout=30.0) as client:
                 response = client.get(url, params=params)
                 response.raise_for_status()
@@ -86,7 +86,7 @@ class UserService:
         """Get user nickname by user_id from BI API."""
         try:
             params = {'businessLine': business_line}
-            url = f"{BI_URL.rstrip('/')}/account_api/users/{user_id}"
+            url = f"{ACCOUNT_API_BASE_URL}/account_api/users/{user_id}"
             with httpx.Client(timeout=30.0) as client:
                 response = client.get(url, params=params)
                 response.raise_for_status()
@@ -105,6 +105,36 @@ class UserService:
         except Exception as e:
             logger.error('获取用户名失败: %s', e)
             return ''
+
+    @staticmethod
+    def get_user_display_name(
+        user_id: str,
+        business_line: str = 'bohrium',
+        timeout: float = 3.0,
+    ) -> str:
+        """一次 BI 请求取昵称或邮箱，用于展示「谁提交」；超时或失败则返回 user_id。"""
+        if not (user_id or '').strip():
+            return '未知'
+        try:
+            params = {'businessLine': business_line}
+            url = f"{ACCOUNT_API_BASE_URL}/account_api/users/{user_id}"
+            with httpx.Client(timeout=timeout) as client:
+                response = client.get(url, params=params)
+                response.raise_for_status()
+                payload = response.json()
+            if payload.get('code') != 0:
+                return user_id
+            data = payload.get('data') or {}
+            nickname = data.get('nickname')
+            if isinstance(nickname, str) and nickname.strip():
+                return f"{nickname.strip()} ({user_id})"
+            email = data.get('email')
+            if isinstance(email, str) and email.strip():
+                return f"{email.strip()} ({user_id})"
+            return user_id
+        except Exception as e:
+            logger.debug('get_user_display_name failed user_id=%s: %s', user_id, e)
+            return user_id
 
     @staticmethod
     def get_bohrium_access_key(user_id: str, org_id: str) -> str | None:

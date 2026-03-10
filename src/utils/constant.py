@@ -24,10 +24,12 @@ DB_CONFIG = {
 # 未配置则 stop 仅在本进程生效。配 REDIS_URL，例：redis://:密码@host:6379/0
 REDIS_URL = (os.getenv('REDIS_URL') or '').strip() or None
 
-BI_URL = os.getenv('BI_URL', 'https://account.test.dp.tech')
-
 # 配额服务（与 MatMaster 一致：matmaster-tools-server）
 _URL_PART = f'.{CURRENT_ENV}' if CURRENT_ENV and CURRENT_ENV != 'prod' else ''
+# 账号/用户信息 API（如 account_api/users/{user_id} 查昵称、邮箱），按环境自动生成 host
+ACCOUNT_API_BASE_URL = (
+    f'https://account{_URL_PART}.dp.tech' if _URL_PART else 'https://account.dp.tech'
+).rstrip('/')
 MATMASTER_TOOLS_SERVER = os.getenv(
     'MATMASTER_TOOLS_SERVER',
     f'https://matmaster-tools-server{_URL_PART}.bohrium.com',
