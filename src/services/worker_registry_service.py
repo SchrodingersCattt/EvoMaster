@@ -90,6 +90,18 @@ class WorkerRegistryService:
         except Exception as e:
             logger.warning('delete_session_run_owner failed session_id=%s: %s', sid, e)
 
+    def count_active_runs(self) -> int:
+        """当前正在执行的 run 总数（即 session_run_owner key 数量）。未配置 Redis 或失败返回 0。"""
+        client = get_redis_dao().create_client()
+        if not client:
+            return 0
+        try:
+            pattern = SESSION_RUN_OWNER_KEY_PREFIX + '*'
+            return sum(1 for _ in client.scan_iter(match=pattern))
+        except Exception as e:
+            logger.warning('count_active_runs failed: %s', e)
+            return 0
+
     def set_worker_alive(self, worker_id: str) -> bool:
         """刷新本进程存活标记（lifespan 里周期调用）。TTL 较短，重启后旧进程不再刷新即失效。"""
         client = get_redis_dao().create_client()
