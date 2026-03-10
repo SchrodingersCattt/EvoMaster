@@ -15,6 +15,7 @@ from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
 from src.services.stream_service import RedisReplyQueue
 from src.services.worker_registry_service import get_worker_registry_service
+from src.utils.logger import LoggingConfig, setup_logging
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
@@ -182,10 +183,7 @@ def _run_worker_loop() -> None:
 
 
 def main() -> None:
-    logging.basicConfig(
-        format='%(asctime)s %(levelname)s [%(name)s] %(message)s',
-        level=logging.INFO,
-    )
+    setup_logging(**LoggingConfig.get_worker_config())
 
     def _on_sigterm(_signum: int, _frame: object) -> None:
         logger.info(
