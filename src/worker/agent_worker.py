@@ -83,6 +83,8 @@ def _run_worker_loop() -> None:
         invocation_id = payload.get('invocation_id')
         user_prompt = payload.get('user_prompt') or ''
         mode = (payload.get('mode') or 'direct').strip().lower() or 'direct'
+        llm_override = (payload.get('llm') or '').strip() or None
+        model_override = (payload.get('model') or '').strip() or None
 
         if not session_id:
             logger.warning('Agent worker: skip job with empty session_id')
@@ -138,6 +140,8 @@ def _run_worker_loop() -> None:
                     reply_queue=reply_queue,
                     task_id=task_id,
                     invocation_id=invocation_id,
+                    llm_override=llm_override,
+                    model_override=model_override,
                 )
                 run_success = result is not False
             except Exception as e:
