@@ -83,6 +83,7 @@ async def lifespan(app: FastAPI):
     """Startup: load tools in a thread so server is ready only after tools are loaded."""
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, _init_playground_sync)
+    _load_persisted_sessions()
     yield
     if _cached_pg is not None:
         s = _get_session()
@@ -163,8 +164,10 @@ async def start_task(req: ChatRequest):
 def list_sessions():
     """List session ids (in-memory + 本地 workspaces 目录下的所有文件夹，重启后仍可回溯历史)."""
     disk_ids = _list_workspace_ids()
+    state_ids = _list_state_ids()
+    all_disk_ids = list(dict.fromkeys(disk_ids + state_ids))  # dedup, preserve order
     in_memory = list(SESSIONS.keys())
-    disk_only = [wid for wid in disk_ids if wid not in SESSIONS]
+    disk_only = [wid for wid in all_disk_ids if wid not in SESSIONS]
     all_ids = in_memory + disk_only
     sessions = []
     for sid in all_ids:
@@ -464,6 +467,80 @@ def _list_workspace_ids() -> list[str]:
     return [name for name, _ in pairs]
 
 
+def _state_dir() -> Path:
+    """Root directory for session state (.state/)."""
+    return _runs_dir() / _get_run_id_web() / '.state'
+
+
+def _session_state_dir(session_id: str) -> Path:
+    """Directory for a specific session state."""
+    return _state_dir() / session_id
+
+
+def _list_state_ids() -> list[str]:
+    """List all session IDs that have persisted state in .state/."""
+    state_root = _state_dir()
+    if not state_root.is_dir():
+        return []
+    return [p.name for p in state_root.iterdir() if p.is_dir()]
+
+
+def _persist_history_event(session_id: str, payload: dict) -> None:
+    """Append one event to .state/<session_id>/history.jsonl."""
+    try:
+        d = _session_state_dir(session_id)
+        d.mkdir(parents=True, exist_ok=True)
+        with (d / 'history.jsonl').open('a', encoding='utf-8') as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + '\n')
+    except Exception:
+        pass
+
+
+def _persist_meta(session_id: str, data: dict) -> None:
+    """Write .state/<session_id>/meta.json (last_task_id etc)."""
+    try:
+        d = _session_state_dir(session_id)
+        d.mkdir(parents=True, exist_ok=True)
+        meta = {'last_task_id': data.get('last_task_id')}
+        (d / 'meta.json').write_text(
+            json.dumps(meta, ensure_ascii=False), encoding='utf-8'
+        )
+    except Exception:
+        pass
+
+
+def _load_persisted_sessions() -> None:
+    """On startup: read .state/*/history.jsonl + meta.json into SESSIONS."""
+    state_root = _state_dir()
+    if not state_root.is_dir():
+        return
+    for sid_dir in state_root.iterdir():
+        if not sid_dir.is_dir():
+            continue
+        sid = sid_dir.name
+        history = []
+        history_file = sid_dir / 'history.jsonl'
+        if history_file.exists():
+            for line in history_file.read_text(encoding='utf-8').splitlines():
+                line = line.strip()
+                if line:
+                    try:
+                        history.append(json.loads(line))
+                    except Exception:
+                        pass
+        meta = {}
+        meta_file = sid_dir / 'meta.json'
+        if meta_file.exists():
+            try:
+                meta = json.loads(meta_file.read_text(encoding='utf-8'))
+            except Exception:
+                pass
+        SESSIONS[sid] = {
+            'history': history,
+            'last_task_id': meta.get('last_task_id'),
+        }
+
+
 def _get_run_workspace_path(run_id: str, task_id: str | None = None) -> Path | None:
     """Resolve run_id (and optional task_id) to workspace directory."""
     runs = _runs_dir()
@@ -739,6 +816,7 @@ def _run_agent_sync(
             SESSIONS[session_id] = {'history': [], 'last_task_id': None}
         if event_type != 'log_line':
             SESSIONS[session_id]['history'].append(payload)
+            _persist_history_event(session_id, payload)
         future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
         try:
             future.result(timeout=5)
@@ -1007,6 +1085,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         'session_id': sid,
                     }
                     SESSIONS[sid]['history'].append(payload)
+                    _persist_history_event(sid, payload)
                     await send_json(payload)
                 elif msg_type == 'ask_human_reply':
                     content = data.get('content', '')
@@ -1024,6 +1103,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         'session_id': sid,
                     }
                     SESSIONS[sid]['history'].append(payload)
+                    _persist_history_event(sid, payload)
                     await send_json(payload)
                 elif msg_type == 'confirmation_reply':
                     content = data.get('content', '')
@@ -1042,6 +1122,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         'session_id': sid,
                     }
                     SESSIONS[sid]['history'].append(payload)
+                    _persist_history_event(sid, payload)
                     await send_json(payload)
                 else:
                     await command_queue.put(data)
@@ -1099,6 +1180,7 @@ async def websocket_endpoint(websocket: WebSocket):
             # Keep a stable workspace per session so uploads are visible before first run.
             task_id = SESSIONS[session_id].get('last_task_id') or session_id
             SESSIONS[session_id]['last_task_id'] = task_id
+            _persist_meta(session_id, SESSIONS[session_id])
             user_msg = {
                 'source': 'User',
                 'type': 'query',
@@ -1107,6 +1189,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 'session_id': session_id,
             }
             SESSIONS[session_id]['history'].append(user_msg)
+            _persist_history_event(session_id, user_msg)
             await send_json(user_msg)
 
             await send_json(
