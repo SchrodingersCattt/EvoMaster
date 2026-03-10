@@ -82,6 +82,10 @@ def _send_dm_impl(to_email: str, text: str) -> None:
         return
     token = _get_tenant_access_token()
     if not token:
+        logger.warning(
+            'Feishu DM skip: no tenant_access_token (auth failed or not configured) to_email=%s',
+            to_email,
+        )
         return
     body = {
         'receive_id': to_email,
@@ -139,7 +143,7 @@ def _notify_task_dm_async(
 
     email = UserService.get_email_by_user_id(user_id)
     if not email or not (email := email.strip()):
-        logger.debug(
+        logger.info(
             'Feishu DM skip: no email for user_id=%s session_id=%s',
             user_id,
             session_id,
