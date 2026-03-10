@@ -1,5 +1,5 @@
 """飞书群机器人通知：Worker 开始/完成时发群消息。发送失败仅打 log，不抛异常。
-环境从 constant.CURRENT_ENV 取，会带在消息前缀中。"""
+环境从 constant.CURRENT_ENV 取，会带在消息前缀中。支持纯文本与 interactive 卡片两种格式。"""
 
 import json
 import logging
@@ -15,6 +15,12 @@ FEISHU_WEBHOOK_URL = (
     'https://open.feishu.cn/open-apis/bot/v2/hook/171cbe39-9702-4063-a2ce-e11adb44cc44'
 )
 
+# 卡片 header 颜色：blue/green/orange/red
+CARD_TEMPLATE_BLUE = 'blue'
+CARD_TEMPLATE_GREEN = 'green'
+CARD_TEMPLATE_ORANGE = 'orange'
+CARD_TEMPLATE_RED = 'red'
+
 
 def _env_prefix() -> str:
     """消息前缀，含环境时如 [MatMaster-uat]，未配置时为 [MatMaster]。"""
@@ -23,18 +29,11 @@ def _env_prefix() -> str:
     return f'[MatMaster-{(CURRENT_ENV or "").strip().lower()}] '
 
 
-def notify(text: str) -> None:
-    """向飞书群发送一条文本消息。发送失败时静默（仅打 log）。若 text 以 [MatMaster] 开头则自动加上当前环境前缀。"""
-    url = FEISHU_WEBHOOK_URL
-    if text.startswith('[MatMaster]'):
-        text = _env_prefix() + text[len('[MatMaster]'):].lstrip()
-    body = json.dumps(
-        {'msg_type': 'text', 'content': {'text': text}},
-        ensure_ascii=False,
-    ).encode('utf-8')
+def _send(body: dict) -> None:
+    """发送飞书 webhook 请求。失败仅打 log。"""
     req = Request(
-        url,
-        data=body,
+        FEISHU_WEBHOOK_URL,
+        data=json.dumps(body, ensure_ascii=False).encode('utf-8'),
         headers={'Content-Type': 'application/json'},
         method='POST',
     )
@@ -50,7 +49,63 @@ def notify(text: str) -> None:
         logger.warning('Feishu notify failed: %s', e)
 
 
+def notify(text: str) -> None:
+    """向飞书群发送一条文本消息。若 text 以 [MatMaster] 开头则自动加上当前环境前缀。"""
+    if text.startswith('[MatMaster]'):
+        text = _env_prefix() + text[len('[MatMaster]') :].lstrip()
+    _send({'msg_type': 'text', 'content': {'text': text}})
+
+
+def _notify_card_impl(
+    title: str,
+    content_rows: list[tuple[str, str]],
+    *,
+    template: str = CARD_TEMPLATE_BLUE,
+) -> None:
+    """发送飞书 interactive 卡片：标题栏（含颜色）+ 正文（lark_md 加粗标签）。"""
+    title_with_env = _env_prefix().rstrip() + ' ' + title
+    elements = [
+        {
+            'tag': 'div',
+            'text': {
+                'tag': 'lark_md',
+                'content': f'**{label}**\n{value}',
+            },
+        }
+        for label, value in content_rows
+    ]
+    body = {
+        'msg_type': 'interactive',
+        'card': {
+            'config': {'wide_screen_mode': True},
+            'header': {
+                'title': {'tag': 'plain_text', 'content': title_with_env},
+                'template': template,
+            },
+            'elements': elements,
+        },
+    }
+    _send(body)
+
+
+def notify_post_async(
+    title: str,
+    content_rows: list[tuple[str, str]],
+    *,
+    template: str = CARD_TEMPLATE_BLUE,
+) -> None:
+    """异步发送飞书 interactive 卡片通知：标题 + 多行「标签: 值」，不阻塞调用方。template 为 header 颜色：blue/green/orange/red。"""
+    t = threading.Thread(
+        target=_notify_card_impl,
+        args=(title, content_rows),
+        kwargs={'template': template},
+        name='feishu_notify_card',
+        daemon=True,
+    )
+    t.start()
+
+
 def notify_async(text: str) -> None:
-    """异步发送飞书通知（新起线程），不阻塞调用方。"""
+    """异步发送飞书纯文本通知（新起线程），不阻塞调用方。"""
     t = threading.Thread(target=notify, args=(text,), name='feishu_notify', daemon=True)
     t.start()

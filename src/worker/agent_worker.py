@@ -14,9 +14,15 @@ from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
 from src.services.stream_service import RedisReplyQueue
+from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.build_info import get_build_version
-from src.utils.feishu_notifier import notify_async
+from src.utils.feishu_notifier import (
+    CARD_TEMPLATE_BLUE,
+    CARD_TEMPLATE_GREEN,
+    CARD_TEMPLATE_RED,
+    notify_post_async,
+)
 from src.utils.logger import LoggingConfig, setup_logging
 from src.utils.worker_id import get_worker_id
 
@@ -151,6 +157,12 @@ def _run_worker_loop() -> None:
             logger.warning('Agent worker: skip job with empty session_id')
             continue
 
+        session_user_id = sessions_service.get_session_user_id(session_id)
+        session_user_display = (
+            UserService.get_user_display_name(session_user_id)
+            if session_user_id
+            else '未知'
+        )
         redis_dao.delete_confirmation_reply_list(session_id)
         redis_dao.set_confirmation_run_active(session_id)
         redis_dao.set_confirmation_run_context(session_id, task_id, invocation_id or '')
@@ -191,8 +203,16 @@ def _run_worker_loop() -> None:
             _current_session_id = session_id
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
-            notify_async(
-                f'[MatMaster] Worker 开始执行 session_id={session_id[:12]}... task_id={task_id[:8] if task_id else "-"}...，执行中: {active_count}，排队数: {queue_len}'
+            notify_post_async(
+                'Worker 开始执行',
+                [
+                    ('session_id', session_id),
+                    ('用户', session_user_display),
+                    ('worker', get_worker_id()),
+                    ('执行中', str(active_count)),
+                    ('排队数', str(queue_len)),
+                ],
+                template=CARD_TEMPLATE_BLUE,
             )
             run_success = True
             try:
@@ -252,8 +272,17 @@ def _run_worker_loop() -> None:
                 )
                 queue_len = redis_dao.llen_agent_run_queue()
                 active_count = get_worker_registry_service().count_active_runs()
-                notify_async(
-                    f'[MatMaster] Worker 执行完成 session_id={session_id[:12]}... {"成功" if run_success else "失败"}，执行中: {active_count}，排队数: {queue_len}'
+                notify_post_async(
+                    'Worker 执行完成',
+                    [
+                        ('session_id', session_id),
+                        ('用户', session_user_display),
+                        ('worker', get_worker_id()),
+                        ('结果', '成功' if run_success else '失败'),
+                        ('执行中', str(active_count)),
+                        ('排队数', str(queue_len)),
+                    ],
+                    template=CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED,
                 )
         if _drain_requested:
             logger.info(
