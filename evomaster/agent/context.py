@@ -62,11 +62,16 @@ class ContextManager:
         if self._token_counter:
             return self._token_counter.count_dialog(dialog)
 
-        # 保守估算：约1个字符 = 1 token（对中英文混合内容更准确）
+        # 保守估算：约3个字符 = 1 token（对中英文混合内容更准确）
+        # Bug fix: 计算所有消息的完整字符数（包括 tool_calls 参数）
         total_chars = sum(
-            self._content_char_len(msg.content) for msg in dialog.messages
+            self._message_char_len(msg) for msg in dialog.messages
         )
-        return int(total_chars / 1)
+
+        # Bug fix: 计算工具定义的字符数（每次 API 调用都会发送）
+        total_chars += self._tools_char_len(dialog.tools)
+
+        return int(total_chars / 3)
 
     @staticmethod
     def _content_char_len(content: str | list | dict | None) -> int:
@@ -82,6 +87,48 @@ class ContextManager:
                 if isinstance(b, dict) and b.get('type') == 'text'
             )
         return len(str(content))
+
+    @staticmethod
+    def _message_char_len(msg: 'Message') -> int:
+        """计算单条消息的字符数，包括 content 和 tool_calls 参数。"""
+        import json
+        total = 0
+        # content 字段
+        content = msg.content
+        if content is None:
+            pass
+        elif isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            total += sum(
+                len(b.get('text', ''))
+                for b in content
+                if isinstance(b, dict) and b.get('type') == 'text'
+            )
+        else:
+            total += len(str(content))
+        # tool_calls 字段（assistant 消息调用工具时的参数）
+        tool_calls = getattr(msg, 'tool_calls', None)
+        if tool_calls:
+            for tc in tool_calls:
+                func = getattr(tc, 'function', None)
+                if func:
+                    total += len(getattr(func, 'name', '') or '')
+                    args = getattr(func, 'arguments', None)
+                    if args:
+                        total += len(args if isinstance(args, str) else json.dumps(args))
+        return total
+
+    @staticmethod
+    def _tools_char_len(tools: list | None) -> int:
+        """计算工具定义的字符数（每次 API 调用都会随 tools 参数发送）。"""
+        import json
+        if not tools:
+            return 0
+        try:
+            return len(json.dumps([t.model_dump() if hasattr(t, 'model_dump') else t for t in tools]))
+        except Exception:
+            return sum(len(str(t)) for t in tools)
 
     def should_truncate(self, dialog: Dialog) -> bool:
         """判断是否需要截断"""
@@ -108,6 +155,9 @@ class ContextManager:
         """保留最新一半的历史
 
         保留系统消息和用户初始消息，然后保留最近一半的对话。
+        确保截断后的消息序列始终合法（tool 消息前必有 assistant）。
+        
+        按 turn 为单位截断：一个 turn = 1 个 assistant + 其所有 tool 消息。
         """
         messages = dialog.messages
 
@@ -124,18 +174,25 @@ class ContextManager:
         num_to_preserve = num_to_truncate // 2
         preserve_start = num_messages - num_to_preserve
 
-        # 确保从 assistant 消息开始
-        while (
-            preserve_start < num_messages
-            and messages[preserve_start].role.value != 'assistant'
-        ):
-            preserve_start += 1
+        # 如果 preserve_start 指向的是 tool 消息，需要调整到一个合法的 turn 边界
+        if preserve_start < num_messages and messages[preserve_start].role.value == 'tool':
+            # 往前找到这个 tool 所属的 assistant 消息
+            turn_start = preserve_start
+            while (
+                turn_start > assistant_start
+                and messages[turn_start].role.value != 'assistant'
+            ):
+                turn_start -= 1
+            # 现在 turn_start 指向该 tool 所属的 assistant
+            # 从这个 assistant 开始保留整个 turn（包括所有 tool 消息）
+            preserve_start = turn_start
 
-        if preserve_start >= num_messages:
-            # 无法截断，返回原对话
+        # 如果往前找到了 assistant_start 还没找到 assistant
+        # 说明无法有效截断，返回原对话
+        if preserve_start <= assistant_start:
             return dialog
 
-        # 构建新对话
+        # 构建新对话：保留 system/user 前缀 + 从找到的 assistant 开始的后续消息
         new_messages = messages[:assistant_start] + messages[preserve_start:]
 
         return Dialog(
@@ -188,10 +245,17 @@ class ContextManager:
     def prepare_for_query(self, dialog: Dialog) -> Dialog:
         """为 LLM 查询准备对话
 
-        检查并在必要时截断对话。
+        检查并在必要时截断对话。循环截断直到 token 数低于限制或无法继续截断。
         """
-        if self.should_truncate(dialog):
-            return self.truncate(dialog)
+        max_iterations = 10
+        for _ in range(max_iterations):
+            if not self.should_truncate(dialog):
+                break
+            truncated = self.truncate(dialog)
+            # 如果截断后消息数没有减少，说明无法继续截断，退出
+            if len(truncated.messages) >= len(dialog.messages):
+                break
+            dialog = truncated
         return dialog
 
 
