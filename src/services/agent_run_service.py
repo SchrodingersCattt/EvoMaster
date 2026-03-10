@@ -28,6 +28,7 @@ from src.services.quota_service import use_quota
 from src.services.sessions_service import SESSIONS, get_sessions_service
 from src.services.user_service import UserService
 from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID
+from src.utils.feishu_dm import notify_task_completed_dm_async
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
@@ -972,6 +973,8 @@ class AgentRunService:
                         future.result(timeout=10)
                     else:
                         asyncio.run(use_quota(user_id))
+                    # 飞书私聊：按 user_id 查邮箱并异步发任务完成通知（未配置或无邮箱则 no-op）
+                    notify_task_completed_dm_async(user_id, session_id, task_id)
                 event_callback('System', 'finish', 'Done')
                 self._upload_workspace_to_oss(
                     session_id=session_id,
