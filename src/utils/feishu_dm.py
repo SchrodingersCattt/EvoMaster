@@ -132,9 +132,16 @@ def notify_dm_async(to_email: str, text: str) -> None:
 
 
 def _notify_task_dm_async(
-    user_id: str, session_id: str, task_id: str, started: bool
+    user_id: str,
+    session_id: str,
+    task_id: str,
+    started: bool,
+    *,
+    user_display: str | None = None,
+    result: str | None = None,
+    worker_id: str | None = None,
 ) -> None:
-    """按 user_id 查邮箱并异步发飞书私聊（任务开始/完成）。无邮箱或未配置时 no-op。"""
+    """按 user_id 查邮箱并异步发飞书私聊（任务开始/完成）。文案与群通知对齐：标题 + **标签**: 值。"""
     if not user_id or not (user_id := user_id.strip()):
         return
     if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
@@ -150,26 +157,64 @@ def _notify_task_dm_async(
         )
         return
     prefix = _env_prefix()
+    # 与 feishu_notifier 群卡片一致：标题 + 多行「**标签**: 值」；展示 worker_id，不展示 task_id
     if started:
-        text = (
-            f'{prefix}您的任务已开始执行。\n'
-            f'session_id: {session_id}\n'
-            f'task_id: {task_id}'
-        )
+        title = 'Worker 开始执行'
+        rows = [
+            ('session_id', session_id),
+            ('worker', worker_id or '-'),
+        ]
+        if user_display:
+            rows.insert(1, ('用户', user_display))
     else:
-        text = (
-            f'{prefix}您的任务已完成。\n'
-            f'session_id: {session_id}\n'
-            f'task_id: {task_id}'
-        )
+        title = 'Worker 执行完成'
+        rows = [
+            ('session_id', session_id),
+            ('worker', worker_id or '-'),
+            ('结果', result if result else '成功'),
+        ]
+        if user_display:
+            rows.insert(1, ('用户', user_display))
+    content = '\n'.join(f'**{label}**: {value}' for label, value in rows)
+    text = f'{prefix}{title}\n\n{content}'
     notify_dm_async(email, text)
 
 
-def notify_task_started_dm_async(user_id: str, session_id: str, task_id: str) -> None:
+def notify_task_started_dm_async(
+    user_id: str,
+    session_id: str,
+    task_id: str,
+    *,
+    user_display: str | None = None,
+    worker_id: str | None = None,
+) -> None:
     """任务开始时按 user_id 查邮箱并异步发飞书私聊。无邮箱或未配置时 no-op。"""
-    _notify_task_dm_async(user_id, session_id, task_id, started=True)
+    _notify_task_dm_async(
+        user_id,
+        session_id,
+        task_id,
+        started=True,
+        user_display=user_display,
+        worker_id=worker_id,
+    )
 
 
-def notify_task_completed_dm_async(user_id: str, session_id: str, task_id: str) -> None:
+def notify_task_completed_dm_async(
+    user_id: str,
+    session_id: str,
+    task_id: str,
+    *,
+    user_display: str | None = None,
+    result: str = '成功',
+    worker_id: str | None = None,
+) -> None:
     """任务完成时按 user_id 查邮箱并异步发飞书私聊。无邮箱或未配置时 no-op。"""
-    _notify_task_dm_async(user_id, session_id, task_id, started=False)
+    _notify_task_dm_async(
+        user_id,
+        session_id,
+        task_id,
+        started=False,
+        user_display=user_display,
+        result=result,
+        worker_id=worker_id,
+    )

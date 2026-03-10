@@ -217,7 +217,13 @@ def _run_worker_loop() -> None:
                     template=CARD_TEMPLATE_BLUE,
                 )
             if session_user_id:
-                notify_task_started_dm_async(session_user_id, session_id, task_id)
+                notify_task_started_dm_async(
+                    session_user_id,
+                    session_id,
+                    task_id,
+                    user_display=session_user_display,
+                    worker_id=get_worker_id(),
+                )
             run_success = True
             try:
                 result = agent_run_service.run_agent_sync(
