@@ -41,6 +41,10 @@ if str(_project_root) not in sys.path:
 # Register mat_master playground (same as run.py auto_import_playgrounds), so get_playground_class returns MatMasterPlayground
 importlib.import_module('playground.mat_master.core.playground')
 
+from evomaster.utils.types import TaskInstance
+from src.services.chat_history import ChatHistoryConverter
+
+_DIALOG_HISTORY_MAX_EVENTS = int(os.environ.get('CHAT_DIALOG_HISTORY_MAX_EVENTS', '500'))
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +154,6 @@ async def start_task(req: ChatRequest):
     if SESSION_ID_DEMO not in SESSIONS:
         SESSIONS[SESSION_ID_DEMO] = {
             'history': [],
-            'task_ids': [],
             'last_task_id': None,
         }
     return {'status': 'ready', 'session_id': SESSION_ID_DEMO}
@@ -182,24 +185,18 @@ def get_session_history(session_id: str):
 
 @app.get('/api/sessions/{session_id}/run_info')
 def get_session_run_info(session_id: str):
-    """Return run_id and task_ids for this session (内存无则用磁盘 workspace 目录对应 task_id，便于回溯历史)."""
+    """Return run_id and task_ids for this session."""
     data = SESSIONS.get(session_id)
     if data:
-        task_ids = data.get('task_ids') or []
         last_task_id = data.get('last_task_id')
         return {
             'run_id': _get_run_id_web(),
             'last_task_id': last_task_id,
-            'task_ids': task_ids,
+            'task_ids': [last_task_id] if last_task_id else [],
         }
-    # 重启后仅存在磁盘的 workspace：用 session_id 作为 task_id 指向 workspaces/<session_id>
     base = _get_run_workspace_path(_get_run_id_web(), task_id=session_id)
     if base and base.is_dir():
-        return {
-            'run_id': _get_run_id_web(),
-            'last_task_id': session_id,
-            'task_ids': [session_id],
-        }
+        return {'run_id': _get_run_id_web(), 'last_task_id': session_id, 'task_ids': [session_id]}
     return {'run_id': _get_run_id_web(), 'last_task_id': None, 'task_ids': []}
 
 
@@ -739,7 +736,7 @@ def _run_agent_sync(
             'session_id': session_id,
         }
         if session_id not in SESSIONS:
-            SESSIONS[session_id] = {'history': [], 'task_ids': [], 'last_task_id': None}
+            SESSIONS[session_id] = {'history': [], 'last_task_id': None}
         if event_type != 'log_line':
             SESSIONS[session_id]['history'].append(payload)
         future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
@@ -918,7 +915,22 @@ def _run_agent_sync(
         exp.set_run_dir(run_dir)
         event_callback('MatMaster', 'exp_run', exp.__class__.__name__)
 
-        exp.run(task_description=user_prompt, task_id=task_id)
+        # Multi-turn: build dialog_history from prior in-memory events
+        all_events = list(SESSIONS.get(session_id, {}).get('history', []))
+        prior_events = all_events[:-1] if all_events and all_events[-1].get('type') == 'query' else all_events
+        if len(prior_events) > _DIALOG_HISTORY_MAX_EVENTS:
+            prior_events = prior_events[-_DIALOG_HISTORY_MAX_EVENTS:]
+        dialog_history = ChatHistoryConverter.events_to_dialog_messages(prior_events) if prior_events else []
+        if dialog_history:
+            logger.debug('multi-turn dialog_history session_id=%s messages=%s', session_id, len(dialog_history))
+        
+        task = TaskInstance(
+            task_id=task_id,
+            task_type='discovery',
+            description=user_prompt,
+            meta={'dialog_history': dialog_history},
+        )
+        exp.run(task=task)
         if stop_event.is_set():
             event_callback('System', 'cancelled', 'Task cancelled by user.')
         else:
@@ -986,7 +998,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     if sid not in SESSIONS:
                         SESSIONS[sid] = {
                             'history': [],
-                            'task_ids': [],
                             'last_task_id': None,
                         }
                     payload = {
@@ -1004,7 +1015,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     if sid not in SESSIONS:
                         SESSIONS[sid] = {
                             'history': [],
-                            'task_ids': [],
                             'last_task_id': None,
                         }
                     payload = {
@@ -1023,7 +1033,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     if sid not in SESSIONS:
                         SESSIONS[sid] = {
                             'history': [],
-                            'task_ids': [],
                             'last_task_id': None,
                         }
                     payload = {
@@ -1085,13 +1094,10 @@ async def websocket_endpoint(websocket: WebSocket):
             if session_id not in SESSIONS:
                 SESSIONS[session_id] = {
                     'history': [],
-                    'task_ids': [],
                     'last_task_id': None,
                 }
             # Keep a stable workspace per session so uploads are visible before first run.
             task_id = SESSIONS[session_id].get('last_task_id') or session_id
-            if task_id not in SESSIONS[session_id].setdefault('task_ids', []):
-                SESSIONS[session_id]['task_ids'].append(task_id)
             SESSIONS[session_id]['last_task_id'] = task_id
             user_msg = {
                 'source': 'User',
