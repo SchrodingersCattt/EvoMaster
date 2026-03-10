@@ -190,8 +190,9 @@ def _run_worker_loop() -> None:
             acquired = True
             _current_session_id = session_id
             queue_len = redis_dao.llen_agent_run_queue()
+            active_count = get_worker_registry_service().count_active_runs()
             notify_async(
-                f'[MatMaster] Worker 开始执行 session_id={session_id[:12]}... task_id={task_id[:8] if task_id else "-"}...，当前排队数: {queue_len}'
+                f'[MatMaster] Worker 开始执行 session_id={session_id[:12]}... task_id={task_id[:8] if task_id else "-"}...，执行中: {active_count}，排队数: {queue_len}'
             )
             run_success = True
             try:
@@ -250,8 +251,9 @@ def _run_worker_loop() -> None:
                     session_id, run_success=run_success
                 )
                 queue_len = redis_dao.llen_agent_run_queue()
+                active_count = get_worker_registry_service().count_active_runs()
                 notify_async(
-                    f'[MatMaster] Worker 执行完成 session_id={session_id[:12]}... {"成功" if run_success else "失败"}，当前排队数: {queue_len}'
+                    f'[MatMaster] Worker 执行完成 session_id={session_id[:12]}... {"成功" if run_success else "失败"}，执行中: {active_count}，排队数: {queue_len}'
                 )
         if _drain_requested:
             logger.info(
