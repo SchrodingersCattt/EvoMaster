@@ -72,12 +72,12 @@ fi
 
 echo "=== Updating $CONSTANT_FILE with test=${ID_BY_ENV[test]} uat=${ID_BY_ENV[uat]} prod=${ID_BY_ENV[prod]} ==="
 for env in test uat prod; do
-  sed -i.bak "s/'${env}': [0-9]*/'${env}': ${ID_BY_ENV[$env]}/" "$CONSTANT_FILE"
+  sed -i.bak -E "/BOHRIUM_ENV_DEFAULT_IMAGE_IDS/,/}/{s/^([[:space:]]*'${env}': )[0-9]+,$/\1${ID_BY_ENV[$env]},/;}" "$CONSTANT_FILE"
 done
 for env in test uat prod; do
   name="${NAME_BY_ENV[$env]}"
   esc_name=$(printf '%s' "$name" | sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g" -e 's/&/\\&/g' -e 's/|/\\|/g')
-  sed -i.bak "s|'${env}': '[^']*'|'${env}': '${esc_name}'|" "$CONSTANT_FILE"
+  sed -i.bak -E "/BOHRIUM_ENV_DEFAULT_IMAGE_NAMES/,/}/{s|^([[:space:]]*'${env}': )'[^']*',$|\1'${esc_name}',|;}" "$CONSTANT_FILE"
 done
 rm -f "${CONSTANT_FILE}.bak"
 
