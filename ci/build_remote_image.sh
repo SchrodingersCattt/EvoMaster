@@ -178,7 +178,7 @@ if git diff --cached --quiet; then
   echo "No change in constant.py (already ${REMOTE_IMAGE_ENV}=${NEW_IMAGE_ID})."
   exit 0
 fi
-git commit -m "chore(remote-image): set BOHRIUM_ENV_DEFAULT_IMAGE_IDS['${REMOTE_IMAGE_ENV}'] to ${NEW_IMAGE_ID}"
+git commit -m "chore(remote-image): set BOHRIUM_ENV_DEFAULT_IMAGE_IDS['${REMOTE_IMAGE_ENV}'] to ${NEW_IMAGE_ID} [skip ci]"
 BRANCH="${CI_COMMIT_BRANCH:-${CI_COMMIT_REF_NAME:-$(git branch --show-current)}}"
 if [[ -z "$BRANCH" ]]; then
   echo "ERROR: Could not determine branch (CI_COMMIT_BRANCH/CI_COMMIT_REF_NAME unset)."
