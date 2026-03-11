@@ -1,5 +1,6 @@
-# 主流水线：仅 build-remote-image + 触发两条完全独立的子流水线（API / Worker）
-# 子流水线内自包含 build → deploy，同一条 pipeline_id，镜像 tag 一致
+# 主流水线：build-remote-image + 按 tag/分支触发子流水线
+# 打 tag 时：tag 含 _matmaster-evo-worker_ 只触发 Worker，含 _matmaster-evo_ 且不含 worker 只触发 API（打哪个 tag 部署哪个服务）
+# 推 test 分支时：同时触发 API + Worker 两条子流水线
 
 variables:
   RUNNER_ZJK_TAG: k8s-runner-zjk-svc
@@ -28,36 +29,36 @@ build-remote-image:all:
   tags:
     - $RUNNER_ZJK_TAG
 
-# 触发 API 完整子流水线（build + test + deploy，独立 pipeline_id）
+# 触发 API 子流水线（tag 含 _matmaster-evo_ 且不含 _matmaster-evo-worker_ 时触发，或 test 分支）
 trigger-api-deploy:
   stage: trigger
   trigger:
     include: ci/api-deploy.yml
     strategy: depend
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/'
       changes:
         - Dockerfile.remote
         - ci/build_remote_image.sh
       when: never
-    - if: '($CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/) && $CI_COMMIT_TAG == null'
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
       when: on_success
-    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo_/ && $CI_COMMIT_TAG !~ /_matmaster-evo-worker_/'
       when: on_success
 
-# 触发 Worker 完整子流水线（build + deploy，独立 pipeline_id）
+# 触发 Worker 子流水线（tag 含 _matmaster-evo-worker_ 时触发，或 test 分支）
 trigger-worker-deploy:
   stage: trigger
   trigger:
     include: ci/worker-deploy.yml
     strategy: depend
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/'
       changes:
         - Dockerfile.remote
         - ci/build_remote_image.sh
       when: never
-    - if: '($CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/) && $CI_COMMIT_TAG == null'
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
       when: on_success
-    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo-worker_/'
       when: on_success
