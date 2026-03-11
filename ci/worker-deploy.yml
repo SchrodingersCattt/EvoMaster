@@ -119,6 +119,8 @@ deploy-test:worker:
 manual-uat:worker:
   extends: .worker_template
   stage: manual-uat
+  variables:
+    DEVOPS_DEPLOY_NAME: "manual-uat"
   needs:
     - docker-build:worker
   script:
@@ -135,6 +137,8 @@ manual-uat:worker:
 deploy-uat:worker:
   extends: .worker_template
   stage: deploy-uat
+  variables:
+    DEVOPS_DEPLOY_NAME: "deploy-uat"
   needs:
     - docker-build:worker
   script:
