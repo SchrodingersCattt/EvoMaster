@@ -25,7 +25,7 @@ for env in test uat prod; do
   fi
 done
 
-# 并行跑三环境，各写 id 与 log 到临时文件
+# 并行跑三环境，用 tee 实时打 log（带 [test]/[uat]/[prod] 前缀），并写入临时 log 供后续解析 ID
 echo "=== Building remote images in parallel (test, uat, prod) ==="
 for env in test uat prod; do
   (
@@ -33,20 +33,26 @@ for env in test uat prod; do
     proj_var="BOHRIUM_PROJECT_ID_$(echo "$env" | tr 'a-z' 'A-Z')"
     export BOHRIUM_ACCESS_KEY="${!key_var}"
     export BOHRIUM_PROJECT_ID="${!proj_var}"
-    out=$(BUILD_ONLY=1 REMOTE_IMAGE_ENV="$env" "$SCRIPT_DIR/build_remote_image.sh" 2>&1)
-    echo "$out" > "$PARALLEL_DIR/${env}.log"
-    id=$(echo "$out" | sed -n 's/^BUILD_ONLY_NEW_IMAGE_ID=\([0-9]*\)$/\1/p')
-    echo "${id:-}" > "$PARALLEL_DIR/${env}.id"
+    stdbuf -oL -eL BUILD_ONLY=1 REMOTE_IMAGE_ENV="$env" "$SCRIPT_DIR/build_remote_image.sh" 2>&1 \
+      | while IFS= read -r line; do echo "[$env] $line"; done \
+      | tee "$PARALLEL_DIR/${env}.log"
   ) &
 done
 wait
 
-# 收集结果，任一失败则打印该环境 log 并退出
+# 从 log 中解析 NEW_IMAGE_ID，任一失败则打印该环境 log 并退出
 for env in test uat prod; do
-  id=$(cat "$PARALLEL_DIR/${env}.id" 2>/dev/null || true)
+  id=$(grep 'BUILD_ONLY_NEW_IMAGE_ID=' "$PARALLEL_DIR/${env}.log" 2>/dev/null | sed -n 's/.*BUILD_ONLY_NEW_IMAGE_ID=\([0-9]*\).*/\1/p' | head -1)
   if [[ -z "$id" || ! "$id" =~ ^[0-9]+$ ]]; then
-    echo "ERROR: Could not get NEW_IMAGE_ID for env=$env. Build log (last 40 lines):"
-    tail -40 "$PARALLEL_DIR/${env}.log" 2>/dev/null || true
+    echo "ERROR: Could not get NEW_IMAGE_ID for env=$env."
+    logfile="$PARALLEL_DIR/${env}.log"
+    if [[ -s "$logfile" ]]; then
+      echo "Build log (last 50 lines):"
+      tail -50 "$logfile"
+    else
+      echo "Build log file empty or missing. ls $PARALLEL_DIR:"
+      ls -la "$PARALLEL_DIR/" 2>/dev/null || true
+    fi
     exit 1
   fi
   ID_BY_ENV[$env]=$id
