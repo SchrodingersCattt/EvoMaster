@@ -31,8 +31,8 @@ fi
 
 case "$REMOTE_IMAGE_ENV" in
   test)  OPENAPI_V2_BASE="https://openapi.test.dp.tech/openapi/v2" ;;
-  uat)   OPENAPI_V2_BASE="https://openapi.uat.dp.tech/openapi/v2" ;;
-  prod)  OPENAPI_V2_BASE="https://open.bohrium.com/openapi/v2" ;;
+  uat)  OPENAPI_V2_BASE="https://openapi.uat.dp.tech/openapi/v2" ;;
+  prod) OPENAPI_V2_BASE="https://openapi.dp.tech/openapi/v2" ;;
   *)
     echo "ERROR: REMOTE_IMAGE_ENV must be test, uat or prod, got: $REMOTE_IMAGE_ENV"
     exit 1
