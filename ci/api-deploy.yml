@@ -82,11 +82,6 @@ docker-build:
     paths:
       - /cache
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/'
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
-      when: never
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_TAG'
       when: on_success
   artifacts:
@@ -140,11 +135,6 @@ test:
     - k8s-runner-ack
   rules:
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/'
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
-      when: never
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/'
       when: on_success
 
 deploy-test:
@@ -161,11 +151,6 @@ deploy-test:
     - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
   retry: 2
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/'
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
-      when: never
     - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
       when: on_success
 
