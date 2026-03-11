@@ -2,7 +2,7 @@
 
 ## 一次构建三环境 Remote 镜像（test / uat / prod）
 
-- **触发方式**：推送到分支 `remote-image`，在 GitLab 该 pipeline 里手动执行 job **build-remote-image:all**。
+- **触发方式**：推送到分支 `remote-image` 即自动执行 **build-remote-image:all**。
 - **效果**：依次在 Bohrium test / uat / prod 创建镜像，然后一次性更新 `src/utils/constant.py` 的 `BOHRIUM_ENV_DEFAULT_IMAGE_IDS` 并 push 回 `remote-image`。
 - **CI 变量**（在 GitLab CI/CD Variables 中配置，建议 Protected + Masked）：
   - `BOHRIUM_ACCESS_KEY_TEST`、`BOHRIUM_PROJECT_ID_TEST`
