@@ -13,8 +13,25 @@ stages:
 include:
   - local: ".deploy-ci.yml"
 
-# Remote 节点镜像：Dockerfile.remote 变更时构建并 push 更新 constant.py
-# 需在 CI/CD Variables 中配置 BOHRIUM_ACCESS_KEY（Masked）、BOHRIUM_PROJECT_ID
+# 一次构建三环境（test/uat/prod）并更新 constant.py，推送到分支 remote-image 时触发
+# 需在 CI/CD Variables 配置：BOHRIUM_ACCESS_KEY_TEST、BOHRIUM_PROJECT_ID_TEST、BOHRIUM_ACCESS_KEY_UAT、
+# BOHRIUM_PROJECT_ID_UAT、BOHRIUM_ACCESS_KEY_PROD、BOHRIUM_PROJECT_ID_PROD
+build-remote-image:all:
+  stage: build-remote-image
+  image: $REGISTRY/public/ubuntu:gitlab-0.0.2
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq jq > /dev/null || true
+    - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh" "${CI_PROJECT_DIR}/ci/build_remote_image_all.sh"
+  script:
+    - "${CI_PROJECT_DIR}/ci/build_remote_image_all.sh"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "remote-image"
+      when: manual
+  tags:
+    - $RUNNER_ZJK_TAG
+
+# Remote 节点镜像（单环境）：Dockerfile.remote 变更时构建并 push 更新 constant.py
+# 需在 CI/CD Variables 中配置 BOHRIUM_ACCESS_KEY（Masked）、BOHRIUM_PROJECT_ID（或按 environment 作用域）
 build-remote-image:test:
   stage: build-remote-image
   image: $REGISTRY/public/ubuntu:gitlab-0.0.2
@@ -40,6 +57,7 @@ build-remote-image:test:
   tags:
     - $RUNNER_ZJK_TAG
 
+# 推送到 uat 分支即出现该 job（手动执行）；仅改 remote 相关文件时自动执行可在此加 changes + when: on_success
 build-remote-image:uat:
   stage: build-remote-image
   image: $REGISTRY/public/ubuntu:gitlab-0.0.2
@@ -53,9 +71,6 @@ build-remote-image:uat:
     - "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /.*uat$/
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
       when: manual
   tags:
     - $RUNNER_ZJK_TAG
