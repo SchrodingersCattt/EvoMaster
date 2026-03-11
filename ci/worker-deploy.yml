@@ -134,11 +134,10 @@ manual-uat:worker:
   rules:
     - if: '$CI_COMMIT_TAG =~ /_matmaster-evo-worker_/'
 
+# 不设 DEVOPS_DEPLOY_NAME，用默认 CI_JOB_NAME（deploy-uat:worker），便于平台在飞书点「部署」时找到并触发本 job
 deploy-uat:worker:
   extends: .worker_template
   stage: deploy-uat
-  variables:
-    DEVOPS_DEPLOY_NAME: "deploy-uat"
   needs:
     - docker-build:worker
   script:
