@@ -11,6 +11,12 @@ stages:
   - build-remote-image
   - trigger
 
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "remote-image" && ($GITLAB_USER_LOGIN == "project_1023_bot" || $GITLAB_USER_LOGIN =~ /^project_[0-9]+_bot$/)'
+      when: never
+    - when: always
+
 include:
   - local: ".deploy-ci.yml"
 
