@@ -1,9 +1,11 @@
 """飞书群机器人通知：Worker 开始/完成时发群消息。发送失败仅打 log，不抛异常。
-环境从 constant.CURRENT_ENV 取，会带在消息前缀中。支持纯文本与 interactive 卡片两种格式。"""
+环境从 constant.CURRENT_ENV 取，会带在消息前缀中。支持纯文本与 interactive 卡片两种格式。
+对 502/503/504 等瞬时错误做有限次重试。"""
 
 import json
 import logging
 import threading
+import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -29,24 +31,64 @@ def _env_prefix() -> str:
     return f'[MatMaster-{(CURRENT_ENV or "").strip().lower()}] '
 
 
+# 502/503/504 等瞬时错误重试：最多重试次数、每次间隔（秒）
+_SEND_MAX_RETRIES = 3
+_SEND_RETRY_DELAYS = (1, 2, 3)
+
+
 def _send(body: dict) -> None:
-    """发送飞书 webhook 请求。失败仅打 log。"""
+    """发送飞书 webhook 请求。对 5xx/网络错误做有限次重试，失败仅打 log。"""
     req = Request(
         FEISHU_WEBHOOK_URL,
         data=json.dumps(body, ensure_ascii=False).encode('utf-8'),
         headers={'Content-Type': 'application/json'},
         method='POST',
     )
-    try:
-        with urlopen(req, timeout=10) as resp:
-            if resp.status != 200:
-                logger.warning(
-                    'Feishu notify HTTP status=%s body=%s',
-                    resp.status,
-                    resp.read()[:200],
+    for attempt in range(_SEND_MAX_RETRIES):
+        try:
+            with urlopen(req, timeout=10) as resp:
+                if resp.status != 200:
+                    body_preview = resp.read()[:200]
+                    logger.warning(
+                        'Feishu notify HTTP status=%s body=%s',
+                        resp.status,
+                        body_preview,
+                    )
+                return
+        except HTTPError as e:
+            # 仅对 5xx 重试，4xx 不重试
+            if e.code is None or e.code < 500 or e.code > 599:
+                logger.warning('Feishu notify failed: %s', e)
+                return
+            if attempt < _SEND_MAX_RETRIES - 1:
+                delay = _SEND_RETRY_DELAYS[attempt]
+                logger.info(
+                    'Feishu notify 5xx (attempt %s/%s), retry in %ss: %s',
+                    attempt + 1,
+                    _SEND_MAX_RETRIES,
+                    delay,
+                    e,
                 )
-    except (HTTPError, URLError, OSError) as e:
-        logger.warning('Feishu notify failed: %s', e)
+                time.sleep(delay)
+            else:
+                logger.warning(
+                    'Feishu notify failed after %s attempts: %s', _SEND_MAX_RETRIES, e
+                )
+        except (URLError, OSError) as e:
+            if attempt < _SEND_MAX_RETRIES - 1:
+                delay = _SEND_RETRY_DELAYS[attempt]
+                logger.info(
+                    'Feishu notify network error (attempt %s/%s), retry in %ss: %s',
+                    attempt + 1,
+                    _SEND_MAX_RETRIES,
+                    delay,
+                    e,
+                )
+                time.sleep(delay)
+            else:
+                logger.warning(
+                    'Feishu notify failed after %s attempts: %s', _SEND_MAX_RETRIES, e
+                )
 
 
 def notify(text: str) -> None:
