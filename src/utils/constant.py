@@ -69,9 +69,9 @@ BOHRIUM_DEFAULT_IMAGE_ID = (
 
 # 镜像 name 也在构建时写入仓库，运行期不用再调 image/private 获取
 BOHRIUM_ENV_DEFAULT_IMAGE_NAMES: dict[str, str] = {
-    'test': 48958'matmaster:be78ed6a-20260311-143121',
-    'uat': 1533'matmaster',
-    'prod': 121694'matmaster',
+    'test': 'matmaster:be78ed6a-20260311-143121',
+    'uat': 'matmaster',
+    'prod': 'matmaster',
 }
 BOHRIUM_DEFAULT_IMAGE_NAME = (
     BOHRIUM_ENV_DEFAULT_IMAGE_NAMES.get(CURRENT_ENV)
