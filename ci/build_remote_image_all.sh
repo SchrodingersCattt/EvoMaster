@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 一次构建 test / uat / prod 三环境 Remote 节点镜像，并一次性更新 constant.py 后 push。
+# 一次构建 test / uat / prod 三环境 Remote 节点镜像（并行），并一次性更新 constant.py 后 push。
 # 触发方式：推送到分支 remote-image（见 .gitlab-ci.yml build-remote-image:all）。
 #
 # 依赖：CI 中配置 BOHRIUM_ACCESS_KEY_TEST、BOHRIUM_PROJECT_ID_TEST、BOHRIUM_ACCESS_KEY_UAT、
@@ -10,24 +10,43 @@ set -e
 REPO_ROOT="${CI_PROJECT_DIR:-.}"
 CONSTANT_FILE="$REPO_ROOT/src/utils/constant.py"
 SCRIPT_DIR="${CI_PROJECT_DIR:-.}/ci"
+PARALLEL_DIR="${PARALLEL_DIR:-/tmp/remote_image_parallel}"
+mkdir -p "$PARALLEL_DIR"
 
 declare -A ID_BY_ENV
 
+# 先校验三环境变量都已配置
 for env in test uat prod; do
   key_var="BOHRIUM_ACCESS_KEY_$(echo "$env" | tr 'a-z' 'A-Z')"
   proj_var="BOHRIUM_PROJECT_ID_$(echo "$env" | tr 'a-z' 'A-Z')"
-  export BOHRIUM_ACCESS_KEY="${!key_var}"
-  export BOHRIUM_PROJECT_ID="${!proj_var}"
-  if [[ -z "${BOHRIUM_ACCESS_KEY:-}" || -z "${BOHRIUM_PROJECT_ID:-}" ]]; then
+  if [[ -z "${!key_var:-}" || -z "${!proj_var:-}" ]]; then
     echo "ERROR: $key_var or $proj_var is not set."
     exit 1
   fi
-  echo "=== Building remote image for env=$env ==="
-  out=$(BUILD_ONLY=1 REMOTE_IMAGE_ENV="$env" "$SCRIPT_DIR/build_remote_image.sh" 2>&1)
-  echo "$out"
-  id=$(echo "$out" | sed -n 's/^BUILD_ONLY_NEW_IMAGE_ID=\([0-9]*\)$/\1/p')
+done
+
+# 并行跑三环境，各写 id 与 log 到临时文件
+echo "=== Building remote images in parallel (test, uat, prod) ==="
+for env in test uat prod; do
+  (
+    key_var="BOHRIUM_ACCESS_KEY_$(echo "$env" | tr 'a-z' 'A-Z')"
+    proj_var="BOHRIUM_PROJECT_ID_$(echo "$env" | tr 'a-z' 'A-Z')"
+    export BOHRIUM_ACCESS_KEY="${!key_var}"
+    export BOHRIUM_PROJECT_ID="${!proj_var}"
+    out=$(BUILD_ONLY=1 REMOTE_IMAGE_ENV="$env" "$SCRIPT_DIR/build_remote_image.sh" 2>&1)
+    echo "$out" > "$PARALLEL_DIR/${env}.log"
+    id=$(echo "$out" | sed -n 's/^BUILD_ONLY_NEW_IMAGE_ID=\([0-9]*\)$/\1/p')
+    echo "${id:-}" > "$PARALLEL_DIR/${env}.id"
+  ) &
+done
+wait
+
+# 收集结果，任一失败则打印该环境 log 并退出
+for env in test uat prod; do
+  id=$(cat "$PARALLEL_DIR/${env}.id" 2>/dev/null || true)
   if [[ -z "$id" || ! "$id" =~ ^[0-9]+$ ]]; then
-    echo "ERROR: Could not get NEW_IMAGE_ID for env=$env"
+    echo "ERROR: Could not get NEW_IMAGE_ID for env=$env. Build log (last 40 lines):"
+    tail -40 "$PARALLEL_DIR/${env}.log" 2>/dev/null || true
     exit 1
   fi
   ID_BY_ENV[$env]=$id
