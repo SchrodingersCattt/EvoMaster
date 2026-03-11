@@ -149,6 +149,65 @@ class BohriumNodeService:
             data = r.json()
         return (data.get('data') or {}).get('items') or []
 
+    def destroy_untracked_nodes_by_name(
+        self,
+        access_key: str,
+        tracked_node_ids: set[int] | None,
+        *,
+        node_name: str,
+        creator_id: int = 0,
+    ) -> list[int]:
+        """
+        清理用户节点里“名称匹配且未登记到 DB”的节点，返回成功销毁的 node_id 列表。
+        """
+        target_name = (node_name or '').strip()
+        if not target_name:
+            return []
+        tracked = set(tracked_node_ids or set())
+        destroyed: list[int] = []
+        for item in self._fetch_node_list(access_key):
+            raw_node_id = item.get('nodeId') or item.get('node_id') or item.get('id')
+            try:
+                node_id = int(raw_node_id)
+            except (TypeError, ValueError):
+                continue
+            if node_id in tracked:
+                continue
+            raw_name = item.get('name') or item.get('nodeName') or item.get('node_name')
+            current_name = (
+                raw_name.strip()
+                if isinstance(raw_name, str) and raw_name.strip()
+                else ''
+            )
+            if current_name != target_name:
+                continue
+            raw_project_id = item.get('projectId') or item.get('project_id')
+            try:
+                project_id = int(raw_project_id)
+            except (TypeError, ValueError):
+                logger.warning(
+                    'skip destroy untracked node: missing project_id node_id=%s name=%s',
+                    node_id,
+                    current_name,
+                )
+                continue
+            try:
+                self.destroy_node(
+                    access_key,
+                    node_id,
+                    project_id,
+                    creator_id=creator_id,
+                )
+                destroyed.append(node_id)
+            except Exception as e:
+                logger.warning(
+                    'destroy untracked node failed node_id=%s name=%s err=%s',
+                    node_id,
+                    current_name,
+                    e,
+                )
+        return destroyed
+
     def get_image_name_by_id(
         self,
         access_key: str,

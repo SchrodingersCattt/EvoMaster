@@ -32,6 +32,28 @@ class BohriumNodesTable(BaseTable):
                 )
                 return cursor.fetchone()
 
+    def list_node_ids_for_user_org(self, user_id: str, org_id: str) -> set[int]:
+        """按 user/org 返回已登记的 node_id 集合（跨 project）。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f'''
+                    SELECT DISTINCT node_id
+                    FROM {self.table_name}
+                    WHERE user_id = %s AND org_id = %s
+                    ''',
+                    (user_id, org_id),
+                )
+                rows = cursor.fetchall() or []
+        out: set[int] = set()
+        for row in rows:
+            node_id = row.get('node_id')
+            try:
+                out.add(int(node_id))
+            except (TypeError, ValueError):
+                continue
+        return out
+
     def insert_node(
         self,
         user_id: str,

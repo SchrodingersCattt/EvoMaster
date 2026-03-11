@@ -503,6 +503,43 @@ class AgentRunService:
                             )
                         if use_reuse_table:
                             nodes_table = get_bohrium_nodes_table()
+                            creator_id = 0
+                            if user_id_for_ak:
+                                try:
+                                    creator_id = int(user_id_for_ak)
+                                except (TypeError, ValueError):
+                                    creator_id = 0
+                            try:
+                                tracked_node_ids = (
+                                    nodes_table.list_node_ids_for_user_org(
+                                        user_id_for_ak, org_id
+                                    )
+                                )
+                                cleanup_node_name = 'matmaster-session'
+                                destroyed_node_ids = (
+                                    node_svc.destroy_untracked_nodes_by_name(
+                                        access_key,
+                                        tracked_node_ids,
+                                        node_name=cleanup_node_name,
+                                        creator_id=creator_id,
+                                    )
+                                )
+                                if destroyed_node_ids:
+                                    logger.info(
+                                        'run_agent_sync: destroyed untracked nodes user_id=%s org_id=%s '
+                                        'name=%s node_ids=%s',
+                                        user_id_for_ak,
+                                        org_id,
+                                        cleanup_node_name,
+                                        destroyed_node_ids,
+                                    )
+                            except Exception as cleanup_err:
+                                logger.warning(
+                                    'run_agent_sync: cleanup untracked nodes failed user_id=%s org_id=%s: %s',
+                                    user_id_for_ak,
+                                    org_id,
+                                    cleanup_err,
+                                )
                             row = nodes_table.find_one_for_reuse(
                                 user_id_for_ak, org_id, project_id
                             )
