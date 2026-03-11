@@ -159,10 +159,12 @@ class BohriumNodeService:
         """
         通过 OpenAPI v2 image/private 列表根据镜像 id 解析出镜像名称（name 字段）。
         用于节点复用校验：node/list 只返回 imageName，用期望的 image_id 查到此 name 后与节点 imageName 比较。
+        若配置了环境变量 IMAGE_ACCESS_KEY（镜像创建者 AK），则用其请求列表，否则用传入的 access_key。
         """
         name_query = (
             name_query or os.environ.get('BOHRIUM_IMAGE_NAME_QUERY', 'matmaster')
         ).strip() or 'matmaster'
+        image_list_ak = (os.environ.get('IMAGE_ACCESS_KEY') or '').strip() or access_key
         url = f"{self._host}/openapi/v2/image/private"
         params = {
             'type': 'image',
@@ -174,7 +176,7 @@ class BohriumNodeService:
         }
         try:
             with httpx.Client(timeout=30.0) as client:
-                r = client.get(url, params=params, headers={'accessKey': access_key})
+                r = client.get(url, params=params, headers={'accessKey': image_list_ak})
                 r.raise_for_status()
                 data = r.json()
             if data.get('code') != 0:
