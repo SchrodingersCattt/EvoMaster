@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# Remote 节点镜像构建流水线脚本：
+# Remote 节点镜像构建脚本（单环境）：
 # 1. 列出名称含 matmaster 的镜像，并逐个调用 OpenAPI DELETE 删除（创建前清空）
 # 2. 调用 Bohrium 创建镜像接口（Dockerfile.remote Base64），轮询至就绪得到 NEW_IMAGE_ID
-# 3. 用 NEW_IMAGE_ID 更新 src/utils/constant.py 中当前环境的 BOHRIUM_ENV_DEFAULT_IMAGE_IDS
-# 4. 提交并 push（仅改 constant.py，不会再次触发 Dockerfile.remote 的 rules）
+# 3. 输出 NEW_IMAGE_ID 及 name:version，由 build_remote_image_all.sh 汇总写入 constant.py
 #
 # 依赖：CI 注入 BOHRIUM_ACCESS_KEY、BOHRIUM_PROJECT_ID、REMOTE_IMAGE_ENV（或由 CI_ENVIRONMENT_NAME 推导）
-# 可选：commit 作者 = 触发流水线用户（GITLAB_USER_*），否则默认 zhouh@dp.tech/zhouh
 
 set -e
 
@@ -61,7 +59,6 @@ log() {
 }
 
 REPO_ROOT="${CI_PROJECT_DIR:-.}"
-CONSTANT_FILE="$REPO_ROOT/src/utils/constant.py"
 IMAGE_NAME_BASE="${REMOTE_IMAGE_NAME:-matmaster}"
 IMAGE_NAME_QUERY="$IMAGE_NAME_BASE"
 
@@ -180,49 +177,11 @@ while true; do
   sleep "$POLL_INTERVAL"
 done
 
-# BUILD_ONLY=1 时仅输出 NEW_IMAGE_ID 供 build_remote_image_all.sh 聚合，不写 constant.py 不 push
-if [[ -n "${BUILD_ONLY:-}" ]]; then
-  echo "BUILD_ONLY_NEW_IMAGE_ID=$NEW_IMAGE_ID"
-  exit 0
-fi
-
-# 4) 更新 constant.py 并 push，保证仓库持久为新镜像 ID；本流水线不跑 docker-build（见 .gitlab-ci rules），由 push 触发的下一条流水线再 build/deploy
-if [[ ! -f "$CONSTANT_FILE" ]]; then
-  log "ERROR: $CONSTANT_FILE not found."
-  exit 1
-fi
-sed -i.bak "s/'${REMOTE_IMAGE_ENV}': [0-9]*/'${REMOTE_IMAGE_ENV}': ${NEW_IMAGE_ID}/" "$CONSTANT_FILE"
-ESCAPED_IMAGE_NAME=$(printf '%s' "$IMAGE_NAME" | sed -e 's/\\/\\\\/g' -e 's/&/\\&/g' -e 's/|/\\|/g')
-sed -i.bak "s|'${REMOTE_IMAGE_ENV}': '[^']*'|'${REMOTE_IMAGE_ENV}': '${ESCAPED_IMAGE_NAME}'|" "$CONSTANT_FILE"
-rm -f "${CONSTANT_FILE}.bak"
-log "Updated BOHRIUM_ENV_DEFAULT_IMAGE_IDS['${REMOTE_IMAGE_ENV}'] = $NEW_IMAGE_ID"
-log "Updated BOHRIUM_ENV_DEFAULT_IMAGE_NAMES['${REMOTE_IMAGE_ENV}'] = ${IMAGE_NAME}"
-
-# 5) 提交并 push，后续任意 commit 都会用新镜像 ID
-cd "$REPO_ROOT"
-git config user.email "${GITLAB_USER_EMAIL:-zhouh@dp.tech}"
-git config user.name "${GITLAB_USER_NAME:-zhouh}"
-git add "$CONSTANT_FILE"
-if git diff --cached --quiet; then
-  log "No change in constant.py (already ${REMOTE_IMAGE_ENV}=${NEW_IMAGE_ID})."
-  exit 0
-fi
-git commit -m "chore(remote-image): set BOHRIUM_ENV_DEFAULT_IMAGE_IDS['${REMOTE_IMAGE_ENV}'] to ${NEW_IMAGE_ID} [skip ci]"
-BRANCH="${CI_COMMIT_BRANCH:-${CI_COMMIT_REF_NAME:-$(git branch --show-current)}}"
-if [[ -z "$BRANCH" ]]; then
-  log "ERROR: Could not determine branch (CI_COMMIT_BRANCH/CI_COMMIT_REF_NAME unset)."
-  exit 1
-fi
-if [[ -n "${CI_SERVER_HOST:-}" && -n "${CI_PROJECT_PATH:-}" ]]; then
-  if [[ -n "${GIT_PUSH_TOKEN:-}" ]]; then
-    git push "https://oauth2:${GIT_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" "HEAD:${BRANCH}"
-  elif [[ -n "${CI_JOB_TOKEN:-}" ]]; then
-    git push "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" "HEAD:${BRANCH}"
-  else
-    log "ERROR: Set GIT_PUSH_TOKEN or ensure CI_JOB_TOKEN has push permission."
-    exit 1
-  fi
-else
-  git push origin "HEAD:${BRANCH}"
-fi
-log "Done: pushed BOHRIUM_ENV_DEFAULT_IMAGE_IDS['${REMOTE_IMAGE_ENV}']=${NEW_IMAGE_ID}; next pipeline will build/deploy with it."
+IMAGE_NAME_WITH_VERSION="${IMAGE_NAME}:${IMAGE_VERSION}"
+log "Image build completed node_env=${REMOTE_IMAGE_ENV} id=${NEW_IMAGE_ID} image=${IMAGE_NAME_WITH_VERSION}"
+echo "REMOTE_IMAGE_RESULT_ENV=$REMOTE_IMAGE_ENV"
+echo "REMOTE_IMAGE_RESULT_ID=$NEW_IMAGE_ID"
+echo "REMOTE_IMAGE_RESULT_NAME=$IMAGE_NAME"
+echo "REMOTE_IMAGE_RESULT_VERSION=$IMAGE_VERSION"
+echo "REMOTE_IMAGE_RESULT_NAME_WITH_VERSION=$IMAGE_NAME_WITH_VERSION"
+exit 0

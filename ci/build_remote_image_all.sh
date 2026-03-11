@@ -14,6 +14,7 @@ PARALLEL_DIR="${PARALLEL_DIR:-/tmp/remote_image_parallel}"
 mkdir -p "$PARALLEL_DIR"
 
 declare -A ID_BY_ENV
+declare -A NAME_BY_ENV
 
 # 先校验三环境变量都已配置
 for env in test uat prod; do
@@ -33,7 +34,7 @@ for env in test uat prod; do
     proj_var="BOHRIUM_PROJECT_ID_$(echo "$env" | tr 'a-z' 'A-Z')"
     export BOHRIUM_ACCESS_KEY="${!key_var}"
     export BOHRIUM_PROJECT_ID="${!proj_var}"
-    stdbuf -oL -eL env BUILD_ONLY=1 REMOTE_IMAGE_ENV="$env" "$SCRIPT_DIR/build_remote_image.sh" 2>&1 \
+    stdbuf -oL -eL env REMOTE_IMAGE_ENV="$env" "$SCRIPT_DIR/build_remote_image.sh" 2>&1 \
       | while IFS= read -r line; do echo "[$env] $line"; done \
       | tee "$PARALLEL_DIR/${env}.log"
   ) &
@@ -43,13 +44,15 @@ wait
 # 从 log 中解析 NEW_IMAGE_ID，汇总失败环境后统一按错误处理并退出
 FAILED_ENVS=()
 for env in test uat prod; do
-  id=$(grep 'BUILD_ONLY_NEW_IMAGE_ID=' "$PARALLEL_DIR/${env}.log" 2>/dev/null | sed -n 's/.*BUILD_ONLY_NEW_IMAGE_ID=\([0-9]*\).*/\1/p' | head -1)
-  if [[ -n "$id" && "$id" =~ ^[0-9]+$ ]]; then
-    ID_BY_ENV[$env]=$id
-    echo "  -> env=$env NEW_IMAGE_ID=$id"
-  else
+  id=$(grep 'REMOTE_IMAGE_RESULT_ID=' "$PARALLEL_DIR/${env}.log" 2>/dev/null | sed -n 's/.*REMOTE_IMAGE_RESULT_ID=\([0-9]*\).*/\1/p' | head -1)
+  name=$(grep 'REMOTE_IMAGE_RESULT_NAME_WITH_VERSION=' "$PARALLEL_DIR/${env}.log" 2>/dev/null | sed -n 's/.*REMOTE_IMAGE_RESULT_NAME_WITH_VERSION=//p' | head -1)
+  if [[ -z "$id" || ! "$id" =~ ^[0-9]+$ || -z "$name" ]]; then
     FAILED_ENVS+=("$env")
+    continue
   fi
+  ID_BY_ENV[$env]=$id
+  NAME_BY_ENV[$env]=$name
+  echo "  -> env=$env NEW_IMAGE_ID=$id IMAGE_NAME=$name"
 done
 
 if [[ ${#FAILED_ENVS[@]} -gt 0 ]]; then
@@ -70,6 +73,11 @@ fi
 echo "=== Updating $CONSTANT_FILE with test=${ID_BY_ENV[test]} uat=${ID_BY_ENV[uat]} prod=${ID_BY_ENV[prod]} ==="
 for env in test uat prod; do
   sed -i.bak "s/'${env}': [0-9]*/'${env}': ${ID_BY_ENV[$env]}/" "$CONSTANT_FILE"
+done
+for env in test uat prod; do
+  name="${NAME_BY_ENV[$env]}"
+  esc_name=$(printf '%s' "$name" | sed -e 's/\\/\\\\/g' -e "s/'/\\\\'/g" -e 's/&/\\&/g' -e 's/|/\\|/g')
+  sed -i.bak "s|'${env}': '[^']*'|'${env}': '${esc_name}'|" "$CONSTANT_FILE"
 done
 rm -f "${CONSTANT_FILE}.bak"
 
