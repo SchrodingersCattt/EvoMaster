@@ -99,7 +99,7 @@ def notify(text: str) -> None:
 
 
 # 这些字段内容较长，单独占一行避免与相邻列挤在一起换行
-_FULL_ROW_FIELDS = {'会话地址', '执行节点'}
+_FULL_ROW_FIELDS = {'会话地址', '用户', '执行节点'}
 
 
 def _notify_card_impl(
