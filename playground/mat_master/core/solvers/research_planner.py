@@ -189,7 +189,11 @@ def _plan_to_external_schema(plan: dict[str, Any]) -> dict[str, Any]:
 
 
 def _extract_json_from_content(content: str) -> str | None:
-    """Extract first {...} or ```json ... ``` from LLM output."""
+    """Extract first {...} or ```json ... ``` from LLM output.
+
+    Uses string-aware brace matching to correctly handle braces inside
+    JSON string values (e.g. goal text containing '{tool_name}').
+    """
     text = (content or '').strip()
     if '```json' in text:
         start = text.find('```json') + 7
@@ -204,15 +208,135 @@ def _extract_json_from_content(content: str) -> str | None:
     start = text.find('{')
     if start < 0:
         return None
+    # String-aware brace matching: skip braces inside quoted strings
     depth = 0
+    in_string = False
+    escape_next = False
     for i in range(start, len(text)):
-        if text[i] == '{':
+        ch = text[i]
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == '\\' and in_string:
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '{':
             depth += 1
-        elif text[i] == '}':
+        elif ch == '}':
             depth -= 1
             if depth == 0:
                 return text[start : i + 1]
     return None
+
+
+def _try_parse_json(raw: str, logger: logging.Logger | None = None) -> dict:
+    """Attempt to parse JSON with multi-stage repair for common LLM output errors.
+
+    Repair stages (applied in order until one succeeds):
+    1. Direct json.loads() — no repair needed
+    2. Fix unescaped newlines/tabs inside string values
+    3. Remove trailing commas before ] or }
+    4. Replace single-quoted strings with double-quoted strings
+    5. Strip JavaScript-style line comments (// ...)
+    6. Strip JavaScript-style block comments (/* ... */)
+    7. Truncate at last valid closing brace (handles truncated output)
+
+    Raises json.JSONDecodeError if all stages fail.
+    """
+    _log = logger or logging.getLogger(__name__)
+
+    # Stage 1: direct parse
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+
+    repaired = raw
+
+    # Stage 2: fix unescaped control characters inside string values.
+    # Replace literal newlines/tabs/carriage-returns inside JSON strings.
+    # We do this by scanning character-by-character to stay string-aware.
+    try:
+        chars: list[str] = []
+        in_str = False
+        esc = False
+        for ch in repaired:
+            if esc:
+                chars.append(ch)
+                esc = False
+                continue
+            if ch == '\\' and in_str:
+                chars.append(ch)
+                esc = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+                chars.append(ch)
+                continue
+            if in_str and ch == '\n':
+                chars.append('\\n')
+                continue
+            if in_str and ch == '\r':
+                chars.append('\\r')
+                continue
+            if in_str and ch == '\t':
+                chars.append('\\t')
+                continue
+            chars.append(ch)
+        stage2 = ''.join(chars)
+        return json.loads(stage2)
+    except json.JSONDecodeError:
+        pass
+
+    # Stage 3: remove trailing commas before ] or }
+    try:
+        stage3 = re.sub(r',\s*([}\]])', r'\1', repaired)
+        return json.loads(stage3)
+    except json.JSONDecodeError:
+        pass
+
+    # Stage 4: combine stage 2 + stage 3
+    try:
+        stage4 = re.sub(r',\s*([}\]])', r'\1', stage2)  # type: ignore[possibly-undefined]
+        return json.loads(stage4)
+    except (json.JSONDecodeError, UnboundLocalError):
+        pass
+
+    # Stage 5: strip JS-style line comments
+    try:
+        stage5 = re.sub(r'//[^\n]*', '', repaired)
+        stage5 = re.sub(r',\s*([}\]])', r'\1', stage5)
+        return json.loads(stage5)
+    except json.JSONDecodeError:
+        pass
+
+    # Stage 6: strip JS-style block comments
+    try:
+        stage6 = re.sub(r'/\*.*?\*/', '', repaired, flags=re.DOTALL)
+        stage6 = re.sub(r',\s*([}\]])', r'\1', stage6)
+        return json.loads(stage6)
+    except json.JSONDecodeError:
+        pass
+
+    # Stage 7: truncate at last valid closing brace (handles truncated LLM output)
+    try:
+        last_brace = repaired.rfind('}')
+        if last_brace > 0:
+            truncated = repaired[: last_brace + 1]
+            # Also fix trailing commas in truncated version
+            truncated = re.sub(r',\s*([}\]])', r'\1', truncated)
+            return json.loads(truncated)
+    except json.JSONDecodeError:
+        pass
+
+    # All stages failed — re-raise original error for caller to handle
+    _log.debug('_try_parse_json: all repair stages failed for input (len=%d)', len(raw))
+    raise json.JSONDecodeError('All JSON repair stages failed', raw, 0)
 
 
 def _to_thought_tag(label: str) -> str:
@@ -247,17 +371,21 @@ def _normalize_planner_thought(content: Any) -> dict[str, Any]:
     embedded = _extract_json_from_content(text)
     if embedded:
         try:
-            parsed = json.loads(embedded)
+            parsed = _try_parse_json(embedded)
             payload['data'] = parsed
-            # Avoid redundant payloads like {"message":"{...}", "data": {...}}
-            # If message is exactly the same JSON structure, keep only `data`.
+            # When structured data is successfully parsed, suppress the raw message
+            # to avoid showing raw JSON text in the chat alongside the rendered card.
+            # Only keep message if it contains meaningful non-JSON text (e.g. preamble).
             msg_text = str(payload.get('message', '')).strip()
             if msg_text:
-                try:
-                    if json.loads(msg_text) == parsed:
-                        payload.pop('message', None)
-                except Exception:
-                    pass
+                # Remove the embedded JSON block from the message text
+                msg_without_json = msg_text.replace(embedded, '').strip()
+                if not msg_without_json:
+                    # Message was purely the JSON — drop it entirely
+                    payload.pop('message', None)
+                else:
+                    # Keep only the non-JSON preamble/suffix
+                    payload['message'] = msg_without_json
         except Exception:
             pass
     return payload
@@ -867,15 +995,19 @@ Rules:
                 }
         try:
             reply = self.agent.llm.query(dialog)
-            # 将 Planner LLM 原始输出推送到前端
+            # 将 Planner LLM 原始输出推送到前端（_normalize_planner_thought 会过滤掉纯 JSON message）
             self._emit('Planner', 'thought', reply.content or '')
-            raw = _extract_json_from_content(reply.content or '')
+            raw = _extract_json_from_content(reply.content or '') or (reply.content or '').strip()
             if not raw:
                 return {
                     'status': 'REFUSED',
                     'refusal_reason': 'Planner output contained no valid JSON.',
                 }
-            plan = json.loads(raw)
+            try:
+                plan = _try_parse_json(raw, self.logger)
+            except json.JSONDecodeError as e:
+                self.logger.error('Plan JSON parse failed (all repair stages exhausted): %s', e)
+                return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
         except json.JSONDecodeError as e:
             self.logger.error('Plan JSON parse failed: %s', e)
             return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
@@ -938,14 +1070,22 @@ Rules:
         try:
             reply = self.agent.llm.query(dialog)
             self._emit('Planner', 'thought', reply.content or '')
-            raw = _extract_json_from_content(reply.content or '')
+            raw = _extract_json_from_content(reply.content or '') or (reply.content or '').strip()
             if not raw:
                 return {
                     **current_plan,
                     'status': 'REFUSED',
                     'refusal_reason': 'Revision output contained no valid JSON.',
                 }
-            plan = json.loads(raw)
+            try:
+                plan = _try_parse_json(raw, self.logger)
+            except json.JSONDecodeError as e:
+                self.logger.error('Revision JSON parse failed (all repair stages exhausted): %s', e)
+                return {
+                    **current_plan,
+                    'status': 'REFUSED',
+                    'refusal_reason': f"Invalid JSON: {e}",
+                }
         except json.JSONDecodeError as e:
             self.logger.error('Revision JSON parse failed: %s', e)
             return {

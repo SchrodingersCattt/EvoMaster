@@ -409,6 +409,10 @@ class OpenAILLM(BaseLLM):
             request_params["tools"] = tools
             request_params["tool_choice"] = kwargs.get("tool_choice", "auto")
 
+        # 支持 response_format（如 {"type": "json_object"} 或 JSON Schema）
+        if "response_format" in kwargs and kwargs["response_format"] is not None:
+            request_params["response_format"] = kwargs["response_format"]
+
         # 调用 API
         response = self.client.chat.completions.create(**request_params)
 
@@ -597,6 +601,10 @@ class DeepSeekLLM(BaseLLM):
                 cleaned_tools.append(cleaned_tool)
             request_params["tools"] = cleaned_tools
             request_params["tool_choice"] = kwargs.get("tool_choice", "auto")
+
+        # 支持 response_format（如 {"type": "json_object"} 或 JSON Schema）
+        if "response_format" in kwargs and kwargs["response_format"] is not None:
+            request_params["response_format"] = kwargs["response_format"]
 
         # 调用 API
         response = self.client.chat.completions.create(**request_params)
