@@ -13,6 +13,7 @@ from .job_service import (
     get_file_token,
     iterate_job_files,
     download_job_file,
+    download_job_directory,
     RUNNING_STATUSES,
 )
 
@@ -33,5 +34,6 @@ __all__ = [
     "get_file_token",
     "iterate_job_files",
     "download_job_file",
+    "download_job_directory",
     "RUNNING_STATUSES",
 ]

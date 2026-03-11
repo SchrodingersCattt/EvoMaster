@@ -348,6 +348,112 @@ def download_job_file(
     return _download_binary(url, dest)
 
 
+def download_job_directory(
+    dir_path: str,
+    bohr_job_id: str,
+    dest_dir: Path,
+    *,
+    access_key: str | None = None,
+    max_bytes_per_file: int | None = None,
+) -> list[Path]:
+    """Download all files under *dir_path* in a Bohrium job to *dest_dir*.
+
+    Uses ``iterate_job_files`` with *dir_path* as prefix to enumerate every
+    file inside the directory, then downloads each one via ``download_job_file``.
+
+    Parameters
+    ----------
+    dir_path:
+        Remote directory path relative to the job root (e.g. ``"trajs_files"``).
+    bohr_job_id:
+        Bohrium job ID.
+    dest_dir:
+        Local directory to write files into (created if absent).
+    access_key:
+        Bohrium access key; falls back to ``BOHRIUM_ACCESS_KEY`` env var.
+    max_bytes_per_file:
+        If set, skip individual files larger than this many bytes.
+
+    Returns
+    -------
+    list[Path]
+        Paths of successfully downloaded files.
+
+    Raises
+    ------
+    RuntimeError
+        If the directory listing returns no files (empty or non-existent dir).
+    """
+    normalized_dir = str(dir_path or "").replace("\\", "/").strip().rstrip("/")
+
+    # Resolve root prefix so we can build correct relative paths for each file.
+    root_prefix = ""
+    try:
+        _, root_path, _ = get_file_token("", bohr_job_id, access_key=access_key)
+        root_prefix = str(root_path or "").replace("\\", "/")
+        if root_prefix and not root_prefix.endswith("/"):
+            root_prefix += "/"
+    except Exception:
+        pass
+
+    # Build the absolute prefix for iterate_job_files.
+    if root_prefix:
+        abs_prefix = root_prefix + normalized_dir
+    else:
+        abs_prefix = normalized_dir
+
+    objects = iterate_job_files(bohr_job_id, prefix=abs_prefix, access_key=access_key)
+    # Filter out directory entries — only download actual files.
+    file_objects = [o for o in objects if isinstance(o, dict) and not o.get("isDir")]
+
+    if not file_objects:
+        raise RuntimeError(
+            f"download_job_directory: no files found under '{normalized_dir}' "
+            f"in job {bohr_job_id} (prefix='{abs_prefix}')."
+        )
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    downloaded: list[Path] = []
+
+    for obj in file_objects:
+        remote_full_path = str(obj.get("path", "")).replace("\\", "/")
+        # Strip root prefix to get the relative path.
+        rel_path = remote_full_path
+        if root_prefix and rel_path.startswith(root_prefix):
+            rel_path = rel_path[len(root_prefix):].lstrip("/")
+
+        # Honour per-file size limit.
+        if max_bytes_per_file is not None:
+            size = obj.get("size")
+            if isinstance(size, int) and size > max_bytes_per_file:
+                logger.info(
+                    "download_job_directory: skipping %s (%d bytes > limit %d)",
+                    rel_path, size, max_bytes_per_file,
+                )
+                continue
+
+        # Preserve sub-directory structure inside dest_dir.
+        # rel_path is relative to job root; strip the leading dir_path component
+        # so files land directly under dest_dir/<subpath>.
+        rel_inside_dir = rel_path
+        if rel_inside_dir.startswith(normalized_dir + "/"):
+            rel_inside_dir = rel_inside_dir[len(normalized_dir) + 1:]
+
+        file_dest = dest_dir / rel_inside_dir
+        file_dest.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            path = download_job_file(rel_path, bohr_job_id, file_dest, access_key=access_key)
+            downloaded.append(path)
+            logger.debug("download_job_directory: downloaded %s → %s", rel_path, path)
+        except Exception as exc:
+            logger.warning(
+                "download_job_directory: failed to download %s: %s", rel_path, exc
+            )
+
+    return downloaded
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # PUBLIC API
 # ═══════════════════════════════════════════════════════════════════════

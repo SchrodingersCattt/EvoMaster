@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from pydantic import Field
 
 from evomaster.adaptors.calculation.job_service import (
+    download_job_directory,
     download_job_file,
     get_file_token,
     get_job_results,
@@ -605,20 +606,26 @@ def _download_results_to_local_dir(
             return p[len(root_prefix) :].lstrip('/')
         return p
 
-    # Step 4: get file sizes for size-gating
+    # Step 4: get file sizes and directory membership for size-gating / dir detection
     size_map: dict[str, int] = {}
+    dir_set: set[str] = set()
     try:
         for obj in iterate_job_files(bohr_job_id, access_key=access_key):
             if not isinstance(obj, dict):
                 continue
             p = obj.get('path')
             s = obj.get('size')
-            if isinstance(p, str) and isinstance(s, int):
-                size_map[p.replace('\\', '/')] = s
+            is_dir = bool(obj.get('isDir'))
+            if isinstance(p, str):
+                norm_p = p.replace('\\', '/')
+                if is_dir:
+                    dir_set.add(norm_p.rstrip('/'))
+                elif isinstance(s, int):
+                    size_map[norm_p] = s
     except Exception:
         pass
 
-    # Step 5: download each referenced file
+    # Step 5: download each referenced file (or directory)
     downloaded: list[str] = [results_txt_local.resolve().as_posix()]
     skipped: list[str] = []
     errors: list[str] = []
@@ -627,7 +634,42 @@ def _download_results_to_local_dir(
         if not isinstance(remote_path, str) or not remote_path.strip():
             continue
         rp = remote_path.strip()
-        size = size_map.get(rp.replace('\\', '/'))
+        rel_rp = _to_rel(rp)
+
+        # Detect whether this path is a directory (either flagged by iterate_job_files
+        # or has no file extension and no matching size entry — conservative heuristic).
+        norm_rp = rp.replace('\\', '/')
+        is_directory = (
+            norm_rp.rstrip('/') in dir_set
+            or rel_rp.rstrip('/') in dir_set
+            or (
+                '.' not in rp.rsplit('/', 1)[-1]
+                and norm_rp not in size_map
+                and rel_rp not in size_map
+            )
+        )
+
+        if is_directory:
+            # Download all files inside the directory recursively.
+            segment = rel_rp.rstrip('/').rsplit('/', 1)[-1] or f'artifact_{i}'
+            segment = re.sub(r'[^\w.\-]', '_', segment) or f'artifact_{i}'
+            dest_dir_path = download_dir / f'result_{i}_{segment}'
+            try:
+                dir_files = download_job_directory(
+                    rel_rp,
+                    bohr_job_id,
+                    dest_dir_path,
+                    access_key=access_key,
+                    max_bytes_per_file=_AUTO_DOWNLOAD_MAX_BYTES,
+                )
+                downloaded.extend(p.resolve().as_posix() for p in dir_files)
+                if not dir_files:
+                    skipped.append(f'{rp}: directory is empty or all files exceeded size limit')
+            except Exception as exc:
+                errors.append(f'{rp} (directory): {exc}')
+            continue
+
+        size = size_map.get(norm_rp) or size_map.get(rel_rp)
         if isinstance(size, int) and size > _AUTO_DOWNLOAD_MAX_BYTES:
             skipped.append(f'{rp}: skipped ({size} bytes > {_AUTO_DOWNLOAD_MAX_BYTES})')
             continue
@@ -636,7 +678,7 @@ def _download_results_to_local_dir(
         dest = download_dir / f'result_{i}_{segment}'
         try:
             path = download_job_file(
-                _to_rel(rp), bohr_job_id, dest, access_key=access_key
+                rel_rp, bohr_job_id, dest, access_key=access_key
             )
             downloaded.append(path.resolve().as_posix())
         except Exception as exc:
