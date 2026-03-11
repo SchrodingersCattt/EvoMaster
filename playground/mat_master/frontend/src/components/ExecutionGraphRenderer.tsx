@@ -175,8 +175,22 @@ export const ExecutionGraphRenderer = React.memo(
 
       const renderDiagram = async () => {
         try {
-          // Dynamic import to avoid SSR issues
-          const mermaid = (await import("mermaid")).default;
+          // Dynamic import with retry logic to handle transient chunk-loading failures
+          let mermaid;
+          let lastError: unknown;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              mermaid = (await import("mermaid")).default;
+              lastError = undefined;
+              break;
+            } catch (e) {
+              lastError = e;
+              if (attempt < 2) {
+                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+              }
+            }
+          }
+          if (!mermaid) throw lastError;
           if (cancelled) return;
 
           mermaid.initialize({
