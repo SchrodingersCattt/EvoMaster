@@ -5,6 +5,7 @@ import { SendIcon, SquareIcon, Loader2Icon } from "./icons";
 import { cn } from "@/lib/utils";
 import type { LogEntry } from "./LogStream";
 import { renderContent, renderMarkdown } from "./ContentRenderer";
+import { ExecutionGraphRenderer } from "./ExecutionGraphRenderer";
 import { isEnvRelatedEntry } from "@/lib/logEntryUtils";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -453,8 +454,10 @@ function PlannerJsonCard({ obj }: { obj: Record<string, unknown> }): React.React
     ([k]) => META_KEYS.has(k) || (typeof obj[k] !== "object" && !Array.isArray(obj[k]))
   );
 
-  // ── Execution steps ───────────────────────────────────────────────────────
-  const steps = Array.isArray(obj.execution_steps)
+  // ── Execution steps: support both execution_graph (LLM schema) and execution_steps (internal) ──
+  const steps = Array.isArray(obj.execution_graph)
+    ? (obj.execution_graph as Record<string, unknown>[])
+    : Array.isArray(obj.execution_steps)
     ? (obj.execution_steps as Record<string, unknown>[])
     : null;
 
@@ -467,7 +470,14 @@ function PlannerJsonCard({ obj }: { obj: Record<string, unknown> }): React.React
   // ── Other top-level keys (not meta, not steps, not report) ───────────────
   // Note: typeof null === "object", so we must also exclude null values
   const otherEntries = Object.entries(obj).filter(
-    ([k]) => !META_KEYS.has(k) && k !== "execution_steps" && k !== "plan_report" && obj[k] !== null && obj[k] !== undefined && typeof obj[k] === "object"
+    ([k]) =>
+      !META_KEYS.has(k) &&
+      k !== "execution_steps" &&
+      k !== "execution_graph" &&
+      k !== "plan_report" &&
+      obj[k] !== null &&
+      obj[k] !== undefined &&
+      typeof obj[k] === "object"
   );
 
   const intensityColor = (v: string) => {
@@ -504,6 +514,16 @@ function PlannerJsonCard({ obj }: { obj: Record<string, unknown> }): React.React
               }
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Execution Graph (Mermaid Diagram) ── */}
+      {steps && steps.length > 0 && (
+        <div>
+          <div className="text-[9px] uppercase tracking-widest font-semibold text-blue-500 dark:text-blue-400 mb-1.5">
+            Execution Graph
+          </div>
+          <ExecutionGraphRenderer steps={steps as Record<string, unknown>[]} />
         </div>
       )}
 
