@@ -81,7 +81,7 @@ if git diff --cached --quiet; then
   echo "No change in constant.py (all envs already up to date)."
   exit 0
 fi
-git commit -m "chore(remote-image): set BOHRIUM_ENV_DEFAULT_IMAGE_IDS test=${ID_BY_ENV[test]} uat=${ID_BY_ENV[uat]} prod=${ID_BY_ENV[prod]}"
+git commit -m "chore(remote-image): set BOHRIUM_ENV_DEFAULT_IMAGE_IDS test=${ID_BY_ENV[test]} uat=${ID_BY_ENV[uat]} prod=${ID_BY_ENV[prod]} [skip ci]"
 BRANCH="${CI_COMMIT_BRANCH:-${CI_COMMIT_REF_NAME:-$(git branch --show-current)}}"
 if [[ -z "$BRANCH" ]]; then
   echo "ERROR: Could not determine branch (CI_COMMIT_BRANCH/CI_COMMIT_REF_NAME unset)."
