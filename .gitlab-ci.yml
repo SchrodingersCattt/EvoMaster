@@ -26,7 +26,6 @@ build-remote-image:all:
     - "${CI_PROJECT_DIR}/ci/build_remote_image_all.sh"
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "remote-image"
-      when: manual
   tags:
     - $RUNNER_ZJK_TAG
 
