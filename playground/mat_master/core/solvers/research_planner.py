@@ -2288,9 +2288,21 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             )
             self._emit('Planner', 'exp_run', 'DirectSolver (pre-check)')
 
+            # Scope-constraint prefix injected into every prerequisite prompt so
+            # the DirectSolver does not treat pre-check as an entry point for the
+            # full user task.
+            _scope_prefix = (
+                "SCOPE: You are in the PRE-CHECK phase. Your ONLY job is to collect "
+                "the specific information described below to help the planner create "
+                "a better plan. Do NOT attempt to execute the full user task, build "
+                "datasets, generate reports, or perform any work beyond what is "
+                "explicitly described in this prerequisite. When you have collected "
+                "the requested information, call finish immediately.\n\n"
+            )
+
             # Build a focused prompt for the prerequisite task
             if prereq_type == 'parse_pdf':
-                prompt = (
+                _body = (
                     f"Parse the following PDF file and extract all relevant information for planning a research task. "
                     f"Use mat_doc_extract_material_data_from_pdf (MCP tool) as the primary method. "
                     f"Extract: crystal structures, computational methods, software used, key parameters "
@@ -2299,62 +2311,17 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                     f"After extraction, summarize all findings clearly."
                 )
             elif prereq_type == 'parse_files':
-                prompt = (
+                _body = (
                     f"Read and parse the following files to extract information needed for planning: {target}. "
                     f"For PDFs, use mat_doc MCP tools first. Summarize key findings."
                 )
-            elif prereq_type == 'search_info':
-                # Extract concept-alignment fields from the prereq dict if present
-                concept_alignment = prereq.get('concept_alignment') or {}
-                inclusion = concept_alignment.get('inclusion_criteria', [])
-                exclusion = concept_alignment.get('exclusion_criteria', [])
-                target_count = int(
-                    concept_alignment.get('target_count')
-                    or prereq.get('target_count')
-                    or 0
-                )
-                max_attempts = int(concept_alignment.get('max_attempts') or 8)
-
-                # Register concept-alignment with the guard so acceptance /
-                # stop-condition checks are grounded.
-                if hasattr(self.agent, '_tool_guard'):
-                    # Build target_terms from description + target keywords
-                    raw_terms = [
-                        t.strip()
-                        for t in (description + ' ' + target).replace(',', ' ').split()
-                        if len(t.strip()) >= 3
-                    ]
-                    self.agent._tool_guard.init_structure_retrieval(
-                        target_terms=raw_terms,
-                        requested_count=target_count,
-                    )
-
-                # Build a focused, bounded prompt for the search_info prereq
-                inclusion_str = (
-                    '; '.join(inclusion) if inclusion else '(none specified)'
-                )
-                exclusion_str = (
-                    '; '.join(exclusion) if exclusion else '(none specified)'
-                )
-                count_hint = (
-                    f" Stop as soon as {target_count} validated items matching the criteria are found."
-                    if target_count > 0
-                    else ''
-                )
-                prompt = (
-                    f"Search for the following information needed before planning: {description}.\n"
-                    f"Target: {target}.\n"
-                    f"Inclusion criteria: {inclusion_str}.\n"
-                    f"Exclusion criteria: {exclusion_str}.\n"
-                    f"Use mat_sn tools for literature/web search. Fetch full page content for high-relevance "
-                    f"URLs (do not rely on snippets alone). Maximum search attempts: {max_attempts}."
-                    f"{count_hint}\n"
-                    f"Summarize all confirmed findings concisely; note which items could not be verified."
-                )
             else:
-                prompt = (
+                # clarify_task or any future type
+                _body = (
                     f"Complete this prerequisite task: {description}. Target: {target}."
                 )
+
+            prompt = _scope_prefix + _body
 
             try:
                 precheck_task = self._build_task_with_dialog_history(
@@ -2407,7 +2374,15 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         prerequisites = assessment.get('prerequisites') or []
         reasoning = assessment.get('reasoning', '')
 
-        if assessment.get('ready_to_plan') and not prerequisites:
+        if assessment.get('ready_to_plan'):
+            # ready_to_plan=true always means proceed to planning immediately.
+            # Any prerequisites returned alongside ready_to_plan=true are treated
+            # as informational hints (context) for the planner, NOT as tasks to
+            # execute.  Executing them here was the root cause of the pre-check
+            # phase running the full user task prematurely.
+            hint_context = (
+                json.dumps(prerequisites, ensure_ascii=False) if prerequisites else ''
+            )
             self.logger.info('[Pre-check] Ready to plan: %s', reasoning)
             self._emit('Planner', 'thought', f"[Pre-check] Ready to plan. {reasoning}")
             self._append_journal(
@@ -2417,13 +2392,16 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 title='Ready to plan',
                 body=reasoning,
             )
+            if hint_context:
+                state['pre_check_context'] = hint_context
             state['phase'] = 'planning'
             self._emit(
                 'Planner', 'phase_change', {'from': 'pre_check', 'to': 'planning'}
             )
             return state
 
-        # Not ready — run prerequisites
+        # ready_to_plan=false — run hard prerequisites (parse_pdf / parse_files /
+        # clarify_task only; search_info is no longer a valid prerequisite type).
         self.logger.info(
             '[Pre-check] Prerequisites needed (%d): %s', len(prerequisites), reasoning
         )
