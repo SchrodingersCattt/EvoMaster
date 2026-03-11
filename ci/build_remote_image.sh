@@ -148,6 +148,12 @@ while true; do
   sleep "$POLL_INTERVAL"
 done
 
+# BUILD_ONLY=1 时仅输出 NEW_IMAGE_ID 供 build_remote_image_all.sh 聚合，不写 constant.py 不 push
+if [[ -n "${BUILD_ONLY:-}" ]]; then
+  echo "BUILD_ONLY_NEW_IMAGE_ID=$NEW_IMAGE_ID"
+  exit 0
+fi
+
 # 4) 更新 constant.py 并 push，保证仓库持久为新镜像 ID；本流水线不跑 docker-build（见 .gitlab-ci rules），由 push 触发的下一条流水线再 build/deploy
 if [[ ! -f "$CONSTANT_FILE" ]]; then
   echo "ERROR: $CONSTANT_FILE not found."
