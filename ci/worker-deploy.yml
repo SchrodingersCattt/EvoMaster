@@ -1,5 +1,4 @@
-# Worker 完整子流水线：build → deploy（同一条 pipeline_id，镜像 tag 一致）
-# 主流水线仅 trigger 本文件；本流水线自包含 before_script + build + deploy，不依赖 API 镜像 cache
+# Worker 部署 job 定义：build → deploy（由主流水线 include，与 API 同属一条 pipeline）
 
 include:
   - local: ".deploy-ci.yml"
@@ -13,22 +12,23 @@ image: $REGISTRY/public/ubuntu:gitlab-0.0.2
 services:
   - $REGISTRY/public/docker:20.10.16-dind
 
-before_script:
-  - |
-    COMMIT_TAG=`echo $CI_COMMIT_TAG | awk -F '_' '{print $3}'`
-    DOCKER_TAG=$CI_PIPELINE_ID$COMMIT_TAG
-    if [ -n "$CI_COMMIT_TAG" ]; then
-      SERVER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
-    elif [ "$CI_COMMIT_BRANCH" = "test" ]; then
-      SERVER_NAME=matmaster-evo-worker_test
-    elif [ "$CI_COMMIT_BRANCH" = "new_test" ]; then
-      SERVER_NAME=matmaster-evo-worker-new_test
-    else
-      SERVER_NAME=matmaster-evo-worker_${CI_COMMIT_BRANCH:-unknown}
-    fi
-    DOCKER_IMAGE=$REGISTRY/flow/matmaster-evo-worker:${DOCKER_TAG}
-    AUTHOR_NAME=$(git log -1 --pretty=format:"%an" --no-merges)
-    export DOCKER_TAG SERVER_NAME DOCKER_IMAGE AUTHOR_NAME
+.worker_template:
+  before_script:
+    - |
+      COMMIT_TAG=`echo $CI_COMMIT_TAG | awk -F '_' '{print $3}'`
+      DOCKER_TAG=$CI_PIPELINE_ID$COMMIT_TAG
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        SERVER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
+      elif [ "$CI_COMMIT_BRANCH" = "test" ]; then
+        SERVER_NAME=matmaster-evo-worker_test
+      elif [ "$CI_COMMIT_BRANCH" = "new_test" ]; then
+        SERVER_NAME=matmaster-evo-worker-new_test
+      else
+        SERVER_NAME=matmaster-evo-worker_${CI_COMMIT_BRANCH:-unknown}
+      fi
+      DOCKER_IMAGE=$REGISTRY/flow/matmaster-evo-worker:${DOCKER_TAG}
+      AUTHOR_NAME=$(git log -1 --pretty=format:"%an" --no-merges)
+      export DOCKER_TAG SERVER_NAME DOCKER_IMAGE AUTHOR_NAME
 
 stages:
   - build
@@ -56,6 +56,7 @@ stages:
   \"deploy_name\":\"${DEVOPS_DEPLOY_NAME:-$CI_JOB_NAME}\"}""" ${devops} > result.json
 
 docker-build:worker:
+  extends: .worker_template
   variables:
     DOCKER_HOST: tcp://docker-build-service:32375
   stage: build
@@ -90,10 +91,11 @@ docker-build:worker:
         - Dockerfile.remote
         - ci/build_remote_image.sh
       when: never
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_TAG =~ /_matmaster-evo-worker_/'
       when: on_success
 
 deploy-test:worker:
+  extends: .worker_template
   stage: deploy-test
   variables:
     DEVOPS_DEPLOY_NAME: "deploy-test"
@@ -118,6 +120,7 @@ deploy-test:worker:
       when: on_success
 
 manual-uat:worker:
+  extends: .worker_template
   stage: manual-uat
   needs:
     - docker-build:worker
@@ -130,9 +133,10 @@ manual-uat:worker:
   tags:
     - k8s-runner-zjk-svc
   rules:
-    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo-worker_/'
 
 deploy-uat:worker:
+  extends: .worker_template
   stage: deploy-uat
   needs:
     - docker-build:worker
@@ -145,10 +149,11 @@ deploy-uat:worker:
   tags:
     - k8s-runner-zjk-svc
   rules:
-    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo-worker_/'
       when: manual
 
 check-branch:worker:
+  extends: .worker_template
   stage: check
   script:
     - |
@@ -172,9 +177,10 @@ check-branch:worker:
   needs:
     - deploy-uat:worker
   rules:
-    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo-worker_/'
 
 manual-online:worker:
+  extends: .worker_template
   stage: manual-online
   needs:
     - check-branch:worker
@@ -187,5 +193,5 @@ manual-online:worker:
   tags:
     - k8s-runner-zjk-svc
   rules:
-    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo-worker_/'
       when: manual
