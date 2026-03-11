@@ -17,6 +17,7 @@ from src.services.stream_service import RedisReplyQueue
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.build_info import get_build_version
+from src.utils.constant import CURRENT_ENV
 from src.utils.feishu_notifier import (
     CARD_TEMPLATE_BLUE,
     CARD_TEMPLATE_GREEN,
@@ -37,6 +38,16 @@ _WORKER_HEARTBEAT_INTERVAL = 10.0
 _current_session_id: str | None = None
 # 优雅退出：SIGTERM 时设为 True，主循环在「当前 run 结束后」或「空闲时」退出，不再接新任务
 _drain_requested = False
+
+
+def _session_url(session_id: str) -> str:
+    """根据当前环境拼接前端会话链接。"""
+    sid = (session_id or '').strip()
+    if not sid:
+        return '-'
+    env = (CURRENT_ENV or '').strip().lower()
+    suffix = '' if not env or env == 'prod' else f'.{env}'
+    return f'https://matmaster{suffix}.bohrium.com/matmaster/chat-evo/{sid}'
 
 
 class RedisBackedStopEvent:
@@ -203,10 +214,12 @@ def _run_worker_loop() -> None:
             _current_session_id = session_id
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
+            session_url = _session_url(session_id)
             notify_post_async(
                 'Worker 开始执行',
                 [
                     ('session_id', session_id),
+                    ('会话地址', session_url),
                     ('用户', session_user_display),
                     ('worker', get_worker_id()),
                     ('执行中', str(active_count)),
@@ -272,10 +285,12 @@ def _run_worker_loop() -> None:
                 )
                 queue_len = redis_dao.llen_agent_run_queue()
                 active_count = get_worker_registry_service().count_active_runs()
+                session_url = _session_url(session_id)
                 notify_post_async(
                     'Worker 执行完成',
                     [
                         ('session_id', session_id),
+                        ('会话地址', session_url),
                         ('用户', session_user_display),
                         ('worker', get_worker_id()),
                         ('结果', '成功' if run_success else '失败'),

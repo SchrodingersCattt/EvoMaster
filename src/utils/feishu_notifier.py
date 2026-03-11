@@ -62,9 +62,32 @@ def _notify_card_impl(
     *,
     template: str = CARD_TEMPLATE_BLUE,
 ) -> None:
-    """发送飞书 interactive 卡片：标题栏（含颜色）+ 正文一行一字段（**标签**: 值），紧凑排版。"""
+    """发送飞书 interactive 卡片：标题栏 + 多列字段（label/value），仿管控通知排版。"""
     title_with_env = _env_prefix().rstrip() + ' ' + title
-    content = '\n'.join(f'**{label}**: {value}' for label, value in content_rows)
+    elements: list[dict] = []
+    # 每行展示两列，模仿截图排版；若为奇数则最后一行只展示一列
+    for i in range(0, len(content_rows), 2):
+        chunk = content_rows[i : i + 2]
+        columns: list[dict] = []
+        for label, value in chunk:
+            columns.append(
+                {
+                    'tag': 'column',
+                    'width': 'weighted',
+                    'weight': 1,
+                    'elements': [
+                        {
+                            'tag': 'div',
+                            'text': {
+                                'tag': 'lark_md',
+                                'content': f'**{label}**\n{value}',
+                            },
+                        }
+                    ],
+                }
+            )
+        elements.append({'tag': 'column_set', 'columns': columns})
+    elements.append({'tag': 'hr'})
     body = {
         'msg_type': 'interactive',
         'card': {
@@ -73,12 +96,7 @@ def _notify_card_impl(
                 'title': {'tag': 'plain_text', 'content': title_with_env},
                 'template': template,
             },
-            'elements': [
-                {
-                    'tag': 'div',
-                    'text': {'tag': 'lark_md', 'content': content},
-                },
-            ],
+            'elements': elements,
         },
     }
     _send(body)
