@@ -33,7 +33,7 @@ for env in test uat prod; do
     proj_var="BOHRIUM_PROJECT_ID_$(echo "$env" | tr 'a-z' 'A-Z')"
     export BOHRIUM_ACCESS_KEY="${!key_var}"
     export BOHRIUM_PROJECT_ID="${!proj_var}"
-    stdbuf -oL -eL BUILD_ONLY=1 REMOTE_IMAGE_ENV="$env" "$SCRIPT_DIR/build_remote_image.sh" 2>&1 \
+    stdbuf -oL -eL env BUILD_ONLY=1 REMOTE_IMAGE_ENV="$env" "$SCRIPT_DIR/build_remote_image.sh" 2>&1 \
       | while IFS= read -r line; do echo "[$env] $line"; done \
       | tee "$PARALLEL_DIR/${env}.log"
   ) &

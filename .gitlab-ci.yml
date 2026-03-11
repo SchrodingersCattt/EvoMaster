@@ -20,7 +20,6 @@ build-remote-image:all:
   stage: build-remote-image
   image: $REGISTRY/public/ubuntu:gitlab-0.0.2
   before_script:
-    - command -v jq >/dev/null 2>&1 || (apt-get update && apt-get install -y jq)
     - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh" "${CI_PROJECT_DIR}/ci/build_remote_image_all.sh"
   script:
     - "${CI_PROJECT_DIR}/ci/build_remote_image_all.sh"
@@ -38,7 +37,6 @@ build-remote-image:test:
   variables:
     REMOTE_IMAGE_ENV: test
   before_script:
-    - command -v jq >/dev/null 2>&1 || (apt-get update && apt-get install -y jq)
     - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
     - |
       if [[ -z "${BOHRIUM_ACCESS_KEY:-}" ]]; then
@@ -64,7 +62,6 @@ build-remote-image:uat:
   variables:
     REMOTE_IMAGE_ENV: uat
   before_script:
-    - command -v jq >/dev/null 2>&1 || (apt-get update && apt-get install -y jq)
     - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
   script:
     - "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
@@ -81,7 +78,6 @@ build-remote-image:prod:
   variables:
     REMOTE_IMAGE_ENV: prod
   before_script:
-    - command -v jq >/dev/null 2>&1 || (apt-get update && apt-get install -y jq)
     - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
   script:
     - "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
