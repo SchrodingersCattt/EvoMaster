@@ -1,6 +1,6 @@
-# 主流水线：build-remote-image + API/Worker 的 build/deploy 均在本流水线内执行（无子流水线）
-# 打 tag 时按 tag 内容只跑对应服务的 job；推 test 分支时同时跑 API + Worker
-# 同一 pipeline_id 便于 DevOps 平台查询 stage
+# 主流水线：build-remote-image + 按 tag/分支 trigger 子流水线
+# 打 tag 时：tag 含 _matmaster-evo-worker_ 只 trigger Worker 子流水线，含 _matmaster-evo_ 且不含 worker 只 trigger API 子流水线
+# 推 test 分支时：同时 trigger API + Worker 两条子流水线
 
 variables:
   RUNNER_ZJK_TAG: k8s-runner-zjk-svc
@@ -9,22 +9,12 @@ variables:
 
 stages:
   - build-remote-image
-  - build
-  - test
-  - deploy-test
-  - manual-uat
-  - deploy-uat
-  - check
-  - manual-online
+  - trigger
 
 include:
   - local: ".deploy-ci.yml"
-  - local: "ci/api-deploy.yml"
-  - local: "ci/worker-deploy.yml"
 
 # 一次构建三环境（test/uat/prod）并更新 constant.py，推送到分支 remote-image 时触发
-# 需在 CI/CD Variables 配置：BOHRIUM_ACCESS_KEY_TEST、BOHRIUM_PROJECT_ID_TEST、BOHRIUM_ACCESS_KEY_UAT、
-# BOHRIUM_PROJECT_ID_UAT、BOHRIUM_ACCESS_KEY_PROD、BOHRIUM_PROJECT_ID_PROD
 build-remote-image:all:
   stage: build-remote-image
   image: $REGISTRY/public/ubuntu:gitlab-0.0.2
@@ -36,3 +26,37 @@ build-remote-image:all:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "remote-image"
   tags:
     - $RUNNER_ZJK_TAG
+
+# 打 tag 含 _matmaster-evo_ 且不含 worker 时自动 trigger API 子流水线；test 分支 push 时也 trigger
+trigger-api-deploy:
+  stage: trigger
+  trigger:
+    include: ci/api-deploy.yml
+    strategy: depend
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/'
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+      when: never
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
+      when: on_success
+    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo_/ && $CI_COMMIT_TAG !~ /_matmaster-evo-worker_/'
+      when: on_success
+
+# 打 tag 含 _matmaster-evo-worker_ 时自动 trigger Worker 子流水线；test 分支 push 时也 trigger
+trigger-worker-deploy:
+  stage: trigger
+  trigger:
+    include: ci/worker-deploy.yml
+    strategy: depend
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/'
+      changes:
+        - Dockerfile.remote
+        - ci/build_remote_image.sh
+      when: never
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
+      when: on_success
+    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo-worker_/'
+      when: on_success

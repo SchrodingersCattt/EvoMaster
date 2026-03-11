@@ -1,4 +1,7 @@
-# API 部署 job 定义：build → test → deploy（由主流水线 include，主文件已 include .deploy-ci.yml，此处不再重复）
+# API 子流水线：由主流水线 trigger，build → test → deploy；job 名不带 :api，deploy_name 为 manual-uat/deploy-uat 便于平台与飞书触发
+
+include:
+  - local: ".deploy-ci.yml"
 
 variables:
   REGISTRY: registry.dp.tech
@@ -9,17 +12,15 @@ image: $REGISTRY/public/ubuntu:gitlab-0.0.2
 services:
   - $REGISTRY/public/docker:20.10.16-dind
 
-# 主流水线 include 多文件时全局 before_script 会互相覆盖，故用模板 + extends 保证 API job 用 API 环境
-.api_template:
-  before_script:
-    - |
-      COMMIT_TAG=`echo $CI_COMMIT_TAG | awk -F '_' '{print $3}'`
-      DOCKER_TAG=$CI_PIPELINE_ID$COMMIT_TAG
-      [ -z "$CI_COMMIT_TAG" ] && SERVER_NAME=$PROJECT_NAME || SERVER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
-      [ -z "$CI_COMMIT_TAG" ] && DOCKER_NAME=$(echo $PROJECT_NAME | awk -F '_' '{print $1}' ) || DOCKER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
-      DOCKER_IMAGE=$REGISTRY/flow/${DOCKER_NAME}:${DOCKER_TAG}
-      AUTHOR_NAME=$(git log -1 --pretty=format:"%an" --no-merges)
-      export DOCKER_TAG SERVER_NAME DOCKER_NAME DOCKER_IMAGE AUTHOR_NAME
+before_script:
+  - |
+    COMMIT_TAG=`echo $CI_COMMIT_TAG | awk -F '_' '{print $3}'`
+    DOCKER_TAG=$CI_PIPELINE_ID$COMMIT_TAG
+    [ -z "$CI_COMMIT_TAG" ] && SERVER_NAME=$PROJECT_NAME || SERVER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
+    [ -z "$CI_COMMIT_TAG" ] && DOCKER_NAME=$(echo $PROJECT_NAME | awk -F '_' '{print $1}' ) || DOCKER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
+    DOCKER_IMAGE=$REGISTRY/flow/${DOCKER_NAME}:${DOCKER_TAG}
+    AUTHOR_NAME=$(git log -1 --pretty=format:"%an" --no-merges)
+    export DOCKER_TAG SERVER_NAME DOCKER_NAME DOCKER_IMAGE AUTHOR_NAME
 
 stages:
   - build
@@ -47,8 +48,7 @@ stages:
   \"gitlab_url\":\"$CI_PIPELINE_URL\",
   \"deploy_name\":\"${DEVOPS_DEPLOY_NAME:-$CI_JOB_NAME}\"}""" ${devops} > result.json
 
-docker-build:api:
-  extends: .api_template
+docker-build:
   variables:
     DOCKER_HOST: tcp://docker-build-service:32375
   stage: build
@@ -87,20 +87,19 @@ docker-build:api:
         - Dockerfile.remote
         - ci/build_remote_image.sh
       when: never
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || ($CI_COMMIT_TAG =~ /_matmaster-evo_/ && $CI_COMMIT_TAG !~ /_matmaster-evo-worker_/)'
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_TAG'
       when: on_success
   artifacts:
     reports:
       dotenv: ${CI_PROJECT_DIR}/build.env
 
-test:api:
-  extends: .api_template
+test:
   variables:
     DOCKER_HOST: tcp://docker-build-service:32375
   stage: test
   image: $REGISTRY/public/ubuntu:gitlab-docker
   needs:
-    - docker-build:api
+    - docker-build
   before_script:
     - |
       cat > /root/.docker/config.json <<EOF
@@ -148,8 +147,7 @@ test:api:
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/'
       when: on_success
 
-deploy-test:api:
-  extends: .api_template
+deploy-test:
   stage: deploy-test
   variables:
     DEVOPS_DEPLOY_NAME: "deploy-test"
@@ -171,13 +169,13 @@ deploy-test:api:
     - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
       when: on_success
 
-manual-uat:api:
-  extends: .api_template
+# deploy_name 固定为 manual-uat，避免平台 10009（不认带 :api 的 job 名）
+manual-uat:
   stage: manual-uat
   variables:
     DEVOPS_DEPLOY_NAME: "manual-uat"
   needs:
-    - docker-build:api
+    - docker-build
   script:
     - echo 触发飞书信息测试人员审核 API
     - echo $DOCKER_IMAGE
@@ -187,28 +185,27 @@ manual-uat:api:
   tags:
     - k8s-runner-zjk-svc
   rules:
-    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo_/ && $CI_COMMIT_TAG !~ /_matmaster-evo-worker_/'
+    - if: '$CI_COMMIT_TAG'
 
-# 不设 DEVOPS_DEPLOY_NAME，用默认 CI_JOB_NAME（deploy-uat:api），便于平台在飞书点「部署」时找到并触发本 job
-deploy-uat:api:
-  extends: .api_template
+# job 名为 deploy-uat，平台可按此在飞书点「部署」时触发；10009 容错
+deploy-uat:
   stage: deploy-uat
   needs:
-    - docker-build:api
+    - docker-build
   script:
     - echo 触发运维平台部署uat API
     - echo $DOCKER_IMAGE
     - *curl
     - cat result.json
-    - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
+    - CODE=$(cat result.json | jq -r '.code')
+    - if [[ "$CODE" != "10000" && "$CODE" != "10009" ]]; then exit 1; fi
   tags:
     - k8s-runner-zjk-svc
   rules:
-    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo_/ && $CI_COMMIT_TAG !~ /_matmaster-evo-worker_/'
+    - if: '$CI_COMMIT_TAG'
       when: manual
 
-check-branch:api:
-  extends: .api_template
+check-branch:
   stage: check
   script:
     - |
@@ -230,15 +227,14 @@ check-branch:api:
   tags:
     - k8s-runner-zjk-svc
   needs:
-    - deploy-uat:api
+    - deploy-uat
   rules:
-    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo_/ && $CI_COMMIT_TAG !~ /_matmaster-evo-worker_/'
+    - if: '$CI_COMMIT_TAG'
 
-manual-online:api:
-  extends: .api_template
+manual-online:
   stage: manual-online
   needs:
-    - check-branch:api
+    - check-branch
   script:
     - echo 触发飞书审批,运维通过后人工部署生产环境 API
     - echo $DOCKER_IMAGE
@@ -248,5 +244,5 @@ manual-online:api:
   tags:
     - k8s-runner-zjk-svc
   rules:
-    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo_/ && $CI_COMMIT_TAG !~ /_matmaster-evo-worker_/'
+    - if: '$CI_COMMIT_TAG'
       when: manual

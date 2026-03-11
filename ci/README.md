@@ -1,14 +1,13 @@
 # CI 说明
 
-## 应用部署（API + Worker）— 打 tag 部署
+## 应用部署（API + Worker）— 子流水线 + 打 tag 自动 trigger
 
-- **单条主流水线**：API 与 Worker 的 job 均在主流水线内执行（`include` 而非 `trigger`），同一 `pipeline_id`，DevOps 平台可按该 ID 查询各 stage，避免「没有查询到 gitlab stage 步骤」。
-- **打哪个 tag 就只跑哪个服务的 job**：
-  - **Tag 格式**：`b_<服务名>_<版本>_<时间戳>`，例如：
-    - `b_matmaster-evo_0.1.0_2026-03-11-13-37` → 只跑 **API** 的 build / manual-uat / deploy-uat 等 job，部署到 `matmaster-evo`。
-    - `b_matmaster-evo-worker_0.1.0_2026-03-11-13-37` → 只跑 **Worker** 的 job，部署到 `matmaster-evo-worker`。
-  - 无单独 UAT server_name，UAT 为流水线在 manual-uat / deploy-uat 等阶段等待审核或手动部署。
-- **分支**：推 **test 结尾分支**时同时跑 API + Worker 的 job。
+- **主流水线**：仅 `build-remote-image` + **trigger** 子流水线。打 tag 时按 tag 内容**自动** trigger 对应一条子流水线（API 或 Worker）；推 test 分支时同时 trigger API + Worker 两条子流水线。
+- **Tag 格式**：`b_<服务名>_<版本>_<时间戳>`，例如：
+  - `b_matmaster-evo_0.1.0_2026-03-11-13-37` → 只 **trigger API 子流水线**（`ci/api-deploy.yml`），子流水线内 job 名为 `manual-uat`、`deploy-uat`（无 `:api` 后缀），便于平台识别、飞书点「部署」可触发。
+  - `b_matmaster-evo-worker_0.1.0_2026-03-11-13-37` → 只 **trigger Worker 子流水线**（`ci/worker-deploy.yml`），子流水线内同样为 `manual-uat`、`deploy-uat`。
+- **10009**：`manual-uat` 步骤的 `DEVOPS_DEPLOY_NAME` 固定为 `"manual-uat"`，不传带 `:api` / `:worker` 的 job 名，避免平台报「没有查询 gitlab stage 步骤」。
+- **分支**：推 **test 结尾分支**时同时 trigger API + Worker 两条子流水线。
 
 ## 一次构建三环境 Remote 镜像（test / uat / prod）
 
