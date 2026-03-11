@@ -37,15 +37,6 @@ _DPA_MODEL_ALIAS_MAP: dict[str, str] = {
 _OSS_URL_RE = re.compile(r"https?://[^\s,'\"<>)}\]]+")
 _DEFAULT_DOWNLOAD_SUBDIR = 'oss_downloaded_files'
 _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024
-_SKIP_DOWNLOAD_TOKENS = (
-    'trajectory',
-    'trace',
-    'traj',
-    'lammpstrj',
-    'dump',
-    'stdout',
-    'stderr',
-)
 
 
 def is_error_artifact_url(url: str) -> bool:
@@ -272,11 +263,6 @@ class MatToolCallbacks:
         except Exception:
             return False
         return ('aliyuncs.com' in host) or ('.oss-' in host) or host.startswith('oss-')
-
-    @staticmethod
-    def _should_skip_download(url: str) -> bool:
-        lower = url.lower()
-        return any(tok in lower for tok in _SKIP_DOWNLOAD_TOKENS)
 
     def _pick_download_path(self, download_dir: str, url: str) -> str:
         """Return a unique destination path (string) under *download_dir*.
@@ -1322,13 +1308,12 @@ class MatToolCallbacks:
             '[autodownload] after_autodownload_oss_results ensure_download_dir done'
         )
 
-        # De-duplicate and filter (skip trajectory/trace files and error bundles)
+        # De-duplicate and filter (skip error bundles only; size-gating handles large files)
         targets: list[str] = []
         seen: set[str] = set()
         for url in urls:
             if (
                 url in seen
-                or self._should_skip_download(url)
                 or is_error_artifact_url(url)
             ):
                 continue
@@ -1432,7 +1417,7 @@ class MatToolCallbacks:
         new_urls = [
             u
             for u in artifact_urls
-            if u not in already and not self._should_skip_download(u)
+            if u not in already
         ]
         if not new_urls:
             return observation, info
