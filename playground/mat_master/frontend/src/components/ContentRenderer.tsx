@@ -22,16 +22,16 @@ function looksLikeMarkdown(str: string): boolean {
   return /#\s|^\s*[-*+]\s|^\s*\d+\.\s|\*\*[^*]+\*\*|__[^_]+__|`[^`]+`|\[.+\]\(.+\)|\$\$|\\\(|\\\[/m.test(str);
 }
 
-function JsonBlock({ data }: { data: unknown }) {
+const JsonBlock = React.memo(function JsonBlock({ data }: { data: unknown }) {
   const str = typeof data === "string" ? data : JSON.stringify(data, null, 2);
   return (
     <pre className="text-xs whitespace-pre-wrap break-words bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 p-3 rounded-md overflow-x-auto text-zinc-800 dark:text-zinc-200 font-mono">
       {str}
     </pre>
   );
-}
+});
 
-function MarkdownContent({ text }: { text: string }) {
+const MarkdownContent = React.memo(function MarkdownContent({ text }: { text: string }) {
   try {
     return (
       <div className="content-renderer text-sm prose prose-sm dark:prose-invert max-w-none prose-p:my-1.5 prose-headings:my-2 prose-pre:bg-zinc-100 prose-pre:dark:bg-zinc-800 prose-pre:border prose-pre:border-zinc-200 prose-pre:dark:border-zinc-700 prose-pre:rounded-md prose-pre:text-xs">
@@ -75,13 +75,21 @@ function MarkdownContent({ text }: { text: string }) {
       </div>
     );
   }
-}
+});
 
 export function renderMarkdown(text: string): React.ReactNode {
   return <MarkdownContent text={text} />;
 }
 
-export function renderContent(content: unknown): React.ReactNode {
+/**
+ * Componentized ContentRenderer with React.memo for performance.
+ * Replaces the old `renderContent()` function approach.
+ */
+export const ContentRenderer = React.memo(function ContentRenderer({
+  content,
+}: {
+  content: unknown;
+}) {
   if (content === null || content === undefined) {
     return <span className="text-zinc-500 italic">(空)</span>;
   }
@@ -102,15 +110,15 @@ export function renderContent(content: unknown): React.ReactNode {
     );
   }
   if (typeof content === "object") {
-    try {
-      return (
-        <pre className="text-xs whitespace-pre-wrap break-words bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 p-3 rounded-md overflow-x-auto text-zinc-800 dark:text-zinc-200 font-mono">
-          {JSON.stringify(content, null, 2)}
-        </pre>
-      );
-    } catch {
-      return <span className="text-zinc-500">(无法序列化)</span>;
-    }
+    return <JsonBlock data={content} />;
   }
   return <span>{String(content)}</span>;
+});
+
+/**
+ * Backward-compatible function wrapper.
+ * Delegates to the memoized <ContentRenderer /> component.
+ */
+export function renderContent(content: unknown): React.ReactNode {
+  return <ContentRenderer content={content} />;
 }
