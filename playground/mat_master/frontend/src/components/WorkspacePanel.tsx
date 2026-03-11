@@ -18,6 +18,8 @@ import type { LogEntry } from "./LogStream";
 import type { FileEntry } from "./FileTree";
 import { renderContent, renderMarkdown } from "./ContentRenderer";
 import { isEnvRelatedEntry } from "@/lib/logEntryUtils";
+import RunOverviewPanel from "./RunOverviewPanel";
+import PlannerOutlinePanel from "./PlannerOutlinePanel";
 
 const API_BASE =
   typeof window !== "undefined"
@@ -635,6 +637,8 @@ export default function WorkspacePanel({
   sessionFilesLogsKey = 0,
   readOnly = false,
   onJumpToLogIndex,
+  mode: modeProp,
+  status,
 }: {
   entries: LogEntry[];
   sessionId: string | null;
@@ -643,6 +647,8 @@ export default function WorkspacePanel({
   sessionFilesLogsKey?: number;
   readOnly?: boolean;
   onJumpToLogIndex?: (index: number) => void;
+  mode?: "direct" | "planner";
+  status?: "idle" | "connecting" | "connected" | "closed";
 }) {
   const [selectedFile, setSelectedFile] = useState<{ path: string; name: string } | null>(null);
   const [fileTreeRefresh, setFileTreeRefresh] = useState(0);
@@ -681,7 +687,6 @@ export default function WorkspacePanel({
     .map((e, index) => ({ entry: e, index }))
     .filter(
       ({ entry: e }) =>
-      e.source === "ToolExecutor" &&
       e.type === "tool_result" &&
       !isEnvRelatedEntry(e)
     );
@@ -698,8 +703,10 @@ export default function WorkspacePanel({
           intent?: string;
         })
       : null;
-  const mode =
+  // Use prop if provided, otherwise infer from entries (backward compat)
+  const inferredMode =
     statusStages.length > 0 || entries.some((e) => e.source === "Planner") ? "planner" : "direct";
+  const mode = modeProp ?? inferredMode;
 
   // Dynamic closed-loop planning events
   const phaseChanges = entries.filter((e) => e.type === "phase_change");
@@ -788,6 +795,25 @@ export default function WorkspacePanel({
 
         <AccordionSection title="Status" icon={ActivityIcon} defaultOpen={true}>
           <div className="p-3 text-xs space-y-2 text-zinc-600 dark:text-zinc-400">
+            {/* Connection status badge (direct mode) */}
+            {mode === "direct" && status && (
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-500 dark:text-zinc-400 font-medium">Connection</span>
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold",
+                    status === "connected"
+                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                      : status === "connecting"
+                        ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                        : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                  )}
+                >
+                  <span className="inline-block w-1.5 h-1.5 rounded-full bg-current" />
+                  {status}
+                </span>
+              </div>
+            )}
             {expRuns.length > 0 && (
               <>
                 <div className="font-medium text-zinc-700 dark:text-zinc-300">Executions</div>
@@ -810,11 +836,13 @@ export default function WorkspacePanel({
             )}
             {mode === "direct" && (
               <>
-                <div className="font-medium text-zinc-700 dark:text-zinc-300">Tools</div>
+                <div className="font-medium text-zinc-700 dark:text-zinc-300">
+                  Tools ({toolResults.length} call{toolResults.length !== 1 ? "s" : ""})
+                </div>
                 {toolResults.length === 0 ? (
                   <p className="text-zinc-500">—</p>
                 ) : (
-                  <ul className="space-y-0.5">
+                  <ul className="space-y-0.5 max-h-[140px] overflow-y-auto">
                     {toolResults.map(({ entry: e, index }, i) => {
                       const c = e.content as { name?: string };
                       const ok = inferToolSuccess(e);
@@ -833,7 +861,7 @@ export default function WorkspacePanel({
                           )}
                           <button
                             type="button"
-                            className="underline-offset-2 hover:underline text-left"
+                            className="underline-offset-2 hover:underline text-left truncate"
                             onClick={() => onJumpToLogIndex?.(index)}
                             title="跳转到右侧对话"
                           >
@@ -900,11 +928,66 @@ export default function WorkspacePanel({
                 )}
               </>
             )}
-            {expRuns.length === 0 && skillHits.length === 0 && mode !== "planner" && (
+            {/* Summary / Finish / Error cards for direct mode */}
+            {mode === "direct" && (() => {
+              let lastSummary: { entry: LogEntry; index: number } | null = null;
+              let lastFinish: { entry: LogEntry; index: number } | null = null;
+              let lastError: { entry: LogEntry; index: number } | null = null;
+              for (let i = 0; i < entries.length; i++) {
+                const e = entries[i];
+                if (e.type === "execution_summary") lastSummary = { entry: e, index: i };
+                if (e.type === "finish") lastFinish = { entry: e, index: i };
+                if (e.type === "error") lastError = { entry: e, index: i };
+              }
+              return (
+                <>
+                  {lastSummary && (
+                    <button
+                      type="button"
+                      className="w-full text-left p-2 rounded-md bg-emerald-50/50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+                      onClick={() => onJumpToLogIndex?.(lastSummary!.index)}
+                    >
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-emerald-700 dark:text-emerald-400 mb-1">✓ Summary</div>
+                      <div className="text-zinc-700 dark:text-zinc-300 line-clamp-3 text-xs">{renderContent(lastSummary.entry.content)}</div>
+                    </button>
+                  )}
+                  {lastError && (
+                    <button
+                      type="button"
+                      className="w-full text-left p-2 rounded-md bg-red-50/50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                      onClick={() => onJumpToLogIndex?.(lastError!.index)}
+                    >
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-red-700 dark:text-red-400 mb-1">✗ Error</div>
+                      <div className="text-zinc-700 dark:text-zinc-300 line-clamp-2 text-xs">{String(lastError.entry.content)}</div>
+                    </button>
+                  )}
+                  {lastFinish && !lastError && (
+                    <div className="p-2 rounded-md bg-green-50/50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                      <div className="text-[10px] uppercase tracking-wider font-bold text-green-700 dark:text-green-400 mb-1">✓ Finished</div>
+                      <div className="text-zinc-700 dark:text-zinc-300 line-clamp-2 text-xs">{String(lastFinish.entry.content) || "Done"}</div>
+                    </div>
+                  )}
+                  {toolResults.length === 0 && !lastSummary && !lastFinish && !lastError && (
+                    <p className="text-zinc-500 italic">No activity yet.</p>
+                  )}
+                </>
+              );
+            })()}
+            {expRuns.length === 0 && skillHits.length === 0 && mode !== "planner" && mode !== "direct" && (
               <p className="text-zinc-500">—</p>
             )}
           </div>
         </AccordionSection>
+
+        {/* Planner Outline for planner mode */}
+        {mode === "planner" && (
+          <AccordionSection title="Plan Outline" icon={ListOrderedIcon} defaultOpen={true}>
+            <PlannerOutlinePanel
+              logs={entries}
+              onJumpToLogIndex={onJumpToLogIndex}
+            />
+          </AccordionSection>
+        )}
 
         <AccordionSection title="Execution log" icon={ListOrderedIcon}>
           <div className="p-2">
