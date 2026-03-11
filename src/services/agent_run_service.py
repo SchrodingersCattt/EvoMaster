@@ -27,7 +27,7 @@ from src.services.chat_history import ChatHistoryConverter
 from src.services.quota_service import use_quota
 from src.services.sessions_service import SESSIONS, get_sessions_service
 from src.services.user_service import UserService
-from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID
+from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
@@ -506,9 +506,21 @@ class AgentRunService:
                             row = nodes_table.find_one_for_reuse(
                                 user_id_for_ak, org_id, project_id
                             )
-                            expected_image_name = node_svc.get_image_name_by_id(
-                                access_key, BOHRIUM_DEFAULT_IMAGE_ID
+                            expected_image_name = (
+                                os.environ.get('BOHRIUM_EXPECTED_IMAGE_NAME')
+                                or os.environ.get('BOHRIUM_IMAGE_NAME')
+                                or BOHRIUM_DEFAULT_IMAGE_NAME
                             )
+                            if isinstance(expected_image_name, str):
+                                expected_image_name = (
+                                    expected_image_name.strip() or None
+                                )
+                            else:
+                                expected_image_name = None
+                            if expected_image_name is None:
+                                expected_image_name = node_svc.get_image_name_by_id(
+                                    access_key, BOHRIUM_DEFAULT_IMAGE_ID
+                                )
                             if row:
                                 node_id = int(row['node_id'])
 

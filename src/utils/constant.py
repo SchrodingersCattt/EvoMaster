@@ -67,6 +67,17 @@ BOHRIUM_DEFAULT_IMAGE_ID = (
     or BOHRIUM_ENV_DEFAULT_IMAGE_IDS['test']
 )
 
+# 镜像 name 也在构建时写入仓库，运行期不用再调 image/private 获取
+BOHRIUM_ENV_DEFAULT_IMAGE_NAMES: dict[str, str] = {
+    'test': 'matmaster',
+    'uat': 'matmaster',
+    'prod': 'matmaster',
+}
+BOHRIUM_DEFAULT_IMAGE_NAME = (
+    BOHRIUM_ENV_DEFAULT_IMAGE_NAMES.get(CURRENT_ENV)
+    or BOHRIUM_ENV_DEFAULT_IMAGE_NAMES['test']
+)
+
 # 飞书私聊（任务完成通知）：需企业自建应用 App ID / App Secret；未配置则不发私聊
 FEISHU_APP_ID = 'cli_a93aa00bf2b9dcc8'
 FEISHU_APP_SECRET = '2HOsgrqaQUazqFU8N2fgwR2ZTuL7fbKm'

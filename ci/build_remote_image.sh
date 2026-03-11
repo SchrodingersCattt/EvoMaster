@@ -166,8 +166,11 @@ if [[ ! -f "$CONSTANT_FILE" ]]; then
   exit 1
 fi
 sed -i.bak "s/'${REMOTE_IMAGE_ENV}': [0-9]*/'${REMOTE_IMAGE_ENV}': ${NEW_IMAGE_ID}/" "$CONSTANT_FILE"
+ESCAPED_IMAGE_NAME=$(printf '%s' "$IMAGE_NAME" | sed -e 's/\\/\\\\/g' -e 's/&/\\&/g' -e 's/|/\\|/g')
+sed -i.bak "s|'${REMOTE_IMAGE_ENV}': '[^']*'|'${REMOTE_IMAGE_ENV}': '${ESCAPED_IMAGE_NAME}'|" "$CONSTANT_FILE"
 rm -f "${CONSTANT_FILE}.bak"
 echo "Updated BOHRIUM_ENV_DEFAULT_IMAGE_IDS['${REMOTE_IMAGE_ENV}'] = $NEW_IMAGE_ID"
+echo "Updated BOHRIUM_ENV_DEFAULT_IMAGE_NAMES['${REMOTE_IMAGE_ENV}'] = ${IMAGE_NAME}"
 
 # 5) 提交并 push，后续任意 commit 都会用新镜像 ID
 cd "$REPO_ROOT"
