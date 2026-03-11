@@ -62,7 +62,8 @@ log() {
 
 REPO_ROOT="${CI_PROJECT_DIR:-.}"
 CONSTANT_FILE="$REPO_ROOT/src/utils/constant.py"
-IMAGE_NAME_QUERY="${REMOTE_IMAGE_NAME:-matmaster}"
+IMAGE_NAME_BASE="${REMOTE_IMAGE_NAME:-matmaster}"
+IMAGE_NAME_QUERY="$IMAGE_NAME_BASE"
 
 log "REMOTE_IMAGE_ENV=$REMOTE_IMAGE_ENV OPENAPI_V2_BASE=$OPENAPI_V2_BASE"
 
@@ -117,10 +118,14 @@ if [[ ! -f "$DOCKERFILE_PATH" ]]; then
   log "ERROR: $DOCKERFILE_PATH not found."
   exit 1
 fi
-IMAGE_NAME="${REMOTE_IMAGE_NAME:-matmaster}"
-IMAGE_VERSION="${REMOTE_IMAGE_VERSION:-$(date +%Y-%m%d-%H%M)}"
-if [[ -n "${CI_COMMIT_SHORT_SHA:-}" ]]; then
-  IMAGE_VERSION="${CI_COMMIT_SHORT_SHA}"
+TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
+IMAGE_NAME="${IMAGE_NAME_BASE}"
+if [[ -n "${REMOTE_IMAGE_VERSION:-}" ]]; then
+  IMAGE_VERSION="${REMOTE_IMAGE_VERSION}"
+elif [[ -n "${CI_COMMIT_SHORT_SHA:-}" ]]; then
+  IMAGE_VERSION="${CI_COMMIT_SHORT_SHA}-${TIMESTAMP}"
+else
+  IMAGE_VERSION="${TIMESTAMP}"
 fi
 DOCKERFILE_B64=$(base64 -w 0 < "$DOCKERFILE_PATH" 2>/dev/null || base64 < "$DOCKERFILE_PATH")
 CREATE_URL="${OPENAPI_V2_BASE}/image/private"
@@ -154,7 +159,7 @@ if ! [[ "$NEW_IMAGE_ID" =~ ^[0-9]+$ ]]; then
 fi
 log "Image created id=$NEW_IMAGE_ID, waiting for status=2 (ready) ..."
 POLL_INTERVAL=30
-POLL_TIMEOUT=600
+POLL_TIMEOUT=900
 DEADLINE=$(($(date +%s) + $POLL_TIMEOUT))
 while true; do
   if [[ $(date +%s) -ge $DEADLINE ]]; then
