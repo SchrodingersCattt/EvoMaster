@@ -17,7 +17,6 @@ from src.services.stream_service import RedisReplyQueue
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.build_info import get_build_version
-from src.utils.feishu_dm import notify_task_started_dm_async
 from src.utils.feishu_notifier import (
     CARD_TEMPLATE_BLUE,
     CARD_TEMPLATE_GREEN,
@@ -204,26 +203,17 @@ def _run_worker_loop() -> None:
             _current_session_id = session_id
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
-            if queue_len >= 1:
-                notify_post_async(
-                    'Worker 开始执行',
-                    [
-                        ('session_id', session_id),
-                        ('用户', session_user_display),
-                        ('worker', get_worker_id()),
-                        ('执行中', str(active_count)),
-                        ('排队数', str(queue_len)),
-                    ],
-                    template=CARD_TEMPLATE_BLUE,
-                )
-            if session_user_id:
-                notify_task_started_dm_async(
-                    session_user_id,
-                    session_id,
-                    task_id,
-                    user_display=session_user_display,
-                    worker_id=get_worker_id(),
-                )
+            notify_post_async(
+                'Worker 开始执行',
+                [
+                    ('session_id', session_id),
+                    ('用户', session_user_display),
+                    ('worker', get_worker_id()),
+                    ('执行中', str(active_count)),
+                    ('排队数', str(queue_len)),
+                ],
+                template=CARD_TEMPLATE_BLUE,
+            )
             run_success = True
             try:
                 result = agent_run_service.run_agent_sync(
@@ -282,21 +272,20 @@ def _run_worker_loop() -> None:
                 )
                 queue_len = redis_dao.llen_agent_run_queue()
                 active_count = get_worker_registry_service().count_active_runs()
-                if queue_len >= 1:
-                    notify_post_async(
-                        'Worker 执行完成',
-                        [
-                            ('session_id', session_id),
-                            ('用户', session_user_display),
-                            ('worker', get_worker_id()),
-                            ('结果', '成功' if run_success else '失败'),
-                            ('执行中', str(active_count)),
-                            ('排队数', str(queue_len)),
-                        ],
-                        template=(
-                            CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
-                        ),
-                    )
+                notify_post_async(
+                    'Worker 执行完成',
+                    [
+                        ('session_id', session_id),
+                        ('用户', session_user_display),
+                        ('worker', get_worker_id()),
+                        ('结果', '成功' if run_success else '失败'),
+                        ('执行中', str(active_count)),
+                        ('排队数', str(queue_len)),
+                    ],
+                    template=(
+                        CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
+                    ),
+                )
         if _drain_requested:
             logger.info(
                 'Agent worker: drain requested, current job finished, exiting loop. session_id=%s worker_id=%s',
