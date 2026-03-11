@@ -1,7 +1,4 @@
-# API 部署 job 定义：build → test → deploy（由主流水线 include，与 Worker 同属一条 pipeline，便于 DevOps 平台按 pipeline_id 查 stage）
-
-include:
-  - local: ".deploy-ci.yml"
+# API 部署 job 定义：build → test → deploy（由主流水线 include，主文件已 include .deploy-ci.yml，此处不再重复）
 
 variables:
   REGISTRY: registry.dp.tech
