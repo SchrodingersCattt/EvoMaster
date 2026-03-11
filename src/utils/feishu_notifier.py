@@ -98,8 +98,11 @@ def notify(text: str) -> None:
     _send({'msg_type': 'text', 'content': {'text': text}})
 
 
-# 这些字段内容较长，单独占一行避免与相邻列挤在一起换行
-_FULL_ROW_FIELDS = {'会话地址', '用户', '执行节点'}
+def _format_row_value(label: str, value: str) -> str:
+    """会话地址渲染为「打开会话」链接，点击跳转，不展示长 URL。"""
+    if label == '会话地址' and (value or '').strip().startswith('http'):
+        return f'[打开会话]({value.strip()})'
+    return value
 
 
 def _notify_card_impl(
@@ -108,48 +111,16 @@ def _notify_card_impl(
     *,
     template: str = CARD_TEMPLATE_BLUE,
 ) -> None:
-    """发送飞书 interactive 卡片：标题栏 + 多列字段（label/value），仿管控通知排版。"""
+    """发送飞书 interactive 卡片：全部项单块 markdown、每行「标签 + 值」，紧凑展示。"""
     title_with_env = _env_prefix().rstrip() + ' ' + title
-    elements: list[dict] = []
-    # 将 content_rows 按「每行 1 或 2 列」分组：会话地址、执行节点 单独一行，其余两列一行
-    row_chunks: list[list[tuple[str, str]]] = []
-    i = 0
-    while i < len(content_rows):
-        label, value = content_rows[i]
-        if label in _FULL_ROW_FIELDS:
-            row_chunks.append([(label, value)])
-            i += 1
-        elif i + 1 < len(content_rows):
-            next_label = content_rows[i + 1][0]
-            if next_label in _FULL_ROW_FIELDS:
-                row_chunks.append([(label, value)])
-                i += 1
-            else:
-                row_chunks.append(content_rows[i : i + 2])
-                i += 2
-        else:
-            row_chunks.append([(label, value)])
-            i += 1
-    for chunk in row_chunks:
-        columns: list[dict] = []
-        for label, value in chunk:
-            columns.append(
-                {
-                    'tag': 'column',
-                    'width': 'weighted',
-                    'weight': 1,
-                    'elements': [
-                        {
-                            'tag': 'div',
-                            'text': {
-                                'tag': 'lark_md',
-                                'content': f'**{label}**\n{value}',
-                            },
-                        }
-                    ],
-                }
-            )
-        elements.append({'tag': 'column_set', 'columns': columns})
+    parts = [
+        f'**{label}**\n{_format_row_value(label, value)}'
+        for label, value in content_rows
+    ]
+    content = '\n'.join(parts)
+    elements: list[dict] = [
+        {'tag': 'div', 'text': {'tag': 'lark_md', 'content': content}},
+    ]
     elements.append({'tag': 'hr'})
     body = {
         'msg_type': 'interactive',
