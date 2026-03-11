@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Transpile mermaid ESM package so webpack can bundle it correctly in dev mode
+  transpilePackages: ['mermaid'],
   // Allow cross-origin requests to /_next/* when accessed via domain (e.g. gjao1318755.bohrium.tech)
   allowedDevOrigins: [
     "localhost:50003",
