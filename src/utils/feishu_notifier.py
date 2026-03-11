@@ -12,7 +12,7 @@ from src.utils.constant import CURRENT_ENV
 logger = logging.getLogger(__name__)
 
 FEISHU_WEBHOOK_URL = (
-    'https://open.feishu.cn/open-apis/bot/v2/hook/171cbe39-9702-4063-a2ce-e11adb44cc44'
+    'https://open.feishu.cn/open-apis/bot/v2/hook/a99f6620-6f73-48a6-85d2-65068e057fd1'
 )
 
 # 卡片 header 颜色：blue/green/orange/red
