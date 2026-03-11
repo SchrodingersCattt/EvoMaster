@@ -157,20 +157,20 @@ def _notify_task_dm_async(
         )
         return
     prefix = _env_prefix()
-    # 与 feishu_notifier 群卡片一致：标题 + 多行「**标签**: 值」；展示 worker_id，不展示 task_id
+    # 与 feishu_notifier 群卡片一致：标题 + 多行「**标签**: 值」；字段与群通知统一为中文
     if started:
         title = 'Worker 开始执行'
         rows = [
-            ('session_id', session_id),
-            ('worker', worker_id or '-'),
+            ('会话ID', session_id),
+            ('执行节点', worker_id or '-'),
         ]
         if user_display:
             rows.insert(1, ('用户', user_display))
     else:
         title = 'Worker 执行完成'
         rows = [
-            ('session_id', session_id),
-            ('worker', worker_id or '-'),
+            ('会话ID', session_id),
+            ('执行节点', worker_id or '-'),
             ('结果', result if result else '成功'),
         ]
         if user_display:

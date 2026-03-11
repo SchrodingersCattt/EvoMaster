@@ -56,6 +56,10 @@ def notify(text: str) -> None:
     _send({'msg_type': 'text', 'content': {'text': text}})
 
 
+# 这些字段内容较长，单独占一行避免与相邻列挤在一起换行
+_FULL_ROW_FIELDS = {'会话地址', '执行节点'}
+
+
 def _notify_card_impl(
     title: str,
     content_rows: list[tuple[str, str]],
@@ -65,9 +69,26 @@ def _notify_card_impl(
     """发送飞书 interactive 卡片：标题栏 + 多列字段（label/value），仿管控通知排版。"""
     title_with_env = _env_prefix().rstrip() + ' ' + title
     elements: list[dict] = []
-    # 每行展示两列，模仿截图排版；若为奇数则最后一行只展示一列
-    for i in range(0, len(content_rows), 2):
-        chunk = content_rows[i : i + 2]
+    # 将 content_rows 按「每行 1 或 2 列」分组：会话地址、执行节点 单独一行，其余两列一行
+    row_chunks: list[list[tuple[str, str]]] = []
+    i = 0
+    while i < len(content_rows):
+        label, value = content_rows[i]
+        if label in _FULL_ROW_FIELDS:
+            row_chunks.append([(label, value)])
+            i += 1
+        elif i + 1 < len(content_rows):
+            next_label = content_rows[i + 1][0]
+            if next_label in _FULL_ROW_FIELDS:
+                row_chunks.append([(label, value)])
+                i += 1
+            else:
+                row_chunks.append(content_rows[i : i + 2])
+                i += 2
+        else:
+            row_chunks.append([(label, value)])
+            i += 1
+    for chunk in row_chunks:
         columns: list[dict] = []
         for label, value in chunk:
             columns.append(

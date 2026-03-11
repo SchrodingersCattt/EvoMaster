@@ -218,10 +218,10 @@ def _run_worker_loop() -> None:
             notify_post_async(
                 'Worker 开始执行',
                 [
-                    ('session_id', session_id),
+                    ('会话ID', session_id),
                     ('会话地址', session_url),
                     ('用户', session_user_display),
-                    ('worker', get_worker_id()),
+                    ('执行节点', get_worker_id()),
                     ('执行中', str(active_count)),
                     ('排队数', str(queue_len)),
                 ],
@@ -289,10 +289,10 @@ def _run_worker_loop() -> None:
                 notify_post_async(
                     'Worker 执行完成',
                     [
-                        ('session_id', session_id),
+                        ('会话ID', session_id),
                         ('会话地址', session_url),
                         ('用户', session_user_display),
-                        ('worker', get_worker_id()),
+                        ('执行节点', get_worker_id()),
                         ('结果', '成功' if run_success else '失败'),
                         ('执行中', str(active_count)),
                         ('排队数', str(queue_len)),
