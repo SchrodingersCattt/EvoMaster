@@ -89,7 +89,7 @@ EvoMaster/
 
 不启动Web时，可通过命令行运行智能体。
 
-**准备：** 安装依赖`pip install -r requirements.txt`（或`uv sync`），并在`.env`或`configs/`下YAML中配置LLM与Bohrium。
+**准备：** 安装依赖 `uv sync`（或 `pip install -e .`），并在 `.env` 或 `configs/` 下 YAML 中配置 LLM 与 Bohrium。
 
 ```bash
 # 默认智能体与任务
