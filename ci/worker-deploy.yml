@@ -20,8 +20,6 @@ before_script:
       SERVER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
     elif [ "$CI_COMMIT_BRANCH" = "test" ]; then
       SERVER_NAME=matmaster-evo-worker_test
-    elif [ "$CI_COMMIT_BRANCH" = "new_test" ]; then
-      SERVER_NAME=matmaster-evo-worker-new_test
     else
       SERVER_NAME=matmaster-evo-worker_${CI_COMMIT_BRANCH:-unknown}
     fi
