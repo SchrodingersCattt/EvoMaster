@@ -215,6 +215,11 @@ export default function MatMasterView({
   );
 
   const loadSessionHistory = useCallback((sid: string) => {
+    // Clear interactive prompts when switching sessions
+    setPlannerAsk(null);
+    setPlannerInput("");
+    setAskHumanQuestion(null);
+    setAskHumanInput("");
     fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sid)}/history`)
       .then((r) => (r.ok ? r.json() : []))
       .then((h: LogEntry[]) => setLogs(h))
@@ -226,6 +231,11 @@ export default function MatMasterView({
     setSessionIds((prev) => [...prev, newId]);
     setCurrentSessionId(newId);
     setLogs([]);
+    // Clear interactive prompts for the new empty session
+    setPlannerAsk(null);
+    setPlannerInput("");
+    setAskHumanQuestion(null);
+    setAskHumanInput("");
   }, []);
 
   useEffect(() => {
@@ -312,6 +322,8 @@ export default function MatMasterView({
             sessionFilesLogsKey={sessionFilesLogsKey}
             readOnly={isReadOnly}
             onJumpToLogIndex={setJumpToLogIndex}
+            mode={mode}
+            status={status}
           />
         </div>
         <div
