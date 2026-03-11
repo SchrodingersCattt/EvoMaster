@@ -40,24 +40,32 @@ for env in test uat prod; do
 done
 wait
 
-# 从 log 中解析 NEW_IMAGE_ID，任一失败则打印该环境 log 并退出
+# 从 log 中解析 NEW_IMAGE_ID，汇总失败环境后统一按错误处理并退出
+FAILED_ENVS=()
 for env in test uat prod; do
   id=$(grep 'BUILD_ONLY_NEW_IMAGE_ID=' "$PARALLEL_DIR/${env}.log" 2>/dev/null | sed -n 's/.*BUILD_ONLY_NEW_IMAGE_ID=\([0-9]*\).*/\1/p' | head -1)
-  if [[ -z "$id" || ! "$id" =~ ^[0-9]+$ ]]; then
-    echo "ERROR: Could not get NEW_IMAGE_ID for env=$env."
+  if [[ -n "$id" && "$id" =~ ^[0-9]+$ ]]; then
+    ID_BY_ENV[$env]=$id
+    echo "  -> env=$env NEW_IMAGE_ID=$id"
+  else
+    FAILED_ENVS+=("$env")
+  fi
+done
+
+if [[ ${#FAILED_ENVS[@]} -gt 0 ]]; then
+  echo "ERROR: Build failed for env(s): ${FAILED_ENVS[*]}. No constant.py update, no push."
+  for env in "${FAILED_ENVS[@]}"; do
+    echo "--- Build log for env=$env (last 50 lines) ---"
     logfile="$PARALLEL_DIR/${env}.log"
     if [[ -s "$logfile" ]]; then
-      echo "Build log (last 50 lines):"
       tail -50 "$logfile"
     else
-      echo "Build log file empty or missing. ls $PARALLEL_DIR:"
+      echo "(log file empty or missing)"
       ls -la "$PARALLEL_DIR/" 2>/dev/null || true
     fi
-    exit 1
-  fi
-  ID_BY_ENV[$env]=$id
-  echo "  -> env=$env NEW_IMAGE_ID=$id"
-done
+  done
+  exit 1
+fi
 
 echo "=== Updating $CONSTANT_FILE with test=${ID_BY_ENV[test]} uat=${ID_BY_ENV[uat]} prod=${ID_BY_ENV[prod]} ==="
 for env in test uat prod; do

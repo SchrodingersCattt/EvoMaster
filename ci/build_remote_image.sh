@@ -48,6 +48,12 @@ echo "REMOTE_IMAGE_ENV=$REMOTE_IMAGE_ENV OPENAPI_V2_BASE=$OPENAPI_V2_BASE"
 # 1) 列出名称含 matmaster 的镜像
 LIST_URL="${OPENAPI_V2_BASE}/image/private?type=image&device=container&current=1&pageSize=20&page=1&name=${IMAGE_NAME_QUERY}"
 RESP=$(curl -s -X GET "$LIST_URL" -H "accessKey: $BOHRIUM_ACCESS_KEY")
+# prod 等环境若鉴权失败可能返回数字(如 401)或 HTML，先校验为 JSON 再解析
+if ! echo "$RESP" | jq -e . >/dev/null 2>&1; then
+  echo "ERROR: List images API did not return valid JSON. Check BOHRIUM_ACCESS_KEY and API base URL."
+  echo "Raw response (first 500 chars): ${RESP:0:500}"
+  exit 1
+fi
 CODE=$(echo "$RESP" | jq -r '.code // empty')
 if [[ "$CODE" != "0" ]]; then
   echo "WARN: list images returned code=$CODE, response: $RESP"
