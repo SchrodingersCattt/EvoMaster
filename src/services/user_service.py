@@ -136,6 +136,44 @@ class UserService:
             logger.debug('get_user_display_name failed user_id=%s: %s', user_id, e)
             return user_id
 
+    _USER_INFO_PLACEHOLDER = '-'
+
+    @staticmethod
+    def get_user_info_for_display(
+        user_id: str | None,
+        business_line: str = 'bohrium',
+        timeout: float = 3.0,
+    ) -> dict[str, str]:
+        """一次 BI 请求取用户信息，用于飞书等通知展示。返回 user_id、昵称、邮箱，缺失时用占位符 '-'。"""
+        ph = UserService._USER_INFO_PLACEHOLDER
+        if not (user_id or '').strip():
+            return {'user_id': ph, 'nickname': ph, 'email': ph}
+        result: dict[str, str] = {
+            'user_id': (user_id or '').strip(),
+            'nickname': ph,
+            'email': ph,
+        }
+        try:
+            params = {'businessLine': business_line}
+            url = f"{ACCOUNT_API_BASE_URL}/account_api/users/{user_id}"
+            with httpx.Client(timeout=timeout) as client:
+                response = client.get(url, params=params)
+                response.raise_for_status()
+                payload = response.json()
+            if payload.get('code') != 0:
+                return result
+            data = payload.get('data') or {}
+            nickname = data.get('nickname')
+            if isinstance(nickname, str) and nickname.strip():
+                result['nickname'] = nickname.strip()
+            email = data.get('email')
+            if isinstance(email, str) and email.strip():
+                result['email'] = email.strip()
+            return result
+        except Exception as e:
+            logger.debug('get_user_info_for_display failed user_id=%s: %s', user_id, e)
+            return result
+
     @staticmethod
     def get_bohrium_access_key(user_id: str, org_id: str) -> str | None:
         """

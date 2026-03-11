@@ -169,10 +169,9 @@ def _run_worker_loop() -> None:
             continue
 
         session_user_id = sessions_service.get_session_user_id(session_id)
-        session_user_display = (
-            UserService.get_user_display_name(session_user_id)
-            if session_user_id
-            else '未知'
+        user_info = UserService.get_user_info_for_display(session_user_id)
+        user_info_display = (
+            f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
         )
         redis_dao.delete_confirmation_reply_list(session_id)
         redis_dao.set_confirmation_run_active(session_id)
@@ -220,7 +219,7 @@ def _run_worker_loop() -> None:
                 [
                     ('会话ID', session_id),
                     ('会话地址', session_url),
-                    ('用户', session_user_display),
+                    ('用户', user_info_display),
                     ('执行节点', get_worker_id()),
                     ('执行中', str(active_count)),
                     ('排队数', str(queue_len)),
@@ -291,7 +290,7 @@ def _run_worker_loop() -> None:
                     [
                         ('会话ID', session_id),
                         ('会话地址', session_url),
-                        ('用户', session_user_display),
+                        ('用户', user_info_display),
                         ('执行节点', get_worker_id()),
                         ('结果', '成功' if run_success else '失败'),
                         ('执行中', str(active_count)),
