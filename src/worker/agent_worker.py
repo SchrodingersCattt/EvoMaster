@@ -286,7 +286,7 @@ def _run_worker_loop() -> None:
                 active_count = get_worker_registry_service().count_active_runs()
                 session_url = _session_url(session_id)
                 notify_post_async(
-                    'Worker 执行完成',
+                    'Worker 执行成功' if run_success else 'Worker 执行失败',
                     [
                         ('会话ID', session_id),
                         ('会话地址', session_url),
