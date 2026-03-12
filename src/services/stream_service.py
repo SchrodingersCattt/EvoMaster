@@ -29,8 +29,13 @@ from src.services.deploy_state_service import (
 )
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
+from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
-from src.utils.constant import AG_UI_EVENT, REDIS_URL
+from src.utils.constant import AG_UI_EVENT, CURRENT_ENV, REDIS_URL
+from src.utils.feishu_notifier import (
+    CARD_TEMPLATE_ORANGE,
+    notify_post_async,
+)
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
@@ -821,6 +826,30 @@ class ChatStreamService:
                         }
                     )
                     return
+                # 进入排队时发飞书群通知
+                try:
+                    session_user_id = self._sessions_service.get_session_user_id(sid)
+                    user_info = UserService.get_user_info_for_display(session_user_id)
+                    user_info_display = f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
+                    env = (CURRENT_ENV or '').strip().lower()
+                    session_url = f"https://matmaster{'' if not env or env == 'prod' else f'.{env}'}.bohrium.com/matmaster/chat-evo/{sid}"
+                    queue_len = get_redis_dao().llen_agent_run_queue()
+                    active_count = get_worker_registry_service().count_active_runs()
+                    notify_post_async(
+                        '任务进入排队',
+                        [
+                            ('会话ID', sid),
+                            ('会话地址', session_url),
+                            ('用户', user_info_display),
+                            ('排队数', str(queue_len)),
+                            ('执行中', str(active_count)),
+                        ],
+                        template=CARD_TEMPLATE_ORANGE,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        'Feishu 进入排队通知发送失败 session_id=%s: %s', sid, e
+                    )
                 redis_queue = asyncio.Queue()
                 stop_event = threading.Event()
                 channel = STREAM_CHANNEL_PREFIX + sid
