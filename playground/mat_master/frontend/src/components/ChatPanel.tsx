@@ -919,7 +919,15 @@ const MessageBubble = React.memo(function MessageBubble({
  * Once streaming ends the parent clears streamingContent and the final
  * `thought` event renders as a normal message bubble.
  */
-function StreamingBubble({ source, content }: { source: string; content: string }) {
+function StreamingBubble({
+  source,
+  content,
+  isStreaming,
+}: {
+  source: string;
+  content: string;
+  isStreaming?: boolean;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   // Track whether user has scrolled away from the bottom
   const isNearBottomRef = useRef(true);
@@ -944,7 +952,11 @@ function StreamingBubble({ source, content }: { source: string; content: string 
     }
   }, [content]);
 
-  if (!content) return null;
+  if (!content && !isStreaming) return null;
+
+  // Backward compatibility: if isStreaming is undefined, default to showing pulse (old behavior)
+  const showPulse = isStreaming ?? true;
+
   return (
     <div className="flex w-full justify-start">
       <div className="max-w-[85%] w-full border-l-2 border-slate-400 dark:border-slate-500 pl-3 bg-slate-50/70 dark:bg-slate-800/30 rounded-r-md">
@@ -953,7 +965,9 @@ function StreamingBubble({ source, content }: { source: string; content: string 
           <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {source}
           </span>
-          <span className="inline-block w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500 animate-pulse" />
+          {showPulse && (
+            <span className="inline-block w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500 animate-pulse" />
+          )}
         </div>
         {/* Fixed-height scroll window with top-fade mask */}
         <div
@@ -1004,6 +1018,7 @@ export default function ChatPanel({
   onJumpHandled,
   streamingContent = "",
   streamingSource = "MatMaster",
+  isStreaming = false,
 }: {
   entries: LogEntry[];
   scrollRef?: React.RefObject<HTMLDivElement>;
@@ -1035,6 +1050,7 @@ export default function ChatPanel({
   onJumpHandled?: () => void;
   streamingContent?: string;
   streamingSource?: string;
+  isStreaming?: boolean;
 }) {
   // ── useMemo: derived filtered list ──
   const filtered = useMemo(
@@ -1341,9 +1357,15 @@ export default function ChatPanel({
               );
             });
           })()}
-          {/* Streaming bubble: live LLM token output */}
-          {streamingContent && (
-            <StreamingBubble source={streamingSource} content={streamingContent} />
+          {/* Streaming bubble: live LLM token output.
+              Show as soon as llm_stream_start arrives (isStreaming=true),
+              even before the first token (streamingContent may still be ""). */}
+          {(isStreaming || streamingContent) && (
+            <StreamingBubble
+              source={streamingSource}
+              content={streamingContent}
+              isStreaming={isStreaming}
+            />
           )}
         </div>
 

@@ -38,6 +38,7 @@ export default function MatMasterView({
   // Streaming LLM token state: accumulates llm_token deltas until a thought/finish clears it
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [streamingSource, setStreamingSource] = useState<string>("MatMaster");
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const wsRef = useRef<WebSocket | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef("");
@@ -92,6 +93,25 @@ export default function MatMasterView({
           const msg = JSON.parse(event.data) as LogEntry;
           const sid = msg.session_id;
           const cur = currentSessionIdRef.current;
+
+          if (msg.type === "llm_stream_start") {
+            if (sid === undefined || sid === cur) {
+              setStreamingSource(msg.source || "MatMaster");
+              setStreamingContent(""); // clear any previous content
+              setIsStreaming(true);
+            }
+            return;
+          }
+
+          if (msg.type === "llm_stream_end") {
+            if (sid === undefined || sid === cur) {
+              setIsStreaming(false);
+              // Don't clear streamingContent here — let the subsequent
+              // thought/planner_reply event clear it (existing behavior)
+            }
+            return;
+          }
+
           // Handle llm_token: accumulate into streamingContent, don't add to logs
           if (msg.type === "llm_token") {
             if (sid === undefined || sid === cur) {
@@ -102,6 +122,7 @@ export default function MatMasterView({
           }
           // Any non-token event clears the streaming buffer
           setStreamingContent("");
+          setIsStreaming(false);
           setLogs((prev) => {
             if (sid !== undefined && sid !== cur) return prev;
             if (msg.type === "log_line") return prev;
@@ -380,6 +401,7 @@ export default function MatMasterView({
             onJumpHandled={() => setJumpToLogIndex(null)}
             streamingContent={streamingContent}
             streamingSource={streamingSource}
+            isStreaming={isStreaming}
           />
         </div>
       </div>
