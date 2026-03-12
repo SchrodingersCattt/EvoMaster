@@ -835,12 +835,16 @@ class ChatStreamService:
                     session_url = f"https://matmaster{'' if not env or env == 'prod' else f'.{env}'}.bohrium.com/matmaster/chat-evo/{sid}"
                     queue_len = get_redis_dao().llen_agent_run_queue()
                     active_count = get_worker_registry_service().count_active_runs()
+                    user_question = (user_prompt or '').strip()
+                    if len(user_question) > 500:
+                        user_question = user_question[:500] + '…'
                     notify_post_async(
                         '任务进入排队',
                         [
                             ('会话ID', sid),
                             ('会话地址', session_url),
                             ('用户', user_info_display),
+                            ('用户问题', user_question or '-'),
                             ('排队数', str(queue_len)),
                             ('执行中', str(active_count)),
                         ],

@@ -214,12 +214,16 @@ def _run_worker_loop() -> None:
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
             session_url = _session_url(session_id)
+            user_question = (user_prompt or '').strip()
+            if len(user_question) > 500:
+                user_question = user_question[:500] + '…'
             notify_post_async(
                 'Worker 开始执行',
                 [
                     ('会话ID', session_id),
                     ('会话地址', session_url),
                     ('用户', user_info_display),
+                    ('用户问题', user_question or '-'),
                     ('执行节点', get_worker_id()),
                     ('执行中', str(active_count)),
                     ('排队数', str(queue_len)),
@@ -285,12 +289,16 @@ def _run_worker_loop() -> None:
                 queue_len = redis_dao.llen_agent_run_queue()
                 active_count = get_worker_registry_service().count_active_runs()
                 session_url = _session_url(session_id)
+                user_question = (user_prompt or '').strip()
+                if len(user_question) > 500:
+                    user_question = user_question[:500] + '…'
                 notify_post_async(
                     'Worker 执行成功' if run_success else 'Worker 执行失败',
                     [
                         ('会话ID', session_id),
                         ('会话地址', session_url),
                         ('用户', user_info_display),
+                        ('用户问题', user_question or '-'),
                         ('执行节点', get_worker_id()),
                         ('结果', '成功' if run_success else '失败'),
                         ('执行中', str(active_count)),
