@@ -14,7 +14,16 @@ from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
 from src.services.stream_service import RedisReplyQueue
+from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
+from src.utils.build_info import get_build_version
+from src.utils.constant import CURRENT_ENV
+from src.utils.feishu_notifier import (
+    CARD_TEMPLATE_BLUE,
+    CARD_TEMPLATE_GREEN,
+    CARD_TEMPLATE_RED,
+    notify_post_async,
+)
 from src.utils.logger import LoggingConfig, setup_logging
 from src.utils.worker_id import get_worker_id
 
@@ -27,6 +36,18 @@ _BLPOP_TIMEOUT = int(os.environ.get('AGENT_WORKER_BLPOP_TIMEOUT', '30'))
 _WORKER_HEARTBEAT_INTERVAL = 10.0
 # 当前正在跑的 session_id（由主循环设置/清除），供心跳线程刷新 run_owner TTL，避免长任务超过 SESSION_RUN_OWNER_TTL 后 API 误判 stale
 _current_session_id: str | None = None
+# 优雅退出：SIGTERM 时设为 True，主循环在「当前 run 结束后」或「空闲时」退出，不再接新任务
+_drain_requested = False
+
+
+def _session_url(session_id: str) -> str:
+    """根据当前环境拼接前端会话链接。"""
+    sid = (session_id or '').strip()
+    if not sid:
+        return '-'
+    env = (CURRENT_ENV or '').strip().lower()
+    suffix = '' if not env or env == 'prod' else f'.{env}'
+    return f'https://matmaster{suffix}.bohrium.com/matmaster/chat-evo/{sid}'
 
 
 class RedisBackedStopEvent:
@@ -39,6 +60,57 @@ class RedisBackedStopEvent:
 
     def is_set(self) -> bool:
         return self._dao.is_stop_requested(self._session_id, self._task_id)
+
+
+def _publish_run_interrupted_deploy(session_id: str) -> None:
+    """SIGTERM 时若当前有 run，向该 session 的 stream 推送 run_interrupted(deploy) + end，前端可立即得知因部署中断。"""
+    sid = session_id.strip()
+    if not sid:
+        return
+    redis_dao = get_redis_dao()
+    if not redis_dao.get_publish_client():
+        return
+    previous_version = get_build_version()
+    content = (
+        f'上一轮任务因服务升级（{previous_version} -> 新版本）中断，请重新发送以继续。'
+        if previous_version
+        else '上一轮任务因服务部署中断，请重新发送以继续。'
+    )
+    run_interrupted_payload = {
+        'source': 'System',
+        'type': 'run_interrupted',
+        'content': content,
+        'session_id': sid,
+        'reason': 'deploy',
+        'treat_as_failure': True,
+    }
+    if previous_version:
+        run_interrupted_payload['previous_version'] = previous_version
+    run_interrupted_payload['reason_note'] = 'worker_sigterm'
+    try:
+        redis_dao.publish_stream_event(sid, run_interrupted_payload)
+        redis_dao.publish_stream_event(
+            sid,
+            {
+                'source': 'System',
+                'type': 'end',
+                'content': content,
+                'session_id': sid,
+                'end_reason': 'run_interrupted_deploy',
+                'treat_as_failure': True,
+            },
+        )
+        logger.info(
+            'Agent worker: published run_interrupted(deploy)+end for session_id=%s worker_id=%s',
+            sid,
+            get_worker_id(),
+        )
+    except Exception as e:
+        logger.warning(
+            'Agent worker: publish run_interrupted failed session_id=%s: %s',
+            sid,
+            e,
+        )
 
 
 def _worker_heartbeat_loop(stop_ev: threading.Event) -> None:
@@ -76,6 +148,12 @@ def _run_worker_loop() -> None:
     while True:
         payload = redis_dao.blpop_agent_run_job(timeout_sec=_BLPOP_TIMEOUT)
         if payload is None:
+            if _drain_requested:
+                logger.info(
+                    'Agent worker: drain requested, no current job, exiting loop. worker_id=%s',
+                    get_worker_id(),
+                )
+                return
             continue
 
         session_id = (payload.get('session_id') or '').strip()
@@ -90,6 +168,11 @@ def _run_worker_loop() -> None:
             logger.warning('Agent worker: skip job with empty session_id')
             continue
 
+        session_user_id = sessions_service.get_session_user_id(session_id)
+        user_info = UserService.get_user_info_for_display(session_user_id)
+        user_info_display = (
+            f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
+        )
         redis_dao.delete_confirmation_reply_list(session_id)
         redis_dao.set_confirmation_run_active(session_id)
         redis_dao.set_confirmation_run_context(session_id, task_id, invocation_id or '')
@@ -128,6 +211,21 @@ def _run_worker_loop() -> None:
 
             acquired = True
             _current_session_id = session_id
+            queue_len = redis_dao.llen_agent_run_queue()
+            active_count = get_worker_registry_service().count_active_runs()
+            session_url = _session_url(session_id)
+            notify_post_async(
+                'Worker 开始执行',
+                [
+                    ('会话ID', session_id),
+                    ('会话地址', session_url),
+                    ('用户', user_info_display),
+                    ('执行节点', get_worker_id()),
+                    ('执行中', str(active_count)),
+                    ('排队数', str(queue_len)),
+                ],
+                template=CARD_TEMPLATE_BLUE,
+            )
             run_success = True
             try:
                 result = agent_run_service.run_agent_sync(
@@ -184,16 +282,46 @@ def _run_worker_loop() -> None:
                 sessions_service.release_session_run(
                     session_id, run_success=run_success
                 )
+                queue_len = redis_dao.llen_agent_run_queue()
+                active_count = get_worker_registry_service().count_active_runs()
+                session_url = _session_url(session_id)
+                notify_post_async(
+                    'Worker 执行完成',
+                    [
+                        ('会话ID', session_id),
+                        ('会话地址', session_url),
+                        ('用户', user_info_display),
+                        ('执行节点', get_worker_id()),
+                        ('结果', '成功' if run_success else '失败'),
+                        ('执行中', str(active_count)),
+                        ('排队数', str(queue_len)),
+                    ],
+                    template=(
+                        CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
+                    ),
+                )
+        if _drain_requested:
+            logger.info(
+                'Agent worker: drain requested, current job finished, exiting loop. session_id=%s worker_id=%s',
+                session_id,
+                get_worker_id(),
+            )
+            return
 
 
 def main() -> None:
     setup_logging(**LoggingConfig.get_worker_config())
 
     def _on_sigterm(_signum: int, _frame: object) -> None:
+        global _drain_requested
+        sid = _current_session_id
+        if sid:
+            _publish_run_interrupted_deploy(sid)
+        _drain_requested = True
         logger.info(
-            'Agent worker: received SIGTERM, exit after current job (or BLPOP timeout).'
+            'Agent worker: received SIGTERM, drain requested; will exit after current job or when idle. worker_id=%s',
+            get_worker_id(),
         )
-        sys.exit(0)
 
     signal.signal(signal.SIGTERM, _on_sigterm)
 

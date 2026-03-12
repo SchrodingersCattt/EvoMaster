@@ -12,7 +12,6 @@ dependencies = [
     "anthropic",
     "google-genai",
     "mcp",
-    "flask",
     "python-dotenv",
     # Calculation path adaptor (mat_master) needs OSS upload for local file -> URL
     "oss2",
@@ -20,23 +19,28 @@ dependencies = [
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.22.0",
     "websockets>=11.0",
-    "pre-commit>=4.5.1",
     "pymysql>=1.1.2",
     "gunicorn>=25.0.3",
     "redis>=5.0.0",
-    # 结构读写与科学计算
-    "ase>=3.22",
-    "pymatgen>=2024.1",
-    "dpdata>=0.2.18",
     "bohrium-sdk>=0.15.0",
     "python-docx>=1.2.0",
     "httpx>=0.28.1",
     "paramiko>=4.0.0",
-    "pytest>=9.0.2",
     "requests",
     "beautifulsoup4",
     "lxml",
     "pymupdf",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+]
+calculation = [
+    "ase>=3.22",
+    "pymatgen>=2024.1",
+    "dpdata>=0.2.18",
 ]
 
 [project.scripts]

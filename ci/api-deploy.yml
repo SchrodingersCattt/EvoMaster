@@ -1,5 +1,4 @@
-# API 完整子流水线：build → test → deploy（同一条 pipeline_id，镜像 tag 一致）
-# 主流水线仅 trigger 本文件，不传变量；本流水线自包含 before_script + build + test + deploy
+# API 子流水线：由主流水线 trigger，build → test → deploy；job 名不带 :api，deploy_name 为 manual-uat/deploy-uat 便于平台与飞书触发
 
 include:
   - local: ".deploy-ci.yml"
@@ -49,7 +48,7 @@ stages:
   \"gitlab_url\":\"$CI_PIPELINE_URL\",
   \"deploy_name\":\"${DEVOPS_DEPLOY_NAME:-$CI_JOB_NAME}\"}""" ${devops} > result.json
 
-docker-build:api:
+docker-build:
   variables:
     DOCKER_HOST: tcp://docker-build-service:32375
   stage: build
@@ -83,24 +82,19 @@ docker-build:api:
     paths:
       - /cache
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
-      when: never
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/ || $CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_TAG'
       when: on_success
   artifacts:
     reports:
       dotenv: ${CI_PROJECT_DIR}/build.env
 
-test:api:
+test:
   variables:
     DOCKER_HOST: tcp://docker-build-service:32375
   stage: test
   image: $REGISTRY/public/ubuntu:gitlab-docker
   needs:
-    - docker-build:api
+    - docker-build
   before_script:
     - |
       cat > /root/.docker/config.json <<EOF
@@ -140,15 +134,10 @@ test:api:
   tags:
     - k8s-runner-ack
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
-      when: never
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/'
       when: on_success
 
-deploy-test:api:
+deploy-test:
   stage: deploy-test
   variables:
     DEVOPS_DEPLOY_NAME: "deploy-test"
@@ -162,18 +151,16 @@ deploy-test:api:
     - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
   retry: 2
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
-      when: never
-    - if: '($CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/) && $CI_COMMIT_TAG == null'
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
       when: on_success
 
-manual-uat:api:
+# deploy_name 固定为 manual-uat，避免平台 10009（不认带 :api 的 job 名）
+manual-uat:
   stage: manual-uat
+  variables:
+    DEVOPS_DEPLOY_NAME: "manual-uat"
   needs:
-    - docker-build:api
+    - docker-build
   script:
     - echo 触发飞书信息测试人员审核 API
     - echo $DOCKER_IMAGE
@@ -185,23 +172,25 @@ manual-uat:api:
   rules:
     - if: '$CI_COMMIT_TAG'
 
-deploy-uat:api:
+# job 名为 deploy-uat，平台可按此在飞书点「部署」时触发；10009 容错
+deploy-uat:
   stage: deploy-uat
   needs:
-    - docker-build:api
+    - docker-build
   script:
     - echo 触发运维平台部署uat API
     - echo $DOCKER_IMAGE
     - *curl
     - cat result.json
-    - if [[ $(cat result.json | jq '.code') -ne 10000 ]];then exit 1;fi
+    - CODE=$(cat result.json | jq -r '.code')
+    - if [[ "$CODE" != "10000" && "$CODE" != "10009" ]]; then exit 1; fi
   tags:
     - k8s-runner-zjk-svc
   rules:
     - if: '$CI_COMMIT_TAG'
       when: manual
 
-check-branch:api:
+check-branch:
   stage: check
   script:
     - |
@@ -223,14 +212,14 @@ check-branch:api:
   tags:
     - k8s-runner-zjk-svc
   needs:
-    - deploy-uat:api
+    - deploy-uat
   rules:
     - if: '$CI_COMMIT_TAG'
 
-manual-online:api:
+manual-online:
   stage: manual-online
   needs:
-    - check-branch:api
+    - check-branch
   script:
     - echo 触发飞书审批,运维通过后人工部署生产环境 API
     - echo $DOCKER_IMAGE

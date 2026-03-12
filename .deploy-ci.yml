@@ -1,11 +1,6 @@
 workflow:
   rules:
-    - if: $CI_COMMIT_BRANCH == "new_test"
-      variables:
-        DOCKERFILE_DIR: ./docker_api/
-        PROJECT_NAME: matmaster-evo-new_test
-        SERVER_NAME_WORKER: matmaster-evo-worker-new_test
-        BRANCH: new_test
+    - if: $CI_COMMIT_BRANCH == "remote-image"
     - if: $CI_COMMIT_BRANCH == "test"
       variables:
         DOCKERFILE_DIR: ./docker_api/

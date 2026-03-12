@@ -53,7 +53,6 @@ repos:
             tests/utils.py
           )$
       - id: no-commit-to-branch
-      - id: requirements-txt-fixer
       - id: sort-simple-yaml
       - id: trailing-whitespace
 
