@@ -1,27 +1,12 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Mermaid v10's package.json "exports['.']" points to mermaid.core.mjs which is a
-  // non-self-contained ESM entry that imports dozens of bare specifiers (d3, dayjs, etc.).
-  // Webpack in Next.js dev mode tries to bundle all of them, producing a chunk named
-  // _app-pages-browser_node_modules_mermaid_dist_mermaid_core_mjs.js that 404s.
-  //
-  // Fix: use NormalModuleReplacementPlugin to redirect any request for mermaid.core.mjs
-  // to mermaid-b92f6f74.js (the pre-built CJS bundle that mermaid.esm.min.mjs re-exports).
-  // This is the actual self-contained bundle with all deps inlined.
-  webpack: (config) => {
-    const path = require("path");
-    const { NormalModuleReplacementPlugin } = require("webpack");
-    config.plugins.push(
-      new NormalModuleReplacementPlugin(
-        /mermaid[\\/]dist[\\/]mermaid\.core\.mjs$/,
-        path.resolve(
-          __dirname,
-          "node_modules/mermaid/dist/mermaid-b92f6f74.js"
-        )
-      )
-    );
-    return config;
-  },
+  // Mermaid is loaded as a static UMD script from /public/mermaid.js (copied from
+  // node_modules/mermaid/dist/mermaid.min.js at build/setup time).
+  // mermaid.min.js is the proper UMD build that sets window.mermaid = factory().
+  // This bypasses webpack bundling entirely, eliminating the 404 chunk error that
+  // occurred when webpack tried to bundle mermaid.core.mjs / mermaid.esm.min.mjs.
+  // See: layout.tsx <Script src="/mermaid.js" strategy="beforeInteractive" />
+  // See: ExecutionGraphRenderer.tsx uses window.mermaid instead of import("mermaid")
 
   // Allow cross-origin requests to /_next/* when accessed via domain (e.g. gjao1318755.bohrium.tech)
   allowedDevOrigins: [

@@ -228,7 +228,9 @@ function FullscreenModal({
  * ExecutionGraphRenderer: Renders execution_graph as a Mermaid flowchart.
  *
  * Key implementation notes:
- * - Uses dynamic import to avoid SSR issues with mermaid
+ * - Mermaid is loaded as a static script (/mermaid.js in public/) via layout.tsx <Script>.
+ *   This completely bypasses webpack bundling, eliminating the 404 chunk error.
+ * - We access mermaid via window.mermaid (set by the UMD bundle).
  * - mermaid.render(id, text) returns { svg } — we set innerHTML directly
  * - Do NOT pass a 3rd container arg to mermaid.render in v10 (causes React DOM conflicts)
  * - The visibleRef div is managed by React; we only set its innerHTML, never appendChild
@@ -270,27 +272,19 @@ export const ExecutionGraphRenderer = React.memo(
 
       const renderDiagram = async () => {
         try {
-          // Dynamic import of mermaid.
-          // mermaid/package.json "exports['.']" is patched to point to
-          // mermaid.esm.min.mjs (pre-built self-contained bundle) instead of
-          // mermaid.core.mjs (non-self-contained ESM that imports dozens of
-          // bare specifiers like d3, dayjs, etc. which webpack can't chunk
-          // properly in Next.js dev mode, causing a 404).
-          let mermaid;
-          let lastError: unknown;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              mermaid = (await import("mermaid")).default;
-              lastError = undefined;
-              break;
-            } catch (e) {
-              lastError = e;
-              if (attempt < 2) {
-                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-              }
+          // Mermaid is loaded as a static UMD script via <Script src="/mermaid.js"> in layout.tsx.
+          // Wait up to 5s for window.mermaid to become available (script may still be loading).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let mermaid = (window as any).mermaid;
+          if (!mermaid) {
+            for (let i = 0; i < 50; i++) {
+              await new Promise((r) => setTimeout(r, 100));
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              mermaid = (window as any).mermaid;
+              if (mermaid) break;
             }
           }
-          if (!mermaid) throw lastError;
+          if (!mermaid) throw new Error("window.mermaid not available — /mermaid.js may have failed to load");
           if (cancelled) return;
 
           mermaid.initialize({
