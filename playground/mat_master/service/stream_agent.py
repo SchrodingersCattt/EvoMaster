@@ -51,10 +51,17 @@ class StreamingMatMasterAgent(MatMasterAgent):
     ):
         super().__init__(**kwargs)
         self.event_callback = event_callback
+        # Inject LLM token streaming callback into the underlying agent
+        self._on_llm_token = self._on_llm_token_cb
 
     def _emit(self, source: str, event_type: str, content: Any) -> None:
         if self.event_callback:
             self.event_callback(source, event_type, content)
+
+    def _on_llm_token_cb(self, delta: str) -> None:
+        """Emit llm_token event for each streamed token from the LLM."""
+        agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
+        self._emit(agent_name, 'llm_token', delta)
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
         agent_name = getattr(self, '_agent_name', None) or 'MatMaster'

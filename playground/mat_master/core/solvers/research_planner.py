@@ -197,12 +197,12 @@ def _extract_json_from_content(content: str) -> str | None:
     text = (content or '').strip()
     if '```json' in text:
         start = text.find('```json') + 7
-        end = text.find('```', start)
+        end = text.rfind('```')
         if end > start:
             return text[start:end].strip()
     if '```' in text:
         start = text.find('```') + 3
-        end = text.find('```', start)
+        end = text.rfind('```')
         if end > start:
             return text[start:end].strip()
     start = text.find('{')
@@ -257,6 +257,28 @@ def _try_parse_json(raw: str, logger: logging.Logger | None = None) -> dict:
         pass
 
     repaired = raw
+
+    # Stage 1.5: strip markdown code fences (```json ... ``` or ``` ... ```)
+    try:
+        stripped = repaired
+        if stripped.lstrip().startswith('```'):
+            # Remove opening fence line
+            first_nl = stripped.find('\n')
+            if first_nl >= 0:
+                stripped = stripped[first_nl + 1:]
+            # Remove closing fence
+            last_fence = stripped.rfind('```')
+            if last_fence >= 0:
+                stripped = stripped[:last_fence]
+            stripped = stripped.strip()
+            if stripped:
+                result = json.loads(stripped)
+                return result
+    except json.JSONDecodeError:
+        # If fence-stripped version also has issues, continue to other stages
+        # but use the stripped version as the base for subsequent repairs
+        if stripped and stripped.strip():
+            repaired = stripped
 
     # Stage 2: fix unescaped control characters inside string values.
     # Replace literal newlines/tabs/carriage-returns inside JSON strings.
@@ -994,10 +1016,13 @@ Rules:
                     'refusal_reason': 'max_turns_exceeded',
                 }
         try:
-            reply = self.agent.llm.query(dialog)
+            reply = self.agent.llm.query_stream(
+                dialog,
+                on_token=lambda delta: self._emit('Planner', 'llm_token', delta),
+            )
             # 将 Planner LLM 原始输出推送到前端（_normalize_planner_thought 会过滤掉纯 JSON message）
             self._emit('Planner', 'thought', reply.content or '')
-            raw = _extract_json_from_content(reply.content or '') or (reply.content or '').strip()
+            raw = _extract_json_from_content(reply.content or '')
             if not raw:
                 return {
                     'status': 'REFUSED',
@@ -1068,9 +1093,12 @@ Rules:
                     'refusal_reason': 'max_turns_exceeded',
                 }
         try:
-            reply = self.agent.llm.query(dialog)
+            reply = self.agent.llm.query_stream(
+                dialog,
+                on_token=lambda delta: self._emit('Planner', 'llm_token', delta),
+            )
             self._emit('Planner', 'thought', reply.content or '')
-            raw = _extract_json_from_content(reply.content or '') or (reply.content or '').strip()
+            raw = _extract_json_from_content(reply.content or '')
             if not raw:
                 return {
                     **current_plan,
@@ -2366,11 +2394,18 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                     'prerequisites': [],
                     'reasoning': 'max_turns_exceeded',
                 }
-            reply = self.agent.llm.query(dialog)
-            self._emit('Planner', 'thought', f"[Pre-check] {reply.content or ''}")
+            reply = self.agent.llm.query_stream(
+                dialog,
+                on_token=lambda delta: self._emit('Planner', 'llm_token', delta),
+            )
             raw = _extract_json_from_content(reply.content or '')
             if raw:
+                # JSON found — don't emit the raw reply as a thought here.
+                # _phase_pre_check will emit a clean structured thought after
+                # receiving the parsed result, avoiding duplicate/raw rendering.
                 return json.loads(raw)
+            # No JSON found — emit the raw reply as a thought (fallback)
+            self._emit('Planner', 'thought', f"[Pre-check] {reply.content or ''}")
         except Exception as e:
             self.logger.warning(
                 '[Pre-check] Assessment failed, proceeding to plan: %s', e

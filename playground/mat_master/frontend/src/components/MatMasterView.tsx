@@ -35,6 +35,9 @@ export default function MatMasterView({
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "closed">("idle");
   const [running, setRunning] = useState(false);
   const [runningSessionId, setRunningSessionId] = useState<string | null>(null);
+  // Streaming LLM token state: accumulates llm_token deltas until a thought/finish clears it
+  const [streamingContent, setStreamingContent] = useState<string>("");
+  const [streamingSource, setStreamingSource] = useState<string>("MatMaster");
   const wsRef = useRef<WebSocket | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef("");
@@ -89,6 +92,16 @@ export default function MatMasterView({
           const msg = JSON.parse(event.data) as LogEntry;
           const sid = msg.session_id;
           const cur = currentSessionIdRef.current;
+          // Handle llm_token: accumulate into streamingContent, don't add to logs
+          if (msg.type === "llm_token") {
+            if (sid === undefined || sid === cur) {
+              setStreamingSource(msg.source || "MatMaster");
+              setStreamingContent((prev) => prev + (typeof msg.content === "string" ? msg.content : ""));
+            }
+            return;
+          }
+          // Any non-token event clears the streaming buffer
+          setStreamingContent("");
           setLogs((prev) => {
             if (sid !== undefined && sid !== cur) return prev;
             if (msg.type === "log_line") return prev;
@@ -365,6 +378,8 @@ export default function MatMasterView({
             readOnly={isReadOnly}
             jumpToLogIndex={jumpToLogIndex}
             onJumpHandled={() => setJumpToLogIndex(null)}
+            streamingContent={streamingContent}
+            streamingSource={streamingSource}
           />
         </div>
       </div>

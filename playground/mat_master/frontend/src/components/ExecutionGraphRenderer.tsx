@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useId } from "react";
+import React, { useEffect, useRef, useState, useId, useCallback } from "react";
 import { cn } from "@/lib/utils";
 
 interface ExecutionGraphRendererProps {
@@ -139,14 +139,105 @@ function generateMermaidDiagram(steps: Record<string, unknown>[]): string {
   return lines.join("\n");
 }
 
+/* ------------------------------------------------------------------ */
+/*  Small icon components (inline SVG to avoid extra dependencies)     */
+/* ------------------------------------------------------------------ */
+
+function IconCode({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="16 18 22 12 16 6" />
+      <polyline points="8 6 2 12 8 18" />
+    </svg>
+  );
+}
+
+function IconExpand({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  );
+}
+
+function IconClose({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Fullscreen modal overlay                                           */
+/* ------------------------------------------------------------------ */
+
+function FullscreenModal({
+  svgHtml,
+  onClose,
+}: {
+  svgHtml: string;
+  onClose: () => void;
+}) {
+  // Close on Escape key
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-[95vw] h-[90vh] bg-white dark:bg-zinc-900 rounded-xl shadow-2xl overflow-auto p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 p-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 transition-colors"
+          title="Close (Esc)"
+        >
+          <IconClose />
+        </button>
+
+        {/* SVG content — full size, no width clamping */}
+        <div
+          className="w-full h-full flex items-start justify-center overflow-auto"
+          dangerouslySetInnerHTML={{
+            __html: svgHtml
+              .replace(/\s+width="100%"/, ' width="100%"')
+              .replace(/\s+height="auto"/, ' height="auto"'),
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 /**
  * ExecutionGraphRenderer: Renders execution_graph as a Mermaid flowchart.
  *
  * Key implementation notes:
- * - Uses dynamic import to avoid SSR issues with mermaid
+ * - Mermaid is loaded as a static script (/mermaid.js in public/) via layout.tsx <Script>.
+ *   This completely bypasses webpack bundling, eliminating the 404 chunk error.
+ * - We access mermaid via window.mermaid (set by the UMD bundle).
  * - mermaid.render(id, text) returns { svg } — we set innerHTML directly
  * - Do NOT pass a 3rd container arg to mermaid.render in v10 (causes React DOM conflicts)
  * - The visibleRef div is managed by React; we only set its innerHTML, never appendChild
+ *
+ * Toolbar buttons:
+ * - "Source": toggles display of the raw Mermaid diagram source
+ * - "Fullscreen": opens the rendered SVG in a fullscreen modal overlay
  */
 export const ExecutionGraphRenderer = React.memo(
   function ExecutionGraphRenderer({
@@ -157,10 +248,16 @@ export const ExecutionGraphRenderer = React.memo(
     const [svgHtml, setSvgHtml] = useState<string | null>(null);
     const [renderState, setRenderState] = useState<"idle" | "loading" | "done" | "error">("idle");
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
+    // Mermaid source text for the "View Source" feature
+    const [diagramSource, setDiagramSource] = useState<string>("");
+    const [showSource, setShowSource] = useState(false);
+    const [showFullscreen, setShowFullscreen] = useState(false);
     // Stable unique ID per component instance (React 18+)
     const uid = useId().replace(/:/g, "");
     // Use a counter-based id to avoid Mermaid caching issues on re-render
     const renderCountRef = useRef(0);
+
+    const handleCloseFullscreen = useCallback(() => setShowFullscreen(false), []);
 
     useEffect(() => {
       if (!steps || steps.length === 0) return;
@@ -175,22 +272,19 @@ export const ExecutionGraphRenderer = React.memo(
 
       const renderDiagram = async () => {
         try {
-          // Dynamic import with retry logic to handle transient chunk-loading failures
-          let mermaid;
-          let lastError: unknown;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              mermaid = (await import("mermaid")).default;
-              lastError = undefined;
-              break;
-            } catch (e) {
-              lastError = e;
-              if (attempt < 2) {
-                await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-              }
+          // Mermaid is loaded as a static UMD script via <Script src="/mermaid.js"> in layout.tsx.
+          // Wait up to 5s for window.mermaid to become available (script may still be loading).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let mermaid = (window as any).mermaid;
+          if (!mermaid) {
+            for (let i = 0; i < 50; i++) {
+              await new Promise((r) => setTimeout(r, 100));
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              mermaid = (window as any).mermaid;
+              if (mermaid) break;
             }
           }
-          if (!mermaid) throw lastError;
+          if (!mermaid) throw new Error("window.mermaid not available — /mermaid.js may have failed to load");
           if (cancelled) return;
 
           mermaid.initialize({
@@ -205,6 +299,7 @@ export const ExecutionGraphRenderer = React.memo(
           });
 
           const diagram = generateMermaidDiagram(steps);
+          setDiagramSource(diagram);
 
           // mermaid v10: render(id, text) — only 2 args, returns { svg, bindFunctions }
           // Do NOT pass a container element — that causes React DOM removeChild errors
@@ -225,6 +320,12 @@ export const ExecutionGraphRenderer = React.memo(
           const msg = err instanceof Error ? err.message : String(err);
           setErrorMsg(msg);
           setRenderState("error");
+          // Still generate the diagram source so it can be shown in error state
+          try {
+            setDiagramSource(generateMermaidDiagram(steps));
+          } catch {
+            // ignore
+          }
           console.error("[ExecutionGraphRenderer] Mermaid render error:", err);
         }
       };
@@ -264,6 +365,45 @@ export const ExecutionGraphRenderer = React.memo(
           />
         )}
 
+        {/* Toolbar: Source + Fullscreen buttons */}
+        {(renderState === "done" || (renderState === "error" && diagramSource)) && (
+          <div className="flex items-center gap-1.5 px-1">
+            {/* View Source toggle */}
+            <button
+              onClick={() => setShowSource((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors",
+                showSource
+                  ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
+                  : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              )}
+              title="Toggle Mermaid source code"
+            >
+              <IconCode />
+              {showSource ? "Hide Source" : "Source"}
+            </button>
+
+            {/* Fullscreen button — only when SVG is available */}
+            {renderState === "done" && svgHtml && (
+              <button
+                onClick={() => setShowFullscreen(true)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                title="View diagram fullscreen"
+              >
+                <IconExpand />
+                Fullscreen
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Mermaid source code block */}
+        {showSource && diagramSource && (
+          <pre className="text-[11px] leading-relaxed bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 overflow-x-auto max-h-[300px] overflow-y-auto font-mono text-zinc-700 dark:text-zinc-300 whitespace-pre">
+            {diagramSource}
+          </pre>
+        )}
+
         {/* Legend */}
         {renderState === "done" && (
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-zinc-500 dark:text-zinc-400 px-1">
@@ -284,6 +424,11 @@ export const ExecutionGraphRenderer = React.memo(
               Fallback
             </span>
           </div>
+        )}
+
+        {/* Fullscreen modal */}
+        {showFullscreen && svgHtml && (
+          <FullscreenModal svgHtml={svgHtml} onClose={handleCloseFullscreen} />
         )}
       </div>
     );
