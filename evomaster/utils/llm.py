@@ -10,7 +10,7 @@ import os
 import sys
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, Field
 
@@ -148,6 +148,32 @@ class BaseLLM(ABC):
 
         # 转换为 AssistantMessage
         return response.to_assistant_message()
+
+    def query_stream(
+        self,
+        dialog: Dialog,
+        on_token: Callable[[str], None] | None = None,
+        **kwargs: Any,
+    ) -> AssistantMessage:
+        """流式查询 LLM，逐 token 调用 on_token(delta)，返回完整 AssistantMessage。
+
+        默认实现：回退到 query()，一次性调用 on_token(full_content)。
+        子类可覆盖以实现真正的流式输出。
+
+        Args:
+            dialog: 对话对象
+            on_token: 每收到一个 token 时调用的回调函数，参数为 token 增量字符串
+            **kwargs: 额外参数（覆盖配置）
+
+        Returns:
+            完整的助手消息（与 query() 接口兼容）
+        """
+        result = self.query(dialog, **kwargs)
+        if on_token is not None:
+            content = result.content if isinstance(result.content, str) else ""
+            if content:
+                on_token(content)
+        return result
 
     def _log_request(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> None:
         """记录 LLM 请求到日志
@@ -460,6 +486,65 @@ class OpenAILLM(BaseLLM):
             }
         )
 
+    def query_stream(
+        self,
+        dialog: Dialog,
+        on_token: Callable[[str], None] | None = None,
+        **kwargs: Any,
+    ) -> AssistantMessage:
+        """OpenAI 流式查询实现，使用 stream=True 逐 token 回调。
+
+        注意：流式模式下不支持工具调用（tool_calls），若 dialog 包含 tools，
+        则回退到非流式 query()。
+        """
+        # 若有工具定义，回退到非流式（流式 + tool_calls 解析复杂，暂不支持）
+        if dialog.tools:
+            return super().query_stream(dialog, on_token=on_token, **kwargs)
+
+        messages = dialog.get_messages_for_api()
+
+        model = (
+            _azure_deployment_name(self.config.model)
+            if getattr(self, "_use_azure_client", False)
+            else self.config.model
+        )
+        use_azure = getattr(self, "_use_azure_client", False)
+        request_params: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "timeout": kwargs.get("timeout", self.config.timeout),
+        }
+        if not use_azure:
+            request_params["temperature"] = kwargs.get("temperature", self.config.temperature)
+        if self.config.max_tokens:
+            val = kwargs.get("max_tokens", self.config.max_tokens)
+            if use_azure:
+                request_params["max_completion_tokens"] = val
+            else:
+                request_params["max_tokens"] = val
+
+        full_content: list[str] = []
+        try:
+            stream = self.client.chat.completions.create(**request_params)
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta is None:
+                    continue
+                token = delta.content or ""
+                if token:
+                    full_content.append(token)
+                    if on_token is not None:
+                        on_token(token)
+        except Exception as e:
+            self.logger.warning("OpenAI stream failed, falling back to query(): %s", e)
+            return super().query_stream(dialog, on_token=on_token, **kwargs)
+
+        return AssistantMessage(content="".join(full_content))
+
+
 class DeepSeekLLM(BaseLLM):
     """DeepSeek LLM 实现
 
@@ -649,6 +734,52 @@ class DeepSeekLLM(BaseLLM):
             }
         )
 
+    def query_stream(
+        self,
+        dialog: Dialog,
+        on_token: Callable[[str], None] | None = None,
+        **kwargs: Any,
+    ) -> AssistantMessage:
+        """DeepSeek 流式查询实现（兼容 OpenAI SDK，使用 stream=True）。
+
+        注意：流式模式下不支持工具调用（tool_calls），若 dialog 包含 tools，
+        则回退到非流式 query()。
+        """
+        # 若有工具定义或使用 Completion API，回退到非流式
+        if dialog.tools or self.config.use_completion_api:
+            return super().query_stream(dialog, on_token=on_token, **kwargs)
+
+        messages = dialog.get_messages_for_api()
+        request_params: dict[str, Any] = {
+            "model": self.config.model,
+            "messages": messages,
+            "temperature": kwargs.get("temperature", self.config.temperature),
+            "stream": True,
+            "timeout": kwargs.get("timeout", self.config.timeout),
+        }
+        if self.config.max_tokens:
+            request_params["max_tokens"] = kwargs.get("max_tokens", self.config.max_tokens)
+
+        full_content: list[str] = []
+        try:
+            stream = self.client.chat.completions.create(**request_params)
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                if delta is None:
+                    continue
+                token = delta.content or ""
+                if token:
+                    full_content.append(token)
+                    if on_token is not None:
+                        on_token(token)
+        except Exception as e:
+            self.logger.warning("DeepSeek stream failed, falling back to query(): %s", e)
+            return super().query_stream(dialog, on_token=on_token, **kwargs)
+
+        return AssistantMessage(content="".join(full_content))
+
 
 class AnthropicLLM(BaseLLM):
     """Anthropic LLM 实现
@@ -749,6 +880,54 @@ class AnthropicLLM(BaseLLM):
                 "response_id": response.id,
             }
         )
+
+    def query_stream(
+        self,
+        dialog: Dialog,
+        on_token: Callable[[str], None] | None = None,
+        **kwargs: Any,
+    ) -> AssistantMessage:
+        """Anthropic 流式查询实现，使用 client.messages.stream() 逐 token 回调。
+
+        注意：流式模式下不支持工具调用（tool_calls），若 dialog 包含 tools，
+        则回退到非流式 query()。
+        """
+        # 若有工具定义，回退到非流式
+        if dialog.tools:
+            return super().query_stream(dialog, on_token=on_token, **kwargs)
+
+        # Anthropic 需要分离 system message
+        messages = dialog.get_messages_for_api()
+        system_message = None
+        user_messages = []
+        for msg in messages:
+            if msg["role"] == "system":
+                system_message = msg["content"]
+            else:
+                user_messages.append(msg)
+
+        request_params: dict[str, Any] = {
+            "model": self.config.model,
+            "messages": user_messages,
+            "max_tokens": kwargs.get("max_tokens", self.config.max_tokens or 4096),
+            "temperature": kwargs.get("temperature", self.config.temperature),
+        }
+        if system_message:
+            request_params["system"] = system_message
+
+        full_content: list[str] = []
+        try:
+            with self.client.messages.stream(**request_params) as stream:
+                for text in stream.text_stream:
+                    if text:
+                        full_content.append(text)
+                        if on_token is not None:
+                            on_token(text)
+        except Exception as e:
+            self.logger.warning("Anthropic stream failed, falling back to query(): %s", e)
+            return super().query_stream(dialog, on_token=on_token, **kwargs)
+
+        return AssistantMessage(content="".join(full_content))
 
 
 def create_llm(config: LLMConfig, output_config: dict[str, Any] | None = None) -> BaseLLM:
