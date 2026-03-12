@@ -803,7 +803,7 @@ def _run_agent_sync(
     run_done: threading.Event | None = None
     _msg_seq = 0  # auto-incrementing message id per run
 
-    def event_callback(source: str, event_type: str, content) -> None:
+    def event_callback(source: str, event_type: str, content, **extra) -> None:
         nonlocal _msg_seq
         _msg_seq += 1
         payload = {
@@ -813,16 +813,21 @@ def _run_agent_sync(
             'content': content,
             'session_id': session_id,
         }
+        # Merge extra top-level fields (e.g. status, context, stream_id, token_count for llm_token)
+        if extra:
+            payload.update(extra)
         if session_id not in SESSIONS:
             SESSIONS[session_id] = {'history': [], 'last_task_id': None}
-        # llm_token is ephemeral (thought event already carries the full content);
-        # skip history persistence to avoid bloat.
-        if event_type not in ('log_line', 'llm_token'):
+        # llm_token{status:streaming} is ephemeral — skip history persistence to avoid bloat.
+        # llm_token{status:start} and llm_token{status:end} are persisted (lightweight, audit value).
+        _is_streaming_token = event_type == 'llm_token' and extra.get('status') == 'streaming'
+        if event_type not in ('log_line',) and not _is_streaming_token:
             SESSIONS[session_id]['history'].append(payload)
             _persist_history_event(session_id, payload)
-        # llm_token: fire-and-forget so the LLM streaming iterator is not
+        # llm_token{status:streaming}: fire-and-forget so the LLM streaming iterator is not
         # blocked by the async WebSocket send round-trip.
-        if event_type == 'llm_token':
+        # llm_token{status:start/end}: wait for confirmation like normal events.
+        if _is_streaming_token:
             asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
         else:
             future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
