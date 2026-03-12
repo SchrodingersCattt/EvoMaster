@@ -47,3 +47,34 @@ body {
 .focus-ring {
   @apply outline-none ring-2 ring-zinc-400 dark:ring-zinc-500 ring-offset-2 ring-offset-background;
 }
+
+/* Hide scrollbar but keep scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Thin scrollbar for streaming window */
+.scrollbar-thin-slate {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.scrollbar-thin-slate::-webkit-scrollbar {
+  width: 3px;
+}
+.scrollbar-thin-slate::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin-slate::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+}
+.dark .scrollbar-thin-slate {
+  scrollbar-color: #475569 transparent;
+}
+.dark .scrollbar-thin-slate::-webkit-scrollbar-thumb {
+  background-color: #475569;
+}

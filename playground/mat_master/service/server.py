@@ -815,14 +815,21 @@ def _run_agent_sync(
         }
         if session_id not in SESSIONS:
             SESSIONS[session_id] = {'history': [], 'last_task_id': None}
-        if event_type != 'log_line':
+        # llm_token is ephemeral (thought event already carries the full content);
+        # skip history persistence to avoid bloat.
+        if event_type not in ('log_line', 'llm_token'):
             SESSIONS[session_id]['history'].append(payload)
             _persist_history_event(session_id, payload)
-        future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
-        try:
-            future.result(timeout=5)
-        except Exception:
-            pass
+        # llm_token: fire-and-forget so the LLM streaming iterator is not
+        # blocked by the async WebSocket send round-trip.
+        if event_type == 'llm_token':
+            asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
+        else:
+            future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
+            try:
+                future.result(timeout=5)
+            except Exception:
+                pass
 
     try:
         _playground_init_done.wait(timeout=300)

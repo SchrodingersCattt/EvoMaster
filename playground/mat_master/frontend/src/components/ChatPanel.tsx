@@ -759,20 +759,18 @@ function renderEntry(entry: LogEntry, isPlannerMode = false, source?: string): R
     const headerLabel = tagLabel ?? "Planner";
 
     return (
-      <div className="my-1 rounded-lg border border-blue-300 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/40 p-3">
-        <div className="flex items-center gap-1.5 mb-2">
-          <span className="text-blue-500 dark:text-blue-400 text-xs">&#9670;</span>
-          <span className="text-[10px] uppercase tracking-wider font-bold text-blue-700 dark:text-blue-300">
+      <div className="my-1 border-l-2 border-slate-400 dark:border-slate-500 pl-3 py-1.5 bg-slate-50/70 dark:bg-slate-800/30 rounded-r-md">
+        <div className="flex items-center gap-1.5 mb-1.5">
+          <span className="text-[10px] uppercase tracking-wider font-medium text-slate-500 dark:text-slate-400">
             {headerLabel}
           </span>
         </div>
         <div className={cn(
           "text-sm text-zinc-600 dark:text-zinc-400 break-words",
-          // h2 section headers - darker blue (for markdown text path)
-          "[&_.content-renderer_h2]:text-blue-800 [&_.content-renderer_h2]:dark:text-blue-200",
+          "[&_.content-renderer_h2]:text-slate-700 [&_.content-renderer_h2]:dark:text-slate-300",
           "[&_.content-renderer_h2]:text-xs [&_.content-renderer_h2]:uppercase [&_.content-renderer_h2]:tracking-wide [&_.content-renderer_h2]:font-semibold",
           "[&_.content-renderer_h2]:mt-3 [&_.content-renderer_h2]:mb-1",
-          "[&_.content-renderer_h2]:border-b [&_.content-renderer_h2]:border-blue-200 [&_.content-renderer_h2]:dark:border-blue-800 [&_.content-renderer_h2]:pb-0.5",
+          "[&_.content-renderer_h2]:border-b [&_.content-renderer_h2]:border-slate-200 [&_.content-renderer_h2]:dark:border-slate-700 [&_.content-renderer_h2]:pb-0.5",
           "[&_.content-renderer_li]:text-zinc-600 [&_.content-renderer_li]:dark:text-zinc-400",
           "[&_.content-renderer_strong]:text-zinc-800 [&_.content-renderer_strong]:dark:text-zinc-200",
         )}>
@@ -847,17 +845,17 @@ const MessageBubble = React.memo(function MessageBubble({
     }
   }
 
-  // Thought events use a collapsible style by default (to avoid clutter)
+  // Thought events: left-border strip style, slate-blue tint, height follows content
   if (isThought) {
     return (
       <div className="flex w-full justify-start">
-        <div className="max-w-[85%] rounded-lg px-3 py-2 shadow-sm border border-violet-200 dark:border-violet-800 bg-violet-50/60 dark:bg-violet-900/20">
+        <div className="max-w-[85%] border-l-2 border-slate-400 dark:border-slate-500 pl-3 py-1.5 bg-slate-50/70 dark:bg-slate-800/30 rounded-r-md">
           <details className="group">
-            <summary className="list-none flex items-center gap-1.5 cursor-pointer text-xs font-medium text-violet-600 dark:text-violet-400">
+            <summary className="list-none flex items-center gap-1.5 cursor-pointer text-xs font-medium text-slate-500 dark:text-slate-400">
               <span className="inline-block transition group-open:rotate-90 text-[10px]">&#9654;</span>
               {source} &middot; Thinking
             </summary>
-            <div className="mt-1.5 text-sm text-zinc-700 dark:text-zinc-300 break-words whitespace-pre-wrap">
+            <div className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400 break-words whitespace-pre-wrap">
               {mainContent}
             </div>
           </details>
@@ -915,6 +913,66 @@ const MessageBubble = React.memo(function MessageBubble({
 
 // ─── ChatPanel ──────────────────────────────────────────────────────────────
 
+/**
+ * Streaming window: fixed-height area with top-fade mask.
+ * New tokens scroll in from the bottom; the top edge fades out smoothly.
+ * Once streaming ends the parent clears streamingContent and the final
+ * `thought` event renders as a normal message bubble.
+ */
+function StreamingBubble({ source, content }: { source: string; content: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Track whether user has scrolled away from the bottom
+  const isNearBottomRef = useRef(true);
+
+  // Listen for user scroll: if they scroll up, stop auto-scrolling
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      isNearBottomRef.current = scrollTop + clientHeight >= scrollHeight - 32;
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Auto-scroll to bottom only when user hasn't scrolled up
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && isNearBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [content]);
+
+  if (!content) return null;
+  return (
+    <div className="flex w-full justify-start">
+      <div className="max-w-[85%] w-full border-l-2 border-slate-400 dark:border-slate-500 pl-3 bg-slate-50/70 dark:bg-slate-800/30 rounded-r-md">
+        {/* Source label + pulse dot */}
+        <div className="flex items-center gap-1.5 mb-0.5 pt-1.5">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {source}
+          </span>
+          <span className="inline-block w-1 h-1 rounded-full bg-slate-400 dark:bg-slate-500 animate-pulse" />
+        </div>
+        {/* Fixed-height scroll window with top-fade mask */}
+        <div
+          ref={scrollRef}
+          className="h-32 overflow-y-auto scrollbar-thin-slate pb-1.5"
+          style={{
+            maskImage: "linear-gradient(to bottom, transparent 0%, black 30%, black 100%)",
+            WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 30%, black 100%)",
+          }}
+        >
+          <p className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap break-words pt-20 pb-1">
+            {content}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ChatPanel({
   entries,
   scrollRef,
@@ -944,6 +1002,8 @@ export default function ChatPanel({
   readOnly = false,
   jumpToLogIndex,
   onJumpHandled,
+  streamingContent = "",
+  streamingSource = "MatMaster",
 }: {
   entries: LogEntry[];
   scrollRef?: React.RefObject<HTMLDivElement>;
@@ -973,6 +1033,8 @@ export default function ChatPanel({
   readOnly?: boolean;
   jumpToLogIndex?: number | null;
   onJumpHandled?: () => void;
+  streamingContent?: string;
+  streamingSource?: string;
 }) {
   // ── useMemo: derived filtered list ──
   const filtered = useMemo(
@@ -1109,7 +1171,7 @@ export default function ChatPanel({
         rafRef.current = null;
       });
     }
-  }, [filtered.length, scrollRef]);
+  }, [filtered.length, streamingContent, scrollRef]);
 
   // Cleanup rAF on unmount
   useEffect(() => {
@@ -1236,8 +1298,7 @@ export default function ChatPanel({
                     id={`chat-log-${item.callIndex}`}
                     className={cn(
                       "rounded-xl transition-colors duration-500",
-                      isHighlighted && "bg-amber-100/60 dark:bg-amber-500/20",
-                      isCurrentStep && "border-l-2 border-l-blue-400 dark:border-l-blue-500 pl-2"
+                      isHighlighted && "bg-amber-100/60 dark:bg-amber-500/20"
                     )}
                   >
                     {/* Hidden anchor for result index so WorkspacePanel jump-to-result works */}
@@ -1264,8 +1325,7 @@ export default function ChatPanel({
                   id={`chat-log-${index}`}
                   className={cn(
                     "rounded-xl transition-colors duration-500",
-                    highlightIndex === index && "bg-amber-100/60 dark:bg-amber-500/20",
-                    currentStepIndices.has(index) && highlightIndex !== index && "border-l-2 border-l-blue-400 dark:border-l-blue-500 pl-2"
+                    highlightIndex === index && "bg-amber-100/60 dark:bg-amber-500/20"
                   )}
                 >
                   {isStatusEvent(log) ? (
@@ -1281,6 +1341,10 @@ export default function ChatPanel({
               );
             });
           })()}
+          {/* Streaming bubble: live LLM token output */}
+          {streamingContent && (
+            <StreamingBubble source={streamingSource} content={streamingContent} />
+          )}
         </div>
 
         {!readOnly && plannerAsk !== null && (

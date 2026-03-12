@@ -1,7 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Transpile mermaid ESM package so webpack can bundle it correctly in dev mode
-  transpilePackages: ['mermaid'],
+  // Mermaid is loaded as a static UMD script from /public/mermaid.js (copied from
+  // node_modules/mermaid/dist/mermaid.min.js at build/setup time).
+  // mermaid.min.js is the proper UMD build that sets window.mermaid = factory().
+  // This bypasses webpack bundling entirely, eliminating the 404 chunk error that
+  // occurred when webpack tried to bundle mermaid.core.mjs / mermaid.esm.min.mjs.
+  // See: layout.tsx <Script src="/mermaid.js" strategy="beforeInteractive" />
+  // See: ExecutionGraphRenderer.tsx uses window.mermaid instead of import("mermaid")
+
   // Allow cross-origin requests to /_next/* when accessed via domain (e.g. gjao1318755.bohrium.tech)
   allowedDevOrigins: [
     "localhost:50003",

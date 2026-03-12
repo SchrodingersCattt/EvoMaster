@@ -10,7 +10,7 @@ import logging
 import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 from pydantic import BaseModel, Field
 
@@ -78,6 +78,7 @@ class BaseAgent(ABC):
         config_dir: Path | str | None = None,
         enable_tools: bool = True,
         enabled_tool_names: list[str] | None = None,
+        on_llm_token: Callable[[str], None] | None = None,
     ):
         """初始化 Agent
 
@@ -91,6 +92,8 @@ class BaseAgent(ABC):
             config_dir: 配置目录路径，用于加载提示词文件
             enable_tools: 是否在提示词中包含工具信息（默认 True）。如果为 False，工具仍然注册但不会出现在提示词中
             enabled_tool_names: 仅暴露给 LLM 的工具名列表；None 表示全部，[] 表示无工具
+            on_llm_token: 可选。LLM 流式输出时每个 token 的回调函数。设置后将使用 query_stream()
+                          代替 query()，实现逐 token 推送。默认 None（行为与改造前完全一致）。
         """
         self.llm = llm
         self.session = session
@@ -99,6 +102,7 @@ class BaseAgent(ABC):
         self.skill_registry = skill_registry
         self.enable_tools = enable_tools
         self.enabled_tool_names = enabled_tool_names
+        self._on_llm_token: Callable[[str], None] | None = on_llm_token
 
         # 输出配置
         self.output_config = output_config or {}
@@ -429,10 +433,16 @@ class BaseAgent(ABC):
             print('-' * 60)
 
     def _query_with_context_recovery(self, dialog_for_query) -> Any:
-        """查询 LLM，若遇到上下文窗口超限错误则强制截断后重试（最多 3 次）。"""
+        """查询 LLM，若遇到上下文窗口超限错误则强制截断后重试（最多 3 次）。
+
+        若 _on_llm_token 已设置，使用 query_stream() 实现逐 token 流式输出；
+        否则使用 query()（行为与改造前完全一致）。
+        """
         max_retries = 3
         for attempt in range(max_retries):
             try:
+                if self._on_llm_token is not None:
+                    return self.llm.query_stream(dialog_for_query, on_token=self._on_llm_token)
                 return self.llm.query(dialog_for_query)
             except Exception as e:
                 err_msg = str(e).lower()
