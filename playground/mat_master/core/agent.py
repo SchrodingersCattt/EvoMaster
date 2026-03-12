@@ -872,7 +872,7 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
             self.current_dialog.add_message(SystemMessage(content=reminder))
 
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
-        assistant_message = self.llm.query(dialog_for_query)
+        assistant_message = self._query_with_context_recovery(dialog_for_query)
         self.current_dialog.add_message(assistant_message)
         self._on_assistant_message(assistant_message)
         step_record = StepRecord(
