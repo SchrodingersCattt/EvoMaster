@@ -56,6 +56,12 @@ class MockLLM:
     def query(self, dialog):
         return _make_mock_assistant_message()
 
+    def query_stream(self, dialog, on_token=None):
+        msg = _make_mock_assistant_message()
+        if on_token and msg.content:
+            on_token(msg.content)
+        return msg
+
 
 def _mock_sessions_table():
     t = MagicMock()
