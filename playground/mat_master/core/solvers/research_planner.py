@@ -538,6 +538,25 @@ class ResearchPlanner(BaseExp):
         if self._output_callback:
             self._output_callback(source, event_type, content)
 
+    def _stream_llm(self, dialog: Dialog, source: str, context: str) -> 'AssistantMessage':
+        """Wrap query_stream with llm_stream_start / llm_stream_end boundary markers."""
+        import uuid as _uuid
+        stream_id = f"str_{_uuid.uuid4().hex[:12]}"
+        self._emit(source, 'llm_stream_start', {'context': context, 'stream_id': stream_id})
+        reply = None
+        try:
+            reply = self.agent.llm.query_stream(
+                dialog,
+                on_token=lambda delta: self._emit(source, 'llm_token', delta),
+            )
+            return reply
+        finally:
+            token_count = len(reply.content or '') if reply is not None else 0
+            self._emit(source, 'llm_stream_end', {
+                'stream_id': stream_id,
+                'token_count': token_count,
+            })
+
     def _run_dir_path(self) -> Path:
         return Path(self.run_dir) if self.run_dir else Path('.')
 
@@ -1016,10 +1035,7 @@ Rules:
                     'refusal_reason': 'max_turns_exceeded',
                 }
         try:
-            reply = self.agent.llm.query_stream(
-                dialog,
-                on_token=lambda delta: self._emit('Planner', 'llm_token', delta),
-            )
+            reply = self._stream_llm(dialog, 'Planner', 'planning')
             # 将 Planner LLM 原始输出推送到前端（_normalize_planner_thought 会过滤掉纯 JSON message）
             self._emit('Planner', 'thought', reply.content or '')
             raw = _extract_json_from_content(reply.content or '')
@@ -1093,10 +1109,7 @@ Rules:
                     'refusal_reason': 'max_turns_exceeded',
                 }
         try:
-            reply = self.agent.llm.query_stream(
-                dialog,
-                on_token=lambda delta: self._emit('Planner', 'llm_token', delta),
-            )
+            reply = self._stream_llm(dialog, 'Planner', 'revision')
             self._emit('Planner', 'thought', reply.content or '')
             raw = _extract_json_from_content(reply.content or '')
             if not raw:
@@ -2394,10 +2407,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                     'prerequisites': [],
                     'reasoning': 'max_turns_exceeded',
                 }
-            reply = self.agent.llm.query_stream(
-                dialog,
-                on_token=lambda delta: self._emit('Planner', 'llm_token', delta),
-            )
+            reply = self._stream_llm(dialog, 'Planner', 'pre_check')
             raw = _extract_json_from_content(reply.content or '')
             if raw:
                 # JSON found — don't emit the raw reply as a thought here.
