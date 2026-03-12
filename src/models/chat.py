@@ -51,14 +51,15 @@ class SessionListApiResponse(BaseResponse[SessionListResponse]):
     """GET /api/sessions 规范响应：code, msg, data"""
 
 
-class ActiveSessionsCountData(BaseModel):
-    """GET /chat/sessions/active_count 的 data 字段"""
+class RunStatusData(BaseModel):
+    """GET /chat/sessions/run_status 的 data 字段：执行中数、排队数"""
 
     active_count: int
+    queued_count: int
 
 
-class ActiveSessionsCountApiResponse(BaseResponse[ActiveSessionsCountData]):
-    """GET /chat/sessions/active_count 规范响应：code, msg, data"""
+class RunStatusApiResponse(BaseResponse[RunStatusData]):
+    """GET /chat/sessions/run_status 规范响应：code, msg, data"""
 
 
 # ---------- Workspace OSS 列表 ----------

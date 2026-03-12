@@ -104,31 +104,35 @@ _DPA_MODEL_ALIAS_NORM_MAP = {
     _normalize_alias(k): v for k, v in _DPA_MODEL_ALIAS_MAP.items()
 }
 
-_SN_TOP_LEVEL_FIELDS_TO_REMOVE: frozenset[str] = frozenset({
-    "userId",
-    "globalId",
-})
+_SN_TOP_LEVEL_FIELDS_TO_REMOVE: frozenset[str] = frozenset(
+    {
+        'userId',
+        'globalId',
+    }
+)
 
-_SN_PAPER_FIELDS_TO_REMOVE: frozenset[str] = frozenset({
-    "zhName",
-    "zhAbstract",
-    "paperId",
-    "publicationId",
-    "publicationCover",
-    "graphicalAbstract",
-    "languageType",
-    "impactScore",
-    "popularity",
-    "good",
-    "goodFlag",
-    "readFlag",
-    "addFlag",
-    "openAccess",
-    "pdfFlag",
-    "title",
-    "authorDetails",
-    "alltext",
-})
+_SN_PAPER_FIELDS_TO_REMOVE: frozenset[str] = frozenset(
+    {
+        'zhName',
+        'zhAbstract',
+        'paperId',
+        'publicationId',
+        'publicationCover',
+        'graphicalAbstract',
+        'languageType',
+        'impactScore',
+        'popularity',
+        'good',
+        'goodFlag',
+        'readFlag',
+        'addFlag',
+        'openAccess',
+        'pdfFlag',
+        'title',
+        'authorDetails',
+        'alltext',
+    }
+)
 
 
 def _extract_artifact_urls(obj: Any, keys: frozenset[str]) -> list[str]:
@@ -937,7 +941,9 @@ class MatToolCallbacks:
                     parsed = json.loads(cleaned)
                     if isinstance(parsed, list):
                         args['words'] = parsed
-                        tool_call.function.arguments = json.dumps(args, ensure_ascii=False)
+                        tool_call.function.arguments = json.dumps(
+                            args, ensure_ascii=False
+                        )
                         self.logger.info(
                             'before_tool: converted words from string to list for mat_sn_search-papers-enhanced: %r -> %r',
                             words,
@@ -1474,10 +1480,10 @@ class MatToolCallbacks:
         - Always-empty alltext field
         - Top-level internal fields (userId, globalId)
         """
-        tool_name: str = getattr(getattr(tool_call, "function", None), "name", "") or ""
-        if not tool_name.startswith("mat_sn_"):
+        tool_name: str = getattr(getattr(tool_call, 'function', None), 'name', '') or ''
+        if not tool_name.startswith('mat_sn_'):
             return observation, info
-        if info.get("error") is not None:
+        if info.get('error') is not None:
             return observation, info
 
         # observation may be a dict or a JSON string
@@ -1500,7 +1506,7 @@ class MatToolCallbacks:
             obj.pop(field, None)
 
         # Clean per-paper records in data[]
-        papers = obj.get("data")
+        papers = obj.get('data')
         if isinstance(papers, list):
             for paper in papers:
                 if isinstance(paper, dict):
@@ -1578,6 +1584,7 @@ class MatToolCallbacks:
         fallback_level: int = 0
         query_used: str = ''
         candidate_count: int = 0
+        obs_obj: Any = None
         try:
             obs_obj = (
                 observation
@@ -1601,12 +1608,16 @@ class MatToolCallbacks:
 
         # Expose in info for guard and later callbacks
         new_info = dict(info)
-        new_info['retrieval_confidence'] = 'direct' if fallback_level == 0 else 'fallback'
+        new_info['retrieval_confidence'] = (
+            'direct' if fallback_level == 0 else 'fallback'
+        )
         new_info['fallback_level'] = fallback_level
         new_info['query_used'] = query_used
         new_info['candidate_count'] = candidate_count
 
-        # Warn the LLM when fallback is active
+        # Warn the LLM when fallback is active. Keep observation as dict so that
+        # _format_tool_observation / _to_json_value preserve it and the final
+        # payload has observation as object rather than a JSON string.
         if fallback_level > 0:
             annotation = (
                 f'\n\n⚠️ [struct-db-metadata] fallback_level={fallback_level}: '
@@ -1615,6 +1626,10 @@ class MatToolCallbacks:
                 'to the target material. Do NOT treat these as confirmed results — '
                 'use the literature-based search path instead.'
             )
+            if isinstance(obs_obj, dict):
+                out = dict(obs_obj)
+                out['fallback_warning'] = annotation.strip()
+                return out, new_info
             obs_str = (
                 json.dumps(observation, ensure_ascii=False)
                 if isinstance(observation, dict)

@@ -24,10 +24,12 @@ DB_CONFIG = {
 # 未配置则 stop 仅在本进程生效。配 REDIS_URL，例：redis://:密码@host:6379/0
 REDIS_URL = (os.getenv('REDIS_URL') or '').strip() or None
 
-BI_URL = os.getenv('BI_URL', 'https://account.test.dp.tech')
-
 # 配额服务（与 MatMaster 一致：matmaster-tools-server）
 _URL_PART = f'.{CURRENT_ENV}' if CURRENT_ENV and CURRENT_ENV != 'prod' else ''
+# 账号/用户信息 API（如 account_api/users/{user_id} 查昵称、邮箱），按环境自动生成 host
+ACCOUNT_API_BASE_URL = (
+    f'https://account{_URL_PART}.dp.tech' if _URL_PART else 'https://account.dp.tech'
+).rstrip('/')
 MATMASTER_TOOLS_SERVER = os.getenv(
     'MATMASTER_TOOLS_SERVER',
     f'https://matmaster-tools-server{_URL_PART}.bohrium.com',
@@ -56,11 +58,26 @@ BOHRIUM_CORE_BASE_URL = os.getenv(
 
 # Bohrium 节点默认镜像 ID，按环境区分（创建节点时未指定且无 BOHRIUM_IMAGE_ID 时使用）
 BOHRIUM_ENV_DEFAULT_IMAGE_IDS: dict[str, int] = {
-    'test': 48944,
-    'uat': 1509,
-    'prod': 121443,
+    'test': 48959,
+    'uat': 1534,
+    'prod': 121695,
 }
 BOHRIUM_DEFAULT_IMAGE_ID = (
     BOHRIUM_ENV_DEFAULT_IMAGE_IDS.get(CURRENT_ENV)
     or BOHRIUM_ENV_DEFAULT_IMAGE_IDS['test']
 )
+
+# 镜像 name 也在构建时写入仓库，运行期不用再调 image/private 获取
+BOHRIUM_ENV_DEFAULT_IMAGE_NAMES: dict[str, str] = {
+    'test': 'matmaster:3903bdd7-20260311-152852',
+    'uat': 'matmaster:3903bdd7-20260311-152852',
+    'prod': 'matmaster:3903bdd7-20260311-152851',
+}
+BOHRIUM_DEFAULT_IMAGE_NAME = (
+    BOHRIUM_ENV_DEFAULT_IMAGE_NAMES.get(CURRENT_ENV)
+    or BOHRIUM_ENV_DEFAULT_IMAGE_NAMES['test']
+)
+
+# 飞书私聊（任务完成通知）：需企业自建应用 App ID / App Secret；未配置则不发私聊
+FEISHU_APP_ID = 'cli_a93aa00bf2b9dcc8'
+FEISHU_APP_SECRET = '2HOsgrqaQUazqFU8N2fgwR2ZTuL7fbKm'

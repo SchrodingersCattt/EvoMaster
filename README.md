@@ -91,7 +91,7 @@ EvoMaster/
 
 You can run agents from the command line without the web UI.
 
-**Prerequisites:** `pip install -r requirements.txt` (or `uv sync`). Configure LLM and Bohrium in `.env` and/or in the YAML under `configs/`.
+**Prerequisites:** `uv sync` (or `pip install -e .`). Configure LLM and Bohrium in `.env` and/or in the YAML under `configs/`.
 
 ```bash
 # Default agent and task
