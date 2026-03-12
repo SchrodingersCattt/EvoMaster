@@ -56,35 +56,32 @@ class StreamingMatMasterAgent(MatMasterAgent):
         self._current_stream_id: str | None = None
         self._stream_token_count: int = 0
 
-    def _emit(self, source: str, event_type: str, content: Any) -> None:
+    def _emit(self, source: str, event_type: str, content: Any, **extra: Any) -> None:
         if self.event_callback:
-            self.event_callback(source, event_type, content)
+            self.event_callback(source, event_type, content, **extra)
 
     def _on_llm_token_cb(self, delta: str) -> None:
-        """Emit llm_token event for each streamed token from the LLM."""
+        """Emit llm_token{status:streaming} for each streamed token from the LLM."""
         agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
         if self._current_stream_id is None:
             self._begin_llm_stream(agent_name)
-        self._emit(agent_name, 'llm_token', delta)
+        self._emit(agent_name, 'llm_token', delta, status='streaming')
         self._stream_token_count += len(delta) if isinstance(delta, str) else 0
 
     def _begin_llm_stream(self, agent_name: str, context: str = 'step_execution') -> None:
-        """Emit llm_stream_start and track stream state."""
+        """Emit llm_token{status:start} and track stream state."""
         import uuid as _uuid
         self._current_stream_id = f"str_{_uuid.uuid4().hex[:12]}"
         self._stream_token_count = 0
-        self._emit(agent_name, 'llm_stream_start', {
-            'context': context,
-            'stream_id': self._current_stream_id,
-        })
+        self._emit(agent_name, 'llm_token', '', status='start',
+                   context=context, stream_id=self._current_stream_id)
 
     def _end_llm_stream(self, agent_name: str) -> None:
-        """Emit llm_stream_end and clear stream state."""
+        """Emit llm_token{status:end} and clear stream state."""
         if self._current_stream_id is not None:
-            self._emit(agent_name, 'llm_stream_end', {
-                'stream_id': self._current_stream_id,
-                'token_count': self._stream_token_count,
-            })
+            self._emit(agent_name, 'llm_token', '', status='end',
+                       stream_id=self._current_stream_id,
+                       token_count=self._stream_token_count)
             self._current_stream_id = None
             self._stream_token_count = 0
 

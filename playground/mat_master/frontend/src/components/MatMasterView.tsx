@@ -21,6 +21,7 @@ export type LogEntry = {
   type: string;
   content: unknown;
   session_id?: string;
+  status?: string; // for llm_token: "start" | "streaming" | "end"
 };
 
 export default function MatMasterView({
@@ -94,29 +95,23 @@ export default function MatMasterView({
           const sid = msg.session_id;
           const cur = currentSessionIdRef.current;
 
-          if (msg.type === "llm_stream_start") {
-            if (sid === undefined || sid === cur) {
-              setStreamingSource(msg.source || "MatMaster");
-              setStreamingContent(""); // clear any previous content
-              setIsStreaming(true);
-            }
-            return;
-          }
-
-          if (msg.type === "llm_stream_end") {
-            if (sid === undefined || sid === cur) {
-              setIsStreaming(false);
-              // Don't clear streamingContent here — let the subsequent
-              // thought/planner_reply event clear it (existing behavior)
-            }
-            return;
-          }
-
-          // Handle llm_token: accumulate into streamingContent, don't add to logs
+          // Handle llm_token with status field: start / streaming / end
           if (msg.type === "llm_token") {
             if (sid === undefined || sid === cur) {
-              setStreamingSource(msg.source || "MatMaster");
-              setStreamingContent((prev) => prev + (typeof msg.content === "string" ? msg.content : ""));
+              const tokenStatus = msg.status;
+              if (tokenStatus === "start") {
+                setStreamingSource(msg.source || "MatMaster");
+                setStreamingContent(""); // clear any previous content
+                setIsStreaming(true);
+              } else if (tokenStatus === "end") {
+                setIsStreaming(false);
+                // Don't clear streamingContent here — let the subsequent
+                // thought/planner_reply event clear it (existing behavior)
+              } else {
+                // status === "streaming" or no status (backward compat with old backend)
+                setStreamingSource(msg.source || "MatMaster");
+                setStreamingContent((prev) => prev + (typeof msg.content === "string" ? msg.content : ""));
+              }
             }
             return;
           }
