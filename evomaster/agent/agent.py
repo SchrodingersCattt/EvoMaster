@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import traceback
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
@@ -189,6 +190,7 @@ class BaseAgent(ABC):
         except Exception as e:
             self.logger.error('=' * 80)
             self.logger.error(f"❌ Agent execution failed: {e}")
+            self.logger.error("Traceback:\n%s", traceback.format_exc())
             self.logger.error('=' * 80)
             self.trajectory.finish('failed', {'reason': str(e)})
             raise

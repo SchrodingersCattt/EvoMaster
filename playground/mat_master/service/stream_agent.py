@@ -88,25 +88,19 @@ class StreamingMatMasterAgent(MatMasterAgent):
     def _step(self) -> bool:
         """Override _step to wrap the MatMasterAgent LLM call with llm_stream_start/end markers.
 
-        MatMasterAgent._step() calls self.llm.query() directly (not _query_with_context_recovery),
-        so _on_llm_token is never invoked from that path.  We monkey-patch self.llm.query for the
-        duration of the step so that query_stream is used instead, and boundary markers are emitted.
+        _query_with_context_recovery() already calls self.llm.query_stream() directly when
+        self._on_llm_token is set, so we only need to emit the stream boundary markers here.
+        The previous monkey-patch approach (self.llm.query = _streaming_query) caused infinite
+        recursion: _streaming_query → query_stream → BaseLLM.query_stream → self.query()
+        → monkey-patched _streaming_query → ... when dialog.tools is present (OpenAILLM falls
+        back to super().query_stream() which calls self.query()).
         """
         agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
-        original_query = self.llm.query
-
-        def _streaming_query(dialog):
-            self._begin_llm_stream(agent_name, context='step_execution')
-            try:
-                return self.llm.query_stream(dialog, on_token=self._on_llm_token_cb)
-            finally:
-                self._end_llm_stream(agent_name)
-
-        self.llm.query = _streaming_query
+        self._begin_llm_stream(agent_name, context='step_execution')
         try:
             return super()._step()
         finally:
-            self.llm.query = original_query
+            self._end_llm_stream(agent_name)
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
         agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
