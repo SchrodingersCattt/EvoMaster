@@ -53,15 +53,60 @@ class StreamingMatMasterAgent(MatMasterAgent):
         self.event_callback = event_callback
         # Inject LLM token streaming callback into the underlying agent
         self._on_llm_token = self._on_llm_token_cb
+        self._current_stream_id: str | None = None
+        self._stream_token_count: int = 0
 
-    def _emit(self, source: str, event_type: str, content: Any) -> None:
+    def _emit(self, source: str, event_type: str, content: Any, **extra: Any) -> None:
         if self.event_callback:
-            self.event_callback(source, event_type, content)
+            self.event_callback(source, event_type, content, **extra)
 
     def _on_llm_token_cb(self, delta: str) -> None:
-        """Emit llm_token event for each streamed token from the LLM."""
+        """Emit llm_token{status:streaming} for each streamed token from the LLM."""
         agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
-        self._emit(agent_name, 'llm_token', delta)
+        if self._current_stream_id is None:
+            self._begin_llm_stream(agent_name)
+        self._emit(agent_name, 'llm_token', delta, status='streaming')
+        self._stream_token_count += len(delta) if isinstance(delta, str) else 0
+
+    def _begin_llm_stream(self, agent_name: str, context: str = 'step_execution') -> None:
+        """Emit llm_token{status:start} and track stream state."""
+        import uuid as _uuid
+        self._current_stream_id = f"str_{_uuid.uuid4().hex[:12]}"
+        self._stream_token_count = 0
+        self._emit(agent_name, 'llm_token', '', status='start',
+                   context=context, stream_id=self._current_stream_id)
+
+    def _end_llm_stream(self, agent_name: str) -> None:
+        """Emit llm_token{status:end} and clear stream state."""
+        if self._current_stream_id is not None:
+            self._emit(agent_name, 'llm_token', '', status='end',
+                       stream_id=self._current_stream_id,
+                       token_count=self._stream_token_count)
+            self._current_stream_id = None
+            self._stream_token_count = 0
+
+    def _step(self) -> bool:
+        """Override _step to wrap the MatMasterAgent LLM call with llm_stream_start/end markers.
+
+        MatMasterAgent._step() calls self.llm.query() directly (not _query_with_context_recovery),
+        so _on_llm_token is never invoked from that path.  We monkey-patch self.llm.query for the
+        duration of the step so that query_stream is used instead, and boundary markers are emitted.
+        """
+        agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
+        original_query = self.llm.query
+
+        def _streaming_query(dialog):
+            self._begin_llm_stream(agent_name, context='step_execution')
+            try:
+                return self.llm.query_stream(dialog, on_token=self._on_llm_token_cb)
+            finally:
+                self._end_llm_stream(agent_name)
+
+        self.llm.query = _streaming_query
+        try:
+            return super()._step()
+        finally:
+            self.llm.query = original_query
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
         agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
