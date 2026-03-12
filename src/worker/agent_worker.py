@@ -231,6 +231,7 @@ def _run_worker_loop() -> None:
                 template=CARD_TEMPLATE_BLUE,
             )
             run_success = True
+            fail_reason: str | None = None
             try:
                 result = agent_run_service.run_agent_sync(
                     session_id=session_id,
@@ -248,6 +249,7 @@ def _run_worker_loop() -> None:
                 run_success = result is not False
             except Exception as e:
                 run_success = False
+                fail_reason = str(e)
                 logger.exception(
                     'Agent worker: run_agent_sync failed session_id=%s task_id=%s: %s',
                     session_id,
@@ -292,18 +294,24 @@ def _run_worker_loop() -> None:
                 user_question = (user_prompt or '').strip()
                 if len(user_question) > 500:
                     user_question = user_question[:500] + '…'
+                rows = [
+                    ('会话ID', session_id),
+                    ('会话地址', session_url),
+                    ('用户', user_info_display),
+                    ('用户问题', user_question or '-'),
+                    ('执行节点', get_worker_id()),
+                    ('结果', '成功' if run_success else '失败'),
+                    ('执行中', str(active_count)),
+                    ('排队数', str(queue_len)),
+                ]
+                if not run_success and fail_reason:
+                    reason = (fail_reason.strip() or '-')[:500]
+                    if len(fail_reason.strip()) > 500:
+                        reason = reason + '…'
+                    rows.insert(6, ('失败原因', reason))  # 插在「结果」之后
                 notify_post_async(
                     'Worker 执行成功' if run_success else 'Worker 执行失败',
-                    [
-                        ('会话ID', session_id),
-                        ('会话地址', session_url),
-                        ('用户', user_info_display),
-                        ('用户问题', user_question or '-'),
-                        ('执行节点', get_worker_id()),
-                        ('结果', '成功' if run_success else '失败'),
-                        ('执行中', str(active_count)),
-                        ('排队数', str(queue_len)),
-                    ],
+                    rows,
                     template=(
                         CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
                     ),
