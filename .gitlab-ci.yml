@@ -1,5 +1,6 @@
-# 主流水线：仅 build-remote-image + 触发两条完全独立的子流水线（API / Worker）
-# 子流水线内自包含 build → deploy，同一条 pipeline_id，镜像 tag 一致
+# 主流水线：build-remote-image + 按 tag/分支 trigger 子流水线
+# 打 tag 时：tag 含 _matmaster-evo-worker_ 只 trigger Worker 子流水线，含 _matmaster-evo_ 且不含 worker 只 trigger API 子流水线
+# 推 test 分支时：同时 trigger API + Worker 两条子流水线
 
 variables:
   RUNNER_ZJK_TAG: k8s-runner-zjk-svc
@@ -10,106 +11,48 @@ stages:
   - build-remote-image
   - trigger
 
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "remote-image" && ($GITLAB_USER_LOGIN == "project_1023_bot" || $GITLAB_USER_LOGIN =~ /^project_[0-9]+_bot$/)'
+      when: never
+    - when: always
+
 include:
   - local: ".deploy-ci.yml"
 
-# Remote 节点镜像：Dockerfile.remote 变更时构建并 push 更新 constant.py
-# 需在 CI/CD Variables 中配置 BOHRIUM_ACCESS_KEY（Masked）、BOHRIUM_PROJECT_ID
-build-remote-image:test:
+# 一次构建三环境（test/uat/prod）并更新 constant.py，推送到分支 remote-image 时触发
+build-remote-image:all:
   stage: build-remote-image
   image: $REGISTRY/public/ubuntu:gitlab-0.0.2
-  environment: test
-  variables:
-    REMOTE_IMAGE_ENV: test
   before_script:
-    - apt-get update -qq && apt-get install -y -qq jq > /dev/null || true
-    - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
-    - |
-      if [[ -z "${BOHRIUM_ACCESS_KEY:-}" ]]; then
-        echo "DEBUG: BOHRIUM_ACCESS_KEY is unset. Check: Variable key exact? Protected + branch test protected? Env scope = test or *?"
-        exit 1
-      fi
-      echo "DEBUG: BOHRIUM_ACCESS_KEY is set (length ${#BOHRIUM_ACCESS_KEY})"
+    - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh" "${CI_PROJECT_DIR}/ci/build_remote_image_all.sh"
   script:
-    - "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
+    - "${CI_PROJECT_DIR}/ci/build_remote_image_all.sh"
   rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /.*test$/
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "remote-image"
   tags:
     - $RUNNER_ZJK_TAG
 
-build-remote-image:uat:
-  stage: build-remote-image
-  image: $REGISTRY/public/ubuntu:gitlab-0.0.2
-  environment: uat
-  variables:
-    REMOTE_IMAGE_ENV: uat
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq jq > /dev/null || true
-    - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
-  script:
-    - "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /.*uat$/
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
-      when: manual
-  tags:
-    - $RUNNER_ZJK_TAG
-
-build-remote-image:prod:
-  stage: build-remote-image
-  image: $REGISTRY/public/ubuntu:gitlab-0.0.2
-  environment: production
-  variables:
-    REMOTE_IMAGE_ENV: prod
-  before_script:
-    - apt-get update -qq && apt-get install -y -qq jq > /dev/null || true
-    - chmod +x "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
-  script:
-    - "${CI_PROJECT_DIR}/ci/build_remote_image.sh"
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && ($CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH =~ /.*prod$/)
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
-      when: manual
-  tags:
-    - $RUNNER_ZJK_TAG
-
-# 触发 API 完整子流水线（build + test + deploy，独立 pipeline_id）
+# 打 tag 含 _matmaster-evo_ 且不含 worker 时自动 trigger API 子流水线；test 分支 push 时也 trigger
 trigger-api-deploy:
   stage: trigger
   trigger:
     include: ci/api-deploy.yml
     strategy: depend
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
-      when: never
-    - if: '($CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/) && $CI_COMMIT_TAG == null'
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
       when: on_success
-    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo_/ && $CI_COMMIT_TAG !~ /_matmaster-evo-worker_/'
       when: on_success
 
-# 触发 Worker 完整子流水线（build + deploy，独立 pipeline_id）
+# 打 tag 含 _matmaster-evo-worker_ 时自动 trigger Worker 子流水线；test 分支 push 时也 trigger
 trigger-worker-deploy:
   stage: trigger
   trigger:
     include: ci/worker-deploy.yml
     strategy: depend
   rules:
-    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/'
-      changes:
-        - Dockerfile.remote
-        - ci/build_remote_image.sh
-      when: never
-    - if: '($CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_BRANCH =~ /.*dev$/) && $CI_COMMIT_TAG == null'
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
       when: on_success
-    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_TAG =~ /_matmaster-evo-worker_/'
       when: on_success

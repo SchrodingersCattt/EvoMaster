@@ -29,8 +29,13 @@ from src.services.deploy_state_service import (
 )
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
+from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
-from src.utils.constant import AG_UI_EVENT, REDIS_URL
+from src.utils.constant import AG_UI_EVENT, CURRENT_ENV, REDIS_URL
+from src.utils.feishu_notifier import (
+    CARD_TEMPLATE_ORANGE,
+    notify_post_async,
+)
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
@@ -799,6 +804,34 @@ class ChatStreamService:
                 self._sessions_service.set_session_status(sid, 'waiting')
                 get_redis_dao().set_session_run_queued(sid)
                 self._sessions_service.discard_session_run_from_this_pod(sid)
+                # 在入队之前发「任务进入排队」飞书通知，避免 Worker 先拿到任务先发「开始执行」导致顺序颠倒
+                try:
+                    session_user_id = self._sessions_service.get_session_user_id(sid)
+                    user_info = UserService.get_user_info_for_display(session_user_id)
+                    user_info_display = f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
+                    env = (CURRENT_ENV or '').strip().lower()
+                    session_url = f"https://matmaster{'' if not env or env == 'prod' else f'.{env}'}.bohrium.com/matmaster/chat-evo/{sid}"
+                    queue_len = get_redis_dao().llen_agent_run_queue()
+                    active_count = get_worker_registry_service().count_active_runs()
+                    user_question = (user_prompt or '').strip()
+                    if len(user_question) > 500:
+                        user_question = user_question[:500] + '…'
+                    notify_post_async(
+                        '任务进入排队',
+                        [
+                            ('会话ID', sid),
+                            ('会话地址', session_url),
+                            ('用户', user_info_display),
+                            ('用户问题', user_question or '-'),
+                            ('排队数', str(queue_len)),
+                            ('执行中', str(active_count)),
+                        ],
+                        template=CARD_TEMPLATE_ORANGE,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        'Feishu 进入排队通知发送失败 session_id=%s: %s', sid, e
+                    )
                 if not get_redis_dao().lpush_agent_run_job(job):
                     self._sessions_service.set_session_status(sid, 'idle')
                     get_redis_dao().delete_session_run_queued(sid)

@@ -27,7 +27,7 @@ from src.services.chat_history import ChatHistoryConverter
 from src.services.quota_service import use_quota
 from src.services.sessions_service import SESSIONS, get_sessions_service
 from src.services.user_service import UserService
-from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID
+from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
@@ -184,7 +184,7 @@ class AgentRunService:
         self,
         session_id: str,
         task_id: str,
-        event_callback: Callable[[str, str, Any], None],
+        event_callback: Callable[..., None],
     ) -> bool:
         """将当前任务的工作目录上传到 OSS，并通过 event_callback 推送 workspace_uploaded 或 workspace_upload_error。返回是否成功。"""
         workspace_path = self._get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
@@ -268,7 +268,9 @@ class AgentRunService:
         _ssh_attached = False
         _task_completed = False
 
-        def event_callback(source: str, event_type: str, content: Any) -> None:
+        def event_callback(
+            source: str, event_type: str, content: Any, **extra: Any
+        ) -> None:
             payload = {
                 'source': source,
                 'type': event_type,
@@ -280,6 +282,7 @@ class AgentRunService:
                 payload['invocation_id'] = invocation_id
             if event_type == 'end':
                 payload['task_completed'] = _task_completed
+            payload.update(extra)
             if event_type != 'log_line':
                 events_table = get_chat_events_table()
                 if events_table:
@@ -503,12 +506,61 @@ class AgentRunService:
                             )
                         if use_reuse_table:
                             nodes_table = get_bohrium_nodes_table()
+                            creator_id = 0
+                            if user_id_for_ak:
+                                try:
+                                    creator_id = int(user_id_for_ak)
+                                except (TypeError, ValueError):
+                                    creator_id = 0
+                            try:
+                                tracked_node_ids = (
+                                    nodes_table.list_node_ids_for_user_org(
+                                        user_id_for_ak, org_id
+                                    )
+                                )
+                                cleanup_node_name = 'matmaster-session'
+                                destroyed_node_ids = (
+                                    node_svc.destroy_untracked_nodes_by_name(
+                                        access_key,
+                                        tracked_node_ids,
+                                        node_name=cleanup_node_name,
+                                        creator_id=creator_id,
+                                    )
+                                )
+                                if destroyed_node_ids:
+                                    logger.info(
+                                        'run_agent_sync: destroyed untracked nodes user_id=%s org_id=%s '
+                                        'name=%s node_ids=%s',
+                                        user_id_for_ak,
+                                        org_id,
+                                        cleanup_node_name,
+                                        destroyed_node_ids,
+                                    )
+                            except Exception as cleanup_err:
+                                logger.warning(
+                                    'run_agent_sync: cleanup untracked nodes failed user_id=%s org_id=%s: %s',
+                                    user_id_for_ak,
+                                    org_id,
+                                    cleanup_err,
+                                )
                             row = nodes_table.find_one_for_reuse(
                                 user_id_for_ak, org_id, project_id
                             )
-                            expected_image_name = node_svc.get_image_name_by_id(
-                                access_key, BOHRIUM_DEFAULT_IMAGE_ID
+                            expected_image_name = (
+                                os.environ.get('BOHRIUM_EXPECTED_IMAGE_NAME')
+                                or os.environ.get('BOHRIUM_IMAGE_NAME')
+                                or BOHRIUM_DEFAULT_IMAGE_NAME
                             )
+                            if isinstance(expected_image_name, str):
+                                expected_image_name = (
+                                    expected_image_name.strip() or None
+                                )
+                            else:
+                                expected_image_name = None
+                            if expected_image_name is None:
+                                expected_image_name = node_svc.get_image_name_by_id(
+                                    access_key, BOHRIUM_DEFAULT_IMAGE_ID
+                                )
                             if row:
                                 node_id = int(row['node_id'])
 
