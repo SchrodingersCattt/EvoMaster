@@ -114,6 +114,9 @@ class ChatSendRequest(BaseModel):
     files: List[str] | None = (
         None  # 可选，OSS 链接列表，前端展示与 content 分开，传给 agent 时拼成 content + URLs
     )
+    workspace_paths: List[str] | None = (
+        None  # 可选，工作区/个人路径列表，如 /personal/1.cif，与 files(OSS) 区分
+    )
     mode: str = 'direct'  # "direct" | "planner"
     llm: Optional[str] = (
         None  # 可选，本轮使用的 LLM 配置块（如 litellm/azure/deepseek），不传则用 agent 默认

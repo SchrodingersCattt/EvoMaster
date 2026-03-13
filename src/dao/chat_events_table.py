@@ -67,17 +67,18 @@ class ChatEventsTable(BaseTable):
                     # 供刷新后回放时计算 stream_started_at / elapsed_ms
                     if row.get('created_at') is not None:
                         ev['created_at_ms'] = int(row['created_at'].timestamp() * 1000)
-                    # User/query 存的是 { content, files } 时拆成顶层 content + files 供前端分开展示
+                    # User/query 存的是 { content, files?, workspace_paths? } 时拆成顶层供前端分开展示
                     if isinstance(content, dict) and 'content' in content:
                         ev['content'] = content.get('content', '')
                         ev['files'] = content.get('files', [])
+                        ev['workspace_paths'] = content.get('workspace_paths', [])
                     events.append(ev)
                 return events
 
     def get_last_user_query(self, session_id: str) -> Optional[Dict]:
         """
         获取该会话最后一次用户输入（source=User, type=query），用于部署中断后重跑。
-        返回 dict：content(str), files(list 可选), mode(str 可选), task_id 可选。
+        返回 dict：content(str), files(list 可选), workspace_paths(list 可选), mode(str 可选), task_id 可选。
         """
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -106,12 +107,14 @@ class ChatEventsTable(BaseTable):
                     return {
                         'content': (content.get('content') or ''),
                         'files': content.get('files') or [],
+                        'workspace_paths': content.get('workspace_paths') or [],
                         'mode': content.get('mode') or 'direct',
                         **base,
                     }
                 return {
                     'content': content if isinstance(content, str) else '',
                     'files': [],
+                    'workspace_paths': [],
                     'mode': 'direct',
                     **base,
                 }
