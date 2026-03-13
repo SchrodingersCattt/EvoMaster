@@ -242,6 +242,7 @@ mcp:
         - build_surface_slab
         - build_surface_adsorbate
         - build_surface_interface
+        - analyze_wyckoff_positions
         - get_structure_info
         - get_molecule_info
     mat_dpa:
