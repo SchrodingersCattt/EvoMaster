@@ -179,10 +179,12 @@ async def chat_stream(
         raise ConflictErrorResponse(
             msg='该会话已有任务在运行，请等待完成或先取消后再发新消息',
         )
-    # 给 agent 的 prompt：正文 + 附件 URL；多轮历史由 run_agent_sync 通过 task.meta['dialog_history'] 注入
+    # 给 agent 的 prompt：正文 + 附件 URL + 工作区路径；多轮历史由 run_agent_sync 通过 task.meta['dialog_history'] 注入
     base_prompt = (req.content or '').strip()
     if req.files:
         base_prompt += '\n\n[Attached files]\n' + '\n'.join(req.files)
+    if req.workspace_paths:
+        base_prompt += '\n\n[Workspace paths]\n' + '\n'.join(req.workspace_paths)
     return StreamingResponse(
         stream_svc.generate_send_stream(sid, base_prompt, ctx),
         media_type='text/event-stream',

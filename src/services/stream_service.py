@@ -634,6 +634,8 @@ class ChatStreamService:
         }
         if req.files:
             user_msg['files'] = list(req.files)
+        if req.workspace_paths:
+            user_msg['workspace_paths'] = list(req.workspace_paths)
         self._events_service.add_history_event(sid, user_msg, user_id=user_id)
 
         request_event_queue: asyncio.Queue = asyncio.Queue()
