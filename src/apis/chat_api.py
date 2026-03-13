@@ -6,10 +6,10 @@ from fastapi.responses import Response, StreamingResponse
 
 from src.base.base_res import BaseResponse
 from src.models.chat import (
-    ActiveSessionsCountApiResponse,
-    ActiveSessionsCountData,
     ChatPlannerReplyRequest,
     ChatSendRequest,
+    RunStatusApiResponse,
+    RunStatusData,
     SessionItem,
     SessionListApiResponse,
     SessionListQuery,
@@ -29,6 +29,7 @@ from src.services.stream_service import (
     get_stream_service,
 )
 from src.services.user_service import UserService
+from src.services.worker_registry_service import get_worker_registry_service
 from src.services.workspace_service import WorkspaceService, get_workspace_service
 from src.utils.exceptions import (
     BadRequestErrorResponse,
@@ -69,14 +70,15 @@ def list_sessions(
     )
 
 
-@router.get('/active_count', response_model=ActiveSessionsCountApiResponse)
-def get_active_sessions_count(
-    chat_svc: ChatSessionsService = Depends(get_sessions_service),
-):
-    """获取全局活跃会话数量（不限于当前用户，无需认证）"""
-    count = chat_svc.get_active_sessions_count()
-    return ActiveSessionsCountApiResponse(
-        data=ActiveSessionsCountData(active_count=count),
+@router.get('/run_status', response_model=RunStatusApiResponse)
+def get_run_status():
+    """获取执行中与排队中的任务数（Redis session_run_owner + agent_run_queue），无需认证。"""
+    registry = get_worker_registry_service()
+    return RunStatusApiResponse(
+        data=RunStatusData(
+            active_count=registry.count_active_runs(),
+            queued_count=registry.count_queued_runs(),
+        ),
     )
 
 
