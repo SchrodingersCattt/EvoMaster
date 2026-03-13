@@ -841,6 +841,7 @@ class AgentRunService:
                                 },
                             )
                     except Exception as e:
+                        reason = f'Bohrium 节点创建失败: {e}'
                         logger.warning(
                             'run_agent_sync: auto create Bohrium node failed: %s',
                             e,
@@ -851,13 +852,13 @@ class AgentRunService:
                             'bohrium_node',
                             {
                                 'status': 'failed',
-                                'message': f'Bohrium 节点创建失败: {e}',
+                                'message': reason,
                             },
                         )
                         event_callback(
                             'System',
                             'error',
-                            f'Bohrium 节点创建失败: {e}',
+                            reason,
                         )
                         # 发送 end 以便流结束、并落库（_task_completed 为 False 表示按失败论）
                         try:
@@ -868,7 +869,8 @@ class AgentRunService:
                             )
                         except Exception:
                             pass
-                        return False
+                        # 返回 (False, reason) 供 Worker 写入飞书「失败原因」
+                        return (False, reason)
 
             # 本轮模型：支持 llm_override（换配置块）和 model_override（覆盖 model 字段，如 gemini-3-flash-preview / azure/gpt-5）
             run_llm = base.llm
