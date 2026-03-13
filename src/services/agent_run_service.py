@@ -184,7 +184,7 @@ class AgentRunService:
         self,
         session_id: str,
         task_id: str,
-        event_callback: Callable[[str, str, Any], None],
+        event_callback: Callable[..., None],
     ) -> bool:
         """将当前任务的工作目录上传到 OSS，并通过 event_callback 推送 workspace_uploaded 或 workspace_upload_error。返回是否成功。"""
         workspace_path = self._get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
@@ -268,7 +268,9 @@ class AgentRunService:
         _ssh_attached = False
         _task_completed = False
 
-        def event_callback(source: str, event_type: str, content: Any) -> None:
+        def event_callback(
+            source: str, event_type: str, content: Any, **extra: Any
+        ) -> None:
             payload = {
                 'source': source,
                 'type': event_type,
@@ -280,6 +282,7 @@ class AgentRunService:
                 payload['invocation_id'] = invocation_id
             if event_type == 'end':
                 payload['task_completed'] = _task_completed
+            payload.update(extra)
             if event_type != 'log_line':
                 events_table = get_chat_events_table()
                 if events_table:

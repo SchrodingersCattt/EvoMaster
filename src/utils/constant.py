@@ -77,7 +77,3 @@ BOHRIUM_DEFAULT_IMAGE_NAME = (
     BOHRIUM_ENV_DEFAULT_IMAGE_NAMES.get(CURRENT_ENV)
     or BOHRIUM_ENV_DEFAULT_IMAGE_NAMES['test']
 )
-
-# 飞书私聊（任务完成通知）：需企业自建应用 App ID / App Secret；未配置则不发私聊
-FEISHU_APP_ID = 'cli_a93aa00bf2b9dcc8'
-FEISHU_APP_SECRET = '2HOsgrqaQUazqFU8N2fgwR2ZTuL7fbKm'
