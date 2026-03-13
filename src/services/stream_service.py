@@ -804,29 +804,7 @@ class ChatStreamService:
                 self._sessions_service.set_session_status(sid, 'waiting')
                 get_redis_dao().set_session_run_queued(sid)
                 self._sessions_service.discard_session_run_from_this_pod(sid)
-                if not get_redis_dao().lpush_agent_run_job(job):
-                    self._sessions_service.set_session_status(sid, 'idle')
-                    get_redis_dao().delete_session_run_queued(sid)
-                    yield self.sse_format(
-                        {
-                            'source': 'System',
-                            'type': 'error',
-                            'content': 'Queue unavailable.',
-                            'session_id': sid,
-                            'invocation_id': ctx.invocation_id,
-                        }
-                    )
-                    yield self.sse_format(
-                        {
-                            'source': 'System',
-                            'type': 'end',
-                            'content': '',
-                            'session_id': sid,
-                            'invocation_id': ctx.invocation_id,
-                        }
-                    )
-                    return
-                # 进入排队时发飞书群通知
+                # 在入队之前发「任务进入排队」飞书通知，避免 Worker 先拿到任务先发「开始执行」导致顺序颠倒
                 try:
                     session_user_id = self._sessions_service.get_session_user_id(sid)
                     user_info = UserService.get_user_info_for_display(session_user_id)
@@ -854,6 +832,28 @@ class ChatStreamService:
                     logger.warning(
                         'Feishu 进入排队通知发送失败 session_id=%s: %s', sid, e
                     )
+                if not get_redis_dao().lpush_agent_run_job(job):
+                    self._sessions_service.set_session_status(sid, 'idle')
+                    get_redis_dao().delete_session_run_queued(sid)
+                    yield self.sse_format(
+                        {
+                            'source': 'System',
+                            'type': 'error',
+                            'content': 'Queue unavailable.',
+                            'session_id': sid,
+                            'invocation_id': ctx.invocation_id,
+                        }
+                    )
+                    yield self.sse_format(
+                        {
+                            'source': 'System',
+                            'type': 'end',
+                            'content': '',
+                            'session_id': sid,
+                            'invocation_id': ctx.invocation_id,
+                        }
+                    )
+                    return
                 redis_queue = asyncio.Queue()
                 stop_event = threading.Event()
                 channel = STREAM_CHANNEL_PREFIX + sid
