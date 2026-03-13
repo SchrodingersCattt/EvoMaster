@@ -246,7 +246,18 @@ def _run_worker_loop() -> None:
                     llm_override=llm_override,
                     model_override=model_override,
                 )
-                run_success = result is not False
+                # 支持 (False, reason) 以便飞书「Worker 执行失败」卡片展示失败原因（如 Bohrium 节点创建失败）
+                if (
+                    isinstance(result, tuple)
+                    and len(result) >= 2
+                    and result[0] is False
+                ):
+                    run_success = False
+                    fail_reason = result[1]
+                elif result is False:
+                    run_success = False
+                else:
+                    run_success = True
             except Exception as e:
                 run_success = False
                 fail_reason = str(e)
