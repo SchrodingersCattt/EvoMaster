@@ -22,6 +22,7 @@ from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_dir_to_oss
+from src.dao.redis_dao import get_redis_dao
 from src.services.bohrium_node_service import get_bohrium_node_service
 from src.services.chat_history import ChatHistoryConverter
 from src.services.quota_service import use_quota
@@ -1118,6 +1119,8 @@ class AgentRunService:
                             exc_info=True,
                         )
             self._sessions_service.clear_stop_event(session_id)
+            # 无论 Worker 还是 direct 模式，run 结束时都清理 Redis stop key，避免 session 级 key 残留导致下一轮误判
+            get_redis_dao().delete_stop_requested(session_id, task_id)
             logger.info(
                 'run_agent_sync end: session_id=%s task_id=%s worker_id=%s',
                 session_id,
