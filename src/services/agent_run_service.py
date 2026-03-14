@@ -1120,6 +1120,11 @@ class AgentRunService:
                         )
             self._sessions_service.clear_stop_event(session_id)
             # 无论 Worker 还是 direct 模式，run 结束时都清理 Redis stop key，避免 session 级 key 残留导致下一轮误判
+            logger.info(
+                'run_agent_sync: clear stop keys in finally session_id=%s task_id=%s',
+                session_id,
+                task_id,
+            )
             get_redis_dao().delete_stop_requested(session_id, task_id)
             logger.info(
                 'run_agent_sync end: session_id=%s task_id=%s worker_id=%s',

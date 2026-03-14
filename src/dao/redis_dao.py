@@ -379,11 +379,24 @@ class RedisDao:
         """
         client = self.get_publish_client() or self.create_client()
         if not client:
+            logger.warning(
+                'Redis delete_stop_requested: no client (session_id=%s task_id=%s), skip',
+                session_id,
+                task_id or '(session-only)',
+            )
             return
         key_task = _stop_key(session_id, task_id)
         key_session = _stop_key(session_id, '')
         try:
-            client.delete(key_task, key_session)
+            deleted = client.delete(key_task, key_session)
+            logger.info(
+                'Redis delete_stop_requested: session_id=%s task_id=%s keys=%s,%s deleted=%s',
+                session_id,
+                task_id or '(session-only)',
+                key_task,
+                key_session,
+                deleted,
+            )
         except Exception as e:
             logger.warning(
                 'Redis delete_stop_requested failed session_id=%s task_id=%s: %s',
