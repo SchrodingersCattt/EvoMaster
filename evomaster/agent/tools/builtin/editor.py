@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import os
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
@@ -122,45 +124,69 @@ class EditorTool(BaseTool):
         
         try:
             # 验证路径
-            path_type = self._validate_path(session, params.command, params.path)
-            
+            normalized_path, path_type = self._validate_path(session, params.command, params.path)
+             
             if params.command == "view":
-                return self._view(session, params.path, params.view_range, path_type)
+                return self._view(session, normalized_path, params.view_range, path_type)
             elif params.command == "create":
-                return self._create(session, params.path, params.file_text)
+                return self._create(session, normalized_path, params.file_text)
             elif params.command == "str_replace":
-                return self._str_replace(session, params.path, params.old_str, params.new_str)
+                return self._str_replace(session, normalized_path, params.old_str, params.new_str)
             elif params.command == "insert":
-                return self._insert(session, params.path, params.insert_line, params.new_str)
+                return self._insert(session, normalized_path, params.insert_line, params.new_str)
             elif params.command == "undo_edit":
-                return self._undo_edit(session, params.path)
+                return self._undo_edit(session, normalized_path)
             else:
                 return f"Unknown command: {params.command}", {}
         except ToolError as e:
             return f"ERROR:\n{str(e)}", {"error": str(e)}
+
+    def _normalize_path(self, session: BaseSession, path: str) -> str:
+        """规范化路径，兼容 Windows 上的 /workspace 风格路径。"""
+        normalized = path.strip()
+        session_workspace = getattr(session.config, "workspace_path", "") or ""
+
+        # 兼容 Windows：将 /workspace/... 或 /... 映射到实际 workspace 下
+        if os.name == "nt" and normalized.startswith("/"):
+            workspace = Path(session_workspace)
+            if workspace.is_absolute():
+                if normalized == "/workspace":
+                    return str(workspace)
+                if normalized.startswith("/workspace/"):
+                    rel_path = normalized[len("/workspace/") :]
+                    return str(workspace / Path(rel_path))
+                return str(workspace / Path(normalized.lstrip("/")))
+
+        return str(Path(normalized))
 
     def _validate_path(
         self,
         session: BaseSession,
         command: str,
         path: str,
-    ) -> Literal["file", "dir", "not_exist"]:
-        """验证路径"""
+    ) -> tuple[str, Literal["file", "dir", "not_exist"]]:
+        """验证路径并返回规范化后的路径。"""
+        normalized_path = self._normalize_path(session, path)
+
         # 检查是否是绝对路径
-        if not Path(path).is_absolute():
-            raise ToolParameterError("path", path, "The path should be an absolute path, starting with `/`.")
+        if not Path(normalized_path).is_absolute():
+            raise ToolParameterError(
+                "path",
+                path,
+                "The path should be an absolute path, starting with `/` or a valid workspace absolute path.",
+            )
         
         # 检查路径类型（优先检查目录，因为目录检查更可靠）
-        if session.is_directory(path):
+        if session.is_directory(normalized_path):
             path_type = "dir"
-        elif session.is_file(path):
+        elif session.is_file(normalized_path):
             path_type = "file"
-        elif session.path_exists(path):
+        elif session.path_exists(normalized_path):
             # 如果路径存在但既不是文件也不是目录，再次检查
             # 可能是符号链接或其他特殊类型，尝试判断实际类型
-            if session.is_directory(path):
+            if session.is_directory(normalized_path):
                 path_type = "dir"
-            elif session.is_file(path):
+            elif session.is_file(normalized_path):
                 path_type = "file"
             else:
                 # 未知类型，默认当作文件处理（但会在使用时再次检查）
@@ -170,23 +196,23 @@ class EditorTool(BaseTool):
         
         # 验证命令与路径类型的兼容性
         if path_type == "not_exist" and command != "create":
-            raise ToolParameterError("path", path, f"The path {path} does not exist.")
+            raise ToolParameterError("path", path, f"The path {normalized_path} does not exist.")
         
         # 对于 create 命令，需要更严格的检查
         if command == "create":
             # 再次确认路径不存在（防止误判）
-            if session.is_file(path):
-                raise ToolParameterError("path", path, f"File already exists at: {path}. Cannot overwrite files using command `create`.")
-            if session.is_directory(path):
-                raise ToolParameterError("path", path, f"The path {path} is a directory. Cannot create a file with the same name as a directory.")
-            if session.path_exists(path):
+            if session.is_file(normalized_path):
+                raise ToolParameterError("path", path, f"File already exists at: {normalized_path}. Cannot overwrite files using command `create`.")
+            if session.is_directory(normalized_path):
+                raise ToolParameterError("path", path, f"The path {normalized_path} is a directory. Cannot create a file with the same name as a directory.")
+            if session.path_exists(normalized_path):
                 # 路径存在但不是文件也不是目录，可能是其他类型（如符号链接）
-                raise ToolParameterError("path", path, f"Path already exists at: {path}. Cannot overwrite using command `create`.")
+                raise ToolParameterError("path", path, f"Path already exists at: {normalized_path}. Cannot overwrite using command `create`.")
         
         if path_type == "dir" and command != "view":
-            raise ToolParameterError("path", path, f"The path {path} is a directory and only the `view` command can be used on directories.")
+            raise ToolParameterError("path", path, f"The path {normalized_path} is a directory and only the `view` command can be used on directories.")
         
-        return path_type
+        return normalized_path, path_type
 
     def _view(
         self,
