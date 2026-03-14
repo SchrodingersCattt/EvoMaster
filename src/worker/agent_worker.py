@@ -174,6 +174,8 @@ def _run_worker_loop() -> None:
             f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
         )
         redis_dao.delete_confirmation_reply_list(session_id)
+        # 清除可能残留的上一轮 stop key（含 session 级），避免上一轮 finally 中 delete 失败导致本轮一启动即被误判为已请求停止
+        redis_dao.delete_stop_requested(session_id, task_id)
         redis_dao.set_confirmation_run_active(session_id)
         redis_dao.set_confirmation_run_context(session_id, task_id, invocation_id or '')
 
