@@ -81,7 +81,7 @@ Converts raw `mat_sn_*` tool outputs into `evidence_cards` and writes them to `c
   - `python collect_evidence.py --collected_json _tmp/surveys/collected_MyTopic.json --facet "Mechanism"` *(recommended: assign facet at ingest so cards are tagged for this batch)*
   - `python collect_evidence.py --collected_json _tmp/surveys/collected_MyTopic.json --tool_outputs_dir _tmp/tool_outputs`
   - `python collect_evidence.py --topic "MyTopic"` *(auto-derives collected_json path and tool_outputs_dir)*
-- **Supported sources**: `mat_sn_search-papers-enhanced` (`data[]`) and `mat_sn_web-search` (`results[]`).
+- **Supported sources**: any `mat_sn_*` paper search tool (output with `data[]` field, e.g. `mat_sn_search-papers-enhanced`, `mat_sn_search-papers-normal`, `mat_sn_scholar-search`) and any web search tool (output with `results[]` field, e.g. `mat_sn_web-search`). If a tool is unavailable or returns errors, switch to a different available search tool or method — do not retry the same failing tool.
 - **Output**: Prints `{"status":"ok","cards_added":<n>,"cards_total":<n>,"collected_json_path":"..."}`.
 - **Survey contract**: `collected_*.json` is the survey contract (schema_version 2: `source_kind`, `key_concepts`). Downstream tools and the finish gate read these fields; do not rely on path heuristics.
 
@@ -109,6 +109,10 @@ Compiles collected findings into the final structured Markdown report.
 ## Tool (via use_skill)
 
 - **run_script** with **script_name**: `run_survey.py`, `summarize_paper.py`, `collect_evidence.py`, or `write_survey_report.py`; **script_args**: as in Usage above. Use `assign_facet.py` only for legacy repair.
+
+## Tool availability and fallback
+
+**If any `mat_sn_*` search tool returns an error, is unavailable, or returns 0 results repeatedly**: do NOT retry the same tool. Switch to a different available search tool or method (e.g. try a different `mat_sn_*` tool, use `mat_sn_web-search`, or use `extract_info_from_webpage` on a known URL). If all `mat_sn_*` tools are unavailable, proceed with whatever information is available and note the limitation.
 
 ## Rules
 

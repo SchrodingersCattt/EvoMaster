@@ -40,7 +40,7 @@ To list all profiles with details: `init_manuscript.py --list_formats`
 
 **Do not** call init_manuscript or write_section until you have run literature search for the topic. Writing **must** be grounded in retrieval:
 
-- Call MCP retrieval tools (**mat_sn_search-papers-normal**, **mat_sn_scholar-search**, **mat_sn_web-search**) with queries derived from the section/title. Run at least a few searches (e.g. topic + "review", topic + "methods") before drafting.
+- Call available MCP retrieval tools (e.g. **mat_sn_search-papers-enhanced**, **mat_sn_scholar-search**, **mat_sn_web-search**, or any other available search tool) with queries derived from the section/title. Run at least a few searches (e.g. topic + "review", topic + "methods") before drafting. If a tool returns errors or is unavailable, switch to a different available search tool or method — do not retry the same failing tool.
 - If the user did not provide source files or references, you **must** search the literature yourself and use the results as the basis for cited content. Do not write sections from memory only.
 - **Exception**: For `computational_report`, retrieval focuses on method references (software, functional, basis set citations). If the user provides all computational parameters, method retrieval is optional.
 

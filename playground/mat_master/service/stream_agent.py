@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
+import traceback as _tb
 from typing import Any, Callable
 
 from evomaster.utils.types import AssistantMessage, ToolMessage
@@ -95,6 +97,18 @@ class StreamingMatMasterAgent(MatMasterAgent):
         → monkey-patched _streaming_query → ... when dialog.tools is present (OpenAILLM falls
         back to super().query_stream() which calls self.query()).
         """
+        _stack_depth = len(_tb.extract_stack())
+        logging.info(
+            '[DIAG] StreamingMatMasterAgent._step() entered: stack_depth=%d, recursion_limit=%d',
+            _stack_depth,
+            sys.getrecursionlimit(),
+        )
+        if _stack_depth > sys.getrecursionlimit() - 100:
+            logging.error(
+                '[DIAG] NEAR RECURSION LIMIT in _step()! stack_depth=%d\nStack:\n%s',
+                _stack_depth,
+                ''.join(_tb.format_stack(limit=40)),
+            )
         agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
         self._begin_llm_stream(agent_name, context='step_execution')
         try:

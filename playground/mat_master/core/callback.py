@@ -1526,35 +1526,54 @@ class MatToolCallbacks:
         observation: str,
         info: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
-        """Append survey-retrieval reminder after mat_sn_search-papers-enhanced."""
-        if tool_call.function.name != 'mat_sn_search-papers-enhanced':
+        """Append survey-retrieval reminder after any mat_sn_* search/retrieval tool call.
+
+        Triggers for all mat_sn_* tools that return paper/web results so the LLM
+        is reminded to keep retrieving across multiple calls. When results are empty
+        or the tool appears unavailable, the reminder advises switching to a different
+        tool or method rather than retrying the same one.
+        """
+        tool_name = tool_call.function.name or ''
+        # Trigger for any mat_sn_* search/retrieval tool (not just search-papers-enhanced)
+        if not tool_name.startswith('mat_sn_'):
             return observation, info
         if info.get('error') is not None:
             return observation, info
 
         n_papers = ''
+        zero_results = False
         try:
             obj = (
                 observation
                 if isinstance(observation, dict)
                 else json.loads(observation)
             )
-            if (
-                isinstance(obj, dict)
-                and 'data' in obj
-                and isinstance(obj['data'], list)
-            ):
-                n_papers = str(len(obj['data']))
+            if isinstance(obj, dict):
+                # paper search tools return data[]
+                if 'data' in obj and isinstance(obj['data'], list):
+                    n_papers = str(len(obj['data']))
+                    zero_results = len(obj['data']) == 0
+                # web search tools return results[]
+                elif 'results' in obj and isinstance(obj['results'], list):
+                    n_papers = str(len(obj['results']))
+                    zero_results = len(obj['results']) == 0
         except (json.JSONDecodeError, TypeError):
             pass
 
         call_count = info.get('call_count', '?')
-        reminder = (
-            f"\n\n[Survey reminder: {n_papers or '?'} papers returned (retrieval #{call_count}). "
-            'A thorough survey requires at least 6-15 retrievals; if results are sparse or '
-            'retrieval count is low, vary your question/words and call '
-            'mat_sn_search-papers-enhanced or mat_sn_web-search again.]'
-        )
+        if zero_results:
+            # Empty results: advise switching tool or method, not retrying the same one
+            reminder = (
+                f"\n\n[Survey reminder: 0 results returned by {tool_name} (retrieval #{call_count}). "
+                'Do NOT retry the same tool with the same query. '
+                'Switch to a different search tool or method, or try a different query angle.]'
+            )
+        else:
+            reminder = (
+                f"\n\n[Survey reminder: {n_papers or '?'} results returned (retrieval #{call_count}). "
+                'A thorough survey requires at least 6-15 retrievals; if results are sparse, '
+                'vary your query and use a different available search tool or method.]'
+            )
         return observation + reminder, info
 
     def after_normalize_struct_db_metadata(

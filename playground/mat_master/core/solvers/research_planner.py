@@ -11,6 +11,7 @@ import logging
 import re
 import shutil
 import sys
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -458,6 +459,7 @@ class ResearchPlanner(BaseExp):
         except Exception:
             self._turn_budget_init = 100
         self._turn_budget_remaining: int = int(self._turn_budget_init)
+        self._turn_budget_lock = threading.Lock()  # guards _turn_budget_remaining read-check-write
         # Unified execution layer config (shared BatchExecutor)
         exec_cfg = mat.get('execution') or {}
         self._planner_max_workers: int = max(
@@ -491,24 +493,26 @@ class ResearchPlanner(BaseExp):
         }
 
     def _consume_turns(self, state: dict[str, Any], task_id: str, n: int = 1) -> bool:
-        """Consume planner turn budget.
+        """Consume planner turn budget (thread-safe).
 
         Returns False if budget would be exceeded; does not decrement in that case.
         Also persists budget fields into state for resume safety.
+        Uses _turn_budget_lock to make the read-check-write atomic when window_size > 1.
         """
         try:
             n_i = int(n)
         except Exception:
             n_i = 1
         n_i = max(1, n_i)
-        if self._turn_budget_remaining - n_i < 0:
+        with self._turn_budget_lock:
+            if self._turn_budget_remaining - n_i < 0:
+                state['turn_budget_init'] = int(self._turn_budget_init)
+                state['turn_budget_remaining'] = int(self._turn_budget_remaining)
+                return False
+            self._turn_budget_remaining -= n_i
             state['turn_budget_init'] = int(self._turn_budget_init)
             state['turn_budget_remaining'] = int(self._turn_budget_remaining)
-            return False
-        self._turn_budget_remaining -= n_i
-        state['turn_budget_init'] = int(self._turn_budget_init)
-        state['turn_budget_remaining'] = int(self._turn_budget_remaining)
-        return True
+            return True
 
     def _fail_max_turns_exceeded(
         self, task_id: str, state: dict[str, Any]
@@ -535,6 +539,17 @@ class ResearchPlanner(BaseExp):
         if source == 'Planner' and event_type == 'thought':
             content = _normalize_planner_thought(content)
             event_type = 'planner_reply'
+        # Forward Planner llm_token{status:streaming} as-is so the frontend streaming
+        # buffer (which only handles msg.type === "llm_token") accumulates tokens correctly.
+        # Suppress start/end boundary markers (they are noisy and not needed by the frontend).
+        # The final _emit('Planner','thought',...) still sends the complete cleaned planner_reply.
+        if source == 'Planner' and event_type == 'llm_token':
+            if extra.get('status') == 'streaming':
+                # Pass through as llm_token so frontend streaming buffer works
+                if self._output_callback:
+                    self._output_callback(source, 'llm_token', content, **extra)
+            # Suppress start/end boundary markers
+            return
         if self._output_callback:
             self._output_callback(source, event_type, content, **extra)
 
@@ -590,9 +605,22 @@ class ResearchPlanner(BaseExp):
                                 self._turn_budget_remaining = max(0, int(tb_rem))
                         except Exception:
                             pass
+                        self.logger.info(
+                            '[Planner] _load_state: RESUME from %s '
+                            '(phase=%s, replan_count=%d, history_len=%d, '
+                            'turn_budget_remaining=%s)',
+                            path,
+                            loaded.get('phase', '?'),
+                            loaded.get('replan_count', 0),
+                            len(loaded.get('history', [])),
+                            loaded.get('turn_budget_remaining', '?'),
+                        )
                     return loaded
             except Exception as e:
                 self.logger.warning('Failed to load state: %s', e)
+        self.logger.info(
+            '[Planner] _load_state: NEW task (no state file at %s)', path
+        )
         return {
             'task_id': task_id,
             'goal': '',
@@ -613,6 +641,11 @@ class ResearchPlanner(BaseExp):
             with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(state, f, indent=2, ensure_ascii=False)
             shutil.move(tmp, path)
+            self.logger.debug(
+                '[Planner] _save_state: OK (phase=%s, path=%s)',
+                state.get('phase', '?'),
+                path,
+            )
         except Exception as e:
             self.logger.error('Failed to save state: %s', e)
 
@@ -682,6 +715,12 @@ class ResearchPlanner(BaseExp):
         with journal_path.open('a', encoding='utf-8') as f:
             f.write('\n'.join(block))
             f.write('\n')
+        self.logger.debug(
+            '[Planner] _append_journal: phase=%s title=%r path=%s',
+            phase,
+            title,
+            journal_path,
+        )
 
     @staticmethod
     def _extract_urls_from_text(text: str) -> list[str]:
@@ -749,6 +788,13 @@ class ResearchPlanner(BaseExp):
             state['literature_entry_count'] = (
                 int(state.get('literature_entry_count', 0) or 0) + added
             )
+        self.logger.debug(
+            '[Planner] _append_literature_index: source=%r added=%d total=%d path=%s',
+            source,
+            added,
+            int(state.get('literature_entry_count', 0) or 0),
+            lit_path,
+        )
         return added
 
     def _build_context_prompt(self, task_description: str) -> str:
@@ -1863,29 +1909,157 @@ Rules:
             s['step_id'] for s in steps if s.get('status') in ('done', 'failed')
         }
         window: list[dict[str, Any]] = []
+        blocked_reasons: list[str] = []
         for s in steps:
             if s.get('status') != 'pending':
                 continue
             deps = s.get('depends_on') or []
-            if all(d in resolved_ids for d in deps):
-                window.append(s)
-                if len(window) >= self.window_size:
-                    break
+            unresolved = [d for d in deps if d not in resolved_ids]
+            if unresolved:
+                blocked_reasons.append(
+                    f"step_{s['step_id']} blocked by unresolved deps: {unresolved}"
+                )
+                continue
+            window.append(s)
+            if len(window) >= self.window_size:
+                break
+        # Structured observability log
+        self.logger.info(
+            '[Planner] ExecutionWindow: resolved_ids=%s, window=[%s], blocked=%d',
+            sorted(resolved_ids),
+            ', '.join(f"step_{s['step_id']}" for s in window),
+            len(blocked_reasons),
+        )
+        if blocked_reasons:
+            self.logger.debug('[Planner] Blocked steps: %s', '; '.join(blocked_reasons))
+        if not window:
+            pending_count = sum(1 for s in steps if s.get('status') == 'pending')
+            self.logger.warning(
+                '[Planner] Empty execution window: pending_steps=%d, resolved_ids=%s',
+                pending_count,
+                sorted(resolved_ids),
+            )
         return window
 
-    def _summarize_history(self, history: list[dict[str, Any]]) -> str:
-        """Build concise text summary of execution history for replan context."""
+    def _summarize_history(
+        self,
+        history: list[dict[str, Any]],
+        max_summary_len: int = 120,
+    ) -> str:
+        """Build text summary of execution history.
+
+        Args:
+            max_summary_len: Max characters per step summary.
+                Default 120 (used for replan prompt, keeps it concise).
+                Pass 0 to disable truncation (used for step-context injection).
+        """
         if not history:
             return '(no steps executed yet)'
         lines = []
         for entry in history:
             step_id = entry.get('step', '?')
             if entry.get('error'):
-                lines.append(f"  Step {step_id}: FAILED — {entry['error'][:120]}")
+                err = entry['error']
+                if max_summary_len and len(err) > max_summary_len:
+                    err = err[:max_summary_len] + '...'
+                lines.append(f"  Step {step_id}: FAILED — {err}")
             else:
-                summary = entry.get('result_summary', 'done')[:120]
+                summary = entry.get('result_summary', 'done')
+                if max_summary_len and len(summary) > max_summary_len:
+                    summary = summary[:max_summary_len] + '...'
                 lines.append(f"  Step {step_id}: OK — {summary}")
         return '\n'.join(lines)
+
+    def _build_step_context(
+        self,
+        step: dict[str, Any],
+        state: dict[str, Any],
+        task_id: str,
+    ) -> str:
+        """Build pre-step context injection block for step prompt enrichment.
+
+        Includes:
+        1. Previous step result (full, not truncated to 120 chars)
+        2. Research Journal recent entries (last 2000 chars)
+        3. Literature Index recent entries (last 20 lines)
+
+        All file reads are logged. Failures degrade gracefully (part omitted).
+        Returns empty string if nothing to inject.
+        """
+        parts: list[str] = []
+
+        # 1. Previous step result (full, untruncated)
+        history = state.get('history', [])
+        if history:
+            last_entry = history[-1]
+            prev_step_id = last_entry.get('step', '?')
+            if last_entry.get('error'):
+                parts.append(
+                    f"[Previous Step {prev_step_id} FAILED]: {last_entry['error']}"
+                )
+            else:
+                summary = last_entry.get('result_summary', 'done')
+                parts.append(f"[Previous Step {prev_step_id} OK]: {summary}")
+
+        # 2. Research Journal recent entries
+        artifacts = state.get('artifacts') or {}
+        journal_raw = artifacts.get('research_journal', '')
+        journal_path = (
+            Path(journal_raw)
+            if journal_raw
+            else (self._planner_artifact_dir(task_id) / 'research_journal.md')
+        )
+        if journal_path.exists():
+            try:
+                journal_text = journal_path.read_text(encoding='utf-8')
+                original_len = len(journal_text)
+                if len(journal_text) > 2000:
+                    journal_text = '...(truncated)\n' + journal_text[-2000:]
+                parts.append(f"[Research Journal (recent)]:\n{journal_text}")
+                self.logger.debug(
+                    '[Planner] _build_step_context: read journal '
+                    'step=%s chars=%d (original=%d) path=%s',
+                    step.get('step_id', '?'),
+                    len(journal_text),
+                    original_len,
+                    journal_path,
+                )
+            except Exception as e:
+                self.logger.warning(
+                    '[Planner] _build_step_context: failed to read journal: %s', e
+                )
+
+        # 3. Literature Index recent entries
+        lit_raw = artifacts.get('literature_index', '')
+        lit_path = (
+            Path(lit_raw)
+            if lit_raw
+            else (self._planner_artifact_dir(task_id) / 'literature_index.jsonl')
+        )
+        if lit_path.exists():
+            try:
+                lines = lit_path.read_text(encoding='utf-8').strip().splitlines()
+                recent_entries = lines[-20:]
+                lit_text = '\n'.join(recent_entries)
+                parts.append(
+                    f"[Literature Index (recent {len(recent_entries)} entries)]:\n{lit_text}"
+                )
+                self.logger.debug(
+                    '[Planner] _build_step_context: read literature_index '
+                    'step=%s entries=%d (total_lines=%d) path=%s',
+                    step.get('step_id', '?'),
+                    len(recent_entries),
+                    len(lines),
+                    lit_path,
+                )
+            except Exception as e:
+                self.logger.warning(
+                    '[Planner] _build_step_context: failed to read literature_index: %s', e
+                )
+
+        if not parts:
+            return ''
+        return '\n\n'.join(parts)
 
     def _get_remaining_steps_text(self, plan: dict[str, Any]) -> str:
         """Build text listing of remaining (non-done) steps for replan context."""
@@ -2053,7 +2227,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             result_info['replan_requested'] = False
             return result_info
 
-        steps_list = state.get('plan', {}).get('steps', [])
+        steps_list = (state.get('plan') or {}).get('steps', [])
         self._emit(
             'Planner',
             'status_stages',
@@ -2231,7 +2405,19 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
 
         # ---- Branch B: goal-oriented execution ----
         self._emit('Planner', 'exp_run', 'DirectSolver')
-        step_prompt = self._build_step_prompt(intent, fallback)
+        # Inject step context (journal + literature read-back) into intent
+        step_context = self._build_step_context(step, state, task_id)
+        if step_context:
+            self.logger.info(
+                '[Planner] _execute_single_step: injecting step_context '
+                'step=%s chars=%d',
+                step_id,
+                len(step_context),
+            )
+            intent_with_context = f"{step_context}\n\n---\n\n{intent}"
+        else:
+            intent_with_context = intent
+        step_prompt = self._build_step_prompt(intent_with_context, fallback)
         try:
             solver.set_run_dir(workspaces)
             step_task = self._build_task_with_dialog_history(
@@ -2444,7 +2630,36 @@ Assess whether this task can be planned immediately or needs preliminary work. O
 
         collected_context: list[str] = []
         for i, prereq in enumerate(prerequisites):
-            # Each prerequisite is treated as one executed step for planner budget.
+            prereq_type = prereq.get('type', 'unknown')
+            description = prereq.get('description', '')
+            target = prereq.get('target', '')
+
+            # ── Fast path: clarify_task is informational only, no agent needed ──
+            # Do NOT consume turn budget or run DirectSolver for clarify_task.
+            # Simply record the clarification text as pre-check context.
+            if prereq_type == 'clarify_task':
+                self.logger.info(
+                    '[Pre-check] clarify_task (fast path, no agent): %s', description[:120]
+                )
+                self._emit(
+                    'Planner',
+                    'thought',
+                    f"[Pre-check] Clarification noted (no agent needed): {description}",
+                )
+                collected_context.append(
+                    f"[Prerequisite {i + 1}: clarify_task] {description}"
+                    + (f"\nTarget: {target}" if target else "")
+                )
+                self._append_journal(
+                    state,
+                    task_id,
+                    phase='pre_check',
+                    title=f"Prerequisite {i + 1}/{len(prerequisites)} (clarify_task, fast path)",
+                    body=f"{description}" + (f"\nTarget: {target}" if target else ""),
+                )
+                continue  # skip _consume_turns and DirectSolver
+
+            # Each non-clarify prerequisite is treated as one executed step for planner budget.
             if not self._consume_turns(state, task_id, 1):
                 self._fail_max_turns_exceeded(task_id, state)
                 break
@@ -2452,10 +2667,6 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             # block each other.
             if hasattr(self.agent, '_tool_guard'):
                 self.agent._tool_guard.reset_loop_history()
-
-            prereq_type = prereq.get('type', 'unknown')
-            description = prereq.get('description', '')
-            target = prereq.get('target', '')
 
             self.logger.info(
                 '[Pre-check] Running prerequisite %d/%d: [%s] %s',
@@ -2499,7 +2710,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                     f"For PDFs, use mat_doc MCP tools first. Summarize key findings."
                 )
             else:
-                # clarify_task or any future type
+                # unknown future type — run as generic task
                 _body = (
                     f"Complete this prerequisite task: {description}. Target: {target}."
                 )
@@ -2864,10 +3075,36 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         Transitions → replanning | completed | failed.
         """
         plan = state['plan']
+        # ── Resume observability: log state at entry to diagnose interrupted runs ──
+        _pending_steps = [s for s in plan.get('steps', []) if s.get('status') == 'pending']
+        _history_len = len(state.get('history', []))
+        self.logger.info(
+            '[Planner] _phase_executing entered: pending_steps=%d, history_len=%d, '
+            'turn_budget_remaining=%d',
+            len(_pending_steps),
+            _history_len,
+            state.get('turn_budget_remaining', -1),
+        )
+        if _history_len == 0 and len(_pending_steps) > 0:
+            self.logger.info(
+                '[Planner] Resume detected: phase=executing but history is empty. '
+                'Will execute from first pending step.'
+            )
+
         workspaces = self._run_dir_path() / 'workspaces' / task_id
         workspaces.mkdir(parents=True, exist_ok=True)
 
         window = self._get_next_execution_window(plan)
+        if window:
+            self._append_journal(
+                state,
+                task_id,
+                phase='executing',
+                title=f"Execution window: {[s['step_id'] for s in window]}",
+                body='\n'.join(
+                    f"step_{s['step_id']}: {s.get('intent', '')[:100]}" for s in window
+                ),
+            )
         if not window:
             # No more pending steps
             if self._is_goal_achieved(state):
@@ -3063,7 +3300,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             state['replan_count'] + 1,
             state.get('replan_reason', ''),
         )
-        old_steps = [s.copy() for s in state.get('plan', {}).get('steps', [])]
+        old_steps = [s.copy() for s in (state.get('plan') or {}).get('steps', [])]
 
         revised_plan = self._replan_from_results(state, goal, task_id)
 
@@ -3233,6 +3470,15 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         """State-machine driven execution: PreCheck → Planning → PreFlight → Executing ⇄ Replanning → Completed.
 
         append_result: 是否将本次结果追加到 self.results（默认 True）。对话/流式等复用同一 Exp 的场景应传 False。
+
+        Resume 语义：若 _initialize_state() 加载到已有 state（phase != 'pre_check'），
+        状态机从当前 phase 继续执行。调用方（agent_run_service / stream_agent）
+        负责在服务重启后重新调用 run()，以恢复中断的任务。
+
+        调用方 resume 职责：
+        - 不依赖进程内 SESSIONS 缓存（重启后会清空）。
+        - 服务重启后，通过 /chat/send 收到用户消息时，应从 DB 恢复 session 并
+          重新调用 MatMasterAgent.run()，触发 ResearchPlanner.run() 的 resume 路径。
         """
         if task is not None:
             task_description = task.description or ''
@@ -3249,9 +3495,12 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             self._solver.set_run_dir(self.run_dir)
 
         self.logger.info(
-            '[Planner] State machine started (phase=%s, replan_count=%d)',
+            '[Planner] State machine started (phase=%s, replan_count=%d, '
+            'history_len=%d, pending_steps=%d)',
             state['phase'],
             state.get('replan_count', 0),
+            len(state.get('history', [])),
+            sum(1 for s in (state.get('plan') or {}).get('steps', []) if s.get('status') == 'pending'),
         )
 
         # Main state-machine loop
@@ -3333,7 +3582,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             state.get('replan_count', 0),
             sum(
                 1
-                for s in state.get('plan', {}).get('steps', [])
+                for s in (state.get('plan') or {}).get('steps', [])
                 if s.get('status') == 'done'
             ),
         )

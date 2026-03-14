@@ -195,7 +195,8 @@ def main() -> None:
         plan_path = base / f"{sanitize_topic(topic)}_plan.md"
         plan_path.write_text(
             f"# Search plan: {topic}\n\n"
-            "Run 10-15+ retrieval calls (mat_sn_search-papers-enhanced, mat_sn_web-search). "
+            "Run 10-15+ retrieval calls using available mat_sn_* search tools. "
+            "If a tool returns errors or is unavailable, switch to a different available search tool or method. "
             "Then use manuscript-scribe write_section or str_replace_editor to write Executive Summary, "
             "Key Methodologies, State of the Art, Gap Analysis, and References from the retrieval results.\n\n"
             + "\n".join(f"## {f}" for f in DEFAULT_FACETS),
