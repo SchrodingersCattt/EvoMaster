@@ -1082,6 +1082,13 @@ Rules:
             reply = self._stream_llm(dialog, 'Planner', 'planning')
             # 将 Planner LLM 原始输出推送到前端（_normalize_planner_thought 会过滤掉纯 JSON message）
             self._emit('Planner', 'thought', reply.content or '')
+            # 落盘原始 LLM 输出，避免截断时丢失内容，也便于后续 LLM 修复
+            if task_id is not None:
+                try:
+                    draft_path = self._task_workspace_dir(task_id) / 'raw_plan_draft.txt'
+                    draft_path.write_text(reply.content or '', encoding='utf-8')
+                except Exception as _save_err:
+                    self.logger.warning('[Planner] Failed to save raw_plan_draft.txt: %s', _save_err)
             raw = _extract_json_from_content(reply.content or '')
             if not raw:
                 return {
@@ -1092,7 +1099,16 @@ Rules:
                 plan = _try_parse_json(raw, self.logger)
             except json.JSONDecodeError as e:
                 self.logger.error('Plan JSON parse failed (all repair stages exhausted): %s', e)
-                return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
+                # 尝试用 LLM 修复截断的 JSON（如 max_tokens 命中导致 JSON 不完整）
+                if task_id is not None:
+                    self.logger.info('[Planner] Attempting LLM-based plan repair for truncated JSON...')
+                    repaired = self._repair_plan_from_file(task_id, reply.content or '', state=state)
+                    if repaired is not None:
+                        plan = repaired
+                    else:
+                        return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
+                else:
+                    return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
         except json.JSONDecodeError as e:
             self.logger.error('Plan JSON parse failed: %s', e)
             return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
@@ -1125,6 +1141,131 @@ Rules:
                     task_id=task_id,
                 )
         return plan
+
+    def _repair_plan_from_file(
+        self,
+        task_id: str,
+        raw_content: str,
+        *,
+        state: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Ask LLM to repair a truncated/malformed plan JSON.
+
+        Called when ``_try_parse_json`` fails (e.g. LLM output was cut off by
+        max_tokens).  Sends the raw truncated text back to the LLM with a
+        prompt asking it to complete and fix the JSON.
+
+        Returns the parsed plan dict on success, or None on failure.
+        """
+        system = self._load_system_prompt()
+        user = (
+            'The following plan JSON was truncated or malformed (likely because the '
+            'previous response hit the token limit). '
+            'Please complete and fix it, returning ONLY valid JSON in the same schema '
+            '(execution_graph with steps, fidelity_level). '
+            'Make the plan SHORTER if needed to avoid truncation — reduce the number '
+            'of steps or shorten intent descriptions.\n\n'
+            f'Truncated output (first 8000 chars):\n{raw_content[:8000]}'
+        )
+        dialog = Dialog(
+            messages=[SystemMessage(content=system), UserMessage(content=user)],
+            tools=[],
+        )
+        if state is not None and task_id is not None:
+            if not self._consume_turns(state, task_id, 1):
+                self.logger.warning('[Planner] _repair_plan_from_file: turn budget exhausted')
+                return None
+        try:
+            reply = self._stream_llm(dialog, 'Planner', 'plan_repair')
+            self._emit('Planner', 'thought', reply.content or '')
+            raw = _extract_json_from_content(reply.content or '')
+            if not raw:
+                self.logger.error('[Planner] _repair_plan_from_file: no JSON in repair reply')
+                return None
+            plan = _try_parse_json(raw, self.logger)
+            self.logger.info('[Planner] _repair_plan_from_file: repair succeeded')
+            return plan
+        except Exception as _e:
+            self.logger.error('[Planner] _repair_plan_from_file failed: %s', _e)
+            return None
+
+    def _revise_plan_from_file(
+        self,
+        goal: str,
+        task_id: str | None,
+        current_plan: dict[str, Any],
+        user_feedback: str,
+        *,
+        state: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Revise plan by reading current_plan.json from disk, applying user feedback,
+        then writing the revised plan back to disk.
+
+        Avoids re-serialising the full plan from memory on every preflight revision,
+        and keeps the on-disk copy in sync so the editor tool can inspect/edit it.
+        """
+        plan_path = (
+            self._task_workspace_dir(task_id) / 'current_plan.json'
+            if task_id is not None
+            else None
+        )
+        if plan_path is not None and plan_path.exists():
+            try:
+                plan_json_str = plan_path.read_text(encoding='utf-8')
+            except Exception as _e:
+                self.logger.warning('[Planner] _revise_plan_from_file: cannot read file: %s', _e)
+                plan_json_str = json.dumps(
+                    _plan_to_external_schema(current_plan), ensure_ascii=False, indent=2
+                )
+        else:
+            plan_json_str = json.dumps(
+                _plan_to_external_schema(current_plan), ensure_ascii=False, indent=2
+            )
+
+        system = self._load_system_prompt()
+        user = (
+            f'REVISION REQUEST\nOriginal goal: {goal}\n\n'
+            f'Current plan (JSON):\n{plan_json_str}\n\n'
+            f'User feedback: {user_feedback}\n\n'
+            'Output the revised plan as a single JSON object (same schema: '
+            'execution_graph, fidelity_level). No other text.'
+        )
+        dialog = Dialog(
+            messages=[SystemMessage(content=system), UserMessage(content=user)],
+            tools=[],
+        )
+        if state is not None and task_id is not None:
+            if not self._consume_turns(state, task_id, 1):
+                self._fail_max_turns_exceeded(task_id, state)
+                return {**current_plan, 'status': 'REFUSED', 'refusal_reason': 'max_turns_exceeded'}
+        try:
+            reply = self._stream_llm(dialog, 'Planner', 'revision')
+            self._emit('Planner', 'thought', reply.content or '')
+            raw = _extract_json_from_content(reply.content or '')
+            if not raw:
+                return {
+                    **current_plan,
+                    'status': 'REFUSED',
+                    'refusal_reason': 'Revision output contained no valid JSON.',
+                }
+            revised = _try_parse_json(raw, self.logger)
+            revised = _normalize_plan(revised, self.max_steps)
+            # 写回磁盘，保持 current_plan.json 与内存同步
+            if plan_path is not None:
+                try:
+                    plan_path.write_text(
+                        json.dumps(_plan_to_external_schema(revised), ensure_ascii=False, indent=2),
+                        encoding='utf-8',
+                    )
+                except Exception as _e:
+                    self.logger.warning('[Planner] _revise_plan_from_file: cannot write back: %s', _e)
+            return revised
+        except json.JSONDecodeError as e:
+            self.logger.error('_revise_plan_from_file JSON parse failed: %s', e)
+            return {**current_plan, 'status': 'REFUSED', 'refusal_reason': f'Invalid JSON: {e}'}
+        except Exception as e:
+            self.logger.error('_revise_plan_from_file failed: %s', e)
+            return {**current_plan, 'status': 'REFUSED', 'refusal_reason': str(e)}
 
     def _revise_plan(
         self,
@@ -2429,6 +2570,19 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
             summary = self._summarize_solver_result(result, max_len=1000)
             result_info['result_summary'] = summary[:200]
+            # 步骤完成后立即发出 status_stages done 事件，让前端 PlannerOutlinePanel
+            # 的 Step X/Y 能及时更新，不必等到下一步的 status_stages 到达
+            self._emit(
+                'Planner',
+                'status_stages',
+                {
+                    'total': len(steps_list),
+                    'current': step_id,
+                    'step_id': step_id,
+                    'intent': intent[:120] if intent else '',
+                    'status': 'done',
+                },
+            )
             llm_verifier = self._llm_verify_step_outcome(
                 intent,
                 summary,
@@ -2892,9 +3046,18 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 'thought',
                 f"[CRP] Plan was refused: {reason}. Auto-revising (attempt {attempt + 1}/{max_auto_fix})...",
             )
-            # Ask LLM to fix the plan itself. Use targeted feedback for
-            # manuscript consistency failures.
-            if 'manuscript_consistency' in str(reason):
+            # Ask LLM to fix the plan itself. Use targeted feedback based on
+            # the refusal reason: JSON truncation, manuscript consistency, or CRP.
+            if reason.startswith('Invalid JSON') or 'truncated' in reason.lower():
+                feedback = (
+                    f"The plan was REFUSED because your output was truncated or contained "
+                    f"malformed JSON: {reason}\n"
+                    'Please output a SHORTER, COMPLETE plan JSON. '
+                    'Reduce the number of steps or shorten intent descriptions if needed. '
+                    'Output ONLY the JSON object with no other text. '
+                    'Ensure the JSON is complete with all braces and brackets closed.'
+                )
+            elif 'manuscript_consistency' in str(reason):
                 feedback = (
                     f"The plan was REFUSED for this reason: {reason}\n"
                     'Fix manuscript workflow consistency now:\n'
@@ -2942,6 +3105,16 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         plan = state['plan']
         # Detailed plan report (cost, risks, alternatives)
         self._print_plan_report(plan)
+        # 落盘当前计划，供 _revise_plan_from_file 读取（避免每次修订重新序列化内存对象）
+        if task_id:
+            try:
+                plan_path = self._task_workspace_dir(task_id) / 'current_plan.json'
+                plan_path.write_text(
+                    json.dumps(_plan_to_external_schema(plan), ensure_ascii=False, indent=2),
+                    encoding='utf-8',
+                )
+            except Exception as _e:
+                self.logger.warning('[Planner] Failed to save current_plan.json: %s', _e)
 
         if self.human_check:
             while True:
@@ -2986,7 +3159,9 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 self.logger.info(
                     '[Planner] Revising plan from user feedback: %s', ans[:100]
                 )
-                plan = self._revise_plan(goal, plan, ans, state=state, task_id=task_id)
+                plan = self._revise_plan_from_file(
+                    goal, task_id, plan, ans, state=state
+                )
                 state['plan'] = plan
                 self._save_state(task_id, state)
                 if plan.get('status') == 'REFUSED':
