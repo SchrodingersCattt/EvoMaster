@@ -73,7 +73,7 @@ def test_chat_stream_returns_503_when_redis_url_missing():
             'src.dao.chat_events_table.get_chat_events_table',
             return_value=mock_events,
         ),
-        patch('src.services.quota_service.check_quota', side_effect=_check_quota_noop),
+        patch('src.apis.chat_api.check_quota', side_effect=_check_quota_noop),
     ]
 
     for p in patches:
