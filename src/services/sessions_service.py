@@ -39,7 +39,7 @@ class RedisStopSubscriber:
                 if not sid:
                     continue
                 try:
-                    if get_sessions_service().stop_session_run(sid):
+                    if get_sessions_service().set_local_stop_event_if_present(sid):
                         logger.info('Redis stop: set event for session_id=%s', sid)
                 except Exception as e:
                     logger.warning(
@@ -401,6 +401,16 @@ class ChatSessionsService:
     def clear_stop_event(self, session_id: str) -> None:
         """run 结束时移除该会话的 stop event。"""
         self._run_stop_events.pop(session_id, None)
+
+    def set_local_stop_event_if_present(self, session_id: str) -> bool:
+        """仅当本进程有该 session 的 run 时 set 其 stop event。
+        供 Redis stop 订阅回调用：只唤醒本进程 direct 模式 run，不再 publish 或写 Redis key，避免把 Worker 已删的 key 再次写入。
+        """
+        ev = self._run_stop_events.get(session_id.strip())
+        if ev is None:
+            return False
+        ev.set()
+        return True
 
 
 @lru_cache
