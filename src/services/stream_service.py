@@ -199,7 +199,6 @@ class SendStreamContext:
     user_msg: dict
     request_event_queue: asyncio.Queue
     reply_queue: ReplyQueueLike  # planner_ask / confirmation_request 共用，POST /confirmation_reply 写入
-    stop_ev: threading.Event
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
 
@@ -560,7 +559,7 @@ class ChatStreamService:
         org_id: str | None = None,
     ) -> SendStreamContext | None:
         """
-        为发送消息做准备：确保会话、尝试占用 run、更新 Bohrium 凭证、写入用户消息、创建队列与 stop_ev。
+        为发送消息做准备：确保会话、尝试占用 run、更新 Bohrium 凭证、写入用户消息、创建队列。
         若该会话已有任务在运行则返回 None（调用方应返回 409）。
         """
         sid = session_id.strip()
@@ -621,8 +620,6 @@ class ChatStreamService:
         dao.delete_confirmation_reply_list(sid)
         reply_queue: ReplyQueueLike = RedisReplyQueue(sid)
         request_event_queue: asyncio.Queue = asyncio.Queue()
-        stop_ev = threading.Event()
-        self._sessions_service.set_stop_event(sid, stop_ev)
 
         return SendStreamContext(
             task_id=task_id,
@@ -631,7 +628,6 @@ class ChatStreamService:
             user_msg=user_msg,
             request_event_queue=request_event_queue,
             reply_queue=reply_queue,
-            stop_ev=stop_ev,
             llm=llm,
             model=model,
         )
