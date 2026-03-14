@@ -539,9 +539,16 @@ class ResearchPlanner(BaseExp):
         if source == 'Planner' and event_type == 'thought':
             content = _normalize_planner_thought(content)
             event_type = 'planner_reply'
-        # Suppress planner llm_token from reaching frontend — plan JSON
-        # should only appear as the cleaned planner_reply event.
+        # Forward Planner llm_token{status:streaming} as-is so the frontend streaming
+        # buffer (which only handles msg.type === "llm_token") accumulates tokens correctly.
+        # Suppress start/end boundary markers (they are noisy and not needed by the frontend).
+        # The final _emit('Planner','thought',...) still sends the complete cleaned planner_reply.
         if source == 'Planner' and event_type == 'llm_token':
+            if extra.get('status') == 'streaming':
+                # Pass through as llm_token so frontend streaming buffer works
+                if self._output_callback:
+                    self._output_callback(source, 'llm_token', content, **extra)
+            # Suppress start/end boundary markers
             return
         if self._output_callback:
             self._output_callback(source, event_type, content, **extra)
@@ -598,9 +605,22 @@ class ResearchPlanner(BaseExp):
                                 self._turn_budget_remaining = max(0, int(tb_rem))
                         except Exception:
                             pass
+                        self.logger.info(
+                            '[Planner] _load_state: RESUME from %s '
+                            '(phase=%s, replan_count=%d, history_len=%d, '
+                            'turn_budget_remaining=%s)',
+                            path,
+                            loaded.get('phase', '?'),
+                            loaded.get('replan_count', 0),
+                            len(loaded.get('history', [])),
+                            loaded.get('turn_budget_remaining', '?'),
+                        )
                     return loaded
             except Exception as e:
                 self.logger.warning('Failed to load state: %s', e)
+        self.logger.info(
+            '[Planner] _load_state: NEW task (no state file at %s)', path
+        )
         return {
             'task_id': task_id,
             'goal': '',
@@ -621,6 +641,11 @@ class ResearchPlanner(BaseExp):
             with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(state, f, indent=2, ensure_ascii=False)
             shutil.move(tmp, path)
+            self.logger.debug(
+                '[Planner] _save_state: OK (phase=%s, path=%s)',
+                state.get('phase', '?'),
+                path,
+            )
         except Exception as e:
             self.logger.error('Failed to save state: %s', e)
 
@@ -690,6 +715,12 @@ class ResearchPlanner(BaseExp):
         with journal_path.open('a', encoding='utf-8') as f:
             f.write('\n'.join(block))
             f.write('\n')
+        self.logger.debug(
+            '[Planner] _append_journal: phase=%s title=%r path=%s',
+            phase,
+            title,
+            journal_path,
+        )
 
     @staticmethod
     def _extract_urls_from_text(text: str) -> list[str]:
@@ -757,6 +788,13 @@ class ResearchPlanner(BaseExp):
             state['literature_entry_count'] = (
                 int(state.get('literature_entry_count', 0) or 0) + added
             )
+        self.logger.debug(
+            '[Planner] _append_literature_index: source=%r added=%d total=%d path=%s',
+            source,
+            added,
+            int(state.get('literature_entry_count', 0) or 0),
+            lit_path,
+        )
         return added
 
     def _build_context_prompt(self, task_description: str) -> str:
@@ -1903,19 +1941,125 @@ Rules:
             )
         return window
 
-    def _summarize_history(self, history: list[dict[str, Any]]) -> str:
-        """Build concise text summary of execution history for replan context."""
+    def _summarize_history(
+        self,
+        history: list[dict[str, Any]],
+        max_summary_len: int = 120,
+    ) -> str:
+        """Build text summary of execution history.
+
+        Args:
+            max_summary_len: Max characters per step summary.
+                Default 120 (used for replan prompt, keeps it concise).
+                Pass 0 to disable truncation (used for step-context injection).
+        """
         if not history:
             return '(no steps executed yet)'
         lines = []
         for entry in history:
             step_id = entry.get('step', '?')
             if entry.get('error'):
-                lines.append(f"  Step {step_id}: FAILED — {entry['error'][:120]}")
+                err = entry['error']
+                if max_summary_len and len(err) > max_summary_len:
+                    err = err[:max_summary_len] + '...'
+                lines.append(f"  Step {step_id}: FAILED — {err}")
             else:
-                summary = entry.get('result_summary', 'done')[:120]
+                summary = entry.get('result_summary', 'done')
+                if max_summary_len and len(summary) > max_summary_len:
+                    summary = summary[:max_summary_len] + '...'
                 lines.append(f"  Step {step_id}: OK — {summary}")
         return '\n'.join(lines)
+
+    def _build_step_context(
+        self,
+        step: dict[str, Any],
+        state: dict[str, Any],
+        task_id: str,
+    ) -> str:
+        """Build pre-step context injection block for step prompt enrichment.
+
+        Includes:
+        1. Previous step result (full, not truncated to 120 chars)
+        2. Research Journal recent entries (last 2000 chars)
+        3. Literature Index recent entries (last 20 lines)
+
+        All file reads are logged. Failures degrade gracefully (part omitted).
+        Returns empty string if nothing to inject.
+        """
+        parts: list[str] = []
+
+        # 1. Previous step result (full, untruncated)
+        history = state.get('history', [])
+        if history:
+            last_entry = history[-1]
+            prev_step_id = last_entry.get('step', '?')
+            if last_entry.get('error'):
+                parts.append(
+                    f"[Previous Step {prev_step_id} FAILED]: {last_entry['error']}"
+                )
+            else:
+                summary = last_entry.get('result_summary', 'done')
+                parts.append(f"[Previous Step {prev_step_id} OK]: {summary}")
+
+        # 2. Research Journal recent entries
+        artifacts = state.get('artifacts') or {}
+        journal_raw = artifacts.get('research_journal', '')
+        journal_path = (
+            Path(journal_raw)
+            if journal_raw
+            else (self._planner_artifact_dir(task_id) / 'research_journal.md')
+        )
+        if journal_path.exists():
+            try:
+                journal_text = journal_path.read_text(encoding='utf-8')
+                original_len = len(journal_text)
+                if len(journal_text) > 2000:
+                    journal_text = '...(truncated)\n' + journal_text[-2000:]
+                parts.append(f"[Research Journal (recent)]:\n{journal_text}")
+                self.logger.debug(
+                    '[Planner] _build_step_context: read journal '
+                    'step=%s chars=%d (original=%d) path=%s',
+                    step.get('step_id', '?'),
+                    len(journal_text),
+                    original_len,
+                    journal_path,
+                )
+            except Exception as e:
+                self.logger.warning(
+                    '[Planner] _build_step_context: failed to read journal: %s', e
+                )
+
+        # 3. Literature Index recent entries
+        lit_raw = artifacts.get('literature_index', '')
+        lit_path = (
+            Path(lit_raw)
+            if lit_raw
+            else (self._planner_artifact_dir(task_id) / 'literature_index.jsonl')
+        )
+        if lit_path.exists():
+            try:
+                lines = lit_path.read_text(encoding='utf-8').strip().splitlines()
+                recent_entries = lines[-20:]
+                lit_text = '\n'.join(recent_entries)
+                parts.append(
+                    f"[Literature Index (recent {len(recent_entries)} entries)]:\n{lit_text}"
+                )
+                self.logger.debug(
+                    '[Planner] _build_step_context: read literature_index '
+                    'step=%s entries=%d (total_lines=%d) path=%s',
+                    step.get('step_id', '?'),
+                    len(recent_entries),
+                    len(lines),
+                    lit_path,
+                )
+            except Exception as e:
+                self.logger.warning(
+                    '[Planner] _build_step_context: failed to read literature_index: %s', e
+                )
+
+        if not parts:
+            return ''
+        return '\n\n'.join(parts)
 
     def _get_remaining_steps_text(self, plan: dict[str, Any]) -> str:
         """Build text listing of remaining (non-done) steps for replan context."""
@@ -2261,7 +2405,19 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
 
         # ---- Branch B: goal-oriented execution ----
         self._emit('Planner', 'exp_run', 'DirectSolver')
-        step_prompt = self._build_step_prompt(intent, fallback)
+        # Inject step context (journal + literature read-back) into intent
+        step_context = self._build_step_context(step, state, task_id)
+        if step_context:
+            self.logger.info(
+                '[Planner] _execute_single_step: injecting step_context '
+                'step=%s chars=%d',
+                step_id,
+                len(step_context),
+            )
+            intent_with_context = f"{step_context}\n\n---\n\n{intent}"
+        else:
+            intent_with_context = intent
+        step_prompt = self._build_step_prompt(intent_with_context, fallback)
         try:
             solver.set_run_dir(workspaces)
             step_task = self._build_task_with_dialog_history(
