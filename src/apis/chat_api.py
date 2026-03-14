@@ -31,8 +31,10 @@ from src.services.stream_service import (
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.services.workspace_service import WorkspaceService, get_workspace_service
+from src.utils.constant import REDIS_URL
 from src.utils.exceptions import (
     BadRequestErrorResponse,
+    BaseErrorResponse,
     ConflictErrorResponse,
     ForbiddenErrorResponse,
     NotFoundErrorResponse,
@@ -162,6 +164,16 @@ async def chat_stream(
                 msg='当日免费额度已用完。请填写问卷申请额度，审核通过后再试。',
             )
 
+    # 仅 Worker 队列模式：发送消息需 REDIS_URL，否则返回 503
+    if not REDIS_URL:
+        logger.warning(
+            'stream: REDIS_URL not configured, send unavailable session_id=%s', sid
+        )
+        raise BaseErrorResponse(
+            http_status=503,
+            code=503,
+            msg='队列服务不可用，请检查 REDIS_URL 配置',
+        )
     # 发送消息并返回本次运行的 SSE 流（此时 req 必存在且 content 非空）；org_id 从上游 Header X-Org-Id 获取
     org_id = UserService.get_org_id(request)
     logger.info(
