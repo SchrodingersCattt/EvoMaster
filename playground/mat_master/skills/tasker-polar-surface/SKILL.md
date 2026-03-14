@@ -83,7 +83,7 @@ The script reads the slab with pymatgen, infers layers along the surface normal,
 
 If **(formula, miller)** is **not** in `tasker_lookup.yaml`, do **not** rely on script-only classification. Use MCP retrieval tools to search the literature, infer the Tasker type, then run the checker and optionally add the result to the table.
 
-1. **Search**: Call **mat_sn_search-papers-normal**, **mat_sn_scholar-search**, or **mat_sn_web-search** (prefer English queries) with queries targeting polar surface / Tasker classification for that material and surface. Suggested query templates:
+1. **Search**: Call available **mat_sn_*** search tools with queries targeting polar surface / Tasker classification for that material and surface. If a tool returns errors or is unavailable, switch to a different available search tool or method — do not retry the same failing tool. Suggested query templates:
    - `Tasker polar surface <formula> <hkl>`
    - `<formula> <miller> surface polar slab`
    - `<formula> <hkl> non-polar symmetric slab`
