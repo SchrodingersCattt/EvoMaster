@@ -11,6 +11,7 @@ import logging
 import re
 import shutil
 import sys
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -458,6 +459,7 @@ class ResearchPlanner(BaseExp):
         except Exception:
             self._turn_budget_init = 100
         self._turn_budget_remaining: int = int(self._turn_budget_init)
+        self._turn_budget_lock = threading.Lock()  # guards _turn_budget_remaining read-check-write
         # Unified execution layer config (shared BatchExecutor)
         exec_cfg = mat.get('execution') or {}
         self._planner_max_workers: int = max(
@@ -491,24 +493,26 @@ class ResearchPlanner(BaseExp):
         }
 
     def _consume_turns(self, state: dict[str, Any], task_id: str, n: int = 1) -> bool:
-        """Consume planner turn budget.
+        """Consume planner turn budget (thread-safe).
 
         Returns False if budget would be exceeded; does not decrement in that case.
         Also persists budget fields into state for resume safety.
+        Uses _turn_budget_lock to make the read-check-write atomic when window_size > 1.
         """
         try:
             n_i = int(n)
         except Exception:
             n_i = 1
         n_i = max(1, n_i)
-        if self._turn_budget_remaining - n_i < 0:
+        with self._turn_budget_lock:
+            if self._turn_budget_remaining - n_i < 0:
+                state['turn_budget_init'] = int(self._turn_budget_init)
+                state['turn_budget_remaining'] = int(self._turn_budget_remaining)
+                return False
+            self._turn_budget_remaining -= n_i
             state['turn_budget_init'] = int(self._turn_budget_init)
             state['turn_budget_remaining'] = int(self._turn_budget_remaining)
-            return False
-        self._turn_budget_remaining -= n_i
-        state['turn_budget_init'] = int(self._turn_budget_init)
-        state['turn_budget_remaining'] = int(self._turn_budget_remaining)
-        return True
+            return True
 
     def _fail_max_turns_exceeded(
         self, task_id: str, state: dict[str, Any]
@@ -535,6 +539,10 @@ class ResearchPlanner(BaseExp):
         if source == 'Planner' and event_type == 'thought':
             content = _normalize_planner_thought(content)
             event_type = 'planner_reply'
+        # Suppress planner llm_token from reaching frontend — plan JSON
+        # should only appear as the cleaned planner_reply event.
+        if source == 'Planner' and event_type == 'llm_token':
+            return
         if self._output_callback:
             self._output_callback(source, event_type, content, **extra)
 
@@ -1863,14 +1871,36 @@ Rules:
             s['step_id'] for s in steps if s.get('status') in ('done', 'failed')
         }
         window: list[dict[str, Any]] = []
+        blocked_reasons: list[str] = []
         for s in steps:
             if s.get('status') != 'pending':
                 continue
             deps = s.get('depends_on') or []
-            if all(d in resolved_ids for d in deps):
-                window.append(s)
-                if len(window) >= self.window_size:
-                    break
+            unresolved = [d for d in deps if d not in resolved_ids]
+            if unresolved:
+                blocked_reasons.append(
+                    f"step_{s['step_id']} blocked by unresolved deps: {unresolved}"
+                )
+                continue
+            window.append(s)
+            if len(window) >= self.window_size:
+                break
+        # Structured observability log
+        self.logger.info(
+            '[Planner] ExecutionWindow: resolved_ids=%s, window=[%s], blocked=%d',
+            sorted(resolved_ids),
+            ', '.join(f"step_{s['step_id']}" for s in window),
+            len(blocked_reasons),
+        )
+        if blocked_reasons:
+            self.logger.debug('[Planner] Blocked steps: %s', '; '.join(blocked_reasons))
+        if not window:
+            pending_count = sum(1 for s in steps if s.get('status') == 'pending')
+            self.logger.warning(
+                '[Planner] Empty execution window: pending_steps=%d, resolved_ids=%s',
+                pending_count,
+                sorted(resolved_ids),
+            )
         return window
 
     def _summarize_history(self, history: list[dict[str, Any]]) -> str:
@@ -2053,7 +2083,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             result_info['replan_requested'] = False
             return result_info
 
-        steps_list = state.get('plan', {}).get('steps', [])
+        steps_list = (state.get('plan') or {}).get('steps', [])
         self._emit(
             'Planner',
             'status_stages',
@@ -2444,7 +2474,36 @@ Assess whether this task can be planned immediately or needs preliminary work. O
 
         collected_context: list[str] = []
         for i, prereq in enumerate(prerequisites):
-            # Each prerequisite is treated as one executed step for planner budget.
+            prereq_type = prereq.get('type', 'unknown')
+            description = prereq.get('description', '')
+            target = prereq.get('target', '')
+
+            # ── Fast path: clarify_task is informational only, no agent needed ──
+            # Do NOT consume turn budget or run DirectSolver for clarify_task.
+            # Simply record the clarification text as pre-check context.
+            if prereq_type == 'clarify_task':
+                self.logger.info(
+                    '[Pre-check] clarify_task (fast path, no agent): %s', description[:120]
+                )
+                self._emit(
+                    'Planner',
+                    'thought',
+                    f"[Pre-check] Clarification noted (no agent needed): {description}",
+                )
+                collected_context.append(
+                    f"[Prerequisite {i + 1}: clarify_task] {description}"
+                    + (f"\nTarget: {target}" if target else "")
+                )
+                self._append_journal(
+                    state,
+                    task_id,
+                    phase='pre_check',
+                    title=f"Prerequisite {i + 1}/{len(prerequisites)} (clarify_task, fast path)",
+                    body=f"{description}" + (f"\nTarget: {target}" if target else ""),
+                )
+                continue  # skip _consume_turns and DirectSolver
+
+            # Each non-clarify prerequisite is treated as one executed step for planner budget.
             if not self._consume_turns(state, task_id, 1):
                 self._fail_max_turns_exceeded(task_id, state)
                 break
@@ -2452,10 +2511,6 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             # block each other.
             if hasattr(self.agent, '_tool_guard'):
                 self.agent._tool_guard.reset_loop_history()
-
-            prereq_type = prereq.get('type', 'unknown')
-            description = prereq.get('description', '')
-            target = prereq.get('target', '')
 
             self.logger.info(
                 '[Pre-check] Running prerequisite %d/%d: [%s] %s',
@@ -2499,7 +2554,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                     f"For PDFs, use mat_doc MCP tools first. Summarize key findings."
                 )
             else:
-                # clarify_task or any future type
+                # unknown future type — run as generic task
                 _body = (
                     f"Complete this prerequisite task: {description}. Target: {target}."
                 )
@@ -2864,10 +2919,36 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         Transitions → replanning | completed | failed.
         """
         plan = state['plan']
+        # ── Resume observability: log state at entry to diagnose interrupted runs ──
+        _pending_steps = [s for s in plan.get('steps', []) if s.get('status') == 'pending']
+        _history_len = len(state.get('history', []))
+        self.logger.info(
+            '[Planner] _phase_executing entered: pending_steps=%d, history_len=%d, '
+            'turn_budget_remaining=%d',
+            len(_pending_steps),
+            _history_len,
+            state.get('turn_budget_remaining', -1),
+        )
+        if _history_len == 0 and len(_pending_steps) > 0:
+            self.logger.info(
+                '[Planner] Resume detected: phase=executing but history is empty. '
+                'Will execute from first pending step.'
+            )
+
         workspaces = self._run_dir_path() / 'workspaces' / task_id
         workspaces.mkdir(parents=True, exist_ok=True)
 
         window = self._get_next_execution_window(plan)
+        if window:
+            self._append_journal(
+                state,
+                task_id,
+                phase='executing',
+                title=f"Execution window: {[s['step_id'] for s in window]}",
+                body='\n'.join(
+                    f"step_{s['step_id']}: {s.get('intent', '')[:100]}" for s in window
+                ),
+            )
         if not window:
             # No more pending steps
             if self._is_goal_achieved(state):
@@ -3063,7 +3144,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             state['replan_count'] + 1,
             state.get('replan_reason', ''),
         )
-        old_steps = [s.copy() for s in state.get('plan', {}).get('steps', [])]
+        old_steps = [s.copy() for s in (state.get('plan') or {}).get('steps', [])]
 
         revised_plan = self._replan_from_results(state, goal, task_id)
 
@@ -3233,6 +3314,15 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         """State-machine driven execution: PreCheck → Planning → PreFlight → Executing ⇄ Replanning → Completed.
 
         append_result: 是否将本次结果追加到 self.results（默认 True）。对话/流式等复用同一 Exp 的场景应传 False。
+
+        Resume 语义：若 _initialize_state() 加载到已有 state（phase != 'pre_check'），
+        状态机从当前 phase 继续执行。调用方（agent_run_service / stream_agent）
+        负责在服务重启后重新调用 run()，以恢复中断的任务。
+
+        调用方 resume 职责：
+        - 不依赖进程内 SESSIONS 缓存（重启后会清空）。
+        - 服务重启后，通过 /chat/send 收到用户消息时，应从 DB 恢复 session 并
+          重新调用 MatMasterAgent.run()，触发 ResearchPlanner.run() 的 resume 路径。
         """
         if task is not None:
             task_description = task.description or ''
@@ -3249,9 +3339,12 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             self._solver.set_run_dir(self.run_dir)
 
         self.logger.info(
-            '[Planner] State machine started (phase=%s, replan_count=%d)',
+            '[Planner] State machine started (phase=%s, replan_count=%d, '
+            'history_len=%d, pending_steps=%d)',
             state['phase'],
             state.get('replan_count', 0),
+            len(state.get('history', [])),
+            sum(1 for s in (state.get('plan') or {}).get('steps', []) if s.get('status') == 'pending'),
         )
 
         # Main state-machine loop
@@ -3333,7 +3426,7 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             state.get('replan_count', 0),
             sum(
                 1
-                for s in state.get('plan', {}).get('steps', [])
+                for s in (state.get('plan') or {}).get('steps', [])
                 if s.get('status') == 'done'
             ),
         )
