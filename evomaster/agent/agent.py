@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import threading
 import traceback
 from abc import ABC, abstractmethod
@@ -187,6 +188,21 @@ class BaseAgent(ABC):
                     self.logger.warning('=' * 80)
                     self.trajectory.finish('failed', {'reason': 'max_turns_exceeded'})
 
+        except RecursionError as e:
+            # RecursionError tracebacks are truncated by Python; use format_stack() instead
+            # to capture the last N frames at the point of the handler (reliable even when
+            # the stack is nearly exhausted).
+            stack_frames = traceback.format_stack(limit=60)
+            self.logger.error('=' * 80)
+            self.logger.error(f"❌ Agent execution failed (RecursionError): {e}")
+            self.logger.error(
+                "RecursionError stack (last 60 frames at handler):\n%s",
+                ''.join(stack_frames),
+            )
+            self.logger.error("Python recursion limit: %d", sys.getrecursionlimit())
+            self.logger.error('=' * 80)
+            self.trajectory.finish('failed', {'reason': str(e)})
+            raise
         except Exception as e:
             self.logger.error('=' * 80)
             self.logger.error(f"❌ Agent execution failed: {e}")
@@ -440,6 +456,23 @@ class BaseAgent(ABC):
         若 _on_llm_token 已设置，使用 query_stream() 实现逐 token 流式输出；
         否则使用 query()（行为与改造前完全一致）。
         """
+        import sys as _sys
+        _stack_depth = len(traceback.extract_stack())
+        # Always log at INFO so it appears regardless of log level config
+        self.logger.info(
+            '[DIAG] _query_with_context_recovery entered: stack_depth=%d, '
+            '_on_llm_token=%s, dialog.tools=%s',
+            _stack_depth,
+            self._on_llm_token is not None,
+            bool(dialog_for_query.tools),
+        )
+        if _stack_depth > _sys.getrecursionlimit() - 200:
+            self.logger.error(
+                '[DIAG] NEAR RECURSION LIMIT in _query_with_context_recovery! '
+                'stack_depth=%d\nStack (last 50 frames):\n%s',
+                _stack_depth,
+                ''.join(traceback.format_stack(limit=50)),
+            )
         max_retries = 3
         for attempt in range(max_retries):
             try:
