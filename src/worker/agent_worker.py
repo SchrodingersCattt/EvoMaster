@@ -21,6 +21,7 @@ from src.utils.constant import CURRENT_ENV
 from src.utils.feishu_notifier import (
     CARD_TEMPLATE_BLUE,
     CARD_TEMPLATE_GREEN,
+    CARD_TEMPLATE_ORANGE,
     CARD_TEMPLATE_RED,
     notify_post_async,
 )
@@ -318,22 +319,29 @@ def _run_worker_loop() -> None:
                     ('用户', user_info_display),
                     ('用户问题', user_question or '-'),
                     ('执行节点', get_worker_id()),
-                    ('结果', '成功' if run_success else '失败'),
+                    (
+                        '结果',
+                        (
+                            '成功'
+                            if run_success
+                            else ('已取消' if fail_reason == 'cancelled' else '失败')
+                        ),
+                    ),
                     ('执行中', str(active_count)),
                     ('排队数', str(queue_len)),
                 ]
-                if not run_success and fail_reason:
+                if not run_success and fail_reason and fail_reason != 'cancelled':
                     reason = (fail_reason.strip() or '-')[:500]
                     if len(fail_reason.strip()) > 500:
                         reason = reason + '…'
                     rows.insert(6, ('失败原因', reason))  # 插在「结果」之后
-                notify_post_async(
-                    'Worker 执行成功' if run_success else 'Worker 执行失败',
-                    rows,
-                    template=(
-                        CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
-                    ),
-                )
+                if fail_reason == 'cancelled':
+                    title = '用户取消运行'
+                    template = CARD_TEMPLATE_ORANGE
+                else:
+                    title = 'Worker 执行成功' if run_success else 'Worker 执行失败'
+                    template = CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
+                notify_post_async(title, rows, template=template)
         if _drain_requested:
             logger.info(
                 'Agent worker: drain requested, current job finished, exiting loop. session_id=%s worker_id=%s',

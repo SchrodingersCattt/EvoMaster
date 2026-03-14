@@ -1010,6 +1010,7 @@ class AgentRunService:
                     task_id,
                 )
                 event_callback('System', 'cancelled', 'Task cancelled by user.')
+                run_result = (False, 'cancelled')
             else:
                 _task_completed = True
                 logger.info(
@@ -1033,7 +1034,7 @@ class AgentRunService:
                     task_id=task_id,
                     event_callback=event_callback,
                 )
-            run_result = True
+                run_result = True
         except Exception as e:
             logger.exception(
                 'run_agent_sync: error session_id=%s task_id=%s err=%s',
