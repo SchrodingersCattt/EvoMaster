@@ -374,9 +374,6 @@ class ChatSessionsService:
         """
         return self._redis_stop_subscriber.start()
 
-    def clear_stop_event(self, session_id: str) -> None:
-        """run 结束时调用（仅 Worker）；API 无本地 stop event，保留空实现供 agent_run_service 调用。"""
-
 
 @lru_cache
 def get_sessions_service() -> ChatSessionsService:
