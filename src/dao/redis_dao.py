@@ -373,13 +373,17 @@ class RedisDao:
             return False
 
     def delete_stop_requested(self, session_id: str, task_id: str) -> None:
-        """清除停止标记（run 结束后）。同时删除 task 级与 session 级 key。"""
-        client = self.create_client()
+        """清除停止标记（run 结束后）。同时删除 task 级与 session 级 key。
+        优先使用 get_publish_client（与 Worker publish 同连接），避免 create_client 在部分环境不可用导致未删。
+        单次 delete 多 key，避免只删掉一个 key 而 session 级残留。
+        """
+        client = self.get_publish_client() or self.create_client()
         if not client:
             return
+        key_task = _stop_key(session_id, task_id)
+        key_session = _stop_key(session_id, '')
         try:
-            client.delete(_stop_key(session_id, task_id))
-            client.delete(_stop_key(session_id, ''))
+            client.delete(key_task, key_session)
         except Exception as e:
             logger.warning(
                 'Redis delete_stop_requested failed session_id=%s task_id=%s: %s',
