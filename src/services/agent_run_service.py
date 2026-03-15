@@ -92,7 +92,26 @@ class AgentRunService:
         finally:
             self._playground_init_done.set()
 
-    def _get_or_create_playground(self, session_id: str) -> Any:
+    def _emit_mcp_event_safely(
+        self,
+        event_callback: Callable[..., None] | None,
+        event_type: str,
+        content: Any,
+        **extra: Any,
+    ) -> None:
+        """Emit MCP progress event via run event_callback when available."""
+        if not callable(event_callback):
+            return
+        try:
+            event_callback('System', event_type, content, **extra)
+        except Exception as e:
+            logger.debug('emit MCP event failed type=%s err=%s', event_type, e)
+
+    def _get_or_create_playground(
+        self,
+        session_id: str,
+        event_callback: Callable[..., None] | None = None,
+    ) -> Any:
         """按 session_id 返回或创建 playground，避免多用户共用同一 pg 导致 working_dir/SSH 串台。run 结束时 pop+cleanup 释放。"""
         if session_id in self._playgrounds:
             return self._playgrounds[session_id]
@@ -105,7 +124,62 @@ class AgentRunService:
         run_dir = _project_root / 'runs' / RUN_ID_WEB
         run_dir.mkdir(parents=True, exist_ok=True)
         pg.set_run_dir(run_dir, task_id=session_id)
-        pg.setup()
+        if callable(event_callback):
+
+            def _on_mcp_progress(progress: dict[str, Any]) -> None:
+                if not isinstance(progress, dict):
+                    return
+                server_name = progress.get('server_name')
+                transport = progress.get('transport')
+                phase = str(progress.get('phase') or '')
+                event_type = 'mcp_server_status' if server_name else 'mcp_connect'
+                self._emit_mcp_event_safely(
+                    event_callback,
+                    event_type,
+                    progress,
+                    mcp_phase=phase,
+                    mcp_server=server_name,
+                    mcp_transport=transport,
+                )
+
+            pg._mcp_progress_callback = _on_mcp_progress
+        self._emit_mcp_event_safely(
+            event_callback,
+            'mcp_connect',
+            {
+                'phase': 'start',
+                'message': '正在初始化 Playground，并连接 MCP Servers...',
+            },
+            mcp_phase='start',
+        )
+        setup_started_at = time.monotonic()
+        try:
+            pg.setup()
+        except Exception as e:
+            elapsed_ms = int((time.monotonic() - setup_started_at) * 1000)
+            self._emit_mcp_event_safely(
+                event_callback,
+                'mcp_connect',
+                {
+                    'phase': 'failed',
+                    'elapsed_ms': elapsed_ms,
+                    'error': str(e),
+                    'message': 'MCP 初始化失败',
+                },
+                mcp_phase='failed',
+            )
+            raise
+        elapsed_ms = int((time.monotonic() - setup_started_at) * 1000)
+        self._emit_mcp_event_safely(
+            event_callback,
+            'mcp_connect',
+            {
+                'phase': 'ready',
+                'elapsed_ms': elapsed_ms,
+                'message': 'MCP 初始化完成',
+            },
+            mcp_phase='ready',
+        )
         self._playgrounds[session_id] = pg
         logger.debug('run_agent_sync: playground created for session_id=%s', session_id)
         return pg
@@ -404,7 +478,9 @@ class AgentRunService:
             run_dir = _project_root / 'runs' / RUN_ID_WEB
             task_id = task_id or ('ws_' + uuid.uuid4().hex[:16])
 
-            pg = self._get_or_create_playground(session_id)
+            pg = self._get_or_create_playground(
+                session_id, event_callback=event_callback
+            )
             pg.set_run_dir(run_dir, task_id=task_id)
             pg_for_run = pg
             logger.debug(
