@@ -39,6 +39,10 @@ class SkillToolParams(BaseToolParams):
     script_args: str | None = Field(
         default=None, description="脚本参数，空格分隔（当 action='run_script' 时可选）"
     )
+    script_timeout: int | None = Field(
+        default=None,
+        description="脚本执行超时时间（秒），覆盖 session 默认超时；不传则使用 session.local.timeout（当 action='run_script' 时可选）"
+    )
 
 
 class SkillTool(BaseTool):
@@ -109,7 +113,8 @@ class SkillTool(BaseTool):
                 return self._get_reference(skill, params.reference_name)
             elif params.action == 'run_script':
                 return self._run_script(
-                    session, skill, params.script_name, params.script_args
+                    session, skill, params.script_name, params.script_args,
+                    params.script_timeout
                 )
             else:
                 return (
@@ -274,6 +279,7 @@ class SkillTool(BaseTool):
         skill: Skill,
         script_name: str | None,
         script_args: str | None,
+        script_timeout: int | None = None,
     ) -> tuple[str, dict[str, Any]]:
         """运行技能中的脚本
 
@@ -412,8 +418,7 @@ class SkillTool(BaseTool):
 
         # 使用 session 的 bash 工具执行脚本
         try:
-            timeout: int | None = None
-            result = session.exec_bash(cmd, timeout=timeout)
+            result = session.exec_bash(cmd, timeout=script_timeout)
             stdout = result.get('stdout', '')
             stderr = result.get('stderr', '')
             exit_code = result.get('exit_code', 0)
