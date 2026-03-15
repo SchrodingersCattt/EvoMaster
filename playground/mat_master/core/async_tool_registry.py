@@ -216,6 +216,26 @@ class AsyncToolRegistry:
             for prefix, names in by_server.items()
         )
 
+    def mcp_submit_mapping_str(self) -> str:
+        """Only servers with native MCP submit tools (server-level executor, tool_key is None)."""
+        by_server: dict[str, list[str]] = {}
+        for e in self._entries:
+            if e.tool_key is None:
+                by_server.setdefault(e.server_prefix, []).append(e.software_name)
+        return "; ".join(
+            f"{prefix}_* for {', '.join(names)}"
+            for prefix, names in by_server.items()
+        )
+
+    def bohrium_job_sw_str(self) -> str:
+        """Software names for servers that use bohrium-job skill (executor_map only, no submit_*)."""
+        mcp_servers = {e.server_prefix for e in self._entries if e.tool_key is None}
+        by_server: dict[str, list[str]] = {}
+        for e in self._entries:
+            if e.tool_key is not None and e.server_prefix not in mcp_servers:
+                by_server.setdefault(e.server_prefix, []).append(e.software_name)
+        return ", ".join(sw for names in by_server.values() for sw in names)
+
     def monitor_job_software_arg(self) -> str:
         """For ``software`` help: ``"sg, dpa, abacus, lammps, ..."``"""
         return ", ".join(self.software_names_lower)
@@ -249,7 +269,31 @@ class AsyncToolRegistry:
 
     def format_calculation_rules(self) -> str:
         sw = self.software_list_str()
-        sm = self.server_mapping_str()
+        mcp_sm = self.mcp_submit_mapping_str()
+        bj_sw = self.bohrium_job_sw_str()
+        # Build submit step based on which paths exist
+        if mcp_sm and bj_sw:
+            submit_step = (
+                f"3. **Submit** — two paths, choose by software:\n"
+                f"   - **MCP submit path** ({mcp_sm}): Call the native MCP submit tool "
+                f"and note the returned job_id. Then go to step 4.\n"
+                f"   - **bohrium-job skill path** ({bj_sw}): These servers provide "
+                f"**prepare_* tools only** (no submit_* MCP tools exist). "
+                f"After prepare_*, submit via `use_skill skill_name=bohrium-job`. "
+                f"**NEVER invent or call any _submit_* tool for these** — they are not registered "
+                f"and will always return Unknown tool. Use bohrium-job `submit_job.py` to get job_id, "
+                f"then `monitor_job.py --job-id <ID>` for monitoring/download.\n"
+            )
+        elif mcp_sm:
+            submit_step = (
+                f"3. **Submit**: Call the appropriate MCP submit tool ({mcp_sm}). "
+                f"Note the returned job_id.\n"
+            )
+        else:
+            submit_step = (
+                f"3. **Submit**: After prepare_* MCP tools, submit via "
+                f"`use_skill skill_name=bohrium-job` ({bj_sw}).\n"
+            )
         return (
             f"# Calculation & Jobs (MANDATORY)\n"
             f"To run any heavy calculation ({sw}, etc.), follow this workflow:\n"
@@ -257,14 +301,14 @@ class AsyncToolRegistry:
             f"script_name=check_compliance.py. Stop if allowed=false.\n"
             f"2. **Input generation**: Use the **input-manual-helper** skill to write and validate input files "
             f"(see tool_rules for the full procedure).\n"
-            f"3. **Submit**: Call the appropriate MCP submit tool ({sm}). Note the returned job_id.\n"
-            f"4. **Monitor & Resilience**: Call `monitor_job(job_id=\"<ID>\", software=\"<SW>\", "
-            f"workspace=\"<PATH>\")`. "
+            f"{submit_step}"
+            f"4. **Monitor & Resilience**: For MCP-submit path jobs, call "
+            f"`monitor_job(job_id=\"<ID>\", software=\"<SW>\", workspace=\"<PATH>\")`. "
             f"Supported software values: {self.monitor_job_software_arg()}. "
             f"For dpdispatcher-based jobs (ABACUS, etc.) also pass bohr_job_id=extra_info.bohr_job_id "
             f"from the submit response. "
-            f"This tool blocks until the job succeeds or fails, handles status polling, result downloading, "
-            f"and error diagnosis internally. Result files are downloaded to workspace/calculation_results/.\n"
+            f"For bohrium-job path jobs, call skill scripts in two steps: submit_job.py then monitor_job.py. "
+            f"Result files are downloaded to workspace by monitor_job.py after status=Finished.\n"
             f"5. **On failure with fix suggestion**: If monitor_job returns status=\"needs_fix\", apply the "
             f"suggested parameter changes to the input files, re-submit via MCP, and call monitor_job again "
             f"with the new job_id.\n"
@@ -278,14 +322,25 @@ class AsyncToolRegistry:
 
     def format_execution_constraints(self) -> str:
         sw = self.software_list_str()
-        sm = self.server_mapping_str()
+        mcp_sm = self.mcp_submit_mapping_str()
+        bj_sw = self.bohrium_job_sw_str()
+        if mcp_sm and bj_sw:
+            constraint_2 = (
+                f"Heavy calculations must NOT run locally. "
+                f"Submit path: {mcp_sm} → native MCP submit tools; "
+                f"{bj_sw} → prepare_* MCP tools then **bohrium-job** skill (no _submit_* MCP). "
+                f"Never run any of these via execute_bash."
+            )
+        elif mcp_sm:
+            constraint_2 = f"Heavy calculations MUST be submitted via MCP tools ({mcp_sm}). Never run these codes via execute_bash."
+        else:
+            constraint_2 = f"Heavy calculations: use prepare_* MCP tools then submit via bohrium-job skill ({bj_sw}). Never run via execute_bash."
         return (
             f"# Execution Environment Constraints\n"
             f"1. The local environment supports Python data processing (ASE, Pymatgen, etc.). "
             f"General Python packages may be installed via pip if missing. "
             f"However, no {sw} binaries are available locally.\n"
-            f"2. Heavy calculations MUST be submitted via MCP tools ({sm}). "
-            f"Never run these codes via execute_bash."
+            f"2. {constraint_2}"
         )
 
     def format_planner_license_firewall(self) -> str:

@@ -113,7 +113,7 @@ def _parse_route(response: str) -> str:
 def _build_router_system(registry: AsyncToolRegistry, skills_str: str = '') -> str:
     """Build ROUTER_SYSTEM prompt with software names from registry (no hardcoding)."""
     sw = registry.software_list_str()
-    sm = registry.server_mapping_str()
+    sm = registry.mcp_submit_mapping_str()
     block = registry.crp_block_str()
     skills_constraint = ''
     if skills_str:
@@ -128,7 +128,10 @@ def _build_router_system(registry: AsyncToolRegistry, skills_str: str = '') -> s
 
 SYSTEM CONSTRAINTS:
 1. Local Environment: The local sandbox supports Python scripting, data manipulation, and lightweight simulations (e.g., ASE, Pymatgen). It does NOT provide {block}, {sw} run services locally.
-2. Remote Delegation: Heavy calculations ({sw}) are submitted via MCP tools ({sm}) and monitored via the monitor_job tool. This is handled within STANDARD_EXECUTION; no separate routing is needed.
+2. Remote Delegation: Heavy calculations ({sw}) are run remotely.
+   - SG/DPA/COMPDART: submitted via their native MCP submit tools ({sm}), monitored via monitor_job.
+   - LAMMPS/CP2K/ABINIT/QE/ORCA (mat_binary_calc): input prepared via prepare_* MCP tools, then **submitted via bohrium-job skill**. There are NO mat_binary_calc_submit_* MCP tools — do not call them.
+   All of this is handled within STANDARD_EXECUTION; no separate routing is needed.
 3. Tool Availability: Use the provided 'Available Tools' list to decide if a programmatic capability is missing (SKILL_EVOLUTION) or can be fulfilled by existing tools and skills (STANDARD_EXECUTION). Always check the full tool list before concluding a tool is missing.
 4. Characterization routing baseline: NMR/XRD/electron-microscopy requests should default to STANDARD_EXECUTION when dedicated MCP tools exist (e.g., mat_nmr_NMR_search_tool, mat_nmr_NMR_predict_tool, mat_nmr_NMR_reverse_predict_tool, mat_xrd_xrd_phase_identification, mat_electron_microscope_get_electron_microscope_recognize). Do NOT choose SKILL_EVOLUTION for these unless the user requests a clearly missing capability.{skills_constraint}
 
