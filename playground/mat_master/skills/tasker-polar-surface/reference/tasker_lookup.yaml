@@ -39,7 +39,7 @@ entries:
     tasker_type: 3
     note: "Corundum (0001); polar; symmetric slab or passivation."
     ref: "Common in literature"
-  - formula: GaN
+  - formula: GaN  
     miller: "0 0 0 1"
     tasker_type: 3
     note: "Wurtzite basal; polar."
