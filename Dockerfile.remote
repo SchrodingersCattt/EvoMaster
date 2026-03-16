@@ -25,7 +25,6 @@ RUN pip install --no-cache-dir \
     matplotlib \
     python-docx \
     requests \
-
     scikit-learn \
     xgboost-cpu \
     lightgbm \
