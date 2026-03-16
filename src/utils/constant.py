@@ -67,9 +67,9 @@ BOHRIUM_CORE_BASE_URL = os.getenv(
 
 # Bohrium 节点默认镜像 ID，按环境区分（创建节点时未指定且无 BOHRIUM_IMAGE_ID 时使用）
 BOHRIUM_ENV_DEFAULT_IMAGE_IDS: dict[str, int] = {
-    'test': 48964,
-    'uat': 1548,
-    'prod': 121787,
+    'test': 48965,
+    'uat': 1549,
+    'prod': 121788,
 }
 BOHRIUM_DEFAULT_IMAGE_ID = (
     BOHRIUM_ENV_DEFAULT_IMAGE_IDS.get(CURRENT_ENV)
@@ -78,9 +78,9 @@ BOHRIUM_DEFAULT_IMAGE_ID = (
 
 # 镜像 name 也在构建时写入仓库，运行期不用再调 image/private 获取
 BOHRIUM_ENV_DEFAULT_IMAGE_NAMES: dict[str, str] = {
-    'test': 'matmaster:8a1c9067-20260316-074122',
-    'uat': 'matmaster:8a1c9067-20260316-074109',
-    'prod': 'matmaster:8a1c9067-20260316-074108',
+    'test': 'matmaster:79c42758-20260316-084157',
+    'uat': 'matmaster:79c42758-20260316-084155',
+    'prod': 'matmaster:79c42758-20260316-084156',
 }
 BOHRIUM_DEFAULT_IMAGE_NAME = (
     BOHRIUM_ENV_DEFAULT_IMAGE_NAMES.get(CURRENT_ENV)
