@@ -391,6 +391,18 @@ mcp:
               app_key: "agent"
           resources:
             envs: {}
+        run_gromacs:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/gromacs:2022.2"
+              platform: "ali"
+              machine_type: "c32_m128_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
       sync_tools:
         - prepare_abinit_job
         - prepare_cp2k_job
