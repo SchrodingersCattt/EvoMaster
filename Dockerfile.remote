@@ -24,7 +24,12 @@ RUN pip install --no-cache-dir \
     numpy \
     matplotlib \
     python-docx \
-    requests
+    requests \
+    scikit-learn \
+    xgboost \
+    lightgbm \
+    mendeleev \
+    matminer
 
 # -----------------------------
 # 安装 VASPKIT（不依赖仓库内 tar 包，在线下载并解压）
