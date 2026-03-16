@@ -26,6 +26,7 @@ from src.utils.feishu_notifier import (
     notify_post_async,
 )
 from src.utils.logger import LoggingConfig, setup_logging
+from src.utils.support_notifier import send_session_complete_email_async
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
@@ -342,6 +343,15 @@ def _run_worker_loop() -> None:
                     title = 'Worker 执行成功' if run_success else 'Worker 执行失败'
                     template = CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
                 notify_post_async(title, rows, template=template)
+                # 会话完成/失败时给用户发邮件（模板：会话已执行完成+链接），与飞书通知并行
+                if (
+                    session_user_id
+                    and user_info.get('email')
+                    and user_info.get('email') != '-'
+                ):
+                    send_session_complete_email_async(
+                        session_url, session_user_id, user_info['email']
+                    )
         if _drain_requested:
             logger.info(
                 'Agent worker: drain requested, current job finished, exiting loop. session_id=%s worker_id=%s',
