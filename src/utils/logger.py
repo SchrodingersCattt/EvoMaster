@@ -29,6 +29,22 @@ class LogContext:
         cls._session_id.set(None)
         cls._task_id.set(None)
 
+    @staticmethod
+    def session_id_from_path(path: str) -> str | None:
+        """从 /api/v1/chat/sessions/<segment>/... 解析 session_id；list、run_status 等无 session 返回 None。"""
+        if '/chat/sessions/' not in path:
+            return None
+        parts = path.rstrip('/').split('/')
+        if 'sessions' not in parts:
+            return None
+        idx = parts.index('sessions')
+        if idx + 1 >= len(parts):
+            return None
+        segment = parts[idx + 1]
+        if segment in ('list', 'run_status'):
+            return None
+        return segment
+
 
 class LogContextFilter(logging.Filter):
     """将 contextvars 中的 session_id/task_id 注入到每条 LogRecord，便于检索。"""

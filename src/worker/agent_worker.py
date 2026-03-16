@@ -170,6 +170,7 @@ def _run_worker_loop() -> None:
             logger.warning('Agent worker: skip job with empty session_id')
             continue
 
+        LogContext.bind(session_id, task_id)
         session_user_id = sessions_service.get_session_user_id(session_id)
         user_info = UserService.get_user_info_for_display(session_user_id)
         user_info_display = (
@@ -216,11 +217,11 @@ def _run_worker_loop() -> None:
                     fail_reason or 'unknown',
                 )
                 redis_dao.delete_confirmation_run_active(session_id)
+                LogContext.clear()
                 continue
 
             acquired = True
             _current_session_id = session_id
-            LogContext.bind(session_id, task_id)
             run_start_time = time.monotonic()
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()

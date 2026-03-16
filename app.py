@@ -22,7 +22,7 @@ from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.build_info import get_build_version
 from src.utils.constant import CURRENT_ENV, DB_CONFIG
 from src.utils.exceptions import BaseErrorResponse
-from src.utils.logger import LoggingConfig, setup_logging
+from src.utils.logger import LogContext, LoggingConfig, setup_logging
 from src.utils.worker_id import get_worker_id
 
 log_config = LoggingConfig.get_main_app_config()
@@ -165,9 +165,13 @@ async def health_check() -> HealthResponse:
         raise HTTPException(status_code=503, detail=f"服务不可用: {str(e)}")
 
 
-# 中间件：记录请求日志
+# 中间件：记录请求日志，并为带 session 的请求绑定 LogContext 便于检索
 @app.middleware('http')
 async def log_requests(request: Request, call_next):
+    session_id_from_path = LogContext.session_id_from_path(request.url.path)
+    if session_id_from_path:
+        LogContext.bind(session_id_from_path, '-')
+
     SENSITIVE_KEYS = {
         'password',
         'passwd',
@@ -219,6 +223,8 @@ async def log_requests(request: Request, call_next):
         response = await call_next(request)
         return response
     finally:
+        if session_id_from_path:
+            LogContext.clear()
         cost_ms = (time.perf_counter() - start) * 1000
         if request.url.path != '/api/health':
             logger.info(
