@@ -1,6 +1,6 @@
 ---
 name: tasker-polar-surface
-description: "Guides surface slab construction for ionic and polar crystals using Tasker's polar surface classification (Type 1/2/3). Type 1: may use mat_sg_build_surface_slab. Type 2/3: do NOT use mat_sg_build_surface_slab; use literature for parameters then 现场搓 (execute_bash + pymatgen/ASE) to build the slab, then validate with check_slab_tasker.py and assess_structure.py. Use when cutting surfaces from bulk (切面、切 slab、从体相切出表面), for oxides/ionic crystals (e.g. MgO, TiO2, ZnO)."
+description: "Guides slab cutting for ionic and polar crystals using Tasker types (1/2/3). Use built-in script build_slab_tasker_fix.py as the default builder for all surface types, then validate with check_slab_tasker.py and assess_structure.py. If auto-fix fails, explicitly report to user and ask for manual adjustment or temporary acceptance."
 ---
 
 # Tasker Polar Surface Skill
@@ -19,46 +19,61 @@ When cutting a surface slab from a bulk crystal (especially ionic or oxide), app
 - **Type 2**: Repeat has no net dipole, but the way layers stack can make a finite slab polar unless symmetric.
 - **Type 3**: Alternating layers of opposite charge (e.g. O- and Zn-terminated ZnO basal); classical ionic model gives diverging surface energy. Stabilization in practice: reconstruction, adsorbates, or charge transfer.
 
-## Workflow: Type 1 vs Type 2/3 (different build path)
+## Workflow: unified build path for all types
 
-1. **Classify** the requested (hkl) for the material: Type 1, 2, or 3. Prefer **reference/tasker_lookup.yaml** and **reference.md**; if (formula, miller) is **not** in the lookup table, **search literature** first (see §2.1) with mat_sn_* tools, then infer the type from search results.
+1. **Pre-classify (provisional)** the requested (hkl): Type 1, 2, or 3.
+   - Prefer **reference/tasker_lookup.yaml** and **reference.md**.
+   - If (formula, miller) is not in lookup, do literature search first (see §2.1) and set a **provisional** type.
+   - This pre-classification is for choosing build path. Final judgment still depends on post-build checks.
 
-2. **Type 1 (non-polar)**
-   - You **may** use the MCP slab builder **mat_sg_build_surface_slab** (or equivalent).
-   - Then run the checker and validation as below.
+2. **Build slab (default for Type 1/2/3)**
+   - Use `build_slab_tasker_fix.py` as the default builder for all types.
+   - If type is uncertain, still build first with this script, then decide with checker + literature consistency.
+   - `mat_sg_build_surface_slab` is optional fallback only when explicitly needed.
 
-3. **Type 2 or Type 3 (polar / need symmetric termination)**
-   - **Do NOT use mat_sg_build_surface_slab.**
-   - Get parameters from literature/web, then **现场搓**：用 **execute_bash** 跑一段 Python（pymatgen 或 ASE）按文献的层数、真空、终止面生成 slab 并写出文件，然后**必须**做校验。见下 § Type 2/3。
+3. **Post-build validate and iterate (mandatory)**
+   - Run `check_slab_tasker.py` on the built slab with the provisional type.
+   - If non-compliant or inconsistent with literature, adjust parameters (layers/termination/thickness) and rebuild.
+   - If repeated attempts still fail, report limitation and ask user to choose manual adjustment vs temporary ignore.
 
-## Type 2/3: 现场搓 (no mat_sg_build_surface_slab)
+## Build slab with script (Type 1/2/3)
 
-**Type 2/3** 不调用 `mat_sg_build_surface_slab`。先查文献/网页拿参数，再**现场写代码、跑脚本**生成 slab，最后校验。
+对 **Type 1/2/3** 都优先运行本 skill 的 `build_slab_tasker_fix.py` 生成 slab（可直接扩胞），最后校验。
 
 ### Step 1 — 从文献/网页拿参数
 
 - 用 **mat_sn_*** 或 **mat_sn_web-search** 搜该 (formula, 晶面)，如 "ZnO 0001 symmetric slab layers", "<formula> <hkl> slab construction vacuum"。
 - 从论文/教程里提取：**层数**（或 repeat units）、**真空厚度**、以及是否推荐某种**终止面**（如上下都是 O 终止）。
 
-### Step 2 — 现场搓 slab
+### Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）
 
-- 用 **execute_bash** 写并执行一段 Python：用 pymatgen（`SlabGenerator`、`get_slabs()` 等）或 ASE，按上面拿到的 bulk 路径、miller、层数、真空生成 slab；**Type 2/3 要选上下层成分一致的对称终止**（从 `get_slabs()` 里挑或按文献指定）；把结构写到 POSCAR/CIF。
-- 不依赖本 skill 的预置脚本；缺啥就现场写、现场跑。
+- **根据用户或文献需求传参**：用户明确要求的层数、厚度、真空、扩胞、电荷等，必须通过 script_args 传给脚本，不要只用默认值。
+- Call `use_skill` with `action=run_script`, `script_name=build_slab_tasker_fix.py`, and script args (choose one mode):
+  - by layers: `-i <bulk_path> -m <h> <k> <l> -L <repeat_layers> -v <vacuum> -o <slab_path>`
+  - by thickness: `-i <bulk_path> -m <h> <k> <l> -T <thickness_A> -v <vacuum> -o <slab_path>`
+- Optional tiling (用户或文献要求超胞/最小尺寸时必传):
+  - fixed repeat: `--tile-repeat NX NY NZ`
+  - minimum in-plane size: `--tile-min-x <A> --tile-min-y <A>`
+- Optional charge override: `--charge "Zn:2,O:-2"` or JSON string (非二元或文献给出电荷时使用).
+- If the script exits non-zero (e.g. "No nonpolar solution found"), **do not hide it**. Report failure to user, include reason, and ask whether to:
+  1) manually adjust termination/layers and retry, or
+  2) temporarily accept a polar slab and continue.
+- Only when this script clearly cannot satisfy the case, fall back to ad-hoc `execute_bash` custom Python.
 
-### Step 3 — 校验（必做）
+### Step 3 — 校验与分型收敛（必做）
 
 - Run **check_slab_tasker.py** on the generated file:
-  `use_skill` … `script_name=check_slab_tasker.py`, `script_args="--file <slab_path> --tasker_type 2|3"` (and `--formula`, `--miller` if known).
+  `use_skill` … `script_name=check_slab_tasker.py`, `script_args="--file <slab_path> --tasker_type <provisional_type>"` (and `--formula`, `--miller` if known).
   Require `compliant: true`; if not, adjust n_layers or termination (from literature) and rebuild.
 - Run **structure-manager** `assess_structure.py` on the same file for dimensionality and sanity.
 Only after both checks pass (and optionally literature/lookup consistency) proceed to finish.
 
 ## Checklist
 
-- [ ] Classified the surface as Type 1, 2, or 3.
-- [ ] **Type 1**: Used mat_sg_build_surface_slab (or script) → then validate.
-- [ ] **Type 2/3**: Did **not** use mat_sg_build_surface_slab; got parameters from literature → 现场搓 (execute_bash + pymatgen/ASE) → ran check_slab_tasker.py and assess_structure.py; both pass.
+- [ ] Did provisional classification first (lookup/literature), then finalized decision after structure check.
+- [ ] Used `build_slab_tasker_fix.py` first for Type 1/2/3 (or gave clear reason for fallback).
 - [ ] **After build**: Ran `check_slab_tasker.py` on the slab file; `compliant` is true. If not, re-build or warn user before finish.
+- [ ] If auto-build/auto-fix fails: explicitly reported failure reason to user and asked for manual adjustment vs temporary ignore.
 
 ## Review after building (mandatory) — script + literature/lookup
 
@@ -88,7 +103,7 @@ If **(formula, miller)** is **not** in `tasker_lookup.yaml`, do **not** rely on 
    - `<formula> <miller> surface polar slab`
    - `<formula> <hkl> non-polar symmetric slab`
    - `ionic crystal surface <formula> <miller> dipole`
-2. **Interpret**: From titles/snippets (or full page via **`extract_info_from_webpage`** if one URL is clearly relevant), infer whether the surface is Type 1 (non-polar), Type 2 (symmetric needed), or Type 3 (polar; symmetric slab or stabilization). Prefer peer-reviewed sources when available.
+2. **Interpret**: From titles/snippets (or full page via **mat_doc_extract_info_from_webpage** if one URL is clearly relevant), infer whether the surface is Type 1 (non-polar), Type 2 (symmetric needed), or Type 3 (polar; symmetric slab or stabilization). Prefer peer-reviewed sources when available.
 3. **Use and verify**: Use the inferred type for building (if still before build) and for `check_slab_tasker.py` (`--tasker_type <inferred>`). Run the checker as usual; script output does **not** include `literature_*` when the table has no entry, but the type you pass is now literature-based.
 4. **Optional — extend the table**: After a compliant result, you may add the new (formula, miller, tasker_type, note, ref) to `reference/tasker_lookup.yaml` (or report to the user: "Consider adding this material/surface to the skill's lookup table for future runs" and paste a suggested YAML block).
 
@@ -102,6 +117,30 @@ The script prints JSON with `compliant`, `symmetric`, `reason`, `layer_summary`,
 
 ## Scripts
 
+- **build_slab_tasker_fix.py**: Builds slab using ASE `surface`, applies heuristic Tasker-style nonpolar fix (layer-charge + dipole check), and supports tiling. **Use the CLI parameters below to match user/literature requirements; do not rely on defaults when the user or literature specifies values.**
+
+  **CLI 参数一览（熟练使用）：**
+
+  | 参数 | 含义 | 默认/必填 | 示例 |
+  |------|------|-----------|------|
+  | `-i`, `--input` | 体相结构文件路径 | 默认 POSCAR | `-i bulk.cif` |
+  | `-m`, `--miller` | Miller 指数 (h k l)，**3 个整数** | **必填** | `-m 1 0 0`；六方 (0001) 用 `-m 0 0 1` |
+  | `-o`, `--output` | 输出 slab 文件路径 | 默认 POSCAR_slab | `-o slab.vasp` |
+  | `-L`, `--repeat-layers` | 重复层数 | 与 `-T` 二选一**必填** | `-L 8` |
+  | `-T`, `--thickness` | 目标厚度（Å） | 与 `-L` 二选一**必填** | `-T 18` |
+  | `-v`, `--vacuum` | 真空层厚度（Å） | 默认 15.0 | `-v 20` |
+  | `--charge` | 电荷映射 | 默认自动（仅二元） | `--charge "Zn:2,O:-2"` 或 JSON |
+  | `--layer-tol` | 层识别容差（Å） | 默认 0.5 | `--layer-tol 0.6` |
+  | `--tile-repeat` | 扩胞重复 (NX NY NZ) | 可选 | `--tile-repeat 2 2 1` |
+  | `--tile-min-x` | x 方向最小尺寸（Å） | 可选 | `--tile-min-x 12` |
+  | `--tile-min-y` | y 方向最小尺寸（Å） | 可选 | `--tile-min-y 12` |
+  | `--quiet` | 静默，少打日志 | 可选 | `--quiet` |
+
+  - Miller：脚本为 `nargs=3`，即 3 个整数；六方 (0001) 传 `-m 0 0 1`（3-index 等价）。
+  - 示例（按层数）：`-i POSCAR -m 1 0 0 -L 8 -v 15 -o slab.vasp`
+  - 示例（按厚度+扩胞）：`-i bulk.cif -m 1 1 0 -T 18 -v 20 -o slab.cif --tile-repeat 2 2 1`
+  - 示例（最小尺寸）：`-i POSCAR -m 1 0 0 -L 6 -v 15 -o slab.vasp --tile-min-x 10 --tile-min-y 10`
+  - Output: slab 文件（格式由 `-o` 扩展名决定）+ 终端日志。**Not universal**：部分极性面仍可能失败，需向用户汇报并请其手动调整或暂时接受。
 - **check_slab_tasker.py**: Reads the built slab file (POSCAR/CIF), infers layers along the surface normal, and checks Tasker compliance. **Required** after every slab build before finish.
   - Usage: `python check_slab_tasker.py --file <slab_path> --tasker_type 1|2|3`
   - Optional (recommended when material/surface known): `--formula <formula> --miller "<h k l>"`; use `--lookup <path>` to override default `reference/tasker_lookup.yaml`.
@@ -110,8 +149,9 @@ The script prints JSON with `compliant`, `symmetric`, `reason`, `layer_summary`,
 
 ## Integration
 
-- **Type 1**: Apply this skill before calling **mat_sg_build_surface_slab** (or equivalent). After building, run check_slab_tasker.py and structure-manager as below.
-- **Type 2/3**: Do **not** use mat_sg_build_surface_slab. Get parameters from literature, then **现场搓** (execute_bash + pymatgen/ASE) to build the slab; then **mandatorily** run **check_slab_tasker.py** and **assess_structure.py** on the generated file.
+- **Type 1/2/3**: Use `build_slab_tasker_fix.py` first, then **mandatorily** run **check_slab_tasker.py** and **assess_structure.py** on the generated file.
+- **Unknown/uncertain type**: still build with `build_slab_tasker_fix.py` first, then use checker + literature consistency to converge on final handling path.
+- If `build_slab_tasker_fix.py` fails or checker stays non-compliant after retries, explicitly report to user and request decision: manual adjustment now vs temporarily continue with polar slab.
 - After any slab build, you **must** run `check_slab_tasker.py` on the **actual slab file**. Do not finish without this check or with a non-compliant result unless the user has been explicitly warned.
 - After a compliant slab is confirmed, use structure-manager (e.g. `assess_structure.py`) for sanity/dimensionality if needed.
 
