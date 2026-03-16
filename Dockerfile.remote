@@ -26,7 +26,7 @@ RUN pip install --no-cache-dir \
     python-docx \
     requests \
     scikit-learn \
-    xgboost \
+    xgboost-cpu \
     lightgbm \
     mendeleev \
     matminer
