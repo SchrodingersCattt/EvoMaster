@@ -17,13 +17,29 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from evomaster.core.exp import BaseExp
-from evomaster.utils.types import Dialog, SystemMessage, TaskInstance, UserMessage
+from evomaster.utils.types import Dialog, FunctionSpec, SystemMessage, TaskInstance, ToolSpec, UserMessage
 
 from ...prompts.build_prompt import LANGUAGE_RULE
-from ..async_tool_registry import AsyncToolRegistry
 from ..constants import MANUSCRIPT_FAIL_MARKERS
 from ..execution import BatchExecutor, ExecutionTask
 from .direct_solver import DirectSolver, _get_available_tool_names
+from .plan_utils import (
+    _STR_REPLACE_TOOL_SPEC,
+    _complete_truncated_json,
+    _extract_json_from_content,
+    _get_async_registry,
+    _get_mat_master_config,
+    _is_deg_plan,
+    _load_pre_check_system_prompt,
+    _normalize_plan,
+    _normalize_planner_thought,
+    _normalize_step,
+    _plan_to_external_schema,
+    _str_replace_in_text,
+    _strip_last_incomplete_step,
+    _to_thought_tag,
+    _try_parse_json,
+)
 
 try:
     from ..exp import SkillEvolutionExp
@@ -32,386 +48,6 @@ try:
 except ImportError:
     SkillEvolutionExp = None
     _HAS_EVOLUTION = False
-
-
-def _get_async_registry(config) -> AsyncToolRegistry:
-    """Create AsyncToolRegistry from config (handles model_dump)."""
-    try:
-        if hasattr(config, 'model_dump'):
-            d = config.model_dump()
-        else:
-            d = dict(config) if config else {}
-    except Exception as exc:
-        logging.getLogger(__name__).warning(
-            'Failed to parse config for AsyncToolRegistry: %s', exc
-        )
-        d = {}
-    return AsyncToolRegistry(d)
-
-
-def _load_pre_check_system_prompt(config_dir=None) -> str:
-    """Load pre-check system prompt from file, falling back to minimal inline template."""
-    candidates = []
-    if config_dir is not None:
-        playground_base = Path(str(config_dir).replace('configs', 'playground', 1))
-        candidates.append(
-            (playground_base / 'prompts' / 'pre_check_system_prompt.txt').resolve()
-        )
-        candidates.append(
-            (Path(config_dir) / 'prompts' / 'pre_check_system_prompt.txt').resolve()
-        )
-    local_base = Path(__file__).resolve().parent.parent.parent
-    candidates.append(
-        (local_base / 'prompts' / 'pre_check_system_prompt.txt').resolve()
-    )
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate.read_text(encoding='utf-8')
-    # Fallback: minimal inline template
-    return (
-        'You are a pre-planning readiness assessor. Output JSON with keys: '
-        'ready_to_plan (bool), prerequisites (list), reasoning (str). '
-        'Do NOT generate the plan itself. Only assess readiness.'
-    )
-
-
-# Pre-check prompt is loaded per-instance in ResearchPlanner.__init__ via
-# _load_pre_check_system_prompt(self._config_dir) and stored as self._pre_check_system.
-
-
-def _get_mat_master_config(config) -> dict:
-    try:
-        if hasattr(config, 'model_dump'):
-            d = config.model_dump()
-        else:
-            d = dict(config) if config else {}
-        return d.get('mat_master') or {}
-    except Exception as exc:
-        logging.getLogger(__name__).warning(
-            'Failed to parse mat_master config: %s', exc
-        )
-        return {}
-
-
-def _is_deg_plan(plan: Any) -> bool:
-    """True if plan is a DEG (has 'steps' or 'execution_graph' with step_id)."""
-    if not isinstance(plan, dict):
-        return False
-    steps = plan.get('steps') or plan.get('execution_graph')
-    return (
-        isinstance(steps, list)
-        and len(steps) > 0
-        and isinstance(steps[0].get('step_id'), int)
-    )
-
-
-def _normalize_step(step: dict[str, Any]) -> dict[str, Any]:
-    """Map execution_graph schema to internal steps schema (goal-oriented)."""
-    intensity = (
-        step.get('compute_intensity') or step.get('compute_cost') or 'MEDIUM'
-    ).upper()
-    if intensity == 'LOW':
-        cost = 'Low'
-    elif intensity == 'HIGH':
-        cost = 'High'
-    else:
-        cost = 'Medium'
-    step_type = (step.get('step_type') or 'normal').lower()
-    if step_type not in ('normal', 'skill_evolution'):
-        step_type = (
-            'skill_evolution'
-            if step.get('tool_name') == 'skill_evolution'
-            else 'normal'
-        )
-    intent = step.get('goal') or step.get('scientific_intent') or step.get('intent', '')
-    return {
-        'step_id': step.get('step_id'),
-        'step_type': step_type,
-        'tool_name': (
-            'skill_evolution' if step_type == 'skill_evolution' else ''
-        ),  # only for executor branch
-        'intent': intent,
-        'compute_cost': cost,
-        'requires_human_confirm': step.get(
-            'requires_confirmation', step.get('requires_human_confirm', False)
-        ),
-        'fallback_logic': step.get('fallback_strategy')
-        or step.get('fallback_logic', 'None'),
-        'status': step.get('status', 'pending'),
-        'conditional_branch': step.get(
-            'conditional_branch'
-        ),  # optional: {"if_success": <step_id>, "if_fail": <step_id>}
-        'depends_on': step.get(
-            'depends_on', []
-        ),  # optional: [step_id, ...] that must complete first
-    }
-
-
-def _normalize_plan(plan: dict[str, Any], max_steps: int = 999) -> dict[str, Any]:
-    """Ensure plan has 'steps' with internal field names; cap length."""
-    graph = plan.get('execution_graph') or plan.get('steps') or []
-    plan['steps'] = [_normalize_step(s) for s in graph][:max_steps]
-    for s in plan['steps']:
-        s.setdefault('status', 'pending')
-    return plan
-
-
-def _plan_to_external_schema(plan: dict[str, Any]) -> dict[str, Any]:
-    """Convert internal plan (steps) to prompt schema (execution_graph) for revision."""
-    steps = plan.get('steps', [])
-    intensity_map = {'Low': 'LOW', 'Medium': 'MEDIUM', 'High': 'HIGH'}
-    execution_graph = []
-    for s in steps:
-        entry = {
-            'step_id': s.get('step_id'),
-            'step_type': s.get('step_type', 'normal'),
-            'goal': s.get('intent', ''),
-            'compute_intensity': intensity_map.get(s.get('compute_cost'), 'MEDIUM'),
-            'requires_confirmation': s.get('requires_human_confirm', False),
-            'fallback_strategy': s.get('fallback_logic', 'None'),
-            'status': s.get('status', 'pending'),
-        }
-        if s.get('conditional_branch'):
-            entry['conditional_branch'] = s['conditional_branch']
-        if s.get('depends_on'):
-            entry['depends_on'] = s['depends_on']
-        execution_graph.append(entry)
-    out = {
-        'plan_id': plan.get('plan_id'),
-        'status': plan.get('status'),
-        'refusal_reason': plan.get('refusal_reason'),
-        'strategy_name': plan.get('strategy_name'),
-        'fidelity_level': plan.get('fidelity_level', 'Production'),
-        'execution_graph': execution_graph,
-    }
-    if plan.get('plan_report'):
-        out['plan_report'] = plan['plan_report']
-    return out
-
-
-def _extract_json_from_content(content: str) -> str | None:
-    """Extract first {...} or ```json ... ``` from LLM output.
-
-    Uses string-aware brace matching to correctly handle braces inside
-    JSON string values (e.g. goal text containing '{tool_name}').
-    """
-    text = (content or '').strip()
-    if '```json' in text:
-        start = text.find('```json') + 7
-        end = text.rfind('```')
-        if end > start:
-            return text[start:end].strip()
-    if '```' in text:
-        start = text.find('```') + 3
-        end = text.rfind('```')
-        if end > start:
-            return text[start:end].strip()
-    start = text.find('{')
-    if start < 0:
-        return None
-    # String-aware brace matching: skip braces inside quoted strings
-    depth = 0
-    in_string = False
-    escape_next = False
-    for i in range(start, len(text)):
-        ch = text[i]
-        if escape_next:
-            escape_next = False
-            continue
-        if ch == '\\' and in_string:
-            escape_next = True
-            continue
-        if ch == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if ch == '{':
-            depth += 1
-        elif ch == '}':
-            depth -= 1
-            if depth == 0:
-                return text[start : i + 1]
-    return None
-
-
-def _try_parse_json(raw: str, logger: logging.Logger | None = None) -> dict:
-    """Attempt to parse JSON with multi-stage repair for common LLM output errors.
-
-    Repair stages (applied in order until one succeeds):
-    1. Direct json.loads() — no repair needed
-    2. Fix unescaped newlines/tabs inside string values
-    3. Remove trailing commas before ] or }
-    4. Replace single-quoted strings with double-quoted strings
-    5. Strip JavaScript-style line comments (// ...)
-    6. Strip JavaScript-style block comments (/* ... */)
-    7. Truncate at last valid closing brace (handles truncated output)
-
-    Raises json.JSONDecodeError if all stages fail.
-    """
-    _log = logger or logging.getLogger(__name__)
-
-    # Stage 1: direct parse
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        pass
-
-    repaired = raw
-
-    # Stage 1.5: strip markdown code fences (```json ... ``` or ``` ... ```)
-    try:
-        stripped = repaired
-        if stripped.lstrip().startswith('```'):
-            # Remove opening fence line
-            first_nl = stripped.find('\n')
-            if first_nl >= 0:
-                stripped = stripped[first_nl + 1:]
-            # Remove closing fence
-            last_fence = stripped.rfind('```')
-            if last_fence >= 0:
-                stripped = stripped[:last_fence]
-            stripped = stripped.strip()
-            if stripped:
-                result = json.loads(stripped)
-                return result
-    except json.JSONDecodeError:
-        # If fence-stripped version also has issues, continue to other stages
-        # but use the stripped version as the base for subsequent repairs
-        if stripped and stripped.strip():
-            repaired = stripped
-
-    # Stage 2: fix unescaped control characters inside string values.
-    # Replace literal newlines/tabs/carriage-returns inside JSON strings.
-    # We do this by scanning character-by-character to stay string-aware.
-    try:
-        chars: list[str] = []
-        in_str = False
-        esc = False
-        for ch in repaired:
-            if esc:
-                chars.append(ch)
-                esc = False
-                continue
-            if ch == '\\' and in_str:
-                chars.append(ch)
-                esc = True
-                continue
-            if ch == '"':
-                in_str = not in_str
-                chars.append(ch)
-                continue
-            if in_str and ch == '\n':
-                chars.append('\\n')
-                continue
-            if in_str and ch == '\r':
-                chars.append('\\r')
-                continue
-            if in_str and ch == '\t':
-                chars.append('\\t')
-                continue
-            chars.append(ch)
-        stage2 = ''.join(chars)
-        return json.loads(stage2)
-    except json.JSONDecodeError:
-        pass
-
-    # Stage 3: remove trailing commas before ] or }
-    try:
-        stage3 = re.sub(r',\s*([}\]])', r'\1', repaired)
-        return json.loads(stage3)
-    except json.JSONDecodeError:
-        pass
-
-    # Stage 4: combine stage 2 + stage 3
-    try:
-        stage4 = re.sub(r',\s*([}\]])', r'\1', stage2)  # type: ignore[possibly-undefined]
-        return json.loads(stage4)
-    except (json.JSONDecodeError, UnboundLocalError):
-        pass
-
-    # Stage 5: strip JS-style line comments
-    try:
-        stage5 = re.sub(r'//[^\n]*', '', repaired)
-        stage5 = re.sub(r',\s*([}\]])', r'\1', stage5)
-        return json.loads(stage5)
-    except json.JSONDecodeError:
-        pass
-
-    # Stage 6: strip JS-style block comments
-    try:
-        stage6 = re.sub(r'/\*.*?\*/', '', repaired, flags=re.DOTALL)
-        stage6 = re.sub(r',\s*([}\]])', r'\1', stage6)
-        return json.loads(stage6)
-    except json.JSONDecodeError:
-        pass
-
-    # Stage 7: truncate at last valid closing brace (handles truncated LLM output)
-    try:
-        last_brace = repaired.rfind('}')
-        if last_brace > 0:
-            truncated = repaired[: last_brace + 1]
-            # Also fix trailing commas in truncated version
-            truncated = re.sub(r',\s*([}\]])', r'\1', truncated)
-            return json.loads(truncated)
-    except json.JSONDecodeError:
-        pass
-
-    # All stages failed — re-raise original error for caller to handle
-    _log.debug('_try_parse_json: all repair stages failed for input (len=%d)', len(raw))
-    raise json.JSONDecodeError('All JSON repair stages failed', raw, 0)
-
-
-def _to_thought_tag(label: str) -> str:
-    """Normalize bracket labels like 'Pre-check' into stable snake_case tags."""
-    t = (label or '').strip().lower()
-    t = re.sub(r'[^a-z0-9]+', '_', t)
-    return t.strip('_')
-
-
-def _normalize_planner_thought(content: Any) -> dict[str, Any]:
-    """Convert planner thought payloads to structured JSON for frontend readability."""
-    if isinstance(content, dict):
-        return content
-    if content is None:
-        return {'message': ''}
-    if not isinstance(content, str):
-        return {'data': content}
-
-    raw_text = content
-    text = raw_text.strip()
-    payload: dict[str, Any] = {'message': raw_text}
-    if not text:
-        return payload
-
-    # Parse leading bracket tags, e.g. "[Pre-check] ...", "[CRP] ..."
-    tag_match = re.match(r'^\[([^\]]+)\]\s*([\s\S]*)$', text)
-    if tag_match:
-        payload['tag'] = _to_thought_tag(tag_match.group(1))
-        payload['message'] = tag_match.group(2).strip()
-
-    # If thought includes embedded JSON, expose it explicitly under `data`.
-    embedded = _extract_json_from_content(text)
-    if embedded:
-        try:
-            parsed = _try_parse_json(embedded)
-            payload['data'] = parsed
-            # When structured data is successfully parsed, suppress the raw message
-            # to avoid showing raw JSON text in the chat alongside the rendered card.
-            # Only keep message if it contains meaningful non-JSON text (e.g. preamble).
-            msg_text = str(payload.get('message', '')).strip()
-            if msg_text:
-                # Remove the embedded JSON block from the message text
-                msg_without_json = msg_text.replace(embedded, '').strip()
-                if not msg_without_json:
-                    # Message was purely the JSON — drop it entirely
-                    payload.pop('message', None)
-                else:
-                    # Keep only the non-JSON preamble/suffix
-                    payload['message'] = msg_without_json
-        except Exception:
-            pass
-    return payload
 
 
 class ResearchPlanner(BaseExp):
@@ -1082,6 +718,13 @@ Rules:
             reply = self._stream_llm(dialog, 'Planner', 'planning')
             # 将 Planner LLM 原始输出推送到前端（_normalize_planner_thought 会过滤掉纯 JSON message）
             self._emit('Planner', 'thought', reply.content or '')
+            # 落盘原始 LLM 输出，避免截断时丢失内容，也便于后续 LLM 修复
+            if task_id is not None:
+                try:
+                    draft_path = self._task_workspace_dir(task_id) / 'raw_plan_draft.txt'
+                    draft_path.write_text(reply.content or '', encoding='utf-8')
+                except Exception as _save_err:
+                    self.logger.warning('[Planner] Failed to save raw_plan_draft.txt: %s', _save_err)
             raw = _extract_json_from_content(reply.content or '')
             if not raw:
                 return {
@@ -1092,7 +735,16 @@ Rules:
                 plan = _try_parse_json(raw, self.logger)
             except json.JSONDecodeError as e:
                 self.logger.error('Plan JSON parse failed (all repair stages exhausted): %s', e)
-                return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
+                # 尝试用 LLM 修复截断的 JSON（如 max_tokens 命中导致 JSON 不完整）
+                if task_id is not None:
+                    self.logger.info('[Planner] Attempting LLM-based plan repair for truncated JSON...')
+                    repaired = self._repair_plan_from_file(task_id, reply.content or '', state=state)
+                    if repaired is not None:
+                        plan = repaired
+                    else:
+                        return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
+                else:
+                    return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
         except json.JSONDecodeError as e:
             self.logger.error('Plan JSON parse failed: %s', e)
             return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
@@ -1125,6 +777,203 @@ Rules:
                     task_id=task_id,
                 )
         return plan
+
+    def _repair_plan_from_file(
+        self,
+        task_id: str,
+        raw_content: str,
+        *,
+        state: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Repair a truncated plan JSON using Python bracket completion — NO LLM call.
+
+        Called when ``_try_parse_json`` fails (e.g. LLM output was cut off by
+        max_tokens).  Tries two pure-Python strategies:
+
+        1. Append missing closing brackets/braces (``_complete_truncated_json``).
+        2. Strip the last incomplete step entry, then complete brackets.
+
+        Returns the parsed+normalised plan dict on success, or ``None`` on failure.
+        No LLM call is made — avoids wasting tokens on a second full-plan generation
+        that would likely truncate again.
+        """
+        raw = _extract_json_from_content(raw_content) or raw_content
+
+        # Strategy 1: bracket completion
+        completed = _complete_truncated_json(raw)
+        if completed is not None:
+            try:
+                plan = _try_parse_json(completed, self.logger)
+                plan = _normalize_plan(plan, self.max_steps)
+                if plan.get('steps'):
+                    self.logger.info('[Planner] _repair_plan_from_file: bracket completion succeeded')
+                    return plan
+            except Exception:
+                pass
+
+        # Strategy 2: strip last incomplete step, then complete brackets
+        stripped = _strip_last_incomplete_step(raw)
+        if stripped and stripped != raw:
+            completed2 = _complete_truncated_json(stripped)
+            target = completed2 if completed2 is not None else stripped
+            try:
+                plan = _try_parse_json(target, self.logger)
+                plan = _normalize_plan(plan, self.max_steps)
+                if plan.get('steps'):
+                    self.logger.info('[Planner] _repair_plan_from_file: strip+complete succeeded')
+                    return plan
+            except Exception:
+                pass
+
+        self.logger.error('[Planner] _repair_plan_from_file: all Python repair attempts failed')
+        return None
+
+    def _revise_plan_from_file(
+        self,
+        goal: str,
+        task_id: str | None,
+        current_plan: dict[str, Any],
+        user_feedback: str,
+        *,
+        state: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Revise plan via function calling with a single str_replace_editor tool.
+
+        The LLM receives the full ``current_plan.json`` text and the user's
+        revision request.  It may call ``str_replace_editor`` (str_replace
+        command) one or more times to make targeted edits.  Python applies each
+        tool call to the plan text using ``_str_replace_in_text``, then
+        ``json.loads`` the result back into memory.
+
+        Only ``str_replace_editor`` is registered — the LLM cannot call any
+        other tool, preventing over-execution.
+
+        If no tool calls are made or the result is invalid JSON, the original
+        plan is returned unchanged (no REFUSED — just a warning log).
+        """
+        plan_path = (
+            self._task_workspace_dir(task_id) / 'current_plan.json'
+            if task_id is not None
+            else None
+        )
+        # Read current plan text from disk (or serialise from memory as fallback)
+        if plan_path is not None and plan_path.exists():
+            try:
+                plan_text = plan_path.read_text(encoding='utf-8')
+            except Exception as _e:
+                self.logger.warning('[Planner] _revise_plan_from_file: cannot read file: %s', _e)
+                plan_text = json.dumps(
+                    _plan_to_external_schema(current_plan), ensure_ascii=False, indent=2
+                )
+        else:
+            plan_text = json.dumps(
+                _plan_to_external_schema(current_plan), ensure_ascii=False, indent=2
+            )
+
+        prompt = (
+            f'Goal: {goal}\n\n'
+            f'User revision request: {user_feedback}\n\n'
+            'Here is the current current_plan.json:\n\n'
+            f'{plan_text}\n\n'
+            'Use the str_replace_editor tool to make the minimal targeted changes '
+            'needed to apply the revision request. '
+            'Do NOT rewrite the whole plan — only change what is necessary. '
+            'You may call the tool multiple times for multiple changes.'
+        )
+        # Build ToolSpec from the raw dict constant
+        tool_spec = ToolSpec(
+            type='function',
+            function=FunctionSpec(
+                name=_STR_REPLACE_TOOL_SPEC['function']['name'],
+                description=_STR_REPLACE_TOOL_SPEC['function']['description'],
+                parameters=_STR_REPLACE_TOOL_SPEC['function']['parameters'],
+            ),
+        )
+        dialog = Dialog(
+            messages=[UserMessage(content=prompt)],
+            tools=[tool_spec],
+        )
+        if state is not None and task_id is not None:
+            if not self._consume_turns(state, task_id, 1):
+                self._fail_max_turns_exceeded(task_id, state)
+                return {**current_plan, 'status': 'REFUSED', 'refusal_reason': 'max_turns_exceeded'}
+        try:
+            # query_stream falls back to non-streaming when tools are present
+            reply = self._stream_llm(dialog, 'Planner', 'revision')
+            self._emit('Planner', 'thought', reply.content or '')
+
+            tool_calls = reply.tool_calls or []
+            if not tool_calls:
+                self.logger.warning(
+                    '[Planner] _revise_plan_from_file: LLM made no tool calls; keeping original plan'
+                )
+                return current_plan
+
+            # Apply each str_replace tool call in order
+            revised_text = plan_text
+            applied = 0
+            for tc in tool_calls:
+                if tc.function.name != 'str_replace_editor':
+                    self.logger.warning(
+                        '[Planner] _revise_plan_from_file: unexpected tool call %r; skipping',
+                        tc.function.name,
+                    )
+                    continue
+                try:
+                    args = json.loads(tc.function.arguments)
+                except json.JSONDecodeError as _je:
+                    self.logger.warning(
+                        '[Planner] _revise_plan_from_file: cannot parse tool args: %s', _je
+                    )
+                    continue
+                old_str = args.get('old_str', '')
+                new_str = args.get('new_str', '')
+                if not old_str:
+                    self.logger.warning('[Planner] _revise_plan_from_file: empty old_str; skipping')
+                    continue
+                revised_text, err = _str_replace_in_text(revised_text, old_str, new_str, self.logger)
+                if err:
+                    self.logger.warning('[Planner] _revise_plan_from_file: str_replace failed: %s', err)
+                else:
+                    applied += 1
+
+            if applied == 0:
+                self.logger.warning(
+                    '[Planner] _revise_plan_from_file: no str_replace succeeded; keeping original plan'
+                )
+                return current_plan
+
+            try:
+                revised = _try_parse_json(revised_text, self.logger)
+            except json.JSONDecodeError as _je:
+                self.logger.error(
+                    '[Planner] _revise_plan_from_file: revised_text is not valid JSON after %d str_replace(s): %s',
+                    applied,
+                    _je,
+                )
+                self.logger.debug(
+                    '[Planner] _revise_plan_from_file: revised_text snippet (first 500 chars): %s',
+                    revised_text[:500],
+                )
+                return current_plan
+            revised = _normalize_plan(revised, self.max_steps)
+            # Write back to disk so current_plan.json stays in sync
+            if plan_path is not None:
+                try:
+                    plan_path.write_text(
+                        json.dumps(_plan_to_external_schema(revised), ensure_ascii=False, indent=2),
+                        encoding='utf-8',
+                    )
+                except Exception as _e:
+                    self.logger.warning('[Planner] _revise_plan_from_file: cannot write back: %s', _e)
+            self.logger.info(
+                '[Planner] _revise_plan_from_file: applied %d str_replace(s) successfully', applied
+            )
+            return revised
+        except Exception as e:
+            # Fallback: return original plan unchanged — don't REFUSED on edit failure
+            self.logger.error('[Planner] _revise_plan_from_file failed (%s); keeping original plan', e)
+            return current_plan
 
     def _revise_plan(
         self,
@@ -2429,6 +2278,19 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
             summary = self._summarize_solver_result(result, max_len=1000)
             result_info['result_summary'] = summary[:200]
+            # 步骤完成后立即发出 status_stages done 事件，让前端 PlannerOutlinePanel
+            # 的 Step X/Y 能及时更新，不必等到下一步的 status_stages 到达
+            self._emit(
+                'Planner',
+                'status_stages',
+                {
+                    'total': len(steps_list),
+                    'current': step_id,
+                    'step_id': step_id,
+                    'intent': intent[:120] if intent else '',
+                    'status': 'done',
+                },
+            )
             llm_verifier = self._llm_verify_step_outcome(
                 intent,
                 summary,
@@ -2892,9 +2754,18 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 'thought',
                 f"[CRP] Plan was refused: {reason}. Auto-revising (attempt {attempt + 1}/{max_auto_fix})...",
             )
-            # Ask LLM to fix the plan itself. Use targeted feedback for
-            # manuscript consistency failures.
-            if 'manuscript_consistency' in str(reason):
+            # Ask LLM to fix the plan itself. Use targeted feedback based on
+            # the refusal reason: JSON truncation, manuscript consistency, or CRP.
+            if reason.startswith('Invalid JSON') or 'truncated' in reason.lower():
+                feedback = (
+                    f"The plan was REFUSED because your output was truncated or contained "
+                    f"malformed JSON: {reason}\n"
+                    'Please output a SHORTER, COMPLETE plan JSON. '
+                    'Reduce the number of steps or shorten intent descriptions if needed. '
+                    'Output ONLY the JSON object with no other text. '
+                    'Ensure the JSON is complete with all braces and brackets closed.'
+                )
+            elif 'manuscript_consistency' in str(reason):
                 feedback = (
                     f"The plan was REFUSED for this reason: {reason}\n"
                     'Fix manuscript workflow consistency now:\n'
@@ -2942,6 +2813,16 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         plan = state['plan']
         # Detailed plan report (cost, risks, alternatives)
         self._print_plan_report(plan)
+        # 落盘当前计划，供 _revise_plan_from_file 读取（避免每次修订重新序列化内存对象）
+        if task_id:
+            try:
+                plan_path = self._task_workspace_dir(task_id) / 'current_plan.json'
+                plan_path.write_text(
+                    json.dumps(_plan_to_external_schema(plan), ensure_ascii=False, indent=2),
+                    encoding='utf-8',
+                )
+            except Exception as _e:
+                self.logger.warning('[Planner] Failed to save current_plan.json: %s', _e)
 
         if self.human_check:
             while True:
@@ -2986,7 +2867,9 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 self.logger.info(
                     '[Planner] Revising plan from user feedback: %s', ans[:100]
                 )
-                plan = self._revise_plan(goal, plan, ans, state=state, task_id=task_id)
+                plan = self._revise_plan_from_file(
+                    goal, task_id, plan, ans, state=state
+                )
                 state['plan'] = plan
                 self._save_state(task_id, state)
                 if plan.get('status') == 'REFUSED':
