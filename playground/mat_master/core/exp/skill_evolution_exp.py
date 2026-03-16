@@ -11,6 +11,7 @@ scripts before relying on them in production.
 import logging
 import shutil
 from pathlib import Path
+from typing import Optional
 
 from evomaster.core.exp import BaseExp
 from evomaster.utils.types import TaskInstance
@@ -41,13 +42,22 @@ class SkillEvolutionExp(BaseExp):
 
     def run(
         self,
-        task_description: str,
+        task_description: str = '',
         task_id: str = 'evo_task',
+        task: Optional[TaskInstance] = None,
+        images: Optional[list[str]] = None,
         append_result: bool = True,
     ) -> dict:
-        """Evolve a new skill for the given requirement (task_description)."""
+        """Evolve a new skill for the given requirement.
+
+        若传入 task，则使用 task.description / task.task_id；否则使用 task_description / task_id。
+        与 BaseExp.run() 接口一致，便于 direct_solver / agent_run_service 等统一调用。
+        """
+        if task is not None:
+            task_description = task.description
+            task_id = task.task_id
         self.logger.info(
-            '[Evo] Attempting to evolve skill for: %s', task_description[:80]
+            '[Evo] Attempting to evolve skill for: %s', (task_description or '')[:80]
         )
 
         # Single source of truth for output directory name.
@@ -66,10 +76,10 @@ class SkillEvolutionExp(BaseExp):
             f"3. Create {output_dir}/SKILL.md (with YAML frontmatter: name, description) and {output_dir}/scripts/<your_script>.py with full, runnable code.\n"
             '4. IMPORTANT: After writing the skill, inform the user that the new skill has NOT been automatically tested and should be manually verified before use in production.'
         )
-        task = TaskInstance(
+        run_task = TaskInstance(
             task_id=f"{task_id}_code", task_type='discovery', description=prompt
         )
-        self.agent.run(task)
+        self.agent.run(run_task)
 
         # Derive workspace from the agent's actual session config (not from task_id),
         # because the agent writes files to its configured workspace_path.
