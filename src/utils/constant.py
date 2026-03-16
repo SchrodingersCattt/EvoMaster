@@ -26,6 +26,15 @@ REDIS_URL = (os.getenv('REDIS_URL') or '').strip() or None
 
 # 配额服务（与 MatMaster 一致：matmaster-tools-server）
 _URL_PART = f'.{CURRENT_ENV}' if CURRENT_ENV and CURRENT_ENV != 'prod' else ''
+# 支持/通知服务（模板发送等），按环境：test -> support.test.dp.tech，prod -> support.dp.tech
+SUPPORT_SERVICE_BASE_URL = (
+    os.getenv('SUPPORT_SERVICE_BASE_URL', '').strip()
+    or (
+        f'https://support{_URL_PART}.dp.tech'
+        if _URL_PART
+        else 'https://support.dp.tech'
+    )
+).rstrip('/') or None
 # 账号/用户信息 API（如 account_api/users/{user_id} 查昵称、邮箱），按环境自动生成 host
 ACCOUNT_API_BASE_URL = (
     f'https://account{_URL_PART}.dp.tech' if _URL_PART else 'https://account.dp.tech'
