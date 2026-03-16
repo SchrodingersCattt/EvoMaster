@@ -378,19 +378,22 @@ class AgentRunService:
                     'run_agent_sync: tool_result before send_cb session_id=%s',
                     session_id,
                 )
-            if loop is not None and asyncio.iscoroutinefunction(send_cb):
-                future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
-                try:
-                    future.result(timeout=5)
-                except Exception as e:
-                    logger.warning(
-                        'run_agent_sync: send_cb timeout or error (event may be in DB but not pushed), session_id=%s type=%s: %s',
-                        session_id,
-                        event_type,
-                        e,
-                    )
-            else:
-                send_cb(payload)
+            # Direct 直播：thought 只入库不推前端，前端只根据 llm_token 流式展示；历史从库拉 thought
+            skip_push = mode == 'direct' and event_type == 'thought'
+            if not skip_push:
+                if loop is not None and asyncio.iscoroutinefunction(send_cb):
+                    future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
+                    try:
+                        future.result(timeout=5)
+                    except Exception as e:
+                        logger.warning(
+                            'run_agent_sync: send_cb timeout or error (event may be in DB but not pushed), session_id=%s type=%s: %s',
+                            session_id,
+                            event_type,
+                            e,
+                        )
+                else:
+                    send_cb(payload)
             if event_type == 'tool_result':
                 logger.info(
                     'run_agent_sync: tool_result after send_cb session_id=%s',
