@@ -708,16 +708,6 @@ class ChatStreamService:
             if event.get('type') != 'log_line':
                 yield self.sse_format(event)
         yield self.sse_format(ctx.user_msg)
-        yield self.sse_format(
-            {
-                'source': 'System',
-                'type': 'status',
-                'content': f"Initializing ({mode})...",
-                'session_id': sid,
-                'stream_started_at': start_time_ms,
-                'invocation_id': ctx.invocation_id,
-            }
-        )
 
         def send_cb(payload: dict):
             """同步回调：用 call_soon_threadsafe 把事件投递到 event loop，不等待。
