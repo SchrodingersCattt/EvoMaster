@@ -359,7 +359,7 @@ class AgentRunService:
             if event_type == 'end':
                 payload['task_completed'] = _task_completed
             payload.update(extra)
-            if event_type != 'log_line':
+            if event_type not in ('log_line', 'llm_token'):
                 events_table = get_chat_events_table()
                 if events_table:
                     try:
