@@ -4,8 +4,39 @@ import logging.handlers
 import os
 import sys
 import time
+from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, Dict
+
+
+class LogContext:
+    """当前 run 的日志上下文，由 Worker 在 run 开始/结束时 bind/clear，便于用 session_id/task_id 检索一次 run 的全部日志。"""
+
+    _session_id: ContextVar[str | None] = ContextVar(
+        'log_context_session_id', default=None
+    )
+    _task_id: ContextVar[str | None] = ContextVar('log_context_task_id', default=None)
+
+    @classmethod
+    def bind(cls, session_id: str | None, task_id: str | None) -> None:
+        """设置当前上下文的 session_id/task_id，此后同上下文内的日志会带上该标识。"""
+        cls._session_id.set(session_id or '-')
+        cls._task_id.set(task_id or '-')
+
+    @classmethod
+    def clear(cls) -> None:
+        """清除当前上下文的 session_id/task_id。"""
+        cls._session_id.set(None)
+        cls._task_id.set(None)
+
+
+class LogContextFilter(logging.Filter):
+    """将 contextvars 中的 session_id/task_id 注入到每条 LogRecord，便于检索。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.session_id = LogContext._session_id.get(None) or '-'
+        record.task_id = LogContext._task_id.get(None) or '-'
+        return True
 
 
 class JsonFormatter(logging.Formatter):
@@ -138,17 +169,21 @@ def setup_logging(
     for handler in root_logger.handlers[:]:
         root_logger.removeHandler(handler)
 
+    # 每条日志带上 session_id/task_id，便于按一次 run 检索（由 LogContextFilter 注入）
+    _log_context_filter = LogContextFilter()
+
     # Create formatters
+    _text_fmt = (
+        '%(asctime)s - %(name)s - %(levelname)s - '
+        '[session_id=%(session_id)s task_id=%(task_id)s] - '
+        '%(filename)s:%(lineno)d - %(message)s'
+    )
     if json_format:
         file_formatter = JsonFormatter()
     else:
-        file_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
-        )
+        file_formatter = logging.Formatter(_text_fmt)
 
-    console_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s'
-    )
+    console_formatter = logging.Formatter(_text_fmt)
 
     # Set root logger level
     root_logger.setLevel(getattr(logging, log_level))
@@ -158,6 +193,7 @@ def setup_logging(
         log_file, maxBytes=max_bytes, backupCount=backup_count, encoding='utf-8'
     )
     file_handler.setLevel(getattr(logging, log_level))
+    file_handler.addFilter(_log_context_filter)
     file_handler.setFormatter(file_formatter)
     root_logger.addHandler(file_handler)
 
@@ -165,6 +201,7 @@ def setup_logging(
     if console_output:
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(getattr(logging, log_level))
+        console_handler.addFilter(_log_context_filter)
         console_handler.setFormatter(console_formatter)
         root_logger.addHandler(console_handler)
 
