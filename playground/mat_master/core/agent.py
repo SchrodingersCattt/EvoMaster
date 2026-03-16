@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from evomaster.agent.agent import Agent
+from evomaster.agent.context import CompactionConfig, ContextCompactor
 from evomaster.utils.types import (
     AssistantMessage,
     Dialog,
@@ -85,6 +86,28 @@ class MatMasterAgent(Agent):
             self._tool_output_auto_save_patterns = ['mat_sn_']
         self._tool_output_save_counter = 0
         self._execution_journal = ExecutionJournal()
+
+        # C.7 — 初始化 ContextCompactor（如果 compaction.enabled）
+        _ctx_cfg = (config_dict or {}).get('agents', {}).get('general', {}).get('context', {})
+        _compaction_raw = _ctx_cfg.get('compaction', {})
+        _compaction_cfg = CompactionConfig(**_compaction_raw) if _compaction_raw else CompactionConfig()
+        self._compaction_enabled: bool = _compaction_cfg.enabled
+        if _compaction_cfg.enabled:
+            def _llm_caller(dialog):
+                return self.llm.query(dialog)
+            _compactor = ContextCompactor(
+                config=_compaction_cfg,
+                llm_caller=_llm_caller,
+                execution_journal=self._execution_journal,
+            )
+            self.context_manager.set_compactor(_compactor)
+            self.logger.info(
+                '[Agent] ContextCompactor enabled (effective_trigger_tokens=%d, '
+                'context_window=%d, ratio=%.0f%%)',
+                _compaction_cfg.effective_trigger_tokens(),
+                _compaction_cfg.context_window_tokens,
+                _compaction_cfg.trigger_ratio * 100,
+            )
 
     def _initialize(self, task) -> None:
         """Override: reset counters and set up execution journal for each new task."""
@@ -840,11 +863,24 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
         if len(task_text) > 500:
             task_text = task_text[:500] + '…'
         compact = self._execution_journal.get_compact_summary()
+        # C.8 — compaction 启用时注入 produced artifacts 列表（防止 LLM 遗忘已产出文件）
+        artifacts_block = ''
+        if getattr(self, '_compaction_enabled', False):
+            files = [
+                e['saved_path']
+                for e in self._execution_journal.entries
+                if e.get('saved_path')
+            ]
+            if files:
+                artifacts_block = '\n\nPRODUCED ARTIFACTS:\n' + '\n'.join(
+                    f'- {f}' for f in files[-20:]
+                )
         return (
             f'{self._REMINDER_MARKER}'
             f'[EXECUTION STATE REMINDER — Step {n}]\n\n'
             f'ORIGINAL TASK:\n{task_text}\n\n'
-            f'PROGRESS ({len(self._execution_journal.entries)} tool calls):\n{compact}\n\n'
+            f'PROGRESS ({len(self._execution_journal.entries)} tool calls):\n{compact}'
+            f'{artifacts_block}\n\n'
             'ACTIVE RULES:\n'
             '- All workspace file links must use [filename](path) format.\n'
             '- Finish message must include "## Execution Details" per-step subsections.\n'
