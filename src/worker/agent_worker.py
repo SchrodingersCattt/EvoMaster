@@ -25,7 +25,7 @@ from src.utils.feishu_notifier import (
     CARD_TEMPLATE_RED,
     notify_post_async,
 )
-from src.utils.logger import LoggingConfig, setup_logging
+from src.utils.logger import LogContext, LoggingConfig, setup_logging
 from src.utils.support_notifier import send_session_complete_email_async
 from src.utils.worker_id import get_worker_id
 
@@ -220,6 +220,7 @@ def _run_worker_loop() -> None:
 
             acquired = True
             _current_session_id = session_id
+            LogContext.bind(session_id, task_id)
             run_start_time = time.monotonic()
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
@@ -314,6 +315,7 @@ def _run_worker_loop() -> None:
         finally:
             if acquired:
                 _current_session_id = None
+                LogContext.clear()
             redis_dao.delete_confirmation_run_active(session_id)
             redis_dao.delete_stop_requested(session_id, task_id)
             if acquired:
