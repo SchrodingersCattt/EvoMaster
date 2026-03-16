@@ -334,6 +334,7 @@ class AgentRunService:
             prompt_preview,
             get_worker_id(),
         )
+        run_started_at = time.monotonic()
 
         # 仅在 workspace 真有新/改/删文件时才上传：用快照比对，并用短防抖避免每次 tool 都扫目录
         _last_workspace_snapshot: list[frozenset[tuple[str, float, int]] | None] = [
@@ -938,16 +939,18 @@ class AgentRunService:
                             reason,
                         )
                         # 发送 end 以便流结束、并落库（_task_completed 为 False 表示按失败论）
+                        _elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
                         try:
                             event_callback(
                                 'System',
                                 'end',
                                 'Bohrium 节点创建失败，会话已结束.',
+                                elapsed_ms=_elapsed_ms,
                             )
                         except Exception:
                             pass
-                        # 返回 (False, reason) 供 Worker 写入飞书「失败原因」
-                        return (False, reason)
+                        # 返回 (False, reason) 供 Worker 写入飞书「失败原因」；与统一 return (run_result, elapsed_ms) 一致
+                        return ((False, reason), _elapsed_ms)
 
             # 本轮模型：支持 llm_override（换配置块）和 model_override（覆盖 model 字段，如 gemini-3-flash-preview / azure/gpt-5）
             run_llm = base.llm
@@ -1208,11 +1211,13 @@ class AgentRunService:
                 task_id,
                 get_worker_id(),
             )
+            elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
             try:
                 event_callback(
                     'System',
                     'end',
                     'Task completed, SSE connection can be closed.',
+                    elapsed_ms=elapsed_ms,
                 )
             except Exception:
                 pass
@@ -1239,7 +1244,7 @@ class AgentRunService:
                 finally:
                     gc.collect()
 
-        return run_result
+        return (run_result, elapsed_ms)
 
 
 @lru_cache
