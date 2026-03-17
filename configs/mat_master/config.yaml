@@ -170,10 +170,11 @@ mat_master:
       enabled: true
   # ask-human 交互配置
   # enabled=false 时全局禁用交互，所有 ask-human 调用短路返回，不发任何事件（适合 CI/批量运行）
-  # timeout_seconds 为 timeout 模式的默认等待秒数，可被每次调用的 per-call 参数覆盖
-  # mode (timeout/block) 由各调用方按业务语义决定，不在此处全局配置
+  # mode: "timeout" 等待 timeout_seconds 后自动继续；"block" 一直等到用户回复或停止（不由 LLM 传参控制）
+  # timeout_seconds: timeout 模式下的等待秒数，block 模式下忽略
   ask_human:
     enabled: true
+    mode: "block"
     timeout_seconds: 20
 
   # 鲁棒计算配置（被 monitor_job 内置工具使用）
