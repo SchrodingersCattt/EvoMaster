@@ -875,7 +875,8 @@ class ChatStreamService:
                 stop_event.set()
                 sub_thread.join(timeout=2.0)
         finally:
-            RedisReplyQueue(sid).put_cancel()
+            # 不断开即不 put_cancel：仅用户显式点「停止」(POST /stop) 才取消，刷新/关 Tab 后可在新页继续回复
+            pass
 
 
 @lru_cache

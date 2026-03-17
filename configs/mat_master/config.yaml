@@ -170,12 +170,14 @@ mat_master:
       enabled: true
   # ask-human 交互配置
   # enabled=false 时全局禁用交互，所有 ask-human 调用短路返回，不发任何事件（适合 CI/批量运行）
-  # mode: "timeout" 等待 timeout_seconds 后自动继续；"block" 一直等到用户回复或停止（不由 LLM 传参控制）
-  # timeout_seconds: timeout 模式下的等待秒数，block 模式下忽略
+  # mode: "timeout" 等待 timeout_seconds 后自动继续；"block" 等到用户回复/停止或超过 block_max_wait_seconds（不由 LLM 传参控制）
+  # timeout_seconds: timeout 模式下的等待秒数
+  # block_max_wait_seconds: block 模式最大等待秒数，超时后自动继续，避免 Worker 永久占用（建议与 session_run_owner TTL 对齐，如 7200）
   ask_human:
     enabled: true
     mode: "block"
     timeout_seconds: 20
+    block_max_wait_seconds: 7200
 
   # 鲁棒计算配置（被 monitor_job 内置工具使用）
   monitor_job:
