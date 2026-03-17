@@ -920,6 +920,22 @@ def _run_agent_sync(
                         event_callback(
                             'System', 'status', f"已连接到 Bohrium 节点 {ssh_host}"
                         )
+                        # Store Bohrium credentials on the session object so that
+                        # skill.py can inline them per-command (KEY=val python script.py).
+                        # This avoids polluting the remote shell's global environment —
+                        # credentials are only visible to the specific skill script process.
+                        # Use BOHRIUM_OPENAPI_HOST from constant.py which resolves the URL
+                        # based on SERVICE_ENV (test → openapi.test.dp.tech, prod → open.bohrium.com),
+                        # falling back to BOHRIUM_BASE_URL env var if set.
+                        from src.utils.constant import BOHRIUM_OPENAPI_HOST
+                        pg.session.bohrium_env = {
+                            'BOHRIUM_ACCESS_KEY': access_key,
+                            'BOHRIUM_PROJECT_ID': str(bohrium_project_id),
+                            'BOHRIUM_BASE_URL': BOHRIUM_OPENAPI_HOST,
+                        }
+                        logger.info(
+                            'Bohrium credentials stored on SSH session for per-command inline injection'
+                        )
                         try:
                             pg.sync_skills_to_remote()
                             event_callback(

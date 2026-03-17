@@ -30,6 +30,7 @@ dependencies = [
     "beautifulsoup4",
     "lxml",
     "pymupdf",
+    "bohrium-open-sdk>=1.0.0",
 ]
 
 [project.optional-dependencies]

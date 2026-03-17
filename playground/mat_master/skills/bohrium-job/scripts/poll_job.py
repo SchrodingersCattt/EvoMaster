@@ -154,8 +154,8 @@ def main() -> None:
     parser.add_argument(
         "--max-polls",
         type=int,
-        default=720,
-        help="Max polling attempts (720 x 30s ~= 6 hours)",
+        default=2880,
+        help="Max polling attempts (2880 x 30s = 24 hours)",
     )
     parser.add_argument("--poll-interval", type=int, default=30, help="Seconds between polls")
     parser.add_argument(
