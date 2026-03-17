@@ -287,36 +287,70 @@ class BaseLLM(ABC):
     ) -> LLMResponse:
         """带重试的调用
 
+        超时异常（ReadTimeout / APITimeoutError）会在每次重试时将 timeout 翻倍，
+        避免因模型响应慢而反复以同样的短超时失败。
+
         Args:
             messages: 消息列表
             tools: 工具列表
-            **kwargs: 额外参数
+            **kwargs: 额外参数（timeout 可在此覆盖配置值）
 
         Returns:
             LLM 响应
         """
+        import traceback
+
+        try:
+            import httpx as _httpx
+            _TIMEOUT_EXCEPTIONS: tuple[type[BaseException], ...] = (
+                _httpx.ReadTimeout,
+                _httpx.ConnectTimeout,
+                _httpx.PoolTimeout,
+            )
+        except ImportError:
+            _TIMEOUT_EXCEPTIONS = ()
+
+        try:
+            import openai as _openai
+            _TIMEOUT_EXCEPTIONS = _TIMEOUT_EXCEPTIONS + (_openai.APITimeoutError,)
+        except ImportError:
+            pass
+
         last_error = None
+        # 首次 timeout 取 kwargs 覆盖值或配置值；每次超时重试后翻倍
+        current_timeout: int = int(kwargs.pop("timeout", self.config.timeout))
 
         for attempt in range(self.config.max_retries):
             try:
-                return self._call(messages, tools, **kwargs)
+                return self._call(messages, tools, timeout=current_timeout, **kwargs)
             except Exception as e:
-                import traceback
                 traceback.print_exc()
                 last_error = e
-                
+
                 err_str = str(e).lower()
+                # 上下文超长：无意义重试，直接抛出
                 if "tokens" in err_str and ("exceed" in err_str or "limit" in err_str):
                     self.logger.error(
                         f"Context length exceeded: {e}. "
                         f"No point retrying with the same oversized context."
                     )
                     raise
-                
-                self.logger.warning(
-                    f"traceback: {traceback.format_exc()}"
-                    f"LLM call failed (attempt {attempt + 1}/{self.config.max_retries}): {e}"
-                )
+
+                is_timeout = isinstance(e, _TIMEOUT_EXCEPTIONS) if _TIMEOUT_EXCEPTIONS else False
+
+                if is_timeout:
+                    next_timeout = current_timeout * 2
+                    self.logger.warning(
+                        f"LLM call timed out after {current_timeout}s "
+                        f"(attempt {attempt + 1}/{self.config.max_retries}). "
+                        f"Retrying with timeout={next_timeout}s. Error: {e}"
+                    )
+                    current_timeout = next_timeout
+                else:
+                    self.logger.warning(
+                        f"traceback: {traceback.format_exc()}"
+                        f"LLM call failed (attempt {attempt + 1}/{self.config.max_retries}): {e}"
+                    )
 
                 if attempt < self.config.max_retries - 1:
                     delay = self.config.retry_delay * (2 ** attempt)  # 指数退避
@@ -372,13 +406,32 @@ class OpenAILLM(BaseLLM):
         if not self.config.api_key:
             raise ValueError("OpenAI API key must be provided in config")
 
+        # 构造 httpx 客户端，确保底层 read timeout 远大于 openai SDK 层的 timeout，
+        # 避免 httpx 比 openai 更早触发 ReadTimeout 导致错误链混乱。
+        # read timeout 设为配置值的 4 倍（最大 1200s），connect timeout 固定 15s。
+        try:
+            import httpx as _httpx
+            _http_client = _httpx.Client(
+                timeout=_httpx.Timeout(
+                    connect=15.0,
+                    read=float(min(self.config.timeout * 4, 1200)),
+                    write=30.0,
+                    pool=15.0,
+                )
+            )
+        except ImportError:
+            _http_client = None
+
         base_url = (self.config.base_url or "").strip().rstrip("/")
         if _is_azure_base_url(base_url):
             # Azure OpenAI：使用 AzureOpenAI 客户端，否则会 404（需 /openai/deployments/.../chat/completions?api-version=）
             try:
                 from openai import AzureOpenAI
             except ImportError:
-                self.client = OpenAI(api_key=self.config.api_key, base_url=base_url)
+                client_kwargs: dict[str, Any] = {"api_key": self.config.api_key, "base_url": base_url}
+                if _http_client is not None:
+                    client_kwargs["http_client"] = _http_client
+                self.client = OpenAI(**client_kwargs)
                 self._use_azure_client = False
                 self.logger.warning(
                     "Azure endpoint detected but AzureOpenAI not available; using OpenAI client (may 404)."
@@ -388,16 +441,21 @@ class OpenAILLM(BaseLLM):
                     self.config.api_version
                     or os.environ.get("AZURE_API_VERSION", "2024-06-01")
                 )
-                self.client = AzureOpenAI(
-                    api_key=self.config.api_key,
-                    azure_endpoint=base_url if "://" in base_url else f"https://{base_url}",
-                    api_version=api_version,
-                )
+                azure_kwargs: dict[str, Any] = {
+                    "api_key": self.config.api_key,
+                    "azure_endpoint": base_url if "://" in base_url else f"https://{base_url}",
+                    "api_version": api_version,
+                }
+                if _http_client is not None:
+                    azure_kwargs["http_client"] = _http_client
+                self.client = AzureOpenAI(**azure_kwargs)
                 self._use_azure_client = True
         else:
             client_kwargs = {"api_key": self.config.api_key}
             if base_url:
                 client_kwargs["base_url"] = base_url
+            if _http_client is not None:
+                client_kwargs["http_client"] = _http_client
             self.client = OpenAI(**client_kwargs)
             self._use_azure_client = False
 
@@ -552,7 +610,7 @@ class DeepSeekLLM(BaseLLM):
     """
 
     def _setup(self) -> None:
-        """设置 OpenAI 客户端"""
+        """设置 OpenAI 客户端（兼容 DeepSeek API）"""
         try:
             from openai import OpenAI
         except ImportError:
@@ -564,10 +622,27 @@ class DeepSeekLLM(BaseLLM):
         if not self.config.api_key:
             raise ValueError("OpenAI API key must be provided in config")
 
+        # 构造 httpx 客户端，确保底层 read timeout 远大于 openai SDK 层的 timeout，
+        # 避免 httpx 比 openai 更早触发 ReadTimeout 导致错误链混乱。
+        try:
+            import httpx as _httpx
+            _http_client = _httpx.Client(
+                timeout=_httpx.Timeout(
+                    connect=15.0,
+                    read=float(min(self.config.timeout * 4, 1200)),
+                    write=30.0,
+                    pool=15.0,
+                )
+            )
+        except ImportError:
+            _http_client = None
+
         # 创建客户端
-        client_kwargs = {"api_key": self.config.api_key}
+        client_kwargs: dict[str, Any] = {"api_key": self.config.api_key}
         if self.config.base_url:
             client_kwargs["base_url"] = self.config.base_url
+        if _http_client is not None:
+            client_kwargs["http_client"] = _http_client
 
         self.client = OpenAI(**client_kwargs)
 
