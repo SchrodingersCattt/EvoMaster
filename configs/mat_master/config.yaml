@@ -134,7 +134,13 @@ mat_master:
     rate_limit: null
     # 工具结果自动落盘：名称以此列表任一前缀开头的工具，执行成功后会将 observation 写入工作区 _tmp/tool_outputs/<工具名>/
     # 便于多批次文献汇总等任务从文件合并，避免上下文截断导致最终 CSV 不全
-    tool_output_auto_save_patterns: ["mat_sn_"]
+    tool_output_auto_save_patterns: ["mat_sn_", "mat_doc_"]
+
+    # Feature C: 超大工具结果摘要化
+    # 当工具 observation 字符数超过阈值时，将其替换为结构化摘要 + 文件路径引用，减少 context 占用
+    # 仅对匹配前缀的工具生效；完整结果已由 tool_output_auto_save_patterns 落盘
+    tool_obs_summarize_patterns: ["mat_sn_search-papers-enhanced", "mat_sn_search-papers", "mat_sg_", "mat_doc_"]
+    tool_obs_summarize_threshold: 10000   # chars；超过此长度才触发摘要
 
   # 规划模式配置（仅 --mode planner 时使用）
   planner:
