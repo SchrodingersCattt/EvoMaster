@@ -9,6 +9,7 @@ import signal
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
@@ -380,8 +381,41 @@ def _run_worker_loop() -> None:
                     and user_info.get('email')
                     and user_info.get('email') != '-'
                 ):
+                    submitted_at_raw = payload.get('submitted_at') or ''
+                    try:
+                        if submitted_at_raw:
+                            dt = datetime.fromisoformat(
+                                submitted_at_raw.replace('Z', '+00:00')
+                            )
+                            submitted_at_str = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+                        else:
+                            submitted_at_str = ''
+                    except (ValueError, TypeError):
+                        submitted_at_str = submitted_at_raw or ''
+                    result_status = (
+                        '成功'
+                        if run_success
+                        else ('已取消' if fail_reason == 'cancelled' else '失败')
+                    )
+                    fail_reason_for_email = (
+                        (fail_reason or '').strip()
+                        if not run_success and fail_reason != 'cancelled'
+                        else ''
+                    )
+                    if len(fail_reason_for_email) > 500:
+                        fail_reason_for_email = fail_reason_for_email[:500] + '…'
                     send_session_complete_email_async(
-                        session_url, session_user_id, user_info['email']
+                        session_url,
+                        session_user_id,
+                        user_info['email'],
+                        user_question=user_question or '',
+                        submitted_at=submitted_at_str,
+                        duration=duration_str,
+                        result_status=result_status,
+                        fail_reason=fail_reason_for_email,
+                        completed_at=datetime.now(timezone.utc).strftime(
+                            '%Y-%m-%d %H:%M:%S UTC'
+                        ),
                     )
         if _drain_requested:
             logger.info(
