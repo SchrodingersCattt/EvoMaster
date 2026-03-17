@@ -21,6 +21,21 @@ const PHASE_LABELS: Record<string, { label: string; color: string }> = {
   aborted: { label: "已中止", color: "bg-gray-100 text-gray-700 dark:bg-gray-900/40 dark:text-gray-400" },
 };
 
+// Context compaction event payload shape
+interface CompactionPayload {
+  status: "started" | "finished" | "skipped" | "failed";
+  tokens_before?: number;
+  tokens_after?: number;
+  tokens_saved?: number;
+  saved_ratio?: number;
+  compressed_turns?: number;
+  recent_msgs_kept?: number;
+  duration_ms?: number;
+  reason?: string;
+  trigger_tokens?: number;
+  compressible_ratio?: number;
+}
+
 export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
   const toolResults = entries.filter(
     (e) => e.source === "ToolExecutor" && e.type === "tool_result" && !isEnvRelatedEntry(e)
@@ -44,10 +59,55 @@ export default function StatusPanel({ entries }: { entries: LogEntry[] }) {
     : null;
   const replanCount = planRevisions.length;
 
+  // Context compaction events
+  const compactionEvents = entries
+    .filter((e) => e.type === "context_compaction")
+    .map((e) => e.content as CompactionPayload);
+  const lastCompaction = compactionEvents.length > 0 ? compactionEvents[compactionEvents.length - 1] : null;
+  const finishedCompactions = compactionEvents.filter((c) => c.status === "finished");
+  const compactionCount = finishedCompactions.length;
+
   return (
     <div className="border border-gray-300 rounded-lg p-3 bg-[#f9fafb] flex flex-col h-full min-h-0">
       <h2 className="text-sm font-semibold mb-2 text-[#1e293b]">状态记录</h2>
       <div className="flex flex-col gap-2 overflow-y-auto overflow-x-hidden flex-1 min-h-0 text-xs break-words">
+
+        {/* Context compaction status */}
+        {lastCompaction && (
+          <div className={`rounded p-1.5 border text-[10px] ${
+            lastCompaction.status === "started"
+              ? "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400"
+              : lastCompaction.status === "finished"
+              ? "bg-sky-50 border-sky-200 text-sky-700 dark:bg-sky-900/20 dark:border-sky-800 dark:text-sky-400"
+              : lastCompaction.status === "failed"
+              ? "bg-red-50 border-red-200 text-red-700 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400"
+              : "bg-gray-50 border-gray-200 text-gray-500"
+          }`}>
+            <div className="font-semibold mb-0.5">
+              {lastCompaction.status === "started" && "🔄 正在压缩上下文…"}
+              {lastCompaction.status === "finished" && `✅ 上下文已压缩 ×${compactionCount}`}
+              {lastCompaction.status === "skipped" && "⏭ 跳过压缩（可压缩比例不足）"}
+              {lastCompaction.status === "failed" && "⚠️ 压缩失败，已降级"}
+            </div>
+            {lastCompaction.status === "finished" && lastCompaction.tokens_before != null && lastCompaction.tokens_after != null && (
+              <div className="text-sky-600 dark:text-sky-300">
+                {lastCompaction.tokens_before.toLocaleString()} → {lastCompaction.tokens_after.toLocaleString()} tokens
+                {lastCompaction.saved_ratio != null && (
+                  <span className="ml-1 font-medium">
+                    (节省 {(lastCompaction.saved_ratio * 100).toFixed(0)}%
+                    {lastCompaction.duration_ms != null && `, ${(lastCompaction.duration_ms / 1000).toFixed(1)}s`})
+                  </span>
+                )}
+              </div>
+            )}
+            {lastCompaction.status === "failed" && lastCompaction.reason && (
+              <div className="text-red-500 mt-0.5 truncate" title={lastCompaction.reason}>
+                {lastCompaction.reason}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Phase badge for planner mode */}
         {mode === "planner" && lastPhase && (
           <div className="flex items-center gap-2 flex-wrap">

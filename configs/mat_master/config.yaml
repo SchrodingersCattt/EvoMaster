@@ -59,10 +59,24 @@ agents:
       mcp: "*"
 
     context:
-      max_tokens: 128000
-      truncation_strategy: "latest_half"
+      max_tokens: 180000
+      truncation_strategy: "summary"    # summary = LLM 摘要压缩（ContextCompactor）
       preserve_system_messages: true
       preserve_recent_turns: 5
+
+      # Compact Message 配置（summary 策略的参数）
+      # P0: trigger_tokens 改为动态计算：context_window_tokens * trigger_ratio（默认 80%）
+      # 若需固定值可设 trigger_tokens > 0 覆盖动态计算（向后兼容）
+      compaction:
+        enabled: true
+        trigger_tokens: -1               # -1 = 动态计算（context_window_tokens * trigger_ratio）
+        context_window_tokens: 200000    # 模型 context window 大小（claude-sonnet-4-6 = 200k）
+        trigger_ratio: 0.80              # 触发阈值 = context_window_tokens * 0.80 = 160000
+        preserve_recent_turns: 2         # 压缩后保留最近 N 轮完整 tool-transaction
+        compaction_llm: null             # 用于摘要的 LLM key；null 则复用 agent LLM
+        fallback_strategy: "sliding_window"  # 压缩失败时的降级策略
+        max_compact_tokens: 3000         # compact message 最大 token 数（约 9000 字符）
+        min_compressible_ratio: 0.10     # P1: compressible/total < 10% 时跳过 compact
 
     system_prompt_file: "prompts/mat_master_system_prompt.txt"
     user_prompt_file: "prompts/user_prompt.txt"
@@ -120,7 +134,13 @@ mat_master:
     rate_limit: null
     # 工具结果自动落盘：名称以此列表任一前缀开头的工具，执行成功后会将 observation 写入工作区 _tmp/tool_outputs/<工具名>/
     # 便于多批次文献汇总等任务从文件合并，避免上下文截断导致最终 CSV 不全
-    tool_output_auto_save_patterns: ["mat_sn_"]
+    tool_output_auto_save_patterns: ["mat_sn_", "mat_doc_"]
+
+    # Feature C: 超大工具结果摘要化
+    # 当工具 observation 字符数超过阈值时，将其替换为结构化摘要 + 文件路径引用，减少 context 占用
+    # 仅对匹配前缀的工具生效；完整结果已由 tool_output_auto_save_patterns 落盘
+    tool_obs_summarize_patterns: ["mat_sn_search-papers-enhanced", "mat_sn_search-papers", "mat_sg_", "mat_doc_"]
+    tool_obs_summarize_threshold: 10000   # chars；超过此长度才触发摘要
 
   # 规划模式配置（仅 --mode planner 时使用）
   planner:
