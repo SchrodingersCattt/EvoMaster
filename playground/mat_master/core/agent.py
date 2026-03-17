@@ -103,8 +103,44 @@ class MatMasterAgent(Agent):
         _compaction_cfg = CompactionConfig(**_compaction_raw) if _compaction_raw else CompactionConfig()
         self._compaction_enabled: bool = _compaction_cfg.enabled
         if _compaction_cfg.enabled:
-            def _llm_caller(dialog):
-                return self.llm.query(dialog)
+            # 尝试为 compaction 创建独立小模型 LLM（由 config.llm.<compaction_llm> 指定）
+            _compaction_llm_instance = None
+            _compaction_llm_key = _compaction_cfg.compaction_llm  # e.g. "compaction" or None
+            if _compaction_llm_key:
+                _llm_dict = (config_dict or {}).get('llm', {})
+                _compaction_llm_cfg_raw = _llm_dict.get(_compaction_llm_key)
+                if _compaction_llm_cfg_raw and isinstance(_compaction_llm_cfg_raw, dict):
+                    try:
+                        from evomaster.utils import LLMConfig, create_llm
+                        _compaction_llm_instance = create_llm(
+                            LLMConfig(**_compaction_llm_cfg_raw),
+                            output_config={'show_in_console': False, 'log_to_file': False},
+                        )
+                        self.logger.info(
+                            '[Agent] ContextCompactor using dedicated LLM: key=%s model=%s',
+                            _compaction_llm_key,
+                            _compaction_llm_cfg_raw.get('model', '?'),
+                        )
+                    except Exception as _e:
+                        self.logger.warning(
+                            '[Agent] Failed to create compaction LLM (key=%s): %s'
+                            ' — falling back to agent LLM',
+                            _compaction_llm_key, _e,
+                        )
+                else:
+                    self.logger.warning(
+                        '[Agent] compaction_llm key=%r not found in config.llm'
+                        ' — falling back to agent LLM',
+                        _compaction_llm_key,
+                    )
+
+            if _compaction_llm_instance is not None:
+                def _llm_caller(dialog, _llm=_compaction_llm_instance):
+                    return _llm.query(dialog)
+            else:
+                def _llm_caller(dialog):
+                    return self.llm.query(dialog)
+
             _compactor = ContextCompactor(
                 config=_compaction_cfg,
                 llm_caller=_llm_caller,
@@ -113,10 +149,11 @@ class MatMasterAgent(Agent):
             self.context_manager.set_compactor(_compactor)
             self.logger.info(
                 '[Agent] ContextCompactor enabled (effective_trigger_tokens=%d, '
-                'context_window=%d, ratio=%.0f%%)',
+                'context_window=%d, ratio=%.0f%%, compaction_llm=%s)',
                 _compaction_cfg.effective_trigger_tokens(),
                 _compaction_cfg.context_window_tokens,
                 _compaction_cfg.trigger_ratio * 100,
+                _compaction_llm_key or 'agent_llm',
             )
 
     def _initialize(self, task) -> None:
