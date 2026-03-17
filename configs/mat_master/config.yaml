@@ -15,7 +15,7 @@ llm:
     base_url: "${LITELLM_PROXY_API_BASE}"
     # temperature: 0.7
     # max_tokens: 16384
-    timeout: 60
+    timeout: 300
     max_retries: 3
     retry_delay: 1.0
 
@@ -28,7 +28,7 @@ llm:
     api_version: "${AZURE_API_VERSION}"
     temperature: 0.7
     max_tokens: 16384
-    timeout: 60
+    timeout: 300
     max_retries: 3
     retry_delay: 1.0
 
@@ -40,7 +40,7 @@ llm:
     base_url: "https://api.deepseek.com"
     temperature: 0.7
     max_tokens: 16384
-    timeout: 60
+    timeout: 300
     max_retries: 3
     retry_delay: 1.0
 

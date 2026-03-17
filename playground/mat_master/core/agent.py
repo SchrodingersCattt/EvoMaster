@@ -86,7 +86,7 @@ class MatMasterAgent(Agent):
             self._tool_output_auto_save_patterns = ['mat_sn_', 'mat_doc_']
         self._tool_output_save_counter = 0
         self._execution_journal = ExecutionJournal()
-        # Feature C: 超大工具结果摘要化
+        # 超大工具结果摘要化：匹配以下前缀的工具 observation 超过阈值时自动替换为结构化摘要
         self._tool_obs_summarize_patterns: list[str] = _exec.get(
             'tool_obs_summarize_patterns',
             ['mat_sn_search-papers-enhanced', 'mat_sn_search-papers', 'mat_sg_', 'mat_doc_'],
@@ -97,7 +97,7 @@ class MatMasterAgent(Agent):
             _exec.get('tool_obs_summarize_threshold', 10000)
         )
 
-        # C.7 — 初始化 ContextCompactor（如果 compaction.enabled）
+        # 初始化 ContextCompactor（如果 compaction.enabled）
         _ctx_cfg = (config_dict or {}).get('agents', {}).get('general', {}).get('context', {})
         _compaction_raw = _ctx_cfg.get('compaction', {})
         _compaction_cfg = CompactionConfig(**_compaction_raw) if _compaction_raw else CompactionConfig()
@@ -727,7 +727,7 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
         observation: Any,
         saved_path: str | None,
     ) -> str | None:
-        """Feature C: 将超大工具 observation 替换为结构化摘要 + 文件路径引用。
+        """将超大工具 observation 替换为结构化摘要 + 文件路径引用。
 
         仅当 observation 为字符串且长度超过阈值，且工具名匹配配置前缀时触发。
         返回替换后的摘要字符串；若不触发则返回 None（调用方保持原 observation 不变）。
@@ -932,6 +932,24 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
             # Record tool outcome in the execution journal (skip finish — handled separately).
             # Note: recorded before run_after so the raw observation is captured; the journal
             # is used for artifact tracking, not for LLM context.
+            #
+            # str_replace_editor is not in _tool_output_auto_save_patterns, so its created files
+            # would never appear in execution_journal.saved_path. Inject the path explicitly so
+            # _build_artifacts_block() can list it under ## Produced Artifacts.
+            if tool_name == 'str_replace_editor' and 'error' not in info:
+                try:
+                    _editor_args = (
+                        json.loads(tool_args) if isinstance(tool_args, str) else tool_args
+                    )
+                    if (
+                        isinstance(_editor_args, dict)
+                        and _editor_args.get('command') == 'create'
+                        and _editor_args.get('path')
+                    ):
+                        info = {**info, 'auto_saved_path': _editor_args['path']}
+                except Exception:
+                    pass
+
             if tool_name != 'finish':
                 self._execution_journal.record(
                     step=self._step_count,
@@ -952,7 +970,7 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
                 info,
             )
 
-            # Fix-3: 工具结果自动落盘在 callback pipeline 之后，落盘的是清洗后的数据
+            # 工具结果自动落盘在 callback pipeline 之后，落盘的是清洗后的数据
             saved_path: str | None = None
             if isinstance(info, dict) and 'error' not in info:
                 saved_path = self._auto_save_tool_output(tool_name, observation)
@@ -963,7 +981,7 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
                         )
                     info = {**info, 'auto_saved_path': saved_path}
 
-            # Fix-5: Feature C 摘要化在 callback pipeline 之后，基于清洗后的 observation
+            # 超大 observation 摘要化在 callback pipeline 之后，基于清洗后的 observation
             if isinstance(info, dict) and 'error' not in info:
                 _summary = self._summarize_large_tool_observation(tool_name, observation, saved_path)
                 if _summary is not None:
@@ -1057,7 +1075,7 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
         if len(task_text) > 500:
             task_text = task_text[:500] + '…'
         compact = self._execution_journal.get_compact_summary()
-        # C.8 — compaction 启用时注入 produced artifacts 列表（防止 LLM 遗忘已产出文件）
+        # compaction 启用时注入 produced artifacts 列表（防止 LLM 遗忘已产出文件）
         artifacts_block = ''
         if getattr(self, '_compaction_enabled', False):
             files = [
