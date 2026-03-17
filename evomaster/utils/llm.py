@@ -43,7 +43,23 @@ class LLMConfig(BaseModel):
     api_version: str | None = Field(default=None, description="Azure 专用：API 版本，如 2024-06-01")
     temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="采样温度")
     max_tokens: int | None = Field(default=None, description="最大生成 token 数")
-    timeout: int = Field(default=300, description="请求超时时间（秒）")
+    timeout: int = Field(default=300, description="非流式请求超时时间（秒）；大模型长输出需要 2-3 分钟")
+    stream_timeout: int | None = Field(
+        default=None,
+        description=(
+            "流式请求首 token 超时时间（秒）。None 表示回退到 timeout。"
+            "控制的是：发起流式请求后，最多等多久才能收到第一个 chunk。"
+            "建议公有云 API 设 20s，内网 proxy 设 30s，本地 sglang/vLLM 设 60s。"
+        ),
+    )
+    stream_idle_timeout: int = Field(
+        default=30,
+        description=(
+            "流式传输过程中，相邻两次 chunk 之间允许的最大空闲时间（秒）。"
+            "一旦开始流式输出，若超过此时间没有新数据则判定超时。"
+            "建议 20~60s；与首 token 超时（stream_timeout）无关。"
+        ),
+    )
     max_retries: int = Field(default=3, description="最大重试次数")
     retry_delay: float = Field(default=1.0, description="重试延迟（秒）")
     use_completion_api: bool = Field(default=False, description="使用 Completion API 而非 Chat API")
@@ -406,15 +422,20 @@ class OpenAILLM(BaseLLM):
         if not self.config.api_key:
             raise ValueError("OpenAI API key must be provided in config")
 
-        # 构造 httpx 客户端，确保底层 read timeout 远大于 openai SDK 层的 timeout，
-        # 避免 httpx 比 openai 更早触发 ReadTimeout 导致错误链混乱。
-        # read timeout 设为配置值的 4 倍（最大 1200s），connect timeout 固定 15s。
+        # 构造 httpx 客户端：
+        # - connect timeout：固定 15s
+        # - read timeout：使用 stream_idle_timeout（流式 chunk 间隔保护）
+        #   必须大于 openai SDK 层的 stream_timeout，避免 httpx 比 SDK 更早触发 ReadTimeout。
+        #   取 max(stream_idle_timeout, stream_timeout_or_fallback) + 10s 作为安全边距。
+        # - write/pool timeout：固定值
         try:
             import httpx as _httpx
+            _first_token_t = self.config.stream_timeout if self.config.stream_timeout is not None else self.config.timeout
+            _read_t = float(max(self.config.stream_idle_timeout, _first_token_t) + 10)
             _http_client = _httpx.Client(
                 timeout=_httpx.Timeout(
                     connect=15.0,
-                    read=float(min(self.config.timeout * 4, 1200)),
+                    read=_read_t,
                     write=30.0,
                     pool=15.0,
                 )
@@ -565,11 +586,14 @@ class OpenAILLM(BaseLLM):
             else self.config.model
         )
         use_azure = getattr(self, "_use_azure_client", False)
+        # 流式首 token 超时：优先用 stream_timeout，否则回退到 timeout
+        _st = self.config.stream_timeout
+        _stream_effective_timeout = kwargs.pop("timeout", _st if _st is not None else self.config.timeout)
         request_params: dict[str, Any] = {
             "model": model,
             "messages": messages,
             "stream": True,
-            "timeout": kwargs.get("timeout", self.config.timeout),
+            "timeout": _stream_effective_timeout,
         }
         if not use_azure:
             request_params["temperature"] = kwargs.get("temperature", self.config.temperature)
@@ -663,14 +687,20 @@ class DeepSeekLLM(BaseLLM):
         if not self.config.api_key:
             raise ValueError("OpenAI API key must be provided in config")
 
-        # 构造 httpx 客户端，确保底层 read timeout 远大于 openai SDK 层的 timeout，
-        # 避免 httpx 比 openai 更早触发 ReadTimeout 导致错误链混乱。
+        # 构造 httpx 客户端：
+        # - connect timeout：固定 15s
+        # - read timeout：使用 stream_idle_timeout（流式 chunk 间隔保护）
+        #   必须大于 openai SDK 层的 stream_timeout，避免 httpx 比 SDK 更早触发 ReadTimeout。
+        #   取 max(stream_idle_timeout, stream_timeout_or_fallback) + 10s 作为安全边距。
+        # - write/pool timeout：固定值
         try:
             import httpx as _httpx
+            _first_token_t = self.config.stream_timeout if self.config.stream_timeout is not None else self.config.timeout
+            _read_t = float(max(self.config.stream_idle_timeout, _first_token_t) + 10)
             _http_client = _httpx.Client(
                 timeout=_httpx.Timeout(
                     connect=15.0,
-                    read=float(min(self.config.timeout * 4, 1200)),
+                    read=_read_t,
                     write=30.0,
                     pool=15.0,
                 )
@@ -869,12 +899,15 @@ class DeepSeekLLM(BaseLLM):
         messages = dialog.get_messages_for_api()
         tools = self._convert_tools(dialog.tools) if dialog.tools else None
 
+        # 流式首 token 超时：优先用 stream_timeout，否则回退到 timeout
+        _st = self.config.stream_timeout
+        _stream_effective_timeout = kwargs.pop("timeout", _st if _st is not None else self.config.timeout)
         request_params: dict[str, Any] = {
             "model": self.config.model,
             "messages": messages,
             "temperature": kwargs.get("temperature", self.config.temperature),
             "stream": True,
-            "timeout": kwargs.get("timeout", self.config.timeout),
+            "timeout": _stream_effective_timeout,
         }
         if self.config.max_tokens:
             request_params["max_tokens"] = kwargs.get("max_tokens", self.config.max_tokens)
@@ -1076,11 +1109,15 @@ class AnthropicLLM(BaseLLM):
             else:
                 user_messages.append(msg)
 
+        # 流式首 token 超时：优先用 stream_timeout，否则回退到 timeout
+        _st = self.config.stream_timeout
+        _stream_effective_timeout = kwargs.pop("timeout", _st if _st is not None else self.config.timeout)
         request_params: dict[str, Any] = {
             "model": self.config.model,
             "messages": user_messages,
             "max_tokens": kwargs.get("max_tokens", self.config.max_tokens or 4096),
             "temperature": kwargs.get("temperature", self.config.temperature),
+            "timeout": _stream_effective_timeout,
         }
         if system_message:
             request_params["system"] = system_message
