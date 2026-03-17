@@ -22,6 +22,7 @@ from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_dir_to_oss
+from src.dao.redis_dao import get_redis_dao
 from src.services.bohrium_node_service import get_bohrium_node_service
 from src.services.chat_history import ChatHistoryConverter
 from src.services.quota_service import use_quota
@@ -91,7 +92,26 @@ class AgentRunService:
         finally:
             self._playground_init_done.set()
 
-    def _get_or_create_playground(self, session_id: str) -> Any:
+    def _emit_mcp_event_safely(
+        self,
+        event_callback: Callable[..., None] | None,
+        event_type: str,
+        content: Any,
+        **extra: Any,
+    ) -> None:
+        """Emit MCP progress event via run event_callback when available."""
+        if not callable(event_callback):
+            return
+        try:
+            event_callback('System', event_type, content, **extra)
+        except Exception as e:
+            logger.debug('emit MCP event failed type=%s err=%s', event_type, e)
+
+    def _get_or_create_playground(
+        self,
+        session_id: str,
+        event_callback: Callable[..., None] | None = None,
+    ) -> Any:
         """按 session_id 返回或创建 playground，避免多用户共用同一 pg 导致 working_dir/SSH 串台。run 结束时 pop+cleanup 释放。"""
         if session_id in self._playgrounds:
             return self._playgrounds[session_id]
@@ -104,7 +124,62 @@ class AgentRunService:
         run_dir = _project_root / 'runs' / RUN_ID_WEB
         run_dir.mkdir(parents=True, exist_ok=True)
         pg.set_run_dir(run_dir, task_id=session_id)
-        pg.setup()
+        if callable(event_callback):
+
+            def _on_mcp_progress(progress: dict[str, Any]) -> None:
+                if not isinstance(progress, dict):
+                    return
+                server_name = progress.get('server_name')
+                transport = progress.get('transport')
+                phase = str(progress.get('phase') or '')
+                event_type = 'mcp_server_status' if server_name else 'mcp_connect'
+                self._emit_mcp_event_safely(
+                    event_callback,
+                    event_type,
+                    progress,
+                    mcp_phase=phase,
+                    mcp_server=server_name,
+                    mcp_transport=transport,
+                )
+
+            pg._mcp_progress_callback = _on_mcp_progress
+        self._emit_mcp_event_safely(
+            event_callback,
+            'mcp_connect',
+            {
+                'phase': 'start',
+                'message': '正在初始化 Playground，并连接 MCP Servers...',
+            },
+            mcp_phase='start',
+        )
+        setup_started_at = time.monotonic()
+        try:
+            pg.setup()
+        except Exception as e:
+            elapsed_ms = int((time.monotonic() - setup_started_at) * 1000)
+            self._emit_mcp_event_safely(
+                event_callback,
+                'mcp_connect',
+                {
+                    'phase': 'failed',
+                    'elapsed_ms': elapsed_ms,
+                    'error': str(e),
+                    'message': 'MCP 初始化失败',
+                },
+                mcp_phase='failed',
+            )
+            raise
+        elapsed_ms = int((time.monotonic() - setup_started_at) * 1000)
+        self._emit_mcp_event_safely(
+            event_callback,
+            'mcp_connect',
+            {
+                'phase': 'ready',
+                'elapsed_ms': elapsed_ms,
+                'message': 'MCP 初始化完成',
+            },
+            mcp_phase='ready',
+        )
         self._playgrounds[session_id] = pg
         logger.debug('run_agent_sync: playground created for session_id=%s', session_id)
         return pg
@@ -259,6 +334,7 @@ class AgentRunService:
             prompt_preview,
             get_worker_id(),
         )
+        run_started_at = time.monotonic()
 
         # 仅在 workspace 真有新/改/删文件时才上传：用快照比对，并用短防抖避免每次 tool 都扫目录
         _last_workspace_snapshot: list[frozenset[tuple[str, float, int]] | None] = [
@@ -283,7 +359,7 @@ class AgentRunService:
             if event_type == 'end':
                 payload['task_completed'] = _task_completed
             payload.update(extra)
-            if event_type != 'log_line':
+            if event_type not in ('log_line', 'llm_token'):
                 events_table = get_chat_events_table()
                 if events_table:
                     try:
@@ -302,19 +378,22 @@ class AgentRunService:
                     'run_agent_sync: tool_result before send_cb session_id=%s',
                     session_id,
                 )
-            if loop is not None and asyncio.iscoroutinefunction(send_cb):
-                future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
-                try:
-                    future.result(timeout=5)
-                except Exception as e:
-                    logger.warning(
-                        'run_agent_sync: send_cb timeout or error (event may be in DB but not pushed), session_id=%s type=%s: %s',
-                        session_id,
-                        event_type,
-                        e,
-                    )
-            else:
-                send_cb(payload)
+            # Direct 直播：thought 只入库不推前端，前端只根据 llm_token 流式展示；历史从库拉 thought
+            skip_push = mode == 'direct' and event_type == 'thought'
+            if not skip_push:
+                if loop is not None and asyncio.iscoroutinefunction(send_cb):
+                    future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
+                    try:
+                        future.result(timeout=5)
+                    except Exception as e:
+                        logger.warning(
+                            'run_agent_sync: send_cb timeout or error (event may be in DB but not pushed), session_id=%s type=%s: %s',
+                            session_id,
+                            event_type,
+                            e,
+                        )
+                else:
+                    send_cb(payload)
             if event_type == 'tool_result':
                 logger.info(
                     'run_agent_sync: tool_result after send_cb session_id=%s',
@@ -403,7 +482,9 @@ class AgentRunService:
             run_dir = _project_root / 'runs' / RUN_ID_WEB
             task_id = task_id or ('ws_' + uuid.uuid4().hex[:16])
 
-            pg = self._get_or_create_playground(session_id)
+            pg = self._get_or_create_playground(
+                session_id, event_callback=event_callback
+            )
             pg.set_run_dir(run_dir, task_id=task_id)
             pg_for_run = pg
             logger.debug(
@@ -841,6 +922,7 @@ class AgentRunService:
                                 },
                             )
                     except Exception as e:
+                        reason = f'Bohrium 节点创建失败: {e}'
                         logger.warning(
                             'run_agent_sync: auto create Bohrium node failed: %s',
                             e,
@@ -851,24 +933,27 @@ class AgentRunService:
                             'bohrium_node',
                             {
                                 'status': 'failed',
-                                'message': f'Bohrium 节点创建失败: {e}',
+                                'message': reason,
                             },
                         )
                         event_callback(
                             'System',
                             'error',
-                            f'Bohrium 节点创建失败: {e}',
+                            reason,
                         )
                         # 发送 end 以便流结束、并落库（_task_completed 为 False 表示按失败论）
+                        _elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
                         try:
                             event_callback(
                                 'System',
                                 'end',
                                 'Bohrium 节点创建失败，会话已结束.',
+                                elapsed_ms=_elapsed_ms,
                             )
                         except Exception:
                             pass
-                        return False
+                        # 返回 (False, reason) 供 Worker 写入飞书「失败原因」；与统一 return (run_result, elapsed_ms) 一致
+                        return ((False, reason), _elapsed_ms)
 
             # 本轮模型：支持 llm_override（换配置块）和 model_override（覆盖 model 字段，如 gemini-3-flash-preview / azure/gpt-5）
             run_llm = base.llm
@@ -1007,6 +1092,7 @@ class AgentRunService:
                     task_id,
                 )
                 event_callback('System', 'cancelled', 'Task cancelled by user.')
+                run_result = (False, 'cancelled')
             else:
                 _task_completed = True
                 logger.info(
@@ -1030,7 +1116,7 @@ class AgentRunService:
                     task_id=task_id,
                     event_callback=event_callback,
                 )
-            run_result = True
+                run_result = True
         except Exception as e:
             logger.exception(
                 'run_agent_sync: error session_id=%s task_id=%s err=%s',
@@ -1115,18 +1201,26 @@ class AgentRunService:
                             e,
                             exc_info=True,
                         )
-            self._sessions_service.clear_stop_event(session_id)
+            # run 结束时清理 Redis stop key，避免 session 级 key 残留导致下一轮误判
+            logger.info(
+                'run_agent_sync: clear stop keys in finally session_id=%s task_id=%s',
+                session_id,
+                task_id,
+            )
+            get_redis_dao().delete_stop_requested(session_id, task_id)
             logger.info(
                 'run_agent_sync end: session_id=%s task_id=%s worker_id=%s',
                 session_id,
                 task_id,
                 get_worker_id(),
             )
+            elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
             try:
                 event_callback(
                     'System',
                     'end',
                     'Task completed, SSE connection can be closed.',
+                    elapsed_ms=elapsed_ms,
                 )
             except Exception:
                 pass
@@ -1153,7 +1247,7 @@ class AgentRunService:
                 finally:
                     gc.collect()
 
-        return run_result
+        return (run_result, elapsed_ms)
 
 
 @lru_cache
