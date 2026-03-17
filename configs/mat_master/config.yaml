@@ -44,6 +44,19 @@ llm:
     max_retries: 3
     retry_delay: 1.0
 
+  # Context compaction 专用小模型（便宜、快速，通过 LiteLLM proxy）
+  # 仅在 context compact 触发时调用，不影响主 agent LLM
+  compaction:
+    provider: "openai"
+    model: "gemini-3-flash-preview"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    temperature: 0.3            # compaction 不需要创造性，低温更稳定
+    max_tokens: 4096
+    timeout: 120
+    max_retries: 2
+    retry_delay: 1.0
+
   default: "litellm"
 
 # ============================================
@@ -73,7 +86,7 @@ agents:
         context_window_tokens: 200000    # 模型 context window 大小（claude-sonnet-4-6 = 200k）
         trigger_ratio: 0.80              # 触发阈值 = context_window_tokens * 0.80 = 160000
         preserve_recent_turns: 2         # 压缩后保留最近 N 轮完整 tool-transaction
-        compaction_llm: null             # 用于摘要的 LLM key；null 则复用 agent LLM
+        compaction_llm: "compaction"     # 用于摘要的 LLM key；指向 llm.compaction（gemini-3-flash-preview）
         fallback_strategy: "sliding_window"  # 压缩失败时的降级策略
         max_compact_tokens: 3000         # compact message 最大 token 数（约 9000 字符）
         min_compressible_ratio: 0.10     # P1: compressible/total < 10% 时跳过 compact
