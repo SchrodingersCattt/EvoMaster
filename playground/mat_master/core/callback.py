@@ -1142,7 +1142,10 @@ class MatToolCallbacks:
             call_mode = ConfirmMode(call_mode_str)
         except (ValueError, TypeError):
             call_mode = ConfirmMode.TIMEOUT
-        call_timeout = cfg_timeout
+        if call_mode == ConfirmMode.BLOCK:
+            call_timeout = ah_cfg.get('block_max_wait_seconds', 7200)
+        else:
+            call_timeout = cfg_timeout
 
         # --- Preferred path: ConfirmationManager ---
         confirm_mgr = getattr(self.agent, '_confirm_manager', None)
@@ -1168,7 +1171,7 @@ class MatToolCallbacks:
                         'ask-human: received reply (%d chars).', len(reply)
                     )
                     return f"User replied: {reply}", info
-                # reply is None: timeout mode expired (default_reply was None for LLM path)
+                # reply is None: timeout or block max-wait expired
                 self.logger.warning(
                     'ask-human: confirmation timed out (%ds).', call_timeout
                 )
@@ -1204,7 +1207,7 @@ class MatToolCallbacks:
                 info,
             )
 
-        wait_timeout = None if call_mode == ConfirmMode.BLOCK else call_timeout
+        wait_timeout = call_timeout
         self.logger.info(
             'ask-human: waiting for user reply (mode=%s, timeout=%s)...',
             call_mode.value,

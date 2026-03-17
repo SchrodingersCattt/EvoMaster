@@ -109,6 +109,8 @@ class ConfirmationManager:
         }
         if mode == ConfirmMode.TIMEOUT:
             payload['timeout_seconds'] = effective_timeout
+        elif mode == ConfirmMode.BLOCK and timeout_sec is not None and timeout_sec > 0:
+            payload['timeout_seconds'] = timeout_sec
         if context:
             payload['context'] = context
         if actions:
@@ -122,14 +124,19 @@ class ConfirmationManager:
         except Exception:
             pass
 
-        wait_timeout = None if mode == ConfirmMode.BLOCK else effective_timeout
+        if mode == ConfirmMode.BLOCK:
+            wait_timeout = (
+                timeout_sec if (timeout_sec is not None and timeout_sec > 0) else None
+            )
+        else:
+            wait_timeout = effective_timeout
         try:
             reply = self._reply_queue.get(timeout=wait_timeout)
             if reply is None:
                 return REPLY_CANCELLED
             return reply
         except queue.Empty:
-            # Only TIMEOUT mode reaches here
+            # TIMEOUT mode or BLOCK with max wait
             try:
                 self._emit(
                     source,
