@@ -6,6 +6,8 @@ skill_type: operator
 
 # Input Manual Helper Skill
 
+> **Skip condition**: If the user has already provided a complete, ready-to-run input file for the target software (and it needs no further modification), **skip this skill entirely** and go directly to the `bohrium-job` skill for submission.
+
 Generate or adapt input files for computational software by **dispatching parameters and paths** to the appropriate prepare_* MCP tool. Do not hand-write or text-edit input file contents for software that has a prepare_* tool; use overrides and structure_file/template paths instead.
 
 ## Routing by engine
@@ -55,6 +57,9 @@ Returns: `success`, `code`, `command`, `stdout`, `stderr`, `log_file` (Path), `p
 ## Workflow
 
 1. **Choose software and task type** — Determine which prepare_* tool (or run_pyscf for PySCF) applies from the routing table and MCP schema. For PySCF, skip steps 2–6 and call **run_pyscf** with structure_file and parameters only.
+0. **User-provided ready file check (exit early)** — Before doing anything else, check whether the user has already provided a complete, ready-to-run input file. If yes (file exists in the workspace, no structural changes or parameter overrides are required), **stop here**: do NOT call prepare_*, do NOT run validate_input.py. Go directly to `bohrium-job` skill and pass the directory containing that file as `--input-dir`.
+
+1. **Choose software and task type** — Determine which prepare_* tool applies from the routing table and MCP schema.
 2. **Resolve template** — For CP2K, obtain an input template (user-provided or get_reference). For ORCA, determine the input mode: template+structure, template-only (inline coords), or structure-only (omit input_file). Use get_reference for a suitable ORCA template when needed (e.g. `orca/minimal_molecule.inp`, `orca/std_dft.inp`).
 3. **Confirm structure_file** — Ensure the structure path exists and is pymatgen-instanceable; do not assume formats the engine cannot read.
 4. **Build overrides** — Set physical parameters (cutoff, functional, k-points, etc.) via the overrides dict exposed by the prepare_* schema; do not inject them by editing the template text.
