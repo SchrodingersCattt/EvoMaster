@@ -124,6 +124,8 @@ export default function MatMasterView({
             // Allow System events like finish/error/cancelled through;
             // only drop ephemeral "status" messages (e.g. "Initializing...")
             if (msg.source === "System" && msg.type === "status") return prev;
+            // context_compaction events are consumed by StatusPanel; don't render as chat bubbles
+            if (msg.type === "context_compaction") return prev;
             return [...prev, msg];
           });
           if (msg.type === "planner_ask") {
@@ -251,7 +253,16 @@ export default function MatMasterView({
     setAskHumanInput("");
     fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sid)}/history`)
       .then((r) => (r.ok ? r.json() : []))
-      .then((h: LogEntry[]) => setLogs(h))
+      .then((h: LogEntry[]) =>
+        setLogs(
+          h.filter(
+            (e) =>
+              e.type !== "context_compaction" &&
+              e.type !== "llm_token" &&
+              e.type !== "log_line"
+          )
+        )
+      )
       .catch(() => setLogs([]));
   }, []);
 

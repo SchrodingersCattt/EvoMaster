@@ -1136,6 +1136,7 @@ export default function ChatPanel({
   const canSend = status === "connected" && !isRunning;
   const [highlightIndex, setHighlightIndex] = useState<number | null>(null);
   const highlightTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Countdown timer for timeout-mode ask-human dialog
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -1225,6 +1226,14 @@ export default function ChatPanel({
       }
     };
   }, [jumpToLogIndex, onJumpHandled]);
+
+  useEffect(() => {
+    const textarea = composerTextareaRef.current;
+    if (!textarea) return;
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+  }, [input]);
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-background">
@@ -1513,6 +1522,7 @@ export default function ChatPanel({
               </div>
               <div className="flex-1 min-w-[200px] flex gap-2">
                 <textarea
+                  ref={composerTextareaRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {

@@ -80,12 +80,44 @@ class MatMasterAgent(Agent):
         _mat = (config_dict or {}).get('mat_master') or {}
         _exec = _mat.get('execution') or {}
         self._tool_output_auto_save_patterns: list[str] = _exec.get(
-            'tool_output_auto_save_patterns', ['mat_sn_']
+            'tool_output_auto_save_patterns', ['mat_sn_', 'mat_doc_']
         )
         if not isinstance(self._tool_output_auto_save_patterns, list):
-            self._tool_output_auto_save_patterns = ['mat_sn_']
+            self._tool_output_auto_save_patterns = ['mat_sn_', 'mat_doc_']
         self._tool_output_save_counter = 0
         self._execution_journal = ExecutionJournal()
+        # Feature C: 超大工具结果摘要化
+        self._tool_obs_summarize_patterns: list[str] = _exec.get(
+            'tool_obs_summarize_patterns',
+            ['mat_sn_search-papers-enhanced', 'mat_sn_search-papers', 'mat_sg_', 'mat_doc_'],
+        )
+        if not isinstance(self._tool_obs_summarize_patterns, list):
+            self._tool_obs_summarize_patterns = ['mat_sn_search-papers-enhanced', 'mat_sn_search-papers', 'mat_sg_', 'mat_doc_']
+        self._tool_obs_summarize_threshold: int = int(
+            _exec.get('tool_obs_summarize_threshold', 10000)
+        )
+
+        # C.7 — 初始化 ContextCompactor（如果 compaction.enabled）
+        _ctx_cfg = (config_dict or {}).get('agents', {}).get('general', {}).get('context', {})
+        _compaction_raw = _ctx_cfg.get('compaction', {})
+        _compaction_cfg = CompactionConfig(**_compaction_raw) if _compaction_raw else CompactionConfig()
+        self._compaction_enabled: bool = _compaction_cfg.enabled
+        if _compaction_cfg.enabled:
+            def _llm_caller(dialog):
+                return self.llm.query(dialog)
+            _compactor = ContextCompactor(
+                config=_compaction_cfg,
+                llm_caller=_llm_caller,
+                execution_journal=self._execution_journal,
+            )
+            self.context_manager.set_compactor(_compactor)
+            self.logger.info(
+                '[Agent] ContextCompactor enabled (effective_trigger_tokens=%d, '
+                'context_window=%d, ratio=%.0f%%)',
+                _compaction_cfg.effective_trigger_tokens(),
+                _compaction_cfg.context_window_tokens,
+                _compaction_cfg.trigger_ratio * 100,
+            )
 
         # C.7 — 初始化 ContextCompactor（如果 compaction.enabled）
         _ctx_cfg = (config_dict or {}).get('agents', {}).get('general', {}).get('context', {})
@@ -709,6 +741,174 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
             self.logger.warning('Auto-save tool output failed: %s', e)
             return None
 
+    def _summarize_large_tool_observation(
+        self,
+        tool_name: str,
+        observation: Any,
+        saved_path: str | None,
+    ) -> str | None:
+        """Feature C: 将超大工具 observation 替换为结构化摘要 + 文件路径引用。
+
+        仅当 observation 为字符串且长度超过阈值，且工具名匹配配置前缀时触发。
+        返回替换后的摘要字符串；若不触发则返回 None（调用方保持原 observation 不变）。
+
+        摘要策略（纯 Python，无 LLM）：
+        - mat_sn_search-papers-enhanced / mat_sn_search-papers：提取 top papers（title/doi/year/score/abstract preview）
+        - mat_sg_*：提取 formula/space_group/energy_above_hull
+        - 通用 fallback：total_items + 前 N 条 preview + 文件路径
+        """
+        if not isinstance(observation, str):
+            return None
+        if len(observation) <= self._tool_obs_summarize_threshold:
+            return None
+        if not any(tool_name.startswith(p) for p in self._tool_obs_summarize_patterns):
+            return None
+
+        path_note = f'\n\n[Full result saved to: {saved_path}]' if saved_path else ''
+
+        # ── Try to parse as JSON ──────────────────────────────────────────────
+        payload: dict | list | None = None
+        try:
+            stripped = observation.strip()
+            # observation may be "...\n\n[Auto-saved to: ...]" — strip that suffix first
+            _obs_clean = re.sub(r'\n\n\[Auto-saved to:[^\]]*\]$', '', stripped).strip()
+            payload = json.loads(_obs_clean)
+        except Exception:
+            pass
+
+        # ── mat_sn_search-papers* ─────────────────────────────────────────────
+        if tool_name.startswith('mat_sn_search-papers'):
+            papers: list[dict] = []
+            if isinstance(payload, dict):
+                # common shapes: {"papers": [...]} or {"results": [...]} or {"data": [...]}
+                for key in ('papers', 'results', 'data', 'items'):
+                    if isinstance(payload.get(key), list):
+                        papers = payload[key]
+                        break
+                if not papers and isinstance(payload.get('total'), int):
+                    # flat dict with a list somewhere
+                    for v in payload.values():
+                        if isinstance(v, list) and v:
+                            papers = v
+                            break
+            elif isinstance(payload, list):
+                papers = payload
+
+            if papers:
+                total = len(papers)
+                top_n = min(10, total)
+                lines = [
+                    f'[Tool: {tool_name}] Returned {total} papers. Top {top_n} shown below:',
+                    '',
+                ]
+                for i, p in enumerate(papers[:top_n], 1):
+                    if not isinstance(p, dict):
+                        lines.append(f'{i}. {str(p)[:120]}')
+                        continue
+                    title = p.get('title') or p.get('Title') or '(no title)'
+                    doi = p.get('doi') or p.get('DOI') or p.get('url') or ''
+                    year = p.get('year') or p.get('Year') or p.get('published_year') or ''
+                    score = p.get('score') or p.get('relevance_score') or p.get('similarity') or ''
+                    abstract = p.get('abstract') or p.get('Abstract') or p.get('summary') or ''
+                    abstract_preview = (abstract[:200] + '…') if len(abstract) > 200 else abstract
+                    parts = [f'{i}. {title}']
+                    if doi:
+                        parts.append(f'   DOI/URL: {doi}')
+                    meta = []
+                    if year:
+                        meta.append(f'year={year}')
+                    if score:
+                        meta.append(f'score={score}')
+                    if meta:
+                        parts.append(f'   {", ".join(meta)}')
+                    if abstract_preview:
+                        parts.append(f'   Abstract: {abstract_preview}')
+                    lines.extend(parts)
+                    lines.append('')
+                if total > top_n:
+                    lines.append(f'… and {total - top_n} more papers.{path_note}')
+                else:
+                    lines.append(path_note.strip() if path_note else '')
+                return '\n'.join(lines).rstrip()
+
+        # ── mat_sg_* (structure generator) ───────────────────────────────────
+        if tool_name.startswith('mat_sg_'):
+            structures: list[dict] = []
+            if isinstance(payload, dict):
+                for key in ('structures', 'results', 'data', 'items'):
+                    if isinstance(payload.get(key), list):
+                        structures = payload[key]
+                        break
+                if not structures:
+                    # single structure result
+                    structures = [payload]
+            elif isinstance(payload, list):
+                structures = payload
+
+            if structures:
+                total = len(structures)
+                top_n = min(20, total)
+                lines = [
+                    f'[Tool: {tool_name}] Returned {total} structure(s). Top {top_n} shown:',
+                    '',
+                ]
+                for i, s in enumerate(structures[:top_n], 1):
+                    if not isinstance(s, dict):
+                        lines.append(f'{i}. {str(s)[:120]}')
+                        continue
+                    formula = (
+                        s.get('formula')
+                        or s.get('Formula')
+                        or s.get('reduced_formula')
+                        or s.get('pretty_formula')
+                        or '?'
+                    )
+                    sg = (
+                        s.get('space_group')
+                        or s.get('spacegroup')
+                        or s.get('space_group_symbol')
+                        or s.get('sg')
+                        or '?'
+                    )
+                    e_hull = s.get('energy_above_hull') or s.get('e_above_hull') or s.get('stability')
+                    mat_id = s.get('material_id') or s.get('id') or s.get('mp_id') or ''
+                    parts = [f'{i}. {formula}  SG={sg}']
+                    if e_hull is not None:
+                        parts[0] += f'  e_above_hull={e_hull}'
+                    if mat_id:
+                        parts[0] += f'  id={mat_id}'
+                    lines.extend(parts)
+                if total > top_n:
+                    lines.append(f'… and {total - top_n} more.{path_note}')
+                else:
+                    lines.append(path_note.strip() if path_note else '')
+                return '\n'.join(lines).rstrip()
+
+        # ── Generic fallback ──────────────────────────────────────────────────
+        items: list = []
+        if isinstance(payload, list):
+            items = payload
+        elif isinstance(payload, dict):
+            for key in ('results', 'data', 'items', 'papers', 'structures'):
+                if isinstance(payload.get(key), list):
+                    items = payload[key]
+                    break
+
+        total_items = len(items) if items else None
+        preview_lines: list[str] = []
+        for item in items[:5]:
+            preview_lines.append(f'  - {str(item)[:150]}')
+
+        summary_parts = [f'[Tool: {tool_name}] Large observation ({len(observation):,} chars).']
+        if total_items is not None:
+            summary_parts.append(f'Total items: {total_items}.')
+        if preview_lines:
+            summary_parts.append('Preview (first 5):')
+            summary_parts.extend(preview_lines)
+        if path_note:
+            summary_parts.append(path_note.strip())
+        return '\n'.join(summary_parts)
+
     def _execute_tool(self, tool_call) -> tuple[str, dict[str, Any]]:
         """Execute tool with MAT callbacks.
 
@@ -749,17 +949,9 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
                 self._log_tool_end(tool_name, error_msg, {'error': str(e)})
                 observation, info = error_msg, {'error': str(e)}
 
-            # 工具结果自动落盘：匹配配置前缀的工具（如 mat_sn_*）成功时将 observation 写入 _tmp/tool_outputs/
-            if isinstance(info, dict) and 'error' not in info:
-                saved_path = self._auto_save_tool_output(tool_name, observation)
-                if saved_path:
-                    if isinstance(observation, str):
-                        observation = (
-                            observation.rstrip() + f"\n\n[Auto-saved to: {saved_path}]"
-                        )
-                    info = {**info, 'auto_saved_path': saved_path}
-
             # Record tool outcome in the execution journal (skip finish — handled separately).
+            # Note: recorded before run_after so the raw observation is captured; the journal
+            # is used for artifact tracking, not for LLM context.
             if tool_name != 'finish':
                 self._execution_journal.record(
                     step=self._step_count,
@@ -772,11 +964,36 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
             # finish 工具从源头返回 dict，直接透传（不经过 run_after / _format_tool_observation，避免 callbacks 假定 observation 为 str）
             if tool_name == 'finish' and isinstance(observation, dict):
                 return observation, info
+
+            # Run after-callbacks (clean SN fields, survey reminder, etc.)
             observation, info = self._tool_callback_pipeline.run_after(
                 tool_call,
                 observation,
                 info,
             )
+
+            # Fix-3: 工具结果自动落盘在 callback pipeline 之后，落盘的是清洗后的数据
+            saved_path: str | None = None
+            if isinstance(info, dict) and 'error' not in info:
+                saved_path = self._auto_save_tool_output(tool_name, observation)
+                if saved_path:
+                    if isinstance(observation, str):
+                        observation = (
+                            observation.rstrip() + f"\n\n[Auto-saved to: {saved_path}]"
+                        )
+                    info = {**info, 'auto_saved_path': saved_path}
+
+            # Fix-5: Feature C 摘要化在 callback pipeline 之后，基于清洗后的 observation
+            if isinstance(info, dict) and 'error' not in info:
+                _summary = self._summarize_large_tool_observation(tool_name, observation, saved_path)
+                if _summary is not None:
+                    self.logger.info(
+                        '[FeatureC] Summarized large observation for %s (%d→%d chars)',
+                        tool_name, len(observation) if isinstance(observation, str) else 0, len(_summary),
+                    )
+                    observation = _summary
+                    info = {**info, 'obs_summarized': True}
+
             return self._format_tool_observation(tool_name, observation, info), info
 
         except Exception as exc:

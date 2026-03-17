@@ -6,6 +6,11 @@
 from __future__ import annotations
 
 import logging
+<<<<<<< HEAD
+=======
+import re
+import time
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import TYPE_CHECKING, Callable
@@ -37,7 +42,30 @@ class CompactionConfig(BaseModel):
     """Compact message 触发与行为配置"""
 
     enabled: bool = Field(default=False, description='是否启用 compact message（默认关闭）')
+<<<<<<< HEAD
     trigger_tokens: int = Field(default=80000, description='超过此 token 数触发压缩（唯一触发条件）')
+=======
+    # P0: trigger_tokens 改为动态计算，默认 -1 表示使用 context_window_tokens * trigger_ratio
+    trigger_tokens: int = Field(
+        default=-1,
+        description=(
+            '超过此 token 数触发压缩。'
+            '-1（默认）表示自动按 context_window_tokens * trigger_ratio 计算。'
+            '显式设置正整数时直接使用该值（向后兼容）。'
+        ),
+    )
+    # P0: 新增 context_window_tokens 和 trigger_ratio
+    context_window_tokens: int = Field(
+        default=200000,
+        description='模型 context window 大小（tokens）。用于动态计算 trigger_tokens。',
+    )
+    trigger_ratio: float = Field(
+        default=0.80,
+        ge=0.1,
+        le=0.99,
+        description='trigger_tokens = context_window_tokens * trigger_ratio（默认 0.80 = 80%%）',
+    )
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
     preserve_recent_turns: int = Field(
         default=2, description='压缩后保留最近 N 轮完整 tool-transaction'
     )
@@ -48,6 +76,29 @@ class CompactionConfig(BaseModel):
     max_compact_tokens: int = Field(
         default=3000, description='compact message 最大 token 数（约 9000 字符）'
     )
+<<<<<<< HEAD
+=======
+    # P1: 无效 compact 检测阈值
+    min_compressible_ratio: float = Field(
+        default=0.10,
+        ge=0.0,
+        le=1.0,
+        description=(
+            'compressible tokens / total tokens 低于此比例时跳过 compact（避免无效压缩）。'
+            '默认 0.10：可压缩部分不足总 token 的 10%% 时跳过。'
+        ),
+    )
+
+    def effective_trigger_tokens(self) -> int:
+        """返回实际生效的 trigger_tokens。
+
+        - trigger_tokens > 0：直接使用（向后兼容旧配置）
+        - trigger_tokens <= 0：动态计算 context_window_tokens * trigger_ratio
+        """
+        if self.trigger_tokens > 0:
+            return self.trigger_tokens
+        return int(self.context_window_tokens * self.trigger_ratio)
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
 
 
 class ContextConfig(BaseModel):
@@ -85,11 +136,24 @@ class ContextCompactor:
        - ## Key Findings
        - ## Current Status
     4. 返回新 Dialog：[system messages] + [COMPACT CONTEXT system msg] + [recent turns]
+<<<<<<< HEAD
+=======
+
+    P1: compact() 前检查 compressible tokens 比例，不足时直接返回原 dialog（跳过无效压缩）。
+    P2: _build_compaction_prompt() 按角色分级截断，保护 Markdown 表格 / JSON / 代码块。
+    P3: 结构化注入 Key User Data / Constraints / Open Tasks。
+    P4: 动态调整 preserve_recent_turns（token 压力大时自动缩减）。
+    P5: n_compressed 改为 assistant transaction 数；增加 compact 前后 token 日志。
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
     """
 
     # Compact message 格式模板（注入到 prompt 中强制 LLM 遵守）
     _COMPACT_SCHEMA = """\
+<<<<<<< HEAD
 [COMPACT CONTEXT — Steps 1-{n_compressed}]
+=======
+[COMPACT CONTEXT — Turns 1-{n_turns}]
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
 
 ## Summary of Prior Work
 {{2-3 sentences summarizing completed work}}
@@ -101,11 +165,26 @@ class ContextCompactor:
 - {{key finding, ≤80 chars each}}
 
 ## Current Status
+<<<<<<< HEAD
 Step {n_compressed} completed. Next: Step {n_next} — {{next_goal}}
+=======
+Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
 
 ## Errors / Warnings
 {{list failed steps with reasons; omit section if none}}"""
 
+<<<<<<< HEAD
+=======
+    # P2: 按角色分级的截断上限（字符数）
+    _ROLE_CHAR_LIMITS: dict[str, int] = {
+        'user': 8000,       # 用户消息可能含数据表格，放宽
+        'assistant': 2000,  # assistant 思考/规划文本
+        'tool': 1500,       # tool observation 通常可截断
+        'system': 500,      # system 消息在压缩 prompt 里不需要完整
+    }
+
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
     def __init__(
         self,
         config: CompactionConfig,
@@ -116,14 +195,44 @@ Step {n_compressed} completed. Next: Step {n_next} — {{next_goal}}
         self._llm_caller = llm_caller
         self._execution_journal = execution_journal
 
+<<<<<<< HEAD
     def compact(self, dialog: 'Dialog') -> 'Dialog':
+=======
+    def compact(
+        self,
+        dialog: 'Dialog',
+        context_manager: 'ContextManager | None' = None,
+        on_event: 'Callable[[dict], None] | None' = None,
+    ) -> 'Dialog':
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
         """压缩对话历史，返回新 Dialog。失败时抛出 CompactionError。
 
         保留尾部使用 ContextManager._safe_tail() 以完整 tool-transaction 为单位，
         确保保留段不含孤立 ToolMessage 或不完整的 assistant/tool 配对。
+<<<<<<< HEAD
         """
         from evomaster.utils.types import SystemMessage, UserMessage
 
+=======
+
+        P1: 若 compressible tokens 占比低于 min_compressible_ratio，直接返回原 dialog。
+        P4: 若 token 压力极大，自动缩减 preserve_recent_turns 到 1。
+        P5: 记录 compact 前后 token 数日志。
+        Feature A: on_event 回调，在 started/skipped/finished/failed 时发事件。
+        """
+        from evomaster.utils.types import SystemMessage, UserMessage
+
+        def _emit(status: str, **extra: object) -> None:
+            if on_event is None:
+                return
+            payload: dict = {'type': 'context_compaction', 'status': status}
+            payload.update(extra)
+            try:
+                on_event(payload)
+            except Exception:
+                pass
+
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
         messages = dialog.messages
         preserve_turns = self._config.preserve_recent_turns
 
@@ -136,10 +245,72 @@ Step {n_compressed} completed. Next: Step {n_next} — {{next_goal}}
             else:
                 other_msgs.append(msg)
 
+<<<<<<< HEAD
         # 2. 用 _safe_tail 取最近 preserve_turns 个完整 tool-transaction 作为保留尾部
         recent_msgs = ContextManager._safe_tail(other_msgs, preserve_turns)
         if len(recent_msgs) >= len(other_msgs):
             # 没有足够消息可压缩，直接返回原 dialog
+=======
+        # Pin the first user message (the original task query) — never compress it.
+        # It is always other_msgs[0] (the task description sent by the user/agent).
+        # After compact the layout is: system_msgs + [first_user_msg] + [COMPACT CONTEXT] + recent_msgs
+        pinned_first_user: list[Message] = []
+        if other_msgs and other_msgs[0].role.value == 'user':
+            pinned_first_user = [other_msgs[0]]
+            other_msgs = other_msgs[1:]
+
+        # P5: 记录 compact 前 token 数
+        tokens_before = context_manager.estimate_tokens(dialog) if context_manager else None
+
+        # P1: 检查 compressible tokens 占比，避免无效压缩
+        # fixed = system + pinned_first_user + tools（这些永远不会被压缩）
+        if context_manager is not None:
+            total_tokens = context_manager.estimate_tokens(dialog)
+            system_tokens = sum(
+                context_manager._message_char_len(m) for m in system_msgs
+            ) // 3
+            pinned_tokens = sum(
+                context_manager._message_char_len(m) for m in pinned_first_user
+            ) // 3
+            tools_tokens = context_manager._tools_char_len(dialog.tools) // 3
+            fixed_tokens = system_tokens + pinned_tokens + tools_tokens
+            compressible_tokens = total_tokens - fixed_tokens
+            min_ratio = self._config.min_compressible_ratio
+            if total_tokens > 0 and (compressible_tokens / total_tokens) < min_ratio:
+                _logger.warning(
+                    'ContextCompactor.compact: skipping — compressible tokens (%d) / total (%d) = %.1f%% '
+                    '< min_compressible_ratio=%.0f%%. system+tools dominate; compact would be ineffective.',
+                    compressible_tokens,
+                    total_tokens,
+                    100.0 * compressible_tokens / total_tokens,
+                    100.0 * min_ratio,
+                )
+                _emit(
+                    'skipped',
+                    reason='min_compressible_ratio',
+                    tokens_before=total_tokens,
+                    compressible_ratio=round(compressible_tokens / total_tokens, 4),
+                )
+                return dialog
+
+        # P4: 动态调整 preserve_recent_turns
+        # 若 token 压力极大（超过 trigger 的 1.2 倍），自动缩减到 1 以最大化可压缩空间
+        effective_trigger = self._config.effective_trigger_tokens()
+        if context_manager is not None and tokens_before is not None:
+            if tokens_before > effective_trigger * 1.2 and preserve_turns > 1:
+                preserve_turns = 1
+                _logger.debug(
+                    'ContextCompactor.compact: high token pressure (%d > %.0f), '
+                    'reducing preserve_recent_turns to 1',
+                    tokens_before,
+                    effective_trigger * 1.2,
+                )
+
+        # 2. 用 _safe_tail 取最近 preserve_turns 个完整 tool-transaction 作为保留尾部
+        recent_msgs = ContextManager._safe_tail(other_msgs, preserve_turns)
+        if len(recent_msgs) >= len(other_msgs):
+            # 没有足够消息可压缩（pinned_first_user 已被移出，other_msgs 全部在 recent），直接返回原 dialog
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
             return dialog
 
         msgs_to_compress = other_msgs[: len(other_msgs) - len(recent_msgs)]
@@ -147,6 +318,7 @@ Step {n_compressed} completed. Next: Step {n_next} — {{next_goal}}
         # 3. 构建 artifacts block（防幻觉：由 Python 注入，LLM 只能引用）
         artifacts_block = self._build_artifacts_block()
 
+<<<<<<< HEAD
         # 4. 构建压缩 prompt
         n_compressed = len(msgs_to_compress)
         n_next = n_compressed + 1
@@ -155,6 +327,32 @@ Step {n_compressed} completed. Next: Step {n_next} — {{next_goal}}
         )
 
         # 5. 调用 LLM 生成摘要
+=======
+        # P3: 构建结构化事实块（Key User Data / Constraints / Open Tasks）
+        # 同时扫描 pinned_first_user（原始任务 query），确保任务里的表格/约束/open tasks 也被提取
+        structured_facts_block = self._build_structured_facts_block(
+            pinned_first_user + msgs_to_compress
+        )
+
+        # P5: 统计 assistant transaction 数（而非消息条数）
+        n_turns = sum(1 for m in msgs_to_compress if m.role.value == 'assistant')
+        if n_turns == 0:
+            n_turns = len(msgs_to_compress)  # fallback：无 assistant 消息时用消息数
+        n_next = n_turns + 1
+
+        # 4. 构建压缩 prompt
+        compaction_prompt = self._build_compaction_prompt(
+            msgs_to_compress, artifacts_block, structured_facts_block, n_turns, n_next
+        )
+
+        # 5. 调用 LLM 生成摘要
+        _emit(
+            'started',
+            tokens_before=tokens_before,
+            trigger_tokens=self._config.effective_trigger_tokens(),
+        )
+        _t0 = time.monotonic()
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
         try:
             compaction_dialog = type(dialog)(
                 messages=system_msgs + [UserMessage(content=compaction_prompt)],
@@ -164,16 +362,27 @@ Step {n_compressed} completed. Next: Step {n_next} — {{next_goal}}
             compact_text = (reply.content or '').strip()
             if not compact_text:
                 raise CompactionError('LLM returned empty compact message')
+<<<<<<< HEAD
         except CompactionError:
             raise
         except Exception as e:
             raise CompactionError(f'LLM call failed: {e}') from e
+=======
+        except CompactionError as e:
+            _emit('failed', reason=str(e), tokens_before=tokens_before)
+            raise
+        except Exception as e:
+            _emit('failed', reason=str(e), tokens_before=tokens_before)
+            raise CompactionError(f'LLM call failed: {e}') from e
+        _duration_ms = int((time.monotonic() - _t0) * 1000)
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
 
         # 6. 截断 compact_text 到 max_compact_tokens（按字符估算：1 token ≈ 3 chars）
         max_chars = self._config.max_compact_tokens * 3
         if len(compact_text) > max_chars:
             compact_text = compact_text[:max_chars] + '\n...(compact message truncated)'
 
+<<<<<<< HEAD
         # 7. 构建新 Dialog：system msgs + COMPACT CONTEXT system msg + recent turns
         compact_sys_msg = SystemMessage(
             content=f'[COMPACT CONTEXT]\n\n{compact_text}'
@@ -189,6 +398,61 @@ Step {n_compressed} completed. Next: Step {n_next} — {{next_goal}}
             messages=new_messages,
             tools=dialog.tools,
             meta={**dialog.meta, 'compacted': True, 'compressed_count': n_compressed},
+=======
+        # 7. 构建新 Dialog：system msgs + pinned first user msg + COMPACT CONTEXT system msg + recent turns
+        # pinned_first_user 保留原始任务描述，确保 LLM 始终能看到完整的原始 query
+        compact_sys_msg = SystemMessage(
+            content=f'[COMPACT CONTEXT]\n\n{compact_text}'
+        )
+        new_messages = system_msgs + pinned_first_user + [compact_sys_msg] + recent_msgs
+
+        # P5: 记录 compact 前后 token 数
+        if context_manager is not None:
+            new_dialog_tmp = type(dialog)(messages=new_messages, tools=dialog.tools)
+            tokens_after = context_manager.estimate_tokens(new_dialog_tmp)
+            _logger.info(
+                'ContextCompactor.compact: %d turns compressed → compact_msg (%d chars) + %d recent msgs | '
+                'tokens: %d → %d (saved %d, %.1f%%)',
+                n_turns,
+                len(compact_text),
+                len(recent_msgs),
+                tokens_before,
+                tokens_after,
+                tokens_before - tokens_after,
+                100.0 * (tokens_before - tokens_after) / tokens_before if tokens_before else 0,
+            )
+            _emit(
+                'finished',
+                tokens_before=tokens_before,
+                tokens_after=tokens_after,
+                tokens_saved=tokens_before - tokens_after,
+                saved_ratio=round(
+                    (tokens_before - tokens_after) / tokens_before, 4
+                ) if tokens_before else 0.0,
+                compressed_turns=n_turns,
+                recent_msgs_kept=len(recent_msgs),
+                duration_ms=_duration_ms,
+            )
+        else:
+            _logger.debug(
+                'ContextCompactor.compact: %d turns compressed → compact_msg (%d chars) + %d recent msgs',
+                n_turns,
+                len(compact_text),
+                len(recent_msgs),
+            )
+            _emit(
+                'finished',
+                tokens_before=tokens_before,
+                compressed_turns=n_turns,
+                recent_msgs_kept=len(recent_msgs),
+                duration_ms=_duration_ms,
+            )
+
+        return type(dialog)(
+            messages=new_messages,
+            tools=dialog.tools,
+            meta={**dialog.meta, 'compacted': True, 'compressed_turns': n_turns},
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
         )
 
     def _build_artifacts_block(self) -> str:
@@ -212,15 +476,164 @@ Step {n_compressed} completed. Next: Step {n_next} — {{next_goal}}
             _logger.debug('ContextCompactor._build_artifacts_block failed: %s', e)
             return '(artifacts unavailable)'
 
+<<<<<<< HEAD
+=======
+    def _build_structured_facts_block(self, msgs_to_compress: list['Message']) -> str:
+        """P3: 从待压缩消息中提取结构化事实，直接注入 compact prompt（防幻觉）。
+
+        提取：
+        - Markdown 表格（实验数据、结果表等）
+        - 明确的约束条件（constraints / bounds / limits）
+        - 未完成任务标记（TODO / pending / open）
+        """
+        tables: list[str] = []
+        constraints: list[str] = []
+        open_tasks: list[str] = []
+
+        for msg in msgs_to_compress:
+            role = msg.role.value
+            content = msg.content or ''
+            if isinstance(content, list):
+                content = ' '.join(
+                    b.get('text', '') for b in content
+                    if isinstance(b, dict) and b.get('type') == 'text'
+                )
+            content_str = str(content)
+
+            # 只从 user 消息提取结构化事实（user 消息含任务描述、数据表格）
+            if role != 'user':
+                continue
+
+            # 提取 Markdown 表格（连续的 | 行）
+            table_lines: list[str] = []
+            in_table = False
+            for line in content_str.splitlines():
+                stripped = line.strip()
+                if stripped.startswith('|') and stripped.endswith('|'):
+                    table_lines.append(line)
+                    in_table = True
+                else:
+                    if in_table and table_lines:
+                        tables.append('\n'.join(table_lines))
+                        table_lines = []
+                    in_table = False
+            if in_table and table_lines:
+                tables.append('\n'.join(table_lines))
+
+            # 提取约束条件行（含关键词）
+            constraint_keywords = re.compile(
+                r'\b(constraint|bound|limit|range|must|should not|≤|≥|<|>|at\.%|wt\.%|ppm)',
+                re.IGNORECASE,
+            )
+            for line in content_str.splitlines():
+                if constraint_keywords.search(line) and len(line.strip()) > 10:
+                    constraints.append(line.strip())
+
+            # 提取未完成任务（TODO / pending / open / step N）
+            open_task_keywords = re.compile(
+                r'\b(TODO|pending|open|step\s+\d+|task\s+\d+|next[:\s])',
+                re.IGNORECASE,
+            )
+            for line in content_str.splitlines():
+                if open_task_keywords.search(line) and len(line.strip()) > 10:
+                    open_tasks.append(line.strip())
+
+        parts: list[str] = []
+
+        if tables:
+            # 最多保留前 3 张表（避免 prompt 过长）
+            parts.append('## Key Data Tables (extracted, do NOT modify)\n' + '\n\n'.join(tables[:3]))
+
+        if constraints:
+            # 去重，最多 20 条
+            seen: set[str] = set()
+            unique_constraints = []
+            for c in constraints:
+                if c not in seen:
+                    seen.add(c)
+                    unique_constraints.append(c)
+            parts.append(
+                '## Constraints / Bounds (extracted, do NOT modify)\n'
+                + '\n'.join(f'- {c}' for c in unique_constraints[:20])
+            )
+
+        if open_tasks:
+            seen_tasks: set[str] = set()
+            unique_tasks = []
+            for t in open_tasks:
+                if t not in seen_tasks:
+                    seen_tasks.add(t)
+                    unique_tasks.append(t)
+            parts.append(
+                '## Open Tasks (extracted, do NOT modify)\n'
+                + '\n'.join(f'- {t}' for t in unique_tasks[:10])
+            )
+
+        if not parts:
+            return ''
+        return '\n\n'.join(parts)
+
+    def _truncate_message_content(self, role: str, content_str: str) -> str:
+        """P2: 按角色分级截断消息内容，保护 Markdown 表格 / JSON / 代码块。
+
+        截断规则：
+        1. 优先保留 Markdown 表格（完整行）
+        2. 优先保留 JSON 对象的前 N 字符（不在中间截断）
+        3. 按角色设定不同上限
+        """
+        limit = self._ROLE_CHAR_LIMITS.get(role, 1500)
+
+        if len(content_str) <= limit:
+            return content_str
+
+        # 检测是否含 Markdown 表格：若含表格，尝试保留完整表格 + 截断其余
+        lines = content_str.splitlines()
+        table_end_idx = -1
+        in_table = False
+        for idx, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith('|') and stripped.endswith('|'):
+                in_table = True
+                table_end_idx = idx
+            elif in_table:
+                # 表格结束
+                break
+
+        if table_end_idx >= 0:
+            # 保留到表格结束行，再加上剩余内容（截断到 limit）
+            table_text = '\n'.join(lines[: table_end_idx + 1])
+            remaining = '\n'.join(lines[table_end_idx + 1 :])
+            remaining_limit = max(0, limit - len(table_text) - 1)
+            if remaining_limit > 0 and remaining:
+                return table_text + '\n' + remaining[:remaining_limit] + '...(truncated)'
+            return table_text
+
+        # 无表格：直接按 limit 截断
+        return content_str[:limit] + '...(truncated)'
+
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
     def _build_compaction_prompt(
         self,
         messages_to_compress: list['Message'],
         artifacts_block: str,
+<<<<<<< HEAD
         n_compressed: int,
         n_next: int,
     ) -> str:
         """构建发给 LLM 的压缩 prompt。"""
         # 序列化待压缩消息（只取 text content，截断超长内容）
+=======
+        structured_facts_block: str,
+        n_turns: int,
+        n_next: int,
+    ) -> str:
+        """P2+P3: 构建发给 LLM 的压缩 prompt。
+
+        - 按角色分级截断消息内容（保护表格/JSON）
+        - 注入结构化事实块（Key Data Tables / Constraints / Open Tasks）
+        """
+        # 序列化待压缩消息（按角色分级截断）
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
         msg_lines: list[str] = []
         for msg in messages_to_compress:
             role = msg.role.value
@@ -231,24 +644,50 @@ Step {n_compressed} completed. Next: Step {n_next} — {{next_goal}}
                     if isinstance(b, dict) and b.get('type') == 'text'
                 )
             content_str = str(content)
+<<<<<<< HEAD
             if len(content_str) > 500:
                 content_str = content_str[:500] + '...(truncated)'
+=======
+            # P2: 按角色分级截断，保护表格
+            content_str = self._truncate_message_content(role, content_str)
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
             msg_lines.append(f'[{role}]: {content_str}')
         history_text = '\n'.join(msg_lines)
 
         schema = self._COMPACT_SCHEMA.format(
+<<<<<<< HEAD
             n_compressed=n_compressed,
+=======
+            n_turns=n_turns,
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
             artifacts_block=artifacts_block,
             n_next=n_next,
         )
 
+<<<<<<< HEAD
+=======
+        # P3: 若有结构化事实块，附加到 prompt
+        structured_section = ''
+        if structured_facts_block:
+            structured_section = (
+                f'\nPRE-EXTRACTED STRUCTURED FACTS (Python-injected, do NOT hallucinate or modify):\n'
+                f'{structured_facts_block}\n'
+            )
+
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
         return (
             f'You are a context compressor. Summarize the following conversation history '
             f'into a compact context block. You MUST follow the exact schema below.\n\n'
             f'IMPORTANT: The "## Produced Artifacts" section is pre-filled — do NOT modify '
             f'file paths. Only fill in the other sections.\n\n'
+<<<<<<< HEAD
             f'SCHEMA TO FOLLOW:\n{schema}\n\n'
             f'CONVERSATION HISTORY TO COMPRESS ({n_compressed} messages):\n'
+=======
+            f'SCHEMA TO FOLLOW:\n{schema}\n'
+            f'{structured_section}\n'
+            f'CONVERSATION HISTORY TO COMPRESS ({n_turns} turns, {len(messages_to_compress)} messages):\n'
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
             f'{history_text}\n\n'
             f'Now produce the compact context block following the schema exactly.'
         )
@@ -268,6 +707,11 @@ class ContextManager:
         self._token_counter: TokenCounter | None = None
         # C.4 — ContextCompactor 实例（由外部注入，默认 None）
         self._compactor: ContextCompactor | None = None
+<<<<<<< HEAD
+=======
+        # Feature A: compact 生命周期事件回调（由 StreamingMatMasterAgent 注入）
+        self._on_compact_event: 'Callable[[dict], None] | None' = None
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
 
     def set_token_counter(self, counter: 'TokenCounter') -> None:
         """设置 token 计数器"""
@@ -278,12 +722,35 @@ class ContextManager:
         """注入 ContextCompactor 实例（由 MatMasterAgent.__init__ 调用）。"""
         self._compactor = compactor
 
+<<<<<<< HEAD
     def should_compact(self, dialog: Dialog) -> bool:
         """判断是否需要 compact（比 should_truncate 更早触发，仅按 token 数判断）。"""
         cfg = self.config.compaction
         if not cfg.enabled:
             return False
         return self.estimate_tokens(dialog) > cfg.trigger_tokens
+=======
+    def set_compact_event_callback(
+        self, cb: 'Callable[[dict], None]'
+    ) -> None:
+        """注入 compact 生命周期事件回调（由 StreamingMatMasterAgent.__init__ 调用）。
+
+        cb(payload) 在 compact started/finished/skipped/failed 时被调用。
+        payload 结构：{'type': 'context_compaction', 'status': ..., ...}
+        """
+        self._on_compact_event = cb
+
+    def should_compact(self, dialog: Dialog) -> bool:
+        """判断是否需要 compact（比 should_truncate 更早触发，仅按 token 数判断）。
+
+        P0: trigger_tokens 改为动态计算（context_window_tokens * trigger_ratio）。
+        """
+        cfg = self.config.compaction
+        if not cfg.enabled:
+            return False
+        effective_trigger = cfg.effective_trigger_tokens()
+        return self.estimate_tokens(dialog) > effective_trigger
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
 
     def estimate_tokens(self, dialog: Dialog) -> int:
         """估算对话的 token 数
@@ -503,7 +970,16 @@ class ContextManager:
         if not cfg.enabled or self._compactor is None:
             return self._truncate_latest_half(dialog)
         try:
+<<<<<<< HEAD
             return self._compactor.compact(dialog)
+=======
+            # P1/P4/P5: 传入 context_manager 以支持 token 估算；Feature A: 传入 on_event 回调
+            return self._compactor.compact(
+                dialog,
+                context_manager=self,
+                on_event=self._on_compact_event,
+            )
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
         except Exception as e:
             _logger.warning(
                 'ContextCompactor.compact failed (%s); falling back to %s',
@@ -519,7 +995,18 @@ class ContextManager:
 
         检查并在必要时截断对话。compact 优先于 truncate（token 阈值更低，更早触发）。
         循环直到 token 数低于限制或无法继续压缩/截断。
+<<<<<<< HEAD
         """
+=======
+
+        P0: should_compact 使用动态 trigger_tokens（context_window_tokens * trigger_ratio）。
+        P5: 记录 prepare_for_query 入口 token 数。
+        """
+        # P5: 记录入口 token 数
+        tokens_entry = self.estimate_tokens(dialog)
+        _logger.debug('prepare_for_query: entry tokens=%d', tokens_entry)
+
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
         # C.6 — compact 优先于 truncate
         max_iterations = 10
         for _ in range(max_iterations):
@@ -529,6 +1016,14 @@ class ContextManager:
                 if len(compacted.messages) < len(dialog.messages):
                     dialog = compacted
                     continue
+<<<<<<< HEAD
+=======
+                # P1: compact 没有减少消息数（被跳过或无效），不再重试 compact
+                _logger.debug(
+                    'prepare_for_query: compact did not reduce messages (skipped or ineffective), '
+                    'falling through to truncate'
+                )
+>>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
             if not self.should_truncate(dialog):
                 break
             truncated = self.truncate(dialog)
@@ -536,6 +1031,15 @@ class ContextManager:
             if len(truncated.messages) >= len(dialog.messages):
                 break
             dialog = truncated
+
+        tokens_exit = self.estimate_tokens(dialog)
+        if tokens_exit != tokens_entry:
+            _logger.info(
+                'prepare_for_query: tokens %d → %d (saved %d)',
+                tokens_entry,
+                tokens_exit,
+                tokens_entry - tokens_exit,
+            )
         return dialog
 
 
