@@ -1537,29 +1537,29 @@ class MatToolCallbacks:
         if info.get('error') is not None:
             return observation, info
 
-        # after_clean_sn_response may return a dict; normalise to str before appending
-        if isinstance(observation, dict):
-            observation = json.dumps(observation, ensure_ascii=False)
+        # Keep observation as dict so _format_tool_observation can emit observation as object
+        # in tool_result; put reminder in info so it is still included in the payload for the LLM.
+        obj = observation if isinstance(observation, dict) else None
+        if obj is None and isinstance(observation, str):
+            try:
+                obj = json.loads(observation)
+            except (json.JSONDecodeError, TypeError):
+                pass
 
         n_papers = ''
         zero_results = False
-        try:
-            obj = json.loads(observation)
-            if isinstance(obj, dict):
-                # paper search tools return data[]
-                if 'data' in obj and isinstance(obj['data'], list):
-                    n_papers = str(len(obj['data']))
-                    zero_results = len(obj['data']) == 0
-                # web search tools return results[]
-                elif 'results' in obj and isinstance(obj['results'], list):
-                    n_papers = str(len(obj['results']))
-                    zero_results = len(obj['results']) == 0
-        except (json.JSONDecodeError, TypeError):
-            pass
+        if isinstance(obj, dict):
+            # paper search tools return data[]
+            if 'data' in obj and isinstance(obj['data'], list):
+                n_papers = str(len(obj['data']))
+                zero_results = len(obj['data']) == 0
+            # web search tools return results[]
+            elif 'results' in obj and isinstance(obj['results'], list):
+                n_papers = str(len(obj['results']))
+                zero_results = len(obj['results']) == 0
 
         call_count = info.get('call_count', '?')
         if zero_results:
-            # Empty results: advise switching tool or method, not retrying the same one
             reminder = (
                 f"\n\n[Survey reminder: 0 results returned by {tool_name} (retrieval #{call_count}). "
                 'Do NOT retry the same tool with the same query. '
@@ -1571,7 +1571,8 @@ class MatToolCallbacks:
                 'A thorough survey requires at least 6-15 retrievals; if results are sparse, '
                 'vary your query and use a different available search tool or method.]'
             )
-        return observation + reminder, info
+        info = {**info, 'survey_reminder': reminder}
+        return observation, info
 
     def after_normalize_struct_db_metadata(
         self,
