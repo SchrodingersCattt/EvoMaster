@@ -150,14 +150,38 @@ export function buildPlannerViewModel(entries: LogEntry[]): PlannerViewModel {
       continue;
     }
 
-    // ── Status stages → new step ──
+    // ── Status stages → new step (start) or step done ──
     if (e.type === "status_stages") {
       const c = e.content as {
         total?: number;
         current?: number;
         step_id?: number;
         intent?: string;
+        status?: string;
       } | null;
+
+      // status:'done' — step completed; clear currentStep so the outline
+      // shows no active step until the next step's status_stages arrives.
+      // This fixes the "Step X/Y stuck" issue when step N finishes but
+      // step N+1 hasn't started yet.
+      if (c?.status === "done") {
+        // Find the matching step and mark it as no longer current
+        const doneId = c?.step_id ?? c?.current;
+        if (doneId !== undefined) {
+          for (const rev of revisions) {
+            for (const s of rev.steps) {
+              if (s.stepNumber === doneId) {
+                s.isCurrent = false;
+              }
+            }
+          }
+        }
+        // Clear the active step pointer so Step X/Y badge disappears
+        // between steps (avoids stale display)
+        currentStep = null;
+        currentStepNum = null;
+        continue;
+      }
 
       const stepNum = c?.current ?? (currentRevision.steps.length + 1);
       totalSteps = c?.total ?? totalSteps;

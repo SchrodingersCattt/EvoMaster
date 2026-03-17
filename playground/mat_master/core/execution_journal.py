@@ -79,8 +79,14 @@ class ExecutionJournal:
             self._entries.append(entry)
             self._flush_one(entry)
 
-    def get_compact_summary(self) -> str:
-        """Return a short progress text (~200-300 tokens) for periodic reminders."""
+    def get_compact_summary(self, include_details: bool = False) -> str:
+        """Return a short progress text (~200-300 tokens) for periodic reminders.
+
+        Args:
+            include_details: If True, include per-step summaries for compact message
+                generation (used by ContextCompactor). Default False keeps the existing
+                ~200-300 token format and is fully backward-compatible.
+        """
         with self._lock:
             entries = list(self._entries)
 
@@ -120,6 +126,13 @@ class ExecutionJournal:
             lines.append('Files: ' + ', '.join(display_files))
         if last_error:
             lines.append(f'Last error: {last_error}')
+        # C.9 — include_details: per-step summaries for ContextCompactor
+        if include_details:
+            detail_lines = [
+                f'  Step {e["step"]} [{e["tool"]}] {e["status"]}: {e["summary"][:150]}'
+                for e in entries[-30:]  # 最近 30 条
+            ]
+            lines.append('Recent steps:\n' + '\n'.join(detail_lines))
         return '\n'.join(lines)
 
     def get_execution_details_md(self) -> str:
