@@ -119,7 +119,7 @@ class ContextCompactor:
 
     compact() 方法：
     1. 从 dialog 中提取 system 消息（保留）+ 最近 preserve_recent_turns 轮（保留）
-    2. 把中间历史 + execution_journal.get_compact_summary(include_details=True) 发给 LLM 生成摘要
+    2. 把中间历史发给 LLM 生成摘要；execution_journal 摘要作为权威事实一并注入
     3. 摘要格式强制包含：
        - ## Summary of Prior Work
        - ## Produced Artifacts（文件路径列表，从 execution_journal 注入，防幻觉）
@@ -127,11 +127,9 @@ class ContextCompactor:
        - ## Current Status
     4. 返回新 Dialog：[system messages] + [COMPACT CONTEXT system msg] + [recent turns]
 
-    P1: compact() 前检查 compressible tokens 比例，不足时直接返回原 dialog（跳过无效压缩）。
-    P2: _build_compaction_prompt() 按角色分级截断，保护 Markdown 表格 / JSON / 代码块。
-    P3: 结构化注入 Key User Data / Constraints / Open Tasks。
-    P4: 动态调整 preserve_recent_turns（token 压力大时自动缩减）。
-    P5: n_compressed 改为 assistant transaction 数；增加 compact 前后 token 日志。
+    压缩前会检查 compressible tokens 占比，不足时直接返回原 dialog。
+    _build_compaction_prompt() 按角色分级截断消息内容，保护 Markdown 表格 / JSON。
+    preserve_recent_turns 在 token 压力极大时自动缩减。
     """
 
     # Compact message 格式模板（注入到 prompt 中强制 LLM 遵守）
@@ -153,7 +151,7 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
 ## Errors / Warnings
 {{list failed steps with reasons; omit section if none}}"""
 
-    # P2: 按角色分级的截断上限（字符数）
+    # 按角色分级的截断上限（字符数）——压缩 prompt 中用于控制单条消息长度
     _ROLE_CHAR_LIMITS: dict[str, int] = {
         'user': 8000,       # 用户消息可能含数据表格，放宽
         'assistant': 2000,  # assistant 思考/规划文本
@@ -277,13 +275,25 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
         # 3. 构建 artifacts block（防幻觉：由 Python 注入，LLM 只能引用）
         artifacts_block = self._build_artifacts_block()
 
-        # P3: 构建结构化事实块（Key User Data / Constraints / Open Tasks）
-        # 同时扫描 pinned_first_user（原始任务 query），确保任务里的表格/约束/open tasks 也被提取
+        # 构建结构化事实块（表格/约束/open tasks/tool 输出关键值）
+        # 同时扫描 pinned_first_user（原始任务 query），确保任务里的表格/约束也被提取
         structured_facts_block = self._build_structured_facts_block(
             pinned_first_user + msgs_to_compress
         )
 
-        # P5: 统计 assistant transaction 数（而非消息条数）
+        # 从 execution_journal 提取结构化执行摘要，注入 compaction prompt 作为权威事实。
+        # compaction LLM 能看到"哪些工具被调用了、哪些没有"，
+        # 无法在 ## Summary of Prior Work 中声称"已完成"从未执行的步骤。
+        journal_summary = ''
+        if self._execution_journal is not None:
+            try:
+                journal_summary = self._execution_journal.get_compact_summary(
+                    include_details=True
+                )
+            except Exception:
+                pass
+
+        # 统计 assistant transaction 数（而非消息条数）作为"轮次"
         n_turns = sum(1 for m in msgs_to_compress if m.role.value == 'assistant')
         if n_turns == 0:
             n_turns = len(msgs_to_compress)  # fallback：无 assistant 消息时用消息数
@@ -291,7 +301,8 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
 
         # 4. 构建压缩 prompt
         compaction_prompt = self._build_compaction_prompt(
-            msgs_to_compress, artifacts_block, structured_facts_block, n_turns, n_next
+            msgs_to_compress, artifacts_block, structured_facts_block,
+            n_turns, n_next, journal_summary=journal_summary,
         )
 
         # 5. 调用 LLM 生成摘要
@@ -400,16 +411,42 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
             return '(artifacts unavailable)'
 
     def _build_structured_facts_block(self, msgs_to_compress: list['Message']) -> str:
-        """P3: 从待压缩消息中提取结构化事实，直接注入 compact prompt（防幻觉）。
+        """从待压缩消息中提取结构化事实，直接注入 compact prompt（防幻觉）。
 
-        提取：
-        - Markdown 表格（实验数据、结果表等）
-        - 明确的约束条件（constraints / bounds / limits）
-        - 未完成任务标记（TODO / pending / open）
+        提取来源：
+        - user 消息：Markdown 表格、约束条件、未完成任务标记
+        - tool 消息：数值键值对、DOI、文件路径、空输出检测
+          空输出检测是关键：若工具返回空内容，记录 [EMPTY OUTPUT]，
+          compaction LLM 无法声称该工具"已成功提取数据"。
         """
+        import json as _json
+
         tables: list[str] = []
         constraints: list[str] = []
         open_tasks: list[str] = []
+        # tool 消息提取的键值对（数值/DOI/路径/空输出）
+        tool_key_values: list[str] = []
+
+        # 预编译正则（tool 消息提取用）
+        _doi_re = re.compile(r'10\.\d{4,}/\S+')
+        _path_re = re.compile(r'(?:^|[\s"\'])(/[\w./\-_]+\.[\w]+|\.\/[\w./\-_]+\.[\w]+)')
+        _numeric_key_re = re.compile(
+            r'"([\w_]*(Ps|Pr|Tc|value|result|score|energy|bandgap|'
+            r'polarization|coercive|temperature|conductivity|permittivity'
+            r'|dielectric|piezo|ferro|pyro|coupling|strain|stress|modulus'
+            r'|density|formula|material|compound|doi|title|author)[^"]*)"'
+            r'\s*:\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|"[^"]{1,120}")',
+            re.IGNORECASE,
+        )
+
+        constraint_keywords = re.compile(
+            r'\b(constraint|bound|limit|range|must|should not|≤|≥|<|>|at\.%|wt\.%|ppm)',
+            re.IGNORECASE,
+        )
+        open_task_keywords = re.compile(
+            r'\b(TODO|pending|open|step\s+\d+|task\s+\d+|next[:\s])',
+            re.IGNORECASE,
+        )
 
         for msg in msgs_to_compress:
             role = msg.role.value
@@ -421,43 +458,79 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
                 )
             content_str = str(content)
 
-            # 只从 user 消息提取结构化事实（user 消息含任务描述、数据表格）
-            if role != 'user':
-                continue
+            # ── user 消息：原有提取逻辑 ──────────────────────────────────────
+            if role == 'user':
+                # 提取 Markdown 表格（连续的 | 行）
+                table_lines: list[str] = []
+                in_table = False
+                for line in content_str.splitlines():
+                    stripped = line.strip()
+                    if stripped.startswith('|') and stripped.endswith('|'):
+                        table_lines.append(line)
+                        in_table = True
+                    else:
+                        if in_table and table_lines:
+                            tables.append('\n'.join(table_lines))
+                            table_lines = []
+                        in_table = False
+                if in_table and table_lines:
+                    tables.append('\n'.join(table_lines))
 
-            # 提取 Markdown 表格（连续的 | 行）
-            table_lines: list[str] = []
-            in_table = False
-            for line in content_str.splitlines():
-                stripped = line.strip()
-                if stripped.startswith('|') and stripped.endswith('|'):
-                    table_lines.append(line)
-                    in_table = True
+                # 提取约束条件行
+                for line in content_str.splitlines():
+                    if constraint_keywords.search(line) and len(line.strip()) > 10:
+                        constraints.append(line.strip())
+
+                # 提取未完成任务
+                for line in content_str.splitlines():
+                    if open_task_keywords.search(line) and len(line.strip()) > 10:
+                        open_tasks.append(line.strip())
+
+            # ── tool 消息（Fix A）：提取数值事实 + 空输出检测 ─────────────────
+            elif role == 'tool':
+                # 空输出检测：observation 为空字符串，或 JSON 中 observation 字段为空
+                stripped = content_str.strip()
+                is_empty = False
+                if not stripped:
+                    is_empty = True
                 else:
-                    if in_table and table_lines:
-                        tables.append('\n'.join(table_lines))
-                        table_lines = []
-                    in_table = False
-            if in_table and table_lines:
-                tables.append('\n'.join(table_lines))
+                    try:
+                        parsed = _json.loads(stripped)
+                        obs = parsed.get('observation', _SENTINEL := object())
+                        if obs is not _SENTINEL and (obs == '' or obs is None):
+                            is_empty = True
+                    except Exception:
+                        pass
 
-            # 提取约束条件行（含关键词）
-            constraint_keywords = re.compile(
-                r'\b(constraint|bound|limit|range|must|should not|≤|≥|<|>|at\.%|wt\.%|ppm)',
-                re.IGNORECASE,
-            )
-            for line in content_str.splitlines():
-                if constraint_keywords.search(line) and len(line.strip()) > 10:
-                    constraints.append(line.strip())
+                # 尝试从 tool_call_id 或消息元数据中获取工具名（不一定有，降级为 'tool'）
+                tool_label = getattr(msg, 'tool_call_id', None) or 'tool'
 
-            # 提取未完成任务（TODO / pending / open / step N）
-            open_task_keywords = re.compile(
-                r'\b(TODO|pending|open|step\s+\d+|task\s+\d+|next[:\s])',
-                re.IGNORECASE,
-            )
-            for line in content_str.splitlines():
-                if open_task_keywords.search(line) and len(line.strip()) > 10:
-                    open_tasks.append(line.strip())
+                if is_empty:
+                    tool_key_values.append(
+                        f'[{tool_label}]: [EMPTY OUTPUT — tool returned no data; '
+                        f'do NOT claim results from this call exist]'
+                    )
+                else:
+                    # 提取数值键值对（最多 10 个，避免 prompt 膨胀）
+                    kv_matches = _numeric_key_re.findall(content_str)
+                    if kv_matches:
+                        # findall returns (full_key, subword_match, value) — use full_key and value
+                        kv_items = [f'{k}={val}' for k, _sub, val in kv_matches[:10]]
+                        tool_key_values.append(f'[{tool_label}] key values: ' + ', '.join(kv_items))
+
+                    # 提取 DOI
+                    dois = _doi_re.findall(content_str)
+                    if dois:
+                        tool_key_values.append(
+                            f'[{tool_label}] DOIs: ' + ', '.join(dict.fromkeys(dois[:5]))
+                        )
+
+                    # 提取文件路径
+                    paths = _path_re.findall(content_str)
+                    if paths:
+                        tool_key_values.append(
+                            f'[{tool_label}] paths: ' + ', '.join(dict.fromkeys(paths[:5]))
+                        )
 
         parts: list[str] = []
 
@@ -488,6 +561,19 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
             parts.append(
                 '## Open Tasks (extracted, do NOT modify)\n'
                 + '\n'.join(f'- {t}' for t in unique_tasks[:10])
+            )
+
+        # Fix A: tool 消息提取的键值（含空输出标记）
+        if tool_key_values:
+            seen_kv: set[str] = set()
+            unique_kv = []
+            for kv in tool_key_values:
+                if kv not in seen_kv:
+                    seen_kv.add(kv)
+                    unique_kv.append(kv)
+            parts.append(
+                '## Tool Output Key Values (Python-extracted, do NOT modify or hallucinate)\n'
+                + '\n'.join(f'- {kv}' for kv in unique_kv[:30])
             )
 
         if not parts:
@@ -539,11 +625,13 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
         structured_facts_block: str,
         n_turns: int,
         n_next: int,
+        journal_summary: str = '',
     ) -> str:
-        """P2+P3: 构建发给 LLM 的压缩 prompt。
+        """构建发给 LLM 的压缩 prompt。
 
         - 按角色分级截断消息内容（保护表格/JSON）
-        - 注入结构化事实块（Key Data Tables / Constraints / Open Tasks）
+        - 注入结构化事实块（Key Data Tables / Constraints / Open Tasks / Tool Output Key Values）
+        - 注入 execution_journal 结构化摘要作为权威事实（LLM 不得与之矛盾）
         """
         # 序列化待压缩消息（按角色分级截断）
         msg_lines: list[str] = []
@@ -556,7 +644,7 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
                     if isinstance(b, dict) and b.get('type') == 'text'
                 )
             content_str = str(content)
-            # P2: 按角色分级截断，保护表格
+            # 按角色分级截断，保护表格
             content_str = self._truncate_message_content(role, content_str)
             msg_lines.append(f'[{role}]: {content_str}')
         history_text = '\n'.join(msg_lines)
@@ -567,12 +655,24 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
             n_next=n_next,
         )
 
-        # P3: 若有结构化事实块，附加到 prompt
+        # 若有结构化事实块，附加到 prompt
         structured_section = ''
         if structured_facts_block:
             structured_section = (
                 f'\nPRE-EXTRACTED STRUCTURED FACTS (Python-injected, do NOT hallucinate or modify):\n'
                 f'{structured_facts_block}\n'
+            )
+
+        # 注入 execution_journal 摘要作为权威事实
+        # LLM 必须以此为准，不得在摘要中声称执行了 journal 中不存在的步骤
+        journal_section = ''
+        if journal_summary:
+            journal_section = (
+                f'\nEXECUTION JOURNAL (Python-injected, authoritative — do NOT contradict):\n'
+                f'{journal_summary}\n'
+                f'IMPORTANT: Your ## Summary of Prior Work and ## Key Findings MUST be consistent '
+                f'with the above journal. If a tool does not appear in the journal, it was NEVER '
+                f'called — do NOT claim its results exist.\n'
             )
 
         return (
@@ -581,7 +681,8 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
             f'IMPORTANT: The "## Produced Artifacts" section is pre-filled — do NOT modify '
             f'file paths. Only fill in the other sections.\n\n'
             f'SCHEMA TO FOLLOW:\n{schema}\n'
-            f'{structured_section}\n'
+            f'{structured_section}'
+            f'{journal_section}\n'
             f'CONVERSATION HISTORY TO COMPRESS ({n_turns} turns, {len(messages_to_compress)} messages):\n'
             f'{history_text}\n\n'
             f'Now produce the compact context block following the schema exactly.'
