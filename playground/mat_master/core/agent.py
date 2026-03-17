@@ -932,6 +932,24 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
             # Record tool outcome in the execution journal (skip finish — handled separately).
             # Note: recorded before run_after so the raw observation is captured; the journal
             # is used for artifact tracking, not for LLM context.
+            #
+            # str_replace_editor is not in _tool_output_auto_save_patterns, so its created files
+            # would never appear in execution_journal.saved_path. Inject the path explicitly so
+            # _build_artifacts_block() can list it under ## Produced Artifacts.
+            if tool_name == 'str_replace_editor' and 'error' not in info:
+                try:
+                    _editor_args = (
+                        json.loads(tool_args) if isinstance(tool_args, str) else tool_args
+                    )
+                    if (
+                        isinstance(_editor_args, dict)
+                        and _editor_args.get('command') == 'create'
+                        and _editor_args.get('path')
+                    ):
+                        info = {**info, 'auto_saved_path': _editor_args['path']}
+                except Exception:
+                    pass
+
             if tool_name != 'finish':
                 self._execution_journal.record(
                     step=self._step_count,
