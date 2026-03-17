@@ -552,14 +552,12 @@ class OpenAILLM(BaseLLM):
     ) -> AssistantMessage:
         """OpenAI 流式查询实现，使用 stream=True 逐 token 回调。
 
-        注意：流式模式下不支持工具调用（tool_calls），若 dialog 包含 tools，
-        则回退到非流式 query()。
+        同时支持工具调用（tool_calls）：文本 delta 实时通过 on_token 推送，
+        tool_call delta 按 index 累积，流结束后组装为完整 AssistantMessage。
+        这避免了 dialog.tools 非空时回退到阻塞 query() 导致前端卡死的问题。
         """
-        # 若有工具定义，回退到非流式（流式 + tool_calls 解析复杂，暂不支持）
-        if dialog.tools:
-            return super().query_stream(dialog, on_token=on_token, **kwargs)
-
         messages = dialog.get_messages_for_api()
+        tools = self._convert_tools(dialog.tools) if dialog.tools else None
 
         model = (
             _azure_deployment_name(self.config.model)
@@ -581,26 +579,69 @@ class OpenAILLM(BaseLLM):
                 request_params["max_completion_tokens"] = val
             else:
                 request_params["max_tokens"] = val
+        if tools:
+            request_params["tools"] = tools
+            request_params["tool_choice"] = kwargs.get("tool_choice", "auto")
+        if "response_format" in kwargs and kwargs["response_format"] is not None:
+            request_params["response_format"] = kwargs["response_format"]
 
         full_content: list[str] = []
+        # tool_call delta 按 index 累积：{index: {"id": str, "name": str, "arguments": str}}
+        tool_calls_acc: dict[int, dict[str, str]] = {}
+        finish_reason: str | None = None
+
         try:
             stream = self.client.chat.completions.create(**request_params)
             for chunk in stream:
                 if not chunk.choices:
                     continue
-                delta = chunk.choices[0].delta
+                choice = chunk.choices[0]
+                delta = choice.delta
                 if delta is None:
                     continue
-                token = delta.content or ""
-                if token:
-                    full_content.append(token)
+                # 记录 finish_reason（最后一个非 None 的值）
+                if choice.finish_reason is not None:
+                    finish_reason = choice.finish_reason
+                # 文本 token → 实时推送
+                if delta.content:
+                    full_content.append(delta.content)
                     if on_token is not None:
-                        on_token(token)
+                        on_token(delta.content)
+                # tool_call delta → 按 index 累积
+                if delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in tool_calls_acc:
+                            tool_calls_acc[idx] = {"id": "", "name": "", "arguments": ""}
+                        if tc_delta.id:
+                            tool_calls_acc[idx]["id"] = tc_delta.id
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                tool_calls_acc[idx]["name"] += tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                tool_calls_acc[idx]["arguments"] += tc_delta.function.arguments
         except Exception as e:
             self.logger.warning("OpenAI stream failed, falling back to query(): %s", e)
             return super().query_stream(dialog, on_token=on_token, **kwargs)
 
-        return AssistantMessage(content="".join(full_content))
+        # 组装 tool_calls（按 index 排序保证顺序）
+        tool_calls: list[ToolCall] | None = None
+        if tool_calls_acc:
+            tool_calls = [
+                ToolCall(
+                    id=v["id"],
+                    type="function",
+                    function=FunctionCall(name=v["name"], arguments=v["arguments"]),
+                )
+                for _, v in sorted(tool_calls_acc.items())
+            ]
+
+        content = "".join(full_content) or None
+        return AssistantMessage(
+            content=content,
+            tool_calls=tool_calls,
+            meta={"finish_reason": finish_reason},
+        )
 
 
 class DeepSeekLLM(BaseLLM):
@@ -817,14 +858,17 @@ class DeepSeekLLM(BaseLLM):
     ) -> AssistantMessage:
         """DeepSeek 流式查询实现（兼容 OpenAI SDK，使用 stream=True）。
 
-        注意：流式模式下不支持工具调用（tool_calls），若 dialog 包含 tools，
-        则回退到非流式 query()。
+        同时支持工具调用（tool_calls）：文本 delta 实时通过 on_token 推送，
+        tool_call delta 按 index 累积，流结束后组装为完整 AssistantMessage。
+        Completion API 模式不支持流式，仍回退到非流式 query()。
         """
-        # 若有工具定义或使用 Completion API，回退到非流式
-        if dialog.tools or self.config.use_completion_api:
+        # Completion API 不支持流式
+        if self.config.use_completion_api:
             return super().query_stream(dialog, on_token=on_token, **kwargs)
 
         messages = dialog.get_messages_for_api()
+        tools = self._convert_tools(dialog.tools) if dialog.tools else None
+
         request_params: dict[str, Any] = {
             "model": self.config.model,
             "messages": messages,
@@ -834,26 +878,77 @@ class DeepSeekLLM(BaseLLM):
         }
         if self.config.max_tokens:
             request_params["max_tokens"] = kwargs.get("max_tokens", self.config.max_tokens)
+        if tools:
+            # 清理 tools 中的 None 值（如 strict=None），某些 API 不接受 None
+            cleaned_tools = []
+            for tool in tools:
+                cleaned_tool = tool.copy()
+                if "function" in cleaned_tool and isinstance(cleaned_tool["function"], dict):
+                    cleaned_function = cleaned_tool["function"].copy()
+                    if cleaned_function.get("strict") is None:
+                        cleaned_function.pop("strict", None)
+                    cleaned_tool["function"] = cleaned_function
+                cleaned_tools.append(cleaned_tool)
+            request_params["tools"] = cleaned_tools
+            request_params["tool_choice"] = kwargs.get("tool_choice", "auto")
 
         full_content: list[str] = []
+        # tool_call delta 按 index 累积：{index: {"id": str, "name": str, "arguments": str}}
+        tool_calls_acc: dict[int, dict[str, str]] = {}
+        finish_reason: str | None = None
+
         try:
             stream = self.client.chat.completions.create(**request_params)
             for chunk in stream:
                 if not chunk.choices:
                     continue
-                delta = chunk.choices[0].delta
+                choice = chunk.choices[0]
+                delta = choice.delta
                 if delta is None:
                     continue
-                token = delta.content or ""
-                if token:
-                    full_content.append(token)
+                # 记录 finish_reason
+                if choice.finish_reason is not None:
+                    finish_reason = choice.finish_reason
+                # 文本 token → 实时推送
+                if delta.content:
+                    full_content.append(delta.content)
                     if on_token is not None:
-                        on_token(token)
+                        on_token(delta.content)
+                # tool_call delta → 按 index 累积
+                if delta.tool_calls:
+                    for tc_delta in delta.tool_calls:
+                        idx = tc_delta.index
+                        if idx not in tool_calls_acc:
+                            tool_calls_acc[idx] = {"id": "", "name": "", "arguments": ""}
+                        if tc_delta.id:
+                            tool_calls_acc[idx]["id"] = tc_delta.id
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                tool_calls_acc[idx]["name"] += tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                tool_calls_acc[idx]["arguments"] += tc_delta.function.arguments
         except Exception as e:
             self.logger.warning("DeepSeek stream failed, falling back to query(): %s", e)
             return super().query_stream(dialog, on_token=on_token, **kwargs)
 
-        return AssistantMessage(content="".join(full_content))
+        # 组装 tool_calls（按 index 排序保证顺序）
+        tool_calls: list[ToolCall] | None = None
+        if tool_calls_acc:
+            tool_calls = [
+                ToolCall(
+                    id=v["id"],
+                    type="function",
+                    function=FunctionCall(name=v["name"], arguments=v["arguments"]),
+                )
+                for _, v in sorted(tool_calls_acc.items())
+            ]
+
+        content = "".join(full_content) or None
+        return AssistantMessage(
+            content=content,
+            tool_calls=tool_calls,
+            meta={"finish_reason": finish_reason},
+        )
 
 
 class AnthropicLLM(BaseLLM):
