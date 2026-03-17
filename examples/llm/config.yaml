@@ -8,7 +8,9 @@ llm:
     base_url: "http://123.129.219.111:3000/v1"
     temperature: 0.7
     max_tokens: 16384
-    timeout: 300
+    timeout: 300              # 非流式整包超时（秒）；大模型长输出需要 2-3 分钟
+    stream_timeout: 20        # 流式首 token 超时（秒）；等多久没出字就报错；不填则回退到 timeout
+    stream_idle_timeout: 30   # 流式 chunk 间最大空闲（秒）；已开始流后，停顿超过此值则超时
     max_retries: 3
     retry_delay: 1.0
 
@@ -20,7 +22,9 @@ llm:
     base_url: "http://123.129.219.111:3000/v1"
     temperature: 0.8
     max_tokens: 16384
-    timeout: 300
+    timeout: 300              # 非流式整包超时（秒）
+    stream_timeout: 60        # 本地 vLLM 冷启动较慢，首 token 超时适当放宽
+    stream_idle_timeout: 60   # 本地模型生成可能有停顿，chunk 间隔保护适当放宽
     max_retries: 2
     retry_delay: 0.5
 
@@ -32,7 +36,9 @@ llm:
     base_url: "http://123.129.219.111:3000"
     temperature: 0.7
     max_tokens: 16384
-    timeout: 300
+    timeout: 300              # 非流式整包超时（秒）
+    stream_timeout: 20        # 流式首 token 超时（秒）
+    stream_idle_timeout: 30   # 流式 chunk 间最大空闲（秒）
     max_retries: 3
     retry_delay: 1.0
 
