@@ -206,7 +206,35 @@ def parse_args() -> argparse.Namespace:
 
 def load_json(path: Path) -> Any:
     with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        raw = f.read()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        pass
+    # Fallback: NDJSON (multiple JSON objects per file, one per line)
+    objects: list[Any] = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            objects.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    if not objects:
+        raise json.JSONDecodeError("No valid JSON found", str(path), 0)
+    if len(objects) == 1:
+        return objects[0]
+    # Merge multiple objects: flatten nested "data" lists into one
+    merged: list[Any] = []
+    for obj in objects:
+        if isinstance(obj, dict) and "data" in obj and isinstance(obj["data"], list):
+            merged.extend(obj["data"])
+        elif isinstance(obj, list):
+            merged.extend(obj)
+        elif isinstance(obj, dict):
+            merged.append(obj)
+    return {"data": merged} if merged else objects
 
 
 def _get_by_path(data: Any, path: str) -> Any:
@@ -510,7 +538,12 @@ def _resolve_input_paths(input_json: list[str], input_dir: str | None) -> list[P
         directory = Path(input_dir)
         if not directory.exists() or not directory.is_dir():
             raise FileNotFoundError(f"Input directory not found: {directory}")
-        paths.extend(sorted(directory.glob("*.json")))
+        direct = sorted(directory.glob("*.json"))
+        if direct:
+            paths.extend(direct)
+        else:
+            # Search results from mat_sn_* tools are saved in subdirectories
+            paths.extend(sorted(directory.glob("**/*.json")))
 
     unique_paths = []
     seen = set()
