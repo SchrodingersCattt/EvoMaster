@@ -805,6 +805,34 @@ function renderEntry(entry: LogEntry, isPlannerMode = false, source?: string): R
       </div>
     );
   }
+  if (entry.type === "context_compaction") {
+    const c = entry.content as {
+      status?: string;
+      tokens_before?: number;
+      tokens_after?: number;
+      tokens_saved?: number;
+      compressed_turns?: number;
+    } | null;
+    const status = c?.status ?? "finished";
+    if (status !== "finished") return null;
+    const before = c?.tokens_before;
+    const after = c?.tokens_after;
+    const saved = c?.tokens_saved ?? (before != null && after != null ? before - after : undefined);
+    const turns = c?.compressed_turns;
+    const label = [
+      "🗜 Context compacted",
+      before != null && after != null ? `${before.toLocaleString()} → ${after.toLocaleString()} tokens` : null,
+      saved != null ? `(−${saved.toLocaleString()})` : null,
+      turns != null ? `· ${turns} turns compressed` : null,
+    ].filter(Boolean).join(" ");
+    return (
+      <div className="flex justify-center my-1">
+        <span className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1 rounded-full font-medium bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300 max-w-[90%] truncate">
+          {label}
+        </span>
+      </div>
+    );
+  }
   return renderContent(entry.content);
 }
 
@@ -864,9 +892,9 @@ const MessageBubble = React.memo(function MessageBubble({
     );
   }
 
-  // tool_call/tool_result/planner_reply/execution_summary render with their own card styling.
+  // tool_call/tool_result/planner_reply/execution_summary/context_compaction render with their own card styling.
   // Skip the outer bubble wrapper to avoid "card inside card" double-boxing.
-  if (entry.type === "tool_call" || entry.type === "tool_result" || entry.type === "planner_reply" || entry.type === "execution_summary") {
+  if (entry.type === "tool_call" || entry.type === "tool_result" || entry.type === "planner_reply" || entry.type === "execution_summary" || entry.type === "context_compaction") {
     return (
       <div className="flex w-full justify-start">
         <div className="w-full max-w-[92%]">

@@ -124,8 +124,12 @@ export default function MatMasterView({
             // Allow System events like finish/error/cancelled through;
             // only drop ephemeral "status" messages (e.g. "Initializing...")
             if (msg.source === "System" && msg.type === "status") return prev;
-            // context_compaction events are consumed by StatusPanel; don't render as chat bubbles
-            if (msg.type === "context_compaction") return prev;
+            // context_compaction: only let "finished" through to chat (rendered as slim pill);
+            // drop started/skipped/failed — those are for StatusPanel only
+            if (msg.type === "context_compaction") {
+              const c = msg.content as { status?: string } | null;
+              if (!c || c.status !== "finished") return prev;
+            }
             return [...prev, msg];
           });
           if (msg.type === "planner_ask") {
@@ -255,12 +259,15 @@ export default function MatMasterView({
       .then((r) => (r.ok ? r.json() : []))
       .then((h: LogEntry[]) =>
         setLogs(
-          h.filter(
-            (e) =>
-              e.type !== "context_compaction" &&
-              e.type !== "llm_token" &&
-              e.type !== "log_line"
-          )
+          h.filter((e) => {
+            if (e.type === "llm_token" || e.type === "log_line") return false;
+            // context_compaction: only keep "finished" events for the slim pill
+            if (e.type === "context_compaction") {
+              const c = e.content as { status?: string } | null;
+              return c?.status === "finished";
+            }
+            return true;
+          })
         )
       )
       .catch(() => setLogs([]));
