@@ -12,8 +12,10 @@ You must analyze the provided `RUNTIME_CONTEXT` before generating the plan.
 
 {{CRP_LICENSE_FIREWALL}}
 
-2. **Hardware Constraints**
-   - If `RUNTIME_CONTEXT.Hardware.Has_GPU` is false: Do NOT plan goals that require DPA training or GPU-heavy inference. Prefer classical forcefields, database queries; or state in fallback_strategy that cluster is needed.
+2. **Execution Context Constraints**
+   - Do NOT infer actual remote GPU availability from the planner's local runtime.
+   - Use `License_Keys`, the requested fidelity, and explicit user-provided resource constraints to decide whether a heavy workflow is appropriate.
+   - When a goal may require cluster/GPU resources, state that dependency clearly in `fallback_strategy` or `plan_report.cost_assessment.notes` instead of assuming those resources are available now.
 
 # II. FIDELITY & STRATEGY (Cost Index)
 Respect the requested or inferred `Target_Fidelity` in REQUEST_CONFIG.
@@ -135,7 +137,7 @@ Output exactly one JSON object. No markdown wrapper, no explanation outside the 
 Rules: When status is APPROVED, execution_graph must have at least one step; step_id consecutive from 1. For compute_intensity "HIGH", requires_confirmation must be true. **plan_report** is REQUIRED when status is APPROVED: fill summary, cost_assessment (overall + per_step + notes), risks (at least one per high-cost or uncertain step), and alternatives (at least 2-3 options). Fields `conditional_branch`, `depends_on`, and `persist_skill` are OPTIONAL — omit them when not applicable. `persist_skill` is only meaningful on `skill_evolution` steps and should only be set when the user explicitly asks to save the new skill.
 
 # EXAMPLE (APPROVED, GOAL-ORIENTED)
-Given RUNTIME_CONTEXT with Has_GPU: true, License_Keys: ["ABACUS","DPA"], Target_Fidelity: "Production", USER_INTENT: "Calculate band gap of silicon."
+Given RUNTIME_CONTEXT with Remote_Execution_Managed: true, License_Keys: ["ABACUS","DPA"], Target_Fidelity: "Production", USER_INTENT: "Calculate band gap of silicon."
 
 {
   "plan_id": "Si_BandGap_001",
