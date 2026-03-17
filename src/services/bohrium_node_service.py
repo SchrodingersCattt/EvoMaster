@@ -5,6 +5,7 @@ run 结束时调用删除接口释放节点。删除接口若与文档不一致�
 host 由 constant.py 的 BOHRIUM_OPENAPI_HOST 提供（不含 /openapi/v1），请求时拼接版本路径。
 """
 
+import json
 import logging
 import os
 import time
@@ -72,9 +73,21 @@ class BohriumNodeService:
             'turnoffAfter': turnoff_after,
             'datasets': [],
         }
+        url = f"{self._host}/openapi/v1/node/add"
+        # 可直接复制的 curl（单引号已转义便于在 shell 中执行）
+        body_s = json.dumps(payload, ensure_ascii=False)
+        ak_esc = access_key.replace("'", "'\\''")
+        body_esc = body_s.replace("'", "'\\''")
+        curl_cmd = (
+            f"curl -X POST '{url}' "
+            f"-H 'accessKey: {ak_esc}' "
+            f"-H 'content-type: application/json' "
+            f"-d '{body_esc}'"
+        )
+        logger.info('Bohrium create node curl (copy to reproduce): %s', curl_cmd)
         with httpx.Client(timeout=60.0) as client:
             r = client.post(
-                f"{self._host}/openapi/v1/node/add",
+                url,
                 headers={
                     'accessKey': access_key,
                     'content-type': 'application/json',
@@ -85,6 +98,12 @@ class BohriumNodeService:
             data = r.json()
         code = data.get('code')
         if code != 0:
+            logger.error(
+                'Bohrium create node failed: code=%s response=%s curl (copy to reproduce): %s',
+                code,
+                data,
+                curl_cmd,
+            )
             raise RuntimeError(
                 f"Bohrium create node failed: code={code}, response={data}"
             )
