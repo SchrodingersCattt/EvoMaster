@@ -121,4 +121,5 @@ import sys  # 不要插在常量或代码中间
 - **服务重启**：新增或修改功能时需考虑服务重启场景。进程内内存（如 `SESSIONS`）在重启后会清空；若逻辑依赖跨请求的状态（如会话级鉴权、当前 run 所用资源），应区分「需持久化」与「仅当次 run 有效」：前者落库或共享存储，后者可保留在内存，并确保重启后新请求能从 DB/共享存储恢复必要信息继续工作。
 - **run_interrupted 与长任务**：API 通过 Redis 的 `session_run_owner` 与 `worker_alive` 判断 run 是否在别的 pod 上。`session_run_owner` 有 TTL（默认 7200s）；若 Worker 在 run 期间不刷新该 key，长任务超过 TTL 后 key 过期，用户刷新页面时 API 会看到 `run_owner=None`、DB 仍为 active，从而误判为 stale 并推送 run_interrupted。因此 Worker 心跳中除刷新 `worker_alive` 外，还需周期刷新当前 session 的 `session_run_owner` TTL（见 `agent_worker._worker_heartbeat_loop` 与 `WorkerRegistryService.refresh_session_run_owner`）。
 - **仅 Worker 队列模式**：run 只在 Worker 上执行，不再支持「在 API 进程内执行 run」。请求中的 `mode: 'direct' | 'planner'` 仅表示任务类型，与执行位置无关。发送消息（POST /stream）必须配置 `REDIS_URL`，否则返回 503。
+- **单文件行数**：若某源文件行数超过 1000 行，应进行重构（拆分为多个模块/子模块、抽取类或函数等），以利于维护与协作。
 - （可在此补充项目的其他通用约定，如测试、提交信息、目录结构等。）
