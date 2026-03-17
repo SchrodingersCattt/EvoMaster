@@ -21,10 +21,12 @@ from src.utils.constant import CURRENT_ENV
 from src.utils.feishu_notifier import (
     CARD_TEMPLATE_BLUE,
     CARD_TEMPLATE_GREEN,
+    CARD_TEMPLATE_ORANGE,
     CARD_TEMPLATE_RED,
     notify_post_async,
 )
-from src.utils.logger import LoggingConfig, setup_logging
+from src.utils.logger import LogContext, LoggingConfig, setup_logging
+from src.utils.support_notifier import send_session_complete_email_async
 from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
@@ -168,12 +170,20 @@ def _run_worker_loop() -> None:
             logger.warning('Agent worker: skip job with empty session_id')
             continue
 
+        LogContext.bind(session_id, task_id)
         session_user_id = sessions_service.get_session_user_id(session_id)
         user_info = UserService.get_user_info_for_display(session_user_id)
         user_info_display = (
             f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
         )
         redis_dao.delete_confirmation_reply_list(session_id)
+        # 清除可能残留的上一轮 stop key（含 session 级），避免上一轮 finally 中 delete 失败导致本轮一启动即被误判为已请求停止
+        logger.info(
+            'Agent worker: clear stop keys before run session_id=%s task_id=%s',
+            session_id,
+            task_id,
+        )
+        redis_dao.delete_stop_requested(session_id, task_id)
         redis_dao.set_confirmation_run_active(session_id)
         redis_dao.set_confirmation_run_context(session_id, task_id, invocation_id or '')
 
@@ -207,10 +217,12 @@ def _run_worker_loop() -> None:
                     fail_reason or 'unknown',
                 )
                 redis_dao.delete_confirmation_run_active(session_id)
+                LogContext.clear()
                 continue
 
             acquired = True
             _current_session_id = session_id
+            run_start_time = time.monotonic()
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
             session_url = _session_url(session_id)
@@ -232,6 +244,7 @@ def _run_worker_loop() -> None:
             )
             run_success = True
             fail_reason: str | None = None
+            elapsed_ms: int | None = None
             try:
                 result = agent_run_service.run_agent_sync(
                     session_id=session_id,
@@ -246,7 +259,28 @@ def _run_worker_loop() -> None:
                     llm_override=llm_override,
                     model_override=model_override,
                 )
-                run_success = result is not False
+                # run_agent_sync 统一返回 (run_result, elapsed_ms)。run_result 可为 True、False 或 (False, reason)
+                run_result = (
+                    result[0]
+                    if isinstance(result, tuple) and len(result) >= 2
+                    else result
+                )
+                elapsed_ms = (
+                    result[1]
+                    if isinstance(result, tuple) and len(result) >= 2
+                    else None
+                )
+                if (
+                    isinstance(run_result, tuple)
+                    and len(run_result) >= 2
+                    and run_result[0] is False
+                ):
+                    run_success = False
+                    fail_reason = run_result[1]
+                elif run_result is False:
+                    run_success = False
+                else:
+                    run_success = True
             except Exception as e:
                 run_success = False
                 fail_reason = str(e)
@@ -282,6 +316,7 @@ def _run_worker_loop() -> None:
         finally:
             if acquired:
                 _current_session_id = None
+                LogContext.clear()
             redis_dao.delete_confirmation_run_active(session_id)
             redis_dao.delete_stop_requested(session_id, task_id)
             if acquired:
@@ -294,28 +329,60 @@ def _run_worker_loop() -> None:
                 user_question = (user_prompt or '').strip()
                 if len(user_question) > 500:
                     user_question = user_question[:500] + '…'
+                # 优先使用 run_agent_sync 返回的 elapsed_ms（与 end 事件、前端展示一致），异常路径无返回值时用 Worker 侧计时
+                if elapsed_ms is not None:
+                    duration_sec = elapsed_ms / 1000.0
+                else:
+                    duration_sec = time.monotonic() - run_start_time
+                if duration_sec < 60:
+                    duration_str = f'{duration_sec:.1f} 秒'
+                elif duration_sec < 3600:
+                    m = int(duration_sec // 60)
+                    s = int(duration_sec % 60)
+                    duration_str = f'{m} 分 {s} 秒'
+                else:
+                    h = int(duration_sec // 3600)
+                    m = int((duration_sec % 3600) // 60)
+                    duration_str = f'{h} 小时 {m} 分'
                 rows = [
                     ('会话ID', session_id),
                     ('会话地址', session_url),
                     ('用户', user_info_display),
                     ('用户问题', user_question or '-'),
                     ('执行节点', get_worker_id()),
-                    ('结果', '成功' if run_success else '失败'),
+                    (
+                        '结果',
+                        (
+                            '成功'
+                            if run_success
+                            else ('已取消' if fail_reason == 'cancelled' else '失败')
+                        ),
+                    ),
+                    ('运行时间', duration_str),
                     ('执行中', str(active_count)),
                     ('排队数', str(queue_len)),
                 ]
-                if not run_success and fail_reason:
+                if not run_success and fail_reason and fail_reason != 'cancelled':
                     reason = (fail_reason.strip() or '-')[:500]
                     if len(fail_reason.strip()) > 500:
                         reason = reason + '…'
                     rows.insert(6, ('失败原因', reason))  # 插在「结果」之后
-                notify_post_async(
-                    'Worker 执行成功' if run_success else 'Worker 执行失败',
-                    rows,
-                    template=(
-                        CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
-                    ),
-                )
+                if fail_reason == 'cancelled':
+                    title = '用户取消运行'
+                    template = CARD_TEMPLATE_ORANGE
+                else:
+                    title = 'Worker 执行成功' if run_success else 'Worker 执行失败'
+                    template = CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
+                notify_post_async(title, rows, template=template)
+                # 会话完成/失败时给用户发邮件（模板：会话已执行完成+链接），与飞书通知并行
+                if (
+                    session_user_id
+                    and user_info.get('email')
+                    and user_info.get('email') != '-'
+                ):
+                    send_session_complete_email_async(
+                        session_url, session_user_id, user_info['email']
+                    )
         if _drain_requested:
             logger.info(
                 'Agent worker: drain requested, current job finished, exiting loop. session_id=%s worker_id=%s',

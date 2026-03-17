@@ -33,9 +33,17 @@ class ChatEventsService:
         source = payload.get('source', 'System')
         event_type = payload.get('type', 'unknown')
         content = payload.get('content', '')
-        # User/query 带 files 时存成 { content, files } 以便读回时前端 content/files 分开展示
-        if source == 'User' and event_type == 'query' and payload.get('files'):
-            content = {'content': content, 'files': list(payload['files'])}
+        # User/query 带 files 或 workspace_paths 时存成 { content, files?, workspace_paths? } 以便读回时前端分开展示
+        if (
+            source == 'User'
+            and event_type == 'query'
+            and (payload.get('files') or payload.get('workspace_paths'))
+        ):
+            content = {'content': content}
+            if payload.get('files'):
+                content['files'] = list(payload['files'])
+            if payload.get('workspace_paths'):
+                content['workspace_paths'] = list(payload['workspace_paths'])
         task_id = payload.get('task_id')
         invocation_id = payload.get('invocation_id')
         self.table.add_event(
@@ -49,7 +57,7 @@ class ChatEventsService:
     def get_last_user_query(self, session_id: str):
         """
         获取该会话最后一次用户输入（User/query），用于部署中断后提示重跑。
-        返回 None 或 dict：content, files, mode, task_id。
+        返回 None 或 dict：content, files, workspace_paths, mode, task_id。
         """
         return self.table.get_last_user_query(session_id)
 

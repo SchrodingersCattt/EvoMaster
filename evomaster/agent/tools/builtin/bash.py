@@ -10,8 +10,15 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from pydantic import Field
 
-from ..base import BaseTool, BaseToolParams, ToolError
+from ..base import BaseTool, BaseToolParams
 from .bash_safety import is_dangerous_bash_command
+
+# 每次执行命令前清除代理，避免远程节点上平台注入的代理导致 curl/wget/git 卡住（ga.dp.tech:8118）
+# 仅对新命令生效，is_input 时不注入
+_PROXY_CLEAR_PREFIX = (
+    'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY=; '
+    'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY 2>/dev/null; '
+)
 
 if TYPE_CHECKING:
     from evomaster.agent.session import BaseSession
@@ -40,72 +47,77 @@ class BashToolParams(BaseToolParams):
     ### Output Handling
     * Output truncation: If the output exceeds a maximum length, it will be truncated.
     """
-    
-    name: ClassVar[str] = "execute_bash"
+
+    name: ClassVar[str] = 'execute_bash'
 
     command: str = Field(
-        description="The bash command to execute. Can be empty string to view additional logs when previous exit code is `-1`. Can be `C-c` (Ctrl+C) to interrupt the currently running process."
+        description='The bash command to execute. Can be empty string to view additional logs when previous exit code is `-1`. Can be `C-c` (Ctrl+C) to interrupt the currently running process.'
     )
-    is_input: Literal["true", "false"] = Field(
-        default="false",
-        description="If True, the command is an input to the running process. If False, the command is a bash command to be executed in the terminal. Default is False.",
+    is_input: Literal['true', 'false'] = Field(
+        default='false',
+        description='If True, the command is an input to the running process. If False, the command is a bash command to be executed in the terminal. Default is False.',
     )
     timeout: float = Field(
         default=-1,
-        description="Optional. Sets a hard timeout in seconds for the command execution. If not provided, the command will use the default soft timeout behavior.",
+        description='Optional. Sets a hard timeout in seconds for the command execution. If not provided, the command will use the default soft timeout behavior.',
     )
 
 
 class BashTool(BaseTool):
     """Bash 命令执行工具"""
-    
-    name: ClassVar[str] = "execute_bash"
+
+    name: ClassVar[str] = 'execute_bash'
     params_class: ClassVar[type[BaseToolParams]] = BashToolParams
 
-    def execute(self, session: BaseSession, args_json: str) -> tuple[str, dict[str, Any]]:
+    def execute(
+        self, session: BaseSession, args_json: str
+    ) -> tuple[str, dict[str, Any]]:
         """执行 Bash 命令"""
         try:
             params = self.parse_params(args_json)
         except Exception as e:
-            return f"Parameter validation error: {str(e)}", {"error": str(e)}
-        
+            return f"Parameter validation error: {str(e)}", {'error': str(e)}
+
         assert isinstance(params, BashToolParams)
 
         # Block dangerous commands (env, rm -rf /, etc.)
         is_dangerous, reason = is_dangerous_bash_command(params.command)
         if is_dangerous:
-            return f"Blocked: {reason}", {"error": reason, "blocked": True}
-        
+            return f"Blocked: {reason}", {'error': reason, 'blocked': True}
+
         # 执行命令
         timeout = int(params.timeout) if params.timeout > 0 else None
-        is_input = params.is_input == "true"
-        
+        is_input = params.is_input == 'true'
+        command = params.command.strip()
+        # 非交互模式下，每条命令前清除代理环境变量，避免远程节点代理导致 curl/wget 连 ga.dp.tech 卡住
+        if not is_input and command:
+            command = _PROXY_CLEAR_PREFIX + command
+
         result = session.exec_bash(
-            command=params.command,
+            command=command,
             timeout=timeout,
             is_input=is_input,
         )
-        
+
         # 构建输出
         # 优先使用合并输出（stdout+stderr），保证报错可见
-        output = result.get("output", "") or result.get("stdout", "")
-        exit_code = result.get("exit_code", -1)
-        working_dir = result.get("working_dir", "")
-        
+        output = result.get('output', '') or result.get('stdout', '')
+        exit_code = result.get('exit_code', -1)
+        working_dir = result.get('working_dir', '')
+
         # 将相对路径转换为绝对路径
-        working_dir_abs = str(Path(working_dir).absolute()) if working_dir else ""
-        
+        working_dir_abs = str(Path(working_dir).absolute()) if working_dir else ''
+
         # 添加状态信息
         obs = output
         if working_dir_abs:
             obs += f"\n[Current working directory: {working_dir_abs}]"
         if exit_code != -1:
             obs += f"\n[Command finished with exit code {exit_code}]"
-        
-        info = {
-            "exit_code": exit_code,
-            "working_dir": working_dir_abs,
-        }
-        
-        return obs, info
 
+        info = {
+            'exit_code': exit_code,
+            'working_dir': working_dir_abs,
+        }
+
+        return obs, info

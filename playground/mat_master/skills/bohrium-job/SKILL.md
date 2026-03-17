@@ -1,0 +1,192 @@
+---
+name: bohrium-job
+description: "Submission engine for Bohrium HPC. Receives a prepared input directory (output_dir from input-manual-helper, or a directory containing user-provided ready-to-run input files) and supports split submission and monitoring via submit_job.py and poll_job.py. Covers CP2K, QE, ABINIT, LAMMPS, ORCA."
+skill_type: operator
+---
+
+# Bohrium Job Skill
+
+Submit an input directory to Bohrium HPC. There are two entry paths:
+- **Normal path**: call `input-manual-helper` first to generate the input files, then pass the resulting `output_dir` here.
+- **User-provided file path**: if the user has already supplied a complete, ready-to-run input file, **skip `input-manual-helper`** and pass the directory containing that file directly as `--input-dir`.
+
+## Workflow
+
+1. **Confirm input directory** — Either get the `output_dir` returned by `input-manual-helper`, or identify the directory that already contains the user-provided input file. List its contents to confirm the main input filename needed for `--cmd`.
+2. **Look up image / machine / command** — Use the Software Reference table below.
+3. **Submit only** (returns `job_id`):
+   ```
+   use_skill bohrium-job run_script submit_job.py \
+     --input-dir <output_dir from input-manual-helper> \
+     --image <image> \
+     --cmd "<command>" \
+     [--machine <machine_type>] \
+     [--job-name <name>] \
+     [--software <software>]
+   ```
+   The script: packages and uploads input dir → three-step job create/upload/add.
+   stdout JSON: `{"success": true, "job_id": ..., "bohr_job_id": ..., "status": "Submitted"}`.
+
+  **Log filename convention (MUST):** the run command in `--cmd` must redirect stdout/stderr to a file named exactly `log` (for example: `> log 2>&1`). Do not rename it to custom names like `caffeine.out`.
+
+4. **Monitor + download** (second step) — MUST use `poll_job.py` script, **NOT** the built-in `monitor_job` tool:
+   ```json
+   {
+     "action": "run_script",
+     "skill_name": "bohrium-job",
+     "script_name": "poll_job.py",
+    "script_args": "--job-id <job_id> [--max-polls 2880] [--poll-interval 30] [--result-dir results/run_xxx]",
+    "script_timeout": 86400
+  }
+  ```
+  > **IMPORTANT**: `script_timeout` is a **`use_skill` tool parameter** (not part of `script_args`). Always set it to `max_polls × poll_interval` (default 2880 × 30 = **86400 s**). Without it, the session default timeout (60 s) will kill the script before the first poll completes.
+  >
+  > ⚠️ **Do NOT reduce `--max-polls` below 2880** unless the user explicitly requests a shorter timeout. HPC jobs can take many hours; underestimating will cause poll timeout before the job finishes. When in doubt, keep the default (`--max-polls 2880`, `script_timeout 86400`).
+
+   The script: polls `/openapi/v1/job/{id}` until terminal status; downloads `out.zip` via `resultUrl` and extracts (for both `Finished` and `Failed`); reads `log_tail` from the local `log` file in the extracted directory.
+   stdout JSON (success): `{"success": true, "job_id": ..., "status": "Finished", "result_dir": "...", "files": [...], "log_tail": "..."}`.
+   stdout JSON (failed): `{"success": false, "job_id": ..., "status": "Failed", "result_dir": "...", "files": [...], "log_tail": "<error from log file>", "error": "..."}`.
+
+> **CRITICAL**: Do NOT call the built-in tool `monitor_job` for this workflow. Always use `use_skill bohrium-job run_script poll_job.py`. The built-in `monitor_job` tool is a different system and will not produce the expected output format.
+
+## Software Reference
+
+### CP2K
+
+| Item | Value |
+|------|-------|
+| Image | `registry.dp.tech/dptech/cp2k:2024.1` |
+| Machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
+| Command (32-core) | `OMP_NUM_THREADS=1 mpirun -np 32 cp2k.popt -i input.inp > log 2>&1` |
+
+> Check actual input filename in `output_dir`; replace `input.inp` if named differently.
+
+### Quantum ESPRESSO (pw.x)
+
+| Item | Value |
+|------|-------|
+| Image | `registry.dp.tech/dptech/quantum-espresso:7.1` |
+| Machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
+| Command (32-core) | `OMP_NUM_THREADS=1 mpirun -np 32 pw.x -i pw.in > log 2>&1` |
+
+> Check actual input filename in `output_dir`; replace `pw.in` if named differently.
+
+### ABINIT
+
+| Item | Value |
+|------|-------|
+| Image | `registry.dp.tech/dptech/dp/native/prod-19853/abinit:v9.10.3_pp` |
+| Machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
+| Command (32-core) | `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 OMP_NUM_THREADS=1 mpirun -np 32 abinit run.abi > log 2>&1` |
+
+> The container runs as root; `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1` are required or mpirun will refuse to start.
+> `OMPI_MCA_rmaps_base_oversubscribe=1` prevents "not enough slots" errors when the container reports fewer slots than `-np`.
+> Check actual `.abi` filename in `output_dir`; replace `run.abi` with the actual name.
+
+### LAMMPS
+
+| Item | Value |
+|------|-------|
+| Image | `registry.dp.tech/dptech/lammps-agent:03810da8` |
+| Machine | `c16_m64_1 * NVIDIA 4090` (GPU node) |
+| Command | `lmp -in lammps.in > log 2>&1` |
+
+> Check actual `.in` / `.lammps` filename in `output_dir`; replace `lammps.in` if named differently.
+
+### ORCA
+
+| Item | Value |
+|------|-------|
+| Image | `registry.dp.tech/dptech/dp/native/prod-19853/orca:v6.1.1` |
+| Machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
+| Command | `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 /opt/orca611_avx2/orca input.inp > log 2>&1` |
+
+> ORCA is run via absolute path (not via mpirun, not in PATH). Check actual `.inp` filename in `oss_downloaded_files/`; replace `input.inp` with the actual filename (e.g. `1773128180_caffeine.inp`).
+
+## Scripts
+
+### submit_job.py
+
+Universal submission script — software-agnostic.
+
+**Usage**:
+```
+python submit_job.py \
+  --input-dir <path> \
+  --image <image_address> \
+  --cmd "<run_command>" \
+  [--machine c32_m128_cpu] \
+  [--job-name my_job] \
+  [--software cp2k] \
+  [--disk-size 50]
+```
+
+**Arguments**:
+- `--input-dir`: Directory containing all input files. Required.
+- `--image`: Docker image address. Required.
+- `--cmd`: Shell command to execute inside the container. Required.
+- `--machine`: Bohrium machine type. Default: `c32_m128_cpu`.
+- `--job-name`: Human-readable job name. Optional.
+- `--software`: Software name label (metadata only). Optional.
+- `--disk-size`: Disk size in GB. Default: 50.
+
+**Output** (stdout JSON):
+```json
+{"success": true, "job_id": 12345, "bohr_job_id": 12345, "status": "Submitted"}
+```
+
+### poll_job.py
+
+Universal monitor script — software-agnostic.
+
+**Usage** (via `use_skill`, shown as tool call parameters):
+```json
+{
+  "action": "run_script",
+  "skill_name": "bohrium-job",
+  "script_name": "poll_job.py",
+  "script_args": "--job-id <id> [--result-dir results/run_xxx] [--max-polls 2880] [--poll-interval 30]",
+  "script_timeout": 86400
+}
+```
+
+> **CRITICAL**: `script_timeout` is a **`use_skill` tool parameter** — do NOT put it inside `script_args`. It controls the session-level process timeout, not a script CLI flag.
+
+**`script_args` flags** (passed to `poll_job.py` command line):
+- `--job-id`: Bohrium job id returned by `submit_job.py`. Required.
+- `--result-dir`: Local directory to extract results into. Default: `results/run_<job_id>`.
+- `--max-polls`: Maximum poll attempts. Default: 2880.
+- `--poll-interval`: Seconds between polls. Default: 30.
+
+**`script_timeout`** (`use_skill` parameter, not a script flag): Always set to `max_polls × poll_interval` (default **86400 s** = 2880 × 30). Without it the session kills the process after 60 s.
+
+> ⚠️ **Do NOT reduce `--max-polls` below 2880** unless the user explicitly requests a shorter timeout. HPC jobs can take many hours; underestimating `--max-polls` will cause the poll loop to exhaust before the job finishes. When in doubt, always use the defaults: `--max-polls 2880`, `script_timeout: 86400`.
+
+**Output** (stdout JSON):
+```json
+{"success": true, "job_id": 12345, "status": "Finished", "result_dir": "results/run_12345", "files": ["orca.out", "orca.gbw"], "log_tail": "..."}
+```
+
+## When to use
+
+- Input files have been prepared by `input-manual-helper` (CP2K, QE, ABINIT, LAMMPS, ORCA)
+- User asks to submit / run / execute a computation on Bohrium HPC
+- Any workflow needing split flow: submit and immediately return `job_id`, then monitor/download in a follow-up step
+
+## Rules
+
+1. **Prepare gate**: If the user has already provided a complete, ready-to-run input file, skip `input-manual-helper` and submit directly. Otherwise, always call `input-manual-helper` first for CP2K / QE / ABINIT / LAMMPS / ORCA — do not hand-write input files here.
+2. **Input files land in `oss_downloaded_files/`**, not in the `output_dir` you passed to `prepare_*`. Always `dir oss_downloaded_files` (Windows) or `ls oss_downloaded_files` to confirm the actual filename before constructing `--cmd`.
+3. **Match MPI `-np` count** in `--cmd` to the machine's core count (e.g. 32 for `c32_m128_cpu`).
+4. **Check `"success": true`** in JSON output before proceeding to the next step.
+5. Run `submit_job.py` first, then pass the returned `job_id` into `poll_job.py`. **Never call the built-in `monitor_job` tool** — always use `use_skill bohrium-job run_script poll_job.py`.
+6. **Log redirection must be unified**: in every software command, always use `> log 2>&1`. Do not use per-case filenames (for example `> orca.out`, `> qe.log`, `> caffeine.out`). This keeps `poll_job.py` log-tail behavior stable.
+
+## Log Filename Best Practice
+
+To avoid "job finished but log tail missing/wrong file" issues:
+
+- Preferred (recommended now): enforce a single convention in all generated commands: `> log 2>&1`.
+- Optional future hardening (if you want more flexibility): extend `poll_job.py` with a `--log-file` argument and pass the same filename used in `--cmd`.
+
+For current workflows, the best solution is the first one: **standardize all commands to write to `log`**.
