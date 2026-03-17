@@ -119,27 +119,7 @@ class MatMasterAgent(Agent):
                 _compaction_cfg.trigger_ratio * 100,
             )
 
-        # C.7 — 初始化 ContextCompactor（如果 compaction.enabled）
-        _ctx_cfg = (config_dict or {}).get('agents', {}).get('general', {}).get('context', {})
-        _compaction_raw = _ctx_cfg.get('compaction', {})
-        _compaction_cfg = CompactionConfig(**_compaction_raw) if _compaction_raw else CompactionConfig()
-        self._compaction_enabled: bool = _compaction_cfg.enabled
-        if _compaction_cfg.enabled:
-            def _llm_caller(dialog):
-                return self.llm.query(dialog)
-            _compactor = ContextCompactor(
-                config=_compaction_cfg,
-                llm_caller=_llm_caller,
-                execution_journal=self._execution_journal,
-            )
-            self.context_manager.set_compactor(_compactor)
-            self.logger.info(
-                '[Agent] ContextCompactor enabled (trigger_tokens=%d)',
-                _compaction_cfg.trigger_tokens,
-            )
-
     def _initialize(self, task) -> None:
-        """Override: reset counters and set up execution journal for each new task."""
         """Override: 支持 task.meta['dialog_history'] 多轮对话；否则与基类一致并重置 tool output 计数。"""
         history_raw = task.meta.get('dialog_history') if task.meta else None
         if isinstance(history_raw, list) and len(history_raw) > 0:

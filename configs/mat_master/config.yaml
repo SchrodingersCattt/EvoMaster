@@ -59,22 +59,12 @@ agents:
       mcp: "*"
 
     context:
-<<<<<<< HEAD
-      max_tokens: 128000
-=======
       max_tokens: 180000
->>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
       truncation_strategy: "summary"    # summary = LLM 摘要压缩（ContextCompactor）
       preserve_system_messages: true
       preserve_recent_turns: 5
 
       # Compact Message 配置（summary 策略的参数）
-<<<<<<< HEAD
-      # enabled: true 时还会在 trigger_tokens 处提前触发（早于 max_tokens 硬上限）
-      compaction:
-        enabled: true                    # 开启提前触发（80000 token 时压缩，不等到 128000）
-        trigger_tokens: 80000            # 超过此 token 数提前触发压缩（唯一触发条件）
-=======
       # P0: trigger_tokens 改为动态计算：context_window_tokens * trigger_ratio（默认 80%）
       # 若需固定值可设 trigger_tokens > 0 覆盖动态计算（向后兼容）
       compaction:
@@ -82,15 +72,11 @@ agents:
         trigger_tokens: -1               # -1 = 动态计算（context_window_tokens * trigger_ratio）
         context_window_tokens: 200000    # 模型 context window 大小（claude-sonnet-4-6 = 200k）
         trigger_ratio: 0.80              # 触发阈值 = context_window_tokens * 0.80 = 160000
->>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
         preserve_recent_turns: 2         # 压缩后保留最近 N 轮完整 tool-transaction
         compaction_llm: null             # 用于摘要的 LLM key；null 则复用 agent LLM
         fallback_strategy: "sliding_window"  # 压缩失败时的降级策略
         max_compact_tokens: 3000         # compact message 最大 token 数（约 9000 字符）
-<<<<<<< HEAD
-=======
         min_compressible_ratio: 0.10     # P1: compressible/total < 10% 时跳过 compact
->>>>>>> 9f41f7d7912fc11afab7343a773fa29406279098
 
     system_prompt_file: "prompts/mat_master_system_prompt.txt"
     user_prompt_file: "prompts/user_prompt.txt"
