@@ -131,7 +131,7 @@ _SN_PAPER_FIELDS_TO_REMOVE: frozenset[str] = frozenset(
         'title',
         'authorDetails',
         'alltext',
-        'pieces',       # Fix-4: enAbstract 的完整重复，纯冗余（~800 chars/paper）
+        'pieces',       # enAbstract 的完整重复，纯冗余（~800 chars/paper）
     }
 )
 
@@ -1541,7 +1541,7 @@ class MatToolCallbacks:
         if info.get('error') is not None:
             return observation, info
 
-        # Fix-2: after_clean_sn_response may return a dict; normalise to str before appending
+        # after_clean_sn_response may return a dict; normalise to str before appending
         if isinstance(observation, dict):
             observation = json.dumps(observation, ensure_ascii=False)
 

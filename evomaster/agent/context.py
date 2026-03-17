@@ -32,14 +32,14 @@ class TruncationStrategy(str, Enum):
 
 
 # ---------------------------------------------------------------------------
-# C.1 — CompactionConfig
+# CompactionConfig
 # ---------------------------------------------------------------------------
 
 class CompactionConfig(BaseModel):
     """Compact message 触发与行为配置"""
 
     enabled: bool = Field(default=False, description='是否启用 compact message（默认关闭）')
-    # P0: trigger_tokens 改为动态计算，默认 -1 表示使用 context_window_tokens * trigger_ratio
+    # trigger_tokens 默认 -1 表示使用 context_window_tokens * trigger_ratio 动态计算
     trigger_tokens: int = Field(
         default=-1,
         description=(
@@ -69,7 +69,7 @@ class CompactionConfig(BaseModel):
     max_compact_tokens: int = Field(
         default=3000, description='compact message 最大 token 数（约 9000 字符）'
     )
-    # P1: 无效 compact 检测阈值
+    # 无效 compact 检测阈值：可压缩部分占比低于此值时跳过压缩
     min_compressible_ratio: float = Field(
         default=0.10,
         ge=0.0,
@@ -100,14 +100,13 @@ class ContextConfig(BaseModel):
     )
     preserve_system_messages: bool = Field(default=True, description='是否保留系统消息')
     preserve_recent_turns: int = Field(default=5, description='保留最近的对话轮数')
-    # C.3 — 新增 compaction 字段
     compaction: CompactionConfig = Field(
         default_factory=CompactionConfig, description='Compact message 配置'
     )
 
 
 # ---------------------------------------------------------------------------
-# C.2 — ContextCompactor
+# ContextCompactor
 # ---------------------------------------------------------------------------
 
 class CompactionError(Exception):
@@ -180,10 +179,9 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
         保留尾部使用 ContextManager._safe_tail() 以完整 tool-transaction 为单位，
         确保保留段不含孤立 ToolMessage 或不完整的 assistant/tool 配对。
 
-        P1: 若 compressible tokens 占比低于 min_compressible_ratio，直接返回原 dialog。
-        P4: 若 token 压力极大，自动缩减 preserve_recent_turns 到 1。
-        P5: 记录 compact 前后 token 数日志。
-        Feature A: on_event 回调，在 started/skipped/finished/failed 时发事件。
+        若 compressible tokens 占比低于 min_compressible_ratio，直接返回原 dialog。
+        token 压力极大时自动缩减 preserve_recent_turns 到 1。
+        on_event 回调在 started/skipped/finished/failed 时触发。
         """
         from evomaster.utils.types import SystemMessage, UserMessage
 
@@ -217,10 +215,10 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
             pinned_first_user = [other_msgs[0]]
             other_msgs = other_msgs[1:]
 
-        # P5: 记录 compact 前 token 数
+        # 记录 compact 前 token 数
         tokens_before = context_manager.estimate_tokens(dialog) if context_manager else None
 
-        # P1: 检查 compressible tokens 占比，避免无效压缩
+        # 检查 compressible tokens 占比，避免无效压缩
         # fixed = system + pinned_first_user + tools（这些永远不会被压缩）
         if context_manager is not None:
             total_tokens = context_manager.estimate_tokens(dialog)
@@ -251,7 +249,7 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
                 )
                 return dialog
 
-        # P4: 动态调整 preserve_recent_turns
+        # 动态调整 preserve_recent_turns
         # 若 token 压力极大（超过 trigger 的 1.2 倍），自动缩减到 1 以最大化可压缩空间
         effective_trigger = self._config.effective_trigger_tokens()
         if context_manager is not None and tokens_before is not None:
@@ -341,7 +339,7 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
         )
         new_messages = system_msgs + pinned_first_user + [compact_sys_msg] + recent_msgs
 
-        # P5: 记录 compact 前后 token 数
+        # 记录 compact 前后 token 数
         if context_manager is not None:
             new_dialog_tmp = type(dialog)(messages=new_messages, tools=dialog.tools)
             tokens_after = context_manager.estimate_tokens(new_dialog_tmp)
@@ -563,7 +561,7 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
                 + '\n'.join(f'- {t}' for t in unique_tasks[:10])
             )
 
-        # Fix A: tool 消息提取的键值（含空输出标记）
+        # tool 消息提取的键值（含空输出标记）
         if tool_key_values:
             seen_kv: set[str] = set()
             unique_kv = []
@@ -581,7 +579,7 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
         return '\n\n'.join(parts)
 
     def _truncate_message_content(self, role: str, content_str: str) -> str:
-        """P2: 按角色分级截断消息内容，保护 Markdown 表格 / JSON / 代码块。
+        """按角色分级截断消息内容，保护 Markdown 表格 / JSON / 代码块。
 
         截断规则：
         1. 优先保留 Markdown 表格（完整行）
@@ -701,16 +699,15 @@ class ContextManager:
     def __init__(self, config: ContextConfig | None = None):
         self.config = config or ContextConfig()
         self._token_counter: TokenCounter | None = None
-        # C.4 — ContextCompactor 实例（由外部注入，默认 None）
+        # ContextCompactor 实例（由外部注入，默认 None）
         self._compactor: ContextCompactor | None = None
-        # Feature A: compact 生命周期事件回调（由 StreamingMatMasterAgent 注入）
+        # compact 生命周期事件回调（由 StreamingMatMasterAgent 注入）
         self._on_compact_event: 'Callable[[dict], None] | None' = None
 
     def set_token_counter(self, counter: 'TokenCounter') -> None:
         """设置 token 计数器"""
         self._token_counter = counter
 
-    # C.4 — set_compactor / should_compact
     def set_compactor(self, compactor: ContextCompactor) -> None:
         """注入 ContextCompactor 实例（由 MatMasterAgent.__init__ 调用）。"""
         self._compactor = compactor
@@ -949,12 +946,10 @@ class ContextManager:
 
         compaction.enabled=False 或无 compactor 时降级 latest_half。
         """
-        # C.5 — 真实实现（替换 stub）
         cfg = self.config.compaction
         if not cfg.enabled or self._compactor is None:
             return self._truncate_latest_half(dialog)
         try:
-            # P1/P4/P5: 传入 context_manager 以支持 token 估算；Feature A: 传入 on_event 回调
             return self._compactor.compact(
                 dialog,
                 context_manager=self,
@@ -976,14 +971,12 @@ class ContextManager:
         检查并在必要时截断对话。compact 优先于 truncate（token 阈值更低，更早触发）。
         循环直到 token 数低于限制或无法继续压缩/截断。
 
-        P0: should_compact 使用动态 trigger_tokens（context_window_tokens * trigger_ratio）。
-        P5: 记录 prepare_for_query 入口 token 数。
+        should_compact 使用动态 trigger_tokens（context_window_tokens * trigger_ratio）。
         """
-        # P5: 记录入口 token 数
         tokens_entry = self.estimate_tokens(dialog)
         _logger.debug('prepare_for_query: entry tokens=%d', tokens_entry)
 
-        # C.6 — compact 优先于 truncate
+        # compact 优先于 truncate
         max_iterations = 10
         for _ in range(max_iterations):
             # compact 优先（token 阈值更低，在 truncate 之前触发）
@@ -992,7 +985,7 @@ class ContextManager:
                 if len(compacted.messages) < len(dialog.messages):
                     dialog = compacted
                     continue
-                # P1: compact 没有减少消息数（被跳过或无效），不再重试 compact
+                # compact 没有减少消息数（被跳过或无效），不再重试 compact
                 _logger.debug(
                     'prepare_for_query: compact did not reduce messages (skipped or ineffective), '
                     'falling through to truncate'

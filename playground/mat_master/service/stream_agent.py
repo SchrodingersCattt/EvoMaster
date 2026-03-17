@@ -57,7 +57,7 @@ class StreamingMatMasterAgent(MatMasterAgent):
         self._on_llm_token = self._on_llm_token_cb
         self._current_stream_id: str | None = None
         self._stream_token_count: int = 0
-        # Feature A: inject compact lifecycle event callback into ContextManager
+        # inject compact lifecycle event callback into ContextManager
         if self.event_callback is not None:
             self.context_manager.set_compact_event_callback(
                 lambda payload: self._emit('System', 'context_compaction', payload)

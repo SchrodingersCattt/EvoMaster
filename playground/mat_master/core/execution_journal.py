@@ -126,7 +126,7 @@ class ExecutionJournal:
             lines.append('Files: ' + ', '.join(display_files))
         if last_error:
             lines.append(f'Last error: {last_error}')
-        # C.9 — include_details: per-step summaries for ContextCompactor
+        # include_details: per-step summaries for ContextCompactor
         if include_details:
             detail_lines = [
                 f'  Step {e["step"]} [{e["tool"]}] {e["status"]}: {e["summary"][:150]}'
