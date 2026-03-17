@@ -71,7 +71,7 @@
 - When writing input files for software that has a **prepare_* MCP tool** (CP2K, QE, ABINIT, LAMMPS, ORCA), use the input-manual-helper skill. **Do not** directly write or text-replace the contents of .inp, .in, .abi, or other input files; pass a template path, structure_file, and **overrides** to the prepare_* tool. IMPORTANT: When the user does not provide an input file, obtain the template via `get_reference` to get correct template—strictly avoid hand-writing input content and passing it to prepare_*. Structure insert/change only via prepare_*'s structure_file parameter. (Gaussian, PSI4 have no prepare_* yet — use reference templates as final input for now; do not apply this ban to them.)
 - **structure_file**: Must be in a format pymatgen can read: e.g. CIF (.cif), VASP POSCAR/CONTCAR (no ext or .vasp), XYZ (.xyz), Materials Project JSON. LAMMPS .data is produced by prepare_lammps_job; do not pass .data as structure_file.
 - **Prepare tools**: Capabilities and parameters come from the mat_binary_calc tool schema; check schema when choosing and calling. Use workflow parameters (e.g. workflow_type) when the tool exposes them instead of hand-assembling inputs.
-- **Validation**: Run validate_input.py once after prepare (required for submit gate). It is **physical-sense review**, not syntax check: you review the prepared file for reasonable parameter ranges and consistency; if doubtful, use ask_human(mode="timeout"); on timeout, treat as pass and proceed.
+- **Validation**: Run validate_input.py once after prepare (required for submit gate). It is **physical-sense review**, not syntax check: you review the prepared file for reasonable parameter ranges and consistency; if doubtful, use ask_human; on timeout, treat as pass and proceed.
 - **Parameter lookup**: When a parameter or keyword is uncertain, use **official docs** with site-restricted search. Official manual URLs: CP2K manual.cp2k.org, QE www.quantum-espresso.org/Doc/, ABINIT docs.abinit.org, LAMMPS docs.lammps.org, ORCA www.faccts.de/docs/orca/ or orca-manual.mpi-muelheim.mpg.de. Do not re-query the same path that already returned nothing useful.
 ## use_skill run_script
 - Always pass all required script arguments. Missing args cause exit code 2 and waste tokens.
@@ -125,7 +125,7 @@
   3a. **If you can identify the cause**: fix input files/parameters, re-submit via MCP,
       then call monitor_job with the new job_id.
   3b. **If you CANNOT identify the cause** from the log:
-      call ask_human(mode="timeout") — include the failure description and the relevant log lines.
+      call ask_human — include the failure description and the relevant log lines.
       Do NOT re-submit without a diagnosed fix. Blind re-submission causes an infinite retry loop.
   4. **On ask_human timeout** (no human reply): abort the task.
      Call finish with task_completed=false and record the failure reason in the message.

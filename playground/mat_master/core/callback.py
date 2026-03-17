@@ -131,7 +131,7 @@ _SN_PAPER_FIELDS_TO_REMOVE: frozenset[str] = frozenset(
         'title',
         'authorDetails',
         'alltext',
-        'pieces',       # enAbstract 的完整重复，纯冗余（~800 chars/paper）
+        'pieces',  # enAbstract 的完整重复，纯冗余（~800 chars/paper）
     }
 )
 
@@ -1131,18 +1131,18 @@ class MatToolCallbacks:
         if not question:
             question = 'The agent is asking for your input.'
 
-        # --- Per-call parameters from skill args ---
+        # --- Mode and timeout from config only (not from LLM tool args) ---
         from playground.mat_master.service.confirm import (
             REPLY_CANCELLED,
             ConfirmMode,
         )
 
-        call_mode_str = args.get('mode', 'timeout')
+        call_mode_str = ah_cfg.get('mode', 'timeout')
         try:
             call_mode = ConfirmMode(call_mode_str)
-        except ValueError:
+        except (ValueError, TypeError):
             call_mode = ConfirmMode.TIMEOUT
-        call_timeout = args.get('timeout_seconds') or cfg_timeout
+        call_timeout = cfg_timeout
 
         # --- Preferred path: ConfirmationManager ---
         confirm_mgr = getattr(self.agent, '_confirm_manager', None)
@@ -1319,10 +1319,7 @@ class MatToolCallbacks:
         targets: list[str] = []
         seen: set[str] = set()
         for url in urls:
-            if (
-                url in seen
-                or is_error_artifact_url(url)
-            ):
+            if url in seen or is_error_artifact_url(url):
                 continue
             seen.add(url)
             targets.append(url)
@@ -1421,11 +1418,7 @@ class MatToolCallbacks:
             return observation, info
 
         already = {d['url'] for d in info.get('auto_downloaded_files', [])}
-        new_urls = [
-            u
-            for u in artifact_urls
-            if u not in already
-        ]
+        new_urls = [u for u in artifact_urls if u not in already]
         if not new_urls:
             return observation, info
 
