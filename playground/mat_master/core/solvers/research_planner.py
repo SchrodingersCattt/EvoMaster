@@ -17,9 +17,18 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from evomaster.core.exp import BaseExp
-from evomaster.utils.types import Dialog, FunctionSpec, SystemMessage, TaskInstance, ToolSpec, UserMessage
+from evomaster.utils.types import (
+    AssistantMessage,
+    Dialog,
+    FunctionSpec,
+    SystemMessage,
+    TaskInstance,
+    ToolSpec,
+    UserMessage,
+)
 
 from ...prompts.build_prompt import LANGUAGE_RULE
+from ..async_tool_registry import AsyncToolRegistry
 from ..constants import MANUSCRIPT_FAIL_MARKERS
 from ..execution import BatchExecutor, ExecutionTask
 from .direct_solver import DirectSolver, _get_available_tool_names
@@ -33,11 +42,9 @@ from .plan_utils import (
     _load_pre_check_system_prompt,
     _normalize_plan,
     _normalize_planner_thought,
-    _normalize_step,
     _plan_to_external_schema,
     _str_replace_in_text,
     _strip_last_incomplete_step,
-    _to_thought_tag,
     _try_parse_json,
 )
 
@@ -95,7 +102,9 @@ class ResearchPlanner(BaseExp):
         except Exception:
             self._turn_budget_init = 100
         self._turn_budget_remaining: int = int(self._turn_budget_init)
-        self._turn_budget_lock = threading.Lock()  # guards _turn_budget_remaining read-check-write
+        self._turn_budget_lock = (
+            threading.Lock()
+        )  # guards _turn_budget_remaining read-check-write
         # Unified execution layer config (shared BatchExecutor)
         exec_cfg = mat.get('execution') or {}
         self._planner_max_workers: int = max(
@@ -189,22 +198,40 @@ class ResearchPlanner(BaseExp):
         if self._output_callback:
             self._output_callback(source, event_type, content, **extra)
 
-    def _stream_llm(self, dialog: Dialog, source: str, context: str) -> 'AssistantMessage':
+    def _stream_llm(
+        self, dialog: Dialog, source: str, context: str
+    ) -> AssistantMessage:
         """Wrap query_stream with llm_token{status:start/streaming/end} boundary markers."""
         import uuid as _uuid
+
         stream_id = f"str_{_uuid.uuid4().hex[:12]}"
-        self._emit(source, 'llm_token', '', status='start', context=context, stream_id=stream_id)
+        self._emit(
+            source,
+            'llm_token',
+            '',
+            status='start',
+            context=context,
+            stream_id=stream_id,
+        )
         reply = None
         try:
             reply = self.agent.llm.query_stream(
                 dialog,
-                on_token=lambda delta: self._emit(source, 'llm_token', delta, status='streaming'),
+                on_token=lambda delta: self._emit(
+                    source, 'llm_token', delta, status='streaming'
+                ),
             )
             return reply
         finally:
             token_count = len(reply.content or '') if reply is not None else 0
-            self._emit(source, 'llm_token', '', status='end',
-                       stream_id=stream_id, token_count=token_count)
+            self._emit(
+                source,
+                'llm_token',
+                '',
+                status='end',
+                stream_id=stream_id,
+                token_count=token_count,
+            )
 
     def _run_dir_path(self) -> Path:
         return Path(self.run_dir) if self.run_dir else Path('.')
@@ -254,9 +281,7 @@ class ResearchPlanner(BaseExp):
                     return loaded
             except Exception as e:
                 self.logger.warning('Failed to load state: %s', e)
-        self.logger.info(
-            '[Planner] _load_state: NEW task (no state file at %s)', path
-        )
+        self.logger.info('[Planner] _load_state: NEW task (no state file at %s)', path)
         return {
             'task_id': task_id,
             'goal': '',
@@ -721,10 +746,14 @@ Rules:
             # 落盘原始 LLM 输出，避免截断时丢失内容，也便于后续 LLM 修复
             if task_id is not None:
                 try:
-                    draft_path = self._task_workspace_dir(task_id) / 'raw_plan_draft.txt'
+                    draft_path = (
+                        self._task_workspace_dir(task_id) / 'raw_plan_draft.txt'
+                    )
                     draft_path.write_text(reply.content or '', encoding='utf-8')
                 except Exception as _save_err:
-                    self.logger.warning('[Planner] Failed to save raw_plan_draft.txt: %s', _save_err)
+                    self.logger.warning(
+                        '[Planner] Failed to save raw_plan_draft.txt: %s', _save_err
+                    )
             raw = _extract_json_from_content(reply.content or '')
             if not raw:
                 return {
@@ -734,15 +763,24 @@ Rules:
             try:
                 plan = _try_parse_json(raw, self.logger)
             except json.JSONDecodeError as e:
-                self.logger.error('Plan JSON parse failed (all repair stages exhausted): %s', e)
+                self.logger.error(
+                    'Plan JSON parse failed (all repair stages exhausted): %s', e
+                )
                 # 尝试用 LLM 修复截断的 JSON（如 max_tokens 命中导致 JSON 不完整）
                 if task_id is not None:
-                    self.logger.info('[Planner] Attempting LLM-based plan repair for truncated JSON...')
-                    repaired = self._repair_plan_from_file(task_id, reply.content or '', state=state)
+                    self.logger.info(
+                        '[Planner] Attempting LLM-based plan repair for truncated JSON...'
+                    )
+                    repaired = self._repair_plan_from_file(
+                        task_id, reply.content or '', state=state
+                    )
                     if repaired is not None:
                         plan = repaired
                     else:
-                        return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
+                        return {
+                            'status': 'REFUSED',
+                            'refusal_reason': f"Invalid JSON: {e}",
+                        }
                 else:
                     return {'status': 'REFUSED', 'refusal_reason': f"Invalid JSON: {e}"}
         except json.JSONDecodeError as e:
@@ -806,7 +844,9 @@ Rules:
                 plan = _try_parse_json(completed, self.logger)
                 plan = _normalize_plan(plan, self.max_steps)
                 if plan.get('steps'):
-                    self.logger.info('[Planner] _repair_plan_from_file: bracket completion succeeded')
+                    self.logger.info(
+                        '[Planner] _repair_plan_from_file: bracket completion succeeded'
+                    )
                     return plan
             except Exception:
                 pass
@@ -820,12 +860,16 @@ Rules:
                 plan = _try_parse_json(target, self.logger)
                 plan = _normalize_plan(plan, self.max_steps)
                 if plan.get('steps'):
-                    self.logger.info('[Planner] _repair_plan_from_file: strip+complete succeeded')
+                    self.logger.info(
+                        '[Planner] _repair_plan_from_file: strip+complete succeeded'
+                    )
                     return plan
             except Exception:
                 pass
 
-        self.logger.error('[Planner] _repair_plan_from_file: all Python repair attempts failed')
+        self.logger.error(
+            '[Planner] _repair_plan_from_file: all Python repair attempts failed'
+        )
         return None
 
     def _revise_plan_from_file(
@@ -861,7 +905,9 @@ Rules:
             try:
                 plan_text = plan_path.read_text(encoding='utf-8')
             except Exception as _e:
-                self.logger.warning('[Planner] _revise_plan_from_file: cannot read file: %s', _e)
+                self.logger.warning(
+                    '[Planner] _revise_plan_from_file: cannot read file: %s', _e
+                )
                 plan_text = json.dumps(
                     _plan_to_external_schema(current_plan), ensure_ascii=False, indent=2
                 )
@@ -896,7 +942,11 @@ Rules:
         if state is not None and task_id is not None:
             if not self._consume_turns(state, task_id, 1):
                 self._fail_max_turns_exceeded(task_id, state)
-                return {**current_plan, 'status': 'REFUSED', 'refusal_reason': 'max_turns_exceeded'}
+                return {
+                    **current_plan,
+                    'status': 'REFUSED',
+                    'refusal_reason': 'max_turns_exceeded',
+                }
         try:
             # query_stream falls back to non-streaming when tools are present
             reply = self._stream_llm(dialog, 'Planner', 'revision')
@@ -923,17 +973,24 @@ Rules:
                     args = json.loads(tc.function.arguments)
                 except json.JSONDecodeError as _je:
                     self.logger.warning(
-                        '[Planner] _revise_plan_from_file: cannot parse tool args: %s', _je
+                        '[Planner] _revise_plan_from_file: cannot parse tool args: %s',
+                        _je,
                     )
                     continue
                 old_str = args.get('old_str', '')
                 new_str = args.get('new_str', '')
                 if not old_str:
-                    self.logger.warning('[Planner] _revise_plan_from_file: empty old_str; skipping')
+                    self.logger.warning(
+                        '[Planner] _revise_plan_from_file: empty old_str; skipping'
+                    )
                     continue
-                revised_text, err = _str_replace_in_text(revised_text, old_str, new_str, self.logger)
+                revised_text, err = _str_replace_in_text(
+                    revised_text, old_str, new_str, self.logger
+                )
                 if err:
-                    self.logger.warning('[Planner] _revise_plan_from_file: str_replace failed: %s', err)
+                    self.logger.warning(
+                        '[Planner] _revise_plan_from_file: str_replace failed: %s', err
+                    )
                 else:
                     applied += 1
 
@@ -961,18 +1018,27 @@ Rules:
             if plan_path is not None:
                 try:
                     plan_path.write_text(
-                        json.dumps(_plan_to_external_schema(revised), ensure_ascii=False, indent=2),
+                        json.dumps(
+                            _plan_to_external_schema(revised),
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
                         encoding='utf-8',
                     )
                 except Exception as _e:
-                    self.logger.warning('[Planner] _revise_plan_from_file: cannot write back: %s', _e)
+                    self.logger.warning(
+                        '[Planner] _revise_plan_from_file: cannot write back: %s', _e
+                    )
             self.logger.info(
-                '[Planner] _revise_plan_from_file: applied %d str_replace(s) successfully', applied
+                '[Planner] _revise_plan_from_file: applied %d str_replace(s) successfully',
+                applied,
             )
             return revised
         except Exception as e:
             # Fallback: return original plan unchanged — don't REFUSED on edit failure
-            self.logger.error('[Planner] _revise_plan_from_file failed (%s); keeping original plan', e)
+            self.logger.error(
+                '[Planner] _revise_plan_from_file failed (%s); keeping original plan', e
+            )
             return current_plan
 
     def _revise_plan(
@@ -1014,7 +1080,9 @@ Rules:
             try:
                 plan = _try_parse_json(raw, self.logger)
             except json.JSONDecodeError as e:
-                self.logger.error('Revision JSON parse failed (all repair stages exhausted): %s', e)
+                self.logger.error(
+                    'Revision JSON parse failed (all repair stages exhausted): %s', e
+                )
                 return {
                     **current_plan,
                     'status': 'REFUSED',
@@ -1903,7 +1971,8 @@ Rules:
                 )
             except Exception as e:
                 self.logger.warning(
-                    '[Planner] _build_step_context: failed to read literature_index: %s', e
+                    '[Planner] _build_step_context: failed to read literature_index: %s',
+                    e,
                 )
 
         if not parts:
@@ -2501,7 +2570,8 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             # Simply record the clarification text as pre-check context.
             if prereq_type == 'clarify_task':
                 self.logger.info(
-                    '[Pre-check] clarify_task (fast path, no agent): %s', description[:120]
+                    '[Pre-check] clarify_task (fast path, no agent): %s',
+                    description[:120],
                 )
                 self._emit(
                     'Planner',
@@ -2510,14 +2580,14 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 )
                 collected_context.append(
                     f"[Prerequisite {i + 1}: clarify_task] {description}"
-                    + (f"\nTarget: {target}" if target else "")
+                    + (f"\nTarget: {target}" if target else '')
                 )
                 self._append_journal(
                     state,
                     task_id,
                     phase='pre_check',
                     title=f"Prerequisite {i + 1}/{len(prerequisites)} (clarify_task, fast path)",
-                    body=f"{description}" + (f"\nTarget: {target}" if target else ""),
+                    body=f"{description}" + (f"\nTarget: {target}" if target else ''),
                 )
                 continue  # skip _consume_turns and DirectSolver
 
@@ -2548,12 +2618,12 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             # the DirectSolver does not treat pre-check as an entry point for the
             # full user task.
             _scope_prefix = (
-                "SCOPE: You are in the PRE-CHECK phase. Your ONLY job is to collect "
-                "the specific information described below to help the planner create "
-                "a better plan. Do NOT attempt to execute the full user task, build "
-                "datasets, generate reports, or perform any work beyond what is "
-                "explicitly described in this prerequisite. When you have collected "
-                "the requested information, call finish immediately.\n\n"
+                'SCOPE: You are in the PRE-CHECK phase. Your ONLY job is to collect '
+                'the specific information described below to help the planner create '
+                'a better plan. Do NOT attempt to execute the full user task, build '
+                'datasets, generate reports, or perform any work beyond what is '
+                'explicitly described in this prerequisite. When you have collected '
+                'the requested information, call finish immediately.\n\n'
             )
 
             # Build a focused prompt for the prerequisite task
@@ -2818,11 +2888,15 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             try:
                 plan_path = self._task_workspace_dir(task_id) / 'current_plan.json'
                 plan_path.write_text(
-                    json.dumps(_plan_to_external_schema(plan), ensure_ascii=False, indent=2),
+                    json.dumps(
+                        _plan_to_external_schema(plan), ensure_ascii=False, indent=2
+                    ),
                     encoding='utf-8',
                 )
             except Exception as _e:
-                self.logger.warning('[Planner] Failed to save current_plan.json: %s', _e)
+                self.logger.warning(
+                    '[Planner] Failed to save current_plan.json: %s', _e
+                )
 
         if self.human_check:
             while True:
@@ -2959,7 +3033,9 @@ Assess whether this task can be planned immediately or needs preliminary work. O
         """
         plan = state['plan']
         # ── Resume observability: log state at entry to diagnose interrupted runs ──
-        _pending_steps = [s for s in plan.get('steps', []) if s.get('status') == 'pending']
+        _pending_steps = [
+            s for s in plan.get('steps', []) if s.get('status') == 'pending'
+        ]
         _history_len = len(state.get('history', []))
         self.logger.info(
             '[Planner] _phase_executing entered: pending_steps=%d, history_len=%d, '
@@ -3073,6 +3149,25 @@ Assess whether this task can be planned immediately or needs preliminary work. O
                 history_entry['skill_path'] = step_result.get('skill_path', '')
             state['history'].append(history_entry)
             self._save_state(task_id, state)
+
+            # 用户点击 stop 导致步骤“失败”时，直接中止任务，不触发重新规划
+            _stop_ev = getattr(self.agent, '_stop_event', None)
+            if (
+                step_result.get('status') == 'failed'
+                and _stop_ev is not None
+                and _stop_ev.is_set()
+            ):
+                self.logger.info(
+                    '[Planner] Stop requested during step %s, aborting.',
+                    step_result.get('step_id'),
+                )
+                state['phase'] = 'aborted'
+                self._emit(
+                    'Planner',
+                    'phase_change',
+                    {'from': 'executing', 'to': 'aborted'},
+                )
+                return state
 
             # --- Observe: check if replanning is needed ---
             should_replan, reason = self._needs_replanning(state, step_result)
@@ -3383,11 +3478,25 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             state['phase'],
             state.get('replan_count', 0),
             len(state.get('history', [])),
-            sum(1 for s in (state.get('plan') or {}).get('steps', []) if s.get('status') == 'pending'),
+            sum(
+                1
+                for s in (state.get('plan') or {}).get('steps', [])
+                if s.get('status') == 'pending'
+            ),
         )
 
         # Main state-machine loop
         while state['phase'] not in ('completed', 'failed', 'aborted'):
+            # 用户点击 stop 时立即退出为 aborted，避免被误判为步骤失败进而触发重新规划
+            _stop_ev = getattr(self.agent, '_stop_event', None)
+            if _stop_ev is not None and _stop_ev.is_set():
+                self.logger.info('[Planner] Stop requested by user, aborting.')
+                phase = state['phase']
+                state['phase'] = 'aborted'
+                self._emit('Planner', 'phase_change', {'from': phase, 'to': 'aborted'})
+                self._save_state(task_id, state)
+                break
+
             phase = state['phase']
 
             if phase == 'pre_check':
