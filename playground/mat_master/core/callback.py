@@ -131,6 +131,7 @@ _SN_PAPER_FIELDS_TO_REMOVE: frozenset[str] = frozenset(
         'title',
         'authorDetails',
         'alltext',
+        'pieces',       # Fix-4: enAbstract 的完整重复，纯冗余（~800 chars/paper）
     }
 )
 
@@ -1523,7 +1524,7 @@ class MatToolCallbacks:
     def after_survey_reminder(
         self,
         tool_call: Any,
-        observation: str,
+        observation: str | dict,
         info: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
         """Append survey-retrieval reminder after any mat_sn_* search/retrieval tool call.
@@ -1540,14 +1541,14 @@ class MatToolCallbacks:
         if info.get('error') is not None:
             return observation, info
 
+        # Fix-2: after_clean_sn_response may return a dict; normalise to str before appending
+        if isinstance(observation, dict):
+            observation = json.dumps(observation, ensure_ascii=False)
+
         n_papers = ''
         zero_results = False
         try:
-            obj = (
-                observation
-                if isinstance(observation, dict)
-                else json.loads(observation)
-            )
+            obj = json.loads(observation)
             if isinstance(obj, dict):
                 # paper search tools return data[]
                 if 'data' in obj and isinstance(obj['data'], list):
