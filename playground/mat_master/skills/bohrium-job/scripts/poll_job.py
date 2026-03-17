@@ -12,21 +12,11 @@ from pathlib import Path
 
 import requests
 
-
-def _load_dotenv() -> None:
-    """Load environment variables from project .env when available."""
-    project_root = Path(__file__).resolve().parents[5]
-    for candidate in (project_root / ".env", Path.cwd() / ".env"):
-        if candidate.exists():
-            for line in candidate.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, _, value = line.partition("=")
-                    os.environ.setdefault(key.strip(), value.strip())
-            break
-
-
-_load_dotenv()
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv()
+except ImportError:
+    pass
 
 ACCESS_KEY = os.environ.get("BOHRIUM_ACCESS_KEY", "").strip()
 OPENAPI_BASE = os.environ.get("BOHRIUM_BASE_URL", "https://openapi.dp.tech").rstrip("/")
