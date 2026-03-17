@@ -464,6 +464,9 @@ class BasePlayground:
 
         self.logger.info('Setting up MCP tools...')
         manager = MCPToolManager()
+        progress_cb = getattr(self, '_mcp_progress_callback', None)
+        if callable(progress_cb):
+            manager.set_progress_callback(progress_cb)
         if mcp_config.get('path_adaptor') == 'calculation':
             from evomaster.adaptors.calculation import get_calculation_path_adaptor
 

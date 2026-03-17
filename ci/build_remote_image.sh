@@ -156,7 +156,8 @@ if ! [[ "$NEW_IMAGE_ID" =~ ^[0-9]+$ ]]; then
 fi
 log "Image created id=$NEW_IMAGE_ID, waiting for status=2 (ready) ..."
 POLL_INTERVAL=30
-POLL_TIMEOUT=900
+# 单环境镜像构建（apt + pip + VASPKIT）耗时长，等待 ready 需足够时间，原 15min 易超时
+POLL_TIMEOUT=7200
 DEADLINE=$(($(date +%s) + $POLL_TIMEOUT))
 while true; do
   if [[ $(date +%s) -ge $DEADLINE ]]; then
