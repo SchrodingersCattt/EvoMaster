@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import shlex
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -358,12 +359,13 @@ class SkillTool(BaseTool):
         if use_remote and remote_script is not None:
             suffix = script_path.suffix
 
+            # Build the inner command (interpreter + script path, no credentials).
             if suffix == '.py':
-                cmd = f"PYTHONPATH={shlex.quote(pythonpath_remote)} python {shlex.quote(remote_script)}"
+                inner_cmd = f"PYTHONPATH={shlex.quote(pythonpath_remote)} python {shlex.quote(remote_script)}"
             elif suffix == '.sh':
-                cmd = f"bash {shlex.quote(remote_script)}"
+                inner_cmd = f"bash {shlex.quote(remote_script)}"
             elif suffix == '.js':
-                cmd = f"node {shlex.quote(remote_script)}"
+                inner_cmd = f"node {shlex.quote(remote_script)}"
             else:
                 return (
                     f"Error: Unsupported script type: {suffix}",
@@ -373,9 +375,30 @@ class SkillTool(BaseTool):
             if script_args and script_args.strip():
                 try:
                     parts = shlex.split(script_args.strip())
-                    cmd += ' ' + ' '.join(shlex.quote(p) for p in parts)
+                    inner_cmd += ' ' + ' '.join(shlex.quote(p) for p in parts)
                 except ValueError:
-                    cmd += ' ' + script_args.strip()
+                    inner_cmd += ' ' + script_args.strip()
+
+            bohrium_env: dict = getattr(session, 'bohrium_env', {})
+            if bohrium_env:
+                # Write credentials to a temp file via SFTP so they never appear in
+                # any shell command string (tmux log, bash history, observation).
+                # session.write_file() uses paramiko SFTP directly — the AK goes
+                # Python memory → SFTP → remote file, bypassing the shell entirely.
+                env_file = f"/tmp/.bohrium_env_{uuid.uuid4().hex[:8]}"
+                env_content = '\n'.join(
+                    f"export {k}={shlex.quote(v)}" for k, v in bohrium_env.items()
+                ) + '\n'
+                session.write_file(env_file, env_content)
+                # Run in a subshell: sourced vars are scoped to this subshell only
+                # (don't leak into the parent tmux shell). Exit code is preserved
+                # via explicit `exit $_r` before the subshell terminates.
+                cmd = (
+                    f"( . {shlex.quote(env_file)}; {inner_cmd};"
+                    f" _r=$?; rm -f {shlex.quote(env_file)}; exit $_r )"
+                )
+            else:
+                cmd = inner_cmd
         else:
             # Local execution (original logic)
             if script_path.suffix == '.py':

@@ -27,17 +27,21 @@ Submit an input directory to Bohrium HPC. There are two entry paths:
    The script: packages and uploads input dir → three-step job create/upload/add.
    stdout JSON: `{"success": true, "job_id": ..., "bohr_job_id": ..., "status": "Submitted"}`.
 
+  **Log filename convention (MUST):** the run command in `--cmd` must redirect stdout/stderr to a file named exactly `log` (for example: `> log 2>&1`). Do not rename it to custom names like `caffeine.out`.
+
 4. **Monitor + download** (second step) — MUST use `poll_job.py` script, **NOT** the built-in `monitor_job` tool:
    ```json
    {
      "action": "run_script",
      "skill_name": "bohrium-job",
      "script_name": "poll_job.py",
-     "script_args": "--job-id <job_id> [--max-polls 720] [--poll-interval 30] [--result-dir results/run_xxx]",
-     "script_timeout": 21600
-   }
-   ```
-   > **IMPORTANT**: `script_timeout` is a **`use_skill` tool parameter** (not part of `script_args`). Always set it to `max_polls × poll_interval` (default 720 × 30 = **21600 s**). Without it, the session default timeout (60 s) will kill the script before the first poll completes.
+    "script_args": "--job-id <job_id> [--max-polls 2880] [--poll-interval 30] [--result-dir results/run_xxx]",
+    "script_timeout": 86400
+  }
+  ```
+  > **IMPORTANT**: `script_timeout` is a **`use_skill` tool parameter** (not part of `script_args`). Always set it to `max_polls × poll_interval` (default 2880 × 30 = **86400 s**). Without it, the session default timeout (60 s) will kill the script before the first poll completes.
+  >
+  > ⚠️ **Do NOT reduce `--max-polls` below 2880** unless the user explicitly requests a shorter timeout. HPC jobs can take many hours; underestimating will cause poll timeout before the job finishes. When in doubt, keep the default (`--max-polls 2880`, `script_timeout 86400`).
 
    The script: polls `/openapi/v1/job/{id}` until terminal status; downloads `out.zip` via `resultUrl` and extracts (for both `Finished` and `Failed`); reads `log_tail` from the local `log` file in the extracted directory.
    stdout JSON (success): `{"success": true, "job_id": ..., "status": "Finished", "result_dir": "...", "files": [...], "log_tail": "..."}`.
@@ -141,8 +145,8 @@ Universal monitor script — software-agnostic.
   "action": "run_script",
   "skill_name": "bohrium-job",
   "script_name": "poll_job.py",
-  "script_args": "--job-id <id> [--result-dir results/run_xxx] [--max-polls 720] [--poll-interval 30]",
-  "script_timeout": 21600
+  "script_args": "--job-id <id> [--result-dir results/run_xxx] [--max-polls 2880] [--poll-interval 30]",
+  "script_timeout": 86400
 }
 ```
 
@@ -151,10 +155,12 @@ Universal monitor script — software-agnostic.
 **`script_args` flags** (passed to `poll_job.py` command line):
 - `--job-id`: Bohrium job id returned by `submit_job.py`. Required.
 - `--result-dir`: Local directory to extract results into. Default: `results/run_<job_id>`.
-- `--max-polls`: Maximum poll attempts. Default: 720.
+- `--max-polls`: Maximum poll attempts. Default: 2880.
 - `--poll-interval`: Seconds between polls. Default: 30.
 
-**`script_timeout`** (`use_skill` parameter, not a script flag): Always set to `max_polls × poll_interval` (default **21600 s** = 720 × 30). Without it the session kills the process after 60 s.
+**`script_timeout`** (`use_skill` parameter, not a script flag): Always set to `max_polls × poll_interval` (default **86400 s** = 2880 × 30). Without it the session kills the process after 60 s.
+
+> ⚠️ **Do NOT reduce `--max-polls` below 2880** unless the user explicitly requests a shorter timeout. HPC jobs can take many hours; underestimating `--max-polls` will cause the poll loop to exhaust before the job finishes. When in doubt, always use the defaults: `--max-polls 2880`, `script_timeout: 86400`.
 
 **Output** (stdout JSON):
 ```json
@@ -174,3 +180,13 @@ Universal monitor script — software-agnostic.
 3. **Match MPI `-np` count** in `--cmd` to the machine's core count (e.g. 32 for `c32_m128_cpu`).
 4. **Check `"success": true`** in JSON output before proceeding to the next step.
 5. Run `submit_job.py` first, then pass the returned `job_id` into `poll_job.py`. **Never call the built-in `monitor_job` tool** — always use `use_skill bohrium-job run_script poll_job.py`.
+6. **Log redirection must be unified**: in every software command, always use `> log 2>&1`. Do not use per-case filenames (for example `> orca.out`, `> qe.log`, `> caffeine.out`). This keeps `poll_job.py` log-tail behavior stable.
+
+## Log Filename Best Practice
+
+To avoid "job finished but log tail missing/wrong file" issues:
+
+- Preferred (recommended now): enforce a single convention in all generated commands: `> log 2>&1`.
+- Optional future hardening (if you want more flexibility): extend `poll_job.py` with a `--log-file` argument and pass the same filename used in `--cmd`.
+
+For current workflows, the best solution is the first one: **standardize all commands to write to `log`**.

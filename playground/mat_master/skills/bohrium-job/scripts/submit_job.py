@@ -64,10 +64,10 @@ def _step1_create(job_name: str) -> dict:
 
 def _step2_upload(create_data: dict, zip_path: Path) -> str:
     try:
-        from bohrium.resources.tiefblue import Tiefblue
+        from bohrium_open_sdk.opensdk._tiefblue_client import Tiefblue as _TiefblueClient
     except ImportError as exc:
         raise RuntimeError(
-            "bohrium SDK not installed - run: pip install bohrium-platform-api"
+            "bohrium SDK not installed - run: pip install bohrium_open_sdk"
         ) from exc
 
     store_path = create_data["storePath"]
@@ -75,12 +75,16 @@ def _step2_upload(create_data: dict, zip_path: Path) -> str:
     token = create_data["token"]
     oss_key = store_path + "input.zip"
 
-    tf_client = Tiefblue(base_url=store_host)
-    resp = tf_client.upload_from_file(object_key=oss_key, file_path=str(zip_path), token=token)
-    if hasattr(resp, "status_code") and resp.status_code not in (200, 201, 204):
-        raise RuntimeError(
-            f"tiefblue upload failed: HTTP {resp.status_code} - {getattr(resp, 'text', '')[:300]}"
-        )
+    # Tiefblue 网关要求 Authorization: Bearer <token>，否则 401 ErrGatewayTokenInvalid
+    tf_client = _TiefblueClient(base_url=store_host)
+    resp = tf_client.upload_from_file_multi_part(
+        object_key=oss_key,
+        file_path=str(zip_path),
+        custom_headers={"Authorization": f"Bearer {token}"},
+        progress_bar=False,
+    )
+    if isinstance(resp, dict) and resp.get("code") not in (0, None):
+        raise RuntimeError(f"tiefblue upload failed: {resp}")
     return oss_key
 
 
