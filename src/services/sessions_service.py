@@ -16,7 +16,7 @@ REDIS_STOP_CHANNEL = 'matmaster_chat:stop'
 
 
 class RedisStopSubscriber:
-    """Redis 停止订阅：在独立线程中监听 channel，收到 session_id 后调用本进程的 stop_session_run。"""
+    """Redis 停止订阅：在独立线程中监听 channel。run 仅在 Worker 上，停止由 Worker 轮询 Redis stop key 处理，API 收到消息无需动作，仅保留订阅以维持连接。"""
 
     def __init__(self) -> None:
         self._thread: Optional[threading.Thread] = None
@@ -35,16 +35,7 @@ class RedisStopSubscriber:
             for message in pubsub.listen():
                 if message.get('type') != 'message':
                     continue
-                sid = (message.get('data') or '').strip()
-                if not sid:
-                    continue
-                try:
-                    if get_sessions_service().stop_session_run(sid):
-                        logger.info('Redis stop: set event for session_id=%s', sid)
-                except Exception as e:
-                    logger.warning(
-                        'Redis stop: handle session_id=%s failed: %s', sid, e
-                    )
+                # run 仅在 Worker 上，停止由 Worker 轮询 Redis stop key 处理；API 无需 set 本地 event，保留订阅线程即可
         except Exception as e:
             logger.warning('Redis stop subscriber exited: %s', e)
         finally:
@@ -84,8 +75,6 @@ class ChatSessionsService:
         # 同一 session 同时只允许一个 agent 在跑，避免双开导致状态混乱
         self._sessions_in_run: set[str] = set()
         self._sessions_run_lock = threading.Lock()
-        # session_id -> 当前 run 的 stop Event，stop_session_run 会 set 该 event
-        self._run_stop_events: dict[str, threading.Event] = {}
         self._redis_stop_subscriber = RedisStopSubscriber()
 
     def can_access_session(self, session_id: str, user_id: str | None) -> bool:
@@ -265,7 +254,6 @@ class ChatSessionsService:
         SESSIONS.pop(session_id, None)
         with self._sessions_run_lock:
             self._sessions_in_run.discard(session_id)
-        self._run_stop_events.pop(session_id, None)
         get_worker_registry_service().delete_session_run_owner(session_id)
         return self.table.delete_session(session_id, user_id)
 
@@ -361,22 +349,14 @@ class ChatSessionsService:
         self.ensure_session(session_id, user_id=user_id)
         self.table.set_session_last_task(session_id, task_id)
 
-    def set_stop_event(self, session_id: str, stop_event: threading.Event) -> None:
-        """注册会话的取消事件，stop_session_run(session_id) 会 set 该 event。"""
-        self._run_stop_events[session_id] = stop_event
-
     def stop_session_run(self, session_id: str) -> bool:
         """
         请求终止该会话当前正在运行的 agent。
-        先通过 Redis 广播（多 worker 时其他进程可收到），再在本进程 set stop event。
-        若启用队列模式且 run 在 Worker，则同时写 Redis stop key，供 Worker 轮询。
-        始终写入 Redis stop（至少 session 级），避免 ctx 尚未就绪或 task_id 为空时 stop 不生效。
-        若有活跃 run 则设置 stop event 并返回 True；否则返回 False。
+        通过 Redis 发布 stop 消息并写入 stop key，Worker 轮询 Redis 停止 run。
         """
         sid = session_id.strip()
         redis_dao = get_redis_dao()
         redis_dao.publish(REDIS_STOP_CHANNEL, sid)
-        # 队列模式：run 在 Worker，Worker 轮询 Redis stop key；始终写至少 session 级，确保 stop 生效
         ctx = redis_dao.get_confirmation_run_context(sid)
         task_id = (ctx.get('task_id', '') or '').strip() if ctx else ''
         if redis_dao.set_stop_requested(sid, task_id):
@@ -385,10 +365,6 @@ class ChatSessionsService:
                 sid,
                 task_id or '(session-only)',
             )
-        ev = self._run_stop_events.get(sid)
-        if ev is None:
-            return False
-        ev.set()
         return True
 
     def start_redis_stop_subscriber(self) -> bool:
@@ -397,10 +373,6 @@ class ChatSessionsService:
         在 app lifespan 中调用一次即可。
         """
         return self._redis_stop_subscriber.start()
-
-    def clear_stop_event(self, session_id: str) -> None:
-        """run 结束时移除该会话的 stop event。"""
-        self._run_stop_events.pop(session_id, None)
 
 
 @lru_cache

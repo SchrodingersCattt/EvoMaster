@@ -9,7 +9,7 @@ import asyncio
 import logging
 import os
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 # 连接 + list_tools 单次超时（秒），避免 SSE/HTTP 不可达时启动卡死；可通过 MCP_CONNECT_TIMEOUT 覆盖
 # 15s × 3 次重试 ≈ 45s 后跳过该服务；内网多数几秒内响应
@@ -92,6 +92,23 @@ class MCPToolManager:
         self._reconnect_events: dict[str, asyncio.Event] = {}
         # 等待重连完成的线程级 Event 列表（由 request_reconnect 添加，runner 完成后 set）
         self._reconnect_waiters: dict[str, list[threading.Event]] = {}
+        # Optional progress callback: receives MCP lifecycle events as dict payloads.
+        self._progress_callback: Callable[[dict[str, Any]], None] | None = None
+
+    def set_progress_callback(
+        self, callback: Callable[[dict[str, Any]], None] | None
+    ) -> None:
+        """Set callback for MCP connection progress events."""
+        self._progress_callback = callback
+
+    def _emit_progress(self, payload: dict[str, Any]) -> None:
+        cb = self._progress_callback
+        if cb is None:
+            return
+        try:
+            cb(payload)
+        except Exception as e:
+            self.logger.debug('MCP progress callback failed: %s', e)
 
     def _build_tools(
         self, server_name: str, connection: Any, tools_info: list[dict]
@@ -251,7 +268,19 @@ class MCPToolManager:
                 for attempt in range(1, 4):
                     conn_ctx = None
                     conn = None
+                    attempt_started_at = asyncio.get_running_loop().time()
+                    is_first_connect = first_connect
                     try:
+                        self._emit_progress(
+                            {
+                                'phase': 'connecting',
+                                'server_name': name,
+                                'transport': transport,
+                                'attempt': attempt,
+                                'max_attempts': 3,
+                                'reconnect': not first_connect,
+                            }
+                        )
                         conn_ctx = create_connection(
                             transport=transport, **connection_kwargs
                         )
@@ -286,6 +315,24 @@ class MCPToolManager:
 
                         ready_evt.set()
                         first_connect = False
+                        elapsed_ms = int(
+                            (asyncio.get_running_loop().time() - attempt_started_at)
+                            * 1000
+                        )
+                        self._emit_progress(
+                            {
+                                'phase': (
+                                    'connected' if is_first_connect else 'reconnected'
+                                ),
+                                'server_name': name,
+                                'transport': transport,
+                                'attempt': attempt,
+                                'max_attempts': 3,
+                                'elapsed_ms': elapsed_ms,
+                                'tool_count': len(tools_info),
+                                'reconnect': not is_first_connect,
+                            }
+                        )
 
                         # 通知所有等待重连的线程
                         self._notify_reconnect_waiters(name)
@@ -313,6 +360,17 @@ class MCPToolManager:
                             break  # 跳出内层 while，继续 for attempt 下一轮以重连
                     except _retry_exc as e:
                         if attempt < 3:
+                            self._emit_progress(
+                                {
+                                    'phase': 'retrying',
+                                    'server_name': name,
+                                    'transport': transport,
+                                    'attempt': attempt,
+                                    'max_attempts': 3,
+                                    'error': str(e),
+                                    'reconnect': not is_first_connect,
+                                }
+                            )
                             self.logger.warning(
                                 "MCP server '%s' connection failed (attempt %s/3), retrying in 2s: %s",
                                 name,
@@ -321,6 +379,17 @@ class MCPToolManager:
                             )
                             await asyncio.sleep(2)
                         else:
+                            self._emit_progress(
+                                {
+                                    'phase': 'failed',
+                                    'server_name': name,
+                                    'transport': transport,
+                                    'attempt': attempt,
+                                    'max_attempts': 3,
+                                    'error': str(e),
+                                    'reconnect': not is_first_connect,
+                                }
+                            )
                             self.logger.error(
                                 "MCP server '%s' failed after 3 attempts: %s", name, e
                             )
@@ -335,6 +404,17 @@ class MCPToolManager:
                             )
                             await asyncio.sleep(5)
                     except BaseException:
+                        self._emit_progress(
+                            {
+                                'phase': 'failed',
+                                'server_name': name,
+                                'transport': transport,
+                                'attempt': attempt,
+                                'max_attempts': 3,
+                                'error': 'unexpected_exception',
+                                'reconnect': not is_first_connect,
+                            }
+                        )
                         self._notify_reconnect_waiters(name)
                         ready_evt.set()
                         raise

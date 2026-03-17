@@ -228,6 +228,13 @@ mcp:
       - "xrd_phase_identification"
     mat_electron_microscope:
       - "get_electron_microscope_recognize"
+    mat_binary_calc:
+      - prepare_abinit_job
+      - prepare_cp2k_job
+      - prepare_qe_job
+      - prepare_lammps_job
+      - prepare_orca_job
+      - prepare_pyatb_job
   # Per-server executor (image/machine_type) and sync_tools. Sync tools → executor None; others → Bohrium executor with env auth.
   calculation_executors:
     mat_sg:

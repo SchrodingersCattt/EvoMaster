@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import shlex
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -38,6 +39,10 @@ class SkillToolParams(BaseToolParams):
     )
     script_args: str | None = Field(
         default=None, description="脚本参数，空格分隔（当 action='run_script' 时可选）"
+    )
+    script_timeout: int | None = Field(
+        default=None,
+        description="脚本执行超时时间（秒），覆盖 session 默认超时；不传则使用 session.local.timeout（当 action='run_script' 时可选）"
     )
 
 
@@ -109,7 +114,8 @@ class SkillTool(BaseTool):
                 return self._get_reference(skill, params.reference_name)
             elif params.action == 'run_script':
                 return self._run_script(
-                    session, skill, params.script_name, params.script_args
+                    session, skill, params.script_name, params.script_args,
+                    params.script_timeout
                 )
             else:
                 return (
@@ -274,6 +280,7 @@ class SkillTool(BaseTool):
         skill: Skill,
         script_name: str | None,
         script_args: str | None,
+        script_timeout: int | None = None,
     ) -> tuple[str, dict[str, Any]]:
         """运行技能中的脚本
 
@@ -352,12 +359,13 @@ class SkillTool(BaseTool):
         if use_remote and remote_script is not None:
             suffix = script_path.suffix
 
+            # Build the inner command (interpreter + script path, no credentials).
             if suffix == '.py':
-                cmd = f"PYTHONPATH={shlex.quote(pythonpath_remote)} python {shlex.quote(remote_script)}"
+                inner_cmd = f"PYTHONPATH={shlex.quote(pythonpath_remote)} python {shlex.quote(remote_script)}"
             elif suffix == '.sh':
-                cmd = f"bash {shlex.quote(remote_script)}"
+                inner_cmd = f"bash {shlex.quote(remote_script)}"
             elif suffix == '.js':
-                cmd = f"node {shlex.quote(remote_script)}"
+                inner_cmd = f"node {shlex.quote(remote_script)}"
             else:
                 return (
                     f"Error: Unsupported script type: {suffix}",
@@ -367,9 +375,30 @@ class SkillTool(BaseTool):
             if script_args and script_args.strip():
                 try:
                     parts = shlex.split(script_args.strip())
-                    cmd += ' ' + ' '.join(shlex.quote(p) for p in parts)
+                    inner_cmd += ' ' + ' '.join(shlex.quote(p) for p in parts)
                 except ValueError:
-                    cmd += ' ' + script_args.strip()
+                    inner_cmd += ' ' + script_args.strip()
+
+            bohrium_env: dict = getattr(session, 'bohrium_env', {})
+            if bohrium_env:
+                # Write credentials to a temp file via SFTP so they never appear in
+                # any shell command string (tmux log, bash history, observation).
+                # session.write_file() uses paramiko SFTP directly — the AK goes
+                # Python memory → SFTP → remote file, bypassing the shell entirely.
+                env_file = f"/tmp/.bohrium_env_{uuid.uuid4().hex[:8]}"
+                env_content = '\n'.join(
+                    f"export {k}={shlex.quote(v)}" for k, v in bohrium_env.items()
+                ) + '\n'
+                session.write_file(env_file, env_content)
+                # Run in a subshell: sourced vars are scoped to this subshell only
+                # (don't leak into the parent tmux shell). Exit code is preserved
+                # via explicit `exit $_r` before the subshell terminates.
+                cmd = (
+                    f"( . {shlex.quote(env_file)}; {inner_cmd};"
+                    f" _r=$?; rm -f {shlex.quote(env_file)}; exit $_r )"
+                )
+            else:
+                cmd = inner_cmd
         else:
             # Local execution (original logic)
             if script_path.suffix == '.py':
@@ -412,8 +441,7 @@ class SkillTool(BaseTool):
 
         # 使用 session 的 bash 工具执行脚本
         try:
-            timeout: int | None = None
-            result = session.exec_bash(cmd, timeout=timeout)
+            result = session.exec_bash(cmd, timeout=script_timeout)
             stdout = result.get('stdout', '')
             stderr = result.get('stderr', '')
             exit_code = result.get('exit_code', 0)
