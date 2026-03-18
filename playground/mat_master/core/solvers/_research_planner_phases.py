@@ -524,16 +524,6 @@ class ResearchPlannerPhaseMixin:
                 return state
 
             should_replan, reason = self._needs_replanning(state, step_result)
-            self.logger.warning(
-                '[DEBUG] step_%s status=%s fallback_succeeded=%s should_replan=%s reason=%s replan_count=%d max_replans=%d',
-                step_result.get('step_id', '?'),
-                step_result.get('status'),
-                step_result.get('fallback_succeeded'),
-                should_replan,
-                reason,
-                state.get('replan_count', 0),
-                self.max_replans,
-            )
             if should_replan:
                 state['phase'] = 'replanning'
                 state['replan_reason'] = reason
