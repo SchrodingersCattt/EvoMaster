@@ -5,7 +5,6 @@ import gc
 import importlib
 import logging
 import os
-import queue
 import threading
 import time
 import uuid
@@ -28,6 +27,7 @@ from src.services.chat_history import ChatHistoryConverter
 from src.services.quota_service import use_quota
 from src.services.sessions_service import SESSIONS, get_sessions_service
 from src.services.user_service import UserService
+from src.utils.chat_event_source import normalize_event_source
 from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 from src.utils.worker_id import get_worker_id
 
@@ -230,31 +230,6 @@ class AgentRunService:
             pass
         return frozenset(out)
 
-    def _planner_ask_and_wait(
-        self,
-        prompt: str,
-        send_cb: Callable[[dict], Any],
-        loop: asyncio.AbstractEventLoop,
-        reply_queue: ReplyQueueLike,
-    ) -> str:
-        """发送 planner_ask 到前端并阻塞等待 reply_queue 中的用户回复。"""
-        payload = {'source': 'Planner', 'type': 'planner_ask', 'content': prompt}
-        if asyncio.iscoroutinefunction(send_cb):
-            future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
-            try:
-                future.result(timeout=5)
-            except Exception:
-                pass
-        else:
-            send_cb(payload)
-        try:
-            reply = reply_queue.get(timeout=300)
-            if reply is None:
-                return 'abort'
-            return reply
-        except queue.Empty:
-            return 'abort'
-
     def _upload_workspace_to_oss(
         self,
         session_id: str,
@@ -318,7 +293,7 @@ class AgentRunService:
     ) -> None:
         """在后台线程中执行 agent，由 stream 层 run_in_executor 或 Worker 进程调用。
         loop 为 None 时（Worker）：send_cb 为同步调用，不投递到 asyncio；stop_event 可为带 is_set() 的 Redis 轮询对象。
-        reply_queue 供 planner_ask 与 confirmation_request（ask_human）共用，POST /confirmation_reply 写入。
+        reply_queue 供 confirmation_request（planner / ask_human）共用，POST /confirmation_reply 写入。
         llm_override：本轮使用的 LLM 配置块名（如 litellm/azure/deepseek），不传则用 agent 默认。
         model_override：本轮使用的模型名（如 gemini-3-flash-preview、azure/gpt-5），覆盖所选 LLM 配置里的 model。
         """
@@ -347,6 +322,7 @@ class AgentRunService:
         def event_callback(
             source: str, event_type: str, content: Any, **extra: Any
         ) -> None:
+            source = normalize_event_source(source)
             payload = {
                 'source': source,
                 'type': event_type,
@@ -503,10 +479,6 @@ class AgentRunService:
                 'set' if reply_queue else 'none',
             )
 
-            if mode == 'planner' and reply_queue is not None:
-                pg._planner_input_fn = lambda prompt: self._planner_ask_and_wait(
-                    prompt, send_cb, loop, reply_queue
-                )
             pg._planner_output_callback = event_callback
 
             base = pg.agent

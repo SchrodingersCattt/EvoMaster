@@ -44,8 +44,11 @@ importlib.import_module('playground.mat_master.core.playground')
 
 from evomaster.utils.types import TaskInstance
 from src.services.chat_history import ChatHistoryConverter
+from src.utils.chat_event_source import normalize_event_source
 
-_DIALOG_HISTORY_MAX_EVENTS = int(os.environ.get('CHAT_DIALOG_HISTORY_MAX_EVENTS', '500'))
+_DIALOG_HISTORY_MAX_EVENTS = int(
+    os.environ.get('CHAT_DIALOG_HISTORY_MAX_EVENTS', '500')
+)
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +203,11 @@ def get_session_run_info(session_id: str):
         }
     base = _get_run_workspace_path(_get_run_id_web(), task_id=session_id)
     if base and base.is_dir():
-        return {'run_id': _get_run_id_web(), 'last_task_id': session_id, 'task_ids': [session_id]}
+        return {
+            'run_id': _get_run_id_web(),
+            'last_task_id': session_id,
+            'task_ids': [session_id],
+        }
     return {'run_id': _get_run_id_web(), 'last_task_id': None, 'task_ids': []}
 
 
@@ -761,28 +768,6 @@ def list_run_files(run_id: str, path: str = '', task_id: str | None = None):
     return {'run_id': run_id, 'path': path or '.', 'entries': entries}
 
 
-def _planner_ask_and_wait(
-    prompt: str,
-    send_cb,
-    loop: asyncio.AbstractEventLoop,
-    reply_queue: queue.Queue,
-) -> str:
-    """Send planner_ask to client and block indefinitely until a planner_reply arrives.
-
-    This is the fallback input_fn path used when ConfirmationManager is unavailable.
-    We never time-out and return 'abort' here; the plan confirmation gate must stay
-    open until the human explicitly replies (go / abort / revise).
-    """
-    payload = {'source': 'Planner', 'type': 'planner_ask', 'content': prompt}
-    future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
-    try:
-        future.result(timeout=5)
-    except Exception:
-        pass
-    # Block indefinitely — no timeout, no implicit abort.
-    return reply_queue.get()
-
-
 def _run_agent_sync(
     session_id: str,
     user_prompt: str,
@@ -806,6 +791,7 @@ def _run_agent_sync(
     def event_callback(source: str, event_type: str, content, **extra) -> None:
         nonlocal _msg_seq
         _msg_seq += 1
+        source = normalize_event_source(source)
         payload = {
             'msg_id': _msg_seq,
             'source': source,
@@ -820,7 +806,9 @@ def _run_agent_sync(
             SESSIONS[session_id] = {'history': [], 'last_task_id': None}
         # llm_token{status:streaming} is ephemeral — skip history persistence to avoid bloat.
         # llm_token{status:start} and llm_token{status:end} are persisted (lightweight, audit value).
-        _is_streaming_token = event_type == 'llm_token' and extra.get('status') == 'streaming'
+        _is_streaming_token = (
+            event_type == 'llm_token' and extra.get('status') == 'streaming'
+        )
         if event_type not in ('log_line',) and not _is_streaming_token:
             SESSIONS[session_id]['history'].append(payload)
             _persist_history_event(session_id, payload)
@@ -861,10 +849,6 @@ def _run_agent_sync(
         mode = (mode or 'direct').strip().lower() or 'direct'
         pg.set_mode(mode)
 
-        if mode == 'planner' and planner_reply_queue is not None:
-            pg._planner_input_fn = lambda prompt: _planner_ask_and_wait(
-                prompt, send_cb, loop, planner_reply_queue
-            )
         pg._planner_output_callback = event_callback
 
         # Bohrium node lifecycle: create -> wait -> attach SSH -> run -> destroy
@@ -928,6 +912,7 @@ def _run_agent_sync(
                         # based on SERVICE_ENV (test → openapi.test.dp.tech, prod → open.bohrium.com),
                         # falling back to BOHRIUM_BASE_URL env var if set.
                         from src.utils.constant import BOHRIUM_OPENAPI_HOST
+
                         pg.session.bohrium_env = {
                             'BOHRIUM_ACCESS_KEY': access_key,
                             'BOHRIUM_PROJECT_ID': str(bohrium_project_id),
@@ -1024,13 +1009,25 @@ def _run_agent_sync(
 
         # Multi-turn: build dialog_history from prior in-memory events
         all_events = list(SESSIONS.get(session_id, {}).get('history', []))
-        prior_events = all_events[:-1] if all_events and all_events[-1].get('type') == 'query' else all_events
+        prior_events = (
+            all_events[:-1]
+            if all_events and all_events[-1].get('type') == 'query'
+            else all_events
+        )
         if len(prior_events) > _DIALOG_HISTORY_MAX_EVENTS:
             prior_events = prior_events[-_DIALOG_HISTORY_MAX_EVENTS:]
-        dialog_history = ChatHistoryConverter.events_to_dialog_messages(prior_events) if prior_events else []
+        dialog_history = (
+            ChatHistoryConverter.events_to_dialog_messages(prior_events)
+            if prior_events
+            else []
+        )
         if dialog_history:
-            logger.debug('multi-turn dialog_history session_id=%s messages=%s', session_id, len(dialog_history))
-        
+            logger.debug(
+                'multi-turn dialog_history session_id=%s messages=%s',
+                session_id,
+                len(dialog_history),
+            )
+
         task = TaskInstance(
             task_id=task_id,
             task_type='discovery',
