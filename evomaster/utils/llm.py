@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
+import re
 import sys
 import time
 from abc import ABC, abstractmethod
@@ -32,6 +34,63 @@ def truncate_content(content: str, max_length: int = 5000, head_length: int = 25
     if len(content) <= max_length:
         return content
     return content[:head_length] + "\n... [truncated] ...\n" + content[-tail_length:]
+
+
+_sanitize_logger = logging.getLogger(__name__)
+
+
+def _sanitize_tool_call_arguments(arguments: str | None) -> str:
+    """验证并修复 LLM 返回的工具调用 arguments JSON 字符串。
+
+    LLM 偶尔会生成非法 JSON（如混入 XML 属性语法 ``is_input="true"``），
+    导致下一轮 LLM 调用时 litellm/Bedrock 适配器解析失败并抛出 500 错误。
+    本函数在 LLM 响应解析阶段对 arguments 做防御性清洗：
+
+    1. 若 arguments 已是合法 JSON，原样返回。
+    2. 若非法，尝试移除 JSON key 与冒号之间的 XML 属性风格 token
+       （如 ``"command" is_input="true":`` → ``"command":``）后重新解析。
+    3. 若修复后仍非法，返回 ``"{}"`` 并记录 ERROR 日志。
+       工具层会因参数校验失败返回错误 observation，Agent 可从中恢复，
+       远比让整个下一轮 LLM 调用崩溃要安全。
+
+    Args:
+        arguments: LLM 返回的 function.arguments 字符串（可为 None）。
+
+    Returns:
+        合法的 JSON 字符串。
+    """
+    if not arguments:
+        return "{}"
+
+    # 快速路径：合法 JSON 直接返回
+    try:
+        json.loads(arguments)
+        return arguments
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # 修复：移除 JSON key 与冒号之间的 XML 属性风格 token
+    # 例：`"command" is_input="true":` → `"command":`
+    repaired = re.sub(r'(?<=")\s+\w+="[^"]*"(?=\s*:)', '', arguments)
+    try:
+        json.loads(repaired)
+        _sanitize_logger.warning(
+            "_sanitize_tool_call_arguments: repaired malformed tool call arguments. "
+            "Original: %r  Repaired: %r",
+            arguments,
+            repaired,
+        )
+        return repaired
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # 无法修复：返回空对象，记录 ERROR
+    _sanitize_logger.error(
+        "_sanitize_tool_call_arguments: could not repair malformed tool call arguments, "
+        "falling back to '{}'. Original: %r",
+        arguments,
+    )
+    return "{}"
 
 
 class LLMConfig(BaseModel):
@@ -352,6 +411,28 @@ class BaseLLM(ABC):
                     )
                     raise
 
+                # 工具调用 arguments 非法 JSON：同样无意义重试，直接抛出
+                # 此错误由 litellm/Bedrock 适配器在将历史消息转换为 Bedrock 格式时触发，
+                # 根因是上一轮 LLM 返回了非法 JSON arguments 并被存入对话历史。
+                # 重试不会改变输入，必然再次失败。
+                is_malformed_tool_args = (
+                    "unable to convert openai tool calls" in err_str
+                    or ("expecting ':' delimiter" in err_str)
+                    or (
+                        "json" in err_str
+                        and "tool" in err_str
+                        and "argument" in err_str
+                    )
+                )
+                if is_malformed_tool_args:
+                    self.logger.error(
+                        "Non-retryable error: malformed tool call arguments in message "
+                        "history (litellm/Bedrock JSON parse failure). "
+                        "Aborting retries immediately. Error: %s",
+                        e,
+                    )
+                    raise
+
                 is_timeout = isinstance(e, _TIMEOUT_EXCEPTIONS) if _TIMEOUT_EXCEPTIONS else False
 
                 if is_timeout:
@@ -535,7 +616,7 @@ class OpenAILLM(BaseLLM):
         choice = response.choices[0]
         message = choice.message
 
-        # 提取工具调用
+        # 提取工具调用（sanitize arguments 防止非法 JSON 污染对话历史）
         tool_calls = None
         if message.tool_calls:
             tool_calls = [
@@ -544,7 +625,7 @@ class OpenAILLM(BaseLLM):
                     type="function",
                     function=FunctionCall(
                         name=tc.function.name,
-                        arguments=tc.function.arguments,
+                        arguments=_sanitize_tool_call_arguments(tc.function.arguments),
                     )
                 )
                 for tc in message.tool_calls
@@ -648,14 +729,14 @@ class OpenAILLM(BaseLLM):
             self.logger.warning("OpenAI stream failed, falling back to query(): %s", e)
             return super().query_stream(dialog, on_token=on_token, **kwargs)
 
-        # 组装 tool_calls（按 index 排序保证顺序）
+        # 组装 tool_calls（按 index 排序保证顺序；sanitize arguments 防止非法 JSON 污染对话历史）
         tool_calls: list[ToolCall] | None = None
         if tool_calls_acc:
             tool_calls = [
                 ToolCall(
                     id=v["id"],
                     type="function",
-                    function=FunctionCall(name=v["name"], arguments=v["arguments"]),
+                    function=FunctionCall(name=v["name"], arguments=_sanitize_tool_call_arguments(v["arguments"])),
                 )
                 for _, v in sorted(tool_calls_acc.items())
             ]
@@ -849,7 +930,7 @@ class DeepSeekLLM(BaseLLM):
         choice = response.choices[0]
         message = choice.message
 
-        # 提取工具调用
+        # 提取工具调用（sanitize arguments 防止非法 JSON 污染对话历史）
         tool_calls = None
         if message.tool_calls:
             tool_calls = [
@@ -858,7 +939,7 @@ class DeepSeekLLM(BaseLLM):
                     type="function",
                     function=FunctionCall(
                         name=tc.function.name,
-                        arguments=tc.function.arguments,
+                        arguments=_sanitize_tool_call_arguments(tc.function.arguments),
                     )
                 )
                 for tc in message.tool_calls
@@ -964,14 +1045,14 @@ class DeepSeekLLM(BaseLLM):
             self.logger.warning("DeepSeek stream failed, falling back to query(): %s", e)
             return super().query_stream(dialog, on_token=on_token, **kwargs)
 
-        # 组装 tool_calls（按 index 排序保证顺序）
+        # 组装 tool_calls（按 index 排序保证顺序；sanitize arguments 防止非法 JSON 污染对话历史）
         tool_calls: list[ToolCall] | None = None
         if tool_calls_acc:
             tool_calls = [
                 ToolCall(
                     id=v["id"],
                     type="function",
-                    function=FunctionCall(name=v["name"], arguments=v["arguments"]),
+                    function=FunctionCall(name=v["name"], arguments=_sanitize_tool_call_arguments(v["arguments"])),
                 )
                 for _, v in sorted(tool_calls_acc.items())
             ]
