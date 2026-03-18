@@ -40,7 +40,7 @@ To list all profiles with details: `init_manuscript.py --list_formats`
 
 **Do not** call init_manuscript or write_section until you have run literature search for the topic. Writing **must** be grounded in retrieval:
 
-- Call available MCP retrieval tools (e.g. **mat_sn_search-papers-enhanced**, **mat_sn_scholar-search**, **mat_sn_web-search**, or any other available search tool) with queries derived from the section/title. Run at least a few searches (e.g. topic + "review", topic + "methods") before drafting. If a tool returns errors or is unavailable, switch to a different available search tool or method — do not retry the same failing tool.
+- Call available MCP retrieval tools (e.g. **mat_sn_search-papers-enhanced**, **mat_sn_scholar-search**, **web-search**, or any other available search tool) with queries derived from the section/title. Run at least a few searches (e.g. topic + "review", topic + "methods") before drafting. If a tool returns errors or is unavailable, switch to a different available search tool or method — do not retry the same failing tool.
 - If the user did not provide source files or references, you **must** search the literature yourself and use the results as the basis for cited content. Do not write sections from memory only.
 - **Exception**: For `computational_report`, retrieval focuses on method references (software, functional, basis set citations). If the user provides all computational parameters, method retrieval is optional.
 
@@ -176,7 +176,7 @@ The export scripts (`export_docx.py`, `export_latex.py`) apply many of these aut
 
 ## Citation and references (mandatory)
 
-- **In text**: Every cited claim must have the reference **immediately after** the relevant text. Use a **hyperlink**: `[n]` must link to the original source URL or to the References section entry (e.g. `[1](#ref-1)`). Example:  
+- **In text**: Every cited claim must have the reference **immediately after** the relevant text. Use a **hyperlink**: `[n]` must link to the original source URL or to the References section entry (e.g. `[1](#ref-1)`). Example:
   `Perovskite stability has been widely studied [1](https://doi.org/...).`
 - **References section**: Must list **exactly** the same numbers as in the text, in order. Each entry must include the index [n], full citation (Authors, Title, *Journal*, Year), and the **original source URL**. No extra or missing entries.
 - **Consistency**: At assembly time, the script checks that every in-text [n] has a matching [n] in References and that reference URLs are valid.
@@ -188,8 +188,8 @@ Full format details are in `citation_and_output_format.md`, which is already inj
 ### `init_manuscript.py`
 
 * **Required**: `--title` (no default). Always pass it to avoid script error.
-* **Usage**: `python init_manuscript.py --title "My Paper" --template "research_paper"`  
-  Or with section files: `python init_manuscript.py --title "My Paper" --template "research_paper" --sections_dir sections/`  
+* **Usage**: `python init_manuscript.py --title "My Paper" --template "research_paper"`
+  Or with section files: `python init_manuscript.py --title "My Paper" --template "research_paper" --sections_dir sections/`
   List profiles: `python init_manuscript.py --list_formats`
 * **use_skill example**: script_name=init_manuscript.py, script_args="--title \"My Paper\" --template computational_report"
 * **Effect**: Creates a draft outline based on the selected format profile. With `--sections_dir`, creates empty section files under `sections/` and writes `_profile.json` with profile metadata so downstream scripts can auto-detect the profile.
@@ -197,10 +197,10 @@ Full format details are in `citation_and_output_format.md`, which is already inj
 
 ### `write_section.py` (workhorse)
 
-* **Usage**:  
-  Create or replace: `python write_section.py --section "Methods" --content_file "methods_notes.txt" --draft draft_manuscript.md`  
-  Append to section: `python write_section.py --section "Introduction" --append --content "Next paragraph..." --draft draft_manuscript.md`  
-  With profile check: `python write_section.py --section "Methods" --content_file m.txt --draft d.md --profile computational_report`  
+* **Usage**:
+  Create or replace: `python write_section.py --section "Methods" --content_file "methods_notes.txt" --draft draft_manuscript.md`
+  Append to section: `python write_section.py --section "Introduction" --append --content "Next paragraph..." --draft draft_manuscript.md`
+  With profile check: `python write_section.py --section "Methods" --content_file m.txt --draft d.md --profile computational_report`
   **For long sections** (bullets, multiple refs, 2+ paragraphs): always use **--content_file**; write content to a file first, then pass that path to avoid truncation of `--content` in tool args.
 * **Logic**:
   * Writes the given content into the section (no expansion; script writes exactly what you pass). Use **`--append`** to add more paragraphs to an existing section so you can build it in chunks (multiple calls) instead of one long generation.
@@ -212,8 +212,8 @@ Full format details are in `citation_and_output_format.md`, which is already inj
 
 ### `validate_content.py` (quality gate)
 
-* **Usage**:  
-  `python validate_content.py --draft draft.md --profile research_paper`  
+* **Usage**:
+  `python validate_content.py --draft draft.md --profile research_paper`
   `python validate_content.py --sections_dir sections/ --profile computational_report --planner_mode --report report.json`
 * **Logic**:
   1. **Word counts**: Per-section and overall against profile minimums. With `--planner_mode`, thresholds are 1.5x.
@@ -226,8 +226,8 @@ Full format details are in `citation_and_output_format.md`, which is already inj
 
 ### `assemble_manuscript.py` (concatenate + review)
 
-* **Usage**:  
-  `python assemble_manuscript.py --sections_dir sections/ --output draft_manuscript.md --validate --profile research_paper --check_length`  
+* **Usage**:
+  `python assemble_manuscript.py --sections_dir sections/ --output draft_manuscript.md --validate --profile research_paper --check_length`
   Or from a single draft: `python assemble_manuscript.py --draft draft_manuscript.md --output final.md --validate`
 * **Logic**:
   1. **Concatenate**: Merge section files (in profile section order, or default) or use the single draft as-is.
@@ -262,7 +262,7 @@ Full format details are in `citation_and_output_format.md`, which is already inj
 
 ### `export_docx.py` (Word export)
 
-* **Usage**: `python export_docx.py --input final.md --output manuscript.docx`  
+* **Usage**: `python export_docx.py --input final.md --output manuscript.docx`
   With style template: `python export_docx.py --input final.md --output manuscript.docx --style_template template.docx`
 * **Requires**: `python-docx` (install via `pip install python-docx` or the project's `docx` optional dependency).
 * **Logic**: Converts Markdown to Word format. Smart scientific formatting:

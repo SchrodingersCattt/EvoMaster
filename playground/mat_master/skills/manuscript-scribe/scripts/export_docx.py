@@ -26,8 +26,6 @@ Usage:
 Output: Creates a .docx file at --output path.
 """
 
-from __future__ import annotations
-
 import argparse
 import re
 import sys
@@ -35,10 +33,11 @@ from pathlib import Path
 
 try:
     from docx import Document
-    from docx.shared import Pt, Inches, Cm, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
-    from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Cm, Pt, RGBColor
+
     HAS_DOCX = True
 except ImportError:
     HAS_DOCX = False
@@ -50,27 +49,112 @@ except ImportError:
 
 # Common element symbols (1- and 2-letter)
 _ELEMENTS = {
-    "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al",
-    "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe",
-    "Co", "Ni", "Cu", "Zn", "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr",
-    "Y", "Zr", "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "Sn",
-    "Sb", "Te", "I", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", "Pm", "Sm",
-    "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W",
-    "Re", "Os", "Ir", "Pt", "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn",
-    "Fr", "Ra", "Ac", "Th", "Pa", "U", "Np", "Pu", "Am",
+    'H',
+    'He',
+    'Li',
+    'Be',
+    'B',
+    'C',
+    'N',
+    'O',
+    'F',
+    'Ne',
+    'Na',
+    'Mg',
+    'Al',
+    'Si',
+    'P',
+    'S',
+    'Cl',
+    'Ar',
+    'K',
+    'Ca',
+    'Sc',
+    'Ti',
+    'V',
+    'Cr',
+    'Mn',
+    'Fe',
+    'Co',
+    'Ni',
+    'Cu',
+    'Zn',
+    'Ga',
+    'Ge',
+    'As',
+    'Se',
+    'Br',
+    'Kr',
+    'Rb',
+    'Sr',
+    'Y',
+    'Zr',
+    'Nb',
+    'Mo',
+    'Tc',
+    'Ru',
+    'Rh',
+    'Pd',
+    'Ag',
+    'Cd',
+    'In',
+    'Sn',
+    'Sb',
+    'Te',
+    'I',
+    'Xe',
+    'Cs',
+    'Ba',
+    'La',
+    'Ce',
+    'Pr',
+    'Nd',
+    'Pm',
+    'Sm',
+    'Eu',
+    'Gd',
+    'Tb',
+    'Dy',
+    'Ho',
+    'Er',
+    'Tm',
+    'Yb',
+    'Lu',
+    'Hf',
+    'Ta',
+    'W',
+    'Re',
+    'Os',
+    'Ir',
+    'Pt',
+    'Au',
+    'Hg',
+    'Tl',
+    'Pb',
+    'Bi',
+    'Po',
+    'At',
+    'Rn',
+    'Fr',
+    'Ra',
+    'Ac',
+    'Th',
+    'Pa',
+    'U',
+    'Np',
+    'Pu',
+    'Am',
 }
 
 # Pattern: element symbol followed by digits, repeated 2+ times
 # e.g. CO2, H2O, Fe2O3, C7H8N2O, CH4
-_CHEM_FORMULA_RE = re.compile(
-    r"\b((?:[A-Z][a-z]?\d*){2,})\b"
-)
+_CHEM_FORMULA_RE = re.compile(r'\b((?:[A-Z][a-z]?\d*){2,})\b')
 
 
 def _is_chemical_formula(text: str) -> bool:
     """Check if text looks like a chemical formula (Element+optional_count, 2+ elements)."""
     # Parse into element-count pairs
-    pairs = re.findall(r"([A-Z][a-z]?)(\d*)", text)
+    pairs = re.findall(r'([A-Z][a-z]?)(\d*)', text)
     if not pairs:
         return False
     # Filter out empty matches at the end
@@ -83,7 +167,7 @@ def _is_chemical_formula(text: str) -> bool:
 
 def _add_chemical_formula(paragraph, formula: str) -> None:
     """Add a chemical formula with subscripted numbers to a paragraph."""
-    pairs = re.findall(r"([A-Z][a-z]?)(\d*)", formula)
+    pairs = re.findall(r'([A-Z][a-z]?)(\d*)', formula)
     for elem, count in pairs:
         if not elem:
             continue
@@ -99,9 +183,9 @@ def _add_chemical_formula(paragraph, formula: str) -> None:
 
 # CJK unified ideographs + extensions + compatibility
 _CJK_CHAR = (
-    r"[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff"
-    r"\u3000-\u303f\uff00-\uffef"
-    r"\u2e80-\u2eff\u3100-\u312f]"
+    r'[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff'
+    r'\u3000-\u303f\uff00-\uffef'
+    r'\u2e80-\u2eff\u3100-\u312f]'
 )
 
 _CJK_SPACE_AFTER = re.compile(
@@ -120,14 +204,15 @@ def _fix_cjk_spacing(text: str) -> str:
     * digit/latin + space + CJK → remove space  (eV 的  → eV的)
     * Latin + space + Latin is preserved          (1.9 eV stays)
     """
-    text = _CJK_SPACE_AFTER.sub(r"\1\2", text)
-    text = _CJK_SPACE_BEFORE.sub(r"\1\2", text)
+    text = _CJK_SPACE_AFTER.sub(r'\1\2', text)
+    text = _CJK_SPACE_BEFORE.sub(r'\1\2', text)
     return text
 
 
 # ---------------------------------------------------------------------------
 # Markdown escape stripping (for science notation)
 # ---------------------------------------------------------------------------
+
 
 def _strip_md_escapes(text: str) -> str:
     r"""Remove Markdown backslash escapes that break science notation.
@@ -136,41 +221,42 @@ def _strip_md_escapes(text: str) -> str:
     ``\*E\*``    →  ``*E*``
     Only strips escapes before ``_``, ``{``, ``}``, ``*``, ``^``, ``-``.
     """
-    return re.sub(r"\\([_{}\-*^])", r"\1", text)
+    return re.sub(r'\\([_{}\-*^])', r'\1', text)
 
 
 # ---------------------------------------------------------------------------
 # Smart inline formatting: subscripts, superscripts, chemical formulas
 # ---------------------------------------------------------------------------
 
+
 def _add_hyperlink(paragraph, text: str, url: str) -> None:
     """Add a superscript hyperlink run to a paragraph (for citations)."""
     part = paragraph.part
     r_id = part.relate_to(
         url,
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink',
         is_external=True,
     )
-    hyperlink = OxmlElement("w:hyperlink")
-    hyperlink.set(qn("r:id"), r_id)
+    hyperlink = OxmlElement('w:hyperlink')
+    hyperlink.set(qn('r:id'), r_id)
 
-    run_elem = OxmlElement("w:r")
-    rPr = OxmlElement("w:rPr")
+    run_elem = OxmlElement('w:r')
+    rPr = OxmlElement('w:rPr')
 
-    color = OxmlElement("w:color")
-    color.set(qn("w:val"), "0563C1")
+    color = OxmlElement('w:color')
+    color.set(qn('w:val'), '0563C1')
     rPr.append(color)
 
-    u = OxmlElement("w:u")
-    u.set(qn("w:val"), "single")
+    u = OxmlElement('w:u')
+    u.set(qn('w:val'), 'single')
     rPr.append(u)
 
-    vertAlign = OxmlElement("w:vertAlign")
-    vertAlign.set(qn("w:val"), "superscript")
+    vertAlign = OxmlElement('w:vertAlign')
+    vertAlign.set(qn('w:val'), 'superscript')
     rPr.append(vertAlign)
 
     run_elem.append(rPr)
-    t = OxmlElement("w:t")
+    t = OxmlElement('w:t')
     t.text = text
     run_elem.append(t)
 
@@ -195,16 +281,16 @@ def _add_plain_text_with_science(paragraph, text: str) -> None:
 
     # Pattern for sub/superscript notation and potential chemical formulas
     pattern = re.compile(
-        r"(_\{([^}]+)\})"          # _{text} subscript
-        r"|(\^\{([^}]+)\})"        # ^{text} superscript
-        r"|(\b[A-Z][a-z]?(?:\d+)[A-Z]?[a-z]?(?:\d+)?(?:[A-Z][a-z]?(?:\d+)?)*\b)"  # potential chemical formula
+        r'(_\{([^}]+)\})'  # _{text} subscript
+        r'|(\^\{([^}]+)\})'  # ^{text} superscript
+        r'|(\b[A-Z][a-z]?(?:\d+)[A-Z]?[a-z]?(?:\d+)?(?:[A-Z][a-z]?(?:\d+)?)*\b)'  # potential chemical formula
     )
 
     pos = 0
     for m in pattern.finditer(text):
         # Plain text before match
         if m.start() > pos:
-            paragraph.add_run(text[pos:m.start()])
+            paragraph.add_run(text[pos : m.start()])
 
         if m.group(2) is not None:  # subscript _{text}
             run = paragraph.add_run(m.group(2))
@@ -245,18 +331,18 @@ def _add_formatted_text(paragraph, text: str, is_reference_entry: bool = False) 
     # Citations first (to avoid [n] being caught by other patterns),
     # then bold, italic, code, then everything else via plain text handler
     pattern = re.compile(
-        r"(\*\*(.+?)\*\*)"            # bold
-        r"|(\*([^*]+?)\*)"            # italic (single *)
-        r"|(`([^`]+?)`)"              # code
-        r"|(\[(\d+)\]\(([^)]+)\))"    # citation [n](url)
-        r"|(\[(\d+)\])"              # plain citation [n]
+        r'(\*\*(.+?)\*\*)'  # bold
+        r'|(\*([^*]+?)\*)'  # italic (single *)
+        r'|(`([^`]+?)`)'  # code
+        r'|(\[(\d+)\]\(([^)]+)\))'  # citation [n](url)
+        r'|(\[(\d+)\])'  # plain citation [n]
     )
 
     pos = 0
     for m in pattern.finditer(text):
         # Add plain text before this match (with science formatting)
         if m.start() > pos:
-            _add_plain_text_with_science(paragraph, text[pos:m.start()])
+            _add_plain_text_with_science(paragraph, text[pos : m.start()])
 
         if m.group(2):  # bold  (groups 1,2)
             run = paragraph.add_run(m.group(2))
@@ -266,7 +352,7 @@ def _add_formatted_text(paragraph, text: str, is_reference_entry: bool = False) 
             run.italic = True
         elif m.group(6):  # code  (groups 5,6)
             run = paragraph.add_run(m.group(6))
-            run.font.name = "Consolas"
+            run.font.name = 'Consolas'
             run.font.size = Pt(9)
         elif m.group(8):  # citation with url [n](url)  (groups 7,8,9)
             _add_hyperlink(paragraph, f"[{m.group(8)}]", m.group(9))
@@ -285,6 +371,7 @@ def _add_formatted_text(paragraph, text: str, is_reference_entry: bool = False) 
 # Reference entry formatting
 # ---------------------------------------------------------------------------
 
+
 def _add_reference_entry(paragraph, text: str) -> None:
     """Format a reference entry: journal italic, year bold, en-dash for pages.
 
@@ -292,25 +379,25 @@ def _add_reference_entry(paragraph, text: str) -> None:
     or:             "[n] *Journal*, **Year**, Volume, Pages."
     """
     # Handle the [n] prefix
-    ref_match = re.match(r"^\[(\d+)\]\s*", text)
+    ref_match = re.match(r'^\[(\d+)\]\s*', text)
     if ref_match:
         run = paragraph.add_run(f"[{ref_match.group(1)}] ")
-        text = text[ref_match.end():]
+        text = text[ref_match.end() :]
 
     # Now process the rest with standard formatting
     # Pattern for bold (year), italic (journal), and URLs
     pattern = re.compile(
-        r"(\*\*(.+?)\*\*)"     # bold (year)
-        r"|(\*([^*]+?)\*)"     # italic (journal)
-        r"|(https?://[^\s]+)"  # URL
+        r'(\*\*(.+?)\*\*)'  # bold (year)
+        r'|(\*([^*]+?)\*)'  # italic (journal)
+        r'|(https?://[^\s]+)'  # URL
     )
 
     pos = 0
     for m in pattern.finditer(text):
         if m.start() > pos:
             # Plain text -- replace hyphen in page ranges with en-dash
-            plain = text[pos:m.start()]
-            plain = re.sub(r"(\d+)-(\d+)", r"\1–\2", plain)
+            plain = text[pos : m.start()]
+            plain = re.sub(r'(\d+)-(\d+)', r'\1–\2', plain)
             paragraph.add_run(plain)
 
         if m.group(2):  # bold (year)
@@ -320,7 +407,7 @@ def _add_reference_entry(paragraph, text: str) -> None:
             run = paragraph.add_run(m.group(4))
             run.italic = True
         elif m.group(5):  # URL
-            url = m.group(5).rstrip(".,;:)")
+            url = m.group(5).rstrip('.,;:)')
             run = paragraph.add_run(url)
             run.font.size = Pt(9)
             run.font.color.rgb = RGBColor(5, 99, 193)
@@ -329,7 +416,7 @@ def _add_reference_entry(paragraph, text: str) -> None:
 
     if pos < len(text):
         plain = text[pos:]
-        plain = re.sub(r"(\d+)-(\d+)", r"\1–\2", plain)
+        plain = re.sub(r'(\d+)-(\d+)', r'\1–\2', plain)
         paragraph.add_run(plain)
 
 
@@ -337,17 +424,20 @@ def _add_reference_entry(paragraph, text: str) -> None:
 # Block-level parsing
 # ---------------------------------------------------------------------------
 
+
 def _is_table_line(line: str) -> bool:
     stripped = line.strip()
-    return stripped.startswith("|") and stripped.endswith("|") and stripped.count("|") >= 2
+    return (
+        stripped.startswith('|') and stripped.endswith('|') and stripped.count('|') >= 2
+    )
 
 
 def _is_separator_line(line: str) -> bool:
-    return bool(re.match(r"^\s*\|[\s\-:|]+\|\s*$", line))
+    return bool(re.match(r'^\s*\|[\s\-:|]+\|\s*$', line))
 
 
 def _parse_table_row(line: str) -> list[str]:
-    cells = line.strip().strip("|").split("|")
+    cells = line.strip().strip('|').split('|')
     return [c.strip() for c in cells]
 
 
@@ -356,12 +446,12 @@ def _add_table(doc, rows: list[list[str]]) -> None:
         return
     n_cols = max(len(r) for r in rows)
     table = doc.add_table(rows=len(rows), cols=n_cols)
-    table.style = "Table Grid"
+    table.style = 'Table Grid'
     for i, row_data in enumerate(rows):
         for j, cell_text in enumerate(row_data):
             if j < n_cols:
                 cell = table.cell(i, j)
-                cell.text = ""
+                cell.text = ''
                 _add_formatted_text(cell.paragraphs[0], cell_text)
     if rows:
         for cell in table.rows[0].cells:
@@ -374,8 +464,8 @@ def _is_in_references_section(lines: list[str], current_idx: int) -> bool:
     """Check if current line is inside a ## References section."""
     for j in range(current_idx, -1, -1):
         stripped = lines[j].strip()
-        if re.match(r"^##\s+", stripped):
-            return "reference" in stripped.lower()
+        if re.match(r'^##\s+', stripped):
+            return 'reference' in stripped.lower()
     return False
 
 
@@ -387,8 +477,8 @@ def export_markdown_to_docx(
     """Convert Markdown text to a .docx file."""
     if not HAS_DOCX:
         print(
-            "Error: python-docx is not installed. "
-            "Install it with: pip install python-docx",
+            'Error: python-docx is not installed. '
+            'Install it with: pip install python-docx',
             file=sys.stderr,
         )
         sys.exit(1)
@@ -399,9 +489,9 @@ def export_markdown_to_docx(
         doc = Document()
 
     # Set default font
-    style = doc.styles["Normal"]
+    style = doc.styles['Normal']
     font = style.font
-    font.name = "Times New Roman"
+    font.name = 'Times New Roman'
     font.size = Pt(11)
 
     # Set margins
@@ -420,7 +510,7 @@ def export_markdown_to_docx(
         stripped = line.strip()
 
         # Skip HTML comments
-        if stripped.startswith("<!--") and stripped.endswith("-->"):
+        if stripped.startswith('<!--') and stripped.endswith('-->'):
             i += 1
             continue
 
@@ -430,17 +520,17 @@ def export_markdown_to_docx(
             continue
 
         # Headings
-        if stripped.startswith("### "):
+        if stripped.startswith('### '):
             p = doc.add_heading(stripped[4:].strip(), level=2)
             i += 1
             continue
-        if stripped.startswith("## "):
+        if stripped.startswith('## '):
             sec_name = stripped[3:].strip()
-            in_references = "reference" in sec_name.lower()
+            in_references = 'reference' in sec_name.lower()
             p = doc.add_heading(sec_name, level=1)
             i += 1
             continue
-        if stripped.startswith("# "):
+        if stripped.startswith('# '):
             p = doc.add_heading(stripped[2:].strip(), level=0)
             i += 1
             continue
@@ -456,23 +546,23 @@ def export_markdown_to_docx(
             continue
 
         # Bullet list
-        if re.match(r"^\s*[-*]\s+", stripped):
-            text = re.sub(r"^\s*[-*]\s+", "", stripped)
-            p = doc.add_paragraph(style="List Bullet")
+        if re.match(r'^\s*[-*]\s+', stripped):
+            text = re.sub(r'^\s*[-*]\s+', '', stripped)
+            p = doc.add_paragraph(style='List Bullet')
             _add_formatted_text(p, text)
             i += 1
             continue
 
         # Numbered list
-        if re.match(r"^\s*\d+\.\s+", stripped):
-            text = re.sub(r"^\s*\d+\.\s+", "", stripped)
-            p = doc.add_paragraph(style="List Number")
+        if re.match(r'^\s*\d+\.\s+', stripped):
+            text = re.sub(r'^\s*\d+\.\s+', '', stripped)
+            p = doc.add_paragraph(style='List Number')
             _add_formatted_text(p, text)
             i += 1
             continue
 
         # Figure placeholder
-        if stripped.lower().startswith("figure ") and "." in stripped:
+        if stripped.lower().startswith('figure ') and '.' in stripped:
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.add_run(stripped)
@@ -482,18 +572,22 @@ def export_markdown_to_docx(
             continue
 
         # Reference entry: line starting with [n]
-        if in_references and re.match(r"^\[\d+\]", stripped):
+        if in_references and re.match(r'^\[\d+\]', stripped):
             p = doc.add_paragraph()
             # Collect multi-line reference entry
             ref_lines = [stripped]
             i += 1
             while i < len(lines):
                 next_line = lines[i].strip()
-                if not next_line or re.match(r"^\[\d+\]", next_line) or next_line.startswith("#"):
+                if (
+                    not next_line
+                    or re.match(r'^\[\d+\]', next_line)
+                    or next_line.startswith('#')
+                ):
                     break
                 ref_lines.append(next_line)
                 i += 1
-            full_ref = " ".join(ref_lines)
+            full_ref = ' '.join(ref_lines)
             _add_formatted_text(p, full_ref, is_reference_entry=True)
             continue
 
@@ -504,18 +598,20 @@ def export_markdown_to_docx(
             next_line = lines[i].strip()
             if not next_line:
                 break
-            if next_line.startswith("#") or _is_table_line(next_line):
+            if next_line.startswith('#') or _is_table_line(next_line):
                 break
-            if re.match(r"^\s*[-*]\s+", next_line) or re.match(r"^\s*\d+\.\s+", next_line):
+            if re.match(r'^\s*[-*]\s+', next_line) or re.match(
+                r'^\s*\d+\.\s+', next_line
+            ):
                 break
-            if next_line.startswith("<!--"):
+            if next_line.startswith('<!--'):
                 break
-            if in_references and re.match(r"^\[\d+\]", next_line):
+            if in_references and re.match(r'^\[\d+\]', next_line):
                 break
             para_lines.append(next_line)
             i += 1
 
-        full_para = " ".join(para_lines)
+        full_para = ' '.join(para_lines)
         p = doc.add_paragraph()
         _add_formatted_text(p, full_para)
 
@@ -526,15 +622,15 @@ def export_markdown_to_docx(
         p = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = p.add_run()
-        fldChar1 = OxmlElement("w:fldChar")
-        fldChar1.set(qn("w:fldCharType"), "begin")
+        fldChar1 = OxmlElement('w:fldChar')
+        fldChar1.set(qn('w:fldCharType'), 'begin')
         run._element.append(fldChar1)
-        instrText = OxmlElement("w:instrText")
-        instrText.set(qn("xml:space"), "preserve")
-        instrText.text = " PAGE "
+        instrText = OxmlElement('w:instrText')
+        instrText.set(qn('xml:space'), 'preserve')
+        instrText.text = ' PAGE '
         run._element.append(instrText)
-        fldChar2 = OxmlElement("w:fldChar")
-        fldChar2.set(qn("w:fldCharType"), "end")
+        fldChar2 = OxmlElement('w:fldChar')
+        fldChar2.set(qn('w:fldCharType'), 'end')
         run._element.append(fldChar2)
 
     output_path = Path(output_path)
@@ -547,16 +643,17 @@ def export_markdown_to_docx(
 # CLI
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description="Export assembled Markdown manuscript to Word (.docx) format."
+        description='Export assembled Markdown manuscript to Word (.docx) format.'
     )
-    ap.add_argument("--input", required=True, help="Path to assembled Markdown file")
-    ap.add_argument("--output", required=True, help="Path to output .docx file")
+    ap.add_argument('--input', required=True, help='Path to assembled Markdown file')
+    ap.add_argument('--output', required=True, help='Path to output .docx file')
     ap.add_argument(
-        "--style_template",
+        '--style_template',
         default=None,
-        help="Optional .docx template file for styles (fonts, headers, etc.)",
+        help='Optional .docx template file for styles (fonts, headers, etc.)',
     )
     args = ap.parse_args()
 
@@ -565,9 +662,9 @@ def main() -> None:
         print(f"Error: input file not found: {input_path}", file=sys.stderr)
         sys.exit(1)
 
-    md_text = input_path.read_text(encoding="utf-8")
+    md_text = input_path.read_text(encoding='utf-8')
     export_markdown_to_docx(md_text, args.output, args.style_template)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

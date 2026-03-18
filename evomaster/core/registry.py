@@ -3,6 +3,7 @@
 提供装饰器机制，用于注册各 agent 的自定义 Playground 类。
 
 使用示例：
+from __future__ import annotations
     from evomaster.core import BasePlayground, register_playground
 
     @register_playground("my-agent")
@@ -15,8 +16,8 @@
 """
 
 import logging
-from typing import Dict, Type, Optional
 from pathlib import Path
+from typing import Dict, Optional, Type
 
 # 全局注册表：存储 agent_name -> Playground 类的映射
 _PLAYGROUND_REGISTRY: Dict[str, Type] = {}
@@ -39,6 +40,7 @@ def register_playground(agent_name: str):
     Returns:
         装饰器函数
     """
+
     def decorator(cls):
         if agent_name in _PLAYGROUND_REGISTRY:
             logger.warning(
@@ -53,7 +55,11 @@ def register_playground(agent_name: str):
     return decorator
 
 
-def get_playground_class(agent_name: str, config_dir: Optional[Path] = None, config_path: Optional[Path] = None):
+def get_playground_class(
+    agent_name: str,
+    config_dir: Optional[Path] = None,
+    config_path: Optional[Path] = None,
+):
     """获取注册的 Playground 类实例
 
     如果 agent 有注册的自定义 Playground 类，则使用自定义类；
@@ -75,7 +81,9 @@ def get_playground_class(agent_name: str, config_dir: Optional[Path] = None, con
 
     if playground_class:
         # 使用注册的自定义类
-        logger.info(f"Using custom Playground: {agent_name} -> {playground_class.__name__}")
+        logger.info(
+            f"Using custom Playground: {agent_name} -> {playground_class.__name__}"
+        )
         return playground_class(config_dir=config_dir, config_path=config_path)
     else:
         # 回退到 BasePlayground（通常说明该 agent 的 playground 模块导入失败，如依赖缺失）
@@ -102,6 +110,5 @@ def get_registry_info():
         字典，格式为 {agent_name: class_name}
     """
     return {
-        agent_name: cls.__name__
-        for agent_name, cls in _PLAYGROUND_REGISTRY.items()
+        agent_name: cls.__name__ for agent_name, cls in _PLAYGROUND_REGISTRY.items()
     }

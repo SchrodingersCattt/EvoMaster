@@ -10,9 +10,12 @@ Example:
     python utils/package_skill.py skills/public/my-skill ./dist
 """
 
+from __future__ import annotations
+
 import sys
 import zipfile
 from pathlib import Path
+
 from quick_validate import validate_skill
 
 
@@ -39,17 +42,17 @@ def package_skill(skill_path, output_dir=None):
         return None
 
     # Validate SKILL.md exists
-    skill_md = skill_path / "SKILL.md"
+    skill_md = skill_path / 'SKILL.md'
     if not skill_md.exists():
         print(f"❌ Error: SKILL.md not found in {skill_path}")
         return None
 
     # Run validation before packaging
-    print("🔍 Validating skill...")
+    print('🔍 Validating skill...')
     valid, message = validate_skill(skill_path)
     if not valid:
         print(f"❌ Validation failed: {message}")
-        print("   Please fix the validation errors before packaging.")
+        print('   Please fix the validation errors before packaging.')
         return None
     print(f"✅ {message}\n")
 
@@ -84,10 +87,12 @@ def package_skill(skill_path, output_dir=None):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python utils/package_skill.py <path/to/skill-folder> [output-directory]")
-        print("\nExample:")
-        print("  python utils/package_skill.py skills/public/my-skill")
-        print("  python utils/package_skill.py skills/public/my-skill ./dist")
+        print(
+            'Usage: python utils/package_skill.py <path/to/skill-folder> [output-directory]'
+        )
+        print('\nExample:')
+        print('  python utils/package_skill.py skills/public/my-skill')
+        print('  python utils/package_skill.py skills/public/my-skill ./dist')
         sys.exit(1)
 
     skill_path = sys.argv[1]
@@ -106,5 +111,5 @@ def main():
         sys.exit(1)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

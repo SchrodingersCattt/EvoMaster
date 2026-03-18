@@ -9,6 +9,8 @@ EvoMaster 是一个用于迭代完成科学实验任务的 Agent 系统，
 - skills: 技能（Skill 统一类型，与上游 v0.0.2 一致）
 """
 
+from __future__ import annotations
+
 __version__ = '0.1.0'
 
 # 从 agent 模块导出常用类（Types 如 Dialog/Message/Trajectory/TaskInstance 从 utils 统一导入，避免 F811）

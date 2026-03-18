@@ -16,21 +16,21 @@ Usage::
     text = registry.replace_placeholders(template)
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Any
-
 
 # ---------------------------------------------------------------------------
 # Tiny data class for one async "software" entry
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class _AsyncEntry:
-    server_prefix: str        # MCP server name, e.g. "mat_dpa"
-    software_name: str        # derived display name, e.g. "DPA"
-    tool_key: str | None      # executor_map key (e.g. "run_lammps"), or None for server-level executor
+    server_prefix: str  # MCP server name, e.g. "mat_dpa"
+    software_name: str  # derived display name, e.g. "DPA"
+    tool_key: (
+        str | None
+    )  # executor_map key (e.g. "run_lammps"), or None for server-level executor
     sync_tools: frozenset[str] = field(default_factory=frozenset)
 
 
@@ -38,12 +38,13 @@ class _AsyncEntry:
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _has_remote_profile(executor_cfg: Any) -> bool:
     """Return True if an executor dict tree contains ``machine.remote_profile``."""
     if not isinstance(executor_cfg, dict):
         return False
-    machine = executor_cfg.get("machine") or {}
-    return bool(machine.get("remote_profile"))
+    machine = executor_cfg.get('machine') or {}
+    return bool(machine.get('remote_profile'))
 
 
 def _derive_name(key: str) -> str:
@@ -55,9 +56,9 @@ def _derive_name(key: str) -> str:
     ``run_quantum_espresso`` → ``QUANTUM_ESPRESSO``
     """
     name = key
-    for prefix in ("mat_", "run_"):
+    for prefix in ('mat_', 'run_'):
         if name.startswith(prefix):
-            name = name[len(prefix):]
+            name = name[len(prefix) :]
             break
     return name.upper()
 
@@ -67,16 +68,26 @@ def _derive_name(key: str) -> str:
 # ---------------------------------------------------------------------------
 
 _DEFAULT_CRP: dict[str, Any] = {
-    "allow_list": [
-        "ABACUS", "LAMMPS", "DPA", "CP2K", "QE", "ABINIT", "ORCA",
-        "OpenBabel",
-        "mat_abacus", "mat_dpa", "mat_sg", "mat_doc", "mat_sn",
+    'allow_list': [
+        'ABACUS',
+        'LAMMPS',
+        'DPA',
+        'CP2K',
+        'QE',
+        'ABINIT',
+        'ORCA',
+        'OpenBabel',
+        'mat_abacus',
+        'mat_dpa',
+        'mat_sg',
+        'mat_doc',
+        'mat_sn',
     ],
-    "block_list": ["VASP", "Gaussian", "CASTEP", "Wien2k"],
-    "tool_stack": {
-        "preferred_dft": "ABACUS",
-        "preferred_mlp": "DPA",
-        "preferred_md": "LAMMPS",
+    'block_list': ['VASP', 'Gaussian', 'CASTEP', 'Wien2k'],
+    'tool_stack': {
+        'preferred_dft': 'ABACUS',
+        'preferred_mlp': 'DPA',
+        'preferred_md': 'LAMMPS',
     },
 }
 
@@ -84,6 +95,7 @@ _DEFAULT_CRP: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
+
 
 class AsyncToolRegistry:
     """Registry of async (remote-execution) software, **derived** from config.
@@ -97,17 +109,17 @@ class AsyncToolRegistry:
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         config = config or {}
         # ── Derive async entries from mcp.calculation_executors ────────────
-        mcp_cfg = config.get("mcp") or {}
-        calc_executors: dict[str, Any] = mcp_cfg.get("calculation_executors") or {}
+        mcp_cfg = config.get('mcp') or {}
+        calc_executors: dict[str, Any] = mcp_cfg.get('calculation_executors') or {}
         self._entries: list[_AsyncEntry] = self._parse_executors(calc_executors)
 
         # ── CRP policy ────────────────────────────────────────────────────
-        mat = config.get("mat_master") or {}
-        crp_raw = mat.get("crp") or _DEFAULT_CRP
+        mat = config.get('mat_master') or {}
+        crp_raw = mat.get('crp') or _DEFAULT_CRP
         self._crp: dict[str, Any] = {
-            "allow_list": crp_raw.get("allow_list", _DEFAULT_CRP["allow_list"]),
-            "block_list": crp_raw.get("block_list", _DEFAULT_CRP["block_list"]),
-            "tool_stack": crp_raw.get("tool_stack", _DEFAULT_CRP["tool_stack"]),
+            'allow_list': crp_raw.get('allow_list', _DEFAULT_CRP['allow_list']),
+            'block_list': crp_raw.get('block_list', _DEFAULT_CRP['block_list']),
+            'tool_stack': crp_raw.get('tool_stack', _DEFAULT_CRP['tool_stack']),
         }
 
     # ── Parsing ───────────────────────────────────────────────────────────
@@ -119,30 +131,34 @@ class AsyncToolRegistry:
         for server_name, server_cfg in calc_executors.items():
             if not isinstance(server_cfg, dict):
                 continue
-            executor = server_cfg.get("executor")
-            executor_map: dict[str, Any] = server_cfg.get("executor_map") or {}
-            sync_tools = frozenset(server_cfg.get("sync_tools") or [])
+            executor = server_cfg.get('executor')
+            executor_map: dict[str, Any] = server_cfg.get('executor_map') or {}
+            sync_tools = frozenset(server_cfg.get('sync_tools') or [])
 
             # Case 1: server-level executor with remote_profile
             if _has_remote_profile(executor):
-                entries.append(_AsyncEntry(
-                    server_prefix=server_name,
-                    software_name=_derive_name(server_name),
-                    tool_key=None,
-                    sync_tools=sync_tools,
-                ))
+                entries.append(
+                    _AsyncEntry(
+                        server_prefix=server_name,
+                        software_name=_derive_name(server_name),
+                        tool_key=None,
+                        sync_tools=sync_tools,
+                    )
+                )
 
             # Case 2: per-tool executor_map entries with remote_profile
             for tool_key, tool_executor in executor_map.items():
                 if tool_key in sync_tools:
                     continue
                 if _has_remote_profile(tool_executor):
-                    entries.append(_AsyncEntry(
-                        server_prefix=server_name,
-                        software_name=_derive_name(tool_key),
-                        tool_key=tool_key,
-                        sync_tools=sync_tools,
-                    ))
+                    entries.append(
+                        _AsyncEntry(
+                            server_prefix=server_name,
+                            software_name=_derive_name(tool_key),
+                            tool_key=tool_key,
+                            sync_tools=sync_tools,
+                        )
+                    )
 
         return entries
 
@@ -204,16 +220,15 @@ class AsyncToolRegistry:
 
     def software_list_str(self) -> str:
         """``"SG, DPA, ABACUS, LAMMPS, CP2K, ABINIT, QUANTUM_ESPRESSO"``"""
-        return ", ".join(self.software_names)
+        return ', '.join(self.software_names)
 
     def server_mapping_str(self) -> str:
         """``"mat_dpa_* for DPA; mat_abacus_* for ABACUS; mat_binary_calc_* for LAMMPS, CP2K, ..."``"""
         by_server: dict[str, list[str]] = {}
         for e in self._entries:
             by_server.setdefault(e.server_prefix, []).append(e.software_name)
-        return "; ".join(
-            f"{prefix}_* for {', '.join(names)}"
-            for prefix, names in by_server.items()
+        return '; '.join(
+            f"{prefix}_* for {', '.join(names)}" for prefix, names in by_server.items()
         )
 
     def mcp_submit_mapping_str(self) -> str:
@@ -222,9 +237,8 @@ class AsyncToolRegistry:
         for e in self._entries:
             if e.tool_key is None:
                 by_server.setdefault(e.server_prefix, []).append(e.software_name)
-        return "; ".join(
-            f"{prefix}_* for {', '.join(names)}"
-            for prefix, names in by_server.items()
+        return '; '.join(
+            f"{prefix}_* for {', '.join(names)}" for prefix, names in by_server.items()
         )
 
     def bohrium_job_sw_str(self) -> str:
@@ -234,34 +248,34 @@ class AsyncToolRegistry:
         for e in self._entries:
             if e.tool_key is not None and e.server_prefix not in mcp_servers:
                 by_server.setdefault(e.server_prefix, []).append(e.software_name)
-        return ", ".join(sw for names in by_server.values() for sw in names)
+        return ', '.join(sw for names in by_server.values() for sw in names)
 
     def monitor_job_software_arg(self) -> str:
         """For ``software`` help: ``"sg, dpa, abacus, lammps, ..."``"""
-        return ", ".join(self.software_names_lower)
+        return ', '.join(self.software_names_lower)
 
     # ── CRP snippets ──────────────────────────────────────────────────────
 
     def crp_allow_str(self) -> str:
-        return ", ".join(self._crp["allow_list"])
+        return ', '.join(self._crp['allow_list'])
 
     def crp_block_str(self) -> str:
-        return ", ".join(self._crp["block_list"])
+        return ', '.join(self._crp['block_list'])
 
     def crp_context_dict(self) -> dict[str, Any]:
         """Build the CRP context dict used by the planner."""
-        ts = self._crp["tool_stack"]
+        ts = self._crp['tool_stack']
         return {
-            "Protocol_Name": "MatMaster_CRP_v1.0",
-            "License_Registry": {
-                "Allow_List": list(self._crp["allow_list"]),
-                "Block_List": list(self._crp["block_list"]),
-                "Policy": "Strict_Block_Execution",
+            'Protocol_Name': 'MatMaster_CRP_v1.0',
+            'License_Registry': {
+                'Allow_List': list(self._crp['allow_list']),
+                'Block_List': list(self._crp['block_list']),
+                'Policy': 'Strict_Block_Execution',
             },
-            "Tool_Stack": {
-                "Preferred_DFT": ts.get("preferred_dft", "ABACUS"),
-                "Preferred_MLP": ts.get("preferred_mlp", "DPA"),
-                "Preferred_MD":  ts.get("preferred_md", "LAMMPS"),
+            'Tool_Stack': {
+                'Preferred_DFT': ts.get('preferred_dft', 'ABACUS'),
+                'Preferred_MLP': ts.get('preferred_mlp', 'DPA'),
+                'Preferred_MD': ts.get('preferred_md', 'LAMMPS'),
             },
         }
 
@@ -345,7 +359,7 @@ class AsyncToolRegistry:
 
     def format_planner_license_firewall(self) -> str:
         block = self.crp_block_str()
-        ts = self._crp["tool_stack"]
+        ts = self._crp['tool_stack']
         return (
             f"1. **Commercial License Barrier**\n"
             f"   - You are STRICTLY PROHIBITED from planning execution of proprietary software "
@@ -378,18 +392,18 @@ class AsyncToolRegistry:
             {{CALC_RULES}}                - Full "Calculation & Jobs" section
             {{EXEC_CONSTRAINTS}}          - Full "Execution Environment Constraints" section
         """
-        ts = self._crp["tool_stack"]
+        ts = self._crp['tool_stack']
         replacements = {
-            "{{ASYNC_SOFTWARE_LIST}}":   self.software_list_str(),
-            "{{ASYNC_SERVER_MAPPING}}":  self.server_mapping_str(),
-            "{{ASYNC_MONITOR_JOB_SW}}":  self.monitor_job_software_arg(),
-            "{{CRP_BLOCK_LIST}}":        self.crp_block_str(),
-            "{{CRP_ALLOW_LIST}}":        self.crp_allow_str(),
-            "{{CRP_PREFERRED_DFT}}":     ts.get("preferred_dft", "ABACUS"),
-            "{{CRP_PREFERRED_MLP}}":     ts.get("preferred_mlp", "DPA"),
-            "{{CRP_PREFERRED_MD}}":      ts.get("preferred_md", "LAMMPS"),
-            "{{CALC_RULES}}":            self.format_calculation_rules(),
-            "{{EXEC_CONSTRAINTS}}":      self.format_execution_constraints(),
+            '{{ASYNC_SOFTWARE_LIST}}': self.software_list_str(),
+            '{{ASYNC_SERVER_MAPPING}}': self.server_mapping_str(),
+            '{{ASYNC_MONITOR_JOB_SW}}': self.monitor_job_software_arg(),
+            '{{CRP_BLOCK_LIST}}': self.crp_block_str(),
+            '{{CRP_ALLOW_LIST}}': self.crp_allow_str(),
+            '{{CRP_PREFERRED_DFT}}': ts.get('preferred_dft', 'ABACUS'),
+            '{{CRP_PREFERRED_MLP}}': ts.get('preferred_mlp', 'DPA'),
+            '{{CRP_PREFERRED_MD}}': ts.get('preferred_md', 'LAMMPS'),
+            '{{CALC_RULES}}': self.format_calculation_rules(),
+            '{{EXEC_CONSTRAINTS}}': self.format_execution_constraints(),
         }
         for token, value in replacements.items():
             text = text.replace(token, value)

@@ -1,7 +1,5 @@
 """StreamingMatMasterAgent: MatMasterAgent that emits thought/tool_call/tool_result via callback."""
 
-from __future__ import annotations
-
 import json
 import logging
 import sys
@@ -75,20 +73,34 @@ class StreamingMatMasterAgent(MatMasterAgent):
         self._emit(agent_name, 'llm_token', delta, status='streaming')
         self._stream_token_count += len(delta) if isinstance(delta, str) else 0
 
-    def _begin_llm_stream(self, agent_name: str, context: str = 'step_execution') -> None:
+    def _begin_llm_stream(
+        self, agent_name: str, context: str = 'step_execution'
+    ) -> None:
         """Emit llm_token{status:start} and track stream state."""
         import uuid as _uuid
+
         self._current_stream_id = f"str_{_uuid.uuid4().hex[:12]}"
         self._stream_token_count = 0
-        self._emit(agent_name, 'llm_token', '', status='start',
-                   context=context, stream_id=self._current_stream_id)
+        self._emit(
+            agent_name,
+            'llm_token',
+            '',
+            status='start',
+            context=context,
+            stream_id=self._current_stream_id,
+        )
 
     def _end_llm_stream(self, agent_name: str) -> None:
         """Emit llm_token{status:end} and clear stream state."""
         if self._current_stream_id is not None:
-            self._emit(agent_name, 'llm_token', '', status='end',
-                       stream_id=self._current_stream_id,
-                       token_count=self._stream_token_count)
+            self._emit(
+                agent_name,
+                'llm_token',
+                '',
+                status='end',
+                stream_id=self._current_stream_id,
+                token_count=self._stream_token_count,
+            )
             self._current_stream_id = None
             self._stream_token_count = 0
 

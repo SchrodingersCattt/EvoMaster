@@ -6,8 +6,6 @@ The registry is the source of truth for:
 - whether they reached terminal states
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -17,9 +15,11 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-_RUNNING_STATES = frozenset({"Running", "Pending", "Scheduling", "Wait", "Uploading"})
-_SUCCESS_STATES = frozenset({"Finished"})
-_FAILURE_STATES = frozenset({"Failed", "Deleted", "Stopped", "Stopping", "Terminating", "Killing"})
+_RUNNING_STATES = frozenset({'Running', 'Pending', 'Scheduling', 'Wait', 'Uploading'})
+_SUCCESS_STATES = frozenset({'Finished'})
+_FAILURE_STATES = frozenset(
+    {'Failed', 'Deleted', 'Stopped', 'Stopping', 'Terminating', 'Killing'}
+)
 
 
 @dataclass
@@ -30,7 +30,7 @@ class JobRecord:
     software: str
     source_tool: str
     bohr_job_id: str | None = None
-    lifecycle_state: str = "submitted"
+    lifecycle_state: str = 'submitted'
     raw_status: str | None = None
     unknown_polls: int = 0
     results: dict[str, Any] | None = None
@@ -40,7 +40,7 @@ class JobRecord:
 
     @property
     def is_terminal(self) -> bool:
-        return self.lifecycle_state in {"succeeded", "failed", "unknown_timeout"}
+        return self.lifecycle_state in {'succeeded', 'failed', 'unknown_timeout'}
 
 
 class JobRegistry:
@@ -99,7 +99,7 @@ class JobRegistry:
                 query_job_status,
             )
         except Exception as exc:
-            self._logger.warning("job_registry: cannot import job service: %s", exc)
+            self._logger.warning('job_registry: cannot import job service: %s', exc)
             return
 
         for rec in pendings:
@@ -112,7 +112,7 @@ class JobRegistry:
                     )
                 )
             except Exception as exc:
-                rec.lifecycle_state = "monitoring"
+                rec.lifecycle_state = 'monitoring'
                 rec.message = f"status_query_error: {exc}"
                 rec.updated_at = _now_iso()
                 continue
@@ -121,11 +121,11 @@ class JobRegistry:
             rec.updated_at = _now_iso()
 
             if status in _RUNNING_STATES:
-                rec.lifecycle_state = "monitoring"
+                rec.lifecycle_state = 'monitoring'
                 rec.unknown_polls = 0
                 continue
             if status in _SUCCESS_STATES:
-                rec.lifecycle_state = "succeeded"
+                rec.lifecycle_state = 'succeeded'
                 rec.unknown_polls = 0
                 try:
                     rec.results = get_job_results(
@@ -136,8 +136,8 @@ class JobRegistry:
                 except Exception as exc:
                     rec.message = f"get_results_error: {exc}"
                 continue
-            if status in _FAILURE_STATES or status.startswith("Error:"):
-                rec.lifecycle_state = "failed"
+            if status in _FAILURE_STATES or status.startswith('Error:'):
+                rec.lifecycle_state = 'failed'
                 rec.unknown_polls = 0
                 rec.message = f"terminal_failure: {status}"
                 continue
@@ -145,31 +145,31 @@ class JobRegistry:
             # Unknown-like states: retry a few times, then mark terminal unknown timeout.
             rec.unknown_polls += 1
             if rec.unknown_polls >= self._max_unknown_polls:
-                rec.lifecycle_state = "unknown_timeout"
+                rec.lifecycle_state = 'unknown_timeout'
                 rec.message = f"status remained unknown after {rec.unknown_polls} polls"
             else:
-                rec.lifecycle_state = "monitoring"
+                rec.lifecycle_state = 'monitoring'
 
     def can_finish(self) -> tuple[bool, dict[str, Any]]:
         """Finish-attempt gate result and structured reason."""
         pending = self.pending_jobs()
         if not pending:
-            return True, {"can_finish": True, "pending_jobs": 0}
+            return True, {'can_finish': True, 'pending_jobs': 0}
         preview = [
             {
-                "job_id": j.job_id,
-                "software": j.software,
-                "state": j.lifecycle_state,
-                "status": j.raw_status,
+                'job_id': j.job_id,
+                'software': j.software,
+                'state': j.lifecycle_state,
+                'status': j.raw_status,
             }
             for j in pending[:10]
         ]
         return (
             False,
             {
-                "can_finish": False,
-                "finish_block_reason": "pending_async_jobs",
-                "pending_jobs": len(pending),
-                "pending_preview": preview,
+                'can_finish': False,
+                'finish_block_reason': 'pending_async_jobs',
+                'pending_jobs': len(pending),
+                'pending_preview': preview,
             },
         )

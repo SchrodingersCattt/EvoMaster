@@ -27,29 +27,30 @@ class ThinkToolParams(BaseToolParams):
 
     The tool simply logs your thought process for better transparency and does not execute any code or make changes.
     """
-    
-    name: ClassVar[str] = "think"
 
-    thought: str = Field(description="The thought to log.")
+    name: ClassVar[str] = 'think'
+
+    thought: str = Field(description='The thought to log.')
 
 
 class ThinkTool(BaseTool):
     """思考工具"""
-    
-    name: ClassVar[str] = "think"
+
+    name: ClassVar[str] = 'think'
     params_class: ClassVar[type[BaseToolParams]] = ThinkToolParams
 
-    def execute(self, session: BaseSession, args_json: str) -> tuple[str, dict[str, Any]]:
+    def execute(
+        self, session: BaseSession, args_json: str
+    ) -> tuple[str, dict[str, Any]]:
         """记录思考内容（不执行任何操作）"""
         try:
             params = self.parse_params(args_json)
         except Exception as e:
-            return f"Parameter validation error: {str(e)}", {"error": str(e)}
-        
+            return f"Parameter validation error: {str(e)}", {'error': str(e)}
+
         assert isinstance(params, ThinkToolParams)
-        
+
         # Think 工具只记录，不执行任何操作
         self.logger.debug(f"Agent thought: {params.thought[:100]}...")
-        
-        return "Your thought has been logged.", {"thought": params.thought}
 
+        return 'Your thought has been logged.', {'thought': params.thought}

@@ -7,7 +7,6 @@ Used by ToolGuard.can_finish_survey() and by check_concept_coverage.py CLI wrapp
 No subprocess: pure Python, so finish gate does not depend on script paths.
 """
 
-from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -18,7 +17,7 @@ def load_survey_contract(collected_path: Path) -> dict | None:
     if not collected_path.exists():
         return None
     try:
-        data = json.loads(collected_path.read_text(encoding="utf-8"))
+        data = json.loads(collected_path.read_text(encoding='utf-8'))
     except Exception:
         return None
     if not isinstance(data, dict):
@@ -26,26 +25,29 @@ def load_survey_contract(collected_path: Path) -> dict | None:
     return data
 
 
-def check_concept_coverage_from_contract(data: dict, min_per_concept: int = 1) -> tuple[bool, str]:
+def check_concept_coverage_from_contract(
+    data: dict, min_per_concept: int = 1
+) -> tuple[bool, str]:
     """
     Check that evidence_cards cover all key_concepts from the contract.
 
     Uses key_concepts from the JSON (no re-parsing of topic). If key_concepts
     is missing or empty, returns (True, "no key concepts").
     """
-    concepts = data.get("key_concepts")
+    concepts = data.get('key_concepts')
     if not concepts or not isinstance(concepts, list):
-        return True, "no key concepts"
+        return True, 'no key concepts'
     concepts = [c for c in concepts if isinstance(c, str) and c.strip()]
     if not concepts:
-        return True, "no key concepts"
+        return True, 'no key concepts'
 
-    cards = data.get("evidence_cards") or []
+    cards = data.get('evidence_cards') or []
     if not isinstance(cards, list):
-        return True, "no evidence cards"
-    text_pool = " ".join(
-        (c.get("claim") or "") + " " + (c.get("source_title") or "")
-        for c in cards if isinstance(c, dict)
+        return True, 'no evidence cards'
+    text_pool = ' '.join(
+        (c.get('claim') or '') + ' ' + (c.get('source_title') or '')
+        for c in cards
+        if isinstance(c, dict)
     ).lower()
 
     missing: list[str] = []
@@ -59,17 +61,19 @@ def check_concept_coverage_from_contract(data: dict, min_per_concept: int = 1) -
             for c in cards
             if isinstance(c, dict)
             and (
-                c_lower in (c.get("claim") or "").lower()
-                or c_lower in (c.get("source_title") or "").lower()
-                or first_word in (c.get("claim") or "").lower()
-                or first_word in (c.get("source_title") or "").lower()
+                c_lower in (c.get('claim') or '').lower()
+                or c_lower in (c.get('source_title') or '').lower()
+                or first_word in (c.get('claim') or '').lower()
+                or first_word in (c.get('source_title') or '').lower()
             )
         )
         if count < min_per_concept:
             missing.append(f"'{concept}' (found {count}, need {min_per_concept})")
     if missing:
-        return False, "Topic key concepts not covered in evidence: " + "; ".join(missing)
-    return True, "All key concepts covered."
+        return False, 'Topic key concepts not covered in evidence: ' + '; '.join(
+            missing
+        )
+    return True, 'All key concepts covered.'
 
 
 def check_concept_coverage_workspace(
@@ -84,14 +88,14 @@ def check_concept_coverage_workspace(
     any file fails coverage.
     """
     workspace = Path(workspace)
-    surveys_dir = workspace / "_tmp" / "surveys"
+    surveys_dir = workspace / '_tmp' / 'surveys'
     if not surveys_dir.exists():
-        return True, "no surveys dir"
-    for p in sorted(surveys_dir.glob("collected_*.json")):
+        return True, 'no surveys dir'
+    for p in sorted(surveys_dir.glob('collected_*.json')):
         data = load_survey_contract(p)
         if not data:
             continue
         passed, reason = check_concept_coverage_from_contract(data, min_per_concept)
         if not passed:
             return False, reason
-    return True, "ok"
+    return True, 'ok'

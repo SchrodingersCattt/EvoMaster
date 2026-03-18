@@ -196,17 +196,17 @@ class BaseAgent(ABC):
             self.logger.error('=' * 80)
             self.logger.error(f"❌ Agent execution failed (RecursionError): {e}")
             self.logger.error(
-                "RecursionError stack (last 60 frames at handler):\n%s",
+                'RecursionError stack (last 60 frames at handler):\n%s',
                 ''.join(stack_frames),
             )
-            self.logger.error("Python recursion limit: %d", sys.getrecursionlimit())
+            self.logger.error('Python recursion limit: %d', sys.getrecursionlimit())
             self.logger.error('=' * 80)
             self.trajectory.finish('failed', {'reason': str(e)})
             raise
         except Exception as e:
             self.logger.error('=' * 80)
             self.logger.error(f"❌ Agent execution failed: {e}")
-            self.logger.error("Traceback:\n%s", traceback.format_exc())
+            self.logger.error('Traceback:\n%s', traceback.format_exc())
             self.logger.error('=' * 80)
             self.trajectory.finish('failed', {'reason': str(e)})
             raise
@@ -426,11 +426,15 @@ class BaseAgent(ABC):
             print('-' * 60)
 
     def _log_tool_end(
-        self, tool_name: str, observation: str, info: dict[str, Any]
+        self, tool_name: str, observation: str | dict[str, Any], info: dict[str, Any]
     ) -> None:
-        """记录工具调用结束"""
-        # 截断过长的输出：超过5000字符时，保留前2500和最后2500
-        obs_display = observation
+        """记录工具调用结束。observation 可为 str 或 dict（如 web-search 返回结构化结果）。"""
+        # 统一成字符串用于展示与截断
+        obs_display = (
+            observation
+            if isinstance(observation, str)
+            else json.dumps(observation, ensure_ascii=False, indent=2)
+        )
         if len(obs_display) > 5000:
             obs_display = (
                 obs_display[:2500] + '\n... [truncated] ...\n' + obs_display[-2500:]
@@ -457,6 +461,7 @@ class BaseAgent(ABC):
         否则使用 query()（行为与改造前完全一致）。
         """
         import sys as _sys
+
         _stack_depth = len(traceback.extract_stack())
         # Always log at INFO so it appears regardless of log level config
         self.logger.info(
@@ -477,7 +482,9 @@ class BaseAgent(ABC):
         for attempt in range(max_retries):
             try:
                 if self._on_llm_token is not None:
-                    return self.llm.query_stream(dialog_for_query, on_token=self._on_llm_token)
+                    return self.llm.query_stream(
+                        dialog_for_query, on_token=self._on_llm_token
+                    )
                 return self.llm.query(dialog_for_query)
             except Exception as e:
                 err_msg = str(e).lower()

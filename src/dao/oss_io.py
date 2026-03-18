@@ -5,8 +5,6 @@ OSS_ENDPOINT, OSS_BUCKET_NAME, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET。
 依赖：pip install oss2
 """
 
-from __future__ import annotations
-
 import logging
 import os
 import time

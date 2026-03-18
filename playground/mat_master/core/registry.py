@@ -13,8 +13,6 @@ Skill tiers (priority high → low):
   4. core      – base evomaster skills (evomaster/skills/)
 """
 
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
