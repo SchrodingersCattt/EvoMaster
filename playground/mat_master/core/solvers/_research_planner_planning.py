@@ -262,7 +262,7 @@ Rules:
             if task_id is not None:
                 try:
                     draft_path = (
-                        self._task_workspace_dir(task_id) / 'raw_plan_draft.txt'
+                        self._planner_hidden_dir(task_id) / 'raw_plan_draft.txt'
                     )
                     draft_path.write_text(reply.content or '', encoding='utf-8')
                 except Exception as save_err:
@@ -394,7 +394,7 @@ Rules:
     ) -> dict[str, Any]:
         """Revise the saved plan using only targeted ``str_replace_editor`` calls."""
         plan_path = (
-            self._task_workspace_dir(task_id) / 'current_plan.json'
+            self._planner_hidden_dir(task_id) / 'current_plan.json'
             if task_id is not None
             else None
         )

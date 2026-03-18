@@ -343,18 +343,33 @@ You can use the 'use_skill' tool to:
             workspace = getattr(self.session.config, 'workspace_path', '') or ''
             task_description = getattr(self, '_current_task_description', '')
 
-            gate_eval = self._llm_finish_gate_check(
-                task_description=task_description,
-                requested_task_completed=requested_task_completed,
-                workspace_path=workspace,
+            # When running inside a ResearchPlanner step the task_description
+            # is the step prompt (contains "[Task of This Step]" / "step N of M").
+            # The planner's own _llm_verify_step_outcome already validated
+            # completion before the agent called finish, so skip the LLM gate
+            # here — it would only see the step prompt and incorrectly block.
+            _is_planner_step = (
+                '[Task of This Step]' in task_description
+                or '[Original Intent]' in task_description
             )
-
-            if not gate_eval.get('approved', False):
-                reason = gate_eval.get('reason', 'Task completion requirements not met')
-                blocked_msgs.append(
-                    f'[finish_attempt_gate] Blocked: {reason}\n'
-                    f'Task: {task_description[:100]}{"..." if len(task_description) > 100 else ""}'
+            if _is_planner_step:
+                self.logger.debug(
+                    '[finish_attempt_gate] Planner step detected — '
+                    'skipping LLM gate (planner already verified completion).'
                 )
+            else:
+                gate_eval = self._llm_finish_gate_check(
+                    task_description=task_description,
+                    requested_task_completed=requested_task_completed,
+                    workspace_path=workspace,
+                )
+
+                if not gate_eval.get('approved', False):
+                    reason = gate_eval.get('reason', 'Task completion requirements not met')
+                    blocked_msgs.append(
+                        f'[finish_attempt_gate] Blocked: {reason}\n'
+                        f'Task: {task_description[:100]}{"..." if len(task_description) > 100 else ""}'
+                    )
         if blocked_msgs:
             self._finish_block_count += 1
             gate_info['finish_block_count'] = self._finish_block_count

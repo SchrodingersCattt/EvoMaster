@@ -40,7 +40,17 @@ Allowed prerequisite types:
 Examples of hard prerequisites:
   ✓ "Reproduce the methods from paper.pdf" but paper.pdf not in workspace → parse_pdf
   ✓ "Load the structure from data/material.cif" but file doesn't exist → clarify_task (ask user to upload)
-  ✓ "Use parameters from config.yaml" but config file not provided → clarify_task
+  ✓ "Use parameters from config.yaml" but config file not provided → clarify_task (ONLY if the task explicitly says "use config.yaml")
+
+CRITICAL ANTI-HALLUCINATION RULE:
+  If the task does NOT explicitly name a file by path or filename, do NOT invent file prerequisites.
+  The planner can always write a plan that uses default parameters or discovers parameters during execution.
+
+  ✗ WRONG: Task says "build BCC Fe and optimize with DPA" → do NOT require config.yaml (not mentioned)
+  ✗ WRONG: Task says "run a DFT calculation" → do NOT require input.yaml (not mentioned)
+  ✗ WRONG: Task says "optimize the structure" → do NOT require any config file (not mentioned)
+  ✓ RIGHT:  Task says "build BCC Fe and optimize with DPA" → ready_to_plan=true, prerequisites=[]
+  ✓ RIGHT:  Task says "run DFT with settings from my_config.yaml" → check if my_config.yaml exists
 
 === SOFT PREREQUISITES (set ready_to_plan=true) ===
 The following are NOT blocking — the planner can handle them as execution steps:

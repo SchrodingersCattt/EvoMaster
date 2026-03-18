@@ -186,6 +186,13 @@ mat_master:
     # 质量门控：survey 完成前至少检索次数（与 plan 中 10-15+ 下界一致）
     quality_gates:
       survey_min_retrieval_calls: 10
+
+    # Sub-agent 隔离模式：每个 plan step 以独立上下文执行，防止 solver 越界执行后续步骤
+    # enabled=true 时每步重置 agent 对话上下文（推荐）；false 回退到共享 solver 模式（旧行为）
+    sub_agent:
+      enabled: true
+      # 每个 step 的最大 turn 数（防止单步消耗过多预算）
+      step_turn_budget: 30
   # 专项能力开关（DirectSolver 路由时据此决定是否走 EVO）
   capabilities:
     skill_evolution:
