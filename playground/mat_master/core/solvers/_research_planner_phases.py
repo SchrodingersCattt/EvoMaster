@@ -186,7 +186,7 @@ class ResearchPlannerPhaseMixin:
         self._print_plan_report(plan)
         if task_id:
             try:
-                plan_path = self._task_workspace_dir(task_id) / 'current_plan.json'
+                plan_path = self._planner_hidden_dir(task_id) / 'current_plan.json'
                 plan_path.write_text(
                     json.dumps(
                         _plan_to_external_schema(plan), ensure_ascii=False, indent=2

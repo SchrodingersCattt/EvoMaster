@@ -111,16 +111,27 @@ class ResearchPlannerRuntimeMixin:
         return Path(self.run_dir) if self.run_dir else Path('.')
 
     def _state_path(self, task_id: str) -> Path:
-        base = self._run_dir_path()
-        workspaces = base / 'workspaces' / task_id
-        workspaces.mkdir(parents=True, exist_ok=True)
-        return workspaces / self.state_file
+        # Store state inside .planner/ so the sub-agent cannot browse it.
+        planner_dir = self._planner_hidden_dir(task_id)
+        return planner_dir / self.state_file
 
     def _task_workspace_dir(self, task_id: str) -> Path:
         base = self._run_dir_path()
         workspaces = base / 'workspaces' / task_id
         workspaces.mkdir(parents=True, exist_ok=True)
         return workspaces
+
+    def _planner_hidden_dir(self, task_id: str) -> Path:
+        """Return the dot-prefixed hidden directory for planner-internal files.
+
+        All planner artifacts (state, plan, journal, literature index, draft)
+        are stored here so that sub-agents browsing the workspace cannot
+        discover the overall plan and overstep step boundaries.
+        """
+        base = self._task_workspace_dir(task_id)
+        hidden = base / '.planner'
+        hidden.mkdir(parents=True, exist_ok=True)
+        return hidden
 
     def _load_state(self, task_id: str) -> dict[str, Any]:
         path = self._state_path(task_id)
@@ -184,10 +195,9 @@ class ResearchPlannerRuntimeMixin:
             self.logger.error('Failed to save state: %s', e)
 
     def _planner_artifact_dir(self, task_id: str) -> Path:
-        base = self._task_workspace_dir(task_id)
-        artifact_dir = base / '_tmp' / 'planner'
-        artifact_dir.mkdir(parents=True, exist_ok=True)
-        return artifact_dir
+        # Use the hidden .planner/ directory so sub-agents cannot browse
+        # the research journal or literature index.
+        return self._planner_hidden_dir(task_id)
 
     def _ensure_longtask_artifacts(
         self, state: dict[str, Any], task_id: str, goal: str
