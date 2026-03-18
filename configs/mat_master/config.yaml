@@ -15,7 +15,9 @@ llm:
     base_url: "${LITELLM_PROXY_API_BASE}"
     # temperature: 0.7
     # max_tokens: 16384
-    timeout: 300
+    timeout: 300              # 非流式整包超时（秒）；大模型长输出需要 2-3 分钟
+    stream_timeout: 20        # 流式首 token 超时（秒）；等多久没出字就报错；不填则回退到 timeout
+    stream_idle_timeout: 30   # 流式 chunk 间最大空闲（秒）；已开始流后，停顿超过此值则超时
     max_retries: 3
     retry_delay: 1.0
 
@@ -28,7 +30,9 @@ llm:
     api_version: "${AZURE_API_VERSION}"
     temperature: 0.7
     max_tokens: 16384
-    timeout: 300
+    timeout: 300              # 非流式整包超时（秒）
+    stream_timeout: 20        # 流式首 token 超时（秒）
+    stream_idle_timeout: 30   # 流式 chunk 间最大空闲（秒）
     max_retries: 3
     retry_delay: 1.0
 
@@ -40,8 +44,25 @@ llm:
     base_url: "https://api.deepseek.com"
     temperature: 0.7
     max_tokens: 16384
-    timeout: 300
+    timeout: 300              # 非流式整包超时（秒）
+    stream_timeout: 20        # 流式首 token 超时（秒）
+    stream_idle_timeout: 30   # 流式 chunk 间最大空闲（秒）
     max_retries: 3
+    retry_delay: 1.0
+
+  # Context compaction 专用小模型（便宜、快速，通过 LiteLLM proxy）
+  # 仅在 context compact 触发时调用，不影响主 agent LLM
+  compaction:
+    provider: "openai"
+    model: "gemini-3-flash-preview"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    temperature: 0.3            # compaction 不需要创造性，低温更稳定
+    max_tokens: 4096
+    timeout: 120              # compaction 小模型，非流式超时适当缩短
+    stream_timeout: 15        # compaction 小模型响应快，首 token 超时 15s 足够
+    stream_idle_timeout: 20   # compaction 小模型 chunk 间隔保护
+    max_retries: 2
     retry_delay: 1.0
 
   default: "litellm"
@@ -73,7 +94,7 @@ agents:
         context_window_tokens: 200000    # 模型 context window 大小（claude-sonnet-4-6 = 200k）
         trigger_ratio: 0.80              # 触发阈值 = context_window_tokens * 0.80 = 160000
         preserve_recent_turns: 2         # 压缩后保留最近 N 轮完整 tool-transaction
-        compaction_llm: null             # 用于摘要的 LLM key；null 则复用 agent LLM
+        compaction_llm: "compaction"     # 用于摘要的 LLM key；指向 llm.compaction（gemini-3-flash-preview）
         fallback_strategy: "sliding_window"  # 压缩失败时的降级策略
         max_compact_tokens: 3000         # compact message 最大 token 数（约 9000 字符）
         min_compressible_ratio: 0.10     # P1: compressible/total < 10% 时跳过 compact
