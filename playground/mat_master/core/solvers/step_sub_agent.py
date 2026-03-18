@@ -7,21 +7,26 @@ overstepping problem where the solver sees the overall goal and attempts
 to complete future steps.
 
 Design constraints (from architecture doc):
-  - NO tool filtering: sub-agents access ALL tools, no restrictions.
   - Context isolation is the primary overstepping prevention mechanism.
   - Hub-and-spoke: sub-agents only report to the planner, never to each other.
   - Concurrency reserved but currently set to 1.
+  - Memory tools (``mem_save``, ``mem_recall``) are excluded from planner
+    sub-agents to prevent cross-session memory leaking future-step info.
 """
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 from evomaster.utils.types import TaskInstance
 
 from .direct_solver import DirectSolver
 
 logger = logging.getLogger('MatMaster.StepSubAgent')
+
+# Tools excluded from planner sub-agents to prevent cross-session memory
+# leaking future-step information into the current step's context.
+_DEFAULT_EXCLUDED_TOOLS: frozenset[str] = frozenset({'mem_save', 'mem_recall'})
 
 
 class SubAgentHandle:
@@ -45,12 +50,14 @@ class SubAgentHandle:
         step_id: int,
         step_turn_budget: int = 30,
         workspaces: Path | None = None,
+        excluded_tools: frozenset[str] = _DEFAULT_EXCLUDED_TOOLS,
     ):
         self._agent = agent
         self._config = config
         self._step_id = step_id
         self._step_turn_budget = step_turn_budget
         self._workspaces = workspaces
+        self._excluded_tools = excluded_tools
         self._solver: DirectSolver | None = None
         self._prepared = False
 
@@ -76,7 +83,26 @@ class SubAgentHandle:
         # 2. Reset the agent's dialog to initial system prompt only.
         self._agent.reset_context()
 
-        # 2. Override the agent's per-run max_turns to the step budget so
+        # 2b. Filter out excluded tools (e.g. mem_save/mem_recall) from the
+        #     dialog so the sub-agent cannot retrieve cross-session memories.
+        if self._excluded_tools and hasattr(self._agent, 'current_dialog'):
+            dialog = self._agent.current_dialog
+            if dialog is not None and dialog.tools:
+                original_count = len(dialog.tools)
+                dialog.tools = [
+                    spec
+                    for spec in dialog.tools
+                    if spec.get('function', {}).get('name') not in self._excluded_tools
+                ]
+                removed = original_count - len(dialog.tools)
+                if removed:
+                    logger.info(
+                        '[SubAgent] Filtered %d tool(s) from dialog: %s',
+                        removed,
+                        sorted(self._excluded_tools),
+                    )
+
+        # 3. Override the agent's per-run max_turns to the step budget so
         #    the sub-agent cannot consume the entire planner budget.
         original_max_turns = getattr(
             getattr(self._agent, 'config', None), 'max_turns', None
@@ -84,7 +110,7 @@ class SubAgentHandle:
         if original_max_turns is not None and self._step_turn_budget > 0:
             self._agent.config.max_turns = self._step_turn_budget
 
-        # 3. Create a fresh DirectSolver (stateless — no accumulated results).
+        # 4. Create a fresh DirectSolver (stateless — no accumulated results).
         self._solver = DirectSolver(self._agent, self._config)
         if self._workspaces is not None:
             self._solver.set_run_dir(self._workspaces)
@@ -150,16 +176,22 @@ class StepSubAgentFactory:
         enabled: bool = True,
         step_turn_budget: int = 30,
         original_max_turns: int = 200,
+        excluded_tools: Sequence[str] | None = None,
     ):
         self._agent = agent
         self._config = config
         self.enabled = enabled
         self._step_turn_budget = step_turn_budget
         self._original_max_turns = original_max_turns
+        self._excluded_tools: frozenset[str] = (
+            frozenset(excluded_tools) if excluded_tools is not None
+            else _DEFAULT_EXCLUDED_TOOLS
+        )
         logger.info(
-            '[SubAgentFactory] Initialised: enabled=%s, step_turn_budget=%d',
+            '[SubAgentFactory] Initialised: enabled=%s, step_turn_budget=%d, excluded_tools=%s',
             self.enabled,
             self._step_turn_budget,
+            sorted(self._excluded_tools) if self._excluded_tools else '(none)',
         )
 
     def create(
@@ -179,6 +211,7 @@ class StepSubAgentFactory:
             step_id=step_id,
             step_turn_budget=self._step_turn_budget,
             workspaces=workspaces,
+            excluded_tools=self._excluded_tools,
         )
 
     def restore_agent_state(self) -> None:
