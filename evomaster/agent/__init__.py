@@ -8,6 +8,8 @@ Agent 是 EvoMaster 的智能体组件，包含：
 - Tools（工具系统）
 """
 
+from __future__ import annotations
+
 from evomaster.utils.types import (
     AssistantMessage,
     Dialog,

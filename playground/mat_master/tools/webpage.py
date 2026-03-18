@@ -4,15 +4,14 @@ Replaces the remote mat_doc MCP `extract_info_from_webpage` tool with a
 local implementation so that webpage fetching never depends on an external
 server connection.
 """
-from __future__ import annotations
 
 import json
 import logging
 import re
 import time as _time
 from collections import defaultdict
-from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 from typing import Any, ClassVar
 from urllib.parse import urlparse
 
@@ -31,25 +30,25 @@ _MAX_CONTENT_LENGTH = 50_000
 
 # Browser-like headers to reduce 403/anti-bot; exported for reuse (e.g. structure-manager).
 BROWSER_HEADERS: dict[str, str] = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
+    'User-Agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) '
+        'Chrome/120.0.0.0 Safari/537.36'
     ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
 }
 
 # Alternate UA for single retry on 403/429 (no extra retries, no proxy).
 ALTERNATE_UA_HEADERS: dict[str, str] = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) "
-        "Gecko/20100101 Firefox/121.0"
+    'User-Agent': (
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) '
+        'Gecko/20100101 Firefox/121.0'
     ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Accept-Encoding": "gzip, deflate, br",
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
 }
 
 logger = logging.getLogger(__name__)
@@ -110,7 +109,7 @@ def _fetch_webpage_content(
     Uses a Session per call if not provided (reuses TCP/cookies for redirects).
     On 403/429, retries once after 1.5s with alternate User-Agent (Firefox).
     """
-    logger.info("Fetching content from URL: %s", url)
+    logger.info('Fetching content from URL: %s', url)
     hdrs = headers or BROWSER_HEADERS
 
     def _do_get(h: dict[str, str]) -> requests.Response:
@@ -121,14 +120,16 @@ def _fetch_webpage_content(
 
     response = _do_get(hdrs)
     if response.status_code in (403, 429):
-        logger.warning("Got %s for %s; retrying once with alternate UA.", response.status_code, url)
+        logger.warning(
+            'Got %s for %s; retrying once with alternate UA.', response.status_code, url
+        )
         _time.sleep(1.5)
         response = _do_get(ALTERNATE_UA_HEADERS)
     response.raise_for_status()
 
-    content_type = response.headers.get("Content-Type", "").lower()
-    is_pdf = "application/pdf" in content_type or (
-        "application/octet-stream" in content_type and url.lower().endswith(".pdf")
+    content_type = response.headers.get('Content-Type', '').lower()
+    is_pdf = 'application/pdf' in content_type or (
+        'application/octet-stream' in content_type and url.lower().endswith('.pdf')
     )
 
     if is_pdf:
@@ -136,30 +137,30 @@ def _fetch_webpage_content(
             raise RuntimeError(
                 'PyMuPDF (fitz) is not available; cannot extract PDF content.'
             )
-        doc = fitz.open(stream=response.content, filetype="pdf")
-        text = "".join(page.get_text() for page in doc)
+        doc = fitz.open(stream=response.content, filetype='pdf')
+        text = ''.join(page.get_text() for page in doc)
         doc.close()
         content = text
     else:
         raw = response.text
-        if raw.strip().startswith("<"):
+        if raw.strip().startswith('<'):
             try:
-                soup = BeautifulSoup(raw, "lxml")
+                soup = BeautifulSoup(raw, 'lxml')
             except Exception:
-                soup = BeautifulSoup(raw, "html.parser")
-            for tag in soup(["script", "style"]):
+                soup = BeautifulSoup(raw, 'html.parser')
+            for tag in soup(['script', 'style']):
                 tag.decompose()
             lines = (line.strip() for line in soup.get_text().splitlines())
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            content = " ".join(chunk for chunk in chunks if chunk)
+            chunks = (phrase.strip() for line in lines for phrase in line.split('  '))
+            content = ' '.join(chunk for chunk in chunks if chunk)
         else:
             content = raw
 
-    content = re.sub(r"\s+", " ", content)
-    content = re.sub(r"[^\x20-\x7E\x0A\x0D]", "", content)
+    content = re.sub(r'\s+', ' ', content)
+    content = re.sub(r'[^\x20-\x7E\x0A\x0D]', '', content)
     if len(content) > _MAX_CONTENT_LENGTH:
         content = content[:_MAX_CONTENT_LENGTH]
-        logger.warning("Webpage content truncated to %d chars", _MAX_CONTENT_LENGTH)
+        logger.warning('Webpage content truncated to %d chars', _MAX_CONTENT_LENGTH)
     return content
 
 
@@ -170,17 +171,17 @@ class ExtractWebpageToolParams(BaseToolParams):
     keyed by URL; all URLs are processed concurrently.
     """
 
-    name: ClassVar[str] = "extract_info_from_webpage"
+    name: ClassVar[str] = 'extract_info_from_webpage'
 
     url: list[str] = Field(
-        description="List of web page URLs to fetch and extract text from.",
+        description='List of web page URLs to fetch and extract text from.',
     )
 
 
 class ExtractWebpageTool(BaseTool):
     """Built-in tool: extract plain-text content from web pages."""
 
-    name: ClassVar[str] = "extract_info_from_webpage"
+    name: ClassVar[str] = 'extract_info_from_webpage'
     params_class: ClassVar[type[BaseToolParams]] = ExtractWebpageToolParams
 
     def __init__(self) -> None:
@@ -196,11 +197,11 @@ class ExtractWebpageTool(BaseTool):
 
             if not urls:
                 result = {
-                    "message": "url list is empty",
-                    "total_processing_time_seconds": 0.0,
-                    "time_saving_json_seconds": 0.0,
+                    'message': 'url list is empty',
+                    'total_processing_time_seconds': 0.0,
+                    'time_saving_json_seconds': 0.0,
                 }
-                return json.dumps(result), {"result": result}
+                return json.dumps(result), {'result': result}
 
             start = _time.time()
             results: dict[str, Any] = {}
@@ -211,22 +212,34 @@ class ExtractWebpageTool(BaseTool):
                 try:
                     domain = _extract_domain(u)
                     if self._domain_circuit.is_open(domain):
-                        reason = self._domain_circuit.open_circuits.get(domain, 'blocked')
-                        return u, None, _time.time() - t0, {
-                            'blocked': True,
-                            'domain': domain,
-                            'reason': reason,
-                            'message': (
-                                'Domain circuit is open due to repeated failures; '
-                                'skip further fetches for this domain.'
-                            ),
-                        }
-                    content = _fetch_webpage_content(u)  # uses BROWSER_HEADERS + Session
+                        reason = self._domain_circuit.open_circuits.get(
+                            domain, 'blocked'
+                        )
+                        return (
+                            u,
+                            None,
+                            _time.time() - t0,
+                            {
+                                'blocked': True,
+                                'domain': domain,
+                                'reason': reason,
+                                'message': (
+                                    'Domain circuit is open due to repeated failures; '
+                                    'skip further fetches for this domain.'
+                                ),
+                            },
+                        )
+                    content = _fetch_webpage_content(
+                        u
+                    )  # uses BROWSER_HEADERS + Session
                     return u, content, _time.time() - t0, None
                 except requests.HTTPError as exc:
                     status = None
                     try:
-                        status = int(getattr(getattr(exc, 'response', None), 'status_code', None) or 0)
+                        status = int(
+                            getattr(getattr(exc, 'response', None), 'status_code', None)
+                            or 0
+                        )
                     except Exception:
                         status = None
                     domain = _extract_domain(u)
@@ -248,18 +261,25 @@ class ExtractWebpageTool(BaseTool):
                         count,
                         opened,
                     )
-                    return u, None, _time.time() - t0, {
-                        'error_class': 'HTTPError',
-                        'http_status': status,
-                        'domain': domain,
-                        'reason': reason,
-                        'domain_failure_count': count,
-                        'domain_circuit_opened': opened,
-                        'message': str(exc),
-                    }
+                    return (
+                        u,
+                        None,
+                        _time.time() - t0,
+                        {
+                            'error_class': 'HTTPError',
+                            'http_status': status,
+                            'domain': domain,
+                            'reason': reason,
+                            'domain_failure_count': count,
+                            'domain_circuit_opened': opened,
+                            'message': str(exc),
+                        },
+                    )
                 except requests.Timeout as exc:
                     domain = _extract_domain(u)
-                    opened, count = self._domain_circuit.record_failure(domain, 'timeout')
+                    opened, count = self._domain_circuit.record_failure(
+                        domain, 'timeout'
+                    )
                     logger.warning(
                         'Web fetch timeout url=%s domain=%s count=%d opened=%s',
                         u,
@@ -267,33 +287,47 @@ class ExtractWebpageTool(BaseTool):
                         count,
                         opened,
                     )
-                    return u, None, _time.time() - t0, {
-                        'error_class': 'Timeout',
-                        'domain': domain,
-                        'reason': 'timeout',
-                        'domain_failure_count': count,
-                        'domain_circuit_opened': opened,
-                        'message': str(exc),
-                    }
+                    return (
+                        u,
+                        None,
+                        _time.time() - t0,
+                        {
+                            'error_class': 'Timeout',
+                            'domain': domain,
+                            'reason': 'timeout',
+                            'domain_failure_count': count,
+                            'domain_circuit_opened': opened,
+                            'message': str(exc),
+                        },
+                    )
                 except Exception as exc:
                     domain = _extract_domain(u)
-                    opened, count = self._domain_circuit.record_failure(domain, 'exception')
-                    logger.error("Failed to fetch %s: %s", u, exc, exc_info=True)
-                    return u, None, _time.time() - t0, {
-                        'error_class': type(exc).__name__,
-                        'domain': domain,
-                        'reason': 'exception',
-                        'domain_failure_count': count,
-                        'domain_circuit_opened': opened,
-                        'message': str(exc),
-                    }
+                    opened, count = self._domain_circuit.record_failure(
+                        domain, 'exception'
+                    )
+                    logger.error('Failed to fetch %s: %s', u, exc, exc_info=True)
+                    return (
+                        u,
+                        None,
+                        _time.time() - t0,
+                        {
+                            'error_class': type(exc).__name__,
+                            'domain': domain,
+                            'reason': 'exception',
+                            'domain_failure_count': count,
+                            'domain_circuit_opened': opened,
+                            'message': str(exc),
+                        },
+                    )
 
             # Group by domain to limit concurrency per domain (reduce 403/429).
             by_domain: dict[str, list[str]] = defaultdict(list)
             for u in urls:
-                by_domain[_extract_domain(u) or "__unknown__"].append(u)
+                by_domain[_extract_domain(u) or '__unknown__'].append(u)
 
-            def run_domain_urls(domain_urls: list[str]) -> list[tuple[str, Any, float, dict | None]]:
+            def run_domain_urls(
+                domain_urls: list[str],
+            ) -> list[tuple[str, Any, float, dict | None]]:
                 out: list[tuple[str, Any, float, dict | None]] = []
                 for u in domain_urls:
                     if request_delay > 0:
@@ -312,33 +346,33 @@ class ExtractWebpageTool(BaseTool):
                     for u, content, elapsed, err in future.result():
                         if err is not None:
                             results[f"webpage_detailed_contents from {u}"] = {
-                                "error": err,
-                                "processing_time_seconds": round(elapsed, 3),
+                                'error': err,
+                                'processing_time_seconds': round(elapsed, 3),
                             }
                         else:
                             results[f"webpage_detailed_contents from {u}"] = {
-                                "content": content,
-                                "processing_time_seconds": round(elapsed, 3),
+                                'content': content,
+                                'processing_time_seconds': round(elapsed, 3),
                             }
 
             total = round(_time.time() - start, 3)
-            results["total_processing_time_seconds"] = total
-            results["time_saving_json_seconds"] = 0.0
+            results['total_processing_time_seconds'] = total
+            results['time_saving_json_seconds'] = 0.0
 
             # Provide circuit summary and guidance to avoid infinite paywall retries.
-            results["web_fetch_circuit"] = self._domain_circuit.summary()
+            results['web_fetch_circuit'] = self._domain_circuit.summary()
             if self._domain_circuit.open_circuits:
-                results["web_fetch_guidance"] = (
+                results['web_fetch_guidance'] = (
                     'Some domains are blocked (paywall/forbidden/not-found/rate-limit). '
                     'Do NOT keep retrying those domains; use alternative open sources '
                     '(e.g., arXiv/PMC/Crossref metadata) or proceed with caveats and finish.'
                 )
 
             obs = json.dumps(results, ensure_ascii=False)
-            return obs, {"result": results}
+            return obs, {'result': results}
         except Exception as exc:
-            self.logger.warning("extract_info_from_webpage failed: %s", exc)
-            return f"Error: {exc}", {"error": str(exc)}
+            self.logger.warning('extract_info_from_webpage failed: %s', exc)
+            return f"Error: {exc}", {'error': str(exc)}
 
 
 def get_extract_webpage_tool() -> ExtractWebpageTool:

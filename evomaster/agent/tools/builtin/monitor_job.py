@@ -664,7 +664,9 @@ def _download_results_to_local_dir(
                 )
                 downloaded.extend(p.resolve().as_posix() for p in dir_files)
                 if not dir_files:
-                    skipped.append(f'{rp}: directory is empty or all files exceeded size limit')
+                    skipped.append(
+                        f'{rp}: directory is empty or all files exceeded size limit'
+                    )
             except Exception as exc:
                 errors.append(f'{rp} (directory): {exc}')
             continue
@@ -677,9 +679,7 @@ def _download_results_to_local_dir(
         segment = re.sub(r'[^\w.\-]', '_', segment) or f'artifact_{i}'
         dest = download_dir / f'result_{i}_{segment}'
         try:
-            path = download_job_file(
-                rel_rp, bohr_job_id, dest, access_key=access_key
-            )
+            path = download_job_file(rel_rp, bohr_job_id, dest, access_key=access_key)
             downloaded.append(path.resolve().as_posix())
         except Exception as exc:
             errors.append(f'{rp}: {exc}')

@@ -1,5 +1,7 @@
 """Lightweight connection handling for MCP servers."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from contextlib import AsyncExitStack
 from typing import Any
@@ -57,9 +59,9 @@ class MCPConnection(ABC):
         response = await self.session.list_tools()
         return [
             {
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": tool.inputSchema,
+                'name': tool.name,
+                'description': tool.description,
+                'input_schema': tool.inputSchema,
             }
             for tool in response.tools
         ]
@@ -73,7 +75,9 @@ class MCPConnection(ABC):
 class MCPConnectionStdio(MCPConnection):
     """MCP connection using standard input/output."""
 
-    def __init__(self, command: str, args: list[str] = None, env: dict[str, str] = None):
+    def __init__(
+        self, command: str, args: list[str] = None, env: dict[str, str] = None
+    ):
         super().__init__()
         self.command = command
         self.args = args or []
@@ -132,20 +136,22 @@ def create_connection(
     """
     transport = transport.lower()
 
-    if transport == "stdio":
+    if transport == 'stdio':
         if not command:
-            raise ValueError("Command is required for stdio transport")
+            raise ValueError('Command is required for stdio transport')
         return MCPConnectionStdio(command=command, args=args, env=env)
 
-    elif transport == "sse":
+    elif transport == 'sse':
         if not url:
-            raise ValueError("URL is required for sse transport")
+            raise ValueError('URL is required for sse transport')
         return MCPConnectionSSE(url=url, headers=headers)
 
-    elif transport in ["http", "streamable_http", "streamable-http"]:
+    elif transport in ['http', 'streamable_http', 'streamable-http']:
         if not url:
-            raise ValueError("URL is required for http transport")
+            raise ValueError('URL is required for http transport')
         return MCPConnectionHTTP(url=url, headers=headers)
 
     else:
-        raise ValueError(f"Unsupported transport type: {transport}. Use 'stdio', 'sse', or 'http'")
+        raise ValueError(
+            f"Unsupported transport type: {transport}. Use 'stdio', 'sse', or 'http'"
+        )

@@ -17,8 +17,11 @@ if TYPE_CHECKING:
 
 class EnvConfig(BaseModel):
     """Env 基础配置"""
-    name: str = Field(default="default_env", description="环境名称")
-    session_config: SessionConfig | None = Field(default=None, description="Session 配置")
+
+    name: str = Field(default='default_env', description='环境名称')
+    session_config: SessionConfig | None = Field(
+        default=None, description='Session 配置'
+    )
 
 
 class BaseEnv(ABC):
@@ -48,12 +51,10 @@ class BaseEnv(ABC):
     @abstractmethod
     def setup(self) -> None:
         """初始化环境"""
-        pass
 
     @abstractmethod
     def teardown(self) -> None:
         """清理环境资源"""
-        pass
 
     @abstractmethod
     def get_session(self) -> BaseSession:
@@ -62,13 +63,12 @@ class BaseEnv(ABC):
         Returns:
             BaseSession 实例
         """
-        pass
 
     @abstractmethod
     def submit_job(
         self,
         command: str,
-        job_type: str = "debug",
+        job_type: str = 'debug',
         **kwargs: Any,
     ) -> str:
         """提交作业到环境
@@ -81,7 +81,6 @@ class BaseEnv(ABC):
         Returns:
             作业 ID
         """
-        pass
 
     @abstractmethod
     def get_job_status(self, job_id: str) -> dict[str, Any]:
@@ -93,7 +92,6 @@ class BaseEnv(ABC):
         Returns:
             状态信息字典
         """
-        pass
 
     @abstractmethod
     def cancel_job(self, job_id: str) -> None:
@@ -102,7 +100,6 @@ class BaseEnv(ABC):
         Args:
             job_id: 作业 ID
         """
-        pass
 
     def __enter__(self) -> BaseEnv:
         """上下文管理器入口"""

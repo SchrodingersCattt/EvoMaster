@@ -8,7 +8,7 @@ skill_type: operator
 
 A systematic researcher that collects literature evidence and, for `standard`/`deep` depth, generates **detailed review reports saved as Markdown files**.
 
-**When NOT to use**: If the user only wants a quick factual answer in chat (not a file), use MCP search tools directly (`mat_sn_web-search`, `mat_sn_search-papers-normal`) and answer in chat. Invoke deep-survey only when the output is a **file** or when another skill (e.g. composition-optimization) needs structured evidence.
+**When NOT to use**: If the user only wants a quick factual answer in chat (not a file), use MCP search tools directly (`web-search`, `mat_sn_search-papers-normal`) and answer in chat. Invoke deep-survey only when the output is a **file** or when another skill (e.g. composition-optimization) needs structured evidence.
 
 ## Depth tiers
 
@@ -81,7 +81,7 @@ Converts raw `mat_sn_*` tool outputs into `evidence_cards` and writes them to `c
   - `python collect_evidence.py --collected_json _tmp/surveys/collected_MyTopic.json --facet "Mechanism"` *(recommended: assign facet at ingest so cards are tagged for this batch)*
   - `python collect_evidence.py --collected_json _tmp/surveys/collected_MyTopic.json --tool_outputs_dir _tmp/tool_outputs`
   - `python collect_evidence.py --topic "MyTopic"` *(auto-derives collected_json path and tool_outputs_dir)*
-- **Supported sources**: any `mat_sn_*` paper search tool (output with `data[]` field, e.g. `mat_sn_search-papers-enhanced`, `mat_sn_search-papers-normal`, `mat_sn_scholar-search`) and any web search tool (output with `results[]` field, e.g. `mat_sn_web-search`). If a tool is unavailable or returns errors, switch to a different available search tool or method — do not retry the same failing tool.
+- **Supported sources**: any `mat_sn_*` paper search tool (output with `data[]` field, e.g. `mat_sn_search-papers-enhanced`, `mat_sn_search-papers-normal`, `mat_sn_scholar-search`) and any web search tool (output with `results[]` field, e.g. `web-search`). If a tool is unavailable or returns errors, switch to a different available search tool or method — do not retry the same failing tool.
 - **Output**: Prints `{"status":"ok","cards_added":<n>,"cards_total":<n>,"collected_json_path":"..."}`.
 - **Survey contract**: `collected_*.json` is the survey contract (schema_version 2: `source_kind`, `key_concepts`). Downstream tools and the finish gate read these fields; do not rely on path heuristics.
 
@@ -112,7 +112,7 @@ Compiles collected findings into the final structured Markdown report.
 
 ## Tool availability and fallback
 
-**If any `mat_sn_*` search tool returns an error, is unavailable, or returns 0 results repeatedly**: do NOT retry the same tool. Switch to a different available search tool or method (e.g. try a different `mat_sn_*` tool, use `mat_sn_web-search`, or use `extract_info_from_webpage` on a known URL). If all `mat_sn_*` tools are unavailable, proceed with whatever information is available and note the limitation.
+**If any `mat_sn_*` search tool returns an error, is unavailable, or returns 0 results repeatedly**: do NOT retry the same tool. Switch to a different available search tool or method (e.g. try a different `mat_sn_*` tool, use `web-search`, or use `extract_info_from_webpage` on a known URL). If all `mat_sn_*` tools are unavailable, proceed with whatever information is available and note the limitation.
 
 ## Rules
 

@@ -47,13 +47,13 @@ From the user's topic or question, derive **multiple search facets** (aspects). 
 - **Do** run **multiple searches per facet**:
   - For each facet, formulate **2–4 query variants** (e.g. different keywords, Chinese/English, synonyms, "X review", "X mechanism").
   - Call **paper search** (e.g. `mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `mat_sn_search-papers-enhanced`) for each variant.
-  - Call **web search** (e.g. `mat_sn_web-search`) where the table above says "Web" (definitions, tutorials).
+  - Call **web search** (e.g. `web-search`) where the table above says "Web" (definitions, tutorials).
 - **Minimum**: Roughly **3–5 facets × 2–3 queries per facet** ⇒ **at least 6–15 retrieval tool calls** before synthesizing. For "deep" surveys, more rounds (e.g. second round on under-covered facets) are expected.
 - After each search: **filter for relevance**; keep only hits clearly related to that facet and the user intent. Then continue to the next query or facet.
 
 ## 3. Tool usage by facet
 
-- **Definition / tutorials**: Prefer `mat_sn_web-search` (e.g. "X definition", "X tutorial").
+- **Definition / tutorials**: Prefer `web-search` (e.g. "X definition", "X tutorial").
 - **Mechanism / methods / reviews**: Prefer `mat_sn_search-papers-normal`, `mat_sn_scholar-search`, or `mat_sn_pubmed-search` with queries like "X mechanism", "X review".
 - **Single URL deep-dive**: Web search returns snippets only. When a result URL is clearly relevant, use `extract_info_from_webpage` (built-in) to pull full page content before using it; do not rely on snippets alone. Do not extract every URL—only those that clearly match the facet or user intent.
 - **Prefer English** for search query terms when possible (better coverage). Before synthesizing, consider each source’s quality (authority, relevance, recency).

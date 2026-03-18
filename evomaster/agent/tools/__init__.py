@@ -8,6 +8,8 @@
 - mcp/: MCP 协议工具支持
 """
 
+from __future__ import annotations
+
 from .base import (
     BaseTool,
     ToolError,

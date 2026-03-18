@@ -5,18 +5,15 @@ This policy centralizes:
 2) Which tool calls are allowed while async jobs are pending.
 """
 
-from __future__ import annotations
-
-
 
 class AsyncExecutionPolicy:
     """Single policy entry for async-execution behavior."""
 
     _HIDDEN_LIFECYCLE_NAMES = frozenset(
-        {"query_job_status", "get_job_results", "terminate_job", "get_job_status"}
+        {'query_job_status', 'get_job_results', 'terminate_job', 'get_job_status'}
     )
     _HIDDEN_LIFECYCLE_SUFFIXES = tuple(f"_{n}" for n in _HIDDEN_LIFECYCLE_NAMES)
-    _ALWAYS_ALLOWED_DURING_PENDING = frozenset({"think", "mem_save", "mem_recall"})
+    _ALWAYS_ALLOWED_DURING_PENDING = frozenset({'think', 'mem_save', 'mem_recall'})
 
     def __init__(self, registry) -> None:
         self._registry = registry
@@ -34,24 +31,26 @@ class AsyncExecutionPolicy:
 
         filtered = []
         for spec in specs:
-            fn = getattr(spec, "function", None)
-            name = getattr(fn, "name", "") if fn else ""
+            fn = getattr(spec, 'function', None)
+            name = getattr(fn, 'name', '') if fn else ''
             if not isinstance(name, str) or not name:
                 filtered.append(spec)
                 continue
 
             # Hide generic lifecycle tools globally for every mat_* server,
             # not only servers discovered as async in registry.
-            if name.startswith("mat_") and name.endswith(self._HIDDEN_LIFECYCLE_SUFFIXES):
+            if name.startswith('mat_') and name.endswith(
+                self._HIDDEN_LIFECYCLE_SUFFIXES
+            ):
                 continue
 
             matched_prefix = None
-            remote_name = ""
+            remote_name = ''
             for prefix in prefixes:
                 marker = f"{prefix}_"
                 if name.startswith(marker):
                     matched_prefix = prefix
-                    remote_name = name[len(marker):]
+                    remote_name = name[len(marker) :]
                     break
 
             if not matched_prefix:
@@ -62,31 +61,30 @@ class AsyncExecutionPolicy:
                 continue
 
             if not self._registry.is_async_tool(matched_prefix, remote_name):
-                if not remote_name.startswith("submit_"):
+                if not remote_name.startswith('submit_'):
                     filtered.append(spec)
                 continue
 
-            if remote_name.startswith("submit_"):
+            if remote_name.startswith('submit_'):
                 filtered.append(spec)
 
         return filtered
 
     def is_call_allowed_while_pending(self, tool_call) -> bool:
         """Restrict tool calls when async jobs are still running."""
-        name = tool_call.function.name or ""
+        name = tool_call.function.name or ''
         if name in self._ALWAYS_ALLOWED_DURING_PENDING:
             return True
-        if name.startswith("mat_") and "_submit_" in name:
+        if name.startswith('mat_') and '_submit_' in name:
             return True
-        if name == "monitor_job":
+        if name == 'monitor_job':
             return True
         return False
 
     @staticmethod
     def pending_gate_message() -> str:
         return (
-            "⚠️ PENDING ASYNC JOB GATE: async calculations are still running. "
-            "Unrelated tools are blocked (e.g., literature/web/doc/manual searches). "
-            "Keep monitoring pending jobs until completion."
+            '⚠️ PENDING ASYNC JOB GATE: async calculations are still running. '
+            'Unrelated tools are blocked (e.g., literature/web/doc/manual searches). '
+            'Keep monitoring pending jobs until completion.'
         )
-

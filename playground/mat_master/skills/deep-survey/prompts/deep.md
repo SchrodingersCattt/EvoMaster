@@ -18,7 +18,7 @@ Produce a full-length, multi-section review report. This is the most rigorous ti
 - Target total: **10-15+ retrieval tool calls**.
 
 ### Step 2 — Execute retrieval loop
-- For each facet and each query variant: call `mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `mat_sn_web-search` repeatedly. Prefer **English queries** for broader coverage.
+- For each facet and each query variant: call `mat_sn_search-papers-normal`, `mat_sn_scholar-search`, `web-search` repeatedly. Prefer **English queries** for broader coverage.
 - After each search: filter for relevance (authority, recency, direct topic match). Keep only hits clearly related to the facet.
 - Web search returns snippets only: fetch full page content (`mat_doc_*`) for high-relevance URLs.
 - For high-relevance papers, fetch full text where accessible.

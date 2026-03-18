@@ -74,9 +74,9 @@ class MCPConnection(ABC):
         response = await self.session.list_tools()
         return [
             {
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": tool.inputSchema,
+                'name': tool.name,
+                'description': tool.description,
+                'input_schema': tool.inputSchema,
             }
             for tool in response.tools
         ]
@@ -96,14 +96,14 @@ class MCPConnection(ABC):
         """
         result = await self.session.call_tool(tool_name, arguments=arguments)
         _logger.debug(
-            "MCP raw result: tool=%s isError=%s content=%s",
+            'MCP raw result: tool=%s isError=%s content=%s',
             tool_name,
             getattr(result, 'isError', 'N/A'),
             result.content,
         )
         if getattr(result, 'isError', False):
             parts = []
-            for item in (result.content or []):
+            for item in result.content or []:
                 if hasattr(item, 'text'):
                     parts.append(item.text)
                 else:
@@ -118,7 +118,9 @@ class MCPConnectionStdio(MCPConnection):
     通过启动子进程并使用 stdio 进行通信。
     """
 
-    def __init__(self, command: str, args: list[str] = None, env: dict[str, str] = None):
+    def __init__(
+        self, command: str, args: list[str] = None, env: dict[str, str] = None
+    ):
         """初始化 stdio 连接
 
         Args:
@@ -199,20 +201,22 @@ def create_connection(
     """
     transport = transport.lower()
 
-    if transport == "stdio":
+    if transport == 'stdio':
         if not command:
-            raise ValueError("Command is required for stdio transport")
+            raise ValueError('Command is required for stdio transport')
         return MCPConnectionStdio(command=command, args=args, env=env)
 
-    elif transport == "sse":
+    elif transport == 'sse':
         if not url:
-            raise ValueError("URL is required for sse transport")
+            raise ValueError('URL is required for sse transport')
         return MCPConnectionSSE(url=url, headers=headers)
 
-    elif transport in ["http", "streamable_http", "streamable-http"]:
+    elif transport in ['http', 'streamable_http', 'streamable-http']:
         if not url:
-            raise ValueError("URL is required for http transport")
+            raise ValueError('URL is required for http transport')
         return MCPConnectionHTTP(url=url, headers=headers)
 
     else:
-        raise ValueError(f"Unsupported transport type: {transport}. Use 'stdio', 'sse', or 'http'")
+        raise ValueError(
+            f"Unsupported transport type: {transport}. Use 'stdio', 'sse', or 'http'"
+        )
