@@ -21,6 +21,36 @@ except ImportError:
 
 
 class ResearchPlannerExecutionMixin:
+    def _extract_produced_artifacts(self) -> list[str]:
+        """Extract file paths produced during the most recent agent run.
+
+        Reads ``saved_path`` and ``downloaded_files`` from the agent's
+        ``ExecutionJournal`` entries, deduplicates, and returns a flat list.
+        The journal is reset at the start of each ``agent.run()`` call, so
+        after a step's ``DirectSolver.run()`` completes the journal contains
+        exactly that step's tool-call records.
+        """
+        journal = getattr(self.agent, '_execution_journal', None)
+        if journal is None:
+            return []
+        seen: set[str] = set()
+        artifacts: list[str] = []
+        for entry in journal.entries:
+            path = entry.get('saved_path')
+            if path and path not in seen:
+                seen.add(path)
+                artifacts.append(path)
+            for f in entry.get('downloaded_files') or []:
+                if isinstance(f, str) and f not in seen:
+                    seen.add(f)
+                    artifacts.append(f)
+                elif isinstance(f, dict):
+                    fp = f.get('local_path') or f.get('path') or ''
+                    if fp and fp not in seen:
+                        seen.add(fp)
+                        artifacts.append(fp)
+        return artifacts
+
     def _is_goal_achieved(self, state: dict[str, Any]) -> bool:
         """A goal is achieved only when all plan steps are done."""
         plan = state.get('plan')
@@ -242,6 +272,9 @@ Rules:
                 if max_summary_len and len(summary) > max_summary_len:
                     summary = summary[:max_summary_len] + '...'
                 lines.append(f"  Step {step_id}: OK — {summary}")
+            produced = entry.get('produced_artifacts', [])
+            if produced:
+                lines.append(f"    Files: {', '.join(produced[-10:])}")
         return '\n'.join(lines)
 
     def _build_step_context(
@@ -268,20 +301,23 @@ Rules:
                     err = str(entry['error'])[:120]
                     lines.append(f'  Step {prev_id} [FAILED]: {err}')
                 else:
-                    summary = str(entry.get('result_summary', 'done'))[:120]
+                    summary = str(entry.get('result_summary', 'done'))[:2000]
                     lines.append(f'  Step {prev_id} [OK]: {summary}')
+                produced = entry.get('produced_artifacts', [])
+                if produced:
+                    lines.append(f'    Produced files: {", ".join(produced[-10:])}')
             parts.append('[Previous Steps Results]\n' + '\n'.join(lines))
 
         artifacts = state.get('artifacts') or {}
         journal_raw = artifacts.get('research_journal', '')
         journal_path = (
-            Path(journal_raw)
+            journal_raw
             if journal_raw
-            else (self._planner_artifact_dir(task_id) / 'research_journal.md')
+            else f"{self._planner_artifact_dir(task_id)}/research_journal.md"
         )
-        if journal_path.exists():
+        if self._file_io.exists(journal_path):
             try:
-                journal_text = journal_path.read_text(encoding='utf-8')
+                journal_text = self._file_io.read_text(journal_path)
                 original_len = len(journal_text)
                 if len(journal_text) > 2000:
                     journal_text = '...(truncated)\n' + journal_text[-2000:]
@@ -302,13 +338,14 @@ Rules:
 
         lit_raw = artifacts.get('literature_index', '')
         lit_path = (
-            Path(lit_raw)
+            lit_raw
             if lit_raw
-            else (self._planner_artifact_dir(task_id) / 'literature_index.jsonl')
+            else f"{self._planner_artifact_dir(task_id)}/literature_index.jsonl"
         )
-        if lit_path.exists():
+        if self._file_io.exists(lit_path):
             try:
-                lines = lit_path.read_text(encoding='utf-8').strip().splitlines()
+                lit_content = self._file_io.read_text(lit_path).strip()
+                lines = lit_content.splitlines() if lit_content else []
                 recent_entries = lines[-20:]
                 lit_text = '\n'.join(recent_entries)
                 parts.append(
@@ -676,6 +713,9 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                     else:
                         summary = str(entry.get('result_summary', 'done'))[:120]
                         lines.append(f'  Step {prev_id} [OK]: {summary}')
+                    produced = entry.get('produced_artifacts', [])
+                    if produced:
+                        lines.append(f'    Produced files: {", ".join(produced[-10:])}')
                 step_context = '[Previous Steps Results]\n' + '\n'.join(lines)
             else:
                 step_context = ''
@@ -750,6 +790,9 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                     result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
             summary = self._summarize_solver_result(result, max_len=2000)
             result_info['result_summary'] = summary[:2000]
+            produced = self._extract_produced_artifacts()
+            if produced:
+                result_info['produced_artifacts'] = produced
             self._emit(
                 'Planner',
                 'status_stages',
@@ -776,7 +819,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 )
                 return result_info
             if self._is_quality_critical_step(intent, state=state, task_id=task_id):
-                workspace_dir = self._task_workspace_dir(task_id)
+                workspace_dir = Path(self._task_workspace_dir(task_id))
                 quality_files = self._collect_quality_files(
                     step_dir, workspace_dir, summary
                 )
