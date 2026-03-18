@@ -247,19 +247,64 @@ def check_slab(
     return _maybe_add_lookup(out, lookup_path, formula, miller)
 
 
+def check_single(file_path: str, tasker_type: int,
+                  lookup_path: Path | None = None,
+                  formula: str | None = None,
+                  miller: str | None = None) -> dict:
+    """Check a single slab file. Returns result dict with 'file' key added."""
+    path = Path(file_path)
+
+    if not path.exists():
+        return {
+            'file': str(path),
+            'compliant': False,
+            'tasker_type': tasker_type,
+            'symmetric': False,
+            'reason': f"File not found: {path}",
+            'layer_summary': [],
+            'n_layers': 0,
+        }
+
+    try:
+        result = check_slab(
+            path,
+            tasker_type,
+            lookup_path=lookup_path,
+            formula=formula,
+            miller=miller,
+        )
+    except Exception as e:
+        result = {
+            'compliant': False,
+            'tasker_type': tasker_type,
+            'symmetric': False,
+            'reason': f"Check failed: {e}",
+            'layer_summary': [],
+            'n_layers': 0,
+        }
+    result['file'] = str(path)
+    return result
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description='Check built slab against Tasker polar surface (layer symmetry / stoichiometry).'
     )
     ap.add_argument(
-        '--file', required=True, help='Path to slab structure (POSCAR, CIF, etc.).'
+        '--file', nargs='+', default=None, help='Path(s) to slab structure (POSCAR, CIF, etc.).'
     )
     ap.add_argument(
         '--tasker_type',
         type=int,
-        required=True,
+        default=None,
         choices=[1, 2, 3],
         help='Tasker type for this surface: 1=non-polar, 2=stacking dipole, 3=polar.',
+    )
+    ap.add_argument(
+        '--batch',
+        type=str,
+        default=None,
+        help='Batch config JSON file. Each entry: {"file": ..., "tasker_type": ..., "formula": ..., "miller": ...}',
     )
     ap.add_argument(
         '--lookup',
@@ -280,44 +325,73 @@ def main() -> None:
         help='Miller indices (e.g. "0 0 0 1" or "1 0 0") for literature lookup. Use with --formula.',
     )
     args = ap.parse_args()
-    path = Path(args.file)
 
-    lookup_path = args.lookup
-    if lookup_path is None and (args.formula and args.miller):
-        script_dir = Path(__file__).resolve().parent
-        lookup_path = script_dir / '..' / 'reference' / 'tasker_lookup.yaml'
+    # Resolve default lookup path
+    def _resolve_lookup(lookup_arg, formula_val, miller_val):
+        if lookup_arg is not None:
+            return lookup_arg
+        if formula_val and miller_val:
+            script_dir = Path(__file__).resolve().parent
+            return script_dir / '..' / 'reference' / 'tasker_lookup.yaml'
+        return None
 
-    if not path.exists():
-        out = {
-            'compliant': False,
-            'tasker_type': args.tasker_type,
-            'symmetric': False,
-            'reason': f"File not found: {path}",
-            'layer_summary': [],
-            'n_layers': 0,
-        }
-        print(json.dumps(out, indent=2))
-        sys.exit(1)
+    # --batch mode: JSON config with independent params per entry
+    if args.batch is not None:
+        with open(args.batch, 'r', encoding='utf-8') as f:
+            batch_configs = json.load(f)
 
-    try:
-        result = check_slab(
-            path,
-            args.tasker_type,
-            lookup_path=lookup_path,
-            formula=args.formula,
-            miller=args.miller,
-        )
-    except Exception as e:
-        result = {
-            'compliant': False,
-            'tasker_type': args.tasker_type,
-            'symmetric': False,
-            'reason': f"Check failed: {e}",
-            'layer_summary': [],
-            'n_layers': 0,
-        }
-    print(json.dumps(result, indent=2))
-    sys.exit(0 if result.get('compliant') else 1)
+        results = []
+        for entry in batch_configs:
+            file_path = entry['file']
+            tasker_type = entry.get('tasker_type', args.tasker_type)
+            formula = entry.get('formula', args.formula)
+            miller = entry.get('miller', args.miller)
+            lookup = _resolve_lookup(args.lookup, formula, miller)
+
+            if tasker_type is None:
+                results.append({
+                    'file': file_path,
+                    'compliant': False,
+                    'tasker_type': None,
+                    'symmetric': False,
+                    'reason': '缺少 tasker_type 参数',
+                    'layer_summary': [],
+                    'n_layers': 0,
+                })
+                continue
+
+            results.append(check_single(file_path, tasker_type,
+                                        lookup_path=lookup, formula=formula, miller=miller))
+
+        print(json.dumps(results, indent=2))
+        any_non_compliant = any(not r.get('compliant') for r in results)
+        sys.exit(1 if any_non_compliant else 0)
+
+    # --file mode (single or multi-file with shared params)
+    if args.file is None:
+        ap.error('必须指定 --file 或 --batch')
+    if args.tasker_type is None:
+        ap.error('必须指定 --tasker_type（非 --batch 模式）')
+
+    lookup_path = _resolve_lookup(args.lookup, args.formula, args.miller)
+
+    if len(args.file) == 1:
+        # Single-file mode (backward compatible: output single JSON object)
+        result = check_single(args.file[0], args.tasker_type,
+                              lookup_path=lookup_path, formula=args.formula, miller=args.miller)
+        print(json.dumps(result, indent=2))
+        sys.exit(0 if result.get('compliant') else 1)
+    else:
+        # Multi-file mode with shared params
+        results = []
+        for file_path in args.file:
+            results.append(check_single(file_path, args.tasker_type,
+                                        lookup_path=lookup_path, formula=args.formula,
+                                        miller=args.miller))
+
+        print(json.dumps(results, indent=2))
+        any_non_compliant = any(not r.get('compliant') for r in results)
+        sys.exit(1 if any_non_compliant else 0)
 
 
 if __name__ == '__main__':
