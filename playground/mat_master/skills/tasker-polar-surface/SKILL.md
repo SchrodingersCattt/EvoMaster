@@ -68,6 +68,44 @@ When cutting a surface slab from a bulk crystal (especially ionic or oxide), app
 - Run **structure-manager** `assess_structure.py` on the same file for dimensionality and sanity.
 Only after both checks pass (and optionally literature/lookup consistency) proceed to finish.
 
+### 批量处理流程（当用户提供多个结构时）
+
+**何时使用批量模式：** 当用户一次给出多个体相结构文件、或明确要求"批量处理"时，使用批量模式而非逐个手动调用。
+
+**判断使用哪种批量模式：**
+- 所有结构**共享相同参数**（同一 miller、层数、真空等）→ 使用**多文件 + 共享参数模式**（`-i file1 file2 ... + --output-dir`）
+- 每个结构需要**不同参数**（不同 miller、不同层数等）→ 使用 **`--batch` JSON 配置文件模式**
+
+#### 模式 A：多文件 + 共享参数
+
+```
+script_args="-i bulk1.cif bulk2.cif bulk3.vasp -m 1 0 0 -L 8 -v 15 --output-dir ./slabs/"
+```
+
+#### 模式 B：`--batch` JSON 配置文件
+
+先用 `execute_bash` 或 `write_file` 生成 config.json：
+```json
+[
+  {"input": "bulk1.cif", "miller": [1,0,0], "repeat_layers": 8, "vacuum": 15, "output": "slab1.vasp"},
+  {"input": "bulk2.cif", "miller": [1,1,0], "thickness": 18, "vacuum": 20, "output": "slab2.cif", "charge": "Zn:2,O:-2"}
+]
+```
+然后：`script_args="--batch config.json"`
+
+#### 批量 build + 批量 check 联动
+
+批量 build 完成后，**必须批量 check**。推荐流程：
+
+1. 运行 `build_slab_tasker_fix.py` 批量生成 → 解析输出的 `{"results": [...]}` 获取所有 `success: true` 的输出文件列表
+2. 用这些文件列表运行 `check_slab_tasker.py`：
+   - 共享参数时：`--file slab1.vasp slab2.cif ... --tasker_type <type>`
+   - 独立参数时：写 check_config.json 用 `--batch check_config.json`
+3. 解析 check 输出的 JSON 数组，对 `compliant: false` 的逐个报告或重试
+4. 对 build 阶段 `success: false` 的，也向用户汇报失败原因
+
+**退出码语义：** 0=全部成功/compliant，1=任一失败/non-compliant。批量模式下单个失败不中断其他结构的处理。
+
 ## Checklist
 
 - [ ] Did provisional classification first (lookup/literature), then finalized decision after structure check.
@@ -135,17 +173,124 @@ The script prints JSON with `compliant`, `symmetric`, `reason`, `layer_summary`,
   | `--tile-min-x` | x 方向最小尺寸（Å） | 可选 | `--tile-min-x 12` |
   | `--tile-min-y` | y 方向最小尺寸（Å） | 可选 | `--tile-min-y 12` |
   | `--quiet` | 静默，少打日志 | 可选 | `--quiet` |
+  | `--output-dir` | 批量模式输出目录（自动命名 `{stem}_slab{ext}`） | 可选（多文件时推荐） | `--output-dir ./slabs/` |
+  | `--batch` | 批量配置 JSON 文件（每条独立参数） | 可选（与 `-i` 互斥） | `--batch config.json` |
 
   - Miller：脚本为 `nargs=3`，即 3 个整数；六方 (0001) 传 `-m 0 0 1`（3-index 等价）。
   - 示例（按层数）：`-i POSCAR -m 1 0 0 -L 8 -v 15 -o slab.vasp`
   - 示例（按厚度+扩胞）：`-i bulk.cif -m 1 1 0 -T 18 -v 20 -o slab.cif --tile-repeat 2 2 1`
   - 示例（最小尺寸）：`-i POSCAR -m 1 0 0 -L 6 -v 15 -o slab.vasp --tile-min-x 10 --tile-min-y 10`
   - Output: slab 文件（格式由 `-o` 扩展名决定）+ 终端日志。**Not universal**：部分极性面仍可能失败，需向用户汇报并请其手动调整或暂时接受。
+
+  **批量处理（Batch）：**
+
+  支持三种使用模式：
+
+  1. **单文件模式（向后兼容）：**
+     ```bash
+     python build_slab_tasker_fix.py -i bulk.cif -m 1 0 0 -L 8 -v 15 -o slab.vasp
+     ```
+
+  2. **多文件 + 共享参数：**
+     ```bash
+     python build_slab_tasker_fix.py -i bulk1.cif bulk2.cif bulk3.vasp \
+         -m 1 0 0 -L 8 -v 15 --output-dir ./slabs/
+     ```
+     所有文件共享相同的 miller、layers、vacuum 等参数。输出自动命名为 `{stem}_slab{ext}`，存入 `--output-dir`。
+
+  3. **配置文件 + 独立参数（`--batch`）：**
+     ```bash
+     python build_slab_tasker_fix.py --batch config.json
+     ```
+     config.json 格式：
+     ```json
+     [
+       {"input": "bulk1.cif", "miller": [1,0,0], "repeat_layers": 8, "vacuum": 15, "output": "slab1.vasp"},
+       {"input": "bulk2.cif", "miller": [1,1,0], "thickness": 18, "vacuum": 20, "output": "slab2.cif", "charge": "Zn:2,O:-2"}
+     ]
+     ```
+     每条可有独立的 miller、layers/thickness、vacuum、charge、tile 等参数。未指定的参数回退到 CLI 默认值。
+
+  批量模式输出汇总 JSON：`{"results": [{"input": ..., "output": ..., "success": bool, "error": ...}, ...]}`。退出码：全部成功=0，任一失败=1。每个结构独立处理，一个失败不影响其他。
+
 - **check_slab_tasker.py**: Reads the built slab file (POSCAR/CIF), infers layers along the surface normal, and checks Tasker compliance. **Required** after every slab build before finish.
   - Usage: `python check_slab_tasker.py --file <slab_path> --tasker_type 1|2|3`
   - Optional (recommended when material/surface known): `--formula <formula> --miller "<h k l>"`; use `--lookup <path>` to override default `reference/tasker_lookup.yaml`.
   - Output: JSON with `compliant`, `symmetric`, `reason`, `layer_summary`; with lookup also `literature_expected_type`, `literature_note`, `literature_ref`, `literature_consistent`. Exit code 0 = compliant.
   - Requires: pymatgen, numpy; PyYAML for lookup.
+
+  **批量处理（Batch）：**
+
+  1. **多文件 + 共享参数：**
+     ```bash
+     python check_slab_tasker.py --file slab1.vasp slab2.cif slab3.vasp --tasker_type 3
+     ```
+     所有文件共享 `--tasker_type`、`--formula`、`--miller` 参数。输出 JSON 数组。
+
+  2. **配置文件 + 独立参数（`--batch`）：**
+     ```bash
+     python check_slab_tasker.py --batch check_config.json
+     ```
+     check_config.json 格式：
+     ```json
+     [
+       {"file": "slab1.vasp", "tasker_type": 3, "formula": "ZnO", "miller": "0 0 0 1"},
+       {"file": "slab2.cif", "tasker_type": 1}
+     ]
+     ```
+     每条可有独立的 tasker_type、formula、miller 参数。
+
+  批量模式输出 JSON 数组 `[{...}, {...}]`，每个结果包含 `file` 字段。退出码：全部 compliant=0，任一非 compliant=1。
+
+- **add_adsorbate_batch.py**: 在 slab 表面添加吸附分子，本地版（替代 MCP `mat_sg_build_surface_adsorbate`），支持批量。底层用 ASE `add_adsorbate`。
+
+  **CLI 参数一览：**
+
+  | 参数 | 含义 | 默认/必填 | 示例 |
+  |------|------|-----------|------|
+  | `-s`, `--surface` | slab 结构文件（支持多个） | **必填**（非 batch） | `-s slab.vasp` 或 `-s slab1.vasp slab2.cif` |
+  | `-a`, `--adsorbate` | 吸附分子结构文件 | **必填**（非 batch） | `-a CO.xyz` |
+  | `-o`, `--output` | 输出文件名（单文件模式） | 默认 structure_adsorbate.cif | `-o slab_CO.vasp` |
+  | `--output-dir` | 批量输出目录（自动命名 `{stem}_ads.cif`） | 可选 | `--output-dir ./ads_slabs/` |
+  | `--shift` | 吸附位置：分数坐标 `"0.5,0.5"` 或 ASE 关键词 `ontop`/`fcc`/`hcp`/`bridge` | 默认 [0.5,0.5] | `--shift "0.25,0.75"` 或 `--shift ontop` |
+  | `--height` | 吸附高度（angstrom） | 默认 2.0 | `--height 1.8` |
+  | `--batch` | 批量配置 JSON 文件 | 可选 | `--batch ads_config.json` |
+  | `--quiet` | 静默模式 | 可选 | `--quiet` |
+
+  **使用模式：**
+
+  1. **单文件模式（等价于 MCP `mat_sg_build_surface_adsorbate` 单次调用）：**
+     ```bash
+     python add_adsorbate_batch.py -s slab.vasp -a CO.xyz --shift "0.5,0.5" --height 2.0 -o slab_CO.cif
+     ```
+
+  2. **多 slab + 共享吸附参数：**
+     ```bash
+     python add_adsorbate_batch.py -s slab1.vasp slab2.cif slab3.vasp \
+         -a CO.xyz --shift ontop --height 1.8 --output-dir ./ads_slabs/
+     ```
+     所有 slab 共享同一个吸附分子和位置参数。输出自动命名 `{stem}_ads.cif`。
+
+  3. **`--batch` JSON 配置（每条独立参数）：**
+     ```bash
+     python add_adsorbate_batch.py --batch ads_config.json
+     ```
+     ads_config.json 格式：
+     ```json
+     [
+       {"surface": "slab1.vasp", "adsorbate": "CO.xyz", "shift": [0.5, 0.5], "height": 2.0, "output": "slab1_CO.cif"},
+       {"surface": "slab2.vasp", "adsorbate": "OH.xyz", "shift": "ontop", "height": 1.5, "output": "slab2_OH.cif"},
+       {"surface": "slab3.vasp", "adsorbate": "CO.xyz", "shift": [0.25, 0.75], "height": 2.5}
+     ]
+     ```
+     每条可有不同的吸附分子、位置、高度。
+
+  批量模式输出汇总 JSON：`{"results": [{"surface": ..., "adsorbate": ..., "output": ..., "success": bool, "error": ...}, ...]}`。退出码：全部成功=0，任一失败=1。
+
+  **与 build/check 联动的典型批量流程：**
+  1. `build_slab_tasker_fix.py --batch` 批量生成 slab
+  2. `check_slab_tasker.py --batch` 批量校验
+  3. `add_adsorbate_batch.py --batch` 批量加吸附分子
 
 ## Integration
 
@@ -154,6 +299,7 @@ The script prints JSON with `compliant`, `symmetric`, `reason`, `layer_summary`,
 - If `build_slab_tasker_fix.py` fails or checker stays non-compliant after retries, explicitly report to user and request decision: manual adjustment now vs temporarily continue with polar slab.
 - After any slab build, you **must** run `check_slab_tasker.py` on the **actual slab file**. Do not finish without this check or with a non-compliant result unless the user has been explicitly warned.
 - After a compliant slab is confirmed, use structure-manager (e.g. `assess_structure.py`) for sanity/dimensionality if needed.
+- **吸附分子**：需要在 slab 上加吸附分子时，优先使用 `add_adsorbate_batch.py`（本地脚本，支持批量），而非 MCP `mat_sg_build_surface_adsorbate`（仅支持单次调用）。尤其是批量场景下必须使用本地脚本。单个结构时两者均可。
 
 ## Additional resources
 
