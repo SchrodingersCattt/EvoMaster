@@ -1,6 +1,6 @@
 # 支持服务邮件模板：Worker 任务完成
 
-会话执行完成/失败/取消时，Worker 会调用支持服务按模板给用户发邮件。模板 ID 见 `src/utils/support_notifier.py` 中 `SESSION_COMPLETE_TEMPLATE_ID`。
+会话执行完成/失败/取消时，Worker 会调用支持服务按模板给用户发邮件。模板 ID 按环境配置（见 `src/utils/constant.py`）：test/prod 使用 `140`，uat 使用 `21`。
 
 ## 模板变量（params）
 
@@ -16,10 +16,98 @@
 
 ## 注册/更新模板（template/add）
 
-使用以下 curl 向支持服务注册「Worker任务完成」模板（需替换为实际环境域名，如 test 环境为 `support.test.dp.tech`）：
+按环境选择对应域名执行 curl，请求体相同，仅 base URL 不同：
+
+| 环境 | base URL |
+|------|----------|
+| test | `https://support.test.dp.tech` |
+| uat  | `https://support.uat.dp.tech`  |
+| prod | `https://support.dp.tech`     |
+
+**test 环境：**
 
 ```bash
 curl --location --request POST 'https://support.test.dp.tech/api/template/add?msg_name=Worker任务完成&business_line=Bohrium&channel=4' \
+--header 'Content-Type: text/plain' \
+--data-raw '<html>
+<body>
+<div id="editor_version_1.19.1_task_done" style="word-break:break-word;">
+    <div data-zone-id="0" data-line-index="0" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;">尊敬的用户您好：
+    </div>
+    <div data-zone-id="0" data-line-index="1" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;">您在 MatMaster 上的会话已执行完毕，摘要如下：
+    </div>
+    <div data-zone-id="0" data-line-index="2" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>用户问题：</strong>{{.user_question}}
+    </div>
+    <div data-zone-id="0" data-line-index="3" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>提交时间：</strong>{{.submitted_at}}
+    </div>
+    <div data-zone-id="0" data-line-index="4" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>完成时间：</strong>{{.completed_at}}
+    </div>
+    <div data-zone-id="0" data-line-index="5" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>运行时长：</strong>{{.duration}}
+    </div>
+    <div data-zone-id="0" data-line-index="6" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>执行结果：</strong>{{.result_status}}
+    </div>
+    <div data-zone-id="0" data-line-index="7" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>失败原因：</strong>{{.fail_reason}}
+    </div>
+    <div data-zone-id="0" data-line-index="8" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;">可点击以下链接查看运行结果与输出文件：
+    </div>
+    <div data-zone-id="0" data-line-index="9" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><a href="{{.session_url}}">{{.session_url}}</a>
+    </div>
+    <div data-zone-id="0" data-line-index="10" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;">如有问题请联系：materials@dp.tech。
+    </div>
+    <div data-zone-id="0" data-line-index="11" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;">敬礼
+    </div>
+    <div data-zone-id="0" data-line-index="12" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6; text-align: right;">
+        深势科技 MatMaster 产品组
+    </div>
+</div>
+</body>
+</html>'
+```
+
+**uat 环境：**
+
+```bash
+curl --location --request POST 'https://support.uat.dp.tech/api/template/add?msg_name=Worker任务完成&business_line=Bohrium&channel=4' \
+--header 'Content-Type: text/plain' \
+--data-raw '<html>
+<body>
+<div id="editor_version_1.19.1_task_done" style="word-break:break-word;">
+    <div data-zone-id="0" data-line-index="0" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;">尊敬的用户您好：
+    </div>
+    <div data-zone-id="0" data-line-index="1" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;">您在 MatMaster 上的会话已执行完毕，摘要如下：
+    </div>
+    <div data-zone-id="0" data-line-index="2" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>用户问题：</strong>{{.user_question}}
+    </div>
+    <div data-zone-id="0" data-line-index="3" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>提交时间：</strong>{{.submitted_at}}
+    </div>
+    <div data-zone-id="0" data-line-index="4" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>完成时间：</strong>{{.completed_at}}
+    </div>
+    <div data-zone-id="0" data-line-index="5" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>运行时长：</strong>{{.duration}}
+    </div>
+    <div data-zone-id="0" data-line-index="6" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>执行结果：</strong>{{.result_status}}
+    </div>
+    <div data-zone-id="0" data-line-index="7" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><strong>失败原因：</strong>{{.fail_reason}}
+    </div>
+    <div data-zone-id="0" data-line-index="8" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;">可点击以下链接查看运行结果与输出文件：
+    </div>
+    <div data-zone-id="0" data-line-index="9" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;"><a href="{{.session_url}}">{{.session_url}}</a>
+    </div>
+    <div data-zone-id="0" data-line-index="10" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;">如有问题请联系：materials@dp.tech。
+    </div>
+    <div data-zone-id="0" data-line-index="11" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6;">敬礼
+    </div>
+    <div data-zone-id="0" data-line-index="12" data-line="true" style="margin-top: 4px; margin-bottom: 4px; line-height: 1.6; text-align: right;">
+        深势科技 MatMaster 产品组
+    </div>
+</div>
+</body>
+</html>'
+```
+
+**prod（线上）环境：**
+
+```bash
+curl --location --request POST 'https://support.dp.tech/api/template/add?msg_name=Worker任务完成&business_line=Bohrium&channel=4' \
 --header 'Content-Type: text/plain' \
 --data-raw '<html>
 <body>

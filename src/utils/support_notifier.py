@@ -8,12 +8,13 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from src.utils.constant import SUPPORT_SERVICE_BASE_URL
+from src.utils.constant import (
+    SUPPORT_SERVICE_BASE_URL,
+    SUPPORT_SESSION_COMPLETE_TEMPLATE_ID,
+)
 
 logger = logging.getLogger(__name__)
 
-# 会话完成邮件模板 ID（支持服务侧配置）
-SESSION_COMPLETE_TEMPLATE_ID = '140'
 SEND_CHANNEL = 4
 BUSINESS_LINE = 'Bohrium'
 
@@ -84,7 +85,7 @@ def _send_session_complete_email_impl(
                 'params': params,
             }
         ],
-        'templateId': SESSION_COMPLETE_TEMPLATE_ID,
+        'templateId': SUPPORT_SESSION_COMPLETE_TEMPLATE_ID,
         'sendChannel': SEND_CHANNEL,
         'businessLine': BUSINESS_LINE,
         'emailInfo': {
