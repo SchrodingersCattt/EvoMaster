@@ -1,6 +1,6 @@
 # 支持服务邮件模板：Worker 任务完成
 
-会话执行完成/失败/取消时，Worker 会调用支持服务按模板给用户发邮件。模板 ID 按环境配置（见 `src/utils/constant.py`）：test/prod 使用 `140`，uat 使用 `21`。
+会话执行完成/失败/取消时，Worker 会调用支持服务按模板给用户发邮件。模板 ID 按环境配置（见 `src/utils/constant.py`）：test 使用 `140`，uat 使用 `21`，prod 使用 `116`。
 
 ## 模板变量（params）
 
