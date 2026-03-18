@@ -275,13 +275,13 @@ Rules:
         artifacts = state.get('artifacts') or {}
         journal_raw = artifacts.get('research_journal', '')
         journal_path = (
-            Path(journal_raw)
+            journal_raw
             if journal_raw
-            else (self._planner_artifact_dir(task_id) / 'research_journal.md')
+            else f"{self._planner_artifact_dir(task_id)}/research_journal.md"
         )
-        if journal_path.exists():
+        if self._file_io.exists(journal_path):
             try:
-                journal_text = journal_path.read_text(encoding='utf-8')
+                journal_text = self._file_io.read_text(journal_path)
                 original_len = len(journal_text)
                 if len(journal_text) > 2000:
                     journal_text = '...(truncated)\n' + journal_text[-2000:]
@@ -302,13 +302,14 @@ Rules:
 
         lit_raw = artifacts.get('literature_index', '')
         lit_path = (
-            Path(lit_raw)
+            lit_raw
             if lit_raw
-            else (self._planner_artifact_dir(task_id) / 'literature_index.jsonl')
+            else f"{self._planner_artifact_dir(task_id)}/literature_index.jsonl"
         )
-        if lit_path.exists():
+        if self._file_io.exists(lit_path):
             try:
-                lines = lit_path.read_text(encoding='utf-8').strip().splitlines()
+                lit_content = self._file_io.read_text(lit_path).strip()
+                lines = lit_content.splitlines() if lit_content else []
                 recent_entries = lines[-20:]
                 lit_text = '\n'.join(recent_entries)
                 parts.append(
@@ -776,7 +777,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 )
                 return result_info
             if self._is_quality_critical_step(intent, state=state, task_id=task_id):
-                workspace_dir = self._task_workspace_dir(task_id)
+                workspace_dir = Path(self._task_workspace_dir(task_id))
                 quality_files = self._collect_quality_files(
                     step_dir, workspace_dir, summary
                 )
