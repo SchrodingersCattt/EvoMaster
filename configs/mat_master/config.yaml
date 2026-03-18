@@ -92,7 +92,7 @@ agents:
         enabled: true
         trigger_tokens: -1               # -1 = 动态计算（context_window_tokens * trigger_ratio）
         context_window_tokens: 200000    # 模型 context window 大小（claude-sonnet-4-6 = 200k）
-        trigger_ratio: 0.80              # 触发阈值 = context_window_tokens * 0.80 = 160000
+        trigger_ratio: 0.90              # 触发阈值
         preserve_recent_turns: 2         # 压缩后保留最近 N 轮完整 tool-transaction
         compaction_llm: "compaction"     # 用于摘要的 LLM key；指向 llm.compaction（gemini-3-flash-preview）
         fallback_strategy: "sliding_window"  # 压缩失败时的降级策略
