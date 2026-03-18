@@ -49,14 +49,59 @@ class ResearchPlannerExecutionMixin:
             return json.dumps(safe_result, ensure_ascii=False)[:max_len]
         return str(result)[:max_len]
 
-    def _build_step_prompt(self, intent: str, fallback: str) -> str:
-        """Build executor step prompt with explicit completion self-reporting."""
-        base = f"Achieve: {intent}. If that fails: {fallback}"
-        base += (
-            ' At the end of the step, explicitly report one of: completed, partial, or blocked. '
-            'List the concrete outputs you produced or saved, and do not claim completion unless the requested deliverable was actually achieved.'
+    def _build_step_prompt(
+        self,
+        intent: str,
+        fallback: str,
+        *,
+        original_intent: str = '',
+        step_id: int = 0,
+        total_steps: int = 0,
+        plan_summary: str = '',
+    ) -> str:
+        """Build executor step prompt with [Original Intent] / [Task of This Step] structure.
+
+        Injecting the original intent and step position prevents the executor from
+        attempting to complete the full task in a single step.
+        """
+        parts: list[str] = []
+
+        # ── Macro context: what the user ultimately wants (read-only) ──────────
+        if original_intent:
+            parts.append(
+                '[Original Intent]\n'
+                f'The user\'s overall goal: {original_intent}\n'
+                '(Read-only context — do NOT attempt to complete the full goal in this step.)'
+            )
+
+        # ── Micro context: exactly what THIS step must achieve ──────────────────
+        if total_steps > 0:
+            next_step = step_id + 1
+            parts.append(
+                '[Task of This Step]\n'
+                f'You are executing step {step_id} of {total_steps}.\n'
+                f'Your ONLY job in this step: {intent}\n'
+                f'If that fails: {fallback}\n'
+                f'Do NOT execute step {next_step} or any later steps.'
+            )
+        else:
+            parts.append(f'Achieve: {intent}. If that fails: {fallback}')
+
+        # ── Overall plan summary (context only, not to be executed ahead) ───────
+        if plan_summary:
+            parts.append(
+                '[Overall Plan — for context only, do NOT execute ahead]\n'
+                f'{plan_summary}'
+            )
+
+        # ── Completion self-reporting requirement ────────────────────────────────
+        parts.append(
+            'At the end of the step, explicitly report one of: completed, partial, or blocked. '
+            'List the concrete outputs you produced or saved, and do not claim completion '
+            'unless the requested deliverable was actually achieved.'
         )
-        return base
+
+        return '\n\n'.join(parts)
 
     def _llm_verify_step_outcome(
         self,
@@ -189,20 +234,27 @@ Rules:
         state: dict[str, Any],
         task_id: str,
     ) -> str:
-        """Build pre-step context injection block for step prompt enrichment."""
+        """Build pre-step context injection block for step prompt enrichment.
+
+        Injects ALL previous step results as a structured summary (not just the last
+        step), so the executor has full awareness of what has already been done.
+        """
         parts: list[str] = []
 
         history = state.get('history', [])
         if history:
-            last_entry = history[-1]
-            prev_step_id = last_entry.get('step', '?')
-            if last_entry.get('error'):
-                parts.append(
-                    f"[Previous Step {prev_step_id} FAILED]: {last_entry['error']}"
-                )
-            else:
-                summary = last_entry.get('result_summary', 'done')
-                parts.append(f"[Previous Step {prev_step_id} OK]: {summary}")
+            # Inject all previous steps as a structured summary list.
+            # Each entry is kept short (~120 chars) to avoid context bloat.
+            lines: list[str] = []
+            for entry in history:
+                prev_id = entry.get('step', '?')
+                if entry.get('error'):
+                    err = str(entry['error'])[:120]
+                    lines.append(f'  Step {prev_id} [FAILED]: {err}')
+                else:
+                    summary = str(entry.get('result_summary', 'done'))[:120]
+                    lines.append(f'  Step {prev_id} [OK]: {summary}')
+            parts.append('[Previous Steps Results]\n' + '\n'.join(lines))
 
         artifacts = state.get('artifacts') or {}
         journal_raw = artifacts.get('research_journal', '')
@@ -597,7 +649,23 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             intent_with_context = f"{step_context}\n\n---\n\n{intent}"
         else:
             intent_with_context = intent
-        step_prompt = self._build_step_prompt(intent_with_context, fallback)
+
+        # Build plan summary for [Overall Plan] block (step id + intent, one line each)
+        plan_summary_lines: list[str] = []
+        for s in steps_list:
+            sid = s.get('step_id', '?')
+            s_intent = str(s.get('intent', '') or s.get('goal', ''))[:80]
+            plan_summary_lines.append(f'  Step {sid}: {s_intent}')
+        plan_summary = '\n'.join(plan_summary_lines)
+
+        step_prompt = self._build_step_prompt(
+            intent_with_context,
+            fallback,
+            original_intent=state.get('goal', ''),
+            step_id=step_id,
+            total_steps=len(steps_list),
+            plan_summary=plan_summary,
+        )
         try:
             solver.set_run_dir(workspaces)
             step_task = self._build_task_with_dialog_history(
