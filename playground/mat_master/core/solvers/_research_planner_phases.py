@@ -186,12 +186,12 @@ class ResearchPlannerPhaseMixin:
         self._print_plan_report(plan)
         if task_id:
             try:
-                plan_path = self._planner_hidden_dir(task_id) / 'current_plan.json'
-                plan_path.write_text(
+                plan_path = f"{self._planner_hidden_dir(task_id)}/current_plan.json"
+                self._file_io.write_text(
+                    plan_path,
                     json.dumps(
                         _plan_to_external_schema(plan), ensure_ascii=False, indent=2
                     ),
-                    encoding='utf-8',
                 )
             except Exception as e:
                 self.logger.warning('[Planner] Failed to save current_plan.json: %s', e)

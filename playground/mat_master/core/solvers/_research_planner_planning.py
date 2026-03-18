@@ -262,9 +262,9 @@ Rules:
             if task_id is not None:
                 try:
                     draft_path = (
-                        self._planner_hidden_dir(task_id) / 'raw_plan_draft.txt'
+                        f"{self._planner_hidden_dir(task_id)}/raw_plan_draft.txt"
                     )
-                    draft_path.write_text(reply.content or '', encoding='utf-8')
+                    self._file_io.write_text(draft_path, reply.content or '')
                 except Exception as save_err:
                     self.logger.warning(
                         '[Planner] Failed to save raw_plan_draft.txt: %s',
@@ -394,13 +394,13 @@ Rules:
     ) -> dict[str, Any]:
         """Revise the saved plan using only targeted ``str_replace_editor`` calls."""
         plan_path = (
-            self._planner_hidden_dir(task_id) / 'current_plan.json'
+            f"{self._planner_hidden_dir(task_id)}/current_plan.json"
             if task_id is not None
             else None
         )
-        if plan_path is not None and plan_path.exists():
+        if plan_path is not None and self._file_io.exists(plan_path):
             try:
-                plan_text = plan_path.read_text(encoding='utf-8')
+                plan_text = self._file_io.read_text(plan_path)
             except Exception as e:
                 self.logger.warning(
                     '[Planner] _revise_plan_from_file: cannot read file: %s',
@@ -512,13 +512,13 @@ Rules:
             revised = _normalize_plan(revised, self.max_steps)
             if plan_path is not None:
                 try:
-                    plan_path.write_text(
+                    self._file_io.write_text(
+                        plan_path,
                         json.dumps(
                             _plan_to_external_schema(revised),
                             ensure_ascii=False,
                             indent=2,
                         ),
-                        encoding='utf-8',
                     )
                 except Exception as e:
                     self.logger.warning(
