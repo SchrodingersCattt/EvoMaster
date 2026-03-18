@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
@@ -90,7 +91,8 @@ class BashTool(BaseTool):
         is_input = params.is_input == 'true'
         command = params.command.strip()
         # 非交互模式下，每条命令前清除代理环境变量，避免远程节点代理导致 curl/wget 连 ga.dp.tech 卡住
-        if not is_input and command:
+        # Windows 上 shell=True 使用 cmd.exe，export/unset 是 bash 内置命令，不可用，跳过注入
+        if not is_input and command and sys.platform != "win32":
             command = _PROXY_CLEAR_PREFIX + command
 
         result = session.exec_bash(
