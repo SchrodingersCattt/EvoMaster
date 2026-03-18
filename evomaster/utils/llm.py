@@ -9,7 +9,6 @@ import json
 import logging
 import os
 import re
-import sys
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Literal
@@ -19,21 +18,26 @@ from pydantic import BaseModel, Field
 from evomaster.utils.types import AssistantMessage, Dialog, FunctionCall, ToolCall
 
 
-def truncate_content(content: str, max_length: int = 5000, head_length: int = 2500, tail_length: int = 2500) -> str:
+def truncate_content(
+    content: str,
+    max_length: int = 5000,
+    head_length: int = 2500,
+    tail_length: int = 2500,
+) -> str:
     """截断内容，如果超过最大长度，保留开头和结尾部分
-    
+
     Args:
         content: 要截断的内容
         max_length: 最大长度阈值，超过此长度才截断
         head_length: 保留的开头部分长度
         tail_length: 保留的结尾部分长度
-    
+
     Returns:
         截断后的内容
     """
     if len(content) <= max_length:
         return content
-    return content[:head_length] + "\n... [truncated] ...\n" + content[-tail_length:]
+    return content[:head_length] + '\n... [truncated] ...\n' + content[-tail_length:]
 
 
 _sanitize_logger = logging.getLogger(__name__)
@@ -60,7 +64,7 @@ def _sanitize_tool_call_arguments(arguments: str | None) -> str:
         合法的 JSON 字符串。
     """
     if not arguments:
-        return "{}"
+        return '{}'
 
     # 快速路径：合法 JSON 直接返回
     try:
@@ -75,8 +79,8 @@ def _sanitize_tool_call_arguments(arguments: str | None) -> str:
     try:
         json.loads(repaired)
         _sanitize_logger.warning(
-            "_sanitize_tool_call_arguments: repaired malformed tool call arguments. "
-            "Original: %r  Repaired: %r",
+            '_sanitize_tool_call_arguments: repaired malformed tool call arguments. '
+            'Original: %r  Repaired: %r',
             arguments,
             repaired,
         )
@@ -86,51 +90,63 @@ def _sanitize_tool_call_arguments(arguments: str | None) -> str:
 
     # 无法修复：返回空对象，记录 ERROR
     _sanitize_logger.error(
-        "_sanitize_tool_call_arguments: could not repair malformed tool call arguments, "
+        '_sanitize_tool_call_arguments: could not repair malformed tool call arguments, '
         "falling back to '{}'. Original: %r",
         arguments,
     )
-    return "{}"
+    return '{}'
 
 
 class LLMConfig(BaseModel):
     """LLM 配置"""
-    provider: Literal["openai", "anthropic","deepseek","openrouter"] = Field(description="LLM 提供商")
-    model: str = Field(description="模型名称（OpenAI 为 model id；Azure 为部署名，可写 azure/部署名）")
-    api_key: str = Field(description="API Key，必须在配置中提供")
-    base_url: str | None = Field(default=None, description="API Base URL")
-    api_version: str | None = Field(default=None, description="Azure 专用：API 版本，如 2024-06-01")
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="采样温度")
-    max_tokens: int | None = Field(default=None, description="最大生成 token 数")
-    timeout: int = Field(default=300, description="非流式请求超时时间（秒）；大模型长输出需要 2-3 分钟")
+
+    provider: Literal['openai', 'anthropic', 'deepseek', 'openrouter'] = Field(
+        description='LLM 提供商'
+    )
+    model: str = Field(
+        description='模型名称（OpenAI 为 model id；Azure 为部署名，可写 azure/部署名）'
+    )
+    api_key: str = Field(description='API Key，必须在配置中提供')
+    base_url: str | None = Field(default=None, description='API Base URL')
+    api_version: str | None = Field(
+        default=None, description='Azure 专用：API 版本，如 2024-06-01'
+    )
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description='采样温度')
+    max_tokens: int | None = Field(default=None, description='最大生成 token 数')
+    timeout: int = Field(
+        default=300, description='非流式请求超时时间（秒）；大模型长输出需要 2-3 分钟'
+    )
     stream_timeout: int | None = Field(
         default=None,
         description=(
-            "流式请求首 token 超时时间（秒）。None 表示回退到 timeout。"
-            "控制的是：发起流式请求后，最多等多久才能收到第一个 chunk。"
-            "建议公有云 API 设 20s，内网 proxy 设 30s，本地 sglang/vLLM 设 60s。"
+            '流式请求首 token 超时时间（秒）。None 表示回退到 timeout。'
+            '控制的是：发起流式请求后，最多等多久才能收到第一个 chunk。'
+            '建议公有云 API 设 20s，内网 proxy 设 30s，本地 sglang/vLLM 设 60s。'
         ),
     )
     stream_idle_timeout: int = Field(
         default=30,
         description=(
-            "流式传输过程中，相邻两次 chunk 之间允许的最大空闲时间（秒）。"
-            "一旦开始流式输出，若超过此时间没有新数据则判定超时。"
-            "建议 20~60s；与首 token 超时（stream_timeout）无关。"
+            '流式传输过程中，相邻两次 chunk 之间允许的最大空闲时间（秒）。'
+            '一旦开始流式输出，若超过此时间没有新数据则判定超时。'
+            '建议 20~60s；与首 token 超时（stream_timeout）无关。'
         ),
     )
-    max_retries: int = Field(default=3, description="最大重试次数")
-    retry_delay: float = Field(default=1.0, description="重试延迟（秒）")
-    use_completion_api: bool = Field(default=False, description="使用 Completion API 而非 Chat API")
+    max_retries: int = Field(default=3, description='最大重试次数')
+    retry_delay: float = Field(default=1.0, description='重试延迟（秒）')
+    use_completion_api: bool = Field(
+        default=False, description='使用 Completion API 而非 Chat API'
+    )
 
 
 class LLMResponse(BaseModel):
     """LLM 响应"""
-    content: str | None = Field(default=None, description="生成的文本内容")
-    tool_calls: list[ToolCall] | None = Field(default=None, description="工具调用列表")
-    finish_reason: str | None = Field(default=None, description="结束原因")
-    usage: dict[str, int] = Field(default_factory=dict, description="Token 使用统计")
-    meta: dict[str, Any] = Field(default_factory=dict, description="其他元数据")
+
+    content: str | None = Field(default=None, description='生成的文本内容')
+    tool_calls: list[ToolCall] | None = Field(default=None, description='工具调用列表')
+    finish_reason: str | None = Field(default=None, description='结束原因')
+    usage: dict[str, int] = Field(default_factory=dict, description='Token 使用统计')
+    meta: dict[str, Any] = Field(default_factory=dict, description='其他元数据')
 
     def to_assistant_message(self) -> AssistantMessage:
         """转换为 AssistantMessage"""
@@ -138,10 +154,10 @@ class LLMResponse(BaseModel):
             content=self.content,
             tool_calls=self.tool_calls,
             meta={
-                "finish_reason": self.finish_reason,
-                "usage": self.usage,
+                'finish_reason': self.finish_reason,
+                'usage': self.usage,
                 **self.meta,
-            }
+            },
         )
 
 
@@ -163,15 +179,14 @@ class BaseLLM(ABC):
         self.config = config
         self.logger = logging.getLogger(self.__class__.__name__)
         self.output_config = output_config or {}
-        self.show_in_console = self.output_config.get("show_in_console", False)
-        self.log_to_file = self.output_config.get("log_to_file", False)
+        self.show_in_console = self.output_config.get('show_in_console', False)
+        self.log_to_file = self.output_config.get('log_to_file', False)
         # 跟踪已记录的消息数量，用于避免重复记录系统消息和初始任务描述
         self._logged_message_count = 0
         self._setup()
 
     def _setup(self) -> None:
         """初始化设置，由子类实现"""
-        pass
 
     @abstractmethod
     def _call(
@@ -190,7 +205,6 @@ class BaseLLM(ABC):
         Returns:
             LLM 响应
         """
-        pass
 
     def query(
         self,
@@ -245,53 +259,63 @@ class BaseLLM(ABC):
         """
         result = self.query(dialog, **kwargs)
         if on_token is not None:
-            content = result.content if isinstance(result.content, str) else ""
+            content = result.content if isinstance(result.content, str) else ''
             if content:
                 on_token(content)
         return result
 
-    def _log_request(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> None:
+    def _log_request(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
+    ) -> None:
         """记录 LLM 请求到日志
 
         优化：只记录新增的消息，避免重复记录系统消息和初始任务描述。
         第一次请求时记录所有消息，后续请求只记录新增的消息。
         当检测到消息数量减少时（如重置context后），重置计数器并记录所有消息。
         """
-        self.logger.info("=" * 80)
-        self.logger.info("LLM Request:")
+        self.logger.info('=' * 80)
+        self.logger.info('LLM Request:')
         self.logger.info(f"Model: {self.config.model}")
         if tools:
-            self.logger.info(f"Tools: {[t.get('function', {}).get('name', 'unknown') for t in tools]}")
-        
+            self.logger.info(
+                f"Tools: {[t.get('function', {}).get('name', 'unknown') for t in tools]}"
+            )
+
         # 检测是否是新对话开始（消息数量减少，通常发生在重置context后）
         if len(messages) <= self._logged_message_count:
             # 消息数量减少，说明是新对话开始，重置计数器
-            self.logger.info("New conversation detected (message count decreased), resetting log counter")
+            self.logger.info(
+                'New conversation detected (message count decreased), resetting log counter'
+            )
             self._logged_message_count = 0
-        
+
         # 计算需要记录的消息
-        new_messages = messages[self._logged_message_count:]
+        new_messages = messages[self._logged_message_count :]
 
         if self._logged_message_count == 0:
             # 第一次请求，记录所有消息（包括系统消息和初始任务描述）
-            self.logger.info("Messages:")
+            self.logger.info('Messages:')
             for i, msg in enumerate(messages):
                 self._log_single_message(i + 1, msg)
             self._logged_message_count = len(messages)
         else:
             # 后续请求，只记录新增的消息
             if new_messages:
-                self.logger.info(f"New Messages (continuing from message {self._logged_message_count + 1}):")
+                self.logger.info(
+                    f"New Messages (continuing from message {self._logged_message_count + 1}):"
+                )
                 for i, msg in enumerate(new_messages):
                     self._log_single_message(self._logged_message_count + i + 1, msg)
                 self._logged_message_count = len(messages)
             else:
                 # 没有新消息（可能由于上下文截断导致消息数量减少）
-                self.logger.info(f"Messages: (same as previous, total: {len(messages)})")
+                self.logger.info(
+                    f"Messages: (same as previous, total: {len(messages)})"
+                )
                 # 更新已记录的消息数量，避免后续重复
                 self._logged_message_count = len(messages)
 
-        self.logger.info("=" * 80)
+        self.logger.info('=' * 80)
 
     def _log_single_message(self, index: int, msg: dict[str, Any]) -> None:
         """记录单条消息，处理工具调用的特殊显示
@@ -300,35 +324,46 @@ class BaseLLM(ABC):
             index: 消息序号
             msg: 消息字典
         """
-        role = msg.get("role", "unknown")
-        content = msg.get("content", "")
-        tool_calls = msg.get("tool_calls", [])
+        role = msg.get('role', 'unknown')
+        content = msg.get('content', '')
+        tool_calls = msg.get('tool_calls', [])
 
         # 如果是 assistant 消息且有工具调用
-        if role == "assistant" and tool_calls:
+        if role == 'assistant' and tool_calls:
             if content:
                 # 有文本内容，先显示内容
-                content_display = truncate_content(content) if isinstance(content, str) else content
+                content_display = (
+                    truncate_content(content) if isinstance(content, str) else content
+                )
                 self.logger.info(f"  [{index}] {role}: {content_display}")
             else:
                 # 只有工具调用，显示占位符
-                self.logger.info(f"  [{index}] {role}: [Calling {len(tool_calls)} tool(s)]")
+                self.logger.info(
+                    f"  [{index}] {role}: [Calling {len(tool_calls)} tool(s)]"
+                )
 
             # 显示每个工具调用的详细信息
             for i, tc in enumerate(tool_calls):
                 if isinstance(tc, dict):
-                    func = tc.get("function", {})
-                    tool_name = func.get("name", "unknown")
-                    tool_args = func.get("arguments", "")
+                    func = tc.get('function', {})
+                    tool_name = func.get('name', 'unknown')
+                    tool_args = func.get('arguments', '')
 
                     # 格式化参数（如果是 JSON 字符串，尝试解析并美化）
                     try:
                         import json
-                        args_dict = json.loads(tool_args) if isinstance(tool_args, str) else tool_args
-                        args_display = json.dumps(args_dict, indent=2, ensure_ascii=False)
+
+                        args_dict = (
+                            json.loads(tool_args)
+                            if isinstance(tool_args, str)
+                            else tool_args
+                        )
+                        args_display = json.dumps(
+                            args_dict, indent=2, ensure_ascii=False
+                        )
                         # 如果参数太长，截断
                         if len(args_display) > 500:
-                            args_display = args_display[:500] + "\n    ... [truncated]"
+                            args_display = args_display[:500] + '\n    ... [truncated]'
                     except:
                         args_display = str(tool_args)
 
@@ -342,17 +377,19 @@ class BaseLLM(ABC):
 
     def _log_response(self, response: LLMResponse) -> None:
         """记录 LLM 响应到日志"""
-        self.logger.info("=" * 80)
-        self.logger.info("LLM Response:")
+        self.logger.info('=' * 80)
+        self.logger.info('LLM Response:')
         if response.content:
             # 截断过长的内容
             content = truncate_content(response.content)
             self.logger.info(f"Content: {content}")
         if response.tool_calls:
-            self.logger.info(f"Tool Calls: {[tc.function.name for tc in response.tool_calls]}")
+            self.logger.info(
+                f"Tool Calls: {[tc.function.name for tc in response.tool_calls]}"
+            )
         if response.usage:
             self.logger.info(f"Usage: {response.usage}")
-        self.logger.info("=" * 80)
+        self.logger.info('=' * 80)
 
     def _call_with_retry(
         self,
@@ -377,6 +414,7 @@ class BaseLLM(ABC):
 
         try:
             import httpx as _httpx
+
             _TIMEOUT_EXCEPTIONS: tuple[type[BaseException], ...] = (
                 _httpx.ReadTimeout,
                 _httpx.ConnectTimeout,
@@ -387,13 +425,14 @@ class BaseLLM(ABC):
 
         try:
             import openai as _openai
+
             _TIMEOUT_EXCEPTIONS = _TIMEOUT_EXCEPTIONS + (_openai.APITimeoutError,)
         except ImportError:
             pass
 
         last_error = None
         # 首次 timeout 取 kwargs 覆盖值或配置值；每次超时重试后翻倍
-        current_timeout: int = int(kwargs.pop("timeout", self.config.timeout))
+        current_timeout: int = int(kwargs.pop('timeout', self.config.timeout))
 
         for attempt in range(self.config.max_retries):
             try:
@@ -404,7 +443,7 @@ class BaseLLM(ABC):
 
                 err_str = str(e).lower()
                 # 上下文超长：无意义重试，直接抛出
-                if "tokens" in err_str and ("exceed" in err_str or "limit" in err_str):
+                if 'tokens' in err_str and ('exceed' in err_str or 'limit' in err_str):
                     self.logger.error(
                         f"Context length exceeded: {e}. "
                         f"No point retrying with the same oversized context."
@@ -416,24 +455,26 @@ class BaseLLM(ABC):
                 # 根因是上一轮 LLM 返回了非法 JSON arguments 并被存入对话历史。
                 # 重试不会改变输入，必然再次失败。
                 is_malformed_tool_args = (
-                    "unable to convert openai tool calls" in err_str
+                    'unable to convert openai tool calls' in err_str
                     or ("expecting ':' delimiter" in err_str)
                     or (
-                        "json" in err_str
-                        and "tool" in err_str
-                        and "argument" in err_str
+                        'json' in err_str
+                        and 'tool' in err_str
+                        and 'argument' in err_str
                     )
                 )
                 if is_malformed_tool_args:
                     self.logger.error(
-                        "Non-retryable error: malformed tool call arguments in message "
-                        "history (litellm/Bedrock JSON parse failure). "
-                        "Aborting retries immediately. Error: %s",
+                        'Non-retryable error: malformed tool call arguments in message '
+                        'history (litellm/Bedrock JSON parse failure). '
+                        'Aborting retries immediately. Error: %s',
                         e,
                     )
                     raise
 
-                is_timeout = isinstance(e, _TIMEOUT_EXCEPTIONS) if _TIMEOUT_EXCEPTIONS else False
+                is_timeout = (
+                    isinstance(e, _TIMEOUT_EXCEPTIONS) if _TIMEOUT_EXCEPTIONS else False
+                )
 
                 if is_timeout:
                     next_timeout = current_timeout * 2
@@ -450,11 +491,13 @@ class BaseLLM(ABC):
                     )
 
                 if attempt < self.config.max_retries - 1:
-                    delay = self.config.retry_delay * (2 ** attempt)  # 指数退避
+                    delay = self.config.retry_delay * (2**attempt)  # 指数退避
                     time.sleep(delay)
 
         # 所有重试失败
-        raise RuntimeError(f"LLM call failed after {self.config.max_retries} attempts") from last_error
+        raise RuntimeError(
+            f"LLM call failed after {self.config.max_retries} attempts"
+        ) from last_error
 
     def _convert_tools(self, tool_specs: list) -> list[dict[str, Any]]:
         """转换工具规格为 API 格式
@@ -472,13 +515,13 @@ def _is_azure_base_url(base_url: str | None) -> bool:
     """判断 base_url 是否为 Azure OpenAI 端点"""
     if not base_url:
         return False
-    return "openai.azure.com" in base_url
+    return 'openai.azure.com' in base_url
 
 
 def _azure_deployment_name(model: str) -> str:
     """从配置的 model 中取出 Azure 部署名（去掉 azure/ 前缀）"""
-    s = (model or "").strip()
-    if s.startswith("azure/"):
+    s = (model or '').strip()
+    if s.startswith('azure/'):
         return s[6:].strip() or model
     return s
 
@@ -496,12 +539,12 @@ class OpenAILLM(BaseLLM):
             from openai import OpenAI
         except ImportError:
             raise ImportError(
-                "OpenAI package not installed. Install with: pip install openai"
+                'OpenAI package not installed. Install with: pip install openai'
             )
 
         # API key 必须在配置中提供
         if not self.config.api_key:
-            raise ValueError("OpenAI API key must be provided in config")
+            raise ValueError('OpenAI API key must be provided in config')
 
         # 构造 httpx 客户端：
         # - connect timeout：固定 15s
@@ -511,7 +554,12 @@ class OpenAILLM(BaseLLM):
         # - write/pool timeout：固定值
         try:
             import httpx as _httpx
-            _first_token_t = self.config.stream_timeout if self.config.stream_timeout is not None else self.config.timeout
+
+            _first_token_t = (
+                self.config.stream_timeout
+                if self.config.stream_timeout is not None
+                else self.config.timeout
+            )
             _read_t = float(max(self.config.stream_idle_timeout, _first_token_t) + 10)
             _http_client = _httpx.Client(
                 timeout=_httpx.Timeout(
@@ -524,40 +572,44 @@ class OpenAILLM(BaseLLM):
         except ImportError:
             _http_client = None
 
-        base_url = (self.config.base_url or "").strip().rstrip("/")
+        base_url = (self.config.base_url or '').strip().rstrip('/')
         if _is_azure_base_url(base_url):
             # Azure OpenAI：使用 AzureOpenAI 客户端，否则会 404（需 /openai/deployments/.../chat/completions?api-version=）
             try:
                 from openai import AzureOpenAI
             except ImportError:
-                client_kwargs: dict[str, Any] = {"api_key": self.config.api_key, "base_url": base_url}
+                client_kwargs: dict[str, Any] = {
+                    'api_key': self.config.api_key,
+                    'base_url': base_url,
+                }
                 if _http_client is not None:
-                    client_kwargs["http_client"] = _http_client
+                    client_kwargs['http_client'] = _http_client
                 self.client = OpenAI(**client_kwargs)
                 self._use_azure_client = False
                 self.logger.warning(
-                    "Azure endpoint detected but AzureOpenAI not available; using OpenAI client (may 404)."
+                    'Azure endpoint detected but AzureOpenAI not available; using OpenAI client (may 404).'
                 )
             else:
-                api_version = (
-                    self.config.api_version
-                    or os.environ.get("AZURE_API_VERSION", "2024-06-01")
+                api_version = self.config.api_version or os.environ.get(
+                    'AZURE_API_VERSION', '2024-06-01'
                 )
                 azure_kwargs: dict[str, Any] = {
-                    "api_key": self.config.api_key,
-                    "azure_endpoint": base_url if "://" in base_url else f"https://{base_url}",
-                    "api_version": api_version,
+                    'api_key': self.config.api_key,
+                    'azure_endpoint': (
+                        base_url if '://' in base_url else f"https://{base_url}"
+                    ),
+                    'api_version': api_version,
                 }
                 if _http_client is not None:
-                    azure_kwargs["http_client"] = _http_client
+                    azure_kwargs['http_client'] = _http_client
                 self.client = AzureOpenAI(**azure_kwargs)
                 self._use_azure_client = True
         else:
-            client_kwargs = {"api_key": self.config.api_key}
+            client_kwargs = {'api_key': self.config.api_key}
             if base_url:
-                client_kwargs["base_url"] = base_url
+                client_kwargs['base_url'] = base_url
             if _http_client is not None:
-                client_kwargs["http_client"] = _http_client
+                client_kwargs['http_client'] = _http_client
             self.client = OpenAI(**client_kwargs)
             self._use_azure_client = False
 
@@ -570,34 +622,36 @@ class OpenAILLM(BaseLLM):
         """调用 OpenAI API 或 Azure OpenAI API"""
         model = (
             _azure_deployment_name(self.config.model)
-            if getattr(self, "_use_azure_client", False)
+            if getattr(self, '_use_azure_client', False)
             else self.config.model
         )
-        use_azure = getattr(self, "_use_azure_client", False)
+        use_azure = getattr(self, '_use_azure_client', False)
         request_params = {
-            "model": model,
-            "messages": messages,
-            "timeout": kwargs.get("timeout", self.config.timeout)
+            'model': model,
+            'messages': messages,
+            'timeout': kwargs.get('timeout', self.config.timeout),
         }
         # 部分 Azure 模型仅支持 temperature=1，不传则用 API 默认
         if not use_azure:
-            request_params["temperature"] = kwargs.get("temperature", self.config.temperature)
+            request_params['temperature'] = kwargs.get(
+                'temperature', self.config.temperature
+            )
 
         if self.config.max_tokens:
-            val = kwargs.get("max_tokens", self.config.max_tokens)
+            val = kwargs.get('max_tokens', self.config.max_tokens)
             # Azure 新模型要求用 max_completion_tokens，不能用 max_tokens
-            if getattr(self, "_use_azure_client", False):
-                request_params["max_completion_tokens"] = val
+            if getattr(self, '_use_azure_client', False):
+                request_params['max_completion_tokens'] = val
             else:
-                request_params["max_tokens"] = val
+                request_params['max_tokens'] = val
 
         if tools:
-            request_params["tools"] = tools
-            request_params["tool_choice"] = kwargs.get("tool_choice", "auto")
+            request_params['tools'] = tools
+            request_params['tool_choice'] = kwargs.get('tool_choice', 'auto')
 
         # 支持 response_format（如 {"type": "json_object"} 或 JSON Schema）
-        if "response_format" in kwargs and kwargs["response_format"] is not None:
-            request_params["response_format"] = kwargs["response_format"]
+        if 'response_format' in kwargs and kwargs['response_format'] is not None:
+            request_params['response_format'] = kwargs['response_format']
 
         # 调用 API
         response = self.client.chat.completions.create(**request_params)
@@ -605,10 +659,10 @@ class OpenAILLM(BaseLLM):
         # 解析响应（防护：API 可能返回 None 或空 choices，例如内容过滤、限流或兼容接口异常）
         if not response.choices or len(response.choices) == 0:
             err_msg = (
-                "LLM API returned no choices (response.choices is None or empty). "
-                "Possible causes: content filtering, rate limit, or provider-specific empty response."
+                'LLM API returned no choices (response.choices is None or empty). '
+                'Possible causes: content filtering, rate limit, or provider-specific empty response.'
             )
-            if hasattr(response, "model") and response.model:
+            if hasattr(response, 'model') and response.model:
                 err_msg += f" Model: {response.model}"
             self.logger.warning(err_msg)
             raise ValueError(err_msg)
@@ -622,11 +676,11 @@ class OpenAILLM(BaseLLM):
             tool_calls = [
                 ToolCall(
                     id=tc.id,
-                    type="function",
+                    type='function',
                     function=FunctionCall(
                         name=tc.function.name,
                         arguments=_sanitize_tool_call_arguments(tc.function.arguments),
-                    )
+                    ),
                 )
                 for tc in message.tool_calls
             ]
@@ -636,14 +690,14 @@ class OpenAILLM(BaseLLM):
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason,
             usage={
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
+                'prompt_tokens': response.usage.prompt_tokens,
+                'completion_tokens': response.usage.completion_tokens,
+                'total_tokens': response.usage.total_tokens,
             },
             meta={
-                "model": response.model,
-                "response_id": response.id,
-            }
+                'model': response.model,
+                'response_id': response.id,
+            },
         )
 
     def query_stream(
@@ -663,32 +717,36 @@ class OpenAILLM(BaseLLM):
 
         model = (
             _azure_deployment_name(self.config.model)
-            if getattr(self, "_use_azure_client", False)
+            if getattr(self, '_use_azure_client', False)
             else self.config.model
         )
-        use_azure = getattr(self, "_use_azure_client", False)
+        use_azure = getattr(self, '_use_azure_client', False)
         # 流式首 token 超时：优先用 stream_timeout，否则回退到 timeout
         _st = self.config.stream_timeout
-        _stream_effective_timeout = kwargs.pop("timeout", _st if _st is not None else self.config.timeout)
+        _stream_effective_timeout = kwargs.pop(
+            'timeout', _st if _st is not None else self.config.timeout
+        )
         request_params: dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-            "stream": True,
-            "timeout": _stream_effective_timeout,
+            'model': model,
+            'messages': messages,
+            'stream': True,
+            'timeout': _stream_effective_timeout,
         }
         if not use_azure:
-            request_params["temperature"] = kwargs.get("temperature", self.config.temperature)
+            request_params['temperature'] = kwargs.get(
+                'temperature', self.config.temperature
+            )
         if self.config.max_tokens:
-            val = kwargs.get("max_tokens", self.config.max_tokens)
+            val = kwargs.get('max_tokens', self.config.max_tokens)
             if use_azure:
-                request_params["max_completion_tokens"] = val
+                request_params['max_completion_tokens'] = val
             else:
-                request_params["max_tokens"] = val
+                request_params['max_tokens'] = val
         if tools:
-            request_params["tools"] = tools
-            request_params["tool_choice"] = kwargs.get("tool_choice", "auto")
-        if "response_format" in kwargs and kwargs["response_format"] is not None:
-            request_params["response_format"] = kwargs["response_format"]
+            request_params['tools'] = tools
+            request_params['tool_choice'] = kwargs.get('tool_choice', 'auto')
+        if 'response_format' in kwargs and kwargs['response_format'] is not None:
+            request_params['response_format'] = kwargs['response_format']
 
         full_content: list[str] = []
         # tool_call delta 按 index 累积：{index: {"id": str, "name": str, "arguments": str}}
@@ -717,16 +775,22 @@ class OpenAILLM(BaseLLM):
                     for tc_delta in delta.tool_calls:
                         idx = tc_delta.index
                         if idx not in tool_calls_acc:
-                            tool_calls_acc[idx] = {"id": "", "name": "", "arguments": ""}
+                            tool_calls_acc[idx] = {
+                                'id': '',
+                                'name': '',
+                                'arguments': '',
+                            }
                         if tc_delta.id:
-                            tool_calls_acc[idx]["id"] = tc_delta.id
+                            tool_calls_acc[idx]['id'] = tc_delta.id
                         if tc_delta.function:
                             if tc_delta.function.name:
-                                tool_calls_acc[idx]["name"] += tc_delta.function.name
+                                tool_calls_acc[idx]['name'] += tc_delta.function.name
                             if tc_delta.function.arguments:
-                                tool_calls_acc[idx]["arguments"] += tc_delta.function.arguments
+                                tool_calls_acc[idx][
+                                    'arguments'
+                                ] += tc_delta.function.arguments
         except Exception as e:
-            self.logger.warning("OpenAI stream failed, falling back to query(): %s", e)
+            self.logger.warning('OpenAI stream failed, falling back to query(): %s', e)
             return super().query_stream(dialog, on_token=on_token, **kwargs)
 
         # 组装 tool_calls（按 index 排序保证顺序；sanitize arguments 防止非法 JSON 污染对话历史）
@@ -734,18 +798,21 @@ class OpenAILLM(BaseLLM):
         if tool_calls_acc:
             tool_calls = [
                 ToolCall(
-                    id=v["id"],
-                    type="function",
-                    function=FunctionCall(name=v["name"], arguments=_sanitize_tool_call_arguments(v["arguments"])),
+                    id=v['id'],
+                    type='function',
+                    function=FunctionCall(
+                        name=v['name'],
+                        arguments=_sanitize_tool_call_arguments(v['arguments']),
+                    ),
                 )
                 for _, v in sorted(tool_calls_acc.items())
             ]
 
-        content = "".join(full_content) or None
+        content = ''.join(full_content) or None
         return AssistantMessage(
             content=content,
             tool_calls=tool_calls,
-            meta={"finish_reason": finish_reason},
+            meta={'finish_reason': finish_reason},
         )
 
 
@@ -761,12 +828,12 @@ class DeepSeekLLM(BaseLLM):
             from openai import OpenAI
         except ImportError:
             raise ImportError(
-                "OpenAI package not installed. Install with: pip install openai"
+                'OpenAI package not installed. Install with: pip install openai'
             )
 
         # API key 必须在配置中提供
         if not self.config.api_key:
-            raise ValueError("OpenAI API key must be provided in config")
+            raise ValueError('OpenAI API key must be provided in config')
 
         # 构造 httpx 客户端：
         # - connect timeout：固定 15s
@@ -776,7 +843,12 @@ class DeepSeekLLM(BaseLLM):
         # - write/pool timeout：固定值
         try:
             import httpx as _httpx
-            _first_token_t = self.config.stream_timeout if self.config.stream_timeout is not None else self.config.timeout
+
+            _first_token_t = (
+                self.config.stream_timeout
+                if self.config.stream_timeout is not None
+                else self.config.timeout
+            )
             _read_t = float(max(self.config.stream_idle_timeout, _first_token_t) + 10)
             _http_client = _httpx.Client(
                 timeout=_httpx.Timeout(
@@ -790,11 +862,11 @@ class DeepSeekLLM(BaseLLM):
             _http_client = None
 
         # 创建客户端
-        client_kwargs: dict[str, Any] = {"api_key": self.config.api_key}
+        client_kwargs: dict[str, Any] = {'api_key': self.config.api_key}
         if self.config.base_url:
-            client_kwargs["base_url"] = self.config.base_url
+            client_kwargs['base_url'] = self.config.base_url
         if _http_client is not None:
-            client_kwargs["http_client"] = _http_client
+            client_kwargs['http_client'] = _http_client
 
         self.client = OpenAI(**client_kwargs)
 
@@ -805,20 +877,20 @@ class DeepSeekLLM(BaseLLM):
         """
         parts = []
         for msg in messages:
-            role = msg.get("role", "")
-            content = msg.get("content", "")
+            role = msg.get('role', '')
+            content = msg.get('content', '')
 
-            if role == "system":
+            if role == 'system':
                 parts.append(content)
-            elif role == "user":
+            elif role == 'user':
                 parts.append(f"<｜User｜> {content} <｜Assistant｜>")
-            elif role == "assistant":
+            elif role == 'assistant':
                 parts.append(content)
-            elif role == "tool":
+            elif role == 'tool':
                 # 工具结果包装在 execution_results 标签中
                 parts.append(f"<execution_results>{content}</execution_results>")
 
-        return "".join(parts)
+        return ''.join(parts)
 
     def _call(
         self,
@@ -841,21 +913,23 @@ class DeepSeekLLM(BaseLLM):
         prompt = self._messages_to_prompt(messages)
 
         request_params = {
-            "model": self.config.model,
-            "prompt": prompt,
-            "temperature": kwargs.get("temperature", self.config.temperature),
-            "timeout": kwargs.get("timeout", self.config.timeout),
+            'model': self.config.model,
+            'prompt': prompt,
+            'temperature': kwargs.get('temperature', self.config.temperature),
+            'timeout': kwargs.get('timeout', self.config.timeout),
         }
 
         if self.config.max_tokens:
-            request_params["max_tokens"] = kwargs.get("max_tokens", self.config.max_tokens)
+            request_params['max_tokens'] = kwargs.get(
+                'max_tokens', self.config.max_tokens
+            )
 
         # 调用 Completion API
         response = self.client.completions.create(**request_params)
 
         # 解析响应（防护：API 可能返回 None 或空 choices）
         if not response.choices or len(response.choices) == 0:
-            err_msg = "LLM API returned no choices (response.choices is None or empty)."
+            err_msg = 'LLM API returned no choices (response.choices is None or empty).'
             self.logger.warning(err_msg)
             raise ValueError(err_msg)
 
@@ -866,15 +940,15 @@ class DeepSeekLLM(BaseLLM):
             tool_calls=None,  # Completion API 不支持原生 tool calls
             finish_reason=choice.finish_reason,
             usage={
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
+                'prompt_tokens': response.usage.prompt_tokens,
+                'completion_tokens': response.usage.completion_tokens,
+                'total_tokens': response.usage.total_tokens,
             },
             meta={
-                "model": response.model,
-                "response_id": response.id,
-                "api_type": "completion",
-            }
+                'model': response.model,
+                'response_id': response.id,
+                'api_type': 'completion',
+            },
         )
 
     def _call_chat(
@@ -886,44 +960,48 @@ class DeepSeekLLM(BaseLLM):
         """调用 Chat Completion API"""
         # 构建请求参数
         request_params = {
-            "model": self.config.model,
-            "messages": messages,
-            "temperature": kwargs.get("temperature", self.config.temperature),
-            "timeout": kwargs.get("timeout", self.config.timeout),
-            "extra_body": {
-                "chat_template_kwargs": {"thinking": True},
-                "separate_reasoning": True
-            }
+            'model': self.config.model,
+            'messages': messages,
+            'temperature': kwargs.get('temperature', self.config.temperature),
+            'timeout': kwargs.get('timeout', self.config.timeout),
+            'extra_body': {
+                'chat_template_kwargs': {'thinking': True},
+                'separate_reasoning': True,
+            },
         }
 
         if self.config.max_tokens:
-            request_params["max_tokens"] = kwargs.get("max_tokens", self.config.max_tokens)
+            request_params['max_tokens'] = kwargs.get(
+                'max_tokens', self.config.max_tokens
+            )
 
         if tools:
             # 清理 tools 中的 None 值（如 strict=None），某些 API 不接受 None
             cleaned_tools = []
             for tool in tools:
                 cleaned_tool = tool.copy()
-                if "function" in cleaned_tool and isinstance(cleaned_tool["function"], dict):
-                    cleaned_function = cleaned_tool["function"].copy()
+                if 'function' in cleaned_tool and isinstance(
+                    cleaned_tool['function'], dict
+                ):
+                    cleaned_function = cleaned_tool['function'].copy()
                     # 移除 strict=None 字段
-                    if cleaned_function.get("strict") is None:
-                        cleaned_function.pop("strict", None)
-                    cleaned_tool["function"] = cleaned_function
+                    if cleaned_function.get('strict') is None:
+                        cleaned_function.pop('strict', None)
+                    cleaned_tool['function'] = cleaned_function
                 cleaned_tools.append(cleaned_tool)
-            request_params["tools"] = cleaned_tools
-            request_params["tool_choice"] = kwargs.get("tool_choice", "auto")
+            request_params['tools'] = cleaned_tools
+            request_params['tool_choice'] = kwargs.get('tool_choice', 'auto')
 
         # 支持 response_format（如 {"type": "json_object"} 或 JSON Schema）
-        if "response_format" in kwargs and kwargs["response_format"] is not None:
-            request_params["response_format"] = kwargs["response_format"]
+        if 'response_format' in kwargs and kwargs['response_format'] is not None:
+            request_params['response_format'] = kwargs['response_format']
 
         # 调用 API
         response = self.client.chat.completions.create(**request_params)
 
         # 解析响应（防护：API 可能返回 None 或空 choices）
         if not response.choices or len(response.choices) == 0:
-            err_msg = "LLM API returned no choices (response.choices is None or empty)."
+            err_msg = 'LLM API returned no choices (response.choices is None or empty).'
             self.logger.warning(err_msg)
             raise ValueError(err_msg)
 
@@ -936,11 +1014,11 @@ class DeepSeekLLM(BaseLLM):
             tool_calls = [
                 ToolCall(
                     id=tc.id,
-                    type="function",
+                    type='function',
                     function=FunctionCall(
                         name=tc.function.name,
                         arguments=_sanitize_tool_call_arguments(tc.function.arguments),
-                    )
+                    ),
                 )
                 for tc in message.tool_calls
             ]
@@ -950,15 +1028,15 @@ class DeepSeekLLM(BaseLLM):
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason,
             usage={
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
+                'prompt_tokens': response.usage.prompt_tokens,
+                'completion_tokens': response.usage.completion_tokens,
+                'total_tokens': response.usage.total_tokens,
             },
             meta={
-                "model": response.model,
-                "response_id": response.id,
-                "api_type": "chat",
-            }
+                'model': response.model,
+                'response_id': response.id,
+                'api_type': 'chat',
+            },
         )
 
     def query_stream(
@@ -982,29 +1060,35 @@ class DeepSeekLLM(BaseLLM):
 
         # 流式首 token 超时：优先用 stream_timeout，否则回退到 timeout
         _st = self.config.stream_timeout
-        _stream_effective_timeout = kwargs.pop("timeout", _st if _st is not None else self.config.timeout)
+        _stream_effective_timeout = kwargs.pop(
+            'timeout', _st if _st is not None else self.config.timeout
+        )
         request_params: dict[str, Any] = {
-            "model": self.config.model,
-            "messages": messages,
-            "temperature": kwargs.get("temperature", self.config.temperature),
-            "stream": True,
-            "timeout": _stream_effective_timeout,
+            'model': self.config.model,
+            'messages': messages,
+            'temperature': kwargs.get('temperature', self.config.temperature),
+            'stream': True,
+            'timeout': _stream_effective_timeout,
         }
         if self.config.max_tokens:
-            request_params["max_tokens"] = kwargs.get("max_tokens", self.config.max_tokens)
+            request_params['max_tokens'] = kwargs.get(
+                'max_tokens', self.config.max_tokens
+            )
         if tools:
             # 清理 tools 中的 None 值（如 strict=None），某些 API 不接受 None
             cleaned_tools = []
             for tool in tools:
                 cleaned_tool = tool.copy()
-                if "function" in cleaned_tool and isinstance(cleaned_tool["function"], dict):
-                    cleaned_function = cleaned_tool["function"].copy()
-                    if cleaned_function.get("strict") is None:
-                        cleaned_function.pop("strict", None)
-                    cleaned_tool["function"] = cleaned_function
+                if 'function' in cleaned_tool and isinstance(
+                    cleaned_tool['function'], dict
+                ):
+                    cleaned_function = cleaned_tool['function'].copy()
+                    if cleaned_function.get('strict') is None:
+                        cleaned_function.pop('strict', None)
+                    cleaned_tool['function'] = cleaned_function
                 cleaned_tools.append(cleaned_tool)
-            request_params["tools"] = cleaned_tools
-            request_params["tool_choice"] = kwargs.get("tool_choice", "auto")
+            request_params['tools'] = cleaned_tools
+            request_params['tool_choice'] = kwargs.get('tool_choice', 'auto')
 
         full_content: list[str] = []
         # tool_call delta 按 index 累积：{index: {"id": str, "name": str, "arguments": str}}
@@ -1033,16 +1117,24 @@ class DeepSeekLLM(BaseLLM):
                     for tc_delta in delta.tool_calls:
                         idx = tc_delta.index
                         if idx not in tool_calls_acc:
-                            tool_calls_acc[idx] = {"id": "", "name": "", "arguments": ""}
+                            tool_calls_acc[idx] = {
+                                'id': '',
+                                'name': '',
+                                'arguments': '',
+                            }
                         if tc_delta.id:
-                            tool_calls_acc[idx]["id"] = tc_delta.id
+                            tool_calls_acc[idx]['id'] = tc_delta.id
                         if tc_delta.function:
                             if tc_delta.function.name:
-                                tool_calls_acc[idx]["name"] += tc_delta.function.name
+                                tool_calls_acc[idx]['name'] += tc_delta.function.name
                             if tc_delta.function.arguments:
-                                tool_calls_acc[idx]["arguments"] += tc_delta.function.arguments
+                                tool_calls_acc[idx][
+                                    'arguments'
+                                ] += tc_delta.function.arguments
         except Exception as e:
-            self.logger.warning("DeepSeek stream failed, falling back to query(): %s", e)
+            self.logger.warning(
+                'DeepSeek stream failed, falling back to query(): %s', e
+            )
             return super().query_stream(dialog, on_token=on_token, **kwargs)
 
         # 组装 tool_calls（按 index 排序保证顺序；sanitize arguments 防止非法 JSON 污染对话历史）
@@ -1050,18 +1142,21 @@ class DeepSeekLLM(BaseLLM):
         if tool_calls_acc:
             tool_calls = [
                 ToolCall(
-                    id=v["id"],
-                    type="function",
-                    function=FunctionCall(name=v["name"], arguments=_sanitize_tool_call_arguments(v["arguments"])),
+                    id=v['id'],
+                    type='function',
+                    function=FunctionCall(
+                        name=v['name'],
+                        arguments=_sanitize_tool_call_arguments(v['arguments']),
+                    ),
                 )
                 for _, v in sorted(tool_calls_acc.items())
             ]
 
-        content = "".join(full_content) or None
+        content = ''.join(full_content) or None
         return AssistantMessage(
             content=content,
             tool_calls=tool_calls,
-            meta={"finish_reason": finish_reason},
+            meta={'finish_reason': finish_reason},
         )
 
 
@@ -1077,17 +1172,17 @@ class AnthropicLLM(BaseLLM):
             from anthropic import Anthropic
         except ImportError:
             raise ImportError(
-                "Anthropic package not installed. Install with: pip install anthropic"
+                'Anthropic package not installed. Install with: pip install anthropic'
             )
 
         # API key 必须在配置中提供
         if not self.config.api_key:
-            raise ValueError("Anthropic API key must be provided in config")
+            raise ValueError('Anthropic API key must be provided in config')
 
         # 创建客户端
-        client_kwargs = {"api_key": self.config.api_key}
+        client_kwargs = {'api_key': self.config.api_key}
         if self.config.base_url:
-            client_kwargs["base_url"] = self.config.base_url
+            client_kwargs['base_url'] = self.config.base_url
 
         self.client = Anthropic(**client_kwargs)
 
@@ -1103,26 +1198,26 @@ class AnthropicLLM(BaseLLM):
         user_messages = []
 
         for msg in messages:
-            if msg["role"] == "system":
-                system_message = msg["content"]
+            if msg['role'] == 'system':
+                system_message = msg['content']
             else:
                 user_messages.append(msg)
 
         # 构建请求参数
         request_params = {
-            "model": self.config.model,
-            "messages": user_messages,
-            "max_tokens": kwargs.get("max_tokens", self.config.max_tokens or 4096),
-            "temperature": kwargs.get("temperature", self.config.temperature),
-            "timeout": kwargs.get("timeout", self.config.timeout),
+            'model': self.config.model,
+            'messages': user_messages,
+            'max_tokens': kwargs.get('max_tokens', self.config.max_tokens or 4096),
+            'temperature': kwargs.get('temperature', self.config.temperature),
+            'timeout': kwargs.get('timeout', self.config.timeout),
         }
 
         if system_message:
-            request_params["system"] = system_message
+            request_params['system'] = system_message
 
         if tools:
-            request_params["tools"] = tools
-            request_params["tool_choice"] = kwargs.get("tool_choice", {"type": "auto"})
+            request_params['tools'] = tools
+            request_params['tool_choice'] = kwargs.get('tool_choice', {'type': 'auto'})
 
         # 调用 API
         response = self.client.messages.create(**request_params)
@@ -1132,21 +1227,22 @@ class AnthropicLLM(BaseLLM):
         tool_calls = None
 
         for content in response.content:
-            if content.type == "text":
+            if content.type == 'text':
                 content_text = content.text
-            elif content.type == "tool_use":
+            elif content.type == 'tool_use':
                 if tool_calls is None:
                     tool_calls = []
                 # Anthropic 的工具调用格式需要转换
                 import json
+
                 tool_calls.append(
                     ToolCall(
                         id=content.id,
-                        type="function",
+                        type='function',
                         function=FunctionCall(
                             name=content.name,
                             arguments=json.dumps(content.input),
-                        )
+                        ),
                     )
                 )
 
@@ -1155,14 +1251,15 @@ class AnthropicLLM(BaseLLM):
             tool_calls=tool_calls,
             finish_reason=response.stop_reason,
             usage={
-                "prompt_tokens": response.usage.input_tokens,
-                "completion_tokens": response.usage.output_tokens,
-                "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
+                'prompt_tokens': response.usage.input_tokens,
+                'completion_tokens': response.usage.output_tokens,
+                'total_tokens': response.usage.input_tokens
+                + response.usage.output_tokens,
             },
             meta={
-                "model": response.model,
-                "response_id": response.id,
-            }
+                'model': response.model,
+                'response_id': response.id,
+            },
         )
 
     def query_stream(
@@ -1185,23 +1282,25 @@ class AnthropicLLM(BaseLLM):
         system_message = None
         user_messages = []
         for msg in messages:
-            if msg["role"] == "system":
-                system_message = msg["content"]
+            if msg['role'] == 'system':
+                system_message = msg['content']
             else:
                 user_messages.append(msg)
 
         # 流式首 token 超时：优先用 stream_timeout，否则回退到 timeout
         _st = self.config.stream_timeout
-        _stream_effective_timeout = kwargs.pop("timeout", _st if _st is not None else self.config.timeout)
+        _stream_effective_timeout = kwargs.pop(
+            'timeout', _st if _st is not None else self.config.timeout
+        )
         request_params: dict[str, Any] = {
-            "model": self.config.model,
-            "messages": user_messages,
-            "max_tokens": kwargs.get("max_tokens", self.config.max_tokens or 4096),
-            "temperature": kwargs.get("temperature", self.config.temperature),
-            "timeout": _stream_effective_timeout,
+            'model': self.config.model,
+            'messages': user_messages,
+            'max_tokens': kwargs.get('max_tokens', self.config.max_tokens or 4096),
+            'temperature': kwargs.get('temperature', self.config.temperature),
+            'timeout': _stream_effective_timeout,
         }
         if system_message:
-            request_params["system"] = system_message
+            request_params['system'] = system_message
 
         full_content: list[str] = []
         try:
@@ -1212,13 +1311,17 @@ class AnthropicLLM(BaseLLM):
                         if on_token is not None:
                             on_token(text)
         except Exception as e:
-            self.logger.warning("Anthropic stream failed, falling back to query(): %s", e)
+            self.logger.warning(
+                'Anthropic stream failed, falling back to query(): %s', e
+            )
             return super().query_stream(dialog, on_token=on_token, **kwargs)
 
-        return AssistantMessage(content="".join(full_content))
+        return AssistantMessage(content=''.join(full_content))
 
 
-def create_llm(config: LLMConfig, output_config: dict[str, Any] | None = None) -> BaseLLM:
+def create_llm(
+    config: LLMConfig, output_config: dict[str, Any] | None = None
+) -> BaseLLM:
     """LLM 工厂函数
 
     Args:
@@ -1231,11 +1334,11 @@ def create_llm(config: LLMConfig, output_config: dict[str, Any] | None = None) -
     Raises:
         ValueError: 不支持的提供商
     """
-    if config.provider == "openai" or config.provider == "openrouter":
+    if config.provider == 'openai' or config.provider == 'openrouter':
         return OpenAILLM(config, output_config=output_config)
-    elif config.provider == "anthropic":
+    elif config.provider == 'anthropic':
         return AnthropicLLM(config, output_config=output_config)
-    elif config.provider == "deepseek":
+    elif config.provider == 'deepseek':
         return DeepSeekLLM(config, output_config=output_config)
     else:
         raise ValueError(f"Unsupported LLM provider: {config.provider}")

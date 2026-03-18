@@ -8,12 +8,13 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from src.utils.constant import SUPPORT_SERVICE_BASE_URL
+from src.utils.constant import (
+    SUPPORT_SERVICE_BASE_URL,
+    SUPPORT_SESSION_COMPLETE_TEMPLATE_ID,
+)
 
 logger = logging.getLogger(__name__)
 
-# 会话完成邮件模板 ID（支持服务侧配置）
-SESSION_COMPLETE_TEMPLATE_ID = '139'
 SEND_CHANNEL = 4
 BUSINESS_LINE = 'Bohrium'
 
@@ -25,6 +26,13 @@ def _send_session_complete_email_impl(
     session_url: str,
     user_id: str,
     email: str,
+    *,
+    user_question: str = '',
+    submitted_at: str = '',
+    duration: str = '',
+    result_status: str = '成功',
+    fail_reason: str = '',
+    completed_at: str = '',
 ) -> None:
     """同步请求支持服务 /api/template/send，发送会话完成邮件。"""
     if not (SUPPORT_SERVICE_BASE_URL or '').strip():
@@ -51,22 +59,39 @@ def _send_session_complete_email_impl(
         )
         return
 
+    if result_status == '已取消':
+        subject_suffix = '您的会话已取消'
+    elif result_status == '失败':
+        subject_suffix = '您的会话执行失败'
+    else:
+        subject_suffix = '您的会话已执行完成'
+
+    params = {
+        'session_url': session_url,
+        'user_question': (user_question or '').strip() or '-',
+        'submitted_at': (submitted_at or '').strip() or '-',
+        'duration': (duration or '').strip() or '-',
+        'result_status': (result_status or '').strip() or '成功',
+        'fail_reason': (fail_reason or '').strip() or '-',
+        'completed_at': (completed_at or '').strip() or '-',
+    }
+
     url = f'{SUPPORT_SERVICE_BASE_URL.rstrip("/")}/api/template/send'
     body = {
         'userInfo': [
             {
                 'userId': user_id_int,
                 'email': email,
-                'params': {'session_url': session_url},
+                'params': params,
             }
         ],
-        'templateId': SESSION_COMPLETE_TEMPLATE_ID,
+        'templateId': SUPPORT_SESSION_COMPLETE_TEMPLATE_ID,
         'sendChannel': SEND_CHANNEL,
         'businessLine': BUSINESS_LINE,
         'emailInfo': {
             'from': 'notice@dpscaas.tech',
             'fromName': 'MatMaster',
-            'subject': '【MatMaster】您的会话已执行完成',
+            'subject': f'【MatMaster】{subject_suffix}',
             'contentType': 'text/html',
         },
     }
@@ -114,11 +139,28 @@ def send_session_complete_email_async(
     session_url: str,
     user_id: str,
     email: str,
+    *,
+    user_question: str = '',
+    submitted_at: str = '',
+    duration: str = '',
+    result_status: str = '成功',
+    fail_reason: str = '',
+    completed_at: str = '',
 ) -> None:
-    """异步发送会话完成邮件（新起线程），不阻塞调用方。成功/失败/取消后均可调用，模板为「会话已执行完成」带链接。"""
+    """异步发送会话完成邮件（新起线程），不阻塞调用方。成功/失败/取消后均可调用。
+    模板可用变量：session_url, user_question, submitted_at, duration, result_status, fail_reason, completed_at。
+    """
     threading.Thread(
         target=_send_session_complete_email_impl,
         args=(session_url, user_id, email),
+        kwargs={
+            'user_question': user_question,
+            'submitted_at': submitted_at,
+            'duration': duration,
+            'result_status': result_status,
+            'fail_reason': fail_reason,
+            'completed_at': completed_at,
+        },
         name='support_notify_session_complete',
         daemon=True,
     ).start()

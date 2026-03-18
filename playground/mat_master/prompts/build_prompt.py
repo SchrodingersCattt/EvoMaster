@@ -8,8 +8,6 @@ System and user prompts are built by functions so tool list and rules stay in on
 - Current date (with OS/shell info) is appended at the end for cache-friendly prefix caching.
 """
 
-from __future__ import annotations
-
 import os
 import platform
 from datetime import datetime, timezone

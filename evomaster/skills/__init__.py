@@ -10,6 +10,8 @@
 3. 第三层级 scripts: 可执行脚本
 """
 
+from __future__ import annotations
+
 from .base import (
     BaseSkill,
     Skill,

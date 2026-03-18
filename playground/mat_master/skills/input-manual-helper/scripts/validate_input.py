@@ -13,8 +13,6 @@ Usage
   python validate_input.py --input_file /path/to/pw.in --software QE
 """
 
-from __future__ import annotations
-
 import argparse
 import sys
 from pathlib import Path
@@ -22,19 +20,21 @@ from pathlib import Path
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Physical-sense review: read prepared input file for LLM inspection."
+        description='Physical-sense review: read prepared input file for LLM inspection.'
     )
     parser.add_argument(
-        "--input_file", required=True,
-        help="Path to the input file to validate.",
+        '--input_file',
+        required=True,
+        help='Path to the input file to validate.',
     )
     parser.add_argument(
-        "--software", required=True,
-        help="Software name (e.g. VASP, CP2K, LAMMPS, QE).",
+        '--software',
+        required=True,
+        help='Software name (e.g. VASP, CP2K, LAMMPS, QE).',
     )
     parser.add_argument(
-        "--data-dir",
-        help="Ignored; kept for backward compatibility.",
+        '--data-dir',
+        help='Ignored; kept for backward compatibility.',
     )
 
     args = parser.parse_args()
@@ -45,15 +45,17 @@ def main() -> None:
         sys.exit(1)
 
     print(f"Physical-sense review: {args.software} -- {input_path.name}")
-    print("Inspect the content below. If doubtful, use ask_human(mode='timeout'); on timeout, treat as pass.")
-    print("-" * 60)
+    print(
+        "Inspect the content below. If doubtful, use ask_human(mode='timeout'); on timeout, treat as pass."
+    )
+    print('-' * 60)
 
-    with open(input_path, "r", encoding="utf-8", errors="replace") as f:
+    with open(input_path, encoding='utf-8', errors='replace') as f:
         content = f.read()
 
     print(content)
     sys.exit(0)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

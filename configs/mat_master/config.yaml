@@ -155,7 +155,8 @@ mat_master:
     rate_limit: null
     # 工具结果自动落盘：名称以此列表任一前缀开头的工具，执行成功后会将 observation 写入工作区 _tmp/tool_outputs/<工具名>/
     # 便于多批次文献汇总等任务从文件合并，避免上下文截断导致最终 CSV 不全
-    tool_output_auto_save_patterns: ["mat_sn_", "mat_doc_"]
+    # 含 web-search：内置 web-search 与 MCP mat_sn_web-search 结果均会落盘
+    tool_output_auto_save_patterns: ["mat_sn_", "mat_doc_", "web-search"]
 
     # Feature C: 超大工具结果摘要化
     # 当工具 observation 字符数超过阈值时，将其替换为结构化摘要 + 文件路径引用，减少 context 占用

@@ -5,8 +5,6 @@ entry).  Provides compact summaries for periodic reminders and a full
 Markdown ``## Execution Details`` section for finish-message augmentation.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import threading
@@ -162,12 +160,20 @@ class ExecutionJournal:
                 if e.get('saved_path'):
                     p = e['saved_path']
                     fname = os.path.basename(p)
-                    ext = os.path.splitext(fname)[1].upper().lstrip('.') or 'File'
-                    uri = p if p.startswith('file://') or p.startswith('http') else f'file://{p}'
+                    os.path.splitext(fname)[1].upper().lstrip('.') or 'File'
+                    uri = (
+                        p
+                        if p.startswith('file://') or p.startswith('http')
+                        else f'file://{p}'
+                    )
                     parts.append(f' [{fname}]({uri})')
                 for f in e.get('downloaded_files') or []:
                     fname2 = os.path.basename(f)
-                    uri2 = f if f.startswith('file://') or f.startswith('http') else f'file://{f}'
+                    uri2 = (
+                        f
+                        if f.startswith('file://') or f.startswith('http')
+                        else f'file://{f}'
+                    )
                     parts.append(f' [{fname2}]({uri2})')
                 if e['status'] == 'error' and e.get('error'):
                     parts.append(f" — {str(e['error'])[:200]}")

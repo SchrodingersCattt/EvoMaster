@@ -7,6 +7,7 @@ connect to the correct environment.
 
 Usage (in playground ``_setup_mcp_tools``)::
 
+from __future__ import annotations
     from evomaster.adaptors.calculation.env_config import resolve_mcp_config_path
     config_path = resolve_mcp_config_path(config_path)
 """
@@ -18,11 +19,11 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # Environment variable used to determine the current deployment environment.
-_ENV_VAR = "SERVICE_ENV"
-_DEFAULT_ENV = "prod"
+_ENV_VAR = 'SERVICE_ENV'
+_DEFAULT_ENV = 'prod'
 
 # Non-prod environments that have their own MCP config files.
-_NON_PROD_ENVS = {"test", "uat"}
+_NON_PROD_ENVS = {'test', 'uat'}
 
 
 def get_current_env() -> str:
@@ -51,13 +52,13 @@ def resolve_mcp_config_path(config_path: Path) -> Path:
         return config_path
 
     # Build env config path: mcp_config.json -> mcp_config.{env}.json
-    stem = config_path.stem          # e.g. "mcp_config"
-    suffix = config_path.suffix      # e.g. ".json"
+    stem = config_path.stem  # e.g. "mcp_config"
+    suffix = config_path.suffix  # e.g. ".json"
     env_path = config_path.with_name(f"{stem}.{current_env}{suffix}")
 
     if env_path.exists():
         logger.info(
-            "SERVICE_ENV=%s → switching MCP config: %s -> %s",
+            'SERVICE_ENV=%s → switching MCP config: %s -> %s',
             current_env,
             config_path.name,
             env_path.name,
@@ -65,7 +66,7 @@ def resolve_mcp_config_path(config_path: Path) -> Path:
         return env_path
 
     logger.warning(
-        "SERVICE_ENV=%s but env config not found: %s; falling back to %s",
+        'SERVICE_ENV=%s but env config not found: %s; falling back to %s',
         current_env,
         env_path,
         config_path,

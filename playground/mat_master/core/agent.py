@@ -3,8 +3,6 @@
 System prompt uses file-first loading with runtime composition fallback.
 """
 
-from __future__ import annotations
-
 import json
 import os
 import re
@@ -80,41 +78,65 @@ class MatMasterAgent(Agent):
         _mat = (config_dict or {}).get('mat_master') or {}
         _exec = _mat.get('execution') or {}
         self._tool_output_auto_save_patterns: list[str] = _exec.get(
-            'tool_output_auto_save_patterns', ['mat_sn_', 'mat_doc_']
+            'tool_output_auto_save_patterns', ['mat_sn_', 'mat_doc_', 'web-search']
         )
         if not isinstance(self._tool_output_auto_save_patterns, list):
-            self._tool_output_auto_save_patterns = ['mat_sn_', 'mat_doc_']
+            self._tool_output_auto_save_patterns = ['mat_sn_', 'mat_doc_', 'web-search']
         self._tool_output_save_counter = 0
         self._execution_journal = ExecutionJournal()
         # 超大工具结果摘要化：匹配以下前缀的工具 observation 超过阈值时自动替换为结构化摘要
         self._tool_obs_summarize_patterns: list[str] = _exec.get(
             'tool_obs_summarize_patterns',
-            ['mat_sn_search-papers-enhanced', 'mat_sn_search-papers', 'mat_sg_', 'mat_doc_'],
+            [
+                'mat_sn_search-papers-enhanced',
+                'mat_sn_search-papers',
+                'mat_sg_',
+                'mat_doc_',
+            ],
         )
         if not isinstance(self._tool_obs_summarize_patterns, list):
-            self._tool_obs_summarize_patterns = ['mat_sn_search-papers-enhanced', 'mat_sn_search-papers', 'mat_sg_', 'mat_doc_']
+            self._tool_obs_summarize_patterns = [
+                'mat_sn_search-papers-enhanced',
+                'mat_sn_search-papers',
+                'mat_sg_',
+                'mat_doc_',
+            ]
         self._tool_obs_summarize_threshold: int = int(
             _exec.get('tool_obs_summarize_threshold', 10000)
         )
 
         # 初始化 ContextCompactor（如果 compaction.enabled）
-        _ctx_cfg = (config_dict or {}).get('agents', {}).get('general', {}).get('context', {})
+        _ctx_cfg = (
+            (config_dict or {}).get('agents', {}).get('general', {}).get('context', {})
+        )
         _compaction_raw = _ctx_cfg.get('compaction', {})
-        _compaction_cfg = CompactionConfig(**_compaction_raw) if _compaction_raw else CompactionConfig()
+        _compaction_cfg = (
+            CompactionConfig(**_compaction_raw)
+            if _compaction_raw
+            else CompactionConfig()
+        )
         self._compaction_enabled: bool = _compaction_cfg.enabled
         if _compaction_cfg.enabled:
             # 尝试为 compaction 创建独立小模型 LLM（由 config.llm.<compaction_llm> 指定）
             _compaction_llm_instance = None
-            _compaction_llm_key = _compaction_cfg.compaction_llm  # e.g. "compaction" or None
+            _compaction_llm_key = (
+                _compaction_cfg.compaction_llm
+            )  # e.g. "compaction" or None
             if _compaction_llm_key:
                 _llm_dict = (config_dict or {}).get('llm', {})
                 _compaction_llm_cfg_raw = _llm_dict.get(_compaction_llm_key)
-                if _compaction_llm_cfg_raw and isinstance(_compaction_llm_cfg_raw, dict):
+                if _compaction_llm_cfg_raw and isinstance(
+                    _compaction_llm_cfg_raw, dict
+                ):
                     try:
                         from evomaster.utils import LLMConfig, create_llm
+
                         _compaction_llm_instance = create_llm(
                             LLMConfig(**_compaction_llm_cfg_raw),
-                            output_config={'show_in_console': False, 'log_to_file': False},
+                            output_config={
+                                'show_in_console': False,
+                                'log_to_file': False,
+                            },
                         )
                         self.logger.info(
                             '[Agent] ContextCompactor using dedicated LLM: key=%s model=%s',
@@ -125,7 +147,8 @@ class MatMasterAgent(Agent):
                         self.logger.warning(
                             '[Agent] Failed to create compaction LLM (key=%s): %s'
                             ' — falling back to agent LLM',
-                            _compaction_llm_key, _e,
+                            _compaction_llm_key,
+                            _e,
                         )
                 else:
                     self.logger.warning(
@@ -135,9 +158,12 @@ class MatMasterAgent(Agent):
                     )
 
             if _compaction_llm_instance is not None:
+
                 def _llm_caller(dialog, _llm=_compaction_llm_instance):
                     return _llm.query(dialog)
+
             else:
+
                 def _llm_caller(dialog):
                     return self.llm.query(dialog)
 
@@ -316,13 +342,13 @@ You can use the 'use_skill' tool to:
         else:
             workspace = getattr(self.session.config, 'workspace_path', '') or ''
             task_description = getattr(self, '_current_task_description', '')
-            
+
             gate_eval = self._llm_finish_gate_check(
                 task_description=task_description,
                 requested_task_completed=requested_task_completed,
                 workspace_path=workspace,
             )
-            
+
             if not gate_eval.get('approved', False):
                 reason = gate_eval.get('reason', 'Task completion requirements not met')
                 blocked_msgs.append(
@@ -344,9 +370,9 @@ You can use the 'use_skill' tool to:
             gate_info.setdefault(
                 'finish_hint',
                 (
-                    "If you are blocked by unavailable/paywalled web sources (403/404/etc.), "
+                    'If you are blocked by unavailable/paywalled web sources (403/404/etc.), '
                     "switch to alternative open sources or finish with task_completed='partial' "
-                    "and include explicit limitations/caveats."
+                    'and include explicit limitations/caveats.'
                 ),
             )
 
@@ -359,22 +385,22 @@ You can use the 'use_skill' tool to:
         workspace_path: str,
     ) -> dict[str, Any]:
         """Use LLM to decide whether finish is appropriate given the actual task requirements.
-        
+
         Evaluates whether the user's requested task has been accomplished, rather than
         checking hardcoded gates that may not match the actual requirements.
-        
+
         Returns dict with 'approved' (bool) and 'reason' (str).
         """
         if not task_description or not task_description.strip():
             # No task description available, allow finish
             return {'approved': True, 'reason': ''}
-        
+
         prompt = f"""TASK DESCRIPTION:
 {task_description}
 
 USER REQUESTED: task_completed={requested_task_completed}
 
-Question: Has the user's requested task been accomplished? 
+Question: Has the user's requested task been accomplished?
 - Do NOT gate on mandatory manuscript validation or survey markdown quality.
 - Only block if the core deliverable requested by the user is clearly missing or incomplete.
 - Be permissive: if the task is substantially done, return approved=true.
@@ -387,17 +413,17 @@ Return exactly one JSON object:
 
 If NOT approved, reason should be specific (e.g. "Requested CSV file not found in workspace").
 """
-        
+
         dialog = Dialog(
             messages=[
                 SystemMessage(
-                    content="You are a strict task completion validator. Output only JSON. Do not require manuscript quality gates or survey markdown gates unless the user explicitly asked for a written document."
+                    content='You are a strict task completion validator. Output only JSON. Do not require manuscript quality gates or survey markdown gates unless the user explicitly asked for a written document.'
                 ),
                 UserMessage(content=prompt),
             ],
             tools=[],
         )
-        
+
         default = {'approved': True, 'reason': ''}
         try:
             reply = self.llm.query(dialog)
@@ -415,7 +441,7 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
     @staticmethod
     def _extract_json_from_reply(content: str) -> str | None:
         """Extract JSON object from LLM reply.
-        
+
         Handles both raw JSON and fenced code blocks (```json ... ```).
         Returns the first valid JSON object found, or None if not found.
         """
@@ -824,10 +850,21 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
                         continue
                     title = p.get('title') or p.get('Title') or '(no title)'
                     doi = p.get('doi') or p.get('DOI') or p.get('url') or ''
-                    year = p.get('year') or p.get('Year') or p.get('published_year') or ''
-                    score = p.get('score') or p.get('relevance_score') or p.get('similarity') or ''
-                    abstract = p.get('abstract') or p.get('Abstract') or p.get('summary') or ''
-                    abstract_preview = (abstract[:200] + '…') if len(abstract) > 200 else abstract
+                    year = (
+                        p.get('year') or p.get('Year') or p.get('published_year') or ''
+                    )
+                    score = (
+                        p.get('score')
+                        or p.get('relevance_score')
+                        or p.get('similarity')
+                        or ''
+                    )
+                    abstract = (
+                        p.get('abstract') or p.get('Abstract') or p.get('summary') or ''
+                    )
+                    abstract_preview = (
+                        (abstract[:200] + '…') if len(abstract) > 200 else abstract
+                    )
                     parts = [f'{i}. {title}']
                     if doi:
                         parts.append(f'   DOI/URL: {doi}')
@@ -887,7 +924,11 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
                         or s.get('sg')
                         or '?'
                     )
-                    e_hull = s.get('energy_above_hull') or s.get('e_above_hull') or s.get('stability')
+                    e_hull = (
+                        s.get('energy_above_hull')
+                        or s.get('e_above_hull')
+                        or s.get('stability')
+                    )
                     mat_id = s.get('material_id') or s.get('id') or s.get('mp_id') or ''
                     parts = [f'{i}. {formula}  SG={sg}']
                     if e_hull is not None:
@@ -916,7 +957,9 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
         for item in items[:5]:
             preview_lines.append(f'  - {str(item)[:150]}')
 
-        summary_parts = [f'[Tool: {tool_name}] Large observation ({len(observation):,} chars).']
+        summary_parts = [
+            f'[Tool: {tool_name}] Large observation ({len(observation):,} chars).'
+        ]
         if total_items is not None:
             summary_parts.append(f'Total items: {total_items}.')
         if preview_lines:
@@ -976,7 +1019,9 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
             if tool_name == 'str_replace_editor' and 'error' not in info:
                 try:
                     _editor_args = (
-                        json.loads(tool_args) if isinstance(tool_args, str) else tool_args
+                        json.loads(tool_args)
+                        if isinstance(tool_args, str)
+                        else tool_args
                     )
                     if (
                         isinstance(_editor_args, dict)
@@ -1020,11 +1065,15 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
 
             # 超大 observation 摘要化在 callback pipeline 之后，基于清洗后的 observation
             if isinstance(info, dict) and 'error' not in info:
-                _summary = self._summarize_large_tool_observation(tool_name, observation, saved_path)
+                _summary = self._summarize_large_tool_observation(
+                    tool_name, observation, saved_path
+                )
                 if _summary is not None:
                     self.logger.info(
                         '[FeatureC] Summarized large observation for %s (%d→%d chars)',
-                        tool_name, len(observation) if isinstance(observation, str) else 0, len(_summary),
+                        tool_name,
+                        len(observation) if isinstance(observation, str) else 0,
+                        len(_summary),
                     )
                     observation = _summary
                     info = {**info, 'obs_summarized': True}

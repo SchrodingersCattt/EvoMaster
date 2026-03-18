@@ -42,7 +42,7 @@ class SkillToolParams(BaseToolParams):
     )
     script_timeout: int | None = Field(
         default=None,
-        description="脚本执行超时时间（秒），覆盖 session 默认超时；不传则使用 session.local.timeout（当 action='run_script' 时可选）"
+        description="脚本执行超时时间（秒），覆盖 session 默认超时；不传则使用 session.local.timeout（当 action='run_script' 时可选）",
     )
 
 
@@ -114,8 +114,11 @@ class SkillTool(BaseTool):
                 return self._get_reference(skill, params.reference_name)
             elif params.action == 'run_script':
                 return self._run_script(
-                    session, skill, params.script_name, params.script_args,
-                    params.script_timeout
+                    session,
+                    skill,
+                    params.script_name,
+                    params.script_args,
+                    params.script_timeout,
                 )
             else:
                 return (
@@ -386,9 +389,12 @@ class SkillTool(BaseTool):
                 # session.write_file() uses paramiko SFTP directly — the AK goes
                 # Python memory → SFTP → remote file, bypassing the shell entirely.
                 env_file = f"/tmp/.bohrium_env_{uuid.uuid4().hex[:8]}"
-                env_content = '\n'.join(
-                    f"export {k}={shlex.quote(v)}" for k, v in bohrium_env.items()
-                ) + '\n'
+                env_content = (
+                    '\n'.join(
+                        f"export {k}={shlex.quote(v)}" for k, v in bohrium_env.items()
+                    )
+                    + '\n'
+                )
                 session.write_file(env_file, env_content)
                 # Run in a subshell: sourced vars are scoped to this subshell only
                 # (don't leak into the parent tmux shell). Exit code is preserved

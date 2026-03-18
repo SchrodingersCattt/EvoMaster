@@ -21,11 +21,13 @@ session is non-local (SSH/Docker), file existence and download are performed via
 session's ``is_file`` / ``download`` methods rather than the local filesystem.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional, Set
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 if TYPE_CHECKING:
@@ -95,13 +97,13 @@ def _has_path_format(prop_schema: dict) -> bool:
     return False
 
 
-def _path_keys_from_schema(input_schema: Optional[Dict[str, Any]]) -> Set[str]:
+def _path_keys_from_schema(input_schema: dict[str, Any] | None) -> set[str]:
     """Derive path-typed parameter names from a JSON Schema ``"format"`` field."""
     if not input_schema or not isinstance(input_schema, dict):
         return set()
 
     props = input_schema.get('properties') or {}
-    out: Set[str] = set()
+    out: set[str] = set()
 
     for key, spec in props.items():
         if not isinstance(spec, dict):
@@ -144,7 +146,7 @@ _DOCSTRING_PATH_RE = re.compile(
 )
 
 
-def _path_keys_from_description(description: Optional[str]) -> Set[str]:
+def _path_keys_from_description(description: str | None) -> set[str]:
     """Parse tool description (docstring) for Path-typed parameter names.
 
     Only searches the **Args** section so that return-value Path annotations
@@ -171,7 +173,7 @@ def _path_keys_from_description(description: Optional[str]) -> Set[str]:
 # ---------------------------------------------------------------------------
 
 
-def _path_keys_from_param_names(input_schema: Optional[Dict[str, Any]]) -> Set[str]:
+def _path_keys_from_param_names(input_schema: dict[str, Any] | None) -> set[str]:
     """Heuristic: parameter names ending with ``_path`` likely accept file paths.
 
     Catches common conventions like ``processed_csv_path``, ``img_path``,
@@ -195,7 +197,7 @@ def _normalize(text: str) -> str:
     return re.sub(r'[^a-z0-9]', '', text.lower())
 
 
-def _build_alias_map(description: Optional[str], param_name: str) -> Dict[str, str]:
+def _build_alias_map(description: str | None, param_name: str) -> dict[str, str]:
     """Build a map of normalised-short-name → full OSS URL for a parameter.
 
     Parses the parameter's description block for HTTP(S) URLs and associates
@@ -220,7 +222,7 @@ def _build_alias_map(description: Optional[str], param_name: str) -> Dict[str, s
     if not urls:
         return {}
 
-    alias_map: Dict[str, str] = {}
+    alias_map: dict[str, str] = {}
     for url in urls:
         # Stem of the URL filename:  .../dpa-2.4-7M.pt → dpa-2.4-7M
         fname = url.rstrip('/').rsplit('/', 1)[-1]
@@ -238,10 +240,10 @@ def _build_alias_map(description: Optional[str], param_name: str) -> Dict[str, s
 
 
 def _resolve_model_aliases(
-    args: Dict[str, Any],
-    tool_description: Optional[str],
-    path_keys: Set[str],
-) -> Dict[str, Any]:
+    args: dict[str, Any],
+    tool_description: str | None,
+    path_keys: set[str],
+) -> dict[str, Any]:
     """Replace short model names with their full OSS URLs.
 
     Only processes string arguments that:
@@ -328,7 +330,7 @@ def _workspace_path_to_local(value: str, workspace_root: Path) -> Path:
     return path
 
 
-def _is_remote_session(session: Optional['BaseSession']) -> bool:
+def _is_remote_session(session: BaseSession | None) -> bool:
     """Return True when *session* is a non-local session (SSH / Docker)."""
     if session is None:
         return False
@@ -338,7 +340,7 @@ def _is_remote_session(session: Optional['BaseSession']) -> bool:
 def _resolve_one(
     value: str,
     workspace_root: Path,
-    session: Optional['BaseSession'] = None,
+    session: BaseSession | None = None,
 ) -> str:
     """If value is a local path, upload to OSS and return the OSS URL.
 
@@ -419,7 +421,7 @@ class CalculationPathAdaptor:
     - sync tools → executor None; async tools → Bohrium executor with env auth
     """
 
-    def __init__(self, calculation_executors: Optional[Dict[str, Any]] = None):
+    def __init__(self, calculation_executors: dict[str, Any] | None = None):
         self.calculation_executors = calculation_executors or {}
 
     def _resolve_executor(
@@ -429,7 +431,7 @@ class CalculationPathAdaptor:
         access_key: str | None = None,
         project_id: int | str | None = None,
         user_id: int | str | None = None,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Return executor for this (server, tool)."""
         server_cfg = self.calculation_executors.get(server_name)
         if not server_cfg:
@@ -481,7 +483,7 @@ class CalculationPathAdaptor:
 
     @staticmethod
     def _validate_executor_profile(
-        executor: Optional[Dict[str, Any]],
+        executor: dict[str, Any] | None,
         *,
         server_name: str,
         remote_tool_name: str,
@@ -515,16 +517,16 @@ class CalculationPathAdaptor:
     def resolve_args(
         self,
         workspace_path: str,
-        args: Dict[str, Any],
+        args: dict[str, Any],
         tool_name: str,
         server_name: str,
-        input_schema: Optional[Dict[str, Any]] = None,
-        tool_description: Optional[str] = None,
+        input_schema: dict[str, Any] | None = None,
+        tool_description: str | None = None,
         access_key: str | None = None,
         project_id: int | str | None = None,
         user_id: int | str | None = None,
-        session: Optional['BaseSession'] = None,
-    ) -> Dict[str, Any]:
+        session: BaseSession | None = None,
+    ) -> dict[str, Any]:
         """Inject executor, storage and resolve Path-typed args → OSS URL.
 
         Path detection:
@@ -646,7 +648,7 @@ class CalculationPathAdaptor:
 
 
 def get_calculation_path_adaptor(
-    mcp_config: Optional[Dict[str, Any]] = None,
+    mcp_config: dict[str, Any] | None = None,
 ) -> CalculationPathAdaptor:
     """Factory: return a CalculationPathAdaptor from mcp config."""
     executors = (

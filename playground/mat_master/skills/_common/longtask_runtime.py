@@ -6,18 +6,16 @@ This module defines:
 - Standard status envelope emission for upstream parsers
 """
 
-from __future__ import annotations
-
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-STATUS_RUNNING = "running"
-STATUS_NEEDS_INPUT = "needs_input"
-STATUS_RETRYABLE_ERROR = "retryable_error"
-STATUS_FATAL_ERROR = "fatal_error"
-STATUS_COMPLETED = "completed"
+STATUS_RUNNING = 'running'
+STATUS_NEEDS_INPUT = 'needs_input'
+STATUS_RETRYABLE_ERROR = 'retryable_error'
+STATUS_FATAL_ERROR = 'fatal_error'
+STATUS_COMPLETED = 'completed'
 
 VALID_STATUSES = {
     STATUS_RUNNING,
@@ -28,7 +26,7 @@ VALID_STATUSES = {
 }
 
 # Prefix used so upstream code can reliably parse structured status from script output.
-RESULT_PREFIX = "LONGTASK_RESULT_JSON:"
+RESULT_PREFIX = 'LONGTASK_RESULT_JSON:'
 
 
 def now_iso() -> str:
@@ -42,14 +40,14 @@ def _ensure_parent(path: Path) -> None:
 def read_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
-    with path.open("r", encoding="utf-8") as f:
+    with path.open('r', encoding='utf-8') as f:
         return json.load(f)
 
 
 def write_json(path: Path, data: Any) -> None:
     _ensure_parent(path)
-    tmp = path.with_suffix(".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
+    tmp = path.with_suffix('.tmp')
+    with tmp.open('w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     tmp.replace(path)
 
@@ -77,16 +75,16 @@ def init_or_load_state(
             state = {}
     else:
         state = {
-            "task_type": task_type,
-            "created_at": now_iso(),
-            "attempts": 0,
+            'task_type': task_type,
+            'created_at': now_iso(),
+            'attempts': 0,
         }
 
-    state.setdefault("task_type", task_type)
-    state.setdefault("created_at", now_iso())
-    state["updated_at"] = now_iso()
-    state["stage"] = stage
-    state["attempts"] = int(state.get("attempts", 0)) + 1
+    state.setdefault('task_type', task_type)
+    state.setdefault('created_at', now_iso())
+    state['updated_at'] = now_iso()
+    state['stage'] = stage
+    state['attempts'] = int(state.get('attempts', 0)) + 1
 
     if extra:
         state.update(extra)
@@ -107,16 +105,16 @@ def append_event(
         raise ValueError(f"Invalid status: {status}")
     _ensure_parent(events_path)
     event: dict[str, Any] = {
-        "ts": now_iso(),
-        "status": status,
-        "stage": stage,
-        "message": message,
+        'ts': now_iso(),
+        'status': status,
+        'stage': stage,
+        'message': message,
     }
     if payload:
-        event["payload"] = payload
-    with events_path.open("a", encoding="utf-8") as f:
+        event['payload'] = payload
+    with events_path.open('a', encoding='utf-8') as f:
         f.write(json.dumps(event, ensure_ascii=False))
-        f.write("\n")
+        f.write('\n')
 
 
 def build_result(
@@ -130,16 +128,16 @@ def build_result(
     if status not in VALID_STATUSES:
         raise ValueError(f"Invalid status: {status}")
     result: dict[str, Any] = {
-        "status": status,
-        "stage": stage,
-        "message": message,
-        "ts": now_iso(),
+        'status': status,
+        'stage': stage,
+        'message': message,
+        'ts': now_iso(),
     }
     if payload:
-        result["payload"] = payload
+        result['payload'] = payload
     if result_path is not None:
         write_json(result_path, result)
-        result["result_file"] = str(result_path)
+        result['result_file'] = str(result_path)
     return result
 
 
