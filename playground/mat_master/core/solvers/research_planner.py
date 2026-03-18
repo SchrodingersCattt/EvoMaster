@@ -19,6 +19,7 @@ from .plan_utils import (
     _get_mat_master_config,
     _load_pre_check_system_prompt,
 )
+from .step_sub_agent import StepSubAgentFactory
 
 
 class ResearchPlanner(
@@ -77,6 +78,14 @@ class ResearchPlanner(
         self._output_callback: Callable[[str, str, Any], None] | None = output_callback
         self._solver: DirectSolver | None = None
         self._registry: AsyncToolRegistry = _get_async_registry(config)
+
+        # ── Sub-agent isolation layer ────────────────────────────────────
+        sub_agent_cfg = planner_cfg.get('sub_agent') or {}
+        self._sub_agent_factory: StepSubAgentFactory | None = None
+        self._sub_agent_enabled: bool = sub_agent_cfg.get('enabled', True)
+        self._sub_agent_step_turn_budget: int = max(
+            1, int(sub_agent_cfg.get('step_turn_budget', 30))
+        )
         quality_cfg = planner_cfg.get('quality_gates') or {}
         self._quality_gate_cfg: dict[str, int] = {
             'survey_min_references': max(

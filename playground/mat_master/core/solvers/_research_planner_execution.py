@@ -43,6 +43,22 @@ class ResearchPlannerExecutionMixin:
                 return json.dumps(result['execution_summary'], ensure_ascii=False)[
                     :max_len
                 ]
+            # BaseExp.run() returns {'trajectory': ..., 'status': 'completed', ...}.
+            # The finish message is stored inside trajectory.steps[-1].observation
+            # (or trajectory.final_answer).  Extract it so Fix 4 cross-step detection
+            # can match keywords from the agent's finish message.
+            trajectory = result.get('trajectory')
+            if trajectory is not None:
+                # Try trajectory.final_answer first (set by MatMasterAgent on finish)
+                final_answer = getattr(trajectory, 'final_answer', None)
+                if isinstance(final_answer, str) and final_answer.strip():
+                    return final_answer.strip()[:max_len]
+                # Fall back to last step observation
+                steps = getattr(trajectory, 'steps', None)
+                if steps:
+                    last_obs = getattr(steps[-1], 'observation', None)
+                    if isinstance(last_obs, str) and last_obs.strip():
+                        return last_obs.strip()[:max_len]
             if 'status' in result:
                 return f"status={result.get('status')}"[:max_len]
             safe_result = {k: v for k, v in result.items() if k != 'trajectory'}
@@ -497,9 +513,6 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
 
         self.logger.info('[Planner] Step %s (goal): %s', step_id, intent[:80])
 
-        if hasattr(self.agent, '_tool_guard'):
-            self.agent._tool_guard.reset_loop_history()
-
         assert self._solver is not None, 'DirectSolver not initialized'
         solver = self._solver
 
@@ -639,7 +652,37 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             return result_info
 
         self._emit('Planner', 'exp_run', 'DirectSolver')
-        step_context = self._build_step_context(step, state, task_id)
+
+        # ── Determine whether to use sub-agent isolation ─────────────────
+        # Must be checked BEFORE _build_step_context() because the full
+        # step context includes the Research Journal which contains the
+        # overall goal — a leak that defeats sub-agent isolation.
+        use_sub_agent = (
+            getattr(self, '_sub_agent_factory', None) is not None
+            and self._sub_agent_factory.enabled
+        )
+
+        if use_sub_agent:
+            # Sub-agent mode: inject ONLY previous step results (no journal,
+            # no literature index) to avoid leaking the overall goal.
+            history = state.get('history', [])
+            if history:
+                lines: list[str] = []
+                for entry in history:
+                    prev_id = entry.get('step', '?')
+                    if entry.get('error'):
+                        err = str(entry['error'])[:120]
+                        lines.append(f'  Step {prev_id} [FAILED]: {err}')
+                    else:
+                        summary = str(entry.get('result_summary', 'done'))[:120]
+                        lines.append(f'  Step {prev_id} [OK]: {summary}')
+                step_context = '[Previous Steps Results]\n' + '\n'.join(lines)
+            else:
+                step_context = ''
+        else:
+            # Legacy mode: full context including journal and literature
+            step_context = self._build_step_context(step, state, task_id)
+
         if step_context:
             self.logger.info(
                 '[Planner] _execute_single_step: injecting step_context step=%s chars=%d',
@@ -650,34 +693,63 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
         else:
             intent_with_context = intent
 
-        # Build plan summary for [Overall Plan] block (step id + intent, one line each)
-        plan_summary_lines: list[str] = []
-        for s in steps_list:
-            sid = s.get('step_id', '?')
-            s_intent = str(s.get('intent', '') or s.get('goal', ''))[:80]
-            plan_summary_lines.append(f'  Step {sid}: {s_intent}')
-        plan_summary = '\n'.join(plan_summary_lines)
-
-        step_prompt = self._build_step_prompt(
-            intent_with_context,
-            fallback,
-            original_intent=state.get('goal', ''),
-            step_id=step_id,
-            total_steps=len(steps_list),
-            plan_summary=plan_summary,
-        )
-        try:
-            solver.set_run_dir(workspaces)
-            step_task = self._build_task_with_dialog_history(
-                step_prompt,
-                f"{task_id}_step_{step_id}",
+        if use_sub_agent:
+            # Sub-agent mode: no overall goal, no plan summary — context isolation
+            step_prompt = self._build_step_prompt(
+                intent_with_context,
+                fallback,
+                original_intent='',       # ← omit overall goal
+                step_id=step_id,
+                total_steps=len(steps_list),
+                plan_summary='',           # ← omit plan summary
             )
-            if step_task is not None:
-                result = solver.run(task=step_task)
+        else:
+            # Legacy mode: include overall goal and plan summary
+            plan_summary_lines: list[str] = []
+            for s in steps_list:
+                sid = s.get('step_id', '?')
+                s_intent = str(s.get('intent', '') or s.get('goal', ''))[:80]
+                plan_summary_lines.append(f'  Step {sid}: {s_intent}')
+            plan_summary = '\n'.join(plan_summary_lines)
+
+            step_prompt = self._build_step_prompt(
+                intent_with_context,
+                fallback,
+                original_intent=state.get('goal', ''),
+                step_id=step_id,
+                total_steps=len(steps_list),
+                plan_summary=plan_summary,
+            )
+
+        try:
+            if use_sub_agent:
+                # ── Sub-agent path: fresh context per step ───────────────
+                # CRITICAL: Do NOT use _build_task_with_dialog_history() here.
+                # That method injects the original user goal (via task_with_history.description)
+                # into dialog_history, which leaks the overall goal into the sub-agent's
+                # context and defeats isolation (the agent sees "Build bcc Fe and optimize"
+                # and attempts to complete future steps).
+                handle = self._sub_agent_factory.create(
+                    step_id=step_id,
+                    workspaces=workspaces,
+                )
+                handle.prepare()
+                result = handle.run(step_prompt, f"{task_id}_step_{step_id}")
+                # For fallback, use the handle's solver
+                solver = handle.solver
             else:
-                result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
-            summary = self._summarize_solver_result(result, max_len=1000)
-            result_info['result_summary'] = summary[:200]
+                # ── Legacy path: shared solver with accumulated context ──
+                solver.set_run_dir(workspaces)
+                step_task = self._build_task_with_dialog_history(
+                    step_prompt,
+                    f"{task_id}_step_{step_id}",
+                )
+                if step_task is not None:
+                    result = solver.run(task=step_task)
+                else:
+                    result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
+            summary = self._summarize_solver_result(result, max_len=2000)
+            result_info['result_summary'] = summary[:2000]
             self._emit(
                 'Planner',
                 'status_stages',
@@ -912,8 +984,6 @@ Assess whether this task can be planned immediately or needs preliminary work. O
             if not self._consume_turns(state, task_id, 1):
                 self._fail_max_turns_exceeded(task_id, state)
                 break
-            if hasattr(self.agent, '_tool_guard'):
-                self.agent._tool_guard.reset_loop_history()
 
             self.logger.info(
                 '[Pre-check] Running prerequisite %d/%d: [%s] %s',

@@ -1,6 +1,7 @@
 """Phase machine and entrypoint for ``ResearchPlanner``."""
 
 import json
+import re
 from typing import Any, Optional
 
 from evomaster.utils.types import TaskInstance
@@ -418,6 +419,75 @@ class ResearchPlannerPhaseMixin:
             elif step_result['status'] == 'failed':
                 step['status'] = 'failed'
 
+            # Fix 4: If the agent did future steps' work during this step,
+            # mark those steps as done instead of re-executing them.
+            if step_result['status'] == 'done':
+                result_summary = step_result.get('result_summary', '')
+                if result_summary:
+                    for future_step in plan.get('steps', []):
+                        if future_step.get('status') != 'pending':
+                            continue
+                        future_id = future_step.get('step_id', 0)
+                        if future_id <= step_result.get('step_id', 0):
+                            continue
+                        future_tool = future_step.get('tool_name', '')
+                        future_intent = future_step.get('intent', '')
+                        summary_lower = result_summary.lower()
+
+                        # 1. Check explicit tool_name field
+                        tool_mentioned = bool(
+                            future_tool
+                            and future_tool.lower() in summary_lower
+                        )
+
+                        # 2. Extract MCP tool names mentioned anywhere in the
+                        #    intent (e.g. "mat_dpa_submit_optimize_structure")
+                        #    and check if any appear in the summary.
+                        intent_tool_names = re.findall(
+                            r'mat_[a-z0-9_]+', future_intent.lower()
+                        )
+                        intent_tool_mentioned = any(
+                            t in summary_lower for t in intent_tool_names
+                        )
+
+                        # 3. Keyword match: words with len>4 from the full
+                        #    intent (not just first 6 words).
+                        intent_words = [
+                            w.lower() for w in future_intent.split()
+                            if len(w) > 4
+                            and not w.startswith('mat_')  # skip tool names
+                        ]
+                        # Require at least 2 distinct content words to match
+                        # (avoids false positives on common words like "step").
+                        matched_words = [
+                            w for w in intent_words if w in summary_lower
+                        ]
+                        keyword_match = (
+                            len(intent_words) >= 2
+                            and len(matched_words) >= min(2, len(intent_words))
+                        )
+
+                        if tool_mentioned or intent_tool_mentioned or keyword_match:
+                            self.logger.info(
+                                '[Planner] Step %s already completed during step %s '
+                                '(tool=%s intent_tools=%s keywords=%s) — marking done.',
+                                future_id,
+                                step_result.get('step_id'),
+                                future_tool or '-',
+                                intent_tool_names,
+                                matched_words[:5],
+                            )
+                            future_step['status'] = 'done'
+                            state['history'].append({
+                                'step': future_id,
+                                'tool_name': future_tool,
+                                'intent': future_intent[:200],
+                                'result_summary': (
+                                    f"Achieved during step {step_result.get('step_id')}: "
+                                    f"{result_summary[:300]}"
+                                ),
+                            })
+
             history_entry: dict[str, Any] = {
                 'step': step_result['step_id'],
                 'tool_name': step.get('tool_name', ''),
@@ -712,6 +782,23 @@ class ResearchPlannerPhaseMixin:
         if self.run_dir is not None:
             self._solver.set_run_dir(self.run_dir)
 
+        # ── Sub-agent factory (context isolation per step) ───────────────
+        if self._sub_agent_enabled:
+            from .step_sub_agent import StepSubAgentFactory
+
+            original_max_turns = getattr(
+                getattr(self.agent, 'config', None), 'max_turns', 200
+            )
+            self._sub_agent_factory = StepSubAgentFactory(
+                self.agent,
+                self.config,
+                enabled=True,
+                step_turn_budget=self._sub_agent_step_turn_budget,
+                original_max_turns=original_max_turns,
+            )
+        else:
+            self._sub_agent_factory = None
+
         self.logger.info(
             '[Planner] State machine started (phase=%s, replan_count=%d, history_len=%d, pending_steps=%d)',
             state['phase'],
@@ -812,6 +899,9 @@ class ResearchPlannerPhaseMixin:
         )
         self._task_with_history = None
         self._solver = None
+        if self._sub_agent_factory is not None:
+            self._sub_agent_factory.restore_agent_state()
+            self._sub_agent_factory = None
 
         execution_summary = self._build_execution_summary(state)
         state['execution_summary'] = execution_summary
