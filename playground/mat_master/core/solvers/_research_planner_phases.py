@@ -500,6 +500,8 @@ class ResearchPlannerPhaseMixin:
             if step_result.get('new_skill_registered'):
                 history_entry['new_skill_registered'] = True
                 history_entry['skill_path'] = step_result.get('skill_path', '')
+            if step_result.get('produced_artifacts'):
+                history_entry['produced_artifacts'] = step_result['produced_artifacts']
             state['history'].append(history_entry)
             self._save_state(task_id, state)
 
@@ -522,6 +524,16 @@ class ResearchPlannerPhaseMixin:
                 return state
 
             should_replan, reason = self._needs_replanning(state, step_result)
+            self.logger.warning(
+                '[DEBUG] step_%s status=%s fallback_succeeded=%s should_replan=%s reason=%s replan_count=%d max_replans=%d',
+                step_result.get('step_id', '?'),
+                step_result.get('status'),
+                step_result.get('fallback_succeeded'),
+                should_replan,
+                reason,
+                state.get('replan_count', 0),
+                self.max_replans,
+            )
             if should_replan:
                 state['phase'] = 'replanning'
                 state['replan_reason'] = reason
@@ -726,6 +738,8 @@ class ResearchPlannerPhaseMixin:
             if entry.get('new_skill_registered'):
                 detail['new_skill_registered'] = True
                 detail['skill_path'] = entry.get('skill_path', '')
+            if entry.get('produced_artifacts'):
+                detail['produced_artifacts'] = entry['produced_artifacts']
             step_results_detail.append(detail)
 
             result_text = (entry.get('result_summary', '') or '').lower()
