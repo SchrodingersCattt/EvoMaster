@@ -113,7 +113,14 @@ class Dialog(BaseModel):
         """获取用于 API 调用的消息格式。
 
         content 为 list（多模态块）时直接传递；为 dict 时序列化为 JSON 字符串；为 str 时直接传递。
+
+        对 AssistantMessage 中的 tool_calls，会验证每个 arguments 字段是否为合法 JSON。
+        若非法（例如 LLM 生成了 XML 属性风格的混合语法），替换为 ``"{}"`` 并记录 WARNING，
+        防止非法字符串传入 litellm/Bedrock 适配器导致 500 错误。
         """
+        import logging as _logging
+        _api_logger = _logging.getLogger(__name__)
+
         result = []
         for msg in self.messages:
             msg_dict: dict[str, Any] = {'role': msg.role.value}
@@ -125,7 +132,24 @@ class Dialog(BaseModel):
                 else:
                     msg_dict['content'] = msg.content
             if isinstance(msg, AssistantMessage) and msg.tool_calls:
-                msg_dict['tool_calls'] = [tc.model_dump() for tc in msg.tool_calls]
+                tool_calls_serialized = []
+                for tc in msg.tool_calls:
+                    tc_dict = tc.model_dump()
+                    args = tc_dict.get('function', {}).get('arguments', '')
+                    try:
+                        json.loads(args)
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        tool_name = tc_dict.get('function', {}).get('name', '?')
+                        _api_logger.warning(
+                            "get_messages_for_api: tool call '%s' has malformed arguments JSON "
+                            "(replacing with '{}' to prevent downstream LLM API failure). "
+                            "Original arguments: %r",
+                            tool_name,
+                            args,
+                        )
+                        tc_dict['function']['arguments'] = '{}'
+                    tool_calls_serialized.append(tc_dict)
+                msg_dict['tool_calls'] = tool_calls_serialized
             if isinstance(msg, ToolMessage):
                 msg_dict['tool_call_id'] = msg.tool_call_id
                 msg_dict['name'] = msg.name
