@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from evomaster.agent.session.ssh import SSHSession
 from evomaster.utils.types import (
     AssistantMessage,
     Dialog,
@@ -109,14 +110,30 @@ class ResearchPlannerRuntimeMixin:
     def _run_dir_path(self) -> Path:
         return Path(self.run_dir) if self.run_dir else Path('.')
 
+    def _planner_workspace_root(self) -> str:
+        """Return the root directory used by planner artifacts/workspaces.
+        """
+        session = getattr(getattr(self, 'agent', None), 'session', None)
+        if isinstance(session, SSHSession):
+            workspace_path = (
+                getattr(getattr(session, 'config', None), 'workspace_path', '') or ''
+            ).strip()
+            if workspace_path:
+                return workspace_path.rstrip('/')
+        return str(self._run_dir_path())
+
     def _state_path(self, task_id: str) -> str:
         # Store state inside .planner/ so the sub-agent cannot browse it.
         planner_dir = self._planner_hidden_dir(task_id)
         return f"{planner_dir}/{self.state_file}"
 
     def _task_workspace_dir(self, task_id: str) -> str:
-        base = str(self._run_dir_path())
-        workspaces = f"{base}/workspaces/{task_id}"
+        base = self._planner_workspace_root()
+        session = getattr(getattr(self, 'agent', None), 'session', None)
+        if isinstance(session, SSHSession):
+            workspaces = f"{base.rstrip('/')}/{task_id}"
+        else:
+            workspaces = f"{base}/workspaces/{task_id}"
         self._file_io.mkdir(workspaces)
         return workspaces
 
