@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Collect and persist evidence cards from raw mat_sn_* tool outputs.
+Collect and persist evidence cards from raw mat_sn_* and web-search tool outputs.
 
-Scans _tmp/tool_outputs/mat_sn_*/ for auto-saved JSON files and converts them
-into structured evidence_cards, writing results back to the collected_<topic>.json
-skeleton produced by run_survey.py.
+Scans _tmp/tool_outputs/mat_sn_*/ and _tmp/tool_outputs/web-search/ for auto-saved
+JSON files and converts them into structured evidence_cards, writing results back
+to the collected_<topic>.json skeleton produced by run_survey.py.
 
 This script performs purely mechanical data conversion — no LLM judgment needed.
 
@@ -251,13 +251,13 @@ def collect_evidence(
         if c.get('source_url')
     }
 
-    # Discover all mat_sn_* JSON files
+    # Discover mat_sn_* and web-search JSON files (built-in web-search also auto-saved under web-search/)
     new_cards: list[dict] = []
     if tool_outputs_dir.exists():
         for subdir in sorted(tool_outputs_dir.iterdir()):
             if not subdir.is_dir():
                 continue
-            if not subdir.name.startswith('mat_sn_'):
+            if not (subdir.name.startswith('mat_sn_') or subdir.name == 'web-search'):
                 continue
             for json_file in sorted(subdir.glob('*.json')):
                 for card in _extract_cards_from_file(json_file):
@@ -292,7 +292,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=(
             'Auto-populate evidence_cards in collected_<topic>.json from '
-            'raw mat_sn_* tool outputs saved in _tmp/tool_outputs/.'
+            'raw mat_sn_* and web-search tool outputs saved in _tmp/tool_outputs/.'
         )
     )
     ap.add_argument(
@@ -307,7 +307,7 @@ def main() -> None:
         '--tool_outputs_dir',
         default=None,
         help=(
-            'Directory containing mat_sn_* subdirectories of auto-saved outputs. '
+            'Directory containing mat_sn_* and web-search subdirs of auto-saved outputs. '
             "Defaults to _tmp/tool_outputs/ relative to CWD or to the collected_json parent's _tmp/."
         ),
     )

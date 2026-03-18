@@ -451,9 +451,9 @@ class MatToolCallbacksAfter:
         observation: str | dict,
         info: dict[str, Any],
     ) -> tuple[str, dict[str, Any]]:
-        """Append survey-retrieval reminder after any mat_sn_* search/retrieval tool call."""
+        """Append survey-retrieval reminder after mat_sn_* or web-search tool call."""
         tool_name = tool_call.function.name or ''
-        if not tool_name.startswith('mat_sn_'):
+        if not (tool_name.startswith('mat_sn_') or tool_name == 'web-search'):
             return observation, info
         if info.get('error') is not None:
             return observation, info
