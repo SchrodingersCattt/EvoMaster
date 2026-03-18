@@ -544,14 +544,28 @@ class ResearchPlannerRuntimeMixin:
         step_dir = workspaces / f"step_{step_id}"
         step_dir.mkdir(parents=True, exist_ok=True)
         solver.set_run_dir(workspaces)
+
+        # In sub-agent mode, skip _build_task_with_dialog_history() to prevent
+        # the original user goal from leaking into the fallback agent's context
+        # (the same isolation principle as the primary step path).
+        use_sub_agent = (
+            getattr(self, '_sub_agent_factory', None) is not None
+            and self._sub_agent_factory.enabled
+        )
+
         try:
-            fallback_task = self._build_task_with_dialog_history(
-                fallback_prompt, f"fallback_{step_id}"
-            )
-            if fallback_task is not None:
-                solver.run(task=fallback_task)
-            else:
+            if use_sub_agent:
+                # Sub-agent mode: no dialog_history injection
                 solver.run(fallback_prompt, task_id=f"fallback_{step_id}")
+            else:
+                # Legacy mode: include dialog_history
+                fallback_task = self._build_task_with_dialog_history(
+                    fallback_prompt, f"fallback_{step_id}"
+                )
+                if fallback_task is not None:
+                    solver.run(task=fallback_task)
+                else:
+                    solver.run(fallback_prompt, task_id=f"fallback_{step_id}")
             return True
         except Exception as e:
             self.logger.warning('Fallback failed for step %s: %s', step_id, e)
