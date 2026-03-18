@@ -268,7 +268,7 @@ Rules:
                     err = str(entry['error'])[:120]
                     lines.append(f'  Step {prev_id} [FAILED]: {err}')
                 else:
-                    summary = str(entry.get('result_summary', 'done'))[:120]
+                    summary = str(entry.get('result_summary', 'done'))[:2000]
                     lines.append(f'  Step {prev_id} [OK]: {summary}')
             parts.append('[Previous Steps Results]\n' + '\n'.join(lines))
 
