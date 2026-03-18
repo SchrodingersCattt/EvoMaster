@@ -288,16 +288,106 @@ def build_slab_with_tasker_fix(
     )
 
 
+def process_single(params: dict) -> dict:
+    """
+    Process a single bulk structure into a slab. Returns a result dict.
+
+    Required keys in params:
+        input (str): path to bulk structure file
+        miller (list[int]): Miller indices [h, k, l]
+        output (str): output file path
+
+    Optional keys:
+        repeat_layers (int), thickness (float), vacuum (float, default 15.0),
+        charge (str or None), layer_tol (float, default 1.0),
+        tile_repeat (list[int] or None), tile_min_x (float or None),
+        tile_min_y (float or None), quiet (bool, default False)
+    """
+    input_path = params["input"]
+    miller = params["miller"]
+    output_path = params["output"]
+    repeat_layers = params.get("repeat_layers")
+    thickness = params.get("thickness")
+    vacuum = params.get("vacuum", 15.0)
+    charge = params.get("charge")
+    layer_tol = params.get("layer_tol", 1.0)
+    tile_repeat = params.get("tile_repeat")
+    tile_min_x = params.get("tile_min_x")
+    tile_min_y = params.get("tile_min_y")
+    quiet = params.get("quiet", False)
+
+    result = {"input": input_path, "output": output_path, "success": False, "error": None}
+
+    try:
+        bulk = read(input_path)
+
+        if charge is None:
+            charge_map = auto_charge_map(bulk)
+        else:
+            charge_map = parse_charge_map(charge) if isinstance(charge, str) else charge
+
+        slab, meta = build_slab_with_tasker_fix(
+            bulk=bulk,
+            miller=tuple(miller),
+            repeat_layers=repeat_layers,
+            thickness=thickness,
+            vacuum=vacuum,
+            charge_map=charge_map,
+            layer_tol=layer_tol,
+            verbose=(not quiet),
+        )
+
+        if tile_repeat is not None:
+            slab = tile_slab(slab, repeat=tuple(tile_repeat))
+        elif tile_min_x is not None or tile_min_y is not None:
+            slab = tile_slab(slab, min_x=tile_min_x, min_y=tile_min_y)
+
+        output_format = get_output_format(output_path)
+        if output_format == "vasp":
+            write(output_path, slab, format="vasp", vasp5=True)
+        else:
+            write(output_path, slab, format=output_format)
+
+        if not quiet:
+            print(f"\n[FINAL] 保存到 {output_path}")
+            print(f"  格式: {output_format}")
+            print(f"  原子数: {len(slab)}")
+            print(f"  晶胞尺寸: {np.linalg.norm(slab.cell, axis=1)}")
+            print(f"  charge_map = {charge_map}")
+            print(f"  layer_tol = {layer_tol}")
+            print(f"  meta = {meta}")
+
+        result["success"] = True
+        result["n_atoms"] = len(slab)
+        result["meta"] = meta
+
+    except Exception as exc:
+        result["error"] = str(exc)
+        print(f"[ERROR] {input_path}: 自动构建失败: {exc}")
+
+    return result
+
+
+def _auto_output_path(input_path: str, output_dir: str) -> str:
+    """Generate output path in output_dir as {stem}_slab{ext}."""
+    stem = os.path.splitext(os.path.basename(input_path))[0]
+    ext = os.path.splitext(input_path)[1] or ".vasp"
+    return os.path.join(output_dir, f"{stem}_slab{ext}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="生成满足 Tasker 条件的非极性 slab")
 
-    parser.add_argument("-i", "--input", default="POSCAR", help="输入结构文件")
+    parser.add_argument("-i", "--input", nargs="+", default=["POSCAR"], help="输入结构文件（支持多个）")
     parser.add_argument(
-        "-m", "--miller", nargs=3, type=int, required=True, help="Miller 指数 (h k l)"
+        "-m", "--miller", nargs=3, type=int, default=None, help="Miller 指数 (h k l)"
     )
-    parser.add_argument("-o", "--output", default="POSCAR_slab", help="输出文件名")
+    parser.add_argument("-o", "--output", default=None, help="输出文件名（单文件模式）")
+    parser.add_argument("--output-dir", default=None, help="批量模式输出目录（自动命名为 {stem}_slab{ext}）")
 
-    mode_group = parser.add_mutually_exclusive_group(required=True)
+    parser.add_argument("--batch", default=None, help="批量配置 JSON 文件（每条可有独立参数）")
+
+    mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument("-L", "--repeat-layers", type=int, help="重复层数")
     mode_group.add_argument("-T", "--thickness", type=float, help="目标厚度（Å）")
 
@@ -324,48 +414,101 @@ def main():
     parser.add_argument("--quiet", action="store_true", help="静默模式")
 
     args = parser.parse_args()
-    bulk = read(args.input)
 
-    if args.charge is None:
-        charge_map = auto_charge_map(bulk)
+    # --batch mode: read JSON config, each entry has independent params
+    if args.batch is not None:
+        with open(args.batch, "r", encoding="utf-8") as f:
+            batch_configs = json.load(f)
+
+        results = []
+        for entry in batch_configs:
+            params = {
+                "input": entry["input"],
+                "miller": entry.get("miller", args.miller),
+                "output": entry.get("output", _auto_output_path(entry["input"], ".")),
+                "repeat_layers": entry.get("repeat_layers", args.repeat_layers),
+                "thickness": entry.get("thickness", args.thickness),
+                "vacuum": entry.get("vacuum", args.vacuum),
+                "charge": entry.get("charge", args.charge),
+                "layer_tol": entry.get("layer_tol", args.layer_tol),
+                "tile_repeat": entry.get("tile_repeat", list(args.tile_repeat) if args.tile_repeat else None),
+                "tile_min_x": entry.get("tile_min_x", args.tile_min_x),
+                "tile_min_y": entry.get("tile_min_y", args.tile_min_y),
+                "quiet": entry.get("quiet", args.quiet),
+            }
+            if params["miller"] is None:
+                print(f"[ERROR] {entry['input']}: 缺少 miller 参数")
+                results.append({"input": entry["input"], "output": params["output"],
+                                "success": False, "error": "缺少 miller 参数"})
+                continue
+            if params["repeat_layers"] is None and params["thickness"] is None:
+                print(f"[ERROR] {entry['input']}: 必须指定 repeat_layers 或 thickness")
+                results.append({"input": entry["input"], "output": params["output"],
+                                "success": False, "error": "必须指定 repeat_layers 或 thickness"})
+                continue
+            results.append(process_single(params))
+
+        print(json.dumps({"results": results}, indent=2, ensure_ascii=False))
+        any_failed = any(not r["success"] for r in results)
+        sys.exit(1 if any_failed else 0)
+
+    # Multi-file or single-file mode via -i
+    input_files = args.input
+
+    if args.miller is None:
+        parser.error("-m/--miller 是必填参数（非 --batch 模式）")
+    if args.repeat_layers is None and args.thickness is None:
+        parser.error("必须指定 -L/--repeat-layers 或 -T/--thickness（非 --batch 模式）")
+
+    if len(input_files) == 1 and args.batch is None:
+        # Single-file mode (backward compatible)
+        output_path = args.output if args.output else "POSCAR_slab"
+        params = {
+            "input": input_files[0],
+            "miller": args.miller,
+            "output": output_path,
+            "repeat_layers": args.repeat_layers,
+            "thickness": args.thickness,
+            "vacuum": args.vacuum,
+            "charge": args.charge,
+            "layer_tol": args.layer_tol,
+            "tile_repeat": list(args.tile_repeat) if args.tile_repeat else None,
+            "tile_min_x": args.tile_min_x,
+            "tile_min_y": args.tile_min_y,
+            "quiet": args.quiet,
+        }
+        result = process_single(params)
+        if not result["success"]:
+            print("[ACTION] 请手动调整终止面/层数，或与用户确认是否暂时接受极性 slab。")
+            sys.exit(1)
     else:
-        charge_map = parse_charge_map(args.charge)
+        # Multi-file mode with shared parameters
+        output_dir = args.output_dir if args.output_dir else "."
+        if output_dir != "." and not os.path.isdir(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
 
-    try:
-        slab, meta = build_slab_with_tasker_fix(
-            bulk=bulk,
-            miller=tuple(args.miller),
-            repeat_layers=args.repeat_layers,
-            thickness=args.thickness,
-            vacuum=args.vacuum,
-            charge_map=charge_map,
-            layer_tol=args.layer_tol,
-            verbose=(not args.quiet),
-        )
-    except Exception as exc:
-        print(f"[ERROR] 自动构建失败: {exc}")
-        print("[ACTION] 请手动调整终止面/层数，或与用户确认是否暂时接受极性 slab。")
-        sys.exit(1)
+        results = []
+        for inp in input_files:
+            output_path = _auto_output_path(inp, output_dir)
+            params = {
+                "input": inp,
+                "miller": args.miller,
+                "output": output_path,
+                "repeat_layers": args.repeat_layers,
+                "thickness": args.thickness,
+                "vacuum": args.vacuum,
+                "charge": args.charge,
+                "layer_tol": args.layer_tol,
+                "tile_repeat": list(args.tile_repeat) if args.tile_repeat else None,
+                "tile_min_x": args.tile_min_x,
+                "tile_min_y": args.tile_min_y,
+                "quiet": args.quiet,
+            }
+            results.append(process_single(params))
 
-    if args.tile_repeat is not None:
-        slab = tile_slab(slab, repeat=tuple(args.tile_repeat))
-    elif args.tile_min_x is not None or args.tile_min_y is not None:
-        slab = tile_slab(slab, min_x=args.tile_min_x, min_y=args.tile_min_y)
-
-    output_format = get_output_format(args.output)
-    if output_format == "vasp":
-        write(args.output, slab, format="vasp", vasp5=True)
-    else:
-        write(args.output, slab, format=output_format)
-
-    if not args.quiet:
-        print(f"\n[FINAL] 保存到 {args.output}")
-        print(f"  格式: {output_format}")
-        print(f"  原子数: {len(slab)}")
-        print(f"  晶胞尺寸: {np.linalg.norm(slab.cell, axis=1)}")
-        print(f"  charge_map = {charge_map}")
-        print(f"  layer_tol = {args.layer_tol}")
-        print(f"  meta = {meta}")
+        print(json.dumps({"results": results}, indent=2, ensure_ascii=False))
+        any_failed = any(not r["success"] for r in results)
+        sys.exit(1 if any_failed else 0)
 
 
 if __name__ == "__main__":
