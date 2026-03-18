@@ -2,7 +2,6 @@
 
 import json
 import re
-import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -424,39 +423,42 @@ class ResearchPlannerRuntimeMixin:
         )
 
         confirm_mgr = getattr(self.agent, '_confirm_manager', None)
-        if confirm_mgr is not None:
-            try:
-                reply = confirm_mgr.request(
-                    question=prompt,
-                    mode=confirm_mode,
-                    timeout_sec=timeout_sec,
-                    default_reply=default or None,
-                    origin='planner',
-                    actions=['go', 'abort', 'revise'],
-                    source_override='Planner',
-                )
-                if reply is REPLY_CANCELLED:
-                    return 'abort'
-                if reply is not None:
-                    return reply.strip()
-                self.logger.info(
-                    "[Planner] ask_human timed out (%ds), using default='%s'",
-                    timeout_sec,
-                    default,
-                )
-                self._emit(
-                    'Planner',
-                    'thought',
-                    f"[Ask Human] No response within {timeout_sec}s — defaulting to '{default}'.",
-                )
-                return default
-            except Exception:
-                pass
+        if confirm_mgr is None:
+            raise RuntimeError(
+                'Planner confirmation requires ConfirmationManager; '
+                'fallback input paths have been removed.'
+            )
 
-        if self._input_fn is not None:
-            return (self._input_fn(prompt) or default).strip()
-        print(f"\033[93m[Planner] {prompt}\033[0m")
-        return sys.stdin.readline().strip() or default
+        try:
+            reply = confirm_mgr.request(
+                question=prompt,
+                mode=confirm_mode,
+                timeout_sec=timeout_sec,
+                default_reply=default or None,
+                origin='planner',
+                actions=['go', 'abort', 'revise'],
+                source_override='Planner',
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                'Planner confirmation failed inside ConfirmationManager.'
+            ) from exc
+
+        if reply is REPLY_CANCELLED:
+            return 'abort'
+        if reply is not None:
+            return reply.strip()
+        self.logger.info(
+            "[Planner] ask_human timed out (%ds), using default='%s'",
+            timeout_sec,
+            default,
+        )
+        self._emit(
+            'Planner',
+            'thought',
+            f"[Ask Human] No response within {timeout_sec}s — defaulting to '{default}'.",
+        )
+        return default
 
     def _plan_report_text(self, plan: dict[str, Any]) -> str:
         """Build plain-text plan report for frontend rendering."""

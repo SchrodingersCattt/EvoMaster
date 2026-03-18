@@ -36,7 +36,6 @@ class ResearchPlanner(
         self,
         agent,
         config,
-        input_fn=None,
         output_callback=None,
         config_dir: str | Path | None = None,
     ):
@@ -80,7 +79,6 @@ class ResearchPlanner(
             1, exec_cfg.get('planner_max_workers', self.window_size)
         )
         self._rate_limit: float | None = exec_cfg.get('rate_limit')
-        self._input_fn = input_fn
         self._output_callback: Callable[[str, str, Any], None] | None = output_callback
         self._solver: DirectSolver | None = None
         self._registry: AsyncToolRegistry = _get_async_registry(config)

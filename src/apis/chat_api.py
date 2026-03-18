@@ -212,7 +212,7 @@ def stop_session(
     stream_svc: ChatStreamService = Depends(get_stream_service),
 ):
     """终止该会话当前正在运行的任务。有权限访问即可调用；多 worker 时通过 Redis 广播，始终返回 200。
-    若当前正在等待用户确认（planner_ask / confirmation_request），会向回复队列投递取消哨兵以立即唤醒阻塞线程。"""
+    若当前正在等待用户确认（confirmation_request），会向回复队列投递取消哨兵以立即唤醒阻塞线程。"""
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg='无权限访问该会话')
@@ -235,7 +235,7 @@ async def confirmation_reply(
     stream_svc: ChatStreamService = Depends(get_stream_service),
     events_svc: ChatEventsService = Depends(get_events_service),
 ):
-    """统一确认回复：收到 planner_ask 或 confirmation_request（ask_human）时，调用本接口传入用户回复，agent 会继续执行。"""
+    """统一确认回复：收到 confirmation_request（planner / ask_human）时，调用本接口传入用户回复，agent 会继续执行。"""
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg='无权限访问该会话')
