@@ -2,7 +2,6 @@
 
 import json
 import re
-import shutil
 import sys
 import uuid
 from datetime import UTC, datetime
@@ -110,18 +109,18 @@ class ResearchPlannerRuntimeMixin:
     def _run_dir_path(self) -> Path:
         return Path(self.run_dir) if self.run_dir else Path('.')
 
-    def _state_path(self, task_id: str) -> Path:
+    def _state_path(self, task_id: str) -> str:
         # Store state inside .planner/ so the sub-agent cannot browse it.
         planner_dir = self._planner_hidden_dir(task_id)
-        return planner_dir / self.state_file
+        return f"{planner_dir}/{self.state_file}"
 
-    def _task_workspace_dir(self, task_id: str) -> Path:
-        base = self._run_dir_path()
-        workspaces = base / 'workspaces' / task_id
-        workspaces.mkdir(parents=True, exist_ok=True)
+    def _task_workspace_dir(self, task_id: str) -> str:
+        base = str(self._run_dir_path())
+        workspaces = f"{base}/workspaces/{task_id}"
+        self._file_io.mkdir(workspaces)
         return workspaces
 
-    def _planner_hidden_dir(self, task_id: str) -> Path:
+    def _planner_hidden_dir(self, task_id: str) -> str:
         """Return the dot-prefixed hidden directory for planner-internal files.
 
         All planner artifacts (state, plan, journal, literature index, draft)
@@ -129,40 +128,39 @@ class ResearchPlannerRuntimeMixin:
         discover the overall plan and overstep step boundaries.
         """
         base = self._task_workspace_dir(task_id)
-        hidden = base / '.planner'
-        hidden.mkdir(parents=True, exist_ok=True)
+        hidden = f"{base}/.planner"
+        self._file_io.mkdir(hidden)
         return hidden
 
     def _load_state(self, task_id: str) -> dict[str, Any]:
         path = self._state_path(task_id)
-        if path.exists():
+        if self._file_io.exists(path):
             try:
-                with open(path, encoding='utf-8') as f:
-                    loaded = json.load(f)
-                    if isinstance(loaded, dict):
-                        tb_init = loaded.get('turn_budget_init')
-                        tb_rem = loaded.get('turn_budget_remaining')
-                        try:
-                            if tb_init is not None:
-                                self._turn_budget_init = max(1, int(tb_init))
-                        except Exception:
-                            pass
-                        try:
-                            if tb_rem is not None:
-                                self._turn_budget_remaining = max(0, int(tb_rem))
-                        except Exception:
-                            pass
-                        self.logger.info(
-                            '[Planner] _load_state: RESUME from %s '
-                            '(phase=%s, replan_count=%d, history_len=%d, '
-                            'turn_budget_remaining=%s)',
-                            path,
-                            loaded.get('phase', '?'),
-                            loaded.get('replan_count', 0),
-                            len(loaded.get('history', [])),
-                            loaded.get('turn_budget_remaining', '?'),
-                        )
-                    return loaded
+                loaded = self._file_io.read_json(path)
+                if isinstance(loaded, dict):
+                    tb_init = loaded.get('turn_budget_init')
+                    tb_rem = loaded.get('turn_budget_remaining')
+                    try:
+                        if tb_init is not None:
+                            self._turn_budget_init = max(1, int(tb_init))
+                    except Exception:
+                        pass
+                    try:
+                        if tb_rem is not None:
+                            self._turn_budget_remaining = max(0, int(tb_rem))
+                    except Exception:
+                        pass
+                    self.logger.info(
+                        '[Planner] _load_state: RESUME from %s '
+                        '(phase=%s, replan_count=%d, history_len=%d, '
+                        'turn_budget_remaining=%s)',
+                        path,
+                        loaded.get('phase', '?'),
+                        loaded.get('replan_count', 0),
+                        len(loaded.get('history', [])),
+                        loaded.get('turn_budget_remaining', '?'),
+                    )
+                return loaded
             except Exception as e:
                 self.logger.warning('Failed to load state: %s', e)
         self.logger.info('[Planner] _load_state: NEW task (no state file at %s)', path)
@@ -181,11 +179,8 @@ class ResearchPlannerRuntimeMixin:
 
     def _save_state(self, task_id: str, state: dict[str, Any]) -> None:
         path = self._state_path(task_id)
-        tmp = path.with_suffix('.tmp')
         try:
-            with open(tmp, 'w', encoding='utf-8') as f:
-                json.dump(state, f, indent=2, ensure_ascii=False)
-            shutil.move(tmp, path)
+            self._file_io.write_json(path, state)
             self.logger.debug(
                 '[Planner] _save_state: OK (phase=%s, path=%s)',
                 state.get('phase', '?'),
@@ -194,7 +189,7 @@ class ResearchPlannerRuntimeMixin:
         except Exception as e:
             self.logger.error('Failed to save state: %s', e)
 
-    def _planner_artifact_dir(self, task_id: str) -> Path:
+    def _planner_artifact_dir(self, task_id: str) -> str:
         # Use the hidden .planner/ directory so sub-agents cannot browse
         # the research journal or literature index.
         return self._planner_hidden_dir(task_id)
@@ -204,24 +199,24 @@ class ResearchPlannerRuntimeMixin:
     ) -> dict[str, Any]:
         """Create planner artifacts used by quality gates and resume safety."""
         artifact_dir = self._planner_artifact_dir(task_id)
-        journal_path = artifact_dir / 'research_journal.md'
-        literature_path = artifact_dir / 'literature_index.jsonl'
-        if not journal_path.exists():
-            journal_path.write_text(
+        journal_path = f"{artifact_dir}/research_journal.md"
+        literature_path = f"{artifact_dir}/literature_index.jsonl"
+        if not self._file_io.exists(journal_path):
+            self._file_io.write_text(
+                journal_path,
                 '# Planner Research Journal\n\n'
                 f"- task_id: {task_id}\n"
                 f"- created_at: {datetime.now(UTC).isoformat()}\n"
                 f"- goal: {goal}\n\n",
-                encoding='utf-8',
             )
-        if not literature_path.exists():
-            literature_path.write_text('', encoding='utf-8')
+        if not self._file_io.exists(literature_path):
+            self._file_io.write_text(literature_path, '')
         artifacts = state.setdefault('artifacts', {})
         if not isinstance(artifacts, dict):
             artifacts = {}
             state['artifacts'] = artifacts
-        artifacts['research_journal'] = str(journal_path)
-        artifacts['literature_index'] = str(literature_path)
+        artifacts['research_journal'] = journal_path
+        artifacts['literature_index'] = literature_path
         state.setdefault('literature_seen_urls', [])
         state.setdefault('literature_entry_count', 0)
         if not state.get('longtask_initialized'):
@@ -247,18 +242,16 @@ class ResearchPlannerRuntimeMixin:
         artifacts = state.get('artifacts') or {}
         journal_raw = artifacts.get('research_journal', '')
         journal_path = (
-            Path(journal_raw)
+            journal_raw
             if journal_raw
-            else (self._planner_artifact_dir(task_id) / 'research_journal.md')
+            else f"{self._planner_artifact_dir(task_id)}/research_journal.md"
         )
         ts = datetime.now(UTC).isoformat()
         block = [f"## [{ts}] {phase}: {title}"]
         if body:
             block.append(body.strip())
         block.append('')
-        with journal_path.open('a', encoding='utf-8') as f:
-            f.write('\n'.join(block))
-            f.write('\n')
+        self._file_io.append_text(journal_path, '\n'.join(block) + '\n')
         self.logger.debug(
             '[Planner] _append_journal: phase=%s title=%r path=%s',
             phase,
@@ -305,9 +298,9 @@ class ResearchPlannerRuntimeMixin:
         artifacts = state.get('artifacts') or {}
         lit_raw = artifacts.get('literature_index', '')
         lit_path = (
-            Path(lit_raw)
+            lit_raw
             if lit_raw
-            else (self._planner_artifact_dir(task_id) / 'literature_index.jsonl')
+            else f"{self._planner_artifact_dir(task_id)}/literature_index.jsonl"
         )
         seen = state.get('literature_seen_urls') or []
         if not isinstance(seen, list):
@@ -316,17 +309,18 @@ class ResearchPlannerRuntimeMixin:
         added = 0
         new_urls = [u for u in self._extract_urls_from_text(text) if u not in seen_set]
         if new_urls:
-            with lit_path.open('a', encoding='utf-8') as f:
-                for url in new_urls:
-                    seen_set.add(url)
-                    rec = {
-                        'ts': datetime.now(UTC).isoformat(),
-                        'source': source,
-                        'url': url,
-                    }
-                    f.write(json.dumps(rec, ensure_ascii=False))
-                    f.write('\n')
-                    added += 1
+            lines: list[str] = []
+            for url in new_urls:
+                seen_set.add(url)
+                rec = {
+                    'ts': datetime.now(UTC).isoformat(),
+                    'source': source,
+                    'url': url,
+                }
+                lines.append(json.dumps(rec, ensure_ascii=False))
+                lines.append('\n')
+                added += 1
+            self._file_io.append_text(lit_path, ''.join(lines))
         if added:
             state['literature_seen_urls'] = list(seen_set)
             state['literature_entry_count'] = (

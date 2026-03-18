@@ -9,6 +9,7 @@ from evomaster.core.exp import BaseExp
 
 from ...prompts.build_prompt import LANGUAGE_RULE
 from ..async_tool_registry import AsyncToolRegistry
+from ._planner_file_io import PlannerFileIO, create_planner_file_io
 from ._research_planner_execution import ResearchPlannerExecutionMixin
 from ._research_planner_phases import ResearchPlannerPhaseMixin
 from ._research_planner_planning import ResearchPlannerPlanningMixin
@@ -104,3 +105,7 @@ class ResearchPlanner(
                 1, int(quality_cfg.get('survey_min_line_length', 60))
             ),
         }
+
+        # ── Planner file I/O (local vs SSH) ──────────────────────────────
+        session = getattr(self.agent, 'session', None)
+        self._file_io: PlannerFileIO = create_planner_file_io(session)
