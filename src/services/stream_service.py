@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import AsyncGenerator, Callable
 
@@ -754,6 +755,7 @@ class ChatStreamService:
                 'mode': mode,
                 'llm': ctx.llm,
                 'model': ctx.model,
+                'submitted_at': datetime.now(timezone.utc).isoformat(),
             }
             # 先设为 waiting 再入队，避免 Worker 接手后 set active 被此处覆盖（竞态）
             self._sessions_service.set_session_status(sid, 'waiting')

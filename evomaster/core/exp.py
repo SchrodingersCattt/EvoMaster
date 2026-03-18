@@ -3,10 +3,12 @@
 提供 Exp 和 Playground 的基础实现，供具体的 playground 继承使用。
 """
 
+from __future__ import annotations
+
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from evomaster.utils.types import TaskInstance
 
@@ -56,8 +58,8 @@ class BaseExp:
         self,
         task_description: str = '',
         task_id: str = 'exp_001',
-        task: Optional[TaskInstance] = None,
-        images: Optional[list[str]] = None,
+        task: TaskInstance | None = None,
+        images: list[str] | None = None,
         append_result: bool = True,
     ) -> dict:
         """运行一次实验。

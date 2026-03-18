@@ -14,8 +14,6 @@ window) feed tasks into this executor so that concurrency, throttling, and
 error handling are implemented exactly once.
 """
 
-from __future__ import annotations
-
 import logging
 import threading
 import time
@@ -23,12 +21,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-logger = logging.getLogger("BatchExecutor")
+logger = logging.getLogger('BatchExecutor')
 
 
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ExecutionTask:
@@ -76,6 +75,7 @@ class ExecutionResult:
 # Token-bucket rate limiter (optional)
 # ---------------------------------------------------------------------------
 
+
 class _TokenBucket:
     """Simple thread-safe token bucket for rate limiting.
 
@@ -109,6 +109,7 @@ class _TokenBucket:
 # BatchExecutor
 # ---------------------------------------------------------------------------
 
+
 class BatchExecutor:
     """Execute a batch of ``ExecutionTask`` items concurrently.
 
@@ -134,7 +135,9 @@ class BatchExecutor:
         self.max_workers = max(1, max_workers)
         self._bucket: _TokenBucket | None = None
         if rate_limit is not None and rate_limit > 0:
-            self._bucket = _TokenBucket(tokens_per_sec=rate_limit, burst=max(1, int(rate_limit)))
+            self._bucket = _TokenBucket(
+                tokens_per_sec=rate_limit, burst=max(1, int(rate_limit))
+            )
 
     # ----- public API -----
 
@@ -156,14 +159,13 @@ class BatchExecutor:
                 results_map[task.task_id] = self._safe_execute(task)
         else:
             logger.info(
-                "Executing %d tasks in parallel (max_workers=%d)",
+                'Executing %d tasks in parallel (max_workers=%d)',
                 len(tasks),
                 workers,
             )
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 future_to_task = {
-                    pool.submit(self._safe_execute, task): task
-                    for task in tasks
+                    pool.submit(self._safe_execute, task): task for task in tasks
                 }
                 for future in as_completed(future_to_task):
                     task = future_to_task[future]
@@ -172,11 +174,11 @@ class BatchExecutor:
                     except Exception as exc:
                         # Should not happen (_safe_execute catches everything)
                         logger.error(
-                            "Critical executor error for %s: %s", task.task_id, exc
+                            'Critical executor error for %s: %s', task.task_id, exc
                         )
                         result = ExecutionResult(
                             task_id=task.task_id,
-                            status="failed",
+                            status='failed',
                             output=str(exc),
                             error=str(exc),
                             meta=task.meta,
@@ -198,18 +200,18 @@ class BatchExecutor:
             output, info = task.func(**task.kwargs)
             return ExecutionResult(
                 task_id=task.task_id,
-                status="success",
+                status='success',
                 output=output,
-                info=info if isinstance(info, dict) else {"raw": info},
+                info=info if isinstance(info, dict) else {'raw': info},
                 meta=task.meta,
             )
         except Exception as exc:
-            logger.warning("Task %s failed: %s", task.task_id, exc)
+            logger.warning('Task %s failed: %s', task.task_id, exc)
             return ExecutionResult(
                 task_id=task.task_id,
-                status="failed",
+                status='failed',
                 output=f"Error executing {task.task_id}: {exc}",
-                info={"error": str(exc)},
+                info={'error': str(exc)},
                 error=str(exc),
                 meta=task.meta,
             )

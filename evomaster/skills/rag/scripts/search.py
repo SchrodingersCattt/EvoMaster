@@ -8,6 +8,8 @@
 - 内容取回：可选加载 `nodes_data.json`，并通过 `content_path`（点路径）提取字段
 """
 
+from __future__ import annotations
+
 import contextlib
 import json
 import logging
@@ -15,10 +17,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+import faiss
 import numpy as np
 import torch
-import faiss
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoModel, AutoTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +30,21 @@ def _find_project_root() -> Path:
     script_path = Path(__file__).resolve()
     current = script_path.parent
     while current != current.parent:
-        if (current / "evomaster").exists() and (current / "evomaster").is_dir():
+        if (current / 'evomaster').exists() and (current / 'evomaster').is_dir():
             return current
         current = current.parent
     cwd = Path.cwd()
     current = cwd
     while current != current.parent:
-        if (current / "evomaster").exists() and (current / "evomaster").is_dir():
+        if (current / 'evomaster').exists() and (current / 'evomaster').is_dir():
             return current
         current = current.parent
-    if "EvoMaster_ROOT" in os.environ:
-        root = Path(os.environ["EvoMaster_ROOT"])
-        if root.exists() and (root / "evomaster").exists():
+    if 'EvoMaster_ROOT' in os.environ:
+        root = Path(os.environ['EvoMaster_ROOT'])
+        if root.exists() and (root / 'evomaster').exists():
             return root
     raise RuntimeError(
-        "无法找到项目根目录。请确保在 EvoMaster 项目目录结构中运行，或设置 EvoMaster_ROOT。"
+        '无法找到项目根目录。请确保在 EvoMaster 项目目录结构中运行，或设置 EvoMaster_ROOT。'
     )
 
 
@@ -51,8 +53,8 @@ def _resolve_path(path_str: str, project_root: Path | None = None) -> Path:
     path = Path(path_str)
     if path.is_absolute():
         return path.resolve()
-    path_str_normalized = str(path).replace("\\", "/")
-    if path_str_normalized.startswith("evomaster/"):
+    path_str_normalized = str(path).replace('\\', '/')
+    if path_str_normalized.startswith('evomaster/'):
         if project_root is None:
             project_root = _find_project_root()
         return (project_root / path).resolve()
@@ -67,10 +69,10 @@ class RAGSearcher:
     def __init__(
         self,
         vec_dir: str,
-        model_name: str = "evomaster/skills/rag/local_models/all-mpnet-base-v2",
+        model_name: str = 'evomaster/skills/rag/local_models/all-mpnet-base-v2',
         nodes_data_json: str | None = None,
-        device: str = "cpu",
-        node_id_key: str = "node_id",
+        device: str = 'cpu',
+        node_id_key: str = 'node_id',
     ):
         """初始化 RAG Searcher
 
@@ -87,14 +89,14 @@ class RAGSearcher:
         self.node_id_key = node_id_key
 
         # 加载 FAISS index
-        index_path = self.vec_dir / "faiss.index"
+        index_path = self.vec_dir / 'faiss.index'
         if not index_path.exists():
             raise FileNotFoundError(f"FAISS index not found: {index_path}")
         self.index = faiss.read_index(str(index_path))
         logger.info(f"Loaded FAISS index from {index_path}")
 
         # 加载 embeddings（可选，用于调试）
-        emb_path = self.vec_dir / "embeddings.npy"
+        emb_path = self.vec_dir / 'embeddings.npy'
         if emb_path.exists():
             self.emb = np.load(emb_path)
             logger.info(f"Loaded embeddings from {emb_path}")
@@ -103,23 +105,27 @@ class RAGSearcher:
             logger.warning(f"Embeddings file not found: {emb_path}")
 
         # 加载 node_id 映射
-        nodes_jsonl_path = self.vec_dir / "nodes.jsonl"
+        nodes_jsonl_path = self.vec_dir / 'nodes.jsonl'
         self.node_ids = []
         if nodes_jsonl_path.exists():
-            with open(nodes_jsonl_path, "r", encoding="utf-8") as f:
+            with open(nodes_jsonl_path, encoding='utf-8') as f:
                 for idx, line in enumerate(f):
                     if line.strip():
                         obj = json.loads(line)
                         # 优先使用指定的 node_id_key，如果没有则尝试使用 task_name，最后使用索引
                         if self.node_id_key in obj:
                             node_id = obj[self.node_id_key]
-                        elif "task_name" in obj:
-                            node_id = obj["task_name"]
-                            logger.debug(f"Using 'task_name' as node_id for line {idx}: {node_id}")
+                        elif 'task_name' in obj:
+                            node_id = obj['task_name']
+                            logger.debug(
+                                f"Using 'task_name' as node_id for line {idx}: {node_id}"
+                            )
                         else:
                             # 使用索引作为 node_id
                             node_id = str(idx)
-                            logger.debug(f"Using index as node_id for line {idx}: {node_id}")
+                            logger.debug(
+                                f"Using index as node_id for line {idx}: {node_id}"
+                            )
                         self.node_ids.append(node_id)
             logger.info(f"Loaded {len(self.node_ids)} node IDs from {nodes_jsonl_path}")
         else:
@@ -130,14 +136,14 @@ class RAGSearcher:
         if nodes_data_json:
             nodes_data_path = Path(nodes_data_json)
             if nodes_data_path.exists():
-                with open(nodes_data_path, "r", encoding="utf-8") as f:
+                with open(nodes_data_path, encoding='utf-8') as f:
                     self.nodes_data = json.load(f)
                 logger.info(f"Loaded nodes data from {nodes_data_path}")
             else:
                 logger.warning(f"Nodes data file not found: {nodes_data_path}")
 
         # 初始化 embedding 模型（静默 stderr，避免 Loading weights 等进度条撑爆 context）
-        with open(os.devnull, "w", encoding="utf-8") as devnull:
+        with open(os.devnull, 'w', encoding='utf-8') as devnull:
             with contextlib.redirect_stderr(devnull):
                 self.tokenizer = AutoTokenizer.from_pretrained(model_name)
                 self.model = AutoModel.from_pretrained(model_name).to(self.device)
@@ -147,10 +153,10 @@ class RAGSearcher:
     @staticmethod
     def _get_by_dotted_path(obj: Any, dotted_path: str, default: Any = None) -> Any:
         """使用点路径从 dict/对象中取值，例如 'content.text'。"""
-        if dotted_path is None or dotted_path == "":
+        if dotted_path is None or dotted_path == '':
             return obj
         cur: Any = obj
-        for key in dotted_path.split("."):
+        for key in dotted_path.split('.'):
             if cur is None:
                 return default
             if isinstance(cur, dict):
@@ -162,15 +168,15 @@ class RAGSearcher:
     def _default_content_candidates(self) -> list[str]:
         # 常见字段兜底（尽量通用，避免绑定某个项目）
         return [
-            "content.text",
-            "content.page_content",
-            "content.knowledge",
-            "content.data",
-            "content",
-            "text",
-            "page_content",
-            "knowledge",
-            "data",
+            'content.text',
+            'content.page_content',
+            'content.knowledge',
+            'content.data',
+            'content',
+            'text',
+            'page_content',
+            'knowledge',
+            'data',
         ]
 
     def encode(self, text: str) -> np.ndarray:
@@ -187,13 +193,13 @@ class RAGSearcher:
             padding=True,
             truncation=True,
             max_length=512,
-            return_tensors="pt",
+            return_tensors='pt',
         ).to(self.device)
 
         with torch.no_grad():
             outputs = self.model(**inputs)
             h = outputs.last_hidden_state
-            attn = inputs["attention_mask"].unsqueeze(-1)
+            attn = inputs['attention_mask'].unsqueeze(-1)
             # Mean pooling with attention weights
             emb = (h * attn).sum(dim=1) / attn.sum(dim=1)
 
@@ -203,7 +209,7 @@ class RAGSearcher:
         self,
         query_emb: np.ndarray,
         top_k: int = 5,
-        distance_threshold: float | None = None
+        distance_threshold: float | None = None,
     ) -> list[tuple[str, float]]:
         """搜索相似节点
 
@@ -216,17 +222,17 @@ class RAGSearcher:
             列表，每个元素为 (node_id, distance) 元组
         """
         if len(self.node_ids) == 0:
-            logger.warning("No node IDs loaded, returning empty results")
+            logger.warning('No node IDs loaded, returning empty results')
             return []
 
         top_k = min(top_k, len(self.node_ids))
-        
+
         # 确保 query_emb 是 2D array
         if query_emb.ndim == 1:
             query_emb = query_emb.reshape(1, -1)
 
         # FAISS 搜索
-        D, I = self.index.search(query_emb.astype("float32"), top_k)
+        D, I = self.index.search(query_emb.astype('float32'), top_k)
 
         results = []
         for dist, idx in zip(D[0], I[0]):
@@ -241,18 +247,13 @@ class RAGSearcher:
                 )
                 continue
 
-            logger.debug(
-                f"Selected node {self.node_ids[idx]} with distance {dist}"
-            )
+            logger.debug(f"Selected node {self.node_ids[idx]} with distance {dist}")
             results.append((self.node_ids[idx], float(dist)))
 
         return results
 
     def search_by_text(
-        self,
-        query_text: str,
-        top_k: int = 5,
-        distance_threshold: float | None = None
+        self, query_text: str, top_k: int = 5, distance_threshold: float | None = None
     ) -> list[tuple[str, float]]:
         """使用文本查询进行搜索（便捷方法）
 
@@ -265,7 +266,9 @@ class RAGSearcher:
             列表，每个元素为 (node_id, distance) 元组
         """
         query_emb = self.encode(query_text)
-        return self.search_similar(query_emb, top_k=top_k, distance_threshold=distance_threshold)
+        return self.search_similar(
+            query_emb, top_k=top_k, distance_threshold=distance_threshold
+        )
 
     def get_knowledge(self, node_id: str) -> Any:
         """获取节点的知识内容
@@ -281,21 +284,23 @@ class RAGSearcher:
             如需精确指定字段，建议使用 `get_knowledge_by_path()`。
         """
         if not self.nodes_data:
-            logger.warning("Nodes data not loaded, cannot retrieve knowledge")
+            logger.warning('Nodes data not loaded, cannot retrieve knowledge')
             return None
 
         node = self.nodes_data.get(str(node_id), {})
         # 兜底：按常见字段尝试提取；都没有就返回整个 node
         for path in self._default_content_candidates():
             val = self._get_by_dotted_path(node, path, default=None)
-            if val not in (None, "", [], {}):
+            if val not in (None, '', [], {}):
                 return val
         return node
 
-    def get_knowledge_by_path(self, node_id: str, content_path: str, default: Any = None) -> Any:
+    def get_knowledge_by_path(
+        self, node_id: str, content_path: str, default: Any = None
+    ) -> Any:
         """按点路径提取节点内容字段（通用）。"""
         if not self.nodes_data:
-            logger.warning("Nodes data not loaded, cannot retrieve knowledge")
+            logger.warning('Nodes data not loaded, cannot retrieve knowledge')
             return default
         node = self.nodes_data.get(str(node_id), {})
         return self._get_by_dotted_path(node, content_path, default=default)
@@ -318,31 +323,33 @@ def main():
     """命令行接口示例"""
     import argparse
 
-    parser = argparse.ArgumentParser(description="RAG Searcher CLI")
-    parser.add_argument("--vec_dir", required=True, help="Vector database directory")
-    parser.add_argument("--model", 
-                       default="evomaster/skills/rag/local_models/all-mpnet-base-v2",
-                       help="Embedding model path or HuggingFace model name (default: local model)")
-    parser.add_argument("--nodes_data", help="Nodes data JSON file")
+    parser = argparse.ArgumentParser(description='RAG Searcher CLI')
+    parser.add_argument('--vec_dir', required=True, help='Vector database directory')
     parser.add_argument(
-        "--node_id_key",
-        default="node_id",
-        help="ID key name in nodes.jsonl per-line JSON (default: node_id)",
+        '--model',
+        default='evomaster/skills/rag/local_models/all-mpnet-base-v2',
+        help='Embedding model path or HuggingFace model name (default: local model)',
     )
-    parser.add_argument("--query", required=True, help="Search query")
-    parser.add_argument("--top_k", type=int, default=5, help="Number of results")
-    parser.add_argument("--threshold", type=float, help="Distance threshold")
+    parser.add_argument('--nodes_data', help='Nodes data JSON file')
     parser.add_argument(
-        "--content_path",
+        '--node_id_key',
+        default='node_id',
+        help='ID key name in nodes.jsonl per-line JSON (default: node_id)',
+    )
+    parser.add_argument('--query', required=True, help='Search query')
+    parser.add_argument('--top_k', type=int, default=5, help='Number of results')
+    parser.add_argument('--threshold', type=float, help='Distance threshold')
+    parser.add_argument(
+        '--content_path',
         default=None,
-        help="Dotted path to extract content from nodes_data (e.g. content.text). "
-             "If omitted, uses a set of common fallback fields.",
+        help='Dotted path to extract content from nodes_data (e.g. content.text). '
+        'If omitted, uses a set of common fallback fields.',
     )
     parser.add_argument(
-        "--output",
-        choices=["text", "json"],
-        default="text",
-        help="Output format (default: text)",
+        '--output',
+        choices=['text', 'json'],
+        default='text',
+        help='Output format (default: text)',
     )
 
     args = parser.parse_args()
@@ -350,10 +357,12 @@ def main():
     # 路径解析：evomaster/ 相对项目根
     project_root = _find_project_root()
     vec_dir_resolved = str(_resolve_path(args.vec_dir, project_root))
-    nodes_data_resolved = str(_resolve_path(args.nodes_data, project_root)) if args.nodes_data else None
+    nodes_data_resolved = (
+        str(_resolve_path(args.nodes_data, project_root)) if args.nodes_data else None
+    )
     model_resolved = (
         str(_resolve_path(args.model, project_root))
-        if str(args.model).replace("\\", "/").startswith("evomaster/")
+        if str(args.model).replace('\\', '/').startswith('evomaster/')
         else args.model
     )
 
@@ -367,22 +376,22 @@ def main():
 
     # 搜索
     results = searcher.search_by_text(
-        query_text=args.query,
-        top_k=args.top_k,
-        distance_threshold=args.threshold
+        query_text=args.query, top_k=args.top_k, distance_threshold=args.threshold
     )
 
-    if args.output == "json":
+    if args.output == 'json':
         payload = {
-            "query": args.query,
-            "results": [
+            'query': args.query,
+            'results': [
                 {
-                    "node_id": node_id,
-                    "distance": distance,
-                    "content": (
+                    'node_id': node_id,
+                    'distance': distance,
+                    'content': (
                         searcher.get_knowledge_by_path(node_id, args.content_path)
                         if (args.nodes_data and args.content_path)
-                        else (searcher.get_knowledge(node_id) if args.nodes_data else None)
+                        else (
+                            searcher.get_knowledge(node_id) if args.nodes_data else None
+                        )
                     ),
                 }
                 for (node_id, distance) in results
@@ -393,7 +402,7 @@ def main():
 
     # text 输出
     print(f"\nSearch results for: '{args.query}'")
-    print("=" * 60)
+    print('=' * 60)
     for i, (node_id, distance) in enumerate(results, 1):
         print(f"\n{i}. Node ID: {node_id}")
         print(f"   Distance: {distance:.4f}")
@@ -403,10 +412,10 @@ def main():
                 content = searcher.get_knowledge_by_path(node_id, args.content_path)
             else:
                 content = searcher.get_knowledge(node_id)
-            if content not in (None, "", [], {}):
+            if content not in (None, '', [], {}):
                 print(f"   Content: {content}")
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     main()

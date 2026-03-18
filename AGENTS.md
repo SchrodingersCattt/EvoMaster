@@ -114,6 +114,19 @@ import sys  # 不要插在常量或代码中间
 
 ---
 
+## Python 与运行环境
+
+**本项目的 Python 运行时以 uv 管理的环境为准。**
+
+- **运行 / 验证时**：在项目根目录下应使用 **`uv run python`**（或先 `source .venv/bin/activate` 再执行 `python`），不要依赖系统 PATH 下第一个 `python`，以免误用其他环境（如系统 3.9、anaconda）导致行为不一致。
+- **示例**：验证导入、跑脚本、跑测试时统一用 uv 环境：
+  - `uv run python -c "from playground.mat_master.core.callback import MatToolCallbacks; print('OK')"`
+  - `uv run pytest ...`
+  - `uv run python app.py` 等。
+- **版本约定**：`pyproject.toml` 中 `requires-python = ">=3.10"`；实际开发/CI 使用 uv 安装的版本（如 3.13）。涉及语法或类型注解（如是否保留 `from __future__ import annotations`）时，以 **uv 环境中的 Python 版本** 为准做验证与决策。
+
+---
+
 ## 其他约定
 
 - **维护本文件**：在对话或开发过程中，若产生新的、值得固化的约定或逻辑（如架构决策、命名/用法约定、废弃说明等），应适时补充到 AGENTS.md，便于后续遵守。

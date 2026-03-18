@@ -15,7 +15,7 @@ Requires: pymatgen, numpy (assess_structure.py); dpdata (convert_format.py); req
 The following are available for obtaining structures. Choose based on what identifier or context you have; if one path fails or returns no results, try another.
 
 - **Literature-based search**: When the target structure is not in an open database, or the material class is unlikely to be there (molecular crystals, hybrid salts, MOFs, co-crystals, energetic perovskites, etc.):
-  1. Search literature with available `mat_sn_*` search tools (e.g. `mat_sn_search-papers-enhanced`, `mat_sn_web-search`) to locate papers reporting the structure. If a tool returns errors or is unavailable, switch to a different available search tool or method — do not retry the same failing tool.
+  1. Search literature with available `mat_sn_*` search tools (e.g. `mat_sn_search-papers-enhanced`, `web-search`) to locate papers reporting the structure. If a tool returns errors or is unavailable, switch to a different available search tool or method — do not retry the same failing tool.
   2. For high-relevance URLs (paper HTML, SI page, open repository), fetch full page content with `extract_info_from_webpage` to extract: space group, lattice constants (a, b, c, α, β, γ), formula, Z, CCDC/ICSD identifiers, DOI. Do **not** rely on search snippets alone — crystal parameters are almost never in abstracts.
   3. If `extract_info_from_webpage` returns 403/paywall on a DOI URL, try alternative open-access URLs for the same paper (SI page, preprint, free full-text mirror) before falling back to snippets.
   4. If a direct CIF/POSCAR download link is found in the full page, use `fetch_web_structure.py --url`. If an HTML page with structure file links is found, use `fetch_web_structure.py --page`.

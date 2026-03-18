@@ -12,8 +12,6 @@ Includes:
 - Edit helpers: _str_replace_in_text, _STR_REPLACE_TOOL_SPEC
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import re
@@ -21,7 +19,6 @@ from pathlib import Path
 from typing import Any
 
 from ..async_tool_registry import AsyncToolRegistry
-
 
 # ---------------------------------------------------------------------------
 # Config helpers
@@ -266,7 +263,7 @@ def _try_parse_json(raw: str, logger: logging.Logger | None = None) -> dict:
             # Remove opening fence line
             first_nl = stripped.find('\n')
             if first_nl >= 0:
-                stripped = stripped[first_nl + 1:]
+                stripped = stripped[first_nl + 1 :]
             # Remove closing fence
             last_fence = stripped.rfind('```')
             if last_fence >= 0:
@@ -577,7 +574,7 @@ def _str_replace_in_text(
                 f'old_str matches multiple locations (lines {lines}); make it more unique'
             )
         m = matches[0]
-        return content[: m.start()] + replacement + content[m.end():]
+        return content[: m.start()] + replacement + content[m.end() :]
 
     try:
         return _do_replace(text, old_str, new_str), None
@@ -594,7 +591,9 @@ def _str_replace_in_text(
         return text, err
     try:
         result = _do_replace(text, old_stripped, new_stripped)
-        _log.debug('[Planner] _str_replace_in_text: used strip fallback for %r', old_str[:60])
+        _log.debug(
+            '[Planner] _str_replace_in_text: used strip fallback for %r', old_str[:60]
+        )
         return result, None
     except ValueError as e:
         err = str(e)

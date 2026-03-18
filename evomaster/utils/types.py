@@ -82,13 +82,6 @@ class ToolMessage(BaseMessage):
 Message = SystemMessage | UserMessage | AssistantMessage | ToolMessage
 
 
-class ToolSpec(BaseModel):
-    """工具规格定义，用于 LLM 的 function calling"""
-
-    type: Literal['function'] = 'function'
-    function: FunctionSpec = Field(description='函数规格')
-
-
 class FunctionSpec(BaseModel):
     """函数规格定义"""
 
@@ -96,6 +89,13 @@ class FunctionSpec(BaseModel):
     description: str = Field(description='函数描述')
     parameters: dict[str, Any] = Field(description='参数 JSON Schema')
     strict: bool | None = Field(default=None, description='是否严格模式')
+
+
+class ToolSpec(BaseModel):
+    """工具规格定义，用于 LLM 的 function calling"""
+
+    type: Literal['function'] = 'function'
+    function: FunctionSpec = Field(description='函数规格')
 
 
 class Dialog(BaseModel):
@@ -119,6 +119,7 @@ class Dialog(BaseModel):
         防止非法字符串传入 litellm/Bedrock 适配器导致 500 错误。
         """
         import logging as _logging
+
         _api_logger = _logging.getLogger(__name__)
 
         result = []
@@ -143,7 +144,7 @@ class Dialog(BaseModel):
                         _api_logger.warning(
                             "get_messages_for_api: tool call '%s' has malformed arguments JSON "
                             "(replacing with '{}' to prevent downstream LLM API failure). "
-                            "Original arguments: %r",
+                            'Original arguments: %r',
                             tool_name,
                             args,
                         )

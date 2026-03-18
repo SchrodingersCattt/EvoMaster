@@ -42,7 +42,7 @@ When cutting a surface slab from a bulk crystal (especially ionic or oxide), app
 
 ### Step 1 — 从文献/网页拿参数
 
-- 用 **mat_sn_*** 或 **mat_sn_web-search** 搜该 (formula, 晶面)，如 "ZnO 0001 symmetric slab layers", "<formula> <hkl> slab construction vacuum"。
+- 用 **mat_sn_*** 或 **web-search** 搜该 (formula, 晶面)，如 "ZnO 0001 symmetric slab layers", "<formula> <hkl> slab construction vacuum"。
 - 从论文/教程里提取：**层数**（或 repeat units）、**真空厚度**、以及是否推荐某种**终止面**（如上下都是 O 终止）。
 
 ### Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）

@@ -239,9 +239,7 @@ class SSHEnv(BaseEnv):
 
         timeout = timeout or self.config.session_config.timeout
 
-        _stdin, stdout, stderr = self._ssh_client.exec_command(
-            command, timeout=timeout
-        )
+        _stdin, stdout, stderr = self._ssh_client.exec_command(command, timeout=timeout)
         channel = stdout.channel
         channel.settimeout(timeout)
 
@@ -418,9 +416,7 @@ class SSHEnv(BaseEnv):
         )
 
     @staticmethod
-    def _walk_filtered(
-        local_root: Path, exclude: set[str]
-    ) -> list[tuple[Path, str]]:
+    def _walk_filtered(local_root: Path, exclude: set[str]) -> list[tuple[Path, str]]:
         """Walk *local_root* and return ``(abs_path, arcname)`` pairs,
         skipping directories and files whose names are in *exclude*."""
         result: list[tuple[Path, str]] = []
@@ -466,7 +462,9 @@ class SSHEnv(BaseEnv):
             except Exception as exc:
                 logger.warning('upload_directory: skip %s: %s', remote_file, exc)
 
-        logger.info('upload_directory: %s -> %s (%d files)', local_dir, remote_dir, count)
+        logger.info(
+            'upload_directory: %s -> %s (%d files)', local_dir, remote_dir, count
+        )
         return count
 
     def upload_directory_tarball(
@@ -511,11 +509,17 @@ class SSHEnv(BaseEnv):
             t1 = time.monotonic()
             with self._sftp_lock:
                 self._sftp.put(tmp_path, remote_tmp)
-            logger.info('upload_directory_tarball: sftp.put %.2fs', time.monotonic() - t1)
+            logger.info(
+                'upload_directory_tarball: sftp.put %.2fs', time.monotonic() - t1
+            )
 
             t2 = time.monotonic()
-            self.ssh_exec(f"mkdir -p '{remote_dir}' && tar -xzf '{remote_tmp}' -C '{remote_dir}'")
-            logger.info('upload_directory_tarball: extract %.2fs', time.monotonic() - t2)
+            self.ssh_exec(
+                f"mkdir -p '{remote_dir}' && tar -xzf '{remote_tmp}' -C '{remote_dir}'"
+            )
+            logger.info(
+                'upload_directory_tarball: extract %.2fs', time.monotonic() - t2
+            )
         finally:
             Path(tmp_path).unlink(missing_ok=True)
             self.ssh_exec(f"rm -f '{remote_tmp}'")

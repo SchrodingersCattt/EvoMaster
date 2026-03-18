@@ -59,7 +59,7 @@ class SSHSession(BaseSession):
         env_config = SSHEnvConfig(session_config=self.config)
         self._env = SSHEnv(env_config)
         self._last_ps1_count: int = 0
-        self._prev_command_status: Literal["completed", "timeout"] = "completed"
+        self._prev_command_status: Literal['completed', 'timeout'] = 'completed'
         self.remote_project_root: str | None = None
 
     def open(self) -> None:

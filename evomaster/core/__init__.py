@@ -3,6 +3,7 @@
 提供 Exp 和 Playground 的基础实现，用于快速构建具体的 playground。
 
 使用示例：
+from __future__ import annotations
     from evomaster.core import BasePlayground, BaseExp
 
     # 直接使用（最简单）
@@ -27,17 +28,17 @@
 from .exp import BaseExp
 from .playground import BasePlayground
 from .registry import (
-    register_playground,
     get_playground_class,
-    list_registered_playgrounds,
     get_registry_info,
+    list_registered_playgrounds,
+    register_playground,
 )
 
 __all__ = [
-    "BaseExp",
-    "BasePlayground",
-    "register_playground",
-    "get_playground_class",
-    "list_registered_playgrounds",
-    "get_registry_info",
+    'BaseExp',
+    'BasePlayground',
+    'register_playground',
+    'get_playground_class',
+    'list_registered_playgrounds',
+    'get_registry_info',
 ]

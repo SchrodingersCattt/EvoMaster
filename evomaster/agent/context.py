@@ -35,10 +35,13 @@ class TruncationStrategy(str, Enum):
 # CompactionConfig
 # ---------------------------------------------------------------------------
 
+
 class CompactionConfig(BaseModel):
     """Compact message 触发与行为配置"""
 
-    enabled: bool = Field(default=False, description='是否启用 compact message（默认关闭）')
+    enabled: bool = Field(
+        default=False, description='是否启用 compact message（默认关闭）'
+    )
     # trigger_tokens 默认 -1 表示使用 context_window_tokens * trigger_ratio 动态计算
     trigger_tokens: int = Field(
         default=-1,
@@ -65,7 +68,9 @@ class CompactionConfig(BaseModel):
     compaction_llm: str | None = Field(
         default=None, description='用于摘要的 LLM key；None 则复用 agent LLM'
     )
-    fallback_strategy: str = Field(default='sliding_window', description='压缩失败时的降级策略')
+    fallback_strategy: str = Field(
+        default='sliding_window', description='压缩失败时的降级策略'
+    )
     max_compact_tokens: int = Field(
         default=3000, description='compact message 最大 token 数（约 9000 字符）'
     )
@@ -108,6 +113,7 @@ class ContextConfig(BaseModel):
 # ---------------------------------------------------------------------------
 # ContextCompactor
 # ---------------------------------------------------------------------------
+
 
 class CompactionError(Exception):
     """Raised when ContextCompactor.compact() fails."""
@@ -152,16 +158,16 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
 
     # 按角色分级的截断上限（字符数）——压缩 prompt 中用于控制单条消息长度
     _ROLE_CHAR_LIMITS: dict[str, int] = {
-        'user': 8000,       # 用户消息可能含数据表格，放宽
+        'user': 8000,  # 用户消息可能含数据表格，放宽
         'assistant': 2000,  # assistant 思考/规划文本
-        'tool': 1500,       # tool observation 通常可截断
-        'system': 500,      # system 消息在压缩 prompt 里不需要完整
+        'tool': 1500,  # tool observation 通常可截断
+        'system': 500,  # system 消息在压缩 prompt 里不需要完整
     }
 
     def __init__(
         self,
         config: CompactionConfig,
-        llm_caller: Callable[['Dialog'], 'AssistantMessage'],
+        llm_caller: Callable[[Dialog], AssistantMessage],
         execution_journal: object | None = None,
     ) -> None:
         self._config = config
@@ -170,10 +176,10 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
 
     def compact(
         self,
-        dialog: 'Dialog',
-        context_manager: 'ContextManager | None' = None,
-        on_event: 'Callable[[dict], None] | None' = None,
-    ) -> 'Dialog':
+        dialog: Dialog,
+        context_manager: ContextManager | None = None,
+        on_event: Callable[[dict], None] | None = None,
+    ) -> Dialog:
         """压缩对话历史，返回新 Dialog。失败时抛出 CompactionError。
 
         保留尾部使用 ContextManager._safe_tail() 以完整 tool-transaction 为单位，
@@ -216,18 +222,21 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
             other_msgs = other_msgs[1:]
 
         # 记录 compact 前 token 数
-        tokens_before = context_manager.estimate_tokens(dialog) if context_manager else None
+        tokens_before = (
+            context_manager.estimate_tokens(dialog) if context_manager else None
+        )
 
         # 检查 compressible tokens 占比，避免无效压缩
         # fixed = system + pinned_first_user + tools（这些永远不会被压缩）
         if context_manager is not None:
             total_tokens = context_manager.estimate_tokens(dialog)
-            system_tokens = sum(
-                context_manager._message_char_len(m) for m in system_msgs
-            ) // 3
-            pinned_tokens = sum(
-                context_manager._message_char_len(m) for m in pinned_first_user
-            ) // 3
+            system_tokens = (
+                sum(context_manager._message_char_len(m) for m in system_msgs) // 3
+            )
+            pinned_tokens = (
+                sum(context_manager._message_char_len(m) for m in pinned_first_user)
+                // 3
+            )
             tools_tokens = context_manager._tools_char_len(dialog.tools) // 3
             fixed_tokens = system_tokens + pinned_tokens + tools_tokens
             compressible_tokens = total_tokens - fixed_tokens
@@ -299,8 +308,12 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
 
         # 4. 构建压缩 prompt
         compaction_prompt = self._build_compaction_prompt(
-            msgs_to_compress, artifacts_block, structured_facts_block,
-            n_turns, n_next, journal_summary=journal_summary,
+            msgs_to_compress,
+            artifacts_block,
+            structured_facts_block,
+            n_turns,
+            n_next,
+            journal_summary=journal_summary,
         )
 
         # 5. 调用 LLM 生成摘要
@@ -334,9 +347,7 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
 
         # 7. 构建新 Dialog：system msgs + pinned first user msg + COMPACT CONTEXT system msg + recent turns
         # pinned_first_user 保留原始任务描述，确保 LLM 始终能看到完整的原始 query
-        compact_sys_msg = SystemMessage(
-            content=f'[COMPACT CONTEXT]\n\n{compact_text}'
-        )
+        compact_sys_msg = SystemMessage(content=f'[COMPACT CONTEXT]\n\n{compact_text}')
         new_messages = system_msgs + pinned_first_user + [compact_sys_msg] + recent_msgs
 
         # 记录 compact 前后 token 数
@@ -352,16 +363,22 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
                 tokens_before,
                 tokens_after,
                 tokens_before - tokens_after,
-                100.0 * (tokens_before - tokens_after) / tokens_before if tokens_before else 0,
+                (
+                    100.0 * (tokens_before - tokens_after) / tokens_before
+                    if tokens_before
+                    else 0
+                ),
             )
             _emit(
                 'finished',
                 tokens_before=tokens_before,
                 tokens_after=tokens_after,
                 tokens_saved=tokens_before - tokens_after,
-                saved_ratio=round(
-                    (tokens_before - tokens_after) / tokens_before, 4
-                ) if tokens_before else 0.0,
+                saved_ratio=(
+                    round((tokens_before - tokens_after) / tokens_before, 4)
+                    if tokens_before
+                    else 0.0
+                ),
                 compressed_turns=n_turns,
                 recent_msgs_kept=len(recent_msgs),
                 duration_ms=_duration_ms,
@@ -408,7 +425,7 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
             _logger.debug('ContextCompactor._build_artifacts_block failed: %s', e)
             return '(artifacts unavailable)'
 
-    def _build_structured_facts_block(self, msgs_to_compress: list['Message']) -> str:
+    def _build_structured_facts_block(self, msgs_to_compress: list[Message]) -> str:
         """从待压缩消息中提取结构化事实，直接注入 compact prompt（防幻觉）。
 
         提取来源：
@@ -427,7 +444,9 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
 
         # 预编译正则（tool 消息提取用）
         _doi_re = re.compile(r'10\.\d{4,}/\S+')
-        _path_re = re.compile(r'(?:^|[\s"\'])(/[\w./\-_]+\.[\w]+|\.\/[\w./\-_]+\.[\w]+)')
+        _path_re = re.compile(
+            r'(?:^|[\s"\'])(/[\w./\-_]+\.[\w]+|\.\/[\w./\-_]+\.[\w]+)'
+        )
         _numeric_key_re = re.compile(
             r'"([\w_]*(Ps|Pr|Tc|value|result|score|energy|bandgap|'
             r'polarization|coercive|temperature|conductivity|permittivity'
@@ -451,7 +470,8 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
             content = msg.content or ''
             if isinstance(content, list):
                 content = ' '.join(
-                    b.get('text', '') for b in content
+                    b.get('text', '')
+                    for b in content
                     if isinstance(b, dict) and b.get('type') == 'text'
                 )
             content_str = str(content)
@@ -514,27 +534,34 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
                     if kv_matches:
                         # findall returns (full_key, subword_match, value) — use full_key and value
                         kv_items = [f'{k}={val}' for k, _sub, val in kv_matches[:10]]
-                        tool_key_values.append(f'[{tool_label}] key values: ' + ', '.join(kv_items))
+                        tool_key_values.append(
+                            f'[{tool_label}] key values: ' + ', '.join(kv_items)
+                        )
 
                     # 提取 DOI
                     dois = _doi_re.findall(content_str)
                     if dois:
                         tool_key_values.append(
-                            f'[{tool_label}] DOIs: ' + ', '.join(dict.fromkeys(dois[:5]))
+                            f'[{tool_label}] DOIs: '
+                            + ', '.join(dict.fromkeys(dois[:5]))
                         )
 
                     # 提取文件路径
                     paths = _path_re.findall(content_str)
                     if paths:
                         tool_key_values.append(
-                            f'[{tool_label}] paths: ' + ', '.join(dict.fromkeys(paths[:5]))
+                            f'[{tool_label}] paths: '
+                            + ', '.join(dict.fromkeys(paths[:5]))
                         )
 
         parts: list[str] = []
 
         if tables:
             # 最多保留前 3 张表（避免 prompt 过长）
-            parts.append('## Key Data Tables (extracted, do NOT modify)\n' + '\n\n'.join(tables[:3]))
+            parts.append(
+                '## Key Data Tables (extracted, do NOT modify)\n'
+                + '\n\n'.join(tables[:3])
+            )
 
         if constraints:
             # 去重，最多 20 条
@@ -610,7 +637,9 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
             remaining = '\n'.join(lines[table_end_idx + 1 :])
             remaining_limit = max(0, limit - len(table_text) - 1)
             if remaining_limit > 0 and remaining:
-                return table_text + '\n' + remaining[:remaining_limit] + '...(truncated)'
+                return (
+                    table_text + '\n' + remaining[:remaining_limit] + '...(truncated)'
+                )
             return table_text
 
         # 无表格：直接按 limit 截断
@@ -618,7 +647,7 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
 
     def _build_compaction_prompt(
         self,
-        messages_to_compress: list['Message'],
+        messages_to_compress: list[Message],
         artifacts_block: str,
         structured_facts_block: str,
         n_turns: int,
@@ -638,7 +667,8 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
             content = msg.content or ''
             if isinstance(content, list):
                 content = ' '.join(
-                    b.get('text', '') for b in content
+                    b.get('text', '')
+                    for b in content
                     if isinstance(b, dict) and b.get('type') == 'text'
                 )
             content_str = str(content)
@@ -702,9 +732,9 @@ class ContextManager:
         # ContextCompactor 实例（由外部注入，默认 None）
         self._compactor: ContextCompactor | None = None
         # compact 生命周期事件回调（由 StreamingMatMasterAgent 注入）
-        self._on_compact_event: 'Callable[[dict], None] | None' = None
+        self._on_compact_event: Callable[[dict], None] | None = None
 
-    def set_token_counter(self, counter: 'TokenCounter') -> None:
+    def set_token_counter(self, counter: TokenCounter) -> None:
         """设置 token 计数器"""
         self._token_counter = counter
 
@@ -712,9 +742,7 @@ class ContextManager:
         """注入 ContextCompactor 实例（由 MatMasterAgent.__init__ 调用）。"""
         self._compactor = compactor
 
-    def set_compact_event_callback(
-        self, cb: 'Callable[[dict], None]'
-    ) -> None:
+    def set_compact_event_callback(self, cb: Callable[[dict], None]) -> None:
         """注入 compact 生命周期事件回调（由 StreamingMatMasterAgent.__init__ 调用）。
 
         cb(payload) 在 compact started/finished/skipped/failed 时被调用。
@@ -743,9 +771,7 @@ class ContextManager:
 
         # 保守估算：约3个字符 = 1 token（对中英文混合内容更准确）
         # Bug fix: 计算所有消息的完整字符数（包括 tool_calls 参数）
-        total_chars = sum(
-            self._message_char_len(msg) for msg in dialog.messages
-        )
+        total_chars = sum(self._message_char_len(msg) for msg in dialog.messages)
 
         # Bug fix: 计算工具定义的字符数（每次 API 调用都会发送）
         total_chars += self._tools_char_len(dialog.tools)
@@ -768,9 +794,10 @@ class ContextManager:
         return len(str(content))
 
     @staticmethod
-    def _message_char_len(msg: 'Message') -> int:
+    def _message_char_len(msg: Message) -> int:
         """计算单条消息的字符数，包括 content 和 tool_calls 参数。"""
         import json
+
         total = 0
         # content 字段
         content = msg.content
@@ -795,17 +822,24 @@ class ContextManager:
                     total += len(getattr(func, 'name', '') or '')
                     args = getattr(func, 'arguments', None)
                     if args:
-                        total += len(args if isinstance(args, str) else json.dumps(args))
+                        total += len(
+                            args if isinstance(args, str) else json.dumps(args)
+                        )
         return total
 
     @staticmethod
     def _tools_char_len(tools: list | None) -> int:
         """计算工具定义的字符数（每次 API 调用都会随 tools 参数发送）。"""
         import json
+
         if not tools:
             return 0
         try:
-            return len(json.dumps([t.model_dump() if hasattr(t, 'model_dump') else t for t in tools]))
+            return len(
+                json.dumps(
+                    [t.model_dump() if hasattr(t, 'model_dump') else t for t in tools]
+                )
+            )
         except Exception:
             return sum(len(str(t)) for t in tools)
 
@@ -832,9 +866,9 @@ class ContextManager:
 
     @staticmethod
     def _safe_tail(
-        other_messages: list['Message'],
+        other_messages: list[Message],
         n_turns: int,
-    ) -> list['Message']:
+    ) -> list[Message]:
         """从 other_messages（非 system 消息列表）的尾部取 n_turns 个完整 tool-transaction。
 
         一个 tool-transaction 定义为：
@@ -854,15 +888,17 @@ class ContextManager:
 
         # 从尾部向前找 transaction 边界
         # 先把消息按 transaction 分组（从前往后）
-        transactions: list[list['Message']] = []
+        transactions: list[list[Message]] = []
         i = 0
         while i < len(other_messages):
             msg = other_messages[i]
             if msg.role.value == 'assistant':
                 # 收集这个 assistant 及其后续所有 tool 消息
-                tx: list['Message'] = [msg]
+                tx: list[Message] = [msg]
                 j = i + 1
-                while j < len(other_messages) and other_messages[j].role.value == 'tool':
+                while (
+                    j < len(other_messages) and other_messages[j].role.value == 'tool'
+                ):
                     tx.append(other_messages[j])
                     j += 1
                 transactions.append(tx)
@@ -873,8 +909,10 @@ class ContextManager:
                 i += 1
 
         # 取最后 n_turns 个 transaction
-        tail_transactions = transactions[-n_turns:] if len(transactions) >= n_turns else transactions
-        result: list['Message'] = []
+        tail_transactions = (
+            transactions[-n_turns:] if len(transactions) >= n_turns else transactions
+        )
+        result: list[Message] = []
         for tx in tail_transactions:
             result.extend(tx)
         return result

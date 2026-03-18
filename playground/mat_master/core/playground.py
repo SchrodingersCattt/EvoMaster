@@ -17,7 +17,7 @@ import yaml
 from evomaster.core import BasePlayground, register_playground
 
 from ..memory import MemoryService, get_memory_tools
-from ..tools import get_peek_file_tool, get_wsb_search_tool
+from ..tools import get_peek_file_tool, get_web_search_tool
 from .agent import MatMasterAgent
 from .registry import MatMasterSkillRegistry
 from .solvers import DirectSolver, ResearchPlanner
@@ -123,12 +123,12 @@ class MatMasterPlayground(BasePlayground):
         from ..tools import get_extract_webpage_tool
 
         registry.register(get_extract_webpage_tool())
-        registry.register(get_wsb_search_tool())
+        registry.register(get_web_search_tool())
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
 
         registry.register(MonitorJobTool())
         self.logger.info(
-            'Registered %d memory tools, peek_file, extract_info_from_webpage, mat_sn_web-search, monitor_job (per-agent registry)',
+            'Registered %d memory tools, peek_file, extract_info_from_webpage, web-search, monitor_job (per-agent registry)',
             len(memory_tools),
         )
         return registry

@@ -1,7 +1,5 @@
 """Minimal deterministic verifier for explicit step contracts only."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -12,7 +10,7 @@ class StepContract:
     """Explicit contract for what a step should produce."""
 
     expected_artifacts: list[str] = field(default_factory=list)
-    semantic_target: str = ""
+    semantic_target: str = ''
     semantic_anti_targets: list[str] = field(default_factory=list)
     allow_partial: bool = True
 
@@ -36,17 +34,17 @@ def verify_step_deterministic(
         dict with keys: artifact_match (bool), produced_artifacts (list),
         missing_artifacts (list), completion_ratio (float 0..1), drift_reason (always "").
     """
-    workspace = Path(workspace_path) if workspace_path else Path(".")
+    workspace = Path(workspace_path) if workspace_path else Path('.')
     if not workspace.is_absolute():
         workspace = workspace.resolve()
 
     produced: list[str] = list(produced_files or [])
     if journal_entries:
         for e in journal_entries:
-            path = e.get("saved_path") or e.get("auto_saved_path")
+            path = e.get('saved_path') or e.get('auto_saved_path')
             if path and path not in produced:
                 produced.append(path)
-            for f in e.get("downloaded_files") or []:
+            for f in e.get('downloaded_files') or []:
                 if f not in produced:
                     produced.append(f)
 
@@ -84,9 +82,9 @@ def verify_step_deterministic(
     artifact_match = len(missing) == 0
 
     return {
-        "artifact_match": artifact_match,
-        "produced_artifacts": list(produced)[:50],
-        "missing_artifacts": missing,
-        "completion_ratio": completion_ratio,
-        "drift_reason": "",
+        'artifact_match': artifact_match,
+        'produced_artifacts': list(produced)[:50],
+        'missing_artifacts': missing,
+        'completion_ratio': completion_ratio,
+        'drift_reason': '',
     }
