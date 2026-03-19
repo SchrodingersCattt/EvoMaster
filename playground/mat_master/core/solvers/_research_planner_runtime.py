@@ -140,6 +140,17 @@ class ResearchPlannerRuntimeMixin:
         self._file_io.mkdir(workspaces)
         return workspaces
 
+    def _agent_workspace_dir(self, task_id: str) -> str:
+        """Return the directory where the agent actually writes files (for quality gate / file collection).
+
+        On SSHSession the agent writes under session.config.workspace_path (no task_id subdir).
+        On local runs it is the same as _task_workspace_dir(task_id).
+        """
+        session = getattr(getattr(self, 'agent', None), 'session', None)
+        if isinstance(session, SSHSession):
+            return self._planner_workspace_root()
+        return self._task_workspace_dir(task_id)
+
     def _planner_hidden_dir(self, task_id: str) -> str:
         """Return the dot-prefixed hidden directory for planner-internal files.
 
