@@ -84,8 +84,12 @@ def _should_persist_event(event_type: str, extra: dict[str, Any]) -> bool:
     return not _is_streaming_thought_event(event_type, extra)
 
 
-def _should_skip_push(mode: str, event_type: str, extra: dict[str, Any]) -> bool:
-    """Direct mode skips only the final thought snapshot, not the live stream."""
+def _should_skip_push(
+    mode: str, source: str, event_type: str, extra: dict[str, Any]
+) -> bool:
+    """Skip frontend push for internal-only thought variants."""
+    if source == 'Planner' and _is_streaming_thought_event(event_type, extra):
+        return True
     return (
         mode == 'direct'
         and event_type == 'thought'
@@ -381,8 +385,8 @@ class AgentRunService:
                     'run_agent_sync: tool_result before send_cb session_id=%s',
                     session_id,
                 )
-            # Direct 直播：推送 thought 流式分片；完整 thought 仅入库，避免前端重复展示。
-            skip_push = _should_skip_push(mode, event_type, extra)
+            # Planner 的原始流式 JSON thought 仅供内部消费；Direct 的完整 thought 仅入库不重复推送。
+            skip_push = _should_skip_push(mode, source, event_type, extra)
             if not skip_push:
                 if loop is not None and asyncio.iscoroutinefunction(send_cb):
                     future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)

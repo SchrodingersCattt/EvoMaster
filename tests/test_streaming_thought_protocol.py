@@ -79,6 +79,13 @@ def test_direct_mode_streamed_thought_is_ephemeral_but_final_thought_is_durable(
     assert _should_persist_event('thought', {})
     assert not _should_persist_event('llm_token', {'status': 'streaming'})
 
-    assert not _should_skip_push('direct', 'thought', {'stream_state': 'streaming'})
-    assert _should_skip_push('direct', 'thought', {})
-    assert not _should_skip_push('planner', 'thought', {})
+    assert not _should_skip_push(
+        'direct', 'MatMaster', 'thought', {'stream_state': 'streaming'}
+    )
+    assert _should_skip_push('direct', 'MatMaster', 'thought', {})
+    assert _should_skip_push(
+        'planner', 'Planner', 'thought', {'stream_state': 'streaming'}
+    )
+    assert _should_skip_push('planner', 'Planner', 'thought', {'stream_state': 'start'})
+    assert _should_skip_push('planner', 'Planner', 'thought', {'stream_state': 'end'})
+    assert not _should_skip_push('planner', 'Planner', 'thought', {})
