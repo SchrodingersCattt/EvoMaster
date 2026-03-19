@@ -479,7 +479,7 @@ class ResearchPlannerStepExecutionMixin:
                 return result_info
             if self._is_quality_critical_step(intent, state=state, task_id=task_id):
                 _post_run_checkpoint = 'inside_quality_critical'
-                workspace_dir = Path(self._task_workspace_dir(task_id))
+                workspace_dir = Path(self._agent_workspace_dir(task_id))
                 quality_files = self._collect_quality_files(
                     step_dir, workspace_dir, summary
                 )
