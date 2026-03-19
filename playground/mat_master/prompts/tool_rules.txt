@@ -27,6 +27,16 @@
 - **Auto-download**: mat_sg_* / mat_struct_db_* tool results are **automatically downloaded** to local workspace by a callback. You do NOT need to download them manually — use the `local_path` values appended to the tool output directly.
 - For other final deliverables (report/manuscript) returned as OSS URLs: prefer downloading a local copy when size is reasonable. If too large, keep the OSS URL and explain. Trajectory/trace/log-dump files can be skipped unless the user explicitly asks.
 
+## AIS Square model/dataset search (aissq_search, aissq_download)
+- AIS Square (https://www.aissquare.com) is a community platform for sharing DP/MLIP models and fine-tuning datasets — analogous to Hugging Face for the materials science domain. No authentication required.
+- Use `aissq_search` when:
+  - The user needs a **DP potential** for a specific material system that is **not covered** by the built-in DPA pretrained models (`DPA-2.4-7M`, `DPA-3.1-3M`, `DPA-3.2-5M`).
+  - The user explicitly asks to search or browse community DP models on AIS Square.
+  - The user needs a **DPA fine-tuning dataset** for their material system (use `resource_type="datasets"`).
+- Use `aissq_download` after `aissq_search` to download the selected resource. Downloaded files are saved under `aissq_downloads/<resource_name>/` in the workspace.
+- Do **NOT** use aissq tools for general literature search — use `mat_sn_*` or `web-search` for that. aissq is specifically for DP/MLIP models and datasets.
+- If `aissq_search` returns no results, try a broader keyword (e.g. element symbol, material class) or check spelling. Resource names on AIS Square are case-sensitive for `aissq_download`.
+
 ## structure-manager skill
 - For any crystal structure task — search, retrieve, download, validate, convert — call `use_skill get_info skill_name=structure-manager` first. Do not answer structure queries from search snippets alone.
 

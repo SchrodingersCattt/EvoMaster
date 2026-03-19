@@ -113,22 +113,24 @@ class MatMasterPlayground(BasePlayground):
         return p
 
     def _create_tools_for_agent(self, skill_registry, tool_config):
-        """Override: 在基类 registry 上增加 memory、peek_file、extract_webpage、monitor_job（每 agent 独立 tools）。"""
+        """Override: 在基类 registry 上增加 memory、peek_file、extract_webpage、monitor_job、aissq（每 agent 独立 tools）。"""
         registry = super()._create_tools_for_agent(skill_registry, tool_config)
         if self.run_dir is not None:
             self.memory_service.run_dir = Path(self.run_dir)
         memory_tools = get_memory_tools(self.memory_service)
         registry.register_many(memory_tools)
         registry.register(get_peek_file_tool())
-        from ..tools import get_extract_webpage_tool
+        from ..tools import get_aissq_download_tool, get_aissq_search_tool, get_extract_webpage_tool
 
         registry.register(get_extract_webpage_tool())
         registry.register(get_web_search_tool())
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
 
         registry.register(MonitorJobTool())
+        registry.register(get_aissq_search_tool())
+        registry.register(get_aissq_download_tool())
         self.logger.info(
-            'Registered %d memory tools, peek_file, extract_info_from_webpage, web-search, monitor_job (per-agent registry)',
+            'Registered %d memory tools, peek_file, extract_info_from_webpage, web-search, monitor_job, aissq_search, aissq_download (per-agent registry)',
             len(memory_tools),
         )
         return registry
