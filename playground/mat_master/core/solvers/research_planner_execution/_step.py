@@ -512,6 +512,11 @@ class ResearchPlannerStepExecutionMixin:
                     task_id=task_id,
                 )
                 if survey_failed:
+                    self.logger.info(
+                        '[Planner] Step %s marked failed by survey_quality_failure: %s',
+                        step_id,
+                        (survey_reason or '')[:200],
+                    )
                     result_info['status'] = 'failed'
                     result_info['replan_requested'] = True
                     result_info['replan_reason'] = f"Step {step_id}: {survey_reason}"
@@ -536,6 +541,11 @@ class ResearchPlannerStepExecutionMixin:
                 summary,
             )
             if failed:
+                self.logger.info(
+                    '[Planner] Step %s marked failed by manuscript_validation_failure: %s',
+                    step_id,
+                    (fail_reason or '')[:200],
+                )
                 result_info['status'] = 'failed'
                 result_info['replan_requested'] = True
                 result_info['replan_reason'] = f"Step {step_id}: {fail_reason}"
