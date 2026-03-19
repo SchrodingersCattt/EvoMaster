@@ -353,6 +353,7 @@ class AgentRunService:
         def event_callback(
             source: str, event_type: str, content: Any, **extra: Any
         ) -> None:
+            raw_source = str(source or '').strip()
             source = normalize_event_source(source)
             payload = {
                 'source': source,
@@ -386,7 +387,7 @@ class AgentRunService:
                     session_id,
                 )
             # Planner 的原始流式 JSON thought 仅供内部消费；Direct 的完整 thought 仅入库不重复推送。
-            skip_push = _should_skip_push(mode, source, event_type, extra)
+            skip_push = _should_skip_push(mode, raw_source, event_type, extra)
             if not skip_push:
                 if loop is not None and asyncio.iscoroutinefunction(send_cb):
                     future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)

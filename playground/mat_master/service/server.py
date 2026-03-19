@@ -803,6 +803,7 @@ def _run_agent_sync(
     def event_callback(source: str, event_type: str, content, **extra) -> None:
         nonlocal _msg_seq
         _msg_seq += 1
+        raw_source = str(source or '').strip()
         source = normalize_event_source(source)
         payload = {
             'msg_id': _msg_seq,
@@ -821,7 +822,7 @@ def _run_agent_sync(
         if event_type not in ('log_line', 'llm_token') and not _is_streaming_thought:
             SESSIONS[session_id]['history'].append(payload)
             _persist_history_event(session_id, payload)
-        if _should_skip_push(source, event_type, extra):
+        if _should_skip_push(raw_source, event_type, extra):
             return
         # Streamed thought deltas: fire-and-forget so the LLM streaming iterator is not
         # blocked by the async WebSocket send round-trip.
