@@ -838,8 +838,15 @@ Rules:
     def _collect_quality_files(
         self, step_dir: Path, workspace_dir: Path, result_text: str
     ) -> list[Path]:
+        from evomaster.agent.session.ssh import SSHSession  # noqa: PLC0415
+
+        session = getattr(getattr(self, 'agent', None), 'session', None)
+        file_io = getattr(self, '_file_io', None)
+        use_remote = isinstance(session, SSHSession) and file_io is not None
+
         files: list[Path] = []
         seen: set[str] = set()
+        ws_str = str(workspace_dir)
 
         def add(path: Path) -> None:
             key = str(path.resolve()) if path.exists() else str(path)
@@ -848,19 +855,45 @@ Rules:
             seen.add(key)
             files.append(path)
 
-        for path in step_dir.glob('*.md'):
-            add(path)
+        def add_remote(path_str: str) -> None:
+            if path_str in seen:
+                return
+            if not file_io or not file_io.exists(path_str):
+                return
+            seen.add(path_str)
+            files.append(Path(path_str))
 
-        survey_dir = workspace_dir / '_tmp' / 'surveys'
-        if survey_dir.exists():
-            for path in survey_dir.glob('*.md'):
+        if use_remote and file_io and hasattr(file_io, 'glob'):
+            survey_dir = f"{ws_str.rstrip('/')}/_tmp/surveys"
+            if file_io.exists(survey_dir):
+                for p in file_io.glob(survey_dir, '*.md'):
+                    add_remote(p)
+            for p in file_io.glob(ws_str, '*_review_*.md'):
+                add_remote(p)
+            for p in file_io.glob(ws_str, '*_survey_*.md'):
+                add_remote(p)
+            for raw in re.findall(r'([A-Za-z0-9_./\\:\-]+\.md)', result_text or ''):
+                cleaned = raw.strip().strip("`'\"")
+                if not cleaned:
+                    continue
+                path = Path(cleaned)
+                full = path if path.is_absolute() else Path(ws_str) / path
+                add_remote(str(full).replace('\\', '/'))
+        else:
+            for path in step_dir.glob('*.md'):
                 add(path)
-        for path in workspace_dir.glob('*_review_*.md'):
-            add(path)
-        for path in workspace_dir.glob('*_survey_*.md'):
-            add(path)
-        for path in self._extract_markdown_paths_from_text(result_text, workspace_dir):
-            add(path)
+            survey_dir = workspace_dir / '_tmp' / 'surveys'
+            if survey_dir.exists():
+                for path in survey_dir.glob('*.md'):
+                    add(path)
+            for path in workspace_dir.glob('*_review_*.md'):
+                add(path)
+            for path in workspace_dir.glob('*_survey_*.md'):
+                add(path)
+            for path in self._extract_markdown_paths_from_text(
+                result_text, workspace_dir
+            ):
+                add(path)
         return files
 
     def _detect_survey_quality_failure(
@@ -880,12 +913,21 @@ Rules:
                 'No markdown artifact found for quality-critical survey/literature step.',
             )
 
+        from evomaster.agent.session.ssh import SSHSession  # noqa: PLC0415
+
+        session = getattr(getattr(self, 'agent', None), 'session', None)
+        file_io = getattr(self, '_file_io', None)
+        use_remote_read = isinstance(session, SSHSession) and file_io is not None
+
         min_line_len = self._quality_gate_cfg.get('survey_min_line_length', 60)
         best: tuple[int, int, int, Path] | None = None
         best_content = ''
         for path in quality_files:
             try:
-                content = path.read_text(encoding='utf-8')
+                if use_remote_read:
+                    content = file_io.read_text(str(path))
+                else:
+                    content = path.read_text(encoding='utf-8')
             except Exception:
                 continue
             refs, dois = self._reference_metrics(content)
