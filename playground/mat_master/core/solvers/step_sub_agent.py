@@ -92,7 +92,7 @@ class SubAgentHandle:
                 dialog.tools = [
                     spec
                     for spec in dialog.tools
-                    if spec.get('function', {}).get('name') not in self._excluded_tools
+                    if getattr(getattr(spec, 'function', None), 'name', '') not in self._excluded_tools
                 ]
                 removed = original_count - len(dialog.tools)
                 if removed:
