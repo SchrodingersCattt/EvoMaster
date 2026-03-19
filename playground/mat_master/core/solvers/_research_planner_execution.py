@@ -2,6 +2,7 @@
 
 import json
 import re
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -743,10 +744,10 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             step_prompt = self._build_step_prompt(
                 intent_with_context,
                 fallback,
-                original_intent='',       # ← omit overall goal
+                original_intent='',  # ← omit overall goal
                 step_id=step_id,
                 total_steps=len(steps_list),
-                plan_summary='',           # ← omit plan summary
+                plan_summary='',  # ← omit plan summary
             )
         else:
             # Legacy mode: include overall goal and plan summary
@@ -766,6 +767,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 plan_summary=plan_summary,
             )
 
+        _post_run_checkpoint = 'start'
         try:
             if use_sub_agent:
                 # ── Sub-agent path: fresh context per step ───────────────
@@ -792,12 +794,27 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 if step_task is not None:
                     result = solver.run(task=step_task)
                 else:
-                    result = solver.run(step_prompt, task_id=f"{task_id}_step_{step_id}")
+                    result = solver.run(
+                        step_prompt, task_id=f"{task_id}_step_{step_id}"
+                    )
+            _post_run_checkpoint = 'after_run'
+            self.logger.info(
+                '[Planner] Step %s post-run checkpoint: %s',
+                step_id,
+                _post_run_checkpoint,
+            )
             summary = self._summarize_solver_result(result, max_len=2000)
             result_info['result_summary'] = summary[:2000]
+            _post_run_checkpoint = 'after_summarize'
+            self.logger.info(
+                '[Planner] Step %s post-run checkpoint: %s',
+                step_id,
+                _post_run_checkpoint,
+            )
             produced = self._extract_produced_artifacts()
             if produced:
                 result_info['produced_artifacts'] = produced
+            _post_run_checkpoint = 'after_extract_artifacts'
             self._emit(
                 'Planner',
                 'status_stages',
@@ -809,11 +826,23 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                     'status': 'done',
                 },
             )
+            _post_run_checkpoint = 'before_llm_verify'
+            self.logger.info(
+                '[Planner] Step %s post-run checkpoint: %s',
+                step_id,
+                _post_run_checkpoint,
+            )
             llm_verifier = self._llm_verify_step_outcome(
                 intent,
                 summary,
                 state=state,
                 task_id=task_id,
+            )
+            _post_run_checkpoint = 'after_llm_verify'
+            self.logger.info(
+                '[Planner] Step %s post-run checkpoint: %s',
+                step_id,
+                _post_run_checkpoint,
             )
             result_info['llm_verifier'] = llm_verifier
             if llm_verifier.get('needs_replan'):
@@ -824,6 +853,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 )
                 return result_info
             if self._is_quality_critical_step(intent, state=state, task_id=task_id):
+                _post_run_checkpoint = 'inside_quality_critical'
                 workspace_dir = Path(self._task_workspace_dir(task_id))
                 quality_files = self._collect_quality_files(
                     step_dir, workspace_dir, summary
@@ -875,6 +905,7 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                     title=f"Step {step_id} quality gate passed",
                     body=f"evidence_delta={max(0, evidence_delta)}",
                 )
+            _post_run_checkpoint = 'before_manuscript_validation'
             failed, fail_reason = self._detect_manuscript_validation_failure(
                 intent,
                 summary,
@@ -884,8 +915,16 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                 result_info['replan_requested'] = True
                 result_info['replan_reason'] = f"Step {step_id}: {fail_reason}"
         except Exception as e:
-            self.logger.error('[Planner] Step %s failed: %s', step_id, e)
-            print('\033[93m[Planner] Step failed. Attempting fallback...\033[0m')
+            self.logger.exception(
+                '[Planner] Step %s failed at checkpoint %s: %s',
+                step_id,
+                _post_run_checkpoint,
+                e,
+            )
+            print(
+                '\033[93m[Planner] Step failed at checkpoint %s. Attempting fallback...\033[0m'
+                % _post_run_checkpoint
+            )
             if self._execute_fallback(
                 step,
                 solver,
@@ -907,7 +946,19 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
                     result_info['result_summary'] = 'completed_via_fallback'
             else:
                 result_info['status'] = 'failed'
-                result_info['result_summary'] = str(e)[:200]
+                tb_lines = traceback.format_exc().strip().split('\n')
+                tb_tail = (
+                    '\n'.join(tb_lines[-4:])
+                    if len(tb_lines) >= 4
+                    else traceback.format_exc()
+                )
+                exc_str = str(e)[:150]
+                result_info['result_summary'] = (
+                    f"checkpoint={_post_run_checkpoint}; exception={exc_str}; traceback_tail={tb_tail[:400]}"
+                )
+                result_info['replan_reason'] = (
+                    f"Step {step_id} failed at {_post_run_checkpoint}: {str(e)[:200]}"
+                )
                 print('\033[91m[Planner] Step and fallback failed.\033[0m')
         return result_info
 
