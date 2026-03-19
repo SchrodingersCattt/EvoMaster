@@ -517,6 +517,22 @@ class ResearchPlannerStepExecutionMixin:
                         step_id,
                         (survey_reason or '')[:200],
                     )
+                    if not quality_files:
+                        survey_dir = workspace_dir / '_tmp' / 'surveys'
+                        survey_exists = survey_dir.exists()
+                        survey_mds = (
+                            list(survey_dir.glob('*.md')) if survey_exists else []
+                        )
+                        self.logger.info(
+                            '[Planner] Step %s quality_files empty: workspace_dir=%s step_dir=%s '
+                            'survey_dir=%s survey_dir.exists=%s survey_dir.glob(*.md)=%s',
+                            step_id,
+                            workspace_dir,
+                            step_dir,
+                            survey_dir,
+                            survey_exists,
+                            [str(p) for p in survey_mds[:20]],
+                        )
                     result_info['status'] = 'failed'
                     result_info['replan_requested'] = True
                     result_info['replan_reason'] = f"Step {step_id}: {survey_reason}"
