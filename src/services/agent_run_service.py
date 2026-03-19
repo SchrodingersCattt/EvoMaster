@@ -66,6 +66,31 @@ class ReplyQueueLike(Protocol):
         ...
 
 
+def _is_streaming_thought_event(event_type: str, extra: dict[str, Any]) -> bool:
+    """Return whether the event is an ephemeral thought stream marker/delta."""
+    return event_type == 'thought' and extra.get('stream_state') in {
+        'start',
+        'streaming',
+        'end',
+    }
+
+
+def _should_persist_event(event_type: str, extra: dict[str, Any]) -> bool:
+    """Persist durable events only."""
+    if event_type in {'log_line', 'llm_token'}:
+        return False
+    return not _is_streaming_thought_event(event_type, extra)
+
+
+def _should_skip_push(mode: str, event_type: str, extra: dict[str, Any]) -> bool:
+    """Direct mode skips only the final thought snapshot, not the live stream."""
+    return (
+        mode == 'direct'
+        and event_type == 'thought'
+        and not _is_streaming_thought_event(event_type, extra)
+    )
+
+
 class AgentRunService:
     """Agent 执行服务：playground 初始化、线程池、同步执行 run。"""
 
@@ -335,7 +360,7 @@ class AgentRunService:
             if event_type == 'end':
                 payload['task_completed'] = _task_completed
             payload.update(extra)
-            if event_type not in ('log_line', 'llm_token'):
+            if _should_persist_event(event_type, extra):
                 events_table = get_chat_events_table()
                 if events_table:
                     try:
@@ -354,8 +379,8 @@ class AgentRunService:
                     'run_agent_sync: tool_result before send_cb session_id=%s',
                     session_id,
                 )
-            # Direct 直播：thought 只入库不推前端，前端只根据 llm_token 流式展示；历史从库拉 thought
-            skip_push = mode == 'direct' and event_type == 'thought'
+            # Direct 直播：推送 thought 流式分片；完整 thought 仅入库，避免前端重复展示。
+            skip_push = _should_skip_push(mode, event_type, extra)
             if not skip_push:
                 if loop is not None and asyncio.iscoroutinefunction(send_cb):
                     future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
