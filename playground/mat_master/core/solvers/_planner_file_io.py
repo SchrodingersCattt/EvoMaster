@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shlex
 import shutil
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -28,6 +29,7 @@ logger = logging.getLogger('MatMaster.PlannerFileIO')
 
 
 # ── Base class ────────────────────────────────────────────────────────────
+
 
 class PlannerFileIO(ABC):
     """Abstract file I/O interface consumed by ``ResearchPlannerRuntimeMixin``."""
@@ -60,8 +62,16 @@ class PlannerFileIO(ABC):
     def read_json(self, path: str) -> Any:
         """Read and parse a JSON file at *path*."""
 
+    def glob(self, dir_path: str, pattern: str = '*.md') -> list[str]:
+        """List full paths of files under *dir_path* matching *pattern* (default *.md).
+
+        Optional method: not all implementations need to support this. Base returns [].
+        """
+        return []
+
 
 # ── Local implementation ──────────────────────────────────────────────────
+
 
 class LocalPlannerFileIO(PlannerFileIO):
     """File I/O backed by the local filesystem (``pathlib.Path``)."""
@@ -93,8 +103,12 @@ class LocalPlannerFileIO(PlannerFileIO):
         with open(path, encoding='utf-8') as f:
             return json.load(f)
 
+    def glob(self, dir_path: str, pattern: str = '*.md') -> list[str]:
+        return [str(p) for p in Path(dir_path).glob(pattern) if p.is_file()]
+
 
 # ── SSH implementation ────────────────────────────────────────────────────
+
 
 class SSHPlannerFileIO(PlannerFileIO):
     """File I/O backed by an ``SSHSession`` (SFTP + exec_bash).
@@ -136,8 +150,24 @@ class SSHPlannerFileIO(PlannerFileIO):
         text = self._session.read_file(path, encoding='utf-8')
         return json.loads(text)
 
+    def glob(self, dir_path: str, pattern: str = '*.md') -> list[str]:
+        if not self._session.path_exists(dir_path):
+            return []
+        # Use find to list files matching pattern; avoid shell glob expansion
+        safe_dir = shlex.quote(dir_path)
+        safe_pat = shlex.quote(pattern)
+        result = self._session.exec_bash(
+            f'find {safe_dir} -maxdepth 1 -type f -name {safe_pat}',
+            timeout=10,
+        )
+        out = (result.get('stdout') or '').strip()
+        if not out:
+            return []
+        return [line.strip() for line in out.splitlines() if line.strip()]
+
 
 # ── Factory ───────────────────────────────────────────────────────────────
+
 
 def create_planner_file_io(session: Any) -> PlannerFileIO:
     """Create the appropriate ``PlannerFileIO`` based on session type.
