@@ -8,6 +8,7 @@ from src.services.agent_run_service import (
     _should_persist_event,
     _should_skip_push,
 )
+from src.utils.chat_event_source import normalize_event_source
 
 
 def test_streaming_agent_emits_thought_stream_events():
@@ -89,3 +90,11 @@ def test_direct_mode_streamed_thought_is_ephemeral_but_final_thought_is_durable(
     assert _should_skip_push('planner', 'Planner', 'thought', {'stream_state': 'start'})
     assert _should_skip_push('planner', 'Planner', 'thought', {'stream_state': 'end'})
     assert not _should_skip_push('planner', 'Planner', 'thought', {})
+
+
+def test_planner_stream_filter_uses_raw_source_before_normalization():
+    """Planner stream filtering must happen before source collapses to MatMaster."""
+    assert normalize_event_source('Planner') == 'MatMaster'
+    assert _should_skip_push(
+        'planner', 'Planner', 'thought', {'stream_state': 'streaming'}
+    )
