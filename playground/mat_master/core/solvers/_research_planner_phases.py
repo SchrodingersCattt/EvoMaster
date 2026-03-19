@@ -617,11 +617,23 @@ class ResearchPlannerPhaseMixin:
     def _phase_replanning(
         self, state: dict[str, Any], goal: str, task_id: str
     ) -> dict[str, Any]:
-        """Revise the remaining plan after execution feedback."""
+        """Revise the remaining plan after execution feedback.
+
+        Increments either ``failure_replan_count`` or ``adaptive_replan_count``
+        depending on the ``[failure]`` / ``[adaptive]`` prefix in
+        ``state['replan_reason']``.  The legacy ``replan_count`` field is kept
+        as the sum of both for backward-compatible logging and state files.
+        """
+        replan_reason = state.get('replan_reason', '')
+        is_adaptive = replan_reason.startswith('[adaptive]')
+        counter_key = 'adaptive_replan_count' if is_adaptive else 'failure_replan_count'
+        replan_type_label = 'adaptive' if is_adaptive else 'failure'
+
         self.logger.info(
-            '[Planner] Mid-flight replan #%d: %s',
-            state['replan_count'] + 1,
-            state.get('replan_reason', ''),
+            '[Planner] Mid-flight replan #%d (%s): %s',
+            state.get('replan_count', 0) + 1,
+            replan_type_label,
+            replan_reason,
         )
         old_steps = [step.copy() for step in (state.get('plan') or {}).get('steps', [])]
 
@@ -646,7 +658,11 @@ class ResearchPlannerPhaseMixin:
                 step['status'] = 'done'
 
         state['plan'] = revised_plan
-        state['replan_count'] = state.get('replan_count', 0) + 1
+        # Increment the type-specific counter and keep the legacy total in sync.
+        state[counter_key] = state.get(counter_key, 0) + 1
+        state['replan_count'] = (
+            state.get('failure_replan_count', 0) + state.get('adaptive_replan_count', 0)
+        )
         state['phase'] = 'executing'
 
         new_steps = revised_plan.get('steps', [])
@@ -744,7 +760,10 @@ class ResearchPlannerPhaseMixin:
 
         replan_info = {
             'replan_count': state.get('replan_count', 0),
+            'failure_replan_count': state.get('failure_replan_count', 0),
+            'adaptive_replan_count': state.get('adaptive_replan_count', 0),
             'max_replans': self.max_replans,
+            'max_adaptive_replans': self.max_adaptive_replans,
         }
 
         summary = {
@@ -836,18 +855,31 @@ class ResearchPlannerPhaseMixin:
             elif phase == 'executing':
                 state = self._phase_executing(state, task_id)
             elif phase == 'replanning':
-                if state.get('replan_count', 0) >= self.max_replans:
+                # Determine which budget applies to this replan request.
+                replan_reason = state.get('replan_reason', '')
+                is_adaptive = replan_reason.startswith('[adaptive]')
+                if is_adaptive:
+                    current_count = state.get('adaptive_replan_count', 0)
+                    limit = self.max_adaptive_replans
+                    limit_label = f"adaptive replan limit ({limit})"
+                else:
+                    current_count = state.get('failure_replan_count', 0)
+                    limit = self.max_replans
+                    limit_label = f"failure replan limit ({limit})"
+
+                if current_count >= limit:
                     self.logger.warning(
-                        '[Planner] Max replan limit (%d) reached',
-                        self.max_replans,
+                        '[Planner] %s reached (current=%d)',
+                        limit_label,
+                        current_count,
                     )
                     self._emit(
                         'Planner',
                         'thought',
-                        f"[Planner] Replan limit ({self.max_replans}) reached. Asking human for guidance...",
+                        f"[Planner] {limit_label.capitalize()} reached. Asking human for guidance...",
                     )
                     ans = self._ask_human(
-                        f"Replan limit ({self.max_replans}) reached. Options:\n"
+                        f"{limit_label.capitalize()} reached. Options:\n"
                         "  'continue' — force continue with current plan\n"
                         "  'retry'    — allow one more replan attempt\n"
                         "  'abort'    — abort the mission\n"
@@ -872,15 +904,26 @@ class ResearchPlannerPhaseMixin:
                         )
                     elif ans_lower == 'retry':
                         self.logger.info('[Planner] Human granted one extra replan')
-                        state['replan_count'] = self.max_replans - 1
+                        # Reset the relevant counter to allow one more attempt.
+                        counter_key = 'adaptive_replan_count' if is_adaptive else 'failure_replan_count'
+                        state[counter_key] = max(0, limit - 1)
+                        state['replan_count'] = (
+                            state.get('failure_replan_count', 0)
+                            + state.get('adaptive_replan_count', 0)
+                        )
                         state = self._phase_replanning(state, task_description, task_id)
                     else:
                         self.logger.info(
                             '[Planner] Human gave revision feedback: %s',
                             ans[:100],
                         )
-                        state['replan_reason'] = f"Human feedback: {ans}"
-                        state['replan_count'] = self.max_replans - 1
+                        state['replan_reason'] = f"[failure] Human feedback: {ans}"
+                        counter_key = 'adaptive_replan_count' if is_adaptive else 'failure_replan_count'
+                        state[counter_key] = max(0, limit - 1)
+                        state['replan_count'] = (
+                            state.get('failure_replan_count', 0)
+                            + state.get('adaptive_replan_count', 0)
+                        )
                         state = self._phase_replanning(state, task_description, task_id)
                 else:
                     state = self._phase_replanning(state, task_description, task_id)

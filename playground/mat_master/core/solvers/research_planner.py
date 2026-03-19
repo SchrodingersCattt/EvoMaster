@@ -55,6 +55,11 @@ class ResearchPlanner(
         self.max_steps = planner_cfg.get('max_steps', 20)
         self.human_check = planner_cfg.get('human_check_step', True)
         self.max_replans = planner_cfg.get('max_replans', 5)
+        # Adaptive replans (triggered by new skill registration or LLM heuristic)
+        # get a separate, smaller budget so they don't exhaust the failure-replan budget.
+        self.max_adaptive_replans = planner_cfg.get(
+            'max_adaptive_replans', self.max_replans
+        )
         self.window_size = planner_cfg.get('window_size', 1)
         self.auto_replan = planner_cfg.get('auto_replan', True)
         self.replan_on_failure = planner_cfg.get('replan_on_failure', True)
