@@ -298,7 +298,12 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
     def _needs_replanning(
         self, state: dict[str, Any], step_result: dict[str, Any]
     ) -> tuple[bool, str]:
-        """Evaluate whether execution should pause for replanning."""
+        """Evaluate whether execution should pause for replanning.
+
+        The returned reason string is prefixed with ``[failure]`` or
+        ``[adaptive]`` so that ``_phase_replanning`` can increment the
+        correct counter (failure_replan_count / adaptive_replan_count).
+        """
         if not self.auto_replan:
             return False, ''
         if (
@@ -308,21 +313,21 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
         ):
             return (
                 True,
-                f"Step {step_result.get('step_id', '?')} failed without successful fallback",
+                f"[failure] Step {step_result.get('step_id', '?')} failed without successful fallback",
             )
         if self.replan_on_new_skill and step_result.get('new_skill_registered'):
             return (
                 True,
-                f"New skill registered: {step_result.get('skill_path', 'unknown')}; subsequent steps may benefit",
+                f"[adaptive] New skill registered: {step_result.get('skill_path', 'unknown')}; subsequent steps may benefit",
             )
         if step_result.get('replan_requested'):
-            return True, step_result.get(
+            return True, '[failure] ' + step_result.get(
                 'replan_reason',
                 'explicit replan requested by executor',
             )
         task_id = str(state.get('task_id') or '')
         if task_id and self._llm_replan_check(state, task_id, step_result):
-            return True, 'LLM heuristic detected plan deviation'
+            return True, '[adaptive] LLM heuristic detected plan deviation'
         return False, ''
 
     def _replan_from_results(
