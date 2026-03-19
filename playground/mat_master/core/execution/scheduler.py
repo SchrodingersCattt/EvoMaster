@@ -17,6 +17,7 @@ error handling are implemented exactly once.
 import logging
 import threading
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -206,12 +207,19 @@ class BatchExecutor:
                 meta=task.meta,
             )
         except Exception as exc:
-            logger.warning('Task %s failed: %s', task.task_id, exc)
+            logger.warning(
+                'Task %s failed: %s',
+                task.task_id,
+                exc,
+                exc_info=True,
+            )
+            tb_tail = traceback.format_exc().strip().split('\n')[-6:]
+            error_detail = f"{exc}\n(traceback tail: {' '.join(tb_tail)})"
             return ExecutionResult(
                 task_id=task.task_id,
                 status='failed',
                 output=f"Error executing {task.task_id}: {exc}",
-                info={'error': str(exc)},
-                error=str(exc),
+                info={'error': str(exc), 'traceback_tail': tb_tail},
+                error=error_detail[:1000],
                 meta=task.meta,
             )
