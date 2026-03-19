@@ -600,6 +600,9 @@ class ResearchPlannerRuntimeMixin:
         state.setdefault('history', [])
         state.setdefault('phase', 'pre_check')
         state.setdefault('replan_count', 0)
+        # Separate counters for failure vs adaptive replans (Fix 3).
+        state.setdefault('failure_replan_count', 0)
+        state.setdefault('adaptive_replan_count', 0)
         state.setdefault('execution_window', 0)
         state.setdefault('pre_check_context', '')
         state.setdefault('artifacts', {})
@@ -611,6 +614,8 @@ class ResearchPlannerRuntimeMixin:
             state['history'] = []
             state['phase'] = 'pre_check'
             state['replan_count'] = 0
+            state['failure_replan_count'] = 0
+            state['adaptive_replan_count'] = 0
             state['pre_check_context'] = ''
             state['literature_seen_urls'] = []
             state['literature_entry_count'] = 0

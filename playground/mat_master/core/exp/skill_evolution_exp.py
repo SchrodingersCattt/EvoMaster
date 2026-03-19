@@ -108,6 +108,27 @@ class SkillEvolutionExp(BaseExp):
             )
             return {'status': 'failed', 'reason': 'no_skill_md'}
 
+        # Syntax-check all Python scripts before registration.
+        # A SyntaxError in a generated script (e.g. Chinese punctuation) would
+        # crash the skill at import/exec time; catching it here lets the planner
+        # treat this as a recoverable failure and retry skill generation.
+        scripts_dir = new_skill_path / 'scripts'
+        if scripts_dir.is_dir():
+            for py_file in sorted(scripts_dir.glob('*.py')):
+                try:
+                    source = py_file.read_text(encoding='utf-8')
+                    compile(source, str(py_file), 'exec')
+                except SyntaxError as exc:
+                    self.logger.error(
+                        '[Evo] SyntaxError in generated script %s: %s', py_file.name, exc
+                    )
+                    return {
+                        'status': 'failed',
+                        'reason': 'syntax_error',
+                        'file': str(py_file),
+                        'error': str(exc),
+                    }
+
         registry = getattr(self.agent, 'skill_registry', None)
         if not registry or not getattr(registry, 'register_dynamic_skill', None):
             self.logger.warning(

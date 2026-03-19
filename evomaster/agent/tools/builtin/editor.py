@@ -51,7 +51,7 @@ class EditorToolParams(BaseToolParams):
 
     * State is persistent across command calls and discussions with the user
     * If `path` is a text file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep
-    * The `create` command cannot be used if the specified `path` already exists as a file
+    * The `create` command will overwrite an existing file; the previous content is saved to undo history so `undo_edit` can restore it
     * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
     * The `undo_edit` command will revert the last edit made to the file at `path`
 
@@ -213,27 +213,13 @@ class EditorTool(BaseTool):
                 'path', path, f"The path {normalized_path} does not exist."
             )
 
-        # 对于 create 命令，需要更严格的检查
+        # 对于 create 命令，只拒绝目录冲突；文件已存在时允许覆盖（内容保存到 undo 历史）
         if command == 'create':
-            # 再次确认路径不存在（防止误判）
-            if session.is_file(normalized_path):
-                raise ToolParameterError(
-                    'path',
-                    path,
-                    f"File already exists at: {normalized_path}. Cannot overwrite files using command `create`.",
-                )
             if session.is_directory(normalized_path):
                 raise ToolParameterError(
                     'path',
                     path,
                     f"The path {normalized_path} is a directory. Cannot create a file with the same name as a directory.",
-                )
-            if session.path_exists(normalized_path):
-                # 路径存在但不是文件也不是目录，可能是其他类型（如符号链接）
-                raise ToolParameterError(
-                    'path',
-                    path,
-                    f"Path already exists at: {normalized_path}. Cannot overwrite using command `create`.",
                 )
 
         if path_type == 'dir' and command != 'view':
@@ -322,7 +308,18 @@ class EditorTool(BaseTool):
     def _create(
         self, session: BaseSession, path: str, file_text: str
     ) -> tuple[str, dict[str, Any]]:
-        """创建文件"""
+        """创建文件；若文件已存在则覆盖，并将旧内容保存到 undo 历史。"""
+        if session.is_file(path):
+            old_content = session.read_file(path)
+            if path not in self._file_history:
+                self._file_history[path] = []
+            self._file_history[path].append((old_content, 'utf-8'))
+            session.write_file(path, file_text)
+            return (
+                f"File overwritten successfully at: {path} "
+                f"(previous content saved to undo history; use `undo_edit` to restore).",
+                {},
+            )
         session.write_file(path, file_text)
         self._file_history[path] = [(file_text, 'utf-8')]
         return f"File created successfully at: {path}", {}
