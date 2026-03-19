@@ -463,6 +463,13 @@ class ResearchPlannerStepExecutionMixin:
                 _post_run_checkpoint,
             )
             result_info['llm_verifier'] = llm_verifier
+            self.logger.info(
+                '[Planner] Step %s LLM verifier result: status=%s needs_replan=%s reason=%s',
+                step_id,
+                llm_verifier.get('status', ''),
+                llm_verifier.get('needs_replan', False),
+                (llm_verifier.get('reason') or '')[:200],
+            )
             if llm_verifier.get('needs_replan'):
                 result_info['status'] = 'failed'
                 result_info['replan_requested'] = True
