@@ -3,6 +3,7 @@
 from playground.mat_master.core.solvers._research_planner_runtime import (
     ResearchPlannerRuntimeMixin,
 )
+from playground.mat_master.service.confirm import ConfirmMode
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 from src.services.agent_run_service import (
     _should_persist_event,
@@ -57,6 +58,35 @@ class _PlannerRuntimeProbe(ResearchPlannerRuntimeMixin):
                 }
             )
         )
+        self.logger = type(
+            '_Logger',
+            (),
+            {'info': staticmethod(lambda *args, **kwargs: None)},
+        )()
+
+
+class _ConfirmManagerProbe:
+    """Minimal confirmation manager probe."""
+
+    def __init__(self, reply: str | None):
+        self.reply = reply
+        self.calls: list[dict] = []
+
+    def request(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.reply
+
+
+class _PlannerAskHumanProbe(_PlannerRuntimeProbe):
+    """Probe with agent confirmation manager."""
+
+    def __init__(self, reply: str | None):
+        super().__init__()
+        self.agent = type(
+            '_Agent',
+            (),
+            {'_confirm_manager': _ConfirmManagerProbe(reply)},
+        )()
 
 
 def test_planner_keeps_streaming_thought_but_normalizes_final_reply():
@@ -98,3 +128,20 @@ def test_planner_stream_filter_uses_raw_source_before_normalization():
     assert _should_skip_push(
         'planner', 'Planner', 'thought', {'stream_state': 'streaming'}
     )
+
+
+def test_ask_human_emits_only_confirmation_request_path():
+    """Planner ask-human should not mirror the prompt as a planner_reply/thought."""
+    runtime = _PlannerAskHumanProbe('go')
+
+    reply = runtime._ask_human(
+        "Type 'go' to execute, 'abort' to quit, or describe changes to revise the plan.",
+        mode='block',
+        timeout_sec=300,
+    )
+
+    assert reply == 'go'
+    assert runtime.events == []
+    call = runtime.agent._confirm_manager.calls[0]
+    assert call['mode'] == ConfirmMode.BLOCK
+    assert call['origin'] == 'planner'
