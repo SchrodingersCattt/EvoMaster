@@ -414,18 +414,6 @@ class ResearchPlannerRuntimeMixin:
         except ValueError:
             confirm_mode = ConfirmMode.BLOCK
 
-        self._emit(
-            'Planner',
-            'thought',
-            f"[Ask Human] (mode={mode}"
-            + (
-                f", timeout={timeout_sec}s, default='{default}'"
-                if confirm_mode == ConfirmMode.TIMEOUT
-                else ''
-            )
-            + f"): {prompt}",
-        )
-
         confirm_mgr = getattr(self.agent, '_confirm_manager', None)
         if confirm_mgr is None:
             raise RuntimeError(
@@ -456,11 +444,6 @@ class ResearchPlannerRuntimeMixin:
             "[Planner] ask_human timed out (%ds), using default='%s'",
             timeout_sec,
             default,
-        )
-        self._emit(
-            'Planner',
-            'thought',
-            f"[Ask Human] No response within {timeout_sec}s — defaulting to '{default}'.",
         )
         return default
 
