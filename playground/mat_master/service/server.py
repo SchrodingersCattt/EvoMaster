@@ -788,6 +788,13 @@ def _run_agent_sync(
     run_done: threading.Event | None = None
     _msg_seq = 0  # auto-incrementing message id per run
 
+    def _is_streaming_thought_event(event_type: str, extra: dict[str, object]) -> bool:
+        return event_type == 'thought' and extra.get('stream_state') in {
+            'start',
+            'streaming',
+            'end',
+        }
+
     def event_callback(source: str, event_type: str, content, **extra) -> None:
         nonlocal _msg_seq
         _msg_seq += 1
@@ -799,23 +806,19 @@ def _run_agent_sync(
             'content': content,
             'session_id': session_id,
         }
-        # Merge extra top-level fields (e.g. status, context, stream_id, token_count for llm_token)
+        # Merge extra top-level fields (e.g. stream_state, context, stream_id, token_count).
         if extra:
             payload.update(extra)
         if session_id not in SESSIONS:
             SESSIONS[session_id] = {'history': [], 'last_task_id': None}
-        # llm_token{status:streaming} is ephemeral — skip history persistence to avoid bloat.
-        # llm_token{status:start} and llm_token{status:end} are persisted (lightweight, audit value).
-        _is_streaming_token = (
-            event_type == 'llm_token' and extra.get('status') == 'streaming'
-        )
-        if event_type not in ('log_line',) and not _is_streaming_token:
+        # Streamed thought markers/deltas are ephemeral — skip history persistence to avoid bloat.
+        _is_streaming_thought = _is_streaming_thought_event(event_type, extra)
+        if event_type not in ('log_line', 'llm_token') and not _is_streaming_thought:
             SESSIONS[session_id]['history'].append(payload)
             _persist_history_event(session_id, payload)
-        # llm_token{status:streaming}: fire-and-forget so the LLM streaming iterator is not
+        # Streamed thought deltas: fire-and-forget so the LLM streaming iterator is not
         # blocked by the async WebSocket send round-trip.
-        # llm_token{status:start/end}: wait for confirmation like normal events.
-        if _is_streaming_token:
+        if _is_streaming_thought and extra.get('stream_state') == 'streaming':
             asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
         else:
             future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)

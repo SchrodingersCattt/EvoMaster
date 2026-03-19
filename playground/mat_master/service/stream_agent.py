@@ -56,38 +56,44 @@ class StreamingMatMasterAgent(MatMasterAgent):
             self.event_callback(source, event_type, content, **extra)
 
     def _on_llm_token_cb(self, delta: str) -> None:
-        """Emit llm_token{status:streaming} for each streamed token from the LLM."""
+        """Emit streamed thought deltas for each token from the LLM."""
         agent_name = normalize_event_source(getattr(self, '_agent_name', None))
         if self._current_stream_id is None:
             self._begin_llm_stream(agent_name)
-        self._emit(agent_name, 'llm_token', delta, status='streaming')
+        self._emit(
+            agent_name,
+            'thought',
+            delta,
+            stream_state='streaming',
+            stream_id=self._current_stream_id,
+        )
         self._stream_token_count += len(delta) if isinstance(delta, str) else 0
 
     def _begin_llm_stream(
         self, agent_name: str, context: str = 'step_execution'
     ) -> None:
-        """Emit llm_token{status:start} and track stream state."""
+        """Emit streamed thought start marker and track stream state."""
         import uuid as _uuid
 
         self._current_stream_id = f"str_{_uuid.uuid4().hex[:12]}"
         self._stream_token_count = 0
         self._emit(
             agent_name,
-            'llm_token',
+            'thought',
             '',
-            status='start',
+            stream_state='start',
             context=context,
             stream_id=self._current_stream_id,
         )
 
     def _end_llm_stream(self, agent_name: str) -> None:
-        """Emit llm_token{status:end} and clear stream state."""
+        """Emit streamed thought end marker and clear stream state."""
         if self._current_stream_id is not None:
             self._emit(
                 agent_name,
-                'llm_token',
+                'thought',
                 '',
-                status='end',
+                stream_state='end',
                 stream_id=self._current_stream_id,
                 token_count=self._stream_token_count,
             )
@@ -95,7 +101,7 @@ class StreamingMatMasterAgent(MatMasterAgent):
             self._stream_token_count = 0
 
     def _step(self) -> bool:
-        """Override _step to wrap the MatMasterAgent LLM call with llm_stream_start/end markers.
+        """Override _step to wrap the MatMasterAgent LLM call with thought stream markers.
 
         _query_with_context_recovery() already calls self.llm.query_stream() directly when
         self._on_llm_token is set, so we only need to emit the stream boundary markers here.
