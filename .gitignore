@@ -184,3 +184,6 @@ runs/
 docs/superpowers/
 docs/plans/
 .planning/
+
+# Worktrees
+.worktrees/
