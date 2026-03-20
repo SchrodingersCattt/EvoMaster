@@ -578,6 +578,25 @@ def _merge_request_overrides(
     return merged
 
 
+def _merge_api_message_extras(
+    current: dict[str, Any], incoming: dict[str, Any]
+) -> dict[str, Any]:
+    """递归合并 assistant 原始扩展字段，用于多轮回放。"""
+    if not incoming:
+        return current
+
+    merged = dict(current)
+    for key, value in incoming.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _merge_api_message_extras(existing, value)
+        elif isinstance(existing, list) and isinstance(value, list):
+            merged[key] = [*existing, *value]
+        else:
+            merged[key] = value
+    return merged
+
+
 class OpenAILLM(BaseLLM):
     """OpenAI LLM 实现
 
@@ -811,6 +830,8 @@ class OpenAILLM(BaseLLM):
         )
 
         full_content: list[str] = []
+        full_reasoning_content: list[str] = []
+        assistant_extra_acc: dict[str, Any] = {}
         # tool_call delta 按 index 累积：{index: {"id": str, "name": str, "arguments": str}}
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
@@ -830,8 +851,15 @@ class OpenAILLM(BaseLLM):
                 # 文本 token → 实时推送
                 if delta.content:
                     full_content.append(delta.content)
+                reasoning_delta = getattr(delta, 'reasoning_content', None)
+                if reasoning_delta:
+                    full_reasoning_content.append(reasoning_delta)
                     if on_token is not None:
-                        on_token(delta.content)
+                        on_token(reasoning_delta)
+                assistant_extra_acc = _merge_api_message_extras(
+                    assistant_extra_acc,
+                    getattr(delta, 'model_extra', {}) or {},
+                )
                 # tool_call delta → 按 index 累积
                 if delta.tool_calls:
                     for tc_delta in delta.tool_calls:
@@ -874,7 +902,11 @@ class OpenAILLM(BaseLLM):
         return AssistantMessage(
             content=content,
             tool_calls=tool_calls,
-            meta={'finish_reason': finish_reason},
+            meta={
+                'finish_reason': finish_reason,
+                'reasoning_content': ''.join(full_reasoning_content) or None,
+                'api_message_extras': assistant_extra_acc,
+            },
         )
 
 
@@ -1159,6 +1191,8 @@ class DeepSeekLLM(BaseLLM):
             request_params['tool_choice'] = kwargs.get('tool_choice', 'auto')
 
         full_content: list[str] = []
+        full_reasoning_content: list[str] = []
+        assistant_extra_acc: dict[str, Any] = {}
         # tool_call delta 按 index 累积：{index: {"id": str, "name": str, "arguments": str}}
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
@@ -1178,8 +1212,15 @@ class DeepSeekLLM(BaseLLM):
                 # 文本 token → 实时推送
                 if delta.content:
                     full_content.append(delta.content)
+                reasoning_delta = getattr(delta, 'reasoning_content', None)
+                if reasoning_delta:
+                    full_reasoning_content.append(reasoning_delta)
                     if on_token is not None:
-                        on_token(delta.content)
+                        on_token(reasoning_delta)
+                assistant_extra_acc = _merge_api_message_extras(
+                    assistant_extra_acc,
+                    getattr(delta, 'model_extra', {}) or {},
+                )
                 # tool_call delta → 按 index 累积
                 if delta.tool_calls:
                     for tc_delta in delta.tool_calls:
@@ -1224,7 +1265,11 @@ class DeepSeekLLM(BaseLLM):
         return AssistantMessage(
             content=content,
             tool_calls=tool_calls,
-            meta={'finish_reason': finish_reason},
+            meta={
+                'finish_reason': finish_reason,
+                'reasoning_content': ''.join(full_reasoning_content) or None,
+                'api_message_extras': assistant_extra_acc,
+            },
         )
 
 
