@@ -2,6 +2,9 @@
 
 Upload uses oss2 when available; env: OSS_ENDPOINT, OSS_BUCKET_NAME, credentials
 (via EnvironmentVariableCredentialsProvider).
+Object keys use ``{prefix}/{uuid}/{basename}`` so the URL last segment matches the
+original filename (required by bohr-agent-sdk ``BaseStorage.download`` and tools like
+``gmx`` that reference files by basename).
 Download uses stdlib urllib so no extra deps for result fetching.
 """
 
@@ -10,7 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-import time
+import uuid
 from pathlib import Path
 from urllib.request import Request, urlopen
 
@@ -34,13 +37,34 @@ def _get_oss2():
     return _oss2
 
 
+def _object_key_last_segment(name: str) -> str:
+    """OSS key final segment: original basename, no path separators."""
+    seg = Path(name).name.strip()
+    if not seg or seg in ('.', '..'):
+        return 'uploaded_file'
+    return seg.replace('\\', '_').replace('/', '_')
+
+
 def upload_file_to_oss(
     local_path: Path,
     workspace_root: Path,
     *,
     oss_prefix: str = 'evomaster/calculation',
+    object_basename: str | None = None,
 ) -> str:
-    """Upload a local file to OSS and return its public URL."""
+    """Upload a local file to OSS and return its public URL.
+
+    The HTTPS URL path ends with *object_basename* (or *local_path*'s basename) so
+    remote MCP runtimes that derive local filenames from the URL basename match
+    ``gmx -f minim.mdp`` style commands.
+
+    Args:
+        local_path: File to read bytes from.
+        workspace_root: Used to resolve relative *local_path*.
+        oss_prefix: OSS key prefix (no leading slash).
+        object_basename: If set, used as the last segment of the object key instead of
+            ``local_path.name`` (e.g. remote temp file with a random name).
+    """
     path = Path(local_path)
     if not path.is_absolute():
         path = (workspace_root / path).resolve()
@@ -61,8 +85,10 @@ def upload_file_to_oss(
 
     auth = oss2_module.ProviderAuth(cred_provider())
     bucket = oss2_module.Bucket(auth, endpoint, bucket_name)
-    filename = path.name
-    oss_key = f"{oss_prefix}/{int(time.time())}_{filename}"
+    raw_name = object_basename if object_basename is not None else path.name
+    filename = _object_key_last_segment(raw_name)
+    prefix = oss_prefix.strip().strip('/')
+    oss_key = f"{prefix}/{uuid.uuid4().hex}/{filename}"
     with open(path, 'rb') as f:
         bucket.put_object(oss_key, f.read())
     host = endpoint.replace('https://', '').replace('http://', '').split('/')[0]
