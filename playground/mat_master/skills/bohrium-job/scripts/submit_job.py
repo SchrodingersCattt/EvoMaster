@@ -32,7 +32,7 @@ _AUTH_HEADER = {'accessKey': ACCESS_KEY, 'Content-Type': 'application/json'}
 
 
 def _is_gromacs_submission(cmd: str, image: str, software: str) -> bool:
-    """Detect GROMACS-style runs that must use MCP run_gromacs instead of this script."""
+    """Detect GROMACS-style runs that must use MCP submit_run_gromacs instead of this script."""
     c = (cmd or '').lower()
     i = (image or '').lower()
     s = (software or '').strip().lower()
@@ -51,7 +51,7 @@ def _is_gromacs_submission(cmd: str, image: str, software: str) -> bool:
 
 _GROMACS_REJECT_MSG = (
     'GROMACS must not be submitted via bohrium-job/submit_job.py. '
-    'Use the MCP tool mat_binary_calc_run_gromacs (run_gromacs on '
+    'Use the MCP tool mat_binary_calc_submit_run_gromacs (submit_run_gromacs on '
     'server mat_binary_calc), then monitor_job with software="gromacs".'
 )
 

@@ -71,7 +71,7 @@ TOOL_GROUPS = [
         'Input preparation: prepare_lammps_job, prepare_cp2k_job, prepare_qe_job, '
         'prepare_abinit_job, prepare_orca_job, prepare_pyatb_job. '
         'Submit after prepare_* via bohrium-job skill (no mat_binary_calc_submit_* MCP tools). '
-        'GROMACS: submit via MCP mat_binary_calc_run_gromacs, then monitor_job (software=gromacs).',
+        'GROMACS: submit via MCP mat_binary_calc_submit_run_gromacs, then monitor_job (software=gromacs).',
     ),
 ]
 
