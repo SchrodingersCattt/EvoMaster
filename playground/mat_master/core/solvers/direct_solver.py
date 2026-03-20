@@ -131,7 +131,7 @@ SYSTEM CONSTRAINTS:
 2. Remote Delegation: Heavy calculations ({sw}) are run remotely.
    - SG/DPA/COMPDART: submitted via their native MCP submit tools ({sm}), monitored via monitor_job.
    - LAMMPS/CP2K/ABINIT/QE/ORCA (mat_binary_calc): input prepared via prepare_* MCP tools, then **submitted via bohrium-job skill**. There are NO mat_binary_calc_submit_* MCP tools — do not call them.
-   - GROMACS (mat_binary_calc): submit via MCP **mat_binary_calc_run_gromacs**, then **monitor_job** (software=gromacs). Do not use bohrium-job for GROMACS when this tool is available.
+   - GROMACS (mat_binary_calc): submit via MCP **mat_binary_calc_submit_run_gromacs**, then **monitor_job** (software=gromacs). Do not use bohrium-job for GROMACS when this tool is available.
    All of this is handled within STANDARD_EXECUTION; no separate routing is needed.
 3. Tool Availability: Use the provided 'Available Tools' list to decide if a programmatic capability is missing (SKILL_EVOLUTION) or can be fulfilled by existing tools and skills (STANDARD_EXECUTION). Always check the full tool list before concluding a tool is missing.
 4. Characterization routing baseline: NMR/XRD/electron-microscopy requests should default to STANDARD_EXECUTION when dedicated MCP tools exist (e.g., mat_nmr_NMR_search_tool, mat_nmr_NMR_predict_tool, mat_nmr_NMR_reverse_predict_tool, mat_xrd_xrd_phase_identification, mat_electron_microscope_get_electron_microscope_recognize). Do NOT choose SKILL_EVOLUTION for these unless the user requests a clearly missing capability.{skills_constraint}
