@@ -151,6 +151,10 @@ class Dialog(BaseModel):
                         tc_dict['function']['arguments'] = '{}'
                     tool_calls_serialized.append(tc_dict)
                 msg_dict['tool_calls'] = tool_calls_serialized
+            if isinstance(msg, AssistantMessage):
+                extras = (msg.meta or {}).get('api_message_extras') or {}
+                if isinstance(extras, dict) and extras:
+                    msg_dict.update(extras)
             if isinstance(msg, ToolMessage):
                 msg_dict['tool_call_id'] = msg.tool_call_id
                 msg_dict['name'] = msg.name
