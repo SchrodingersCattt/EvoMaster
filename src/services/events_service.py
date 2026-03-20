@@ -5,6 +5,7 @@ from functools import lru_cache
 
 from src.dao.chat_events_table import ChatEventsTable, get_chat_events_table
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
+from src.utils.chat_event_source import normalize_event_source
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class ChatEventsService:
         self._sessions_service.ensure_session(session_id, user_id=user_id)
         if not self.table:
             return
-        source = payload.get('source', 'System')
+        source = normalize_event_source(payload.get('source', 'System'))
         event_type = payload.get('type', 'unknown')
         content = payload.get('content', '')
         # User/query 带 files 或 workspace_paths 时存成 { content, files?, workspace_paths? } 以便读回时前端分开展示

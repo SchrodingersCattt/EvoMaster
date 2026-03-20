@@ -10,7 +10,6 @@ from evomaster.core.exp import BaseExp
 from ...prompts.build_prompt import LANGUAGE_RULE
 from ..async_tool_registry import AsyncToolRegistry
 from ._planner_file_io import PlannerFileIO, create_planner_file_io
-from ._research_planner_execution import ResearchPlannerExecutionMixin
 from ._research_planner_phases import ResearchPlannerPhaseMixin
 from ._research_planner_planning import ResearchPlannerPlanningMixin
 from ._research_planner_runtime import ResearchPlannerRuntimeMixin
@@ -20,6 +19,7 @@ from .plan_utils import (
     _get_mat_master_config,
     _load_pre_check_system_prompt,
 )
+from .research_planner_execution import ResearchPlannerExecutionMixin
 from .step_sub_agent import StepSubAgentFactory
 
 
@@ -36,7 +36,6 @@ class ResearchPlanner(
         self,
         agent,
         config,
-        input_fn=None,
         output_callback=None,
         config_dir: str | Path | None = None,
     ):
@@ -80,7 +79,6 @@ class ResearchPlanner(
             1, exec_cfg.get('planner_max_workers', self.window_size)
         )
         self._rate_limit: float | None = exec_cfg.get('rate_limit')
-        self._input_fn = input_fn
         self._output_callback: Callable[[str, str, Any], None] | None = output_callback
         self._solver: DirectSolver | None = None
         self._registry: AsyncToolRegistry = _get_async_registry(config)

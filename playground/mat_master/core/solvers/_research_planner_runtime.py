@@ -2,7 +2,6 @@
 
 import json
 import re
-import sys
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,26 +63,27 @@ class ResearchPlannerRuntimeMixin:
         return state
 
     def _emit(self, source: str, event_type: str, content: Any, **extra) -> None:
-        if source == 'Planner' and event_type == 'thought':
+        is_stream_thought = event_type == 'thought' and extra.get('stream_state') in {
+            'start',
+            'streaming',
+            'end',
+        }
+        if source == 'Planner' and event_type == 'thought' and not is_stream_thought:
             content = _normalize_planner_thought(content)
             event_type = 'planner_reply'
-        if source == 'Planner' and event_type == 'llm_token':
-            if extra.get('status') == 'streaming' and self._output_callback:
-                self._output_callback(source, 'llm_token', content, **extra)
-            return
         if self._output_callback:
             self._output_callback(source, event_type, content, **extra)
 
     def _stream_llm(
         self, dialog: Dialog, source: str, context: str
     ) -> AssistantMessage:
-        """Wrap query_stream with llm token boundary markers."""
+        """Wrap query_stream with streamed thought boundary markers."""
         stream_id = f"str_{uuid.uuid4().hex[:12]}"
         self._emit(
             source,
-            'llm_token',
+            'thought',
             '',
-            status='start',
+            stream_state='start',
             context=context,
             stream_id=stream_id,
         )
@@ -92,7 +92,11 @@ class ResearchPlannerRuntimeMixin:
             reply = self.agent.llm.query_stream(
                 dialog,
                 on_token=lambda delta: self._emit(
-                    source, 'llm_token', delta, status='streaming'
+                    source,
+                    'thought',
+                    delta,
+                    stream_state='streaming',
+                    stream_id=stream_id,
                 ),
             )
             return reply
@@ -100,9 +104,9 @@ class ResearchPlannerRuntimeMixin:
             token_count = len(reply.content or '') if reply is not None else 0
             self._emit(
                 source,
-                'llm_token',
+                'thought',
                 '',
-                status='end',
+                stream_state='end',
                 stream_id=stream_id,
                 token_count=token_count,
             )
@@ -111,8 +115,7 @@ class ResearchPlannerRuntimeMixin:
         return Path(self.run_dir) if self.run_dir else Path('.')
 
     def _planner_workspace_root(self) -> str:
-        """Return the root directory used by planner artifacts/workspaces.
-        """
+        """Return the root directory used by planner artifacts/workspaces."""
         session = getattr(getattr(self, 'agent', None), 'session', None)
         if isinstance(session, SSHSession):
             workspace_path = (
@@ -136,6 +139,17 @@ class ResearchPlannerRuntimeMixin:
             workspaces = f"{base}/workspaces/{task_id}"
         self._file_io.mkdir(workspaces)
         return workspaces
+
+    def _agent_workspace_dir(self, task_id: str) -> str:
+        """Return the directory where the agent actually writes files (for quality gate / file collection).
+
+        On SSHSession the agent writes under session.config.workspace_path (no task_id subdir).
+        On local runs it is the same as _task_workspace_dir(task_id).
+        """
+        session = getattr(getattr(self, 'agent', None), 'session', None)
+        if isinstance(session, SSHSession):
+            return self._planner_workspace_root()
+        return self._task_workspace_dir(task_id)
 
     def _planner_hidden_dir(self, task_id: str) -> str:
         """Return the dot-prefixed hidden directory for planner-internal files.
@@ -411,52 +425,38 @@ class ResearchPlannerRuntimeMixin:
         except ValueError:
             confirm_mode = ConfirmMode.BLOCK
 
-        self._emit(
-            'Planner',
-            'thought',
-            f"[Ask Human] (mode={mode}"
-            + (
-                f", timeout={timeout_sec}s, default='{default}'"
-                if confirm_mode == ConfirmMode.TIMEOUT
-                else ''
-            )
-            + f"): {prompt}",
-        )
-
         confirm_mgr = getattr(self.agent, '_confirm_manager', None)
-        if confirm_mgr is not None:
-            try:
-                reply = confirm_mgr.request(
-                    question=prompt,
-                    mode=confirm_mode,
-                    timeout_sec=timeout_sec,
-                    default_reply=default or None,
-                    origin='planner',
-                    actions=['go', 'abort', 'revise'],
-                    source_override='Planner',
-                )
-                if reply is REPLY_CANCELLED:
-                    return 'abort'
-                if reply is not None:
-                    return reply.strip()
-                self.logger.info(
-                    "[Planner] ask_human timed out (%ds), using default='%s'",
-                    timeout_sec,
-                    default,
-                )
-                self._emit(
-                    'Planner',
-                    'thought',
-                    f"[Ask Human] No response within {timeout_sec}s — defaulting to '{default}'.",
-                )
-                return default
-            except Exception:
-                pass
+        if confirm_mgr is None:
+            raise RuntimeError(
+                'Planner confirmation requires ConfirmationManager; '
+                'fallback input paths have been removed.'
+            )
 
-        if self._input_fn is not None:
-            return (self._input_fn(prompt) or default).strip()
-        print(f"\033[93m[Planner] {prompt}\033[0m")
-        return sys.stdin.readline().strip() or default
+        try:
+            reply = confirm_mgr.request(
+                question=prompt,
+                mode=confirm_mode,
+                timeout_sec=timeout_sec,
+                default_reply=default or None,
+                origin='planner',
+                actions=['go', 'abort', 'revise'],
+                source_override='Planner',
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                'Planner confirmation failed inside ConfirmationManager.'
+            ) from exc
+
+        if reply is REPLY_CANCELLED:
+            return 'abort'
+        if reply is not None:
+            return reply.strip()
+        self.logger.info(
+            "[Planner] ask_human timed out (%ds), using default='%s'",
+            timeout_sec,
+            default,
+        )
+        return default
 
     def _plan_report_text(self, plan: dict[str, Any]) -> str:
         """Build plain-text plan report for frontend rendering."""

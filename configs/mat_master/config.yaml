@@ -350,12 +350,13 @@ mcp:
       executor: null
       sync_tools:
         - get_electron_microscope_recognize
-    # 结构数据库检索：走 local，仅注入 BOHRIUM_ACCESS_KEY / BOHRIUM_PROJECT_ID 到 env
+    # 结构数据库检索：走 local，仅注入 BOHRIUM_ACCESS_KEY / BOHRIUM_PROJECT_ID 到 env；仅用同步工具
     mat_struct_db:
       executor:
         type: "local"
         env: {}
-      sync_tools: []
+      sync_tools:
+        - fetch_structures_from_db
     mat_abacus:
       executor:
         type: "dispatcher"

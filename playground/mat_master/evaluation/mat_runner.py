@@ -10,17 +10,6 @@ from evomaster.core import get_playground_class
 from .schemas import ModeLiteral
 
 
-def _planner_eval_auto_reply(prompt: str) -> str:
-    """Non-interactive planner reply policy for evaluation runs."""
-    normalized = (prompt or '').strip().lower()
-    if "type 'go' to execute" in normalized or 'type "go" to execute' in normalized:
-        return 'go'
-    if 'proceed? (y/n)' in normalized:
-        return 'y'
-    # Return empty for other prompts so planner can fall back to its own defaults.
-    return ''
-
-
 def _cleanup_playground_logging(playground: Any) -> None:
     """Remove the playground's file handler from root logger to prevent log leaking."""
     import logging
@@ -56,8 +45,7 @@ def run_mat_task(
     if getattr(playground, 'set_mode', None):
         playground.set_mode(mode)
     if mode == 'planner':
-        # Evaluation should be fully non-interactive: disable preflight confirmation
-        # and provide deterministic replies for planner confirmation prompts.
+        # Evaluation should be fully non-interactive: disable preflight confirmation.
         mat_master_cfg = getattr(
             getattr(playground, 'config', None), 'mat_master', None
         )
@@ -65,7 +53,6 @@ def run_mat_task(
             planner_cfg = mat_master_cfg.setdefault('planner', {})
             if isinstance(planner_cfg, dict):
                 planner_cfg['human_check_step'] = False
-        setattr(playground, '_planner_input_fn', _planner_eval_auto_reply)
     try:
         result = playground.run(task_description=prompt)
     finally:
