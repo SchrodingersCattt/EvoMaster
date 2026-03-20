@@ -77,6 +77,7 @@ import sys  # 不要插在常量或代码中间
 
 - **executor 类型**：本仓库对 `executor.type == "dispatcher"` 注入 machine.remote_profile 与 resources.envs；对 `executor.type == "local"` 仅注入 `executor.env` 的 BOHRIUM_ACCESS_KEY 与 BOHRIUM_PROJECT_ID，供 bohr-agent-sdk 的 LocalExecutor 在本地运行时使用（`evomaster/env/bohrium.py`）。
 - **配置结构**：executor 模板来自 `mcp_config.calculation_executors[server_name].executor` 或 `executor_map[tool_name]`；未出现在 `calculation_executors` 中的 server（如纯 DB 检索）不会注入 executor，仅会注入 storage（若在 `calculation_servers` 中）。
+- **path_params_by_tool**：可选。`calculation_executors[server_name].path_params_by_tool` 将 **远程工具名**（如 `submit_run_gromacs`）映射到需在本地解析并上传 OSS 的参数名列表（须出现在 MCP `inputSchema.properties`）。用于 MCP 将 `List[Path]` 暴露为无 `format: path` 的 string 数组、或 submit 工具 description 过短导致无法从 docstring 推断 Path 的场景；未配置时仍依赖 schema / docstring / `*_path` 三层检测。
 - **文档与兼容**：修改 Path Adaptor、executor/storage 结构或鉴权注入逻辑时，需考虑与 bohr-agent-sdk 的 CalculationMCPServer、DispatcherExecutor/LocalExecutor 及 storage 约定的兼容性；可参考 [bohr-agent-sdk 仓库](https://github.com/dptech-corp/bohr-agent-sdk) 的 `src/dp/agent/server/calculation_mcp_server.py` 与 `executor/`、`storage/` 实现。
 
 ---
