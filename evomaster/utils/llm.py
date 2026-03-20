@@ -147,6 +147,11 @@ class LLMResponse(BaseModel):
     """LLM 响应"""
 
     content: str | None = Field(default=None, description='生成的文本内容')
+    reasoning_content: str | None = Field(default=None, description='模型返回的推理内容')
+    api_message_extras: dict[str, Any] = Field(
+        default_factory=dict,
+        description='需要在后续 assistant message 中保留的原始扩展字段',
+    )
     tool_calls: list[ToolCall] | None = Field(default=None, description='工具调用列表')
     finish_reason: str | None = Field(default=None, description='结束原因')
     usage: dict[str, int] = Field(default_factory=dict, description='Token 使用统计')
@@ -158,9 +163,11 @@ class LLMResponse(BaseModel):
             content=self.content,
             tool_calls=self.tool_calls,
             meta={
+                **self.meta,
                 'finish_reason': self.finish_reason,
                 'usage': self.usage,
-                **self.meta,
+                'reasoning_content': self.reasoning_content,
+                'api_message_extras': self.api_message_extras,
             },
         )
 
@@ -736,6 +743,8 @@ class OpenAILLM(BaseLLM):
 
         return LLMResponse(
             content=message.content,
+            reasoning_content=getattr(message, 'reasoning_content', None),
+            api_message_extras=getattr(message, 'model_extra', {}) or {},
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason,
             usage={
@@ -1082,6 +1091,8 @@ class DeepSeekLLM(BaseLLM):
 
         return LLMResponse(
             content=message.content,
+            reasoning_content=getattr(message, 'reasoning_content', None),
+            api_message_extras=getattr(message, 'model_extra', {}) or {},
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason,
             usage={
