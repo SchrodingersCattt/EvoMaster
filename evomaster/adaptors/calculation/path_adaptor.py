@@ -602,9 +602,36 @@ class CalculationPathAdaptor:
             if path_arg_names:
                 source = 'param_name'
 
+        _schema_props = (
+            sorted((input_schema or {}).get('properties') or {})
+            if isinstance(input_schema, dict)
+            else []
+        )
+        _has_input_files_prop = 'input_files' in (
+            (input_schema or {}).get('properties') or {}
+        )
+        logger.info(
+            'Path adaptor [%s] path_keys=%s source=%s workspace_path_set=%s '
+            'schema_props=%s input_files_in_schema=%s input_files_classified=%s',
+            tool_name,
+            sorted(path_arg_names),
+            source,
+            bool(workspace_path and str(workspace_path).strip()),
+            _schema_props,
+            bool(_has_input_files_prop),
+            'input_files' in path_arg_names,
+        )
+        if _has_input_files_prop and 'input_files' not in path_arg_names:
+            logger.warning(
+                'Path adaptor [%s]: schema has input_files but it was not classified as '
+                'path params (no format/path in schema, docstring Path, or *_path name); '
+                'local paths may be sent to MCP unchanged.',
+                tool_name,
+            )
+
         if path_arg_names:
             logger.debug(
-                'Tool %s: Path params detected via %s: %s',
+                'Tool %s: Path params detail via %s: %s',
                 remote_name,
                 source,
                 sorted(path_arg_names),
@@ -616,6 +643,16 @@ class CalculationPathAdaptor:
 
         # --- Upload local files → OSS ---
         if not path_arg_names or not workspace_path:
+            if not path_arg_names:
+                logger.info(
+                    'Path adaptor [%s]: skip OSS upload (no path-typed params detected).',
+                    tool_name,
+                )
+            elif not workspace_path:
+                logger.info(
+                    'Path adaptor [%s]: skip OSS upload (workspace_path empty).',
+                    tool_name,
+                )
             return out
 
         def _is_null_or_empty_path(v: Any) -> bool:
@@ -626,6 +663,12 @@ class CalculationPathAdaptor:
             return False
 
         workspace_root = Path(workspace_path).resolve()
+        logger.info(
+            'Path adaptor [%s]: resolving local paths → OSS (keys=%s workspace_root=%s)',
+            tool_name,
+            sorted(path_arg_names),
+            workspace_root,
+        )
         for key in sorted(path_arg_names):
             if key not in out:
                 continue
