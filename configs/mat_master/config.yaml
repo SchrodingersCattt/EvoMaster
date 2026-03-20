@@ -124,6 +124,7 @@ mat_master:
       - "QE"
       - "ABINIT"
       - "ORCA"
+      - "GROMACS"
       - "OpenBabel"
       # MCP server prefixes (planner validation)
       - "mat_abacus"
@@ -270,6 +271,7 @@ mcp:
       - prepare_lammps_job
       - prepare_orca_job
       - prepare_pyatb_job
+      - run_gromacs
   # Per-server executor (image/machine_type) and sync_tools. Sync tools → executor None; others → Bohrium executor with env auth.
   calculation_executors:
     mat_sg:
