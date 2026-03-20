@@ -49,6 +49,38 @@ def _is_gromacs_submission(cmd: str, image: str, software: str) -> bool:
     return False
 
 
+_GROMACS_REJECT_MSG = (
+    'GROMACS must not be submitted via bohrium-job/submit_job.py. '
+    'Use the MCP tool mat_binary_calc_run_gromacs (run_gromacs on '
+    'server mat_binary_calc), then monitor_job with software="gromacs".'
+)
+
+
+def _get_argv_flag(argv: list[str], flag: str) -> str | None:
+    """Next token after ``flag`` in argv, or None."""
+    i = 0
+    while i < len(argv):
+        if argv[i] == flag and i + 1 < len(argv):
+            return argv[i + 1]
+        i += 1
+    return None
+
+
+def _reject_gromacs_before_argparse(argv: list[str]) -> None:
+    """Run before parse_args so missing --image does not hide GROMACS detection."""
+    cmd = _get_argv_flag(argv, '--cmd') or ''
+    image = _get_argv_flag(argv, '--image') or ''
+    software = _get_argv_flag(argv, '--software') or 'unknown'
+    if _is_gromacs_submission(cmd, image, software):
+        print(
+            json.dumps(
+                {'success': False, 'error': _GROMACS_REJECT_MSG},
+                ensure_ascii=False,
+            )
+        )
+        sys.exit(1)
+
+
 def _post(path: str, payload: dict, timeout: int = 30) -> dict:
     response = requests.post(
         f"{OPENAPI_BASE}{path}",
@@ -168,6 +200,8 @@ def main() -> None:
         '--software', default='unknown', help='Software label for default job name'
     )
     parser.add_argument('--disk-size', type=int, default=50, help='Disk size in GB')
+    _reject_gromacs_before_argparse(sys.argv)
+
     args = parser.parse_args()
 
     if not ACCESS_KEY:
@@ -193,15 +227,7 @@ def main() -> None:
     if _is_gromacs_submission(args.cmd, args.image, args.software):
         print(
             json.dumps(
-                {
-                    'success': False,
-                    'error': (
-                        'GROMACS must not be submitted via bohrium-job/submit_job.py. '
-                        'Use the MCP tool mat_binary_calc_run_gromacs (run_gromacs on '
-                        'server mat_binary_calc), then monitor_job with software='
-                        '"gromacs".'
-                    ),
-                },
+                {'success': False, 'error': _GROMACS_REJECT_MSG},
                 ensure_ascii=False,
             )
         )
