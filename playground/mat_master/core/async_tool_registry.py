@@ -291,12 +291,14 @@ class AsyncToolRegistry:
                 f"3. **Submit** — two paths, choose by software:\n"
                 f"   - **MCP submit path** ({mcp_sm}): Call the native MCP submit tool "
                 f"and note the returned job_id. Then go to step 4.\n"
-                f"   - **bohrium-job skill path** ({bj_sw}): These servers provide "
-                f"**prepare_* tools only** (no submit_* MCP tools exist). "
+                f"   - **GROMACS (mat_binary_calc)**: Call MCP **`mat_binary_calc_run_gromacs`**, "
+                f"then `monitor_job` with software=\"gromacs\". Do **not** use bohrium-job for GROMACS.\n"
+                f"   - **bohrium-job skill path** ({bj_sw}): For LAMMPS/CP2K/QE/ABINIT/ORCA/PySCF-class jobs, "
+                f"these entries use **prepare_* MCP tools** (no submit_* MCP). "
                 f"After prepare_*, submit via `use_skill skill_name=bohrium-job`. "
                 f"**NEVER invent or call any _submit_* tool for these** — they are not registered "
                 f"and will always return Unknown tool. Use bohrium-job `submit_job.py` to get job_id, "
-                f"then `monitor_job.py --job-id <ID>` for monitoring/download.\n"
+                f"then `poll_job.py` for monitoring/download.\n"
             )
         elif mcp_sm:
             submit_step = (
@@ -342,8 +344,9 @@ class AsyncToolRegistry:
             constraint_2 = (
                 f"Heavy calculations must NOT run locally. "
                 f"Submit path: {mcp_sm} → native MCP submit tools; "
-                f"{bj_sw} → prepare_* MCP tools then **bohrium-job** skill (no _submit_* MCP). "
-                f"Never run any of these via execute_bash."
+                f"GROMACS → **mat_binary_calc_run_gromacs** then monitor_job; "
+                f"{bj_sw} (except GROMACS per above) → prepare_* MCP tools then **bohrium-job** skill "
+                f"(no _submit_* MCP). Never run any of these via execute_bash."
             )
         elif mcp_sm:
             constraint_2 = f"Heavy calculations MUST be submitted via MCP tools ({mcp_sm}). Never run these codes via execute_bash."
@@ -369,7 +372,8 @@ class AsyncToolRegistry:
             f"(open source), **CP2K**, **Quantum Espresso**, or **ABINIT**.\n"
             f"     - DFT tasks (molecular) -> prefer **PySCF** (`run_pyscf`, direct run, no prepare_* needed) or **ORCA**.\n"
             f"     - MD / Potential / screening -> goals achievable with "
-            f"**{ts.get('preferred_mlp', 'DPA')}**, **{ts.get('preferred_md', 'LAMMPS')}**, or **CP2K**.\n"
+            f"**{ts.get('preferred_mlp', 'DPA')}**, **{ts.get('preferred_md', 'LAMMPS')}**, **GROMACS** "
+            f"(`mat_binary_calc_run_gromacs`), or **CP2K**.\n"
             f"     - If the request cannot be fulfilled with open alternatives, return status `REFUSED` "
             f"with a clear refusal_reason."
         )

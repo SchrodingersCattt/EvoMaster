@@ -68,10 +68,10 @@ TOOL_GROUPS = [
     (
         'mat_binary_calc',
         'Binary Calculators',
-        'Input file preparation for LAMMPS, CP2K, ABINIT, QE, ORCA '
-        '(prepare_* tools only: prepare_lammps_job, prepare_cp2k_job, prepare_qe_job, '
-        'prepare_abinit_job, prepare_orca_job, prepare_pyatb_job). '
-        'NO submit_* MCP tools — submit via bohrium-job skill after prepare_*.',
+        'Input preparation: prepare_lammps_job, prepare_cp2k_job, prepare_qe_job, '
+        'prepare_abinit_job, prepare_orca_job, prepare_pyatb_job. '
+        'Submit after prepare_* via bohrium-job skill (no mat_binary_calc_submit_* MCP tools). '
+        'GROMACS: submit via MCP mat_binary_calc_run_gromacs, then monitor_job (software=gromacs).',
     ),
 ]
 
