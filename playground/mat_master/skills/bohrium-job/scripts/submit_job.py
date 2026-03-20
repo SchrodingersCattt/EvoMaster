@@ -9,6 +9,7 @@ This script performs only the 3 submission steps:
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 import zipfile
@@ -28,6 +29,24 @@ PROJECT_ID = int(os.environ.get('BOHRIUM_PROJECT_ID', '-1') or '-1')
 OPENAPI_BASE = os.environ.get('BOHRIUM_BASE_URL', 'https://openapi.dp.tech').rstrip('/')
 
 _AUTH_HEADER = {'accessKey': ACCESS_KEY, 'Content-Type': 'application/json'}
+
+
+def _is_gromacs_submission(cmd: str, image: str, software: str) -> bool:
+    """Detect GROMACS-style runs that must use MCP run_gromacs instead of this script."""
+    c = (cmd or '').lower()
+    i = (image or '').lower()
+    s = (software or '').strip().lower()
+    if s == 'gromacs':
+        return True
+    if 'gromacs' in i:
+        return True
+    if 'gromacs' in c:
+        return True
+    if re.search(r'\bgmx(?:_mpi)?\b', c):
+        return True
+    if 'grompp' in c or 'mdrun' in c:
+        return True
+    return False
 
 
 def _post(path: str, payload: dict, timeout: int = 30) -> dict:
@@ -167,6 +186,23 @@ def main() -> None:
         print(
             json.dumps(
                 {'success': False, 'error': f"input_dir not found: {args.input_dir}"}
+            )
+        )
+        sys.exit(1)
+
+    if _is_gromacs_submission(args.cmd, args.image, args.software):
+        print(
+            json.dumps(
+                {
+                    'success': False,
+                    'error': (
+                        'GROMACS must not be submitted via bohrium-job/submit_job.py. '
+                        'Use the MCP tool mat_binary_calc_run_gromacs (run_gromacs on '
+                        'server mat_binary_calc), then monitor_job with software='
+                        '"gromacs".'
+                    ),
+                },
+                ensure_ascii=False,
             )
         )
         sys.exit(1)
