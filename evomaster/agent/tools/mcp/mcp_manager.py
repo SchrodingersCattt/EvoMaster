@@ -143,13 +143,41 @@ class MCPToolManager:
                 )
 
         server_tools: dict[str, MCPTool] = {}
-        # First pass: build name → description for base tools (used by submit_* below)
+        # First pass: build name → description for base tools (used by submit_* below).
+        # Must happen BEFORE dedup so that submit_* can still inherit the base description
+        # even after the base tool entry is removed from tools_info.
         base_descriptions: dict[str, str] = {}
         for tool_info in tools_info:
             name = tool_info.get('name', '')
             desc = tool_info.get('description', '')
             if not name.startswith('submit_') and desc:
                 base_descriptions[name] = desc
+
+        # --- Dedup: for async tools, drop the base tool when submit_* exists ---
+        # After sync_tools filtering, any remaining submit_X means X is async.
+        # The base X tool is redundant (submit_X already carries its description
+        # via the propagation below), so remove it to halve the token cost.
+        # NOTE: base_descriptions must be built first (above) so submit_* can still
+        # inherit the full description even after the base entry is removed here.
+        submit_names = {
+            t.get('name', '')[len('submit_') :]
+            for t in tools_info
+            if t.get('name', '').startswith('submit_')
+        }
+        if submit_names:
+            before_dedup = len(tools_info)
+            tools_info = [
+                t
+                for t in tools_info
+                if t.get('name', '').startswith('submit_')
+                or t.get('name', '') not in submit_names
+            ]
+            if len(tools_info) < before_dedup:
+                self.logger.info(
+                    "Dedup: removed %d base tools with submit_* counterparts on server '%s'",
+                    before_dedup - len(tools_info),
+                    server_name,
+                )
 
         for tool_info in tools_info:
             original_name = tool_info['name']

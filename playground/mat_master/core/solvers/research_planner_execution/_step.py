@@ -16,6 +16,18 @@ except ImportError:
     SkillEvolutionExp = None
     _HAS_EVOLUTION = False
 
+# status_stages carries intent for the UI/SSE; avoid multi‑MB payloads if a plan is malformed.
+_STATUS_STAGES_INTENT_MAX = 32_768
+
+
+def _intent_for_status_stages(raw: Any) -> str:
+    if raw is None or raw == '':
+        return ''
+    s = raw if isinstance(raw, str) else str(raw)
+    if len(s) <= _STATUS_STAGES_INTENT_MAX:
+        return s
+    return s[: _STATUS_STAGES_INTENT_MAX - 1] + '…'
+
 
 class ResearchPlannerStepExecutionMixin:
     """Mixin for executing a single plan step: artifacts, summarize, prompt, run."""
@@ -175,7 +187,7 @@ class ResearchPlannerStepExecutionMixin:
                 'total': len(steps_list),
                 'current': step_id,
                 'step_id': step_id,
-                'intent': intent[:120] if intent else '',
+                'intent': _intent_for_status_stages(intent),
             },
         )
 
@@ -423,6 +435,20 @@ class ResearchPlannerStepExecutionMixin:
             )
             summary = self._summarize_solver_result(result, max_len=2000)
             result_info['result_summary'] = summary[:2000]
+            preview = (summary[:500] + '…') if len(summary) > 500 else summary
+            self.logger.info(
+                '[Planner] Step %s summarize_solver_result: len=%d preview=%r',
+                step_id,
+                len(summary),
+                preview,
+            )
+            if isinstance(result, dict):
+                self.logger.debug(
+                    '[Planner] Step %s solver.run result keys=%s status=%r',
+                    step_id,
+                    sorted(result.keys()),
+                    result.get('status'),
+                )
             _post_run_checkpoint = 'after_summarize'
             self.logger.info(
                 '[Planner] Step %s post-run checkpoint: %s',
@@ -432,6 +458,12 @@ class ResearchPlannerStepExecutionMixin:
             produced = self._extract_produced_artifacts()
             if produced:
                 result_info['produced_artifacts'] = produced
+            quality_scan_text = summary
+            if produced:
+                quality_scan_text = (
+                    f'{summary}\n\n# Artifact paths (journal)\n'
+                    + '\n'.join(str(p) for p in produced)
+                )
             _post_run_checkpoint = 'after_extract_artifacts'
             self._emit(
                 'Planner',
@@ -440,7 +472,7 @@ class ResearchPlannerStepExecutionMixin:
                     'total': len(steps_list),
                     'current': step_id,
                     'step_id': step_id,
-                    'intent': intent[:120] if intent else '',
+                    'intent': _intent_for_status_stages(intent),
                     'status': 'done',
                 },
             )
@@ -481,28 +513,103 @@ class ResearchPlannerStepExecutionMixin:
                 _post_run_checkpoint = 'inside_quality_critical'
                 workspace_dir = Path(self._agent_workspace_dir(task_id))
                 quality_files = self._collect_quality_files(
-                    step_dir, workspace_dir, summary
+                    step_dir, workspace_dir, quality_scan_text
+                )
+                _qf_paths = [str(p) for p in quality_files]
+                _qf_max = 40
+                if len(_qf_paths) > _qf_max:
+                    _qf_log = _qf_paths[:_qf_max] + [
+                        f'… (+{len(_qf_paths) - _qf_max} more)'
+                    ]
+                else:
+                    _qf_log = _qf_paths
+                self.logger.info(
+                    '[Planner] Step %s quality_files for literature_index: n=%d paths=%s',
+                    step_id,
+                    len(quality_files),
+                    _qf_log,
+                )
+                from evomaster.agent.session.ssh import SSHSession  # noqa: PLC0415
+
+                _sess = getattr(getattr(self, 'agent', None), 'session', None)
+                _file_io = getattr(self, '_file_io', None)
+                _use_remote_read = (
+                    isinstance(_sess, SSHSession) and _file_io is not None
+                )
+                self.logger.info(
+                    '[Planner] Step %s literature_index ingest: use_remote_read=%s '
+                    '(SSHSession + _file_io) summary_chars=%d',
+                    step_id,
+                    _use_remote_read,
+                    len(summary or ''),
                 )
                 before_count = int(state.get('literature_entry_count', 0) or 0)
-                self._append_literature_index(
+                summary_added = self._append_literature_index(
                     state,
                     task_id,
                     source=f"step:{step_id}:summary",
                     text=summary,
                 )
+                self.logger.info(
+                    '[Planner] Step %s literature_index after summary: added_urls=%d '
+                    'literature_entry_count=%d',
+                    step_id,
+                    summary_added,
+                    int(state.get('literature_entry_count', 0) or 0),
+                )
+                files_added_sum = 0
+                files_read_ok = 0
+                files_read_fail = 0
                 for quality_file in quality_files:
+                    path_str = str(quality_file)
+                    text = None
                     try:
-                        text = quality_file.read_text(encoding='utf-8')
-                    except Exception:
+                        text = self._read_workspace_text(quality_file)
+                    except Exception as e:
+                        files_read_fail += 1
+                        self.logger.warning(
+                            '[Planner] Step %s literature_index quality_file read failed: '
+                            'path=%s remote=%s err=%s: %s',
+                            step_id,
+                            path_str,
+                            _use_remote_read,
+                            type(e).__name__,
+                            e,
+                        )
                         continue
-                    self._append_literature_index(
+                    files_read_ok += 1
+                    slice_len = min(len(text), 200000)
+                    added = self._append_literature_index(
                         state,
                         task_id,
                         source=f"step:{step_id}:file:{quality_file.name}",
                         text=text[:200000],
                     )
-                evidence_delta = (
-                    int(state.get('literature_entry_count', 0) or 0) - before_count
+                    files_added_sum += added
+                    self.logger.info(
+                        '[Planner] Step %s literature_index quality_file ok: name=%s '
+                        'path=%s chars=%d slice_used=%d added_urls=%d',
+                        step_id,
+                        quality_file.name,
+                        path_str,
+                        len(text),
+                        slice_len,
+                        added,
+                    )
+                after_count = int(state.get('literature_entry_count', 0) or 0)
+                evidence_delta = after_count - before_count
+                self.logger.info(
+                    '[Planner] Step %s literature_index step totals: before=%d after=%d '
+                    'delta=%d summary_added=%d files_read_ok=%d files_read_fail=%d '
+                    'files_added_sum=%d',
+                    step_id,
+                    before_count,
+                    after_count,
+                    evidence_delta,
+                    summary_added,
+                    files_read_ok,
+                    files_read_fail,
+                    files_added_sum,
                 )
                 survey_failed, survey_reason = self._detect_survey_quality_failure(
                     intent=intent,

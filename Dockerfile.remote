@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir \
     rdkit \
     numpy \
     matplotlib \
+    openpyxl \
     python-docx \
     requests \
     scikit-learn \
