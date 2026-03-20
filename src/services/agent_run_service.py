@@ -87,7 +87,9 @@ def _should_persist_event(event_type: str, extra: dict[str, Any]) -> bool:
 def _should_skip_push(
     mode: str, source: str, event_type: str, extra: dict[str, Any]
 ) -> bool:
-    """Skip frontend push for internal-only thought variants."""
+    """Skip frontend push for internal-only snapshots (still persisted when durable)."""
+    if event_type == 'assistant_state':
+        return True
     if source == 'Planner' and _is_streaming_thought_event(event_type, extra):
         return True
     return (
