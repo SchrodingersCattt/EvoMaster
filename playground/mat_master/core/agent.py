@@ -5,10 +5,6 @@ System prompt uses file-first loading with runtime composition fallback.
 
 import json
 import os
-import re
-import tempfile
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +20,13 @@ from evomaster.utils.types import (
     UserMessage,
 )
 
+from .agent_finish_message import extract_json_from_reply, generate_finish_report
+from .agent_tool_observation import (
+    auto_save_tool_output,
+    compact_mat_sn_papers_observation,
+    format_tool_observation,
+    summarize_large_tool_observation,
+)
 from .async_execution_policy import AsyncExecutionPolicy
 from .callback import MatToolCallbacks, ToolCallbackPipeline
 from .execution import BatchExecutor, ExecutionTask
@@ -457,7 +460,9 @@ You can use the 'use_skill' tool to:
                 )
 
                 if not gate_eval.get('approved', False):
-                    reason = gate_eval.get('reason', 'Task completion requirements not met')
+                    reason = gate_eval.get(
+                        'reason', 'Task completion requirements not met'
+                    )
                     blocked_msgs.append(
                         f'[finish_attempt_gate] Blocked: {reason}\n'
                         f'Task: {task_description[:100]}{"..." if len(task_description) > 100 else ""}'
@@ -534,7 +539,7 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
         default = {'approved': True, 'reason': ''}
         try:
             reply = self.llm.query(dialog)
-            raw = self._extract_json_from_reply(reply.content or '')
+            raw = extract_json_from_reply(reply.content or '')
             if not raw:
                 return default
             result = json.loads(raw)
@@ -545,536 +550,9 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
             self.logger.debug('LLM finish gate check failed: %s', e)
             return default
 
-    @staticmethod
-    def _extract_json_from_reply(content: str) -> str | None:
-        """Extract JSON object from LLM reply.
-
-        Handles both raw JSON and fenced code blocks (```json ... ```).
-        Returns the first valid JSON object found, or None if not found.
-        """
-        text = (content or '').strip()
-        if '```json' in text:
-            start = text.find('```json') + 7
-            end = text.find('```', start)
-            if end > start:
-                return text[start:end].strip()
-        if '```' in text:
-            start = text.find('```') + 3
-            end = text.find('```', start)
-            if end > start:
-                return text[start:end].strip()
-        start = text.find('{')
-        if start < 0:
-            return None
-        depth = 0
-        for i in range(start, len(text)):
-            if text[i] == '{':
-                depth += 1
-            elif text[i] == '}':
-                depth -= 1
-                if depth == 0:
-                    return text[start : i + 1]
-        return None
-
     # ------------------------------------------------------------------
-    # Finish report generation
+    # Tool execution (formatting helpers in agent_tool_observation)
     # ------------------------------------------------------------------
-
-    def _normalise_finish_message(self, raw: str) -> str:
-        """Make finish message canonical: fix literal \\n, ensure URLs get a line break before them."""
-        if not raw:
-            return raw
-        text = raw.strip()
-        # Literal backslash-n etc. -> real newline so message is well-formed
-        text = text.replace('\\n', '\n').replace('\\r', '\r')
-        # Ensure each bare URL line has a blank line before it so markdown doesn't glue them
-        out: list[str] = []
-        for line in text.splitlines():
-            stripped = line.strip()
-            if stripped.startswith('http://') or stripped.startswith('https://'):
-                if out and out[-1].strip():
-                    out.append('')
-                out.append(line)
-            else:
-                out.append(line)
-        workspace = getattr(self.session.config, 'workspace_path', '') or ''
-        workspace_abs = str(Path(workspace).absolute()) if workspace else ''
-        return self._add_file_uri_prefix('\n'.join(out), workspace_path=workspace_abs)
-
-    @staticmethod
-    def _add_file_uri_prefix(text: str, workspace_path: str = '') -> str:
-        """Convert local paths to file:// URIs in non-code text.
-
-        Handles three cases:
-        - Bare absolute Unix paths (e.g. /personal/workspace/a.csv) anywhere in text.
-        - Bare absolute Windows paths (e.g. C:\\Users\\foo\\a.csv) anywhere in text.
-        - Relative paths inside markdown link targets (e.g. [f](_tmp/a.json)), resolved
-          against workspace_path when provided.
-
-        Skips fenced code blocks and inline code spans.  Existing http/https/ftp/file
-        URLs are preserved as-is to avoid double-conversion.
-        """
-        _SCHEME_OR_ANCHOR = re.compile(
-            r'^(?:https?|ftp|file|mailto)://|^#', re.IGNORECASE
-        )
-        # Matches Windows absolute paths: letter + colon + slash or backslash
-        _WIN_ABS = re.compile(r'^[A-Za-z]:[/\\]')
-
-        def _win_path_to_uri(path: str) -> str:
-            """Convert a Windows absolute path to a file:/// URI."""
-            return 'file:///' + path.replace('\\', '/')
-
-        # Split on fenced code blocks (``` ... ```) and inline code (`...`).
-        # Odd-indexed parts are inside code — leave them untouched.
-        parts = re.split(r'(```[\s\S]*?```|`[^`\n]+`)', text)
-        result: list[str] = []
-        for i, part in enumerate(parts):
-            if i % 2 == 1:
-                result.append(part)
-                continue
-            # Temporarily stash existing URLs so they are never re-processed.
-            stashed: list[str] = []
-
-            def _stash(
-                m: re.Match, _s: list[str] = stashed
-            ) -> str:  # noqa: E731  bind loop var for B023
-                _s.append(m.group(0))
-                return f'\x00URL{len(_s) - 1:04d}\x00'
-
-            proc = re.sub(r'(?:https?|ftp|file)://[^\s\)\]\,;"\'<>]+', _stash, part)
-            # Convert bare absolute Unix paths (starting with /) to file:// URIs.
-            # The negative lookbehind avoids touching paths already part of a URL
-            # or preceded by word characters / colons (e.g. inside JSON keys).
-            proc = re.sub(
-                r'(?<![a-zA-Z0-9_.:-])(/[^\s\)\]\,;"\'<>*#]+)',
-                r'file://\1',
-                proc,
-            )
-            # Convert bare absolute Windows paths (e.g. C:\foo\bar.csv or C:/foo/bar.csv).
-            # Lookbehind: not preceded by word chars or colon to avoid false positives.
-            proc = re.sub(
-                r'(?<![a-zA-Z0-9_.])([A-Za-z]:[/\\][^\s\)\]\,;"\'<>*#]+)',
-                lambda m: _win_path_to_uri(m.group(1)),
-                proc,
-            )
-
-            # Convert relative paths inside markdown link targets to file:// URIs.
-            # Absolute targets (Unix, Windows, scheme, anchor) are already handled above
-            # or detected here and skipped.
-            # Targets containing \x00 are stash placeholders (already-stashed URLs)
-            # and must be skipped to avoid treating them as relative paths.
-            def _fix_md_link(m: re.Match) -> str:  # noqa: E731
-                link_text, target = m.group(1), m.group(2)
-                if (
-                    '\x00' in target
-                    or _SCHEME_OR_ANCHOR.match(target)
-                    or target.startswith('/')
-                    or _WIN_ABS.match(target)
-                ):
-                    return m.group(0)
-                if workspace_path:
-                    # Normalise workspace_path to forward slashes for the URI
-                    ws = workspace_path.rstrip('/').rstrip('\\').replace('\\', '/')
-                    # workspace_path may itself be a Windows path — use file:///
-                    prefix = 'file:///' if re.match(r'^[A-Za-z]:/', ws) else 'file://'
-                    return f'[{link_text}]({prefix}{ws}/{target})'
-                return m.group(0)
-
-            proc = re.sub(r'\[([^\]]*)\]\(([^)\s]+)\)', _fix_md_link, proc)
-            # Restore stashed URLs.
-            for idx, url in enumerate(stashed):
-                proc = proc.replace(f'\x00URL{idx:04d}\x00', url)
-            result.append(proc)
-        return ''.join(result)
-
-    def _generate_finish_report(
-        self,
-        finish_message: str,
-        task_completed: str,
-    ) -> tuple[str | None, str]:
-        """Save the finish message as a Markdown report, upload to OSS, return (report_url, normalised_message).
-
-        The report is just the normalised message (same as .message). No separate
-        trajectory-based content. Returns the normalised message so the caller
-        can use it for info['message'] and observation.
-        """
-        normalised = self._normalise_finish_message(finish_message or '')
-
-        # Safety net: if the LLM omitted the Execution Details section and the
-        # journal has entries, auto-append a structured per-step section.
-        # Zero extra LLM calls.
-        if '## Execution Details' not in normalised and self._execution_journal.entries:
-            details_md = self._execution_journal.get_execution_details_md()
-            if details_md:
-                normalised = normalised.rstrip() + '\n\n' + details_md
-
-        now_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
-        header = (
-            '# Task Finish Report\n\n'
-            f'**Generated**: {now_str}  \n'
-            f'**Status**: `{task_completed}`\n\n---\n\n'
-        )
-        md_content = header + (normalised or '*(no message)*')
-
-        # Write to a local temp file, upload, then delete
-        tmp_path = None
-        try:
-            from src.dao.oss_io import upload_file_to_oss  # noqa: PLC0415
-
-            fd, tmp_path = tempfile.mkstemp(suffix='_finish_report.md')
-            try:
-                with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                    f.write(md_content)
-            except Exception:
-                try:
-                    os.close(fd)
-                except Exception:
-                    pass
-                raise
-
-            report_url = upload_file_to_oss(
-                tmp_path,
-                key_prefix='matmaster_evo/finish_reports',
-            )
-            self.logger.info('Finish report uploaded: %s', report_url)
-            return report_url, normalised
-        except Exception as e:
-            self.logger.warning('_generate_finish_report: OSS upload failed: %s', e)
-            return None, normalised
-        finally:
-            if tmp_path and os.path.exists(tmp_path):
-                try:
-                    os.unlink(tmp_path)
-                except Exception:
-                    pass
-
-    # ------------------------------------------------------------------
-    # Observation formatting (MatMaster-only)
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _format_bash_observation(
-        observation: str, info: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Build structured JSON object for ``execute_bash`` results.
-
-        Includes a ``status`` field (``"success"`` / ``"error"``) so the LLM
-        can reliably branch on command outcome.
-        """
-        exit_code = info.get('exit_code', -1)
-        has_error = 'error' in info
-        if has_error:
-            status = 'error'
-        elif exit_code != 0 and exit_code != -1:
-            status = 'error'
-        else:
-            status = 'success'
-        return {
-            'status': status,
-            'output': observation,
-            'exit_code': exit_code,
-            'working_dir': info.get('working_dir', ''),
-        }
-
-    @staticmethod
-    def _to_json_value(value: Any) -> Any:
-        """Convert observation payload to a JSON-compatible value when possible."""
-        if not isinstance(value, str):
-            return value
-        text = value.strip()
-        if not text:
-            return ''
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return value
-
-    def _format_tool_observation(
-        self,
-        tool_name: str,
-        observation: Any,
-        info: dict[str, Any],
-    ) -> str:
-        """Return JSON text for every tool observation."""
-        # 调试：format 前 observation 类型与预览（便于排查 observation 被转成 str 的位置）
-        obs_type = type(observation).__name__
-        if isinstance(observation, dict):
-            self.logger.debug(
-                '[observation] before _format_tool_observation tool=%s type=%s keys=%s',
-                tool_name,
-                obs_type,
-                list(observation.keys())[:8],
-            )
-        elif isinstance(observation, str):
-            self.logger.debug(
-                '[observation] before _format_tool_observation tool=%s type=%s len=%s head=%s',
-                tool_name,
-                obs_type,
-                len(observation),
-                (observation[:80] + '...') if len(observation) > 80 else observation,
-            )
-        else:
-            self.logger.debug(
-                '[observation] before _format_tool_observation tool=%s type=%s',
-                tool_name,
-                obs_type,
-            )
-        if tool_name == 'execute_bash':
-            obs_str = observation if isinstance(observation, str) else str(observation)
-            payload = self._format_bash_observation(obs_str, info)
-        else:
-            status = 'error' if 'error' in info else 'success'
-            # For use_skill(action=run_script), propagate non-zero script exit code
-            # to outer status so tool-level status matches business outcome.
-            if (
-                tool_name == 'use_skill'
-                and info.get('action') == 'run_script'
-                and isinstance(info.get('exit_code'), int)
-                and info['exit_code'] != 0
-            ):
-                status = 'error'
-            payload = {
-                'status': status,
-                'observation': self._to_json_value(observation),
-            }
-            if info:
-                payload['info'] = info
-        return json.dumps(payload, ensure_ascii=False, indent=2, default=str)
-
-    # ------------------------------------------------------------------
-    # Tool execution
-    # ------------------------------------------------------------------
-
-    def _auto_save_tool_output(self, tool_name: str, observation: Any) -> str | None:
-        """将匹配模式的工具执行结果自动写入 session 工作区 _tmp/tool_outputs/<tool_name>/。
-
-        支持 str/dict/list 等常见类型；非字符串 observation 会在写盘前 json.dumps，
-        但返回值仍保持原始对象，前端展示不受影响。
-        """
-        if observation is None:
-            return None
-        if not any(
-            tool_name.startswith(p) for p in self._tool_output_auto_save_patterns
-        ):
-            return None
-        try:
-            workspace = getattr(self.session.config, 'workspace_path', '') or getattr(
-                self.session, 'working_dir', ''
-            )
-            if not workspace:
-                return None
-            base = workspace.rstrip('/')
-            safe_name = re.sub(r'[^\w\-.]', '_', tool_name)
-            self._tool_output_save_counter += 1
-            suffix = uuid.uuid4().hex[:8]
-            step = getattr(self, '_step_count', 0)
-            payload: str
-            if isinstance(observation, str):
-                stripped = observation.strip()
-                ext = (
-                    '.json'
-                    if stripped.startswith('{') or stripped.startswith('[')
-                    else '.txt'
-                )
-                payload = observation
-            else:
-                ext = '.json'
-                payload = json.dumps(
-                    observation, ensure_ascii=False, indent=2, default=str
-                )
-            rel = f'_tmp/tool_outputs/{safe_name}/step_{step}_{suffix}{ext}'
-            remote_path = f'{base}/{rel}'
-            self.session.write_file(remote_path, payload, encoding='utf-8')
-            self.logger.info('Auto-saved tool output to %s', remote_path)
-            return remote_path
-        except Exception as e:
-            self.logger.warning('Auto-save tool output failed: %s', e)
-            return None
-
-    def _summarize_large_tool_observation(
-        self,
-        tool_name: str,
-        observation: Any,
-        saved_path: str | None,
-    ) -> str | None:
-        """将超大工具 observation 替换为结构化摘要 + 文件路径引用。
-
-        仅当 observation 为字符串且长度超过阈值，且工具名匹配配置前缀时触发。
-        返回替换后的摘要字符串；若不触发则返回 None（调用方保持原 observation 不变）。
-
-        摘要策略（纯 Python，无 LLM）：
-        - mat_sn_search-papers-enhanced / mat_sn_search-papers：提取 top papers（title/doi/year/score/abstract preview）
-        - mat_sg_*：提取 formula/space_group/energy_above_hull
-        - 通用 fallback：total_items + 前 N 条 preview + 文件路径
-        """
-        if not isinstance(observation, str):
-            return None
-        if len(observation) <= self._tool_obs_summarize_threshold:
-            return None
-        if not any(tool_name.startswith(p) for p in self._tool_obs_summarize_patterns):
-            return None
-
-        path_note = f'\n\n[Full result saved to: {saved_path}]' if saved_path else ''
-
-        # ── Try to parse as JSON ──────────────────────────────────────────────
-        payload: dict | list | None = None
-        try:
-            stripped = observation.strip()
-            # observation may be "...\n\n[Auto-saved to: ...]" — strip that suffix first
-            _obs_clean = re.sub(r'\n\n\[Auto-saved to:[^\]]*\]$', '', stripped).strip()
-            payload = json.loads(_obs_clean)
-        except Exception:
-            pass
-
-        # ── mat_sn_search-papers* ─────────────────────────────────────────────
-        if tool_name.startswith('mat_sn_search-papers'):
-            papers: list[dict] = []
-            if isinstance(payload, dict):
-                # common shapes: {"papers": [...]} or {"results": [...]} or {"data": [...]}
-                for key in ('papers', 'results', 'data', 'items'):
-                    if isinstance(payload.get(key), list):
-                        papers = payload[key]
-                        break
-                if not papers and isinstance(payload.get('total'), int):
-                    # flat dict with a list somewhere
-                    for v in payload.values():
-                        if isinstance(v, list) and v:
-                            papers = v
-                            break
-            elif isinstance(payload, list):
-                papers = payload
-
-            if papers:
-                total = len(papers)
-                top_n = min(10, total)
-                lines = [
-                    f'[Tool: {tool_name}] Returned {total} papers. Top {top_n} shown below:',
-                    '',
-                ]
-                for i, p in enumerate(papers[:top_n], 1):
-                    if not isinstance(p, dict):
-                        lines.append(f'{i}. {str(p)[:120]}')
-                        continue
-                    title = p.get('title') or p.get('Title') or '(no title)'
-                    doi = p.get('doi') or p.get('DOI') or p.get('url') or ''
-                    year = (
-                        p.get('year') or p.get('Year') or p.get('published_year') or ''
-                    )
-                    score = (
-                        p.get('score')
-                        or p.get('relevance_score')
-                        or p.get('similarity')
-                        or ''
-                    )
-                    abstract = (
-                        p.get('abstract') or p.get('Abstract') or p.get('summary') or ''
-                    )
-                    abstract_preview = (
-                        (abstract[:200] + '…') if len(abstract) > 200 else abstract
-                    )
-                    parts = [f'{i}. {title}']
-                    if doi:
-                        parts.append(f'   DOI/URL: {doi}')
-                    meta = []
-                    if year:
-                        meta.append(f'year={year}')
-                    if score:
-                        meta.append(f'score={score}')
-                    if meta:
-                        parts.append(f'   {", ".join(meta)}')
-                    if abstract_preview:
-                        parts.append(f'   Abstract: {abstract_preview}')
-                    lines.extend(parts)
-                    lines.append('')
-                if total > top_n:
-                    lines.append(f'… and {total - top_n} more papers.{path_note}')
-                else:
-                    lines.append(path_note.strip() if path_note else '')
-                return '\n'.join(lines).rstrip()
-
-        # ── mat_sg_* (structure generator) ───────────────────────────────────
-        if tool_name.startswith('mat_sg_'):
-            structures: list[dict] = []
-            if isinstance(payload, dict):
-                for key in ('structures', 'results', 'data', 'items'):
-                    if isinstance(payload.get(key), list):
-                        structures = payload[key]
-                        break
-                if not structures:
-                    # single structure result
-                    structures = [payload]
-            elif isinstance(payload, list):
-                structures = payload
-
-            if structures:
-                total = len(structures)
-                top_n = min(20, total)
-                lines = [
-                    f'[Tool: {tool_name}] Returned {total} structure(s). Top {top_n} shown:',
-                    '',
-                ]
-                for i, s in enumerate(structures[:top_n], 1):
-                    if not isinstance(s, dict):
-                        lines.append(f'{i}. {str(s)[:120]}')
-                        continue
-                    formula = (
-                        s.get('formula')
-                        or s.get('Formula')
-                        or s.get('reduced_formula')
-                        or s.get('pretty_formula')
-                        or '?'
-                    )
-                    sg = (
-                        s.get('space_group')
-                        or s.get('spacegroup')
-                        or s.get('space_group_symbol')
-                        or s.get('sg')
-                        or '?'
-                    )
-                    e_hull = (
-                        s.get('energy_above_hull')
-                        or s.get('e_above_hull')
-                        or s.get('stability')
-                    )
-                    mat_id = s.get('material_id') or s.get('id') or s.get('mp_id') or ''
-                    parts = [f'{i}. {formula}  SG={sg}']
-                    if e_hull is not None:
-                        parts[0] += f'  e_above_hull={e_hull}'
-                    if mat_id:
-                        parts[0] += f'  id={mat_id}'
-                    lines.extend(parts)
-                if total > top_n:
-                    lines.append(f'… and {total - top_n} more.{path_note}')
-                else:
-                    lines.append(path_note.strip() if path_note else '')
-                return '\n'.join(lines).rstrip()
-
-        # ── Generic fallback ──────────────────────────────────────────────────
-        items: list = []
-        if isinstance(payload, list):
-            items = payload
-        elif isinstance(payload, dict):
-            for key in ('results', 'data', 'items', 'papers', 'structures'):
-                if isinstance(payload.get(key), list):
-                    items = payload[key]
-                    break
-
-        total_items = len(items) if items else None
-        preview_lines: list[str] = []
-        for item in items[:5]:
-            preview_lines.append(f'  - {str(item)[:150]}')
-
-        summary_parts = [
-            f'[Tool: {tool_name}] Large observation ({len(observation):,} chars).'
-        ]
-        if total_items is not None:
-            summary_parts.append(f'Total items: {total_items}.')
-        if preview_lines:
-            summary_parts.append('Preview (first 5):')
-            summary_parts.extend(preview_lines)
-        if path_note:
-            summary_parts.append(path_note.strip())
-        return '\n'.join(summary_parts)
 
     def _execute_tool(self, tool_call) -> tuple[str, dict[str, Any]]:
         """Execute tool with MAT callbacks.
@@ -1104,7 +582,7 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
                 obs, inf = self._tool_callback_pipeline.run_after(
                     tool_call, error_msg, {'error': 'tool_not_found'}
                 )
-                return self._format_tool_observation(tool_name, obs, inf), inf
+                return format_tool_observation(self.logger, tool_name, obs, inf), inf
 
             try:
                 observation, info = tool.execute(self.session, tool_args)
@@ -1162,7 +640,15 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
             # 工具结果自动落盘在 callback pipeline 之后，落盘的是清洗后的数据
             saved_path: str | None = None
             if isinstance(info, dict) and 'error' not in info:
-                saved_path = self._auto_save_tool_output(tool_name, observation)
+                saved_path, self._tool_output_save_counter = auto_save_tool_output(
+                    self.logger,
+                    self.session,
+                    tool_name,
+                    observation,
+                    save_patterns=self._tool_output_auto_save_patterns,
+                    save_counter=self._tool_output_save_counter,
+                    step_count=getattr(self, '_step_count', 0),
+                )
                 if saved_path:
                     if isinstance(observation, str):
                         observation = (
@@ -1170,10 +656,28 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
                         )
                     info = {**info, 'auto_saved_path': saved_path}
 
+            # mat_sn 论文检索：落盘后仅向上下文返回路径 + 条数 + 少量题录（完整 JSON 仅在磁盘）
+            if isinstance(info, dict) and 'error' not in info and saved_path:
+                _compact = compact_mat_sn_papers_observation(
+                    tool_name, observation, saved_path
+                )
+                if _compact is not None:
+                    observation = _compact
+                    info = {**info, 'obs_summarized': True}
+                    self.logger.info(
+                        '[FeatureC] Compact mat_sn papers observation for %s → data_count=%s',
+                        tool_name,
+                        _compact.get('data_count'),
+                    )
+
             # 超大 observation 摘要化在 callback pipeline 之后，基于清洗后的 observation
             if isinstance(info, dict) and 'error' not in info:
-                _summary = self._summarize_large_tool_observation(
-                    tool_name, observation, saved_path
+                _summary = summarize_large_tool_observation(
+                    tool_name,
+                    observation,
+                    saved_path,
+                    summarize_patterns=self._tool_obs_summarize_patterns,
+                    summarize_threshold=self._tool_obs_summarize_threshold,
                 )
                 if _summary is not None:
                     self.logger.info(
@@ -1185,14 +689,18 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
                     observation = _summary
                     info = {**info, 'obs_summarized': True}
 
-            return self._format_tool_observation(tool_name, observation, info), info
+            return (
+                format_tool_observation(self.logger, tool_name, observation, info),
+                info,
+            )
 
         except Exception as exc:
             # Catch-all: callback pipeline or any other unexpected error
             tb_str = _tb.format_exc()
             error_msg = f"Tool execution error: {exc}\n\nTraceback:\n{tb_str}"
             self.logger.error('_execute_tool failed:\n%s', tb_str)
-            return self._format_tool_observation(
+            return format_tool_observation(
+                self.logger,
                 'internal_error',
                 error_msg,
                 {'error': str(exc)},
@@ -1494,9 +1002,15 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
                 task_completed = info.get('task_completed', 'false')
                 if task_completed in ('true', 'partial'):
                     should_finish = True
-                    report_url, normalised_message = self._generate_finish_report(
+                    report_url, normalised_message = generate_finish_report(
+                        self.logger,
+                        self._execution_journal,
                         finish_message=info.get('message', ''),
                         task_completed=task_completed,
+                        workspace_path=getattr(
+                            self.session.config, 'workspace_path', ''
+                        )
+                        or '',
                     )
                     info['message'] = normalised_message
                     observation['message'] = normalised_message
