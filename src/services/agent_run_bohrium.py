@@ -14,6 +14,49 @@ from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_N
 logger = logging.getLogger(__name__)
 
 
+def _clear_remote_proxy_shell() -> str:
+    """Bash snippet for root on Bohrium SSH nodes: wget/curl/git + env.
+
+    GNU wget only accepts ``use_proxy = on|off``; ``use_proxy = no`` is invalid and
+    leaves /etc/wgetrc proxy (e.g. ga.dp.tech:8118) in effect.
+    """
+    return (
+        'rm -f /root/speedUp.sh /speedUp.sh; '
+        'printf %s\\n '
+        "'# matmaster-evo: disable platform proxy for OSS/outbound' "
+        "'use_proxy = off' "
+        "'proxy =' "
+        "'http_proxy =' "
+        "'https_proxy =' "
+        "'ftp_proxy =' "
+        '> /root/.wgetrc; '
+        'printf %s\\n '
+        "'# matmaster-evo: disable curl default proxy' "
+        "'proxy = \"\"' "
+        "'noproxy = \"*\"' "
+        '> /root/.curlrc; '
+        'git config --global --unset-all http.proxy 2>/dev/null; true; '
+        'git config --global --unset-all https.proxy 2>/dev/null; true; '
+        'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= '
+        'NO_PROXY= no_proxy= ftp_proxy= FTP_PROXY=; '
+        'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY '
+        'NO_PROXY no_proxy ftp_proxy FTP_PROXY WGETRC 2>/dev/null; '
+    )
+
+
+def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
+    try:
+        session = getattr(pg, 'session', None)
+        if session is not None and hasattr(session, 'exec_bash'):
+            session.exec_bash(_clear_remote_proxy_shell(), timeout=20)
+    except Exception as clear_err:
+        logger.warning(
+            'run_agent_sync: clear_remote_proxy (%s) failed: %s',
+            phase,
+            clear_err,
+        )
+
+
 class BohriumSetupResult(NamedTuple):
     """Result of Bohrium setup for a run."""
 
@@ -347,22 +390,7 @@ def setup_bohrium_for_run(
                 'run_agent_sync: SSH session attached to Bohrium node ip=%s',
                 node_ip,
             )
-            try:
-                if pg.session and hasattr(pg.session, 'exec_bash'):
-                    pg.session.exec_bash(
-                        'rm -f /root/speedUp.sh /speedUp.sh; '
-                        "echo 'use_proxy = no' > /root/.wgetrc; "
-                        "echo '# proxy disabled' > /root/.curlrc; "
-                        'git config --global --unset http.proxy 2>/dev/null; '
-                        'git config --global --unset https.proxy 2>/dev/null; '
-                        'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY=;',
-                        timeout=15,
-                    )
-            except Exception as clear_err:
-                logger.warning(
-                    'run_agent_sync: clear_remote_proxy failed: %s',
-                    clear_err,
-                )
+            _run_clear_remote_proxy(pg, 'post_ssh')
             try:
                 pg.sync_skills_to_remote()
                 _emit_node_status(
@@ -378,6 +406,7 @@ def setup_bohrium_for_run(
                     sync_err,
                     exc_info=True,
                 )
+            _run_clear_remote_proxy(pg, 'post_skills_sync')
             _emit_node_status(
                 event_callback,
                 node_id,
