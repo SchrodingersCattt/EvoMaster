@@ -17,8 +17,10 @@ from .bash_safety import is_dangerous_bash_command
 # 每次执行命令前清除代理，避免远程节点上平台注入的代理导致 curl/wget/git 卡住（ga.dp.tech:8118）
 # 仅对新命令生效，is_input 时不注入
 _PROXY_CLEAR_PREFIX = (
-    'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY=; '
-    'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY 2>/dev/null; '
+    'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= '
+    'NO_PROXY= no_proxy= ftp_proxy= FTP_PROXY=; '
+    'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY '
+    'NO_PROXY no_proxy ftp_proxy FTP_PROXY WGETRC 2>/dev/null; '
 )
 
 if TYPE_CHECKING:

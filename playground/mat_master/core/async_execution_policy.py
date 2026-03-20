@@ -2,6 +2,8 @@
 
 This policy centralizes:
 1) Which tool specs are exposed to LLM (submit-only async surface).
+   Non-submit async tools (e.g. legacy ``run_gromacs``) are hidden; use
+   ``submit_run_gromacs`` so the MCP tool name matches ``submit_*`` and is exposed.
 2) Which tool calls are allowed while async jobs are pending.
 """
 
@@ -19,7 +21,11 @@ class AsyncExecutionPolicy:
         self._registry = registry
 
     def filter_tool_specs_for_llm(self, specs: list) -> list:
-        """Apply submit-only async surface and hide lifecycle tools."""
+        """Apply submit-only async surface and hide lifecycle tools.
+
+        Async tools whose remote name starts with ``submit_`` (e.g. ``submit_run_gromacs``)
+        are kept; others are dropped so the model only sees submit-style MCP calls.
+        """
         if not specs:
             return specs
 

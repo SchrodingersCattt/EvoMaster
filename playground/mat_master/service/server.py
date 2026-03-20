@@ -504,6 +504,75 @@ def _persist_history_event(session_id: str, payload: dict) -> None:
         pass
 
 
+def _heal_orphaned_tool_calls(session_id: str) -> None:
+    """Scan the session history for tool_call events that have no matching
+    tool_result and persist synthetic ``tool_result(status=interrupted)``
+    events for each one.
+
+    This is called at the start of every new run so that the persisted history
+    is always structurally valid before it is converted to dialog messages.
+    Without this, a session interrupted mid-step (tool_calls dispatched but
+    results not yet received) would carry orphaned tool_use blocks into the
+    next LLM request, causing a 400 Bad Request from Claude/Bedrock.
+    """
+    session = SESSIONS.get(session_id)
+    if not session:
+        return
+    history: list[dict] = session.get('history', [])
+
+    # Build a set of tool_call ids that already have a matching tool_result.
+    result_ids: set[str] = set()
+    for ev in history:
+        if ev.get('type') == 'tool_result':
+            c = ev.get('content')
+            if isinstance(c, dict):
+                rid = str(c.get('id') or '')
+                if rid:
+                    result_ids.add(rid)
+
+    # Find tool_call events whose id has no matching tool_result.
+    orphaned: list[dict] = []
+    for ev in history:
+        if ev.get('type') == 'tool_call':
+            c = ev.get('content')
+            if isinstance(c, dict):
+                call_id = str(c.get('id') or '')
+                name = str(c.get('name') or 'unknown')
+                if call_id and call_id not in result_ids:
+                    orphaned.append({'id': call_id, 'name': name})
+
+    if not orphaned:
+        return
+
+    logger.warning(
+        '_heal_orphaned_tool_calls: session_id=%s found %d orphaned tool_call(s); '
+        'persisting placeholder tool_result(s): %s',
+        session_id,
+        len(orphaned),
+        [o['id'] for o in orphaned],
+    )
+
+    for o in orphaned:
+        payload = {
+            'source': 'ToolExecutor',
+            'type': 'tool_result',
+            'content': {
+                'id': o['id'],
+                'name': o['name'],
+                'result': {
+                    'status': 'interrupted',
+                    'observation': (
+                        'Tool call was interrupted before completion; '
+                        'result is unavailable. Please retry if needed.'
+                    ),
+                },
+            },
+            'session_id': session_id,
+        }
+        history.append(payload)
+        _persist_history_event(session_id, payload)
+
+
 def _persist_meta(session_id: str, data: dict) -> None:
     """Write .state/<session_id>/meta.json (last_task_id etc)."""
     try:
@@ -1023,6 +1092,12 @@ def _run_agent_sync(
         exp = pg._create_exp()
         exp.set_run_dir(run_dir)
         event_callback('MatMaster', 'exp_run', exp.__class__.__name__)
+
+        # Heal any orphaned tool_calls from a previous interrupted run before
+        # converting history to dialog messages.  This ensures the persisted
+        # history is structurally valid (every tool_use has a tool_result) so
+        # that the LLM request does not fail with a 400 Bad Request.
+        _heal_orphaned_tool_calls(session_id)
 
         # Multi-turn: build dialog_history from prior in-memory events
         all_events = list(SESSIONS.get(session_id, {}).get('history', []))

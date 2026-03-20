@@ -24,6 +24,14 @@ from .plan_utils import (
 
 
 class ResearchPlannerRuntimeMixin:
+    def _read_workspace_text(self, path: str | Path) -> str:
+        """Read UTF-8 text from a workspace or artifact path via planner I/O.
+
+        Use for paths under the agent workspace (including SSH remote). Prefer
+        this over ``Path.read_text`` so local and SSH sessions behave the same.
+        """
+        return self._file_io.read_text(str(path))
+
     def _consume_turns(self, state: dict[str, Any], task_id: str, n: int = 1) -> bool:
         """Consume planner turn budget in a thread-safe way."""
         try:

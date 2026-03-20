@@ -155,6 +155,7 @@ mat_master:
       - "QE"
       - "ABINIT"
       - "ORCA"
+      - "GROMACS"
       - "OpenBabel"
       # MCP server prefixes (planner validation)
       - "mat_abacus"
@@ -217,6 +218,9 @@ mat_master:
     # 质量门控：survey 完成前至少检索次数（与 plan 中 10-15+ 下界一致）
     quality_gates:
       survey_min_retrieval_calls: 10
+      # 工作区根目录 *.md 纳入 survey 质量门禁时的最小字节数（0=不限制）；最多纳入文件数见 survey_max_root_md_files
+      survey_min_root_md_bytes: 400
+      survey_max_root_md_files: 48
 
     # Sub-agent 隔离模式：每个 plan step 以独立上下文执行，防止 solver 越界执行后续步骤
     # enabled=true 时每步重置 agent 对话上下文（推荐）；false 回退到共享 solver 模式（旧行为）
@@ -298,6 +302,8 @@ mcp:
       - prepare_lammps_job
       - prepare_orca_job
       - prepare_pyatb_job
+      # MCP exposes submit_run_gromacs; executor_map uses run_gromacs (path_adaptor strips submit_)
+      - submit_run_gromacs
   # Per-server executor (image/machine_type) and sync_tools. Sync tools → executor None; others → Bohrium executor with env auth.
   calculation_executors:
     mat_sg:
@@ -494,6 +500,13 @@ mcp:
               app_key: "agent"
           resources:
             envs: {}
+      # MCP 可能将 List[Path] 暴露为 array of string（无 items.format:path）；submit 工具 description 常为短句。
+      # 在此按「远程工具名」声明需走 OSS 上传的参数名（须出现在 inputSchema.properties）；可与 run_* 共用一条。
+      path_params_by_tool:
+        submit_run_gromacs:
+          - input_files
+        run_gromacs:
+          - input_files
       sync_tools:
         - prepare_abinit_job
         - prepare_cp2k_job
