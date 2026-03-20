@@ -58,7 +58,13 @@ def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
             'run_agent_sync: clear_remote_proxy (%s) running (wgetrc/curlrc + env)',
             phase,
         )
-        result = session.exec_bash(_clear_remote_proxy_shell(), timeout=20)
+        script = _clear_remote_proxy_shell()
+        env = getattr(session, '_env', None)
+        if env is not None and hasattr(env, 'ssh_bash_noninteractive'):
+            # Avoid tmux send-keys on very long lines (remote tmux: unknown command C-m).
+            result = env.ssh_bash_noninteractive(script, timeout=20)
+        else:
+            result = session.exec_bash(script, timeout=20)
         exit_code = result.get('exit_code', -1)
         out = (result.get('output') or result.get('stdout') or '').strip()
         if exit_code == 0:
