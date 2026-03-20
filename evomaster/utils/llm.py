@@ -530,6 +530,47 @@ def _azure_deployment_name(model: str) -> str:
     return s
 
 
+def _build_reasoning_request_overrides(config: LLMConfig) -> dict[str, Any]:
+    """构造 reasoning/thinking 相关的 provider 请求覆盖参数。"""
+    effort = (config.thinking_effort or '').strip().lower()
+    if not effort:
+        return {}
+
+    model = (config.model or '').strip().lower()
+    if 'claude-sonnet-4-6' in model or 'claude-opus-4-6' in model:
+        return {
+            'extra_body': {
+                'thinking': {'type': 'adaptive'},
+                'output_config': {'effort': effort},
+            }
+        }
+
+    return {'reasoning_effort': effort}
+
+
+def _merge_request_overrides(
+    request_params: dict[str, Any], overrides: dict[str, Any]
+) -> dict[str, Any]:
+    """合并 reasoning 请求覆盖，保留已有 extra_body 字段。"""
+    if not overrides:
+        return request_params
+
+    merged = request_params.copy()
+    for key, value in overrides.items():
+        if (
+            key == 'extra_body'
+            and isinstance(value, dict)
+            and isinstance(merged.get('extra_body'), dict)
+        ):
+            merged['extra_body'] = {
+                **merged['extra_body'],
+                **value,
+            }
+        else:
+            merged[key] = value
+    return merged
+
+
 class OpenAILLM(BaseLLM):
     """OpenAI LLM 实现
 
@@ -657,6 +698,10 @@ class OpenAILLM(BaseLLM):
         if 'response_format' in kwargs and kwargs['response_format'] is not None:
             request_params['response_format'] = kwargs['response_format']
 
+        request_params = _merge_request_overrides(
+            request_params, _build_reasoning_request_overrides(self.config)
+        )
+
         # 调用 API
         response = self.client.chat.completions.create(**request_params)
 
@@ -751,6 +796,10 @@ class OpenAILLM(BaseLLM):
             request_params['tool_choice'] = kwargs.get('tool_choice', 'auto')
         if 'response_format' in kwargs and kwargs['response_format'] is not None:
             request_params['response_format'] = kwargs['response_format']
+
+        request_params = _merge_request_overrides(
+            request_params, _build_reasoning_request_overrides(self.config)
+        )
 
         full_content: list[str] = []
         # tool_call delta 按 index 累积：{index: {"id": str, "name": str, "arguments": str}}
@@ -999,6 +1048,10 @@ class DeepSeekLLM(BaseLLM):
         # 支持 response_format（如 {"type": "json_object"} 或 JSON Schema）
         if 'response_format' in kwargs and kwargs['response_format'] is not None:
             request_params['response_format'] = kwargs['response_format']
+
+        request_params = _merge_request_overrides(
+            request_params, _build_reasoning_request_overrides(self.config)
+        )
 
         # 调用 API
         response = self.client.chat.completions.create(**request_params)
