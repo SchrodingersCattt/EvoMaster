@@ -1,6 +1,6 @@
 ---
 name: bohrium-job
-description: "Submission engine for Bohrium HPC. Receives a prepared input directory (output_dir from input-manual-helper, or a directory containing user-provided ready-to-run input files) and supports split submission and monitoring via submit_job.py and poll_job.py. Covers CP2K, QE, ABINIT, LAMMPS, ORCA. Do NOT use for GROMACS — use MCP mat_binary_calc_run_gromacs instead."
+description: "Submission engine for Bohrium HPC. Receives a prepared input directory (output_dir from input-manual-helper, or a directory containing user-provided ready-to-run input files) and supports split submission and monitoring via submit_job.py and poll_job.py. Covers CP2K, QE, ABINIT, LAMMPS, ORCA. Do NOT use for GROMACS — use MCP mat_binary_calc_submit_run_gromacs instead."
 skill_type: operator
 ---
 
@@ -10,7 +10,7 @@ skill_type: operator
 
 **Do not** use this skill (`submit_job.py` / `poll_job.py`) for GROMACS (`gmx`, `grompp`, `mdrun`, or `gromacs` images). `submit_job.py` **rejects** such submissions at runtime.
 
-- Use MCP **`mat_binary_calc_run_gromacs`** (tool `run_gromacs` on server `mat_binary_calc`), then the built-in **`monitor_job`** with `software="gromacs"`.
+- Use MCP **`mat_binary_calc_submit_run_gromacs`** (tool `submit_run_gromacs` on server `mat_binary_calc`), then the built-in **`monitor_job`** with `software="gromacs"`.
 
 Submit an input directory to Bohrium HPC. There are two entry paths:
 - **Normal path**: call `input-manual-helper` first to generate the input files, then pass the resulting `output_dir` here.
@@ -181,7 +181,7 @@ Universal monitor script — software-agnostic.
 
 ## Rules
 
-0. **GROMACS**: Never use this skill. Use **`mat_binary_calc_run_gromacs`** + **`monitor_job`** (see Forbidden section above).
+0. **GROMACS**: Never use this skill. Use **`mat_binary_calc_submit_run_gromacs`** + **`monitor_job`** (see Forbidden section above).
 1. **Prepare gate**: If the user has already provided a complete, ready-to-run input file, skip `input-manual-helper` and submit directly. Otherwise, always call `input-manual-helper` first for CP2K / QE / ABINIT / LAMMPS / ORCA — do not hand-write input files here.
 2. **Input files land in `oss_downloaded_files/`**, not in the `output_dir` you passed to `prepare_*`. Always `dir oss_downloaded_files` (Windows) or `ls oss_downloaded_files` to confirm the actual filename before constructing `--cmd`.
 3. **Match MPI `-np` count** in `--cmd` to the machine's core count (e.g. 32 for `c32_m128_cpu`).
@@ -189,7 +189,7 @@ Universal monitor script — software-agnostic.
 5. Run `submit_job.py` first, then pass the returned `job_id` into `poll_job.py`. **Never call the built-in `monitor_job` tool** — always use `use_skill bohrium-job run_script poll_job.py`.
 6. **Log redirection must be unified**: in every software command, always use `> log 2>&1`. Do not use per-case filenames (for example `> orca.out`, `> qe.log`, `> caffeine.out`). This keeps `poll_job.py` log-tail behavior stable.
 
-> **Note**: Rule 5 applies to **this skill’s** CP2K/QE/LAMMPS/ORCA/ABINIT path only. **GROMACS** uses `monitor_job` after `run_gromacs` MCP (not `poll_job.py`).
+> **Note**: Rule 5 applies to **this skill’s** CP2K/QE/LAMMPS/ORCA/ABINIT path only. **GROMACS** uses `monitor_job` after `submit_run_gromacs` MCP (not `poll_job.py`).
 
 ## Log Filename Best Practice
 

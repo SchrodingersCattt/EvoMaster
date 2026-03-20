@@ -291,7 +291,7 @@ class AsyncToolRegistry:
                 f"3. **Submit** — two paths, choose by software:\n"
                 f"   - **MCP submit path** ({mcp_sm}): Call the native MCP submit tool "
                 f"and note the returned job_id. Then go to step 4.\n"
-                f"   - **GROMACS (mat_binary_calc)**: Call MCP **`mat_binary_calc_run_gromacs`**, "
+                f"   - **GROMACS (mat_binary_calc)**: Call MCP **`mat_binary_calc_submit_run_gromacs`**, "
                 f"then `monitor_job` with software=\"gromacs\". Do **not** use bohrium-job for GROMACS.\n"
                 f"   - **bohrium-job skill path** ({bj_sw}): For LAMMPS/CP2K/QE/ABINIT/ORCA/PySCF-class jobs, "
                 f"these entries use **prepare_* MCP tools** (no submit_* MCP). "
@@ -344,7 +344,7 @@ class AsyncToolRegistry:
             constraint_2 = (
                 f"Heavy calculations must NOT run locally. "
                 f"Submit path: {mcp_sm} → native MCP submit tools; "
-                f"GROMACS → **mat_binary_calc_run_gromacs** then monitor_job; "
+                f"GROMACS → **mat_binary_calc_submit_run_gromacs** then monitor_job; "
                 f"{bj_sw} (except GROMACS per above) → prepare_* MCP tools then **bohrium-job** skill "
                 f"(no _submit_* MCP). Never run any of these via execute_bash."
             )
@@ -373,7 +373,7 @@ class AsyncToolRegistry:
             f"     - DFT tasks (molecular) -> prefer **PySCF** (`run_pyscf`, direct run, no prepare_* needed) or **ORCA**.\n"
             f"     - MD / Potential / screening -> goals achievable with "
             f"**{ts.get('preferred_mlp', 'DPA')}**, **{ts.get('preferred_md', 'LAMMPS')}**, **GROMACS** "
-            f"(`mat_binary_calc_run_gromacs`), or **CP2K**.\n"
+            f"(`mat_binary_calc_submit_run_gromacs`), or **CP2K**.\n"
             f"     - If the request cannot be fulfilled with open alternatives, return status `REFUSED` "
             f"with a clear refusal_reason."
         )
