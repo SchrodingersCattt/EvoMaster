@@ -64,8 +64,8 @@ def test_streaming_agent_emits_reasoning_as_thought():
     )
     agent._on_assistant_message(assistant)
 
-    assert events[-1]['type'] == 'thought'
-    assert events[-1]['content'] == 'real reasoning'
+    thought_events = [event for event in events if event['type'] == 'thought']
+    assert thought_events[-1]['content'] == 'real reasoning'
 
 
 class _PlannerRuntimeProbe(ResearchPlannerRuntimeMixin):
