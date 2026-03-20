@@ -423,6 +423,20 @@ class ResearchPlannerStepExecutionMixin:
             )
             summary = self._summarize_solver_result(result, max_len=2000)
             result_info['result_summary'] = summary[:2000]
+            preview = (summary[:500] + '…') if len(summary) > 500 else summary
+            self.logger.info(
+                '[Planner] Step %s summarize_solver_result: len=%d preview=%r',
+                step_id,
+                len(summary),
+                preview,
+            )
+            if isinstance(result, dict):
+                self.logger.debug(
+                    '[Planner] Step %s solver.run result keys=%s status=%r',
+                    step_id,
+                    sorted(result.keys()),
+                    result.get('status'),
+                )
             _post_run_checkpoint = 'after_summarize'
             self.logger.info(
                 '[Planner] Step %s post-run checkpoint: %s',
@@ -482,6 +496,20 @@ class ResearchPlannerStepExecutionMixin:
                 workspace_dir = Path(self._agent_workspace_dir(task_id))
                 quality_files = self._collect_quality_files(
                     step_dir, workspace_dir, summary
+                )
+                _qf_paths = [str(p) for p in quality_files]
+                _qf_max = 40
+                if len(_qf_paths) > _qf_max:
+                    _qf_log = _qf_paths[:_qf_max] + [
+                        f'… (+{len(_qf_paths) - _qf_max} more)'
+                    ]
+                else:
+                    _qf_log = _qf_paths
+                self.logger.info(
+                    '[Planner] Step %s quality_files for literature_index: n=%d paths=%s',
+                    step_id,
+                    len(quality_files),
+                    _qf_log,
                 )
                 before_count = int(state.get('literature_entry_count', 0) or 0)
                 self._append_literature_index(
