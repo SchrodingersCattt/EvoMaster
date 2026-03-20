@@ -23,6 +23,7 @@ session's ``is_file`` / ``download`` methods rather than the local filesystem.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import tempfile
@@ -183,6 +184,47 @@ def _path_keys_from_param_names(input_schema: dict[str, Any] | None) -> set[str]
         return set()
     props = input_schema.get('properties') or {}
     return {k for k in props if k.endswith('_path')}
+
+
+def _brief_json_schema_prop(spec: Any, depth: int = 0) -> Any:
+    """Compact view of one JSON Schema property for logs (type/format/items/union)."""
+    if depth > 4:
+        return '…'
+    if not isinstance(spec, dict):
+        return type(spec).__name__
+    out: dict[str, Any] = {}
+    for k in ('title', 'description'):
+        if k in spec and isinstance(spec[k], str) and len(spec[k]) > 120:
+            out[k] = spec[k][:117] + '…'
+        elif k in spec:
+            out[k] = spec[k]
+    if 'type' in spec:
+        out['type'] = spec['type']
+    if 'format' in spec:
+        out['format'] = spec['format']
+    items = spec.get('items')
+    if isinstance(items, dict):
+        out['items'] = _brief_json_schema_prop(items, depth + 1)
+    for branch_key in ('anyOf', 'oneOf', 'allOf'):
+        branches = spec.get(branch_key)
+        if isinstance(branches, list):
+            out[branch_key] = [
+                _brief_json_schema_prop(b, depth + 1) if isinstance(b, dict) else b
+                for b in branches[:6]
+            ]
+            if len(branches) > 6:
+                out[f'{branch_key}_len'] = len(branches)
+    if not out and spec:
+        out['_keys'] = sorted(spec.keys())
+    return out
+
+
+def _input_schema_params_brief(input_schema: dict[str, Any] | None) -> dict[str, Any]:
+    """Per-parameter type summary from MCP ``inputSchema`` (``properties``)."""
+    if not input_schema or not isinstance(input_schema, dict):
+        return {}
+    props = input_schema.get('properties') or {}
+    return {k: _brief_json_schema_prop(v) for k, v in sorted(props.items())}
 
 
 # ---------------------------------------------------------------------------
@@ -610,9 +652,13 @@ class CalculationPathAdaptor:
         _has_input_files_prop = 'input_files' in (
             (input_schema or {}).get('properties') or {}
         )
+        _params_brief = _input_schema_params_brief(
+            input_schema if isinstance(input_schema, dict) else None
+        )
         logger.info(
             'Path adaptor [%s] path_keys=%s source=%s workspace_path_set=%s '
-            'schema_props=%s input_files_in_schema=%s input_files_classified=%s',
+            'schema_props=%s input_files_in_schema=%s input_files_classified=%s '
+            'schema_params_brief=%s',
             tool_name,
             sorted(path_arg_names),
             source,
@@ -620,7 +666,15 @@ class CalculationPathAdaptor:
             _schema_props,
             bool(_has_input_files_prop),
             'input_files' in path_arg_names,
+            json.dumps(_params_brief, ensure_ascii=False, default=str),
         )
+        if _has_input_files_prop:
+            _raw_if = ((input_schema or {}).get('properties') or {}).get('input_files')
+            logger.info(
+                'Path adaptor [%s] input_files raw schema (JSON): %s',
+                tool_name,
+                json.dumps(_raw_if, ensure_ascii=False, default=str),
+            )
         if _has_input_files_prop and 'input_files' not in path_arg_names:
             logger.warning(
                 'Path adaptor [%s]: schema has input_files but it was not classified as '
