@@ -123,6 +123,7 @@ class StreamingMatMasterAgent(MatMasterAgent):
             # 兼容旧模型：无 reasoning_content 时，仍推送 assistant 文本
             native_text = msg.content if msg.content is not None else ''
             self._emit(agent_name, 'thought', native_text)
+        self._emit('MatMaster', 'assistant_state', msg.model_dump())
         if msg.tool_calls:
             for tc in msg.tool_calls:
                 # skill_hit 跟踪（skill_name 不被 before-callback 修改，此处可安全读取）
