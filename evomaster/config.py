@@ -326,6 +326,28 @@ class ConfigManager:
             raise ValueError(f"LLM config '{name}' not found")
         return self._require_dict(llm_config, f'llm.{name}')
 
+    def find_llm_config_by_model(self, model: str) -> dict[str, Any] | None:
+        """根据模型名在所有 LLM 配置块中查找匹配项
+
+        遍历 config.llm 下所有配置块，返回第一个 model 字段与给定值匹配的配置。
+        跳过 'default'、'compaction' 等非模型块。
+
+        Args:
+            model: 模型名，如 'azure/gpt-5'、'claude-opus-4-6'
+
+        Returns:
+            匹配的 LLM 配置字典，未找到返回 None
+        """
+        config = self.load()
+        llm_root = self._require_dict(config.llm, 'llm')
+        skip_keys = {'default', 'compaction'}
+        for key, block in llm_root.items():
+            if key in skip_keys or not isinstance(block, dict):
+                continue
+            if block.get('model') == model:
+                return dict(block)
+        return None
+
     def get_agent_config(self, name: str) -> dict[str, Any]:
         """获取指定名称的 Agent 配置（与上游一致，必须显式传 name）
 

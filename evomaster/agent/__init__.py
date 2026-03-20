@@ -44,7 +44,6 @@ from .tools import (
     BashTool,
     EditorTool,
     FinishTool,
-    ThinkTool,
     ToolError,
     ToolRegistry,
     create_default_registry,
@@ -88,6 +87,5 @@ __all__ = [
     'create_registry',
     'BashTool',
     'EditorTool',
-    'ThinkTool',
     'FinishTool',
 ]

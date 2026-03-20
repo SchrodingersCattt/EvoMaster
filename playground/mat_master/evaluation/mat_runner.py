@@ -244,7 +244,7 @@ def extract_tool_calls_from_trajectory_file(
 
     Each record contains the tool name, parsed arguments, and whether the
     tool execution succeeded.  Only non-lifecycle tool calls are included
-    (``finish``, ``think``, ``peek_file`` are excluded).
+    (``finish``, ``peek_file`` are excluded).
     """
     try:
         content = json.loads(path.read_text(encoding='utf-8'))
@@ -259,7 +259,7 @@ def extract_tool_calls_from_trajectory_file(
     else:
         return []
 
-    _SKIP_TOOLS = {'finish', 'think', 'peek_file'}
+    _SKIP_TOOLS = {'finish', 'peek_file'}
     records: list[dict[str, Any]] = []
 
     for entry in entries:

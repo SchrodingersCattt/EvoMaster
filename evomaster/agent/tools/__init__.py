@@ -4,7 +4,7 @@
 
 目录结构：
 - base.py: 工具基类和注册中心
-- builtin/: 内置工具（Bash, Editor, Think, Finish）
+- builtin/: 内置工具（Bash, Editor, Finish）
 - mcp/: MCP 协议工具支持
 """
 
@@ -26,8 +26,6 @@ from .builtin import (
     EditorToolParams,
     FinishTool,
     FinishToolParams,
-    ThinkTool,
-    ThinkToolParams,
 )
 
 # MCP 工具
@@ -51,8 +49,6 @@ __all__ = [
     'BashToolParams',
     'EditorTool',
     'EditorToolParams',
-    'ThinkTool',
-    'ThinkToolParams',
     'FinishTool',
     'FinishToolParams',
     # Skill Tools

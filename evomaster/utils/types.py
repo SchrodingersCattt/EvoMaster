@@ -82,6 +82,48 @@ class ToolMessage(BaseMessage):
 Message = SystemMessage | UserMessage | AssistantMessage | ToolMessage
 
 
+def _is_blank_content_block(value: Any) -> bool:
+    """识别会被 Bedrock/Anthropic 拒绝的空内容块。"""
+    if not isinstance(value, dict):
+        return False
+
+    block_type = value.get('type')
+    if block_type == 'text':
+        return not str(value.get('text') or '').strip()
+    if block_type == 'thinking':
+        return not str(value.get('thinking') or '').strip()
+    return False
+
+
+def _sanitize_api_payload_value(value: Any) -> Any:
+    """递归清理 API payload 中的空 content/thinking 块与空 reasoning 字段。"""
+    if isinstance(value, list):
+        sanitized_items: list[Any] = []
+        for item in value:
+            sanitized_item = _sanitize_api_payload_value(item)
+            if _is_blank_content_block(sanitized_item):
+                continue
+            sanitized_items.append(sanitized_item)
+        return sanitized_items
+
+    if isinstance(value, dict):
+        sanitized_dict: dict[str, Any] = {}
+        for key, item in value.items():
+            sanitized_item = _sanitize_api_payload_value(item)
+            if key == 'reasoning_content' and not str(sanitized_item or '').strip():
+                continue
+            if key == 'reasoningContent' and isinstance(sanitized_item, dict):
+                if not str(sanitized_item.get('text') or '').strip():
+                    continue
+            if key == 'provider_specific_fields' and isinstance(sanitized_item, dict):
+                if not sanitized_item:
+                    continue
+            sanitized_dict[key] = sanitized_item
+        return sanitized_dict
+
+    return value
+
+
 class FunctionSpec(BaseModel):
     """函数规格定义"""
 
@@ -127,11 +169,18 @@ class Dialog(BaseModel):
             msg_dict: dict[str, Any] = {'role': msg.role.value}
             if msg.content is not None:
                 if isinstance(msg.content, list):
-                    msg_dict['content'] = msg.content
+                    content = _sanitize_api_payload_value(msg.content)
+                    if content:
+                        msg_dict['content'] = content
                 elif isinstance(msg.content, dict):
                     msg_dict['content'] = json.dumps(msg.content, ensure_ascii=False)
                 else:
-                    msg_dict['content'] = msg.content
+                    if not (
+                        isinstance(msg, AssistantMessage)
+                        and isinstance(msg.content, str)
+                        and not msg.content.strip()
+                    ):
+                        msg_dict['content'] = msg.content
             if isinstance(msg, AssistantMessage) and msg.tool_calls:
                 tool_calls_serialized = []
                 for tc in msg.tool_calls:
@@ -151,6 +200,12 @@ class Dialog(BaseModel):
                         tc_dict['function']['arguments'] = '{}'
                     tool_calls_serialized.append(tc_dict)
                 msg_dict['tool_calls'] = tool_calls_serialized
+            if isinstance(msg, AssistantMessage):
+                extras = _sanitize_api_payload_value(
+                    (msg.meta or {}).get('api_message_extras') or {}
+                )
+                if isinstance(extras, dict) and extras:
+                    msg_dict.update(extras)
             if isinstance(msg, ToolMessage):
                 msg_dict['tool_call_id'] = msg.tool_call_id
                 msg_dict['name'] = msg.name

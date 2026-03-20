@@ -173,4 +173,17 @@ local_model/
 runs/
 
 .env*
-.codex
+
+# Agent
+.codex/
+.claude/
+.agent/
+.agents/
+
+# Agent plugin docs
+docs/superpowers/
+docs/plans/
+.planning/
+
+# Worktrees
+.worktrees/
