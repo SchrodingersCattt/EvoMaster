@@ -8,7 +8,6 @@ Built-in tools:
 - execute_bash: run bash commands for computation or processing
 - str_replace_editor: create/edit files (command=create with file_text, or command=str_replace with old_str/new_str)
 - peek_file: read FULL file content with automatic encoding/compression detection (use for large or binary-like files, or JSON manuals)
-- think: reason (no side effects)
 - finish: signal task completion
 - use_skill: invoke Operator skills (run_script, get_info, get_reference)
 

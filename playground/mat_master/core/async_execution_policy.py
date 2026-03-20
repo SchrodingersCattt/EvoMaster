@@ -13,7 +13,7 @@ class AsyncExecutionPolicy:
         {'query_job_status', 'get_job_results', 'terminate_job', 'get_job_status'}
     )
     _HIDDEN_LIFECYCLE_SUFFIXES = tuple(f"_{n}" for n in _HIDDEN_LIFECYCLE_NAMES)
-    _ALWAYS_ALLOWED_DURING_PENDING = frozenset({'think', 'mem_save', 'mem_recall'})
+    _ALWAYS_ALLOWED_DURING_PENDING = frozenset({'mem_save', 'mem_recall'})
 
     def __init__(self, registry) -> None:
         self._registry = registry
