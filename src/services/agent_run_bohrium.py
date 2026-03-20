@@ -47,8 +47,33 @@ def _clear_remote_proxy_shell() -> str:
 def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
     try:
         session = getattr(pg, 'session', None)
-        if session is not None and hasattr(session, 'exec_bash'):
-            session.exec_bash(_clear_remote_proxy_shell(), timeout=20)
+        if session is None or not hasattr(session, 'exec_bash'):
+            logger.warning(
+                'run_agent_sync: clear_remote_proxy (%s) skipped: '
+                'no session or no exec_bash',
+                phase,
+            )
+            return
+        logger.info(
+            'run_agent_sync: clear_remote_proxy (%s) running (wgetrc/curlrc + env)',
+            phase,
+        )
+        result = session.exec_bash(_clear_remote_proxy_shell(), timeout=20)
+        exit_code = result.get('exit_code', -1)
+        out = (result.get('output') or result.get('stdout') or '').strip()
+        if exit_code == 0:
+            logger.info(
+                'run_agent_sync: clear_remote_proxy (%s) ok exit_code=0',
+                phase,
+            )
+        else:
+            tail = out[:500] + ('...' if len(out) > 500 else '')
+            logger.warning(
+                'run_agent_sync: clear_remote_proxy (%s) non-zero exit_code=%s output=%r',
+                phase,
+                exit_code,
+                tail,
+            )
     except Exception as clear_err:
         logger.warning(
             'run_agent_sync: clear_remote_proxy (%s) failed: %s',
