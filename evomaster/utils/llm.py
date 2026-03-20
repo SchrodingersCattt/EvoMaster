@@ -472,6 +472,27 @@ class BaseLLM(ABC):
                     )
                     raise
 
+                is_orphaned_tool_use = (
+                    'tool_use' in err_str and 'tool_result' in err_str
+                ) or (
+                    'tool_use' in err_str and 'without' in err_str
+                ) or (
+                    # Bedrock 原始错误格式：
+                    # "tool_use ids were found without tool_result blocks"
+                    'ids were found without' in err_str
+                    and 'tool' in err_str
+                )
+                if is_orphaned_tool_use:
+                    self.logger.error(
+                        'Non-retryable error: orphaned tool_use block(s) in message '
+                        'history — each tool_use must have a corresponding tool_result '
+                        'in the next message (Claude/Bedrock constraint). '
+                        'This is a dialog structure issue; retrying will not help. '
+                        'Error: %s',
+                        e,
+                    )
+                    raise
+
                 is_timeout = (
                     isinstance(e, _TIMEOUT_EXCEPTIONS) if _TIMEOUT_EXCEPTIONS else False
                 )
