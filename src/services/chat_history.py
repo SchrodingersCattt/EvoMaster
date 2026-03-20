@@ -9,6 +9,7 @@ from evomaster.utils.types import (
     ToolMessage,
     UserMessage,
 )
+from src.utils.chat_event_source import normalize_event_source
 
 
 class ChatHistoryConverter:
@@ -76,9 +77,9 @@ class ChatHistoryConverter:
 
         事件类型映射：
         - User/query -> UserMessage
-        - MatMaster|Planner/thought -> AssistantMessage(content)
+        - thought|planner_reply -> AssistantMessage(content)
         - tool_call -> 与后续 tool_result 配对，先输出 AssistantMessage(tool_calls)，再输出 ToolMessage
-        - MatMaster|Planner/finish -> AssistantMessage(content)
+        - finish -> AssistantMessage(content)
         """
         out: list[dict] = []
         pending_tool_calls: list[dict] = []
@@ -94,7 +95,7 @@ class ChatHistoryConverter:
             pending_tool_calls.clear()
 
         for ev in events:
-            source = (ev.get('source') or '').strip()
+            source = normalize_event_source(ev.get('source'))
             typ = (ev.get('type') or '').strip()
 
             if source == 'User' and typ == 'query':
@@ -103,7 +104,7 @@ class ChatHistoryConverter:
                 out.append(UserMessage(content=text).model_dump())
                 continue
 
-            if source in ('MatMaster', 'Planner') and typ == 'thought':
+            if source == 'MatMaster' and typ in ('thought', 'planner_reply'):
                 flush_tool_calls()
                 text = cls._assistant_content(ev)
                 if text:
@@ -130,7 +131,7 @@ class ChatHistoryConverter:
                     )
                 continue
 
-            if source in ('MatMaster', 'Planner') and typ == 'finish':
+            if source == 'MatMaster' and typ == 'finish':
                 flush_tool_calls()
                 text = cls._assistant_content(ev)
                 if text:

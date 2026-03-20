@@ -21,7 +21,8 @@ export type LogEntry = {
   type: string;
   content: unknown;
   session_id?: string;
-  status?: string; // for llm_token: "start" | "streaming" | "end"
+  status?: string; // legacy llm_token: "start" | "streaming" | "end"
+  stream_state?: string; // thought stream: "start" | "streaming" | "end"
 };
 
 export default function MatMasterView({
@@ -36,7 +37,7 @@ export default function MatMasterView({
   const [status, setStatus] = useState<"idle" | "connecting" | "connected" | "closed">("idle");
   const [running, setRunning] = useState(false);
   const [runningSessionId, setRunningSessionId] = useState<string | null>(null);
-  // Streaming LLM token state: accumulates llm_token deltas until a thought/finish clears it
+  // Streaming thought state: accumulates deltas until a durable event clears it
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [streamingSource, setStreamingSource] = useState<string>("MatMaster");
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
@@ -95,20 +96,39 @@ export default function MatMasterView({
           const sid = msg.session_id;
           const cur = currentSessionIdRef.current;
 
-          // Handle llm_token with status field: start / streaming / end
+          const thoughtStreamState =
+            msg.type === "thought" ? msg.stream_state : undefined;
+          if (
+            thoughtStreamState === "start" ||
+            thoughtStreamState === "streaming" ||
+            thoughtStreamState === "end"
+          ) {
+            if (sid === undefined || sid === cur) {
+              if (thoughtStreamState === "start") {
+                setStreamingSource(msg.source || "MatMaster");
+                setStreamingContent("");
+                setIsStreaming(true);
+              } else if (thoughtStreamState === "end") {
+                setIsStreaming(false);
+              } else {
+                setStreamingSource(msg.source || "MatMaster");
+                setStreamingContent((prev) => prev + (typeof msg.content === "string" ? msg.content : ""));
+              }
+            }
+            return;
+          }
+
+          // Backward compat: handle legacy llm_token with status field.
           if (msg.type === "llm_token") {
             if (sid === undefined || sid === cur) {
               const tokenStatus = msg.status;
               if (tokenStatus === "start") {
                 setStreamingSource(msg.source || "MatMaster");
-                setStreamingContent(""); // clear any previous content
+                setStreamingContent("");
                 setIsStreaming(true);
               } else if (tokenStatus === "end") {
                 setIsStreaming(false);
-                // Don't clear streamingContent here — let the subsequent
-                // thought/planner_reply event clear it (existing behavior)
               } else {
-                // status === "streaming" or no status (backward compat with old backend)
                 setStreamingSource(msg.source || "MatMaster");
                 setStreamingContent((prev) => prev + (typeof msg.content === "string" ? msg.content : ""));
               }

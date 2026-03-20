@@ -7,19 +7,9 @@ import traceback as _tb
 from typing import Any, Callable
 
 from evomaster.utils.types import AssistantMessage, ToolMessage
+from src.utils.chat_event_source import normalize_event_source
 
 from ..core.agent import MatMasterAgent
-
-# Map tool names to display source for multi-agent UI
-TOOL_SOURCE_MAP = {
-    'think_plan': 'Planner',
-    'write_code': 'Coder',
-    'run_python': 'Coder',
-}
-
-
-def _source_for_tool(tool_name: str) -> str:
-    return TOOL_SOURCE_MAP.get(tool_name, 'MatMaster')
 
 
 def _extract_think_content(args_str: str) -> str | None:
@@ -66,38 +56,44 @@ class StreamingMatMasterAgent(MatMasterAgent):
             self.event_callback(source, event_type, content, **extra)
 
     def _on_llm_token_cb(self, delta: str) -> None:
-        """Emit llm_token{status:streaming} for each streamed token from the LLM."""
-        agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
+        """Emit streamed thought deltas for each token from the LLM."""
+        agent_name = normalize_event_source(getattr(self, '_agent_name', None))
         if self._current_stream_id is None:
             self._begin_llm_stream(agent_name)
-        self._emit(agent_name, 'llm_token', delta, status='streaming')
+        self._emit(
+            agent_name,
+            'thought',
+            delta,
+            stream_state='streaming',
+            stream_id=self._current_stream_id,
+        )
         self._stream_token_count += len(delta) if isinstance(delta, str) else 0
 
     def _begin_llm_stream(
         self, agent_name: str, context: str = 'step_execution'
     ) -> None:
-        """Emit llm_token{status:start} and track stream state."""
+        """Emit streamed thought start marker and track stream state."""
         import uuid as _uuid
 
         self._current_stream_id = f"str_{_uuid.uuid4().hex[:12]}"
         self._stream_token_count = 0
         self._emit(
             agent_name,
-            'llm_token',
+            'thought',
             '',
-            status='start',
+            stream_state='start',
             context=context,
             stream_id=self._current_stream_id,
         )
 
     def _end_llm_stream(self, agent_name: str) -> None:
-        """Emit llm_token{status:end} and clear stream state."""
+        """Emit streamed thought end marker and clear stream state."""
         if self._current_stream_id is not None:
             self._emit(
                 agent_name,
-                'llm_token',
+                'thought',
                 '',
-                status='end',
+                stream_state='end',
                 stream_id=self._current_stream_id,
                 token_count=self._stream_token_count,
             )
@@ -105,7 +101,7 @@ class StreamingMatMasterAgent(MatMasterAgent):
             self._stream_token_count = 0
 
     def _step(self) -> bool:
-        """Override _step to wrap the MatMasterAgent LLM call with llm_stream_start/end markers.
+        """Override _step to wrap the MatMasterAgent LLM call with thought stream markers.
 
         _query_with_context_recovery() already calls self.llm.query_stream() directly when
         self._on_llm_token is set, so we only need to emit the stream boundary markers here.
@@ -126,7 +122,7 @@ class StreamingMatMasterAgent(MatMasterAgent):
                 _stack_depth,
                 ''.join(_tb.format_stack(limit=40)),
             )
-        agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
+        agent_name = normalize_event_source(getattr(self, '_agent_name', None))
         self._begin_llm_stream(agent_name, context='step_execution')
         try:
             return super()._step()
@@ -134,7 +130,7 @@ class StreamingMatMasterAgent(MatMasterAgent):
             self._end_llm_stream(agent_name)
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
-        agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
+        agent_name = normalize_event_source(getattr(self, '_agent_name', None))
         # 始终推送 LLM 原生文本（含空字符串），前端可区分空与有内容
         native_text = msg.content if msg.content is not None else ''
         self._emit(agent_name, 'thought', native_text)
@@ -157,7 +153,7 @@ class StreamingMatMasterAgent(MatMasterAgent):
                                 registry, 'get_skill', None
                             ):
                                 if registry.get_skill(name) is not None:
-                                    self._emit('ToolExecutor', 'skill_hit', name)
+                                    self._emit('MatMaster', 'skill_hit', name)
                     except (json.JSONDecodeError, TypeError):
                         pass
         # NOTE: tool_call 事件不再从此处推送。
@@ -172,14 +168,13 @@ class StreamingMatMasterAgent(MatMasterAgent):
         model alias resolved to OSS URL, auto-filled bohr_job_id, etc.)
         rather than the raw LLM output.
         """
-        source = _source_for_tool(tool_call.function.name)
         args_raw = tool_call.function.arguments or ''
         try:
             args_payload = json.loads(args_raw) if args_raw.strip() else {}
         except (json.JSONDecodeError, TypeError):
             args_payload = args_raw
         self._emit(
-            source,
+            'MatMaster',
             'tool_call',
             {'id': tool_call.id, 'name': tool_call.function.name, 'args': args_payload},
         )
@@ -204,7 +199,7 @@ class StreamingMatMasterAgent(MatMasterAgent):
             'info': info,
         }
         # report_url 已在 result 内（agent 写入 observation['report_url']），不再重复写顶层
-        self._emit('ToolExecutor', 'tool_result', payload)
+        self._emit('MatMaster', 'tool_result', payload)
 
         # Model-visible hinting: when webpage tool indicates blocked domains,
         # emit an extra thought to push the agent to stop retrying and conclude.
@@ -214,7 +209,9 @@ class StreamingMatMasterAgent(MatMasterAgent):
                 if isinstance(result, dict):
                     guidance = result.get('web_fetch_guidance')
                 if guidance:
-                    agent_name = getattr(self, '_agent_name', None) or 'MatMaster'
+                    agent_name = normalize_event_source(
+                        getattr(self, '_agent_name', None)
+                    )
                     self._emit(agent_name, 'thought', str(guidance))
         except Exception:
             pass

@@ -118,7 +118,7 @@ class ReplyQueueNotifyOnGet:
 
 
 class StreamQueueManager:
-    """流式接口的队列管理：SSE 订阅队列的注册/注销与广播；当前 run 的确认回复队列（planner_ask / confirmation_request 共用）。"""
+    """流式接口的队列管理：SSE 订阅队列的注册/注销与广播；当前 run 的确认回复队列（confirmation_request 共用）。"""
 
     def __init__(self) -> None:
         # session_id -> 该会话下所有 SSE 连接的队列，agent 事件会广播到这些队列
@@ -199,7 +199,9 @@ class SendStreamContext:
     mode: str
     user_msg: dict
     request_event_queue: asyncio.Queue
-    reply_queue: ReplyQueueLike  # planner_ask / confirmation_request 共用，POST /confirmation_reply 写入
+    reply_queue: (
+        ReplyQueueLike  # confirmation_request 共用，POST /confirmation_reply 写入
+    )
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
 
@@ -648,7 +650,7 @@ class ChatStreamService:
         return get_redis_dao().get_confirmation_run_context(session_id)
 
     def broadcast_reply(self, session_id: str, content: str) -> None:
-        """将用户确认回复广播到该会话所有 SSE 订阅（planner_ask / confirmation_request 统一用 confirmation_reply）。
+        """将用户确认回复广播到该会话所有 SSE 订阅（confirmation_request 统一用 confirmation_reply）。
         发送流内的 confirmation_reply 由 ReplyQueueNotifyOnGet 在 agent 的 get() 返回时注入，保证顺序且多 worker 下也正确。
         broadcast 的 payload 带上 task_id/invocation_id（同 worker 从内存取，多 worker 从 Redis 取），便于前端去重或排序。
         """

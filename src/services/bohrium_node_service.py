@@ -158,6 +158,10 @@ class BohriumNodeService:
 
     def _fetch_node_list(self, access_key: str) -> list[dict[str, Any]]:
         """请求 node/list 返回 items，供 get_node_info / get_node_detail 复用。"""
+        url = f"{self._host}/openapi/v1/node/list?queryType=private"
+        ak_esc = access_key.replace("'", "'\\''")
+        curl_cmd = f"curl -v -X GET '{url}' -H 'accessKey: {ak_esc}'"
+        logger.info('Bohrium node/list curl (copy to reproduce): %s', curl_cmd)
         with httpx.Client(timeout=30.0) as client:
             r = client.get(
                 f"{self._host}/openapi/v1/node/list",
@@ -243,7 +247,7 @@ class BohriumNodeService:
             name_query or os.environ.get('BOHRIUM_IMAGE_NAME_QUERY', 'matmaster')
         ).strip() or 'matmaster'
         image_list_ak = (os.environ.get('IMAGE_ACCESS_KEY') or '').strip() or access_key
-        url = f"{self._host}/openapi/v2/image/private"
+        url_base = f"{self._host}/openapi/v2/image/private"
         params = {
             'type': 'image',
             'device': 'container',
@@ -252,9 +256,19 @@ class BohriumNodeService:
             'page': 1,
             'name': name_query,
         }
+        qs = '&'.join(f"{k}={v}" for k, v in params.items())
+        url_with_params = f"{url_base}?{qs}"
+        ak_esc = image_list_ak.replace("'", "'\\''")
+        logger.info(
+            "Bohrium image/private curl (copy to reproduce): curl -v -X GET '%s' -H 'accessKey: %s'",
+            url_with_params,
+            ak_esc,
+        )
         try:
             with httpx.Client(timeout=30.0) as client:
-                r = client.get(url, params=params, headers={'accessKey': image_list_ak})
+                r = client.get(
+                    url_base, params=params, headers={'accessKey': image_list_ak}
+                )
                 r.raise_for_status()
                 data = r.json()
             if data.get('code') != 0:
@@ -365,6 +379,14 @@ class BohriumNodeService:
             'datasets': [],
         }
         url = f"{self._host}/openapi/v1/node/restart/{node_id}"
+        ak_esc = access_key.replace("'", "'\\''")
+        body_esc = json.dumps(body, ensure_ascii=False).replace("'", "'\\''")
+        logger.info(
+            "Bohrium node/restart curl (copy to reproduce): curl -X POST '%s' -H 'accessKey: %s' -H 'content-type: application/json' -d '%s'",
+            url,
+            ak_esc,
+            body_esc,
+        )
         with httpx.Client(timeout=60.0) as client:
             r = client.post(
                 url,
@@ -401,6 +423,14 @@ class BohriumNodeService:
             'device': device,
             'projectId': project_id,
         }
+        ak_esc = access_key.replace("'", "'\\''")
+        body_esc = json.dumps(body).replace("'", "'\\''")
+        logger.info(
+            "Bohrium node/del curl (copy to reproduce): curl -X POST '%s' -H 'accessKey: %s' -H 'content-type: application/json' -d '%s'",
+            url,
+            ak_esc,
+            body_esc,
+        )
         with httpx.Client(timeout=30.0) as client:
             r = client.post(
                 url,

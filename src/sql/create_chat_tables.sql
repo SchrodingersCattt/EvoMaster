@@ -20,8 +20,8 @@ CREATE TABLE IF NOT EXISTS `evo_chat_sessions` (
 CREATE TABLE IF NOT EXISTS `evo_chat_events` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '事件ID',
     `session_id` VARCHAR(255) NOT NULL COMMENT '会话ID',
-    `source` VARCHAR(50) NOT NULL COMMENT '事件来源：System|User|MatMaster|Planner',
-    `type` VARCHAR(50) NOT NULL COMMENT '事件类型：status|query|thought|tool_call|tool_result|finish|error|cancelled|planner_ask|planner_reply|exp_run|log_line等',
+    `source` VARCHAR(50) NOT NULL COMMENT '事件来源：System|User|MatMaster',
+    `type` VARCHAR(50) NOT NULL COMMENT '事件类型：status|query|thought|tool_call|tool_result|finish|error|cancelled|confirmation_request|confirmation_reply|planner_reply|exp_run|log_line等',
     `content` JSON NOT NULL COMMENT '事件内容（JSON格式）',
     `task_id` VARCHAR(255) NULL COMMENT '关联的任务ID',
     `invocation_id` VARCHAR(64) NULL COMMENT '本轮调用唯一标识，前端区分轮次',
