@@ -311,6 +311,11 @@ Answer with a single JSON object: {{"needs_replan": true/false, "reason": "brief
             and step_result.get('status') == 'failed'
             and not step_result.get('fallback_succeeded')
         ):
+            detail = str(step_result.get('replan_reason') or '').strip()
+            if detail:
+                if detail.startswith('[failure]') or detail.startswith('[adaptive]'):
+                    return True, detail
+                return True, f'[failure] {detail}'
             return (
                 True,
                 f"[failure] Step {step_result.get('step_id', '?')} failed without successful fallback",
