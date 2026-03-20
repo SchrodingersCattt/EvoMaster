@@ -186,6 +186,9 @@ mat_master:
     # 质量门控：survey 完成前至少检索次数（与 plan 中 10-15+ 下界一致）
     quality_gates:
       survey_min_retrieval_calls: 10
+      # 工作区根目录 *.md 纳入 survey 质量门禁时的最小字节数（0=不限制）；最多纳入文件数见 survey_max_root_md_files
+      survey_min_root_md_bytes: 400
+      survey_max_root_md_files: 48
 
     # Sub-agent 隔离模式：每个 plan step 以独立上下文执行，防止 solver 越界执行后续步骤
     # enabled=true 时每步重置 agent 对话上下文（推荐）；false 回退到共享 solver 模式（旧行为）
