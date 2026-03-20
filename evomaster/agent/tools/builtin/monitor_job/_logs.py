@@ -19,6 +19,7 @@ from ._constants import (
     _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS,
     _LOG_PER_FILE_MAX_CHARS,
     _LOG_TAIL_MAX_CHARS,
+    LOG_EXCLUDE_BASENAMES,
     LOG_PATTERNS,
 )
 from ._llm import (
@@ -79,6 +80,8 @@ def _find_log_files_from_job(
     for f in all_files:
         path = f.get('path', '')
         basename = path.rsplit('/', 1)[-1] if '/' in path else path
+        if basename in LOG_EXCLUDE_BASENAMES:
+            continue
         for pat in patterns:
             if fnmatch.fnmatch(basename, pat):
                 matched.append(path)
