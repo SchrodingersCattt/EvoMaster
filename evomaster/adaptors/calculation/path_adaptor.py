@@ -628,21 +628,28 @@ class CalculationPathAdaptor:
         )
 
         # --- Detect path-typed params ---
-        # Layer 1: schema format (works when MCP SDK preserves Pydantic format)
-        path_arg_names = _path_keys_from_schema(input_schema)
-        source = 'schema'
+        # Compute each layer explicitly for logging (submit_* vs base tool, truncated
+        # tool_description, and List[Path]→array-of-string schema are easier to debug).
+        _schema_keys = _path_keys_from_schema(input_schema)
+        _desc_keys = _path_keys_from_description(tool_description)
+        _param_keys = _path_keys_from_param_names(input_schema)
 
-        # Layer 2: description fallback (handles bohr-agent-sdk Path→str conversion)
-        if not path_arg_names:
-            path_arg_names = _path_keys_from_description(tool_description)
-            if path_arg_names:
-                source = 'description'
+        if _schema_keys:
+            path_arg_names = _schema_keys
+            source = 'schema'
+        elif _desc_keys:
+            path_arg_names = _desc_keys
+            source = 'description'
+        elif _param_keys:
+            path_arg_names = _param_keys
+            source = 'param_name'
+        else:
+            path_arg_names = set()
+            source = 'schema'
 
-        # Layer 3: param-name heuristic (names ending with _path)
-        if not path_arg_names:
-            path_arg_names = _path_keys_from_param_names(input_schema)
-            if path_arg_names:
-                source = 'param_name'
+        _td = tool_description if isinstance(tool_description, str) else ''
+        _desc_len = len(_td)
+        _desc_has_args_header = bool(re.search(r'Args:\s*\n', _td))
 
         _schema_props = (
             sorted((input_schema or {}).get('properties') or {})
@@ -656,12 +663,18 @@ class CalculationPathAdaptor:
             input_schema if isinstance(input_schema, dict) else None
         )
         logger.info(
-            'Path adaptor [%s] path_keys=%s source=%s workspace_path_set=%s '
-            'schema_props=%s input_files_in_schema=%s input_files_classified=%s '
-            'schema_params_brief=%s',
+            'Path adaptor [%s] path_keys=%s source=%s L1_schema=%s L2_description=%s '
+            'L3_param_name=%s tool_description_len=%s tool_description_has_args_header=%s '
+            'workspace_path_set=%s schema_props=%s input_files_in_schema=%s '
+            'input_files_classified=%s schema_params_brief=%s',
             tool_name,
             sorted(path_arg_names),
             source,
+            sorted(_schema_keys),
+            sorted(_desc_keys),
+            sorted(_param_keys),
+            _desc_len,
+            _desc_has_args_header,
             bool(workspace_path and str(workspace_path).strip()),
             _schema_props,
             bool(_has_input_files_prop),
@@ -676,6 +689,11 @@ class CalculationPathAdaptor:
                 json.dumps(_raw_if, ensure_ascii=False, default=str),
             )
         if _has_input_files_prop and 'input_files' not in path_arg_names:
+            logger.info(
+                'Path adaptor [%s] tool_description_head (first 400 chars, repr): %s',
+                tool_name,
+                repr(_td[:400]) if _td else repr(_td),
+            )
             logger.warning(
                 'Path adaptor [%s]: schema has input_files but it was not classified as '
                 'path params (no format/path in schema, docstring Path, or *_path name); '
