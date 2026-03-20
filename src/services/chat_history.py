@@ -83,6 +83,8 @@ class ChatHistoryConverter:
         """
         out: list[dict] = []
         pending_tool_calls: list[dict] = []
+        last_assistant_text_idx: int | None = None
+        assistant_state_tool_ids: set[str] = set()
 
         def flush_tool_calls() -> None:
             if not pending_tool_calls:
@@ -100,20 +102,45 @@ class ChatHistoryConverter:
 
             if source == 'User' and typ == 'query':
                 flush_tool_calls()
+                last_assistant_text_idx = None
+                assistant_state_tool_ids.clear()
                 text = cls._user_content(ev)
                 out.append(UserMessage(content=text).model_dump())
                 continue
 
             if source == 'MatMaster' and typ in ('thought', 'planner_reply'):
                 flush_tool_calls()
+                assistant_state_tool_ids.clear()
+                last_assistant_text_idx = None
                 text = cls._assistant_content(ev)
                 if text:
                     out.append(AssistantMessage(content=text).model_dump())
+                    last_assistant_text_idx = len(out) - 1
+                continue
+
+            if source == 'MatMaster' and typ == 'assistant_state':
+                flush_tool_calls()
+                try:
+                    msg = AssistantMessage.model_validate(ev.get('content') or {})
+                except Exception:
+                    continue
+                if (
+                    last_assistant_text_idx is not None
+                    and last_assistant_text_idx == len(out) - 1
+                ):
+                    out.pop()
+                out.append(msg.model_dump())
+                last_assistant_text_idx = None
+                assistant_state_tool_ids = {
+                    tc.id for tc in (msg.tool_calls or []) if getattr(tc, 'id', None)
+                }
                 continue
 
             if typ == 'tool_call':
                 tc = cls._tool_call_from_event(ev)
                 if tc:
+                    if tc.get('id') in assistant_state_tool_ids:
+                        continue
                     pending_tool_calls.append(tc)
                 continue
 
@@ -122,6 +149,7 @@ class ChatHistoryConverter:
                 if triple:
                     flush_tool_calls()
                     call_id, name, content = triple
+                    assistant_state_tool_ids.discard(call_id)
                     out.append(
                         ToolMessage(
                             tool_call_id=call_id,
@@ -133,9 +161,12 @@ class ChatHistoryConverter:
 
             if source == 'MatMaster' and typ == 'finish':
                 flush_tool_calls()
+                assistant_state_tool_ids.clear()
+                last_assistant_text_idx = None
                 text = cls._assistant_content(ev)
                 if text:
                     out.append(AssistantMessage(content=text).model_dump())
+                    last_assistant_text_idx = len(out) - 1
                 continue
 
         flush_tool_calls()
