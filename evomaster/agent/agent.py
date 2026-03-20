@@ -1010,7 +1010,6 @@ class Agent(BaseAgent):
 You have access to the following tools:
 - execute_bash: Execute bash commands in a terminal
 - str_replace_editor: View, create, and edit files
-- think: Think about the problem (does not affect the environment)
 - finish: Signal that you have completed the task
 """
 
