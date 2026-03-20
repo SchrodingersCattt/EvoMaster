@@ -423,7 +423,11 @@ def _resolve_one(
             tmp.write(data)
             tmp_path = Path(tmp.name)
         try:
-            return upload_file_to_oss(tmp_path, tmp_path.parent)
+            return upload_file_to_oss(
+                tmp_path,
+                tmp_path.parent,
+                object_basename=Path(remote_path).name,
+            )
         except Exception as e:
             raise RuntimeError(
                 f"Cannot pass remote file to calculation MCP: OSS upload required "
