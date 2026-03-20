@@ -4,13 +4,17 @@ For any MCP tool routed through this adaptor, file/path arguments must be URL-ba
 (OSS or HTTP). If the caller passes a local path, the adaptor uploads the file to OSS
 and passes the resulting URL.
 
-Path detection uses three layers (in order):
+Path detection uses layers (in order); later layers **merge** into the result:
 1. **Schema-driven**: ``"format": "path"`` in the JSON Schema (works when MCP SDK
    preserves Pydantic's format annotation).
 2. **Description fallback**: parse the tool docstring for ``param_name (Path):``
    patterns (handles SDKs that convert ``Path → str`` and strip the format).
 3. **Param-name heuristic**: parameter names ending with ``_path`` (catches servers
    where both schema and docstring detection miss, e.g. ``processed_csv_path``).
+4. **Config** (optional): ``mcp.calculation_executors.<server>.path_params_by_tool`` maps
+   remote tool names to extra parameter names that must be treated as paths when present
+   in ``inputSchema.properties`` (e.g. ``submit_run_gromacs`` → ``input_files`` when
+   MCP exposes ``List[Path]`` as a plain array of strings).
 
 Model alias resolution: short model names like ``"DPA2.4-7M"`` are automatically
 resolved to their full OSS URLs by matching against URLs found in the parameter's
@@ -23,6 +27,7 @@ session's ``is_file`` / ``download`` methods rather than the local filesystem.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import tempfile
@@ -183,6 +188,47 @@ def _path_keys_from_param_names(input_schema: dict[str, Any] | None) -> set[str]
         return set()
     props = input_schema.get('properties') or {}
     return {k for k in props if k.endswith('_path')}
+
+
+def _brief_json_schema_prop(spec: Any, depth: int = 0) -> Any:
+    """Compact view of one JSON Schema property for logs (type/format/items/union)."""
+    if depth > 4:
+        return '…'
+    if not isinstance(spec, dict):
+        return type(spec).__name__
+    out: dict[str, Any] = {}
+    for k in ('title', 'description'):
+        if k in spec and isinstance(spec[k], str) and len(spec[k]) > 120:
+            out[k] = spec[k][:117] + '…'
+        elif k in spec:
+            out[k] = spec[k]
+    if 'type' in spec:
+        out['type'] = spec['type']
+    if 'format' in spec:
+        out['format'] = spec['format']
+    items = spec.get('items')
+    if isinstance(items, dict):
+        out['items'] = _brief_json_schema_prop(items, depth + 1)
+    for branch_key in ('anyOf', 'oneOf', 'allOf'):
+        branches = spec.get(branch_key)
+        if isinstance(branches, list):
+            out[branch_key] = [
+                _brief_json_schema_prop(b, depth + 1) if isinstance(b, dict) else b
+                for b in branches[:6]
+            ]
+            if len(branches) > 6:
+                out[f'{branch_key}_len'] = len(branches)
+    if not out and spec:
+        out['_keys'] = sorted(spec.keys())
+    return out
+
+
+def _input_schema_params_brief(input_schema: dict[str, Any] | None) -> dict[str, Any]:
+    """Per-parameter type summary from MCP ``inputSchema`` (``properties``)."""
+    if not input_schema or not isinstance(input_schema, dict):
+        return {}
+    props = input_schema.get('properties') or {}
+    return {k: _brief_json_schema_prop(v) for k, v in sorted(props.items())}
 
 
 # ---------------------------------------------------------------------------
@@ -424,6 +470,33 @@ class CalculationPathAdaptor:
     def __init__(self, calculation_executors: dict[str, Any] | None = None):
         self.calculation_executors = calculation_executors or {}
 
+    def _path_keys_from_tool_config(
+        self,
+        server_name: str,
+        remote_tool_name: str,
+        input_schema: dict[str, Any] | None,
+    ) -> set[str]:
+        """Extra path param names from ``path_params_by_tool`` (must exist in schema)."""
+        server_cfg = self.calculation_executors.get(server_name)
+        if not isinstance(server_cfg, dict):
+            return set()
+        mapping = server_cfg.get('path_params_by_tool')
+        if not isinstance(mapping, dict):
+            return set()
+        raw = mapping.get(remote_tool_name)
+        if raw is None and remote_tool_name.startswith('submit_'):
+            raw = mapping.get(remote_tool_name[len('submit_') :])
+        if raw is None:
+            return set()
+        if isinstance(raw, str):
+            names = [raw]
+        elif isinstance(raw, (list, tuple)):
+            names = [x for x in raw if isinstance(x, str)]
+        else:
+            return set()
+        props = set((input_schema or {}).get('properties') or {})
+        return {n for n in names if n in props}
+
     def _resolve_executor(
         self,
         server_name: str,
@@ -532,6 +605,7 @@ class CalculationPathAdaptor:
         Path detection:
         1. Schema ``"format": "path"`` (primary).
         2. Description ``param_name (Path):`` (fallback when SDK strips format).
+        3. Param names ending with ``_path``; 4. ``path_params_by_tool`` in config.
 
         When *session* is a non-local session (SSH/Docker), remote files are
         fetched via SFTP and uploaded to OSS without touching the local filesystem.
@@ -586,25 +660,92 @@ class CalculationPathAdaptor:
         )
 
         # --- Detect path-typed params ---
-        # Layer 1: schema format (works when MCP SDK preserves Pydantic format)
-        path_arg_names = _path_keys_from_schema(input_schema)
-        source = 'schema'
+        # Compute each layer explicitly for logging (submit_* vs base tool, truncated
+        # tool_description, and List[Path]→array-of-string schema are easier to debug).
+        _schema_keys = _path_keys_from_schema(input_schema)
+        _desc_keys = _path_keys_from_description(tool_description)
+        _param_keys = _path_keys_from_param_names(input_schema)
 
-        # Layer 2: description fallback (handles bohr-agent-sdk Path→str conversion)
-        if not path_arg_names:
-            path_arg_names = _path_keys_from_description(tool_description)
-            if path_arg_names:
-                source = 'description'
+        if _schema_keys:
+            path_arg_names = _schema_keys
+            source = 'schema'
+        elif _desc_keys:
+            path_arg_names = _desc_keys
+            source = 'description'
+        elif _param_keys:
+            path_arg_names = _param_keys
+            source = 'param_name'
+        else:
+            path_arg_names = set()
+            source = 'schema'
 
-        # Layer 3: param-name heuristic (names ending with _path)
-        if not path_arg_names:
-            path_arg_names = _path_keys_from_param_names(input_schema)
-            if path_arg_names:
-                source = 'param_name'
+        _before_config_keys = set(path_arg_names)
+        _config_keys = self._path_keys_from_tool_config(
+            server_name, remote_name, input_schema
+        )
+        if _config_keys:
+            path_arg_names = path_arg_names | _config_keys
+            if not _before_config_keys:
+                source = 'config'
+
+        _td = tool_description if isinstance(tool_description, str) else ''
+        _desc_len = len(_td)
+        _desc_has_args_header = bool(re.search(r'Args:\s*\n', _td))
+
+        _schema_props = (
+            sorted((input_schema or {}).get('properties') or {})
+            if isinstance(input_schema, dict)
+            else []
+        )
+        _has_input_files_prop = 'input_files' in (
+            (input_schema or {}).get('properties') or {}
+        )
+        _params_brief = _input_schema_params_brief(
+            input_schema if isinstance(input_schema, dict) else None
+        )
+        logger.info(
+            'Path adaptor [%s] path_keys=%s source=%s L1_schema=%s L2_description=%s '
+            'L3_param_name=%s L4_config=%s tool_description_len=%s '
+            'tool_description_has_args_header=%s workspace_path_set=%s schema_props=%s '
+            'input_files_in_schema=%s input_files_classified=%s schema_params_brief=%s',
+            tool_name,
+            sorted(path_arg_names),
+            source,
+            sorted(_schema_keys),
+            sorted(_desc_keys),
+            sorted(_param_keys),
+            sorted(_config_keys),
+            _desc_len,
+            _desc_has_args_header,
+            bool(workspace_path and str(workspace_path).strip()),
+            _schema_props,
+            bool(_has_input_files_prop),
+            'input_files' in path_arg_names,
+            json.dumps(_params_brief, ensure_ascii=False, default=str),
+        )
+        if _has_input_files_prop:
+            _raw_if = ((input_schema or {}).get('properties') or {}).get('input_files')
+            logger.info(
+                'Path adaptor [%s] input_files raw schema (JSON): %s',
+                tool_name,
+                json.dumps(_raw_if, ensure_ascii=False, default=str),
+            )
+        if _has_input_files_prop and 'input_files' not in path_arg_names:
+            logger.info(
+                'Path adaptor [%s] tool_description_head (first 400 chars, repr): %s',
+                tool_name,
+                repr(_td[:400]) if _td else repr(_td),
+            )
+            logger.warning(
+                'Path adaptor [%s]: schema has input_files but it was not classified as '
+                'path params (no format/path in schema, docstring Path, *_path name, or '
+                'path_params_by_tool); local paths may be sent to MCP unchanged.',
+                tool_name,
+            )
 
         if path_arg_names:
             logger.debug(
-                'Tool %s: Path params detected via %s: %s',
+                'Tool %s: Path params detail via %s: %s',
                 remote_name,
                 source,
                 sorted(path_arg_names),
@@ -616,6 +757,16 @@ class CalculationPathAdaptor:
 
         # --- Upload local files → OSS ---
         if not path_arg_names or not workspace_path:
+            if not path_arg_names:
+                logger.info(
+                    'Path adaptor [%s]: skip OSS upload (no path-typed params detected).',
+                    tool_name,
+                )
+            elif not workspace_path:
+                logger.info(
+                    'Path adaptor [%s]: skip OSS upload (workspace_path empty).',
+                    tool_name,
+                )
             return out
 
         def _is_null_or_empty_path(v: Any) -> bool:
@@ -626,6 +777,12 @@ class CalculationPathAdaptor:
             return False
 
         workspace_root = Path(workspace_path).resolve()
+        logger.info(
+            'Path adaptor [%s]: resolving local paths → OSS (keys=%s workspace_root=%s)',
+            tool_name,
+            sorted(path_arg_names),
+            workspace_root,
+        )
         for key in sorted(path_arg_names):
             if key not in out:
                 continue

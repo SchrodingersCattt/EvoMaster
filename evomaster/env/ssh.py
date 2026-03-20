@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import logging
 import os
@@ -261,6 +262,24 @@ class SSHEnv(BaseEnv):
             'exit_code': exit_code,
             'output': out + err,
         }
+
+    def ssh_bash_noninteractive(
+        self,
+        script: str,
+        timeout: int | None = None,
+    ) -> dict[str, Any]:
+        """Run a bash script over SSH without tmux.
+
+        Long one-liners sent via ``tmux send-keys`` can exceed reliable shell
+        quoting limits; remote tmux may then fail with
+        ``unknown command: C-m`` while the same script runs fine here.
+        Base64 avoids embedding the script in single quotes for ``send-keys``.
+        """
+        self._ensure_connected()
+        b64 = base64.b64encode(script.encode('utf-8')).decode('ascii')
+        # Base64 alphabet has no single quotes; safe inside '...' on remote sh.
+        wrapped = f"printf '%s' '{b64}' | base64 -d | bash -s"
+        return self.ssh_exec(wrapped, timeout=timeout)
 
     # ------------------------------------------------------------------
     # tmux (same mechanism as DockerEnv)
