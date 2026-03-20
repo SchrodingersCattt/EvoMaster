@@ -223,19 +223,12 @@ Rules:
                 'No markdown artifact found for quality-critical survey/literature step.',
             )
 
-        session = getattr(getattr(self, 'agent', None), 'session', None)
-        file_io = getattr(self, '_file_io', None)
-        use_remote_read = isinstance(session, SSHSession) and file_io is not None
-
         min_line_len = self._quality_gate_cfg.get('survey_min_line_length', 60)
         best: tuple[int, int, int, Path] | None = None
         best_content = ''
         for path in quality_files:
             try:
-                if use_remote_read:
-                    content = file_io.read_text(str(path))
-                else:
-                    content = path.read_text(encoding='utf-8')
+                content = self._read_workspace_text(path)
             except Exception:
                 continue
             refs, dois = self._reference_metrics(content)
