@@ -11,27 +11,12 @@ from src.utils.chat_event_source import normalize_event_source
 
 from ..core.agent import MatMasterAgent
 
-
-def _extract_think_content(args_str: str) -> str | None:
-    """If args parse as { \"thought\": \"...\" }, return the thought text."""
-    if not args_str or not args_str.strip():
-        return None
-    try:
-        obj = json.loads(args_str)
-        if isinstance(obj, dict) and 'thought' in obj:
-            t = obj['thought']
-            return str(t) if t is not None else None
-    except (json.JSONDecodeError, TypeError):
-        pass
-    return None
-
-
 class StreamingMatMasterAgent(MatMasterAgent):
     """
     MatMasterAgent that reports state in real time via event_callback.
     Overrides _on_assistant_message, _on_tool_call_start, and _on_tool_message
     to emit events.
-    LLM 原生文本通过 thought 事件推送；think 工具的参数也作为 thought 推送，便于前端展示推理。
+    LLM 原生 reasoning 通过 thought 事件推送；若无 reasoning，则回退到 assistant 文本。
     tool_call 事件在 _on_tool_call_start 中推送（before-callback 修补参数之后），
     确保前端看到的是 callback 处理后的真实参数。
     """
@@ -131,19 +116,21 @@ class StreamingMatMasterAgent(MatMasterAgent):
 
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
         agent_name = normalize_event_source(getattr(self, '_agent_name', None))
-        # 始终推送 LLM 原生文本（含空字符串），前端可区分空与有内容
-        native_text = msg.content if msg.content is not None else ''
-        self._emit(agent_name, 'thought', native_text)
+        reasoning_text = (msg.meta or {}).get('reasoning_content')
+        if isinstance(reasoning_text, str) and reasoning_text:
+            self._emit(agent_name, 'thought', reasoning_text)
+        else:
+            # 兼容旧模型：无 reasoning_content 时，仍推送 assistant 文本
+            native_text = msg.content if msg.content is not None else ''
+            self._emit(agent_name, 'thought', native_text)
+        self._emit('MatMaster', 'assistant_state', msg.model_dump())
         if msg.tool_calls:
             for tc in msg.tool_calls:
-                # think 工具的参数作为"思考"再推一条，方便前端当作文本展示
-                if tc.function.name == 'think':
-                    thought_text = _extract_think_content(tc.function.arguments or '')
-                    if thought_text:
-                        self._emit(agent_name, 'thought', thought_text)
                 # skill_hit 跟踪（skill_name 不被 before-callback 修改，此处可安全读取）
                 if tc.function.name == 'use_skill':
                     try:
+                        import json
+
                         args = json.loads(tc.function.arguments or '{}')
                         if isinstance(args, dict) and args.get('skill_name'):
                             name = args.get('skill_name')

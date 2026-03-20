@@ -579,11 +579,15 @@ class AgentRunService:
                             session_id,
                         )
                 if cfg is None and not llm_override:
-                    # 仅指定 model 时，从当前 agent 的 LLM 配置取 base 再覆盖 model
-                    try:
-                        cfg = base.llm.config.model_dump()
-                    except Exception:
-                        cfg = {}
+                    # 仅指定 model 时，先尝试从所有 llm 块中匹配完整配置；
+                    # 未匹配则回退到当前 agent 的 LLM 配置作为 base
+                    if model_override:
+                        cfg = pg.config_manager.find_llm_config_by_model(model_override)
+                    if cfg is None:
+                        try:
+                            cfg = base.llm.config.model_dump()
+                        except Exception:
+                            cfg = {}
                 if cfg and isinstance(cfg, dict):
                     if model_override:
                         cfg = {**cfg, 'model': model_override}

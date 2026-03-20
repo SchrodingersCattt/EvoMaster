@@ -867,6 +867,8 @@ def _run_agent_sync(
     def _should_skip_push(
         source: str, event_type: str, extra: dict[str, object]
     ) -> bool:
+        if event_type == 'assistant_state':
+            return True
         return source == 'Planner' and _is_streaming_thought_event(event_type, extra)
 
     def event_callback(source: str, event_type: str, content, **extra) -> None:
@@ -886,6 +888,10 @@ def _run_agent_sync(
             payload.update(extra)
         if session_id not in SESSIONS:
             SESSIONS[session_id] = {'history': [], 'last_task_id': None}
+        if event_type == 'assistant_state':
+            SESSIONS[session_id]['history'].append(payload)
+            _persist_history_event(session_id, payload)
+            return
         # Streamed thought markers/deltas are ephemeral — skip history persistence to avoid bloat.
         _is_streaming_thought = _is_streaming_thought_event(event_type, extra)
         if event_type not in ('log_line', 'llm_token') and not _is_streaming_thought:

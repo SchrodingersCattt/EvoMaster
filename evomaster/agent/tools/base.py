@@ -264,12 +264,11 @@ def create_registry(
         builtin_names: 要注册的内置工具名列表；[\"*\"] 表示全部内置工具。
         skill_registry: 可选的 SkillRegistry 实例，若提供则注册 SkillTool。
     """
-    from .builtin import BashTool, EditorTool, FinishTool, ThinkTool
+    from .builtin import BashTool, EditorTool, FinishTool
 
     builtin_list: list[BaseTool] = [
         BashTool(),
         EditorTool(),
-        ThinkTool(),
         FinishTool(),
     ]
     name_to_tool = {t.name: t for t in builtin_list}

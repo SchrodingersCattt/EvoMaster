@@ -11,6 +11,7 @@ import os
 import re
 import time
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, Field
@@ -137,12 +138,39 @@ class LLMConfig(BaseModel):
     use_completion_api: bool = Field(
         default=False, description='使用 Completion API 而非 Chat API'
     )
+    thinking_effort: str | None = Field(
+        default=None,
+        description='统一的 reasoning/thinking 强度配置，供 provider 适配层使用',
+    )
+    reasoning_protocol: (
+        Literal['anthropic_adaptive_thinking', 'openai_reasoning_effort'] | None
+    ) = Field(
+        default=None,
+        description='显式指定 reasoning 请求协议；为空时回退到兼容推断逻辑',
+    )
+    model_family: str | None = Field(
+        default=None,
+        description='统一模型族标识，用于能力约束、fallback 分组和请求规范化',
+    )
+    fallback_group: str | None = Field(
+        default=None,
+        description='上游代理使用的 fallback 分组名；为空时可由模型族默认值补齐',
+    )
+    temperature_policy: Literal['default', 'force_one_when_reasoning'] | None = Field(
+        default=None,
+        description='温度规范化策略；支持按模型族自动收敛 provider 特殊约束',
+    )
 
 
 class LLMResponse(BaseModel):
     """LLM 响应"""
 
     content: str | None = Field(default=None, description='生成的文本内容')
+    reasoning_content: str | None = Field(default=None, description='模型返回的推理内容')
+    api_message_extras: dict[str, Any] = Field(
+        default_factory=dict,
+        description='需要在后续 assistant message 中保留的原始扩展字段',
+    )
     tool_calls: list[ToolCall] | None = Field(default=None, description='工具调用列表')
     finish_reason: str | None = Field(default=None, description='结束原因')
     usage: dict[str, int] = Field(default_factory=dict, description='Token 使用统计')
@@ -154,11 +182,59 @@ class LLMResponse(BaseModel):
             content=self.content,
             tool_calls=self.tool_calls,
             meta={
+                **self.meta,
                 'finish_reason': self.finish_reason,
                 'usage': self.usage,
-                **self.meta,
+                'reasoning_content': self.reasoning_content,
+                'api_message_extras': self.api_message_extras,
             },
         )
+
+
+class LLMConfigurationError(RuntimeError):
+    """LLM 配置/能力约束错误，适合直接反馈给配置维护者。"""
+
+    def __init__(
+        self,
+        *,
+        category: str,
+        message: str,
+        raw_error: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.category = category
+        self.raw_error = raw_error
+
+
+@dataclass(frozen=True)
+class ModelProfile:
+    family: str | None
+    reasoning_protocol: str | None
+    fallback_group: str | None
+    temperature_policy: str
+
+
+_MODEL_FAMILY_DEFAULTS: dict[str, dict[str, str]] = {
+    'claude-4.6': {
+        'reasoning_protocol': 'anthropic_adaptive_thinking',
+        'fallback_group': 'claude-4.6',
+        'temperature_policy': 'force_one_when_reasoning',
+    },
+    'gpt-5': {
+        'reasoning_protocol': 'openai_reasoning_effort',
+        'fallback_group': 'gpt-5',
+        'temperature_policy': 'default',
+    },
+    'deepseek-reasoner': {
+        'reasoning_protocol': 'openai_reasoning_effort',
+        'fallback_group': 'deepseek-reasoner',
+        'temperature_policy': 'default',
+    },
+    'gemini-3-flash-preview': {
+        'fallback_group': 'gemini-3-flash-preview',
+        'temperature_policy': 'default',
+    },
+}
 
 
 class BaseLLM(ABC):
@@ -493,6 +569,16 @@ class BaseLLM(ABC):
                     )
                     raise
 
+                classified_error = _classify_llm_error(self.config, e)
+                if classified_error is not None:
+                    self.logger.error(
+                        'Non-retryable LLM configuration error [%s]: %s | raw=%s',
+                        classified_error.category,
+                        classified_error,
+                        classified_error.raw_error or e,
+                    )
+                    raise classified_error from e
+
                 is_timeout = (
                     isinstance(e, _TIMEOUT_EXCEPTIONS) if _TIMEOUT_EXCEPTIONS else False
                 )
@@ -545,6 +631,193 @@ def _azure_deployment_name(model: str) -> str:
     if s.startswith('azure/'):
         return s[6:].strip() or model
     return s
+
+
+def _build_anthropic_adaptive_thinking_request(effort: str) -> dict[str, Any]:
+    return {
+        'extra_body': {
+            'thinking': {'type': 'adaptive'},
+            'output_config': {'effort': effort},
+        }
+    }
+
+
+def _build_openai_reasoning_effort_request(effort: str) -> dict[str, Any]:
+    return {'reasoning_effort': effort}
+
+
+_REASONING_PROTOCOL_BUILDERS: dict[str, Callable[[str], dict[str, Any]]] = {
+    'anthropic_adaptive_thinking': _build_anthropic_adaptive_thinking_request,
+    'openai_reasoning_effort': _build_openai_reasoning_effort_request,
+}
+
+
+def _infer_model_family_from_model(model: str) -> str | None:
+    model_name = (model or '').strip().lower()
+    if 'claude-sonnet-4-6' in model_name or 'claude-opus-4-6' in model_name:
+        return 'claude-4.6'
+    if 'gpt-5' in model_name:
+        return 'gpt-5'
+    if 'deepseek-reasoner' in model_name:
+        return 'deepseek-reasoner'
+    if 'gemini-3-flash-preview' in model_name:
+        return 'gemini-3-flash-preview'
+    return None
+
+
+def _infer_reasoning_protocol_from_model(model: str) -> str | None:
+    family = _infer_model_family_from_model(model)
+    family_defaults = _MODEL_FAMILY_DEFAULTS.get(family or '', {})
+    if family_defaults.get('reasoning_protocol'):
+        return family_defaults['reasoning_protocol']
+    if (model or '').strip():
+        return 'openai_reasoning_effort'
+    return None
+
+
+def _resolve_model_profile(config: LLMConfig) -> ModelProfile:
+    family = config.model_family or _infer_model_family_from_model(config.model)
+    defaults = _MODEL_FAMILY_DEFAULTS.get(family or '', {})
+    return ModelProfile(
+        family=family,
+        reasoning_protocol=(
+            config.reasoning_protocol
+            or defaults.get('reasoning_protocol')
+            or _infer_reasoning_protocol_from_model(config.model)
+        ),
+        fallback_group=config.fallback_group or defaults.get('fallback_group'),
+        temperature_policy=(
+            config.temperature_policy
+            or defaults.get('temperature_policy')
+            or 'default'
+        ),
+    )
+
+
+def _resolve_reasoning_protocol(config: LLMConfig) -> str | None:
+    return _resolve_model_profile(config).reasoning_protocol
+
+
+def _build_reasoning_request_overrides(config: LLMConfig) -> dict[str, Any]:
+    """构造 reasoning/thinking 相关的 provider 请求覆盖参数。"""
+    effort = (config.thinking_effort or '').strip().lower()
+    if not effort:
+        return {}
+
+    protocol = _resolve_reasoning_protocol(config)
+    if not protocol:
+        return {}
+
+    builder = _REASONING_PROTOCOL_BUILDERS.get(protocol)
+    if builder is None:
+        raise ValueError(f'Unsupported reasoning protocol: {protocol}')
+    return builder(effort)
+
+
+def _normalize_request_params(
+    config: LLMConfig, request_params: dict[str, Any]
+) -> dict[str, Any]:
+    """按统一模型画像规范化请求参数，优先在本地消化 provider 特殊约束。"""
+    normalized = request_params.copy()
+    profile = _resolve_model_profile(config)
+    thinking_enabled = bool((config.thinking_effort or '').strip())
+    if (
+        thinking_enabled
+        and profile.reasoning_protocol == 'anthropic_adaptive_thinking'
+        and profile.temperature_policy == 'force_one_when_reasoning'
+    ):
+        normalized['temperature'] = 1
+    return normalized
+
+
+def _classify_llm_error(
+    config: LLMConfig, error: Exception
+) -> LLMConfigurationError | None:
+    """将长 provider 错误归一为高信号、不可重试的配置错误。"""
+    err_text = str(error)
+    err_lower = err_text.lower()
+    issues: list[str] = []
+    profile = _resolve_model_profile(config)
+
+    if (
+        'temperature' in err_lower
+        and 'may only be set to 1' in err_lower
+        and profile.reasoning_protocol == 'anthropic_adaptive_thinking'
+    ):
+        issues.append(
+            '当前模型在 thinking/adaptive 模式下 temperature 必须为 1；'
+            '请通过统一模型策略规范化温度，避免把其他采样值直接发给上游。'
+        )
+
+    if 'contentblock object' in err_lower and 'is blank' in err_lower:
+        issues.append(
+            '回放的 assistant 历史中包含空的 text/thinking 内容块；'
+            '请在发送前过滤空 content 与空 reasoning block，避免 Bedrock/Anthropic 拒绝该消息。'
+        )
+
+    if 'no fallback model group found' in err_lower:
+        group = profile.fallback_group
+        if group:
+            issues.append(
+                f'上游代理未识别 fallback_group={group}；'
+                '请检查代理侧 fallback 分组是否与本地模型画像一致。'
+            )
+        else:
+            issues.append(
+                '当前模型未声明 fallback_group；请在统一模型配置中补齐该字段。'
+            )
+
+    if not issues:
+        return None
+
+    model_label = profile.family or config.model
+    return LLMConfigurationError(
+        category='model_configuration_error',
+        message=f"LLM 配置错误（{model_label}）：{' '.join(issues)}",
+        raw_error=err_text,
+    )
+
+
+def _merge_request_overrides(
+    request_params: dict[str, Any], overrides: dict[str, Any]
+) -> dict[str, Any]:
+    """合并 reasoning 请求覆盖，保留已有 extra_body 字段。"""
+    if not overrides:
+        return request_params
+
+    merged = request_params.copy()
+    for key, value in overrides.items():
+        if (
+            key == 'extra_body'
+            and isinstance(value, dict)
+            and isinstance(merged.get('extra_body'), dict)
+        ):
+            merged['extra_body'] = {
+                **merged['extra_body'],
+                **value,
+            }
+        else:
+            merged[key] = value
+    return merged
+
+
+def _merge_api_message_extras(
+    current: dict[str, Any], incoming: dict[str, Any]
+) -> dict[str, Any]:
+    """递归合并 assistant 原始扩展字段，用于多轮回放。"""
+    if not incoming:
+        return current
+
+    merged = dict(current)
+    for key, value in incoming.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _merge_api_message_extras(existing, value)
+        elif isinstance(existing, list) and isinstance(value, list):
+            merged[key] = [*existing, *value]
+        else:
+            merged[key] = value
+    return merged
 
 
 class OpenAILLM(BaseLLM):
@@ -674,6 +947,11 @@ class OpenAILLM(BaseLLM):
         if 'response_format' in kwargs and kwargs['response_format'] is not None:
             request_params['response_format'] = kwargs['response_format']
 
+        request_params = _normalize_request_params(self.config, request_params)
+        request_params = _merge_request_overrides(
+            request_params, _build_reasoning_request_overrides(self.config)
+        )
+
         # 调用 API
         response = self.client.chat.completions.create(**request_params)
 
@@ -708,6 +986,8 @@ class OpenAILLM(BaseLLM):
 
         return LLMResponse(
             content=message.content,
+            reasoning_content=getattr(message, 'reasoning_content', None),
+            api_message_extras=getattr(message, 'model_extra', {}) or {},
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason,
             usage={
@@ -769,7 +1049,14 @@ class OpenAILLM(BaseLLM):
         if 'response_format' in kwargs and kwargs['response_format'] is not None:
             request_params['response_format'] = kwargs['response_format']
 
+        request_params = _normalize_request_params(self.config, request_params)
+        request_params = _merge_request_overrides(
+            request_params, _build_reasoning_request_overrides(self.config)
+        )
+
         full_content: list[str] = []
+        full_reasoning_content: list[str] = []
+        assistant_extra_acc: dict[str, Any] = {}
         # tool_call delta 按 index 累积：{index: {"id": str, "name": str, "arguments": str}}
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
@@ -789,8 +1076,15 @@ class OpenAILLM(BaseLLM):
                 # 文本 token → 实时推送
                 if delta.content:
                     full_content.append(delta.content)
+                reasoning_delta = getattr(delta, 'reasoning_content', None)
+                if reasoning_delta:
+                    full_reasoning_content.append(reasoning_delta)
                     if on_token is not None:
-                        on_token(delta.content)
+                        on_token(reasoning_delta)
+                assistant_extra_acc = _merge_api_message_extras(
+                    assistant_extra_acc,
+                    getattr(delta, 'model_extra', {}) or {},
+                )
                 # tool_call delta → 按 index 累积
                 if delta.tool_calls:
                     for tc_delta in delta.tool_calls:
@@ -833,7 +1127,11 @@ class OpenAILLM(BaseLLM):
         return AssistantMessage(
             content=content,
             tool_calls=tool_calls,
-            meta={'finish_reason': finish_reason},
+            meta={
+                'finish_reason': finish_reason,
+                'reasoning_content': ''.join(full_reasoning_content) or None,
+                'api_message_extras': assistant_extra_acc,
+            },
         )
 
 
@@ -1017,6 +1315,11 @@ class DeepSeekLLM(BaseLLM):
         if 'response_format' in kwargs and kwargs['response_format'] is not None:
             request_params['response_format'] = kwargs['response_format']
 
+        request_params = _normalize_request_params(self.config, request_params)
+        request_params = _merge_request_overrides(
+            request_params, _build_reasoning_request_overrides(self.config)
+        )
+
         # 调用 API
         response = self.client.chat.completions.create(**request_params)
 
@@ -1046,6 +1349,8 @@ class DeepSeekLLM(BaseLLM):
 
         return LLMResponse(
             content=message.content,
+            reasoning_content=getattr(message, 'reasoning_content', None),
+            api_message_extras=getattr(message, 'model_extra', {}) or {},
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason,
             usage={
@@ -1112,6 +1417,8 @@ class DeepSeekLLM(BaseLLM):
             request_params['tool_choice'] = kwargs.get('tool_choice', 'auto')
 
         full_content: list[str] = []
+        full_reasoning_content: list[str] = []
+        assistant_extra_acc: dict[str, Any] = {}
         # tool_call delta 按 index 累积：{index: {"id": str, "name": str, "arguments": str}}
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
@@ -1131,8 +1438,15 @@ class DeepSeekLLM(BaseLLM):
                 # 文本 token → 实时推送
                 if delta.content:
                     full_content.append(delta.content)
+                reasoning_delta = getattr(delta, 'reasoning_content', None)
+                if reasoning_delta:
+                    full_reasoning_content.append(reasoning_delta)
                     if on_token is not None:
-                        on_token(delta.content)
+                        on_token(reasoning_delta)
+                assistant_extra_acc = _merge_api_message_extras(
+                    assistant_extra_acc,
+                    getattr(delta, 'model_extra', {}) or {},
+                )
                 # tool_call delta → 按 index 累积
                 if delta.tool_calls:
                     for tc_delta in delta.tool_calls:
@@ -1177,7 +1491,11 @@ class DeepSeekLLM(BaseLLM):
         return AssistantMessage(
             content=content,
             tool_calls=tool_calls,
-            meta={'finish_reason': finish_reason},
+            meta={
+                'finish_reason': finish_reason,
+                'reasoning_content': ''.join(full_reasoning_content) or None,
+                'api_message_extras': assistant_extra_acc,
+            },
         )
 
 
