@@ -458,6 +458,12 @@ class ResearchPlannerStepExecutionMixin:
             produced = self._extract_produced_artifacts()
             if produced:
                 result_info['produced_artifacts'] = produced
+            quality_scan_text = summary
+            if produced:
+                quality_scan_text = (
+                    f'{summary}\n\n# Artifact paths (journal)\n'
+                    + '\n'.join(str(p) for p in produced)
+                )
             _post_run_checkpoint = 'after_extract_artifacts'
             self._emit(
                 'Planner',
@@ -507,7 +513,7 @@ class ResearchPlannerStepExecutionMixin:
                 _post_run_checkpoint = 'inside_quality_critical'
                 workspace_dir = Path(self._agent_workspace_dir(task_id))
                 quality_files = self._collect_quality_files(
-                    step_dir, workspace_dir, summary
+                    step_dir, workspace_dir, quality_scan_text
                 )
                 _qf_paths = [str(p) for p in quality_files]
                 _qf_max = 40
