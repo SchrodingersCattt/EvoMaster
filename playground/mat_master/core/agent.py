@@ -182,6 +182,93 @@ class MatMasterAgent(Agent):
                 _compaction_llm_key or 'agent_llm',
             )
 
+    @staticmethod
+    def _sanitize_dialog_history(
+        messages: list,
+        logger=None,
+    ) -> list:
+        """Ensure every AssistantMessage with tool_calls has matching ToolMessages.
+
+        Claude/Bedrock requires that each ``tool_use`` block is immediately
+        followed by a ``tool_result`` block.  When a session is interrupted
+        mid-step the tool results may never have been recorded, leaving orphaned
+        tool_calls in the history.  This method inserts placeholder ToolMessages
+        for any such orphans so the dialog is structurally valid before it is
+        sent to the LLM.
+
+        Args:
+            messages: Parsed message objects (UserMessage / AssistantMessage /
+                ToolMessage).
+            logger: Optional logger for warning about injected placeholders.
+
+        Returns:
+            A new list with placeholder ToolMessages inserted where needed.
+        """
+        sanitized: list = []
+        i = 0
+        while i < len(messages):
+            msg = messages[i]
+            sanitized.append(msg)
+
+            tool_calls = getattr(msg, 'tool_calls', None) or []
+            if not tool_calls:
+                i += 1
+                continue
+
+            # Collect the tool_call_ids that are expected
+            expected_ids: dict[str, str] = {}  # id -> function name
+            for tc in tool_calls:
+                tc_id = getattr(tc, 'id', None) or ''
+                tc_name = ''
+                fn = getattr(tc, 'function', None)
+                if fn is not None:
+                    tc_name = getattr(fn, 'name', '') or ''
+                expected_ids[tc_id] = tc_name
+
+            # Collect tool_call_ids that are already present in subsequent
+            # ToolMessages (they may be interleaved with other messages in
+            # some edge cases, but we only look at the immediately following
+            # block to stay conservative).
+            found_ids: set[str] = set()
+            j = i + 1
+            while j < len(messages):
+                next_msg = messages[j]
+                tc_id = getattr(next_msg, 'tool_call_id', None)
+                if tc_id is None:
+                    break  # non-ToolMessage encountered — stop scanning
+                found_ids.add(tc_id)
+                j += 1
+
+            missing_ids = set(expected_ids.keys()) - found_ids
+            if missing_ids:
+                if logger is not None:
+                    logger.warning(
+                        '_sanitize_dialog_history: %d orphaned tool_call(s) '
+                        'detected; injecting placeholder tool_result(s): %s',
+                        len(missing_ids),
+                        missing_ids,
+                    )
+                for tc in tool_calls:
+                    tc_id = getattr(tc, 'id', None) or ''
+                    if tc_id not in missing_ids:
+                        continue
+                    tc_name = expected_ids.get(tc_id, 'unknown')
+                    sanitized.append(
+                        ToolMessage(
+                            tool_call_id=tc_id,
+                            name=tc_name,
+                            content={
+                                'status': 'interrupted',
+                                'observation': (
+                                    'Tool call was interrupted before completion; '
+                                    'result is unavailable. Please retry if needed.'
+                                ),
+                            },
+                        )
+                    )
+            i += 1
+        return sanitized
+
     def _initialize(self, task) -> None:
         """Override: 支持 task.meta['dialog_history'] 多轮对话；否则与基类一致并重置 tool output 计数。"""
         history_raw = task.meta.get('dialog_history') if task.meta else None
@@ -212,6 +299,11 @@ class MatMasterAgent(Agent):
                     self.logger.warning(
                         'dialog_history skip invalid message role=%s: %s', role, e
                     )
+            # Defensive: ensure every tool_use has a matching tool_result so
+            # the dialog is structurally valid for all LLM providers.
+            history_messages = self._sanitize_dialog_history(
+                history_messages, logger=self.logger
+            )
             self._current_task_description = getattr(task, 'description', '') or ''
             self.current_dialog = Dialog(
                 messages=[
