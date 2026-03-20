@@ -11,10 +11,14 @@ llm:
   litellm:
     provider: "openai"
     model: "claude-sonnet-4-6"
+    model_family: "claude-4.6"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     thinking_effort: "high"
-    # temperature: 0.7
+    reasoning_protocol: "anthropic_adaptive_thinking"
+    fallback_group: "claude-sonnet-4-6"
+    temperature_policy: "force_one_when_reasoning"
+    temperature: 0.7
     # max_tokens: 16384
     timeout: 300              # 非流式整包超时（秒）；大模型长输出需要 2-3 分钟
     stream_timeout: 20        # 流式首 token 超时（秒）；等多久没出字就报错；不填则回退到 timeout
@@ -26,10 +30,13 @@ llm:
   azure:
     provider: "openai"
     model: "azure/gpt-5"
+    model_family: "gpt-5"
     api_key: "${AZURE_API_KEY}"
     base_url: "${AZURE_API_BASE}"
     api_version: "${AZURE_API_VERSION}"
     thinking_effort: "high"
+    reasoning_protocol: "openai_reasoning_effort"
+    fallback_group: "gpt-5"
     temperature: 0.7
     max_tokens: 16384
     timeout: 300              # 非流式整包超时（秒）
@@ -42,9 +49,12 @@ llm:
   deepseek:
     provider: "deepseek"
     model: "deepseek-reasoner"
+    model_family: "deepseek-reasoner"
     api_key: "${DEEPSEEK_API_KEY}"
     base_url: "https://api.deepseek.com"
     thinking_effort: "high"
+    reasoning_protocol: "openai_reasoning_effort"
+    fallback_group: "deepseek-reasoner"
     temperature: 0.7
     max_tokens: 16384
     timeout: 300              # 非流式整包超时（秒）
@@ -53,13 +63,31 @@ llm:
     max_retries: 3
     retry_delay: 1.0
 
+  # Gemini Flash：轻量快速，通过 LiteLLM proxy 路由
+  gemini:
+    provider: "openai"
+    model: "gemini-3-flash-preview"
+    model_family: "gemini-3-flash-preview"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    fallback_group: "gemini-3-flash-preview"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "high"
+    timeout: 120
+    stream_timeout: 15
+    stream_idle_timeout: 20
+    max_retries: 3
+    retry_delay: 1.0
+
   # Context compaction 专用小模型（便宜、快速，通过 LiteLLM proxy）
   # 仅在 context compact 触发时调用，不影响主 agent LLM
   compaction:
     provider: "openai"
     model: "gemini-3-flash-preview"
+    model_family: "gemini-3-flash-preview"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
+    fallback_group: "gemini-3-flash-preview"
     temperature: 0.3            # compaction 不需要创造性，低温更稳定
     max_tokens: 4096
     timeout: 120              # compaction 小模型，非流式超时适当缩短
