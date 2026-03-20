@@ -107,6 +107,12 @@ class ResearchPlanner(
             'survey_min_line_length': max(
                 1, int(quality_cfg.get('survey_min_line_length', 60))
             ),
+            'survey_min_root_md_bytes': max(
+                0, int(quality_cfg.get('survey_min_root_md_bytes', 400))
+            ),
+            'survey_max_root_md_files': max(
+                1, int(quality_cfg.get('survey_max_root_md_files', 48))
+            ),
         }
 
         # ── Planner file I/O (local vs SSH) ──────────────────────────────

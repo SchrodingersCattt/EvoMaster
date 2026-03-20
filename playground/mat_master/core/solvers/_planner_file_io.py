@@ -69,6 +69,10 @@ class PlannerFileIO(ABC):
         """
         return []
 
+    def stat_size(self, path: str) -> int | None:
+        """Return regular file size in bytes, or ``None`` if unavailable."""
+        return None
+
 
 # ── Local implementation ──────────────────────────────────────────────────
 
@@ -105,6 +109,15 @@ class LocalPlannerFileIO(PlannerFileIO):
 
     def glob(self, dir_path: str, pattern: str = '*.md') -> list[str]:
         return [str(p) for p in Path(dir_path).glob(pattern) if p.is_file()]
+
+    def stat_size(self, path: str) -> int | None:
+        try:
+            p = Path(path)
+            if not p.is_file():
+                return None
+            return p.stat().st_size
+        except OSError:
+            return None
 
 
 # ── SSH implementation ────────────────────────────────────────────────────
@@ -164,6 +177,18 @@ class SSHPlannerFileIO(PlannerFileIO):
         if not out:
             return []
         return [line.strip() for line in out.splitlines() if line.strip()]
+
+    def stat_size(self, path: str) -> int | None:
+        if not self._session.path_exists(path):
+            return None
+        result = self._session.exec_bash(
+            f'stat -c %s {shlex.quote(path)}',
+            timeout=10,
+        )
+        out = (result.get('stdout') or '').strip()
+        if not out or not out.isdigit():
+            return None
+        return int(out)
 
 
 # ── Factory ───────────────────────────────────────────────────────────────
