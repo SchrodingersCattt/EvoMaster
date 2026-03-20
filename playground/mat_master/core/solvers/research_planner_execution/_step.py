@@ -564,15 +564,15 @@ class ResearchPlannerStepExecutionMixin:
                     path_str = str(quality_file)
                     text = None
                     try:
-                        text = quality_file.read_text(encoding='utf-8')
+                        text = self._read_workspace_text(quality_file)
                     except Exception as e:
                         files_read_fail += 1
                         self.logger.warning(
-                            '[Planner] Step %s literature_index quality_file read failed '
-                            '(Path.read_text local only; on SSH workspace this often '
-                            'misses remote paths): path=%s err=%s: %s',
+                            '[Planner] Step %s literature_index quality_file read failed: '
+                            'path=%s remote=%s err=%s: %s',
                             step_id,
                             path_str,
+                            _use_remote_read,
                             type(e).__name__,
                             e,
                         )
