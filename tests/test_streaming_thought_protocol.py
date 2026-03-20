@@ -5,6 +5,7 @@ from playground.mat_master.core.solvers._research_planner_runtime import (
 )
 from playground.mat_master.service.confirm import ConfirmMode
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
+from evomaster.utils.types import AssistantMessage
 from src.services.agent_run_service import (
     _should_persist_event,
     _should_skip_push,
@@ -41,6 +42,30 @@ def test_streaming_agent_emits_thought_stream_events():
     assert events[1]['content'] == 'alpha'
     assert events[2]['token_count'] == len('alpha')
     assert events[0]['stream_id'] == events[1]['stream_id'] == events[2]['stream_id']
+
+
+def test_streaming_agent_emits_reasoning_as_thought():
+    """Assistant completion should prefer real reasoning_content over final answer text."""
+    events: list[dict] = []
+    agent = StreamingMatMasterAgent.__new__(StreamingMatMasterAgent)
+    agent.event_callback = lambda source, event_type, content, **extra: events.append(
+        {
+            'source': source,
+            'type': event_type,
+            'content': content,
+            **extra,
+        }
+    )
+    agent._agent_name = 'Coder'
+
+    assistant = AssistantMessage(
+        content='final answer',
+        meta={'reasoning_content': 'real reasoning'},
+    )
+    agent._on_assistant_message(assistant)
+
+    assert events[-1]['type'] == 'thought'
+    assert events[-1]['content'] == 'real reasoning'
 
 
 class _PlannerRuntimeProbe(ResearchPlannerRuntimeMixin):
