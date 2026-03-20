@@ -23,6 +23,7 @@ using the ``bohr_job_id``.
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import logging
 import os
@@ -83,6 +84,7 @@ _MAX_FAILURE_CONFIRMS = 3
 
 # Maximum characters to include in log_tail returned to the agent.
 _LOG_TAIL_MAX_CHARS = 5000
+_LOG_PER_FILE_MAX_CHARS = 3000
 
 LOG_PATTERNS: dict[str, list[str]] = {
     'vasp': ['OUTCAR', 'vasp.out', '*.out'],
@@ -324,6 +326,60 @@ def _terminate_job_if_needed(
         return {'attempted': True, 'success': False, 'detail': str(exc)}
 
 
+def _find_log_files_from_job(
+    bohr_job_id: str,
+    software: str,
+    access_key: str | None = None,
+) -> list[str]:
+    """用 iterate_job_files 递归列出 job 全部文件，按 LOG_PATTERNS 通配符匹配日志文件路径。"""
+    patterns = LOG_PATTERNS.get(software.lower(), ['*.log', '*.out', '*.json'])
+    logger.info(
+        '_find_log_files_from_job: bohr_job_id=%s software=%s patterns=%s',
+        bohr_job_id, software, patterns,
+    )
+
+    # 递归列出所有文件（iterate_job_files 只返回一级，需要对子目录再次调用）
+    all_files: list[dict] = []
+    max_depth = 2  # 只遍历两级目录
+    try:
+        dirs_to_visit: list[tuple[str | None, int]] = [(None, 0)]
+        while dirs_to_visit:
+            prefix, depth = dirs_to_visit.pop()
+            entries = iterate_job_files(bohr_job_id, prefix=prefix, access_key=access_key)
+            for entry in entries:
+                if entry.get('isDir'):
+                    if depth < max_depth:
+                        dir_path = entry.get('path', '')
+                        if dir_path:
+                            dirs_to_visit.append((dir_path, depth + 1))
+                else:
+                    all_files.append(entry)
+    except Exception:
+        logger.warning(
+            '_find_log_files_from_job: iterate_job_files failed for %s',
+            bohr_job_id, exc_info=True,
+        )
+        return []
+    logger.info(
+        '_find_log_files_from_job: found %d files (recursive) for %s: %s',
+        len(all_files), bohr_job_id,
+        [f.get('path', '') for f in all_files],
+    )
+    matched = []
+    for f in all_files:
+        path = f.get('path', '')
+        basename = path.rsplit('/', 1)[-1] if '/' in path else path
+        for pat in patterns:
+            if fnmatch.fnmatch(basename, pat):
+                matched.append(path)
+                break
+    logger.info(
+        '_find_log_files_from_job: matched %d log files: %s',
+        len(matched), matched,
+    )
+    return matched
+
+
 def run_monitor_decision_once(
     *,
     job_id: str,
@@ -352,41 +408,53 @@ def run_monitor_decision_once(
     log_tail: str | None = None
     log_file: str | None = None
     if bohr_job_id:
-        # 尝试下载多个可能的日志文件并合并（扩展列表，覆盖更多场景）
-        log_files = [
-            'log',  # Bohrium 调度日志
-            'md_simulation.log',  # DPA MD 日志
-            'relaxation.log',  # DPA 弛豫日志
-            'output.log',  # 通用输出日志
-            'OUTCAR',  # VASP
-            'OUT.ABACUS',  # ABACUS
-            'log.lammps',  # LAMMPS
-            'running_scf.log',  # ABACUS SCF
-            'running_md.log',  # ABACUS MD
-        ]
         combined_text = ''
         downloaded_files = []
 
-        for log_name in log_files:
+        # 1) 始终先下载 Bohrium 调度日志（固定文件名 'log'）
+        log_names_to_download = ['log']
+        # 2) 用 iterate_job_files + LOG_PATTERNS 通配符匹配日志文件
+        matched_paths = _find_log_files_from_job(
+            bohr_job_id, software, access_key=access_key
+        )
+        for p in matched_paths:
+            if p not in log_names_to_download:
+                log_names_to_download.append(p)
+        logger.info(
+            'monitor_log_download: bohr_job_id=%s final download list=%s',
+            bohr_job_id, log_names_to_download,
+        )
+
+        for log_name in log_names_to_download:
             tmp_path: Path | None = None
             try:
-                tmp_path = Path(
-                    tempfile.mktemp(suffix=f'_{log_name.replace(".", "_")}')
-                )
+                safe_suffix = '_' + log_name.replace('/', '_').replace('.', '_')
+                tmp_path = Path(tempfile.mktemp(suffix=safe_suffix))
                 download_job_file(
                     log_name, bohr_job_id, tmp_path, access_key=access_key
                 )
-                # 读取完整文件内容（不截断）
-                text = tmp_path.read_text(encoding='utf-8', errors='ignore')
-                if text and text.strip():
-                    combined_text += f'\n\n=== {log_name} ===\n{text}'
+                raw_text = tmp_path.read_text(encoding='utf-8', errors='ignore')
+                if raw_text and raw_text.strip():
+                    text = raw_text[-_LOG_PER_FILE_MAX_CHARS:] if len(raw_text) > _LOG_PER_FILE_MAX_CHARS else raw_text
+                    combined_text += f'\n\n=== {log_name} (last {len(text)}/{len(raw_text)} chars) ===\n{text}'
                     downloaded_files.append(log_name)
+                    logger.info(
+                        'monitor_log_download: downloaded %s (%d/%d chars)',
+                        log_name, len(text), len(raw_text),
+                    )
+                else:
+                    logger.debug(
+                        'monitor_log_download: %s downloaded but empty', log_name,
+                    )
                 try:
                     tmp_path.unlink()
                 except OSError:
                     pass
             except Exception:
-                # 某个日志文件不存在或下载失败，继续尝试其他文件
+                logger.debug(
+                    'monitor_log_download: failed to download %s',
+                    log_name, exc_info=True,
+                )
                 if tmp_path and tmp_path.exists():
                     try:
                         tmp_path.unlink()
@@ -415,7 +483,7 @@ def run_monitor_decision_once(
         status=status,
         poll_index=poll_index,
         software=software,
-        log_tail=_trim_text(log_tail, _LOG_TAIL_MAX_CHARS),
+        log_tail=log_tail or '',
         log_file=log_file,
     )
     decision: dict[str, Any] | None = None
@@ -425,6 +493,11 @@ def run_monitor_decision_once(
             task_intent=task_intent,
             llm_alias=llm_model_alias,
             timeout_seconds=llm_timeout_seconds,
+        )
+        logger.info(
+            'monitor_llm_decision: bohr_job_id=%s poll=%d decision=%s reason=%s confidence=%s',
+            bohr_job_id, poll_index,
+            decision.get('decision'), decision.get('reason'), decision.get('confidence'),
         )
     return {
         'status': status,
@@ -1067,17 +1140,51 @@ def _run_lifecycle(
     log_path: str | None = None
 
     if bohr_job_id:
-        try:
-            _tmp_log = Path(tempfile.mktemp(suffix='.log'))
-            download_job_file('log', bohr_job_id, _tmp_log, access_key=access_key)
-            log_tail = _read_log_tail(str(_tmp_log))
-            log_path = f'bohrium://jobs/{bohr_job_id}/log'
+        # 复用 _find_log_files_from_job 统一匹配日志文件
+        fail_log_names = ['log']
+        matched = _find_log_files_from_job(bohr_job_id, software, access_key=access_key)
+        for p in matched:
+            if p not in fail_log_names:
+                fail_log_names.append(p)
+        logger.info(
+            'monitor_job failure log download: bohr_job_id=%s list=%s',
+            bohr_job_id, fail_log_names,
+        )
+        combined_fail_text = ''
+        fail_downloaded = []
+        for log_name in fail_log_names:
+            _tmp: Path | None = None
             try:
-                _tmp_log.unlink()
-            except OSError:
-                pass
-        except Exception:
-            pass
+                safe_suffix = '_' + log_name.replace('/', '_').replace('.', '_')
+                _tmp = Path(tempfile.mktemp(suffix=safe_suffix))
+                download_job_file(log_name, bohr_job_id, _tmp, access_key=access_key)
+                raw_text = _tmp.read_text(encoding='utf-8', errors='ignore')
+                if raw_text and raw_text.strip():
+                    text = raw_text[-_LOG_PER_FILE_MAX_CHARS:] if len(raw_text) > _LOG_PER_FILE_MAX_CHARS else raw_text
+                    combined_fail_text += f'\n\n=== {log_name} (last {len(text)}/{len(raw_text)} chars) ===\n{text}'
+                    fail_downloaded.append(log_name)
+                    logger.info(
+                        'monitor_job failure log: downloaded %s (%d/%d chars)',
+                        log_name, len(text), len(raw_text),
+                    )
+                try:
+                    _tmp.unlink()
+                except OSError:
+                    pass
+            except Exception:
+                logger.debug(
+                    'monitor_job failure log: failed to download %s',
+                    log_name, exc_info=True,
+                )
+                if _tmp and _tmp.exists():
+                    try:
+                        _tmp.unlink()
+                    except OSError:
+                        pass
+                continue
+        if combined_fail_text:
+            log_tail = combined_fail_text
+            log_path = f'bohrium://jobs/{bohr_job_id}/[{",".join(fail_downloaded)}]'
 
     # Priority 2: fallback to local workspace or remote SSH node
     if log_tail is None:
