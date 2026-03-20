@@ -137,6 +137,10 @@ class LLMConfig(BaseModel):
     use_completion_api: bool = Field(
         default=False, description='使用 Completion API 而非 Chat API'
     )
+    thinking_effort: str | None = Field(
+        default=None,
+        description='统一的 reasoning/thinking 强度配置，供 provider 适配层使用',
+    )
 
 
 class LLMResponse(BaseModel):
