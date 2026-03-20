@@ -16,6 +16,18 @@ except ImportError:
     SkillEvolutionExp = None
     _HAS_EVOLUTION = False
 
+# status_stages carries intent for the UI/SSE; avoid multi‑MB payloads if a plan is malformed.
+_STATUS_STAGES_INTENT_MAX = 32_768
+
+
+def _intent_for_status_stages(raw: Any) -> str:
+    if raw is None or raw == '':
+        return ''
+    s = raw if isinstance(raw, str) else str(raw)
+    if len(s) <= _STATUS_STAGES_INTENT_MAX:
+        return s
+    return s[: _STATUS_STAGES_INTENT_MAX - 1] + '…'
+
 
 class ResearchPlannerStepExecutionMixin:
     """Mixin for executing a single plan step: artifacts, summarize, prompt, run."""
@@ -175,7 +187,7 @@ class ResearchPlannerStepExecutionMixin:
                 'total': len(steps_list),
                 'current': step_id,
                 'step_id': step_id,
-                'intent': intent[:120] if intent else '',
+                'intent': _intent_for_status_stages(intent),
             },
         )
 
@@ -454,7 +466,7 @@ class ResearchPlannerStepExecutionMixin:
                     'total': len(steps_list),
                     'current': step_id,
                     'step_id': step_id,
-                    'intent': intent[:120] if intent else '',
+                    'intent': _intent_for_status_stages(intent),
                     'status': 'done',
                 },
             )
