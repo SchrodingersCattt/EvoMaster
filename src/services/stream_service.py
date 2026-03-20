@@ -45,6 +45,16 @@ logger = logging.getLogger(__name__)
 _CANCEL_SENTINEL = object()
 
 
+def _should_emit_event_to_sse(event: dict) -> bool:
+    """Persisted event types that must not be sent to the client SSE (see agent_run_service._should_skip_push)."""
+    t = event.get('type')
+    if t == 'log_line':
+        return False
+    if t == 'assistant_state':
+        return False
+    return True
+
+
 class InMemoryReplyQueue:
     """进程内队列封装，实现 ReplyQueueLike。"""
 
@@ -435,7 +445,7 @@ class ChatStreamService:
             if events:
                 events = self._inject_elapsed_for_history(events)
                 for event in events:
-                    if event.get('type') != 'log_line':
+                    if _should_emit_event_to_sse(event):
                         yield self.sse_format(event)
 
             # 保持流打开直到 Worker 上的 run 结束，或「已入队未接手」结束；仅队列模式，run 不在 API 进程
@@ -708,7 +718,7 @@ class ChatStreamService:
         history = self._events_service.get_session_events(sid) or []
         history = self._inject_elapsed_for_history(history)
         for event in history:
-            if event.get('type') != 'log_line':
+            if _should_emit_event_to_sse(event):
                 yield self.sse_format(event)
         yield self.sse_format(ctx.user_msg)
 
