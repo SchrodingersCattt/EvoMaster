@@ -523,26 +523,87 @@ class ResearchPlannerStepExecutionMixin:
                     len(quality_files),
                     _qf_log,
                 )
+                from evomaster.agent.session.ssh import SSHSession  # noqa: PLC0415
+
+                _sess = getattr(getattr(self, 'agent', None), 'session', None)
+                _file_io = getattr(self, '_file_io', None)
+                _use_remote_read = (
+                    isinstance(_sess, SSHSession) and _file_io is not None
+                )
+                self.logger.info(
+                    '[Planner] Step %s literature_index ingest: use_remote_read=%s '
+                    '(SSHSession + _file_io) summary_chars=%d',
+                    step_id,
+                    _use_remote_read,
+                    len(summary or ''),
+                )
                 before_count = int(state.get('literature_entry_count', 0) or 0)
-                self._append_literature_index(
+                summary_added = self._append_literature_index(
                     state,
                     task_id,
                     source=f"step:{step_id}:summary",
                     text=summary,
                 )
+                self.logger.info(
+                    '[Planner] Step %s literature_index after summary: added_urls=%d '
+                    'literature_entry_count=%d',
+                    step_id,
+                    summary_added,
+                    int(state.get('literature_entry_count', 0) or 0),
+                )
+                files_added_sum = 0
+                files_read_ok = 0
+                files_read_fail = 0
                 for quality_file in quality_files:
+                    path_str = str(quality_file)
+                    text = None
                     try:
                         text = quality_file.read_text(encoding='utf-8')
-                    except Exception:
+                    except Exception as e:
+                        files_read_fail += 1
+                        self.logger.warning(
+                            '[Planner] Step %s literature_index quality_file read failed '
+                            '(Path.read_text local only; on SSH workspace this often '
+                            'misses remote paths): path=%s err=%s: %s',
+                            step_id,
+                            path_str,
+                            type(e).__name__,
+                            e,
+                        )
                         continue
-                    self._append_literature_index(
+                    files_read_ok += 1
+                    slice_len = min(len(text), 200000)
+                    added = self._append_literature_index(
                         state,
                         task_id,
                         source=f"step:{step_id}:file:{quality_file.name}",
                         text=text[:200000],
                     )
-                evidence_delta = (
-                    int(state.get('literature_entry_count', 0) or 0) - before_count
+                    files_added_sum += added
+                    self.logger.info(
+                        '[Planner] Step %s literature_index quality_file ok: name=%s '
+                        'path=%s chars=%d slice_used=%d added_urls=%d',
+                        step_id,
+                        quality_file.name,
+                        path_str,
+                        len(text),
+                        slice_len,
+                        added,
+                    )
+                after_count = int(state.get('literature_entry_count', 0) or 0)
+                evidence_delta = after_count - before_count
+                self.logger.info(
+                    '[Planner] Step %s literature_index step totals: before=%d after=%d '
+                    'delta=%d summary_added=%d files_read_ok=%d files_read_fail=%d '
+                    'files_added_sum=%d',
+                    step_id,
+                    before_count,
+                    after_count,
+                    evidence_delta,
+                    summary_added,
+                    files_read_ok,
+                    files_read_fail,
+                    files_added_sum,
                 )
                 survey_failed, survey_reason = self._detect_survey_quality_failure(
                     intent=intent,
