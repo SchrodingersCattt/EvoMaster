@@ -49,6 +49,11 @@ LOG_PATTERNS: dict[str, list[str]] = {
     'gromacs': ['log', 'md.log', '*.log'],
 }
 
+# 匹配时排除的文件名（basename 精确匹配），这些文件内容会误导 LLM 决策
+LOG_EXCLUDE_BASENAMES: set[str] = {
+    'warning.log',  # ABACUS 电荷归一化调试输出，非真实错误
+}
+
 _AUTO_DOWNLOAD_MAX_BYTES = 100 * 1024 * 1024  # 100 MB
 _MONITOR_LLM_DECISION_PROMPT = """你是科学计算作业监控专家，分析材料计算、量子化学、分子动力学等任务的运行日志。
 
