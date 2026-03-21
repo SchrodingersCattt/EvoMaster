@@ -30,8 +30,8 @@
 
 ### EventBus (事件系统)
 
-- [ ] **EBUS-01**: MessageBus 使用同步 queue 实现，适配 ThreadPoolExecutor 线程模型
-- [ ] **EBUS-02**: QueueBridge 将 MessageBus 事件桥接到现有 SSE 消费路径
+- [x] **EBUS-01**: MessageBus 使用同步 queue 实现，适配 ThreadPoolExecutor 线程模型
+- [x] **EBUS-02**: QueueBridge 将 MessageBus 事件桥接到现有 SSE 消费路径
 
 ### LLM Provider
 
@@ -103,8 +103,8 @@
 | ASBL-03 | Phase 3 | Pending |
 | ASBL-04 | Phase 3 | Pending |
 | ASBL-05 | Phase 3 | Pending |
-| EBUS-01 | Phase 1 | Pending |
-| EBUS-02 | Phase 1 | Pending |
+| EBUS-01 | Phase 1 | Complete |
+| EBUS-02 | Phase 1 | Complete |
 | LLMP-01 | Phase 2 | Pending |
 | WKSP-01 | Phase 4 | Pending |
 | WKSP-02 | Phase 4 | Pending |
