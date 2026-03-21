@@ -15,7 +15,7 @@
 
 ### Kernel (执行核心)
 
-- [ ] **KERN-01**: AgentKernel 实现纯执行循环，只消费 AgentRuntimeSpec，不做 config 装配
+- [x] **KERN-01**: AgentKernel 实现纯执行循环，只消费 AgentRuntimeSpec，不做 config 装配
 - [x] **KERN-02**: 内置通用 Guard（loop detection、max turns），不可移除
 - [x] **KERN-03**: GuardPipeline 支持串联执行多个 Guard（内置 + 业务注入）
 - [x] **KERN-04**: Hook Point API 支持 pre_tool_call/post_tool_call/pre_llm_call/should_continue 扩展点
@@ -27,6 +27,7 @@
 - [ ] **ASBL-03**: 业务 Guard（manuscript gate、auth failure gate）通过 AgentRuntimeSpec.guards 注入
 - [ ] **ASBL-04**: Solver 模式（ResearchPlanner 等）收入 exp 层作为高阶装配模式
 - [ ] **ASBL-05**: ContextBuilder 从 identity/skills/memory/task 多源组装 system prompt
+- [ ] **ASBL-06**: WorkerRegistry 集成——Exp 层管理跨 pod 会话所有权（set/get session_run_owner）、worker 心跳检测、run_interrupted 分类（deploy vs restart）
 
 ### EventBus (事件系统)
 
@@ -42,6 +43,7 @@
 - [ ] **WKSP-01**: 新 Playground base class 只负责环境准备，输出 PlaygroundContext
 - [ ] **WKSP-02**: mat_master playground 重构为只输出 PlaygroundContext
 - [ ] **WKSP-03**: minimal playground 重构为只输出 PlaygroundContext
+- [ ] **WKSP-04**: PlaygroundContext 包含 workspace 归档配置（OSS 上传路径、凭证引用），支持 run 结束后 workspace 快照上传
 
 ### Migration (迁移)
 
@@ -53,6 +55,7 @@
 - [ ] **QUAL-01**: 三层契约（PlaygroundContext/AgentRuntimeSpec/AgentEvent）有单元测试覆盖
 - [ ] **QUAL-02**: mat_master 和 minimal 有端到端测试验证迁移正确性
 - [ ] **QUAL-03**: 迁移文档记录新旧架构差异和迁移指南
+- [ ] **QUAL-04**: 上游场景端到端验证——run_interrupted 检测、跨 pod 订阅恢复（RedisReplyQueue）、workspace OSS 上传、Bohrium 节点生命周期（创建/复用/清理）
 
 ## v2 Requirements
 
@@ -94,7 +97,7 @@
 | CONT-03 | Phase 1 | Complete |
 | CONT-04 | Phase 1 | Complete |
 | CONT-05 | Phase 1 | Complete |
-| KERN-01 | Phase 2 | Pending |
+| KERN-01 | Phase 2 | Complete |
 | KERN-02 | Phase 2 | Complete |
 | KERN-03 | Phase 2 | Complete |
 | KERN-04 | Phase 2 | Complete |
@@ -103,21 +106,24 @@
 | ASBL-03 | Phase 3 | Pending |
 | ASBL-04 | Phase 3 | Pending |
 | ASBL-05 | Phase 3 | Pending |
+| ASBL-06 | Phase 3 | Pending |
 | EBUS-01 | Phase 1 | Complete |
 | EBUS-02 | Phase 1 | Complete |
 | LLMP-01 | Phase 2 | Complete |
 | WKSP-01 | Phase 4 | Pending |
 | WKSP-02 | Phase 4 | Pending |
 | WKSP-03 | Phase 4 | Pending |
+| WKSP-04 | Phase 4 | Pending |
 | MIGR-01 | Phase 5 | Pending |
 | MIGR-02 | Phase 5 | Pending |
 | QUAL-01 | Phase 5 | Pending |
 | QUAL-02 | Phase 5 | Pending |
 | QUAL-03 | Phase 5 | Pending |
+| QUAL-04 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 25 total
-- Mapped to phases: 25
+- v1 requirements: 28 total
+- Mapped to phases: 28
 - Unmapped: 0
 
 ---

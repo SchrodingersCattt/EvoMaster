@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-21T16:38:35.564Z"
-last_activity: 2026-03-21 -- Completed plan 02-01 (Kernel Foundation Modules)
+status: completed
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-21T16:50:11.110Z"
+last_activity: 2026-03-21 -- Completed plan 02-02 (Kernel Execution Loop & OpenAIProvider)
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -21,33 +21,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 2: Agent Kernel
+**Current focus:** Phase 2: Agent Kernel -- COMPLETE
 
 ## Current Position
 
-Phase: 2 of 5 (Agent Kernel)
-Plan: 1 of 2 in current phase -- COMPLETE
-Status: Executing Phase 2
-Last activity: 2026-03-21 -- Completed plan 02-01 (Kernel Foundation Modules)
+Phase: 2 of 5 (Agent Kernel) -- COMPLETE
+Plan: 2 of 2 in current phase -- COMPLETE
+Status: Phase 2 Complete
+Last activity: 2026-03-21 -- Completed plan 02-02 (Kernel Execution Loop & OpenAIProvider)
 
-Progress: [########░░] 75%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
-- Average duration: 5min
-- Total execution time: 0.25 hours
+- Total plans completed: 4
+- Average duration: 6min
+- Total execution time: 0.37 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-contracts | 2 | 10min | 5min |
-| 02-agent-kernel | 1 | 5min | 5min |
+| 02-agent-kernel | 2 | 12min | 6min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (6min), 01-02 (4min), 02-01 (5min)
+- Last 5 plans: 01-01 (6min), 01-02 (4min), 02-01 (5min), 02-02 (7min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -73,6 +73,8 @@ Recent decisions affecting current work:
 - [02-01]: Hook Protocol separates intercepting hooks (short-circuit) from observation hooks (all-execute)
 - [02-01]: GuardPipeline records calls only after all guards pass (denied calls not tracked)
 - [02-01]: EventEmitterHook returns CONTINUE after emitting (observation, not interception)
+- [Phase 02]: TYPE_CHECKING guard in kernel.py to break circular import with contracts.runtime
+- [Phase 02]: OpenAI SDK retry delegated to client-level max_retries, kernel does not retry
 
 ### Pending Todos
 
@@ -86,6 +88,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T16:38:35.561Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-03-21T16:50:11.108Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
