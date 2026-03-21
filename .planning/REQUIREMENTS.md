@@ -16,9 +16,9 @@
 ### Kernel (执行核心)
 
 - [ ] **KERN-01**: AgentKernel 实现纯执行循环，只消费 AgentRuntimeSpec，不做 config 装配
-- [ ] **KERN-02**: 内置通用 Guard（loop detection、max turns），不可移除
-- [ ] **KERN-03**: GuardPipeline 支持串联执行多个 Guard（内置 + 业务注入）
-- [ ] **KERN-04**: Hook Point API 支持 pre_tool_call/post_tool_call/pre_llm_call/should_continue 扩展点
+- [x] **KERN-02**: 内置通用 Guard（loop detection、max turns），不可移除
+- [x] **KERN-03**: GuardPipeline 支持串联执行多个 Guard（内置 + 业务注入）
+- [x] **KERN-04**: Hook Point API 支持 pre_tool_call/post_tool_call/pre_llm_call/should_continue 扩展点
 
 ### Assembly (Exp 装配层)
 
@@ -35,7 +35,7 @@
 
 ### LLM Provider
 
-- [ ] **LLMP-01**: LLMProvider Protocol 接口定义 chat() + chat_with_retry() + streaming 统一签名
+- [x] **LLMP-01**: LLMProvider Protocol 接口定义 chat() + chat_with_retry() + streaming 统一签名
 
 ### Workspace (Playground 层)
 
@@ -95,9 +95,9 @@
 | CONT-04 | Phase 1 | Complete |
 | CONT-05 | Phase 1 | Complete |
 | KERN-01 | Phase 2 | Pending |
-| KERN-02 | Phase 2 | Pending |
-| KERN-03 | Phase 2 | Pending |
-| KERN-04 | Phase 2 | Pending |
+| KERN-02 | Phase 2 | Complete |
+| KERN-03 | Phase 2 | Complete |
+| KERN-04 | Phase 2 | Complete |
 | ASBL-01 | Phase 3 | Pending |
 | ASBL-02 | Phase 3 | Pending |
 | ASBL-03 | Phase 3 | Pending |
@@ -105,7 +105,7 @@
 | ASBL-05 | Phase 3 | Pending |
 | EBUS-01 | Phase 1 | Complete |
 | EBUS-02 | Phase 1 | Complete |
-| LLMP-01 | Phase 2 | Pending |
+| LLMP-01 | Phase 2 | Complete |
 | WKSP-01 | Phase 4 | Pending |
 | WKSP-02 | Phase 4 | Pending |
 | WKSP-03 | Phase 4 | Pending |

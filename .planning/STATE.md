@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 2 context gathered
-last_updated: "2026-03-21T16:02:27.671Z"
-last_activity: 2026-03-21 -- Completed plan 01-02 (MessageBus + QueueBridge)
+status: executing
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-21T16:38:35.564Z"
+last_activity: 2026-03-21 -- Completed plan 02-01 (Kernel Foundation Modules)
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
-  percent: 100
+  total_plans: 4
+  completed_plans: 3
+  percent: 75
 ---
 
 # Project State
@@ -21,33 +21,34 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 1: Foundation Contracts
+**Current focus:** Phase 2: Agent Kernel
 
 ## Current Position
 
-Phase: 1 of 5 (Foundation Contracts) -- COMPLETE
-Plan: 2 of 2 in current phase
-Status: Phase 1 Complete
-Last activity: 2026-03-21 -- Completed plan 01-02 (MessageBus + QueueBridge)
+Phase: 2 of 5 (Agent Kernel)
+Plan: 1 of 2 in current phase -- COMPLETE
+Status: Executing Phase 2
+Last activity: 2026-03-21 -- Completed plan 02-01 (Kernel Foundation Modules)
 
-Progress: [##########] 100%
+Progress: [########░░] 75%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
+- Total plans completed: 3
 - Average duration: 5min
-- Total execution time: 0.17 hours
+- Total execution time: 0.25 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-contracts | 2 | 10min | 5min |
+| 02-agent-kernel | 1 | 5min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (6min), 01-02 (4min)
-- Trend: Accelerating
+- Last 5 plans: 01-01 (6min), 01-02 (4min), 02-01 (5min)
+- Trend: Stable
 
 *Updated after each plan completion*
 
@@ -68,6 +69,10 @@ Recent decisions affecting current work:
 - [Phase 01-02]: QueueBridge.next_payload() returns base payload without session_id/task_id -- injected by agent_run_service
 - [Phase 01-02]: Single consumer pattern -- QueueBridge exclusively consumes from MessageBus
 - [Phase 01-02]: Synchronous queue.Queue chosen over asyncio.Queue -- agent runs in ThreadPoolExecutor
+- [02-01]: ToolCallData.arguments is dict[str, Any] (not raw JSON string) -- parsing at provider boundary
+- [02-01]: Hook Protocol separates intercepting hooks (short-circuit) from observation hooks (all-execute)
+- [02-01]: GuardPipeline records calls only after all guards pass (denied calls not tracked)
+- [02-01]: EventEmitterHook returns CONTINUE after emitting (observation, not interception)
 
 ### Pending Todos
 
@@ -81,6 +86,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T16:02:27.662Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-agent-kernel/02-CONTEXT.md
+Last session: 2026-03-21T16:38:35.561Z
+Stopped at: Completed 02-01-PLAN.md
+Resume file: None
