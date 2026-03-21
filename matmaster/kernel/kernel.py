@@ -16,11 +16,13 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from matmaster.contracts.events import FinishEvent
-from matmaster.contracts.runtime import AgentRuntimeSpec
 from matmaster.kernel.guard_pipeline import GuardPipeline
+
+if TYPE_CHECKING:
+    from matmaster.contracts.runtime import AgentRuntimeSpec
 from matmaster.kernel.hooks import (
     HookAction,
     run_on_stream_chunk,
