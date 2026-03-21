@@ -267,8 +267,12 @@ class BaseAgent(ABC):
         self._step_count += 1
         stop_event = getattr(self, '_stop_event', None)
 
-        # 准备对话（可能需要截断）
+        # 准备对话（可能需要截断/压缩）
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
+        # 若 prepare_for_query 发生了压缩/截断，将结果回写到 current_dialog，
+        # 避免下一个 step 再次对未压缩的原始 dialog 重复触发压缩。
+        if dialog_for_query is not self.current_dialog:
+            self.current_dialog = dialog_for_query
 
         # 查询模型（使用 LLM，带上下文窗口超限自动恢复）
         assistant_message = self._query_with_context_recovery(dialog_for_query)
