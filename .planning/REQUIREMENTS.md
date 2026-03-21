@@ -7,11 +7,11 @@
 
 ### Contracts (契约层)
 
-- [ ] **CONT-01**: PlaygroundContext 使用 Pydantic frozen model 定义，包含 workdir、session type、cache area、环境变量、MCP manager、skill registry
-- [ ] **CONT-02**: AgentRuntimeSpec 使用 Pydantic frozen model 定义，包含 LLM provider、tool registry、guards、termination policy、hooks、compaction config
-- [ ] **CONT-03**: AgentEvent 使用 Pydantic discriminated union 定义事件类型（ThoughtEvent/ToolCallEvent/ToolResultEvent/FinishEvent/ErrorEvent）
-- [ ] **CONT-04**: Guard Protocol 接口定义（evaluate 方法签名 + GuardResult 返回类型）
-- [ ] **CONT-05**: TerminationPolicy 类型定义（max_turns/finish_tool/stop_event 的统一抽象）
+- [x] **CONT-01**: PlaygroundContext 使用 Pydantic frozen model 定义，包含 workdir、session type、cache area、环境变量、MCP manager、skill registry
+- [x] **CONT-02**: AgentRuntimeSpec 使用 Pydantic frozen model 定义，包含 LLM provider、tool registry、guards、termination policy、hooks、compaction config
+- [x] **CONT-03**: AgentEvent 使用 Pydantic discriminated union 定义事件类型（ThoughtEvent/ToolCallEvent/ToolResultEvent/FinishEvent/ErrorEvent）
+- [x] **CONT-04**: Guard Protocol 接口定义（evaluate 方法签名 + GuardResult 返回类型）
+- [x] **CONT-05**: TerminationPolicy 类型定义（max_turns/finish_tool/stop_event 的统一抽象）
 
 ### Kernel (执行核心)
 
@@ -89,11 +89,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONT-01 | Phase 1 | Pending |
-| CONT-02 | Phase 1 | Pending |
-| CONT-03 | Phase 1 | Pending |
-| CONT-04 | Phase 1 | Pending |
-| CONT-05 | Phase 1 | Pending |
+| CONT-01 | Phase 1 | Complete |
+| CONT-02 | Phase 1 | Complete |
+| CONT-03 | Phase 1 | Complete |
+| CONT-04 | Phase 1 | Complete |
+| CONT-05 | Phase 1 | Complete |
 | KERN-01 | Phase 2 | Pending |
 | KERN-02 | Phase 2 | Pending |
 | KERN-03 | Phase 2 | Pending |
