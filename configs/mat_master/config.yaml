@@ -10,7 +10,7 @@
 llm:
   litellm:
     provider: "openai"
-    model: "claude-sonnet-4-6"
+    model: "claude-opus-4-6"
     model_family: "claude-4.6"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
@@ -60,6 +60,22 @@ llm:
     timeout: 300              # 非流式整包超时（秒）
     stream_timeout: 20        # 流式首 token 超时（秒）
     stream_idle_timeout: 30   # 流式 chunk 间最大空闲（秒）
+    max_retries: 3
+    retry_delay: 1.0
+
+  # Claude Haiku 4.5：轻量快速，不支持 extended thinking
+  haiku:
+    provider: "openai"
+    model: "claude-haiku-4-5"
+    model_family: "claude-haiku-4.5"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    fallback_group: "claude-haiku-4.5"
+    reasoning_protocol: ~
+    thinking_effort: ~
+    timeout: 120
+    stream_timeout: 15
+    stream_idle_timeout: 20
     max_retries: 3
     retry_delay: 1.0
 
