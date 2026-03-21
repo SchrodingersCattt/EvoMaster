@@ -16,13 +16,27 @@ class LLMProvider(Protocol):
     """LLM backend interface for the agent kernel.
 
     Implementations wrap a specific LLM API (OpenAI, Anthropic, etc.)
-    and provide both blocking (chat) and streaming (chat_stream) methods.
+    and provide blocking (chat), retry-aware (chat_with_retry), and
+    streaming (chat_stream) methods.
+
+    Implementations of chat_with_retry must handle retry with exponential
+    backoff. Non-retryable errors (context length exceeded, malformed input)
+    must be raised immediately without retry.
     """
 
     def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+    ) -> LLMResponse: ...
+
+    def chat_with_retry(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
     ) -> LLMResponse: ...
 
     def chat_stream(

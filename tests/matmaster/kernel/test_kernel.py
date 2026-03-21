@@ -62,6 +62,16 @@ class StreamingProvider:
     ) -> LLMResponse:
         return LLMResponse(content="not used", finish_reason="stop")
 
+    def chat_with_retry(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+    ) -> LLMResponse:
+        return self.chat(messages, tools)
+
     def chat_stream(
         self,
         messages: list[dict[str, Any]],
@@ -90,6 +100,16 @@ class ToolCallingProvider:
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         return LLMResponse(content="not used", finish_reason="stop")
+
+    def chat_with_retry(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+    ) -> LLMResponse:
+        return self.chat(messages, tools)
 
     def chat_stream(
         self,
@@ -281,6 +301,16 @@ class TestExternalCancel:
             def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
 
+            def chat_with_retry(
+                self,
+                messages: list,
+                tools: list | None = None,
+                *,
+                max_retries: int = 3,
+                retry_delay: float = 1.0,
+            ) -> LLMResponse:
+                return self.chat(messages, tools)
+
             def chat_stream(
                 self,
                 messages: list,
@@ -413,6 +443,16 @@ class TestToolCallDelta:
 
             def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
+
+            def chat_with_retry(
+                self,
+                messages: list,
+                tools: list | None = None,
+                *,
+                max_retries: int = 3,
+                retry_delay: float = 1.0,
+            ) -> LLMResponse:
+                return self.chat(messages, tools)
 
             def chat_stream(
                 self, messages: list, tools: list | None = None
