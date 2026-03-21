@@ -316,6 +316,30 @@ class MatMasterAgent(Agent):
                 ],
                 tools=self._get_tool_specs(),
             )
+
+            # Pre-compact: if the restored history already exceeds the compaction
+            # trigger threshold, compact it now instead of deferring to the first
+            # prepare_for_query() call.  This avoids the "compaction fires on every
+            # continuation" problem where full raw DB history is replayed each time.
+            if self.context_manager.should_compact(self.current_dialog):
+                tokens_before = self.context_manager.estimate_tokens(self.current_dialog)
+                self.logger.info(
+                    '[Agent] _initialize: pre-compacting dialog_history '
+                    '(tokens=%d exceeds trigger=%d)',
+                    tokens_before,
+                    self.context_manager.config.compaction.effective_trigger_tokens(),
+                )
+                self.current_dialog = self.context_manager.prepare_for_query(
+                    self.current_dialog
+                )
+                tokens_after = self.context_manager.estimate_tokens(self.current_dialog)
+                self.logger.info(
+                    '[Agent] _initialize: pre-compact done tokens=%d → %d (saved %d)',
+                    tokens_before,
+                    tokens_after,
+                    tokens_before - tokens_after,
+                )
+
             self.trajectory.dialogs.append(self.current_dialog)
             self._step_count = 0
             self._tool_output_save_counter = 0
@@ -821,6 +845,10 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
             self.current_dialog.add_message(SystemMessage(content=reminder))
 
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
+        # 若 prepare_for_query 发生了压缩/截断，将结果回写到 current_dialog，
+        # 避免下一个 step 再次对未压缩的原始 dialog 重复触发压缩。
+        if dialog_for_query is not self.current_dialog:
+            self.current_dialog = dialog_for_query
         assistant_message = self._query_with_context_recovery(dialog_for_query)
         self.current_dialog.add_message(assistant_message)
         self._on_assistant_message(assistant_message)
