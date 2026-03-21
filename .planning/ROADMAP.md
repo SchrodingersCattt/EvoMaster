@@ -30,11 +30,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Guard Protocol 和 TerminationPolicy 有明确的类型签名，mypy 可以对实现者做静态检查
   4. MessageBus 可以在同步线程中发射事件，消费端按 FIFO 顺序接收
   5. QueueBridge 可以将 MessageBus 事件桥接到现有 SSE 消费路径
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- 定义所有契约类型：Guard Protocol、PlaygroundContext、AgentRuntimeSpec、AgentEvent/SystemEvent/BusEvent (CONT-01~05)
+- [ ] 01-02-PLAN.md -- 实现 MessageBus 同步事件总线和 QueueBridge SSE 桥接适配器 (EBUS-01~02)
 
 ### Phase 2: Agent Kernel
 **Goal**: Agent 执行循环只消费 AgentRuntimeSpec，不做 config 装配，可用 mock spec 独立测试
@@ -105,7 +105,7 @@ Note: Phase 3 and Phase 4 can execute in parallel (both depend on Phase 1, commu
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Contracts | 0/2 | Not started | - |
+| 1. Foundation Contracts | 0/2 | Planned | - |
 | 2. Agent Kernel | 0/2 | Not started | - |
 | 3. Exp Assembly Layer | 0/2 | Not started | - |
 | 4. Playground Layer | 0/1 | Not started | - |
