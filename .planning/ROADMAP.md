@@ -45,12 +45,12 @@ Plans:
   2. 内置 loop detection 和 max turns guard 在触发条件下自动终止循环，不可被外部移除
   3. GuardPipeline 可以串联执行内置 guard + 外部注入的业务 guard，按顺序返回第一个拒绝结果
   4. Hook points (pre_tool_call/post_tool_call/pre_llm_call/should_continue) 可以被外部注入的 callable 扩展
-  5. LLMProvider Protocol 实现的 chat() 和 chat_with_retry() 可以被 kernel 调用完成模型推理
-**Plans**: TBD
+  5. LLMProvider Protocol 实现的 chat() 和 chat_stream() 可以被 kernel 调用完成模型推理
+**Plans:** 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- Kernel 基础模块：消息类型、LLMProvider Protocol、Hook 系统、GuardPipeline (KERN-02, KERN-03, KERN-04, LLMP-01)
+- [ ] 02-02-PLAN.md -- AgentKernel 纯执行循环 + AgentRuntimeSpec 类型更新 + 公开 API (KERN-01, KERN-04)
 
 ### Phase 3: Exp Assembly Layer
 **Goal**: Exp 层消费 PlaygroundContext 输出 AgentRuntimeSpec，统一所有能力的装配路径
@@ -105,8 +105,8 @@ Note: Phase 3 and Phase 4 can execute in parallel (both depend on Phase 1, commu
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Contracts | 0/2 | Planned | - |
-| 2. Agent Kernel | 0/2 | Not started | - |
+| 1. Foundation Contracts | 2/2 | Complete | 2026-03-21 |
+| 2. Agent Kernel | 0/2 | Planned | - |
 | 3. Exp Assembly Layer | 0/2 | Not started | - |
 | 4. Playground Layer | 0/1 | Not started | - |
 | 5. Integration and Quality | 0/2 | Not started | - |
