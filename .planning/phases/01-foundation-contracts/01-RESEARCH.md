@@ -19,7 +19,7 @@ Phase 1 建立整个重构的类型基础。所有新代码放在 `matmaster/` �
 
 ### Locked Decisions
 - 所有新代码放 `matmaster/` 目录下，与 evomaster 脱钩
-- `matmaster/contracts/` 独立契约包，包含 context.py、runtime.py、events.py、guards.py
+- `matmaster/types/` 独立契约包，包含 context.py、runtime.py、events.py、guards.py
 - `matmaster/bus/` 独立事件总线包，包含 queue.py、bridge.py
 - 新契约完全独立于 evomaster/utils/types.py 中的现有类型，干净新起点
 - 后续 Phase 2-4 的代码也全部放 matmaster/ 下
@@ -314,7 +314,7 @@ class QueueBridge:
 
 ### Example 1: 完整的 PlaygroundContext 定义 (CONT-01)
 ```python
-# matmaster/contracts/context.py
+# matmaster/types/context.py
 from pathlib import Path
 from typing import Any
 
@@ -340,7 +340,7 @@ class PlaygroundContext(BaseModel):
 
 ### Example 2: 完整的 AgentRuntimeSpec 定义 (CONT-02)
 ```python
-# matmaster/contracts/runtime.py
+# matmaster/types/runtime.py
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -393,7 +393,7 @@ class AgentRuntimeSpec(BaseModel):
 
 ### Example 3: 事件类型分层设计 (CONT-03)
 ```python
-# matmaster/contracts/events.py
+# matmaster/types/events.py
 from datetime import datetime
 from typing import Annotated, Any, Literal, Union
 
@@ -562,7 +562,7 @@ BusEvent = Annotated[
 
 ### Example 4: Guard Protocol (CONT-04)
 ```python
-# matmaster/contracts/guards.py
+# matmaster/types/guards.py
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -610,7 +610,7 @@ class Guard(Protocol):
 import queue
 from typing import Any
 
-from matmaster.contracts.events import BusEvent
+from matmaster.types.events import BusEvent
 
 
 class MessageBus:
@@ -655,7 +655,7 @@ class MessageBus:
 # matmaster/bus/bridge.py
 from typing import Any
 
-from matmaster.contracts.events import (
+from matmaster.types.events import (
     BusEvent, ThoughtEvent, ToolCallEvent, ToolResultEvent,
     FinishEvent, ErrorEvent, AssistantStateEvent, SkillHitEvent,
     ConfirmationRequestEvent, ConfirmationTimeoutEvent,
@@ -856,11 +856,11 @@ class QueueBridge:
 ### Phase Requirements -> Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| CONT-01 | PlaygroundContext frozen model 构造、验证、不可变性 | unit | `python -m pytest tests/matmaster/contracts/test_context.py -x` | Wave 0 |
-| CONT-02 | AgentRuntimeSpec frozen model 构造、验证、不可变性 | unit | `python -m pytest tests/matmaster/contracts/test_runtime.py -x` | Wave 0 |
-| CONT-03 | AgentEvent/SystemEvent/BusEvent discriminated union 序列化、反序列化、type 判别 | unit | `python -m pytest tests/matmaster/contracts/test_events.py -x` | Wave 0 |
-| CONT-04 | Guard Protocol 接口满足、GuardContext/GuardResult 构造 | unit | `python -m pytest tests/matmaster/contracts/test_guards.py -x` | Wave 0 |
-| CONT-05 | TerminationPolicy 简化为 max_turns 字段验证 | unit | `python -m pytest tests/matmaster/contracts/test_runtime.py::test_max_turns -x` | Wave 0 |
+| CONT-01 | PlaygroundContext frozen model 构造、验证、不可变性 | unit | `python -m pytest tests/matmaster/types/test_context.py -x` | Wave 0 |
+| CONT-02 | AgentRuntimeSpec frozen model 构造、验证、不可变性 | unit | `python -m pytest tests/matmaster/types/test_runtime.py -x` | Wave 0 |
+| CONT-03 | AgentEvent/SystemEvent/BusEvent discriminated union 序列化、反序列化、type 判别 | unit | `python -m pytest tests/matmaster/types/test_events.py -x` | Wave 0 |
+| CONT-04 | Guard Protocol 接口满足、GuardContext/GuardResult 构造 | unit | `python -m pytest tests/matmaster/types/test_guards.py -x` | Wave 0 |
+| CONT-05 | TerminationPolicy 简化为 max_turns 字段验证 | unit | `python -m pytest tests/matmaster/types/test_runtime.py::test_max_turns -x` | Wave 0 |
 | EBUS-01 | MessageBus emit/get 线程安全、超时、pending | unit | `python -m pytest tests/matmaster/bus/test_queue.py -x` | Wave 0 |
 | EBUS-02 | QueueBridge 事件转换为 SSE payload 格式正确性 | unit | `python -m pytest tests/matmaster/bus/test_bridge.py -x` | Wave 0 |
 
@@ -871,11 +871,11 @@ class QueueBridge:
 
 ### Wave 0 Gaps
 - [ ] `tests/matmaster/__init__.py` -- test package init
-- [ ] `tests/matmaster/contracts/__init__.py` -- contracts test package
-- [ ] `tests/matmaster/contracts/test_context.py` -- PlaygroundContext 测试
-- [ ] `tests/matmaster/contracts/test_runtime.py` -- AgentRuntimeSpec + max_turns 测试
-- [ ] `tests/matmaster/contracts/test_events.py` -- 事件 discriminated union 测试
-- [ ] `tests/matmaster/contracts/test_guards.py` -- Guard Protocol 满足性测试
+- [ ] `tests/matmaster/types/__init__.py` -- contracts test package
+- [ ] `tests/matmaster/types/test_context.py` -- PlaygroundContext 测试
+- [ ] `tests/matmaster/types/test_runtime.py` -- AgentRuntimeSpec + max_turns 测试
+- [ ] `tests/matmaster/types/test_events.py` -- 事件 discriminated union 测试
+- [ ] `tests/matmaster/types/test_guards.py` -- Guard Protocol 满足性测试
 - [ ] `tests/matmaster/bus/__init__.py` -- bus test package
 - [ ] `tests/matmaster/bus/test_queue.py` -- MessageBus 线程安全测试
 - [ ] `tests/matmaster/bus/test_bridge.py` -- QueueBridge SSE payload 转换测试

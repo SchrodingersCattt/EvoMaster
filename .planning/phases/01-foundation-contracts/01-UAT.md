@@ -37,7 +37,7 @@ expected: ThoughtEvent correctly converted to SSE payload dict with source, type
 result: pass
 
 ### 7. Package Imports Work
-expected: All public types importable from matmaster.contracts and matmaster.bus with no errors.
+expected: All public types importable from matmaster.types and matmaster.bus with no errors.
 result: pass
 
 ## Summary

@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from matmaster.contracts.events import (
+from matmaster.types.events import (
     AgentEvent,
     AssistantStateEvent,
     BohriumNodeEvent,

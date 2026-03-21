@@ -65,10 +65,10 @@
 - `.planning/ROADMAP.md` — Phase 2 目标、成功标准、依赖关系
 
 ### Phase 1 交付物（Phase 2 直接依赖）
-- `matmaster/contracts/runtime.py` — AgentRuntimeSpec 定义（llm_provider/tool_registry/guards/hooks/max_turns）
-- `matmaster/contracts/guards.py` — Guard Protocol、GuardContext、GuardResult 定义
-- `matmaster/contracts/events.py` — AgentEvent/SystemEvent/BusEvent discriminated union
-- `matmaster/contracts/context.py` — PlaygroundContext 定义
+- `matmaster/types/runtime.py` — AgentRuntimeSpec 定义（llm_provider/tool_registry/guards/hooks/max_turns）
+- `matmaster/types/guards.py` — Guard Protocol、GuardContext、GuardResult 定义
+- `matmaster/types/events.py` — AgentEvent/SystemEvent/BusEvent discriminated union
+- `matmaster/types/context.py` — PlaygroundContext 定义
 - `matmaster/bus/queue.py` — MessageBus 同步事件总线
 - `matmaster/bus/bridge.py` — QueueBridge SSE 桥接适配器
 
@@ -95,9 +95,9 @@
 ## Existing Code Insights
 
 ### Reusable Assets
-- `matmaster/contracts/guards.py` Guard Protocol — kernel 直接使用，不需要重新定义
-- `matmaster/contracts/runtime.py` AgentRuntimeSpec — kernel 的输入契约，需要更新 llm_provider/hooks 的 Any 类型为具体 Protocol
-- `matmaster/contracts/events.py` AgentEvent — FinishEvent/ThoughtEvent/ToolCallEvent/ToolResultEvent 已定义，kernel 通过 hook 发射
+- `matmaster/types/guards.py` Guard Protocol — kernel 直接使用，不需要重新定义
+- `matmaster/types/runtime.py` AgentRuntimeSpec — kernel 的输入契约，需要更新 llm_provider/hooks 的 Any 类型为具体 Protocol
+- `matmaster/types/events.py` AgentEvent — FinishEvent/ThoughtEvent/ToolCallEvent/ToolResultEvent 已定义，kernel 通过 hook 发射
 - `matmaster/bus/queue.py` MessageBus — EventEmitterHook 使用
 
 ### Established Patterns
@@ -107,7 +107,7 @@
 - 事件通过 MessageBus emit，不通过 callback 直传 — Phase 1 已确立
 
 ### Integration Points
-- `matmaster/kernel/` — Phase 2 新代码位置（AgentKernel、GuardPipeline、Hook、LLMProvider）
+- `matmaster/engine/` — Phase 2 新代码位置（AgentKernel、GuardPipeline、Hook、LLMProvider）
 - AgentRuntimeSpec — kernel 的输入，exp 层的输出。Phase 2 需要更新 spec 中 llm_provider/hooks 字段的类型
 - MessageBus — kernel 不直接使用，通过 EventEmitterHook 间接连接
 - Phase 3 (Exp Assembly) 将构建 AgentRuntimeSpec 并注入 hooks/guards

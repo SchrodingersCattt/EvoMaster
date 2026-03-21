@@ -15,7 +15,7 @@
 
 ### 契约模块组织
 - 所有新代码放 `matmaster/` 目录下，与 evomaster 脱钩
-- `matmaster/contracts/` 独立契约包，包含 context.py、runtime.py、events.py、guards.py
+- `matmaster/types/` 独立契约包，包含 context.py、runtime.py、events.py、guards.py
 - `matmaster/bus/` 独立事件总线包，包含 queue.py、bridge.py
 - 新契约完全独立于 evomaster/utils/types.py 中的现有类型，干净新起点
 - 后续 Phase 2-4 的代码（kernel、assembly、playground 重构）也全部放 matmaster/ 下
@@ -93,7 +93,7 @@
 - 事件通过 callback 函数发射：`event_callback(source: str, event_type: str, content: Any, **extra: Any)`
 
 ### Integration Points
-- matmaster/contracts/ 被 Phase 2 kernel、Phase 3 assembly、Phase 4 playground 引用
+- matmaster/types/ 被 Phase 2 kernel、Phase 3 assembly、Phase 4 playground 引用
 - matmaster/bus/ 被 Phase 2 kernel（发射端）和 QueueBridge（消费端）使用
 - QueueBridge 输出接入现有 src/services/stream_service.py 的 SSE queue
 

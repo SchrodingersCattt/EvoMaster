@@ -1,4 +1,4 @@
-"""matmaster.contracts -- Type contracts for the three-layer architecture."""
+"""matmaster.types -- Type contracts for the three-layer architecture."""
 
 from .context import PlaygroundContext
 from .events import (
@@ -23,6 +23,7 @@ from .events import (
     WorkspaceUploadErrorEvent,
 )
 from .guards import Guard, GuardContext, GuardResult, RecentCall
+from .llm_provider import LLMProvider
 from .runtime import AgentRuntimeSpec, CompactionConfig
 
 __all__ = [
@@ -53,6 +54,8 @@ __all__ = [
     "RecentCall",
     # context
     "PlaygroundContext",
+    # llm
+    "LLMProvider",
     # runtime
     "AgentRuntimeSpec",
     "CompactionConfig",

@@ -18,12 +18,12 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any
 
-from matmaster.contracts.events import FinishEvent
-from matmaster.kernel.guard_pipeline import GuardPipeline
+from matmaster.types.events import FinishEvent
+from matmaster.engine.guard_pipeline import GuardPipeline
 
 if TYPE_CHECKING:
-    from matmaster.contracts.runtime import AgentRuntimeSpec
-from matmaster.kernel.hooks import (
+    from matmaster.types.runtime import AgentRuntimeSpec
+from matmaster.engine.hooks import (
     HookAction,
     run_on_stream_chunk,
     run_post_tool_call,
@@ -31,7 +31,7 @@ from matmaster.kernel.hooks import (
     run_pre_tool_call,
     run_should_continue,
 )
-from matmaster.kernel.types import (
+from matmaster.engine.types import (
     AssistantMessage,
     LLMResponse,
     Message,
@@ -234,7 +234,7 @@ class AgentKernel:
         """Unified exit path -- all termination goes through here."""
         status = "cancelled" if reason == "cancelled" else "completed"
         return FinishEvent(
-            source="kernel",
+            source="agent",
             status=status,
             reason=reason,
             final_content=final_content,

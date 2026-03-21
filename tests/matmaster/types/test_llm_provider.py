@@ -1,11 +1,11 @@
-"""Tests for matmaster.kernel.llm_provider -- LLMProvider Protocol."""
+"""Tests for matmaster.types.llm_provider -- LLMProvider Protocol."""
 
 from __future__ import annotations
 
 from typing import Any, Iterator
 
-from matmaster.kernel.llm_provider import LLMProvider
-from matmaster.kernel.types import LLMResponse, StreamChunk, ToolCallData
+from matmaster.types.llm_provider import LLMProvider
+from matmaster.engine.types import LLMResponse, StreamChunk, ToolCallData
 
 
 # ── Mock implementations ──────────────────────────────
@@ -143,7 +143,7 @@ class TestChatWithRetryProtocol:
 
     def test_mock_provider_conforms(self) -> None:
         """MockLLMProvider from conftest satisfies Protocol with chat_with_retry."""
-        from tests.matmaster.kernel.conftest import MockLLMProvider
+        from tests.matmaster.engine.conftest import MockLLMProvider
 
         provider = MockLLMProvider()
         assert isinstance(provider, LLMProvider)
