@@ -45,12 +45,13 @@ Plans:
   2. 内置 loop detection 和 max turns guard 在触发条件下自动终止循环，不可被外部移除
   3. GuardPipeline 可以串联执行内置 guard + 外部注入的业务 guard，按顺序返回第一个拒绝结果
   4. Hook points (pre_tool_call/post_tool_call/pre_llm_call/should_continue) 可以被外部注入的 callable 扩展
-  5. LLMProvider Protocol 实现的 chat() 和 chat_stream() 可以被 kernel 调用完成模型推理
-**Plans:** 2 plans
+  5. LLMProvider Protocol 实现的 chat() + chat_with_retry() + chat_stream() 可以被 kernel 调用完成模型推理
+**Plans:** 3 plans
 
 Plans:
 - [ ] 02-01-PLAN.md -- Kernel 基础模块：消息类型、LLMProvider Protocol、Hook 系统、GuardPipeline (KERN-02, KERN-03, KERN-04, LLMP-01)
 - [ ] 02-02-PLAN.md -- AgentKernel 纯执行循环 + AgentRuntimeSpec 类型更新 + 公开 API (KERN-01, KERN-04)
+- [ ] 02-03-PLAN.md -- Gap closure: 添加 chat_with_retry() 到 LLMProvider Protocol 并在 OpenAIProvider 实现显式重试逻辑 (LLMP-01)
 
 ### Phase 3: Exp Assembly Layer
 **Goal**: Exp 层消费 PlaygroundContext 输出 AgentRuntimeSpec，统一所有能力的装配路径，集成跨 pod 协调
@@ -62,7 +63,7 @@ Plans:
   3. 业务 Guard（manuscript gate、auth failure gate）通过 assemble() 注入到 AgentRuntimeSpec.guards，kernel 无需感知业务语义
   4. Solver 模式（ResearchPlanner 等）作为 exp 层的高阶装配模式运行，不作为独立抽象层
   5. ContextBuilder 可以从 identity/skills/memory/task 多个来源组装出完整的 system prompt
-  6. WorkerRegistry 集成到 Exp 层，管理跨 pod 会话所有权（set/get session_run_owner）、worker 心跳检测、run_interrupted 分类（deploy vs restart），跨 pod 订阅恢复通过 RedisReplyQueue 保持可用
+  6. WorkerRegistry 集成到 Exp 层，管理跨 pod 会话所有权（set/get session_run_owner）、worker 心跳检测、run_interrupted 分类（deploy vs restart），跨 pod 订阅恢复通过 RedisReplyQueue 保持可用，Bohrium 凭证加载与绑定由 Exp 层统一管理
 **Plans**: TBD
 
 Plans:
@@ -86,7 +87,7 @@ Plans:
 ### Phase 5: Integration and Quality
 **Goal**: mat_master 和 minimal 在新骨架上端到端跑通，三层契约有测试覆盖，上游场景对齐验证，迁移差异有文档记录
 **Depends on**: Phase 2, Phase 3, Phase 4
-**Requirements**: MIGR-01, MIGR-02, QUAL-01, QUAL-02, QUAL-03, QUAL-04
+**Requirements**: MIGR-01, MIGR-02, QUAL-01, QUAL-02, QUAL-03, QUAL-04, QUAL-05
 **Success Criteria** (what must be TRUE):
   1. mat_master 在新三层管线（playground -> exp -> kernel）上可以端到端完成完整的 agent 运行流程
   2. minimal 在新三层管线上可以端到端完成完整的 agent 运行流程
@@ -94,6 +95,8 @@ Plans:
   4. mat_master 和 minimal 有端到端测试验证新旧路径的功能一致性
   5. 迁移文档清晰记录新旧架构差异和迁移步骤
   6. 上游场景端到端验证通过：run_interrupted 检测（deploy vs restart）、跨 pod 订阅恢复（RedisReplyQueue 跨 worker 确认）、workspace OSS 上传、Bohrium 节点生命周期（创建/复用/清理）
+  7. 配额扣减（use_quota）在新管线中正确执行——run 成功后扣减、失败不扣减
+  8. agent_run_service.py 简化为薄编排层：接收请求 -> Playground.prepare() 输出 PlaygroundContext -> Exp.assemble() 输出 AgentRuntimeSpec -> Kernel.run() 执行 -> 返回结果，不再承担装配、事件过滤、workspace 上传等职责
 **Plans**: TBD
 
 Plans:
@@ -109,7 +112,7 @@ Note: Phase 3 and Phase 4 can execute in parallel (both depend on Phase 1, commu
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Contracts | 2/2 | Complete | 2026-03-21 |
-| 2. Agent Kernel | 0/2 | Planned | - |
+| 2. Agent Kernel | 2/3 | Gap closure | - |
 | 3. Exp Assembly Layer | 0/2 | Not started | - |
 | 4. Playground Layer | 0/1 | Not started | - |
 | 5. Integration and Quality | 0/2 | Not started | - |
