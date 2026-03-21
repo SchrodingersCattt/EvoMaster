@@ -5,9 +5,14 @@ and consumed by AgentKernel.run(spec, task). frozen=True guarantees
 immutability during kernel execution.
 """
 
+from __future__ import annotations
+
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from matmaster.kernel.hooks import Hook
+from matmaster.kernel.llm_provider import LLMProvider
 
 from .guards import Guard
 
@@ -34,8 +39,8 @@ class AgentRuntimeSpec(BaseModel):
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
-    # LLM (Phase 2 defines LLMProvider Protocol)
-    llm_provider: Any
+    # LLM (Phase 2: typed as LLMProvider Protocol)
+    llm_provider: LLMProvider
 
     # Tools (Phase 3 defines ToolRegistry)
     tool_registry: Any
@@ -46,8 +51,8 @@ class AgentRuntimeSpec(BaseModel):
     # Termination (CONT-05: simplified to max_turns field)
     max_turns: int = 100
 
-    # Hooks (Phase 2 defines Hook Protocol)
-    hooks: list[Any] = Field(default_factory=list)
+    # Hooks (Phase 2: typed as Hook Protocol)
+    hooks: list[Hook] = Field(default_factory=list)
 
     # Context
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
