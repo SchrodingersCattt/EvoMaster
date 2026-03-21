@@ -27,7 +27,7 @@
 - [ ] **ASBL-03**: 业务 Guard（manuscript gate、auth failure gate）通过 AgentRuntimeSpec.guards 注入
 - [ ] **ASBL-04**: Solver 模式（ResearchPlanner 等）收入 exp 层作为高阶装配模式
 - [ ] **ASBL-05**: ContextBuilder 从 identity/skills/memory/task 多源组装 system prompt
-- [ ] **ASBL-06**: WorkerRegistry 集成——Exp 层管理跨 pod 会话所有权（set/get session_run_owner）、worker 心跳检测、run_interrupted 分类（deploy vs restart）
+- [ ] **ASBL-06**: WorkerRegistry 集成——Exp 层管理跨 pod 会话所有权（set/get session_run_owner）、worker 心跳检测、run_interrupted 分类（deploy vs restart）、Bohrium 凭证加载与绑定（load_run_credentials + apply_run_credentials_to_session）
 
 ### EventBus (事件系统)
 
@@ -56,6 +56,7 @@
 - [ ] **QUAL-02**: mat_master 和 minimal 有端到端测试验证迁移正确性
 - [ ] **QUAL-03**: 迁移文档记录新旧架构差异和迁移指南
 - [ ] **QUAL-04**: 上游场景端到端验证——run_interrupted 检测、跨 pod 订阅恢复（RedisReplyQueue）、workspace OSS 上传、Bohrium 节点生命周期（创建/复用/清理）
+- [ ] **QUAL-05**: 配额扣减（use_quota）在新管线中正确执行——run 成功后扣减、失败不扣减、异步/同步路径均可用
 
 ## v2 Requirements
 
@@ -120,10 +121,11 @@
 | QUAL-02 | Phase 5 | Pending |
 | QUAL-03 | Phase 5 | Pending |
 | QUAL-04 | Phase 5 | Pending |
+| QUAL-05 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 28 total
-- Mapped to phases: 28
+- v1 requirements: 29 total
+- Mapped to phases: 29
 - Unmapped: 0
 
 ---
