@@ -11,7 +11,7 @@ provides:
   - "PlaygroundContext frozen Pydantic model (Layer 1 boundary contract)"
   - "AgentRuntimeSpec frozen Pydantic model with CompactionConfig (Layer 2 boundary contract)"
   - "16 event types: 7 AgentEvent + 9 SystemEvent + BusEvent union"
-  - "matmaster/contracts/ package with re-exports"
+  - "matmaster/types/ package with re-exports"
 affects: [02-agent-kernel, 03-exp-assembly, 04-playground-layer, 05-integration-quality]
 
 # Tech tracking
@@ -26,15 +26,15 @@ tech-stack:
 key-files:
   created:
     - matmaster/__init__.py
-    - matmaster/contracts/__init__.py
-    - matmaster/contracts/guards.py
-    - matmaster/contracts/context.py
-    - matmaster/contracts/runtime.py
-    - matmaster/contracts/events.py
-    - tests/matmaster/contracts/test_guards.py
-    - tests/matmaster/contracts/test_context.py
-    - tests/matmaster/contracts/test_runtime.py
-    - tests/matmaster/contracts/test_events.py
+    - matmaster/types/__init__.py
+    - matmaster/types/guards.py
+    - matmaster/types/context.py
+    - matmaster/types/runtime.py
+    - matmaster/types/events.py
+    - tests/matmaster/types/test_guards.py
+    - tests/matmaster/types/test_context.py
+    - tests/matmaster/types/test_runtime.py
+    - tests/matmaster/types/test_events.py
   modified: []
 
 key-decisions:
@@ -47,7 +47,7 @@ patterns-established:
   - "Pydantic frozen model pattern: ConfigDict(frozen=True) on all boundary contracts"
   - "Event type pattern: Literal['type_name'] default field + Annotated Union with Field(discriminator='type')"
   - "Guard interface pattern: Protocol with evaluate(GuardContext) -> GuardResult"
-  - "Package export pattern: matmaster/contracts/__init__.py re-exports all public types"
+  - "Package export pattern: matmaster/types/__init__.py re-exports all public types"
 
 requirements-completed: [CONT-01, CONT-02, CONT-03, CONT-04, CONT-05]
 
@@ -85,16 +85,16 @@ Each task was committed atomically:
 
 ## Files Created/Modified
 - `matmaster/__init__.py` - Top-level package marker
-- `matmaster/contracts/__init__.py` - Re-exports all 27 public types
-- `matmaster/contracts/guards.py` - Guard Protocol, GuardContext, GuardResult, RecentCall
-- `matmaster/contracts/context.py` - PlaygroundContext frozen model
-- `matmaster/contracts/runtime.py` - AgentRuntimeSpec, CompactionConfig frozen models
-- `matmaster/contracts/events.py` - All 16 event types + AgentEvent/SystemEvent/BusEvent unions
-- `tests/matmaster/contracts/__init__.py` - Test package marker
-- `tests/matmaster/contracts/test_guards.py` - 8 tests for Guard types
-- `tests/matmaster/contracts/test_context.py` - 5 tests for PlaygroundContext
-- `tests/matmaster/contracts/test_runtime.py` - 9 tests for AgentRuntimeSpec
-- `tests/matmaster/contracts/test_events.py` - 26 tests for event types and unions
+- `matmaster/types/__init__.py` - Re-exports all 27 public types
+- `matmaster/types/guards.py` - Guard Protocol, GuardContext, GuardResult, RecentCall
+- `matmaster/types/context.py` - PlaygroundContext frozen model
+- `matmaster/types/runtime.py` - AgentRuntimeSpec, CompactionConfig frozen models
+- `matmaster/types/events.py` - All 16 event types + AgentEvent/SystemEvent/BusEvent unions
+- `tests/matmaster/types/__init__.py` - Test package marker
+- `tests/matmaster/types/test_guards.py` - 8 tests for Guard types
+- `tests/matmaster/types/test_context.py` - 5 tests for PlaygroundContext
+- `tests/matmaster/types/test_runtime.py` - 9 tests for AgentRuntimeSpec
+- `tests/matmaster/types/test_events.py` - 26 tests for event types and unions
 
 ## Decisions Made
 - Guard Protocol uses `@runtime_checkable` to enable isinstance checks at runtime, supporting both static (mypy) and dynamic type checking

@@ -11,8 +11,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from matmaster.kernel.hooks import Hook
-from matmaster.kernel.llm_provider import LLMProvider
+from matmaster.engine.hooks import Hook
+from .llm_provider import LLMProvider
 
 from .guards import Guard
 

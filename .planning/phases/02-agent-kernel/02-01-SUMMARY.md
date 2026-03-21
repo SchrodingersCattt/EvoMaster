@@ -34,17 +34,17 @@ tech-stack:
 
 key-files:
   created:
-    - matmaster/kernel/__init__.py
-    - matmaster/kernel/types.py
-    - matmaster/kernel/llm_provider.py
-    - matmaster/kernel/hooks.py
-    - matmaster/kernel/guard_pipeline.py
-    - tests/matmaster/kernel/__init__.py
-    - tests/matmaster/kernel/conftest.py
-    - tests/matmaster/kernel/test_types.py
-    - tests/matmaster/kernel/test_llm_provider.py
-    - tests/matmaster/kernel/test_hooks.py
-    - tests/matmaster/kernel/test_guard_pipeline.py
+    - matmaster/engine/__init__.py
+    - matmaster/engine/types.py
+    - matmaster/types/llm_provider.py
+    - matmaster/engine/hooks.py
+    - matmaster/engine/guard_pipeline.py
+    - tests/matmaster/engine/__init__.py
+    - tests/matmaster/engine/conftest.py
+    - tests/matmaster/engine/test_types.py
+    - tests/matmaster/engine/test_llm_provider.py
+    - tests/matmaster/engine/test_hooks.py
+    - tests/matmaster/engine/test_guard_pipeline.py
   modified: []
 
 key-decisions:
@@ -99,17 +99,17 @@ Each task was committed atomically (TDD: RED then GREEN):
 _Note: TDD tasks have separate test (RED) and implementation (GREEN) commits._
 
 ## Files Created/Modified
-- `matmaster/kernel/__init__.py` - Package marker with module docstring
-- `matmaster/kernel/types.py` - Role enum, ToolCallData, Message hierarchy, LLMResponse, StreamChunk
-- `matmaster/kernel/llm_provider.py` - @runtime_checkable LLMProvider Protocol
-- `matmaster/kernel/hooks.py` - HookAction enum, Hook Protocol, BaseHook, run_* helpers, EventEmitterHook
-- `matmaster/kernel/guard_pipeline.py` - LoopDetectionGuard, GuardPipeline with sliding window deque
-- `tests/matmaster/kernel/__init__.py` - Test package marker
-- `tests/matmaster/kernel/conftest.py` - mock_tool_call fixture, make_tool_call factory, MockLLMProvider, build_mock_spec
-- `tests/matmaster/kernel/test_types.py` - 28 tests for message types and serialization
-- `tests/matmaster/kernel/test_llm_provider.py` - 5 tests for Protocol conformance and usage
-- `tests/matmaster/kernel/test_hooks.py` - 19 tests for hooks, short-circuit, EventEmitterHook
-- `tests/matmaster/kernel/test_guard_pipeline.py` - 15 tests for guard pipeline and loop detection
+- `matmaster/engine/__init__.py` - Package marker with module docstring
+- `matmaster/engine/types.py` - Role enum, ToolCallData, Message hierarchy, LLMResponse, StreamChunk
+- `matmaster/types/llm_provider.py` - @runtime_checkable LLMProvider Protocol
+- `matmaster/engine/hooks.py` - HookAction enum, Hook Protocol, BaseHook, run_* helpers, EventEmitterHook
+- `matmaster/engine/guard_pipeline.py` - LoopDetectionGuard, GuardPipeline with sliding window deque
+- `tests/matmaster/engine/__init__.py` - Test package marker
+- `tests/matmaster/engine/conftest.py` - mock_tool_call fixture, make_tool_call factory, MockLLMProvider, build_mock_spec
+- `tests/matmaster/engine/test_types.py` - 28 tests for message types and serialization
+- `tests/matmaster/engine/test_llm_provider.py` - 5 tests for Protocol conformance and usage
+- `tests/matmaster/engine/test_hooks.py` - 19 tests for hooks, short-circuit, EventEmitterHook
+- `tests/matmaster/engine/test_guard_pipeline.py` - 15 tests for guard pipeline and loop detection
 
 ## Decisions Made
 - ToolCallData.arguments stored as dict[str, Any] (not raw JSON string) -- parsing happens at the LLM provider boundary, kernel works with structured data

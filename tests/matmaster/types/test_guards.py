@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from matmaster.contracts.guards import Guard, GuardContext, GuardResult, RecentCall
+from matmaster.types.guards import Guard, GuardContext, GuardResult, RecentCall
 
 
 # ── RecentCall ──────────────────────────────────────────

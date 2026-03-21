@@ -7,7 +7,7 @@ import queue
 
 from matmaster.bus.bridge import QueueBridge
 from matmaster.bus.queue import MessageBus
-from matmaster.contracts.events import (
+from matmaster.types.events import (
     AssistantStateEvent,
     BohriumNodeEvent,
     CancelledEvent,

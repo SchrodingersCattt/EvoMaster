@@ -12,7 +12,7 @@ Phase 2 的核心目标是将现有分散在 `evomaster/agent/agent.py` (BaseAge
 
 LLMProvider 需要同时覆盖 chat()（完整响应）和 chat_stream()（流式 Iterator），其中 chat_stream() 是默认调用方式，streaming token 通过 Hook 转发给事件系统。现有 OpenAILLM.query_stream() 的流式 delta 累积逻辑和 tool_call delta 重组逻辑是可复用的参考模式。
 
-**Primary recommendation:** 将 kernel 设计为 3 个独立模块 (kernel.py + guard_pipeline.py + hooks.py) 加 LLM Provider 抽象 (llm_provider.py + 消息类型 types.py)，全部放入 `matmaster/kernel/` 目录，同步线程模型（Iterator 而非 AsyncIterator），与 Phase 1 的 threading 模型保持一致。
+**Primary recommendation:** 将 kernel 设计为 3 个独立模块 (kernel.py + guard_pipeline.py + hooks.py) 加 LLM Provider 抽象 (llm_provider.py + 消息类型 types.py)，全部放入 `matmaster/engine/` 目录，同步线程模型（Iterator 而非 AsyncIterator），与 Phase 1 的 threading 模型保持一致。
 
 <user_constraints>
 ## User Constraints (from CONTEXT.md)
@@ -408,7 +408,7 @@ class EventEmitterHook(BaseHook):
 
 ```python
 # Source: 参考 evomaster/utils/types.py + nanobot/providers/base.py
-# 位置: matmaster/kernel/types.py
+# 位置: matmaster/engine/types.py
 
 from __future__ import annotations
 from enum import Enum
@@ -470,12 +470,12 @@ class StreamChunk(BaseModel):
 
 ```python
 # Source: 提取自 playground/mat_master/core/tool_guard.py _is_loop()
-# 位置: matmaster/kernel/guard_pipeline.py
+# 位置: matmaster/engine/guard_pipeline.py
 
 import json
 import time
 from collections import deque
-from matmaster.contracts.guards import Guard, GuardContext, GuardResult, RecentCall
+from matmaster.types.guards import Guard, GuardContext, GuardResult, RecentCall
 
 LOOP_WINDOW = 5
 LOOP_THRESHOLD = 2
@@ -526,10 +526,10 @@ class LoopDetectionGuard:
 
 ```python
 # Source: 参考 nanobot/providers/base.py + evomaster/utils/llm.py BaseLLM
-# 位置: matmaster/kernel/llm_provider.py
+# 位置: matmaster/types/llm_provider.py
 
 from typing import Any, Iterator, Protocol, runtime_checkable
-from matmaster.kernel.types import LLMResponse, StreamChunk
+from matmaster.engine.types import LLMResponse, StreamChunk
 
 @runtime_checkable
 class LLMProvider(Protocol):
@@ -566,7 +566,7 @@ class LLMProvider(Protocol):
 
 ```python
 # Source: 参考 OpenAILLM.query_stream() 的累积模式
-# 位置: matmaster/kernel/kernel.py 内部方法
+# 位置: matmaster/engine/agent.py 内部方法
 
 def _call_llm(self, spec: AgentRuntimeSpec, messages: list[Message]) -> LLMResponse:
     """调用 LLM（默认 streaming），通过 hook 转发 chunk。"""
@@ -633,7 +633,7 @@ def _call_llm(self, spec: AgentRuntimeSpec, messages: list[Message]) -> LLMRespo
 | Dialog.tools + get_messages_for_api() | Message.to_api_dict() + tool_defs 独立传递 | Phase 2 设计 | messages 和 tool definitions 分离 |
 
 **Deprecated/outdated:**
-- `evomaster/utils/types.py` Message 体系: kernel 使用新定义的 `matmaster/kernel/types.py`，不再依赖
+- `evomaster/utils/types.py` Message 体系: kernel 使用新定义的 `matmaster/engine/types.py`，不再依赖
 - `evomaster/utils/llm.py` BaseLLM 继承体系: 被 LLMProvider Protocol 替代
 - `BaseAgent._step()` 中的 finish tool 检查逻辑: CONTEXT 已确认去掉 finish tool
 
@@ -661,48 +661,48 @@ def _call_llm(self, spec: AgentRuntimeSpec, messages: list[Message]) -> LLMRespo
 |----------|-------|
 | Framework | pytest (已配置) |
 | Config file | pytest.ini |
-| Quick run command | `pytest tests/matmaster/kernel/ -x -q` |
+| Quick run command | `pytest tests/matmaster/engine/ -x -q` |
 | Full suite command | `pytest tests/matmaster/ -x -q` |
 
 ### Phase Requirements -> Test Map
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|-------------|
-| KERN-01 | AgentKernel 用 mock spec 完成完整循环 | unit | `pytest tests/matmaster/kernel/test_kernel.py -x` | Wave 0 |
-| KERN-01 | 自然终止 (no tool_calls) | unit | `pytest tests/matmaster/kernel/test_kernel.py::test_natural_finish -x` | Wave 0 |
-| KERN-01 | max_turns 终止 | unit | `pytest tests/matmaster/kernel/test_kernel.py::test_max_turns -x` | Wave 0 |
-| KERN-01 | 外部取消 (stop_event) | unit | `pytest tests/matmaster/kernel/test_kernel.py::test_cancel -x` | Wave 0 |
-| KERN-02 | LoopDetectionGuard 阻断重复调用 | unit | `pytest tests/matmaster/kernel/test_guard_pipeline.py::test_loop_detection -x` | Wave 0 |
-| KERN-02 | LoopDetectionGuard 不可移除 | unit | `pytest tests/matmaster/kernel/test_guard_pipeline.py::test_builtin_not_removable -x` | Wave 0 |
-| KERN-03 | GuardPipeline 串联执行 (内置 + 外部) | unit | `pytest tests/matmaster/kernel/test_guard_pipeline.py::test_pipeline_order -x` | Wave 0 |
-| KERN-03 | 第一个拒绝立即生效 | unit | `pytest tests/matmaster/kernel/test_guard_pipeline.py::test_first_deny -x` | Wave 0 |
-| KERN-04 | pre_tool_call SKIP 阻断执行 | unit | `pytest tests/matmaster/kernel/test_hooks.py::test_pre_tool_call_skip -x` | Wave 0 |
-| KERN-04 | should_continue 返回 False 终止循环 | unit | `pytest tests/matmaster/kernel/test_hooks.py::test_should_continue_false -x` | Wave 0 |
-| KERN-04 | 多 hook 短路执行 | unit | `pytest tests/matmaster/kernel/test_hooks.py::test_hook_short_circuit -x` | Wave 0 |
-| KERN-04 | EventEmitterHook 转发事件 | unit | `pytest tests/matmaster/kernel/test_hooks.py::test_event_emitter_hook -x` | Wave 0 |
-| LLMP-01 | LLMProvider Protocol 类型检查 | unit | `pytest tests/matmaster/kernel/test_llm_provider.py::test_protocol_check -x` | Wave 0 |
-| LLMP-01 | chat() 返回 LLMResponse | unit | `pytest tests/matmaster/kernel/test_llm_provider.py::test_chat -x` | Wave 0 |
-| LLMP-01 | chat_stream() 返回 Iterator[StreamChunk] | unit | `pytest tests/matmaster/kernel/test_llm_provider.py::test_chat_stream -x` | Wave 0 |
+| KERN-01 | AgentKernel 用 mock spec 完成完整循环 | unit | `pytest tests/matmaster/engine/test_kernel.py -x` | Wave 0 |
+| KERN-01 | 自然终止 (no tool_calls) | unit | `pytest tests/matmaster/engine/test_kernel.py::test_natural_finish -x` | Wave 0 |
+| KERN-01 | max_turns 终止 | unit | `pytest tests/matmaster/engine/test_kernel.py::test_max_turns -x` | Wave 0 |
+| KERN-01 | 外部取消 (stop_event) | unit | `pytest tests/matmaster/engine/test_kernel.py::test_cancel -x` | Wave 0 |
+| KERN-02 | LoopDetectionGuard 阻断重复调用 | unit | `pytest tests/matmaster/engine/test_guard_pipeline.py::test_loop_detection -x` | Wave 0 |
+| KERN-02 | LoopDetectionGuard 不可移除 | unit | `pytest tests/matmaster/engine/test_guard_pipeline.py::test_builtin_not_removable -x` | Wave 0 |
+| KERN-03 | GuardPipeline 串联执行 (内置 + 外部) | unit | `pytest tests/matmaster/engine/test_guard_pipeline.py::test_pipeline_order -x` | Wave 0 |
+| KERN-03 | 第一个拒绝立即生效 | unit | `pytest tests/matmaster/engine/test_guard_pipeline.py::test_first_deny -x` | Wave 0 |
+| KERN-04 | pre_tool_call SKIP 阻断执行 | unit | `pytest tests/matmaster/engine/test_hooks.py::test_pre_tool_call_skip -x` | Wave 0 |
+| KERN-04 | should_continue 返回 False 终止循环 | unit | `pytest tests/matmaster/engine/test_hooks.py::test_should_continue_false -x` | Wave 0 |
+| KERN-04 | 多 hook 短路执行 | unit | `pytest tests/matmaster/engine/test_hooks.py::test_hook_short_circuit -x` | Wave 0 |
+| KERN-04 | EventEmitterHook 转发事件 | unit | `pytest tests/matmaster/engine/test_hooks.py::test_event_emitter_hook -x` | Wave 0 |
+| LLMP-01 | LLMProvider Protocol 类型检查 | unit | `pytest tests/matmaster/engine/test_llm_provider.py::test_protocol_check -x` | Wave 0 |
+| LLMP-01 | chat() 返回 LLMResponse | unit | `pytest tests/matmaster/engine/test_llm_provider.py::test_chat -x` | Wave 0 |
+| LLMP-01 | chat_stream() 返回 Iterator[StreamChunk] | unit | `pytest tests/matmaster/engine/test_llm_provider.py::test_chat_stream -x` | Wave 0 |
 
 ### Sampling Rate
-- **Per task commit:** `pytest tests/matmaster/kernel/ -x -q`
+- **Per task commit:** `pytest tests/matmaster/engine/ -x -q`
 - **Per wave merge:** `pytest tests/matmaster/ -x -q`
 - **Phase gate:** Full suite green before `/gsd:verify-work`
 
 ### Wave 0 Gaps
-- [ ] `tests/matmaster/kernel/__init__.py` -- package init
-- [ ] `tests/matmaster/kernel/test_kernel.py` -- covers KERN-01
-- [ ] `tests/matmaster/kernel/test_guard_pipeline.py` -- covers KERN-02, KERN-03
-- [ ] `tests/matmaster/kernel/test_hooks.py` -- covers KERN-04
-- [ ] `tests/matmaster/kernel/test_llm_provider.py` -- covers LLMP-01
-- [ ] `tests/matmaster/kernel/test_types.py` -- covers Message types
-- [ ] `tests/matmaster/kernel/conftest.py` -- shared fixtures (MockLLMProvider, mock spec builder)
+- [ ] `tests/matmaster/engine/__init__.py` -- package init
+- [ ] `tests/matmaster/engine/test_kernel.py` -- covers KERN-01
+- [ ] `tests/matmaster/engine/test_guard_pipeline.py` -- covers KERN-02, KERN-03
+- [ ] `tests/matmaster/engine/test_hooks.py` -- covers KERN-04
+- [ ] `tests/matmaster/engine/test_llm_provider.py` -- covers LLMP-01
+- [ ] `tests/matmaster/engine/test_types.py` -- covers Message types
+- [ ] `tests/matmaster/engine/conftest.py` -- shared fixtures (MockLLMProvider, mock spec builder)
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- `matmaster/contracts/runtime.py` -- Phase 1 AgentRuntimeSpec 定义 (直接读取)
-- `matmaster/contracts/guards.py` -- Phase 1 Guard Protocol 定义 (直接读取)
-- `matmaster/contracts/events.py` -- Phase 1 AgentEvent 定义 (直接读取)
+- `matmaster/types/runtime.py` -- Phase 1 AgentRuntimeSpec 定义 (直接读取)
+- `matmaster/types/guards.py` -- Phase 1 Guard Protocol 定义 (直接读取)
+- `matmaster/types/events.py` -- Phase 1 AgentEvent 定义 (直接读取)
 - `matmaster/bus/queue.py` -- Phase 1 MessageBus 实现 (直接读取)
 - `evomaster/agent/agent.py` -- 现有 BaseAgent.run()/_step() 循环 (直接读取)
 - `evomaster/utils/llm.py` -- 现有 BaseLLM/OpenAILLM 实现 (直接读取)

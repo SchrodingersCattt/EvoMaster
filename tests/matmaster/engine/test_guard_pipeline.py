@@ -1,4 +1,4 @@
-"""Tests for matmaster.kernel.guard_pipeline -- LoopDetectionGuard and GuardPipeline."""
+"""Tests for matmaster.engine.guard_pipeline -- LoopDetectionGuard and GuardPipeline."""
 
 from __future__ import annotations
 
@@ -6,15 +6,15 @@ from typing import Any
 
 import pytest
 
-from matmaster.contracts.guards import Guard, GuardContext, GuardResult, RecentCall
-from matmaster.kernel.guard_pipeline import (
+from matmaster.types.guards import Guard, GuardContext, GuardResult, RecentCall
+from matmaster.engine.guard_pipeline import (
     LOOP_THRESHOLD,
     LOOP_WINDOW,
     GuardPipeline,
     LoopDetectionGuard,
 )
-from matmaster.kernel.types import ToolCallData
-from tests.matmaster.kernel.conftest import make_tool_call
+from matmaster.engine.types import ToolCallData
+from tests.matmaster.engine.conftest import make_tool_call
 
 
 # ── Helper: build a GuardContext with recent_calls ────

@@ -6,7 +6,7 @@ the existing event_callback payload dict format {source, type, content, ...extra
 
 from typing import Any
 
-from matmaster.contracts.events import (
+from matmaster.types.events import (
     AssistantStateEvent,
     BohriumNodeEvent,
     BusEvent,

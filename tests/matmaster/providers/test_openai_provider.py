@@ -14,9 +14,9 @@ from unittest.mock import MagicMock, patch
 import openai
 import pytest
 
-from matmaster.kernel.llm_provider import LLMProvider
-from matmaster.kernel.openai_provider import OpenAIProvider
-from matmaster.kernel.types import LLMResponse, StreamChunk, ToolCallData
+from matmaster.types.llm_provider import LLMProvider
+from matmaster.providers.openai_provider import OpenAIProvider
+from matmaster.engine.types import LLMResponse, StreamChunk, ToolCallData
 
 
 # ── Protocol conformance ────────────────────────────────
@@ -25,24 +25,24 @@ from matmaster.kernel.types import LLMResponse, StreamChunk, ToolCallData
 class TestProtocolConformance:
     def test_protocol_conformance(self) -> None:
         """OpenAIProvider satisfies LLMProvider Protocol."""
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI"):
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
             provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         assert isinstance(provider, LLMProvider)
 
     def test_has_chat_method(self) -> None:
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI"):
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
             provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         assert hasattr(provider, "chat")
         assert callable(provider.chat)
 
     def test_has_chat_stream_method(self) -> None:
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI"):
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
             provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         assert hasattr(provider, "chat_stream")
         assert callable(provider.chat_stream)
 
     def test_has_chat_with_retry_method(self) -> None:
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI"):
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
             provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         assert hasattr(provider, "chat_with_retry")
         assert callable(provider.chat_with_retry)
@@ -53,7 +53,7 @@ class TestProtocolConformance:
 
 class TestConstruction:
     def test_construction(self) -> None:
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
             mock_cls.assert_called_once_with(
                 api_key="sk-test",
@@ -63,7 +63,7 @@ class TestConstruction:
             )
 
     def test_custom_base_url(self) -> None:
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             OpenAIProvider(
                 model="gpt-4o-mini",
                 api_key="sk-test",
@@ -77,7 +77,7 @@ class TestConstruction:
             )
 
     def test_custom_config(self) -> None:
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI"):
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
             provider = OpenAIProvider(
                 model="gpt-4o-mini",
                 api_key="sk-test",
@@ -89,7 +89,7 @@ class TestConstruction:
 
     def test_max_retries_stored(self) -> None:
         """max_retries stored as _max_retries, SDK gets max_retries=0."""
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             provider = OpenAIProvider(
                 model="gpt-4o-mini", api_key="sk-test", max_retries=5
             )
@@ -103,7 +103,7 @@ class TestConstruction:
 
     def test_retry_delay_stored(self) -> None:
         """Custom retry_delay stored as _retry_delay."""
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI"):
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
             provider = OpenAIProvider(
                 model="gpt-4o-mini",
                 api_key="sk-test",
@@ -134,7 +134,7 @@ def _make_mock_completion(
 
 class TestChatContent:
     def test_chat_content(self) -> None:
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             mock_client.chat.completions.create.return_value = _make_mock_completion(
@@ -154,7 +154,7 @@ class TestChatContent:
         tc_mock.function.name = "get_weather"
         tc_mock.function.arguments = '{"city": "Beijing"}'
 
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             mock_client.chat.completions.create.return_value = _make_mock_completion(
@@ -177,7 +177,7 @@ class TestChatContent:
         usage.completion_tokens = 5
         usage.total_tokens = 15
 
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             mock_client.chat.completions.create.return_value = _make_mock_completion(
@@ -194,7 +194,7 @@ class TestChatContent:
             }
 
     def test_chat_finish_reason(self) -> None:
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             mock_client.chat.completions.create.return_value = _make_mock_completion(
@@ -227,7 +227,7 @@ def _make_stream_chunk(
 
 class TestChatStreamContent:
     def test_chat_stream_content(self) -> None:
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             mock_client.chat.completions.create.return_value = iter([
@@ -254,7 +254,7 @@ class TestChatStreamContent:
         tc_delta.function.name = "fn"
         tc_delta.function.arguments = '{"a": 1}'
 
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             mock_client.chat.completions.create.return_value = iter([
@@ -279,7 +279,7 @@ class TestChatStreamContent:
         empty_chunk = MagicMock()
         empty_chunk.choices = []
 
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             mock_client.chat.completions.create.return_value = iter([
@@ -296,7 +296,7 @@ class TestChatStreamContent:
             assert chunks[0].content == "ok"
 
     def test_chat_stream_returns_iterator(self) -> None:
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             mock_client.chat.completions.create.return_value = iter([
@@ -322,7 +322,7 @@ class TestErrorHandling:
         tc_mock.function.name = "fn"
         tc_mock.function.arguments = "not valid json {"
 
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             mock_client.chat.completions.create.return_value = _make_mock_completion(
@@ -343,7 +343,7 @@ class TestErrorHandling:
         tc_mock.function.name = "fn"
         tc_mock.function.arguments = None
 
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             mock_client.chat.completions.create.return_value = _make_mock_completion(
@@ -359,7 +359,7 @@ class TestErrorHandling:
 
     def test_chat_with_tools_kwarg(self) -> None:
         """chat() passes tools to the API when provided."""
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             mock_client.chat.completions.create.return_value = _make_mock_completion()
@@ -386,7 +386,7 @@ class TestChatWithRetry:
 
     def _make_provider(self) -> tuple[OpenAIProvider, MagicMock]:
         """Create provider with mocked OpenAI client, return (provider, mock_client)."""
-        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()
             mock_cls.return_value = mock_client
             provider = OpenAIProvider(
@@ -418,7 +418,7 @@ class TestChatWithRetry:
             _make_mock_completion(content="recovered"),
         ]
 
-        with patch("matmaster.kernel.openai_provider.time.sleep"):
+        with patch("matmaster.providers.openai_provider.time.sleep"):
             result = provider.chat_with_retry([{"role": "user", "content": "Hi"}])
 
         assert result.content == "recovered"
@@ -432,7 +432,7 @@ class TestChatWithRetry:
             _make_mock_completion(content="recovered"),
         ]
 
-        with patch("matmaster.kernel.openai_provider.time.sleep"):
+        with patch("matmaster.providers.openai_provider.time.sleep"):
             result = provider.chat_with_retry([{"role": "user", "content": "Hi"}])
 
         assert result.content == "recovered"
@@ -450,7 +450,7 @@ class TestChatWithRetry:
             _make_mock_completion(content="recovered"),
         ]
 
-        with patch("matmaster.kernel.openai_provider.time.sleep"):
+        with patch("matmaster.providers.openai_provider.time.sleep"):
             result = provider.chat_with_retry([{"role": "user", "content": "Hi"}])
 
         assert result.content == "recovered"
@@ -468,7 +468,7 @@ class TestChatWithRetry:
             _make_mock_completion(content="recovered"),
         ]
 
-        with patch("matmaster.kernel.openai_provider.time.sleep"):
+        with patch("matmaster.providers.openai_provider.time.sleep"):
             result = provider.chat_with_retry([{"role": "user", "content": "Hi"}])
 
         assert result.content == "recovered"
@@ -513,7 +513,7 @@ class TestChatWithRetry:
             openai.APIConnectionError(request=MagicMock())
         )
 
-        with patch("matmaster.kernel.openai_provider.time.sleep"):
+        with patch("matmaster.providers.openai_provider.time.sleep"):
             with pytest.raises(RuntimeError, match="LLM call failed after 3 attempts"):
                 provider.chat_with_retry([{"role": "user", "content": "Hi"}])
 
@@ -526,7 +526,7 @@ class TestChatWithRetry:
             openai.APIConnectionError(request=MagicMock())
         )
 
-        with patch("matmaster.kernel.openai_provider.time.sleep") as mock_sleep:
+        with patch("matmaster.providers.openai_provider.time.sleep") as mock_sleep:
             with pytest.raises(RuntimeError):
                 provider.chat_with_retry(
                     [{"role": "user", "content": "Hi"}],
@@ -547,7 +547,7 @@ class TestChatWithRetry:
             openai.APIConnectionError(request=MagicMock())
         )
 
-        with patch("matmaster.kernel.openai_provider.time.sleep"):
+        with patch("matmaster.providers.openai_provider.time.sleep"):
             with pytest.raises(RuntimeError, match="LLM call failed after 5 attempts"):
                 provider.chat_with_retry(
                     [{"role": "user", "content": "Hi"}],
@@ -563,7 +563,7 @@ class TestChatWithRetry:
             openai.APIConnectionError(request=MagicMock())
         )
 
-        with patch("matmaster.kernel.openai_provider.time.sleep") as mock_sleep:
+        with patch("matmaster.providers.openai_provider.time.sleep") as mock_sleep:
             with pytest.raises(RuntimeError):
                 provider.chat_with_retry(
                     [{"role": "user", "content": "Hi"}],
