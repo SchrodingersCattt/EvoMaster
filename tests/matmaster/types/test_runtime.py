@@ -7,11 +7,11 @@ from typing import Any, Iterator
 import pytest
 from pydantic import ValidationError
 
-from matmaster.contracts.guards import Guard, GuardContext, GuardResult
-from matmaster.contracts.runtime import AgentRuntimeSpec, CompactionConfig
-from matmaster.kernel.hooks import BaseHook, Hook
-from matmaster.kernel.llm_provider import LLMProvider
-from matmaster.kernel.types import LLMResponse, StreamChunk
+from matmaster.types.guards import Guard, GuardContext, GuardResult
+from matmaster.types.runtime import AgentRuntimeSpec, CompactionConfig
+from matmaster.engine.hooks import BaseHook, Hook
+from matmaster.types.llm_provider import LLMProvider
+from matmaster.engine.types import LLMResponse, StreamChunk
 
 
 # ── Test helpers ───────────────────────────────────────

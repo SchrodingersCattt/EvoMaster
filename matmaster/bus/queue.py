@@ -6,7 +6,7 @@ the agent kernel (producer) and QueueBridge (consumer).
 
 import queue
 
-from matmaster.contracts.events import BusEvent
+from matmaster.types.events import BusEvent
 
 
 class MessageBus:

@@ -45,18 +45,18 @@ human_verification: []
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `matmaster/contracts/guards.py` | Guard Protocol, GuardContext, GuardResult, RecentCall | VERIFIED | All 4 classes present; `@runtime_checkable`; `def evaluate` signature correct |
-| `matmaster/contracts/context.py` | PlaygroundContext frozen model | VERIFIED | `ConfigDict(frozen=True)`; workdir, session_type, cache_area, env_vars, mcp_manager, skill_registry, run_meta |
-| `matmaster/contracts/runtime.py` | AgentRuntimeSpec, CompactionConfig frozen models | VERIFIED | Both classes present; `ConfigDict(frozen=True, arbitrary_types_allowed=True)`; `from .guards import Guard` wired |
-| `matmaster/contracts/events.py` | 16 event types + AgentEvent + SystemEvent + BusEvent | VERIFIED | 16 concrete classes; 3 Annotated union definitions; all with `Field(discriminator='type')` |
-| `matmaster/contracts/__init__.py` | Re-exports all 27 public types | VERIFIED | All 27 names in `__all__`; imports from all 4 modules present |
+| `matmaster/types/guards.py` | Guard Protocol, GuardContext, GuardResult, RecentCall | VERIFIED | All 4 classes present; `@runtime_checkable`; `def evaluate` signature correct |
+| `matmaster/types/context.py` | PlaygroundContext frozen model | VERIFIED | `ConfigDict(frozen=True)`; workdir, session_type, cache_area, env_vars, mcp_manager, skill_registry, run_meta |
+| `matmaster/types/runtime.py` | AgentRuntimeSpec, CompactionConfig frozen models | VERIFIED | Both classes present; `ConfigDict(frozen=True, arbitrary_types_allowed=True)`; `from .guards import Guard` wired |
+| `matmaster/types/events.py` | 16 event types + AgentEvent + SystemEvent + BusEvent | VERIFIED | 16 concrete classes; 3 Annotated union definitions; all with `Field(discriminator='type')` |
+| `matmaster/types/__init__.py` | Re-exports all 27 public types | VERIFIED | All 27 names in `__all__`; imports from all 4 modules present |
 | `matmaster/bus/queue.py` | MessageBus synchronous event bus | VERIFIED | `emit/get/get_nowait/pending/empty`; backed by `queue.Queue[BusEvent]` |
 | `matmaster/bus/bridge.py` | QueueBridge SSE adapter | VERIFIED | `next_payload` + `_to_sse_payload`; 16 `isinstance` branches; all extra fields (mcp_phase/mcp_server/mcp_transport) present |
 | `matmaster/bus/__init__.py` | Exports MessageBus, QueueBridge | VERIFIED | `from .queue import MessageBus` + `from .bridge import QueueBridge` |
-| `tests/matmaster/contracts/test_guards.py` | Guard Protocol conformance tests | VERIFIED | 8 tests; all pass |
-| `tests/matmaster/contracts/test_context.py` | PlaygroundContext frozen model tests | VERIFIED | 5 tests; all pass |
-| `tests/matmaster/contracts/test_runtime.py` | AgentRuntimeSpec frozen model tests | VERIFIED | 9 tests; all pass |
-| `tests/matmaster/contracts/test_events.py` | Event discriminated union tests | VERIFIED | 26 tests; all pass |
+| `tests/matmaster/types/test_guards.py` | Guard Protocol conformance tests | VERIFIED | 8 tests; all pass |
+| `tests/matmaster/types/test_context.py` | PlaygroundContext frozen model tests | VERIFIED | 5 tests; all pass |
+| `tests/matmaster/types/test_runtime.py` | AgentRuntimeSpec frozen model tests | VERIFIED | 9 tests; all pass |
+| `tests/matmaster/types/test_events.py` | Event discriminated union tests | VERIFIED | 26 tests; all pass |
 | `tests/matmaster/bus/test_message_bus.py` | MessageBus FIFO, threading, timeout tests | VERIFIED | 8 tests; all pass |
 | `tests/matmaster/bus/test_queue_bridge.py` | QueueBridge payload conversion tests | VERIFIED | 26 tests; all pass |
 
@@ -66,11 +66,11 @@ human_verification: []
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| `matmaster/contracts/runtime.py` | `matmaster/contracts/guards.py` | `from .guards import Guard` | WIRED | Line 12: `from .guards import Guard`; used in `guards: list[Guard]` |
-| `matmaster/contracts/__init__.py` | all contract modules | re-export all public types | WIRED | Imports from `.context`, `.events`, `.guards`, `.runtime`; all 27 names in `__all__` |
-| `matmaster/bus/queue.py` | `matmaster/contracts/events.py` | `from matmaster.contracts.events import BusEvent` | WIRED | Line 9: exact pattern matches; used as `queue.Queue[BusEvent]` type annotation |
+| `matmaster/types/runtime.py` | `matmaster/types/guards.py` | `from .guards import Guard` | WIRED | Line 12: `from .guards import Guard`; used in `guards: list[Guard]` |
+| `matmaster/types/__init__.py` | all contract modules | re-export all public types | WIRED | Imports from `.context`, `.events`, `.guards`, `.runtime`; all 27 names in `__all__` |
+| `matmaster/bus/queue.py` | `matmaster/types/events.py` | `from matmaster.types.events import BusEvent` | WIRED | Line 9: exact pattern matches; used as `queue.Queue[BusEvent]` type annotation |
 | `matmaster/bus/bridge.py` | `matmaster/bus/queue.py` | `from .queue import MessageBus` | WIRED | Line 29: exact pattern matches; `self._bus: MessageBus` in `__init__` |
-| `matmaster/bus/bridge.py` | `matmaster/contracts/events.py` | `from matmaster.contracts.events import` (16 event types) | WIRED | Lines 9-27: imports all 16 concrete event types; all used in `isinstance` dispatch |
+| `matmaster/bus/bridge.py` | `matmaster/types/events.py` | `from matmaster.types.events import` (16 event types) | WIRED | Lines 9-27: imports all 16 concrete event types; all used in `isinstance` dispatch |
 
 ---
 
@@ -78,8 +78,8 @@ human_verification: []
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|------------|-------------|--------|----------|
-| CONT-01 | 01-01-PLAN.md | PlaygroundContext Pydantic frozen model with workdir/session_type/cache_area/env_vars/mcp_manager/skill_registry | SATISFIED | `matmaster/contracts/context.py`; all 7 fields present; `ConfigDict(frozen=True)` |
-| CONT-02 | 01-01-PLAN.md | AgentRuntimeSpec Pydantic frozen model with llm_provider/tool_registry/guards/termination policy/hooks/compaction config | SATISFIED | `matmaster/contracts/runtime.py`; all fields present; frozen confirmed by test |
+| CONT-01 | 01-01-PLAN.md | PlaygroundContext Pydantic frozen model with workdir/session_type/cache_area/env_vars/mcp_manager/skill_registry | SATISFIED | `matmaster/types/context.py`; all 7 fields present; `ConfigDict(frozen=True)` |
+| CONT-02 | 01-01-PLAN.md | AgentRuntimeSpec Pydantic frozen model with llm_provider/tool_registry/guards/termination policy/hooks/compaction config | SATISFIED | `matmaster/types/runtime.py`; all fields present; frozen confirmed by test |
 | CONT-03 | 01-01-PLAN.md | AgentEvent discriminated union (REQUIREMENTS says 5 types; PLAN delivers 7 types -- superset) | SATISFIED | 7 AgentEvent types cover the 5 specified in REQUIREMENTS plus AssistantStateEvent and SkillHitEvent from existing system mapping |
 | CONT-04 | 01-01-PLAN.md | Guard Protocol with evaluate() method signature and GuardResult return type | SATISFIED | `@runtime_checkable class Guard(Protocol)` with correct signature; runtime isinstance check confirmed |
 | CONT-05 | 01-01-PLAN.md | TerminationPolicy type definition | SATISFIED | Simplified to `max_turns: int = 100` on AgentRuntimeSpec per locked decision in CONTEXT.md; dedicated test confirms |

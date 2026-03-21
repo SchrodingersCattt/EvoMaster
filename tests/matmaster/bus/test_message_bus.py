@@ -4,7 +4,7 @@ import queue
 import threading
 
 from matmaster.bus.queue import MessageBus
-from matmaster.contracts.events import ThoughtEvent
+from matmaster.types.events import ThoughtEvent
 
 
 def _make_thought(content: str = "hello", source: str = "agent") -> ThoughtEvent:

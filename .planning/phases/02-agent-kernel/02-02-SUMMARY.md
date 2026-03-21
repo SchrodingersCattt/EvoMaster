@@ -14,7 +14,7 @@ provides:
   - "AgentKernel.run(spec, task, stop_event) -- full execution loop with 4 termination paths"
   - "OpenAIProvider -- concrete LLMProvider implementation using openai SDK"
   - "AgentRuntimeSpec.llm_provider typed as LLMProvider, hooks typed as list[Hook]"
-  - "matmaster.kernel public API exports via __init__.py"
+  - "matmaster.engine public API exports via __init__.py"
 affects: [03-exp-layer, 04-playground-layer]
 
 # Tech tracking
@@ -27,14 +27,14 @@ tech-stack:
 
 key-files:
   created:
-    - matmaster/kernel/kernel.py
-    - matmaster/kernel/openai_provider.py
-    - tests/matmaster/kernel/test_kernel.py
-    - tests/matmaster/kernel/test_openai_provider.py
+    - matmaster/engine/agent.py
+    - matmaster/providers/openai_provider.py
+    - tests/matmaster/engine/test_kernel.py
+    - tests/matmaster/engine/test_openai_provider.py
   modified:
-    - matmaster/contracts/runtime.py
-    - matmaster/kernel/__init__.py
-    - tests/matmaster/contracts/test_runtime.py
+    - matmaster/types/runtime.py
+    - matmaster/engine/__init__.py
+    - tests/matmaster/types/test_runtime.py
 
 key-decisions:
   - "TYPE_CHECKING guard in kernel.py to break circular import with contracts.runtime"
@@ -70,7 +70,7 @@ completed: 2026-03-21
 - AgentKernel.run() executes complete LLM -> guard -> hook -> tool -> loop cycle with streaming chunk accumulation and tool_call delta reassembly
 - OpenAIProvider satisfies LLMProvider Protocol with real OpenAI SDK (chat + chat_stream), all tests using mocked client
 - AgentRuntimeSpec typed with concrete Protocol types (LLMProvider, Hook) instead of Any
-- matmaster.kernel public API exports all 18 types via __init__.py
+- matmaster.engine public API exports all 18 types via __init__.py
 
 ## Task Commits
 
@@ -81,13 +81,13 @@ Each task was committed atomically:
 3. **Task 3: Update AgentRuntimeSpec types + kernel exports** - `d9a066b` (feat)
 
 ## Files Created/Modified
-- `matmaster/kernel/kernel.py` - AgentKernel class with run(), _call_llm(), _parse_arguments(), _finish()
-- `matmaster/kernel/openai_provider.py` - OpenAIProvider class wrapping openai.OpenAI client
-- `matmaster/kernel/__init__.py` - Public API re-exports for all 18 kernel types
-- `matmaster/contracts/runtime.py` - AgentRuntimeSpec with typed llm_provider and hooks fields
-- `tests/matmaster/kernel/test_kernel.py` - 12 tests covering all termination paths and execution flows
-- `tests/matmaster/kernel/test_openai_provider.py` - 18 tests with mocked OpenAI client
-- `tests/matmaster/contracts/test_runtime.py` - Updated tests for typed fields + 3 new Protocol tests
+- `matmaster/engine/agent.py` - AgentKernel class with run(), _call_llm(), _parse_arguments(), _finish()
+- `matmaster/providers/openai_provider.py` - OpenAIProvider class wrapping openai.OpenAI client
+- `matmaster/engine/__init__.py` - Public API re-exports for all 18 kernel types
+- `matmaster/types/runtime.py` - AgentRuntimeSpec with typed llm_provider and hooks fields
+- `tests/matmaster/engine/test_kernel.py` - 12 tests covering all termination paths and execution flows
+- `tests/matmaster/engine/test_openai_provider.py` - 18 tests with mocked OpenAI client
+- `tests/matmaster/types/test_runtime.py` - Updated tests for typed fields + 3 new Protocol tests
 
 ## Decisions Made
 - Used TYPE_CHECKING guard in kernel.py to break circular import between kernel and contracts packages (contracts.runtime imports kernel.hooks, kernel.kernel imports contracts.runtime)
@@ -100,9 +100,9 @@ Each task was committed atomically:
 
 **1. [Rule 3 - Blocking] Fixed circular import between kernel and contracts packages**
 - **Found during:** Task 3 (Update AgentRuntimeSpec types)
-- **Issue:** Adding `from matmaster.kernel.hooks import Hook` to contracts/runtime.py created circular import: contracts.runtime -> kernel.__init__ -> kernel.kernel -> contracts.runtime
+- **Issue:** Adding `from matmaster.engine.hooks import Hook` to contracts/runtime.py created circular import: contracts.runtime -> kernel.__init__ -> kernel.kernel -> contracts.runtime
 - **Fix:** Used TYPE_CHECKING guard in kernel.py for the AgentRuntimeSpec import, which is only needed for type annotations (deferred by `from __future__ import annotations`)
-- **Files modified:** matmaster/kernel/kernel.py
+- **Files modified:** matmaster/engine/agent.py
 - **Verification:** All 177 matmaster tests pass
 - **Committed in:** d9a066b (Task 3 commit)
 
@@ -119,7 +119,7 @@ None - no external service configuration required.
 
 ## Next Phase Readiness
 - AgentKernel is ready for consumption by Phase 3 (Exp layer) which will define ToolRegistry and assemble AgentRuntimeSpec
-- All kernel types exported via matmaster.kernel for downstream imports
+- All kernel types exported via matmaster.engine for downstream imports
 - OpenAIProvider ready for real API usage when api_key is configured
 
 ## Self-Check: PASSED

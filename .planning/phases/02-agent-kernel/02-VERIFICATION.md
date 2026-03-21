@@ -68,37 +68,37 @@ Previous verification (2026-03-22T04:00:00Z) found 1 gap: LLMP-01 was not satisf
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `matmaster/kernel/types.py` | Message hierarchy + LLMResponse + StreamChunk + ToolCallData | VERIFIED | All 8 classes present: Role, ToolCallData, Message, SystemMessage, UserMessage, AssistantMessage, ToolMessage, LLMResponse, StreamChunk |
-| `matmaster/kernel/llm_provider.py` | LLMProvider Protocol with chat, chat_with_retry, chat_stream | VERIFIED | @runtime_checkable LLMProvider Protocol — 3 methods present; chat_with_retry has max_retries: int = 3, retry_delay: float = 1.0 keyword params |
-| `matmaster/kernel/hooks.py` | Hook Protocol + BaseHook + HookAction enum | VERIFIED | HookAction enum, Hook Protocol, BaseHook, 5 run_* helpers, EventEmitterHook |
-| `matmaster/kernel/guard_pipeline.py` | GuardPipeline + LoopDetectionGuard | VERIFIED | LOOP_WINDOW=5, LOOP_THRESHOLD=2, LoopDetectionGuard, GuardPipeline with deque |
-| `matmaster/kernel/kernel.py` | AgentKernel execution loop | VERIFIED | AgentKernel.run(), _call_llm(), _parse_arguments(), _finish() all present |
-| `matmaster/kernel/openai_provider.py` | OpenAIProvider with chat_with_retry + exponential backoff, SDK max_retries=0 | VERIFIED | chat_with_retry implemented lines 105–167; time.sleep(backoff) where backoff = delay * (2**attempt); openai.OpenAI(..., max_retries=0) at line 52 |
-| `matmaster/kernel/__init__.py` | Public API re-exports (18 types) | VERIFIED | Exports AgentKernel, OpenAIProvider, LLMProvider, all message types, Hook types, Guard pipeline types |
-| `matmaster/contracts/runtime.py` | AgentRuntimeSpec with typed llm_provider and hooks | VERIFIED | llm_provider: LLMProvider and hooks: list[Hook] typed with Protocol imports |
-| `tests/matmaster/kernel/conftest.py` | MockLLMProvider with chat_with_retry | VERIFIED | chat_with_retry(messages, tools, *, max_retries=3, retry_delay=1.0) present lines 49–57; delegates to self.chat() |
-| `tests/matmaster/kernel/test_llm_provider.py` | TestChatWithRetryProtocol + MissingRetryProvider | VERIFIED | MissingRetryProvider (chat + chat_stream only) class at line 98; TestChatWithRetryProtocol at line 116; 5 tests including test_protocol_requires_chat_with_retry and test_mock_provider_conforms |
-| `tests/matmaster/kernel/test_openai_provider.py` | TestChatWithRetry (11 tests) + updated construction tests | VERIFIED | TestChatWithRetry class at line 384; test_retry_on_connection_error, test_no_retry_on_auth_error, test_exhausted_retries, test_exponential_backoff all present; test_max_retries_stored verifies SDK gets max_retries=0 |
-| `tests/matmaster/kernel/test_types.py` | 28 type tests | VERIFIED | Unchanged from initial verification |
-| `tests/matmaster/kernel/test_hooks.py` | 19 hook tests | VERIFIED | Unchanged from initial verification |
-| `tests/matmaster/kernel/test_guard_pipeline.py` | 15 guard pipeline tests | VERIFIED | Unchanged from initial verification |
-| `tests/matmaster/kernel/test_kernel.py` | 12 kernel execution tests | VERIFIED | Updated to add chat_with_retry to all inline mock providers (StreamingProvider, ToolCallingProvider, etc.) — no regressions |
+| `matmaster/engine/types.py` | Message hierarchy + LLMResponse + StreamChunk + ToolCallData | VERIFIED | All 8 classes present: Role, ToolCallData, Message, SystemMessage, UserMessage, AssistantMessage, ToolMessage, LLMResponse, StreamChunk |
+| `matmaster/types/llm_provider.py` | LLMProvider Protocol with chat, chat_with_retry, chat_stream | VERIFIED | @runtime_checkable LLMProvider Protocol — 3 methods present; chat_with_retry has max_retries: int = 3, retry_delay: float = 1.0 keyword params |
+| `matmaster/engine/hooks.py` | Hook Protocol + BaseHook + HookAction enum | VERIFIED | HookAction enum, Hook Protocol, BaseHook, 5 run_* helpers, EventEmitterHook |
+| `matmaster/engine/guard_pipeline.py` | GuardPipeline + LoopDetectionGuard | VERIFIED | LOOP_WINDOW=5, LOOP_THRESHOLD=2, LoopDetectionGuard, GuardPipeline with deque |
+| `matmaster/engine/agent.py` | AgentKernel execution loop | VERIFIED | AgentKernel.run(), _call_llm(), _parse_arguments(), _finish() all present |
+| `matmaster/providers/openai_provider.py` | OpenAIProvider with chat_with_retry + exponential backoff, SDK max_retries=0 | VERIFIED | chat_with_retry implemented lines 105–167; time.sleep(backoff) where backoff = delay * (2**attempt); openai.OpenAI(..., max_retries=0) at line 52 |
+| `matmaster/engine/__init__.py` | Public API re-exports (18 types) | VERIFIED | Exports AgentKernel, OpenAIProvider, LLMProvider, all message types, Hook types, Guard pipeline types |
+| `matmaster/types/runtime.py` | AgentRuntimeSpec with typed llm_provider and hooks | VERIFIED | llm_provider: LLMProvider and hooks: list[Hook] typed with Protocol imports |
+| `tests/matmaster/engine/conftest.py` | MockLLMProvider with chat_with_retry | VERIFIED | chat_with_retry(messages, tools, *, max_retries=3, retry_delay=1.0) present lines 49–57; delegates to self.chat() |
+| `tests/matmaster/engine/test_llm_provider.py` | TestChatWithRetryProtocol + MissingRetryProvider | VERIFIED | MissingRetryProvider (chat + chat_stream only) class at line 98; TestChatWithRetryProtocol at line 116; 5 tests including test_protocol_requires_chat_with_retry and test_mock_provider_conforms |
+| `tests/matmaster/engine/test_openai_provider.py` | TestChatWithRetry (11 tests) + updated construction tests | VERIFIED | TestChatWithRetry class at line 384; test_retry_on_connection_error, test_no_retry_on_auth_error, test_exhausted_retries, test_exponential_backoff all present; test_max_retries_stored verifies SDK gets max_retries=0 |
+| `tests/matmaster/engine/test_types.py` | 28 type tests | VERIFIED | Unchanged from initial verification |
+| `tests/matmaster/engine/test_hooks.py` | 19 hook tests | VERIFIED | Unchanged from initial verification |
+| `tests/matmaster/engine/test_guard_pipeline.py` | 15 guard pipeline tests | VERIFIED | Unchanged from initial verification |
+| `tests/matmaster/engine/test_kernel.py` | 12 kernel execution tests | VERIFIED | Updated to add chat_with_retry to all inline mock providers (StreamingProvider, ToolCallingProvider, etc.) — no regressions |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| `matmaster/kernel/openai_provider.py` | `matmaster/kernel/llm_provider.py` | OpenAIProvider satisfies Protocol including chat_with_retry | WIRED | chat_with_retry defined lines 105–167; isinstance(provider, LLMProvider) passes per test_protocol_conformance |
-| `tests/matmaster/kernel/conftest.py` | `matmaster/kernel/llm_provider.py` | MockLLMProvider satisfies Protocol including chat_with_retry | WIRED | chat_with_retry in MockLLMProvider lines 49–57; test_mock_provider_conforms verifies isinstance check passes |
-| `matmaster/kernel/hooks.py` | `matmaster/kernel/types.py` | imports ToolCallData, StreamChunk, Message | WIRED | Line 26: from matmaster.kernel.types import Message, StreamChunk, ToolCallData |
-| `matmaster/kernel/guard_pipeline.py` | `matmaster/contracts/guards.py` | imports Guard, GuardContext, GuardResult, RecentCall | WIRED | Line 17: from matmaster.contracts.guards import Guard, GuardContext, GuardResult, RecentCall |
-| `matmaster/kernel/kernel.py` | `matmaster/kernel/types.py` | imports Message types | WIRED | Lines 34–43: imports all message types |
-| `matmaster/kernel/kernel.py` | `matmaster/kernel/guard_pipeline.py` | creates GuardPipeline(spec.guards) | WIRED | Line 71: guard_pipeline = GuardPipeline(spec.guards) |
-| `matmaster/kernel/kernel.py` | `matmaster/kernel/hooks.py` | calls run_* helpers | WIRED | All 5 run_* functions called in kernel.py |
-| `matmaster/kernel/kernel.py` | `matmaster/contracts/runtime.py` | consumes AgentRuntimeSpec as input | WIRED | TYPE_CHECKING guard prevents circular import; spec: AgentRuntimeSpec annotation throughout |
-| `matmaster/contracts/runtime.py` | `matmaster/kernel/llm_provider.py` | llm_provider field typed as LLMProvider | WIRED | Line 15: from matmaster.kernel.llm_provider import LLMProvider; line 43: llm_provider: LLMProvider |
-| `matmaster/contracts/runtime.py` | `matmaster/kernel/hooks.py` | hooks field typed as list[Hook] | WIRED | Line 14: from matmaster.kernel.hooks import Hook; line 55: hooks: list[Hook] |
-| `matmaster/kernel/openai_provider.py` | `matmaster/kernel/types.py` | returns LLMResponse, yields StreamChunk | WIRED | Line 17: from matmaster.kernel.types import LLMResponse, StreamChunk, ToolCallData |
+| `matmaster/providers/openai_provider.py` | `matmaster/types/llm_provider.py` | OpenAIProvider satisfies Protocol including chat_with_retry | WIRED | chat_with_retry defined lines 105–167; isinstance(provider, LLMProvider) passes per test_protocol_conformance |
+| `tests/matmaster/engine/conftest.py` | `matmaster/types/llm_provider.py` | MockLLMProvider satisfies Protocol including chat_with_retry | WIRED | chat_with_retry in MockLLMProvider lines 49–57; test_mock_provider_conforms verifies isinstance check passes |
+| `matmaster/engine/hooks.py` | `matmaster/engine/types.py` | imports ToolCallData, StreamChunk, Message | WIRED | Line 26: from matmaster.engine.types import Message, StreamChunk, ToolCallData |
+| `matmaster/engine/guard_pipeline.py` | `matmaster/types/guards.py` | imports Guard, GuardContext, GuardResult, RecentCall | WIRED | Line 17: from matmaster.types.guards import Guard, GuardContext, GuardResult, RecentCall |
+| `matmaster/engine/agent.py` | `matmaster/engine/types.py` | imports Message types | WIRED | Lines 34–43: imports all message types |
+| `matmaster/engine/agent.py` | `matmaster/engine/guard_pipeline.py` | creates GuardPipeline(spec.guards) | WIRED | Line 71: guard_pipeline = GuardPipeline(spec.guards) |
+| `matmaster/engine/agent.py` | `matmaster/engine/hooks.py` | calls run_* helpers | WIRED | All 5 run_* functions called in kernel.py |
+| `matmaster/engine/agent.py` | `matmaster/types/runtime.py` | consumes AgentRuntimeSpec as input | WIRED | TYPE_CHECKING guard prevents circular import; spec: AgentRuntimeSpec annotation throughout |
+| `matmaster/types/runtime.py` | `matmaster/types/llm_provider.py` | llm_provider field typed as LLMProvider | WIRED | Line 15: from matmaster.types.llm_provider import LLMProvider; line 43: llm_provider: LLMProvider |
+| `matmaster/types/runtime.py` | `matmaster/engine/hooks.py` | hooks field typed as list[Hook] | WIRED | Line 14: from matmaster.engine.hooks import Hook; line 55: hooks: list[Hook] |
+| `matmaster/providers/openai_provider.py` | `matmaster/engine/types.py` | returns LLMResponse, yields StreamChunk | WIRED | Line 17: from matmaster.engine.types import LLMResponse, StreamChunk, ToolCallData |
 
 ### Requirements Coverage
 
@@ -138,17 +138,17 @@ No TODOs, FIXMEs, placeholder returns, empty handlers, or stub implementations d
 
 **Changes made (plan 02-03, commits 54325bf, 547ca95, 8307faf, 1668066):**
 
-1. `matmaster/kernel/llm_provider.py` — `chat_with_retry(messages, tools=None, *, max_retries=3, retry_delay=1.0) -> LLMResponse` added to Protocol. Protocol docstring updated to require exponential backoff. Protocol now has exactly 3 methods.
+1. `matmaster/types/llm_provider.py` — `chat_with_retry(messages, tools=None, *, max_retries=3, retry_delay=1.0) -> LLMResponse` added to Protocol. Protocol docstring updated to require exponential backoff. Protocol now has exactly 3 methods.
 
-2. `matmaster/kernel/openai_provider.py` — `chat_with_retry()` implemented with explicit exponential backoff (`delay * (2**attempt)`). Retries on `APIConnectionError`, `APITimeoutError`, `RateLimitError`, `InternalServerError`. Raises immediately (no retry) on `AuthenticationError`, `PermissionDeniedError`, and `BadRequestError` with context-length keyword. SDK client constructed with `max_retries=0` to prevent double-retry. `retry_delay` parameter added to constructor.
+2. `matmaster/providers/openai_provider.py` — `chat_with_retry()` implemented with explicit exponential backoff (`delay * (2**attempt)`). Retries on `APIConnectionError`, `APITimeoutError`, `RateLimitError`, `InternalServerError`. Raises immediately (no retry) on `AuthenticationError`, `PermissionDeniedError`, and `BadRequestError` with context-length keyword. SDK client constructed with `max_retries=0` to prevent double-retry. `retry_delay` parameter added to constructor.
 
-3. `tests/matmaster/kernel/test_llm_provider.py` — `MissingRetryProvider` class (chat + chat_stream only) added; `TestChatWithRetryProtocol` (5 tests) added; `CompleteLLMProvider` updated with `chat_with_retry`.
+3. `tests/matmaster/engine/test_llm_provider.py` — `MissingRetryProvider` class (chat + chat_stream only) added; `TestChatWithRetryProtocol` (5 tests) added; `CompleteLLMProvider` updated with `chat_with_retry`.
 
-4. `tests/matmaster/kernel/test_openai_provider.py` — `TestChatWithRetry` class with 11 tests added: success, retry on 4 transient error types, no-retry on 2 non-retryable types, exhausted retries, exponential backoff timing, custom max_retries, custom retry_delay. Construction tests updated to assert `max_retries=0` in SDK call.
+4. `tests/matmaster/engine/test_openai_provider.py` — `TestChatWithRetry` class with 11 tests added: success, retry on 4 transient error types, no-retry on 2 non-retryable types, exhausted retries, exponential backoff timing, custom max_retries, custom retry_delay. Construction tests updated to assert `max_retries=0` in SDK call.
 
-5. `tests/matmaster/kernel/conftest.py` — `MockLLMProvider` updated with `chat_with_retry` method.
+5. `tests/matmaster/engine/conftest.py` — `MockLLMProvider` updated with `chat_with_retry` method.
 
-6. `tests/matmaster/kernel/test_kernel.py`, `tests/matmaster/contracts/test_runtime.py` — All inline mock providers updated with `chat_with_retry` to satisfy updated Protocol (auto-fix during plan execution).
+6. `tests/matmaster/engine/test_kernel.py`, `tests/matmaster/types/test_runtime.py` — All inline mock providers updated with `chat_with_retry` to satisfy updated Protocol (auto-fix during plan execution).
 
 **Verification:** 195 tests pass (177 existing + 18 new), 0 regressions.
 

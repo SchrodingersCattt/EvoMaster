@@ -22,8 +22,8 @@ import enum
 from typing import Protocol, runtime_checkable
 
 from matmaster.bus.queue import MessageBus
-from matmaster.contracts.events import ThoughtEvent, ToolCallEvent, ToolResultEvent
-from matmaster.kernel.types import Message, StreamChunk, ToolCallData
+from matmaster.types.events import ThoughtEvent, ToolCallEvent, ToolResultEvent
+from matmaster.engine.types import Message, StreamChunk, ToolCallData
 
 
 class HookAction(enum.Enum):
