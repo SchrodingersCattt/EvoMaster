@@ -2,7 +2,8 @@
 
 All tests use unittest.mock.patch to mock the OpenAI client -- no real API
 calls are made. Tests verify Protocol conformance, construction, chat()
-response mapping, chat_stream() response mapping, and error handling.
+response mapping, chat_stream() response mapping, chat_with_retry() retry
+logic, and error handling.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
+import openai
 import pytest
 
 from matmaster.kernel.llm_provider import LLMProvider
@@ -39,6 +41,12 @@ class TestProtocolConformance:
         assert hasattr(provider, "chat_stream")
         assert callable(provider.chat_stream)
 
+    def test_has_chat_with_retry_method(self) -> None:
+        with patch("matmaster.kernel.openai_provider.openai.OpenAI"):
+            provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        assert hasattr(provider, "chat_with_retry")
+        assert callable(provider.chat_with_retry)
+
 
 # ── Construction ────────────────────────────────────────
 
@@ -51,7 +59,7 @@ class TestConstruction:
                 api_key="sk-test",
                 base_url=None,
                 timeout=300.0,
-                max_retries=3,
+                max_retries=0,
             )
 
     def test_custom_base_url(self) -> None:
@@ -65,7 +73,7 @@ class TestConstruction:
                 api_key="sk-test",
                 base_url="https://custom.api",
                 timeout=300.0,
-                max_retries=3,
+                max_retries=0,
             )
 
     def test_custom_config(self) -> None:
@@ -79,15 +87,29 @@ class TestConstruction:
             assert provider._temperature == 0.5
             assert provider._max_tokens == 100
 
-    def test_max_retries(self) -> None:
+    def test_max_retries_stored(self) -> None:
+        """max_retries stored as _max_retries, SDK gets max_retries=0."""
         with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
-            OpenAIProvider(model="gpt-4o-mini", api_key="sk-test", max_retries=5)
+            provider = OpenAIProvider(
+                model="gpt-4o-mini", api_key="sk-test", max_retries=5
+            )
+            assert provider._max_retries == 5
             mock_cls.assert_called_once_with(
                 api_key="sk-test",
                 base_url=None,
                 timeout=300.0,
-                max_retries=5,
+                max_retries=0,
             )
+
+    def test_retry_delay_stored(self) -> None:
+        """Custom retry_delay stored as _retry_delay."""
+        with patch("matmaster.kernel.openai_provider.openai.OpenAI"):
+            provider = OpenAIProvider(
+                model="gpt-4o-mini",
+                api_key="sk-test",
+                retry_delay=2.0,
+            )
+            assert provider._retry_delay == 2.0
 
 
 # ── chat() response mapping ────────────────────────────
@@ -354,3 +376,201 @@ class TestErrorHandling:
                 len(call_kwargs.args) == 0
                 and "tools" in call_kwargs.kwargs
             )
+
+
+# ── chat_with_retry() tests ──────────────────────────
+
+
+class TestChatWithRetry:
+    """Tests for OpenAIProvider.chat_with_retry() explicit retry logic."""
+
+    def _make_provider(self) -> tuple[OpenAIProvider, MagicMock]:
+        """Create provider with mocked OpenAI client, return (provider, mock_client)."""
+        with patch("matmaster.kernel.openai_provider.openai.OpenAI") as mock_cls:
+            mock_client = MagicMock()
+            mock_cls.return_value = mock_client
+            provider = OpenAIProvider(
+                model="gpt-4o-mini",
+                api_key="sk-test",
+                max_retries=3,
+                retry_delay=1.0,
+            )
+        return provider, mock_client
+
+    def test_success_no_retry(self) -> None:
+        """chat_with_retry returns LLMResponse on first success."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.return_value = _make_mock_completion(
+            content="Hello"
+        )
+
+        result = provider.chat_with_retry([{"role": "user", "content": "Hi"}])
+
+        assert isinstance(result, LLMResponse)
+        assert result.content == "Hello"
+        assert mock_client.chat.completions.create.call_count == 1
+
+    def test_retry_on_connection_error(self) -> None:
+        """Retries on APIConnectionError, succeeds on second attempt."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = [
+            openai.APIConnectionError(request=MagicMock()),
+            _make_mock_completion(content="recovered"),
+        ]
+
+        with patch("matmaster.kernel.openai_provider.time.sleep"):
+            result = provider.chat_with_retry([{"role": "user", "content": "Hi"}])
+
+        assert result.content == "recovered"
+        assert mock_client.chat.completions.create.call_count == 2
+
+    def test_retry_on_timeout_error(self) -> None:
+        """Retries on APITimeoutError, succeeds on second attempt."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = [
+            openai.APITimeoutError(request=MagicMock()),
+            _make_mock_completion(content="recovered"),
+        ]
+
+        with patch("matmaster.kernel.openai_provider.time.sleep"):
+            result = provider.chat_with_retry([{"role": "user", "content": "Hi"}])
+
+        assert result.content == "recovered"
+        assert mock_client.chat.completions.create.call_count == 2
+
+    def test_retry_on_rate_limit(self) -> None:
+        """Retries on RateLimitError (429), succeeds on second attempt."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = [
+            openai.RateLimitError(
+                response=MagicMock(status_code=429, headers={}),
+                body=None,
+                message="rate limited",
+            ),
+            _make_mock_completion(content="recovered"),
+        ]
+
+        with patch("matmaster.kernel.openai_provider.time.sleep"):
+            result = provider.chat_with_retry([{"role": "user", "content": "Hi"}])
+
+        assert result.content == "recovered"
+        assert mock_client.chat.completions.create.call_count == 2
+
+    def test_retry_on_server_error(self) -> None:
+        """Retries on InternalServerError (500), succeeds on second attempt."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = [
+            openai.InternalServerError(
+                response=MagicMock(status_code=500, headers={}),
+                body=None,
+                message="server error",
+            ),
+            _make_mock_completion(content="recovered"),
+        ]
+
+        with patch("matmaster.kernel.openai_provider.time.sleep"):
+            result = provider.chat_with_retry([{"role": "user", "content": "Hi"}])
+
+        assert result.content == "recovered"
+        assert mock_client.chat.completions.create.call_count == 2
+
+    def test_no_retry_on_auth_error(self) -> None:
+        """AuthenticationError raises immediately, no retry."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.AuthenticationError(
+                response=MagicMock(status_code=401, headers={}),
+                body=None,
+                message="invalid key",
+            )
+        )
+
+        with pytest.raises(openai.AuthenticationError):
+            provider.chat_with_retry([{"role": "user", "content": "Hi"}])
+
+        assert mock_client.chat.completions.create.call_count == 1
+
+    def test_no_retry_on_context_length(self) -> None:
+        """BadRequestError with 'context length' raises immediately."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.BadRequestError(
+                response=MagicMock(status_code=400, headers={}),
+                body=None,
+                message="context length exceeded",
+            )
+        )
+
+        with pytest.raises(openai.BadRequestError):
+            provider.chat_with_retry([{"role": "user", "content": "Hi"}])
+
+        assert mock_client.chat.completions.create.call_count == 1
+
+    def test_exhausted_retries(self) -> None:
+        """All retries exhausted raises RuntimeError."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.APIConnectionError(request=MagicMock())
+        )
+
+        with patch("matmaster.kernel.openai_provider.time.sleep"):
+            with pytest.raises(RuntimeError, match="LLM call failed after 3 attempts"):
+                provider.chat_with_retry([{"role": "user", "content": "Hi"}])
+
+        assert mock_client.chat.completions.create.call_count == 3
+
+    def test_exponential_backoff(self) -> None:
+        """Verify time.sleep called with exponential delays."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.APIConnectionError(request=MagicMock())
+        )
+
+        with patch("matmaster.kernel.openai_provider.time.sleep") as mock_sleep:
+            with pytest.raises(RuntimeError):
+                provider.chat_with_retry(
+                    [{"role": "user", "content": "Hi"}],
+                    max_retries=3,
+                    retry_delay=1.0,
+                )
+
+        # Backoff: 1.0 * 2^0 = 1.0, 1.0 * 2^1 = 2.0
+        # Last attempt does NOT sleep (only sleeps between retries)
+        assert mock_sleep.call_count == 2
+        mock_sleep.assert_any_call(1.0)
+        mock_sleep.assert_any_call(2.0)
+
+    def test_custom_max_retries(self) -> None:
+        """chat_with_retry respects custom max_retries parameter."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.APIConnectionError(request=MagicMock())
+        )
+
+        with patch("matmaster.kernel.openai_provider.time.sleep"):
+            with pytest.raises(RuntimeError, match="LLM call failed after 5 attempts"):
+                provider.chat_with_retry(
+                    [{"role": "user", "content": "Hi"}],
+                    max_retries=5,
+                )
+
+        assert mock_client.chat.completions.create.call_count == 5
+
+    def test_custom_retry_delay(self) -> None:
+        """chat_with_retry respects custom retry_delay parameter."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.APIConnectionError(request=MagicMock())
+        )
+
+        with patch("matmaster.kernel.openai_provider.time.sleep") as mock_sleep:
+            with pytest.raises(RuntimeError):
+                provider.chat_with_retry(
+                    [{"role": "user", "content": "Hi"}],
+                    max_retries=3,
+                    retry_delay=0.5,
+                )
+
+        # Backoff: 0.5 * 2^0 = 0.5, 0.5 * 2^1 = 1.0
+        mock_sleep.assert_any_call(0.5)
+        mock_sleep.assert_any_call(1.0)
