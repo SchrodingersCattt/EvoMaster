@@ -845,6 +845,10 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
             self.current_dialog.add_message(SystemMessage(content=reminder))
 
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
+        # 若 prepare_for_query 发生了压缩/截断，将结果回写到 current_dialog，
+        # 避免下一个 step 再次对未压缩的原始 dialog 重复触发压缩。
+        if dialog_for_query is not self.current_dialog:
+            self.current_dialog = dialog_for_query
         assistant_message = self._query_with_context_recovery(dialog_for_query)
         self.current_dialog.add_message(assistant_message)
         self._on_assistant_message(assistant_message)
