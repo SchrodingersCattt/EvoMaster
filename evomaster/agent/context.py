@@ -205,10 +205,20 @@ Turn {n_turns} completed. Next: Turn {n_next} — {{next_goal}}
         preserve_turns = self._config.preserve_recent_turns
 
         # 1. 分离 system 消息和非 system 消息
+        #    Strip prior [COMPACT CONTEXT] system messages to prevent accumulation
+        #    across multiple compaction cycles within the same run.
         system_msgs: list[Message] = []
         other_msgs: list[Message] = []
         for msg in messages:
             if msg.role.value == 'system':
+                content = getattr(msg, 'content', '') or ''
+                if isinstance(content, str) and content.startswith('[COMPACT CONTEXT]'):
+                    _logger.debug(
+                        'ContextCompactor.compact: stripping prior [COMPACT CONTEXT] '
+                        'system message (%d chars) to prevent accumulation',
+                        len(content),
+                    )
+                    continue  # drop old compact context — will be replaced by new one
                 system_msgs.append(msg)
             else:
                 other_msgs.append(msg)
