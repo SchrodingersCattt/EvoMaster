@@ -89,37 +89,37 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CONT-01 | — | Pending |
-| CONT-02 | — | Pending |
-| CONT-03 | — | Pending |
-| CONT-04 | — | Pending |
-| CONT-05 | — | Pending |
-| KERN-01 | — | Pending |
-| KERN-02 | — | Pending |
-| KERN-03 | — | Pending |
-| KERN-04 | — | Pending |
-| ASBL-01 | — | Pending |
-| ASBL-02 | — | Pending |
-| ASBL-03 | — | Pending |
-| ASBL-04 | — | Pending |
-| ASBL-05 | — | Pending |
-| EBUS-01 | — | Pending |
-| EBUS-02 | — | Pending |
-| LLMP-01 | — | Pending |
-| WKSP-01 | — | Pending |
-| WKSP-02 | — | Pending |
-| WKSP-03 | — | Pending |
-| MIGR-01 | — | Pending |
-| MIGR-02 | — | Pending |
-| QUAL-01 | — | Pending |
-| QUAL-02 | — | Pending |
-| QUAL-03 | — | Pending |
+| CONT-01 | Phase 1 | Pending |
+| CONT-02 | Phase 1 | Pending |
+| CONT-03 | Phase 1 | Pending |
+| CONT-04 | Phase 1 | Pending |
+| CONT-05 | Phase 1 | Pending |
+| KERN-01 | Phase 2 | Pending |
+| KERN-02 | Phase 2 | Pending |
+| KERN-03 | Phase 2 | Pending |
+| KERN-04 | Phase 2 | Pending |
+| ASBL-01 | Phase 3 | Pending |
+| ASBL-02 | Phase 3 | Pending |
+| ASBL-03 | Phase 3 | Pending |
+| ASBL-04 | Phase 3 | Pending |
+| ASBL-05 | Phase 3 | Pending |
+| EBUS-01 | Phase 1 | Pending |
+| EBUS-02 | Phase 1 | Pending |
+| LLMP-01 | Phase 2 | Pending |
+| WKSP-01 | Phase 4 | Pending |
+| WKSP-02 | Phase 4 | Pending |
+| WKSP-03 | Phase 4 | Pending |
+| MIGR-01 | Phase 5 | Pending |
+| MIGR-02 | Phase 5 | Pending |
+| QUAL-01 | Phase 5 | Pending |
+| QUAL-02 | Phase 5 | Pending |
+| QUAL-03 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 25 total
-- Mapped to phases: 0
-- Unmapped: 25 ⚠️
+- Mapped to phases: 25
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-21*
-*Last updated: 2026-03-21 after initial definition*
+*Last updated: 2026-03-21 after roadmap creation*
