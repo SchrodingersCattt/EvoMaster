@@ -21,6 +21,16 @@ class CompleteLLMProvider:
     ) -> LLMResponse:
         return LLMResponse(content="response", finish_reason="stop")
 
+    def chat_with_retry(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+    ) -> LLMResponse:
+        return self.chat(messages, tools)
+
     def chat_stream(
         self,
         messages: list[dict[str, Any]],
