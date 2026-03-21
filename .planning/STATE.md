@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 02-02-PLAN.md
-last_updated: "2026-03-21T16:50:11.110Z"
-last_activity: 2026-03-21 -- Completed plan 02-02 (Kernel Execution Loop & OpenAIProvider)
+stopped_at: Completed 02-03-PLAN.md
+last_updated: "2026-03-21T17:19:26Z"
+last_activity: 2026-03-22 -- Completed plan 02-03 (chat_with_retry gap closure)
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 5
+  completed_plans: 5
   percent: 100
 ---
 
@@ -26,28 +26,28 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Position
 
 Phase: 2 of 5 (Agent Kernel) -- COMPLETE
-Plan: 2 of 2 in current phase -- COMPLETE
+Plan: 3 of 3 in current phase -- COMPLETE
 Status: Phase 2 Complete
-Last activity: 2026-03-21 -- Completed plan 02-02 (Kernel Execution Loop & OpenAIProvider)
+Last activity: 2026-03-22 -- Completed plan 02-03 (chat_with_retry gap closure)
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 6min
-- Total execution time: 0.37 hours
+- Total plans completed: 5
+- Average duration: 5min
+- Total execution time: 0.45 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation-contracts | 2 | 10min | 5min |
-| 02-agent-kernel | 2 | 12min | 6min |
+| 02-agent-kernel | 3 | 17min | 6min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (6min), 01-02 (4min), 02-01 (5min), 02-02 (7min)
+- Last 5 plans: 01-02 (4min), 02-01 (5min), 02-02 (7min), 02-03 (5min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -74,7 +74,9 @@ Recent decisions affecting current work:
 - [02-01]: GuardPipeline records calls only after all guards pass (denied calls not tracked)
 - [02-01]: EventEmitterHook returns CONTINUE after emitting (observation, not interception)
 - [Phase 02]: TYPE_CHECKING guard in kernel.py to break circular import with contracts.runtime
-- [Phase 02]: OpenAI SDK retry delegated to client-level max_retries, kernel does not retry
+- [Phase 02]: ~~OpenAI SDK retry delegated to client-level max_retries~~ Superseded by 02-03
+- [02-03]: Retry at Protocol level (chat_with_retry), SDK max_retries=0, every provider implements own retry
+- [02-03]: Non-retryable errors (auth, context length) raise immediately without retry
 
 ### Pending Todos
 
@@ -88,6 +90,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-21T16:50:11.108Z
-Stopped at: Completed 02-02-PLAN.md
+Last session: 2026-03-21T17:19:26Z
+Stopped at: Completed 02-03-PLAN.md
 Resume file: None
