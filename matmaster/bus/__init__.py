@@ -5,6 +5,7 @@ Provides:
 - QueueBridge: converts BusEvent to SSE payload dict format
 """
 
+from .bridge import QueueBridge
 from .queue import MessageBus
 
-__all__ = ["MessageBus"]
+__all__ = ["MessageBus", "QueueBridge"]
