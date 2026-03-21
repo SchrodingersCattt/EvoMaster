@@ -820,6 +820,42 @@ def _merge_api_message_extras(
     return merged
 
 
+def _extract_reasoning_delta(delta: Any) -> str | None:
+    """从流式 chunk delta 中提取 reasoning/thinking 内容。
+
+    按优先级依次检查：
+    1. delta.reasoning_content — OpenAI 原生格式（o1/o3 系列）
+    2. delta.reasoning — 部分 LiteLLM 版本的别名
+    3. model_extra 中的 thinking_blocks / thinking_delta — LiteLLM 代理 Claude 时的格式
+    """
+    # OpenAI 原生
+    rc = getattr(delta, 'reasoning_content', None)
+    if rc:
+        return rc
+    # 部分 proxy 别名
+    rc = getattr(delta, 'reasoning', None)
+    if rc:
+        return rc
+    # LiteLLM Claude 代理：thinking 内容可能在 model_extra
+    extras = getattr(delta, 'model_extra', None) or {}
+    # provider_specific_fields.thinking_blocks[].thinking
+    psf = extras.get('provider_specific_fields') or {}
+    thinking_blocks = psf.get('thinking_blocks') or []
+    if thinking_blocks:
+        parts = [
+            b.get('thinking', '') if isinstance(b, dict) else ''
+            for b in thinking_blocks
+        ]
+        text = ''.join(parts)
+        if text:
+            return text
+    # thinking_delta 字段（某些 LiteLLM 版本的流式增量格式）
+    td = psf.get('thinking_delta') or extras.get('thinking_delta')
+    if td:
+        return td if isinstance(td, str) else str(td)
+    return None
+
+
 class OpenAILLM(BaseLLM):
     """OpenAI LLM 实现
 
@@ -1076,7 +1112,7 @@ class OpenAILLM(BaseLLM):
                 # 文本 token → 实时推送
                 if delta.content:
                     full_content.append(delta.content)
-                reasoning_delta = getattr(delta, 'reasoning_content', None)
+                reasoning_delta = _extract_reasoning_delta(delta)
                 if reasoning_delta:
                     full_reasoning_content.append(reasoning_delta)
                     if on_token is not None:
@@ -1438,7 +1474,7 @@ class DeepSeekLLM(BaseLLM):
                 # 文本 token → 实时推送
                 if delta.content:
                     full_content.append(delta.content)
-                reasoning_delta = getattr(delta, 'reasoning_content', None)
+                reasoning_delta = _extract_reasoning_delta(delta)
                 if reasoning_delta:
                     full_reasoning_content.append(reasoning_delta)
                     if on_token is not None:
