@@ -183,7 +183,6 @@ runs/
 # Agent plugin docs
 docs/superpowers/
 docs/plans/
-.planning/
 
 # Worktrees
 .worktrees/
