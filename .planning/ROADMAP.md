@@ -53,15 +53,16 @@ Plans:
 - [ ] 02-02-PLAN.md -- AgentKernel 纯执行循环 + AgentRuntimeSpec 类型更新 + 公开 API (KERN-01, KERN-04)
 
 ### Phase 3: Exp Assembly Layer
-**Goal**: Exp 层消费 PlaygroundContext 输出 AgentRuntimeSpec，统一所有能力的装配路径
+**Goal**: Exp 层消费 PlaygroundContext 输出 AgentRuntimeSpec，统一所有能力的装配路径，集成跨 pod 协调
 **Depends on**: Phase 1, Phase 2
-**Requirements**: ASBL-01, ASBL-02, ASBL-03, ASBL-04, ASBL-05
+**Requirements**: ASBL-01, ASBL-02, ASBL-03, ASBL-04, ASBL-05, ASBL-06
 **Success Criteria** (what must be TRUE):
   1. Exp base class 的 assemble() 方法可以接收 PlaygroundContext 并输出完整的 AgentRuntimeSpec
   2. ToolRegistry 可以在一个注册路径下统一管理 builtin tools、MCP tools 和 skill tools
   3. 业务 Guard（manuscript gate、auth failure gate）通过 assemble() 注入到 AgentRuntimeSpec.guards，kernel 无需感知业务语义
   4. Solver 模式（ResearchPlanner 等）作为 exp 层的高阶装配模式运行，不作为独立抽象层
   5. ContextBuilder 可以从 identity/skills/memory/task 多个来源组装出完整的 system prompt
+  6. WorkerRegistry 集成到 Exp 层，管理跨 pod 会话所有权（set/get session_run_owner）、worker 心跳检测、run_interrupted 分类（deploy vs restart），跨 pod 订阅恢复通过 RedisReplyQueue 保持可用
 **Plans**: TBD
 
 Plans:
@@ -69,28 +70,30 @@ Plans:
 - [ ] 03-02: TBD
 
 ### Phase 4: Playground Layer
-**Goal**: Playground 只负责环境准备，输出 PlaygroundContext，不穿透到 agent 层注册工具或配置 guard
+**Goal**: Playground 只负责环境准备，输出 PlaygroundContext（含 workspace 归档配置），不穿透到 agent 层注册工具或配置 guard
 **Depends on**: Phase 1
-**Requirements**: WKSP-01, WKSP-02, WKSP-03
+**Requirements**: WKSP-01, WKSP-02, WKSP-03, WKSP-04
 **Success Criteria** (what must be TRUE):
   1. 新 Playground base class 只暴露环境准备接口，输出 PlaygroundContext 类型化对象
   2. mat_master playground 重构后只输出 PlaygroundContext（含 session/workdir/MCP/config），不直接操作 agent 或 tool
   3. minimal playground 重构后只输出 PlaygroundContext，验证最简路径可用
+  4. PlaygroundContext 包含 workspace 归档配置（OSS 上传路径、凭证引用），run 结束后可通过配置驱动 workspace 快照上传
 **Plans**: TBD
 
 Plans:
 - [ ] 04-01: TBD
 
 ### Phase 5: Integration and Quality
-**Goal**: mat_master 和 minimal 在新骨架上端到端跑通，三层契约有测试覆盖，迁移差异有文档记录
+**Goal**: mat_master 和 minimal 在新骨架上端到端跑通，三层契约有测试覆盖，上游场景对齐验证，迁移差异有文档记录
 **Depends on**: Phase 2, Phase 3, Phase 4
-**Requirements**: MIGR-01, MIGR-02, QUAL-01, QUAL-02, QUAL-03
+**Requirements**: MIGR-01, MIGR-02, QUAL-01, QUAL-02, QUAL-03, QUAL-04
 **Success Criteria** (what must be TRUE):
   1. mat_master 在新三层管线（playground -> exp -> kernel）上可以端到端完成完整的 agent 运行流程
   2. minimal 在新三层管线上可以端到端完成完整的 agent 运行流程
   3. PlaygroundContext、AgentRuntimeSpec、AgentEvent 三个核心契约有单元测试覆盖其构造、验证和序列化行为
   4. mat_master 和 minimal 有端到端测试验证新旧路径的功能一致性
   5. 迁移文档清晰记录新旧架构差异和迁移步骤
+  6. 上游场景端到端验证通过：run_interrupted 检测（deploy vs restart）、跨 pod 订阅恢复（RedisReplyQueue 跨 worker 确认）、workspace OSS 上传、Bohrium 节点生命周期（创建/复用/清理）
 **Plans**: TBD
 
 Plans:
