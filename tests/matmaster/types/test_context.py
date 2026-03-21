@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from matmaster.contracts.context import PlaygroundContext
+from matmaster.types.context import PlaygroundContext
 
 
 class TestPlaygroundContext:

@@ -22,13 +22,13 @@ tech-stack:
 key-files:
   created: []
   modified:
-    - matmaster/kernel/llm_provider.py
-    - matmaster/kernel/openai_provider.py
-    - tests/matmaster/kernel/test_llm_provider.py
-    - tests/matmaster/kernel/test_openai_provider.py
-    - tests/matmaster/kernel/conftest.py
-    - tests/matmaster/kernel/test_kernel.py
-    - tests/matmaster/contracts/test_runtime.py
+    - matmaster/types/llm_provider.py
+    - matmaster/providers/openai_provider.py
+    - tests/matmaster/engine/test_llm_provider.py
+    - tests/matmaster/engine/test_openai_provider.py
+    - tests/matmaster/engine/conftest.py
+    - tests/matmaster/engine/test_kernel.py
+    - tests/matmaster/types/test_runtime.py
 
 key-decisions:
   - "Retry at Protocol level, not SDK level -- every provider implements own retry logic"
@@ -73,13 +73,13 @@ Each task was committed atomically (TDD: RED then GREEN):
 2. **Task 2: Implement chat_with_retry in OpenAIProvider** - `8307faf` (test: RED), `1668066` (feat: GREEN)
 
 ## Files Created/Modified
-- `matmaster/kernel/llm_provider.py` - Added chat_with_retry to LLMProvider Protocol with max_retries and retry_delay params
-- `matmaster/kernel/openai_provider.py` - Implemented chat_with_retry with exponential backoff, SDK max_retries=0
-- `tests/matmaster/kernel/test_llm_provider.py` - TestChatWithRetryProtocol, CompleteLLMProvider updated, MissingRetryProvider
-- `tests/matmaster/kernel/test_openai_provider.py` - TestChatWithRetry (11 tests), updated construction tests
-- `tests/matmaster/kernel/conftest.py` - MockLLMProvider updated with chat_with_retry
-- `tests/matmaster/kernel/test_kernel.py` - StreamingProvider, ToolCallingProvider, inline providers updated
-- `tests/matmaster/contracts/test_runtime.py` - _MockLLMProvider updated with chat_with_retry
+- `matmaster/types/llm_provider.py` - Added chat_with_retry to LLMProvider Protocol with max_retries and retry_delay params
+- `matmaster/providers/openai_provider.py` - Implemented chat_with_retry with exponential backoff, SDK max_retries=0
+- `tests/matmaster/engine/test_llm_provider.py` - TestChatWithRetryProtocol, CompleteLLMProvider updated, MissingRetryProvider
+- `tests/matmaster/engine/test_openai_provider.py` - TestChatWithRetry (11 tests), updated construction tests
+- `tests/matmaster/engine/conftest.py` - MockLLMProvider updated with chat_with_retry
+- `tests/matmaster/engine/test_kernel.py` - StreamingProvider, ToolCallingProvider, inline providers updated
+- `tests/matmaster/types/test_runtime.py` - _MockLLMProvider updated with chat_with_retry
 
 ## Decisions Made
 - Retry at Protocol level ensures every LLM provider (not just OpenAI) handles retry consistently
@@ -95,7 +95,7 @@ Each task was committed atomically (TDD: RED then GREEN):
 - **Found during:** Task 1 (Protocol update)
 - **Issue:** Protocol change broke existing mock providers (StreamingProvider, ToolCallingProvider, CancelAfterFirstTurnProvider, TwoPhaseProvider, _MockLLMProvider) that lacked chat_with_retry
 - **Fix:** Added chat_with_retry to all mock providers that satisfy LLMProvider Protocol
-- **Files modified:** tests/matmaster/kernel/test_kernel.py, tests/matmaster/contracts/test_runtime.py
+- **Files modified:** tests/matmaster/engine/test_kernel.py, tests/matmaster/types/test_runtime.py
 - **Verification:** All 195 tests pass
 - **Committed in:** 547ca95 (Task 1 commit)
 

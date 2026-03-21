@@ -19,7 +19,7 @@ created: 2026-03-21
 |----------|-------|
 | **Framework** | pytest 7.x + pytest-asyncio |
 | **Config file** | pytest.ini (existing) |
-| **Quick run command** | `python -m pytest tests/matmaster/contracts/ -x -q` |
+| **Quick run command** | `python -m pytest tests/matmaster/types/ -x -q` |
 | **Full suite command** | `python -m pytest tests/matmaster/ -v` |
 | **Estimated runtime** | ~5 seconds |
 
@@ -27,7 +27,7 @@ created: 2026-03-21
 
 ## Sampling Rate
 
-- **After every task commit:** Run `python -m pytest tests/matmaster/contracts/ -x -q`
+- **After every task commit:** Run `python -m pytest tests/matmaster/types/ -x -q`
 - **After every plan wave:** Run `python -m pytest tests/matmaster/ -v`
 - **Before `/gsd:verify-work`:** Full suite must be green
 - **Max feedback latency:** 5 seconds
@@ -38,11 +38,11 @@ created: 2026-03-21
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| TBD | TBD | TBD | CONT-01 | unit | `pytest tests/matmaster/contracts/test_playground_context.py -v` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | CONT-02 | unit | `pytest tests/matmaster/contracts/test_agent_runtime_spec.py -v` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | CONT-03 | unit | `pytest tests/matmaster/contracts/test_events.py -v` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | CONT-04 | unit | `pytest tests/matmaster/contracts/test_guard.py -v` | ❌ W0 | ⬜ pending |
-| TBD | TBD | TBD | CONT-05 | unit | `pytest tests/matmaster/contracts/test_termination.py -v` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | CONT-01 | unit | `pytest tests/matmaster/types/test_playground_context.py -v` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | CONT-02 | unit | `pytest tests/matmaster/types/test_agent_runtime_spec.py -v` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | CONT-03 | unit | `pytest tests/matmaster/types/test_events.py -v` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | CONT-04 | unit | `pytest tests/matmaster/types/test_guard.py -v` | ❌ W0 | ⬜ pending |
+| TBD | TBD | TBD | CONT-05 | unit | `pytest tests/matmaster/types/test_termination.py -v` | ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | EBUS-01 | unit | `pytest tests/matmaster/bus/test_message_bus.py -v` | ❌ W0 | ⬜ pending |
 | TBD | TBD | TBD | EBUS-02 | unit | `pytest tests/matmaster/bus/test_queue_bridge.py -v` | ❌ W0 | ⬜ pending |
 
@@ -53,13 +53,13 @@ created: 2026-03-21
 ## Wave 0 Requirements
 
 - [ ] `tests/matmaster/__init__.py` — test package init
-- [ ] `tests/matmaster/contracts/__init__.py` — contracts test subpackage
+- [ ] `tests/matmaster/types/__init__.py` — contracts test subpackage
 - [ ] `tests/matmaster/bus/__init__.py` — bus test subpackage
-- [ ] `tests/matmaster/contracts/test_playground_context.py` — stubs for CONT-01
-- [ ] `tests/matmaster/contracts/test_agent_runtime_spec.py` — stubs for CONT-02
-- [ ] `tests/matmaster/contracts/test_events.py` — stubs for CONT-03
-- [ ] `tests/matmaster/contracts/test_guard.py` — stubs for CONT-04
-- [ ] `tests/matmaster/contracts/test_termination.py` — stubs for CONT-05
+- [ ] `tests/matmaster/types/test_playground_context.py` — stubs for CONT-01
+- [ ] `tests/matmaster/types/test_agent_runtime_spec.py` — stubs for CONT-02
+- [ ] `tests/matmaster/types/test_events.py` — stubs for CONT-03
+- [ ] `tests/matmaster/types/test_guard.py` — stubs for CONT-04
+- [ ] `tests/matmaster/types/test_termination.py` — stubs for CONT-05
 - [ ] `tests/matmaster/bus/test_message_bus.py` — stubs for EBUS-01
 - [ ] `tests/matmaster/bus/test_queue_bridge.py` — stubs for EBUS-02
 

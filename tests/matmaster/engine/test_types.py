@@ -1,4 +1,4 @@
-"""Tests for matmaster.kernel.types -- Message hierarchy and LLM response types."""
+"""Tests for matmaster.engine.types -- Message hierarchy and LLM response types."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from matmaster.kernel.types import (
+from matmaster.engine.types import (
     AssistantMessage,
     LLMResponse,
     Role,

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Iterator, Protocol, runtime_checkable
 
-from matmaster.kernel.types import LLMResponse, StreamChunk
+from matmaster.engine.types import LLMResponse, StreamChunk
 
 
 @runtime_checkable

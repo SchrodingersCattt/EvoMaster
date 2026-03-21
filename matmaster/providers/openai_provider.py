@@ -15,8 +15,8 @@ from typing import Any, Iterator
 
 import openai
 
-from matmaster.kernel.llm_provider import LLMProvider  # noqa: F401
-from matmaster.kernel.types import LLMResponse, StreamChunk, ToolCallData
+from matmaster.types.llm_provider import LLMProvider  # noqa: F401
+from matmaster.engine.types import LLMResponse, StreamChunk, ToolCallData
 
 logger = logging.getLogger(__name__)
 

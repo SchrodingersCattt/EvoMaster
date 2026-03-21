@@ -13,11 +13,11 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from matmaster.contracts.events import FinishEvent
-from matmaster.contracts.guards import Guard, GuardContext, GuardResult
-from matmaster.contracts.runtime import AgentRuntimeSpec
-from matmaster.kernel.hooks import BaseHook, HookAction
-from matmaster.kernel.types import (
+from matmaster.types.events import FinishEvent
+from matmaster.types.guards import Guard, GuardContext, GuardResult
+from matmaster.types.runtime import AgentRuntimeSpec
+from matmaster.engine.hooks import BaseHook, HookAction
+from matmaster.engine.types import (
     AssistantMessage,
     LLMResponse,
     Message,
@@ -230,7 +230,7 @@ class TestNaturalFinish:
     """LLM returns no tool_calls -> FinishEvent(reason='natural')."""
 
     def test_natural_finish(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         provider = StreamingProvider([
             StreamChunk(content="Hello"),
@@ -245,7 +245,7 @@ class TestNaturalFinish:
         assert result.final_content == "Hello"
 
     def test_natural_finish_messages(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         provider = StreamingProvider([
             StreamChunk(content="Hello"),
@@ -262,7 +262,7 @@ class TestMaxTurns:
     """LLM always returns tool_calls, max_turns reached."""
 
     def test_max_turns(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="some_tool", arguments={"x": 1})
         provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=999)
@@ -278,7 +278,7 @@ class TestExternalCancel:
     """stop_event.set() -> FinishEvent(reason='cancelled')."""
 
     def test_cancel_before_run(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         stop_event = threading.Event()
         stop_event.set()
@@ -290,7 +290,7 @@ class TestExternalCancel:
         assert result.reason == "cancelled"
 
     def test_cancel_during_run(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         stop_event = threading.Event()
 
@@ -341,7 +341,7 @@ class TestHookStopped:
     """should_continue returns False -> FinishEvent(reason='hook_stopped')."""
 
     def test_hook_stopped(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         spec = _make_spec(hooks=[StopHook()])
         kernel = AgentKernel()
@@ -355,7 +355,7 @@ class TestGuardBlocks:
     """Guard blocks tool call -> BLOCKED message, hooks NOT triggered."""
 
     def test_guard_blocks(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="bad_tool", arguments={})
         provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=1, final_content="ok")
@@ -382,7 +382,7 @@ class TestHookSkip:
     """Hook SKIP -> tool NOT executed, ToolMessage with 'skipped by hook'."""
 
     def test_hook_skip(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="skip_me", arguments={})
         provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=1, final_content="ok")
@@ -404,7 +404,7 @@ class TestStreamingAccumulation:
     """Provider yields chunks, kernel accumulates to LLMResponse."""
 
     def test_streaming_accumulation(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         chunk_hook = ChunkRecordingHook()
         provider = StreamingProvider([
@@ -425,7 +425,7 @@ class TestToolCallDelta:
     """Provider yields tool_call_deltas, kernel accumulates to ToolCallData."""
 
     def test_tool_call_delta(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         # Simulate streaming tool call deltas
         chunks = [
@@ -478,7 +478,7 @@ class TestFullCycle:
     """Turn 1: tool_call -> execute. Turn 2: natural finish."""
 
     def test_full_cycle(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="my_tool", arguments={"key": "val"})
         provider = ToolCallingProvider(
@@ -505,7 +505,7 @@ class TestExecutionOrder:
     """Recording hook tracks correct call order."""
 
     def test_execution_order(self) -> None:
-        from matmaster.kernel.kernel import AgentKernel
+        from matmaster.engine.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="tool", arguments={})
         provider = ToolCallingProvider(

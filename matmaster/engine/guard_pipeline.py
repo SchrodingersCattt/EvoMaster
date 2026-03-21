@@ -14,8 +14,8 @@ import json
 import time
 from collections import deque
 
-from matmaster.contracts.guards import Guard, GuardContext, GuardResult, RecentCall
-from matmaster.kernel.types import ToolCallData
+from matmaster.types.guards import Guard, GuardContext, GuardResult, RecentCall
+from matmaster.engine.types import ToolCallData
 
 LOOP_WINDOW: int = 5
 """Default sliding window size for loop detection."""
