@@ -12,10 +12,7 @@ from matmaster.assembly.tool_registry import ToolRegistry
 from matmaster.bus.queue import MessageBus
 from matmaster.engine.hooks import EventEmitterHook
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.guards import Guard
 from matmaster.types.runtime import AgentRuntimeSpec
-
-from .conftest import MockTool
 
 
 class MockLLMProvider:
@@ -46,12 +43,22 @@ class MockLLMProvider:
         yield None
 
 
-def _make_ctx() -> PlaygroundContext:
-    return PlaygroundContext(
-        workdir=Path("/tmp/test"),
-        session_type="local",
-        cache_area=Path("/tmp/cache"),
-    )
+class MockSession:
+    """Minimal session mock for builtin tool tests."""
+
+    def exec_bash(self, cmd: str) -> str:
+        return ""
+
+
+def _make_ctx(*, session: Any = None) -> PlaygroundContext:
+    kwargs: dict[str, Any] = {
+        "workdir": Path("/tmp/test"),
+        "session_type": "local",
+        "cache_area": Path("/tmp/cache"),
+    }
+    if session is not None:
+        kwargs["session"] = session
+    return PlaygroundContext(**kwargs)
 
 
 class TestDirectExpAssemble:
@@ -68,20 +75,22 @@ class TestDirectExpAssemble:
         spec = exp.assemble(_make_ctx())
         assert spec.llm_provider is provider
 
-    def test_assemble_spec_has_tools(self) -> None:
-        """Returned spec.tool_registry contains builtin tools passed to constructor."""
-        tool = MockTool(name="my_tool")
-        exp = DirectExp(llm_provider=MockLLMProvider(), builtin_tools=[tool])
+    def test_assemble_spec_has_tool_registry(self) -> None:
+        """Returned spec has a ToolRegistry (builtin tools from ctx.session)."""
+        exp = DirectExp(llm_provider=MockLLMProvider())
         spec = exp.assemble(_make_ctx())
         assert spec.tool_registry is not None
         assert isinstance(spec.tool_registry, ToolRegistry)
-        assert "my_tool" in spec.tool_registry
 
     def test_assemble_spec_has_guards(self) -> None:
         """Returned spec.guards contains guards passed to constructor."""
-        from matmaster.assembly.guards import ManuscriptGateGuard
+        from matmaster.types.guards import GuardContext, GuardResult
 
-        guard = ManuscriptGateGuard()
+        class StubGuard:
+            def evaluate(self, ctx: GuardContext) -> GuardResult:
+                return GuardResult(allowed=True)
+
+        guard = StubGuard()
         exp = DirectExp(llm_provider=MockLLMProvider(), guards=[guard])
         spec = exp.assemble(_make_ctx())
         assert guard in spec.guards
@@ -154,9 +163,9 @@ class TestDirectExpCapabilityOwnership:
             llm_provider=MockLLMProvider(),
             skill_config={"enabled": True},
             skill_registry_factory=lambda: fake_registry,
-            session=MagicMock(),
         )
-        spec = exp.assemble(_make_ctx())
+        ctx = _make_ctx(session=MagicMock())
+        spec = exp.assemble(ctx)
         skill_tools = spec.tool_registry.get_tools_by_source("skill")
         assert len(skill_tools) == 1
         assert skill_tools[0].name == "use_skill"
@@ -189,9 +198,9 @@ class TestDirectExpCapabilityOwnership:
             llm_provider=MockLLMProvider(),
             mcp_config={"enabled": True},
             mcp_manager_factory=lambda ctx: fake_manager,
-            session=MagicMock(),
         )
-        spec = exp.assemble(_make_ctx())
+        ctx = _make_ctx(session=MagicMock())
+        spec = exp.assemble(ctx)
         mcp_tools = spec.tool_registry.get_tools_by_source("mcp")
         assert len(mcp_tools) == 1
         assert mcp_tools[0].name == "mcp_search"
@@ -218,7 +227,78 @@ class TestDirectExpCapabilityOwnership:
             llm_provider=MockLLMProvider(),
             mcp_config={"enabled": True},
             mcp_manager_factory=lambda ctx: fake_manager,
-            session=MagicMock(),
         )
-        exp.assemble(_make_ctx())
+        ctx = _make_ctx(session=MagicMock())
+        exp.assemble(ctx)
         assert len(exp._cleanup_callbacks) >= 1
+
+
+class TestDirectExpBuiltinTools:
+    """Tests for builtin tool construction in assemble() from ctx.session."""
+
+    def test_builtin_tools_registered_from_ctx_session(self) -> None:
+        """DirectExp.assemble(ctx) with ctx.session set registers 3 builtin tools."""
+        from unittest.mock import MagicMock, patch
+
+        # Mock the EvoMaster tool classes at their source modules
+        mock_bash_inst = MagicMock()
+        mock_bash_inst.name = "bash"
+        mock_bash_inst.params_class.__doc__ = "Run bash commands"
+        mock_bash_inst.params_class.model_json_schema.return_value = {"type": "object"}
+
+        mock_editor_inst = MagicMock()
+        mock_editor_inst.name = "editor"
+        mock_editor_inst.params_class.__doc__ = "Edit files"
+        mock_editor_inst.params_class.model_json_schema.return_value = {"type": "object"}
+
+        mock_monitor_inst = MagicMock()
+        mock_monitor_inst.name = "monitor_job"
+        mock_monitor_inst.params_class.__doc__ = "Monitor jobs"
+        mock_monitor_inst.params_class.model_json_schema.return_value = {"type": "object"}
+
+        with (
+            patch(
+                "evomaster.agent.tools.builtin.bash.BashTool",
+                return_value=mock_bash_inst,
+            ),
+            patch(
+                "evomaster.agent.tools.builtin.editor.EditorTool",
+                return_value=mock_editor_inst,
+            ),
+            patch(
+                "evomaster.agent.tools.builtin.monitor_job.MonitorJobTool",
+                return_value=mock_monitor_inst,
+            ),
+        ):
+            exp = DirectExp(llm_provider=MockLLMProvider())
+            ctx = _make_ctx(session=MockSession())
+            spec = exp.assemble(ctx)
+
+        builtin_tools = spec.tool_registry.get_tools_by_source("builtin")
+        assert len(builtin_tools) == 3
+
+    def test_builtin_tools_skipped_when_no_session(self) -> None:
+        """DirectExp.assemble(ctx) with ctx.session=None skips builtin registration."""
+        exp = DirectExp(llm_provider=MockLLMProvider())
+        ctx = _make_ctx()  # session=None by default
+        spec = exp.assemble(ctx)
+        builtin_tools = spec.tool_registry.get_tools_by_source("builtin")
+        assert len(builtin_tools) == 0
+
+    def test_constructor_rejects_old_params(self) -> None:
+        """DirectExp constructor rejects session, config_dir, builtin_tools parameters."""
+        with pytest.raises(TypeError):
+            DirectExp(llm_provider=MockLLMProvider(), session=object())
+
+        with pytest.raises(TypeError):
+            DirectExp(llm_provider=MockLLMProvider(), builtin_tools=[])
+
+        with pytest.raises(TypeError):
+            DirectExp(llm_provider=MockLLMProvider(), config_dir="/tmp")
+
+    def test_guards_no_longer_have_shells(self) -> None:
+        """ManuscriptGateGuard and AuthFailureGateGuard no longer exist in guards module."""
+        import matmaster.assembly.guards as guards_mod
+
+        assert not hasattr(guards_mod, "ManuscriptGateGuard")
+        assert not hasattr(guards_mod, "AuthFailureGateGuard")
