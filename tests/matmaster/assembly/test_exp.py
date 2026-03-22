@@ -102,7 +102,7 @@ class TestExpRun:
             exp.assemble.assert_called_once_with(ctx)
             MockKernel.assert_called_once()
             mock_kernel_inst.run.assert_called_once_with(
-                mock_spec, "do something", stop_event=None
+                mock_spec, "do something", history=None, stop_event=None
             )
             assert result is mock_finish
 
