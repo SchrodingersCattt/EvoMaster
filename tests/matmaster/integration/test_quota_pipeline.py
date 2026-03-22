@@ -70,7 +70,6 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
 
     svc = AgentRunService(sessions_service=mock_sessions_svc)
     svc._build_llm_provider = MagicMock(return_value=mock_llm)
-    svc._get_builtin_tools = MagicMock(return_value=[])
 
     mock_pg = MagicMock()
     if mock_pg_ctx is not None:
@@ -198,7 +197,6 @@ class TestQuotaAsyncMode:
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
         svc._build_llm_provider = MagicMock(return_value=mock_llm)
-        svc._get_builtin_tools = MagicMock(return_value=[])
 
         mock_pg = MagicMock()
         mock_pg.prepare.return_value = pg_ctx
