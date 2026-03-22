@@ -107,9 +107,11 @@ class DirectExp(Exp):
             skill_registry=owned_skill_registry,
         )
 
-        # 5. Build hooks (MessageBus + EventEmitterHook)
+        # 5. Build hooks (MessageBus + EventEmitterHook + external hooks)
         bus = self._bus or MessageBus()
         emitter_hook = EventEmitterHook(bus, source=self.exp_name)
+        external_hooks = kwargs.get("hooks") or []
+        all_hooks = [emitter_hook, *external_hooks]
 
         # 6. Assemble AgentRuntimeSpec
         return AgentRuntimeSpec(
@@ -117,7 +119,7 @@ class DirectExp(Exp):
             tool_registry=registry,
             guards=self._guards,
             max_turns=self._max_turns,
-            hooks=[emitter_hook],
+            hooks=all_hooks,
             system_prompt=system_prompt,
             mode="direct",
         )
