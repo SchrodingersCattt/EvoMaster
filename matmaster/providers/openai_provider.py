@@ -39,12 +39,14 @@ class OpenAIProvider:
         timeout: float = 300.0,
         max_retries: int = 3,
         retry_delay: float = 1.0,
+        extra_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self._model = model
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._max_retries = max_retries
         self._retry_delay = retry_delay
+        self._extra_kwargs = extra_kwargs or {}
         self._client = openai.OpenAI(
             api_key=api_key,
             base_url=base_url,
@@ -67,6 +69,8 @@ class OpenAIProvider:
             kwargs["max_tokens"] = self._max_tokens
         if tools:
             kwargs["tools"] = tools
+        if self._extra_kwargs:
+            kwargs.update(self._extra_kwargs)
 
         response = self._client.chat.completions.create(**kwargs)
         choice = response.choices[0]
@@ -182,6 +186,8 @@ class OpenAIProvider:
             kwargs["max_tokens"] = self._max_tokens
         if tools:
             kwargs["tools"] = tools
+        if self._extra_kwargs:
+            kwargs.update(self._extra_kwargs)
 
         stream = self._client.chat.completions.create(**kwargs)
 
