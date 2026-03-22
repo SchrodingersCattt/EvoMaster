@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from .base import BaseEnv, EnvConfig
 from .bohrium import (
+    build_bohrium_skill_remote_env,
     get_bohrium_credentials,
     get_bohrium_storage_config,
     inject_bohrium_executor,
@@ -46,6 +47,7 @@ __all__ = [
     'DockerEnvConfig',
     'SSHEnv',
     'SSHEnvConfig',
+    'build_bohrium_skill_remote_env',
     'get_bohrium_credentials',
     'get_bohrium_storage_config',
     'inject_bohrium_executor',
