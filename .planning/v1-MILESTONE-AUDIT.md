@@ -31,6 +31,8 @@ gaps:
       severity: "tech_debt"
       documented: false
       source: "Phase 5 SSEHandler 设计选择"
+      resolved: true
+      resolved_in: "Phase 7 (QueueBridge deleted, SSEHandler is production path)"
   flows:
     - flow: "真实生产 run (mat_master/minimal)"
       breaks_at: "Stage 3: _build_llm_provider NotImplementedError"
@@ -44,7 +46,7 @@ tech_debt:
     items:
       - "_build_llm_provider 存根 (NotImplementedError) — OpenAIProvider 已就绪但 service 层工厂未接线 (v2 LLMP-02)"
       - "_get_builtin_tools 返回空列表 — 工具注册路径待接入"
-      - "QueueBridge 功能被 SSEHandler 取代，存在冗余实现"
+      - "QueueBridge 冗余已清理 (Phase 7) -- SSEHandler 为唯一 SSE 路径"
       - "REQUIREMENTS.md 追踪表 5 项状态过期 (MIGR-01/02 Pending, QUAL-01/02/04 Pending)，2 个 checkbox 未更新 (MIGR-01/02)"
   - phase: 03-exp-assembly-layer
     items:
@@ -156,7 +158,7 @@ nyquist:
 | PlaygroundContext.with_bohrium() | Phase 5 internal | WIRED |
 | Lazy import circular resolution | Phase 3↔2 | WIRED |
 
-### Connection gaps (3 items, all tech_debt)
+### Connection gaps (3 items, 1 resolved in Phase 7)
 
 1. **_build_llm_provider stub** (LLMP-01, MIGR-01, MIGR-02)
    - `src/services/agent_run_service.py:138` — NotImplementedError
@@ -168,9 +170,9 @@ nyquist:
    - ManuscriptGateGuard/AuthFailureGateGuard 为 shell (always allowed)
    - Documented: Phase 3 设计意图
 
-3. **QueueBridge orphaned** (EBUS-02)
-   - `matmaster/bus/bridge.py` — 完整实现但 SSEHandler 取代了其角色
-   - 功能冗余，next_payload() 在生产代码中无调用方
+3. **QueueBridge orphaned** (EBUS-02) -- RESOLVED Phase 7
+   - `matmaster/bus/bridge.py` deleted
+   - SSEHandler in matmaster/integration/event_router.py is the production SSE path
 
 ---
 
@@ -195,7 +197,7 @@ nyquist:
 ### Phase 5: Integration and Quality
 - `_build_llm_provider` 存根 NotImplementedError (v2 LLMP-02)
 - `_get_builtin_tools` 返回空列表
-- QueueBridge 被 SSEHandler 功能取代，存在冗余
+- QueueBridge 冗余已清理 (Phase 7) -- SSEHandler 为唯一 SSE 路径
 - REQUIREMENTS.md 追踪表 5 项状态过期，2 个 checkbox 未更新
 
 ### Total: 7 items across 2 phases
