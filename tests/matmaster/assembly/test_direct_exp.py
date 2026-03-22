@@ -131,3 +131,94 @@ class TestDirectExpAssemble:
         emitter = [h for h in spec.hooks if isinstance(h, EventEmitterHook)]
         assert len(emitter) == 1
         assert emitter[0]._bus is bus
+
+
+class TestDirectExpCapabilityOwnership:
+    """Tests for Exp-owned capability initialization (skill, MCP)."""
+
+    def test_assemble_without_capabilities_still_valid(self) -> None:
+        """DirectExp with no skill/mcp config still produces valid spec."""
+        exp = DirectExp(llm_provider=MockLLMProvider())
+        spec = exp.assemble(_make_ctx())
+        assert isinstance(spec, AgentRuntimeSpec)
+        assert spec.mode == "direct"
+
+    def test_skill_tool_registered_via_factory(self) -> None:
+        """When skill_registry_factory is provided, SkillTool gets wrapped and registered."""
+        from unittest.mock import MagicMock
+
+        fake_registry = MagicMock()
+        fake_registry.get_meta_info_context.return_value = "skill info"
+
+        exp = DirectExp(
+            llm_provider=MockLLMProvider(),
+            skill_config={"enabled": True},
+            skill_registry_factory=lambda: fake_registry,
+            session=MagicMock(),
+        )
+        spec = exp.assemble(_make_ctx())
+        skill_tools = spec.tool_registry.get_tools_by_source("skill")
+        assert len(skill_tools) == 1
+        assert skill_tools[0].name == "use_skill"
+
+    def test_mcp_tool_registered_via_factory(self) -> None:
+        """When mcp_manager_factory is provided, MCP tools get wrapped and registered."""
+        from unittest.mock import MagicMock
+
+        from evomaster.agent.tools.base import BaseTool, BaseToolParams
+        from pydantic import Field
+        from typing import ClassVar
+
+        class _FakeMCPParams(BaseToolParams):
+            """Fake MCP tool."""
+            name: ClassVar[str] = "mcp_search"
+            q: str = Field(description="query")
+
+        class _FakeMCPTool(BaseTool):
+            name: ClassVar[str] = "mcp_search"
+            params_class: ClassVar[type[BaseToolParams]] = _FakeMCPParams
+            def execute(self, session, args_json):
+                return "ok", {}
+
+        fake_manager = MagicMock()
+        fake_evo_registry = MagicMock()
+        fake_evo_registry.get_all_tools.return_value = [_FakeMCPTool()]
+        fake_manager.get_tool_registry.return_value = fake_evo_registry
+
+        exp = DirectExp(
+            llm_provider=MockLLMProvider(),
+            mcp_config={"enabled": True},
+            mcp_manager_factory=lambda ctx: fake_manager,
+            session=MagicMock(),
+        )
+        spec = exp.assemble(_make_ctx())
+        mcp_tools = spec.tool_registry.get_tools_by_source("mcp")
+        assert len(mcp_tools) == 1
+        assert mcp_tools[0].name == "mcp_search"
+
+    def test_no_ctx_skill_registry_access(self) -> None:
+        """DirectExp.assemble must not access ctx.skill_registry (field removed)."""
+        ctx = _make_ctx()
+        assert not hasattr(ctx, "skill_registry")
+        exp = DirectExp(llm_provider=MockLLMProvider())
+        # Should not raise AttributeError
+        spec = exp.assemble(ctx)
+        assert isinstance(spec, AgentRuntimeSpec)
+
+    def test_mcp_cleanup_registered(self) -> None:
+        """When MCP manager is created, a cleanup callback is registered on the Exp."""
+        from unittest.mock import MagicMock
+
+        fake_manager = MagicMock()
+        fake_evo_registry = MagicMock()
+        fake_evo_registry.get_all_tools.return_value = []
+        fake_manager.get_tool_registry.return_value = fake_evo_registry
+
+        exp = DirectExp(
+            llm_provider=MockLLMProvider(),
+            mcp_config={"enabled": True},
+            mcp_manager_factory=lambda ctx: fake_manager,
+            session=MagicMock(),
+        )
+        exp.assemble(_make_ctx())
+        assert len(exp._cleanup_callbacks) >= 1
