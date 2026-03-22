@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from matmaster.core.bus import MessageBus
-from matmaster.core.agent import AgentKernel
+
 from matmaster.hooks import (
     AssistantStateHook,
     ConfirmationHook,
@@ -420,24 +420,39 @@ class AgentRunService:
             pg_ctx = pg_ctx.with_bohrium(bohrium_result._asdict())
 
             # -- Stage 3: Exp assembly --
-            from matmaster.core.direct_exp import DirectExp
+            from matmaster.core.exp import Exp
 
-            exp = DirectExp(
-                llm_provider=self._build_llm_provider(
-                    playground, model_override
-                ),
-                bus=bus,
-                mcp_config=pg_ctx.run_meta.get("mcp_config"),
-                skill_config=pg_ctx.run_meta.get("skill_config"),
+            exp_config = {
+                "name": "direct",
+                "tools": {"builtin": ["*"]},
+                "guards": [],
+                "termination": {"max_turns": 100},
+                "prompt": {},
+                "context": {},
+                "skills": pg_ctx.run_meta.get("skill_config", {}),
+                "mcp": pg_ctx.run_meta.get("mcp_config", {}),
+            }
+
+            pg_ctx = pg_ctx.model_copy(
+                update={
+                    "llm_provider": self._build_llm_provider(
+                        playground, model_override
+                    )
+                }
             )
-            spec = exp.assemble(
-                pg_ctx,
-                hooks=[
-                    ConfirmationHook(reply_queue, bus),
-                    OutputProcessorHook(bus),
-                    SkillHitHook(bus),
-                    AssistantStateHook(bus),
-                ],
+
+            exp = Exp(exp_config)
+            runtime = exp.build_runtime(pg_ctx, bus=bus)
+
+            # Add external hooks to spec
+            external_hooks = [
+                ConfirmationHook(reply_queue, bus),
+                OutputProcessorHook(bus),
+                SkillHitHook(bus),
+                AssistantStateHook(bus),
+            ]
+            spec = runtime.spec.model_copy(
+                update={"hooks": [*runtime.spec.hooks, *external_hooks]}
             )
 
             # -- Stage 4: History --
@@ -482,8 +497,7 @@ class AgentRunService:
             router.start()
 
             # -- Stage 6: Kernel execution --
-            kernel = AgentKernel()
-            finish_event = kernel.run(
+            finish_event = runtime.kernel.run(
                 spec=spec,
                 task=user_prompt,
                 history=history,
