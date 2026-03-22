@@ -430,18 +430,7 @@ class AgentRunService:
                 llm_provider=self._build_llm_provider(
                     playground, model_override
                 ),
-                builtin_tools=self._get_builtin_tools(pg_ctx),
                 bus=bus,
-                session=(
-                    playground.session
-                    if hasattr(playground, "session")
-                    else None
-                ),
-                config_dir=(
-                    playground.config_path.parent
-                    if hasattr(playground, "config_path")
-                    else None
-                ),
                 mcp_config=pg_ctx.run_meta.get("mcp_config"),
                 skill_config=pg_ctx.run_meta.get("skill_config"),
             )

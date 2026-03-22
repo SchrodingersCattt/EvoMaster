@@ -54,7 +54,6 @@ class TestMinimalE2EPipeline:
 
         exp = DirectExp(
             llm_provider=mock_llm,
-            builtin_tools=[],  # empty
             bus=bus,
             # No MCP, no Skill
             mcp_config=None,
