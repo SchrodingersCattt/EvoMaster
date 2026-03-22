@@ -44,7 +44,7 @@ class PlaygroundContext(BaseModel):
     belong here.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     workdir: Path
     session_type: str  # "docker" | "local" | "ssh"
@@ -52,6 +52,8 @@ class PlaygroundContext(BaseModel):
     env_vars: dict[str, str] = Field(default_factory=dict)
     archival: WorkspaceArchivalConfig | None = None
     run_meta: dict[str, Any] = Field(default_factory=dict)
+    session: Any = None  # EvoMaster BaseSession instance (per D-09)
+    config_dir: Path | None = None  # Playground config directory (per D-10)
 
     def with_bohrium(self, result: dict[str, Any]) -> "PlaygroundContext":
         """Return a new frozen instance with Bohrium result in run_meta.
