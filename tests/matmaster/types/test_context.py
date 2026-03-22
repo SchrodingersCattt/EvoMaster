@@ -159,3 +159,39 @@ class TestPlaygroundContext:
             env_vars={"API_KEY": "secret"},
         )
         assert ctx.env_vars == {"API_KEY": "secret"}
+
+
+class TestWithBohrium:
+    """PlaygroundContext.with_bohrium() returns new frozen instance."""
+
+    def test_with_bohrium_returns_new_instance_with_bohrium_in_run_meta(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+        )
+        result = ctx.with_bohrium({"ssh_attached": True, "node_id": "abc"})
+        assert result.run_meta["bohrium"] == {"ssh_attached": True, "node_id": "abc"}
+
+    def test_with_bohrium_preserves_existing_run_meta(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+            run_meta={"task_id": "t1", "extra": 42},
+        )
+        result = ctx.with_bohrium({"ssh_attached": False})
+        assert result.run_meta["task_id"] == "t1"
+        assert result.run_meta["extra"] == 42
+        assert result.run_meta["bohrium"] == {"ssh_attached": False}
+
+    def test_with_bohrium_does_not_mutate_original(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+            run_meta={"task_id": "t1"},
+        )
+        _ = ctx.with_bohrium({"ssh_attached": True})
+        assert "bohrium" not in ctx.run_meta
+        assert ctx.run_meta == {"task_id": "t1"}
