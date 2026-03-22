@@ -171,3 +171,55 @@ class ChatHistoryConverter:
 
         flush_tool_calls()
         return out
+
+    @classmethod
+    def events_to_messages(cls, events: list[dict]) -> list:
+        """Convert DB events to matmaster Message types.
+
+        Reuses events_to_dialog_messages() logic, then converts each dict
+        to the corresponding matmaster.engine.types Message subclass.
+        """
+        from matmaster.engine.types import (
+            AssistantMessage as MMAssistantMessage,
+            ToolCallData as MMToolCallData,
+            ToolMessage as MMToolMessage,
+            UserMessage as MMUserMessage,
+        )
+
+        dialog_dicts = cls.events_to_dialog_messages(events)
+        messages = []
+        for d in dialog_dicts:
+            role = d.get("role")
+            if role == "user":
+                messages.append(MMUserMessage(content=d.get("content", "")))
+            elif role == "assistant":
+                msg_kwargs: dict = {"content": d.get("content")}
+                if d.get("tool_calls"):
+                    import json as _json
+
+                    tcs = []
+                    for tc in d["tool_calls"]:
+                        func = tc.get("function", {})
+                        args_str = func.get("arguments", "{}")
+                        tcs.append(
+                            MMToolCallData(
+                                id=tc.get("id", ""),
+                                name=func.get("name", ""),
+                                arguments=(
+                                    _json.loads(args_str)
+                                    if isinstance(args_str, str)
+                                    else args_str
+                                ),
+                            )
+                        )
+                    msg_kwargs["tool_calls"] = tcs
+                messages.append(MMAssistantMessage(**msg_kwargs))
+            elif role == "tool":
+                messages.append(
+                    MMToolMessage(
+                        content=d.get("content", ""),
+                        tool_call_id=d.get("tool_call_id", ""),
+                        tool_name=d.get("name", ""),
+                    )
+                )
+        return messages
