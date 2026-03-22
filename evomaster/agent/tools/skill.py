@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import Field
 
+from evomaster.env.bohrium import build_bohrium_skill_remote_env
+
 from .base import BaseTool, BaseToolParams
 
 if TYPE_CHECKING:
@@ -382,16 +384,18 @@ class SkillTool(BaseTool):
                 except ValueError:
                     inner_cmd += ' ' + script_args.strip()
 
-            bohrium_env: dict = getattr(session, 'bohrium_env', {})
-            if bohrium_env:
+            remote_skill_env: dict[str, str] = build_bohrium_skill_remote_env(session)
+            if remote_skill_env:
                 # Write credentials to a temp file via SFTP so they never appear in
                 # any shell command string (tmux log, bash history, observation).
                 # session.write_file() uses paramiko SFTP directly — the AK goes
                 # Python memory → SFTP → remote file, bypassing the shell entirely.
-                env_file = f"/tmp/.bohrium_env_{uuid.uuid4().hex[:8]}"
+                # Source: session._bohrium_credentials (same as MCP / monitor_job).
+                env_file = f"/tmp/.skill_remote_env_{uuid.uuid4().hex[:8]}"
                 env_content = (
                     '\n'.join(
-                        f"export {k}={shlex.quote(v)}" for k, v in bohrium_env.items()
+                        f"export {k}={shlex.quote(v)}"
+                        for k, v in remote_skill_env.items()
                     )
                     + '\n'
                 )
