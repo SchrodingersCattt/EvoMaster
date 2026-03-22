@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 04-02-PLAN.md
-last_updated: "2026-03-22T06:25:38.454Z"
-last_activity: 2026-03-22 -- Completed plan 04-03 (Exp Capability Ownership)
+status: in_progress
+stopped_at: Completed 05-02-PLAN.md
+last_updated: "2026-03-22T08:52:42.000Z"
+last_activity: 2026-03-22 -- Completed Plan 05-02 (EventRouter + Handlers)
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 12
-  completed_plans: 12
-  percent: 92
+  total_plans: 17
+  completed_plans: 13
+  percent: 94
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 4: Playground Layer -- IN PROGRESS
+**Current focus:** Phase 5: Integration and Quality -- IN PROGRESS
 
 ## Current Position
 
-Phase: 4 of 5 (Playground Layer)
-Plan: 3 of 3 in current phase (04-03 complete)
-Status: Plan 04-03 complete. Exp capability ownership migration delivered.
-Last activity: 2026-03-22 -- Completed plan 04-03 (Exp Capability Ownership)
+Phase: 5 of 5 (Integration and Quality)
+Plan: 2 of 5 in current phase
+Status: Phase 5 in progress -- Plan 02 complete (EventRouter + Handlers)
+Last activity: 2026-03-22 -- Completed Plan 05-02 (EventRouter + Handlers)
 
-Progress: [█████████░] 92%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -59,6 +59,8 @@ Progress: [█████████░] 92%
 | Phase 04 P01 | 5min | 2 tasks | 6 files |
 | Phase 04 P02 | 5min | 2 tasks | 4 files |
 | Phase 04 P03 | 4min | 2 tasks | 7 files |
+| Phase 05 P01 | 4min | 2 tasks | 15 files |
+| Phase 05 P02 | 4min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -113,6 +115,14 @@ Recent decisions affecting current work:
 - [Phase 04-03]: Factory callback injection for skill/MCP init -- DirectExp receives callables enabling test isolation
 - [Phase 04-03]: Cleanup callbacks execute independently -- one failing callback does not prevent others
 - [Phase 04-03]: Structured observation JSON-serialized by adapter -- matmaster Tool Protocol contract stays str-only
+- [Phase 05-01]: ReplyQueueLike Protocol duplicated in hooks/confirmation.py to avoid cross-layer import from src/services/
+- [Phase 05-01]: AssistantStateHook only emits when last AssistantMessage has tool_calls (not for plain text responses)
+- [Phase 05-01]: OutputProcessorHook uses substring matching consistent with existing auto_save_tool_output_patterns logic
+- [Phase 05-01]: SkillHitHook extracts skill_name by stripping 'skill:' prefix from tool_call.name
+- [Phase 05-02]: PersistenceHandler._should_persist_type() exposed as method for type-level filter testing (log_line/llm_token not in BusEvent union)
+- [Phase 05-02]: SSEHandler detects async send_cb via asyncio.iscoroutinefunction at construction time, not per-call
+- [Phase 05-02]: WorkspaceHandler uses injected snapshot_fn and upload_fn for full test isolation
+- [Phase 05-02]: BohriumSetupService uses lazy imports inside methods to avoid importing src.services at module level
 
 ### Pending Todos
 
@@ -126,6 +136,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T06:21:24.612Z
-Stopped at: Completed 04-02-PLAN.md
+Last session: 2026-03-22T08:52:42Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
