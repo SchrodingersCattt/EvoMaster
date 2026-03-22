@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
-from matmaster.bus.queue import MessageBus
+from matmaster.core.bus import MessageBus
 from matmaster.types.events import (
     AssistantStateEvent,
     FinishEvent,

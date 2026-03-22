@@ -10,10 +10,10 @@ import queue
 from pathlib import Path
 from typing import Any, Iterator
 
-from matmaster.assembly.direct_exp import DirectExp
-from matmaster.bus.queue import MessageBus
-from matmaster.engine.agent import AgentKernel
-from matmaster.engine.types import StreamChunk, LLMResponse
+from matmaster.core.direct_exp import DirectExp
+from matmaster.core.bus import MessageBus
+from matmaster.core.agent import AgentKernel
+from matmaster.types.messages import StreamChunk, LLMResponse
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import FinishEvent, ThoughtEvent
 

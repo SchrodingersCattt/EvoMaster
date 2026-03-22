@@ -11,8 +11,8 @@ from typing import Any, Iterator
 
 import pytest
 
-from matmaster.engine.guard_pipeline import GuardPipeline
-from matmaster.engine.types import ToolCallData
+from matmaster.core.guard_pipeline import GuardPipeline
+from matmaster.types.messages import ToolCallData
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.guards import Guard, GuardContext, GuardResult
 
@@ -51,7 +51,7 @@ class TestGuardProtocol:
 class TestGuardInjection:
     def test_guards_injected_via_assemble(self) -> None:
         """Create DirectExp with guards, assemble(ctx) returns spec with guards."""
-        from matmaster.assembly.direct_exp import DirectExp
+        from matmaster.core.direct_exp import DirectExp
 
         class _MockProvider:
             def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> Any:

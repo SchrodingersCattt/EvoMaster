@@ -1,4 +1,4 @@
-"""Shared test fixtures for matmaster.engine tests.
+"""Shared test fixtures for matmaster.core tests.
 
 Provides mock objects and builders for kernel test suites.
 """
@@ -9,7 +9,7 @@ from typing import Any, Iterator
 
 import pytest
 
-from matmaster.engine.types import LLMResponse, StreamChunk, ToolCallData
+from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
 
 
 @pytest.fixture

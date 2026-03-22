@@ -6,7 +6,7 @@ mock implementation correctness (set/refresh/delete/get).
 
 from __future__ import annotations
 
-from matmaster.assembly.worker_registry import WorkerRegistry
+from matmaster.types.worker_registry import WorkerRegistry
 
 
 # ---------------------------------------------------------------------------

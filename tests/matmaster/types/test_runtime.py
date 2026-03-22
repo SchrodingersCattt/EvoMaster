@@ -9,10 +9,10 @@ from pydantic import ValidationError
 
 from matmaster.types.guards import Guard, GuardContext, GuardResult
 from matmaster.types.runtime import AgentRuntimeSpec, CompactionConfig
-from matmaster.engine.hooks import BaseHook, Hook
+from matmaster.core.hooks import BaseHook, Hook
 from matmaster.types.llm_provider import LLMProvider
-from matmaster.engine.types import LLMResponse, StreamChunk
-from matmaster.assembly.tool_registry import ToolRegistry
+from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.tools.tool_registry import ToolRegistry
 
 
 # ── Test helpers ───────────────────────────────────────

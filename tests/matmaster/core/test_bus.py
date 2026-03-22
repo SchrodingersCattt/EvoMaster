@@ -3,7 +3,7 @@
 import queue
 import threading
 
-from matmaster.bus.queue import MessageBus
+from matmaster.core.bus import MessageBus
 from matmaster.types.events import ThoughtEvent
 
 

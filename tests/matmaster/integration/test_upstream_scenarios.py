@@ -15,11 +15,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from matmaster.assembly.direct_exp import DirectExp
-from matmaster.bus.queue import MessageBus
-from matmaster.engine.agent import AgentKernel
-from matmaster.engine.hooks import BaseHook, HookAction
-from matmaster.engine.types import (
+from matmaster.core.direct_exp import DirectExp
+from matmaster.core.bus import MessageBus
+from matmaster.core.agent import AgentKernel
+from matmaster.core.hooks import BaseHook, HookAction
+from matmaster.types.messages import (
     LLMResponse,
     Message,
     StreamChunk,

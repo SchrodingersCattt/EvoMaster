@@ -48,7 +48,7 @@ class _FakeTool(BaseTool):
 class TestEvoToolAdapter:
     def test_adapter_exposes_tool_name(self) -> None:
         """Adapter.name returns the wrapped EvoMaster tool's name."""
-        from matmaster.assembly.evomaster_tool_adapter import EvoToolAdapter
+        from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool()
         session = MagicMock()
@@ -57,7 +57,7 @@ class TestEvoToolAdapter:
 
     def test_adapter_exposes_description(self) -> None:
         """Adapter.description returns docstring of the params class."""
-        from matmaster.assembly.evomaster_tool_adapter import EvoToolAdapter
+        from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool()
         adapter = EvoToolAdapter(tool, MagicMock())
@@ -65,7 +65,7 @@ class TestEvoToolAdapter:
 
     def test_adapter_exposes_json_schema(self) -> None:
         """Adapter.json_schema returns model_json_schema() from params_class."""
-        from matmaster.assembly.evomaster_tool_adapter import EvoToolAdapter
+        from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool()
         adapter = EvoToolAdapter(tool, MagicMock())
@@ -76,7 +76,7 @@ class TestEvoToolAdapter:
 
     def test_adapter_returns_raw_string_observation(self) -> None:
         """When wrapped tool returns str observation, adapter returns it unchanged."""
-        from matmaster.assembly.evomaster_tool_adapter import EvoToolAdapter
+        from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool(observation="hello world")
         adapter = EvoToolAdapter(tool, MagicMock())
@@ -85,7 +85,7 @@ class TestEvoToolAdapter:
 
     def test_adapter_json_serializes_structured_observation(self) -> None:
         """When wrapped tool returns dict observation, adapter JSON-serializes it."""
-        from matmaster.assembly.evomaster_tool_adapter import EvoToolAdapter
+        from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool(observation={"key": "value", "num": 42})
         adapter = EvoToolAdapter(tool, MagicMock())
@@ -95,7 +95,7 @@ class TestEvoToolAdapter:
 
     def test_adapter_json_serializes_list_observation(self) -> None:
         """When wrapped tool returns list observation, adapter JSON-serializes it."""
-        from matmaster.assembly.evomaster_tool_adapter import EvoToolAdapter
+        from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool(observation=[1, 2, 3])
         adapter = EvoToolAdapter(tool, MagicMock())
@@ -105,7 +105,7 @@ class TestEvoToolAdapter:
 
     def test_adapter_passes_json_args_exactly_once(self) -> None:
         """Adapter serializes arguments to JSON and passes to wrapped tool exactly once."""
-        from matmaster.assembly.evomaster_tool_adapter import EvoToolAdapter
+        from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool()
         session = MagicMock()
@@ -119,8 +119,8 @@ class TestEvoToolAdapter:
 
     def test_adapter_satisfies_tool_protocol(self) -> None:
         """EvoToolAdapter satisfies the matmaster Tool Protocol (isinstance check)."""
-        from matmaster.assembly.evomaster_tool_adapter import EvoToolAdapter
-        from matmaster.assembly.tool_registry import Tool
+        from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
+        from matmaster.tools.tool_registry import Tool
 
         tool = _FakeTool()
         adapter = EvoToolAdapter(tool, MagicMock())

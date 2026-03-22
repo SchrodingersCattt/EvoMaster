@@ -1,4 +1,4 @@
-"""Tests for matmaster.engine.hooks -- Hook Protocol, BaseHook, HookAction, run_* helpers, EventEmitterHook."""
+"""Tests for matmaster.core.hooks -- Hook Protocol, BaseHook, HookAction, run_* helpers, EventEmitterHook."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from matmaster.bus.queue import MessageBus
+from matmaster.core.bus import MessageBus
 from matmaster.types.events import ThoughtEvent, ToolCallEvent, ToolResultEvent
-from matmaster.engine.hooks import (
+from matmaster.core.hooks import (
     BaseHook,
     EventEmitterHook,
     Hook,
@@ -20,7 +20,7 @@ from matmaster.engine.hooks import (
     run_pre_tool_call,
     run_should_continue,
 )
-from matmaster.engine.types import (
+from matmaster.types.messages import (
     AssistantMessage,
     Message,
     StreamChunk,

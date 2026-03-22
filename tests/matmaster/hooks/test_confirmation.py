@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from matmaster.engine.hooks import HookAction
-from matmaster.engine.types import ToolCallData
+from matmaster.core.hooks import HookAction
+from matmaster.types.messages import ToolCallData
 
 
 class TestConfirmationHook:
