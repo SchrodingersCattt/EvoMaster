@@ -124,3 +124,84 @@ class TestExpRun:
             exp.run(ctx, "task", extra_param="hello", another=42)
 
             exp.assemble.assert_called_once_with(ctx, extra_param="hello", another=42)
+
+
+class TestExpCleanup:
+    """Tests for Exp cleanup callback infrastructure."""
+
+    def test_cleanup_callbacks_initialized_empty(self) -> None:
+        """Exp.__init__ creates an empty _cleanup_callbacks list."""
+        exp = _ConcreteExp()
+        assert hasattr(exp, "_cleanup_callbacks")
+        assert exp._cleanup_callbacks == []
+
+    def test_register_cleanup_appends(self) -> None:
+        """_register_cleanup adds callback to the list."""
+        exp = _ConcreteExp()
+        cb = MagicMock()
+        exp._register_cleanup(cb)
+        assert cb in exp._cleanup_callbacks
+
+    def test_run_cleanup_on_success(self) -> None:
+        """run() executes cleanup callbacks after successful kernel.run()."""
+        exp = _ConcreteExp()
+        ctx = _make_ctx()
+        mock_spec = MagicMock(spec=AgentRuntimeSpec)
+        mock_finish = FinishEvent(
+            source="agent", status="completed", reason="natural"
+        )
+
+        exp.assemble = MagicMock(return_value=mock_spec)  # type: ignore[method-assign]
+        cleanup_cb = MagicMock()
+        exp._register_cleanup(cleanup_cb)
+
+        with patch("matmaster.engine.agent.AgentKernel") as MockKernel:
+            mock_kernel_inst = MockKernel.return_value
+            mock_kernel_inst.run.return_value = mock_finish
+
+            exp.run(ctx, "task")
+
+        cleanup_cb.assert_called_once()
+
+    def test_run_cleanup_on_kernel_error(self) -> None:
+        """run() executes cleanup callbacks even when kernel.run() raises."""
+        exp = _ConcreteExp()
+        ctx = _make_ctx()
+        mock_spec = MagicMock(spec=AgentRuntimeSpec)
+
+        exp.assemble = MagicMock(return_value=mock_spec)  # type: ignore[method-assign]
+        cleanup_cb = MagicMock()
+        exp._register_cleanup(cleanup_cb)
+
+        with patch("matmaster.engine.agent.AgentKernel") as MockKernel:
+            mock_kernel_inst = MockKernel.return_value
+            mock_kernel_inst.run.side_effect = RuntimeError("kernel exploded")
+
+            with pytest.raises(RuntimeError, match="kernel exploded"):
+                exp.run(ctx, "task")
+
+        cleanup_cb.assert_called_once()
+
+    def test_multiple_cleanup_callbacks_all_execute(self) -> None:
+        """All registered cleanup callbacks run, even if one raises."""
+        exp = _ConcreteExp()
+        ctx = _make_ctx()
+        mock_spec = MagicMock(spec=AgentRuntimeSpec)
+        mock_finish = FinishEvent(
+            source="agent", status="completed", reason="natural"
+        )
+
+        exp.assemble = MagicMock(return_value=mock_spec)  # type: ignore[method-assign]
+        cb1 = MagicMock(side_effect=ValueError("cb1 broken"))
+        cb2 = MagicMock()
+        exp._register_cleanup(cb1)
+        exp._register_cleanup(cb2)
+
+        with patch("matmaster.engine.agent.AgentKernel") as MockKernel:
+            mock_kernel_inst = MockKernel.return_value
+            mock_kernel_inst.run.return_value = mock_finish
+
+            exp.run(ctx, "task")
+
+        cb1.assert_called_once()
+        cb2.assert_called_once()
