@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from matmaster.assembly.tool_registry import ToolRegistry
+from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
 
 

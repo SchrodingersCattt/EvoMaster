@@ -23,8 +23,8 @@ from matmaster.types.events import FinishEvent
 from matmaster.types.runtime import AgentRuntimeSpec
 
 if TYPE_CHECKING:
-    from matmaster.engine.agent import AgentKernel
-    from matmaster.engine.types import Message
+    from matmaster.core.agent import AgentKernel
+    from matmaster.types.messages import Message
 
 
 class Exp(ABC):
@@ -108,7 +108,7 @@ class Exp(ABC):
         """
         try:
             spec = self.assemble(ctx, **assemble_kwargs)
-            from matmaster.engine.agent import AgentKernel  # lazy import to avoid circular
+            from matmaster.core.agent import AgentKernel  # lazy import to avoid circular
 
             kernel = AgentKernel()
             return kernel.run(spec, task, history=history, stop_event=stop_event)
