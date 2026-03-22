@@ -10,7 +10,8 @@ import queue
 from pathlib import Path
 from typing import Any, Iterator
 
-from matmaster.core.direct_exp import DirectExp
+
+from matmaster.core.exp import Exp
 from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
 from matmaster.types.messages import StreamChunk, LLMResponse
@@ -31,12 +32,13 @@ class MinimalMockLLMProvider:
         yield StreamChunk(content="minimal response", finish_reason="stop")
 
 
-def _make_minimal_ctx(tmp_path: Path) -> PlaygroundContext:
+def _make_minimal_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
     """Create a minimal PlaygroundContext (no archival, no env vars)."""
     return PlaygroundContext(
         workdir=tmp_path / "workspace",
         session_type="local",
         cache_area=tmp_path / "cache",
+        llm_provider=llm_provider,
     )
 
 
@@ -48,21 +50,25 @@ class TestMinimalE2EPipeline:
         No builtin_tools, no mcp_config, no skill_config.
         Verify pipeline completes with natural finish.
         """
-        pg_ctx = _make_minimal_ctx(tmp_path)
-        bus = MessageBus()
         mock_llm = MinimalMockLLMProvider()
+        pg_ctx = _make_minimal_ctx(tmp_path, llm_provider=mock_llm)
+        bus = MessageBus()
 
-        exp = DirectExp(
-            llm_provider=mock_llm,
-            bus=bus,
-            # No MCP, no Skill
-            mcp_config=None,
-            skill_config=None,
-        )
-        spec = exp.assemble(pg_ctx)
+        config = {
+            "name": "direct",
+            "tools": {"builtin": []},
+            "guards": [],
+            "termination": {"max_turns": 100},
+            "prompt": {},
+            "context": {},
+            "skills": {},
+            "mcp": {},
+        }
+        exp = Exp(config)
+        runtime = exp.build_runtime(pg_ctx, bus=bus)
 
         kernel = AgentKernel()
-        finish = kernel.run(spec, "minimal test task")
+        finish = kernel.run(runtime.spec, "minimal test task")
 
         assert isinstance(finish, FinishEvent)
         assert finish.reason == "natural"
