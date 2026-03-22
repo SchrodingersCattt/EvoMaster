@@ -205,6 +205,17 @@ logging:
 # ============================================
 # 其他配置
 # ============================================
+# ============================================
+# Playground 配置（Phase 4: 物理环境层）
+# ============================================
+playground:
+  cache_dir: ".cache/minimal"
+  archival:
+    enabled: false
+    oss_bucket: ""
+    oss_prefix: ""
+    credential_ref: ""
+
 project_root: "."
 workspace: "./workspace"
 results_dir: "./results"
