@@ -1,4 +1,4 @@
-"""Tests for PlaygroundContext frozen model."""
+"""Tests for PlaygroundContext frozen model and WorkspaceArchivalConfig."""
 
 from __future__ import annotations
 
@@ -7,7 +7,44 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from matmaster.types.context import PlaygroundContext
+from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
+
+
+class TestWorkspaceArchivalConfig:
+    def test_frozen(self) -> None:
+        cfg = WorkspaceArchivalConfig()
+        with pytest.raises(ValidationError):
+            cfg.enabled = True
+
+    def test_defaults(self) -> None:
+        cfg = WorkspaceArchivalConfig()
+        assert cfg.enabled is False
+        assert cfg.oss_bucket == ""
+        assert cfg.oss_prefix == ""
+        assert cfg.credential_ref == ""
+
+    def test_custom_values(self) -> None:
+        cfg = WorkspaceArchivalConfig(
+            enabled=True,
+            oss_bucket="my-bucket",
+            oss_prefix="runs/",
+            credential_ref="env:aliyun-oss",
+        )
+        assert cfg.enabled is True
+        assert cfg.oss_bucket == "my-bucket"
+        assert cfg.oss_prefix == "runs/"
+        assert cfg.credential_ref == "env:aliyun-oss"
+
+    def test_roundtrip(self) -> None:
+        cfg = WorkspaceArchivalConfig(
+            enabled=True,
+            oss_bucket="bucket",
+            oss_prefix="prefix/",
+            credential_ref="ref",
+        )
+        data = cfg.model_dump()
+        restored = WorkspaceArchivalConfig.model_validate(data)
+        assert restored == cfg
 
 
 class TestPlaygroundContext:
@@ -38,10 +75,70 @@ class TestPlaygroundContext:
         )
         assert ctx.env_vars == {}
         assert ctx.run_meta == {}
-        assert ctx.mcp_manager is None
-        assert ctx.skill_registry is None
+        assert ctx.archival is None
+
+    def test_no_mcp_manager_field(self) -> None:
+        """PlaygroundContext must not have mcp_manager field."""
+        assert "mcp_manager" not in PlaygroundContext.model_fields
+
+    def test_no_skill_registry_field(self) -> None:
+        """PlaygroundContext must not have skill_registry field."""
+        assert "skill_registry" not in PlaygroundContext.model_fields
+
+    def test_archival_defaults_to_none(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="local",
+            cache_area=Path("/tmp/cache"),
+        )
+        assert ctx.archival is None
+
+    def test_archival_with_config(self) -> None:
+        archival = WorkspaceArchivalConfig(
+            enabled=True,
+            oss_bucket="bucket",
+            oss_prefix="prefix/",
+            credential_ref="env:oss",
+        )
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="local",
+            cache_area=Path("/tmp/cache"),
+            archival=archival,
+        )
+        assert ctx.archival is not None
+        assert ctx.archival.enabled is True
+        assert ctx.archival.oss_bucket == "bucket"
 
     def test_model_dump_roundtrip(self) -> None:
+        archival = WorkspaceArchivalConfig(
+            enabled=True, oss_bucket="b", oss_prefix="p/", credential_ref="r"
+        )
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+            env_vars={"KEY": "val"},
+            run_meta={"task_id": "t1"},
+            archival=archival,
+        )
+        data = ctx.model_dump()
+        assert isinstance(data, dict)
+        assert "workdir" in data
+        assert "session_type" in data
+        assert "env_vars" in data
+        assert "archival" in data
+
+        restored = PlaygroundContext.model_validate(data)
+        assert restored.workdir == ctx.workdir
+        assert restored.session_type == ctx.session_type
+        assert restored.env_vars == ctx.env_vars
+        assert restored.run_meta == ctx.run_meta
+        assert restored.archival is not None
+        assert restored.archival.enabled is True
+        assert restored.archival.oss_bucket == "b"
+
+    def test_model_dump_roundtrip_no_archival(self) -> None:
         ctx = PlaygroundContext(
             workdir=Path("/tmp/work"),
             session_type="docker",
@@ -50,16 +147,9 @@ class TestPlaygroundContext:
             run_meta={"task_id": "t1"},
         )
         data = ctx.model_dump()
-        assert isinstance(data, dict)
-        assert "workdir" in data
-        assert "session_type" in data
-        assert "env_vars" in data
-
         restored = PlaygroundContext.model_validate(data)
         assert restored.workdir == ctx.workdir
-        assert restored.session_type == ctx.session_type
-        assert restored.env_vars == ctx.env_vars
-        assert restored.run_meta == ctx.run_meta
+        assert restored.archival is None
 
     def test_custom_env_vars(self) -> None:
         ctx = PlaygroundContext(
