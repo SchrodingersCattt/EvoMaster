@@ -144,7 +144,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md -- QueueBridge 删除 + bus/ 包清理 + 追踪文档更新 + untracked planning 文件提交 (EBUS-02)
+- [x] 07-01-PLAN.md -- QueueBridge 删除 + bus/ 包清理 + 追踪文档更新 + untracked planning 文件提交 (EBUS-02)
 - [ ] 07-02-PLAN.md -- matmaster 目录重组：engine/assembly/bus/playground/ 合并到 core/tools/types/ + 全量 import 重写 (EBUS-02)
 
 ## Progress
@@ -161,4 +161,4 @@ Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 D
 | 4. Playground Layer | 3/3 | Complete | 2026-03-22 |
 | 5. Integration and Quality | 5/5 | Complete | 2026-03-22 |
 | 6. Service Layer Wiring | 2/2 | Complete | 2026-03-22 |
-| 7. Cleanup and Traceability | 0/2 | Pending | -- |
+| 7. Cleanup and Traceability | 1/2 | In Progress | -- |
