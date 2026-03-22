@@ -113,6 +113,8 @@ class Playground:
             env_vars=self._collect_env_vars(),
             archival=self._build_archival_config(),
             run_meta=dict(run_meta),
+            session=self.session,
+            config_dir=self.config_path.parent,
         )
 
     def cleanup(self) -> None:
