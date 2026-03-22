@@ -63,7 +63,7 @@ Plans:
   3. 业务 Guard（manuscript gate、auth failure gate）通过 assemble() 注入到 AgentRuntimeSpec.guards，kernel 无需感知业务语义
   4. Solver 模式（ResearchPlanner 等）作为 exp 层的高阶装配模式运行，不作为独立抽象层
   5. ContextBuilder 可以从 identity/skills/memory/task 多个来源组装出完整的 system prompt
-  6. WorkerRegistry 集成到 Exp 层，管理跨 pod 会话所有权（set/get session_run_owner）、worker 心跳检测、run_interrupted 分类（deploy vs restart），跨 pod 订阅恢复通过 RedisReplyQueue 保持可用，Bohrium 凭证加载与绑定由 Exp 层统一管理
+  6. WorkerRegistry Protocol 和注入点已定义（PlaygroundContext.run_meta 传递凭证、Protocol 抽象 session_run_owner 管理），Phase 3 不实际迁移业务代码，实际的 WorkerRegistry/Bohrium/run_interrupted 业务逻辑迁移在 Phase 5 完成
 **Plans**: TBD
 
 Plans:
