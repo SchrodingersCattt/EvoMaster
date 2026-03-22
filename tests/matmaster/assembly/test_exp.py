@@ -93,7 +93,7 @@ class TestExpRun:
 
         exp.assemble = MagicMock(return_value=mock_spec)  # type: ignore[method-assign]
 
-        with patch("matmaster.assembly.exp.AgentKernel") as MockKernel:
+        with patch("matmaster.engine.agent.AgentKernel") as MockKernel:
             mock_kernel_inst = MockKernel.return_value
             mock_kernel_inst.run.return_value = mock_finish
 
@@ -117,7 +117,7 @@ class TestExpRun:
 
         exp.assemble = MagicMock(return_value=mock_spec)  # type: ignore[method-assign]
 
-        with patch("matmaster.assembly.exp.AgentKernel") as MockKernel:
+        with patch("matmaster.engine.agent.AgentKernel") as MockKernel:
             mock_kernel_inst = MockKernel.return_value
             mock_kernel_inst.run.return_value = mock_finish
 

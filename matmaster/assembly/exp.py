@@ -6,15 +6,19 @@ Subclasses (DirectExp, PlannerExp) override assemble() for different strategies.
 Advanced subclasses can override run() for multi-step state machines.
 """
 
+from __future__ import annotations
+
 import logging
 import threading
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from matmaster.engine.agent import AgentKernel
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import FinishEvent
 from matmaster.types.runtime import AgentRuntimeSpec
+
+if TYPE_CHECKING:
+    from matmaster.engine.agent import AgentKernel
 
 
 class Exp(ABC):
@@ -59,5 +63,7 @@ class Exp(ABC):
         and executes the kernel with the assembled spec and task string.
         """
         spec = self.assemble(ctx, **assemble_kwargs)
+        from matmaster.engine.agent import AgentKernel  # lazy import to avoid circular
+
         kernel = AgentKernel()
         return kernel.run(spec, task, stop_event=stop_event)
