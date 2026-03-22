@@ -11,8 +11,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from matmaster.playground import Playground
 from matmaster.types.context import PlaygroundContext
 
@@ -33,6 +31,8 @@ MINIMAL_CONFIG = _PROJECT_ROOT / "configs" / "minimal" / "config.yaml"
 
 
 class TestMatMasterConfigPath:
+    """Prove that configs/mat_master/config.yaml drives the unified Playground."""
+
     def test_mat_master_config_path(self, tmp_path: Path) -> None:
         pg = Playground(MAT_MASTER_CONFIG)
 
@@ -43,15 +43,19 @@ class TestMatMasterConfigPath:
             assert ctx.session_type == "local"
             assert str(ctx.workdir).endswith("runs/workspaces/matmaster-case")
 
-            # Archival enabled for mat_master
+            # Archival must be populated and enabled
             assert ctx.archival is not None
             assert ctx.archival.enabled is True
             assert ctx.archival.oss_prefix == "matmaster_evo/chat_workspace"
 
-            # Session config sync: workspace_path == working_dir
+            # Session config workspace_path must be synchronised with workdir.
+            # For local sessions only workspace_path exists (working_dir is
+            # a Docker/SSH field); when present, both must match.
             cfg = pg.session.config
-            if hasattr(cfg, "workspace_path") and hasattr(cfg, "working_dir"):
-                assert cfg.workspace_path == cfg.working_dir
+            ws_abs = str(ctx.workdir.absolute())
+            assert cfg.workspace_path == ws_abs
+            if hasattr(cfg, "working_dir"):
+                assert cfg.working_dir == ws_abs
         finally:
             pg.cleanup()
 
@@ -62,6 +66,8 @@ class TestMatMasterConfigPath:
 
 
 class TestMinimalConfigPath:
+    """Prove that configs/minimal/config.yaml drives the unified Playground."""
+
     def test_minimal_config_path(self, tmp_path: Path) -> None:
         pg = Playground(MINIMAL_CONFIG)
 
@@ -72,14 +78,16 @@ class TestMinimalConfigPath:
             assert ctx.session_type == "local"
             assert str(ctx.workdir).endswith("runs/workspaces/minimal-case")
 
-            # Archival disabled for minimal
+            # Archival must be present but disabled
             assert ctx.archival is not None
             assert ctx.archival.enabled is False
 
-            # Session config sync: workspace_path == working_dir
+            # Session config workspace_path must be synchronised with workdir.
             cfg = pg.session.config
-            if hasattr(cfg, "workspace_path") and hasattr(cfg, "working_dir"):
-                assert cfg.workspace_path == cfg.working_dir
+            ws_abs = str(ctx.workdir.absolute())
+            assert cfg.workspace_path == ws_abs
+            if hasattr(cfg, "working_dir"):
+                assert cfg.working_dir == ws_abs
         finally:
             pg.cleanup()
 
@@ -90,15 +98,31 @@ class TestMinimalConfigPath:
 
 
 class TestCacheDirFromConfig:
+    """Verify that playground.cache_dir is respected by the unified Playground."""
+
     def test_mat_master_cache_dir_from_config(self, tmp_path: Path) -> None:
-        """Cache area should respect playground.cache_dir when configured."""
+        """Cache area resolves playground.cache_dir relative to workspace."""
         pg = Playground(MAT_MASTER_CONFIG)
         ctx = pg.prepare({"run_dir": tmp_path / "runs", "task_id": "cache-test"})
 
         try:
             # playground.cache_dir = ".cache/matmaster" (relative)
-            # Should resolve under workspace path
-            assert ctx.cache_area.name == "matmaster" or ".cache" in str(ctx.cache_area)
+            # Resolved under workspace_path
+            assert ctx.cache_area.name == "matmaster"
+            assert ".cache" in str(ctx.cache_area)
+            assert ctx.cache_area.is_dir()
+        finally:
+            pg.cleanup()
+
+    def test_minimal_cache_dir_from_config(self, tmp_path: Path) -> None:
+        """Minimal config also gets its own cache_dir."""
+        pg = Playground(MINIMAL_CONFIG)
+        ctx = pg.prepare({"run_dir": tmp_path / "runs", "task_id": "cache-min"})
+
+        try:
+            # playground.cache_dir = ".cache/minimal" (relative)
+            assert ctx.cache_area.name == "minimal"
+            assert ".cache" in str(ctx.cache_area)
             assert ctx.cache_area.is_dir()
         finally:
             pg.cleanup()
