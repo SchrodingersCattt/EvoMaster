@@ -22,7 +22,7 @@ import threading
 import time
 from typing import Any, Callable, Protocol, runtime_checkable
 
-from matmaster.bus.queue import MessageBus
+from matmaster.core.bus import MessageBus
 from matmaster.types.events import BusEvent, ThoughtEvent
 
 logger = logging.getLogger(__name__)

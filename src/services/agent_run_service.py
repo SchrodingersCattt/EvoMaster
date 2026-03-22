@@ -20,8 +20,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
-from matmaster.bus.queue import MessageBus
-from matmaster.engine.agent import AgentKernel
+from matmaster.core.bus import MessageBus
+from matmaster.core.agent import AgentKernel
 from matmaster.hooks import (
     AssistantStateHook,
     ConfirmationHook,
@@ -35,7 +35,7 @@ from matmaster.integration import (
     WorkspaceHandler,
 )
 from matmaster.integration.bohrium_setup import BohriumSetupService
-from matmaster.playground.playground import Playground
+from matmaster.core.playground import Playground
 from matmaster.types.events import CancelledEvent, ErrorEvent
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
@@ -420,7 +420,7 @@ class AgentRunService:
             pg_ctx = pg_ctx.with_bohrium(bohrium_result._asdict())
 
             # -- Stage 3: Exp assembly --
-            from matmaster.assembly.direct_exp import DirectExp
+            from matmaster.core.direct_exp import DirectExp
 
             exp = DirectExp(
                 llm_provider=self._build_llm_provider(

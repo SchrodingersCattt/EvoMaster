@@ -177,9 +177,9 @@ class ChatHistoryConverter:
         """Convert DB events to matmaster Message types.
 
         Reuses events_to_dialog_messages() logic, then converts each dict
-        to the corresponding matmaster.engine.types Message subclass.
+        to the corresponding matmaster.types.messages Message subclass.
         """
-        from matmaster.engine.types import (
+        from matmaster.types.messages import (
             AssistantMessage as MMAssistantMessage,
             ToolCallData as MMToolCallData,
             ToolMessage as MMToolMessage,

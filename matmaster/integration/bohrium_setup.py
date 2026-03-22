@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 if TYPE_CHECKING:
     from typing import Callable
 
-    from matmaster.bus.queue import MessageBus
+    from matmaster.core.bus import MessageBus
 
 logger = logging.getLogger(__name__)
 
