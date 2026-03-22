@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: All phases complete
-last_updated: "2026-03-22T09:30:00.000Z"
-last_activity: 2026-03-22 -- Phase 5 verified and complete. All 5 phases done.
+status: executing
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-22T13:24:30.000Z"
+last_activity: 2026-03-22 -- Phase 6 Plan 1 (LLM Factory Wiring) complete
 progress:
-  total_phases: 5
+  total_phases: 7
   completed_phases: 5
-  total_plans: 17
-  completed_plans: 17
-  percent: 100
+  total_plans: 19
+  completed_plans: 18
+  percent: 94
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 
 ## Current Position
 
-Phase: 5 of 5 (Integration and Quality) — COMPLETE
-Plan: 5 of 5 in current phase (all complete)
-Status: All 5 phases verified. Milestone v1.0 complete.
-Last activity: 2026-03-22 -- Phase 5 verified, all must-haves passed (8/8)
+Phase: 6 of 7 (Service Layer Wiring) — IN PROGRESS
+Plan: 1 of 2 in current phase
+Status: Plan 1 complete; Plan 2 (builtin tools, DirectExp cleanup, guard removal, WorkerRegistry) pending
+Last activity: 2026-03-22 -- Phase 6 Plan 1 complete
 
-Progress: [██████████] 100%
+Progress: [█████████░] 94%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [██████████] 100%
 | Phase 05 P03 | 5min | 2 tasks | 4 files |
 | Phase 05 P04 | 8min | 2 tasks | 8 files |
 | Phase 05 P05 | 3min | 1 tasks | 1 files |
+| Phase 06 P01 | 5min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -134,6 +135,11 @@ Recent decisions affecting current work:
 - [Phase 05-04]: Mock tools implement Tool Protocol (json_schema property, arguments dict) for full type compatibility
 - [Phase 05-05]: Migration guide structured with 8 sections: Overview, Architecture Changes, New Components, Pipeline Flow, Configuration Changes, Breaking Changes, Deprecation Notices, Out of Scope
 - [Phase 05-05]: Architecture Changes table maps 11 old components to new equivalents with change type
+- [Phase 06-01]: PlaygroundContext uses arbitrary_types_allowed=True for session field accepting BaseSession instances
+- [Phase 06-01]: extra_kwargs merged via dict.update() in OpenAIProvider after tools check, before SDK create() call
+- [Phase 06-01]: Model family resolution: explicit config model_family > _infer_model_family substring matching
+- [Phase 06-01]: Profile resolution chain: model name match > profile key match > default profile fallback with model override
+- [Phase 06-01]: _build_llm_provider signature changed from (pg_ctx, llm_override, model_override) to (playground, model_override) per D-02
 
 ### Pending Todos
 
@@ -147,6 +153,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T09:12:05Z
-Stopped at: Completed 05-05-PLAN.md (Task 1 auto-complete, Task 2 checkpoint:human-verify pending)
+Last session: 2026-03-22T13:24:30Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None

@@ -127,7 +127,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md -- PlaygroundContext 扩展 session/config_dir + OpenAIProvider extra_kwargs + LLM 工厂实现 (MIGR-01, MIGR-02)
+- [x] 06-01-PLAN.md -- PlaygroundContext 扩展 session/config_dir + OpenAIProvider extra_kwargs + LLM 工厂实现 (MIGR-01, MIGR-02)
 - [ ] 06-02-PLAN.md -- DirectExp 构造清理 + builtin tool 构建 + guard shell 移除 + WorkerRegistry 适配器 (ASBL-02, ASBL-06, MIGR-01, MIGR-02)
 
 ### Phase 7: Cleanup and Traceability
@@ -154,5 +154,5 @@ Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 D
 | 3. Exp Assembly Layer | 4/4 | Complete | 2026-03-22 |
 | 4. Playground Layer | 3/3 | Complete | 2026-03-22 |
 | 5. Integration and Quality | 5/5 | Complete | 2026-03-22 |
-| 6. Service Layer Wiring | 0/2 | In Progress | -- |
+| 6. Service Layer Wiring | 1/2 | In Progress | -- |
 | 7. Cleanup and Traceability | 0/0 | Pending | -- |
