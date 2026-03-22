@@ -53,7 +53,7 @@ class DirectExp(Exp):
         skill_registry_factory: Callable[[], Any] | None = None,
         mcp_manager_factory: Callable[[PlaygroundContext], Any] | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__({"name": "Direct"})
         self._llm_provider = llm_provider
         self._guards = list(guards) if guards else []
         self._max_turns = max_turns
