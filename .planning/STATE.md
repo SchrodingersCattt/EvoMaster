@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-03-22T09:03:54.000Z"
-last_activity: 2026-03-22 -- Completed Plan 05-03 (Service Layer Rewrite)
+stopped_at: Completed 05-05-PLAN.md (Task 1 auto-complete, Task 2 checkpoint:human-verify pending)
+last_updated: "2026-03-22T09:12:05.000Z"
+last_activity: 2026-03-22 -- Completed Plan 05-05 (Migration Documentation)
 progress:
   total_phases: 5
   completed_phases: 4
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Position
 
 Phase: 5 of 5 (Integration and Quality)
-Plan: 3 of 5 in current phase
-Status: Phase 5 in progress -- Plan 03 complete (Service Layer Rewrite)
-Last activity: 2026-03-22 -- Completed Plan 05-03 (Service Layer Rewrite)
+Plan: 5 of 5 in current phase
+Status: Phase 5 in progress -- Plan 05 complete (Migration Documentation)
+Last activity: 2026-03-22 -- Completed Plan 05-05 (Migration Documentation)
 
 Progress: [█████████░] 94%
 
@@ -62,6 +62,7 @@ Progress: [█████████░] 94%
 | Phase 05 P01 | 4min | 2 tasks | 15 files |
 | Phase 05 P02 | 4min | 2 tasks | 7 files |
 | Phase 05 P03 | 5min | 2 tasks | 4 files |
+| Phase 05 P05 | 3min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -127,6 +128,8 @@ Recent decisions affecting current work:
 - [Phase 05-03]: BohriumSetupService.setup() called with legacy API params via bridge callback, not new API
 - [Phase 05-03]: CancelledEvent used for user cancellation (distinct from ErrorEvent)
 - [Phase 05-03]: _bohrium_event_cb bridges legacy bohrium events into BohriumNodeEvent on MessageBus
+- [Phase 05-05]: Migration guide structured with 8 sections: Overview, Architecture Changes, New Components, Pipeline Flow, Configuration Changes, Breaking Changes, Deprecation Notices, Out of Scope
+- [Phase 05-05]: Architecture Changes table maps 11 old components to new equivalents with change type
 
 ### Pending Todos
 
@@ -140,6 +143,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T09:03:54Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-03-22T09:12:05Z
+Stopped at: Completed 05-05-PLAN.md (Task 1 auto-complete, Task 2 checkpoint:human-verify pending)
 Resume file: None
