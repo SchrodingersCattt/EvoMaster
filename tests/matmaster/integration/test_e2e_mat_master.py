@@ -16,11 +16,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from matmaster.assembly.direct_exp import DirectExp
-from matmaster.assembly.tool_registry import Tool, ToolRegistry
-from matmaster.bus.queue import MessageBus
-from matmaster.engine.agent import AgentKernel
-from matmaster.engine.types import (
+from matmaster.core.direct_exp import DirectExp
+from matmaster.tools.tool_registry import Tool, ToolRegistry
+from matmaster.core.bus import MessageBus
+from matmaster.core.agent import AgentKernel
+from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
     Message,

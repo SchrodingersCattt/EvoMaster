@@ -1,14 +1,14 @@
 """Behavioral tests for ChatHistoryConverter.events_to_messages().
 
 Verifies that DB event dicts are correctly converted to matmaster
-engine Message types (UserMessage, AssistantMessage, ToolMessage).
+types Message types (UserMessage, AssistantMessage, ToolMessage).
 """
 
 from __future__ import annotations
 
 import pytest
 
-from matmaster.engine.types import (
+from matmaster.types.messages import (
     AssistantMessage,
     ToolCallData,
     ToolMessage,

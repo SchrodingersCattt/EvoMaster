@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from matmaster.assembly.tool_registry import Tool, ToolRegistry
+from matmaster.tools.tool_registry import Tool, ToolRegistry
 
 from .conftest import MockTool
 

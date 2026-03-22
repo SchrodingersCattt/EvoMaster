@@ -16,7 +16,7 @@ import pytest
 
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.providers.openai_provider import OpenAIProvider
-from matmaster.engine.types import LLMResponse, StreamChunk, ToolCallData
+from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
 
 
 # ── Protocol conformance ────────────────────────────────

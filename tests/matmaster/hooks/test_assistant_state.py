@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from matmaster.engine.types import (
+from matmaster.types.messages import (
     AssistantMessage,
     Message,
     SystemMessage,

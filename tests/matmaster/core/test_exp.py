@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from matmaster.assembly.exp import Exp
+from matmaster.core.exp import Exp
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import FinishEvent
 from matmaster.types.runtime import AgentRuntimeSpec
@@ -93,7 +93,7 @@ class TestExpRun:
 
         exp.assemble = MagicMock(return_value=mock_spec)  # type: ignore[method-assign]
 
-        with patch("matmaster.engine.agent.AgentKernel") as MockKernel:
+        with patch("matmaster.core.agent.AgentKernel") as MockKernel:
             mock_kernel_inst = MockKernel.return_value
             mock_kernel_inst.run.return_value = mock_finish
 
@@ -117,7 +117,7 @@ class TestExpRun:
 
         exp.assemble = MagicMock(return_value=mock_spec)  # type: ignore[method-assign]
 
-        with patch("matmaster.engine.agent.AgentKernel") as MockKernel:
+        with patch("matmaster.core.agent.AgentKernel") as MockKernel:
             mock_kernel_inst = MockKernel.return_value
             mock_kernel_inst.run.return_value = mock_finish
 
@@ -155,7 +155,7 @@ class TestExpCleanup:
         cleanup_cb = MagicMock()
         exp._register_cleanup(cleanup_cb)
 
-        with patch("matmaster.engine.agent.AgentKernel") as MockKernel:
+        with patch("matmaster.core.agent.AgentKernel") as MockKernel:
             mock_kernel_inst = MockKernel.return_value
             mock_kernel_inst.run.return_value = mock_finish
 
@@ -173,7 +173,7 @@ class TestExpCleanup:
         cleanup_cb = MagicMock()
         exp._register_cleanup(cleanup_cb)
 
-        with patch("matmaster.engine.agent.AgentKernel") as MockKernel:
+        with patch("matmaster.core.agent.AgentKernel") as MockKernel:
             mock_kernel_inst = MockKernel.return_value
             mock_kernel_inst.run.side_effect = RuntimeError("kernel exploded")
 
@@ -197,7 +197,7 @@ class TestExpCleanup:
         exp._register_cleanup(cb1)
         exp._register_cleanup(cb2)
 
-        with patch("matmaster.engine.agent.AgentKernel") as MockKernel:
+        with patch("matmaster.core.agent.AgentKernel") as MockKernel:
             mock_kernel_inst = MockKernel.return_value
             mock_kernel_inst.run.return_value = mock_finish
 

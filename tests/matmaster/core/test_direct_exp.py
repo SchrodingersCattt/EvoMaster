@@ -7,10 +7,10 @@ from typing import Any, Iterator
 
 import pytest
 
-from matmaster.assembly.direct_exp import DirectExp
-from matmaster.assembly.tool_registry import ToolRegistry
-from matmaster.bus.queue import MessageBus
-from matmaster.engine.hooks import EventEmitterHook
+from matmaster.core.direct_exp import DirectExp
+from matmaster.tools.tool_registry import ToolRegistry
+from matmaster.core.bus import MessageBus
+from matmaster.core.hooks import EventEmitterHook
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntimeSpec
 
@@ -296,9 +296,9 @@ class TestDirectExpBuiltinTools:
         with pytest.raises(TypeError):
             DirectExp(llm_provider=MockLLMProvider(), config_dir="/tmp")
 
-    def test_guards_no_longer_have_shells(self) -> None:
-        """ManuscriptGateGuard and AuthFailureGateGuard no longer exist in guards module."""
-        import matmaster.assembly.guards as guards_mod
+    def test_guards_shells_module_removed(self) -> None:
+        """matmaster.assembly.guards module no longer exists (deleted in Phase 7)."""
+        import importlib
 
-        assert not hasattr(guards_mod, "ManuscriptGateGuard")
-        assert not hasattr(guards_mod, "AuthFailureGateGuard")
+        with pytest.raises((ImportError, ModuleNotFoundError)):
+            importlib.import_module("matmaster.assembly.guards")
