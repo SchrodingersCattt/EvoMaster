@@ -38,10 +38,9 @@ class PlaygroundContext(BaseModel):
     Built by Playground.prepare(), passed to Exp.assemble().
     frozen=True guarantees immutability during inter-layer transfer.
 
-    This contract is strictly environment-only: workspace path,
-    session type, cache area, environment variables, archival config,
-    and run metadata.  No capability objects (MCP, Skill, Tool, LLM)
-    belong here.
+    Contains environment info (workspace, session, cache) and
+    externally-determined capability objects (llm_provider) whose
+    selection is made outside the Exp layer (e.g. by frontend user).
     """
 
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
@@ -54,6 +53,7 @@ class PlaygroundContext(BaseModel):
     run_meta: dict[str, Any] = Field(default_factory=dict)
     session: Any = None  # EvoMaster BaseSession instance (per D-09)
     config_dir: Path | None = None  # Playground config directory (per D-10)
+    llm_provider: Any = None  # LLMProvider instance (externally determined)
 
     def with_bohrium(self, result: dict[str, Any]) -> "PlaygroundContext":
         """Return a new frozen instance with Bohrium result in run_meta.
