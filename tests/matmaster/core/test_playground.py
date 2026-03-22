@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 import yaml
 
-from matmaster.playground import Playground
+from matmaster.core.playground import Playground
 from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
 
 

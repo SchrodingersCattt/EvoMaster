@@ -1,4 +1,4 @@
-"""Shared test fixtures for matmaster.assembly tests."""
+"""Shared test fixtures for matmaster.tools tests."""
 
 from __future__ import annotations
 

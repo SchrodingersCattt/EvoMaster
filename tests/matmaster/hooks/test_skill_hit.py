@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from matmaster.engine.types import ToolCallData
+from matmaster.types.messages import ToolCallData
 
 
 class TestSkillHitHook:
