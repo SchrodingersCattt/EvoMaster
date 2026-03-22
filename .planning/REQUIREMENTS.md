@@ -26,8 +26,8 @@
 - [ ] **ASBL-02**: ToolRegistry 统一 builtin tools、MCP tools、skill tools 的注册路径
 - [ ] **ASBL-03**: 业务 Guard（manuscript gate、auth failure gate）通过 AgentRuntimeSpec.guards 注入
 - [ ] **ASBL-04**: Solver 模式（ResearchPlanner 等）收入 exp 层作为高阶装配模式
-- [ ] **ASBL-05**: ContextBuilder 从 identity/skills/memory/task 多源组装 system prompt
-- [ ] **ASBL-06**: WorkerRegistry 接口定义——定义 WorkerRegistry Protocol 和注入点（PlaygroundContext.run_meta 传递凭证），Phase 3 只建接口不迁移业务代码，实际的 WorkerRegistry/Bohrium/run_interrupted 业务逻辑迁移在 Phase 5 完成
+- [x] **ASBL-05**: ContextBuilder 从 identity/skills/memory/task 多源组装 system prompt
+- [x] **ASBL-06**: WorkerRegistry 接口定义——定义 WorkerRegistry Protocol 和注入点（PlaygroundContext.run_meta 传递凭证），Phase 3 只建接口不迁移业务代码，实际的 WorkerRegistry/Bohrium/run_interrupted 业务逻辑迁移在 Phase 5 完成
 
 ### EventBus (事件系统)
 
@@ -106,8 +106,8 @@
 | ASBL-02 | Phase 3 | Pending |
 | ASBL-03 | Phase 3 | Pending |
 | ASBL-04 | Phase 3 | Pending |
-| ASBL-05 | Phase 3 | Pending |
-| ASBL-06 | Phase 3 | Pending |
+| ASBL-05 | Phase 3 | Complete |
+| ASBL-06 | Phase 3 | Complete |
 | EBUS-01 | Phase 1 | Complete |
 | EBUS-02 | Phase 1 | Complete |
 | LLMP-01 | Phase 2 | Complete |
