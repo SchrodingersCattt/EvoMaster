@@ -24,6 +24,7 @@ from src.utils.feishu_notifier import (
     CARD_TEMPLATE_GREEN,
     CARD_TEMPLATE_ORANGE,
     CARD_TEMPLATE_RED,
+    format_llm_model_for_notify,
     notify_post_async,
 )
 from src.utils.logger import LogContext, LoggingConfig, setup_logging
@@ -236,6 +237,7 @@ def _run_worker_loop() -> None:
                     ('会话ID', session_id),
                     ('会话地址', session_url),
                     ('用户', user_info_display),
+                    ('模型', format_llm_model_for_notify(llm_override, model_override)),
                     ('用户问题', user_question or '-'),
                     ('执行节点', get_worker_id()),
                     ('执行中', str(active_count)),
@@ -349,6 +351,7 @@ def _run_worker_loop() -> None:
                     ('会话ID', session_id),
                     ('会话地址', session_url),
                     ('用户', user_info_display),
+                    ('模型', format_llm_model_for_notify(llm_override, model_override)),
                     ('用户问题', user_question or '-'),
                     ('执行节点', get_worker_id()),
                     (
@@ -367,7 +370,7 @@ def _run_worker_loop() -> None:
                     reason = (fail_reason.strip() or '-')[:500]
                     if len(fail_reason.strip()) > 500:
                         reason = reason + '…'
-                    rows.insert(6, ('失败原因', reason))  # 插在「结果」之后
+                    rows.insert(7, ('失败原因', reason))  # 插在「结果」之后
                 if fail_reason == 'cancelled':
                     title = '用户取消运行'
                     template = CARD_TEMPLATE_ORANGE

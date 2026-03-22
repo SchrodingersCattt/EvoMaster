@@ -11,6 +11,7 @@ from .agent_tool_observation import (
     compact_extract_webpage_observation,
     compact_mat_sn_papers_observation,
     format_tool_observation,
+    slim_tool_info_for_payload,
     summarize_large_tool_observation,
 )
 from .execution import BatchExecutor, ExecutionTask
@@ -42,7 +43,8 @@ class MatMasterToolExecutionMixin:
                 obs, inf = self._tool_callback_pipeline.run_after(
                     tool_call, error_msg, {'error': 'tool_not_found'}
                 )
-                return format_tool_observation(self.logger, tool_name, obs, inf), inf
+                slim = slim_tool_info_for_payload(inf)
+                return format_tool_observation(self.logger, tool_name, obs, slim), slim
 
             try:
                 observation, info = tool.execute(self.session, tool_args)
@@ -80,7 +82,7 @@ class MatMasterToolExecutionMixin:
                 )
 
             if tool_name == 'finish' and isinstance(observation, dict):
-                return observation, info
+                return observation, slim_tool_info_for_payload(info)
 
             observation, info = self._tool_callback_pipeline.run_after(
                 tool_call,
@@ -148,21 +150,26 @@ class MatMasterToolExecutionMixin:
                     observation = _summary
                     info = {**info, 'obs_summarized': True}
 
+            slim_info = slim_tool_info_for_payload(info)
             return (
-                format_tool_observation(self.logger, tool_name, observation, info),
-                info,
+                format_tool_observation(self.logger, tool_name, observation, slim_info),
+                slim_info,
             )
 
         except Exception as exc:
             tb_str = _tb.format_exc()
             error_msg = f"Tool execution error: {exc}\n\nTraceback:\n{tb_str}"
             self.logger.error('_execute_tool failed:\n%s', tb_str)
-            return format_tool_observation(
-                self.logger,
-                'internal_error',
-                error_msg,
-                {'error': str(exc)},
-            ), {'error': str(exc)}
+            err_info = slim_tool_info_for_payload({'error': str(exc)})
+            return (
+                format_tool_observation(
+                    self.logger,
+                    'internal_error',
+                    error_msg,
+                    err_info,
+                ),
+                err_info,
+            )
 
     def _execute_tools_parallel(
         self,
