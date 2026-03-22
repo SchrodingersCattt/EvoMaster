@@ -1,14 +1,15 @@
-"""Tests for AgentRuntimeSpec and CompactionConfig frozen models."""
+"""Tests for AgentRuntimeSpec, CompactionConfig, and AgentRuntime frozen models."""
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError
 from typing import Any, Iterator
 
 import pytest
 from pydantic import ValidationError
 
 from matmaster.types.guards import Guard, GuardContext, GuardResult
-from matmaster.types.runtime import AgentRuntimeSpec, CompactionConfig
+from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, CompactionConfig
 from matmaster.core.hooks import BaseHook, Hook
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -240,3 +241,40 @@ class TestAgentRuntimeSpecArbitraryTypes:
         assert spec.llm_provider is provider
         assert spec.tool_registry is registry
         assert isinstance(spec.llm_provider, LLMProvider)
+
+
+# ── AgentRuntime ────────────────────────────────────────
+
+
+class TestAgentRuntime:
+    """AgentRuntime frozen dataclass — runtime bundle from Exp.build_runtime()."""
+
+    def _make_spec(self) -> AgentRuntimeSpec:
+        return AgentRuntimeSpec(llm_provider=_MockLLMProvider())
+
+    def test_agent_runtime_creation(self) -> None:
+        """AgentRuntime holds kernel, spec, and cleanup callable."""
+        mock_kernel = object()
+        spec = self._make_spec()
+        cleanup_called: list[bool] = []
+
+        def cleanup() -> None:
+            cleanup_called.append(True)
+
+        runtime = AgentRuntime(kernel=mock_kernel, spec=spec, cleanup=cleanup)
+
+        assert runtime.kernel is mock_kernel
+        assert runtime.spec is spec
+        assert runtime.cleanup is cleanup
+        # Verify cleanup callable works
+        runtime.cleanup()
+        assert cleanup_called == [True]
+
+    def test_agent_runtime_is_frozen(self) -> None:
+        """AgentRuntime is frozen — reassignment raises FrozenInstanceError."""
+        mock_kernel = object()
+        spec = self._make_spec()
+        runtime = AgentRuntime(kernel=mock_kernel, spec=spec, cleanup=lambda: None)
+
+        with pytest.raises(FrozenInstanceError):
+            runtime.kernel = object()  # type: ignore[misc]
