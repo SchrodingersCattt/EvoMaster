@@ -32,7 +32,7 @@
 ### EventBus (事件系统)
 
 - [x] **EBUS-01**: MessageBus 使用同步 queue 实现，适配 ThreadPoolExecutor 线程模型
-- [x] **EBUS-02**: QueueBridge 将 MessageBus 事件桥接到现有 SSE 消费路径
+- [x] **EBUS-02**: QueueBridge 将 MessageBus 事件桥接到现有 SSE 消费路径 *(v1 实现已由 SSEHandler (matmaster/integration/event_router.py) 取代，QueueBridge 已在 Phase 7 清理)*
 
 ### LLM Provider
 
