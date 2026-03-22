@@ -82,10 +82,12 @@ Plans:
   3. mat_master 和 minimal 通过同一个 Playground 类 + 不同 config YAML 驱动，验证两种配置路径可用
   4. DirectExp 构造函数接收 mcp_config/skill_config，assemble() 中自行初始化 MCP 和 Skill（不再从 PlaygroundContext 读取）
   5. PlaygroundContext 包含 workspace 归档配置（WorkspaceArchivalConfig），run 结束后可通过配置驱动 workspace 快照上传
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md -- PlaygroundContext 收缩为物理环境契约 + WorkspaceArchivalConfig + 统一 Playground 核心生命周期 (WKSP-01, WKSP-04)
+- [ ] 04-02-PLAN.md -- 用统一 Playground 跑通 mat_master / minimal 两条 config 路径，并补 archival config (WKSP-02, WKSP-03)
+- [ ] 04-03-PLAN.md -- DirectExp 自行初始化 MCP / Skill 并通过 cleanup finally 自管资源，不再依赖 PlaygroundContext 能力字段 (WKSP-01)
 
 ### Phase 5: Integration and Quality
 **Goal**: mat_master 和 minimal 在新骨架上端到端跑通，三层契约有测试覆盖，上游场景对齐验证，迁移差异有文档记录
@@ -117,5 +119,5 @@ Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 D
 | 1. Foundation Contracts | 2/2 | Complete | 2026-03-21 |
 | 2. Agent Kernel | 2/3 | Gap closure | - |
 | 3. Exp Assembly Layer | 3/4 | Gap closure | - |
-| 4. Playground Layer | 0/1 | Not started | - |
+| 4. Playground Layer | 0/3 | Not started | - |
 | 5. Integration and Quality | 0/2 | Not started | - |
