@@ -52,3 +52,13 @@ class PlaygroundContext(BaseModel):
     env_vars: dict[str, str] = Field(default_factory=dict)
     archival: WorkspaceArchivalConfig | None = None
     run_meta: dict[str, Any] = Field(default_factory=dict)
+
+    def with_bohrium(self, result: dict[str, Any]) -> "PlaygroundContext":
+        """Return a new frozen instance with Bohrium result in run_meta.
+
+        Since PlaygroundContext is frozen, this creates a copy with
+        run_meta updated to include a 'bohrium' key. The original
+        instance is not mutated.
+        """
+        updated_meta = {**self.run_meta, "bohrium": result}
+        return self.model_copy(update={"run_meta": updated_meta})

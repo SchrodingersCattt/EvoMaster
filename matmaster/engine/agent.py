@@ -52,6 +52,7 @@ class AgentKernel:
         self,
         spec: AgentRuntimeSpec,
         task: str,
+        history: list[Message] | None = None,
         stop_event: threading.Event | None = None,
     ) -> FinishEvent:
         """Execute the agent loop until termination.
@@ -62,10 +63,18 @@ class AgentKernel:
         - cancelled: stop_event is set
         - hook_stopped: should_continue hook returns False
 
+        Args:
+            spec: Runtime specification with tools, hooks, guards, LLM provider.
+            task: The user's current task/prompt.
+            history: Optional multi-turn conversation history to insert between
+                     SystemMessage and UserMessage(task).
+            stop_event: External cancellation signal.
+
         Returns FinishEvent with the reason.
         """
         messages: list[Message] = [
             SystemMessage(content=spec.system_prompt),
+            *(history or []),
             UserMessage(content=task),
         ]
         guard_pipeline = GuardPipeline(spec.guards)
