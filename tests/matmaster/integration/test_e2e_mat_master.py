@@ -281,7 +281,6 @@ class TestMatMasterRunAgentSyncE2E:
         # Patch _build_llm_provider to return mock LLM
         mock_llm = MockLLMProvider("E2E test response")
         svc._build_llm_provider = MagicMock(return_value=mock_llm)
-        svc._get_builtin_tools = MagicMock(return_value=[])
 
         # Patch Playground to return test context
         mock_pg = MagicMock()
