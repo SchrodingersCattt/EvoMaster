@@ -60,6 +60,75 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
 
 
+# -- LLM Factory helpers (per D-01 through D-05) --
+
+_MODEL_FAMILY_DEFAULTS: dict[str, dict[str, str]] = {
+    'claude-4.6': {
+        'reasoning_protocol': 'anthropic_adaptive_thinking',
+        'temperature_policy': 'force_one_when_reasoning',
+    },
+    'gpt-5': {
+        'reasoning_protocol': 'openai_reasoning_effort',
+        'temperature_policy': 'default',
+    },
+    'deepseek-reasoner': {
+        'reasoning_protocol': 'openai_reasoning_effort',
+        'temperature_policy': 'default',
+    },
+    'gemini-3-flash-preview': {
+        'temperature_policy': 'default',
+    },
+}
+
+
+def _infer_model_family(model: str) -> str | None:
+    """Infer model family from model name string (per D-05, from evomaster/utils/llm.py)."""
+    name = (model or '').strip().lower()
+    if 'claude-sonnet-4-6' in name or 'claude-opus-4-6' in name:
+        return 'claude-4.6'
+    if 'claude-haiku-4-5' in name:
+        return 'claude-haiku-4.5'
+    if 'gpt-5' in name:
+        return 'gpt-5'
+    if 'deepseek-reasoner' in name:
+        return 'deepseek-reasoner'
+    if 'gemini-3-flash-preview' in name:
+        return 'gemini-3-flash-preview'
+    return None
+
+
+def _build_reasoning_extra_kwargs(
+    reasoning_protocol: str | None,
+    thinking_effort: str | None,
+) -> dict[str, Any]:
+    """Build extra_kwargs for OpenAIProvider from reasoning config (per D-04)."""
+    if not reasoning_protocol or not thinking_effort:
+        return {}
+    effort = thinking_effort.strip().lower()
+    if not effort:
+        return {}
+    if reasoning_protocol == 'anthropic_adaptive_thinking':
+        return {
+            'extra_body': {
+                'thinking': {'type': 'adaptive'},
+                'output_config': {'effort': effort},
+            },
+        }
+    if reasoning_protocol == 'openai_reasoning_effort':
+        return {'reasoning_effort': effort}
+    return {}
+
+
+def _resolve_temperature(
+    temperature: float,
+    temperature_policy: str | None,
+) -> float:
+    """Apply temperature policy (per D-04: claude-4.6 forces temperature=1)."""
+    if temperature_policy == 'force_one_when_reasoning':
+        return 1.0
+    return temperature
+
+
 @runtime_checkable
 class ReplyQueueLike(Protocol):
     """Confirmation reply queue abstraction: put content/cancel, blocking get."""
@@ -132,10 +201,128 @@ class AgentRunService:
         """Return the thread pool for agent execution."""
         return self._executor
 
-    def _build_llm_provider(self, pg_ctx, llm_override, model_override):
-        """Build LLMProvider from playground config. Placeholder for provider factory."""
-        # TODO: Wire actual LLM config extraction from pg_ctx
-        raise NotImplementedError("_build_llm_provider to be wired with config")
+    def _build_llm_provider(self, playground, model_override):
+        """Build LLMProvider from playground config (per D-01 through D-05).
+
+        Resolution chain:
+        1. Get llm config dict from playground config
+        2. Resolve profile key from model_override or agent default
+        3. Extract parameters from profile
+        4. Infer model family, apply reasoning parameters
+        5. Apply temperature policy
+        6. Instantiate OpenAIProvider with extra_kwargs
+        """
+        from matmaster.providers.openai_provider import OpenAIProvider
+
+        config = playground.config
+        llm_dict = config.llm  # dict of profile_key -> config dict
+
+        # 1. Resolve profile key
+        profile_key, llm_cfg = self._resolve_llm_profile(
+            llm_dict, config, model_override
+        )
+
+        # 2. Extract base parameters
+        model = model_override or llm_cfg.get('model', '')
+        api_key = llm_cfg.get('api_key', '')
+        base_url = llm_cfg.get('base_url')
+        temperature = float(llm_cfg.get('temperature', 0.7))
+        max_tokens = llm_cfg.get('max_tokens')
+        timeout = float(llm_cfg.get('timeout', 300))
+        max_retries = int(llm_cfg.get('max_retries', 3))
+        retry_delay = float(llm_cfg.get('retry_delay', 1.0))
+
+        # 3. Model family resolution
+        family = llm_cfg.get('model_family') or _infer_model_family(model)
+        family_defaults = _MODEL_FAMILY_DEFAULTS.get(family or '', {})
+
+        # 4. Reasoning parameters
+        reasoning_protocol = (
+            llm_cfg.get('reasoning_protocol')
+            or family_defaults.get('reasoning_protocol')
+        )
+        thinking_effort = llm_cfg.get('thinking_effort')
+        extra_kwargs = _build_reasoning_extra_kwargs(
+            reasoning_protocol, thinking_effort
+        )
+
+        # 5. Temperature policy
+        temp_policy = (
+            llm_cfg.get('temperature_policy')
+            or family_defaults.get('temperature_policy')
+        )
+        temperature = _resolve_temperature(temperature, temp_policy)
+
+        logger.info(
+            "_build_llm_provider: profile=%s model=%s family=%s reasoning=%s",
+            profile_key, model, family, reasoning_protocol,
+        )
+
+        return OpenAIProvider(
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            extra_kwargs=extra_kwargs or None,
+        )
+
+    def _resolve_llm_profile(self, llm_dict, config, model_override):
+        """Resolve LLM profile key and config dict from model_override.
+
+        Resolution order (per D-02, D-03):
+        1. Search config entries for matching model name
+        2. Search for matching profile key
+        3. Fall back to agents.general.llm default key, override model
+        """
+        if not isinstance(llm_dict, dict):
+            raise ValueError("Config missing 'llm' section")
+
+        # Default profile key from agents.general.llm
+        default_key = 'litellm'
+        agents = getattr(config, 'agents', None)
+        if isinstance(agents, dict):
+            general = agents.get('general', {})
+            if isinstance(general, dict):
+                default_key = general.get('llm', default_key)
+
+        if not model_override:
+            # No override: use default profile
+            cfg = llm_dict.get(default_key)
+            if cfg is None:
+                raise ValueError(
+                    f"Default LLM profile '{default_key}' not found in config"
+                )
+            return default_key, cfg
+
+        # 1. Search by model name match
+        for key, cfg in llm_dict.items():
+            if key == 'default' or not isinstance(cfg, dict):
+                continue
+            if cfg.get('model') == model_override:
+                return key, cfg
+
+        # 2. Search by profile key match
+        if model_override in llm_dict and isinstance(
+            llm_dict[model_override], dict
+        ):
+            return model_override, llm_dict[model_override]
+
+        # 3. Fallback: use default profile but override the model
+        logger.warning(
+            "model_override '%s' not found in config, using default profile '%s' with overridden model",
+            model_override,
+            default_key,
+        )
+        cfg = llm_dict.get(default_key)
+        if cfg is None:
+            raise ValueError(
+                f"Default LLM profile '{default_key}' not found in config"
+            )
+        return default_key, cfg
 
     def _get_builtin_tools(self, pg_ctx):
         """Get builtin tools for the playground type. Placeholder."""
@@ -241,7 +428,7 @@ class AgentRunService:
 
             exp = DirectExp(
                 llm_provider=self._build_llm_provider(
-                    pg_ctx, llm_override, model_override
+                    playground, model_override
                 ),
                 builtin_tools=self._get_builtin_tools(pg_ctx),
                 bus=bus,
