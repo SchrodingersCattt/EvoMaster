@@ -5,23 +5,21 @@ Assembles: builtin tools -> skill/MCP tools -> ToolRegistry -> ContextBuilder
 
 This is the standard assembly path for non-planner experiments.
 
-Phase 4 migration: DirectExp now owns MCP and Skill capability initialization.
-PlaygroundContext is strictly environment-only; capability config (mcp_config,
-skill_config) is passed to the constructor, and actual initialization happens
-in assemble().
+Phase 6 migration: Builtin tools (BashTool, EditorTool, MonitorJobTool) are
+constructed inside assemble() from ctx.session, not passed via constructor.
+session, config_dir, and builtin_tools constructor parameters removed.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any
 
 from matmaster.assembly.context_builder import ContextBuilder
 from matmaster.assembly.evomaster_tool_adapter import EvoToolAdapter
 from matmaster.assembly.exp import Exp
-from matmaster.assembly.tool_registry import Tool, ToolRegistry
+from matmaster.assembly.tool_registry import ToolRegistry
 from matmaster.bus.queue import MessageBus
 from matmaster.engine.hooks import EventEmitterHook
 from matmaster.types.context import PlaygroundContext
@@ -35,28 +33,21 @@ logger = logging.getLogger(__name__)
 class DirectExp(Exp):
     """Direct execution mode -- single agent, direct tool use.
 
-    Assembles a complete AgentRuntimeSpec from builtin tools, guards,
-    and LLM provider. Creates ToolRegistry, builds system prompt via
-    ContextBuilder, and wires EventEmitterHook for bus event delivery.
+    Assembles a complete AgentRuntimeSpec from guards and LLM provider.
+    Creates ToolRegistry with builtin tools from ctx.session, builds system
+    prompt via ContextBuilder, and wires EventEmitterHook for bus event delivery.
 
-    Phase 4: capability ownership.  MCP and Skill initialization are
-    handled here rather than in PlaygroundContext.  The constructor
-    accepts optional capability config and factory callables; assemble()
-    uses them to create EvoMaster tools, wraps them with EvoToolAdapter,
-    and registers them into the matmaster ToolRegistry.
+    Phase 6: builtin tools constructed in assemble() from ctx.session.
+    Constructor no longer accepts session, config_dir, or builtin_tools.
     """
 
     def __init__(
         self,
         *,
         llm_provider: LLMProvider,
-        builtin_tools: list[Tool] | None = None,
         guards: list[Guard] | None = None,
         max_turns: int = 100,
         bus: MessageBus | None = None,
-        # Phase 4: capability ownership parameters
-        session: Any | None = None,
-        config_dir: str | Path | None = None,
         mcp_config: dict[str, Any] | None = None,
         skill_config: dict[str, Any] | None = None,
         skill_registry_factory: Callable[[], Any] | None = None,
@@ -64,13 +55,9 @@ class DirectExp(Exp):
     ) -> None:
         super().__init__()
         self._llm_provider = llm_provider
-        self._builtin_tools = builtin_tools or []
         self._guards = list(guards) if guards else []
         self._max_turns = max_turns
         self._bus = bus  # If None, assemble() creates a new one
-        # Phase 4 capability config
-        self._session = session
-        self._config_dir = Path(config_dir) if config_dir else None
         self._mcp_config = mcp_config
         self._skill_config = skill_config
         self._skill_registry_factory = skill_registry_factory
@@ -87,13 +74,12 @@ class DirectExp(Exp):
         5. Build hooks (MessageBus + EventEmitterHook)
         6. Return complete AgentRuntimeSpec
         """
-        # 1. Build ToolRegistry from builtin tools
+        # 1. Build ToolRegistry and register builtin tools from ctx.session
         registry = ToolRegistry()
-        for tool in self._builtin_tools:
-            registry.register(tool, source="builtin")
+        self._init_builtin_tools(ctx, registry)
 
         # 2. Register skill tools (Exp-owned)
-        owned_skill_registry = self._init_skill_tools(registry)
+        owned_skill_registry = self._init_skill_tools(ctx, registry)
 
         # 3. Register MCP tools (Exp-owned)
         self._init_mcp_tools(ctx, registry)
@@ -128,7 +114,27 @@ class DirectExp(Exp):
     # Capability initialization helpers
     # ------------------------------------------------------------------
 
-    def _init_skill_tools(self, registry: ToolRegistry) -> Any | None:
+    def _init_builtin_tools(self, ctx: PlaygroundContext, registry: ToolRegistry) -> None:
+        """Construct and register builtin tools using ctx.session (per D-06, D-07, D-08).
+
+        Builtin tools: BashTool, EditorTool, MonitorJobTool.
+        Each is wrapped with EvoToolAdapter for matmaster Tool Protocol.
+        """
+        if ctx.session is None:
+            logger.warning("No session in PlaygroundContext, skipping builtin tools")
+            return
+
+        from evomaster.agent.tools.builtin.bash import BashTool
+        from evomaster.agent.tools.builtin.editor import EditorTool
+        from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
+
+        for evo_tool in [BashTool(), EditorTool(), MonitorJobTool()]:
+            adapted = EvoToolAdapter(evo_tool, ctx.session)
+            registry.register(adapted, source="builtin")
+
+        logger.debug("Registered 3 builtin tools via EvoToolAdapter")
+
+    def _init_skill_tools(self, ctx: PlaygroundContext, registry: ToolRegistry) -> Any | None:
         """Initialize skill tools if skill_config is enabled.
 
         Returns the owned skill_registry (for ContextBuilder) or None.
@@ -148,7 +154,7 @@ class DirectExp(Exp):
         from evomaster.agent.tools.skill import SkillTool
 
         evo_skill_tool = SkillTool(skill_reg)
-        adapted = EvoToolAdapter(evo_skill_tool, self._session)
+        adapted = EvoToolAdapter(evo_skill_tool, ctx.session)
         registry.register(adapted, source="skill")
         logger.debug("Registered skill tool via EvoToolAdapter")
         return skill_reg
@@ -187,7 +193,7 @@ class DirectExp(Exp):
 
         evo_tools = evo_registry.get_all_tools()
         for evo_tool in evo_tools:
-            adapted = EvoToolAdapter(evo_tool, self._session)
+            adapted = EvoToolAdapter(evo_tool, ctx.session)
             registry.register(adapted, source="mcp")
 
         logger.debug("Registered %d MCP tools via EvoToolAdapter", len(evo_tools))
