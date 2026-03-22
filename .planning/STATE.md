@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Phase 4 context gathered
-last_updated: "2026-03-22T05:38:49.762Z"
-last_activity: "2026-03-22 -- Completed plan 03-04 (Gap Closure: Circular Import Fix) -- Phase 3 fully verified"
+status: in-progress
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-22T06:10:38.000Z"
+last_activity: "2026-03-22 -- Completed plan 04-01 (Playground Contract + Unified Core Lifecycle)"
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_plans: 12
+  completed_plans: 10
+  percent: 83
 ---
 
 # Project State
@@ -21,23 +21,23 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 3: Exp Assembly Layer -- COMPLETE
+**Current focus:** Phase 4: Playground Layer -- IN PROGRESS
 
 ## Current Position
 
-Phase: 3 of 5 (Exp Assembly Layer) -- COMPLETE
-Plan: 4 of 4 in current phase (includes gap closure plan)
-Status: Phase 3 complete. All 4 plans executed (3 original + 1 gap closure).
-Last activity: 2026-03-22 -- Completed plan 03-04 (Gap Closure: Circular Import Fix) -- Phase 3 fully verified
+Phase: 4 of 5 (Playground Layer)
+Plan: 1 of 3 in current phase (04-01 complete)
+Status: Plan 04-01 complete. Playground contract and unified core lifecycle delivered.
+Last activity: 2026-03-22 -- Completed plan 04-01 (Playground Contract + Unified Core Lifecycle)
 
-Progress: [██████████] 100%
+Progress: [████████░░] 83%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
+- Total plans completed: 7
 - Average duration: 5min
-- Total execution time: 0.52 hours
+- Total execution time: 0.60 hours
 
 **By Phase:**
 
@@ -46,15 +46,17 @@ Progress: [██████████] 100%
 | 01-foundation-contracts | 2 | 10min | 5min |
 | 02-agent-kernel | 3 | 17min | 6min |
 | 03-exp-assembly-layer | 1 | 4min | 4min |
+| 04-playground-layer | 1 | 5min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-02 (4min), 02-01 (5min), 02-02 (7min), 02-03 (5min), 03-02 (4min)
+- Last 5 plans: 02-02 (7min), 02-03 (5min), 03-02 (4min), 03-04 (2min), 04-01 (5min)
 - Trend: Stable
 
 *Updated after each plan completion*
 | Phase 03 P01 | 5min | 2 tasks | 6 files |
 | Phase 03 P03 | 4min | 2 tasks | 7 files |
 | Phase 03 P04 | 2min | 1 tasks | 3 files |
+| Phase 04 P01 | 5min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -99,6 +101,9 @@ Recent decisions affecting current work:
 - [Phase 04 Context]: Service layer reads config and distributes -- physical env config to Playground, capability config to Exp
 - [Phase 04 Context]: Exp.assemble() initializes MCP/Skill using mcp_config (constructor) + ctx.workdir (PlaygroundContext)
 - [Phase 04 Context]: Mixed cleanup model -- Exp self-manages via try/finally, Playground cleanup by Service layer
+- [Phase 04-01]: WorkspaceArchivalConfig._build_archival_config() returns None when archival.enabled is False
+- [Phase 04-01]: Playground(config_path) constructor consistent with existing BasePlayground pattern
+- [Phase 04-01]: _sync_workspace_to_session_config updates both workspace_path and working_dir to prevent directory inconsistency
 
 ### Pending Todos
 
@@ -112,6 +117,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T05:38:49.750Z
-Stopped at: Phase 4 context gathered
-Resume file: .planning/phases/04-playground-layer/04-CONTEXT.md
+Last session: 2026-03-22T06:10:38.000Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: .planning/phases/04-playground-layer/04-01-SUMMARY.md
