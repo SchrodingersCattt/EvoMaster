@@ -320,3 +320,92 @@ class TestNoTypeCollision:
         ]
         assert len(type_values) == 16
         assert len(set(type_values)) == 16
+
+
+# ── Edge case tests (QUAL-01) ─────────────────────────
+
+
+_ALL_EVENT_CLASSES = [
+    ThoughtEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+    FinishEvent,
+    ErrorEvent,
+    AssistantStateEvent,
+    SkillHitEvent,
+    ConfirmationRequestEvent,
+    ConfirmationTimeoutEvent,
+    ContextCompactionEvent,
+    ExpRunEvent,
+    CancelledEvent,
+    WorkspaceUploadErrorEvent,
+    BohriumNodeEvent,
+    McpServerStatusEvent,
+    McpConnectEvent,
+]
+
+
+def _make_event_instance(cls):
+    """Create a minimal valid instance of each event class."""
+    required_extra = {
+        ToolCallEvent: {"call_id": "c1", "tool_name": "t1", "arguments": {"k": "v"}},
+        ToolResultEvent: {"call_id": "c1", "tool_name": "t1", "result": "ok"},
+        ErrorEvent: {"message": "err"},
+        AssistantStateEvent: {"state": {"content": "hi"}},
+        SkillHitEvent: {"skill_name": "research"},
+        ConfirmationRequestEvent: {"question": "proceed?", "mode": "timeout"},
+        ConfirmationTimeoutEvent: {"question": "proceed?"},
+        ContextCompactionEvent: {"payload": {"tokens": 100}},
+        ExpRunEvent: {"exp_name": "mat_master"},
+        WorkspaceUploadErrorEvent: {"message": "upload failed"},
+        McpServerStatusEvent: {"server_name": "code-server"},
+    }
+    kwargs = {"source": "test", **required_extra.get(cls, {})}
+    return cls(**kwargs)
+
+
+class TestBusEventDiscriminatedUnionRoundtrip:
+    """QUAL-01: For each of the 16 event types, create -> dump -> validate -> assert match."""
+
+    def test_bus_event_discriminated_union_roundtrip(self) -> None:
+        for cls in _ALL_EVENT_CLASSES:
+            event = _make_event_instance(cls)
+            data = event.model_dump()
+            restored = _bus_event_adapter.validate_python(data)
+            assert type(restored) is type(event), (
+                f"Roundtrip failed for {cls.__name__}: "
+                f"got {type(restored).__name__}"
+            )
+            # Verify key fields survive roundtrip
+            assert restored.type == event.type
+            assert restored.source == event.source
+
+
+class TestThoughtEventStreamStates:
+    """QUAL-01: Test stream_state values for ThoughtEvent."""
+
+    def test_thought_event_stream_states(self) -> None:
+        for state in ("start", "streaming", "end", None):
+            evt = ThoughtEvent(source="agent", stream_state=state)
+            assert evt.stream_state == state
+
+
+class TestEventTimestampAutoPopulated:
+    """QUAL-01: Create event without explicit timestamp, assert timestamp is set."""
+
+    def test_event_timestamp_auto_populated(self) -> None:
+        for cls in _ALL_EVENT_CLASSES:
+            event = _make_event_instance(cls)
+            assert isinstance(event.timestamp, datetime), (
+                f"{cls.__name__}.timestamp not auto-populated"
+            )
+
+
+class TestBusEventInvalidTypeRejected:
+    """QUAL-01: Pydantic validation error for unknown type discriminator."""
+
+    def test_bus_event_invalid_type_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            _bus_event_adapter.validate_python(
+                {"type": "nonexistent_fake_type", "source": "x"}
+            )
