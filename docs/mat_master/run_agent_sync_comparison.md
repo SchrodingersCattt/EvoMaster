@@ -44,7 +44,7 @@
 | 项目 | 生产 | 本地 Web |
 |------|------|----------|
 | 事件存储 | `get_chat_events_table().add_event` → DB | `state.SESSIONS` + `persistence._persist_history_event`（本地文件） |
-| 历史来源 | DB：`get_session_events(session_id)`，若最后一条为 `User`/`query` 则去掉 | 内存：`state.SESSIONS[session_id]['history']`，若最后一条 `type == 'query'` 则去掉 |
+| 历史来源 | DB：`get_session_events` → `trim_events_for_dialog_history`（`playground/mat_master/core/dialog_history_helpers.py`） | 内存 history 同样经 `trim_events_for_dialog_history`；去掉条件为最后一条 `User` + `query` |
 | 条数上限 | 环境变量 `CHAT_DIALOG_HISTORY_MAX_EVENTS`（默认 500，见 `agent_run_service`） | `state.DIALOG_HISTORY_MAX_EVENTS`（同源环境变量名，默认 500） |
 | 孤儿 tool 调用 | 无 `_heal_orphaned_tool_calls` | 有 `persistence._heal_orphaned_tool_calls` |
 
@@ -87,7 +87,7 @@
 
 1. 是否改动了 **`event_callback` 里写入 DB / 推送 / `tool_result` 分支**？→ 核对生产 `agent_run_service` 与本地 `run_agent.py`。
 2. 是否改动了 **direct / planner 下 `thought` 的展示**？→ 改 `playground/mat_master/core/run_helpers.py` 中 `should_skip_push_for_frontend` / `should_persist_chat_event`（两处共用）。
-3. 是否改动了 **多轮 `dialog_history` 的裁剪或字段**？→ 核对 DB 路径与 `state.SESSIONS` 路径。
+3. 是否改动了 **多轮 `dialog_history` 的裁剪或字段**？→ 改 `playground/mat_master/core/dialog_history_helpers.py` 中 `trim_events_for_dialog_history` / `build_mat_master_discovery_task`（两处共用）。
 4. 是否改动了 **Bohrium、SSH、workspace 上传**？→ 以 `agent_run_bohrium` 与 `agent_run_service` 为准；本地仅为子集。
 5. 是否改动了 **`StreamingMatMasterAgent` 构造函数参数**？→ 两处 `StreamingMatMasterAgent(...)` 调用是否都要更新。
 
@@ -99,6 +99,7 @@
 |------|------|
 | 共用推送/落库判断 | `playground/mat_master/core/run_helpers.py` |
 | 首个 agent 配置与 prompt 路径 | `playground/mat_master/core/agent_config_helpers.py` |
+| 多轮事件裁剪与 discovery Task | `playground/mat_master/core/dialog_history_helpers.py` |
 | 生产 run | `src/services/agent_run_service.py` |
 | 生产 Bohrium | `src/services/agent_run_bohrium.py` |
 | 本地 Web run | `playground/mat_master/service/server/run_agent.py` |

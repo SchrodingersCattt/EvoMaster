@@ -15,10 +15,13 @@ from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from evomaster.core import get_playground_class
 from evomaster.utils import LLMConfig, create_llm
-from evomaster.utils.types import TaskInstance
 from playground.mat_master.core.agent_config_helpers import (
     get_first_agent_config,
     resolve_mat_master_prompt_files,
+)
+from playground.mat_master.core.dialog_history_helpers import (
+    build_mat_master_discovery_task,
+    trim_events_for_dialog_history,
 )
 from playground.mat_master.core.run_helpers import (
     should_persist_chat_event,
@@ -638,21 +641,14 @@ class AgentRunService:
             event_callback('MatMaster', 'exp_run', exp_name)
 
             # 多轮对话：从 DB 取历史事件
-            history_events = []
+            history_events: list = []
             try:
                 events_table = get_chat_events_table()
                 if events_table:
                     all_events = events_table.get_session_events(session_id) or []
-                    if (
-                        all_events
-                        and all_events[-1].get('source') == 'User'
-                        and all_events[-1].get('type') == 'query'
-                    ):
-                        history_events = all_events[:-1]
-                    else:
-                        history_events = all_events
-                    if len(history_events) > _DIALOG_HISTORY_MAX_EVENTS:
-                        history_events = history_events[-_DIALOG_HISTORY_MAX_EVENTS:]
+                    history_events = trim_events_for_dialog_history(
+                        all_events, _DIALOG_HISTORY_MAX_EVENTS
+                    )
             except Exception as e:
                 logger.debug(
                     'run_agent_sync: get_session_events for history failed: %s',
@@ -669,12 +665,7 @@ class AgentRunService:
                     session_id,
                     len(dialog_history),
                 )
-            task = TaskInstance(
-                task_id=task_id,
-                task_type='discovery',
-                description=user_prompt,
-                meta={'dialog_history': dialog_history},
-            )
+            task = build_mat_master_discovery_task(task_id, user_prompt, dialog_history)
             exp.run(task=task, append_result=False)
             if stop_event.is_set():
                 logger.info(
