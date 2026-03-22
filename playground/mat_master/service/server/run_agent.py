@@ -7,9 +7,24 @@ import logging
 import queue
 import threading
 import uuid
-from pathlib import Path
 
-from evomaster.utils.types import TaskInstance
+from playground.mat_master.core.agent_config_helpers import (
+    get_first_agent_config,
+    resolve_mat_master_prompt_files,
+)
+from playground.mat_master.core.ask_human_helpers import (
+    attach_ask_human_on_agent,
+    get_ask_human_config_dict,
+)
+from playground.mat_master.core.dialog_history_helpers import (
+    build_mat_master_discovery_task,
+    trim_events_for_dialog_history,
+)
+from playground.mat_master.core.run_helpers import (
+    is_streaming_thought_event,
+    should_persist_chat_event,
+    should_skip_push_for_frontend,
+)
 from src.services.chat_history import ChatHistoryConverter
 from src.utils.chat_event_source import normalize_event_source
 
@@ -38,20 +53,6 @@ def _run_agent_sync(
     run_done: threading.Event | None = None
     _msg_seq = 0
 
-    def _is_streaming_thought_event(event_type: str, extra: dict[str, object]) -> bool:
-        return event_type == 'thought' and extra.get('stream_state') in {
-            'start',
-            'streaming',
-            'end',
-        }
-
-    def _should_skip_push(
-        source: str, event_type: str, extra: dict[str, object]
-    ) -> bool:
-        if event_type == 'assistant_state':
-            return True
-        return source == 'Planner' and _is_streaming_thought_event(event_type, extra)
-
     def event_callback(source: str, event_type: str, content, **extra) -> None:
         nonlocal _msg_seq
         _msg_seq += 1
@@ -72,11 +73,11 @@ def _run_agent_sync(
             state.SESSIONS[session_id]['history'].append(payload)
             persistence._persist_history_event(session_id, payload)
             return
-        _is_streaming_thought = _is_streaming_thought_event(event_type, extra)
-        if event_type not in ('log_line', 'llm_token') and not _is_streaming_thought:
+        _is_streaming_thought = is_streaming_thought_event(event_type, extra)
+        if should_persist_chat_event(event_type, extra):
             state.SESSIONS[session_id]['history'].append(payload)
             persistence._persist_history_event(session_id, payload)
-        if _should_skip_push(raw_source, event_type, extra):
+        if should_skip_push_for_frontend(mode, raw_source, event_type, extra):
             return
         if _is_streaming_thought and extra.get('stream_state') == 'streaming':
             asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
@@ -194,25 +195,10 @@ def _run_agent_sync(
 
         base = pg.agent
         config_dict = pg.config.model_dump()
-        agents_block = config_dict.get('agents')
-        if isinstance(agents_block, dict) and agents_block:
-            agent_config = next(iter(agents_block.values()))
-        else:
-            agent_config = config_dict.get('agent') or {}
-        if not isinstance(agent_config, dict):
-            agent_config = {}
-        system_prompt_file = agent_config.get('system_prompt_file')
-        user_prompt_file = agent_config.get('user_prompt_file')
-        playground_base = Path(str(pg.config_dir).replace('configs', 'playground'))
-        if system_prompt_file:
-            p = Path(system_prompt_file)
-            if not p.is_absolute():
-                system_prompt_file = str((playground_base / p).resolve())
-        if user_prompt_file:
-            p = Path(user_prompt_file)
-            if not p.is_absolute():
-                user_prompt_file = str((playground_base / p).resolve())
-        prompt_format_kwargs = agent_config.get('prompt_format_kwargs', {})
+        agent_config = get_first_agent_config(config_dict)
+        system_prompt_file, user_prompt_file, prompt_format_kwargs = (
+            resolve_mat_master_prompt_files(pg.config_dir, agent_config)
+        )
 
         from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 
@@ -237,23 +223,12 @@ def _run_agent_sync(
         agent.set_agent_name(getattr(base, '_agent_name', 'default'))
         agent._stop_event = stop_event
         if ask_human_queue is not None:
-            agent._ask_human_queue = ask_human_queue
-            try:
-                from playground.mat_master.service.confirm import ConfirmationManager
-
-                ah_cfg = (
-                    (getattr(pg, 'config', None) or {})
-                    .get('mat_master', {})
-                    .get('ask_human', {})
-                )
-                agent._ask_human_config = ah_cfg
-                agent._confirm_manager = ConfirmationManager(
-                    emitter=event_callback,
-                    reply_queue=ask_human_queue,
-                    default_timeout_sec=ah_cfg.get('timeout_seconds', 20),
-                )
-            except Exception:
-                pass
+            attach_ask_human_on_agent(
+                agent,
+                ask_human_queue,
+                event_callback,
+                get_ask_human_config_dict(config_dict),
+            )
 
         pg.agent = agent
         exp = pg._create_exp()
@@ -263,13 +238,9 @@ def _run_agent_sync(
         persistence._heal_orphaned_tool_calls(session_id)
 
         all_events = list(state.SESSIONS.get(session_id, {}).get('history', []))
-        prior_events = (
-            all_events[:-1]
-            if all_events and all_events[-1].get('type') == 'query'
-            else all_events
+        prior_events = trim_events_for_dialog_history(
+            all_events, state.DIALOG_HISTORY_MAX_EVENTS
         )
-        if len(prior_events) > state.DIALOG_HISTORY_MAX_EVENTS:
-            prior_events = prior_events[-state.DIALOG_HISTORY_MAX_EVENTS :]
         dialog_history = (
             ChatHistoryConverter.events_to_dialog_messages(prior_events)
             if prior_events
@@ -282,12 +253,7 @@ def _run_agent_sync(
                 len(dialog_history),
             )
 
-        task = TaskInstance(
-            task_id=task_id,
-            task_type='discovery',
-            description=user_prompt,
-            meta={'dialog_history': dialog_history},
-        )
+        task = build_mat_master_discovery_task(task_id, user_prompt, dialog_history)
         exp.run(task=task)
         if stop_event.is_set():
             event_callback('System', 'cancelled', 'Task cancelled by user.')

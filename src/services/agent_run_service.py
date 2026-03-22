@@ -15,8 +15,22 @@ from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from evomaster.core import get_playground_class
 from evomaster.utils import LLMConfig, create_llm
-from evomaster.utils.types import TaskInstance
-from playground.mat_master.service.confirm import ConfirmationManager
+from playground.mat_master.core.agent_config_helpers import (
+    get_first_agent_config,
+    resolve_mat_master_prompt_files,
+)
+from playground.mat_master.core.ask_human_helpers import (
+    attach_ask_human_on_agent,
+    get_ask_human_config_dict,
+)
+from playground.mat_master.core.dialog_history_helpers import (
+    build_mat_master_discovery_task,
+    trim_events_for_dialog_history,
+)
+from playground.mat_master.core.run_helpers import (
+    should_persist_chat_event,
+    should_skip_push_for_frontend,
+)
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_dir_to_oss
@@ -66,37 +80,6 @@ class ReplyQueueLike(Protocol):
     def get(self, timeout: float | None = None) -> str | None:
         """阻塞获取回复。返回 None 表示取消；超时抛出 queue.Empty。"""
         ...
-
-
-def _is_streaming_thought_event(event_type: str, extra: dict[str, Any]) -> bool:
-    """Return whether the event is an ephemeral thought stream marker/delta."""
-    return event_type == 'thought' and extra.get('stream_state') in {
-        'start',
-        'streaming',
-        'end',
-    }
-
-
-def _should_persist_event(event_type: str, extra: dict[str, Any]) -> bool:
-    """Persist durable events only."""
-    if event_type in {'log_line', 'llm_token'}:
-        return False
-    return not _is_streaming_thought_event(event_type, extra)
-
-
-def _should_skip_push(
-    mode: str, source: str, event_type: str, extra: dict[str, Any]
-) -> bool:
-    """Skip frontend push for internal-only thought variants."""
-    if event_type == 'assistant_state':
-        return True
-    if source == 'Planner' and _is_streaming_thought_event(event_type, extra):
-        return True
-    return (
-        mode == 'direct'
-        and event_type == 'thought'
-        and not _is_streaming_thought_event(event_type, extra)
-    )
 
 
 class AgentRunService:
@@ -369,7 +352,7 @@ class AgentRunService:
             if event_type == 'end':
                 payload['task_completed'] = _task_completed
             payload.update(extra)
-            if _should_persist_event(event_type, extra):
+            if should_persist_chat_event(event_type, extra):
                 events_table = get_chat_events_table()
                 if events_table:
                     try:
@@ -389,7 +372,9 @@ class AgentRunService:
                     session_id,
                 )
             # Planner 的原始流式 JSON thought 仅供内部消费；Direct 的完整 thought 仅入库不重复推送。
-            skip_push = _should_skip_push(mode, raw_source, event_type, extra)
+            skip_push = should_skip_push_for_frontend(
+                mode, raw_source, event_type, extra
+            )
             if not skip_push:
                 if loop is not None and asyncio.iscoroutinefunction(send_cb):
                     future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
@@ -517,25 +502,10 @@ class AgentRunService:
 
             base = pg.agent
             config_dict = pg.config.model_dump()
-            agents_block = config_dict.get('agents')
-            if isinstance(agents_block, dict) and agents_block:
-                agent_config = next(iter(agents_block.values()))
-            else:
-                agent_config = config_dict.get('agent') or {}
-            if not isinstance(agent_config, dict):
-                agent_config = {}
-            system_prompt_file = agent_config.get('system_prompt_file')
-            user_prompt_file = agent_config.get('user_prompt_file')
-            playground_base = Path(str(pg.config_dir).replace('configs', 'playground'))
-            if system_prompt_file:
-                p = Path(system_prompt_file)
-                if not p.is_absolute():
-                    system_prompt_file = str((playground_base / p).resolve())
-            if user_prompt_file:
-                p = Path(user_prompt_file)
-                if not p.is_absolute():
-                    user_prompt_file = str((playground_base / p).resolve())
-            prompt_format_kwargs = agent_config.get('prompt_format_kwargs', {})
+            agent_config = get_first_agent_config(config_dict)
+            system_prompt_file, user_prompt_file, prompt_format_kwargs = (
+                resolve_mat_master_prompt_files(pg.config_dir, agent_config)
+            )
 
             run_creds, user_id_for_ak, org_id = load_run_credentials(
                 self._sessions_service, session_id
@@ -588,11 +558,16 @@ class AgentRunService:
                     except Exception:
                         cfg = {}
                     if model_override and cfg:
-                        matched = pg.config_manager.find_llm_config_by_model(model_override)
+                        matched = pg.config_manager.find_llm_config_by_model(
+                            model_override
+                        )
                         if matched:
                             _MODEL_BEHAVIOR_KEYS = {
-                                'reasoning_protocol', 'thinking_effort',
-                                'model_family', 'fallback_group', 'temperature_policy',
+                                'reasoning_protocol',
+                                'thinking_effort',
+                                'model_family',
+                                'fallback_group',
+                                'temperature_policy',
                             }
                             for key in _MODEL_BEHAVIOR_KEYS:
                                 if key in matched:
@@ -636,26 +611,12 @@ class AgentRunService:
             if getattr(agent, 'session', None) is not None:
                 agent.session._stop_event = stop_event
             if reply_queue is not None:
-                agent._ask_human_queue = reply_queue
-                try:
-                    mat_master_block = (
-                        config_dict.get('mat_master')
-                        if isinstance(config_dict, dict)
-                        else None
-                    )
-                    ah_cfg = (
-                        mat_master_block.get('ask_human')
-                        if isinstance(mat_master_block, dict)
-                        else {}
-                    ) or {}
-                    agent._ask_human_config = ah_cfg
-                    agent._confirm_manager = ConfirmationManager(
-                        emitter=event_callback,
-                        reply_queue=reply_queue,
-                        default_timeout_sec=ah_cfg.get('timeout_seconds', 20),
-                    )
-                except Exception:
-                    pass
+                attach_ask_human_on_agent(
+                    agent,
+                    reply_queue,
+                    event_callback,
+                    get_ask_human_config_dict(config_dict),
+                )
 
             pg.agent = agent
             exp = pg._create_exp()
@@ -669,21 +630,14 @@ class AgentRunService:
             event_callback('MatMaster', 'exp_run', exp_name)
 
             # 多轮对话：从 DB 取历史事件
-            history_events = []
+            history_events: list = []
             try:
                 events_table = get_chat_events_table()
                 if events_table:
                     all_events = events_table.get_session_events(session_id) or []
-                    if (
-                        all_events
-                        and all_events[-1].get('source') == 'User'
-                        and all_events[-1].get('type') == 'query'
-                    ):
-                        history_events = all_events[:-1]
-                    else:
-                        history_events = all_events
-                    if len(history_events) > _DIALOG_HISTORY_MAX_EVENTS:
-                        history_events = history_events[-_DIALOG_HISTORY_MAX_EVENTS:]
+                    history_events = trim_events_for_dialog_history(
+                        all_events, _DIALOG_HISTORY_MAX_EVENTS
+                    )
             except Exception as e:
                 logger.debug(
                     'run_agent_sync: get_session_events for history failed: %s',
@@ -700,12 +654,7 @@ class AgentRunService:
                     session_id,
                     len(dialog_history),
                 )
-            task = TaskInstance(
-                task_id=task_id,
-                task_type='discovery',
-                description=user_prompt,
-                meta={'dialog_history': dialog_history},
-            )
+            task = build_mat_master_discovery_task(task_id, user_prompt, dialog_history)
             exp.run(task=task, append_result=False)
             if stop_event.is_set():
                 logger.info(
