@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in-progress
-stopped_at: Completed 04-01-PLAN.md
-last_updated: "2026-03-22T06:10:38.000Z"
-last_activity: "2026-03-22 -- Completed plan 04-01 (Playground Contract + Unified Core Lifecycle)"
+stopped_at: Completed 04-03-PLAN.md
+last_updated: "2026-03-22T06:18:45.000Z"
+last_activity: "2026-03-22 -- Completed plan 04-03 (Exp Capability Ownership)"
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 12
-  completed_plans: 10
-  percent: 83
+  completed_plans: 12
+  percent: 92
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Position
 
 Phase: 4 of 5 (Playground Layer)
-Plan: 1 of 3 in current phase (04-01 complete)
-Status: Plan 04-01 complete. Playground contract and unified core lifecycle delivered.
-Last activity: 2026-03-22 -- Completed plan 04-01 (Playground Contract + Unified Core Lifecycle)
+Plan: 3 of 3 in current phase (04-03 complete)
+Status: Plan 04-03 complete. Exp capability ownership migration delivered.
+Last activity: 2026-03-22 -- Completed plan 04-03 (Exp Capability Ownership)
 
-Progress: [████████░░] 83%
+Progress: [█████████░] 92%
 
 ## Performance Metrics
 
@@ -46,10 +46,10 @@ Progress: [████████░░] 83%
 | 01-foundation-contracts | 2 | 10min | 5min |
 | 02-agent-kernel | 3 | 17min | 6min |
 | 03-exp-assembly-layer | 1 | 4min | 4min |
-| 04-playground-layer | 1 | 5min | 5min |
+| 04-playground-layer | 3 | 14min | 5min |
 
 **Recent Trend:**
-- Last 5 plans: 02-02 (7min), 02-03 (5min), 03-02 (4min), 03-04 (2min), 04-01 (5min)
+- Last 5 plans: 02-03 (5min), 03-02 (4min), 03-04 (2min), 04-01 (5min), 04-03 (4min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -57,6 +57,8 @@ Progress: [████████░░] 83%
 | Phase 03 P03 | 4min | 2 tasks | 7 files |
 | Phase 03 P04 | 2min | 1 tasks | 3 files |
 | Phase 04 P01 | 5min | 2 tasks | 6 files |
+| Phase 04 P02 | 5min | 2 tasks | 4 files |
+| Phase 04 P03 | 4min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -101,9 +103,16 @@ Recent decisions affecting current work:
 - [Phase 04 Context]: Service layer reads config and distributes -- physical env config to Playground, capability config to Exp
 - [Phase 04 Context]: Exp.assemble() initializes MCP/Skill using mcp_config (constructor) + ctx.workdir (PlaygroundContext)
 - [Phase 04 Context]: Mixed cleanup model -- Exp self-manages via try/finally, Playground cleanup by Service layer
+- [Phase 04-02]: _build_archival_config() returns config even when enabled=False -- None only when no archival block in YAML
+- [Phase 04-02]: Workspace sync before session.open() -- prevents /workspace mkdir on real configs
+- [Phase 04-02]: _resolve_cache_area() resolves relative playground.cache_dir under workspace path
 - [Phase 04-01]: WorkspaceArchivalConfig._build_archival_config() returns None when archival.enabled is False
 - [Phase 04-01]: Playground(config_path) constructor consistent with existing BasePlayground pattern
 - [Phase 04-01]: _sync_workspace_to_session_config updates both workspace_path and working_dir to prevent directory inconsistency
+- [Phase 04-03]: EvoToolAdapter wraps BaseTool without inheritance -- clean adapter pattern, no EvoMaster coupling in matmaster types
+- [Phase 04-03]: Factory callback injection for skill/MCP init -- DirectExp receives callables enabling test isolation
+- [Phase 04-03]: Cleanup callbacks execute independently -- one failing callback does not prevent others
+- [Phase 04-03]: Structured observation JSON-serialized by adapter -- matmaster Tool Protocol contract stays str-only
 
 ### Pending Todos
 
@@ -117,6 +126,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T06:10:38.000Z
-Stopped at: Completed 04-01-PLAN.md
-Resume file: .planning/phases/04-playground-layer/04-01-SUMMARY.md
+Last session: 2026-03-22T06:18:45.000Z
+Stopped at: Completed 04-03-PLAN.md
+Resume file: .planning/phases/04-playground-layer/04-03-SUMMARY.md
