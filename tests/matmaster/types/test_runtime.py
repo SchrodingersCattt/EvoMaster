@@ -190,3 +190,53 @@ class TestAgentRuntimeSpec:
         assert isinstance(spec.llm_provider, LLMProvider)
         assert len(spec.hooks) == 2
         assert len(spec.guards) == 1
+
+
+# ── Edge case tests (QUAL-01) ─────────────────────────
+
+
+class TestAgentRuntimeSpecFrozenRejectMutation:
+    """QUAL-01: Attempt to modify frozen spec fields -> error."""
+
+    def test_agent_runtime_spec_frozen_reject_mutation(self) -> None:
+        spec = AgentRuntimeSpec(
+            llm_provider=_MockLLMProvider(),
+            tool_registry=ToolRegistry(),
+            guards=[_MockGuard()],
+        )
+        with pytest.raises(ValidationError):
+            spec.max_turns = 50
+        with pytest.raises(ValidationError):
+            spec.system_prompt = "changed"
+        with pytest.raises(ValidationError):
+            spec.mode = "planner"
+
+
+class TestAgentRuntimeSpecDefaults:
+    """QUAL-01: Default values for all optional fields."""
+
+    def test_agent_runtime_spec_defaults(self) -> None:
+        spec = AgentRuntimeSpec(
+            llm_provider=_MockLLMProvider(),
+        )
+        assert spec.max_turns == 100
+        assert spec.mode == "direct"
+        assert spec.system_prompt == ""
+        assert spec.guards == []
+        assert spec.hooks == []
+        assert spec.tool_registry is None
+
+
+class TestAgentRuntimeSpecArbitraryTypes:
+    """QUAL-01: LLMProvider and ToolRegistry accepted as arbitrary types."""
+
+    def test_agent_runtime_spec_arbitrary_types(self) -> None:
+        provider = _MockLLMProvider()
+        registry = ToolRegistry()
+        spec = AgentRuntimeSpec(
+            llm_provider=provider,
+            tool_registry=registry,
+        )
+        assert spec.llm_provider is provider
+        assert spec.tool_registry is registry
+        assert isinstance(spec.llm_provider, LLMProvider)
