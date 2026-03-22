@@ -62,6 +62,7 @@ Progress: [█████████░] 94%
 | Phase 05 P01 | 4min | 2 tasks | 15 files |
 | Phase 05 P02 | 4min | 2 tasks | 7 files |
 | Phase 05 P03 | 5min | 2 tasks | 4 files |
+| Phase 05 P04 | 8min | 2 tasks | 8 files |
 | Phase 05 P05 | 3min | 1 tasks | 1 files |
 
 ## Accumulated Context
@@ -128,6 +129,9 @@ Recent decisions affecting current work:
 - [Phase 05-03]: BohriumSetupService.setup() called with legacy API params via bridge callback, not new API
 - [Phase 05-03]: CancelledEvent used for user cancellation (distinct from ErrorEvent)
 - [Phase 05-03]: _bohrium_event_cb bridges legacy bohrium events into BohriumNodeEvent on MessageBus
+- [Phase 05-04]: run_agent_sync E2E validates use_quota call rather than add_event (PersistenceHandler correctly filters streaming thoughts)
+- [Phase 05-04]: Stop_event pre-set for interrupt tests to avoid timing flakiness
+- [Phase 05-04]: Mock tools implement Tool Protocol (json_schema property, arguments dict) for full type compatibility
 - [Phase 05-05]: Migration guide structured with 8 sections: Overview, Architecture Changes, New Components, Pipeline Flow, Configuration Changes, Breaking Changes, Deprecation Notices, Out of Scope
 - [Phase 05-05]: Architecture Changes table maps 11 old components to new equivalents with change type
 
