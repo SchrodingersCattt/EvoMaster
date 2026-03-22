@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 03-01-PLAN.md (Tool Protocol + ToolRegistry)
-last_updated: "2026-03-22T02:59:11.493Z"
-last_activity: 2026-03-22 -- Completed plan 03-02 (ContextBuilder + WorkerRegistry)
+stopped_at: Completed 03-03-PLAN.md (Exp + DirectExp + Guards) -- Phase 3 complete
+last_updated: "2026-03-22T03:06:28.533Z"
+last_activity: 2026-03-22 -- Completed plan 03-03 (Exp + DirectExp + Guards) -- Phase 3 complete
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 8
-  completed_plans: 7
-  percent: 75
+  completed_plans: 8
+  percent: 100
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 3: Exp Assembly Layer -- IN PROGRESS
+**Current focus:** Phase 3: Exp Assembly Layer -- COMPLETE
 
 ## Current Position
 
-Phase: 3 of 5 (Exp Assembly Layer)
-Plan: 2 of 3 in current phase
-Status: Plan 03-02 complete, Plan 03-03 remaining
-Last activity: 2026-03-22 -- Completed plan 03-02 (ContextBuilder + WorkerRegistry)
+Phase: 3 of 5 (Exp Assembly Layer) -- COMPLETE
+Plan: 3 of 3 in current phase
+Status: Phase 3 complete. All 3 plans executed.
+Last activity: 2026-03-22 -- Completed plan 03-03 (Exp + DirectExp + Guards) -- Phase 3 complete
 
-Progress: [████████░░] 75%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Progress: [████████░░] 75%
 
 *Updated after each plan completion*
 | Phase 03 P01 | 5min | 2 tasks | 6 files |
+| Phase 03 P03 | 4min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,9 @@ Recent decisions affecting current work:
 - [Phase 03-02]: Empty optional sections produce no output rather than empty headers, keeping prompt clean
 - [Phase 03-01]: Direct import of ToolRegistry in runtime.py (not TYPE_CHECKING) -- Pydantic needs runtime class resolution, no circular dependency
 - [Phase 03-01]: Engine tests use real ToolRegistry + _CatchAllTool instead of duck-typed MockToolRegistry -- validates type constraint end-to-end
+- [Phase 03-03]: DirectExp stores guards as list copy (defensive) to prevent external mutation after construction
+- [Phase 03-03]: EventEmitterHook source uses exp_name property for consistent bus event attribution
+- [Phase 03-03]: Pre-existing TestAgentRuntimeSpec failures (object() as tool_registry) deferred to Phase 5
 
 ### Pending Todos
 
@@ -97,6 +101,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T02:59:11.491Z
-Stopped at: Completed 03-01-PLAN.md (Tool Protocol + ToolRegistry)
+Last session: 2026-03-22T03:06:28.531Z
+Stopped at: Completed 03-03-PLAN.md (Exp + DirectExp + Guards) -- Phase 3 complete
 Resume file: None
