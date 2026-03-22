@@ -52,10 +52,10 @@
 
 ### Quality (质量)
 
-- [ ] **QUAL-01**: 三层契约（PlaygroundContext/AgentRuntimeSpec/AgentEvent）有单元测试覆盖
-- [ ] **QUAL-02**: mat_master 和 minimal 有端到端测试验证迁移正确性
+- [x] **QUAL-01**: 三层契约（PlaygroundContext/AgentRuntimeSpec/AgentEvent）有单元测试覆盖
+- [x] **QUAL-02**: mat_master 和 minimal 有端到端测试验证迁移正确性
 - [x] **QUAL-03**: 迁移文档记录新旧架构差异和迁移指南
-- [ ] **QUAL-04**: 上游场景端到端验证——run_interrupted 检测、跨 pod 订阅恢复（RedisReplyQueue）、workspace OSS 上传、Bohrium 节点生命周期（创建/复用/清理）
+- [x] **QUAL-04**: 上游场景端到端验证——run_interrupted 检测、跨 pod 订阅恢复（RedisReplyQueue）、workspace OSS 上传、Bohrium 节点生命周期（创建/复用/清理）
 - [x] **QUAL-05**: 配额扣减（use_quota）在新管线中正确执行——run 成功后扣减、失败不扣减、异步/同步路径均可用
 
 ## v2 Requirements
