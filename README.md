@@ -10,6 +10,19 @@ EvoMaster is a framework for building scientific agents. It provides MCP tooling
 
 MatMaster is a scientific agent for materials research, with a Next.js frontend and FastAPI backend. Development runs backend and frontend together via a single script.
 
+### Two backends (entrypoints and ports)
+
+This repo exposes **two HTTP stacks** for MatMaster-related work. Do not mix up ports or treat the local dev server as the production API:
+
+| | **Platform API (`src/` + root `app.py`)** | **Local MatMaster Web (`playground/mat_master/service/server`)** |
+|------|-------------------------------------------|-------------------------------------------------------------------|
+| **Role** | Production-style integration: DB sessions, SSE, Redis + Worker | Local debugging: Next dashboard under `playground/mat_master`, WebSocket chat, in-memory sessions, fixed workspace |
+| **Typical entry** | `uv run python app.py` (default **8000**) | `python -m playground.mat_master.service.server` or `start_dev.sh` (default **BACKEND_PORT=50001**) |
+| **Protocol** | REST + SSE (e.g. `/api/v1/.../chat/sessions/...`) | WebSocket `/ws/chat`, etc. |
+| **Notes** | Multi-process layout: see **Service architecture** in `AGENTS.md` | See [playground/mat_master/README_WEB.md](playground/mat_master/README_WEB.md) |
+
+The **Start development** section below refers to the **local Web** stack (default port 50001).
+
 ### Start development (frontend + backend)
 
 From the project root:
