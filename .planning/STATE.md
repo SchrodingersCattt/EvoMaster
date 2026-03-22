@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: in_progress
-stopped_at: Completed 05-02-PLAN.md
-last_updated: "2026-03-22T08:52:42.000Z"
-last_activity: 2026-03-22 -- Completed Plan 05-02 (EventRouter + Handlers)
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-03-22T09:03:54.000Z"
+last_activity: 2026-03-22 -- Completed Plan 05-03 (Service Layer Rewrite)
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 17
-  completed_plans: 13
+  completed_plans: 14
   percent: 94
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Position
 
 Phase: 5 of 5 (Integration and Quality)
-Plan: 2 of 5 in current phase
-Status: Phase 5 in progress -- Plan 02 complete (EventRouter + Handlers)
-Last activity: 2026-03-22 -- Completed Plan 05-02 (EventRouter + Handlers)
+Plan: 3 of 5 in current phase
+Status: Phase 5 in progress -- Plan 03 complete (Service Layer Rewrite)
+Last activity: 2026-03-22 -- Completed Plan 05-03 (Service Layer Rewrite)
 
 Progress: [█████████░] 94%
 
@@ -61,6 +61,7 @@ Progress: [█████████░] 94%
 | Phase 04 P03 | 4min | 2 tasks | 7 files |
 | Phase 05 P01 | 4min | 2 tasks | 15 files |
 | Phase 05 P02 | 4min | 2 tasks | 7 files |
+| Phase 05 P03 | 5min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -123,6 +124,9 @@ Recent decisions affecting current work:
 - [Phase 05-02]: SSEHandler detects async send_cb via asyncio.iscoroutinefunction at construction time, not per-call
 - [Phase 05-02]: WorkspaceHandler uses injected snapshot_fn and upload_fn for full test isolation
 - [Phase 05-02]: BohriumSetupService uses lazy imports inside methods to avoid importing src.services at module level
+- [Phase 05-03]: BohriumSetupService.setup() called with legacy API params via bridge callback, not new API
+- [Phase 05-03]: CancelledEvent used for user cancellation (distinct from ErrorEvent)
+- [Phase 05-03]: _bohrium_event_cb bridges legacy bohrium events into BohriumNodeEvent on MessageBus
 
 ### Pending Todos
 
@@ -136,6 +140,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T08:52:42Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-03-22T09:03:54Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
