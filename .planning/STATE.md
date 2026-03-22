@@ -64,7 +64,7 @@ Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
 - [Roadmap]: 5 phases derived from 25 requirements, standard granularity
-- [Roadmap]: Phase 3 (Exp) and Phase 4 (Playground) can execute in parallel
+- [Roadmap]: ~~Phase 3 (Exp) and Phase 4 (Playground) can execute in parallel~~ Phase 4 now depends on Phase 3 (修正 PlaygroundContext 和 DirectExp)
 - [Roadmap]: Quality/cleanup merged into Phase 5 instead of separate phase
 - [01-01]: Guard Protocol uses @runtime_checkable for isinstance checks at runtime
 - [01-01]: CONT-05 TerminationPolicy simplified to AgentRuntimeSpec.max_turns int field (default 100)
@@ -91,6 +91,14 @@ Recent decisions affecting current work:
 - [Phase 03-03]: Pre-existing TestAgentRuntimeSpec failures (object() as tool_registry) deferred to Phase 5
 - [Phase 03]: [Phase 03-04]: TYPE_CHECKING + lazy import in run() body for AgentKernel -- breaks circular import while preserving type annotations
 - [Phase 03]: [Phase 03-04]: Module-level __getattr__ (PEP 562) in assembly/__init__.py for lazy Exp/DirectExp export -- avoids triggering engine import chain during package init
+- [Phase 04 Context]: Playground only handles physical environment (workspace/session/logging) -- MCP/skill/tool belong to Exp layer
+- [Phase 04 Context]: PlaygroundContext removes mcp_manager and skill_registry fields -- adds WorkspaceArchivalConfig nested field
+- [Phase 04 Context]: Playground = Workspace equivalence -- 1:1:1 (session:playground:workspace) in current project
+- [Phase 04 Context]: prepare()/cleanup() two-phase lifecycle -- no separate setup() needed
+- [Phase 04 Context]: Unified Playground class -- mat_master and minimal differ only by config YAML, no subclasses
+- [Phase 04 Context]: Service layer reads config and distributes -- physical env config to Playground, capability config to Exp
+- [Phase 04 Context]: Exp.assemble() initializes MCP/Skill using mcp_config (constructor) + ctx.workdir (PlaygroundContext)
+- [Phase 04 Context]: Mixed cleanup model -- Exp self-manages via try/finally, Playground cleanup by Service layer
 
 ### Pending Todos
 
