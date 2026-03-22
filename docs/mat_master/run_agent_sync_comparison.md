@@ -90,6 +90,7 @@
 3. 是否改动了 **多轮 `dialog_history` 的裁剪或字段**？→ 改 `playground/mat_master/core/dialog_history_helpers.py` 中 `trim_events_for_dialog_history` / `build_mat_master_discovery_task`（两处共用）。
 4. 是否改动了 **Bohrium、SSH、workspace 上传**？→ 以 `agent_run_bohrium` 与 `agent_run_service` 为准；本地仅为子集。
 5. 是否改动了 **`StreamingMatMasterAgent` 构造函数参数**？→ 两处 `StreamingMatMasterAgent(...)` 调用是否都要更新。
+6. 是否改动了 **ask_human / 确认框超时或队列**？→ 改 `playground/mat_master/core/ask_human_helpers.py`（两处共用）。
 
 ---
 
@@ -100,6 +101,7 @@
 | 共用推送/落库判断 | `playground/mat_master/core/run_helpers.py` |
 | 首个 agent 配置与 prompt 路径 | `playground/mat_master/core/agent_config_helpers.py` |
 | 多轮事件裁剪与 discovery Task | `playground/mat_master/core/dialog_history_helpers.py` |
+| ask_human 配置与 ConfirmationManager | `playground/mat_master/core/ask_human_helpers.py` |
 | 生产 run | `src/services/agent_run_service.py` |
 | 生产 Bohrium | `src/services/agent_run_bohrium.py` |
 | 本地 Web run | `playground/mat_master/service/server/run_agent.py` |

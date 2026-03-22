@@ -19,6 +19,10 @@ from playground.mat_master.core.agent_config_helpers import (
     get_first_agent_config,
     resolve_mat_master_prompt_files,
 )
+from playground.mat_master.core.ask_human_helpers import (
+    attach_ask_human_on_agent,
+    get_ask_human_config_dict,
+)
 from playground.mat_master.core.dialog_history_helpers import (
     build_mat_master_discovery_task,
     trim_events_for_dialog_history,
@@ -27,7 +31,6 @@ from playground.mat_master.core.run_helpers import (
     should_persist_chat_event,
     should_skip_push_for_frontend,
 )
-from playground.mat_master.service.confirm import ConfirmationManager
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_dir_to_oss
@@ -608,26 +611,12 @@ class AgentRunService:
             if getattr(agent, 'session', None) is not None:
                 agent.session._stop_event = stop_event
             if reply_queue is not None:
-                agent._ask_human_queue = reply_queue
-                try:
-                    mat_master_block = (
-                        config_dict.get('mat_master')
-                        if isinstance(config_dict, dict)
-                        else None
-                    )
-                    ah_cfg = (
-                        mat_master_block.get('ask_human')
-                        if isinstance(mat_master_block, dict)
-                        else {}
-                    ) or {}
-                    agent._ask_human_config = ah_cfg
-                    agent._confirm_manager = ConfirmationManager(
-                        emitter=event_callback,
-                        reply_queue=reply_queue,
-                        default_timeout_sec=ah_cfg.get('timeout_seconds', 20),
-                    )
-                except Exception:
-                    pass
+                attach_ask_human_on_agent(
+                    agent,
+                    reply_queue,
+                    event_callback,
+                    get_ask_human_config_dict(config_dict),
+                )
 
             pg.agent = agent
             exp = pg._create_exp()

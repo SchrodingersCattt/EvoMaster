@@ -12,6 +12,10 @@ from playground.mat_master.core.agent_config_helpers import (
     get_first_agent_config,
     resolve_mat_master_prompt_files,
 )
+from playground.mat_master.core.ask_human_helpers import (
+    attach_ask_human_on_agent,
+    get_ask_human_config_dict,
+)
 from playground.mat_master.core.dialog_history_helpers import (
     build_mat_master_discovery_task,
     trim_events_for_dialog_history,
@@ -219,23 +223,12 @@ def _run_agent_sync(
         agent.set_agent_name(getattr(base, '_agent_name', 'default'))
         agent._stop_event = stop_event
         if ask_human_queue is not None:
-            agent._ask_human_queue = ask_human_queue
-            try:
-                from playground.mat_master.service.confirm import ConfirmationManager
-
-                ah_cfg = (
-                    (getattr(pg, 'config', None) or {})
-                    .get('mat_master', {})
-                    .get('ask_human', {})
-                )
-                agent._ask_human_config = ah_cfg
-                agent._confirm_manager = ConfirmationManager(
-                    emitter=event_callback,
-                    reply_queue=ask_human_queue,
-                    default_timeout_sec=ah_cfg.get('timeout_seconds', 20),
-                )
-            except Exception:
-                pass
+            attach_ask_human_on_agent(
+                agent,
+                ask_human_queue,
+                event_callback,
+                get_ask_human_config_dict(config_dict),
+            )
 
         pg.agent = agent
         exp = pg._create_exp()
