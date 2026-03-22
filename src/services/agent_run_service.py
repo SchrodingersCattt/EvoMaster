@@ -16,6 +16,10 @@ from typing import Any, Callable, Optional, Protocol, runtime_checkable
 from evomaster.core import get_playground_class
 from evomaster.utils import LLMConfig, create_llm
 from evomaster.utils.types import TaskInstance
+from playground.mat_master.core.agent_config_helpers import (
+    get_first_agent_config,
+    resolve_mat_master_prompt_files,
+)
 from playground.mat_master.core.run_helpers import (
     should_persist_chat_event,
     should_skip_push_for_frontend,
@@ -492,25 +496,10 @@ class AgentRunService:
 
             base = pg.agent
             config_dict = pg.config.model_dump()
-            agents_block = config_dict.get('agents')
-            if isinstance(agents_block, dict) and agents_block:
-                agent_config = next(iter(agents_block.values()))
-            else:
-                agent_config = config_dict.get('agent') or {}
-            if not isinstance(agent_config, dict):
-                agent_config = {}
-            system_prompt_file = agent_config.get('system_prompt_file')
-            user_prompt_file = agent_config.get('user_prompt_file')
-            playground_base = Path(str(pg.config_dir).replace('configs', 'playground'))
-            if system_prompt_file:
-                p = Path(system_prompt_file)
-                if not p.is_absolute():
-                    system_prompt_file = str((playground_base / p).resolve())
-            if user_prompt_file:
-                p = Path(user_prompt_file)
-                if not p.is_absolute():
-                    user_prompt_file = str((playground_base / p).resolve())
-            prompt_format_kwargs = agent_config.get('prompt_format_kwargs', {})
+            agent_config = get_first_agent_config(config_dict)
+            system_prompt_file, user_prompt_file, prompt_format_kwargs = (
+                resolve_mat_master_prompt_files(pg.config_dir, agent_config)
+            )
 
             run_creds, user_id_for_ak, org_id = load_run_credentials(
                 self._sessions_service, session_id
