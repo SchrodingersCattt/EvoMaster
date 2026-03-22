@@ -195,3 +195,64 @@ class TestWithBohrium:
         _ = ctx.with_bohrium({"ssh_attached": True})
         assert "bohrium" not in ctx.run_meta
         assert ctx.run_meta == {"task_id": "t1"}
+
+
+# ── Edge case tests (QUAL-01) ─────────────────────────
+
+
+class TestPlaygroundContextFrozenRejectMutation:
+    """QUAL-01: Attempt setattr on frozen instance -> ValidationError."""
+
+    def test_playground_context_frozen_reject_mutation(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+        )
+        with pytest.raises(ValidationError):
+            ctx.workdir = Path("/other")
+        with pytest.raises(ValidationError):
+            ctx.session_type = "ssh"
+        with pytest.raises(ValidationError):
+            ctx.env_vars = {"NEW": "val"}
+
+
+class TestPlaygroundContextWithBohriumPreservesExistingMeta:
+    """QUAL-01: with_bohrium preserves existing run_meta keys."""
+
+    def test_playground_context_with_bohrium_preserves_existing_meta(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+            run_meta={"key": "val", "number": 42},
+        )
+        result = ctx.with_bohrium({"ssh": True})
+        # Both original and bohrium keys present
+        assert result.run_meta["key"] == "val"
+        assert result.run_meta["number"] == 42
+        assert result.run_meta["bohrium"] == {"ssh": True}
+
+
+class TestPlaygroundContextEmptyArchival:
+    """QUAL-01: archival=None accepted without error."""
+
+    def test_playground_context_empty_archival(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="local",
+            cache_area=Path("/tmp/cache"),
+            archival=None,
+        )
+        assert ctx.archival is None
+
+
+class TestWorkspaceArchivalConfigDefaults:
+    """QUAL-01: All defaults applied correctly."""
+
+    def test_workspace_archival_config_defaults(self) -> None:
+        cfg = WorkspaceArchivalConfig()
+        assert cfg.enabled is False
+        assert cfg.oss_bucket == ""
+        assert cfg.oss_prefix == ""
+        assert cfg.credential_ref == ""
