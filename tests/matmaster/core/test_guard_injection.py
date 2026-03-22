@@ -7,8 +7,6 @@ Tests updated to use inline stub guards that satisfy the Guard Protocol.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Iterator
-
 import pytest
 
 from matmaster.core.guard_pipeline import GuardPipeline
@@ -50,18 +48,8 @@ class TestGuardProtocol:
 
 class TestGuardInjection:
     def test_guards_injected_via_assemble(self) -> None:
-        """Create DirectExp with guards, assemble(ctx) returns spec with guards."""
-        from matmaster.core.direct_exp import DirectExp
-
-        class _MockProvider:
-            def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> Any:
-                return None
-
-            def chat_with_retry(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> Any:
-                return self.chat(messages, tools)
-
-            def chat_stream(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> Iterator[Any]:
-                yield None
+        """Create Exp with guards in config, assemble(ctx) returns spec with guards."""
+        from matmaster.core.exp import Exp
 
         ctx = PlaygroundContext(
             workdir=Path("/tmp/test"),
@@ -69,7 +57,17 @@ class TestGuardInjection:
             cache_area=Path("/tmp/cache"),
         )
         guard = _StubGuard()
-        exp = DirectExp(llm_provider=_MockProvider(), guards=[guard])
+        config = {
+            "name": "direct",
+            "guards": [guard],
+            "termination": {"max_turns": 100},
+            "tools": {"builtin": []},
+            "prompt": {},
+            "context": {},
+            "skills": {},
+            "mcp": {},
+        }
+        exp = Exp(config)
         spec = exp.assemble(ctx)
         assert guard in spec.guards
 
