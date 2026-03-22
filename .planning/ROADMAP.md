@@ -102,11 +102,14 @@ Plans:
   6. 上游场景端到端验证通过：run_interrupted 检测（deploy vs restart）、跨 pod 订阅恢复（RedisReplyQueue 跨 worker 确认）、workspace OSS 上传、Bohrium 节点生命周期（创建/复用/清理）
   7. 配额扣减（use_quota）在新管线中正确执行——run 成功后扣减、失败不扣减
   8. agent_run_service.py 简化为薄编排层：接收请求 -> Playground.prepare() 输出 PlaygroundContext -> Exp.assemble() 输出 AgentRuntimeSpec -> Kernel.run() 执行 -> 返回结果，不再承担装配、事件过滤、workspace 上传等职责
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md -- AgentKernel history 扩展 + PlaygroundContext.with_bohrium() + 4 个业务 Hook 实现 (MIGR-01, MIGR-02)
+- [ ] 05-02-PLAN.md -- EventRouter + PersistenceHandler/SSEHandler/WorkspaceHandler + BohriumSetupService (MIGR-01, QUAL-04)
+- [ ] 05-03-PLAN.md -- agent_run_service.py 重写为新管线 + ChatHistoryConverter 扩展 + DirectExp hooks 合并 (MIGR-01, MIGR-02, QUAL-05)
+- [ ] 05-04-PLAN.md -- 三层契约边界测试 + E2E 管线测试 + 上游场景测试 + 配额管线测试 (QUAL-01, QUAL-02, QUAL-04, QUAL-05)
+- [ ] 05-05-PLAN.md -- 迁移文档：新旧架构差异、替换组件映射、配置变更、迁移指南 (QUAL-03)
 
 ## Progress
 
@@ -120,4 +123,4 @@ Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 D
 | 2. Agent Kernel | 2/3 | Gap closure | - |
 | 3. Exp Assembly Layer | 3/4 | Gap closure | - |
 | 4. Playground Layer | 0/3 | Not started | - |
-| 5. Integration and Quality | 0/2 | Not started | - |
+| 5. Integration and Quality | 0/5 | Not started | - |
