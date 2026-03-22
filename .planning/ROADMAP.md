@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Exp Assembly Layer** - 实现能力装配层，统一 tool/guard/prompt/solver 的注册与组装路径
 - [x] **Phase 4: Playground Layer** - 重构 playground 为纯环境准备层，只输出 PlaygroundContext
 - [x] **Phase 5: Integration and Quality** - mat_master/minimal 端到端迁移验证，三层契约测试覆盖，迁移文档
-- [ ] **Phase 6: Service Layer Wiring** - 打通 service 层最后一公里：LLM 工厂、工具注册、Guard 注入、WorkerRegistry 适配
+- [x] **Phase 6: Service Layer Wiring** - 打通 service 层最后一公里：LLM 工厂、工具注册、Guard 注入、WorkerRegistry 适配
 - [ ] **Phase 7: Cleanup and Traceability** - QueueBridge 冗余清理，REQUIREMENTS.md 追踪表修正
 
 ## Phase Details
@@ -128,7 +128,7 @@ Plans:
 
 Plans:
 - [x] 06-01-PLAN.md -- PlaygroundContext 扩展 session/config_dir + OpenAIProvider extra_kwargs + LLM 工厂实现 (MIGR-01, MIGR-02)
-- [ ] 06-02-PLAN.md -- DirectExp 构造清理 + builtin tool 构建 + guard shell 移除 + WorkerRegistry 适配器 (ASBL-02, ASBL-06, MIGR-01, MIGR-02)
+- [x] 06-02-PLAN.md -- DirectExp 构造清理 + builtin tool 构建 + guard shell 移除 + WorkerRegistry 适配器 (ASBL-02, ASBL-06, MIGR-01, MIGR-02)
 
 ### Phase 7: Cleanup and Traceability
 **Goal**: 清理冗余实现，修正追踪文档，确保里程碑审计通过
@@ -154,5 +154,5 @@ Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 D
 | 3. Exp Assembly Layer | 4/4 | Complete | 2026-03-22 |
 | 4. Playground Layer | 3/3 | Complete | 2026-03-22 |
 | 5. Integration and Quality | 5/5 | Complete | 2026-03-22 |
-| 6. Service Layer Wiring | 1/2 | In Progress | -- |
+| 6. Service Layer Wiring | 2/2 | Complete | 2026-03-22 |
 | 7. Cleanup and Traceability | 0/0 | Pending | -- |
