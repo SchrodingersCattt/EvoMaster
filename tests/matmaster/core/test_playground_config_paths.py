@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from matmaster.playground import Playground
+from matmaster.core.playground import Playground
 from matmaster.types.context import PlaygroundContext
 
 

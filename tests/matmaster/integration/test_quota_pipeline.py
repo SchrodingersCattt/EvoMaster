@@ -17,8 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from matmaster.bus.queue import MessageBus
-from matmaster.engine.types import LLMResponse, StreamChunk
+from matmaster.core.bus import MessageBus
+from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.context import PlaygroundContext
 
 

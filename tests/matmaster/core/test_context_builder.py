@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from matmaster.assembly.context_builder import ContextBuilder
-from matmaster.assembly.tool_registry import Tool, ToolRegistry
+from matmaster.core.context_builder import ContextBuilder
+from matmaster.tools.tool_registry import Tool, ToolRegistry
 from matmaster.types.context import PlaygroundContext
 
 
