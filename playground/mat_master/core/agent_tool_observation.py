@@ -8,6 +8,28 @@ import re
 import uuid
 from typing import Any
 
+# Tool ``execute`` often returns ``info`` with the same payload as ``observation`` under
+# ``result`` (or peek_file decode branches). Those keys must not appear in the outer
+# JSON ``info`` / ToolMessage.meta — they only bloat LLM context and SSE/DB.
+_INFO_KEYS_REDUNDANT_WITH_OBSERVATION = frozenset(
+    {
+        'result',
+        'direct_parsing',
+        'base64_decoding',
+        'utf16_decoding',
+        'gzip_decompression',
+    }
+)
+
+
+def slim_tool_info_for_payload(info: dict[str, Any] | None) -> dict[str, Any]:
+    """Keep only lightweight ``info`` keys; drop blobs duplicated in ``observation``."""
+    if not info:
+        return {}
+    return {
+        k: v for k, v in info.items() if k not in _INFO_KEYS_REDUNDANT_WITH_OBSERVATION
+    }
+
 
 def format_bash_observation(observation: str, info: dict[str, Any]) -> dict[str, Any]:
     """Build structured JSON object for ``execute_bash`` results."""
