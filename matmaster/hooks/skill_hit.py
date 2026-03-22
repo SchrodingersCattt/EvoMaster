@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import logging
 
-from matmaster.bus.queue import MessageBus
-from matmaster.engine.hooks import BaseHook
-from matmaster.engine.types import ToolCallData
+from matmaster.core.bus import MessageBus
+from matmaster.core.hooks import BaseHook
+from matmaster.types.messages import ToolCallData
 from matmaster.types.events import SkillHitEvent
 
 logger = logging.getLogger(__name__)

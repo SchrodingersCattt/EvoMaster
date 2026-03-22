@@ -1,7 +1,7 @@
 """Business hooks for the matmaster agent kernel.
 
 These hooks inject business logic into the kernel execution loop per D-07/D-08.
-EventEmitterHook (the generic kernel->bus bridge) stays in engine/hooks.py.
+EventEmitterHook (the generic kernel->bus bridge) stays in core/hooks.py.
 
 Each hook inherits BaseHook and overrides only the relevant hook points.
 """
