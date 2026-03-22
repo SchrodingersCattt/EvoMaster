@@ -116,15 +116,19 @@ Plans:
 ### Phase 6: Service Layer Wiring
 **Goal**: Service 层存根全部接线到真实实现，生产 run 可端到端执行（不再依赖 mock LLM）
 **Depends on**: Phase 5
-**Requirements**: MIGR-01, MIGR-02, ASBL-02, ASBL-03, ASBL-06 (gap closure reinforcement)
+**Requirements**: MIGR-01, MIGR-02, ASBL-02, ASBL-06 (gap closure reinforcement)
 **Gap Closure:** Closes integration gaps from v1 audit
 **Success Criteria** (what must be TRUE):
-  1. `_build_llm_provider` 从 config 提取 LLM 配置并实例化 OpenAIProvider（不再 NotImplementedError）
-  2. `_get_builtin_tools` 返回实际的 builtin tool 列表（从 evomaster 工具适配或新注册）
-  3. DirectExp 构造时注入 ManuscriptGateGuard/AuthFailureGateGuard（service 层传入 guards 参数）
+  1. `_build_llm_provider` 实现 LLM 工厂 + config 驱动的 provider 路由，按模型族匹配参数模板实例化 OpenAIProvider
+  2. Builtin tools（BashTool/EditorTool/MonitorJobTool）在 DirectExp.assemble(ctx) 中通过 ctx.session 构建并注册
+  3. PlaygroundContext 携带 session 和 config_dir 字段，DirectExp 不再需要单独的 session/config_dir 构造参数
   4. 现有 `worker_registry_service.py` 适配为 WorkerRegistry Protocol 实现，通过依赖注入传入 Exp 层
   5. mat_master 生产路径可以不依赖 mock 完成 Playground→Exp→Kernel 全链路（配置驱动）
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md -- PlaygroundContext 扩展 session/config_dir + OpenAIProvider extra_kwargs + LLM 工厂实现 (MIGR-01, MIGR-02)
+- [ ] 06-02-PLAN.md -- DirectExp 构造清理 + builtin tool 构建 + guard shell 移除 + WorkerRegistry 适配器 (ASBL-02, ASBL-06, MIGR-01, MIGR-02)
 
 ### Phase 7: Cleanup and Traceability
 **Goal**: 清理冗余实现，修正追踪文档，确保里程碑审计通过
@@ -140,7 +144,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 DirectExp 传参路径), cannot execute in parallel.
 
 | Phase | Plans Complete | Status | Completed |
@@ -150,5 +154,5 @@ Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 D
 | 3. Exp Assembly Layer | 4/4 | Complete | 2026-03-22 |
 | 4. Playground Layer | 3/3 | Complete | 2026-03-22 |
 | 5. Integration and Quality | 5/5 | Complete | 2026-03-22 |
-| 6. Service Layer Wiring | 0/0 | Pending | — |
-| 7. Cleanup and Traceability | 0/0 | Pending | — |
+| 6. Service Layer Wiring | 0/2 | In Progress | -- |
+| 7. Cleanup and Traceability | 0/0 | Pending | -- |
