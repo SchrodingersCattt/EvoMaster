@@ -41,8 +41,8 @@
 ### Workspace (Playground 层)
 
 - [x] **WKSP-01**: 统一 Playground 类只负责物理环境准备（workspace/session/logging），暴露 prepare(run_meta)->PlaygroundContext + cleanup() 两段式 API。PlaygroundContext 移除 mcp_manager/skill_registry 字段（能力由 Exp 层负责）
-- [ ] **WKSP-02**: mat_master 场景通过统一 Playground 类 + mat_master config YAML 驱动，输出 PlaygroundContext（含 session/workdir/archival 配置）。不再有独立的 MatMasterPlayground 子类
-- [ ] **WKSP-03**: minimal 场景通过统一 Playground 类 + minimal config YAML 驱动，输出 PlaygroundContext，验证最简路径可用
+- [x] **WKSP-02**: mat_master 场景通过统一 Playground 类 + mat_master config YAML 驱动，输出 PlaygroundContext（含 session/workdir/archival 配置）。不再有独立的 MatMasterPlayground 子类
+- [x] **WKSP-03**: minimal 场景通过统一 Playground 类 + minimal config YAML 驱动，输出 PlaygroundContext，验证最简路径可用
 - [x] **WKSP-04**: PlaygroundContext 包含 WorkspaceArchivalConfig 嵌套字段（OSS 上传路径、凭证引用），支持 run 结束后 workspace 快照上传
 
 ### Migration (迁移)
@@ -112,8 +112,8 @@
 | EBUS-02 | Phase 1 | Complete |
 | LLMP-01 | Phase 2 | Complete |
 | WKSP-01 | Phase 4 | Complete |
-| WKSP-02 | Phase 4 | Pending |
-| WKSP-03 | Phase 4 | Pending |
+| WKSP-02 | Phase 4 | Complete |
+| WKSP-03 | Phase 4 | Complete |
 | WKSP-04 | Phase 4 | Complete |
 | MIGR-01 | Phase 5 | Pending |
 | MIGR-02 | Phase 5 | Pending |
