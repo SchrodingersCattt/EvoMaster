@@ -12,6 +12,7 @@ from matmaster.types.runtime import AgentRuntimeSpec, CompactionConfig
 from matmaster.engine.hooks import BaseHook, Hook
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.engine.types import LLMResponse, StreamChunk
+from matmaster.assembly.tool_registry import ToolRegistry
 
 
 # ── Test helpers ───────────────────────────────────────
@@ -88,7 +89,7 @@ class TestAgentRuntimeSpec:
         provider = _MockLLMProvider()
         spec = AgentRuntimeSpec(
             llm_provider=provider,
-            tool_registry=object(),
+            tool_registry=ToolRegistry(),
         )
         assert spec.llm_provider is not None
         assert spec.tool_registry is not None
@@ -96,7 +97,7 @@ class TestAgentRuntimeSpec:
     def test_defaults(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=object(),
+            tool_registry=ToolRegistry(),
         )
         assert spec.guards == []
         assert spec.max_turns == 100
@@ -108,7 +109,7 @@ class TestAgentRuntimeSpec:
     def test_frozen(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=object(),
+            tool_registry=ToolRegistry(),
         )
         with pytest.raises(ValidationError):
             spec.max_turns = 50
@@ -117,7 +118,7 @@ class TestAgentRuntimeSpec:
         """CONT-05: TerminationPolicy simplified to AgentRuntimeSpec.max_turns."""
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=object(),
+            tool_registry=ToolRegistry(),
         )
         assert isinstance(spec.max_turns, int)
         assert spec.max_turns == 100
@@ -128,7 +129,7 @@ class TestAgentRuntimeSpec:
 
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=object(),
+            tool_registry=ToolRegistry(),
             guards=[guard],
         )
         assert len(spec.guards) == 1
@@ -137,7 +138,7 @@ class TestAgentRuntimeSpec:
     def test_serialization(self) -> None:
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry="mock_tools",
+            tool_registry=ToolRegistry(),
             max_turns=50,
             system_prompt="You are a scientist.",
             mode="planner",
@@ -161,7 +162,7 @@ class TestAgentRuntimeSpec:
 
         spec = AgentRuntimeSpec(
             llm_provider=provider,
-            tool_registry=object(),
+            tool_registry=ToolRegistry(),
         )
         assert isinstance(spec.llm_provider, LLMProvider)
 
@@ -172,7 +173,7 @@ class TestAgentRuntimeSpec:
 
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=object(),
+            tool_registry=ToolRegistry(),
             hooks=[hook],
         )
         assert len(spec.hooks) == 1
@@ -182,7 +183,7 @@ class TestAgentRuntimeSpec:
         """AgentRuntimeSpec with MockLLMProvider and BaseHook constructs successfully."""
         spec = AgentRuntimeSpec(
             llm_provider=_MockLLMProvider(),
-            tool_registry=object(),
+            tool_registry=ToolRegistry(),
             hooks=[BaseHook(), BaseHook()],
             guards=[_MockGuard()],
         )
