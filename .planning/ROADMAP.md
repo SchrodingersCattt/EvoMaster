@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Playground Layer** - 重构 playground 为纯环境准备层，只输出 PlaygroundContext
 - [x] **Phase 5: Integration and Quality** - mat_master/minimal 端到端迁移验证，三层契约测试覆盖，迁移文档
 - [x] **Phase 6: Service Layer Wiring** - 打通 service 层最后一公里：LLM 工厂、工具注册、Guard 注入、WorkerRegistry 适配
-- [ ] **Phase 7: Cleanup and Traceability** - QueueBridge 冗余清理，REQUIREMENTS.md 追踪表修正
+- [ ] **Phase 7: Cleanup and Traceability** - QueueBridge 冗余清理，matmaster 目录重组，REQUIREMENTS.md 追踪表修正
 
 ## Phase Details
 
@@ -131,15 +131,21 @@ Plans:
 - [x] 06-02-PLAN.md -- DirectExp 构造清理 + builtin tool 构建 + guard shell 移除 + WorkerRegistry 适配器 (ASBL-02, ASBL-06, MIGR-01, MIGR-02)
 
 ### Phase 7: Cleanup and Traceability
-**Goal**: 清理冗余实现，修正追踪文档，确保里程碑审计通过
+**Goal**: 清理冗余实现，重组目录结构，修正追踪文档，确保里程碑审计通过
 **Depends on**: Phase 6
 **Requirements**: EBUS-02 (cleanup reinforcement)
 **Gap Closure:** Closes remaining tech debt from v1 audit
 **Success Criteria** (what must be TRUE):
-  1. QueueBridge 与 SSEHandler 的冗余消除（统一 SSE payload 路径或移除 QueueBridge）
-  2. REQUIREMENTS.md 追踪表所有 v1 需求状态正确（无 Pending 遗留）
-  3. REQUIREMENTS.md checkbox 与 VERIFICATION.md 一致
-**Plans**: TBD
+  1. QueueBridge 与 SSEHandler 的冗余消除（删除 QueueBridge，SSEHandler 为唯一 SSE 路径）
+  2. matmaster 目录按职责重组：core/（运行时核心）、types/（契约）、tools/（工具）、hooks/（业务 hook）、integration/（集成）、providers/（LLM）
+  3. REQUIREMENTS.md EBUS-02 标注 SSEHandler 替代说明
+  4. v1-MILESTONE-AUDIT.md EBUS-02 gap 标记为 resolved
+  5. 所有测试在新 import 路径下通过
+**Plans**: 2 plans
+
+Plans:
+- [ ] 07-01-PLAN.md -- QueueBridge 删除 + bus/ 包清理 + 追踪文档更新 + untracked planning 文件提交 (EBUS-02)
+- [ ] 07-02-PLAN.md -- matmaster 目录重组：engine/assembly/bus/playground/ 合并到 core/tools/types/ + 全量 import 重写 (EBUS-02)
 
 ## Progress
 
@@ -155,4 +161,4 @@ Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 D
 | 4. Playground Layer | 3/3 | Complete | 2026-03-22 |
 | 5. Integration and Quality | 5/5 | Complete | 2026-03-22 |
 | 6. Service Layer Wiring | 2/2 | Complete | 2026-03-22 |
-| 7. Cleanup and Traceability | 0/0 | Pending | -- |
+| 7. Cleanup and Traceability | 0/2 | Pending | -- |
