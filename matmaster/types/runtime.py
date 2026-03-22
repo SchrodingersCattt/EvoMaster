@@ -1,12 +1,17 @@
-"""AgentRuntimeSpec and CompactionConfig frozen models -- Layer 2 boundary contract.
+"""AgentRuntimeSpec, CompactionConfig, and AgentRuntime frozen models.
 
-Exp layer output: agent runtime specification built by Exp.assemble(ctx)
-and consumed by AgentKernel.run(spec, task). frozen=True guarantees
-immutability during kernel execution.
+Layer 2 boundary contracts:
+- AgentRuntimeSpec: Exp layer output built by Exp.assemble(ctx), consumed by
+  AgentKernel.run(spec, task). frozen=True guarantees immutability during
+  kernel execution.
+- AgentRuntime: runtime bundle returned by Exp.build_runtime(). Holds the
+  kernel, assembled spec, and cleanup callable.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -61,3 +66,16 @@ class AgentRuntimeSpec(BaseModel):
 
     # Mode
     mode: str = "direct"  # 'direct' | 'planner'
+
+
+@dataclass(frozen=True)
+class AgentRuntime:
+    """Runtime bundle returned by Exp.build_runtime().
+
+    Holds the kernel, assembled spec, and cleanup callable.
+    frozen=True guarantees the bundle is not mutated after construction.
+    """
+
+    kernel: Any  # AgentKernel (avoid circular import)
+    spec: AgentRuntimeSpec
+    cleanup: Callable[[], None]
