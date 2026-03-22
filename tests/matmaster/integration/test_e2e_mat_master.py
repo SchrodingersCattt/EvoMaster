@@ -215,10 +215,11 @@ class TestMatMasterE2EPipeline:
 
         exp = DirectExp(
             llm_provider=mock_llm,
-            builtin_tools=[echo_tool],
             bus=bus,
         )
         spec = exp.assemble(pg_ctx)
+        # Register echo tool directly on the registry (builtin_tools param removed in Phase 6)
+        spec.tool_registry.register(echo_tool, source="test")
 
         kernel = AgentKernel()
         finish = kernel.run(spec, "call echo tool")

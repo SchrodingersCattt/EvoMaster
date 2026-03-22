@@ -102,10 +102,11 @@ class TestEventSequenceAlignment:
 
         exp = DirectExp(
             llm_provider=mock_llm,
-            builtin_tools=[tool],
             bus=bus,
         )
         spec = exp.assemble(pg_ctx)
+        # Register test tool directly (builtin_tools param removed in Phase 6)
+        spec.tool_registry.register(tool, source="test")
 
         kernel = AgentKernel()
         finish = kernel.run(spec, "alignment test")
