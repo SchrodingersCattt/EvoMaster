@@ -109,7 +109,7 @@ Plans:
 - [x] 05-02-PLAN.md -- EventRouter + PersistenceHandler/SSEHandler/WorkspaceHandler + BohriumSetupService (MIGR-01, QUAL-04)
 - [x] 05-03-PLAN.md -- agent_run_service.py 重写为新管线 + ChatHistoryConverter 扩展 + DirectExp hooks 合并 (MIGR-01, MIGR-02, QUAL-05)
 - [ ] 05-04-PLAN.md -- 三层契约边界测试 + E2E 管线测试 + 上游场景测试 + 配额管线测试 (QUAL-01, QUAL-02, QUAL-04, QUAL-05)
-- [ ] 05-05-PLAN.md -- 迁移文档：新旧架构差异、替换组件映射、配置变更、迁移指南 (QUAL-03)
+- [x] 05-05-PLAN.md -- 迁移文档：新旧架构差异、替换组件映射、配置变更、迁移指南 (QUAL-03)
 
 ## Progress
 
