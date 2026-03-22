@@ -1,7 +1,7 @@
 """Synchronous event bus backed by stdlib queue.Queue.
 
 MessageBus is the core transport for BusEvent objects between
-the agent kernel (producer) and QueueBridge (consumer).
+the agent kernel (producer) and EventRouter handlers (consumer).
 """
 
 import queue
@@ -13,9 +13,9 @@ class MessageBus:
     """同步事件总线。
 
     Agent kernel 调用 emit() 发射 BusEvent，
-    QueueBridge 调用 get() 消费事件。
+    EventRouter handlers 调用 get() 消费事件。
     基于 queue.Queue，线程安全。
-    单 producer（agent thread）单 consumer（bridge）模式。
+    单 producer（agent thread）模式。
 
     设计选择：同步 queue.Queue 而非 asyncio.Queue
     （agent 在 ThreadPoolExecutor 中同步运行）。
