@@ -64,12 +64,13 @@ Plans:
   4. Solver 模式（ResearchPlanner 等）作为 exp 层的高阶装配模式运行，不作为独立抽象层
   5. ContextBuilder 可以从 identity/skills/memory/task 多个来源组装出完整的 system prompt
   6. WorkerRegistry Protocol 和注入点已定义（PlaygroundContext.run_meta 传递凭证、Protocol 抽象 session_run_owner 管理），Phase 3 不实际迁移业务代码，实际的 WorkerRegistry/Bohrium/run_interrupted 业务逻辑迁移在 Phase 5 完成
-**Plans:** 3 plans
+**Plans:** 4 plans
 
 Plans:
 - [ ] 03-01-PLAN.md -- Tool Protocol + ToolRegistry 统一注册 + AgentRuntimeSpec 类型更新 (ASBL-02)
 - [ ] 03-02-PLAN.md -- ContextBuilder 分段 system prompt 组装 + WorkerRegistry Protocol 定义 (ASBL-05, ASBL-06)
 - [ ] 03-03-PLAN.md -- Exp base class + DirectExp 子类 + 业务 Guard 注入 + 包导出 (ASBL-01, ASBL-03, ASBL-04)
+- [ ] 03-04-PLAN.md -- Gap closure: 修复 assembly/engine 循环导入，恢复 engine 测试套件 (ASBL-01, ASBL-03, ASBL-04)
 
 ### Phase 4: Playground Layer
 **Goal**: Playground 只负责环境准备，输出 PlaygroundContext（含 workspace 归档配置），不穿透到 agent 层注册工具或配置 guard
@@ -114,6 +115,6 @@ Note: Phase 3 and Phase 4 can execute in parallel (both depend on Phase 1, commu
 |-------|----------------|--------|-----------|
 | 1. Foundation Contracts | 2/2 | Complete | 2026-03-21 |
 | 2. Agent Kernel | 2/3 | Gap closure | - |
-| 3. Exp Assembly Layer | 0/3 | Planning complete | - |
+| 3. Exp Assembly Layer | 3/4 | Gap closure | - |
 | 4. Playground Layer | 0/1 | Not started | - |
 | 5. Integration and Quality | 0/2 | Not started | - |
