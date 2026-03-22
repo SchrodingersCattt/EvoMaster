@@ -322,3 +322,30 @@ class TestPlaygroundContextSessionAndConfigDir:
         # session should be in dump (Any type) but may not be serializable
         # for JSON -- that's expected and fine for in-process use
         assert "session" in data
+
+
+class TestPlaygroundContextLLMProvider:
+    """PlaygroundContext.llm_provider field — externally-determined capability."""
+
+    def test_llm_provider_field_accepted(self) -> None:
+        """llm_provider accepts an arbitrary object (LLMProvider instance)."""
+
+        class MockLLMProvider:
+            pass
+
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+            llm_provider=MockLLMProvider(),
+        )
+        assert ctx.llm_provider is not None
+
+    def test_llm_provider_defaults_to_none(self) -> None:
+        """llm_provider defaults to None when not provided."""
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+        )
+        assert ctx.llm_provider is None
