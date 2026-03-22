@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from matmaster.assembly.tool_registry import ToolRegistry
 from matmaster.types.events import FinishEvent
 from matmaster.types.guards import Guard, GuardContext, GuardResult
 from matmaster.types.runtime import AgentRuntimeSpec
@@ -34,19 +35,47 @@ from .conftest import MockLLMProvider
 # ── Helper fixtures ─────────────────────────────────────
 
 
-class MockToolRegistry:
-    """Mock tool registry with execute() and get_tool_definitions()."""
+class _CatchAllTool:
+    """Tool that accepts any name and records calls for test assertions."""
 
     def __init__(self, result: str = "tool result") -> None:
         self._result = result
         self.calls: list[tuple[str, dict[str, Any]]] = []
 
-    def execute(self, name: str, arguments: dict[str, Any]) -> str:
-        self.calls.append((name, arguments))
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def description(self) -> str:
+        return "catch-all test tool"
+
+    @property
+    def json_schema(self) -> dict[str, Any]:
+        return {"type": "object", "properties": {}}
+
+    def execute(self, arguments: dict[str, Any]) -> str:
+        self.calls.append((self._name, arguments))
         return self._result
 
-    def get_tool_definitions(self) -> list[dict[str, Any]]:
-        return []
+
+def _make_tool_registry(
+    tool_names: list[str] | None = None,
+    result: str = "tool result",
+) -> tuple[ToolRegistry, list[_CatchAllTool]]:
+    """Create a ToolRegistry with named catch-all tools.
+
+    Returns (registry, tools) so tests can inspect tool.calls.
+    """
+    registry = ToolRegistry()
+    names = tool_names or ["test_tool", "some_tool", "bad_tool", "skip_me", "my_tool", "fn", "tool"]
+    tools: list[_CatchAllTool] = []
+    for n in names:
+        t = _CatchAllTool(result=result)
+        t._name = n
+        tools.append(t)
+        registry.register(t, source="test")
+    return registry, tools
 
 
 class StreamingProvider:
@@ -207,15 +236,17 @@ class ChunkRecordingHook(BaseHook):
 def _make_spec(
     *,
     provider: Any | None = None,
-    tool_registry: Any | None = None,
+    tool_registry: ToolRegistry | None = None,
     guards: list[Any] | None = None,
     hooks: list[Any] | None = None,
     max_turns: int = 10,
     system_prompt: str = "You are a test agent",
 ) -> AgentRuntimeSpec:
+    if tool_registry is None:
+        tool_registry, _ = _make_tool_registry()
     return AgentRuntimeSpec(
         llm_provider=provider or MockLLMProvider(),
-        tool_registry=tool_registry or MockToolRegistry(),
+        tool_registry=tool_registry,
         guards=guards or [],
         hooks=hooks or [],
         max_turns=max_turns,
@@ -360,7 +391,7 @@ class TestGuardBlocks:
         tc = ToolCallData(id="tc-1", name="bad_tool", arguments={})
         provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=1, final_content="ok")
         recording = RecordingHook()
-        tool_reg = MockToolRegistry()
+        tool_reg, tools = _make_tool_registry(["bad_tool"])
         spec = _make_spec(
             provider=provider,
             tool_registry=tool_reg,
@@ -372,7 +403,8 @@ class TestGuardBlocks:
         result = kernel.run(spec, "test")
 
         # Tool should NOT have been executed
-        assert len(tool_reg.calls) == 0
+        bad_tool = tools[0]
+        assert len(bad_tool.calls) == 0
         # Hooks pre_tool_call/post_tool_call should NOT be called for blocked tool
         assert "pre_tool_call" not in recording.calls
         assert "post_tool_call" not in recording.calls
@@ -386,7 +418,7 @@ class TestHookSkip:
 
         tc = ToolCallData(id="tc-1", name="skip_me", arguments={})
         provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=1, final_content="ok")
-        tool_reg = MockToolRegistry()
+        tool_reg, tools = _make_tool_registry(["skip_me"])
         spec = _make_spec(
             provider=provider,
             tool_registry=tool_reg,
@@ -397,7 +429,8 @@ class TestHookSkip:
         result = kernel.run(spec, "test")
 
         # Tool should NOT have been executed
-        assert len(tool_reg.calls) == 0
+        skip_tool = tools[0]
+        assert len(skip_tool.calls) == 0
 
 
 class TestStreamingAccumulation:
@@ -463,15 +496,16 @@ class TestToolCallDelta:
                 else:
                     yield StreamChunk(content="done", finish_reason="stop")
 
-        tool_reg = MockToolRegistry()
+        tool_reg, tools = _make_tool_registry(["fn"])
         spec = _make_spec(provider=TwoPhaseProvider(), tool_registry=tool_reg)
         kernel = AgentKernel()
         result = kernel.run(spec, "test")
 
         # Tool should have been called with parsed arguments
-        assert len(tool_reg.calls) == 1
-        assert tool_reg.calls[0][0] == "fn"
-        assert tool_reg.calls[0][1] == {"a": 1}
+        fn_tool = tools[0]
+        assert len(fn_tool.calls) == 1
+        assert fn_tool.calls[0][0] == "fn"
+        assert fn_tool.calls[0][1] == {"a": 1}
 
 
 class TestFullCycle:
@@ -484,7 +518,7 @@ class TestFullCycle:
         provider = ToolCallingProvider(
             tool_calls=[tc], max_tool_turns=1, final_content="final answer"
         )
-        tool_reg = MockToolRegistry(result="tool output")
+        tool_reg, tools = _make_tool_registry(["my_tool"], result="tool output")
         recording = RecordingHook()
         spec = _make_spec(
             provider=provider,
@@ -497,8 +531,9 @@ class TestFullCycle:
 
         assert result.reason == "natural"
         assert result.final_content == "final answer"
-        assert len(tool_reg.calls) == 1
-        assert tool_reg.calls[0][0] == "my_tool"
+        my_tool = tools[0]
+        assert len(my_tool.calls) == 1
+        assert my_tool.calls[0][0] == "my_tool"
 
 
 class TestExecutionOrder:
@@ -512,9 +547,10 @@ class TestExecutionOrder:
             tool_calls=[tc], max_tool_turns=1, final_content="done"
         )
         recording = RecordingHook()
+        tool_reg, _ = _make_tool_registry(["tool"])
         spec = _make_spec(
             provider=provider,
-            tool_registry=MockToolRegistry(),
+            tool_registry=tool_reg,
             hooks=[recording],
             max_turns=10,
         )
