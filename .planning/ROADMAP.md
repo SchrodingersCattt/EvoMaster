@@ -73,14 +73,15 @@ Plans:
 - [ ] 03-04-PLAN.md -- Gap closure: 修复 assembly/engine 循环导入，恢复 engine 测试套件 (ASBL-01, ASBL-03, ASBL-04)
 
 ### Phase 4: Playground Layer
-**Goal**: Playground 只负责环境准备，输出 PlaygroundContext（含 workspace 归档配置），不穿透到 agent 层注册工具或配置 guard
-**Depends on**: Phase 1
+**Goal**: Playground 只负责物理环境准备（workspace/session/logging），输出 PlaygroundContext（含 workspace 归档配置）。MCP/skill/tool 等能力初始化由 Exp 层负责，config 分发由 Service 层编排
+**Depends on**: Phase 1, Phase 3 (修正 PlaygroundContext 字段归属和 DirectExp 传参路径)
 **Requirements**: WKSP-01, WKSP-02, WKSP-03, WKSP-04
 **Success Criteria** (what must be TRUE):
-  1. 新 Playground base class 只暴露环境准备接口，输出 PlaygroundContext 类型化对象
-  2. mat_master playground 重构后只输出 PlaygroundContext（含 session/workdir/MCP/config），不直接操作 agent 或 tool
-  3. minimal playground 重构后只输出 PlaygroundContext，验证最简路径可用
-  4. PlaygroundContext 包含 workspace 归档配置（OSS 上传路径、凭证引用），run 结束后可通过配置驱动 workspace 快照上传
+  1. 统一 Playground 类只暴露 prepare(run_meta)->PlaygroundContext + cleanup() 接口，只处理 workspace 目录、Session（Docker/SSH/Local）、logging
+  2. PlaygroundContext 移除 mcp_manager 和 skill_registry 字段（能力初始化由 Exp 层负责），新增 WorkspaceArchivalConfig 嵌套字段
+  3. mat_master 和 minimal 通过同一个 Playground 类 + 不同 config YAML 驱动，验证两种配置路径可用
+  4. DirectExp 构造函数接收 mcp_config/skill_config，assemble() 中自行初始化 MCP 和 Skill（不再从 PlaygroundContext 读取）
+  5. PlaygroundContext 包含 workspace 归档配置（WorkspaceArchivalConfig），run 结束后可通过配置驱动 workspace 快照上传
 **Plans**: TBD
 
 Plans:
@@ -109,7 +110,7 @@ Plans:
 
 **Execution Order:**
 Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
-Note: Phase 3 and Phase 4 can execute in parallel (both depend on Phase 1, communicate only through PlaygroundContext contract).
+Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 DirectExp 传参路径), cannot execute in parallel.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|

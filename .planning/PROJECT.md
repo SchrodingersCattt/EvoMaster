@@ -37,7 +37,7 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 - [ ] 重定义 Playground 层为纯 workspace 搭建层，输出 PlaygroundContext 类型化契约
 - [ ] 重定义 Exp 层为能力装配层，输出 AgentRuntimeSpec 类型化契约
 - [ ] 重定义 Agent 层为轻量执行 kernel，只消费 AgentRuntimeSpec
-- [ ] PlaygroundContext 包含 workdir、session type、cache area、环境变量、运行元信息
+- [ ] PlaygroundContext 只包含物理环境信息：workdir、session type、cache area、环境变量、运行元信息、workspace 归档配置（WorkspaceArchivalConfig）。不包含 mcp_manager 和 skill_registry（由 Exp 层管理）
 - [ ] AgentRuntimeSpec 包含 prompt 配置、tool registry、LLM provider、termination policy、hooks、业务 guard
 - [ ] 实现 MessageBus 事件系统，agent 发射事件到 bus，调用方从 bus 消费
 - [ ] 实现 ToolRegistry（注册制 + JSON Schema 自描述），参考 nanobot 的 Tool 抽象
@@ -118,12 +118,19 @@ nanobot kernel (`/Users/kealdoom/Desktop/github/nanobot/nanobot`) 的关键设�
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | 采用方案 B（新 kernel + 适配层） | 平衡重构收益与迁移成本，保留心智模型 | — Pending |
-| PlaygroundContext 包含 session/workdir | 环境信息属于 workspace 准备，不是 agent 执行关注点 | — Pending |
+| PlaygroundContext 只含物理环境信息 | workspace/session/logging 是环境准备，MCP/skill 是能力装配 | Phase 4 Context |
+| PlaygroundContext 不含 mcp_manager/skill_registry | MCP 和 skill 是 Exp 层职责，不通过 PlaygroundContext 传递 | Phase 4 Context |
 | AgentRuntimeSpec 不包含环境信息 | agent kernel 只关心执行所需的能力配置 | — Pending |
 | Guard 拆分（通用 vs 业务） | 通用 guard 是 kernel 安全机制，业务 guard 是可配置策略 | — Pending |
 | Solver 收入 exp 层 | solver 是用 exp 组合 agent 的高阶模式，不是独立抽象 | — Pending |
 | 事件系统用 MessageBus 解耦 | 参考 nanobot，agent 不直接持有 callback reference | — Pending |
 | 参考 nanobot kernel 设计 | AgentLoop + ToolRegistry + LLMProvider 的职责划分清晰可复用 | — Pending |
+| Playground = Workspace 等价 | 项目实际 1:1:1（session:playground:workspace），简化生命周期 | Phase 4 Context |
+| Service 层统一读 config 并分发 | 物理环境 config 给 Playground，能力 config 给 Exp，避免 config 重复读取 | Phase 4 Context |
+| 统一 Playground 类（无子类） | 重构后 mat_master/minimal 差异纯 config 驱动，无需子类 | Phase 4 Context |
+| prepare/cleanup 两段式生命周期 | 1:1:1 关系下不需要三段式 setup/prepare/cleanup | Phase 4 Context |
+| Exp.assemble() 中初始化 MCP/Skill | Exp 构造函数接收 config 数据，assemble 时用 ctx.workdir 初始化 MCP | Phase 4 Context |
+| 混合资源释放模式 | Exp 自管能力资源（try/finally），Playground 由 Service 层编排 cleanup | Phase 4 Context |
 
 ---
-*Last updated: 2026-03-21 after initialization*
+*Last updated: 2026-03-22 after Phase 4 context discussion*
