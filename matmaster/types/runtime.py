@@ -11,6 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from matmaster.assembly.tool_registry import ToolRegistry
 from matmaster.engine.hooks import Hook
 from .llm_provider import LLMProvider
 
@@ -42,8 +43,8 @@ class AgentRuntimeSpec(BaseModel):
     # LLM (Phase 2: typed as LLMProvider Protocol)
     llm_provider: LLMProvider
 
-    # Tools (Phase 3 defines ToolRegistry)
-    tool_registry: Any
+    # Tools (Phase 3: typed as ToolRegistry)
+    tool_registry: ToolRegistry | None = None
 
     # Guards
     guards: list[Guard] = Field(default_factory=list)
