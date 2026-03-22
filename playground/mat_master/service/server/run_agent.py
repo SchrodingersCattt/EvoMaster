@@ -10,6 +10,11 @@ import uuid
 from pathlib import Path
 
 from evomaster.utils.types import TaskInstance
+from playground.mat_master.core.run_helpers import (
+    is_streaming_thought_event,
+    should_persist_chat_event,
+    should_skip_push_for_frontend,
+)
 from src.services.chat_history import ChatHistoryConverter
 from src.utils.chat_event_source import normalize_event_source
 
@@ -38,20 +43,6 @@ def _run_agent_sync(
     run_done: threading.Event | None = None
     _msg_seq = 0
 
-    def _is_streaming_thought_event(event_type: str, extra: dict[str, object]) -> bool:
-        return event_type == 'thought' and extra.get('stream_state') in {
-            'start',
-            'streaming',
-            'end',
-        }
-
-    def _should_skip_push(
-        source: str, event_type: str, extra: dict[str, object]
-    ) -> bool:
-        if event_type == 'assistant_state':
-            return True
-        return source == 'Planner' and _is_streaming_thought_event(event_type, extra)
-
     def event_callback(source: str, event_type: str, content, **extra) -> None:
         nonlocal _msg_seq
         _msg_seq += 1
@@ -72,11 +63,11 @@ def _run_agent_sync(
             state.SESSIONS[session_id]['history'].append(payload)
             persistence._persist_history_event(session_id, payload)
             return
-        _is_streaming_thought = _is_streaming_thought_event(event_type, extra)
-        if event_type not in ('log_line', 'llm_token') and not _is_streaming_thought:
+        _is_streaming_thought = is_streaming_thought_event(event_type, extra)
+        if should_persist_chat_event(event_type, extra):
             state.SESSIONS[session_id]['history'].append(payload)
             persistence._persist_history_event(session_id, payload)
-        if _should_skip_push(raw_source, event_type, extra):
+        if should_skip_push_for_frontend(mode, raw_source, event_type, extra):
             return
         if _is_streaming_thought and extra.get('stream_state') == 'streaming':
             asyncio.run_coroutine_threadsafe(send_cb(payload), loop)

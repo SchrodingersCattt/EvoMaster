@@ -47,7 +47,7 @@ _CANCEL_SENTINEL = object()
 
 
 def _should_emit_event_to_sse(event: dict) -> bool:
-    """Persisted event types that must not be sent to the client SSE (see agent_run_service._should_skip_push)."""
+    """Persisted event types that must not be sent to the client SSE (see playground.mat_master.core.run_helpers.should_skip_push_for_frontend)."""
     t = event.get('type')
     if t == 'log_line':
         return False

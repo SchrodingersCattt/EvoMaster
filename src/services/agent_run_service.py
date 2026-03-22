@@ -16,6 +16,10 @@ from typing import Any, Callable, Optional, Protocol, runtime_checkable
 from evomaster.core import get_playground_class
 from evomaster.utils import LLMConfig, create_llm
 from evomaster.utils.types import TaskInstance
+from playground.mat_master.core.run_helpers import (
+    should_persist_chat_event,
+    should_skip_push_for_frontend,
+)
 from playground.mat_master.service.confirm import ConfirmationManager
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 from src.dao.chat_events_table import get_chat_events_table
@@ -66,37 +70,6 @@ class ReplyQueueLike(Protocol):
     def get(self, timeout: float | None = None) -> str | None:
         """阻塞获取回复。返回 None 表示取消；超时抛出 queue.Empty。"""
         ...
-
-
-def _is_streaming_thought_event(event_type: str, extra: dict[str, Any]) -> bool:
-    """Return whether the event is an ephemeral thought stream marker/delta."""
-    return event_type == 'thought' and extra.get('stream_state') in {
-        'start',
-        'streaming',
-        'end',
-    }
-
-
-def _should_persist_event(event_type: str, extra: dict[str, Any]) -> bool:
-    """Persist durable events only."""
-    if event_type in {'log_line', 'llm_token'}:
-        return False
-    return not _is_streaming_thought_event(event_type, extra)
-
-
-def _should_skip_push(
-    mode: str, source: str, event_type: str, extra: dict[str, Any]
-) -> bool:
-    """Skip frontend push for internal-only thought variants."""
-    if event_type == 'assistant_state':
-        return True
-    if source == 'Planner' and _is_streaming_thought_event(event_type, extra):
-        return True
-    return (
-        mode == 'direct'
-        and event_type == 'thought'
-        and not _is_streaming_thought_event(event_type, extra)
-    )
 
 
 class AgentRunService:
@@ -369,7 +342,7 @@ class AgentRunService:
             if event_type == 'end':
                 payload['task_completed'] = _task_completed
             payload.update(extra)
-            if _should_persist_event(event_type, extra):
+            if should_persist_chat_event(event_type, extra):
                 events_table = get_chat_events_table()
                 if events_table:
                     try:
@@ -389,7 +362,9 @@ class AgentRunService:
                     session_id,
                 )
             # Planner 的原始流式 JSON thought 仅供内部消费；Direct 的完整 thought 仅入库不重复推送。
-            skip_push = _should_skip_push(mode, raw_source, event_type, extra)
+            skip_push = should_skip_push_for_frontend(
+                mode, raw_source, event_type, extra
+            )
             if not skip_push:
                 if loop is not None and asyncio.iscoroutinefunction(send_cb):
                     future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
@@ -588,11 +563,16 @@ class AgentRunService:
                     except Exception:
                         cfg = {}
                     if model_override and cfg:
-                        matched = pg.config_manager.find_llm_config_by_model(model_override)
+                        matched = pg.config_manager.find_llm_config_by_model(
+                            model_override
+                        )
                         if matched:
                             _MODEL_BEHAVIOR_KEYS = {
-                                'reasoning_protocol', 'thinking_effort',
-                                'model_family', 'fallback_group', 'temperature_policy',
+                                'reasoning_protocol',
+                                'thinking_effort',
+                                'model_family',
+                                'fallback_group',
+                                'temperature_policy',
                             }
                             for key in _MODEL_BEHAVIOR_KEYS:
                                 if key in matched:

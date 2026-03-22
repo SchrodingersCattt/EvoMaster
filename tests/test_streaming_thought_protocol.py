@@ -1,15 +1,15 @@
 """Regression tests for streamed thought event protocol."""
 
 from evomaster.utils.types import AssistantMessage
+from playground.mat_master.core.run_helpers import (
+    should_persist_chat_event,
+    should_skip_push_for_frontend,
+)
 from playground.mat_master.core.solvers._research_planner_runtime import (
     ResearchPlannerRuntimeMixin,
 )
 from playground.mat_master.service.confirm import ConfirmMode
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
-from src.services.agent_run_service import (
-    _should_persist_event,
-    _should_skip_push,
-)
 from src.utils.chat_event_source import normalize_event_source
 
 
@@ -129,30 +129,34 @@ def test_planner_keeps_streaming_thought_but_normalizes_final_reply():
 
 def test_direct_mode_streamed_thought_is_ephemeral_but_final_thought_is_durable():
     """Only the final thought snapshot should be persisted in direct mode."""
-    assert not _should_persist_event('thought', {'stream_state': 'start'})
-    assert not _should_persist_event('thought', {'stream_state': 'streaming'})
-    assert not _should_persist_event('thought', {'stream_state': 'end'})
-    assert _should_persist_event('thought', {})
-    assert not _should_persist_event('llm_token', {'status': 'streaming'})
+    assert not should_persist_chat_event('thought', {'stream_state': 'start'})
+    assert not should_persist_chat_event('thought', {'stream_state': 'streaming'})
+    assert not should_persist_chat_event('thought', {'stream_state': 'end'})
+    assert should_persist_chat_event('thought', {})
+    assert not should_persist_chat_event('llm_token', {'status': 'streaming'})
 
-    assert not _should_skip_push(
+    assert not should_skip_push_for_frontend(
         'direct', 'MatMaster', 'thought', {'stream_state': 'streaming'}
     )
-    assert _should_skip_push('direct', 'MatMaster', 'thought', {})
-    assert _should_skip_push(
+    assert should_skip_push_for_frontend('direct', 'MatMaster', 'thought', {})
+    assert should_skip_push_for_frontend(
         'planner', 'Planner', 'thought', {'stream_state': 'streaming'}
     )
-    assert _should_skip_push('planner', 'Planner', 'thought', {'stream_state': 'start'})
-    assert _should_skip_push('planner', 'Planner', 'thought', {'stream_state': 'end'})
-    assert not _should_skip_push('planner', 'Planner', 'thought', {})
-    assert _should_skip_push('direct', 'MatMaster', 'assistant_state', {})
-    assert _should_skip_push('planner', 'MatMaster', 'assistant_state', {})
+    assert should_skip_push_for_frontend(
+        'planner', 'Planner', 'thought', {'stream_state': 'start'}
+    )
+    assert should_skip_push_for_frontend(
+        'planner', 'Planner', 'thought', {'stream_state': 'end'}
+    )
+    assert not should_skip_push_for_frontend('planner', 'Planner', 'thought', {})
+    assert should_skip_push_for_frontend('direct', 'MatMaster', 'assistant_state', {})
+    assert should_skip_push_for_frontend('planner', 'MatMaster', 'assistant_state', {})
 
 
 def test_planner_stream_filter_uses_raw_source_before_normalization():
     """Planner stream filtering must happen before source collapses to MatMaster."""
     assert normalize_event_source('Planner') == 'MatMaster'
-    assert _should_skip_push(
+    assert should_skip_push_for_frontend(
         'planner', 'Planner', 'thought', {'stream_state': 'streaming'}
     )
 

@@ -21,6 +21,8 @@ This repo exposes **two HTTP stacks** for MatMaster-related work. Do not mix up 
 | **Protocol** | REST + SSE (e.g. `/api/v1/.../chat/sessions/...`) | WebSocket `/ws/chat`, etc. |
 | **Notes** | Multi-process layout: see **Service architecture** in `AGENTS.md` | See [playground/mat_master/README_WEB.md](playground/mat_master/README_WEB.md) |
 
+The platform API and the local Web stack use **different `run_agent_sync` implementations** (persistence, OSS, Bohrium, event push rules, etc.). See [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md).
+
 The **Start development** section below refers to the **local Web** stack (default port 50001).
 
 ### Start development (frontend + backend)
