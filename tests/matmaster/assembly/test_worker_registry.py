@@ -99,3 +99,80 @@ def test_get_nonexistent() -> None:
     """get_session_run_owner for unknown session_id returns None."""
     reg = MockWorkerRegistry()
     assert reg.get_session_run_owner("nonexistent") is None
+
+
+# ---------------------------------------------------------------------------
+# WorkerRegistryServiceAdapter tests
+# ---------------------------------------------------------------------------
+
+
+class _StubService:
+    """Minimal stub mimicking WorkerRegistryService interface."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+
+    def set_session_run_owner(self, session_id: str, worker_id: str) -> bool:
+        self.calls.append(("set", session_id, worker_id))
+        return True
+
+    def refresh_session_run_owner(self, session_id: str, worker_id: str) -> bool:
+        self.calls.append(("refresh", session_id, worker_id))
+        return True
+
+    def delete_session_run_owner(self, session_id: str) -> None:
+        self.calls.append(("delete", session_id))
+        return None  # Service returns None, not bool
+
+    def get_session_run_owner(self, session_id: str) -> str | None:
+        self.calls.append(("get", session_id))
+        return "worker-X"
+
+
+class TestWorkerRegistryServiceAdapter:
+    """WorkerRegistryServiceAdapter bridges Service -> Protocol."""
+
+    def test_adapter_isinstance_check(self) -> None:
+        """Adapter passes WorkerRegistry isinstance check."""
+        from src.services.worker_registry_adapter import WorkerRegistryServiceAdapter
+
+        adapter = WorkerRegistryServiceAdapter(_StubService())
+        assert isinstance(adapter, WorkerRegistry)
+
+    def test_adapter_delete_returns_bool(self) -> None:
+        """Adapter bridges None -> True for delete."""
+        from src.services.worker_registry_adapter import WorkerRegistryServiceAdapter
+
+        adapter = WorkerRegistryServiceAdapter(_StubService())
+        result = adapter.delete_session_run_owner("s1")
+        assert result is True
+
+    def test_adapter_delegates_set(self) -> None:
+        """Adapter delegates set_session_run_owner to service."""
+        from src.services.worker_registry_adapter import WorkerRegistryServiceAdapter
+
+        svc = _StubService()
+        adapter = WorkerRegistryServiceAdapter(svc)
+        result = adapter.set_session_run_owner("s1", "w1")
+        assert result is True
+        assert ("set", "s1", "w1") in svc.calls
+
+    def test_adapter_delegates_refresh(self) -> None:
+        """Adapter delegates refresh_session_run_owner to service."""
+        from src.services.worker_registry_adapter import WorkerRegistryServiceAdapter
+
+        svc = _StubService()
+        adapter = WorkerRegistryServiceAdapter(svc)
+        result = adapter.refresh_session_run_owner("s1", "w1")
+        assert result is True
+        assert ("refresh", "s1", "w1") in svc.calls
+
+    def test_adapter_delegates_get(self) -> None:
+        """Adapter delegates get_session_run_owner to service."""
+        from src.services.worker_registry_adapter import WorkerRegistryServiceAdapter
+
+        svc = _StubService()
+        adapter = WorkerRegistryServiceAdapter(svc)
+        result = adapter.get_session_run_owner("s1")
+        assert result == "worker-X"
+        assert ("get", "s1") in svc.calls

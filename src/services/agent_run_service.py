@@ -324,10 +324,6 @@ class AgentRunService:
             )
         return default_key, cfg
 
-    def _get_builtin_tools(self, pg_ctx):
-        """Get builtin tools for the playground type. Placeholder."""
-        return []
-
     def run_agent_sync(
         self,
         session_id: str,
