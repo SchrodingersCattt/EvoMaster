@@ -76,20 +76,12 @@ else
     echo "✅ Using provided API URL: $NEXT_PUBLIC_API_URL"
 fi
 
-# === 3. Backend: FastAPI (强制监听 0.0.0.0) ===
-echo "Starting backend (FastAPI) on 0.0.0.0:${BACKEND_PORT}..."
-cd "$ROOT/playground/mat_master/service"
-
-# 激活虚拟环境 (确保路径对)
-if [ -f "$ROOT/.venv/bin/activate" ]; then
-    source "$ROOT/.venv/bin/activate"
-fi
-
-# 【修改点】直接用 uvicorn 命令启动，强制 host=0.0.0.0，避免代码写死 localhost
-# 假设 server.py 里有一个 app 对象
-uvicorn server:app --host 0.0.0.0 --port "$BACKEND_PORT" --reload &
-BACKEND_PID=$!
+# === 3. Backend: FastAPI（仓库根目录 uv run，与 README_WEB / AGENTS 一致）===
+echo "Starting backend (MatMaster Local Web, FastAPI) on 0.0.0.0:${BACKEND_PORT}..."
 cd "$ROOT"
+export BACKEND_PORT
+uv run python -m playground.mat_master.service.server &
+BACKEND_PID=$!
 
 # === 4. Frontend: Next.js (监听 0.0.0.0) ===
 echo "Preparing frontend..."

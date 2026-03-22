@@ -32,8 +32,14 @@ router = APIRouter()
 def root():
     """API only. Use http://localhost:3000 for the dashboard."""
     return {
-        'service': 'MatMaster Web Service',
-        'message': 'API only. Dashboard at http://localhost:3000',
+        'service': 'MatMaster Local Web (dev)',
+        'role': 'local_dev',
+        'not_production_api': True,
+        'message': (
+            'Local MatMaster Web backend for debugging only. '
+            'Dashboard at http://localhost:3000. '
+            'Production platform API: repo root app.py + src/.'
+        ),
         'docs': '/docs',
         'openapi': '/openapi.json',
         'ws_chat': '/ws/chat',
@@ -44,7 +50,9 @@ def root():
 def info():
     """Service info and links (for API users)."""
     return {
-        'service': 'MatMaster Web Service',
+        'service': 'MatMaster Local Web (dev)',
+        'role': 'local_dev',
+        'not_production_api': True,
         'dashboard': 'http://localhost:3000',
         'docs': '/docs',
         'openapi': '/openapi.json',
