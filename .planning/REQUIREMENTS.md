@@ -47,8 +47,8 @@
 
 ### Migration (迁移)
 
-- [ ] **MIGR-01**: mat_master 在新骨架上端到端跑通完整流程
-- [ ] **MIGR-02**: minimal 在新骨架上端到端跑通完整流程
+- [x] **MIGR-01**: mat_master 在新骨架上端到端跑通完整流程
+- [x] **MIGR-02**: minimal 在新骨架上端到端跑通完整流程
 
 ### Quality (质量)
 
@@ -115,12 +115,12 @@
 | WKSP-02 | Phase 4 | Complete |
 | WKSP-03 | Phase 4 | Complete |
 | WKSP-04 | Phase 4 | Complete |
-| MIGR-01 | Phase 5 | Pending |
-| MIGR-02 | Phase 5 | Pending |
-| QUAL-01 | Phase 5 | Pending |
-| QUAL-02 | Phase 5 | Pending |
+| MIGR-01 | Phase 5 + Phase 6 | Complete |
+| MIGR-02 | Phase 5 + Phase 6 | Complete |
+| QUAL-01 | Phase 5 | Complete |
+| QUAL-02 | Phase 5 | Complete |
 | QUAL-03 | Phase 5 | Complete |
-| QUAL-04 | Phase 5 | Pending |
+| QUAL-04 | Phase 5 | Complete |
 | QUAL-05 | Phase 5 | Complete |
 
 **Coverage:**
@@ -130,4 +130,4 @@
 
 ---
 *Requirements defined: 2026-03-21*
-*Last updated: 2026-03-21 after roadmap creation*
+*Last updated: 2026-03-22 after milestone audit gap closure planning*
