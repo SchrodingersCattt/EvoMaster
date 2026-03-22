@@ -19,11 +19,11 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 from matmaster.types.events import FinishEvent
-from matmaster.engine.guard_pipeline import GuardPipeline
+from matmaster.core.guard_pipeline import GuardPipeline
 
 if TYPE_CHECKING:
     from matmaster.types.runtime import AgentRuntimeSpec
-from matmaster.engine.hooks import (
+from matmaster.core.hooks import (
     HookAction,
     run_on_stream_chunk,
     run_post_tool_call,
@@ -31,7 +31,7 @@ from matmaster.engine.hooks import (
     run_pre_tool_call,
     run_should_continue,
 )
-from matmaster.engine.types import (
+from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
     Message,

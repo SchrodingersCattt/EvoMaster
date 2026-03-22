@@ -24,9 +24,23 @@ from .events import (
 )
 from .guards import Guard, GuardContext, GuardResult, RecentCall
 from .llm_provider import LLMProvider
+from .messages import (
+    AssistantMessage,
+    LLMResponse,
+    Message,
+    Role,
+    StreamChunk,
+    SystemMessage,
+    ToolCallData,
+    ToolMessage,
+    UserMessage,
+)
 from .runtime import AgentRuntimeSpec, CompactionConfig
+from .worker_registry import WorkerRegistry
 
 __all__ = [
+    # context
+    "PlaygroundContext",
     # events
     "AgentEvent",
     "AssistantStateEvent",
@@ -52,11 +66,21 @@ __all__ = [
     "GuardContext",
     "GuardResult",
     "RecentCall",
-    # context
-    "PlaygroundContext",
     # llm
     "LLMProvider",
+    # messages
+    "AssistantMessage",
+    "LLMResponse",
+    "Message",
+    "Role",
+    "StreamChunk",
+    "SystemMessage",
+    "ToolCallData",
+    "ToolMessage",
+    "UserMessage",
     # runtime
     "AgentRuntimeSpec",
     "CompactionConfig",
+    # worker registry
+    "WorkerRegistry",
 ]

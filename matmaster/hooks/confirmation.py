@@ -11,9 +11,9 @@ import logging
 import queue
 from typing import Protocol, runtime_checkable
 
-from matmaster.bus.queue import MessageBus
-from matmaster.engine.hooks import BaseHook, HookAction
-from matmaster.engine.types import ToolCallData
+from matmaster.core.bus import MessageBus
+from matmaster.core.hooks import BaseHook, HookAction
+from matmaster.types.messages import ToolCallData
 from matmaster.types.events import ConfirmationRequestEvent
 
 logger = logging.getLogger(__name__)

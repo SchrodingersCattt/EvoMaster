@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import logging
 
-from matmaster.bus.queue import MessageBus
-from matmaster.engine.hooks import BaseHook
-from matmaster.engine.types import AssistantMessage, Message
+from matmaster.core.bus import MessageBus
+from matmaster.core.hooks import BaseHook
+from matmaster.types.messages import AssistantMessage, Message
 from matmaster.types.events import AssistantStateEvent
 
 logger = logging.getLogger(__name__)

@@ -16,12 +16,12 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from matmaster.assembly.context_builder import ContextBuilder
-from matmaster.assembly.evomaster_tool_adapter import EvoToolAdapter
-from matmaster.assembly.exp import Exp
-from matmaster.assembly.tool_registry import ToolRegistry
-from matmaster.bus.queue import MessageBus
-from matmaster.engine.hooks import EventEmitterHook
+from matmaster.core.context_builder import ContextBuilder
+from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
+from matmaster.core.exp import Exp
+from matmaster.tools.tool_registry import ToolRegistry
+from matmaster.core.bus import MessageBus
+from matmaster.core.hooks import EventEmitterHook
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.guards import Guard
 from matmaster.types.llm_provider import LLMProvider

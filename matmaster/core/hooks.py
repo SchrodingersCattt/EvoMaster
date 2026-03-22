@@ -22,10 +22,10 @@ import enum
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from matmaster.types.events import ThoughtEvent, ToolCallEvent, ToolResultEvent
-from matmaster.engine.types import Message, StreamChunk, ToolCallData
+from matmaster.types.messages import Message, StreamChunk, ToolCallData
 
 if TYPE_CHECKING:
-    from matmaster.bus.queue import MessageBus
+    from matmaster.core.bus import MessageBus
 
 
 class HookAction(enum.Enum):
