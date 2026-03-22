@@ -21,6 +21,8 @@ MatMaster是面向材料研究的科学智能体，前端为Next.js，后端为F
 | **协议** | REST + SSE（如 `/api/v1/.../chat/sessions/...`） | WebSocket `/ws/chat` 等 |
 | **说明** | 部署与多进程约定见 `AGENTS.md`「服务架构」 | 详见 [playground/mat_master/README_WEB.md](playground/mat_master/README_WEB.md) |
 
+平台 API 与本地 Web 各自对应的 **`run_agent_sync` 实现不同**（落库、OSS、Bohrium、事件推送等），维护时勿混为一谈；对照说明见 [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md)。
+
 下文「启动前端调试」中的后端指 **本地 Web** 这一套（默认 50001）。
 
 ### 启动前端调试（前后端一体）
