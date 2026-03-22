@@ -8,10 +8,13 @@ import queue
 import threading
 import uuid
 
-from evomaster.utils.types import TaskInstance
 from playground.mat_master.core.agent_config_helpers import (
     get_first_agent_config,
     resolve_mat_master_prompt_files,
+)
+from playground.mat_master.core.dialog_history_helpers import (
+    build_mat_master_discovery_task,
+    trim_events_for_dialog_history,
 )
 from playground.mat_master.core.run_helpers import (
     is_streaming_thought_event,
@@ -242,13 +245,9 @@ def _run_agent_sync(
         persistence._heal_orphaned_tool_calls(session_id)
 
         all_events = list(state.SESSIONS.get(session_id, {}).get('history', []))
-        prior_events = (
-            all_events[:-1]
-            if all_events and all_events[-1].get('type') == 'query'
-            else all_events
+        prior_events = trim_events_for_dialog_history(
+            all_events, state.DIALOG_HISTORY_MAX_EVENTS
         )
-        if len(prior_events) > state.DIALOG_HISTORY_MAX_EVENTS:
-            prior_events = prior_events[-state.DIALOG_HISTORY_MAX_EVENTS :]
         dialog_history = (
             ChatHistoryConverter.events_to_dialog_messages(prior_events)
             if prior_events
@@ -261,12 +260,7 @@ def _run_agent_sync(
                 len(dialog_history),
             )
 
-        task = TaskInstance(
-            task_id=task_id,
-            task_type='discovery',
-            description=user_prompt,
-            meta={'dialog_history': dialog_history},
-        )
+        task = build_mat_master_discovery_task(task_id, user_prompt, dialog_history)
         exp.run(task=task)
         if stop_event.is_set():
             event_callback('System', 'cancelled', 'Task cancelled by user.')
