@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in-progress
-stopped_at: Completed 03-02-PLAN.md (ContextBuilder + WorkerRegistry)
-last_updated: "2026-03-22T02:57:43.202Z"
+status: completed
+stopped_at: Completed 03-01-PLAN.md (Tool Protocol + ToolRegistry)
+last_updated: "2026-03-22T02:59:11.493Z"
 last_activity: 2026-03-22 -- Completed plan 03-02 (ContextBuilder + WorkerRegistry)
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 75
 ---
 
@@ -52,6 +52,7 @@ Progress: [████████░░] 75%
 - Trend: Stable
 
 *Updated after each plan completion*
+| Phase 03 P01 | 5min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -81,6 +82,8 @@ Recent decisions affecting current work:
 - [Phase 03-02]: ContextBuilder uses static _MODE_CONTRACTS dict for mode text lookup, extensible for future modes
 - [Phase 03-02]: WorkerRegistry is Protocol-only in Phase 3; Redis implementation deferred to Phase 5
 - [Phase 03-02]: Empty optional sections produce no output rather than empty headers, keeping prompt clean
+- [Phase 03-01]: Direct import of ToolRegistry in runtime.py (not TYPE_CHECKING) -- Pydantic needs runtime class resolution, no circular dependency
+- [Phase 03-01]: Engine tests use real ToolRegistry + _CatchAllTool instead of duck-typed MockToolRegistry -- validates type constraint end-to-end
 
 ### Pending Todos
 
@@ -94,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T02:57:43.200Z
-Stopped at: Completed 03-02-PLAN.md (ContextBuilder + WorkerRegistry)
+Last session: 2026-03-22T02:59:11.491Z
+Stopped at: Completed 03-01-PLAN.md (Tool Protocol + ToolRegistry)
 Resume file: None
