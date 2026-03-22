@@ -602,6 +602,17 @@ logging:
   console: true
   log_path: "./logs/evomaster.log"
 
+# ============================================
+# Playground 配置（Phase 4: 物理环境层）
+# ============================================
+playground:
+  cache_dir: ".cache/matmaster"
+  archival:
+    enabled: true
+    oss_bucket: "${OSS_BUCKET_NAME}"
+    oss_prefix: "matmaster_evo/chat_workspace"
+    credential_ref: "env:aliyun-oss"
+
 project_root: "."
 workspace: "./workspace"
 results_dir: "./results"

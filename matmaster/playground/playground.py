@@ -74,7 +74,11 @@ class Playground:
         Returns:
             Immutable ``PlaygroundContext`` snapshot.
         """
-        # 1. Session -- reuse override or create from config
+        # 1. Workspace -- resolve path first (needed before session.open)
+        workspace_path = self._resolve_workspace_path(run_meta)
+        workspace_path.mkdir(parents=True, exist_ok=True)
+
+        # 2. Session -- reuse override or create from config
         session_override = run_meta.get("session_override")
         if session_override is not None:
             self.session = session_override
@@ -82,18 +86,17 @@ class Playground:
         else:
             self.session = self._create_session_from_config()
             self._owns_session = True
-            if not self.session.is_open:
-                self.session.open()
 
-        # 2. Workspace
-        workspace_path = self._resolve_workspace_path(run_meta)
-        workspace_path.mkdir(parents=True, exist_ok=True)
-
-        # 3. Sync workspace onto session config
+        # 3. Sync workspace onto session config BEFORE open() so that
+        #    session.open() / env.setup() uses the correct workspace path
+        #    instead of the default /workspace from SessionConfig.
         self._sync_workspace_to_session_config(workspace_path)
 
-        # 4. Cache area
-        cache_area = workspace_path / ".cache"
+        if self._owns_session and not self.session.is_open:
+            self.session.open()
+
+        # 4. Cache area -- prefer playground.cache_dir from config
+        cache_area = self._resolve_cache_area(workspace_path)
         cache_area.mkdir(parents=True, exist_ok=True)
 
         # 5. Logging
@@ -271,10 +274,11 @@ class Playground:
     def _build_archival_config(self) -> WorkspaceArchivalConfig | None:
         """Build ``WorkspaceArchivalConfig`` from the YAML playground block.
 
-        Returns ``None`` when the config does not contain a ``playground.archival``
-        section or when ``enabled`` is falsy.
+        Returns ``None`` only when the config does not contain a
+        ``playground.archival`` section at all.  When the block is present
+        but ``enabled`` is ``False``, the config object is still returned
+        so downstream code can inspect the archival settings.
         """
-        # config.session is always loaded; playground block is extra
         raw = self.config.model_dump()
         playground_block = raw.get("playground", None)
         if not isinstance(playground_block, dict):
@@ -284,10 +288,27 @@ class Playground:
         if not isinstance(archival_block, dict):
             return None
 
-        cfg = WorkspaceArchivalConfig(**archival_block)
-        if not cfg.enabled:
-            return None
-        return cfg
+        return WorkspaceArchivalConfig(**archival_block)
+
+    def _resolve_cache_area(self, workspace_path: Path) -> Path:
+        """Resolve cache directory, preferring ``playground.cache_dir`` config.
+
+        When ``playground.cache_dir`` is set in the YAML config:
+          - If the path is relative, it is resolved under *workspace_path*.
+          - If the path is absolute, it is used as-is.
+
+        Falls back to ``workspace_path / ".cache"`` when not configured.
+        """
+        raw = self.config.model_dump()
+        playground_block = raw.get("playground", None)
+        if isinstance(playground_block, dict):
+            cache_dir = playground_block.get("cache_dir")
+            if cache_dir:
+                cache_path = Path(cache_dir)
+                if not cache_path.is_absolute():
+                    cache_path = workspace_path / cache_path
+                return cache_path
+        return workspace_path / ".cache"
 
     def _collect_env_vars(self) -> dict[str, str]:
         """Collect environment variables to include in context.
