@@ -98,6 +98,7 @@
 | 说明 | 路径 |
 |------|------|
 | 共用推送/落库判断 | `playground/mat_master/core/run_helpers.py` |
+| 首个 agent 配置与 prompt 路径 | `playground/mat_master/core/agent_config_helpers.py` |
 | 生产 run | `src/services/agent_run_service.py` |
 | 生产 Bohrium | `src/services/agent_run_bohrium.py` |
 | 本地 Web run | `playground/mat_master/service/server/run_agent.py` |
