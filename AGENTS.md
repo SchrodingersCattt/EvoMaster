@@ -114,6 +114,12 @@ import sys  # 不要插在常量或代码中间
 
 - **协调方式**：API 与 Worker 之间通过 Redis 通信：任务队列、stream 事件发布/订阅、`session_run_owner` / `worker_alive`、stop 请求等。新增或修改功能时，不得依赖「处理当前 HTTP 请求的进程」与「执行该会话 agent 的进程」为同一进程。
 
+### MatMaster：平台 API 与本地 Web 调试后端
+
+除上表 **API / Worker** 外，仓库内还有一套 **仅用于本地调试** 的 FastAPI 应用：`playground/mat_master/service/server/`（`python -m playground.mat_master.service.server`，环境变量 `BACKEND_PORT`，默认 **50001**）。它与根目录 `app.py` **并行存在**，不是生产部署中 API 的替代进程，而是配合 `playground/mat_master/frontend` 的裸机开发（WebSocket、同进程内 run、固定 workspace 等）。修改会话、流式推送、鉴权或 agent 执行路径时，应明确改动落在 `src/` / `app.py` 还是 `playground/.../service/server/`，避免只验证本地 Web 却误以为已覆盖生产路径。更完整的说明见根目录 [README-zh.md](README-zh.md) 中的「两套后端」。
+
+**两套 `run_agent_sync`：** 生产为 `AgentRunService.run_agent_sync`（`src/services/agent_run_service.py`），本地 Web 为 `_run_agent_sync`（`playground/mat_master/service/server/run_agent.py`）。行为差异（落库、Bohrium、OSS、推送过滤、配额等）见 [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md)。
+
 ---
 
 ## Python 与运行环境
