@@ -10,6 +10,7 @@ triggered during types.runtime loading of ToolRegistry.
 """
 
 from .context_builder import ContextBuilder
+from .evomaster_tool_adapter import EvoToolAdapter
 from .guards import AuthFailureGateGuard, ManuscriptGateGuard
 from .tool_registry import Tool, ToolRegistry
 from .worker_registry import WorkerRegistry
@@ -18,6 +19,7 @@ __all__ = [
     "AuthFailureGateGuard",
     "ContextBuilder",
     "DirectExp",
+    "EvoToolAdapter",
     "Exp",
     "ManuscriptGateGuard",
     "Tool",
