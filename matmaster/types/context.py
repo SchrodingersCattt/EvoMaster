@@ -1,8 +1,12 @@
 """PlaygroundContext frozen model -- Layer 1 boundary contract.
 
-Playground layer output: environment context built by Playground.setup()
+Playground layer output: environment context built by Playground.prepare()
 and passed to Exp.assemble(). frozen=True guarantees immutability during
 inter-layer transfer.
+
+WorkspaceArchivalConfig: nested frozen contract for workspace archival
+metadata (OSS bucket, prefix, credential ref). Populated by Playground
+from config YAML; consumed by Service layer after run completes.
 """
 
 from pathlib import Path
@@ -11,11 +15,33 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class PlaygroundContext(BaseModel):
-    """Playground 层输出的环境上下文契约。
+class WorkspaceArchivalConfig(BaseModel):
+    """Workspace archival configuration.
 
-    由 Playground.setup() 构建，传递给 Exp.assemble()。
-    frozen=True 保证层间传递时不被意外修改。
+    Frozen nested contract describing where and how to archive the
+    workspace after a run completes.  The actual upload is performed
+    by the Service layer in Phase 5; Playground only populates the
+    metadata from config YAML.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = False
+    oss_bucket: str = ""
+    oss_prefix: str = ""
+    credential_ref: str = ""
+
+
+class PlaygroundContext(BaseModel):
+    """Playground layer environment context contract.
+
+    Built by Playground.prepare(), passed to Exp.assemble().
+    frozen=True guarantees immutability during inter-layer transfer.
+
+    This contract is strictly environment-only: workspace path,
+    session type, cache area, environment variables, archival config,
+    and run metadata.  No capability objects (MCP, Skill, Tool, LLM)
+    belong here.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -24,6 +50,5 @@ class PlaygroundContext(BaseModel):
     session_type: str  # "docker" | "local" | "ssh"
     cache_area: Path
     env_vars: dict[str, str] = Field(default_factory=dict)
-    mcp_manager: Any = None  # Phase 4 defines Protocol
-    skill_registry: Any = None  # Phase 3 defines Protocol
+    archival: WorkspaceArchivalConfig | None = None
     run_meta: dict[str, Any] = Field(default_factory=dict)
