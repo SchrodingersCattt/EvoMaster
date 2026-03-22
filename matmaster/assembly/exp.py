@@ -24,6 +24,7 @@ from matmaster.types.runtime import AgentRuntimeSpec
 
 if TYPE_CHECKING:
     from matmaster.engine.agent import AgentKernel
+    from matmaster.engine.types import Message
 
 
 class Exp(ABC):
@@ -84,6 +85,7 @@ class Exp(ABC):
         ctx: PlaygroundContext,
         task: str,
         *,
+        history: list[Message] | None = None,
         stop_event: threading.Event | None = None,
         **assemble_kwargs: Any,
     ) -> FinishEvent:
@@ -91,6 +93,15 @@ class Exp(ABC):
 
         Calls assemble() with ctx and any extra kwargs, creates an AgentKernel,
         and executes the kernel with the assembled spec and task string.
+
+        Args:
+            ctx: Playground environment context.
+            task: The user's current task/prompt.
+            history: Optional multi-turn conversation history passed to
+                     AgentKernel.run() for insertion between SystemMessage
+                     and UserMessage(task).
+            stop_event: External cancellation signal.
+            **assemble_kwargs: Extra kwargs forwarded to assemble().
 
         Cleanup callbacks registered during assemble() are guaranteed to run
         in the finally block, even when kernel.run() raises.
@@ -100,6 +111,6 @@ class Exp(ABC):
             from matmaster.engine.agent import AgentKernel  # lazy import to avoid circular
 
             kernel = AgentKernel()
-            return kernel.run(spec, task, stop_event=stop_event)
+            return kernel.run(spec, task, history=history, stop_event=stop_event)
         finally:
             self._run_cleanup_callbacks()
