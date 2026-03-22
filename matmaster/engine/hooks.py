@@ -19,11 +19,13 @@ EventEmitterHook bridges hook events to the MessageBus for SSE delivery.
 from __future__ import annotations
 
 import enum
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from matmaster.bus.queue import MessageBus
 from matmaster.types.events import ThoughtEvent, ToolCallEvent, ToolResultEvent
 from matmaster.engine.types import Message, StreamChunk, ToolCallData
+
+if TYPE_CHECKING:
+    from matmaster.bus.queue import MessageBus
 
 
 class HookAction(enum.Enum):
