@@ -17,6 +17,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Exp Assembly Layer** - 实现能力装配层，统一 tool/guard/prompt/solver 的注册与组装路径
 - [x] **Phase 4: Playground Layer** - 重构 playground 为纯环境准备层，只输出 PlaygroundContext
 - [x] **Phase 5: Integration and Quality** - mat_master/minimal 端到端迁移验证，三层契约测试覆盖，迁移文档
+- [ ] **Phase 6: Service Layer Wiring** - 打通 service 层最后一公里：LLM 工厂、工具注册、Guard 注入、WorkerRegistry 适配
+- [ ] **Phase 7: Cleanup and Traceability** - QueueBridge 冗余清理，REQUIREMENTS.md 追踪表修正
 
 ## Phase Details
 
@@ -111,6 +113,30 @@ Plans:
 - [x] 05-04-PLAN.md -- 三层契约边界测试 + E2E 管线测试 + 上游场景测试 + 配额管线测试 (QUAL-01, QUAL-02, QUAL-04, QUAL-05)
 - [x] 05-05-PLAN.md -- 迁移文档：新旧架构差异、替换组件映射、配置变更、迁移指南 (QUAL-03)
 
+### Phase 6: Service Layer Wiring
+**Goal**: Service 层存根全部接线到真实实现，生产 run 可端到端执行（不再依赖 mock LLM）
+**Depends on**: Phase 5
+**Requirements**: MIGR-01, MIGR-02, ASBL-02, ASBL-03, ASBL-06 (gap closure reinforcement)
+**Gap Closure:** Closes integration gaps from v1 audit
+**Success Criteria** (what must be TRUE):
+  1. `_build_llm_provider` 从 config 提取 LLM 配置并实例化 OpenAIProvider（不再 NotImplementedError）
+  2. `_get_builtin_tools` 返回实际的 builtin tool 列表（从 evomaster 工具适配或新注册）
+  3. DirectExp 构造时注入 ManuscriptGateGuard/AuthFailureGateGuard（service 层传入 guards 参数）
+  4. 现有 `worker_registry_service.py` 适配为 WorkerRegistry Protocol 实现，通过依赖注入传入 Exp 层
+  5. mat_master 生产路径可以不依赖 mock 完成 Playground→Exp→Kernel 全链路（配置驱动）
+**Plans**: TBD
+
+### Phase 7: Cleanup and Traceability
+**Goal**: 清理冗余实现，修正追踪文档，确保里程碑审计通过
+**Depends on**: Phase 6
+**Requirements**: EBUS-02 (cleanup reinforcement)
+**Gap Closure:** Closes remaining tech debt from v1 audit
+**Success Criteria** (what must be TRUE):
+  1. QueueBridge 与 SSEHandler 的冗余消除（统一 SSE payload 路径或移除 QueueBridge）
+  2. REQUIREMENTS.md 追踪表所有 v1 需求状态正确（无 Pending 遗留）
+  3. REQUIREMENTS.md checkbox 与 VERIFICATION.md 一致
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
@@ -124,3 +150,5 @@ Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 D
 | 3. Exp Assembly Layer | 4/4 | Complete | 2026-03-22 |
 | 4. Playground Layer | 3/3 | Complete | 2026-03-22 |
 | 5. Integration and Quality | 5/5 | Complete | 2026-03-22 |
+| 6. Service Layer Wiring | 0/0 | Pending | — |
+| 7. Cleanup and Traceability | 0/0 | Pending | — |
