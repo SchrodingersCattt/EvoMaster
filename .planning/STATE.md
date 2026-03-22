@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 03-03-PLAN.md (Exp + DirectExp + Guards) -- Phase 3 complete
-last_updated: "2026-03-22T03:06:28.533Z"
-last_activity: 2026-03-22 -- Completed plan 03-03 (Exp + DirectExp + Guards) -- Phase 3 complete
+stopped_at: "Completed 03-04-PLAN.md (Gap Closure: Circular Import Fix) -- Phase 3 fully verified"
+last_updated: "2026-03-22T03:28:48.655Z"
+last_activity: "2026-03-22 -- Completed plan 03-04 (Gap Closure: Circular Import Fix) -- Phase 3 fully verified"
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 9
+  completed_plans: 9
   percent: 100
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Position
 
 Phase: 3 of 5 (Exp Assembly Layer) -- COMPLETE
-Plan: 3 of 3 in current phase
-Status: Phase 3 complete. All 3 plans executed.
-Last activity: 2026-03-22 -- Completed plan 03-03 (Exp + DirectExp + Guards) -- Phase 3 complete
+Plan: 4 of 4 in current phase (includes gap closure plan)
+Status: Phase 3 complete. All 4 plans executed (3 original + 1 gap closure).
+Last activity: 2026-03-22 -- Completed plan 03-04 (Gap Closure: Circular Import Fix) -- Phase 3 fully verified
 
 Progress: [██████████] 100%
 
@@ -54,6 +54,7 @@ Progress: [██████████] 100%
 *Updated after each plan completion*
 | Phase 03 P01 | 5min | 2 tasks | 6 files |
 | Phase 03 P03 | 4min | 2 tasks | 7 files |
+| Phase 03 P04 | 2min | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,8 @@ Recent decisions affecting current work:
 - [Phase 03-03]: DirectExp stores guards as list copy (defensive) to prevent external mutation after construction
 - [Phase 03-03]: EventEmitterHook source uses exp_name property for consistent bus event attribution
 - [Phase 03-03]: Pre-existing TestAgentRuntimeSpec failures (object() as tool_registry) deferred to Phase 5
+- [Phase 03]: [Phase 03-04]: TYPE_CHECKING + lazy import in run() body for AgentKernel -- breaks circular import while preserving type annotations
+- [Phase 03]: [Phase 03-04]: Module-level __getattr__ (PEP 562) in assembly/__init__.py for lazy Exp/DirectExp export -- avoids triggering engine import chain during package init
 
 ### Pending Todos
 
@@ -101,6 +104,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T03:06:28.531Z
-Stopped at: Completed 03-03-PLAN.md (Exp + DirectExp + Guards) -- Phase 3 complete
+Last session: 2026-03-22T03:28:48.653Z
+Stopped at: Completed 03-04-PLAN.md (Gap Closure: Circular Import Fix) -- Phase 3 fully verified
 Resume file: None
