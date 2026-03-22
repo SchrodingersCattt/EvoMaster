@@ -9,10 +9,26 @@ No authentication required — all public resources are freely accessible.
 Tools:
     aissq_search  — search/list models and datasets by keyword
     aissq_download — download a specific resource by exact name
+
+Download strategy:
+    - SSH/Docker session (has exec_bash, not LocalSession):
+        Download files directly on the remote machine using wget or curl.
+        If neither wget nor curl is available on the remote, the tool returns
+        an error immediately — no silent fallback to local download.
+    - LocalSession (Worker Pod local):
+        Download files locally using Python requests into workspace_path.
+
+    After download, files are verified to exist at the expected paths.
+    If any file is missing the tool returns status=error so the agent is
+    not misled into thinking the download succeeded.
+
+Download URLs come from the AIS Square backend API (backend.aissquare.com)
+and point to store.aissquare.com — publicly accessible, no auth required.
 """
 
 import json
 import logging
+import shlex
 import time
 from pathlib import Path
 from typing import Any, ClassVar, Optional
@@ -534,6 +550,133 @@ class AissqDownloadTool(BaseTool):
     name: ClassVar[str] = "aissq_download"
     params_class: ClassVar[type[BaseToolParams]] = AissqDownloadToolParams
 
+    # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
+
+    def _is_local_session(self, session: Any) -> bool:
+        """Return True if session is a LocalSession (runs on Worker Pod itself)."""
+        return type(session).__name__ == "LocalSession"
+
+    def _probe_remote_downloader(self, session: Any) -> Optional[str]:
+        """Return 'wget' or 'curl' if available on the remote, else None."""
+        for tool in ("wget", "curl"):
+            try:
+                res = session.exec_bash(
+                    f"command -v {tool} 2>/dev/null && echo OK || echo MISSING",
+                    timeout=10,
+                )
+                stdout = res.get("stdout", "").strip()
+                if "OK" in stdout:
+                    self.logger.info(
+                        "Remote downloader probe: %s is available on remote", tool
+                    )
+                    return tool
+            except Exception as exc:
+                self.logger.warning(
+                    "Remote downloader probe for %s failed: %s", tool, exc
+                )
+        self.logger.warning(
+            "Remote downloader probe: neither wget nor curl found on remote"
+        )
+        return None
+
+    def _remote_download_file(
+        self,
+        session: Any,
+        downloader: str,
+        url: str,
+        remote_path: str,
+    ) -> None:
+        """Download a single file directly on the remote using wget or curl."""
+        remote_dir = str(Path(remote_path).parent)
+        res = session.exec_bash(
+            f"mkdir -p {shlex.quote(remote_dir)}", timeout=15
+        )
+        if res.get("exit_code", -1) != 0:
+            raise AissqError(
+                f"mkdir -p failed for {remote_dir}: {res.get('stdout', '')}"
+            )
+
+        if downloader == "wget":
+            cmd = (
+                f"wget -q --show-progress -O {shlex.quote(remote_path)} "
+                f"{shlex.quote(url)}"
+            )
+        else:  # curl
+            cmd = (
+                f"curl -fsSL -o {shlex.quote(remote_path)} "
+                f"{shlex.quote(url)}"
+            )
+
+        self.logger.info(
+            "Remote download [%s]: %s -> %s", downloader, url, remote_path
+        )
+        # Large model files can be 40+ MB; allow up to 10 minutes.
+        res = session.exec_bash(cmd, timeout=600)
+        exit_code = res.get("exit_code", -1)
+        stdout = res.get("stdout", "").strip()
+        if exit_code != 0:
+            raise AissqError(
+                f"Remote download failed (exit {exit_code}) for {url}: {stdout}"
+            )
+        self.logger.info("Remote download finished: %s", remote_path)
+
+    def _local_download_file(
+        self,
+        client: "AissqClient",
+        file_info: dict,
+        local_path: Path,
+        i: int,
+        total: int,
+    ) -> None:
+        """Download a file locally using Python requests (LocalSession path)."""
+        file_name = file_info.get("fileName", f"file_{i}")
+        download_link = file_info.get("downloadLink", "")
+        file_size = file_info.get("size", 0)
+
+        if not download_link:
+            self.logger.warning("Skipping '%s': no download link.", file_name)
+            return
+
+        self.logger.info(
+            "Local download [%d/%d]: %s (%s) -> %s",
+            i + 1,
+            total,
+            file_name,
+            _format_size(file_size),
+            local_path,
+        )
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        client.download_file(download_link, local_path, expected_size=file_size)
+        self.logger.info(
+            "Local download done: %s (%s)",
+            local_path,
+            _format_size(local_path.stat().st_size),
+        )
+
+    def _verify_paths(
+        self, session: Any, paths: list[str], is_local: bool
+    ) -> list[str]:
+        """Return list of paths that are missing after download."""
+        missing = []
+        for p in paths:
+            try:
+                exists = Path(p).exists() if is_local else session.path_exists(p)
+            except Exception as exc:
+                self.logger.warning("path_exists check failed for %s: %s", p, exc)
+                exists = False
+            if not exists:
+                missing.append(p)
+                self.logger.error("File missing after download: %s", p)
+            else:
+                self.logger.info("File verified: %s", p)
+        return missing
+
+    # ------------------------------------------------------------------
+    # main execute
+    # ------------------------------------------------------------------
+
     def execute(self, session: Any, args_json: str) -> tuple[str, dict]:
         try:
             params = self.parse_params(args_json)
@@ -541,10 +684,7 @@ class AissqDownloadTool(BaseTool):
 
             resource_name = (params.resource_name or "").strip()
             if not resource_name:
-                result = {
-                    "status": "error",
-                    "message": "resource_name is required",
-                }
+                result = {"status": "error", "message": "resource_name is required"}
                 return json.dumps(result), {"result": result}
 
             resource_type = (params.resource_type or "models").strip().lower()
@@ -555,36 +695,183 @@ class AissqDownloadTool(BaseTool):
                 }
                 return json.dumps(result), {"result": result}
 
-            # Resolve download directory from session workspace
+            # ----------------------------------------------------------
+            # Determine session type and download directory
+            # ----------------------------------------------------------
+            is_local = self._is_local_session(session)
             ws = getattr(getattr(session, "config", None), "workspace_path", None)
             if ws:
-                download_base = Path(ws) / "aissq_downloads"
+                download_base = ws.rstrip("/") + "/aissq_downloads"
             else:
-                download_base = Path("./aissq_downloads")
+                download_base = "./aissq_downloads"
+            resource_dir = download_base + "/" + resource_name
 
             self.logger.info(
-                "Downloading '%s' (%s) to '%s'",
+                "aissq_download: resource='%s' type='%s' dir='%s' "
+                "session_type=%s is_local=%s",
                 resource_name,
                 resource_type,
-                download_base,
+                resource_dir,
+                type(session).__name__,
+                is_local,
             )
 
+            # ----------------------------------------------------------
+            # For SSH/Docker sessions: require wget or curl on remote.
+            # No silent fallback to local download — the Worker Pod may
+            # not be able to reach store.aissquare.com either.
+            # ----------------------------------------------------------
+            downloader: Optional[str] = None
+            if not is_local:
+                downloader = self._probe_remote_downloader(session)
+                if downloader is None:
+                    result = {
+                        "status": "error",
+                        "message": (
+                            "Neither wget nor curl is available on the remote machine. "
+                            "Please install one of them (e.g. `apt-get install wget`) "
+                            "and retry."
+                        ),
+                        "resource_name": resource_name,
+                        "download_dir": resource_dir,
+                    }
+                    self.logger.error(
+                        "aissq_download: no remote downloader available, aborting."
+                    )
+                    return json.dumps(result), {"result": result}
+                self.logger.info(
+                    "Download strategy: remote-direct via %s", downloader
+                )
+            else:
+                self.logger.info(
+                    "Download strategy: local (LocalSession, workspace=%s)", ws
+                )
+
+            # ----------------------------------------------------------
+            # Fetch file list from AIS Square API
+            # ----------------------------------------------------------
             client = AissqClient()
-            downloaded_files = client.download_resource(
-                name=resource_name,
-                resource_type=resource_type,
-                output_dir=download_base,
+            self.logger.info(
+                "Fetching resource metadata for '%s' (%s) from AIS Square API...",
+                resource_name,
+                resource_type,
+            )
+            resource = client.find_by_name(resource_name, resource_type)
+            if resource is None:
+                raise ResourceNotFoundError(
+                    f"Resource '{resource_name}' not found in {resource_type}."
+                )
+
+            resource_id = resource["ID"]
+            self.logger.info(
+                "Found '%s' (ID=%s), fetching file list...", resource_name, resource_id
+            )
+            detail = client.get_detail(
+                resource_id, resource_type=resource_type, name=resource_name
+            )
+            files = detail.get("files", [])
+            if not files:
+                self.logger.info("No files found for '%s'.", resource_name)
+                result = {
+                    "status": "success",
+                    "resource_name": resource_name,
+                    "resource_type": resource_type,
+                    "download_dir": resource_dir,
+                    "files_downloaded": 0,
+                    "files": [],
+                    "note": "No files available for this resource.",
+                }
+                return json.dumps(result, ensure_ascii=False), {"result": result}
+
+            self.logger.info(
+                "Found %d file(s) for '%s'. Starting download...",
+                len(files),
+                resource_name,
             )
 
-            download_dir = str((download_base / resource_name).resolve())
+            # ----------------------------------------------------------
+            # Download each file
+            # ----------------------------------------------------------
+            downloaded_files: list[dict] = []
+            expected_paths: list[str] = []
+
+            for i, file_info in enumerate(files):
+                file_name = file_info.get("fileName", f"file_{i}")
+                download_link = file_info.get("downloadLink", "")
+                file_size = file_info.get("size", 0)
+
+                if not download_link:
+                    self.logger.warning("Skipping '%s': no download link.", file_name)
+                    continue
+
+                dest = resource_dir + "/" + file_name
+                expected_paths.append(dest)
+
+                if not is_local:
+                    # SSH/Docker: download directly on remote
+                    self.logger.info(
+                        "Downloading [%d/%d]: %s (%s) via %s on remote",
+                        i + 1, len(files), file_name, _format_size(file_size), downloader,
+                    )
+                    self._remote_download_file(session, downloader, download_link, dest)
+                else:
+                    # LocalSession: download locally
+                    self._local_download_file(
+                        client, file_info, Path(dest), i, len(files)
+                    )
+
+                downloaded_files.append(
+                    {
+                        "file_name": file_name,
+                        "path": dest,
+                        "size": file_size,
+                        "size_human": _format_size(file_size),
+                    }
+                )
+
+                if i < len(files) - 1:
+                    time.sleep(0.5)
+
+            # ----------------------------------------------------------
+            # Verify files exist at expected paths
+            # ----------------------------------------------------------
+            self.logger.info(
+                "Verifying %d file(s) at expected paths...", len(expected_paths)
+            )
+            missing = self._verify_paths(session, expected_paths, is_local)
+            if missing:
+                result = {
+                    "status": "error",
+                    "message": (
+                        f"Download appeared to succeed but {len(missing)} file(s) "
+                        f"are missing: {missing}"
+                    ),
+                    "resource_name": resource_name,
+                    "download_dir": resource_dir,
+                    "files_downloaded": len(downloaded_files) - len(missing),
+                    "files_missing": missing,
+                }
+                self.logger.error(
+                    "aissq_download: %d file(s) missing after download: %s",
+                    len(missing), missing,
+                )
+                return json.dumps(result), {"result": result}
+
+            self.logger.info(
+                "aissq_download complete: %d file(s) in '%s' (strategy=%s)",
+                len(downloaded_files),
+                resource_dir,
+                f"remote-direct:{downloader}" if not is_local else "local",
+            )
 
             result = {
                 "status": "success",
                 "resource_name": resource_name,
                 "resource_type": resource_type,
-                "download_dir": download_dir,
+                "download_dir": resource_dir,
                 "files_downloaded": len(downloaded_files),
                 "files": downloaded_files,
+                "strategy": f"remote-direct:{downloader}" if not is_local else "local",
             }
             return json.dumps(result, ensure_ascii=False), {"result": result}
 
@@ -601,7 +888,7 @@ class AissqDownloadTool(BaseTool):
             return json.dumps(result), {"result": result}
 
         except Exception as exc:
-            self.logger.warning("aissq_download failed: %s", exc)
+            self.logger.warning("aissq_download failed: %s", exc, exc_info=True)
             result = {
                 "status": "error",
                 "message": f"{type(exc).__name__}: {exc}",
