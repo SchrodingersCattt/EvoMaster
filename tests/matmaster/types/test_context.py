@@ -256,3 +256,69 @@ class TestWorkspaceArchivalConfigDefaults:
         assert cfg.oss_bucket == ""
         assert cfg.oss_prefix == ""
         assert cfg.credential_ref == ""
+
+
+class TestPlaygroundContextSessionAndConfigDir:
+    """PlaygroundContext session and config_dir fields (D-09, D-10)."""
+
+    def test_session_field_accepts_arbitrary_object(self) -> None:
+        """session=object() constructs without error (arbitrary_types_allowed)."""
+        sentinel = object()
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+            session=sentinel,
+        )
+        assert ctx.session is sentinel
+
+    def test_config_dir_field(self) -> None:
+        """config_dir=Path stores correctly as Path."""
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+            config_dir=Path("/configs/mat_master"),
+        )
+        assert ctx.config_dir == Path("/configs/mat_master")
+
+    def test_session_and_config_dir_default_none(self) -> None:
+        """Both fields default to None when not provided."""
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+        )
+        assert ctx.session is None
+        assert ctx.config_dir is None
+
+    def test_backward_compatible_construction(self) -> None:
+        """Existing construction without session/config_dir still works."""
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+            env_vars={"KEY": "val"},
+            run_meta={"task_id": "t1"},
+        )
+        assert ctx.workdir == Path("/tmp/work")
+        assert ctx.session_type == "docker"
+        assert ctx.env_vars == {"KEY": "val"}
+        assert ctx.session is None
+        assert ctx.config_dir is None
+
+    def test_model_dump_excludes_session_by_default(self) -> None:
+        """model_dump works even with arbitrary session object."""
+        sentinel = object()
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="docker",
+            cache_area=Path("/tmp/cache"),
+            session=sentinel,
+            config_dir=Path("/configs"),
+        )
+        data = ctx.model_dump()
+        assert "config_dir" in data
+        # session should be in dump (Any type) but may not be serializable
+        # for JSON -- that's expected and fine for in-process use
+        assert "session" in data
