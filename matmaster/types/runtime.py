@@ -46,7 +46,9 @@ class AgentRuntimeSpec(BaseModel):
     model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     # LLM (Phase 2: typed as LLMProvider Protocol)
-    llm_provider: LLMProvider
+    # None is allowed during the assemble phase (ctx.llm_provider may be None);
+    # build_runtime guarantees a real provider before kernel execution.
+    llm_provider: LLMProvider | None = None
 
     # Tools (Phase 3: typed as ToolRegistry)
     tool_registry: ToolRegistry | None = None
@@ -66,6 +68,9 @@ class AgentRuntimeSpec(BaseModel):
 
     # Mode
     mode: str = "direct"  # 'direct' | 'planner'
+
+    # Extensible metadata bag (prompt templates, MCP/skill config, etc.)
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
 @dataclass(frozen=True)
