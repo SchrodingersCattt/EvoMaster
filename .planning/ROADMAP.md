@@ -12,11 +12,11 @@
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation Contracts** - 定义三层边界契约、事件类型和 EventBus，建立后续所有组件的类型基础
-- [ ] **Phase 2: Agent Kernel** - 实现纯执行循环和 LLM Provider 抽象，交付可独立测试的 kernel
-- [ ] **Phase 3: Exp Assembly Layer** - 实现能力装配层，统一 tool/guard/prompt/solver 的注册与组装路径
-- [ ] **Phase 4: Playground Layer** - 重构 playground 为纯环境准备层，只输出 PlaygroundContext
-- [ ] **Phase 5: Integration and Quality** - mat_master/minimal 端到端迁移验证，三层契约测试覆盖，迁移文档
+- [x] **Phase 1: Foundation Contracts** - 定义三层边界契约、事件类型和 EventBus，建立后续所有组件的类型基础
+- [x] **Phase 2: Agent Kernel** - 实现纯执行循环和 LLM Provider 抽象，交付可独立测试的 kernel
+- [x] **Phase 3: Exp Assembly Layer** - 实现能力装配层，统一 tool/guard/prompt/solver 的注册与组装路径
+- [x] **Phase 4: Playground Layer** - 重构 playground 为纯环境准备层，只输出 PlaygroundContext
+- [x] **Phase 5: Integration and Quality** - mat_master/minimal 端到端迁移验证，三层契约测试覆盖，迁移文档
 
 ## Phase Details
 
@@ -120,7 +120,7 @@ Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 D
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Contracts | 2/2 | Complete | 2026-03-21 |
-| 2. Agent Kernel | 2/3 | Gap closure | - |
-| 3. Exp Assembly Layer | 3/4 | Gap closure | - |
-| 4. Playground Layer | 0/3 | Not started | - |
-| 5. Integration and Quality | 0/5 | Not started | - |
+| 2. Agent Kernel | 3/3 | Complete | 2026-03-22 |
+| 3. Exp Assembly Layer | 4/4 | Complete | 2026-03-22 |
+| 4. Playground Layer | 3/3 | Complete | 2026-03-22 |
+| 5. Integration and Quality | 5/5 | Complete | 2026-03-22 |
