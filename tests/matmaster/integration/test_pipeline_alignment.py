@@ -11,7 +11,7 @@ import queue
 from pathlib import Path
 from typing import Any, Iterator
 
-from matmaster.core.direct_exp import DirectExp
+from matmaster.core.exp import Exp
 from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -91,25 +91,33 @@ class TestEventSequenceAlignment:
         """Verify new pipeline emits events in expected order.
         Expected: thought -> tool_call -> tool_result -> thought -> (finish via return)
         """
+        mock_llm = _ToolCallThenFinishLLM()
         pg_ctx = PlaygroundContext(
             workdir=tmp_path / "workspace",
             session_type="local",
             cache_area=tmp_path / "cache",
+            llm_provider=mock_llm,
         )
         bus = MessageBus()
-        mock_llm = _ToolCallThenFinishLLM()
         tool = _SimpleTool()
 
-        exp = DirectExp(
-            llm_provider=mock_llm,
-            bus=bus,
-        )
-        spec = exp.assemble(pg_ctx)
-        # Register test tool directly (builtin_tools param removed in Phase 6)
-        spec.tool_registry.register(tool, source="test")
+        config = {
+            "name": "direct",
+            "tools": {"builtin": []},
+            "guards": [],
+            "termination": {"max_turns": 100},
+            "prompt": {},
+            "context": {},
+            "skills": {},
+            "mcp": {},
+        }
+        exp = Exp(config)
+        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        # Register test tool directly on the runtime's registry
+        runtime.spec.tool_registry.register(tool, source="test")
 
         kernel = AgentKernel()
-        finish = kernel.run(spec, "alignment test")
+        finish = kernel.run(runtime.spec, "alignment test")
 
         assert finish.reason == "natural"
 

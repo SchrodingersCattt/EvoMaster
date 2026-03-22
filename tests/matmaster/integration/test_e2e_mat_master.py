@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from matmaster.core.direct_exp import DirectExp
+from matmaster.core.exp import Exp
 from matmaster.tools.tool_registry import Tool, ToolRegistry
 from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
@@ -158,13 +158,14 @@ class EchoTool:
 # ── Helper ────────────────────────────────────────────
 
 
-def _make_pg_ctx(tmp_path: Path) -> PlaygroundContext:
+def _make_pg_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
     """Create a test PlaygroundContext using tmp_path."""
     return PlaygroundContext(
         workdir=tmp_path / "workspace",
         session_type="local",
         cache_area=tmp_path / "cache",
         run_meta={"run_dir": str(tmp_path), "task_id": "test-task"},
+        llm_provider=llm_provider,
     )
 
 
@@ -185,17 +186,28 @@ def _collect_bus_events(bus: MessageBus, timeout: float = 0.5) -> list:
 class TestMatMasterE2EPipeline:
     """QUAL-02: Full E2E pipeline with mock LLM."""
 
-    def test_mat_master_e2e_pipeline(self, tmp_path: Path) -> None:
-        """E2E: Playground.prepare() -> DirectExp.assemble() -> Kernel.run() with mock LLM."""
-        pg_ctx = _make_pg_ctx(tmp_path)
-        bus = MessageBus()
-        mock_llm = MockLLMProvider()
+    _EXP_CONFIG: dict[str, Any] = {
+        "name": "direct",
+        "tools": {"builtin": []},
+        "guards": [],
+        "termination": {"max_turns": 100},
+        "prompt": {},
+        "context": {},
+        "skills": {},
+        "mcp": {},
+    }
 
-        exp = DirectExp(llm_provider=mock_llm, bus=bus)
-        spec = exp.assemble(pg_ctx)
+    def test_mat_master_e2e_pipeline(self, tmp_path: Path) -> None:
+        """E2E: Playground.prepare() -> Exp.build_runtime() -> Kernel.run() with mock LLM."""
+        mock_llm = MockLLMProvider()
+        pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
+        bus = MessageBus()
+
+        exp = Exp(self._EXP_CONFIG)
+        runtime = exp.build_runtime(pg_ctx, bus=bus)
 
         kernel = AgentKernel()
-        finish = kernel.run(spec, "test task")
+        finish = kernel.run(runtime.spec, "test task")
 
         assert isinstance(finish, FinishEvent)
         assert finish.reason == "natural"
@@ -208,21 +220,18 @@ class TestMatMasterE2EPipeline:
 
     def test_mat_master_e2e_with_tool_call(self, tmp_path: Path) -> None:
         """E2E: Pipeline with a tool call and tool result."""
-        pg_ctx = _make_pg_ctx(tmp_path)
-        bus = MessageBus()
         mock_llm = MockLLMProviderWithToolCall()
+        pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
+        bus = MessageBus()
         echo_tool = EchoTool()
 
-        exp = DirectExp(
-            llm_provider=mock_llm,
-            bus=bus,
-        )
-        spec = exp.assemble(pg_ctx)
-        # Register echo tool directly on the registry (builtin_tools param removed in Phase 6)
-        spec.tool_registry.register(echo_tool, source="test")
+        exp = Exp(self._EXP_CONFIG)
+        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        # Register echo tool directly on the runtime's registry
+        runtime.spec.tool_registry.register(echo_tool, source="test")
 
         kernel = AgentKernel()
-        finish = kernel.run(spec, "call echo tool")
+        finish = kernel.run(runtime.spec, "call echo tool")
 
         assert isinstance(finish, FinishEvent)
         assert finish.reason == "natural"
@@ -237,20 +246,20 @@ class TestMatMasterE2EPipeline:
 
     def test_mat_master_e2e_with_history(self, tmp_path: Path) -> None:
         """E2E: Pipeline with multi-turn history injection."""
-        pg_ctx = _make_pg_ctx(tmp_path)
-        bus = MessageBus()
         mock_llm = MockLLMProviderCapturingMessages()
+        pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
+        bus = MessageBus()
 
         history: list[Message] = [
             UserMessage(content="old question"),
             AssistantMessage(content="old answer"),
         ]
 
-        exp = DirectExp(llm_provider=mock_llm, bus=bus)
-        spec = exp.assemble(pg_ctx)
+        exp = Exp(self._EXP_CONFIG)
+        runtime = exp.build_runtime(pg_ctx, bus=bus)
 
         kernel = AgentKernel()
-        finish = kernel.run(spec, "new task", history=history)
+        finish = kernel.run(runtime.spec, "new task", history=history)
 
         assert finish.reason == "natural"
         # Verify messages passed to LLM include history
