@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from matmaster.core.direct_exp import DirectExp
+from matmaster.core.exp import Exp
 from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
 from matmaster.core.hooks import BaseHook, HookAction
@@ -98,12 +98,13 @@ class _QuickMockLLM:
         yield StreamChunk(content="quick", finish_reason="stop")
 
 
-def _make_ctx(tmp_path: Path) -> PlaygroundContext:
+def _make_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
     return PlaygroundContext(
         workdir=tmp_path / "workspace",
         session_type="local",
         cache_area=tmp_path / "cache",
         run_meta={"run_dir": str(tmp_path), "task_id": "test"},
+        llm_provider=llm_provider,
     )
 
 
@@ -113,23 +114,34 @@ def _make_ctx(tmp_path: Path) -> PlaygroundContext:
 class TestRunInterruptedDetection:
     """Verify stop_event.is_set() detected during kernel loop."""
 
+    _EXP_CONFIG: dict[str, Any] = {
+        "name": "direct",
+        "tools": {"builtin": []},
+        "guards": [],
+        "termination": {"max_turns": 100},
+        "prompt": {},
+        "context": {},
+        "skills": {},
+        "mcp": {},
+    }
+
     def test_run_interrupted_detection_deploy(self, tmp_path: Path) -> None:
         """Verify stop_event.is_set() detected before kernel turn.
         Uses pre-set stop_event to guarantee detection on first check.
         """
-        pg_ctx = _make_ctx(tmp_path)
-        bus = MessageBus()
         mock_llm = _QuickMockLLM()
+        pg_ctx = _make_ctx(tmp_path, llm_provider=mock_llm)
+        bus = MessageBus()
 
-        exp = DirectExp(llm_provider=mock_llm, bus=bus)
-        spec = exp.assemble(pg_ctx)
+        exp = Exp(self._EXP_CONFIG)
+        runtime = exp.build_runtime(pg_ctx, bus=bus)
 
         # Pre-set stop_event: kernel checks before first LLM call
         stop_event = threading.Event()
         stop_event.set()
 
         kernel = AgentKernel()
-        finish = kernel.run(spec, "long task", stop_event=stop_event)
+        finish = kernel.run(runtime.spec, "long task", stop_event=stop_event)
 
         assert isinstance(finish, FinishEvent)
         assert finish.reason == "cancelled"
@@ -137,19 +149,19 @@ class TestRunInterruptedDetection:
 
     def test_run_interrupted_detection_restart(self, tmp_path: Path) -> None:
         """Verify stop_event from Redis stop key detected (same mechanism)."""
-        pg_ctx = _make_ctx(tmp_path)
-        bus = MessageBus()
         mock_llm = _QuickMockLLM()
+        pg_ctx = _make_ctx(tmp_path, llm_provider=mock_llm)
+        bus = MessageBus()
 
-        exp = DirectExp(llm_provider=mock_llm, bus=bus)
-        spec = exp.assemble(pg_ctx)
+        exp = Exp(self._EXP_CONFIG)
+        runtime = exp.build_runtime(pg_ctx, bus=bus)
 
         # Simulate Redis-backed stop event: already set before run starts
         stop_event = threading.Event()
         stop_event.set()
 
         kernel = AgentKernel()
-        finish = kernel.run(spec, "restart task", stop_event=stop_event)
+        finish = kernel.run(runtime.spec, "restart task", stop_event=stop_event)
 
         assert finish.reason == "cancelled"
 
