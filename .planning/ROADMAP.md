@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Playground Layer** - 重构 playground 为纯环境准备层，只输出 PlaygroundContext
 - [x] **Phase 5: Integration and Quality** - mat_master/minimal 端到端迁移验证，三层契约测试覆盖，迁移文档
 - [x] **Phase 6: Service Layer Wiring** - 打通 service 层最后一公里：LLM 工厂、工具注册、Guard 注入、WorkerRegistry 适配
-- [ ] **Phase 7: Cleanup and Traceability** - QueueBridge 冗余清理，matmaster 目录重组，REQUIREMENTS.md 追踪表修正
+- [x] **Phase 7: Cleanup and Traceability** - QueueBridge 冗余清理，matmaster 目录重组，REQUIREMENTS.md 追踪表修正
 
 ## Phase Details
 
@@ -145,7 +145,7 @@ Plans:
 
 Plans:
 - [x] 07-01-PLAN.md -- QueueBridge 删除 + bus/ 包清理 + 追踪文档更新 + untracked planning 文件提交 (EBUS-02)
-- [ ] 07-02-PLAN.md -- matmaster 目录重组：engine/assembly/bus/playground/ 合并到 core/tools/types/ + 全量 import 重写 (EBUS-02)
+- [x] 07-02-PLAN.md -- matmaster 目录重组：engine/assembly/bus/playground/ 合并到 core/tools/types/ + 全量 import 重写 (EBUS-02)
 
 ## Progress
 
@@ -161,4 +161,4 @@ Note: Phase 4 now depends on Phase 3 (修正 PlaygroundContext 字段归属和 D
 | 4. Playground Layer | 3/3 | Complete | 2026-03-22 |
 | 5. Integration and Quality | 5/5 | Complete | 2026-03-22 |
 | 6. Service Layer Wiring | 2/2 | Complete | 2026-03-22 |
-| 7. Cleanup and Traceability | 1/2 | In Progress | -- |
+| 7. Cleanup and Traceability | 2/2 | Complete | 2026-03-22 |
