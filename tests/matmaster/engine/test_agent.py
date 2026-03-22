@@ -536,6 +536,102 @@ class TestFullCycle:
         assert my_tool.calls[0][0] == "my_tool"
 
 
+class TestHistoryParameter:
+    """AgentKernel.run() with history parameter."""
+
+    def test_history_inserts_between_system_and_user(self) -> None:
+        """history messages are placed between SystemMessage and UserMessage(task)."""
+        from matmaster.engine.agent import AgentKernel
+
+        captured_messages: list[list[dict[str, Any]]] = []
+
+        class CapturingProvider:
+            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+                return LLMResponse(content="unused", finish_reason="stop")
+
+            def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
+                return self.chat(messages, tools)
+
+            def chat_stream(self, messages: list, tools: list | None = None) -> Iterator[StreamChunk]:
+                captured_messages.append(messages)
+                yield StreamChunk(content="ok", finish_reason="stop")
+
+        history = [
+            UserMessage(content="hi"),
+            AssistantMessage(content="hello"),
+        ]
+        spec = _make_spec(provider=CapturingProvider())
+        kernel = AgentKernel()
+        result = kernel.run(spec, "new question", history=history)
+
+        assert result.reason == "natural"
+        # Check captured API messages structure
+        msgs = captured_messages[0]
+        assert msgs[0]["role"] == "system"
+        assert msgs[1]["role"] == "user"
+        assert msgs[1]["content"] == "hi"
+        assert msgs[2]["role"] == "assistant"
+        assert msgs[2]["content"] == "hello"
+        assert msgs[3]["role"] == "user"
+        assert msgs[3]["content"] == "new question"
+
+    def test_history_none_is_backward_compatible(self) -> None:
+        """history=None produces [SystemMessage, UserMessage(task)]."""
+        from matmaster.engine.agent import AgentKernel
+
+        captured_messages: list[list[dict[str, Any]]] = []
+
+        class CapturingProvider:
+            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+                return LLMResponse(content="unused", finish_reason="stop")
+
+            def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
+                return self.chat(messages, tools)
+
+            def chat_stream(self, messages: list, tools: list | None = None) -> Iterator[StreamChunk]:
+                captured_messages.append(messages)
+                yield StreamChunk(content="ok", finish_reason="stop")
+
+        spec = _make_spec(provider=CapturingProvider())
+        kernel = AgentKernel()
+        result = kernel.run(spec, "test task", history=None)
+
+        assert result.reason == "natural"
+        msgs = captured_messages[0]
+        assert len(msgs) == 2
+        assert msgs[0]["role"] == "system"
+        assert msgs[1]["role"] == "user"
+        assert msgs[1]["content"] == "test task"
+
+    def test_empty_history_is_backward_compatible(self) -> None:
+        """history=[] produces [SystemMessage, UserMessage(task)]."""
+        from matmaster.engine.agent import AgentKernel
+
+        captured_messages: list[list[dict[str, Any]]] = []
+
+        class CapturingProvider:
+            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+                return LLMResponse(content="unused", finish_reason="stop")
+
+            def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
+                return self.chat(messages, tools)
+
+            def chat_stream(self, messages: list, tools: list | None = None) -> Iterator[StreamChunk]:
+                captured_messages.append(messages)
+                yield StreamChunk(content="ok", finish_reason="stop")
+
+        spec = _make_spec(provider=CapturingProvider())
+        kernel = AgentKernel()
+        result = kernel.run(spec, "test task", history=[])
+
+        assert result.reason == "natural"
+        msgs = captured_messages[0]
+        assert len(msgs) == 2
+        assert msgs[0]["role"] == "system"
+        assert msgs[1]["role"] == "user"
+        assert msgs[1]["content"] == "test task"
+
+
 class TestExecutionOrder:
     """Recording hook tracks correct call order."""
 
