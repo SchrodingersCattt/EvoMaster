@@ -1,11 +1,12 @@
-"""Event bus package -- synchronous message bus and SSE bridge.
+"""Event bus package -- synchronous message bus for agent event delivery.
 
 Provides:
 - MessageBus: thread-safe synchronous event queue (queue.Queue wrapper)
-- QueueBridge: converts BusEvent to SSE payload dict format
+
+Note: QueueBridge (SSE payload conversion) was removed in Phase 7.
+SSE delivery is handled by SSEHandler in matmaster/integration/event_router.py.
 """
 
-from .bridge import QueueBridge
 from .queue import MessageBus
 
-__all__ = ["MessageBus", "QueueBridge"]
+__all__ = ["MessageBus"]
