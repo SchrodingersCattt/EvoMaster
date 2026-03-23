@@ -7,6 +7,7 @@ import logging
 import queue
 import threading
 import uuid
+from collections import Counter
 
 from playground.mat_master.core.agent_config_helpers import (
     get_first_agent_config,
@@ -246,11 +247,17 @@ def _run_agent_sync(
             if prior_events
             else []
         )
-        if dialog_history:
-            logger.debug(
-                'multi-turn dialog_history session_id=%s messages=%s',
+        if prior_events:
+            ev_types = Counter((e.get('type') or '?') for e in prior_events)
+            logger.info(
+                '_run_agent_sync: dialog_history session_id=%s task_id=%s '
+                'raw_events=%s event_types=%s out_msgs=%s chain=%s',
                 session_id,
+                task_id,
+                len(prior_events),
+                dict(ev_types),
                 len(dialog_history),
+                ChatHistoryConverter.summarize_dialog_messages_for_log(dialog_history),
             )
 
         task = build_mat_master_discovery_task(task_id, user_prompt, dialog_history)

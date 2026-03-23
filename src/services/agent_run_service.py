@@ -8,6 +8,7 @@ import os
 import threading
 import time
 import uuid
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
@@ -648,11 +649,19 @@ class AgentRunService:
                 if history_events
                 else []
             )
-            if dialog_history:
-                logger.debug(
-                    'run_agent_sync: multi-turn dialog_history session_id=%s messages=%s',
+            if history_events:
+                ev_types = Counter((e.get('type') or '?') for e in history_events)
+                logger.info(
+                    'run_agent_sync: dialog_history session_id=%s task_id=%s '
+                    'raw_events=%s event_types=%s out_msgs=%s chain=%s',
                     session_id,
+                    task_id,
+                    len(history_events),
+                    dict(ev_types),
                     len(dialog_history),
+                    ChatHistoryConverter.summarize_dialog_messages_for_log(
+                        dialog_history
+                    ),
                 )
             task = build_mat_master_discovery_task(task_id, user_prompt, dialog_history)
             exp.run(task=task, append_result=False)
