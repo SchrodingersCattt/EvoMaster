@@ -1,5 +1,6 @@
 """End-to-end MATTER evaluation runner."""
 
+import logging
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,6 +9,7 @@ from typing import Any
 import yaml
 
 from .aggregator import build_summary
+from .evidence import EvidenceExtractor
 from .evaluator import RubricEvaluator
 from .mat_runner import run_mat_task
 from .reporter import append_raw_run, write_reports
@@ -18,8 +20,11 @@ from .schemas import (
     QuestionItem,
     Rubric,
     SafetyVetoRecord,
+    TokenUsageRecord,
 )
 from .simulator import HumanSimulator
+
+_runner_logger = logging.getLogger(__name__)
 
 
 def run_evaluation(config: EvalConfig) -> dict[str, Any]:
@@ -41,6 +46,8 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
         llm_cfg=config.simulator_llm, use_seed_prompt=config.use_seed_prompt
     )
     evaluator = RubricEvaluator(llm_cfg=config.evaluator_llm)
+    # EvidenceExtractor is shared across all runs (loads mapping once)
+    evidence_extractor = EvidenceExtractor()
 
     records: list[EvalRunRecord] = []
     mat_config_path = Path(_resolve_to_project_root(config.mat_config_path))
@@ -66,11 +73,28 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
         )
         answer = str(mat_result.get('answer', '') or '')
         tool_calls = mat_result.get('tool_calls', [])
+
+        # --- Phase 3: extract evidence bundle from trajectory ---
+        trajectory_path = mat_result.get('trajectory_path')
+        evidence = None
+        if trajectory_path:
+            try:
+                evidence = evidence_extractor.extract(
+                    trajectory_path=trajectory_path,
+                    task_id=task_id,
+                    final_answer=answer,
+                )
+            except Exception as exc:  # noqa: BLE001
+                _runner_logger.warning(
+                    "EvidenceExtractor failed for %s: %s", task_id, exc
+                )
+
         eval_payload = evaluator.evaluate(
             question=question,
             rubric=rubric,
             answer=answer,
             tool_calls=tool_calls,
+            evidence=evidence,
         )
         safety_payload = eval_payload.get('safety_veto', {})
         safety_record = (
@@ -78,6 +102,16 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
             if isinstance(safety_payload, dict)
             else SafetyVetoRecord()
         )
+
+        # --- Phase 3: populate three-dimensional scores + model/token info ---
+        token_usage_record = TokenUsageRecord()
+        if evidence is not None:
+            token_usage_record = TokenUsageRecord(
+                prompt_tokens=evidence.token_usage.prompt_tokens,
+                completion_tokens=evidence.token_usage.completion_tokens,
+                total_tokens=evidence.token_usage.total_tokens,
+            )
+
         record = EvalRunRecord(
             question_id=question.id,
             level=question.level,
@@ -93,6 +127,14 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
             safety_veto=safety_record,
             tool_calls=tool_calls,
             raw_result=mat_result,
+            # Phase 3 additions
+            accuracy_score=eval_payload.get('accuracy_score'),
+            grounding_score=eval_payload.get('grounding_score'),
+            efficiency_score=eval_payload.get('efficiency_score'),
+            strict_final=eval_payload.get('strict_final'),
+            analysis_final=eval_payload.get('analysis_final'),
+            model_name=evidence.model_name if evidence is not None else None,
+            token_usage=token_usage_record,
         )
         records.append(record)
         append_raw_run(output_dir=run_dir, record=record)
