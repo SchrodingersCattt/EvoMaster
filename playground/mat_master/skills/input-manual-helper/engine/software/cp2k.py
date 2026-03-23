@@ -10,6 +10,7 @@ cp2k.py — CP2K 软件后端完整实现。
 
 from __future__ import annotations
 
+import io
 import re
 from typing import Any
 
@@ -19,6 +20,20 @@ from engine.document import DocumentModel, ParsedParam, ParsedSection, SourceRan
 from engine.renderer import RenderIntent
 from engine.schema import SchemaRegistry
 from engine.software.base import SoftwareBackend
+
+# ---------------------------------------------------------------------------
+# 可选依赖：cp2k-input-tools（官方 CP2K 输入文件解析器与 Schema 校验器）
+# 安装：uv add cp2k-input-tools  或  pip install cp2k-input-tools
+# 缺失时优雅降级：跳过 Schema 级别校验，仅保留手写规则
+# ---------------------------------------------------------------------------
+try:
+    from cp2k_input_tools.parser import CP2KInputParser as _CP2KInputParser  # type: ignore[import]
+    from cp2k_input_tools.parser_errors import (  # type: ignore[import]
+        CP2KInputParserError as _CP2KInputParserError,
+    )
+    _HAS_CP2K_TOOLS = True
+except ImportError:
+    _HAS_CP2K_TOOLS = False
 
 # ---------------------------------------------------------------------------
 # 内建 Si 金刚石结构（primitive cell，a = 5.431 Å）
@@ -682,9 +697,273 @@ class CP2KBackend(SoftwareBackend):
                     )
                 )
 
+        # 4b. 物理兼容性规则（cross-section 互斥/依赖检查）
+        diags.extend(self._check_physics_compatibility(doc))
+
         # 追加解析阶段的错误
         diags.extend(doc.parse_errors)
+
+        # 5. cp2k-input-tools Schema 级别校验（官方 cp2k_input.xml，覆盖全量参数）
+        #    有 cp2k-input-tools 时，run 一次完整校验并追加结果；
+        #    同时把手写 unknown-param 诊断过滤掉，避免双重噪音。
+        tools_diags = self._validate_with_cp2k_tools(doc.raw_text, doc.source)
+        if tools_diags is not None:
+            # cp2k-input-tools 可用：删除手写 unknown-param warning（减少噪音）
+            diags = [d for d in diags if d.rule_id != "unknown-param"]
+            diags.extend(tools_diags)
+
         return diags
+
+    # ------------------------------------------------------------------
+    # _check_physics_compatibility  (物理兼容性规则)
+    # ------------------------------------------------------------------
+
+    def _check_physics_compatibility(
+        self, doc: DocumentModel
+    ) -> list[Diagnostic]:
+        """检查 CP2K 输入中跨 section 的物理兼容性约束。
+
+        规则（按严重程度排序）：
+
+        1. **OT + KPOINTS → error**
+           &SCF/&OT 与 &KPOINTS 不兼容：OT（Orbital Transformation）是
+           Γ 点算法，不支持 k 点采样。应改用传统对角化（DIAGONALIZATION）。
+
+        2. **HFX + KPOINTS without RI_HFX → error**
+           CP2K 对 k 点计算的 HFX（Hybrid Functional）仅支持 RI-HFX 近似
+           （Resolution-of-Identity）；普通 HFX + KPOINTS 会在运行时失败。
+
+        3. **CELL_OPT without STRESS_TENSOR → warning**
+           CELL_OPT（晶胞优化）需要应力张量；若 DFT/STRESS_TENSOR 未设置
+           为 ANALYTICAL 或 NUMERICAL，CP2K 会报错或给出无意义结果。
+
+        4. **BAND without BAND_STRUCTURE section → warning**
+           RUN_TYPE BAND 要求 &PROPERTIES/&BAND_STRUCTURE section；缺失时
+           计算不会报错但也不会输出能带数据。
+        """
+        diags: list[Diagnostic] = []
+        raw_upper = doc.raw_text.upper()
+
+        # ── 辅助：检测某 section 路径是否存在 ──────────────────────────────
+        def _has_section(*paths: str) -> bool:
+            """任一路径存在时返回 True（大小写不敏感）。"""
+            return any(doc.get_section(p) is not None for p in paths)
+
+        def _has_param_in_section(section_path: str, param_name: str) -> bool:
+            """section 存在且其 params 列表中含有指定参数名（大小写不敏感）。"""
+            sec = doc.get_section(section_path)
+            if sec is None:
+                return False
+            return any(p.name.upper() == param_name.upper() for p in sec.params)
+
+        def _param_value_upper(section_path: str, param_name: str) -> str | None:
+            """返回 section 内指定参数的值（大写字符串），不存在时返回 None。"""
+            sec = doc.get_section(section_path)
+            if sec is None:
+                return None
+            for p in sec.params:
+                if p.name.upper() == param_name.upper():
+                    return str(p.value).upper() if p.value is not None else None
+            return None
+
+        # ── 规则 1: OT + KPOINTS 互斥 ──────────────────────────────────────
+        has_ot = _has_section(
+            "&FORCE_EVAL/&DFT/&SCF/&OT",
+            "&DFT/&SCF/&OT",
+        )
+        has_kpoints = _has_section(
+            "&FORCE_EVAL/&DFT/&KPOINTS",
+            "&DFT/&KPOINTS",
+        )
+        if has_ot and has_kpoints:
+            # 找到 &OT section 的起始行以便精确定位
+            ot_sec = doc.get_section("&FORCE_EVAL/&DFT/&SCF/&OT") or doc.get_section("&DFT/&SCF/&OT")
+            rng = ot_sec.range if ot_sec is not None else None
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    message=(
+                        "OT（Orbital Transformation）与 KPOINTS 不兼容：OT 是 Γ 点专用算法，"
+                        "不支持 k 点采样。请改用 SCF 对角化（移除 &OT section 或将 "
+                        "ADDED_MOS 设为正整数并使用 DIAGONALIZATION）。"
+                    ),
+                    range=rng,
+                    param="OT",
+                    suggestion=(
+                        "删除 &SCF/&OT section，在 &SCF 中改用 "
+                        "DIAGONALIZATION 并设置 ADDED_MOS"
+                    ),
+                    rule_id="ot-incompatible-with-kpoints",
+                )
+            )
+
+        # ── 规则 2: HFX + KPOINTS without RI_HFX ─────────────────────────
+        has_hfx = _has_section(
+            "&FORCE_EVAL/&DFT/&XC/&HF",
+            "&DFT/&XC/&HF",
+        )
+        has_ri_hfx = _has_section(
+            "&FORCE_EVAL/&DFT/&XC/&HF/&RI",
+            "&DFT/&XC/&HF/&RI",
+            "&FORCE_EVAL/&DFT/&XC/&HF/&SCREENING",  # 旧版 RI_HFX 写法
+        )
+        if has_hfx and has_kpoints and not has_ri_hfx:
+            hf_sec = (
+                doc.get_section("&FORCE_EVAL/&DFT/&XC/&HF")
+                or doc.get_section("&DFT/&XC/&HF")
+            )
+            rng = hf_sec.range if hf_sec is not None else None
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    message=(
+                        "CP2K 对 k 点计算只支持 RI-HFX（Resolution-of-Identity HFX），"
+                        "普通 &HF + &KPOINTS 会在运行时报错 "
+                        "'Only RI-HFX is implemented for K-points'。"
+                        "请在 &HF 下添加 &RI section 启用 RI 近似。"
+                    ),
+                    range=rng,
+                    param="HF",
+                    suggestion=(
+                        "在 &XC/&HF 下添加：\n"
+                        "  &RI\n"
+                        "    KFN_REUSE_NUMBER  1\n"
+                        "    NGROUPS           4\n"
+                        "  &END RI"
+                    ),
+                    rule_id="hfx-kpoints-requires-ri",
+                )
+            )
+
+        # ── 规则 3: CELL_OPT without STRESS_TENSOR ────────────────────────
+        has_cell_opt = False
+        run_type_val = _param_value_upper("&GLOBAL", "RUN_TYPE")
+        if run_type_val == "CELL_OPT":
+            has_cell_opt = True
+        # 也检查文档中扁平参数列表
+        if not has_cell_opt:
+            for p in doc.params:
+                if p.name.upper() == "RUN_TYPE" and str(p.value).upper() == "CELL_OPT":
+                    has_cell_opt = True
+                    break
+
+        if has_cell_opt:
+            stress_val = _param_value_upper("&FORCE_EVAL/&DFT", "STRESS_TENSOR")
+            if stress_val is None:
+                stress_val = _param_value_upper("&DFT", "STRESS_TENSOR")
+            valid_stress = {"ANALYTICAL", "NUMERICAL", "DIAGONAL_ANALYTICAL", "DIAGONAL_NUMERICAL"}
+            if stress_val is None or stress_val not in valid_stress:
+                diags.append(
+                    Diagnostic(
+                        severity="warning",
+                        message=(
+                            "RUN_TYPE CELL_OPT 需要计算应力张量，但 "
+                            "DFT/STRESS_TENSOR 未设置为 ANALYTICAL 或 NUMERICAL。"
+                            "未设置时 CP2K 可能报错或无法优化晶胞参数。"
+                        ),
+                        param="STRESS_TENSOR",
+                        suggestion=(
+                            "在 &FORCE_EVAL/&DFT 中添加：\n"
+                            "  STRESS_TENSOR ANALYTICAL"
+                        ),
+                        rule_id="cell-opt-missing-stress-tensor",
+                    )
+                )
+
+        # ── 规则 4: BAND without BAND_STRUCTURE section ───────────────────
+        run_type_band = False
+        if run_type_val == "BAND":
+            run_type_band = True
+        if not run_type_band:
+            for p in doc.params:
+                if p.name.upper() == "RUN_TYPE" and str(p.value).upper() == "BAND":
+                    run_type_band = True
+                    break
+
+        if run_type_band:
+            has_band_structure = _has_section(
+                "&FORCE_EVAL/&PROPERTIES/&BAND_STRUCTURE",
+                "&PROPERTIES/&BAND_STRUCTURE",
+            )
+            if not has_band_structure:
+                diags.append(
+                    Diagnostic(
+                        severity="warning",
+                        message=(
+                            "RUN_TYPE BAND 需要 &PROPERTIES/&BAND_STRUCTURE section "
+                            "来指定 k 点路径和能带计算参数；未找到该 section，"
+                            "能带数据将不会输出。"
+                        ),
+                        param="RUN_TYPE",
+                        suggestion=(
+                            "在 &FORCE_EVAL 下添加：\n"
+                            "  &PROPERTIES\n"
+                            "    &BAND_STRUCTURE\n"
+                            "      ADDED_MOS  20\n"
+                            "      &KPOINT_SET\n"
+                            "        UNITS RECIPROCAL\n"
+                            "        SPECIAL_POINT G  0.0 0.0 0.0\n"
+                            "        SPECIAL_POINT X  0.5 0.0 0.5\n"
+                            "        NPOINTS  20\n"
+                            "      &END KPOINT_SET\n"
+                            "    &END BAND_STRUCTURE\n"
+                            "  &END PROPERTIES"
+                        ),
+                        rule_id="band-missing-band-structure-section",
+                    )
+                )
+
+        return diags
+
+    # ------------------------------------------------------------------
+    # _validate_with_cp2k_tools  (private helper)
+    # ------------------------------------------------------------------
+
+    def _validate_with_cp2k_tools(
+        self, text: str, source: str
+    ) -> list[Diagnostic] | None:
+        """调用 cp2k-input-tools 的 CP2KInputParser 做官方 Schema 校验。
+
+        - 返回 None  → cp2k-input-tools 不可用，调用方继续走手写规则
+        - 返回 []    → 解析成功，无错误
+        - 返回 [...]  → 包含 error/warning 诊断
+
+        cp2k-input-tools 的 ``CP2KInputParser.parse()`` 接受 file-like 对象，
+        校验基于 ``cp2k_input.xml``，覆盖全量 CP2K 参数。
+        """
+        if not _HAS_CP2K_TOOLS:
+            return None
+
+        result: list[Diagnostic] = []
+        try:
+            parser = _CP2KInputParser()
+            parser.parse(io.StringIO(text))
+            # 解析成功：不追加额外 info（保持诊断列表简洁）
+        except _CP2KInputParserError as exc:
+            # exc.line_nr 是 1-based 行号（可能为 None/0）
+            line_nr = getattr(exc, "line_nr", 0) or 0
+            rng = _make_range(line_nr, 0, 0) if line_nr > 0 else None
+            result.append(
+                Diagnostic(
+                    severity="error",
+                    message=f"[cp2k-input-tools] {exc}",
+                    range=rng,
+                    param="",
+                    suggestion="参考 https://manual.cp2k.org 检查 section/keyword 拼写",
+                    rule_id="cp2k-tools-schema-error",
+                )
+            )
+        except Exception as exc:  # noqa: BLE001
+            # cp2k-input-tools 内部意外异常，降级为 warning 而非 error
+            result.append(
+                Diagnostic(
+                    severity="warning",
+                    message=f"[cp2k-input-tools] 校验时发生意外错误: {exc}",
+                    param="",
+                    rule_id="cp2k-tools-unexpected-error",
+                )
+            )
+        return result
 
     # ------------------------------------------------------------------
     # get_completions

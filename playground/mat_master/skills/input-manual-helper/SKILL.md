@@ -43,7 +43,7 @@ SoftwareBackend（parse → diagnostics → completion → render）
 
 | 软件 | 格式 | 默认测试体系 | 支持任务类型 |
 |------|------|------------|------------|
-| **CP2K** | `&SECTION ... &END` 嵌套 | Si 金刚石（GPW/PBE） | scf, opt, md |
+| **CP2K** | `&SECTION ... &END` 嵌套 | Si 金刚石（GPW/PBE） | scf, opt, md, band |
 | **ORCA** | `! keyword` + `%block` | H₂O 分子（B3LYP/def2-SVP） | scf, opt, freq, tddft |
 | **Quantum ESPRESSO** | Fortran namelist + cards | Si 金刚石（pw.x SCF） | scf, relax, vc-relax, md, nscf, bands |
 | **ABINIT** | 扁平 key-value | Si 金刚石（primitive FCC） | scf, relax, cellopt |
@@ -147,37 +147,30 @@ uv run python scripts/validate_input.py --input_file input.in --software qe
 
 > **注意**：新工作流请使用 `diagnose_input.py`，支持更多软件和更精确的诊断。
 
-## Bohrium 镜像与运行命令
+## Bohrium 提交
 
-以下为 E2E 测试验证的 Bohrium 镜像和运行命令：
+镜像、机型和运行命令的**权威来源**是 **bohrium-job** Skill。提交前务必先查阅：
 
-| 软件 | Bohrium 镜像 | 推荐机型 | 运行命令 |
-|------|-------------|---------|---------|
-| **Quantum ESPRESSO** | `quantum-espresso:7.1` | `c4_m16_cpu` | `mpirun -np 4 pw.x -in input.in` |
-| **ABINIT** | `abinit:9.10` | `c4_m16_cpu` | `abinit run.abi` |
-| **CP2K** | `cp2k:v3` | `c4_m16_cpu` | `OMP_NUM_THREADS=1 mpirun -np 4 /opt/cp2k/exe/local/cp2k.psmp -i input.inp` |
-| **ORCA** | `orca:latest` | `c4_m16_cpu` | `/opt/orca/orca input.inp` |
-| **LAMMPS** | `lammps:stable` | `c4_m16_cpu` | `lmp -in input.lammps` |
+```python
+use_skill(skill_name="bohrium-job", action="get_info")
+```
+
+查阅 `## Software Reference` 表中对应软件的 Image、Machine 和 Command。
+
+> ⚠️ **不要**从本 Skill 的文档中获取镜像名——本 Skill 不维护镜像信息。
 
 ### 赝势注意事项
 
-**Quantum ESPRESSO（qe:7.1）**：
-- 镜像内置赝势路径：`/qe-7.1/EPW/examples/sic/pp/`
-- 默认使用：`Si.pz-vbc.UPF`（NC-LDA 型）
-- `render_input.py` 输出的 `pseudo_dir` 已指向该路径，无需额外配置
+**Quantum ESPRESSO**：
+- `render_input.py` 输出的 `pseudo_dir` 已指向 bohrium-job SKILL.md 中 QE 镜像内置赝势路径，无需额外配置
 
-**ABINIT（abinit:9.10）**：
-- 镜像内置赝势路径：`/opt/abinit-9.10.3/tests/Psps_for_tests/`
-- 默认使用：`Si_r.psp8`
+**ABINIT**：
 - ⚠️ `ppdirpath` **不是** ABINIT v9.10 的合法关键字，render 输出中已移除
-- 运行前需手动复制赝势到工作目录：
-  ```bash
-  cp /opt/abinit-9.10.3/tests/Psps_for_tests/Si_r.psp8 .
-  ```
+- 运行前可能需手动复制赝势到工作目录（参见 bohrium-job SKILL.md 中的 ABINIT 说明）
 
 **CP2K**：
 - 使用内置 GTH 赝势（`GTH_POTENTIALS` 文件内置于镜像）
-- 基组文件：`BASIS_MOLOPT`（内置）
+- 基组文件：`BASIS_MOLOPT`、`BASIS_ADMM`、`BASIS_ADMM_UZH`（内置）
 - 无需额外配置
 
 **ORCA**：
