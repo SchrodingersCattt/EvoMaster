@@ -21,6 +21,7 @@ import pytest
 from matmaster.core.bus import MessageBus
 from matmaster.types.events import (
     AssistantStateEvent,
+    BohriumNodeEvent,
     FinishEvent,
     ThoughtEvent,
     ToolCallEvent,
@@ -124,6 +125,78 @@ class TestEventRouter:
         assert len(received) == 1
         assert received[0].type == "finish"
 
+    def test_add_handler_post_registration_only_receives_future_events(self) -> None:
+        """A handler added after start only receives events emitted after registration."""
+        bus = MessageBus()
+        initial_received: list[str] = []
+        late_received: list[str] = []
+        first_event_processed = threading.Event()
+        second_event_processed = threading.Event()
+
+        class InitialHandler:
+            def handle(self, event: Any) -> None:
+                initial_received.append(event.reason)
+                if event.reason == "before-registration":
+                    first_event_processed.set()
+                if event.reason == "after-registration":
+                    second_event_processed.set()
+
+        class LateHandler:
+            def handle(self, event: Any) -> None:
+                late_received.append(event.reason)
+                if event.reason == "after-registration":
+                    second_event_processed.set()
+
+        router = EventRouter(bus, [InitialHandler()])
+        router.start()
+
+        bus.emit(FinishEvent(source="Agent", reason="before-registration"))
+        assert first_event_processed.wait(timeout=1.0)
+
+        router.add_handler(LateHandler())
+
+        bus.emit(FinishEvent(source="Agent", reason="after-registration"))
+        assert second_event_processed.wait(timeout=1.0)
+
+        router.stop()
+
+        assert initial_received == ["before-registration", "after-registration"]
+        assert late_received == ["after-registration"]
+
+    def test_add_handler_during_dispatch_skips_in_flight_event_and_receives_next_event(
+        self,
+    ) -> None:
+        """A handler added during dispatch does not receive the current event."""
+        bus = MessageBus()
+        late_received: list[str] = []
+
+        class LateHandler:
+            def handle(self, event: Any) -> None:
+                late_received.append(event.reason)
+
+        late_handler = LateHandler()
+
+        class RegisteringHandler:
+            def __init__(self) -> None:
+                self._router: EventRouter | None = None
+
+            def bind(self, router: EventRouter) -> None:
+                self._router = router
+
+            def handle(self, event: Any) -> None:
+                if event.reason == "current":
+                    assert self._router is not None
+                    self._router.add_handler(late_handler)
+
+        registering_handler = RegisteringHandler()
+        router = EventRouter(bus, [registering_handler])
+        registering_handler.bind(router)
+
+        router._dispatch(FinishEvent(source="Agent", reason="current"))
+        router._dispatch(FinishEvent(source="Agent", reason="next"))
+
+        assert late_received == ["next"]
+
 
 # ── PersistenceHandler Tests ────────────────────────────
 
@@ -201,6 +274,26 @@ class TestPersistenceHandler:
         )
 
         events_table.add_event.assert_called_once()
+
+    def test_persists_bohrium_node_payload_as_content(self) -> None:
+        """handle() persists Bohrium node payload as the content field."""
+        handler, events_table = self._make_handler()
+        bohrium_payload = {
+            "type": "setup_ready",
+            "content": {"node_id": "node-1"},
+            "phase": "ssh",
+        }
+
+        handler.handle(
+            BohriumNodeEvent(source="BohriumSetup", payload=bohrium_payload)
+        )
+
+        events_table.add_event.assert_called_once()
+        args = events_table.add_event.call_args
+        assert args[0][0] == "sess1"
+        assert args[0][1] == "BohriumSetup"
+        assert args[0][2] == "bohrium_node"
+        assert args[0][3] == bohrium_payload
 
 
 # ── SSEHandler Tests ────────────────────────────────────

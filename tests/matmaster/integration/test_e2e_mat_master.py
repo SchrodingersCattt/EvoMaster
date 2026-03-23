@@ -365,3 +365,237 @@ class TestMatMasterRunAgentSyncE2E:
             # Note: PersistenceHandler skips streaming thoughts (stream_state in start/streaming/end)
             # so add_event may not be called for this minimal mock. That's correct behavior.
             # The key E2E validation is: kernel ran -> finish -> use_quota called.
+
+    def test_events_table_failure_returns_cleanly_without_router_lifecycle(
+        self, tmp_path: Path
+    ) -> None:
+        """Regression: events table failure exits before router bootstrap."""
+        from src.services.agent_run_service import AgentRunService
+
+        mock_sessions_svc = MagicMock()
+        mock_sessions_svc.get_session_user_id.return_value = "user-123"
+
+        svc = AgentRunService(sessions_service=mock_sessions_svc)
+        svc._playground_init_done.set()
+        svc._build_llm_provider = MagicMock()
+
+        mock_pg = MagicMock()
+        mock_pg_ctx = _make_pg_ctx(tmp_path)
+        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.session = None
+        svc._playgrounds["sess-events-table-error"] = mock_pg
+
+        with (
+            patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
+            patch("src.services.agent_run_service.EventRouter") as mock_router_cls,
+            patch(
+                "src.services.agent_run_service.BohriumSetupService"
+            ) as mock_bohrium_cls,
+            patch(
+                "src.services.agent_run_service.get_chat_events_table",
+                side_effect=RuntimeError("events table unavailable"),
+            ),
+            patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
+            patch("src.services.agent_run_service.use_quota") as mock_use_quota,
+        ):
+            sse_payloads: list[dict[str, Any]] = []
+
+            def mock_send_cb(payload: dict[str, Any]) -> None:
+                sse_payloads.append(payload)
+
+            result = svc.run_agent_sync(
+                session_id="sess-events-table-error",
+                user_prompt="test prompt",
+                send_cb=mock_send_cb,
+                loop=None,
+                stop_event=threading.Event(),
+                mode="direct",
+                reply_queue=None,
+                task_id="task-events-table-error",
+            )
+
+        assert result is None
+        mock_router_cls.assert_not_called()
+        mock_router_cls.return_value.start.assert_not_called()
+        mock_router_cls.return_value.stop.assert_not_called()
+        mock_bohrium_cls.assert_not_called()
+        svc._build_llm_provider.assert_not_called()
+        mock_use_quota.assert_not_called()
+        assert sse_payloads == []
+        mock_redis_fn.return_value.delete_stop_requested.assert_called_once_with(
+            "sess-events-table-error",
+            "task-events-table-error",
+        )
+        mock_pg.cleanup.assert_called_once()
+
+    def test_bohrium_events_reach_sse_before_setup_returns(
+        self, tmp_path: Path
+    ) -> None:
+        """Bohrium setup events must reach SSE before setup() returns."""
+        from src.services.agent_run_service import AgentRunService
+
+        mock_sessions_svc = MagicMock()
+        mock_sessions_svc.get_session_user_id.return_value = "user-123"
+
+        svc = AgentRunService(sessions_service=mock_sessions_svc)
+        svc._build_llm_provider = MagicMock(
+            return_value=MockLLMProvider("Bohrium event test response")
+        )
+
+        mock_pg = MagicMock()
+        mock_pg_ctx = _make_pg_ctx(tmp_path)
+        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.session = None
+
+        with (
+            patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
+            patch(
+                "src.services.agent_run_service.BohriumSetupService"
+            ) as mock_bohrium_cls,
+            patch(
+                "src.services.agent_run_service.get_chat_events_table"
+            ) as mock_events_table_fn,
+            patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
+            patch("src.services.agent_run_service.use_quota") as mock_use_quota,
+        ):
+            mock_bohrium_result = MagicMock()
+            mock_bohrium_result.ssh_attached = False
+            mock_bohrium_result.abort_result = None
+            mock_bohrium_result._asdict.return_value = {
+                "ssh_attached": False,
+                "abort_result": None,
+            }
+            mock_bohrium_svc = mock_bohrium_cls.return_value
+            mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
+
+            mock_events_table = MagicMock()
+            mock_events_table.get_session_events.return_value = []
+            mock_events_table_fn.return_value = mock_events_table
+
+            mock_redis = MagicMock()
+            mock_redis_fn.return_value = mock_redis
+
+            async def _mock_use_quota(uid):
+                pass
+
+            mock_use_quota.side_effect = _mock_use_quota
+
+            sse_payloads: list[dict[str, Any]] = []
+            bohrium_seen_by_sse = threading.Event()
+            setup_state: dict[str, bool] = {}
+
+            def mock_send_cb(payload: dict[str, Any]) -> None:
+                sse_payloads.append(payload)
+                if payload.get("type") == "bohrium_node":
+                    bohrium_seen_by_sse.set()
+
+            def _mock_setup(**kwargs):
+                kwargs["event_callback"](
+                    source="BohriumSetup",
+                    event_type="node_ready",
+                    content="node is ready",
+                    stage="setup",
+                )
+                setup_state["saw_bohrium_event_before_return"] = (
+                    bohrium_seen_by_sse.wait(timeout=1.0)
+                )
+                return mock_bohrium_result
+
+            mock_bohrium_svc.setup.side_effect = _mock_setup
+
+            svc.run_agent_sync(
+                session_id="sess-bohrium-event",
+                user_prompt="test prompt",
+                send_cb=mock_send_cb,
+                loop=None,
+                stop_event=threading.Event(),
+                mode="direct",
+                reply_queue=None,
+                task_id="task-bohrium-event",
+            )
+
+        assert setup_state["saw_bohrium_event_before_return"] is True
+        bohrium_payload = next(
+            (
+                payload
+                for payload in sse_payloads
+                if payload.get("type") == "bohrium_node"
+            ),
+            None,
+        )
+        assert bohrium_payload is not None
+        assert bohrium_payload["payload"]["type"] == "node_ready"
+        assert bohrium_payload["payload"]["content"] == "node is ready"
+
+    def test_bohrium_setup_exception_is_sent_to_sse_when_router_starts_early(
+        self, tmp_path: Path
+    ) -> None:
+        """Bohrium-stage exceptions should surface through SSE error payloads."""
+        from src.services.agent_run_service import AgentRunService
+
+        mock_sessions_svc = MagicMock()
+        mock_sessions_svc.get_session_user_id.return_value = "user-123"
+
+        svc = AgentRunService(sessions_service=mock_sessions_svc)
+        svc._build_llm_provider = MagicMock(
+            return_value=MockLLMProvider("Bohrium exception test response")
+        )
+
+        mock_pg = MagicMock()
+        mock_pg_ctx = _make_pg_ctx(tmp_path)
+        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.session = None
+
+        with (
+            patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
+            patch(
+                "src.services.agent_run_service.BohriumSetupService"
+            ) as mock_bohrium_cls,
+            patch(
+                "src.services.agent_run_service.get_chat_events_table"
+            ) as mock_events_table_fn,
+            patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
+            patch("src.services.agent_run_service.use_quota") as mock_use_quota,
+        ):
+            mock_bohrium_svc = mock_bohrium_cls.return_value
+            mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
+            mock_bohrium_svc.setup.side_effect = RuntimeError("bohrium setup failed")
+
+            mock_events_table = MagicMock()
+            mock_events_table.get_session_events.return_value = []
+            mock_events_table_fn.return_value = mock_events_table
+
+            mock_redis = MagicMock()
+            mock_redis_fn.return_value = mock_redis
+
+            async def _mock_use_quota(uid):
+                pass
+
+            mock_use_quota.side_effect = _mock_use_quota
+
+            sse_payloads: list[dict[str, Any]] = []
+
+            def mock_send_cb(payload: dict[str, Any]) -> None:
+                sse_payloads.append(payload)
+
+            svc.run_agent_sync(
+                session_id="sess-bohrium-error",
+                user_prompt="test prompt",
+                send_cb=mock_send_cb,
+                loop=None,
+                stop_event=threading.Event(),
+                mode="direct",
+                reply_queue=None,
+                task_id="task-bohrium-error",
+            )
+
+        error_payload = next(
+            (payload for payload in sse_payloads if payload.get("type") == "error"),
+            None,
+        )
+        assert error_payload is not None
+        assert error_payload["source"] == "System"
+        assert error_payload["message"] == "bohrium setup failed"
