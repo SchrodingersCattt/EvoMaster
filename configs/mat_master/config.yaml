@@ -318,8 +318,6 @@ mcp:
       - prepare_lammps_job
       - prepare_orca_job
       - prepare_pyatb_job
-      # MCP exposes submit_run_gromacs; executor_map uses run_gromacs (path_adaptor strips submit_)
-      - submit_run_gromacs
   # Per-server executor (image/machine_type) and sync_tools. Sync tools → executor None; others → Bohrium executor with env auth.
   calculation_executors:
     mat_sg:
@@ -516,13 +514,6 @@ mcp:
               app_key: "agent"
           resources:
             envs: {}
-      # MCP 可能将 List[Path] 暴露为 array of string（无 items.format:path）；submit 工具 description 常为短句。
-      # 在此按「远程工具名」声明需走 OSS 上传的参数名（须出现在 inputSchema.properties）；可与 run_* 共用一条。
-      path_params_by_tool:
-        submit_run_gromacs:
-          - input_files
-        run_gromacs:
-          - input_files
       sync_tools:
         - prepare_abinit_job
         - prepare_cp2k_job
