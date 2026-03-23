@@ -38,6 +38,20 @@ class _SuccessLLM:
         yield StreamChunk(content="success", finish_reason="stop")
 
 
+class _InvalidFinishLLM:
+    """Mock LLM: streams content but ends with a non-committable finish reason."""
+
+    def chat(self, messages, tools=None) -> LLMResponse:
+        return LLMResponse(content="partial", finish_reason="length")
+
+    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
+        return self.chat(messages, tools)
+
+    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+        yield StreamChunk(content="partial")
+        yield StreamChunk(finish_reason="length")
+
+
 class _ErrorLLM:
     """Mock LLM: raises exception."""
 
@@ -80,7 +94,7 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
     return svc, mock_pg
 
 
-def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None):
+def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None, send_cb=None):
     """Run agent with standard patches and return whether use_quota was called."""
     with (
         patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
@@ -114,7 +128,7 @@ def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None):
         svc.run_agent_sync(
             session_id="sess-q",
             user_prompt="quota test",
-            send_cb=MagicMock(),
+            send_cb=send_cb or MagicMock(),
             loop=None,
             stop_event=stop_event or threading.Event(),
             mode="direct",
@@ -143,6 +157,32 @@ class TestQuotaDeductedOnSuccess:
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
         called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
         assert called, "use_quota should be called on success"
+
+    def test_finish_event_is_sent_on_success(self, tmp_path: Path) -> None:
+        """Verify run_agent_sync emits the kernel FinishEvent to send_cb."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _SuccessLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        payloads: list[dict[str, Any]] = []
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        _run_with_quota_mock(
+            svc,
+            mock_pg,
+            use_quota_mock,
+            send_cb=lambda payload: payloads.append(payload),
+        )
+
+        finish_payload = next(
+            (payload for payload in payloads if payload.get("type") == "finish"),
+            None,
+        )
+        assert finish_payload is not None
+        assert finish_payload["reason"] == "natural"
+        assert finish_payload["final_content"] == "success"
 
 
 class TestQuotaNotDeductedOnCancel:
@@ -181,6 +221,19 @@ class TestQuotaNotDeductedOnError:
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
         called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
         assert not called, "use_quota should NOT be called on error"
+
+    def test_quota_not_deducted_on_invalid_finish(self, tmp_path: Path) -> None:
+        """Verify use_quota NOT called when finish validation fails."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _InvalidFinishLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
+        assert not called, "use_quota should NOT be called on invalid finish"
 
 
 class TestQuotaAsyncMode:
