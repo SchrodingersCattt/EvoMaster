@@ -107,6 +107,29 @@ class UserService:
             return ''
 
     @staticmethod
+    def get_user_no_by_user_id(
+        user_id: str, business_line: str = 'bohrium'
+    ) -> str | None:
+        """从 BI ``account_api/users/{user_id}`` 取学术码 ``userNo``（与邮箱/昵称同源）。"""
+        try:
+            params = {'businessLine': business_line}
+            url = f"{ACCOUNT_API_BASE_URL}/account_api/users/{user_id}"
+            with httpx.Client(timeout=15.0) as client:
+                response = client.get(url, params=params)
+                response.raise_for_status()
+                payload = response.json()
+            if payload.get('code') != 0:
+                return None
+            data = payload.get('data') or {}
+            user_no = data.get('userNo')
+            if isinstance(user_no, str) and user_no.strip():
+                return user_no.strip()
+            return None
+        except Exception as e:
+            logger.error('获取用户学术码失败: %s', e)
+            return None
+
+    @staticmethod
     def get_user_display_name(
         user_id: str,
         business_line: str = 'bohrium',
