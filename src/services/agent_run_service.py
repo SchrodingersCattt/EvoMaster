@@ -129,6 +129,27 @@ def _resolve_temperature(
     return temperature
 
 
+def _build_workspace_upload_fn(
+    archival_config: Any,
+) -> Callable[..., Any] | None:
+    """Build workspace upload closure when archival is enabled.
+
+    Lazy-imports oss_io to avoid hard oss2 dependency when archival
+    is disabled.
+    """
+    if not archival_config or not archival_config.enabled:
+        return None
+    oss_prefix = archival_config.oss_prefix
+
+    def _do_upload(session_id: str, task_id: str, workspace_path: Path) -> None:
+        from src.dao.oss_io import upload_dir_to_oss
+
+        key_prefix = f"{oss_prefix}/{session_id}/{task_id}"
+        upload_dir_to_oss(workspace_path, key_prefix)
+
+    return _do_upload
+
+
 @runtime_checkable
 class ReplyQueueLike(Protocol):
     """Confirmation reply queue abstraction: put content/cancel, blocking get."""
@@ -491,6 +512,7 @@ class AgentRunService:
                         ssh_attached=ssh_attached,
                         archival_config=pg_ctx.archival,
                         workspace_path=workspace_path,
+                        upload_fn=_build_workspace_upload_fn(pg_ctx.archival),
                     ),
                 ],
             )
