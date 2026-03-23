@@ -512,18 +512,20 @@ class AgentRunService:
                     )
                 )
             else:
+                bus.emit(finish_event)
                 # Quota deduction (per QUAL-05: success only)
-                user_id = self._sessions_service.get_session_user_id(
-                    session_id
-                )
-                if user_id:
-                    if loop is not None:
-                        future = asyncio.run_coroutine_threadsafe(
-                            use_quota(user_id), loop
-                        )
-                        future.result(timeout=10)
-                    else:
-                        asyncio.run(use_quota(user_id))
+                if finish_event.status == "completed":
+                    user_id = self._sessions_service.get_session_user_id(
+                        session_id
+                    )
+                    if user_id:
+                        if loop is not None:
+                            future = asyncio.run_coroutine_threadsafe(
+                                use_quota(user_id), loop
+                            )
+                            future.result(timeout=10)
+                        else:
+                            asyncio.run(use_quota(user_id))
 
         except Exception as exc:
             logger.exception(

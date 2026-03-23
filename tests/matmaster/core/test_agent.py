@@ -451,7 +451,40 @@ class TestStreamingAccumulation:
 
         assert result.reason == "natural"
         assert result.final_content == "Hello"
-        assert len(chunk_hook.chunks) == 3  # all 3 chunks forwarded
+        assert [chunk.stream_state for chunk in chunk_hook.chunks] == [
+            "start",
+            "streaming",
+            "streaming",
+            "end",
+        ]
+        assert chunk_hook.chunks[0].stream_id == chunk_hook.chunks[-1].stream_id
+        assert chunk_hook.chunks[1].content == "He"
+        assert chunk_hook.chunks[2].content == "llo"
+
+
+class TestFinishValidation:
+    """Natural finish must validate terminal finish_reason before commit."""
+
+    def test_non_stop_finish_reason_does_not_commit_natural_finish(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        chunk_hook = ChunkRecordingHook()
+        provider = StreamingProvider([
+            StreamChunk(content="partial"),
+            StreamChunk(finish_reason="length"),
+        ])
+        spec = _make_spec(provider=provider, hooks=[chunk_hook])
+        kernel = AgentKernel()
+        result = kernel.run(spec, "test")
+
+        assert result.reason == "invalid_finish"
+        assert result.status == "failed"
+        assert result.final_content is None
+        assert [chunk.stream_state for chunk in chunk_hook.chunks] == [
+            "start",
+            "streaming",
+            "end",
+        ]
 
 
 class TestToolCallDelta:
