@@ -365,3 +365,104 @@ class TestMatMasterRunAgentSyncE2E:
             # Note: PersistenceHandler skips streaming thoughts (stream_state in start/streaming/end)
             # so add_event may not be called for this minimal mock. That's correct behavior.
             # The key E2E validation is: kernel ran -> finish -> use_quota called.
+
+    def test_run_agent_sync_excludes_current_task_query_from_history(
+        self, tmp_path: Path
+    ) -> None:
+        """Current task query should not be replayed into history for the LLM."""
+        from src.services.agent_run_service import AgentRunService
+
+        mock_sessions_svc = MagicMock()
+        mock_sessions_svc.get_session_user_id.return_value = "user-123"
+
+        svc = AgentRunService(sessions_service=mock_sessions_svc)
+
+        mock_llm = MockLLMProviderCapturingMessages()
+        svc._build_llm_provider = MagicMock(return_value=mock_llm)
+
+        mock_pg = MagicMock()
+        mock_pg_ctx = _make_pg_ctx(tmp_path)
+        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.session = None
+
+        current_task_id = "task-1"
+        raw_events = [
+            {
+                "source": "User",
+                "type": "query",
+                "content": "old question",
+                "task_id": "task-0",
+            },
+            {
+                "source": "MatMaster",
+                "type": "finish",
+                "content": "old answer",
+                "task_id": "task-0",
+            },
+            {
+                "source": "User",
+                "type": "query",
+                "content": "new question",
+                "task_id": current_task_id,
+            },
+        ]
+
+        with (
+            patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
+            patch(
+                "src.services.agent_run_service.BohriumSetupService"
+            ) as mock_bohrium_cls,
+            patch(
+                "src.services.agent_run_service.get_chat_events_table"
+            ) as mock_events_table_fn,
+            patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
+            patch("src.services.agent_run_service.use_quota") as mock_use_quota,
+        ):
+            mock_bohrium_result = MagicMock()
+            mock_bohrium_result.ssh_attached = False
+            mock_bohrium_result.abort_result = None
+            mock_bohrium_result._asdict.return_value = {
+                "ssh_attached": False,
+                "abort_result": None,
+            }
+            mock_bohrium_svc = mock_bohrium_cls.return_value
+            mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
+            mock_bohrium_svc.setup.return_value = mock_bohrium_result
+
+            mock_events_table = MagicMock()
+            mock_events_table.get_session_events.return_value = raw_events
+            mock_events_table_fn.return_value = mock_events_table
+
+            mock_redis = MagicMock()
+            mock_redis_fn.return_value = mock_redis
+
+            async def _mock_use_quota(uid):
+                pass
+
+            mock_use_quota.side_effect = _mock_use_quota
+
+            svc.run_agent_sync(
+                session_id="sess-1",
+                user_prompt="new question",
+                send_cb=MagicMock(),
+                loop=None,
+                stop_event=threading.Event(),
+                mode="direct",
+                reply_queue=None,
+                task_id=current_task_id,
+            )
+
+        assert len(mock_llm.captured_messages) == 1
+        llm_messages = mock_llm.captured_messages[0]
+        assert [m["role"] for m in llm_messages] == [
+            "system",
+            "user",
+            "assistant",
+            "user",
+        ]
+        assert [m["content"] for m in llm_messages[1:]] == [
+            "old question",
+            "old answer",
+            "new question",
+        ]

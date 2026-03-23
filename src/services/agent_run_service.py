@@ -486,7 +486,9 @@ class AgentRunService:
                 if events_table
                 else []
             )
-            history = ChatHistoryConverter.events_to_messages(raw_events)
+            history = ChatHistoryConverter.events_to_messages(
+                ChatHistoryConverter.exclude_task_events(raw_events, task_id)
+            )
 
             # -- Stage 5: EventRouter --
             workspace_path = pg_ctx.workdir
