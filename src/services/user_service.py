@@ -2,6 +2,7 @@
 
 import logging
 from functools import lru_cache
+from typing import Any
 
 import httpx
 from fastapi import HTTPException, Request, status
@@ -62,21 +63,44 @@ class UserService:
         return org_id or None
 
     @staticmethod
+    def _fetch_account_user(
+        user_id: str,
+        *,
+        business_line: str = 'bohrium',
+        timeout: float = 30.0,
+    ) -> dict[str, Any] | None:
+        """GET ``account_api/users/{user_id}``；成功且 ``code==0`` 时返回 ``data`` 字典，否则 ``None``。
+
+        不捕获异常，由调用方按场景记录 error / debug 日志。
+        """
+        if not (user_id or '').strip():
+            return None
+        params = {'businessLine': business_line}
+        url = f"{ACCOUNT_API_BASE_URL}/account_api/users/{user_id}"
+        with httpx.Client(timeout=timeout) as client:
+            response = client.get(url, params=params)
+            response.raise_for_status()
+            payload = response.json()
+        if payload.get('code') != 0:
+            return None
+        data = payload.get('data')
+        if not isinstance(data, dict):
+            return None
+        return data
+
+    @staticmethod
     def get_email_by_user_id(
         user_id: str, business_line: str = 'bohrium'
     ) -> str | None:
         """Get user email by user_id from BI API."""
         try:
-            params = {'businessLine': business_line}
-            url = f"{ACCOUNT_API_BASE_URL}/account_api/users/{user_id}"
-            with httpx.Client(timeout=30.0) as client:
-                response = client.get(url, params=params)
-                response.raise_for_status()
-                data = response.json()
-                logger.info('data: %s', data)
-                if data.get('code') == 0:
-                    return data.get('data', {}).get('email')
+            data = UserService._fetch_account_user(
+                user_id, business_line=business_line, timeout=30.0
+            )
+            logger.debug('account user payload: %s', data)
+            if not data:
                 return None
+            return data.get('email')
         except Exception as e:
             logger.error('获取用户邮箱失败: %s', e)
             return None
@@ -85,17 +109,11 @@ class UserService:
     def get_username_by_user_id(user_id: str, business_line: str = 'bohrium') -> str:
         """Get user nickname by user_id from BI API."""
         try:
-            params = {'businessLine': business_line}
-            url = f"{ACCOUNT_API_BASE_URL}/account_api/users/{user_id}"
-            with httpx.Client(timeout=30.0) as client:
-                response = client.get(url, params=params)
-                response.raise_for_status()
-                payload = response.json()
-
-            if payload.get('code') != 0:
+            data = UserService._fetch_account_user(
+                user_id, business_line=business_line, timeout=30.0
+            )
+            if not data:
                 return ''
-
-            data = payload.get('data') or {}
             nickname = data.get('nickname')
             if nickname is None:
                 return ''
@@ -110,17 +128,13 @@ class UserService:
     def get_user_no_by_user_id(
         user_id: str, business_line: str = 'bohrium'
     ) -> str | None:
-        """从 BI ``account_api/users/{user_id}`` 取学术码 ``userNo``（与邮箱/昵称同源）。"""
+        """从 BI ``data.userNo`` 取学术码。"""
         try:
-            params = {'businessLine': business_line}
-            url = f"{ACCOUNT_API_BASE_URL}/account_api/users/{user_id}"
-            with httpx.Client(timeout=15.0) as client:
-                response = client.get(url, params=params)
-                response.raise_for_status()
-                payload = response.json()
-            if payload.get('code') != 0:
+            data = UserService._fetch_account_user(
+                user_id, business_line=business_line, timeout=15.0
+            )
+            if not data:
                 return None
-            data = payload.get('data') or {}
             user_no = data.get('userNo')
             if isinstance(user_no, str) and user_no.strip():
                 return user_no.strip()
@@ -139,15 +153,11 @@ class UserService:
         if not (user_id or '').strip():
             return '未知'
         try:
-            params = {'businessLine': business_line}
-            url = f"{ACCOUNT_API_BASE_URL}/account_api/users/{user_id}"
-            with httpx.Client(timeout=timeout) as client:
-                response = client.get(url, params=params)
-                response.raise_for_status()
-                payload = response.json()
-            if payload.get('code') != 0:
+            data = UserService._fetch_account_user(
+                user_id, business_line=business_line, timeout=timeout
+            )
+            if not data:
                 return user_id
-            data = payload.get('data') or {}
             nickname = data.get('nickname')
             if isinstance(nickname, str) and nickname.strip():
                 return f"{nickname.strip()} ({user_id})"
@@ -177,15 +187,11 @@ class UserService:
             'email': ph,
         }
         try:
-            params = {'businessLine': business_line}
-            url = f"{ACCOUNT_API_BASE_URL}/account_api/users/{user_id}"
-            with httpx.Client(timeout=timeout) as client:
-                response = client.get(url, params=params)
-                response.raise_for_status()
-                payload = response.json()
-            if payload.get('code') != 0:
+            data = UserService._fetch_account_user(
+                user_id, business_line=business_line, timeout=timeout
+            )
+            if not data:
                 return result
-            data = payload.get('data') or {}
             nickname = data.get('nickname')
             if isinstance(nickname, str) and nickname.strip():
                 result['nickname'] = nickname.strip()
