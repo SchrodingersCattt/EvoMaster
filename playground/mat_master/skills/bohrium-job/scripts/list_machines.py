@@ -56,34 +56,28 @@ def list_machines(choose_type: str = 'cpu') -> list[dict]:
             'productLine': 'bohrium',
         },
     )
-    records = (data.get('data') or {}).get('list') or []
+    records = (data.get('data') or {}).get('items') or []
     return records
 
 
 def _matches_keyword(record: dict, keyword: str) -> bool:
     """判断机型记录是否包含关键词（大小写不敏感）。"""
     kw = keyword.lower()
-    name = str(record.get('scassType') or record.get('name') or '').lower()
-    desc = str(record.get('description') or record.get('remark') or '').lower()
-    return kw in name or kw in desc
+    name = str(record.get('skuEnName') or record.get('skuName') or '').lower()
+    return kw in name
 
 
 def _extract_machine_info(record: dict) -> dict:
     """提取机型的关键字段。"""
     entry: dict = {}
     for key in (
-        'scassType',
-        'name',
-        'description',
-        'remark',
-        'cpu',
+        'skuEnName',
+        'cpuCoreNum',
         'memory',
         'gpu',
-        'gpuType',
-        'gpuNum',
-        'cpuNum',
+        'gpuCoreNum',
         'price',
-        'unit',
+        'hasStock',
     ):
         val = record.get(key)
         if val is not None and val != '':
