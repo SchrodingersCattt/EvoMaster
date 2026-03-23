@@ -7,13 +7,27 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 ModeLiteral = Literal['direct', 'planner']
 VerifyLiteral = Literal[
+    # ---- legacy deterministic checks (always kept for backward compat) ----
     'exact_match',
     'numerical_range',
     'contains_all',
     'llm_judge',
     'tool_called',
     'tool_args_match',
+    # ---- evidence-native deterministic checks (Phase 1+) ----
+    'event_type_called',       # EventRecord with matching event_type exists
+    'source_type_used',        # EventRecord with matching source_type exists
+    'call_count_range',        # total tool_call count is within [min, max]
+    'no_retries',              # no consecutive identical tool calls (loop detection)
+    'artifact_exists',         # ArtifactRecord with matching path/type exists
+    'token_budget',            # total_tokens within budget
+    # ---- LLM judge checks (Phase 1+) ----
+    'llm_judge_grounding',     # LLM judge: source_usage + answer_binding
+    'llm_judge_efficiency',    # LLM judge: recovery_quality + process efficiency
 ]
+
+# Dimension a checklist item belongs to.
+DimensionLiteral = Literal['accuracy', 'grounding', 'efficiency']
 
 
 class TouchpointBands(BaseModel):
@@ -37,6 +51,25 @@ class Rubric(BaseModel):
     pass_threshold: float = 0.0
     description: str = ''
     criteria: dict[str, str] = Field(default_factory=dict)
+    # --- Phase 1: three-dimensional score weights ---
+    # strict_final = accuracy × (grounding_weight×grounding + efficiency_weight×efficiency)
+    # analysis_final = analysis_weights.accuracy×acc + .grounding×grnd + .efficiency×eff
+    grounding_weight: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description='Weight of grounding in strict_final multiplier (a)',
+    )
+    efficiency_weight: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description='Weight of efficiency in strict_final multiplier (b)',
+    )
+    analysis_weights: dict[str, float] = Field(
+        default_factory=lambda: {'accuracy': 0.6, 'grounding': 0.2, 'efficiency': 0.2},
+        description='Weights for analysis_final = wa*acc + wg*grnd + we*eff',
+    )
 
     @field_validator('score_bands')
     @classmethod
@@ -91,6 +124,17 @@ class ScoringCheckItem(BaseModel):
     criterion: str
     weight: float = 1.0
     verify: VerifyLiteral
+    # Phase 1: which evaluation dimension this item belongs to.
+    # Defaults to 'accuracy' so all legacy YAML items continue to work unchanged.
+    dimension: DimensionLiteral = Field(
+        default='accuracy',
+        description=(
+            "Which scoring dimension this item contributes to: "
+            "'accuracy' (is the answer correct?), "
+            "'grounding' (is it grounded in external sources?), "
+            "'efficiency' (was the process efficient?)."
+        ),
+    )
 
     @field_validator('weight')
     @classmethod
@@ -243,6 +287,14 @@ class SafetyVetoRecord(BaseModel):
     safe_redirection: bool = True
 
 
+class TokenUsageRecord(BaseModel):
+    """Serialisable token usage summary stored in EvalRunRecord."""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+
+
 class EvalRunRecord(BaseModel):
     """Atomic run record: one question, one mode, one repeat."""
 
@@ -261,6 +313,36 @@ class EvalRunRecord(BaseModel):
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     raw_result: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    # --- Phase 1: three-dimensional scores + dual totals ---
+    accuracy_score: float | None = Field(
+        default=None,
+        description='Accuracy dimension score [0, 1]. None = not yet computed.',
+    )
+    grounding_score: float | None = Field(
+        default=None,
+        description='Grounding dimension score [0, 1]. None = not yet computed.',
+    )
+    efficiency_score: float | None = Field(
+        default=None,
+        description='Efficiency dimension score [0, 1]. None = not yet computed.',
+    )
+    strict_final: float | None = Field(
+        default=None,
+        description='strict_final = accuracy × (a×grounding + b×efficiency)',
+    )
+    analysis_final: float | None = Field(
+        default=None,
+        description='analysis_final = wa×accuracy + wg×grounding + we×efficiency',
+    )
+    # --- Phase 1: model identity + token cost ---
+    model_name: str | None = Field(
+        default=None,
+        description='Base model name used during the run (from trajectory meta)',
+    )
+    token_usage: TokenUsageRecord = Field(
+        default_factory=TokenUsageRecord,
+        description='Aggregated LLM token cost for this run',
+    )
 
 
 class EvaluationSummary(BaseModel):
@@ -272,6 +354,11 @@ class EvaluationSummary(BaseModel):
     by_mode: dict[str, Any]
     overall: dict[str, Any]
     safety: dict[str, Any]
+    # v4: model-level comparison stats (keyed by model_name)
+    by_model: dict[str, Any] = Field(
+        default_factory=dict,
+        description='Per-model aggregated stats: band_score, strict_final, analysis_final, token cost',
+    )
 
 
 # ---------------------------------------------------------------------------
