@@ -16,10 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 安装 Python 依赖（dpdata 的 mol/sdf 格式依赖 rdkit）
-# Versions pinned from build.log (last known-good build).
-# pint and cp2k-input-tools are not pinned: pint>=0.24 is required because
-# cp2k-input-tools 0.9.x declares pint<0.24 but pint<0.24 crashes on numpy>=2.0
-# (np.cumproduct removed in numpy 2.0).
 RUN pip install --no-cache-dir \
     "ase==3.28.0" \
     "pymatgen==2025.10.7" \
@@ -36,8 +32,9 @@ RUN pip install --no-cache-dir \
     "mendeleev==1.1.0" \
     "matminer==0.10.0" \
     "bohrium-open-sdk==1.0.5" \
-    "pint>=0.24" \
-    "cp2k-input-tools>=0.9.0"
+    "pint>=0.24"
+
+RUN pip install --no-cache-dir --no-deps "cp2k-input-tools>=0.9.0"
 
 
 # -----------------------------

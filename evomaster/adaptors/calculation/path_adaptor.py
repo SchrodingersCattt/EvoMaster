@@ -468,7 +468,10 @@ class CalculationPathAdaptor:
 
     For tools covered by this adaptor:
     - local file paths are rewritten to OSS URLs
-    - sync tools → executor None; async tools → Bohrium executor with env auth
+    - ``sync_tools`` (MatMaster-aligned): always use ``type: local`` +
+      ``inject_bohrium_executor`` (Bohrium AK in ``executor.env``), overriding
+      server-level dispatcher / executor_map for those tool names. MCP-side
+      ``submit_*`` filtering still uses ``sync_tools`` (see MCPToolManager).
     """
 
     def __init__(self, calculation_executors: dict[str, Any] | None = None):
@@ -515,7 +518,14 @@ class CalculationPathAdaptor:
             return None
         sync_tools = server_cfg.get('sync_tools') or []
         if remote_tool_name in sync_tools:
-            return None
+            # MatMaster private_callback: sync tools → LOCAL_EXECUTOR ({'type': 'local'}),
+            # not None and not dispatcher; Bohrium auth goes to executor.env.
+            return inject_bohrium_executor(
+                {'type': 'local', 'env': {}},
+                access_key=access_key,
+                project_id=project_id,
+                user_id=user_id,
+            )
         executor_map = server_cfg.get('executor_map')
         if executor_map and isinstance(executor_map, dict):
             tool_executor = executor_map.get(remote_tool_name)

@@ -1,12 +1,12 @@
 # Calculation path adaptor (bohr-agent-sdk)
 
-与 _tmp/MatMaster 一致：**HTTPS 存储走 Bohrium 鉴权**；**executor** 按“同步/异步”区分：同步任务传 `None`，其余传指定镜像/机型的 Bohrium executor（鉴权从 .env 注入）。
+与 MatMaster `private_callback` 对齐：**HTTPS 存储走 Bohrium 鉴权**；**executor** 规则见下。
 
 ## 注入参数
 
 - **executor**（依配置 `mcp.calculation_executors`）：
-  - 若工具名在该服务器的 `sync_tools` 中 → 传 `None`（同步执行，跑在服务端默认环境）。
-  - 否则若该服务器配置了 `executor` 模板（镜像/机型）→ 传 Bohrium executor（鉴权由 `evomaster.env.inject_bohrium_executor` 从 .env 注入）。
+  - 若工具名在该服务器的 `sync_tools` 中 → **固定** `type: local` + `inject_bohrium_executor`（与 MatMaster `LOCAL_EXECUTOR` 一致，鉴权进 `executor.env`），**不再**使用服务器级 dispatcher / `executor_map` 中该工具的配置。
+  - 否则若该服务器配置了 `executor` 或 `executor_map` 模板 → 传 Bohrium executor（鉴权由 `evomaster.env.inject_bohrium_executor` 注入）。
   - 未配置或无模板 → `None`。
 - **storage**：`get_bohrium_storage_config()`（来自 `evomaster.env.bohrium`），从 `.env` 的 `BOHRIUM_ACCESS_KEY`、`BOHRIUM_PROJECT_ID` 读取。
 - **输入路径**：本地/workspace 文件在配置了 OSS 时上传并替换为 https URL 再调用 MCP。
