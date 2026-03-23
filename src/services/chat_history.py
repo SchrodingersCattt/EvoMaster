@@ -16,6 +16,13 @@ class ChatHistoryConverter:
     """将 get_session_events 返回的事件列表转为 task.meta['dialog_history'] 所需的 Message 序列化列表。"""
 
     @staticmethod
+    def exclude_task_events(events: list[dict], task_id: str | None) -> list[dict]:
+        """Drop in-flight task events when the current user turn is passed separately."""
+        if not task_id:
+            return list(events)
+        return [ev for ev in events if ev.get("task_id") != task_id]
+
+    @staticmethod
     def _user_content(ev: dict) -> str:
         """从 User/query 事件中取出纯文本 content。"""
         c = ev.get('content')

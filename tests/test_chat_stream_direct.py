@@ -1,5 +1,7 @@
 """Stream 接口测试：仅 Worker 队列模式。无 REDIS_URL 时发送返回 503；有 Redis 时验证入队与 SSE 流（可选）。"""
 
+import asyncio
+import json
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -44,6 +46,10 @@ def _mock_events_table():
 
 async def _check_quota_noop(user_id: str) -> int:
     return 10
+
+
+def _decode_sse_payload(frame: str) -> dict:
+    return json.loads(frame.split('data: ', 1)[1].strip())
 
 
 def test_chat_stream_returns_503_when_redis_url_missing():
@@ -105,3 +111,85 @@ def test_chat_stream_returns_503_when_redis_url_missing():
     finally:
         for p in patches:
             p.stop()
+
+
+def test_generate_send_stream_skips_current_task_in_history_replay():
+    """发送流回放历史时不应再次回放当前任务刚落库的 query。"""
+    from src.services.stream_service import ChatStreamService, SendStreamContext
+
+    sessions_service = MagicMock()
+    sessions_service.get_session_status_payload.return_value = {
+        'source': 'System',
+        'type': 'status',
+        'content': '',
+        'session_id': 'sess-1',
+    }
+    events_service = MagicMock()
+    events_service.get_session_events.return_value = [
+        {
+            'source': 'User',
+            'type': 'query',
+            'content': 'old question',
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'finish',
+            'content': 'old answer',
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'User',
+            'type': 'query',
+            'content': 'new question',
+            'session_id': 'sess-1',
+            'task_id': 'task-1',
+            'invocation_id': 'inv-1',
+        },
+    ]
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        agent_run_service=MagicMock(),
+        deploy_state_service=MagicMock(),
+    )
+
+    async def _collect_first_four_frames() -> list[dict]:
+        ctx = SendStreamContext(
+            task_id='task-1',
+            invocation_id='inv-1',
+            mode='direct',
+            user_msg={
+                'source': 'User',
+                'type': 'query',
+                'content': 'new question',
+                'mode': 'direct',
+                'session_id': 'sess-1',
+                'task_id': 'task-1',
+                'invocation_id': 'inv-1',
+            },
+            request_event_queue=asyncio.Queue(),
+            reply_queue=MagicMock(),
+        )
+        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        try:
+            return [
+                _decode_sse_payload(await gen.__anext__()),
+                _decode_sse_payload(await gen.__anext__()),
+                _decode_sse_payload(await gen.__anext__()),
+                _decode_sse_payload(await gen.__anext__()),
+            ]
+        finally:
+            await gen.aclose()
+
+    frames = asyncio.run(_collect_first_four_frames())
+
+    assert [frame['content'] for frame in frames[1:]] == [
+        'old question',
+        'old answer',
+        'new question',
+    ]
+    assert frames[3]['type'] == 'query'
+    assert frames[3]['mode'] == 'direct'

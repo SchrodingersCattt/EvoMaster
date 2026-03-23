@@ -28,6 +28,7 @@ from src.services.deploy_state_service import (
     DeployStateService,
     get_deploy_state_service,
 )
+from src.services.chat_history import ChatHistoryConverter
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.user_service import UserService
@@ -716,6 +717,7 @@ class ChatStreamService:
         payload['invocation_id'] = ctx.invocation_id
         yield self.sse_format(payload)
         history = self._events_service.get_session_events(sid) or []
+        history = ChatHistoryConverter.exclude_task_events(history, ctx.task_id)
         history = self._inject_elapsed_for_history(history)
         for event in history:
             if _should_emit_event_to_sse(event):
