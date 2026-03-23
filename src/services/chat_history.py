@@ -15,6 +15,34 @@ from evomaster.utils.types import (
 from src.utils.chat_event_source import normalize_event_source
 
 
+def _summarize_assistant_state_content_for_log(raw: Any) -> str:
+    """失败时单行描述 content 形态，避免整段 JSON 撑爆日志。"""
+    if raw is None:
+        return 'type=None'
+    if isinstance(raw, str):
+        s = raw.replace('\n', '\\n')
+        tail = '...' if len(s) > 200 else ''
+        return f'type=str len={len(raw)} preview={s[:200]!r}{tail}'
+    if isinstance(raw, dict):
+        keys = sorted(raw.keys())
+        role = raw.get('role')
+        tcs = raw.get('tool_calls')
+        n_tc = len(tcs) if isinstance(tcs, list) else 'n/a'
+        c = raw.get('content')
+        c_kind = type(c).__name__
+        meta = raw.get('meta')
+        meta_keys = sorted(meta.keys()) if isinstance(meta, dict) else []
+        mk = meta_keys[:12]
+        extra = '...' if len(meta_keys) > 12 else ''
+        return (
+            f'type=dict keys={keys} role={role!r} tool_calls_count={n_tc} '
+            f'content_type={c_kind} meta_keys={mk}{extra}'
+        )
+    if isinstance(raw, list):
+        return f'type=list len={len(raw)}'
+    return f'type={type(raw).__name__} repr={repr(raw)[:300]}'
+
+
 def _serialized_message_role(m: dict) -> str:
     """Normalize role from model_dump() (str or MessageRole) for comparisons."""
     r = m.get('role')
@@ -242,13 +270,17 @@ class ChatHistoryConverter:
 
             if source == 'MatMaster' and typ == 'assistant_state':
                 flush_tool_calls()
+                raw_content = ev.get('content')
                 try:
-                    msg = AssistantMessage.model_validate(ev.get('content') or {})
+                    msg = AssistantMessage.model_validate(raw_content or {})
                 except Exception as e:
                     logger.warning(
                         'chat_history: assistant_state model_validate failed, event skipped '
-                        '(tool_calls may be missing in dialog). task_id=%s err=%s: %s',
+                        '(tool_calls may be missing in dialog). task_id=%s session_id=%s '
+                        'content_summary=%s err=%s: %s',
                         ev.get('task_id'),
+                        ev.get('session_id'),
+                        _summarize_assistant_state_content_for_log(raw_content),
                         type(e).__name__,
                         e,
                     )
