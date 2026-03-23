@@ -2,9 +2,8 @@
 """EvoMaster 统一入口
 
 使用方式：
-  python run.py --agent minimal --task "你的任务描述"
-  python run.py --agent agent-builder --config configs/agent-builder/config.yaml
-  python run.py --agent mcp-example --interactive
+  python run.py --agent mat_master --config configs/mat_master/config.yaml --task "你的任务描述"
+  python run.py --agent mat_master --config configs/mat_master/config.yaml --interactive
 
 参数说明：
   --agent: 指定 playground 名称（必需）
@@ -15,11 +14,11 @@
 """
 
 import argparse
+import importlib
 import logging
 import sys
-import importlib
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # 添加项目根目录到 sys.path
 project_root = Path(__file__).parent
@@ -32,73 +31,65 @@ from evomaster.core import get_playground_class, list_registered_playgrounds
 def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
-        description="EvoMaster 统一入口 - 运行指定的 playground agent",
+        description='EvoMaster 统一入口 - 运行指定的 playground agent',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例：
-  # 使用默认配置运行 minimal agent
-  python run.py --agent minimal --task "分析数据"
+  # MatMaster 与默认配置路径 configs/mat_master/config.yaml
+  python run.py --agent mat_master --config configs/mat_master/config.yaml --task "分析数据"
 
-  # 使用自定义配置
-  python run.py --agent minimal --config my_config.yaml --task "分析数据"
+  # 使用自定义配置文件
+  python run.py --agent mat_master --config my_config.yaml --task "分析数据"
 
   # 交互式模式
-  python run.py --agent agent-builder --interactive
+  python run.py --agent mat_master --config configs/mat_master/config.yaml --interactive
 
   # 指定 run 目录
-  python run.py --agent minimal --task "分析数据" --run-dir runs/my_experiment
+  python run.py --agent mat_master --config configs/mat_master/config.yaml --task "分析数据" --run-dir runs/my_experiment
 
   # 批量任务（串行）
-  python run.py --agent minimal --task-file tasks.json
+  python run.py --agent mat_master --config configs/mat_master/config.yaml --task-file tasks.json
 
   # 批量任务（并行）
-  python run.py --agent minimal --task-file tasks.json --parallel
-        """
+  python run.py --agent mat_master --config configs/mat_master/config.yaml --task-file tasks.json --parallel
+        """,
     )
 
     parser.add_argument(
-        "--agent",
+        '--agent',
         required=True,
-        help="Playground agent 名称（如 minimal, agent-builder, mcp-example）"
+        help='Playground agent 名称（本仓库主要为 mat_master）',
     )
 
     parser.add_argument(
-        "--config",
-        help="配置文件路径（默认：configs/{agent}/config.yaml）"
+        '--config', help='配置文件路径（默认：configs/{agent}/config.yaml）'
     )
 
     # 任务输入（互斥）
     task_group = parser.add_mutually_exclusive_group(required=True)
     task_group.add_argument(
-        "--task",
-        help="单个任务描述，或任务文件路径（.txt 或 .md）"
+        '--task', help='单个任务描述，或任务文件路径（.txt 或 .md）'
     )
+    task_group.add_argument('--task-file', help='包含多个任务的 JSON 文件路径')
     task_group.add_argument(
-        "--task-file",
-        help="包含多个任务的 JSON 文件路径"
-    )
-    task_group.add_argument(
-        "--interactive",
-        action="store_true",
-        help="交互式模式（手动输入任务）"
+        '--interactive', action='store_true', help='交互式模式（手动输入任务）'
     )
 
     parser.add_argument(
-        "--run-dir",
-        help="指定 run 目录（默认自动创建 runs/{agent}_{timestamp}/）"
+        '--run-dir', help='指定 run 目录（默认自动创建 runs/{agent}_{timestamp}/）'
     )
 
     parser.add_argument(
-        "--parallel",
-        action="store_true",
-        help="并行执行多个任务（仅在使用 --task-file 时有效）"
+        '--parallel',
+        action='store_true',
+        help='并行执行多个任务（仅在使用 --task-file 时有效）',
     )
 
     parser.add_argument(
-        "--mode",
-        choices=["direct", "planner"],
+        '--mode',
+        choices=['direct', 'planner'],
         default=None,
-        help="Mat Master 工作流模式（仅 agent=mat_master 时有效）：direct | planner，用 --mode 切换"
+        help='Mat Master 工作流模式（仅 agent=mat_master 时有效）：direct | planner，用 --mode 切换',
     )
 
     return parser.parse_args()
@@ -108,25 +99,29 @@ def setup_logging():
     """配置基础日志"""
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     )
 
     # 禁用 httpx 的 INFO 级别日志（只保留 WARNING 及以上）
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger('httpx').setLevel(logging.WARNING)
 
 
 def get_task_description(args):
     """获取任务描述
-    
+
     如果 args.task 是文件路径（.txt 或 .md），则读取文件内容；
     否则直接返回 args.task 作为任务描述。
     """
     if args.task:
         task_path = Path(args.task)
         # 检查是否是文件路径（.txt 或 .md）
-        if task_path.suffix.lower() in ['.txt', '.md'] and task_path.exists() and task_path.is_file():
+        if (
+            task_path.suffix.lower() in ['.txt', '.md']
+            and task_path.exists()
+            and task_path.is_file()
+        ):
             try:
-                with open(task_path, 'r', encoding='utf-8') as f:
+                with open(task_path, encoding='utf-8') as f:
                     content = f.read().strip()
                 if not content:
                     print(f"❌ 错误：文件 {task_path} 为空")
@@ -139,9 +134,9 @@ def get_task_description(args):
         return args.task
 
     if args.interactive:
-        print("\n" + "=" * 60)
-        print("📝 请输入任务描述（输入空行结束）：")
-        print("=" * 60)
+        print('\n' + '=' * 60)
+        print('📝 请输入任务描述（输入空行结束）：')
+        print('=' * 60)
         lines = []
         while True:
             try:
@@ -153,13 +148,13 @@ def get_task_description(args):
                 break
 
         if not lines:
-            print("❌ 错误：未提供任务描述")
+            print('❌ 错误：未提供任务描述')
             sys.exit(1)
 
         return '\n'.join(lines)
 
     # 既没有 --task 也没有 --interactive
-    print("❌ 错误：请使用 --task 提供任务描述或使用 --interactive 进入交互式模式")
+    print('❌ 错误：请使用 --task 提供任务描述或使用 --interactive 进入交互式模式')
     sys.exit(1)
 
 
@@ -174,28 +169,32 @@ def parse_task_file(task_file_path: Path):
     """
     import json
 
-    with open(task_file_path, 'r', encoding='utf-8') as f:
+    with open(task_file_path, encoding='utf-8') as f:
         tasks_raw = json.load(f)
 
     if not isinstance(tasks_raw, list):
-        raise ValueError(f"任务文件格式错误：期望列表，实际为 {type(tasks_raw).__name__}")
+        raise ValueError(
+            f"任务文件格式错误：期望列表，实际为 {type(tasks_raw).__name__}"
+        )
 
     tasks = []
     for idx, task in enumerate(tasks_raw):
         if isinstance(task, str):
             # 兼容简单列表格式：["任务1", "任务2"]
-            task_obj = {"description": task}
+            task_obj = {'description': task}
         elif isinstance(task, dict):
             task_obj = task.copy()
         else:
-            raise ValueError(f"任务 {idx} 格式错误：期望字符串或字典，实际为 {type(task).__name__}")
+            raise ValueError(
+                f"任务 {idx} 格式错误：期望字符串或字典，实际为 {type(task).__name__}"
+            )
 
         # 自动生成 ID（如果没有）
-        if "id" not in task_obj:
-            task_obj["id"] = f"task_{idx}"
+        if 'id' not in task_obj:
+            task_obj['id'] = f"task_{idx}"
 
         # 验证必需字段
-        if "description" not in task_obj:
+        if 'description' not in task_obj:
             raise ValueError(f"任务 {idx} 缺少必需字段 'description'")
 
         tasks.append(task_obj)
@@ -203,8 +202,14 @@ def parse_task_file(task_file_path: Path):
     return tasks
 
 
-def run_single_task(agent_name: str, config_path: Path, run_dir: Path,
-                    task_id: str, task_description: str, mode: str | None = None):
+def run_single_task(
+    agent_name: str,
+    config_path: Path,
+    run_dir: Path,
+    task_id: str,
+    task_description: str,
+    mode: str | None = None,
+):
     """运行单个任务（在主进程中）
 
     注意：这个函数在主进程中运行，不是在独立进程中。
@@ -228,7 +233,11 @@ def run_single_task(agent_name: str, config_path: Path, run_dir: Path,
         playground = get_playground_class(agent_name, config_path=config_path)
 
         # Mat Master: 命令行 --mode 覆盖 config
-        if agent_name == "mat_master" and mode and getattr(playground, "set_mode", None):
+        if (
+            agent_name == 'mat_master'
+            and mode
+            and getattr(playground, 'set_mode', None)
+        ):
             playground.set_mode(mode)
 
         # 设置 run_dir 和 task_id（会创建独立的 workspace）
@@ -236,23 +245,23 @@ def run_single_task(agent_name: str, config_path: Path, run_dir: Path,
 
         # 运行任务
         result = playground.run(task_description=task_description)
-        result["task_id"] = task_id
+        result['task_id'] = task_id
 
         logger.info(f"✅ Task {task_id} completed: {result['status']}")
         return result
 
     except Exception as e:
         logger.error(f"❌ Task {task_id} failed: {e}", exc_info=True)
-        return {
-            "task_id": task_id,
-            "status": "failed",
-            "error": str(e),
-            "steps": 0
-        }
+        return {'task_id': task_id, 'status': 'failed', 'error': str(e), 'steps': 0}
 
 
-def run_tasks_sequential(agent_name: str, config_path: Path, run_dir: Path,
-                         tasks: list, mode: str | None = None):
+def run_tasks_sequential(
+    agent_name: str,
+    config_path: Path,
+    run_dir: Path,
+    tasks: list,
+    mode: str | None = None,
+):
     """串行运行多个任务
 
     Args:
@@ -271,16 +280,22 @@ def run_tasks_sequential(agent_name: str, config_path: Path, run_dir: Path,
             agent_name,
             config_path,
             run_dir,
-            task["id"],
-            task["description"],
+            task['id'],
+            task['description'],
             mode=mode,
         )
         results.append(result)
     return results
 
 
-def run_tasks_parallel(agent_name: str, config_path: Path, run_dir: Path,
-                       tasks: list, max_workers: int = 4, mode: str | None = None):
+def run_tasks_parallel(
+    agent_name: str,
+    config_path: Path,
+    run_dir: Path,
+    tasks: list,
+    max_workers: int = 4,
+    mode: str | None = None,
+):
     """并行运行多个任务
 
     使用 ProcessPoolExecutor 并行执行任务。
@@ -309,8 +324,8 @@ def run_tasks_parallel(agent_name: str, config_path: Path, run_dir: Path,
                 agent_name,
                 config_path,
                 run_dir,
-                task["id"],
-                task["description"],
+                task['id'],
+                task['description'],
                 mode,
             ): task
             for task in tasks
@@ -324,15 +339,16 @@ def run_tasks_parallel(agent_name: str, config_path: Path, run_dir: Path,
                 results.append(result)
             except Exception as e:
                 logger.error(f"❌ Task {task['id']} failed: {e}")
-                results.append({
-                    "task_id": task["id"],
-                    "status": "failed",
-                    "error": str(e),
-                    "steps": 0
-                })
+                results.append(
+                    {
+                        'task_id': task['id'],
+                        'status': 'failed',
+                        'error': str(e),
+                        'steps': 0,
+                    }
+                )
 
     return results
-
 
 
 def auto_import_playgrounds():
@@ -342,7 +358,7 @@ def auto_import_playgrounds():
     这样可以确保所有使用 @register_playground 装饰器的类都被注册。
     """
     logger = logging.getLogger(__name__)
-    playground_dir = project_root / "playground"
+    playground_dir = project_root / 'playground'
 
     if not playground_dir.exists():
         logger.warning(f"Playground 目录不存在: {playground_dir}")
@@ -362,7 +378,11 @@ def auto_import_playgrounds():
             imported_count += 1
         except ImportError as e:
             # 如果没有 core/playground.py 或依赖缺失，跳过
-            logger.warning("Playground '%s' failed to import (missing deps or no core.playground): %s", agent_dir.name, e)
+            logger.warning(
+                "Playground '%s' failed to import (missing deps or no core.playground): %s",
+                agent_dir.name,
+                e,
+            )
         except Exception as e:
             logger.warning(f"Failed to import {module_name}: {e}")
 
@@ -388,7 +408,7 @@ def main():
     if args.config:
         config_path = Path(args.config)
     else:
-        config_path = project_root / "configs" / args.agent / "config.yaml"
+        config_path = project_root / 'configs' / args.agent / 'config.yaml'
 
     if not config_path.exists():
         logger.error(f"配置文件不存在: {config_path}")
@@ -398,8 +418,8 @@ def main():
     if args.run_dir:
         run_dir = Path(args.run_dir)
     else:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_dir = project_root / "runs" / f"{args.agent}_{timestamp}"
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        run_dir = project_root / 'runs' / f"{args.agent}_{timestamp}"
 
     # 3. 解析任务
     if args.task_file:
@@ -418,43 +438,44 @@ def main():
     else:
         # 单任务模式
         task_description = get_task_description(args)
-        tasks = [{
-            "id": "task_0",
-            "description": task_description
-        }]
+        tasks = [{'id': 'task_0', 'description': task_description}]
 
     # 4. 打印运行信息
-    logger.info("=" * 60)
-    logger.info("🚀 EvoMaster 启动")
-    logger.info("=" * 60)
+    logger.info('=' * 60)
+    logger.info('🚀 EvoMaster 启动')
+    logger.info('=' * 60)
     logger.info(f"Agent: {args.agent}")
     logger.info(f"Config: {config_path}")
     logger.info(f"Run Directory: {run_dir}")
     logger.info(f"Tasks: {len(tasks)}")
-    if getattr(args, "mode", None) and args.agent == "mat_master":
+    if getattr(args, 'mode', None) and args.agent == 'mat_master':
         logger.info(f"Mat Master mode: {args.mode}")
     if len(tasks) > 1:
-        exec_mode = "并行" if args.parallel else "串行"
+        exec_mode = '并行' if args.parallel else '串行'
         logger.info(f"执行模式: {exec_mode}")
-    logger.info("=" * 60)
+    logger.info('=' * 60)
 
     # 5. 运行任务
-    mat_mode = getattr(args, "mode", None) if args.agent == "mat_master" else None
+    mat_mode = getattr(args, 'mode', None) if args.agent == 'mat_master' else None
     try:
         if len(tasks) > 1 and args.parallel:
             # 并行模式
-            logger.info("🔄 并行执行任务...")
-            results = run_tasks_parallel(args.agent, config_path, run_dir, tasks, mode=mat_mode)
+            logger.info('🔄 并行执行任务...')
+            results = run_tasks_parallel(
+                args.agent, config_path, run_dir, tasks, mode=mat_mode
+            )
         else:
             # 串行模式（包括单任务）
             if len(tasks) > 1:
-                logger.info("🔄 串行执行任务...")
-            results = run_tasks_sequential(args.agent, config_path, run_dir, tasks, mode=mat_mode)
+                logger.info('🔄 串行执行任务...')
+            results = run_tasks_sequential(
+                args.agent, config_path, run_dir, tasks, mode=mat_mode
+            )
 
         # 6. 输出结果
-        logger.info("=" * 60)
-        logger.info("✅ 所有任务完成")
-        logger.info("=" * 60)
+        logger.info('=' * 60)
+        logger.info('✅ 所有任务完成')
+        logger.info('=' * 60)
 
         # 统计结果（注意：trajectory.status 的值是 "completed"/"failed"/"cancelled"）
         success_count = sum(1 for r in results if r.get('status') == 'completed')
@@ -469,13 +490,15 @@ def main():
             # 批量任务模式：显示汇总和每个任务状态
             logger.info(f"成功: {success_count}/{len(results)}")
             logger.info(f"失败: {failed_count}/{len(results)}")
-            logger.info("")
-            logger.info("任务状态:")
+            logger.info('')
+            logger.info('任务状态:')
             for result in results:
-                status_icon = "✅" if result.get('status') == 'completed' else "❌"
-                logger.info(f"  {status_icon} {result['task_id']}: {result['status']} ({result.get('steps', 0)} steps)")
+                status_icon = '✅' if result.get('status') == 'completed' else '❌'
+                logger.info(
+                    f"  {status_icon} {result['task_id']}: {result['status']} ({result.get('steps', 0)} steps)"
+                )
 
-        logger.info("")
+        logger.info('')
         logger.info(f"结果目录: {run_dir}")
         logger.info(f"  - 配置: {run_dir}/config.yaml")
         logger.info(f"  - 日志: {run_dir}/logs/")
@@ -484,7 +507,7 @@ def main():
             logger.info(f"  - Workspaces: {run_dir}/workspaces/")
         else:
             logger.info(f"  - Workspace: {run_dir}/workspace/")
-        logger.info("=" * 60)
+        logger.info('=' * 60)
 
         return 0 if failed_count == 0 else 1
 
@@ -493,5 +516,5 @@ def main():
         return 1
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())
