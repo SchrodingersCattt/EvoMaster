@@ -6,7 +6,6 @@ Note: Exp is lazy-imported via __getattr__ to avoid circular import
 
 from .agent import AgentKernel
 from .bus import MessageBus
-from .config_loader import load_config
 from .context_builder import ContextBuilder
 from .guard_pipeline import GuardPipeline, LoopDetectionGuard
 from .hooks import BaseHook, EventEmitterHook, Hook, HookAction
@@ -21,7 +20,6 @@ __all__ = [
     "GuardPipeline",
     "Hook",
     "HookAction",
-    "load_config",
     "LoopDetectionGuard",
     "MessageBus",
     "Playground",
