@@ -13,7 +13,7 @@ Submit an input directory to Bohrium HPC. There are two entry paths:
 ## Workflow
 
 1. **Confirm input directory** — Either get the `output_dir` returned by `input-manual-helper`, or identify the directory that already contains the user-provided input file. List its contents to confirm the main input filename needed for `--cmd`.
-2. **Look up image / machine / command** — Check the Software Reference table below first. If the software is not listed or you need a specific version, use `list_images.py` and/or `list_machines.py` to discover available options dynamically.
+2. **Look up image / machine / command** — Check the Software Reference table below. If the software **is not listed**, or you need a different version/machine, you **MUST** run `list_images.py` and/or `list_machines.py` to query the Bohrium platform — **never** conclude that a software or machine is unavailable without running these scripts first.
 3. **Submit only** (returns `job_id`):
    ```
    use_skill bohrium-job run_script submit_job.py \
@@ -51,7 +51,7 @@ Submit an input directory to Bohrium HPC. There are two entry paths:
 
 ## Dynamic Discovery: Images & Machines
 
-When the Software Reference table below does not have the software/version you need, use these scripts to discover available options on Bohrium:
+**These scripts query the live Bohrium platform.** You MUST use them whenever the Software Reference table does not cover the requested software, version, or machine type. Do NOT assume a software/image/machine is unavailable — always query first.
 
 ### list_images.py — Query available Docker images
 
@@ -64,9 +64,9 @@ use_skill bohrium-job run_script list_images.py \
 - `--keyword`: Filter by image name (case-insensitive), e.g. `--keyword gromacs`
 - `--max-results`: Limit returned entries (default: 20)
 
-Output JSON: `{"success": true, "total_found": N, "returned": M, "images": [{"id": ..., "name": "...", "versions": [{"imageAddress": "...", ...}]}]}`
+Output JSON: `{"success": true, "total_found": N, "returned": M, "images": [{"id": ..., "name": "...", "versions": [{"url": "registry.dp.tech/...", "version": "...", "resourceType": "CPU GPU", ...}]}]}`
 
-Use the `imageAddress` value from the versions list as the `--image` argument to `submit_job.py`.
+Use the `url` value from the versions list as the `--image` argument to `submit_job.py`.
 
 ### list_machines.py — Query available machine types
 
@@ -81,9 +81,9 @@ use_skill bohrium-job run_script list_machines.py \
 - `--keyword`: Filter by machine name, e.g. `--keyword c32`
 - `--max-results`: Limit returned entries (default: 50)
 
-Output JSON: `{"success": true, "type": "cpu", "machines": [{"scassType": "c32_m128_cpu", "cpu": 32, "memory": 128, ...}]}`
+Output JSON: `{"success": true, "type": "cpu", "machines": [{"skuEnName": "c32_m64_cpu", "cpuCoreNum": 32, "memory": 64, "price": 2.56, "hasStock": true, ...}]}`
 
-Use the `scassType` value as the `--machine` argument to `submit_job.py`.
+Use the `skuEnName` value as the `--machine` argument to `submit_job.py`.
 
 ## Software Reference
 
@@ -150,7 +150,7 @@ Use the `scassType` value as the `--machine` argument to `submit_job.py`.
 | Command | `gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run > log 2>&1` |
 
 > Adjust the `gmx grompp` and `gmx mdrun` arguments to match actual input filenames in the directory.
-> For GPU-accelerated GROMACS runs, use `--machine c16_m64_1 * NVIDIA 4090` and add `-gpu_id 0` to `mdrun`.
+> For GPU-accelerated GROMACS runs, use `--machine "c6_m60_1 * NVIDIA 4090"` and add `-gpu_id 0` to `mdrun`. Run `list_machines.py --type gpu --keyword 4090` to see all GPU options.
 > If you need a different GROMACS version, run `list_images.py --keyword gromacs` to find available versions.
 
 ## Scripts
