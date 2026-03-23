@@ -447,3 +447,284 @@ class TestValidateInputScript:
         assert "diagnostics" in data
         assert "status" in data
         assert "summary" in data
+
+
+# ---------------------------------------------------------------------------
+# Physics compatibility rules (Fix B) — Validator layer
+# ---------------------------------------------------------------------------
+
+
+class TestCP2KPhysicsCompatibility:
+    """Tests for _check_physics_compatibility in CP2KValidator."""
+
+    def setup_method(self):
+        self.v = get_validator("cp2k")
+
+    def _diags(self, text: str):
+        return self.v.validate_text(text)
+
+    def _rule_ids(self, diags):
+        return [d.rule_id for d in diags if d.rule_id]
+
+    def _has_rule(self, diags, rule_id: str) -> bool:
+        return any(d.rule_id == rule_id for d in diags if d.rule_id)
+
+    def _errors_for(self, diags, rule_id: str):
+        return [d for d in diags if d.rule_id == rule_id and d.severity == SEVERITY_ERROR]
+
+    # ── Rule 1: OT + KPOINTS ────────────────────────────────────────────────
+
+    def test_ot_with_kpoints_is_error(self):
+        """OT + KPOINTS must produce an error diagnostic."""
+        text = """\
+&GLOBAL
+  RUN_TYPE ENERGY
+  PROJECT test
+&END GLOBAL
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+    &KPOINTS
+      SCHEME MONKHORST-PACK 4 4 4
+    &END KPOINTS
+    &SCF
+      &OT ON
+        MINIMIZER DIIS
+      &END OT
+    &END SCF
+  &END DFT
+&END FORCE_EVAL
+"""
+        diags = self._diags(text)
+        errors = [d for d in diags if d.severity == SEVERITY_ERROR and "OT" in (d.param or "")]
+        assert errors, (
+            "Expected an error for OT + KPOINTS combination, got: "
+            + str([(d.severity, d.param, d.message[:60]) for d in diags])
+        )
+
+    def test_ot_without_kpoints_no_ot_error(self):
+        """OT alone (no KPOINTS) must NOT produce the OT+KPOINTS error."""
+        text = """\
+&GLOBAL
+  RUN_TYPE ENERGY
+  PROJECT test
+&END GLOBAL
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+    &SCF
+      &OT ON
+      &END OT
+    &END SCF
+  &END DFT
+&END FORCE_EVAL
+"""
+        diags = self._diags(text)
+        ot_errors = [
+            d for d in diags
+            if d.severity == SEVERITY_ERROR and "OT" in (d.param or "")
+            and "KPOINTS" in d.message
+        ]
+        assert not ot_errors, f"No OT+KPOINTS error expected without KPOINTS: {ot_errors}"
+
+    def test_kpoints_without_ot_no_ot_error(self):
+        """KPOINTS without OT must NOT produce the OT+KPOINTS error."""
+        text = """\
+&GLOBAL
+  RUN_TYPE ENERGY
+  PROJECT test
+&END GLOBAL
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+    &KPOINTS
+      SCHEME MONKHORST-PACK 4 4 4
+    &END KPOINTS
+    &SCF
+      DIAGONALIZATION ON
+      ADDED_MOS 5
+    &END SCF
+  &END DFT
+&END FORCE_EVAL
+"""
+        diags = self._diags(text)
+        ot_kpts_errors = [
+            d for d in diags
+            if d.severity == SEVERITY_ERROR
+            and "OT" in (d.param or "")
+            and "kpoint" in d.message.lower()
+        ]
+        assert not ot_kpts_errors
+
+    # ── Rule 2: HFX + KPOINTS without RI ───────────────────────────────────
+
+    def test_hfx_kpoints_without_ri_is_error(self):
+        """&HF + &KPOINTS without &RI must produce an error."""
+        text = """\
+&GLOBAL
+  RUN_TYPE ENERGY
+  PROJECT test
+&END GLOBAL
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+    &KPOINTS
+      SCHEME MONKHORST-PACK 4 4 4
+    &END KPOINTS
+    &XC
+      &XC_FUNCTIONAL PBE0
+      &END XC_FUNCTIONAL
+      &HF
+        FRACTION 0.25
+      &END HF
+    &END XC
+  &END DFT
+&END FORCE_EVAL
+"""
+        diags = self._diags(text)
+        errors = [d for d in diags if d.severity == SEVERITY_ERROR and "HF" in (d.param or "")]
+        assert errors, (
+            "Expected error for HFX + KPOINTS without RI, got: "
+            + str([(d.severity, d.param, d.message[:60]) for d in diags])
+        )
+
+    def test_hfx_kpoints_with_ri_no_error(self):
+        """&HF + &KPOINTS + &RI must NOT produce the RI error."""
+        text = """\
+&GLOBAL
+  RUN_TYPE ENERGY
+  PROJECT test
+&END GLOBAL
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+    &KPOINTS
+      SCHEME MONKHORST-PACK 4 4 4
+    &END KPOINTS
+    &XC
+      &XC_FUNCTIONAL PBE0
+      &END XC_FUNCTIONAL
+      &HF
+        FRACTION 0.25
+        &RI
+          KFN_REUSE_NUMBER 1
+        &END RI
+      &END HF
+    &END XC
+  &END DFT
+&END FORCE_EVAL
+"""
+        diags = self._diags(text)
+        ri_errors = [
+            d for d in diags
+            if d.severity == SEVERITY_ERROR
+            and "HF" in (d.param or "")
+            and "RI" in d.message
+        ]
+        assert not ri_errors, f"No RI error expected when &RI is present: {ri_errors}"
+
+    # ── Rule 3: CELL_OPT without STRESS_TENSOR ─────────────────────────────
+
+    def test_cell_opt_without_stress_tensor_warning(self):
+        """CELL_OPT without STRESS_TENSOR must produce a warning."""
+        text = """\
+&GLOBAL
+  RUN_TYPE CELL_OPT
+  PROJECT test
+&END GLOBAL
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+  &END DFT
+&END FORCE_EVAL
+"""
+        diags = self._diags(text)
+        warnings = [
+            d for d in diags
+            if d.severity == SEVERITY_WARNING and "STRESS_TENSOR" in (d.param or "").upper()
+        ]
+        assert warnings, (
+            "Expected STRESS_TENSOR warning for CELL_OPT, got: "
+            + str([(d.severity, d.param, d.message[:60]) for d in diags])
+        )
+
+    def test_cell_opt_with_stress_tensor_no_warning(self):
+        """CELL_OPT with STRESS_TENSOR ANALYTICAL must NOT produce the warning."""
+        text = """\
+&GLOBAL
+  RUN_TYPE CELL_OPT
+  PROJECT test
+&END GLOBAL
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+    STRESS_TENSOR ANALYTICAL
+  &END DFT
+&END FORCE_EVAL
+"""
+        diags = self._diags(text)
+        st_warnings = [
+            d for d in diags
+            if d.severity == SEVERITY_WARNING
+            and "STRESS_TENSOR" in (d.param or "").upper()
+        ]
+        assert not st_warnings, f"No STRESS_TENSOR warning expected: {st_warnings}"
+
+    # ── Rule 4: RUN_TYPE BAND without &BAND_STRUCTURE ──────────────────────
+
+    def test_band_without_band_structure_warning(self):
+        """RUN_TYPE BAND without &BAND_STRUCTURE must produce a warning."""
+        text = """\
+&GLOBAL
+  RUN_TYPE BAND
+  PROJECT test
+&END GLOBAL
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+  &END DFT
+&END FORCE_EVAL
+"""
+        diags = self._diags(text)
+        warnings = [
+            d for d in diags
+            if d.severity == SEVERITY_WARNING
+            and "RUN_TYPE" in (d.param or "").upper()
+        ]
+        assert warnings, (
+            "Expected warning for BAND without BAND_STRUCTURE section, got: "
+            + str([(d.severity, d.param, d.message[:60]) for d in diags])
+        )
+
+    def test_band_with_band_structure_no_warning(self):
+        """RUN_TYPE BAND with &BAND_STRUCTURE must NOT produce the section warning."""
+        text = """\
+&GLOBAL
+  RUN_TYPE BAND
+  PROJECT test
+&END GLOBAL
+&FORCE_EVAL
+  METHOD Quickstep
+  &DFT
+  &END DFT
+  &PROPERTIES
+    &BAND_STRUCTURE
+      ADDED_MOS 10
+      &KPOINT_SET
+        UNITS RECIPROCAL
+        SPECIAL_POINT G  0.0 0.0 0.0
+        SPECIAL_POINT X  0.5 0.0 0.5
+        NPOINTS 10
+      &END KPOINT_SET
+    &END BAND_STRUCTURE
+  &END PROPERTIES
+&END FORCE_EVAL
+"""
+        diags = self._diags(text)
+        band_warnings = [
+            d for d in diags
+            if d.severity == SEVERITY_WARNING
+            and "RUN_TYPE" in (d.param or "").upper()
+            and "BAND_STRUCTURE" in d.message.upper()
+        ]
+        assert not band_warnings, f"No BAND_STRUCTURE warning expected: {band_warnings}"

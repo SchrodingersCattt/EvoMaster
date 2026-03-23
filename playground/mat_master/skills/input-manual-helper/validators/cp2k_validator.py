@@ -210,6 +210,7 @@ class CP2KValidator(BaseValidator):
         diags.extend(self._check_kpoints(text))
         diags.extend(self._check_scf_convergence(text))
         diags.extend(self._check_run_type(text))
+        diags.extend(self._check_physics_compatibility(text))
         return diags
 
     def _check_cutoff(self, text: str) -> list[Diagnostic]:
@@ -321,3 +322,123 @@ class CP2KValidator(BaseValidator):
                 )
             ]
         return []
+
+    def _check_physics_compatibility(self, text: str) -> list[Diagnostic]:
+        """Check cross-section physical compatibility constraints in CP2K input.
+
+        Rules:
+        1. OT + KPOINTS → error  (OT is Γ-point only, incompatible with k-points)
+        2. HFX + KPOINTS without RI → error  (only RI-HFX works with k-points)
+        3. CELL_OPT without STRESS_TENSOR → warning
+        4. RUN_TYPE BAND without &BAND_STRUCTURE section → warning
+        """
+        diags: list[Diagnostic] = []
+
+        has_ot = bool(re.search(r"^\s*&OT\b", text, re.MULTILINE | re.IGNORECASE))
+        has_kpoints = bool(
+            re.search(r"^\s*&KPOINTS\b", text, re.MULTILINE | re.IGNORECASE)
+        )
+        has_hf = bool(re.search(r"^\s*&HF\b", text, re.MULTILINE | re.IGNORECASE))
+        # RI section inside &HF (CP2K 8+: &RI; older: &RI_HFX inside &HF is rare)
+        has_ri = bool(re.search(r"^\s*&RI\b", text, re.MULTILINE | re.IGNORECASE))
+
+        # Rule 1: OT + KPOINTS
+        if has_ot and has_kpoints:
+            line = find_line(text, r"^\s*&OT\b")
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_ERROR,
+                    line=line,
+                    param="OT",
+                    message=(
+                        "OT (Orbital Transformation) is incompatible with KPOINTS: "
+                        "OT is a Γ-point-only SCF solver. "
+                        "CP2K will abort with 'OT not possible with kpoint calculations'."
+                    ),
+                    suggestion=(
+                        "Remove the &OT section and use DIAGONALIZATION instead. "
+                        "Add ADDED_MOS to capture unoccupied states for k-point runs."
+                    ),
+                )
+            )
+
+        # Rule 2: HFX + KPOINTS without RI
+        if has_hf and has_kpoints and not has_ri:
+            line = find_line(text, r"^\s*&HF\b")
+            diags.append(
+                Diagnostic(
+                    severity=SEVERITY_ERROR,
+                    line=line,
+                    param="HF",
+                    message=(
+                        "Only RI-HFX is implemented for K-points in CP2K. "
+                        "Using &HF without &RI under k-point sampling will abort at runtime."
+                    ),
+                    suggestion=(
+                        "Add a &RI section inside &HF:\n"
+                        "  &RI\n"
+                        "    KFN_REUSE_NUMBER  1\n"
+                        "    NGROUPS           4\n"
+                        "  &END RI"
+                    ),
+                )
+            )
+
+        # Rule 3: CELL_OPT without STRESS_TENSOR
+        run_type_m = re.search(
+            r"^\s*RUN_TYPE\s+(\S+)", text, re.MULTILINE | re.IGNORECASE
+        )
+        if run_type_m and run_type_m.group(1).upper() == "CELL_OPT":
+            stress_m = re.search(
+                r"^\s*STRESS_TENSOR\s+(\S+)", text, re.MULTILINE | re.IGNORECASE
+            )
+            valid_stress = {
+                "ANALYTICAL",
+                "NUMERICAL",
+                "DIAGONAL_ANALYTICAL",
+                "DIAGONAL_NUMERICAL",
+            }
+            if stress_m is None or stress_m.group(1).upper() not in valid_stress:
+                line = find_line(text, r"^\s*RUN_TYPE\s+CELL_OPT")
+                diags.append(
+                    Diagnostic(
+                        severity=SEVERITY_WARNING,
+                        line=line,
+                        param="STRESS_TENSOR",
+                        message=(
+                            "RUN_TYPE CELL_OPT requires stress tensor calculation, "
+                            "but DFT/STRESS_TENSOR is not set to ANALYTICAL or NUMERICAL. "
+                            "Cell optimization may fail or produce incorrect results."
+                        ),
+                        suggestion=(
+                            "Add 'STRESS_TENSOR ANALYTICAL' inside the &DFT section."
+                        ),
+                    )
+                )
+
+        # Rule 4: RUN_TYPE BAND without &BAND_STRUCTURE section
+        if run_type_m and run_type_m.group(1).upper() == "BAND":
+            has_band_structure = bool(
+                re.search(
+                    r"^\s*&BAND_STRUCTURE\b", text, re.MULTILINE | re.IGNORECASE
+                )
+            )
+            if not has_band_structure:
+                line = find_line(text, r"^\s*RUN_TYPE\s+BAND")
+                diags.append(
+                    Diagnostic(
+                        severity=SEVERITY_WARNING,
+                        line=line,
+                        param="RUN_TYPE",
+                        message=(
+                            "RUN_TYPE BAND requires a &PROPERTIES/&BAND_STRUCTURE "
+                            "section with k-point path definition. "
+                            "Without it, no band structure data will be written."
+                        ),
+                        suggestion=(
+                            "Add a &BAND_STRUCTURE section inside &FORCE_EVAL/&PROPERTIES."
+                        ),
+                    )
+                )
+
+        return diags

@@ -73,6 +73,14 @@ def main() -> None:
         help="Task type (default: scf). Examples: scf, opt, md, sp, relax, minimize",
     )
     parser.add_argument(
+        "--structure", default=None, metavar="FILE",
+        help=(
+            "Path to a structure file (CIF, POSCAR, XYZ, etc.) to embed in the "
+            "generated input. Requires pymatgen. If omitted, a built-in Si "
+            "diamond structure is used as placeholder."
+        ),
+    )
+    parser.add_argument(
         "--param", action="append", default=[], metavar="KEY=VALUE",
         help="Override parameter (repeatable). Example: --param CUTOFF=400",
     )
@@ -88,7 +96,7 @@ def main() -> None:
     intent = RenderIntent(
         software=args.software.lower(),
         task_type=args.task,
-        structure_file=None,
+        structure_file=args.structure,
         params=params,
     )
     text = backend.render(intent)
