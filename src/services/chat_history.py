@@ -15,6 +15,16 @@ from evomaster.utils.types import (
 from src.utils.chat_event_source import normalize_event_source
 
 
+def _serialized_message_role(m: dict) -> str:
+    """Normalize role from model_dump() (str or MessageRole) for comparisons."""
+    r = m.get('role')
+    if isinstance(r, str):
+        return r.strip().lower()
+    if r is not None and hasattr(r, 'value'):
+        return str(getattr(r, 'value', r)).strip().lower()
+    return str(r or '').strip().lower()
+
+
 class ChatHistoryConverter:
     """将 get_session_events 返回的事件列表转为 task.meta['dialog_history'] 所需的 Message 序列化列表。"""
 
@@ -39,6 +49,93 @@ class ChatHistoryConverter:
                 ln = len(str(c)) if c is not None else 0
                 parts.append(f"{i}:{role}(len={ln})")
         return ' | '.join(parts)
+
+    @staticmethod
+    def validate_dialog_messages_for_llm(
+        messages: list[dict],
+        *,
+        context: str = '',
+        session_id: str | None = None,
+        task_id: str | None = None,
+        raw_event_count: int | None = None,
+        raw_tool_call_events: int | None = None,
+        raw_tool_result_events: int | None = None,
+    ) -> None:
+        """校验 OpenAI 格式消息是否满足 tool 配对，便于发现 Bedrock 类报错根因。
+
+        检测：(1) 无 tool_calls 的 assistant 后紧跟 tool；(2) assistant 声明的 tool_calls
+        数量与紧随其后的连续 tool 条数不一致。
+        """
+        extra = ''
+        if session_id:
+            extra += f' session_id={session_id}'
+        if task_id:
+            extra += f' task_id={task_id}'
+        if raw_event_count is not None:
+            extra += f' raw_events={raw_event_count}'
+        if raw_tool_call_events is not None and raw_tool_result_events is not None:
+            extra += (
+                f' event_tool_calls={raw_tool_call_events}'
+                f' event_tool_results={raw_tool_result_events}'
+            )
+            if raw_tool_call_events != raw_tool_result_events:
+                logger.warning(
+                    'chat_history: tool_call/tool_result event count mismatch'
+                    '%s (investigate duplicate or missing events)',
+                    extra,
+                )
+
+        i = 0
+        while i < len(messages):
+            m = messages[i]
+            role = _serialized_message_role(m)
+            if role != 'assistant':
+                i += 1
+                continue
+            tcs = m.get('tool_calls') or []
+            n = len(tcs)
+            if n == 0:
+                if i + 1 < len(messages):
+                    nxt = messages[i + 1]
+                    if _serialized_message_role(nxt) == 'tool':
+                        logger.warning(
+                            'chat_history: orphan tool_message after assistant without '
+                            'tool_calls idx=%d next_tool_call_id=%s context=%s%s',
+                            i,
+                            str(nxt.get('tool_call_id', ''))[:64],
+                            context,
+                            extra,
+                        )
+                i += 1
+                continue
+            for k in range(n):
+                pos = i + 1 + k
+                if pos >= len(messages):
+                    logger.warning(
+                        'chat_history: missing tool_message(s) after assistant with '
+                        'tool_calls idx=%d expected=%d got=%d context=%s%s',
+                        i,
+                        n,
+                        k,
+                        context,
+                        extra,
+                    )
+                    break
+                nxt = messages[pos]
+                if _serialized_message_role(nxt) != 'tool':
+                    logger.warning(
+                        'chat_history: expected consecutive tool_message at idx=%d '
+                        'but got role=%s (assistant tool_calls at idx=%d expected=%d) '
+                        'context=%s%s',
+                        pos,
+                        _serialized_message_role(nxt),
+                        i,
+                        n,
+                        context,
+                        extra,
+                    )
+                    break
+            i += 1
 
     @staticmethod
     def _user_content(ev: dict) -> str:
@@ -202,4 +299,23 @@ class ChatHistoryConverter:
                 continue
 
         flush_tool_calls()
+
+        sid: str | None = None
+        tid: str | None = None
+        for ev in events:
+            if sid is None and ev.get('session_id'):
+                sid = str(ev.get('session_id'))
+            if ev.get('task_id'):
+                tid = str(ev.get('task_id'))
+        tc_ev = sum(1 for e in events if (e.get('type') or '').strip() == 'tool_call')
+        tr_ev = sum(1 for e in events if (e.get('type') or '').strip() == 'tool_result')
+        ChatHistoryConverter.validate_dialog_messages_for_llm(
+            out,
+            context='events_to_dialog_messages',
+            session_id=sid,
+            task_id=tid,
+            raw_event_count=len(events),
+            raw_tool_call_events=tc_ev,
+            raw_tool_result_events=tr_ev,
+        )
         return out
