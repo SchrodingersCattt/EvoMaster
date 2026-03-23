@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from matmaster.core.bus import MessageBus
+from matmaster.types.context import WorkspaceArchivalConfig
 
 from matmaster.hooks import (
     AssistantStateHook,
@@ -130,7 +131,7 @@ def _resolve_temperature(
 
 
 def _build_workspace_upload_fn(
-    archival_config: Any,
+    archival_config: WorkspaceArchivalConfig | None,
 ) -> Callable[..., Any] | None:
     """Build workspace upload closure when archival is enabled.
 
@@ -139,12 +140,12 @@ def _build_workspace_upload_fn(
     """
     if not archival_config or not archival_config.enabled:
         return None
-    oss_prefix = archival_config.oss_prefix
+    oss_prefix = (archival_config.oss_prefix or "").strip("/")
 
     def _do_upload(session_id: str, task_id: str, workspace_path: Path) -> None:
         from src.dao.oss_io import upload_dir_to_oss
 
-        key_prefix = f"{oss_prefix}/{session_id}/{task_id}"
+        key_prefix = "/".join(part for part in (oss_prefix, session_id) if part)
         upload_dir_to_oss(workspace_path, key_prefix)
 
     return _do_upload
