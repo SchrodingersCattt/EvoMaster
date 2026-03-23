@@ -406,7 +406,7 @@ class ChatStreamService:
                     },
                     user_id=self._sessions_service.get_session_user_id(sid),
                 )
-                # reason=restart 或 deploy 时按失败处理：直接结束流并推送 end，不再等待
+                # reason=restart 或 deploy 时按失败处理：直接结束流并推送 stream_closed，不再等待
                 if reason in ('restart', 'deploy'):
                     end_reason = (
                         'run_interrupted_restart'
@@ -416,7 +416,7 @@ class ChatStreamService:
                     yield self.sse_format(
                         {
                             'source': 'System',
-                            'type': 'end',
+                            'type': 'stream_closed',
                             'content': run_interrupted_content,
                             'session_id': sid,
                             'end_reason': end_reason,
@@ -519,7 +519,7 @@ class ChatStreamService:
                                         }
                                     )
                                     continue
-                                if payload.get('type') == 'end':
+                                if payload.get('type') in {'stream_closed', 'end'}:
                                     yield self.sse_format(payload)
                                     break
                                 yield self.sse_format(payload)
@@ -816,7 +816,7 @@ class ChatStreamService:
                 yield self.sse_format(
                     {
                         'source': 'System',
-                        'type': 'end',
+                        'type': 'stream_closed',
                         'content': '',
                         'session_id': sid,
                         'invocation_id': ctx.invocation_id,
@@ -885,7 +885,7 @@ class ChatStreamService:
                         or ctx.invocation_id,
                     }
                     yield self.sse_format(out)
-                    if payload.get('type') == 'end':
+                    if payload.get('type') in {'stream_closed', 'end'}:
                         break
             finally:
                 stop_event.set()

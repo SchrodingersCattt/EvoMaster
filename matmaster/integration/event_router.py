@@ -25,6 +25,110 @@ from typing import Any, Callable, Protocol, runtime_checkable
 from matmaster.core.bus import MessageBus
 from matmaster.types.events import BusEvent, ThoughtEvent
 
+
+def _normalize_public_source(source: object) -> str:
+    """Collapse internal source labels to the public SSE set."""
+    raw = str(source or "").strip()
+    if raw in {"User", "System"}:
+        return raw
+    return "MatMaster"
+
+
+def _flatten_bohrium_content(raw_payload: object) -> object:
+    """Unwrap Bohrium callback payloads into the frontend-facing content shape."""
+    if not isinstance(raw_payload, dict):
+        return raw_payload
+
+    nested = raw_payload.get("content")
+    extras = {
+        key: value
+        for key, value in raw_payload.items()
+        if key not in {"content", "type"}
+    }
+
+    if isinstance(nested, dict):
+        content: dict[str, Any] = {**nested, **extras}
+    elif nested is None:
+        content = extras
+    else:
+        content = {"message": nested, **extras}
+
+    event_type = raw_payload.get("type")
+    if event_type is not None and "event_type" not in content:
+        content["event_type"] = event_type
+
+    return content
+
+
+def _public_content_for_event(
+    event_type: str, payload: dict[str, Any]
+) -> object | None:
+    """Adapt internal event payloads to the frontend SSE contract."""
+    if event_type == "tool_call":
+        call_id = payload.get("call_id")
+        return {
+            "id": call_id,
+            "call_id": call_id,
+            "name": payload.get("tool_name"),
+            "args": payload.get("arguments") or {},
+        }
+
+    if event_type == "tool_result":
+        call_id = payload.get("call_id")
+        return {
+            "id": call_id,
+            "call_id": call_id,
+            "name": payload.get("tool_name"),
+            "result": payload.get("result"),
+            "info": payload.get("info") or {},
+        }
+
+    if event_type == "confirmation_request":
+        return {
+            "question": payload.get("question"),
+            "mode": payload.get("mode"),
+            "timeout_seconds": payload.get("timeout_seconds"),
+            "context": payload.get("context"),
+            "actions": payload.get("actions") or [],
+            "origin": payload.get("origin"),
+        }
+
+    if event_type == "error":
+        return {
+            "message": payload.get("message"),
+            "traceback": payload.get("traceback"),
+        }
+
+    if event_type == "workspace_upload_error":
+        return {"message": payload.get("message")}
+
+    if event_type == "bohrium_node":
+        return _flatten_bohrium_content(payload.get("payload"))
+
+    if event_type == "mcp_server_status":
+        detail = payload.get("detail")
+        content = {
+            "server_name": payload.get("server_name"),
+            "transport": payload.get("transport"),
+            "phase": payload.get("phase"),
+        }
+        if isinstance(detail, dict):
+            content.update(detail)
+        return content
+
+    if event_type == "mcp_connect":
+        return {
+            "phase": payload.get("phase"),
+            "message": payload.get("message"),
+            "elapsed_ms": payload.get("elapsed_ms"),
+            "error": payload.get("error"),
+        }
+
+    if event_type == "context_compaction":
+        return payload.get("payload")
+
+    return payload.get("content")
+
 logger = logging.getLogger(__name__)
 
 
@@ -147,7 +251,7 @@ class PersistenceHandler:
     - Persist: everything else
     """
 
-    _SKIP_TYPES = frozenset({"log_line", "llm_token"})
+    _SKIP_TYPES = frozenset({"log_line", "llm_token", "stream_closed", "end"})
     _STREAMING_STATES = frozenset({"start", "streaming", "end"})
 
     def __init__(
@@ -238,7 +342,11 @@ class SSEHandler:
         if self._should_skip(event):
             return
 
-        payload = event.model_dump()
+        payload = event.model_dump(mode="json")
+        content = _public_content_for_event(str(payload.get("type", "")), payload)
+        if content is not None:
+            payload["content"] = content
+        payload["source"] = _normalize_public_source(payload.get("source"))
         payload["session_id"] = self._session_id
         payload["task_id"] = self._task_id
         if self._invocation_id is not None:

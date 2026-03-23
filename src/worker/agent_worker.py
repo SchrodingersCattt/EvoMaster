@@ -96,7 +96,7 @@ def _publish_run_interrupted_deploy(session_id: str) -> None:
             sid,
             {
                 'source': 'System',
-                'type': 'end',
+                'type': 'stream_closed',
                 'content': content,
                 'session_id': sid,
                 'end_reason': 'run_interrupted_deploy',
@@ -104,7 +104,7 @@ def _publish_run_interrupted_deploy(session_id: str) -> None:
             },
         )
         logger.info(
-            'Agent worker: published run_interrupted(deploy)+end for session_id=%s worker_id=%s',
+            'Agent worker: published run_interrupted(deploy)+stream_closed for session_id=%s worker_id=%s',
             sid,
             get_worker_id(),
         )
@@ -305,7 +305,7 @@ def _run_worker_loop() -> None:
                     send_cb(
                         {
                             'source': 'System',
-                            'type': 'end',
+                            'type': 'stream_closed',
                             'content': '',
                             'session_id': session_id,
                             'task_id': task_id,

@@ -2,7 +2,7 @@
 
 Consumes an AgentRuntimeSpec and executes the LLM -> guard -> hook -> tool
 -> message accumulate -> loop cycle. All termination paths go through
-_finish() which produces a FinishEvent.
+_finish() which produces a RunResultEvent.
 
 Termination conditions:
 - natural: LLM returns no tool_calls
@@ -18,7 +18,7 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any
 
-from matmaster.types.events import FinishEvent
+from matmaster.types.events import RunResultEvent
 from matmaster.core.guard_pipeline import GuardPipeline
 
 if TYPE_CHECKING:
@@ -54,7 +54,7 @@ class AgentKernel:
         task: str,
         history: list[Message] | None = None,
         stop_event: threading.Event | None = None,
-    ) -> FinishEvent:
+    ) -> RunResultEvent:
         """Execute the agent loop until termination.
 
         Termination conditions:
@@ -70,7 +70,7 @@ class AgentKernel:
                      SystemMessage and UserMessage(task).
             stop_event: External cancellation signal.
 
-        Returns FinishEvent with the reason.
+        Returns RunResultEvent with the reason.
         """
         messages: list[Message] = [
             SystemMessage(content=spec.system_prompt),
@@ -269,7 +269,7 @@ class AgentKernel:
         messages: list[Message],
         reason: str,
         final_content: str | None = None,
-    ) -> FinishEvent:
+    ) -> RunResultEvent:
         """Unified exit path -- all termination goes through here."""
         if reason == "cancelled":
             status = "cancelled"
@@ -277,7 +277,7 @@ class AgentKernel:
             status = "failed"
         else:
             status = "completed"
-        return FinishEvent(
+        return RunResultEvent(
             source="agent",
             status=status,
             reason=reason,

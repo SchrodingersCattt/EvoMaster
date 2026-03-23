@@ -23,7 +23,12 @@ from matmaster.core.bus import MessageBus
 from matmaster.types.events import (
     AssistantStateEvent,
     BohriumNodeEvent,
-    FinishEvent,
+    ConfirmationRequestEvent,
+    ErrorEvent,
+    McpConnectEvent,
+    McpServerStatusEvent,
+    RunResultEvent,
+    StreamClosedEvent,
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
@@ -119,12 +124,12 @@ class TestEventRouter:
         router = EventRouter(bus, [BadHandler(), GoodHandler()])
         router.start()
 
-        bus.emit(FinishEvent(source="Agent", reason="done"))
+        bus.emit(RunResultEvent(source="Agent", reason="done"))
         time.sleep(0.3)
         router.stop()
 
         assert len(received) == 1
-        assert received[0].type == "finish"
+        assert received[0].type == "run_result"
 
     def test_router_stop_waits_for_handler_close(self) -> None:
         """stop() should call handler.close() and wait for it."""
@@ -174,12 +179,12 @@ class TestEventRouter:
         router = EventRouter(bus, [InitialHandler()])
         router.start()
 
-        bus.emit(FinishEvent(source="Agent", reason="before-registration"))
+        bus.emit(RunResultEvent(source="Agent", reason="before-registration"))
         assert first_event_processed.wait(timeout=1.0)
 
         router.add_handler(LateHandler())
 
-        bus.emit(FinishEvent(source="Agent", reason="after-registration"))
+        bus.emit(RunResultEvent(source="Agent", reason="after-registration"))
         assert second_event_processed.wait(timeout=1.0)
 
         router.stop()
@@ -216,8 +221,8 @@ class TestEventRouter:
         router = EventRouter(bus, [registering_handler])
         registering_handler.bind(router)
 
-        router._dispatch(FinishEvent(source="Agent", reason="current"))
-        router._dispatch(FinishEvent(source="Agent", reason="next"))
+        router._dispatch(RunResultEvent(source="Agent", reason="current"))
+        router._dispatch(RunResultEvent(source="Agent", reason="next"))
 
         assert late_received == ["next"]
 
@@ -253,8 +258,8 @@ class TestPersistenceHandler:
         assert args[0][1] == "Agent"  # source
         assert args[0][2] == "tool_call"  # type
 
-    def test_persists_tool_result_and_finish(self) -> None:
-        """handle() persists tool_result and finish events."""
+    def test_persists_tool_result_and_run_result(self) -> None:
+        """handle() persists tool_result and run_result events."""
         handler, events_table = self._make_handler()
 
         handler.handle(
@@ -262,9 +267,17 @@ class TestPersistenceHandler:
                 source="Agent", call_id="c1", tool_name="bash", result="ok"
             )
         )
-        handler.handle(FinishEvent(source="Agent", reason="done"))
+        handler.handle(RunResultEvent(source="Agent", reason="done"))
 
         assert events_table.add_event.call_count == 2
+
+    def test_skips_stream_closed_event(self) -> None:
+        """handle() skips stream_closed events because they are SSE-only lifecycle markers."""
+        handler, events_table = self._make_handler()
+
+        handler.handle(StreamClosedEvent(source="System"))
+
+        events_table.add_event.assert_not_called()
 
     def test_skips_log_line(self) -> None:
         """handle() skips events with type 'log_line'."""
@@ -338,15 +351,16 @@ class TestSSEHandler:
             mode="direct",
         )
 
-        handler.handle(FinishEvent(source="Agent", reason="done"))
+        handler.handle(RunResultEvent(source="Agent", reason="done"))
 
         send_cb.assert_called_once()
         payload = send_cb.call_args[0][0]
-        assert payload["type"] == "finish"
+        assert payload["type"] == "run_result"
+        assert payload["source"] == "MatMaster"
         assert payload["session_id"] == "sess1"
 
     def test_sends_json_safe_payload(self) -> None:
-        """handle() emits payloads that can be JSON-encoded for SSE/Redis."""
+        """handle() emits payloads that are safe for SSE/Redis JSON encoding."""
         send_cb = MagicMock()
         handler = SSEHandler(
             send_cb=send_cb,
@@ -357,11 +371,253 @@ class TestSSEHandler:
             mode="direct",
         )
 
-        handler.handle(FinishEvent(source="Agent", reason="done"))
+        handler.handle(RunResultEvent(source="Agent", reason="done"))
 
         payload = send_cb.call_args[0][0]
         json.dumps(payload, ensure_ascii=False)
         assert isinstance(payload["timestamp"], str)
+
+    def test_tool_call_payload_matches_frontend_contract(self) -> None:
+        """tool_call payload exposes nested content expected by the frontend."""
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id="inv1",
+            mode="direct",
+        )
+
+        handler.handle(
+            ToolCallEvent(
+                source="Agent",
+                call_id="call-1",
+                tool_name="bash",
+                arguments={"cmd": "ls"},
+            )
+        )
+
+        payload = send_cb.call_args[0][0]
+        assert payload["source"] == "MatMaster"
+        assert payload["content"] == {
+            "id": "call-1",
+            "call_id": "call-1",
+            "name": "bash",
+            "args": {"cmd": "ls"},
+        }
+
+    def test_tool_result_payload_matches_frontend_contract(self) -> None:
+        """tool_result payload exposes nested content expected by the frontend."""
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id="inv1",
+            mode="direct",
+        )
+
+        handler.handle(
+            ToolResultEvent(
+                source="Agent",
+                call_id="call-1",
+                tool_name="bash",
+                result={"status": "success", "stdout": "ok"},
+                info={"auto_save": True},
+            )
+        )
+
+        payload = send_cb.call_args[0][0]
+        assert payload["content"] == {
+            "id": "call-1",
+            "call_id": "call-1",
+            "name": "bash",
+            "result": {"status": "success", "stdout": "ok"},
+            "info": {"auto_save": True},
+        }
+
+    def test_confirmation_request_payload_matches_frontend_contract(self) -> None:
+        """confirmation_request payload exposes question and actions via content."""
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id="inv1",
+            mode="direct",
+        )
+
+        handler.handle(
+            ConfirmationRequestEvent(
+                source="MatMaster",
+                question="Proceed?",
+                mode="timeout",
+                timeout_seconds=20,
+                actions=["yes", "no"],
+                context="ctx",
+                origin="planner",
+            )
+        )
+
+        payload = send_cb.call_args[0][0]
+        assert payload["content"] == {
+            "question": "Proceed?",
+            "mode": "timeout",
+            "timeout_seconds": 20,
+            "context": "ctx",
+            "actions": ["yes", "no"],
+            "origin": "planner",
+        }
+
+    def test_error_payload_exposes_message_via_content(self) -> None:
+        """error payload exposes message text under content for frontend rendering."""
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id="inv1",
+            mode="direct",
+        )
+
+        handler.handle(ErrorEvent(source="System", message="boom", traceback="tb"))
+
+        payload = send_cb.call_args[0][0]
+        assert payload["content"] == {"message": "boom", "traceback": "tb"}
+
+    def test_bohrium_node_payload_flattens_wrapped_content(self) -> None:
+        """bohrium_node payload unwraps nested node status into content."""
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id="inv1",
+            mode="direct",
+        )
+
+        handler.handle(
+            BohriumNodeEvent(
+                source="BohriumSetup",
+                payload={
+                    "type": "setup_ready",
+                    "content": {
+                        "status": "ready",
+                        "message": "Node ready",
+                        "node_id": 1,
+                    },
+                    "phase": "ssh",
+                },
+            )
+        )
+
+        payload = send_cb.call_args[0][0]
+        assert payload["source"] == "MatMaster"
+        assert payload["content"] == {
+            "status": "ready",
+            "message": "Node ready",
+            "node_id": 1,
+            "event_type": "setup_ready",
+            "phase": "ssh",
+        }
+
+    def test_mcp_server_status_payload_uses_content_object(self) -> None:
+        """mcp_server_status payload exposes merged detail in content."""
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id="inv1",
+            mode="direct",
+        )
+
+        handler.handle(
+            McpServerStatusEvent(
+                source="System",
+                server_name="code-server",
+                transport="sse",
+                phase="retrying",
+                detail={
+                    "message": "retrying",
+                    "attempt": 2,
+                    "max_attempts": 3,
+                    "error": "timeout",
+                },
+            )
+        )
+
+        payload = send_cb.call_args[0][0]
+        assert payload["content"] == {
+            "server_name": "code-server",
+            "transport": "sse",
+            "phase": "retrying",
+            "message": "retrying",
+            "attempt": 2,
+            "max_attempts": 3,
+            "error": "timeout",
+        }
+
+    def test_mcp_connect_payload_uses_content_object(self) -> None:
+        """mcp_connect payload exposes phase and message via content."""
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id="inv1",
+            mode="direct",
+        )
+
+        handler.handle(
+            McpConnectEvent(
+                source="System",
+                phase="ready",
+                message="connected",
+                elapsed_ms=123,
+            )
+        )
+
+        payload = send_cb.call_args[0][0]
+        assert payload["content"] == {
+            "phase": "ready",
+            "message": "connected",
+            "elapsed_ms": 123,
+            "error": None,
+        }
+
+    def test_sends_stream_closed_event(self) -> None:
+        """handle() forwards stream_closed events for frontend stream completion."""
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id=None,
+            mode="direct",
+        )
+
+        handler.handle(
+            StreamClosedEvent(
+                source="System",
+                task_completed=True,
+                end_reason="natural",
+            )
+        )
+
+        send_cb.assert_called_once()
+        payload = send_cb.call_args[0][0]
+        assert payload["type"] == "stream_closed"
+        assert payload["source"] == "System"
+        assert payload["task_completed"] is True
 
     def test_skips_assistant_state(self) -> None:
         """handle() skips AssistantStateEvent."""

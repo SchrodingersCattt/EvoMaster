@@ -1,6 +1,6 @@
 """Event type hierarchy for the matmaster bus system.
 
-Defines all 16 event types in two categories:
+Defines all 17 event types in two categories:
 - AgentEvent (7 types): emitted by the kernel during agent execution
 - SystemEvent (9 types): emitted by service-layer components
 
@@ -60,10 +60,14 @@ class ToolResultEvent(BaseModel):
     info: dict[str, Any] = Field(default_factory=dict)
 
 
-class FinishEvent(BaseModel):
-    """Agent execution completion event."""
+class RunResultEvent(BaseModel):
+    """Business terminal event for a run outcome.
 
-    type: Literal["finish"] = "finish"
+    Canonical type is ``run_result``. Legacy ``finish`` payloads are still
+    accepted during migration so persisted history can be replayed.
+    """
+
+    type: Literal["run_result", "finish"] = "run_result"
     source: str
     timestamp: datetime = Field(default_factory=datetime.now)
     status: str = "completed"  # 'completed' | 'failed' | 'cancelled'
@@ -153,6 +157,22 @@ class CancelledEvent(BaseModel):
     reason: str = ""
 
 
+class StreamClosedEvent(BaseModel):
+    """Transport-level marker indicating the live SSE stream can close.
+
+    Canonical type is ``stream_closed``. Legacy ``end`` payloads are still
+    accepted during migration so old live/history payloads remain readable.
+    """
+
+    type: Literal["stream_closed", "end"] = "stream_closed"
+    source: str
+    timestamp: datetime = Field(default_factory=datetime.now)
+    content: str = ""
+    task_completed: bool = False
+    end_reason: str | None = None
+    treat_as_failure: bool | None = None
+
+
 class WorkspaceUploadErrorEvent(BaseModel):
     """Workspace upload error event."""
 
@@ -202,7 +222,7 @@ AgentEvent = Annotated[
         ThoughtEvent,
         ToolCallEvent,
         ToolResultEvent,
-        FinishEvent,
+        RunResultEvent,
         ErrorEvent,
         AssistantStateEvent,
         SkillHitEvent,
@@ -217,6 +237,7 @@ SystemEvent = Annotated[
         ContextCompactionEvent,
         ExpRunEvent,
         CancelledEvent,
+        StreamClosedEvent,
         WorkspaceUploadErrorEvent,
         BohriumNodeEvent,
         McpServerStatusEvent,
@@ -231,7 +252,7 @@ BusEvent = Annotated[
         ThoughtEvent,
         ToolCallEvent,
         ToolResultEvent,
-        FinishEvent,
+        RunResultEvent,
         ErrorEvent,
         AssistantStateEvent,
         SkillHitEvent,
@@ -241,6 +262,7 @@ BusEvent = Annotated[
         ContextCompactionEvent,
         ExpRunEvent,
         CancelledEvent,
+        StreamClosedEvent,
         WorkspaceUploadErrorEvent,
         BohriumNodeEvent,
         McpServerStatusEvent,
@@ -248,3 +270,9 @@ BusEvent = Annotated[
     ],
     Field(discriminator="type"),
 ]
+
+
+# Legacy aliases kept during protocol migration. New code should use the
+# clearer RunResultEvent / StreamClosedEvent names.
+FinishEvent = RunResultEvent
+EndEvent = StreamClosedEvent
