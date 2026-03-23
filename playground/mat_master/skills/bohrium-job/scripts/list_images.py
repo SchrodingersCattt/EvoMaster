@@ -47,12 +47,12 @@ def list_image_ids(page_size: int = 1000) -> list[dict]:
         '/openapi/v2/image/public',
         params={'page': 1, 'pageSize': page_size},
     )
-    records = (data.get('data') or {}).get('list') or []
+    records = (data.get('data') or {}).get('items') or []
     return records
 
 
 def get_image_versions(image_id: int) -> list[dict]:
-    """获取单个镜像的版本列表（含 image_address）。"""
+    """获取单个镜像的版本列表（含 url/image address）。"""
     data = _get(
         f'/openapi/v2/image/public/{image_id}/version',
         params={
@@ -63,7 +63,7 @@ def get_image_versions(image_id: int) -> list[dict]:
             'version': '',
         },
     )
-    records = (data.get('data') or {}).get('list') or []
+    records = (data.get('data') or {}).get('items') or []
     return records
 
 
@@ -117,14 +117,16 @@ def main() -> None:
         except Exception as exc:
             versions = [{'error': str(exc)}]
 
-        # 提取有用字段
+        # 提取有用字段：url 是实际 docker image address
         version_list = []
         for v in versions:
             entry: dict = {}
-            for key in ('imageAddress', 'image_address', 'address', 'tag', 'version', 'name'):
-                if v.get(key):
-                    entry[key] = v[key]
-            version_list.append(entry)
+            for key in ('url', 'version', 'resourceType', 'desc', 'size'):
+                val = v.get(key)
+                if val is not None and val != '':
+                    entry[key] = val
+            if entry:
+                version_list.append(entry)
 
         results.append(
             {
