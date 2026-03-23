@@ -21,6 +21,28 @@ from .helpers import (
 from .sanitize import _sanitize_tool_call_arguments
 
 
+def _diagnostic_api_messages_summary(messages: list[dict[str, Any]]) -> str:
+    """单行描述即将发给网关的 messages（角色、assistant 的 tool_calls id、tool 的 tool_call_id）。"""
+    parts: list[str] = []
+    for i, m in enumerate(messages):
+        role = m.get('role', '?')
+        if role == 'assistant':
+            tcs = m.get('tool_calls') or []
+            ids: list[str] = []
+            for tc in tcs:
+                fn = (tc or {}).get('function') or {}
+                tid = (tc or {}).get('id') or ''
+                ids.append(f"{fn.get('name', '?')}:{tid[:22]}")
+            parts.append(f"{i}:A(tc={len(tcs)} {','.join(ids) or '-'})")
+        elif role == 'tool':
+            parts.append(f"{i}:T({str(m.get('tool_call_id', ''))[:30]})")
+        else:
+            c = m.get('content')
+            ln = len(str(c)) if c is not None else 0
+            parts.append(f"{i}:{role}(len={ln})")
+    return ' | '.join(parts)
+
+
 class OpenAILLM(BaseLLM):
     """OpenAI LLM 实现
 
@@ -153,8 +175,15 @@ class OpenAILLM(BaseLLM):
             request_params, _build_reasoning_request_overrides(self.config)
         )
 
-        # 调用 API
-        response = self.client.chat.completions.create(**request_params)
+        try:
+            response = self.client.chat.completions.create(**request_params)
+        except Exception as e:
+            self.logger.warning(
+                'OpenAI chat.completions.create failed: %s | msgs_diag=%s',
+                e,
+                _diagnostic_api_messages_summary(messages),
+            )
+            raise
 
         # 解析响应（防护：API 可能返回 None 或空 choices，例如内容过滤、限流或兼容接口异常）
         if not response.choices or len(response.choices) == 0:
@@ -310,7 +339,11 @@ class OpenAILLM(BaseLLM):
                                     'arguments'
                                 ] += tc_delta.function.arguments
         except Exception as e:
-            self.logger.warning('OpenAI stream failed, falling back to query(): %s', e)
+            self.logger.warning(
+                'OpenAI stream failed, falling back to query(): %s | msgs_diag=%s',
+                e,
+                _diagnostic_api_messages_summary(messages),
+            )
             return super().query_stream(dialog, on_token=on_token, **kwargs)
 
         # 组装 tool_calls（按 index 排序保证顺序；sanitize arguments 防止非法 JSON 污染对话历史）
