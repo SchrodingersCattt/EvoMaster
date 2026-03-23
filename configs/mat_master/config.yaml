@@ -280,7 +280,7 @@ mat_master:
 # ============================================
 # path_adaptor: "calculation" 为历史命名；对所列服务器统一做路径解析与 executor/storage 注入
 # calculation_servers: 仅对这些服务器启用 path adaptor（本地文件参数会自动上传 OSS 并改写为 URL）
-# calculation_executors: 每服务器可配置 executor（镜像/机型）与 sync_tools；同步任务传 executor=null，否则传 Bohrium executor（鉴权从 .env BOHRIUM_* 注入）
+# calculation_executors: 每服务器可配置 executor 与 sync_tools；sync_tools 用于 MCP 侧过滤 submit_*；Path Adaptor 对 sync_tools 中工具固定注入 type:local + Bohrium 鉴权（与 MatMaster LOCAL_EXECUTOR 对齐）
 # 结构数据库检索（当前）: mat_struct_db
 # 第一性原理计算: mat_abacus
 mcp:
@@ -318,7 +318,7 @@ mcp:
       - prepare_lammps_job
       - prepare_orca_job
       - prepare_pyatb_job
-  # Per-server executor (image/machine_type) and sync_tools. Sync tools → executor None; others → Bohrium executor with env auth.
+  # Per-server executor and sync_tools: sync_tools 过滤 MCP 注册的 submit_*；sync_tools 内工具 Path Adaptor 固定注入 local + Bohrium 鉴权（覆盖服务器级 dispatcher）。
   calculation_executors:
     mat_sg:
       executor:
@@ -401,7 +401,7 @@ mcp:
       executor: null
       sync_tools:
         - get_electron_microscope_recognize
-    # 结构数据库检索：走 local，仅注入 BOHRIUM_ACCESS_KEY / BOHRIUM_PROJECT_ID 到 env；仅用同步工具
+    # 结构数据库检索：sync_tools 会固定 local+鉴权（与下方 executor 一致）；保留 executor 块便于阅读
     mat_struct_db:
       executor:
         type: "local"
