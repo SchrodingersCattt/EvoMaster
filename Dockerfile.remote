@@ -31,7 +31,9 @@ RUN pip install --no-cache-dir \
     lightgbm \
     mendeleev \
     matminer \
-    bohrium-open-sdk
+    bohrium-open-sdk \
+    "pint>=0.24" \
+    "cp2k-input-tools>=0.9.0"
 
 
 # -----------------------------
