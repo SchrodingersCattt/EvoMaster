@@ -68,6 +68,10 @@ class EventRouter:
         )
         self._thread.start()
 
+    def add_handler(self, handler: EventHandler) -> None:
+        """Register a new handler for future dispatches."""
+        self._handlers = [*self._handlers, handler]
+
     def stop(self, drain_timeout: float = 2.0) -> None:
         """Signal stop, drain remaining events, join thread.
 
@@ -101,7 +105,8 @@ class EventRouter:
 
     def _dispatch(self, event: BusEvent) -> None:  # type: ignore[arg-type]
         """Dispatch event to all handlers, catching exceptions."""
-        for handler in self._handlers:
+        handlers = self._handlers
+        for handler in handlers:
             try:
                 handler.handle(event)
             except Exception:
@@ -152,7 +157,10 @@ class PersistenceHandler:
             return
 
         payload = event.model_dump()
-        content = payload.get("content")
+        if event_type == "bohrium_node":
+            content = payload.get("payload")
+        else:
+            content = payload.get("content")
 
         try:
             self._events_table.add_event(
