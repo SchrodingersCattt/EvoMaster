@@ -25,7 +25,10 @@ except ImportError:
 
 ACCESS_KEY = os.environ.get('BOHRIUM_ACCESS_KEY', '').strip()
 PROJECT_ID = int(os.environ.get('BOHRIUM_PROJECT_ID', '-1') or '-1')
-OPENAPI_BASE = os.environ.get('BOHRIUM_BASE_URL', 'https://openapi.dp.tech').rstrip('/')
+_ENV = os.environ.get('SERVICE_ENV', '').strip()
+_URL_PART = f'.{_ENV}' if _ENV and _ENV not in ('prod', 'production') else ''
+_DEFAULT_BASE = f'https://openapi{_URL_PART}.dp.tech' if _URL_PART else 'https://open.bohrium.com'
+OPENAPI_BASE = os.environ.get('BOHRIUM_BASE_URL', _DEFAULT_BASE).rstrip('/')
 
 _AUTH_HEADER = {'accessKey': ACCESS_KEY, 'Content-Type': 'application/json'}
 
