@@ -39,7 +39,7 @@ def test_chat_history_converter_uses_stable_types_for_assistant_events():
             'type': 'tool_result',
             'content': {'id': 'call_1', 'name': 'demo_tool', 'result': {'ok': True}},
         },
-        {'source': 'Planner', 'type': 'finish', 'content': 'done'},
+        {'source': 'Planner', 'type': 'run_result', 'content': 'done'},
     ]
 
     out = ChatHistoryConverter.events_to_dialog_messages(events)

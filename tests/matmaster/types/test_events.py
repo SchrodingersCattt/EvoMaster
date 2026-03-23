@@ -18,10 +18,11 @@ from matmaster.types.events import (
     ContextCompactionEvent,
     ErrorEvent,
     ExpRunEvent,
-    FinishEvent,
     McpConnectEvent,
     McpServerStatusEvent,
+    RunResultEvent,
     SkillHitEvent,
+    StreamClosedEvent,
     SystemEvent,
     ThoughtEvent,
     ToolCallEvent,
@@ -85,10 +86,10 @@ class TestToolResultEvent:
         assert evt.info == {}
 
 
-class TestFinishEvent:
+class TestRunResultEvent:
     def test_defaults(self) -> None:
-        evt = FinishEvent(source="agent")
-        assert evt.type == "finish"
+        evt = RunResultEvent(source="agent")
+        assert evt.type == "run_result"
         assert evt.status == "completed"
         assert evt.reason == ""
         assert evt.final_content is None
@@ -155,6 +156,14 @@ class TestSystemEvents:
         assert evt.type == "cancelled"
         assert evt.reason == ""
 
+    def test_stream_closed(self) -> None:
+        evt = StreamClosedEvent(source="system")
+        assert evt.type == "stream_closed"
+        assert evt.content == ""
+        assert evt.task_completed is False
+        assert evt.end_reason is None
+        assert evt.treat_as_failure is None
+
     def test_workspace_upload_error(self) -> None:
         evt = WorkspaceUploadErrorEvent(source="system", message="upload failed")
         assert evt.type == "workspace_upload_error"
@@ -200,13 +209,13 @@ class TestAgentEventDiscriminator:
             {"type": "thought", "source": "a"},
             {"type": "tool_call", "source": "a", "call_id": "c", "tool_name": "t", "arguments": {}},
             {"type": "tool_result", "source": "a", "call_id": "c", "tool_name": "t", "result": "r"},
-            {"type": "finish", "source": "a"},
+            {"type": "run_result", "source": "a"},
             {"type": "error", "source": "a", "message": "m"},
             {"type": "assistant_state", "source": "a", "state": {}},
             {"type": "skill_hit", "source": "a", "skill_name": "s"},
         ]
         expected_types = [
-            ThoughtEvent, ToolCallEvent, ToolResultEvent, FinishEvent,
+            ThoughtEvent, ToolCallEvent, ToolResultEvent, RunResultEvent,
             ErrorEvent, AssistantStateEvent, SkillHitEvent,
         ]
         for payload, expected in zip(payloads, expected_types):
@@ -228,6 +237,7 @@ class TestSystemEventDiscriminator:
             {"type": "context_compaction", "source": "s", "payload": {}},
             {"type": "exp_run", "source": "s", "exp_name": "e"},
             {"type": "cancelled", "source": "s"},
+            {"type": "stream_closed", "source": "s"},
             {"type": "workspace_upload_error", "source": "s", "message": "m"},
             {"type": "bohrium_node", "source": "s"},
             {"type": "mcp_server_status", "source": "s", "server_name": "n"},
@@ -235,7 +245,7 @@ class TestSystemEventDiscriminator:
         ]
         expected_types = [
             ConfirmationRequestEvent, ConfirmationTimeoutEvent,
-            ContextCompactionEvent, ExpRunEvent, CancelledEvent,
+            ContextCompactionEvent, ExpRunEvent, CancelledEvent, StreamClosedEvent,
             WorkspaceUploadErrorEvent, BohriumNodeEvent,
             McpServerStatusEvent, McpConnectEvent,
         ]
@@ -245,14 +255,14 @@ class TestSystemEventDiscriminator:
 
 
 class TestBusEventUnion:
-    def test_validates_all_16_types(self) -> None:
-        """BusEvent union can validate all 16 event types."""
+    def test_validates_all_17_types(self) -> None:
+        """BusEvent union can validate all 17 event types."""
         payloads = [
             # 7 AgentEvent types
             {"type": "thought", "source": "a"},
             {"type": "tool_call", "source": "a", "call_id": "c", "tool_name": "t", "arguments": {}},
             {"type": "tool_result", "source": "a", "call_id": "c", "tool_name": "t", "result": "r"},
-            {"type": "finish", "source": "a"},
+            {"type": "run_result", "source": "a"},
             {"type": "error", "source": "a", "message": "m"},
             {"type": "assistant_state", "source": "a", "state": {}},
             {"type": "skill_hit", "source": "a", "skill_name": "s"},
@@ -262,6 +272,7 @@ class TestBusEventUnion:
             {"type": "context_compaction", "source": "s", "payload": {}},
             {"type": "exp_run", "source": "s", "exp_name": "e"},
             {"type": "cancelled", "source": "s"},
+            {"type": "stream_closed", "source": "s"},
             {"type": "workspace_upload_error", "source": "s", "message": "m"},
             {"type": "bohrium_node", "source": "s"},
             {"type": "mcp_server_status", "source": "s", "server_name": "n"},
@@ -285,7 +296,7 @@ class TestEventSerializationRoundtrip:
             ThoughtEvent(source="a", content="hello"),
             ToolCallEvent(source="a", call_id="c", tool_name="t", arguments={}),
             ToolResultEvent(source="a", call_id="c", tool_name="t", result="r"),
-            FinishEvent(source="a"),
+            RunResultEvent(source="a"),
             ErrorEvent(source="a", message="m"),
             AssistantStateEvent(source="a", state={"k": "v"}),
             SkillHitEvent(source="a", skill_name="s"),
@@ -294,6 +305,7 @@ class TestEventSerializationRoundtrip:
             ContextCompactionEvent(source="s", payload={}),
             ExpRunEvent(source="s", exp_name="e"),
             CancelledEvent(source="s"),
+            StreamClosedEvent(source="s"),
             WorkspaceUploadErrorEvent(source="s", message="m"),
             BohriumNodeEvent(source="s"),
             McpServerStatusEvent(source="s", server_name="n"),
@@ -308,18 +320,18 @@ class TestEventSerializationRoundtrip:
 
 
 class TestNoTypeCollision:
-    def test_all_16_type_literals_are_unique(self) -> None:
-        """All 16 type literals must be globally unique strings."""
+    def test_all_17_type_literals_are_unique(self) -> None:
+        """All 17 type literals must be globally unique strings."""
         type_values = [
-            "thought", "tool_call", "tool_result", "finish", "error",
+            "thought", "tool_call", "tool_result", "run_result", "error",
             "assistant_state", "skill_hit",
             "confirmation_request", "confirmation_timeout",
-            "context_compaction", "exp_run", "cancelled",
+            "context_compaction", "exp_run", "cancelled", "stream_closed",
             "workspace_upload_error", "bohrium_node",
             "mcp_server_status", "mcp_connect",
         ]
-        assert len(type_values) == 16
-        assert len(set(type_values)) == 16
+        assert len(type_values) == 17
+        assert len(set(type_values)) == 17
 
 
 # ── Edge case tests (QUAL-01) ─────────────────────────
@@ -329,7 +341,7 @@ _ALL_EVENT_CLASSES = [
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
-    FinishEvent,
+    RunResultEvent,
     ErrorEvent,
     AssistantStateEvent,
     SkillHitEvent,
@@ -338,6 +350,7 @@ _ALL_EVENT_CLASSES = [
     ContextCompactionEvent,
     ExpRunEvent,
     CancelledEvent,
+    StreamClosedEvent,
     WorkspaceUploadErrorEvent,
     BohriumNodeEvent,
     McpServerStatusEvent,

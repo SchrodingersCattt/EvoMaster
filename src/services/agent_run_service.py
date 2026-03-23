@@ -38,7 +38,7 @@ from matmaster.integration import (
 )
 from matmaster.integration.bohrium_setup import BohriumSetupService
 from matmaster.core.playground import Playground
-from matmaster.types.events import CancelledEvent, ErrorEvent
+from matmaster.types.events import CancelledEvent, ErrorEvent, StreamClosedEvent
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.chat_history import ChatHistoryConverter
@@ -526,7 +526,7 @@ class AgentRunService:
             )
 
             # -- Stage 6: Kernel execution --
-            finish_event = runtime.kernel.run(
+            run_result_event = runtime.kernel.run(
                 spec=spec,
                 task=user_prompt,
                 history=history,
@@ -534,16 +534,31 @@ class AgentRunService:
             )
 
             # -- Post-processing --
-            if finish_event.reason == "cancelled":
+            if run_result_event.reason == "cancelled":
                 bus.emit(
                     CancelledEvent(
                         source="System", reason="Task cancelled by user."
                     )
                 )
+                bus.emit(
+                    StreamClosedEvent(
+                        source="System",
+                        end_reason="cancelled",
+                        task_completed=False,
+                    )
+                )
             else:
-                bus.emit(finish_event)
+                bus.emit(run_result_event)
+                bus.emit(
+                    StreamClosedEvent(
+                        source="System",
+                        task_completed=run_result_event.reason == "natural",
+                        end_reason=run_result_event.reason,
+                        treat_as_failure=run_result_event.status == "failed" or None,
+                    )
+                )
                 # Quota deduction (per QUAL-05: success only)
-                if finish_event.status == "completed":
+                if run_result_event.status == "completed":
                     user_id = self._sessions_service.get_session_user_id(
                         session_id
                     )
@@ -562,6 +577,14 @@ class AgentRunService:
             )
             try:
                 bus.emit(ErrorEvent(source="System", message=str(exc)))
+                bus.emit(
+                    StreamClosedEvent(
+                        source="System",
+                        end_reason="error",
+                        task_completed=False,
+                        treat_as_failure=True,
+                    )
+                )
             except Exception:
                 pass
         finally:

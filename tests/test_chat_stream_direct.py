@@ -135,7 +135,7 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
         },
         {
             'source': 'MatMaster',
-            'type': 'finish',
+            'type': 'run_result',
             'content': 'old answer',
             'session_id': 'sess-1',
             'task_id': 'task-0',
@@ -193,3 +193,158 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
     ]
     assert frames[3]['type'] == 'query'
     assert frames[3]['mode'] == 'direct'
+
+
+def test_sse_frames_match_frontend_contract_without_mysql():
+    """无需 MySQL，直接验证最终 SSE frame 的 payload shape 可被前端消费。"""
+    from matmaster.integration.event_router import SSEHandler
+    from matmaster.types.events import (
+        BohriumNodeEvent,
+        ConfirmationRequestEvent,
+        ErrorEvent,
+        McpConnectEvent,
+        McpServerStatusEvent,
+        RunResultEvent,
+        StreamClosedEvent,
+        ToolCallEvent,
+        ToolResultEvent,
+    )
+    from src.services.stream_service import ChatStreamService
+
+    payloads = []
+    handler = SSEHandler(
+        send_cb=payloads.append,
+        loop=None,
+        session_id='sess-verify',
+        task_id='task-verify',
+        invocation_id='inv-verify',
+        mode='direct',
+    )
+
+    events = [
+        ToolCallEvent(
+            source='Agent',
+            call_id='call-1',
+            tool_name='bash',
+            arguments={'cmd': 'ls'},
+        ),
+        ToolResultEvent(
+            source='Agent',
+            call_id='call-1',
+            tool_name='bash',
+            result={'status': 'success', 'stdout': 'ok'},
+            info={'auto_save': True},
+        ),
+        ConfirmationRequestEvent(
+            source='MatMaster',
+            question='Proceed?',
+            mode='timeout',
+            timeout_seconds=20,
+            actions=['yes', 'no'],
+            context='ctx',
+            origin='planner',
+        ),
+        ErrorEvent(source='System', message='boom', traceback='tb'),
+        BohriumNodeEvent(
+            source='BohriumSetup',
+            payload={
+                'type': 'setup_ready',
+                'content': {
+                    'status': 'ready',
+                    'message': 'Node ready',
+                    'node_id': 1,
+                },
+                'phase': 'ssh',
+            },
+        ),
+        McpServerStatusEvent(
+            source='System',
+            server_name='code-server',
+            transport='sse',
+            phase='retrying',
+            detail={
+                'message': 'retrying',
+                'attempt': 2,
+                'max_attempts': 3,
+                'error': 'timeout',
+            },
+        ),
+        McpConnectEvent(
+            source='System',
+            phase='ready',
+            message='connected',
+            elapsed_ms=123,
+        ),
+        RunResultEvent(source='Agent', reason='natural', final_content='done'),
+        StreamClosedEvent(source='System', task_completed=True, end_reason='natural'),
+    ]
+
+    for event in events:
+        handler.handle(event)
+
+    frames = []
+    for payload in payloads:
+        frame = ChatStreamService.sse_format(payload)
+        assert frame.startswith('event: ag-ui\n')
+        frames.append(_decode_sse_payload(frame))
+
+    assert [frame['type'] for frame in frames] == [
+        'tool_call',
+        'tool_result',
+        'confirmation_request',
+        'error',
+        'bohrium_node',
+        'mcp_server_status',
+        'mcp_connect',
+        'run_result',
+        'stream_closed',
+    ]
+    assert all(isinstance(frame.get('timestamp'), str) for frame in frames)
+
+    assert frames[0]['content'] == {
+        'id': 'call-1',
+        'call_id': 'call-1',
+        'name': 'bash',
+        'args': {'cmd': 'ls'},
+    }
+    assert frames[1]['content'] == {
+        'id': 'call-1',
+        'call_id': 'call-1',
+        'name': 'bash',
+        'result': {'status': 'success', 'stdout': 'ok'},
+        'info': {'auto_save': True},
+    }
+    assert frames[2]['content'] == {
+        'question': 'Proceed?',
+        'mode': 'timeout',
+        'timeout_seconds': 20,
+        'context': 'ctx',
+        'actions': ['yes', 'no'],
+        'origin': 'planner',
+    }
+    assert frames[3]['content'] == {'message': 'boom', 'traceback': 'tb'}
+    assert frames[4]['content'] == {
+        'status': 'ready',
+        'message': 'Node ready',
+        'node_id': 1,
+        'phase': 'ssh',
+        'event_type': 'setup_ready',
+    }
+    assert frames[5]['content'] == {
+        'server_name': 'code-server',
+        'transport': 'sse',
+        'phase': 'retrying',
+        'message': 'retrying',
+        'attempt': 2,
+        'max_attempts': 3,
+        'error': 'timeout',
+    }
+    assert frames[6]['content'] == {
+        'phase': 'ready',
+        'message': 'connected',
+        'elapsed_ms': 123,
+        'error': None,
+    }
+    assert frames[7]['final_content'] == 'done'
+    assert frames[8]['task_completed'] is True
+    assert frames[8]['end_reason'] == 'natural'
