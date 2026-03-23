@@ -55,3 +55,13 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["evomaster", "playground"]
+
+# ---------------------------------------------------------------------------
+# uv dependency overrides
+# cp2k-input-tools==0.9.1 declares pint>=0.15,<0.24, but pint<0.24 is
+# broken on numpy>=2.0 (np.cumproduct removed). Override to allow pint>=0.24.
+# ---------------------------------------------------------------------------
+[tool.uv]
+override-dependencies = [
+    "pint>=0.24",
+]
