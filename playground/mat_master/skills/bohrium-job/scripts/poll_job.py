@@ -18,10 +18,12 @@ except ImportError:
     pass
 
 ACCESS_KEY = os.environ.get('BOHRIUM_ACCESS_KEY', '').strip()
-_ENV = os.environ.get('SERVICE_ENV', '').strip()
-_URL_PART = f'.{_ENV}' if _ENV and _ENV not in ('prod', 'production') else ''
-_DEFAULT_BASE = f'https://openapi{_URL_PART}.dp.tech' if _URL_PART else 'https://open.bohrium.com'
-OPENAPI_BASE = os.environ.get('BOHRIUM_BASE_URL', _DEFAULT_BASE).rstrip('/')
+try:
+    from src.utils.constant import BOHRIUM_OPENAPI_HOST
+
+    OPENAPI_BASE = BOHRIUM_OPENAPI_HOST
+except ImportError:
+    OPENAPI_BASE = os.environ.get('BOHRIUM_BASE_URL', 'https://open.bohrium.com').rstrip('/')
 
 _HEADER = {'accessKey': ACCESS_KEY}
 _STATUS_MAP = {
