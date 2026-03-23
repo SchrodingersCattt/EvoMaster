@@ -9,6 +9,7 @@ Timeouts: connect 3s, read 10s.
 
 import asyncio
 import logging
+import time
 from pathlib import Path
 from typing import Any, ClassVar, Optional
 
@@ -173,16 +174,41 @@ async def format_short_term_memory(
 
 
 class MemoryService:
-    """Uses the remote MatMaster memory service (existing port). session_id derived from run_dir."""
+    """Uses the remote MatMaster memory service (existing port).
 
-    def __init__(self, run_dir: Optional[Path] = None, base_url: Optional[str] = None):
+    session_id 优先使用显式传入的 session_id（每会话唯一，来自前端的 UUID），
+    fallback 到 run_dir 路径（CLI 单用户场景）。
+    多用户 Web 服务中必须通过 set_session_id(session_id) 设置，否则所有用户共享同一
+    session_id 会导致 memory 跨用户泄漏。
+    """
+
+    def __init__(
+        self,
+        run_dir: Optional[Path] = None,
+        base_url: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ):
         self.run_dir = Path(run_dir) if run_dir else None
         self.base_url = (base_url or MEMORY_SERVICE_URL).strip()
+        # 显式 session_id 优先（多用户 Web 场景），否则退回 run_dir 路径（CLI 单用户场景）
+        self._explicit_session_id: Optional[str] = session_id or None
+        # CLI fallback 用：进程启动时间戳，使每次本地运行的 session_id 唯一，避免多次测试互相污染
+        self._start_ts: str = str(int(time.time()))
+
+    def set_session_id(self, session_id: str) -> None:
+        """设置当前会话的 session_id（每用户每会话唯一）。
+        必须在多用户 Web 服务场景中调用，否则会出现跨用户 memory 泄漏。
+        """
+        self._explicit_session_id = session_id or None
 
     def _session_id(self) -> str:
+        # 优先使用显式 session_id（来自前端的会话 UUID，每用户唯一）
+        if self._explicit_session_id:
+            return self._explicit_session_id
+        # CLI 单用户 fallback：run_dir + 启动时间戳，避免多次本地测试复用同一 session 互相污染
         if self.run_dir is not None:
-            return str(self.run_dir.resolve())
-        return "default"
+            return f"{self.run_dir.resolve()}@{self._start_ts}"
+        return f"default@{self._start_ts}"
 
     def get_tools(self):
         """Return mem_save and mem_recall tools (call HTTP API on existing port)."""
