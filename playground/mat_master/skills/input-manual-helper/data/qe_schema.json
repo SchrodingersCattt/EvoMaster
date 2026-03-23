@@ -1,0 +1,315 @@
+[
+  {
+    "name": "calculation",
+    "param_type": "enum",
+    "default": "scf",
+    "description": "计算类型。'scf' 自洽场；'nscf' 非自洽；'bands' 能带；'relax' 离子弛豫；'md' 分子动力学；'vc-relax' 变胞弛豫；'vc-md' 变胞 MD。",
+    "category": "control",
+    "section": "&CONTROL",
+    "enum_values": ["scf", "nscf", "bands", "relax", "md", "vc-relax", "vc-md"],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm45"
+  },
+  {
+    "name": "prefix",
+    "param_type": "string",
+    "default": "pwscf",
+    "description": "输出文件名前缀，用于命名 .save 目录及各种输出文件。",
+    "category": "control",
+    "section": "&CONTROL",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm90"
+  },
+  {
+    "name": "outdir",
+    "param_type": "string",
+    "default": "./",
+    "description": "输出目录（scratch 目录）。存放 .save 目录与临时文件。",
+    "category": "control",
+    "section": "&CONTROL",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm100"
+  },
+  {
+    "name": "pseudo_dir",
+    "param_type": "string",
+    "default": "./",
+    "description": "赝势文件所在目录。",
+    "category": "control",
+    "section": "&CONTROL",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm107"
+  },
+  {
+    "name": "tprnfor",
+    "param_type": "boolean",
+    "default": false,
+    "description": "是否计算并打印原子受力。弛豫或 MD 计算时自动开启。",
+    "category": "control",
+    "section": "&CONTROL",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm128"
+  },
+  {
+    "name": "tstress",
+    "param_type": "boolean",
+    "default": false,
+    "description": "是否计算并打印应力张量。vc-relax 或 vc-md 计算时自动开启。",
+    "category": "control",
+    "section": "&CONTROL",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm133"
+  },
+  {
+    "name": "forc_conv_thr",
+    "param_type": "float",
+    "default": 1e-3,
+    "description": "离子弛豫（relax）收敛阈值，单位 Ry/bohr。所有力小于此值时认为收敛。",
+    "category": "control",
+    "section": "&CONTROL",
+    "unit": "Ry/bohr",
+    "valid_range": [1e-10, 1.0],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm160"
+  },
+  {
+    "name": "etot_conv_thr",
+    "param_type": "float",
+    "default": 1e-4,
+    "description": "离子弛豫总能收敛阈值（相邻步能量差），单位 Ry。",
+    "category": "control",
+    "section": "&CONTROL",
+    "unit": "Ry",
+    "valid_range": [1e-12, 1.0],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm155"
+  },
+  {
+    "name": "nstep",
+    "param_type": "integer",
+    "default": 50,
+    "description": "弛豫或 MD 的最大步数。",
+    "category": "control",
+    "section": "&CONTROL",
+    "valid_range": [1, 100000],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm55"
+  },
+  {
+    "name": "restart_mode",
+    "param_type": "enum",
+    "default": "from_scratch",
+    "description": "重启模式：'from_scratch' 全新计算；'restart' 从上次中断处继续。",
+    "category": "control",
+    "section": "&CONTROL",
+    "enum_values": ["from_scratch", "restart"],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm60"
+  },
+  {
+    "name": "verbosity",
+    "param_type": "enum",
+    "default": "low",
+    "description": "输出详细程度：'low' 简洁；'medium' 中等；'high' 详细；'debug' 调试。",
+    "category": "control",
+    "section": "&CONTROL",
+    "enum_values": ["low", "medium", "high", "debug"],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm40"
+  },
+  {
+    "name": "ibrav",
+    "param_type": "integer",
+    "default": 0,
+    "description": "Bravais 晶格类型编号。0 = 用 CELL_PARAMETERS 卡片手动指定晶格；其他值代表标准晶格（需同时给定 celldm 或 A/B/C/cosAB 等参数）。",
+    "category": "system",
+    "section": "&SYSTEM",
+    "valid_range": [-13, 14],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm200"
+  },
+  {
+    "name": "nat",
+    "param_type": "integer",
+    "default": null,
+    "description": "晶胞中原子总数。必填，须与 ATOMIC_POSITIONS 中的原子行数一致。",
+    "category": "system",
+    "section": "&SYSTEM",
+    "valid_range": [1, 100000],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm247"
+  },
+  {
+    "name": "ntyp",
+    "param_type": "integer",
+    "default": null,
+    "description": "原子种类数。必填，须与 ATOMIC_SPECIES 中的种类数一致。",
+    "category": "system",
+    "section": "&SYSTEM",
+    "valid_range": [1, 10],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm252"
+  },
+  {
+    "name": "ecutwfc",
+    "param_type": "float",
+    "default": 30.0,
+    "description": "平面波基函数动能截断（波函数），单位 Ry。NC 赝势通常 40-80 Ry；PAW/US 通常 25-60 Ry。",
+    "category": "electronic",
+    "section": "&SYSTEM",
+    "unit": "Ry",
+    "valid_range": [10.0, 200.0],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm257"
+  },
+  {
+    "name": "ecutrho",
+    "param_type": "float",
+    "default": null,
+    "description": "电荷密度平面波截断，单位 Ry。NC 赝势默认 4*ecutwfc；PAW/US 赝势通常需要 8-12*ecutwfc。",
+    "category": "electronic",
+    "section": "&SYSTEM",
+    "unit": "Ry",
+    "valid_range": [40.0, 2000.0],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm262"
+  },
+  {
+    "name": "occupations",
+    "param_type": "enum",
+    "default": "fixed",
+    "description": "占据数处理方式：'fixed' 固定占据（绝缘体）；'smearing' 展宽展开（金属）；'tetrahedra' 四面体方法；'from_input' 手动指定。",
+    "category": "electronic",
+    "section": "&SYSTEM",
+    "enum_values": ["fixed", "smearing", "tetrahedra", "tetrahedra_lin", "tetrahedra_opt", "from_input"],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm285"
+  },
+  {
+    "name": "smearing",
+    "param_type": "enum",
+    "default": "gaussian",
+    "description": "展宽方法（occupations='smearing' 时使用）：'gaussian'；'methfessel-paxton'（金属推荐）；'marzari-vanderbilt'；'fermi-dirac'。",
+    "category": "electronic",
+    "section": "&SYSTEM",
+    "enum_values": ["gaussian", "methfessel-paxton", "marzari-vanderbilt", "cold", "fermi-dirac"],
+    "requires": ["occupations"],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm290"
+  },
+  {
+    "name": "degauss",
+    "param_type": "float",
+    "default": 0.01,
+    "description": "展宽宽度，单位 Ry。金属计算通常 0.01-0.05 Ry；过大会影响精度。",
+    "category": "electronic",
+    "section": "&SYSTEM",
+    "unit": "Ry",
+    "valid_range": [1e-6, 1.0],
+    "requires": ["occupations", "smearing"],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm295"
+  },
+  {
+    "name": "nspin",
+    "param_type": "integer",
+    "default": 1,
+    "description": "自旋极化：1 = 非自旋极化；2 = 共线自旋极化；4 = 非共线自旋轨道耦合。",
+    "category": "electronic",
+    "section": "&SYSTEM",
+    "enum_values": ["1", "2", "4"],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm330"
+  },
+  {
+    "name": "nbnd",
+    "param_type": "integer",
+    "default": null,
+    "description": "计算的能带数。默认取 ceil(nelec/2) + 若干空带；能带计算时通常需要增加。",
+    "category": "electronic",
+    "section": "&SYSTEM",
+    "valid_range": [1, 100000],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm280"
+  },
+  {
+    "name": "input_dft",
+    "param_type": "string",
+    "default": null,
+    "description": "覆盖赝势中内置的交换关联泛函。如 'pbe'、'pbesol'、'hse'、'b3lyp'。",
+    "category": "electronic",
+    "section": "&SYSTEM",
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm385"
+  },
+  {
+    "name": "conv_thr",
+    "param_type": "float",
+    "default": 1e-6,
+    "description": "SCF 收敛阈值（总能变化），单位 Ry。典型值 1e-6（relax 时 1e-8 以上）。",
+    "category": "electronic",
+    "section": "&ELECTRONS",
+    "unit": "Ry",
+    "valid_range": [1e-14, 1e-2],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm470"
+  },
+  {
+    "name": "mixing_beta",
+    "param_type": "float",
+    "default": 0.7,
+    "description": "电荷密度混合参数（Pulay/Broyden 混合）。绝缘体通常 0.7；金属或磁性体系可适当减小至 0.3-0.5。",
+    "category": "electronic",
+    "section": "&ELECTRONS",
+    "valid_range": [0.01, 1.0],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm480"
+  },
+  {
+    "name": "mixing_mode",
+    "param_type": "enum",
+    "default": "plain",
+    "description": "混合模式：'plain' 简单混合；'TF' Thomas-Fermi 预处理；'local-TF' 局域 TF。",
+    "category": "electronic",
+    "section": "&ELECTRONS",
+    "enum_values": ["plain", "TF", "local-TF"],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm475"
+  },
+  {
+    "name": "electron_maxstep",
+    "param_type": "integer",
+    "default": 100,
+    "description": "SCF 迭代最大步数。若 100 步后未收敛会报错（不影响结果但需检查）。",
+    "category": "electronic",
+    "section": "&ELECTRONS",
+    "valid_range": [1, 10000],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm465"
+  },
+  {
+    "name": "diagonalization",
+    "param_type": "enum",
+    "default": "david",
+    "description": "对角化算法：'david' David-Davidson（默认，大多数情况效率最高）；'cg' 共轭梯度；'ppcg' 并行 PCG；'paro' 并行 RO。",
+    "category": "electronic",
+    "section": "&ELECTRONS",
+    "enum_values": ["david", "cg", "ppcg", "paro", "par_io"],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm455"
+  },
+  {
+    "name": "ion_dynamics",
+    "param_type": "enum",
+    "default": "bfgs",
+    "description": "离子运动算法（relax/md）：'bfgs'（弛豫推荐）；'damp'（阻尼 MD）；'verlet'（MD）；'langevin'；'fire' 等。",
+    "category": "ionic",
+    "section": "&IONS",
+    "enum_values": ["bfgs", "damp", "verlet", "langevin", "langevin-smc", "beeman", "fire"],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm540"
+  },
+  {
+    "name": "upscale",
+    "param_type": "float",
+    "default": 100.0,
+    "description": "BFGS 弛豫中 conv_thr 的放大因子。最后几步用 conv_thr/upscale 收紧 SCF 阈值。",
+    "category": "ionic",
+    "section": "&IONS",
+    "valid_range": [1.0, 1e6],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm590"
+  },
+  {
+    "name": "cell_dynamics",
+    "param_type": "enum",
+    "default": "bfgs",
+    "description": "晶胞优化算法（vc-relax 时使用）：'bfgs'（推荐）；'damp-pr'；'damp-w'。",
+    "category": "cell",
+    "section": "&CELL",
+    "enum_values": ["bfgs", "damp-pr", "damp-w", "none"],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm620"
+  },
+  {
+    "name": "press",
+    "param_type": "float",
+    "default": 0.0,
+    "description": "外部压强（vc-relax/vc-md），单位 kbar。正值表示压缩。",
+    "category": "cell",
+    "section": "&CELL",
+    "unit": "kbar",
+    "valid_range": [-1e6, 1e6],
+    "doc_url": "https://www.quantum-espresso.org/Doc/INPUT_PW.html#idm628"
+  }
+]
