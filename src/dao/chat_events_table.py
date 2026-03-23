@@ -67,8 +67,15 @@ class ChatEventsTable(BaseTable):
                     # 供刷新后回放时计算 stream_started_at / elapsed_ms
                     if row.get('created_at') is not None:
                         ev['created_at_ms'] = int(row['created_at'].timestamp() * 1000)
-                    # User/query 存的是 { content, files?, workspace_paths? } 时拆成顶层供前端分开展示
-                    if isinstance(content, dict) and 'content' in content:
+                    # 仅 User/query：存的是 { content, files?, workspace_paths? } 时拆成顶层供前端分开展示。
+                    # assistant_state 等事件的 content 也是含 'content' 键的 dict，不可在此拆包，否则会丢掉
+                    # tool_calls/meta，并把整段 AssistantMessage 误当成内层字符串传给下游。
+                    if (
+                        row.get('source') == 'User'
+                        and row.get('type') == 'query'
+                        and isinstance(content, dict)
+                        and 'content' in content
+                    ):
                         ev['content'] = content.get('content', '')
                         ev['files'] = content.get('files', [])
                         ev['workspace_paths'] = content.get('workspace_paths', [])
