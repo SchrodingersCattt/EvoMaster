@@ -261,10 +261,14 @@ class OpenAILLM(BaseLLM):
         # tool_call delta 按 index 累积：{index: {"id": str, "name": str, "arguments": str}}
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
+        stream_model: str | None = None  # 从第一个 chunk 捕获实际模型名
 
         try:
             stream = self.client.chat.completions.create(**request_params)
             for chunk in stream:
+                # 从首个 chunk 捕获实际模型名（供 trajectory 记录）
+                if stream_model is None and hasattr(chunk, 'model') and chunk.model:
+                    stream_model = chunk.model
                 if not chunk.choices:
                     continue
                 choice = chunk.choices[0]
@@ -329,6 +333,7 @@ class OpenAILLM(BaseLLM):
             content=content,
             tool_calls=tool_calls,
             meta={
+                'model': stream_model,
                 'finish_reason': finish_reason,
                 'reasoning_content': ''.join(full_reasoning_content) or None,
                 'api_message_extras': assistant_extra_acc,
