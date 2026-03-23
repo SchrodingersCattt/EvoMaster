@@ -124,6 +124,29 @@ class TestEventRouter:
         assert len(received) == 1
         assert received[0].type == "finish"
 
+    def test_router_stop_waits_for_handler_close(self) -> None:
+        """stop() should call handler.close() and wait for it."""
+        bus = MessageBus()
+        closed = threading.Event()
+
+        class SlowCloser:
+            def handle(self, event: Any) -> None:
+                return None
+
+            def close(self) -> None:
+                time.sleep(0.2)
+                closed.set()
+
+        router = EventRouter(bus, [SlowCloser()])
+        router.start()
+
+        start = time.monotonic()
+        router.stop()
+        elapsed = time.monotonic() - start
+
+        assert closed.is_set()
+        assert elapsed >= 0.2
+
 
 # ── PersistenceHandler Tests ────────────────────────────
 

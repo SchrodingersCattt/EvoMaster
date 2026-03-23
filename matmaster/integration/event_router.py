@@ -51,7 +51,7 @@ class EventRouter:
 
     Lifecycle bound to a single run (D-15):
     - start(): spawns daemon thread
-    - stop(drain_timeout): drains remaining events, joins thread
+    - stop(drain_timeout): joins consumer, drains queue, closes handlers
     """
 
     def __init__(self, bus: MessageBus, handlers: list[EventHandler]) -> None:
@@ -69,13 +69,17 @@ class EventRouter:
         self._thread.start()
 
     def stop(self, drain_timeout: float = 2.0) -> None:
-        """Signal stop, drain remaining events, join thread.
+        """Signal stop, wait for consumer, drain remaining events, close handlers.
 
         Args:
             drain_timeout: max seconds to spend draining queued events
-                after signaling stop.
+                after the consumer thread exits.
         """
         self._stop_event.set()
+
+        if self._thread is not None:
+            self._thread.join()
+            self._thread = None
 
         # Drain remaining events from bus within deadline
         deadline = time.monotonic() + drain_timeout
@@ -86,9 +90,7 @@ class EventRouter:
             except queue.Empty:
                 break
 
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
-            self._thread = None
+        self._close_handlers()
 
     def _consume_loop(self) -> None:
         """Main consume loop -- runs in background thread."""
@@ -101,7 +103,8 @@ class EventRouter:
 
     def _dispatch(self, event: BusEvent) -> None:  # type: ignore[arg-type]
         """Dispatch event to all handlers, catching exceptions."""
-        for handler in self._handlers:
+        handlers = self._handlers
+        for handler in handlers:
             try:
                 handler.handle(event)
             except Exception:
@@ -109,6 +112,21 @@ class EventRouter:
                     "Handler %s raised exception for event type=%s",
                     type(handler).__name__,
                     getattr(event, "type", "?"),
+                    exc_info=True,
+                )
+
+    def _close_handlers(self) -> None:
+        """Flush handler-owned resources after dispatch stops."""
+        for handler in self._handlers:
+            close = getattr(handler, "close", None)
+            if not callable(close):
+                continue
+            try:
+                close()
+            except Exception:
+                logger.warning(
+                    "Handler %s raised during close()",
+                    type(handler).__name__,
                     exc_info=True,
                 )
 
