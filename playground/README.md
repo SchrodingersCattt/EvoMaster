@@ -2,17 +2,15 @@
 
 Playground is where developers build their own research agents. Each playground defines a complete experimental workflow by inheriting EvoMaster's base components (`BasePlayground`, `BaseExp`) to implement specific scientific experiment automation.
 
-**Developers should create their own playground in this directory to implement their research agents.**
+**This repository ships one product playground (`mat_master`). To add another agent, create a new subdirectory under `playground/` (or refer to the [EvoMaster upstream](https://github.com/sjtu-sai-agents/EvoMaster) for minimal and example playgrounds).**
 
-## Existing Examples
+## Bundled Playground
 
 | Playground | Type | Description | Docs |
 |---|---|---|---|
-| `minimal` | Single Agent | Minimal example, only inherits `BasePlayground`, ideal for learning the framework | [README](./minimal/README.md) |
-| `minimal_multi_agent` | Multi-Agent | Planning + Coding dual-agent collaboration, demonstrates multi-agent workflow | [README](./minimal_multi_agent/README.md) |
-| `minimal_kaggle` | Multi-Agent | Kaggle competition automation with 6 role agents (draft/debug/improve/research/knowledge/metric) | [README](./minimal_kaggle/README.md) |
-| `minimal_skill_task` | Single Agent + Skills | RAG-based Analyze → Plan → Search → Summarize workflow | [README](./minimal_skill_task/README.md) |
-| `x_master` | Multi-Phase Parallel | Four-phase iterative workflow: Solve → Critique → Rewrite → Select, with MCP tool support | [README](./x_master/README.md) |
+| `mat_master` | Product | MatMaster UI, skills, Bohrium/MCP integration | [README_WEB](./mat_master/README_WEB.md) |
+
+Configuration lives under `configs/mat_master/`. CLI: `python run.py --agent mat_master --config configs/mat_master/config.yaml --task "..."`.
 
 ## Quick Start: Create Your Playground
 
@@ -42,7 +40,7 @@ class MyPlayground(BasePlayground):
         self.logger = logging.getLogger(self.__class__.__name__)
 ```
 
-This is the minimal implementation. For multi-agent or custom experiment flows, override `setup()`, `_create_exp()`, `run()` methods. See `minimal_multi_agent` and `x_master` for examples.
+This is the minimal implementation. For multi-agent or custom experiment flows, override `setup()`, `_create_exp()`, `run()` methods. See `playground/mat_master/` in this repo or the EvoMaster upstream `playground/` tree for richer examples.
 
 ### 3. Write Prompts
 

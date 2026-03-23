@@ -1,7 +1,7 @@
 # MATTER Evaluation v4 — 三维评测系统
 
-> **版本**: v4 (2026-03)  
-> **模块路径**: `playground/mat_master/evaluation/`  
+> **版本**: v4 (2026-03)
+> **模块路径**: `playground/mat_master/evaluation/`
 > **设计理念**: 准确性 × 溯源性 × 效率性 三维独立评估，解耦评测与运行时
 
 ---
@@ -217,7 +217,7 @@ runner.py → EvalRunRecord.model_name → aggregator by_model 分组
 位置: playground/mat_master/evaluation/mat_runner.py:31-85
 ```
 
-如果要把 evaluation 移植到其他 agent（如 x_master），只需替换 `mat_runner.py` 中的 agent 调用逻辑。其余模块（evaluator、aggregator、reporter）完全不感知 agent 实现。
+如果要把 evaluation 移植到其他 agent，只需替换 `mat_runner.py` 中的 agent 调用逻辑。其余模块（evaluator、aggregator、reporter）完全不感知 agent 实现。
 
 ### 接触点 3：`evidence_mapping.yaml` — 工具名称映射
 
@@ -750,7 +750,7 @@ Safety veto 具有一票否决语义：
 
 ### 移植到其他 Agent
 
-evaluation 框架不绑定 MatMaster。移植到其他 agent（如 x_master、kaggle agent）只需：
+evaluation 框架不绑定 MatMaster。移植到其他 agent 只需：
 
 | 步骤 | 操作 | 涉及文件 |
 |------|------|----------|
