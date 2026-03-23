@@ -1154,15 +1154,6 @@ class BasePlayground:
             except Exception as e:
                 self.logger.warning(f"Error cleaning up MCP: {e}")
 
-        # # 清理 MCP 连接
-        # if self.mcp_manager:
-        #     try:
-        #         import asyncio
-        #         asyncio.run(self.mcp_manager.cleanup())
-        #         self.logger.debug("MCP connections cleaned up")
-        #     except Exception as e:
-        #         self.logger.warning(f"Error cleaning up MCP: {e}")
-
         if self.session:
             # 检查是否是 DockerSession 且配置了保留容器
             should_keep_session = False
