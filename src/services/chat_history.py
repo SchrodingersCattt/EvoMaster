@@ -1,7 +1,10 @@
 """多轮对话历史：将 DB 中的 chat 事件转换为 Agent Dialog 所需的 Message 列表（可序列化 dict）。"""
 
 import json
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from evomaster.utils.types import (
     AssistantMessage,
@@ -14,6 +17,28 @@ from src.utils.chat_event_source import normalize_event_source
 
 class ChatHistoryConverter:
     """将 get_session_events 返回的事件列表转为 task.meta['dialog_history'] 所需的 Message 序列化列表。"""
+
+    @staticmethod
+    def summarize_dialog_messages_for_log(messages: list[dict]) -> str:
+        """将序列化后的多轮消息压成一行，便于排查 tool_use / tool_result 是否与 Bedrock 报错对齐。"""
+        parts: list[str] = []
+        for i, m in enumerate(messages):
+            role = m.get('role', '?')
+            if role == 'assistant':
+                tcs = m.get('tool_calls') or []
+                ids: list[str] = []
+                for tc in tcs:
+                    fn = (tc or {}).get('function') or {}
+                    tid = (tc or {}).get('id') or ''
+                    ids.append(f"{fn.get('name', '?')}:{tid[:24]}")
+                parts.append(f"{i}:A(tc={len(tcs)} {','.join(ids) or '-'})")
+            elif role == 'tool':
+                parts.append(f"{i}:T(id={str(m.get('tool_call_id', ''))[:32]})")
+            else:
+                c = m.get('content')
+                ln = len(str(c)) if c is not None else 0
+                parts.append(f"{i}:{role}(len={ln})")
+        return ' | '.join(parts)
 
     @staticmethod
     def _user_content(ev: dict) -> str:
@@ -122,7 +147,14 @@ class ChatHistoryConverter:
                 flush_tool_calls()
                 try:
                     msg = AssistantMessage.model_validate(ev.get('content') or {})
-                except Exception:
+                except Exception as e:
+                    logger.warning(
+                        'chat_history: assistant_state model_validate failed, event skipped '
+                        '(tool_calls may be missing in dialog). task_id=%s err=%s: %s',
+                        ev.get('task_id'),
+                        type(e).__name__,
+                        e,
+                    )
                     continue
                 if (
                     last_assistant_text_idx is not None
