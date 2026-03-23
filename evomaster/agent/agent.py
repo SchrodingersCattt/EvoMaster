@@ -901,6 +901,14 @@ class BaseAgent(ABC):
                             'agent_version': self.VERSION,
                             'agent_name': self._agent_name or 'unknown',
                             'step': self._step_count,
+                            # model_name is extracted here so EvidenceExtractor can
+                            # read it from trajectory.meta without scanning all steps.
+                            'model_name': (
+                                (assistant_message.meta or {}).get('model')
+                                if hasattr(assistant_message, 'meta')
+                                   and assistant_message.meta
+                                else None
+                            ),
                         },
                     },
                 }

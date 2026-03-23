@@ -1,12 +1,14 @@
 """Rubric-based evaluator for MATTER runs."""
 
 import json
+import logging
 import re
 from typing import Any
 
 from evomaster.utils.llm import LLMConfig, create_llm
 from evomaster.utils.types import Dialog, SystemMessage, UserMessage
 
+from .evidence import EvidenceBundle, EventType, SourceType
 from .schemas import (
     LLMRuntimeConfig,
     QuestionItem,
@@ -15,6 +17,8 @@ from .schemas import (
     SafetyVetoRecord,
     ScoringCheckItem,
 )
+
+_eval_logger = logging.getLogger(__name__)
 
 _GENERAL_EVAL_SYSTEM_PROMPT = """You are an evaluation judge for scientific QA quality.
 Score strictly by the provided rubric and touchpoints.
@@ -63,6 +67,62 @@ Return STRICT JSON:
 Do not output anything else.
 """
 
+_GROUNDING_JUDGE_SYSTEM_PROMPT = """You are an expert evaluator assessing whether a materials science agent's answer is properly grounded in external sources.
+
+Evaluate TWO sub-dimensions:
+
+1. **source_usage** (0-1): Did the agent actually contact external constraint sources during its work?
+   - 1.0: Agent clearly used database queries, scientific software, or authoritative tools
+   - 0.5: Agent used some external tools but reliance is partial or unclear
+   - 0.0: Agent appears to have generated the answer entirely from its own knowledge
+
+2. **answer_binding** (0-1): Is the final answer demonstrably constrained/supported by those external source results?
+   - 1.0: Final answer values/structures directly trace back to tool outputs (e.g. a0 matches the DB result)
+   - 0.5: Partial binding — some values come from sources, others seem invented
+   - 0.0: Final answer has no traceable connection to any external source
+
+Return STRICT JSON:
+{
+  "source_usage": <0.0-1.0>,
+  "answer_binding": <0.0-1.0>,
+  "verdict": "pass" | "partial" | "fail",
+  "confidence": <0.0-1.0>,
+  "evidence_refs": ["<short observation excerpt that supports verdict>"],
+  "uncertain": false
+}
+
+Do not output anything else.
+"""
+
+_EFFICIENCY_JUDGE_SYSTEM_PROMPT = """You are an expert evaluator assessing the process efficiency of a materials science agent run.
+
+Evaluate whether the agent solved the task efficiently:
+
+1. **recovery_quality** (0-1): When the agent encountered errors or failures, did it recover gracefully?
+   - 1.0: Clean recovery with appropriate retry strategy
+   - 0.5: Recovered but with unnecessary steps or confusion
+   - 0.0: Got stuck in loops, gave up prematurely, or cascaded failures
+
+2. **process_efficiency** (0-1): Was the overall trajectory direct and purposeful?
+   - 1.0: Near-optimal path — no wasted steps, no redundant calls
+   - 0.5: Some inefficiency but acceptable
+   - 0.0: Many redundant calls, hallucinated intermediate steps, or severe thrashing
+
+Note: Token cost is assessed separately via deterministic budget checks.
+
+Return STRICT JSON:
+{
+  "recovery_quality": <0.0-1.0>,
+  "process_efficiency": <0.0-1.0>,
+  "verdict": "pass" | "partial" | "fail",
+  "confidence": <0.0-1.0>,
+  "evidence_refs": ["<short note from trajectory that supports verdict>"],
+  "uncertain": false
+}
+
+Do not output anything else.
+"""
+
 
 class RubricEvaluator:
     """LLM-based evaluator with deterministic fallback."""
@@ -82,6 +142,8 @@ class RubricEvaluator:
             self._llm = create_llm(
                 cfg, output_config={'show_in_console': False, 'log_to_file': False}
             )
+        # JudgeAdapter is initialised lazily (shares the same LLM instance)
+        self._judge_adapter: JudgeAdapter = JudgeAdapter(llm=self._llm)
 
     def evaluate(
         self,
@@ -90,7 +152,22 @@ class RubricEvaluator:
         rubric: Rubric,
         answer: str,
         tool_calls: list[dict[str, Any]] | None = None,
+        evidence: EvidenceBundle | None = None,
     ) -> dict[str, Any]:
+        """Evaluate one run.
+
+        Parameters
+        ----------
+        question, rubric, answer:
+            Standard evaluation inputs (unchanged from legacy interface).
+        tool_calls:
+            Legacy flat tool-call list from mat_runner.  Still accepted for
+            backward compatibility; the evidence layer is preferred.
+        evidence:
+            :class:`~.evidence.EvidenceBundle` produced by
+            :class:`~.evidence.EvidenceExtractor`.  When present it is used by
+            evidence-native verify types and populates three-dimensional scores.
+        """
         if tool_calls is None:
             tool_calls = []
         if question.level == 'Safety':
@@ -108,6 +185,7 @@ class RubricEvaluator:
                 rubric=rubric,
                 answer=answer,
                 tool_calls=tool_calls,
+                evidence=evidence,
             )
         else:
             payload = self._evaluate_general(
@@ -223,45 +301,88 @@ class RubricEvaluator:
         rubric: Rubric,
         answer: str,
         tool_calls: list[dict[str, Any]],
+        evidence: EvidenceBundle | None = None,
     ) -> dict[str, Any]:
+        """Evaluate using the scoring checklist.
+
+        Computes three independent dimension scores (accuracy / grounding /
+        efficiency) plus two total-score formulas:
+
+        * ``strict_final = accuracy × (a×grounding + b×efficiency)``
+        * ``analysis_final = wa×accuracy + wg×grounding + we×efficiency``
+
+        When no grounding or efficiency items exist in the checklist the
+        corresponding scores default to 1.0, so ``strict_final`` degrades
+        gracefully to ``accuracy × 1.0``.
+        """
         ref_map = {item.key: item for item in question.reference_answers}
         check_outputs: dict[str, dict[str, Any]] = {}
         deductions: list[dict[str, Any]] = []
-        total_weight = 0.0
-        hit_weight = 0.0
+
+        # Per-dimension accumulators
+        dim_total: dict[str, float] = {'accuracy': 0.0, 'grounding': 0.0, 'efficiency': 0.0}
+        dim_hit: dict[str, float] = {'accuracy': 0.0, 'grounding': 0.0, 'efficiency': 0.0}
 
         for item in question.scoring_checklist:
-            hit, evidence = self._evaluate_check_item(
+            hit, evidence_text = self._evaluate_check_item(
                 item=item,
                 reference_map=ref_map,
                 answer=answer,
                 question=question,
                 tool_calls=tool_calls,
+                evidence=evidence,
             )
+            dim = item.dimension  # 'accuracy' | 'grounding' | 'efficiency'
             check_outputs[item.id] = {
                 'hit': hit,
-                'evidence': evidence,
+                'evidence': evidence_text,
                 'criterion': item.criterion,
                 'verify': item.verify,
                 'weight': item.weight,
+                'dimension': dim,
             }
-            total_weight += float(item.weight)
+            dim_total[dim] += float(item.weight)
             if hit:
-                hit_weight += float(item.weight)
+                dim_hit[dim] += float(item.weight)
             else:
                 deductions.append(
                     {
                         'reason': f"{item.id} not satisfied",
                         'penalty': float(item.weight),
+                        'dimension': dim,
                     }
                 )
 
-        ratio = (hit_weight / total_weight) if total_weight > 0 else 0.0
+        # Dimension ratios — default to 1.0 when no items in that dimension
+        def _ratio(dim: str) -> float:
+            return (dim_hit[dim] / dim_total[dim]) if dim_total[dim] > 0 else 1.0
+
+        accuracy_score = _ratio('accuracy')
+        grounding_score = _ratio('grounding')
+        efficiency_score = _ratio('efficiency')
+
+        # Dual totals
+        a = rubric.grounding_weight
+        b = rubric.efficiency_weight
+        strict_final = accuracy_score * (a * grounding_score + b * efficiency_score)
+
+        aw = rubric.analysis_weights
+        wa = aw.get('accuracy', 0.6)
+        wg = aw.get('grounding', 0.2)
+        we = aw.get('efficiency', 0.2)
+        analysis_final = wa * accuracy_score + wg * grounding_score + we * efficiency_score
+
+        # Legacy band_score based on overall accuracy ratio only
         low = min(rubric.score_bands) if rubric.score_bands else 0.0
         high = max(rubric.score_bands) if rubric.score_bands else low
-        raw_score = low + (high - low) * ratio
+        raw_score = low + (high - low) * accuracy_score
         band_score = self._snap_score(raw_score, rubric.score_bands)
-        confidence = 0.55 + 0.4 * ratio
+
+        overall_hit_ratio = (
+            sum(dim_hit.values()) / sum(dim_total.values())
+            if sum(dim_total.values()) > 0 else 0.0
+        )
+        confidence = 0.55 + 0.4 * overall_hit_ratio
         confidence = min(max(confidence, 0.0), 1.0)
 
         return {
@@ -269,6 +390,12 @@ class RubricEvaluator:
             'touchpoints': check_outputs,
             'deductions': deductions,
             'confidence': confidence,
+            # Three-dimensional scores
+            'accuracy_score': accuracy_score,
+            'grounding_score': grounding_score,
+            'efficiency_score': efficiency_score,
+            'strict_final': strict_final,
+            'analysis_final': analysis_final,
         }
 
     def _evaluate_check_item(
@@ -279,8 +406,10 @@ class RubricEvaluator:
         answer: str,
         question: QuestionItem,
         tool_calls: list[dict[str, Any]],
+        evidence: EvidenceBundle | None = None,
     ) -> tuple[bool, str]:
         ref = reference_map.get(item.id)
+        # --- legacy deterministic checks ---
         if item.verify == 'exact_match':
             if ref is None:
                 return False, 'missing reference answer'
@@ -307,6 +436,52 @@ class RubricEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return self._check_tool_args_match(tool_calls=tool_calls, ref=ref)
+        # --- evidence-native deterministic checks (Phase 1+) ---
+        if item.verify == 'event_type_called':
+            if ref is None:
+                return False, 'missing reference answer'
+            return self._check_event_type_called(
+                evidence=evidence, expected=ref.value
+            )
+        if item.verify == 'source_type_used':
+            if ref is None:
+                return False, 'missing reference answer'
+            return self._check_source_type_used(
+                evidence=evidence, expected=ref.value
+            )
+        if item.verify == 'call_count_range':
+            if ref is None:
+                return False, 'missing reference answer'
+            return self._check_call_count_range(
+                evidence=evidence, expected=ref.value
+            )
+        if item.verify == 'no_retries':
+            return self._check_no_retries(evidence=evidence)
+        if item.verify == 'artifact_exists':
+            if ref is None:
+                return False, 'missing reference answer'
+            return self._check_artifact_exists(
+                evidence=evidence, expected=ref.value
+            )
+        if item.verify == 'token_budget':
+            if ref is None:
+                return False, 'missing reference answer'
+            return self._check_token_budget(
+                evidence=evidence, expected=ref.value
+            )
+        # --- LLM judge checks (Phase 1+) ---
+        if item.verify == 'llm_judge_grounding':
+            if evidence is None:
+                return False, 'llm_judge_grounding requires EvidenceBundle'
+            return self._judge_adapter.judge_grounding(
+                evidence=evidence, answer=answer, question=question, item=item
+            )
+        if item.verify == 'llm_judge_efficiency':
+            if evidence is None:
+                return False, 'llm_judge_efficiency requires EvidenceBundle'
+            return self._judge_adapter.judge_efficiency(
+                evidence=evidence, answer=answer, question=question, item=item
+            )
         return False, f"unsupported verify type: {item.verify}"
 
     @staticmethod
@@ -503,3 +678,276 @@ class RubricEvaluator:
         if start >= 0 and end > start:
             return _try_loads(stripped[start : end + 1])
         raise ValueError('No JSON object found')
+
+    # ------------------------------------------------------------------
+    # Evidence-native deterministic check methods (Phase 1+)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _check_event_type_called(
+        *,
+        evidence: EvidenceBundle | None,
+        expected: Any,
+    ) -> tuple[bool, str]:
+        """Check that at least one EventRecord with the expected event_type exists."""
+        if evidence is None:
+            return False, 'no EvidenceBundle provided'
+        targets = [str(t) for t in expected] if isinstance(expected, list) else [str(expected)]
+        for evt in evidence.events:
+            if evt.event_type.value in targets and evt.succeeded:
+                return True, f"event_type '{evt.event_type.value}' found at step {evt.step}"
+        found = sorted({e.event_type.value for e in evidence.events})
+        return False, f"none of {targets} found (found: {found})"
+
+    @staticmethod
+    def _check_source_type_used(
+        *,
+        evidence: EvidenceBundle | None,
+        expected: Any,
+    ) -> tuple[bool, str]:
+        """Check that at least one EventRecord with the expected source_type exists."""
+        if evidence is None:
+            return False, 'no EvidenceBundle provided'
+        targets = [str(t) for t in expected] if isinstance(expected, list) else [str(expected)]
+        for evt in evidence.events:
+            if evt.source_type.value in targets and evt.succeeded:
+                return True, f"source_type '{evt.source_type.value}' found at step {evt.step}"
+        found = sorted({e.source_type.value for e in evidence.events})
+        return False, f"none of {targets} found (found: {found})"
+
+    @staticmethod
+    def _check_call_count_range(
+        *,
+        evidence: EvidenceBundle | None,
+        expected: Any,
+    ) -> tuple[bool, str]:
+        """Check total tool-call count is within [min, max].
+
+        ``expected`` should be a list/tuple of [min, max] or a dict
+        ``{min: int, max: int}``.
+        """
+        if evidence is None:
+            return False, 'no EvidenceBundle provided'
+        count = len(evidence.tool_calls)
+        if isinstance(expected, (list, tuple)) and len(expected) >= 2:
+            lo, hi = int(expected[0]), int(expected[1])
+        elif isinstance(expected, dict):
+            lo = int(expected.get('min', 0))
+            hi = int(expected.get('max', 9999))
+        else:
+            return False, f"unexpected call_count_range format: {expected!r}"
+        hit = lo <= count <= hi
+        return hit, f"tool_calls={count}, expected=[{lo},{hi}]"
+
+    @staticmethod
+    def _check_no_retries(
+        *,
+        evidence: EvidenceBundle | None,
+    ) -> tuple[bool, str]:
+        """Check there are no consecutive identical tool calls (loop detection)."""
+        if evidence is None:
+            return True, 'no EvidenceBundle provided (skipped)'
+        calls = evidence.tool_calls
+        for i in range(1, len(calls)):
+            if (
+                calls[i].tool_name == calls[i - 1].tool_name
+                and calls[i].args == calls[i - 1].args
+            ):
+                return (
+                    False,
+                    f"identical consecutive call to '{calls[i].tool_name}' at step {calls[i].step}",
+                )
+        return True, f"no retries detected ({len(calls)} calls)"
+
+    @staticmethod
+    def _check_artifact_exists(
+        *,
+        evidence: EvidenceBundle | None,
+        expected: Any,
+    ) -> tuple[bool, str]:
+        """Check that an artifact matching path or type substring exists."""
+        if evidence is None:
+            return False, 'no EvidenceBundle provided'
+        needle = str(expected)
+        for art in evidence.artifacts:
+            if needle in art.path or needle == art.artifact_type:
+                return True, f"artifact found: {art.path}"
+        paths = [a.path for a in evidence.artifacts]
+        return False, f"artifact '{needle}' not found (artifacts: {paths})"
+
+    @staticmethod
+    def _check_token_budget(
+        *,
+        evidence: EvidenceBundle | None,
+        expected: Any,
+    ) -> tuple[bool, str]:
+        """Check total_tokens is within budget.
+
+        ``expected`` may be a single int (max) or dict ``{max: int}``.
+        """
+        if evidence is None:
+            return True, 'no EvidenceBundle provided (skipped)'
+        total = evidence.token_usage.total_tokens
+        if isinstance(expected, dict):
+            budget = int(expected.get('max', expected.get('budget', 999_999)))
+        else:
+            budget = int(expected)
+        hit = total <= budget
+        return hit, f"total_tokens={total}, budget={budget}"
+
+
+# ---------------------------------------------------------------------------
+# JudgeAdapter — encapsulates LLM judge calls with structured JSON output
+# ---------------------------------------------------------------------------
+
+
+class JudgeAdapter:
+    """Wraps LLM judge calls for grounding and efficiency evaluation.
+
+    Produces structured verdicts with ``confidence`` and ``evidence_refs``.
+    Falls back gracefully when no LLM is configured.
+    """
+
+    def __init__(self, llm: Any = None) -> None:
+        self._llm = llm
+
+    # ------------------------------------------------------------------
+    # Public judge methods
+    # ------------------------------------------------------------------
+
+    def judge_grounding(
+        self,
+        *,
+        evidence: EvidenceBundle,
+        answer: str,
+        question: QuestionItem,
+        item: ScoringCheckItem,
+    ) -> tuple[bool, str]:
+        """Judge grounding: source_usage + answer_binding."""
+        if self._llm is None:
+            return False, 'llm_judge_grounding: no evaluator LLM configured'
+        summary = self._format_tool_calls_summary(evidence)
+        user_content = (
+            f"Question intent:\n{question.intent}\n\n"
+            f"Final answer:\n{answer}\n\n"
+            f"Tool calls summary:\n{summary}\n\n"
+            "Assess whether the answer is grounded in external sources. "
+            "Return JSON only."
+        )
+        data = self._run_structured_judge(
+            system_prompt=_GROUNDING_JUDGE_SYSTEM_PROMPT,
+            user_content=user_content,
+        )
+        if data is None:
+            return False, 'llm_judge_grounding: parse error'
+        source_usage = float(data.get('source_usage', 0.0))
+        answer_binding = float(data.get('answer_binding', 0.0))
+        verdict = str(data.get('verdict', 'fail')).lower()
+        confidence = float(data.get('confidence', 0.5))
+        evidence_refs = data.get('evidence_refs', [])
+        uncertain = bool(data.get('uncertain', False))
+        hit = verdict == 'pass' or (verdict == 'partial' and (source_usage + answer_binding) >= 1.0)
+        note = (
+            f"grounding verdict={verdict} "
+            f"source_usage={source_usage:.2f} answer_binding={answer_binding:.2f} "
+            f"conf={confidence:.2f}"
+            + (" [uncertain]" if uncertain else "")
+            + (f" refs={evidence_refs[:2]}" if evidence_refs else "")
+        )
+        return hit, note
+
+    def judge_efficiency(
+        self,
+        *,
+        evidence: EvidenceBundle,
+        answer: str,
+        question: QuestionItem,
+        item: ScoringCheckItem,
+    ) -> tuple[bool, str]:
+        """Judge efficiency: recovery_quality + process_efficiency."""
+        if self._llm is None:
+            return False, 'llm_judge_efficiency: no evaluator LLM configured'
+        summary = self._format_tool_calls_summary(evidence)
+        user_content = (
+            f"Question intent:\n{question.intent}\n\n"
+            f"Total steps: {evidence.total_steps}  "
+            f"Total tokens: {evidence.token_usage.total_tokens}  "
+            f"Model: {evidence.model_name or 'unknown'}\n\n"
+            f"Tool calls summary:\n{summary}\n\n"
+            "Assess whether the agent solved the task efficiently. "
+            "Return JSON only."
+        )
+        data = self._run_structured_judge(
+            system_prompt=_EFFICIENCY_JUDGE_SYSTEM_PROMPT,
+            user_content=user_content,
+        )
+        if data is None:
+            return False, 'llm_judge_efficiency: parse error'
+        recovery = float(data.get('recovery_quality', 0.0))
+        process = float(data.get('process_efficiency', 0.0))
+        verdict = str(data.get('verdict', 'fail')).lower()
+        confidence = float(data.get('confidence', 0.5))
+        evidence_refs = data.get('evidence_refs', [])
+        uncertain = bool(data.get('uncertain', False))
+        hit = verdict == 'pass' or (verdict == 'partial' and (recovery + process) >= 1.0)
+        note = (
+            f"efficiency verdict={verdict} "
+            f"recovery={recovery:.2f} process={process:.2f} "
+            f"conf={confidence:.2f}"
+            + (" [uncertain]" if uncertain else "")
+            + (f" refs={evidence_refs[:2]}" if evidence_refs else "")
+        )
+        return hit, note
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_tool_calls_summary(evidence: EvidenceBundle) -> str:
+        """Format tool calls as a compact numbered list for the judge prompt."""
+        lines: list[str] = []
+        for tc in evidence.tool_calls:
+            status_marker = "✓" if tc.status.value == "success" else f"✗({tc.status.value})"
+            args_preview = json.dumps(tc.args, ensure_ascii=False)
+            if len(args_preview) > 80:
+                args_preview = args_preview[:77] + "..."
+            obs_preview = tc.observation_excerpt[:80].replace("\n", " ")
+            lines.append(
+                f"  [{tc.step}.{tc.call_index}] {status_marker} {tc.tool_name}({args_preview})"
+                f"\n        → {obs_preview}"
+            )
+        return "\n".join(lines) if lines else "(no tool calls)"
+
+    def _run_structured_judge(
+        self,
+        *,
+        system_prompt: str,
+        user_content: str,
+    ) -> dict[str, Any] | None:
+        """Call the LLM judge and parse structured JSON output."""
+        from evomaster.utils.types import Dialog, SystemMessage, UserMessage
+
+        dialog = Dialog(
+            messages=[
+                SystemMessage(content=system_prompt),
+                UserMessage(content=user_content),
+            ],
+            tools=[],
+        )
+        try:
+            reply = self._llm.query(dialog)
+            text = reply.content or ''
+            # Reuse RubricEvaluator._parse_json logic inline
+            stripped = text.strip()
+            if stripped.startswith('{') and stripped.endswith('}'):
+                return json.loads(stripped)
+            start = stripped.find('{')
+            end = stripped.rfind('}')
+            if start >= 0 and end > start:
+                return json.loads(stripped[start: end + 1])
+            _eval_logger.warning("JudgeAdapter: no JSON found in LLM reply: %s", text[:200])
+            return None
+        except Exception as exc:  # noqa: BLE001
+            _eval_logger.warning("JudgeAdapter: LLM call failed: %s", exc)
+            return None

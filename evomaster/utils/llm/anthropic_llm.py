@@ -152,17 +152,25 @@ class AnthropicLLM(BaseLLM):
             request_params['system'] = system_message
 
         full_content: list[str] = []
+        stream_model: str | None = None
         try:
-            with self.client.messages.stream(**request_params) as stream:
-                for text in stream.text_stream:
+            with self.client.messages.stream(**request_params) as stream_ctx:
+                for text in stream_ctx.text_stream:
                     if text:
                         full_content.append(text)
                         if on_token is not None:
                             on_token(text)
+                # 流结束后获取最终消息以提取 model 名
+                final_msg = stream_ctx.get_final_message()
+                if final_msg and hasattr(final_msg, 'model'):
+                    stream_model = final_msg.model
         except Exception as e:
             self.logger.warning(
                 'Anthropic stream failed, falling back to query(): %s', e
             )
             return super().query_stream(dialog, on_token=on_token, **kwargs)
 
-        return AssistantMessage(content=''.join(full_content))
+        return AssistantMessage(
+            content=''.join(full_content),
+            meta={'model': stream_model or self.config.model},
+        )

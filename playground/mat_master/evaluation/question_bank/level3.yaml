@@ -11,6 +11,14 @@ rubric:
     "6.0": "Main diagnosis is plausible but one critical fix/check is missing."
     "3.0": "High-level suggestions without mapping to concrete anomaly evidence."
     "0.0": "No evidence-based diagnosis."
+  # v4 three-dimensional weights
+  grounding_weight: 0.6
+  efficiency_weight: 0.4
+  analysis_weights:
+    accuracy: 0.5
+    grounding: 0.30
+    efficiency: 0.20
+
 questions:
   - id: "L3_Q01"
     level: "L3"
@@ -34,18 +42,39 @@ questions:
       - key: "required_fields"
         value: ["kept_candidates", "excluded_candidates", "numeric_reason", "next_validation"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "kept_candidates_count"
         criterion: "Number of kept candidates is correct."
         weight: 0.25
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "excluded_candidates_count"
         criterion: "Number of excluded candidates is correct."
         weight: 0.25
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Output includes list of kept candidates, list of excluded candidates, numeric reasoning for exclusions, and proposed next validation steps."
         weight: 0.50
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Each exclusion decision cites specific numeric values from anomaly_bundle.json; no candidates are excluded based on LLM prior knowledge alone."
+        weight: 0.70
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      - id: "source_type_db"
+        criterion: "Any supplementary structure/property lookups use registered data sources (database or MCP tool)."
+        weight: 0.30
+        verify: "source_type_used"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Candidate filtering is done in a direct pass through the anomaly bundle without redundant re-reading or repeated queries."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Candidate filtering is evidence-driven and complete."]
       partial: ["Filter decisions without explicit numeric evidence."]
@@ -73,18 +102,39 @@ questions:
       - key: "required_fields"
         value: ["root_cause", "strategy_A", "strategy_B", "verification_signal"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "imaginary_frequency_cm1"
-        criterion: "Imaginary mode value is read correctly."
+        criterion: "Imaginary mode value is read correctly from the anomaly bundle."
         weight: 0.25
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "min_strategy_count"
         criterion: "At least two repair strategies are given."
         weight: 0.25
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Output includes root cause explanation, two physically distinct repair strategies (A and B), and a verification signal to confirm the fix."
         weight: 0.50
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Root cause and strategies are grounded in the imaginary frequency value and mode character from anomaly_bundle.json."
+        weight: 0.70
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      - id: "artifact_phonon"
+        criterion: "Agent reads and references a phonon data artifact from the bundle."
+        weight: 0.30
+        verify: "artifact_exists"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Imaginary mode diagnosis and dual-strategy proposal are completed without redundant re-reading of the anomaly bundle."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Diagnosis and dual-path repair are concrete."]
       partial: ["Only one repair strategy or weak verification plan."]
@@ -109,14 +159,34 @@ questions:
       - key: "required_fields"
         value: ["class_A", "class_B", "class_C", "retry_parameters", "stop_rule"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "failure_class_count"
-        criterion: "Failure-class count is correct."
+        criterion: "Failure-class count is correct (exactly 3)."
         weight: 0.30
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Output includes per-failure-class classification, retry parameters for each class, and a stop rule for retry loops."
         weight: 0.70
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Each failure class is grounded in specific log entries from anomaly_bundle.json; retry parameters cite bundle-specific error patterns."
+        weight: 0.70
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      - id: "artifact_log"
+        criterion: "Agent reads and references failure log artifact from the bundle."
+        weight: 0.30
+        verify: "artifact_exists"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Failure taxonomy and retry mapping are produced in a direct analysis pass without unnecessary repeated tool calls."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Failure taxonomy and retry mapping are complete."]
       partial: ["Failure classes identified but retry settings vague."]
@@ -144,18 +214,39 @@ questions:
       - key: "required_fields"
         value: ["outlier_index", "cause_hypotheses", "re_fit_plan", "expected_r2"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "outlier_index"
         criterion: "Outlier point index is correctly identified."
         weight: 0.30
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "target_r2_after_fix"
         criterion: "Expected post-fix fit quality is realistic."
         weight: 0.25
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Output includes identified outlier index, cause hypotheses, re-fit protocol, and expected R² improvement."
         weight: 0.45
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Outlier identification is based on specific E-V data points from anomaly_bundle.json; cause hypotheses reference the actual data values."
+        weight: 0.70
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      - id: "artifact_eos"
+        criterion: "Agent reads and references EOS data artifact from the bundle."
+        weight: 0.30
+        verify: "artifact_exists"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "EOS outlier analysis and re-fit plan are produced without repeated re-parsing of the same data file."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Outlier diagnosis is evidence-backed and actionable."]
       partial: ["Outlier detected but re-fit protocol weak."]
@@ -179,14 +270,34 @@ questions:
       - key: "required_fields"
         value: ["phase_window", "stable_defect", "migration_path", "validation_metric"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "stable_defect_label"
         criterion: "Correctly identifies the stable defect species as vacancy under the given chemical potential conditions."
         weight: 0.35
         verify: "llm_judge"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Output includes chemical potential phase window, stable defect identification, migration path proposal, and validation metric."
         weight: 0.65
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Stable defect selection is grounded in the phase diagram window data from anomaly_bundle.json; migration path references the defect geometry from the bundle."
+        weight: 0.70
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      - id: "artifact_defect"
+        criterion: "Agent reads and references defect formation energy data artifact from the bundle."
+        weight: 0.30
+        verify: "artifact_exists"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Defect selection and migration plan are derived without redundant re-reading of the phase diagram data."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Phase conflict resolved with explicit follow-up path."]
       partial: ["Stable species guessed without phase-window evidence."]
@@ -211,14 +322,34 @@ questions:
       - key: "required_fields"
         value: ["signal_conflict", "branch_A", "branch_B", "disambiguation_criterion"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "strategy_branch_count"
         criterion: "Provides at least two disambiguation branches."
         weight: 0.30
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Output includes description of signal conflict, two disambiguation branches, and explicit decision criterion."
         weight: 0.70
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Signal conflict description cites specific observations from anomaly_bundle.json; disambiguation criterion references measurable quantities from the bundle."
+        weight: 0.70
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      - id: "artifact_signal"
+        criterion: "Agent reads and references phase-transition signal data artifact from the bundle."
+        weight: 0.30
+        verify: "artifact_exists"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Ambiguity analysis and branch strategy are produced in a single coherent pass over the anomaly data."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Ambiguity is resolved by explicit branch strategy."]
       partial: ["Mentions branches without decision criterion."]
