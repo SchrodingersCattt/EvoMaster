@@ -1,8 +1,9 @@
 """Agent execution service: new matmaster pipeline orchestration.
 
 Rewritten per D-12: run_agent_sync() is a thin orchestration layer using:
-  Playground.prepare() -> Bohrium -> Exp.assemble() -> ChatHistory ->
-  EventRouter -> Kernel.run() -> post-processing
+  Playground.prepare() -> get_chat_events_table() -> EventRouter bootstrap ->
+  Bohrium -> WorkspaceHandler attachment -> Exp.assemble() -> ChatHistory ->
+  Kernel.run() -> post-processing
 
 Method signature (12 parameters) unchanged -- zero caller modifications.
 """
@@ -362,8 +363,9 @@ class AgentRunService:
     ) -> None:
         """Execute agent in background thread using new matmaster pipeline.
 
-        Pipeline: Playground.prepare() -> Bohrium -> Exp.assemble() ->
-        ChatHistory -> EventRouter -> Kernel.run() -> post-processing.
+        Pipeline: Playground.prepare() -> get_chat_events_table() ->
+        EventRouter bootstrap -> Bohrium -> WorkspaceHandler attachment ->
+        Exp.assemble() -> ChatHistory -> Kernel.run() -> post-processing.
 
         Method signature unchanged per D-12: all 12 parameters preserved.
         """
@@ -398,8 +400,31 @@ class AgentRunService:
                     "task_id": task_id,
                 }
             )
+            events_table = get_chat_events_table()
 
-            # -- Stage 2: Bohrium credentials + SSH --
+            # -- Stage 2: EventRouter bootstrap --
+            router = EventRouter(
+                bus=bus,
+                handlers=[
+                    PersistenceHandler(
+                        events_table,
+                        session_id,
+                        task_id,
+                        invocation_id,
+                    ),
+                    SSEHandler(
+                        send_cb,
+                        loop,
+                        session_id,
+                        task_id,
+                        invocation_id,
+                        mode,
+                    ),
+                ],
+            )
+            router.start()
+
+            # -- Stage 3: Bohrium credentials + SSH --
             bohrium_svc = BohriumSetupService(self._sessions_service, bus)
             run_creds, user_id_for_ak, org_id = bohrium_svc.load_credentials(
                 session_id
@@ -440,8 +465,19 @@ class AgentRunService:
             if bohrium_result.abort_result is not None:
                 return
             pg_ctx = pg_ctx.with_bohrium(bohrium_result._asdict())
+            # Workspace handling depends on the finalized Bohrium/archival context.
+            router.add_handler(
+                WorkspaceHandler(
+                    session_id=session_id,
+                    task_id=task_id,
+                    ssh_attached=ssh_attached,
+                    archival_config=pg_ctx.archival,
+                    workspace_path=pg_ctx.workdir,
+                    upload_fn=_build_workspace_upload_fn(pg_ctx.archival),
+                )
+            )
 
-            # -- Stage 3: Exp assembly --
+            # -- Stage 4: Exp assembly --
             from matmaster.core.exp import Exp
 
             exp_config = {
@@ -477,8 +513,7 @@ class AgentRunService:
                 update={"hooks": [*runtime.spec.hooks, *external_hooks]}
             )
 
-            # -- Stage 4: History --
-            events_table = get_chat_events_table()
+            # -- Stage 5: History --
             raw_events = (
                 events_table.get_session_events(
                     session_id, limit=_DIALOG_HISTORY_MAX_EVENTS
@@ -489,37 +524,6 @@ class AgentRunService:
             history = ChatHistoryConverter.events_to_messages(
                 ChatHistoryConverter.exclude_task_events(raw_events, task_id)
             )
-
-            # -- Stage 5: EventRouter --
-            workspace_path = pg_ctx.workdir
-            router = EventRouter(
-                bus=bus,
-                handlers=[
-                    PersistenceHandler(
-                        events_table,
-                        session_id,
-                        task_id,
-                        invocation_id,
-                    ),
-                    SSEHandler(
-                        send_cb,
-                        loop,
-                        session_id,
-                        task_id,
-                        invocation_id,
-                        mode,
-                    ),
-                    WorkspaceHandler(
-                        session_id=session_id,
-                        task_id=task_id,
-                        ssh_attached=ssh_attached,
-                        archival_config=pg_ctx.archival,
-                        workspace_path=workspace_path,
-                        upload_fn=_build_workspace_upload_fn(pg_ctx.archival),
-                    ),
-                ],
-            )
-            router.start()
 
             # -- Stage 6: Kernel execution --
             finish_event = runtime.kernel.run(
