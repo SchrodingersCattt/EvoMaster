@@ -23,12 +23,16 @@ from matmaster.core.bus import MessageBus
 from matmaster.types.events import (
     AssistantStateEvent,
     BohriumNodeEvent,
+    CancelledEvent,
     ConfirmationRequestEvent,
+    ConfirmationTimeoutEvent,
     ErrorEvent,
+    ExpRunEvent,
     McpConnectEvent,
     McpServerStatusEvent,
     ResponseEvent,
     RunResultEvent,
+    SkillHitEvent,
     StreamClosedEvent,
     ThoughtEvent,
     ToolCallEvent,
@@ -329,25 +333,102 @@ class TestPersistenceHandler:
 
         events_table.add_event.assert_not_called()
 
-    def test_persists_bohrium_node_payload_as_content(self) -> None:
-        """handle() persists Bohrium node payload as the content field."""
+    def test_tool_call_persists_public_shape(self) -> None:
         handler, events_table = self._make_handler()
-        bohrium_payload = {
-            "type": "setup_ready",
-            "content": {"node_id": "node-1"},
-            "phase": "ssh",
-        }
 
         handler.handle(
-            BohriumNodeEvent(source="BohriumSetup", payload=bohrium_payload)
+            ToolCallEvent(
+                source="Agent",
+                call_id="c1",
+                tool_name="bash",
+                arguments={"cmd": "ls"},
+            )
         )
 
-        events_table.add_event.assert_called_once()
-        args = events_table.add_event.call_args
-        assert args[0][0] == "sess1"
-        assert args[0][1] == "BohriumSetup"
-        assert args[0][2] == "bohrium_node"
-        assert args[0][3] == bohrium_payload
+        args = events_table.add_event.call_args[0]
+        assert args[3] == {
+            "id": "c1",
+            "call_id": "c1",
+            "name": "bash",
+            "args": {"cmd": "ls"},
+        }
+
+    def test_tool_result_persists_public_shape(self) -> None:
+        handler, events_table = self._make_handler()
+
+        handler.handle(
+            ToolResultEvent(
+                source="Agent",
+                call_id="c1",
+                tool_name="bash",
+                result="file.txt",
+                info={"auto_save": True},
+            )
+        )
+
+        args = events_table.add_event.call_args[0]
+        assert args[3] == {
+            "id": "c1",
+            "call_id": "c1",
+            "name": "bash",
+            "result": "file.txt",
+            "info": {"auto_save": True},
+        }
+
+    def test_run_result_persists_content_status_reason(self) -> None:
+        handler, events_table = self._make_handler()
+
+        handler.handle(
+            RunResultEvent(
+                source="Agent",
+                status="completed",
+                reason="natural",
+                final_content="here are your files",
+            )
+        )
+
+        args = events_table.add_event.call_args[0]
+        assert args[3] == {
+            "content": "here are your files",
+            "status": "completed",
+            "reason": "natural",
+        }
+
+    def test_assistant_state_persists_state_dict(self) -> None:
+        handler, events_table = self._make_handler()
+
+        state = {"role": "assistant", "content": "hi", "tool_calls": []}
+        handler.handle(AssistantStateEvent(source="Agent", state=state))
+
+        args = events_table.add_event.call_args[0]
+        assert args[3] == state
+
+    def test_bohrium_node_persists_flattened_public_shape(self) -> None:
+        handler, events_table = self._make_handler()
+
+        handler.handle(
+            BohriumNodeEvent(
+                source="BohriumSetup",
+                payload={
+                    "type": "setup_ready",
+                    "content": {
+                        "status": "ready",
+                        "message": "Node ready",
+                        "node_id": 1,
+                    },
+                    "phase": "ssh",
+                },
+            )
+        )
+
+        args = events_table.add_event.call_args[0]
+        assert args[3] == {
+            "status": "ready",
+            "message": "Node ready",
+            "node_id": 1,
+            "event_type": "setup_ready",
+            "phase": "ssh",
+        }
 
 
 # ── SSEHandler Tests ────────────────────────────────────
