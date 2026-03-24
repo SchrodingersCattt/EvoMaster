@@ -143,9 +143,9 @@ class TestRunInterruptedDetection:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "long task", stop_event=stop_event)
 
-        assert isinstance(finish, FinishEvent)
-        assert finish.reason == "cancelled"
-        assert finish.status == "cancelled"
+        assert isinstance(finish.event, FinishEvent)
+        assert finish.event.reason == "cancelled"
+        assert finish.event.status == "cancelled"
 
     def test_run_interrupted_detection_restart(self, tmp_path: Path) -> None:
         """Verify stop_event from Redis stop key detected (same mechanism)."""
@@ -163,7 +163,7 @@ class TestRunInterruptedDetection:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "restart task", stop_event=stop_event)
 
-        assert finish.reason == "cancelled"
+        assert finish.event.reason == "cancelled"
 
 
 # ── QUAL-04: Workspace upload scenarios ──────────────

@@ -119,7 +119,7 @@ class TestEventSequenceAlignment:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "alignment test")
 
-        assert finish.reason == "natural"
+        assert finish.event.reason == "natural"
 
         # Collect events from bus
         events = []

@@ -271,9 +271,9 @@ class TestNaturalFinish:
         kernel = AgentKernel()
         result = kernel.run(spec, "test task")
 
-        assert isinstance(result, FinishEvent)
-        assert result.reason == "natural"
-        assert result.final_content == "Hello"
+        assert isinstance(result.event, FinishEvent)
+        assert result.event.reason == "natural"
+        assert result.event.final_content == "Hello"
 
     def test_natural_finish_messages(self) -> None:
         from matmaster.core.agent import AgentKernel
@@ -286,7 +286,7 @@ class TestNaturalFinish:
         kernel = AgentKernel()
         result = kernel.run(spec, "test task")
 
-        assert result.reason == "natural"
+        assert result.event.reason == "natural"
 
 
 class TestMaxTurns:
@@ -301,8 +301,8 @@ class TestMaxTurns:
         kernel = AgentKernel()
         result = kernel.run(spec, "test")
 
-        assert isinstance(result, FinishEvent)
-        assert result.reason == "max_turns"
+        assert isinstance(result.event, FinishEvent)
+        assert result.event.reason == "max_turns"
 
 
 class TestExternalCancel:
@@ -317,8 +317,8 @@ class TestExternalCancel:
         kernel = AgentKernel()
         result = kernel.run(spec, "test", stop_event=stop_event)
 
-        assert isinstance(result, FinishEvent)
-        assert result.reason == "cancelled"
+        assert isinstance(result.event, FinishEvent)
+        assert result.event.reason == "cancelled"
 
     def test_cancel_during_run(self) -> None:
         from matmaster.core.agent import AgentKernel
@@ -364,8 +364,8 @@ class TestExternalCancel:
         kernel = AgentKernel()
         result = kernel.run(spec, "test", stop_event=stop_event)
 
-        assert isinstance(result, FinishEvent)
-        assert result.reason == "cancelled"
+        assert isinstance(result.event, FinishEvent)
+        assert result.event.reason == "cancelled"
 
 
 class TestHookStopped:
@@ -378,8 +378,8 @@ class TestHookStopped:
         kernel = AgentKernel()
         result = kernel.run(spec, "test")
 
-        assert isinstance(result, FinishEvent)
-        assert result.reason == "hook_stopped"
+        assert isinstance(result.event, FinishEvent)
+        assert result.event.reason == "hook_stopped"
 
 
 class TestGuardBlocks:
@@ -449,8 +449,8 @@ class TestStreamingAccumulation:
         kernel = AgentKernel()
         result = kernel.run(spec, "test")
 
-        assert result.reason == "natural"
-        assert result.final_content == "Hello"
+        assert result.event.reason == "natural"
+        assert result.event.final_content == "Hello"
         assert [chunk.stream_state for chunk in chunk_hook.chunks] == [
             "start",
             "streaming",
@@ -477,9 +477,9 @@ class TestFinishValidation:
         kernel = AgentKernel()
         result = kernel.run(spec, "test")
 
-        assert result.reason == "invalid_finish"
-        assert result.status == "failed"
-        assert result.final_content is None
+        assert result.event.reason == "invalid_finish"
+        assert result.event.status == "failed"
+        assert result.event.final_content is None
         assert [chunk.stream_state for chunk in chunk_hook.chunks] == [
             "start",
             "streaming",
@@ -562,8 +562,8 @@ class TestFullCycle:
         kernel = AgentKernel()
         result = kernel.run(spec, "test")
 
-        assert result.reason == "natural"
-        assert result.final_content == "final answer"
+        assert result.event.reason == "natural"
+        assert result.event.final_content == "final answer"
         my_tool = tools[0]
         assert len(my_tool.calls) == 1
         assert my_tool.calls[0][0] == "my_tool"
@@ -597,7 +597,7 @@ class TestHistoryParameter:
         kernel = AgentKernel()
         result = kernel.run(spec, "new question", history=history)
 
-        assert result.reason == "natural"
+        assert result.event.reason == "natural"
         # Check captured API messages structure
         msgs = captured_messages[0]
         assert msgs[0]["role"] == "system"
@@ -629,7 +629,7 @@ class TestHistoryParameter:
         kernel = AgentKernel()
         result = kernel.run(spec, "test task", history=None)
 
-        assert result.reason == "natural"
+        assert result.event.reason == "natural"
         msgs = captured_messages[0]
         assert len(msgs) == 2
         assert msgs[0]["role"] == "system"
@@ -657,7 +657,7 @@ class TestHistoryParameter:
         kernel = AgentKernel()
         result = kernel.run(spec, "test task", history=[])
 
-        assert result.reason == "natural"
+        assert result.event.reason == "natural"
         msgs = captured_messages[0]
         assert len(msgs) == 2
         assert msgs[0]["role"] == "system"
@@ -698,3 +698,51 @@ class TestExecutionOrder:
         first_stream = recording.calls.index("on_stream_chunk")
         first_pre_tool = recording.calls.index("pre_tool_call")
         assert first_stream < first_pre_tool
+
+
+class TestKernelRunResultMessages:
+    """kernel.run() returns KernelRunResult with message transcript."""
+
+    def test_natural_finish_returns_messages(self) -> None:
+        from matmaster.core.agent import AgentKernel
+        from matmaster.types.runtime import KernelRunResult
+
+        provider = StreamingProvider([
+            StreamChunk(content="Hello"),
+            StreamChunk(finish_reason="stop"),
+        ])
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+        result = kernel.run(spec, "test task")
+
+        assert isinstance(result, KernelRunResult)
+        assert result.event.reason == "natural"
+        # Messages: [SystemMessage, UserMessage, AssistantMessage]
+        assert len(result.messages) == 3
+        assert isinstance(result.messages[0], SystemMessage)
+        assert isinstance(result.messages[1], UserMessage)
+        assert isinstance(result.messages[2], AssistantMessage)
+        assert result.messages[2].content == "Hello"
+
+    def test_tool_cycle_returns_all_messages(self) -> None:
+        from matmaster.core.agent import AgentKernel
+        from matmaster.types.runtime import KernelRunResult
+
+        tc = ToolCallData(id="tc-1", name="my_tool", arguments={"key": "val"})
+        provider = ToolCallingProvider(
+            tool_calls=[tc], max_tool_turns=1, final_content="final"
+        )
+        tool_reg, _ = _make_tool_registry(["my_tool"], result="tool output")
+        spec = _make_spec(provider=provider, tool_registry=tool_reg, max_turns=10)
+        kernel = AgentKernel()
+        result = kernel.run(spec, "test")
+
+        assert isinstance(result, KernelRunResult)
+        assert result.event.reason == "natural"
+        # Messages: System, User, Assistant(tool_calls), ToolMessage, Assistant(final)
+        assert len(result.messages) == 5
+        assert isinstance(result.messages[2], AssistantMessage)
+        assert result.messages[2].tool_calls is not None
+        assert isinstance(result.messages[3], ToolMessage)
+        assert isinstance(result.messages[4], AssistantMessage)
+        assert result.messages[4].content == "final"

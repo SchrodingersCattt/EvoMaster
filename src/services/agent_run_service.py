@@ -526,12 +526,13 @@ class AgentRunService:
             )
 
             # -- Stage 6: Kernel execution --
-            run_result_event = runtime.kernel.run(
+            kernel_result = runtime.kernel.run(
                 spec=spec,
                 task=user_prompt,
                 history=history,
                 stop_event=stop_event,
             )
+            run_result_event = kernel_result.event
 
             # -- Post-processing --
             if run_result_event.reason == "cancelled":

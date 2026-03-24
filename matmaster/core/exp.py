@@ -200,9 +200,10 @@ class Exp:
         """
         runtime = self.build_runtime(ctx, bus=bus)
         try:
-            return runtime.kernel.run(
+            result = runtime.kernel.run(
                 runtime.spec, task, history=history, stop_event=stop_event
             )
+            return result.event
         finally:
             runtime.cleanup()
 
