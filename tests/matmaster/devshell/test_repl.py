@@ -1,6 +1,7 @@
 """Tests for REPL builtin command parsing and routing."""
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 import io
 
@@ -57,3 +58,34 @@ class TestFormatBanner:
         banner = format_banner(cfg, workdir="/my/workdir", log_dir="/my/logs")
         assert "/my/workdir" in banner
         assert "/my/logs" in banner
+
+
+class TestCliParsing:
+    def test_parse_required_args(self) -> None:
+        from matmaster.devshell.cli import parse_args
+
+        args = parse_args(["--workdir", "/tmp/ws", "--log-dir", "/tmp/logs"])
+        assert args.workdir == Path("/tmp/ws")
+        assert args.log_dir == Path("/tmp/logs")
+
+    def test_parse_optional_args(self) -> None:
+        from matmaster.devshell.cli import parse_args
+
+        args = parse_args([
+            "--workdir", "/tmp/ws",
+            "--log-dir", "/tmp/logs",
+            "--config", "custom.yaml",
+            "--session", "docker",
+            "--verbose",
+        ])
+        assert args.config == Path("custom.yaml")
+        assert args.session == "docker"
+        assert args.verbose is True
+
+    def test_defaults(self) -> None:
+        from matmaster.devshell.cli import parse_args
+
+        args = parse_args(["--workdir", "/tmp/ws", "--log-dir", "/tmp/logs"])
+        assert args.config is None
+        assert args.session is None
+        assert args.verbose is False
