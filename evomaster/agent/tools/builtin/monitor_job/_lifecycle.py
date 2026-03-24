@@ -45,9 +45,9 @@ logger = logging.getLogger(__name__)
 def _llm_decision_interval_at_poll(poll_index: int, base_interval: int) -> int:
     """Return the effective decision_check_interval at this poll (progressive schedule).
 
-    - polls 0~9 (前 ~5 min): 每 2 次轮询做 1 次 LLM 决策
-    - polls 10~29 (接下来 ~10 min): 每 5 次
-    - polls 30+: 每 base_interval 次（默认 10，约 5 min）
+    - polls 0~9 (~5 min at 30s interval): every 5 polls → 1 LLM decision
+    - polls 10~39 (~15 min): every 10 polls
+    - polls 40+: every base_interval polls (default 10, ~5 min at 30s)
     """
     if poll_index < 10:
         return 5
@@ -324,47 +324,37 @@ def _run_lifecycle(
         polls += 1
 
     # ── Loop ended: either confirmed failure (break) or max_polls exceeded ──
-    # If we exited because polls >= max_polls, job was still "Running".
+    # If we exited because polls >= max_polls, job was still running.
+    # Unified path: always return status="running" so the caller knows the job
+    # is alive and can decide to re-poll or finish with task_completed=partial.
     if failure_confirm_count < _MAX_FAILURE_CONFIRMS:
-        # 单次轮询上限（挂起恢复）：返回 running，由调度器定时恢复后再次调用；间隔可由 LLM 建议
-        if max_polls_per_call is not None and polls >= max_polls:
-            effective_interval = poll_interval
-            if last_llm_decision and isinstance(
-                last_llm_decision.get('suggested_poll_interval_seconds'), (int, float)
-            ):
-                try:
-                    effective_interval = max(
-                        30,
-                        min(
-                            300,
-                            int(last_llm_decision['suggested_poll_interval_seconds']),
-                        ),
-                    )
-                except (TypeError, ValueError):
-                    pass
-            return {
-                'status': 'running',
-                'job_id': current_job_id,
-                'bohr_job_id': bohr_job_id,
-                'llm_decision': last_llm_decision,
-                'llm_decision_history': llm_decision_history,
-                'message': (
-                    f"Job {current_job_id} still running after {polls} poll(s). "
-                    f"Re-call monitor_job with the same job_id in about {effective_interval} seconds to continue."
-                ),
-                'poll_interval': effective_interval,
-            }
+        effective_interval = poll_interval
+        if last_llm_decision and isinstance(
+            last_llm_decision.get('suggested_poll_interval_seconds'), (int, float)
+        ):
+            try:
+                effective_interval = max(
+                    30,
+                    min(
+                        300,
+                        int(last_llm_decision['suggested_poll_interval_seconds']),
+                    ),
+                )
+            except (TypeError, ValueError):
+                pass
         return {
-            'status': 'timeout',
+            'status': 'running',
             'job_id': current_job_id,
             'bohr_job_id': bohr_job_id,
             'llm_decision': last_llm_decision,
             'llm_decision_history': llm_decision_history,
             'message': (
-                f"Job {current_job_id} still running after {polls} polls (max {max_polls}). "
-                'Monitor timed out; job may still be running on Bohrium. '
-                'Re-call monitor_job with the same job_id to continue, or check the job on Bohrium.'
+                f"Job {current_job_id} still running after {polls} poll(s) (max {max_polls}). "
+                f"Re-call monitor_job with the same job_id in about {effective_interval} seconds "
+                'to continue watching, or finish with task_completed=partial. '
+                'Do NOT start unrelated work while the job is pending.'
             ),
+            'poll_interval': effective_interval,
         }
 
     # ── Confirmed failed — read log tail for LLM diagnosis ──

@@ -127,6 +127,13 @@
 - Before calling manuscript-scribe write_section or init_manuscript, run literature search (mat_sn_search-papers-normal, mat_sn_scholar-search, web-search) for the section topic unless the user already provided source files.
 - Do not write sections from memory only; ground content in retrieved material and cite it. When citing papers use: In [year], [first author] et al. [did what / found that ...]; [n](url).
 
+## HPC job monitoring: still_running / running status (MANDATORY)
+- When a job monitoring tool returns `status: "still_running"` (poll_job.py) or `status: "running"` (monitor_job), the job is **alive on Bohrium** — this is NOT a failure or timeout error.
+- You MUST choose one of two responses:
+  1. **Re-invoke the monitor** with the same job_id to continue watching (preferred when the session budget allows).
+  2. **Call `finish` with `task_completed=partial`** and report the job_id so the user knows it is still running.
+- **Do NOT start unrelated tasks** (web search, literature retrieval, structure building, etc.) while waiting for HPC jobs to complete.
+
 ## Calculation job failure: diagnose, fix, or abort (MANDATORY)
 - When **monitor_job** returns `status='failed'`:
   1. Read the `log_tail` field in the response — it contains the last section of the job log.

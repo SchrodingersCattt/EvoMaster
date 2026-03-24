@@ -207,15 +207,38 @@ Universal monitor script — software-agnostic.
 - `--result-dir`: Local directory to extract results into. Default: `results/run_<job_id>`.
 - `--max-polls`: Maximum poll attempts. Default: 2880.
 - `--poll-interval`: Seconds between polls. Default: 30.
+- `--timeout-minutes`: Optional convenience shortcut. Computes `max_polls = max(1, timeout_minutes * 60 / poll_interval)` and overrides `--max-polls`. Use this instead of manually computing `--max-polls` when you want a wall-time cap (e.g. `--timeout-minutes 60` → 120 polls at 30 s).
 
 **`script_timeout`** (`use_skill` parameter, not a script flag): Always set to `max_polls × poll_interval` (default **86400 s** = 2880 × 30). Without it the session kills the process after 60 s.
 
 > ⚠️ **Do NOT reduce `--max-polls` below 2880** unless the user explicitly requests a shorter timeout. HPC jobs can take many hours; underestimating `--max-polls` will cause the poll loop to exhaust before the job finishes. When in doubt, always use the defaults: `--max-polls 2880`, `script_timeout: 86400`.
 
-**Output** (stdout JSON):
+**Output** (stdout JSON — success):
 ```json
-{"success": true, "job_id": 12345, "status": "Finished", "result_dir": "results/run_12345", "files": ["orca.out", "orca.gbw"], "log_tail": "..."}
+{"success": true, "job_id": 12345, "status": "Finished", "result_dir": "results/run_12345", "files": ["orca.out", "orca.gbw"], "polls_done": 42, "elapsed_seconds": 1260.0, "log_tail": "..."}
 ```
+
+**Output** (stdout JSON — poll budget exhausted, job still running):
+```json
+{"success": true, "job_id": 12345, "status": "still_running", "polls_done": 120, "elapsed_seconds": 3600.0, "log_tail": "", "message": "Poll budget exhausted (120/120 polls, 60.0 min). Job is still running on Bohrium (job_id=12345). Re-invoke poll_job.py with the same --job-id to continue monitoring, or finish with task_completed=partial."}
+```
+
+> **`still_running` is NOT a failure.** `success: true` and exit code 0 mean the job is alive on Bohrium. See "Resuming Monitoring" below.
+
+**Output** (stdout JSON — failed):
+```json
+{"success": false, "job_id": 12345, "status": "Failed", "result_dir": "results/run_12345", "files": [...], "polls_done": 5, "elapsed_seconds": 150.0, "log_tail": "<error from log file>", "error": "..."}
+```
+
+### Resuming Monitoring
+
+When `poll_job.py` returns `status: "still_running"` (or `monitor_job` returns `status: "running"`):
+
+1. **The job is alive on Bohrium** — this is not an error or timeout.
+2. **Decision point** — choose one of:
+   - **Re-poll** (preferred when session budget allows): re-invoke `poll_job.py` with the same `--job-id`. The script picks up where it left off (Bohrium tracks state, not the client).
+   - **Yield with partial result**: call `finish` with `task_completed=partial`, report the `job_id`, and explain that the job is still running. The user can re-invoke the agent later to check.
+3. **Do NOT start unrelated tasks** (literature search, structure building, etc.) while the job is pending.
 
 ### list_images.py
 

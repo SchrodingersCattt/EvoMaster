@@ -7,6 +7,8 @@ This policy centralizes:
 2) Which tool calls are allowed while async jobs are pending.
 """
 
+import json
+
 
 class AsyncExecutionPolicy:
     """Single policy entry for async-execution behavior."""
@@ -85,6 +87,16 @@ class AsyncExecutionPolicy:
             return True
         if name == 'monitor_job':
             return True
+        if name == 'use_skill':
+            # Only allow bohrium-job skill (for poll_job.py re-invocation) during pending
+            try:
+                args = json.loads(tool_call.function.arguments or '{}')
+                skill_name = (args.get('skill_name') or '').strip().lower()
+                if skill_name == 'bohrium-job':
+                    return True
+            except Exception:
+                pass
+            return False
         return False
 
     @staticmethod
