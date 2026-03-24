@@ -155,7 +155,11 @@ class AgentKernel:
                     continue
 
                 # Tool execution
-                result = spec.tool_registry.execute(tc.name, tc.arguments)
+                try:
+                    result = spec.tool_registry.execute(tc.name, tc.arguments)
+                except Exception as e:
+                    result = f"Error executing tool '{tc.name}': {type(e).__name__}: {e}"
+                    logger.exception("Tool execution failed: %s", tc.name)
                 messages.append(
                     ToolMessage(
                         tool_call_id=tc.id,
