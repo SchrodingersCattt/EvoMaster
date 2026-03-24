@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import FinishEvent
@@ -30,27 +31,27 @@ def _make_ctx(*, with_llm: bool = False) -> PlaygroundContext:
 
 
 class TestExpConstruction:
-    """Exp is a concrete class instantiated with a config dict."""
+    """Exp is a concrete class instantiated with an ExpConfig."""
 
     def test_exp_is_concrete(self) -> None:
         """Exp can be instantiated directly (not abstract)."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         assert isinstance(exp, Exp)
 
     def test_exp_name_from_config(self) -> None:
-        """exp_name reads from config['name']."""
-        exp = Exp({"name": "my-experiment"})
+        """exp_name reads from config.name."""
+        exp = Exp(ExpConfig(name="my-experiment"))
         assert exp.exp_name == "my-experiment"
 
-    def test_exp_name_defaults_to_unnamed(self) -> None:
-        """Missing name in config defaults to 'unnamed'."""
-        exp = Exp({})
-        assert exp.exp_name == "unnamed"
+    def test_exp_name_defaults_to_direct(self) -> None:
+        """Default name in ExpConfig is 'direct'."""
+        exp = Exp(ExpConfig())
+        assert exp.exp_name == "direct"
 
-    def test_exp_empty_config(self) -> None:
-        """Exp accepts empty config dict."""
-        exp = Exp({})
-        assert exp._config == {}
+    def test_exp_stores_config(self) -> None:
+        """Exp accepts ExpConfig."""
+        exp = Exp(ExpConfig())
+        assert isinstance(exp._config, ExpConfig)
 
 
 # ── TestExpAssemble ──────────────────────────────────────
@@ -61,65 +62,56 @@ class TestExpAssemble:
 
     def test_returns_agent_runtime_spec(self) -> None:
         """assemble() returns an AgentRuntimeSpec instance."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx()
         spec = exp.assemble(ctx)
         assert isinstance(spec, AgentRuntimeSpec)
 
     def test_max_turns_from_config(self) -> None:
         """max_turns in config propagates to spec."""
-        exp = Exp({"name": "test", "max_turns": 50})
+        exp = Exp(ExpConfig(name="test", max_turns=50))
         ctx = _make_ctx()
         spec = exp.assemble(ctx)
         assert spec.max_turns == 50
 
     def test_max_turns_default(self) -> None:
         """Default max_turns is 100 when not in config."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx()
         spec = exp.assemble(ctx)
         assert spec.max_turns == 100
 
-    def test_guards_from_config(self) -> None:
-        """guards in config propagate to spec."""
-        mock_guard = MagicMock(spec=["evaluate"])
-        mock_guard.evaluate = MagicMock()
-        exp = Exp({"name": "test", "guards": [mock_guard]})
+    def test_guards_deferred(self) -> None:
+        """guards are deferred to build_runtime; assemble returns empty list."""
+        exp = Exp(ExpConfig(name="test", guards=["mock_guard"]))
         ctx = _make_ctx()
         spec = exp.assemble(ctx)
-        assert spec.guards == [mock_guard]
+        assert spec.guards == []
 
-    def test_meta_stores_extra_config(self) -> None:
-        """Meta bag captures prompt_template and MCP/skill config."""
-        exp = Exp({
-            "name": "test",
-            "prompt_template": "custom.txt",
-            "skills": {"enabled": True},
-            "mcp": {"servers": ["s1"]},
-        })
+    def test_meta_is_empty(self) -> None:
+        """Meta bag is empty with new ExpConfig design."""
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx()
         spec = exp.assemble(ctx)
-        assert spec.meta.get("prompt_template") == "custom.txt"
-        assert spec.meta.get("skills") == {"enabled": True}
-        assert spec.meta.get("mcp") == {"servers": ["s1"]}
+        assert spec.meta == {}
 
     def test_mode_from_config(self) -> None:
         """mode in config propagates to spec."""
-        exp = Exp({"name": "test", "mode": "planner"})
+        exp = Exp(ExpConfig(name="test", mode="planner"))
         ctx = _make_ctx()
         spec = exp.assemble(ctx)
         assert spec.mode == "planner"
 
     def test_mode_default(self) -> None:
         """Default mode is 'direct'."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx()
         spec = exp.assemble(ctx)
         assert spec.mode == "direct"
 
     def test_llm_provider_from_ctx(self) -> None:
         """llm_provider comes from ctx, not config."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
         spec = exp.assemble(ctx)
         assert spec.llm_provider is ctx.llm_provider
@@ -133,7 +125,7 @@ class TestExpBuildRuntime:
 
     def test_returns_agent_runtime(self) -> None:
         """build_runtime() returns an AgentRuntime dataclass."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -143,7 +135,7 @@ class TestExpBuildRuntime:
 
     def test_uses_ctx_llm_provider(self) -> None:
         """Runtime spec uses LLM provider from ctx."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -156,7 +148,7 @@ class TestExpBuildRuntime:
         from matmaster.core.bus import MessageBus
         from matmaster.core.hooks import EventEmitterHook
 
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
         bus = MessageBus()
 
@@ -170,7 +162,7 @@ class TestExpBuildRuntime:
         """Without bus, no EventEmitterHook in spec.hooks."""
         from matmaster.core.hooks import EventEmitterHook
 
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -181,7 +173,7 @@ class TestExpBuildRuntime:
 
     def test_runtime_has_cleanup_callable(self) -> None:
         """AgentRuntime.cleanup is a callable."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -198,7 +190,7 @@ class TestExpRun:
 
     def test_run_calls_build_runtime_then_kernel(self) -> None:
         """run() delegates to build_runtime then kernel.run."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
         mock_finish = FinishEvent(source="agent", status="completed", reason="natural")
         mock_kernel_result = KernelRunResult(event=mock_finish, messages=[])
@@ -212,7 +204,7 @@ class TestExpRun:
         with patch.object(exp, "build_runtime", return_value=mock_runtime) as mock_br:
             result = exp.run(ctx, "do something")
 
-        mock_br.assert_called_once_with(ctx, bus=None)
+        mock_br.assert_called_once_with(ctx, bus=None, skills=None, mcp=None)
         mock_kernel.run.assert_called_once_with(
             mock_spec, "do something", history=None, stop_event=None
         )
@@ -222,7 +214,7 @@ class TestExpRun:
         """run() passes bus to build_runtime."""
         from matmaster.core.bus import MessageBus
 
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
         bus = MessageBus()
         mock_finish = FinishEvent(source="agent", status="completed", reason="natural")
@@ -236,13 +228,13 @@ class TestExpRun:
         with patch.object(exp, "build_runtime", return_value=mock_runtime) as mock_br:
             exp.run(ctx, "task", bus=bus)
 
-        mock_br.assert_called_once_with(ctx, bus=bus)
+        mock_br.assert_called_once_with(ctx, bus=bus, skills=None, mcp=None)
 
     def test_run_forwards_history_and_stop_event(self) -> None:
         """run() passes history and stop_event to kernel.run."""
         import threading
 
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
         mock_finish = FinishEvent(source="agent", status="completed", reason="natural")
         stop = threading.Event()
@@ -270,7 +262,7 @@ class TestExpCleanup:
 
     def test_cleanup_runs_on_success(self) -> None:
         """Cleanup is called after successful kernel.run via run()."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
         mock_finish = FinishEvent(source="agent", status="completed", reason="natural")
 
@@ -287,7 +279,7 @@ class TestExpCleanup:
 
     def test_cleanup_runs_on_error(self) -> None:
         """Cleanup is called even when kernel.run() raises."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         mock_kernel = MagicMock()
@@ -304,7 +296,7 @@ class TestExpCleanup:
 
     def test_multiple_cleanups_all_execute(self) -> None:
         """All registered cleanup callbacks run even if one raises."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         cb1 = MagicMock(side_effect=ValueError("cb1 broken"))
         cb2 = MagicMock()
         exp._register_cleanup(cb1)
@@ -317,7 +309,7 @@ class TestExpCleanup:
 
     def test_cleanup_clears_list(self) -> None:
         """_run_cleanup_callbacks clears the list after execution."""
-        exp = Exp({"name": "test"})
+        exp = Exp(ExpConfig(name="test"))
         cb = MagicMock()
         exp._register_cleanup(cb)
 
@@ -333,16 +325,21 @@ class TestIdentityOverride:
     """Identity from config is forwarded to ContextBuilder.build()."""
 
     def test_identity_from_config(self) -> None:
-        config = {"name": "test", "identity": "I am a materials scientist.", "tools": {"builtin": []}}
-        exp = Exp(config)
+        exp = Exp(ExpConfig(
+            name="test",
+            developer_instructions="I am a materials scientist.",
+            tools=ExpToolsConfig(builtin=[]),
+        ))
         ctx = _make_ctx(with_llm=True)
         runtime = exp.build_runtime(ctx)
 
         assert "I am a materials scientist." in runtime.spec.system_prompt
 
     def test_default_identity_when_not_set(self) -> None:
-        config = {"name": "test", "tools": {"builtin": []}}
-        exp = Exp(config)
+        exp = Exp(ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=[]),
+        ))
         ctx = _make_ctx(with_llm=True)
         runtime = exp.build_runtime(ctx)
 
@@ -350,52 +347,30 @@ class TestIdentityOverride:
 
 
 class TestExpCompaction:
-    def test_assemble_passes_compaction_config(self) -> None:
+    def test_assemble_compaction_defaults_disabled(self) -> None:
         from matmaster.types.runtime import CompactionConfig
 
-        config = {
-            "name": "test",
-            "compaction": {
-                "enabled": True,
-                "context_window_tokens": 200000,
-                "trigger_ratio": 0.9,
-            },
-        }
-        exp = Exp(config)
+        exp = Exp(ExpConfig(name="test"))
         ctx = MagicMock()
         ctx.llm_provider = None
 
         spec = exp.assemble(ctx)
         assert isinstance(spec.compaction, CompactionConfig)
-        assert spec.compaction.enabled is True
-        assert spec.compaction.context_window_tokens == 200000
-        assert spec.compaction.trigger_ratio == 0.9
+        assert spec.compaction.enabled is False
 
     def test_assemble_default_compaction(self) -> None:
-        config = {"name": "test"}
-        exp = Exp(config)
+        exp = Exp(ExpConfig(name="test"))
         ctx = MagicMock()
         ctx.llm_provider = None
 
         spec = exp.assemble(ctx)
         assert spec.compaction.enabled is False
 
-    def test_build_runtime_creates_compactor_when_enabled(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
-
-        config = {
-            "name": "test",
-            "tools": {"builtin": []},
-            "compaction": {
-                "enabled": True,
-                "context_window_tokens": 200000,
-                "trigger_ratio": 0.9,
-            },
-        }
-        exp = Exp(config)
+    def test_build_runtime_compactor_none_when_disabled(self) -> None:
+        exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=[])))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = exp.build_runtime(ctx)
 
-        assert isinstance(runtime.spec.compactor, ContextCompactor)
+        assert runtime.spec.compactor is None
