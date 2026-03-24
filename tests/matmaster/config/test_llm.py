@@ -1,9 +1,14 @@
-"""Tests for LLM config: profile defaults, semantic methods, and resolve_profile."""
+"""Tests for LLM config: profile methods, route schema, and resolve_route."""
 from __future__ import annotations
 
 import pytest
 
-from matmaster.config.llm import LLMConfig, LLMProfileConfig
+from matmaster.config.llm import (
+    LLMConfig,
+    LLMProfileConfig,
+    LLMRouteConfig,
+    ResolvedLLMRoute,
+)
 
 
 class TestLLMProfileConfig:
@@ -198,3 +203,142 @@ class TestResolveProfile:
     def test_invalid_default_key_raises(self, llm_config: LLMConfig) -> None:
         with pytest.raises(KeyError):
             llm_config.resolve_profile(default_key="nonexistent")
+
+
+# ── Task 2: Route schema + resolve_route ──────────────────────────────────────
+
+
+class TestLLMRouteConfig:
+    """LLMRouteConfig basic schema."""
+
+    def test_route_with_model(self) -> None:
+        r = LLMRouteConfig(profile="litellm", model="claude-sonnet-4-6")
+        assert r.profile == "litellm"
+        assert r.model == "claude-sonnet-4-6"
+
+    def test_route_without_model(self) -> None:
+        r = LLMRouteConfig(profile="litellm")
+        assert r.profile == "litellm"
+        assert r.model is None
+
+
+class TestLLMConfigWithRoutes:
+    """resolve_route with route table."""
+
+    @pytest.fixture()
+    def cfg(self) -> LLMConfig:
+        return LLMConfig.model_validate({
+            "profiles": {
+                "litellm": {"provider": "openai", "model": "claude-opus-4-6"},
+                "azure": {"provider": "openai", "model": "azure/gpt-5"},
+            },
+            "routes": {
+                "claude-opus-4-6": {"profile": "litellm"},
+                "claude-sonnet-4-6": {"profile": "litellm", "model": "claude-sonnet-4-6"},
+                "gpt-5": {"profile": "azure"},
+            },
+            "default": "litellm",
+        })
+
+    def test_routes_parsed(self, cfg: LLMConfig) -> None:
+        assert len(cfg.routes) == 3
+        assert cfg.routes["claude-opus-4-6"].profile == "litellm"
+
+    def test_resolve_route_hit(self, cfg: LLMConfig) -> None:
+        r = cfg.resolve_route(model_override="claude-opus-4-6")
+        assert r == ResolvedLLMRoute(
+            route_key="claude-opus-4-6",
+            profile_key="litellm",
+            provider="openai",
+            model="claude-opus-4-6",
+        )
+
+    def test_resolve_route_alias(self, cfg: LLMConfig) -> None:
+        r = cfg.resolve_route(model_override="gpt-5")
+        assert r.profile_key == "azure"
+        assert r.provider == "openai"
+
+    def test_resolve_route_unknown_raises(self, cfg: LLMConfig) -> None:
+        with pytest.raises(KeyError, match="Unknown LLM route key"):
+            cfg.resolve_route(model_override="nonexistent-model")
+
+    def test_resolve_route_llm_override_as_profile_key(self, cfg: LLMConfig) -> None:
+        r = cfg.resolve_route(llm_override="azure")
+        assert r == ResolvedLLMRoute(
+            route_key=None,
+            profile_key="azure",
+            provider="openai",
+            model="azure/gpt-5",
+        )
+
+    def test_resolve_route_default_path(self, cfg: LLMConfig) -> None:
+        r = cfg.resolve_route()
+        assert r.profile_key == "litellm"
+        assert r.route_key is None
+
+    def test_resolve_route_custom_default_key(self, cfg: LLMConfig) -> None:
+        r = cfg.resolve_route(default_key="azure")
+        assert r.profile_key == "azure"
+        assert r.model == "azure/gpt-5"
+
+    def test_resolve_route_model_override_takes_precedence(self, cfg: LLMConfig) -> None:
+        r = cfg.resolve_route(model_override="gpt-5", llm_override="litellm")
+        assert r.route_key == "gpt-5"
+        assert r.profile_key == "azure"
+
+    def test_resolve_route_route_model_overrides_profile_model(self, cfg: LLMConfig) -> None:
+        r = cfg.resolve_route(model_override="claude-sonnet-4-6")
+        assert r.model == "claude-sonnet-4-6"
+        assert r.profile_key == "litellm"
+
+    def test_resolve_route_route_without_model_uses_profile_model(self, cfg: LLMConfig) -> None:
+        r = cfg.resolve_route(model_override="claude-opus-4-6")
+        assert r.model == "claude-opus-4-6"
+
+
+class TestLLMConfigValidation:
+    """Fail-fast validation of internal references."""
+
+    def test_route_references_nonexistent_profile(self) -> None:
+        with pytest.raises(ValueError, match="route.*references profile.*ghost"):
+            LLMConfig.model_validate({
+                "profiles": {"litellm": {"model": "m1"}},
+                "routes": {"r1": {"profile": "ghost"}},
+                "default": "litellm",
+            })
+
+    def test_default_references_nonexistent_profile(self) -> None:
+        with pytest.raises(ValueError, match="default profile.*missing"):
+            LLMConfig.model_validate({
+                "profiles": {"litellm": {"model": "m1"}},
+                "default": "missing",
+            })
+
+
+class TestLLMConfigLegacyCompat:
+    """Legacy flat format still works with new route features."""
+
+    def test_legacy_flat_format(self) -> None:
+        cfg = LLMConfig.model_validate({
+            "litellm": {"provider": "openai", "model": "claude-opus-4-6"},
+            "default": "litellm",
+        })
+        assert "litellm" in cfg.profiles
+        assert cfg.routes == {}
+
+    def test_legacy_resolve_route_default(self) -> None:
+        cfg = LLMConfig.model_validate({
+            "litellm": {"provider": "openai", "model": "claude-opus-4-6"},
+            "default": "litellm",
+        })
+        r = cfg.resolve_route()
+        assert r.profile_key == "litellm"
+        assert r.model == "claude-opus-4-6"
+
+    def test_legacy_resolve_route_model_override_raises(self) -> None:
+        cfg = LLMConfig.model_validate({
+            "litellm": {"provider": "openai", "model": "claude-opus-4-6"},
+            "default": "litellm",
+        })
+        with pytest.raises(KeyError, match="Unknown LLM route key"):
+            cfg.resolve_route(model_override="claude-opus-4-6")
