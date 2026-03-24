@@ -24,6 +24,7 @@ def build_bohrium_skill_remote_env(session: Any) -> dict[str, str]:
 
     Returns:
         非空时包含 ``BOHRIUM_ACCESS_KEY``、``BOHRIUM_PROJECT_ID``、``BOHRIUM_BASE_URL``；
+        凭证中若有 ``user_id`` / ``user_no`` 则额外包含 ``BOHRIUM_USER_ID`` / ``BOHRIUM_USER_NO``。
         凭证缺失或无效时返回空 dict。
     """
     creds = getattr(session, '_bohrium_credentials', None)
@@ -39,11 +40,18 @@ def build_bohrium_skill_remote_env(session: Any) -> dict[str, str]:
         pid_int = int(pid)
     except (TypeError, ValueError):
         return {}
-    return {
+    out: dict[str, str] = {
         'BOHRIUM_ACCESS_KEY': access_key,
         'BOHRIUM_PROJECT_ID': str(pid_int),
         'BOHRIUM_BASE_URL': BOHRIUM_OPENAPI_HOST,
     }
+    uid = creds.get('user_id')
+    if uid is not None and str(uid).strip() and str(uid).strip() != '-1':
+        out['BOHRIUM_USER_ID'] = str(uid).strip()
+    user_no = creds.get('user_no')
+    if isinstance(user_no, str) and user_no.strip():
+        out['BOHRIUM_USER_NO'] = user_no.strip()
+    return out
 
 
 def get_bohrium_credentials(
@@ -130,6 +138,7 @@ def inject_bohrium_executor(
     access_key: str | None = None,
     project_id: int | str | None = None,
     user_id: int | str | None = None,
+    user_no: str | None = None,
 ) -> dict[str, Any]:
     """深拷贝 executor 模板并注入 BOHRIUM_* 鉴权（与 MatMaster private_callback 一致）。
 
@@ -138,6 +147,7 @@ def inject_bohrium_executor(
         access_key: 可选的 access_key，如果提供则优先使用
         project_id: 可选的 project_id，如果提供则优先使用
         user_id: 可选的 user_id，如果提供则优先使用
+        user_no: 可选的学术码（account_api 的 userNo），写入 BOHRIUM_USER_NO
 
     Returns:
         注入鉴权后的 executor 字典
@@ -146,6 +156,16 @@ def inject_bohrium_executor(
     cred = get_bohrium_credentials(
         access_key=access_key, project_id=project_id, user_id=user_id
     )
+    uid_val = cred.get('user_id', -1)
+    uid_env = str(uid_val) if uid_val != -1 else ''
+    user_no_s = (user_no or '').strip()
+
+    def _inject_user_env(envs: dict[str, Any]) -> None:
+        if uid_env:
+            envs['BOHRIUM_USER_ID'] = uid_env
+        if user_no_s:
+            envs['BOHRIUM_USER_NO'] = user_no_s
+
     if executor.get('type') == 'dispatcher':
         rp = executor.setdefault('machine', {}).setdefault('remote_profile', {})
         rp['access_key'] = cred['access_key']
@@ -154,10 +174,12 @@ def inject_bohrium_executor(
         resources = executor.setdefault('resources', {})
         envs = resources.setdefault('envs', {})
         envs['BOHRIUM_PROJECT_ID'] = cred['project_id']
+        _inject_user_env(envs)
     elif executor.get('type') == 'local':
         # bohr-agent-sdk LocalExecutor 使用 executor.env 作为运行时环境变量；仅传 ak 与 project_id
         env = executor.setdefault('env', {})
         env['BOHRIUM_PROJECT_ID'] = str(cred['project_id'])
         if cred.get('access_key'):
             env['BOHRIUM_ACCESS_KEY'] = str(cred['access_key'])
+        _inject_user_env(env)
     return executor
