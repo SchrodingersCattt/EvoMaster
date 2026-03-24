@@ -48,7 +48,22 @@ _CANCEL_SENTINEL = object()
 
 
 def _should_emit_event_to_sse(event: dict) -> bool:
-    """Persisted event types that must not be sent to the client SSE (see agent_run_service._should_skip_push)."""
+    """Filter persisted events for history replay SSE.
+
+    NOTE: This filter is intentionally simpler than
+    matmaster.integration.event_router.SSEHandler._should_skip().
+    The live SSE path knows the run mode and stream_state; replay only sees
+    persisted event rows.
+
+    Practical consequences:
+    - assistant_state is always hidden in replay
+    - log_line is always hidden in replay
+    - direct-mode non-streaming thoughts may still appear in replay if they
+      were persisted as completed events
+
+    If exact parity is required in the future, the missing replay inputs
+    (for example mode) must be persisted explicitly.
+    """
     t = event.get('type')
     if t == 'log_line':
         return False
