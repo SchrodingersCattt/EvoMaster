@@ -26,7 +26,7 @@ class TestExpConfig:
     def test_from_agents_general_dict(self) -> None:
         """Load from a dict shaped like YAML agents.general section.
 
-        extra='ignore' discards fields not in ExpConfig (context, compaction, etc.).
+        extra='ignore' discards fields not in ExpConfig (context, etc.).
         """
         raw = {
             "llm": "litellm",
@@ -59,3 +59,33 @@ class TestExpConfig:
         assert d["name"] == "planner"
         assert d["mode"] == "planner"
         assert d["max_turns"] == 50
+
+
+class TestExpConfigCompaction:
+    def test_compaction_default_empty(self) -> None:
+        cfg = ExpConfig()
+        assert cfg.compaction == {}
+
+    def test_compaction_from_yaml_dict(self) -> None:
+        raw = {
+            "max_turns": 100,
+            "compaction": {
+                "enabled": True,
+                "context_window_tokens": 200000,
+                "trigger_ratio": 0.9,
+                "compaction_llm": "compaction",
+            },
+        }
+        cfg = ExpConfig.model_validate(raw)
+        assert cfg.compaction["enabled"] is True
+        assert cfg.compaction["compaction_llm"] == "compaction"
+
+    def test_extra_fields_still_ignored(self) -> None:
+        raw = {
+            "compaction": {"enabled": True},
+            "context": {"max_tokens": 180000},
+            "system_prompt_file": "prompts/system.txt",
+        }
+        cfg = ExpConfig.model_validate(raw)
+        assert cfg.compaction == {"enabled": True}
+        assert not hasattr(cfg, "context")

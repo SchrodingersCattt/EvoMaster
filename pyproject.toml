@@ -30,6 +30,7 @@ dependencies = [
     "beautifulsoup4",
     "lxml",
     "pymupdf",
+    "tiktoken>=0.7.0",
 ]
 
 [project.optional-dependencies]

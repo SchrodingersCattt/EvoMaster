@@ -812,3 +812,131 @@ class TestToolExecutionException:
 
         assert result.event.reason == "natural"
         assert result.event.final_content == "recovered"
+
+
+class TestCallLlmUsageCapture:
+    """_call_llm captures usage from StreamChunk into LLMResponse."""
+
+    def test_usage_captured_from_stream(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        usage_data = {
+            "prompt_tokens": 500,
+            "completion_tokens": 100,
+            "total_tokens": 600,
+        }
+
+        class UsageProvider:
+            def chat(self, messages, tools=None):
+                return LLMResponse(content="unused", finish_reason="stop")
+
+            def chat_with_retry(
+                self,
+                messages,
+                tools=None,
+                *,
+                max_retries=3,
+                retry_delay=1.0,
+            ):
+                return self.chat(messages, tools)
+
+            def chat_stream(self, messages, tools=None):
+                yield StreamChunk(content="hello")
+                yield StreamChunk(finish_reason="stop", usage=usage_data)
+
+        spec = _make_spec(provider=UsageProvider())
+        kernel = AgentKernel()
+        result = kernel.run(spec, "test")
+
+        assert result.event.reason == "natural"
+        response = kernel._call_llm(spec, [UserMessage(content="test")])
+        assert response.usage == usage_data
+
+
+class TestCompactorIntegration:
+    """Kernel calls compactor.compact_if_needed and update_message_count."""
+
+    def test_compactor_called_each_turn(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        call_log: list[tuple[int, int]] = []
+
+        class SpyCompactor:
+            _last_llm_message_count = 0
+
+            def compact_if_needed(self, messages, last_usage, turn):
+                call_log.append((len(messages), turn))
+
+            def update_message_count(self, count):
+                self._last_llm_message_count = count
+
+        tc = ToolCallData(id="tc-1", name="tool", arguments={})
+        provider = ToolCallingProvider(
+            tool_calls=[tc], max_tool_turns=2, final_content="done"
+        )
+        tool_reg, _ = _make_tool_registry(["tool"])
+        spec = _make_spec(provider=provider, tool_registry=tool_reg, max_turns=10)
+        spec = spec.model_copy(update={"compactor": SpyCompactor()})
+
+        kernel = AgentKernel()
+        result = kernel.run(spec, "test")
+
+        assert result.event.reason == "natural"
+        assert len(call_log) == 3
+        assert [turn for _, turn in call_log] == [1, 2, 3]
+
+    def test_last_usage_passed_to_compactor(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        usage_log: list[dict] = []
+
+        class UsageSpyCompactor:
+            _last_llm_message_count = 0
+
+            def compact_if_needed(self, messages, last_usage, turn):
+                usage_log.append(dict(last_usage))
+
+            def update_message_count(self, count):
+                self._last_llm_message_count = count
+
+        usage_data = {
+            "prompt_tokens": 500,
+            "completion_tokens": 100,
+            "total_tokens": 600,
+        }
+
+        class UsageTrackingProvider:
+            def chat(self, messages, tools=None):
+                return LLMResponse(content="unused", finish_reason="stop")
+
+            def chat_with_retry(
+                self,
+                messages,
+                tools=None,
+                *,
+                max_retries=3,
+                retry_delay=1.0,
+            ):
+                return self.chat(messages, tools)
+
+            def chat_stream(self, messages, tools=None):
+                yield StreamChunk(
+                    content="done", finish_reason="stop", usage=usage_data
+                )
+
+        spec = _make_spec(provider=UsageTrackingProvider())
+        spec = spec.model_copy(update={"compactor": UsageSpyCompactor()})
+
+        kernel = AgentKernel()
+        kernel.run(spec, "test")
+
+        assert usage_log[0] == {}
+
+    def test_no_compactor_no_error(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        spec = _make_spec()
+        assert spec.compactor is None
+        kernel = AgentKernel()
+        result = kernel.run(spec, "test")
+        assert result.event.reason == "natural"

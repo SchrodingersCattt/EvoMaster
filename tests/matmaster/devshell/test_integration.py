@@ -195,8 +195,8 @@ class TestDevShellIntegration:
                 break
 
         event_types = [getattr(e, "type", None) for e in events]
-        # EventEmitterHook emits thought events for stream chunks
-        assert "thought" in event_types
+        # EventEmitterHook emits response events for visible content chunks
+        assert "response" in event_types
 
     def test_cancelled_run_does_not_accumulate_history(
         self, tmp_path: Path

@@ -62,8 +62,8 @@ class TestCompactionConfig:
         config = CompactionConfig()
         assert config.enabled is False
         assert config.context_window_tokens == 128_000
-        assert config.trigger_ratio == 0.7
-        assert config.strategy == "sliding_window"
+        assert config.trigger_ratio == 0.9
+        assert config.strategy == "summary"
         assert config.compaction_llm is None
 
     def test_frozen(self) -> None:
@@ -80,6 +80,25 @@ class TestCompactionConfig:
         assert config.enabled is True
         assert config.context_window_tokens == 200_000
         assert config.strategy == "summary"
+
+
+class TestCompactionConfigUpdate:
+    def test_trigger_ratio_default_09(self) -> None:
+        cfg = CompactionConfig()
+        assert cfg.trigger_ratio == 0.9
+
+    def test_strategy_default_summary(self) -> None:
+        cfg = CompactionConfig()
+        assert cfg.strategy == "summary"
+
+    def test_compaction_llm_from_config(self) -> None:
+        cfg = CompactionConfig(compaction_llm="compaction")
+        assert cfg.compaction_llm == "compaction"
+
+    def test_frozen(self) -> None:
+        cfg = CompactionConfig()
+        with pytest.raises(Exception):
+            cfg.enabled = True
 
 
 # ── AgentRuntimeSpec ────────────────────────────────────
@@ -191,6 +210,24 @@ class TestAgentRuntimeSpec:
         assert isinstance(spec.llm_provider, LLMProvider)
         assert len(spec.hooks) == 2
         assert len(spec.guards) == 1
+
+
+class TestAgentRuntimeSpecCompactor:
+    def test_compactor_default_none(self) -> None:
+        spec = AgentRuntimeSpec()
+        assert spec.compactor is None
+
+    def test_compactor_accepts_object(self) -> None:
+        class FakeCompactor:
+            pass
+
+        spec = AgentRuntimeSpec(compactor=FakeCompactor())
+        assert spec.compactor is not None
+
+    def test_compactor_frozen_reference(self) -> None:
+        spec = AgentRuntimeSpec()
+        with pytest.raises(Exception):
+            spec.compactor = "new"
 
 
 # ── Edge case tests (QUAL-01) ─────────────────────────
