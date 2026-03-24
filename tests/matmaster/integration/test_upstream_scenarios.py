@@ -27,11 +27,9 @@ from matmaster.types.messages import (
 )
 from matmaster.hooks.confirmation import ConfirmationHook
 from matmaster.integration.bohrium_setup import BohriumSetupService
-from matmaster.integration.event_router import (
-    EventRouter,
-    PersistenceHandler,
-    SSEHandler,
-)
+from matmaster.integration.event_router import EventRouter
+from matmaster.integration.persistence_handler import PersistenceHandler
+from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
 from matmaster.types.events import (

@@ -8,9 +8,9 @@ from matmaster.integration.bohrium_setup import BohriumSetupService
 from matmaster.integration.event_router import (
     EventHandler,
     EventRouter,
-    PersistenceHandler,
-    SSEHandler,
 )
+from matmaster.integration.persistence_handler import PersistenceHandler
+from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
 
 __all__ = [

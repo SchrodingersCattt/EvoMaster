@@ -197,7 +197,7 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
 
 def test_sse_frames_match_frontend_contract_without_mysql():
     """无需 MySQL，直接验证最终 SSE frame 的 payload shape 可被前端消费。"""
-    from matmaster.integration.event_router import SSEHandler
+    from matmaster.integration.sse_handler import SSEHandler
     from matmaster.types.events import (
         BohriumNodeEvent,
         ConfirmationRequestEvent,
