@@ -96,7 +96,7 @@ EvoMaster/
 ├── evomaster/           # Core (agent, session, tools, skills, LLM)
 ├── playground/
 │   └── mat_master/      # MatMaster app (frontend + service + start_dev.sh)
-├── configs/             # Agent/config YAML
+├── configs/mat_master/  # MatMaster YAML + mcp_config*.json
 └── docs/                # Documentation
 ```
 
@@ -106,26 +106,20 @@ EvoMaster/
 
 You can run agents from the command line without the web UI.
 
-**Prerequisites:** `uv sync` (or `pip install -e .`). Configure LLM and Bohrium in `.env` and/or in the YAML under `configs/`.
+**Prerequisites:** `uv sync` (or `pip install -e .`). Configure LLM and Bohrium in `.env` and/or in `configs/mat_master/config.yaml` (and MCP JSON as needed).
 
 ```bash
-# Default agent and task
-python run.py --agent minimal --task "Your task"
-
-# Custom config
-python run.py --agent minimal --config configs/minimal/config.yaml --task "Your task"
+# MatMaster agent (default config under configs/mat_master/)
+python run.py --agent mat_master --config configs/mat_master/config.yaml --task "Your task"
 
 # Task from file
-python run.py --agent minimal --task task.txt
+python run.py --agent mat_master --config configs/mat_master/config.yaml --task task.txt
 
 # Interactive
-python run.py --agent minimal --interactive
-```
+python run.py --agent mat_master --config configs/mat_master/config.yaml --interactive
 
-Example with a specific playground config:
-
-```bash
-python run.py --agent minimal_multi_agent --config configs/minimal_multi_agent/deepseek-v3.2-example.yaml --task "Describe your task here"
+# Planner vs direct mode (MatMaster)
+python run.py --agent mat_master --config configs/mat_master/config.yaml --mode planner --task "Your task"
 ```
 
 ---
