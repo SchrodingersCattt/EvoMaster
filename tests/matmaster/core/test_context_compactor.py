@@ -322,3 +322,117 @@ class TestCompactorEventEmission:
         compactor.update_message_count(len(msgs))
 
         compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+
+
+class TestEndToEndCompaction:
+    """Full kernel loop with compaction enabled."""
+
+    def test_compaction_triggers_on_large_context(self) -> None:
+        from matmaster.core.agent import AgentKernel
+        from matmaster.core.context_compactor import ContextCompactor
+        from matmaster.tools.tool_registry import ToolRegistry
+        from matmaster.types.runtime import AgentRuntimeSpec, CompactionConfig
+
+        compaction_cfg = CompactionConfig(
+            enabled=True,
+            context_window_tokens=500,
+            trigger_ratio=0.9,
+        )
+
+        call_count = 0
+        summary_calls = 0
+
+        class CompactionTestProvider:
+            def chat(self, messages, tools=None):
+                nonlocal summary_calls
+                summary_calls += 1
+                return LLMResponse(
+                    content="Summary of conversation.",
+                    finish_reason="stop",
+                )
+
+            def chat_with_retry(
+                self,
+                messages,
+                tools=None,
+                *,
+                max_retries=3,
+                retry_delay=1.0,
+            ):
+                return self.chat(messages, tools)
+
+            def chat_stream(self, messages, tools=None):
+                nonlocal call_count
+                call_count += 1
+                if call_count <= 5:
+                    yield StreamChunk(
+                        tool_call_deltas=[
+                            {
+                                "index": 0,
+                                "id": f"tc-{call_count}",
+                                "name": "tool",
+                                "arguments": "{}",
+                            }
+                        ],
+                    )
+                    yield StreamChunk(
+                        finish_reason="stop",
+                        usage={
+                            "prompt_tokens": 480,
+                            "completion_tokens": 50,
+                            "total_tokens": 530,
+                        },
+                    )
+                else:
+                    yield StreamChunk(
+                        content="all done",
+                        finish_reason="stop",
+                        usage={
+                            "prompt_tokens": 200,
+                            "completion_tokens": 20,
+                            "total_tokens": 220,
+                        },
+                    )
+
+        provider = CompactionTestProvider()
+        registry = ToolRegistry()
+
+        class SimpleTool:
+            @property
+            def name(self):
+                return "tool"
+
+            @property
+            def description(self):
+                return "test"
+
+            @property
+            def json_schema(self):
+                return {"type": "object", "properties": {}}
+
+            def execute(self, arguments):
+                return "result " + "x" * 100
+
+        registry.register(SimpleTool(), source="test")
+
+        compactor = ContextCompactor(
+            config=compaction_cfg,
+            summary_provider=provider,
+        )
+
+        spec = AgentRuntimeSpec(
+            llm_provider=provider,
+            tool_registry=registry,
+            max_turns=10,
+            system_prompt="test",
+            compaction=compaction_cfg,
+            compactor=compactor,
+        )
+
+        kernel = AgentKernel()
+        result = kernel.run(spec, "do things")
+
+        assert result.event.reason == "natural"
+        assert result.event.final_content == "all done"
+        assert summary_calls > 0
+        assert compactor._compaction_count > 0
