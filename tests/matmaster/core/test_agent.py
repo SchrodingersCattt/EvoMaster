@@ -812,3 +812,42 @@ class TestToolExecutionException:
 
         assert result.event.reason == "natural"
         assert result.event.final_content == "recovered"
+
+
+class TestCallLlmUsageCapture:
+    """_call_llm captures usage from StreamChunk into LLMResponse."""
+
+    def test_usage_captured_from_stream(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        usage_data = {
+            "prompt_tokens": 500,
+            "completion_tokens": 100,
+            "total_tokens": 600,
+        }
+
+        class UsageProvider:
+            def chat(self, messages, tools=None):
+                return LLMResponse(content="unused", finish_reason="stop")
+
+            def chat_with_retry(
+                self,
+                messages,
+                tools=None,
+                *,
+                max_retries=3,
+                retry_delay=1.0,
+            ):
+                return self.chat(messages, tools)
+
+            def chat_stream(self, messages, tools=None):
+                yield StreamChunk(content="hello")
+                yield StreamChunk(finish_reason="stop", usage=usage_data)
+
+        spec = _make_spec(provider=UsageProvider())
+        kernel = AgentKernel()
+        result = kernel.run(spec, "test")
+
+        assert result.event.reason == "natural"
+        response = kernel._call_llm(spec, [UserMessage(content="test")])
+        assert response.usage == usage_data
