@@ -54,6 +54,11 @@ def _run_result_event(content: str = "done") -> dict:
     return {"source": "MatMaster", "type": "run_result", "content": content}
 
 
+def _response_event(content: str = "done") -> dict:
+    """Build a MatMaster response event dict."""
+    return {"source": "MatMaster", "type": "response", "content": content}
+
+
 class TestEventsToMessagesUserEvent:
     """events_to_messages converts user event dict to UserMessage."""
 
@@ -176,3 +181,21 @@ class TestEventsToMessagesPreservesOrder:
         assert len(result) == 2
         assert isinstance(result[1], AssistantMessage)
         assert result[1].content == "legacy answer"
+
+    def test_response_event_becomes_assistant_message(self):
+        events = [_user_event("q"), _response_event("answer")]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assert len(result) == 2
+        assert isinstance(result[-1], AssistantMessage)
+        assert result[-1].content == "answer"
+
+    def test_run_result_is_only_legacy_fallback_when_response_missing(self):
+        events = [_run_result_event("legacy answer")]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assert len(result) == 1
+        assert isinstance(result[-1], AssistantMessage)
+        assert result[-1].content == "legacy answer"

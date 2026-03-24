@@ -204,6 +204,7 @@ def test_sse_frames_match_frontend_contract_without_mysql():
         ErrorEvent,
         McpConnectEvent,
         McpServerStatusEvent,
+        ResponseEvent,
         RunResultEvent,
         StreamClosedEvent,
         ToolCallEvent,
@@ -275,6 +276,7 @@ def test_sse_frames_match_frontend_contract_without_mysql():
             message='connected',
             elapsed_ms=123,
         ),
+        ResponseEvent(source='Agent', content='done'),
         RunResultEvent(source='Agent', reason='natural', final_content='done'),
         StreamClosedEvent(source='System', task_completed=True, end_reason='natural'),
     ]
@@ -296,6 +298,7 @@ def test_sse_frames_match_frontend_contract_without_mysql():
         'bohrium_node',
         'mcp_server_status',
         'mcp_connect',
+        'response',
         'run_result',
         'stream_closed',
     ]
@@ -345,6 +348,7 @@ def test_sse_frames_match_frontend_contract_without_mysql():
         'elapsed_ms': 123,
         'error': None,
     }
-    assert frames[7]['final_content'] == 'done'
-    assert frames[8]['task_completed'] is True
-    assert frames[8]['end_reason'] == 'natural'
+    assert frames[7]['content'] == 'done'
+    assert frames[8]['final_content'] == 'done'
+    assert frames[9]['task_completed'] is True
+    assert frames[9]['end_reason'] == 'natural'

@@ -1,8 +1,8 @@
 """Event type hierarchy for the matmaster bus system.
 
-Defines all 17 event types in two categories:
-- AgentEvent (7 types): emitted by the kernel during agent execution
-- SystemEvent (9 types): emitted by service-layer components
+Defines all 18 event types in two categories:
+- AgentEvent (8 types): emitted by the kernel during agent execution
+- SystemEvent (10 types): emitted by service-layer components
 
 BusEvent = AgentEvent | SystemEvent -- the unified type for MessageBus transport.
 
@@ -35,6 +35,17 @@ class ThoughtEvent(BaseModel):
     token_count: int = 0
     context: str | None = None  # e.g. 'step_execution'
     reasoning_content: str | None = None
+
+
+class ResponseEvent(BaseModel):
+    """Visible assistant response event."""
+
+    type: Literal["response"] = "response"
+    source: str
+    timestamp: datetime = Field(default_factory=datetime.now)
+    content: str = ""
+    stream_state: str | None = None  # 'start' | 'streaming' | 'end' | None
+    stream_id: str | None = None
 
 
 class ToolCallEvent(BaseModel):
@@ -220,6 +231,7 @@ class McpConnectEvent(BaseModel):
 AgentEvent = Annotated[
     Union[
         ThoughtEvent,
+        ResponseEvent,
         ToolCallEvent,
         ToolResultEvent,
         RunResultEvent,
@@ -250,6 +262,7 @@ BusEvent = Annotated[
     Union[
         # AgentEvent types
         ThoughtEvent,
+        ResponseEvent,
         ToolCallEvent,
         ToolResultEvent,
         RunResultEvent,
