@@ -191,6 +191,7 @@ class AgentKernel:
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
         stream_id = f"turn-{len(messages)}"
+        usage: dict[str, int] = {}
 
         run_on_stream_chunk(
             spec.hooks,
@@ -215,6 +216,8 @@ class AgentKernel:
                     reasoning_parts.append(chunk.reasoning_content)
                 if chunk.finish_reason:
                     finish_reason = chunk.finish_reason
+                if chunk.usage:
+                    usage = chunk.usage
                 if chunk.tool_call_deltas:
                     for delta in chunk.tool_call_deltas:
                         idx = delta.get("index", 0)
@@ -251,6 +254,7 @@ class AgentKernel:
             reasoning_content="".join(reasoning_parts) or None,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
+            usage=usage,
         )
 
     @staticmethod
