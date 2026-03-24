@@ -324,3 +324,26 @@ class TestExpCleanup:
         exp._run_cleanup_callbacks()
 
         assert exp._cleanup_callbacks == []
+
+
+# ── TestIdentityOverride ────────────────────────────────
+
+
+class TestIdentityOverride:
+    """Identity from config is forwarded to ContextBuilder.build()."""
+
+    def test_identity_from_config(self) -> None:
+        config = {"name": "test", "identity": "I am a materials scientist.", "tools": {"builtin": []}}
+        exp = Exp(config)
+        ctx = _make_ctx(with_llm=True)
+        runtime = exp.build_runtime(ctx)
+
+        assert "I am a materials scientist." in runtime.spec.system_prompt
+
+    def test_default_identity_when_not_set(self) -> None:
+        config = {"name": "test", "tools": {"builtin": []}}
+        exp = Exp(config)
+        ctx = _make_ctx(with_llm=True)
+        runtime = exp.build_runtime(ctx)
+
+        assert "helpful AI assistant" in runtime.spec.system_prompt
