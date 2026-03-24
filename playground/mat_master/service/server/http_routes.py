@@ -110,7 +110,9 @@ def get_session_run_info(session_id: str):
             'last_task_id': last_task_id,
             'task_ids': [last_task_id] if last_task_id else [],
         }
-    base = _get_run_workspace_path(_get_run_id_web(), task_id=session_id)
+    base = _get_run_workspace_path(
+        _get_run_id_web(), task_id=session_id, session_id=session_id
+    )
     if base and base.is_dir():
         return {
             'run_id': _get_run_id_web(),
