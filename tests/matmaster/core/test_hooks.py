@@ -8,7 +8,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from matmaster.core.bus import MessageBus
-from matmaster.types.events import ThoughtEvent, ToolCallEvent, ToolResultEvent
+from matmaster.types.events import (
+    ResponseEvent,
+    ThoughtEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
 from matmaster.core.hooks import (
     BaseHook,
     EventEmitterHook,
@@ -269,24 +274,53 @@ class TestEventEmitterHook:
         bus = MessageBus()
         hook = EventEmitterHook(bus, "agent-1")
         hook.on_stream_chunk(sample_chunk)
-        assert not bus.empty
-        event = bus.get_nowait()
-        assert isinstance(event, ThoughtEvent)
-        assert event.source == "agent-1"
-        assert event.content == "hello"
-        assert event.stream_state == "streaming"
-        assert event.stream_id == "s1"
-        assert event.reasoning_content == "thinking"
+        assert bus.pending == 2
 
-    def test_on_stream_chunk_none_content(self) -> None:
-        """When chunk.content is None, emit ThoughtEvent with empty string."""
+        thought = bus.get_nowait()
+        assert isinstance(thought, ThoughtEvent)
+        assert thought.source == "agent-1"
+        assert thought.content == "thinking"
+        assert thought.stream_state == "streaming"
+        assert thought.stream_id == "s1"
+        assert thought.reasoning_content == "thinking"
+
+        response = bus.get_nowait()
+        assert isinstance(response, ResponseEvent)
+        assert response.source == "agent-1"
+        assert response.content == "hello"
+        assert response.stream_state == "streaming"
+        assert response.stream_id == "s1"
+
+    def test_on_stream_chunk_emits_response_event_for_content(self) -> None:
         bus = MessageBus()
         hook = EventEmitterHook(bus, "agent-1")
-        chunk = StreamChunk(content=None)
+        chunk = StreamChunk(content="answer", stream_state="streaming", stream_id="s1")
+        hook.on_stream_chunk(chunk)
+        event = bus.get_nowait()
+        assert isinstance(event, ResponseEvent)
+        assert event.content == "answer"
+        assert event.stream_state == "streaming"
+        assert event.stream_id == "s1"
+
+    def test_on_stream_chunk_emits_thought_event_for_reasoning(self) -> None:
+        bus = MessageBus()
+        hook = EventEmitterHook(bus, "agent-1")
+        chunk = StreamChunk(
+            reasoning_content="thinking", stream_state="streaming", stream_id="s1"
+        )
         hook.on_stream_chunk(chunk)
         event = bus.get_nowait()
         assert isinstance(event, ThoughtEvent)
-        assert event.content == ""
+        assert event.content == "thinking"
+        assert event.reasoning_content == "thinking"
+        assert event.stream_state == "streaming"
+        assert event.stream_id == "s1"
+
+    def test_on_stream_chunk_empty_chunk_emits_nothing(self) -> None:
+        bus = MessageBus()
+        hook = EventEmitterHook(bus, "agent-1")
+        hook.on_stream_chunk(StreamChunk())
+        assert bus.empty
 
 
 # ── run_guard_blocked ────────────────────────────────

@@ -22,7 +22,12 @@ from __future__ import annotations
 import enum
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from matmaster.types.events import ThoughtEvent, ToolCallEvent, ToolResultEvent
+from matmaster.types.events import (
+    ResponseEvent,
+    ThoughtEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
 from matmaster.types.guards import GuardResult
 from matmaster.types.messages import Message, StreamChunk, ToolCallData
 
@@ -160,7 +165,7 @@ class EventEmitterHook(BaseHook):
     Bridges hook calls to BusEvent types:
     - pre_tool_call -> ToolCallEvent (returns CONTINUE)
     - post_tool_call -> ToolResultEvent
-    - on_stream_chunk -> ThoughtEvent
+    - on_stream_chunk -> ThoughtEvent / ResponseEvent
     """
 
     def __init__(self, bus: MessageBus, source: str) -> None:
@@ -191,16 +196,26 @@ class EventEmitterHook(BaseHook):
         )
 
     def on_stream_chunk(self, chunk: StreamChunk) -> None:
-        """Emit ThoughtEvent for each streaming chunk."""
-        self._bus.emit(
-            ThoughtEvent(
-                source=self._source,
-                content=chunk.content or "",
-                stream_state=chunk.stream_state,
-                stream_id=chunk.stream_id,
-                reasoning_content=chunk.reasoning_content,
+        """Emit ThoughtEvent for reasoning and ResponseEvent for visible content."""
+        if chunk.reasoning_content:
+            self._bus.emit(
+                ThoughtEvent(
+                    source=self._source,
+                    content=chunk.reasoning_content,
+                    stream_state=chunk.stream_state,
+                    stream_id=chunk.stream_id,
+                    reasoning_content=chunk.reasoning_content,
+                )
             )
-        )
+        if chunk.content:
+            self._bus.emit(
+                ResponseEvent(
+                    source=self._source,
+                    content=chunk.content,
+                    stream_state=chunk.stream_state,
+                    stream_id=chunk.stream_id,
+                )
+            )
 
     def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
         """Guard blocks are not emitted to the bus by default."""

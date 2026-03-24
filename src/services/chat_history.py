@@ -34,7 +34,7 @@ class ChatHistoryConverter:
 
     @staticmethod
     def _assistant_content(ev: dict) -> str:
-        """从 thought/run_result 等事件中取出文本。"""
+        """从 thought/response/run_result 等事件中取出文本。"""
         c = ev.get('content')
         if isinstance(c, str):
             return c
@@ -86,12 +86,14 @@ class ChatHistoryConverter:
         - User/query -> UserMessage
         - thought|planner_reply -> AssistantMessage(content)
         - tool_call -> 与后续 tool_result 配对，先输出 AssistantMessage(tool_calls)，再输出 ToolMessage
-        - run_result|finish -> AssistantMessage(content)
+        - response -> AssistantMessage(content)
+        - run_result|finish -> AssistantMessage(content)（仅 response 缺失时作为兼容兜底）
         """
         out: list[dict] = []
         pending_tool_calls: list[dict] = []
         last_assistant_text_idx: int | None = None
         assistant_state_tool_ids: set[str] = set()
+        response_seen_in_turn = False
 
         def flush_tool_calls() -> None:
             if not pending_tool_calls:
@@ -111,6 +113,7 @@ class ChatHistoryConverter:
                 flush_tool_calls()
                 last_assistant_text_idx = None
                 assistant_state_tool_ids.clear()
+                response_seen_in_turn = False
                 text = cls._user_content(ev)
                 out.append(UserMessage(content=text).model_dump())
                 continue
@@ -123,6 +126,17 @@ class ChatHistoryConverter:
                 if text:
                     out.append(AssistantMessage(content=text).model_dump())
                     last_assistant_text_idx = len(out) - 1
+                continue
+
+            if source == 'MatMaster' and typ == 'response':
+                flush_tool_calls()
+                assistant_state_tool_ids.clear()
+                last_assistant_text_idx = None
+                text = cls._assistant_content(ev)
+                if text:
+                    out.append(AssistantMessage(content=text).model_dump())
+                    last_assistant_text_idx = len(out) - 1
+                    response_seen_in_turn = True
                 continue
 
             if source == 'MatMaster' and typ == 'assistant_state':
@@ -170,6 +184,8 @@ class ChatHistoryConverter:
                 flush_tool_calls()
                 assistant_state_tool_ids.clear()
                 last_assistant_text_idx = None
+                if response_seen_in_turn:
+                    continue
                 text = cls._assistant_content(ev)
                 if text:
                     out.append(AssistantMessage(content=text).model_dump())
