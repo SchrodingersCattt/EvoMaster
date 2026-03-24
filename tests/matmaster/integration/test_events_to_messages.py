@@ -49,9 +49,9 @@ def _tool_result_event(
     }
 
 
-def _finish_event(content: str = "done") -> dict:
-    """Build a MatMaster finish event dict."""
-    return {"source": "MatMaster", "type": "finish", "content": content}
+def _run_result_event(content: str = "done") -> dict:
+    """Build a MatMaster run_result event dict."""
+    return {"source": "MatMaster", "type": "run_result", "content": content}
 
 
 class TestEventsToMessagesUserEvent:
@@ -80,11 +80,11 @@ class TestEventsToMessagesAssistantWithToolCalls:
             _user_event("list files"),
             _tool_call_event("tc_1", "bash", {"cmd": "ls"}),
             _tool_result_event("tc_1", "bash", "file.txt"),
-            _finish_event("here are your files"),
+            _run_result_event("here are your files"),
         ]
         result = ChatHistoryConverter.events_to_messages(events)
 
-        # Should have: UserMessage, AssistantMessage(tool_calls), ToolMessage, AssistantMessage(finish)
+        # Should have: UserMessage, AssistantMessage(tool_calls), ToolMessage, AssistantMessage(run_result)
         assert len(result) == 4
 
         # First: UserMessage
@@ -105,7 +105,7 @@ class TestEventsToMessagesAssistantWithToolCalls:
         assert result[2].tool_call_id == "tc_1"
         assert result[2].tool_name == "bash"
 
-        # Fourth: AssistantMessage (finish)
+        # Fourth: AssistantMessage (run_result)
         assert isinstance(result[3], AssistantMessage)
         assert result[3].content == "here are your files"
 
@@ -144,10 +144,10 @@ class TestEventsToMessagesPreservesOrder:
             _user_event("first question"),
             _tool_call_event("tc_1", "bash", {"cmd": "echo hi"}),
             _tool_result_event("tc_1", "bash", "hi"),
-            _finish_event("answer 1"),
+            _run_result_event("answer 1"),
             # Turn 2
             _user_event("second question"),
-            _finish_event("answer 2"),
+            _run_result_event("answer 2"),
         ]
         result = ChatHistoryConverter.events_to_messages(events)
 
@@ -155,12 +155,24 @@ class TestEventsToMessagesPreservesOrder:
             UserMessage,       # first question
             AssistantMessage,  # tool_calls
             ToolMessage,       # tool result
-            AssistantMessage,  # finish answer 1
+            AssistantMessage,  # run_result answer 1
             UserMessage,       # second question
-            AssistantMessage,  # finish answer 2
+            AssistantMessage,  # run_result answer 2
         ]
         assert len(result) == len(expected_types)
         for msg, expected_type in zip(result, expected_types):
             assert isinstance(msg, expected_type), (
                 f"Expected {expected_type.__name__}, got {type(msg).__name__}"
             )
+
+    def test_legacy_finish_events_still_map_to_assistant_messages(self):
+        events = [
+            _user_event("legacy question"),
+            {"source": "MatMaster", "type": "finish", "content": "legacy answer"},
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assert len(result) == 2
+        assert isinstance(result[1], AssistantMessage)
+        assert result[1].content == "legacy answer"

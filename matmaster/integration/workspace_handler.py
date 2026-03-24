@@ -14,8 +14,10 @@ Key behavior:
 
 from __future__ import annotations
 
+import threading
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
@@ -57,6 +59,16 @@ class WorkspaceHandler:
         self._debounce_seconds = debounce_seconds
         self._last_check_time: float = 0
         self._last_snapshot: frozenset[tuple[str, float, int]] | None = None
+        self._close_lock = threading.Lock()
+        self._closed = False
+        self._upload_executor = (
+            ThreadPoolExecutor(
+                max_workers=1,
+                thread_name_prefix="workspace-upload",
+            )
+            if upload_fn is not None
+            else None
+        )
 
     def handle(self, event: BusEvent) -> None:  # type: ignore[arg-type]
         """Process event -- only acts on ToolResultEvent.
@@ -126,7 +138,26 @@ class WorkspaceHandler:
         return frozenset(out)
 
     def _upload(self) -> None:
-        """Trigger workspace upload via injected function."""
+        """Queue workspace upload on a dedicated worker."""
+        with self._close_lock:
+            if (
+                self._upload_fn is None
+                or self._upload_executor is None
+                or self._closed
+            ):
+                return
+            executor = self._upload_executor
+
+        try:
+            executor.submit(self._run_upload)
+        except RuntimeError:
+            logger.debug(
+                "WorkspaceHandler: skip upload after close session_id=%s",
+                self._session_id,
+            )
+
+    def _run_upload(self) -> None:
+        """Run the upload task and log failures without blocking the router."""
         if self._upload_fn is None:
             return
 
@@ -138,3 +169,15 @@ class WorkspaceHandler:
                 self._session_id,
                 exc_info=True,
             )
+
+    def close(self) -> None:
+        """Wait for any queued uploads, then release the worker."""
+        with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
+            executor = self._upload_executor
+            self._upload_executor = None
+
+        if executor is not None:
+            executor.shutdown(wait=True, cancel_futures=False)

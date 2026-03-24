@@ -28,6 +28,7 @@ from src.services.deploy_state_service import (
     DeployStateService,
     get_deploy_state_service,
 )
+from src.services.chat_history import ChatHistoryConverter
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.user_service import UserService
@@ -405,7 +406,7 @@ class ChatStreamService:
                     },
                     user_id=self._sessions_service.get_session_user_id(sid),
                 )
-                # reason=restart 或 deploy 时按失败处理：直接结束流并推送 end，不再等待
+                # reason=restart 或 deploy 时按失败处理：直接结束流并推送 stream_closed，不再等待
                 if reason in ('restart', 'deploy'):
                     end_reason = (
                         'run_interrupted_restart'
@@ -415,7 +416,7 @@ class ChatStreamService:
                     yield self.sse_format(
                         {
                             'source': 'System',
-                            'type': 'end',
+                            'type': 'stream_closed',
                             'content': run_interrupted_content,
                             'session_id': sid,
                             'end_reason': end_reason,
@@ -518,7 +519,7 @@ class ChatStreamService:
                                         }
                                     )
                                     continue
-                                if payload.get('type') == 'end':
+                                if payload.get('type') in {'stream_closed', 'end'}:
                                     yield self.sse_format(payload)
                                     break
                                 yield self.sse_format(payload)
@@ -716,6 +717,7 @@ class ChatStreamService:
         payload['invocation_id'] = ctx.invocation_id
         yield self.sse_format(payload)
         history = self._events_service.get_session_events(sid) or []
+        history = ChatHistoryConverter.exclude_task_events(history, ctx.task_id)
         history = self._inject_elapsed_for_history(history)
         for event in history:
             if _should_emit_event_to_sse(event):
@@ -814,7 +816,7 @@ class ChatStreamService:
                 yield self.sse_format(
                     {
                         'source': 'System',
-                        'type': 'end',
+                        'type': 'stream_closed',
                         'content': '',
                         'session_id': sid,
                         'invocation_id': ctx.invocation_id,
@@ -883,7 +885,7 @@ class ChatStreamService:
                         or ctx.invocation_id,
                     }
                     yield self.sse_format(out)
-                    if payload.get('type') == 'end':
+                    if payload.get('type') in {'stream_closed', 'end'}:
                         break
             finally:
                 stop_event.set()
