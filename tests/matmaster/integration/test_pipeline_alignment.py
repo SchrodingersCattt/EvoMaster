@@ -11,6 +11,7 @@ import queue
 from pathlib import Path
 from typing import Any, Iterator
 
+from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
 from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
@@ -104,16 +105,7 @@ class TestEventSequenceAlignment:
         bus = MessageBus()
         tool = _SimpleTool()
 
-        config = {
-            "name": "direct",
-            "tools": {"builtin": []},
-            "guards": [],
-            "termination": {"max_turns": 100},
-            "prompt": {},
-            "context": {},
-            "skills": {},
-            "mcp": {},
-        }
+        config = ExpConfig(name="direct")
         exp = Exp(config)
         runtime = exp.build_runtime(pg_ctx, bus=bus)
         # Register test tool directly on the runtime's registry
