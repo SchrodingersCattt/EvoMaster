@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
 from matmaster.tools.tool_registry import Tool, ToolRegistry
 from matmaster.core.bus import MessageBus
@@ -186,16 +187,7 @@ def _collect_bus_events(bus: MessageBus, timeout: float = 0.5) -> list:
 class TestMatMasterE2EPipeline:
     """QUAL-02: Full E2E pipeline with mock LLM."""
 
-    _EXP_CONFIG: dict[str, Any] = {
-        "name": "direct",
-        "tools": {"builtin": []},
-        "guards": [],
-        "termination": {"max_turns": 100},
-        "prompt": {},
-        "context": {},
-        "skills": {},
-        "mcp": {},
-    }
+    _EXP_CONFIG: ExpConfig = ExpConfig(name="direct")
 
     def test_mat_master_e2e_pipeline(self, tmp_path: Path) -> None:
         """E2E: Playground.prepare() -> Exp.build_runtime() -> Kernel.run() with mock LLM."""

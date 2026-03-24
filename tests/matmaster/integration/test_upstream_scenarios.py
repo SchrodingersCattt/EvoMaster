@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
 from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
@@ -112,16 +113,7 @@ def _make_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
 class TestRunInterruptedDetection:
     """Verify stop_event.is_set() detected during kernel loop."""
 
-    _EXP_CONFIG: dict[str, Any] = {
-        "name": "direct",
-        "tools": {"builtin": []},
-        "guards": [],
-        "termination": {"max_turns": 100},
-        "prompt": {},
-        "context": {},
-        "skills": {},
-        "mcp": {},
-    }
+    _EXP_CONFIG: ExpConfig = ExpConfig(name="direct")
 
     def test_run_interrupted_detection_deploy(self, tmp_path: Path) -> None:
         """Verify stop_event.is_set() detected before kernel turn.

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 
+from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
 from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
@@ -54,16 +55,7 @@ class TestMinimalE2EPipeline:
         pg_ctx = _make_minimal_ctx(tmp_path, llm_provider=mock_llm)
         bus = MessageBus()
 
-        config = {
-            "name": "direct",
-            "tools": {"builtin": []},
-            "guards": [],
-            "termination": {"max_turns": 100},
-            "prompt": {},
-            "context": {},
-            "skills": {},
-            "mcp": {},
-        }
+        config = ExpConfig(name="direct")
         exp = Exp(config)
         runtime = exp.build_runtime(pg_ctx, bus=bus)
 
