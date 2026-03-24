@@ -137,15 +137,18 @@ mode = "direct"
 max_turns = 200
 guards = []
 
+# developer_instructions 必须放在所有 [table] 之前，
+# 否则 TOML 解析器会将其归入上一个 table。
+developer_instructions = '''
+You are Mat Master, an autonomous agent for materials science
+and computational materials.
+
+（ContextBuilder identity section 的内容，见下方说明）
+'''
+
 [tools]
 builtin = ["*"]
 mcp = "*"
-
-developer_instructions = '''
-你是 MatMaster，一个专注于材料科学的 AI 助手...
-
-（当前 prompts/mat_master_system_prompt.txt 的完整内容迁入此处）
-'''
 ```
 
 设计要点：
@@ -153,8 +156,16 @@ developer_instructions = '''
 - `name` 是 exp 唯一标识，与文件名一致
 - `mode` 是传递给 AgentRuntimeSpec 的运行模式标签（当前与 name 相同，未来 exp 可能定义不同的 mode）
 - `guards` 是顶层扁平列表（不是 `[guards]` table），当前始终为空
-- `developer_instructions` 取代独立 prompt 文件，作为 ContextBuilder 的 `identity` 参数传入
+- `developer_instructions` 是 ContextBuilder 的 `identity` 参数，只包含 agent 身份和领域知识描述，**不包含**工具列表、模式契约、技能描述等——这些由 ContextBuilder 的其他 section（mode_contract、tools、skills）自动生成
+- TOML 裸 key 必须放在所有 `[table]` section 之前，否则会被解析为最近一个 table 的子键
 - 不包含 `skills`、`mcp`、`compaction`、LLM 配置
+
+关于 `developer_instructions` 的内容来源：
+
+- 旧架构使用 `playground/mat_master/prompts/mat_master_system_prompt.txt`（含 `{{MAT_*}}` 占位符），由 `build_prompt.py` 渲染
+- 重构后的新架构使用 `ContextBuilder`，prompt 由固定 section 拼接：identity → mode_contract → skills → tools → memory → task
+- `developer_instructions` 只需包含 identity section 的文本（agent 身份、领域专长、行为准则），不需要包含工具列表、模式契约等动态内容
+- 旧模板中与工具/模式/约束相关的 `{{MAT_*}}` 占位符逻辑已由 ContextBuilder 的对应 section 接管，不需要迁移到 toml
 
 ## Detailed Changes
 
@@ -278,13 +289,21 @@ def build_runtime(
 ) -> AgentRuntime:
     spec = self.assemble(ctx)
 
-    # 工具注册 — 从 ExpConfig 读取
+    # 工具注册 — 先注册所有工具，再构建 system prompt
+    # 顺序很重要：ContextBuilder 需要完整的工具表来生成 tools section
     tool_registry = ToolRegistry()
     if "*" in self._config.tools.builtin:
         self._init_builtin_tools(tool_registry, ctx)
 
+    # skills/mcp — 从运行时参数初始化（必须在 build system_prompt 之前）
+    # 签名保留 ctx 参数（未来实现可能需要 ctx.session 等上下文）
+    if skills:
+        self._init_skill_tools(ctx, tool_registry, skills)
+    if mcp:
+        self._init_mcp_tools(ctx, tool_registry, mcp)
+
     # system prompt — developer_instructions 作为 identity 传入 ContextBuilder
-    # ContextBuilder 继续负责拼接 mode_contract, tools, skills 等 section
+    # ContextBuilder 按固定 section 顺序拼接：identity → mode_contract → skills → tools
     # 注意：原代码从 config dict 读取 "identity" key，现改为 ExpConfig.developer_instructions
     builder = ContextBuilder()
     system_prompt = builder.build(
@@ -294,13 +313,6 @@ def build_runtime(
         identity=self._config.developer_instructions,
     )
 
-    # skills/mcp — 从运行时参数初始化
-    # 签名保留 ctx 参数（未来实现可能需要 ctx.session 等上下文）
-    if skills:
-        self._init_skill_tools(ctx, tool_registry, skills)
-    if mcp:
-        self._init_mcp_tools(ctx, tool_registry, mcp)
-
     # ... hooks 逻辑不变 ...
     # ... compaction 逻辑暂时保持不动，待 compaction 进程完成后统一收口 ...
 ```
@@ -308,9 +320,10 @@ def build_runtime(
 关键变化：
 
 - `self._config.get(...)` → `self._config.xxx` 属性访问
-- `developer_instructions` 直接作为 prompt 源，不再读取外部文件
+- `developer_instructions` 作为 ContextBuilder `identity` 参数，不再读取外部文件（原 key 名为 `identity`，现改为 `developer_instructions` 以与 toml 字段对齐）
+- 组装顺序修正：先注册所有工具（builtin + skills + mcp），再构建 system_prompt，确保 ContextBuilder 能看到完整工具表
 - `spec.meta` 不再作为搬运袋
-- `skills`/`mcp` 通过方法参数注入
+- `skills`/`mcp` 通过方法参数注入，签名从 `(self, ctx, registry)` 变为 `(self, ctx, registry, config_dict)`
 
 ### 4. `src/services/agent_run_service.py`
 
