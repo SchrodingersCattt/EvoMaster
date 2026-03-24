@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 
-import yaml
 from fastapi import HTTPException
+
+from playground.mat_master.core.workspace_resolver import (
+    resolve_workspace_path,
+)
 
 from . import state
 from .bootstrap import PROJECT_ROOT
+
+logger = logging.getLogger(__name__)
 
 
 def _runs_dir() -> Path:
@@ -28,32 +34,13 @@ def _get_run_id_web() -> str:
     return state.RUN_ID_WEB
 
 
-def _workspace_root_override() -> Path | None:
-    raw = (os.environ.get('MAT_MASTER_WORKSPACE_ROOT') or '').strip()
-    if not raw:
-        try:
-            config_path = PROJECT_ROOT / 'configs' / 'mat_master' / 'config.yaml'
-            if config_path.is_file():
-                data = yaml.safe_load(config_path.read_text(encoding='utf-8')) or {}
-                raw = (data.get('mat_master') or {}).get('workspace_root') or ''
-        except Exception:
-            raw = ''
-    if not raw:
-        return None
-    p = Path(raw).expanduser()
-    if not p.is_absolute():
-        p = (PROJECT_ROOT / p).resolve()
-    return p
-
-
 def _list_workspace_ids() -> list[str]:
-    """List workspace folder names under runs/.../workspaces/."""
-    run_path = _runs_dir() / _get_run_id_web()
-    workspaces_dir = run_path / 'workspaces'
-    if not workspaces_dir.is_dir():
+    """List workspace folder names from the active workspace root."""
+    workspace_root = _runs_dir() / _get_run_id_web() / 'workspaces'
+    if not workspace_root.is_dir():
         return []
     pairs = []
-    for p in workspaces_dir.iterdir():
+    for p in workspace_root.iterdir():
         if p.is_dir():
             try:
                 mtime = p.stat().st_mtime
@@ -82,11 +69,25 @@ def _list_state_ids() -> list[str]:
     return [p.name for p in state_root.iterdir() if p.is_dir()]
 
 
-def _get_run_workspace_path(run_id: str, task_id: str | None = None) -> Path | None:
+def _get_run_workspace_path(
+    run_id: str,
+    task_id: str | None = None,
+    session_id: str | None = None,
+) -> Path | None:
     """Resolve run_id (and optional task_id) to workspace directory."""
     runs = _runs_dir()
     run_path = runs / run_id
     if not run_path.is_dir():
+        return None
+    resolution = resolve_workspace_path(
+        run_path,
+        task_id=task_id,
+        session_id=session_id,
+        create=False,
+    )
+    if resolution.path.is_dir():
+        return resolution.path
+    if task_id or session_id:
         return None
     if task_id:
         ws = run_path / 'workspaces' / task_id
@@ -107,24 +108,36 @@ def _get_run_workspace_path(run_id: str, task_id: str | None = None) -> Path | N
 def _resolve_session_workspace(
     session_id: str, create: bool = True
 ) -> tuple[Path, str]:
-    """Resolve session workspace dir and task_id, optionally creating it."""
-    override = _workspace_root_override()
-    if override is not None:
-        if create:
-            override.mkdir(parents=True, exist_ok=True)
-        if not override.is_dir():
-            raise HTTPException(status_code=404, detail='Workspace root not found')
-        return override, 'external'
+    """Resolve session workspace dir and task_id, optionally creating it.
+
+    Local web keeps task-scoped workspaces. When a session has no last_task_id
+    yet, we use session_id as a stable placeholder so file APIs still have a
+    deterministic local directory before the first run completes.
+    """
     run_path = _runs_dir() / _get_run_id_web()
     if not run_path.is_dir():
         raise HTTPException(status_code=404, detail='Run not found')
     data = state.SESSIONS.get(session_id)
-    task_id = (data or {}).get('last_task_id') if data else None
+    task_id = ((data or {}).get('last_task_id') or '') if data else ''
+    task_id = task_id or None
     if task_id is None:
         task_id = session_id
-        if create:
-            (run_path / 'workspaces' / task_id).mkdir(parents=True, exist_ok=True)
-    base = _get_run_workspace_path(_get_run_id_web(), task_id=task_id)
+    resolution = resolve_workspace_path(
+        run_path,
+        task_id=task_id,
+        session_id=session_id,
+        create=create,
+    )
+    base = resolution.path
     if not base or not base.is_dir():
         raise HTTPException(status_code=404, detail='Workspace not found')
-    return base, task_id
+    logical_task_id = task_id or session_id
+    logger.debug(
+        'resolve_session_workspace: mode=%s source=%s session_id=%s task_id=%s path=%s',
+        resolution.mode,
+        resolution.source,
+        session_id,
+        logical_task_id,
+        base,
+    )
+    return base, logical_task_id

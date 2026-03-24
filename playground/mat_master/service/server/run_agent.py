@@ -26,6 +26,10 @@ from playground.mat_master.core.run_helpers import (
     should_persist_chat_event,
     should_skip_push_for_frontend,
 )
+from playground.mat_master.core.workspace_resolver import (
+    get_remote_session_workspace_root,
+    load_workspace_config_dict,
+)
 from src.services.chat_history import ChatHistoryConverter
 from src.utils.chat_event_source import normalize_event_source
 
@@ -34,6 +38,11 @@ from .bootstrap import PROJECT_ROOT
 from .paths import _get_run_id_web, _runs_dir
 
 logger = logging.getLogger(__name__)
+_REMOTE_WORKSPACE_ROOT = str(
+    get_remote_session_workspace_root(
+        load_workspace_config_dict(PROJECT_ROOT), project_root=PROJECT_ROOT
+    )
+)
 
 
 def _run_agent_sync(
@@ -100,7 +109,7 @@ def _run_agent_sync(
 
         if state._cached_pg is not None:
             pg = state._cached_pg
-            pg.set_run_dir(run_dir, task_id=task_id)
+            pg.set_run_dir(run_dir, task_id=task_id, session_id=session_id)
             pg._setup_trajectory_file()
         else:
             from evomaster.core import get_playground_class
@@ -109,7 +118,7 @@ def _run_agent_sync(
             if not config_path.exists():
                 raise FileNotFoundError(f"Config not found: {config_path}")
             pg = get_playground_class('mat_master', config_path=config_path)
-            pg.set_run_dir(run_dir, task_id=task_id)
+            pg.set_run_dir(run_dir, task_id=task_id, session_id=session_id)
             pg.setup()
             pg._setup_trajectory_file()
 
@@ -160,11 +169,15 @@ def _run_agent_sync(
                             host=ssh_host,
                             username=node_user,
                             password=node_pwd,
-                            working_dir='/personal/workspace',
+                            working_dir=_REMOTE_WORKSPACE_ROOT,
+                            session_id=session_id,
                         )
                         _ssh_attached = True
                         logger.info(
-                            'SSH session attached to Bohrium node host=%s', ssh_host
+                            'SSH session attached to Bohrium node host=%s workspace=%s/%s',
+                            ssh_host,
+                            _REMOTE_WORKSPACE_ROOT.rstrip('/'),
+                            session_id,
                         )
                         event_callback(
                             'System', 'status', f"已连接到 Bohrium 节点 {ssh_host}"

@@ -18,8 +18,9 @@
 
 - `/share` 已经由 Bohrium `project_id` 自动隔离。
 - 不再引入额外的业务项目模型。
-- 第一阶段先改“运行时行为”，不优先做 schema 重设计。
+- 第一阶段先改 **SSH / Bohrium 远端运行时行为**，不优先做 schema 重设计。
 - `evo_chat_sessions` 表里的 `project_id` 继续保持当前 Bohrium `project_id` 语义。
+- 本地 worker / 本地 Web 进程没有天然的 `/share` 目录，因此本地 workspace 继续保持当前 task-scoped 语义。
 
 ## 当前模型
 
@@ -29,6 +30,7 @@
 - 每次发送消息都会生成新的 `task_id`。
 - 多轮对话连续性主要依赖 DB 历史，而不是复用同一个 workspace。
 - 本地 Web 文件树仍然默认“展示最近一次 task 的 workspace”。
+- Bohrium SSH attach 的旧默认 cwd 语义仍然来自 `/personal/workspace`。
 
 关键代码位置：
 
@@ -61,6 +63,12 @@
 - 前端会先持久化当前项目，再发 stream 请求。
 - 文件浏览基于存储路径语义，而不是基于 `task_id` 目录语义。
 
+需要注意的差异：
+
+- `scimaster-bohr-chat` 的 session 目录是 `/personal/workspace/{sessionId}`。
+- MatMaster-Evo 这次迁移的目标是 `/share/workspace/{session_id}`。
+- 原因不是再造一套“业务项目”概念，而是直接复用 Bohrium `project_id` 对 `/share` 的天然隔离能力。
+
 ## 目标模型
 
 ### 后端
@@ -69,6 +77,13 @@
 - 不再使用 `task_id` 决定主 Agent 的 workspace。
 - 主 workspace 按 `session_id` 解析。
 - 同一 session 的多轮对话复用同一个 workspace。
+- SSH / Bohrium 远端 cwd 目标为 `/share/workspace/{session_id}`。
+- `/share` 继续表示 Bohrium 项目级共享存储；`/share/workspace/{session_id}` 只是其中的 session-specific 子目录。
+
+### 本地运行
+
+- 本地 worker 与本地 Web 继续使用现有 task-scoped workspace。
+- 这轮不保留本地 session-scoped workspace 的配置入口，避免造成误解。
 
 ### 前端
 
@@ -90,18 +105,17 @@
 
 目标：
 
-- 为新旧两种 workspace 行为加一个可回滚开关。
+- 把本地 workspace 解析与 SSH 远端 workspace root 解析收口到统一入口。
 
 建议配置/环境变量：
 
-- `MAT_MASTER_WORKSPACE_MODE=task|session`
-- `MAT_MASTER_SESSION_WORKSPACE_ROOT=/share/workspace`
+- `mat_master.remote_session_workspace_root=/share/workspace`
 
 工作项：
 
-- [ ] 抽出统一的 workspace resolver。
-- [ ] 默认仍保留旧行为。
-- [ ] 在日志中打印当前解析出的 workspace mode 和 path。
+- [x] 抽出统一的 workspace resolver。
+- [x] 本地默认仍保留 task-scoped 旧行为。
+- [x] 在关键入口统一使用 resolver 解析本地 workspace 与远端 SSH root。
 
 建议修改文件：
 
@@ -112,71 +126,53 @@
 
 验证项：
 
-- [ ] 默认配置下仍走 task 模式。
-- [ ] 现有 direct 流程不回归。
-- [ ] 现有 planner 流程不回归。
+- [x] 默认配置下仍走 task 模式。
+- [x] workspace resolver 单测通过。
+- [x] 关键 import smoke test 通过。
 
-### Phase 1：先改本地 Web 后端，只打通 Direct
+### Phase 1：先改 SSH / Bohrium 远端 session workspace
 
 目标：
 
-- 让本地 Web 调试链路先切到稳定的 session workspace。
+- 先把真正需要的 Bohrium SSH cwd 语义改到 `/share/workspace/{session_id}`。
+- 让同一个 Bohrium 项目下的多个 session 共享 `/share`，但各自拥有独立 session 目录。
+- 不要求本地 worker / 本地 Web 同步完成 session-scoped workspace。
 
 工作项：
 
-- [ ] 保留本地 run 流程中的 `task_id` 生成逻辑。
-- [ ] 将 Agent 实际使用的 workspace 改为 `/share/workspace/{session_id}`。
-- [ ] 首次进入新 session 时自动创建目录。
-- [ ] 文件相关 API 改为按 `session_id` 解析，不再按“最近一次 task 目录”解析。
+- [x] 新增 `remote_session_workspace_root` 配置入口。
+- [x] 生产 Bohrium attach 改为 `working_dir={remote_root}` + `session_id=session_id`。
+- [x] 本地 Web Bohrium attach 改为 `working_dir={remote_root}` + `session_id=session_id`。
+- [x] Agent prompt 补充 `/share` 是项目级共享存储、`/share/workspace/{session_id}` 是当前会话目录的语义提示。
+- [x] `monitor_job` 的 SSH fallback 从 `/personal/workspace` 调整为优先使用当前 session config。
+- [ ] 做一次真实 Bohrium 远端联调，确认新 session 会在 `/share/workspace/{session_id}` 下落目录。
+- [ ] 核对远端 skill sync / callback / 其他远程工具是否还依赖旧 cwd 假设。
 
 建议修改文件：
 
+- `src/services/agent_run_bohrium.py`
 - `playground/mat_master/service/server/run_agent.py`
-- `playground/mat_master/core/playground.py`
-- `playground/mat_master/service/server/paths.py`
-- `playground/mat_master/service/server/http_routes.py`
+- `playground/mat_master/core/agent.py`
+- `evomaster/agent/tools/builtin/monitor_job/_tool.py`
 
 验证项：
 
-- [ ] 第 1 轮能在 session workspace 写文件。
-- [ ] 第 2 轮能读到第 1 轮生成的文件。
-- [ ] 前端刷新后，仍能看到同一个 session 的文件。
-- [ ] 新建 session 时会创建新的目录。
+- [x] resolver / import 级最小验证通过。
+- [ ] 第 1 轮 Bohrium 运行能在 `/share/workspace/{session_id}` 写文件。
+- [ ] 第 2 轮 Bohrium 运行能读到第 1 轮生成的文件。
+- [ ] 同一 Bohrium 项目下，session B 可以读取 `/share` 中的共享内容。
 
-### Phase 1.5：单独收敛 Planner
-
-目标：
-
-- 在不重新引入 task-scoped 主 workspace 的前提下，保证 planner 正常工作。
-
-工作项：
-
-- [ ] 将 planner 中间状态迁到 `session_root/_runs/{task_id}`。
-- [ ] 最终用户可见产物继续留在稳定的 session 根目录。
-- [ ] 清理本地 planner 对 `run_dir/workspaces/{task_id}` 的旧假设。
-
-建议修改文件：
-
-- `playground/mat_master/core/solvers/_research_planner_runtime.py`
-- `playground/mat_master/core/solvers/research_planner_execution/_precheck.py`
-- `playground/mat_master/core/solvers/research_planner_execution/_step.py`
-
-验证项：
-
-- [ ] planner 第 1 轮的中间文件进入 `_runs/{task_id}`。
-- [ ] planner 第 2 轮不会覆盖第 1 轮的中间态。
-- [ ] 最终 session 可见产物仍在稳定的 session 根目录下。
-
-### Phase 2：前端适配
+### Phase 2：前端适配稳定的 session 语义
 
 目标：
 
-- 让前端尽快适配稳定的 session workspace，但不要求第一版就支持完整 `/share` 浏览。
+- 让前端优先适配“当前 session 的稳定目录”语义。
+- 第一版不阻塞在完整 `/share` 树浏览能力上。
 
 工作项：
 
 - [ ] 文案从“最近一次 run 的 workspace”改成“当前会话目录”或“当前 session 工作区”。
-- [ ] 以 `workspace_root` 为主显示文件根。
+- [ ] 以当前 session 文件根为主显示文件根。
 - [ ] `task_id` 仅作为本轮运行元数据保留。
 - [ ] 第一版不要因为共享树未完成而阻塞联调。
 
@@ -192,18 +188,61 @@
 - [ ] 新一轮运行后刷新文件树，仍然指向同一个 session 根目录。
 - [ ] 上传、预览、下载功能不回归。
 
-### Phase 3：生产 API / Worker 迁移
+### Phase 3：本地 session workspace（可选，后置）
 
 目标：
 
-- 让生产 SSE / Worker 链路也遵循 session-scoped workspace 模型。
+- 当前不做。
+- 若未来确有需要，再重新单独设计，不沿用这轮已移除的半成品配置开关。
+
+工作项：
+
+- [ ] 暂无。
+
+建议修改文件：
+
+- 暂无。
+
+验证项：
+
+- [ ] 暂无。
+
+### Phase 4：Planner 中间态收敛
+
+目标：
+
+- 在不重新引入 task-scoped 主 workspace 的前提下，保证 planner 正常工作。
+
+工作项：
+
+- [ ] 将 planner 中间状态迁到 `session_root/_runs/{task_id}`。
+- [ ] 最终用户可见产物继续留在稳定的 session 根目录。
+- [ ] 清理 planner 对 `run_dir/workspaces/{task_id}` 的旧假设。
+
+建议修改文件：
+
+- `playground/mat_master/core/solvers/_research_planner_runtime.py`
+- `playground/mat_master/core/solvers/research_planner_execution/_precheck.py`
+- `playground/mat_master/core/solvers/research_planner_execution/_step.py`
+
+验证项：
+
+- [ ] planner 第 1 轮的中间文件进入 `_runs/{task_id}`。
+- [ ] planner 第 2 轮不会覆盖第 1 轮的中间态。
+- [ ] 最终 session 可见产物仍在稳定的 session 根目录下。
+
+### Phase 5：生产 API / Worker 全量对齐
+
+目标：
+
+- 生产 SSE / Worker 链路整体对齐 session-scoped workspace 语义。
 
 工作项：
 
 - [ ] 保持 `task_id` 和 `invocation_id` 语义不变。
-- [ ] 生产 Agent 主 workspace 改为按 `session_id` 解析。
-- [ ] workspace 上传逻辑改为使用 session 根目录。
-- [ ] 重新确认 stop / retry / end 在稳定 session 目录下的行为。
+- [ ] 生产 Agent 本地 workspace 是否切换为 session-scoped，根据联调结果决定。
+- [ ] workspace 上传逻辑改为使用稳定 session 根目录或明确维持现状。
+- [ ] 重新确认 stop / retry / end 在新语义下的行为。
 
 建议修改文件：
 
@@ -213,34 +252,10 @@
 
 验证项：
 
-- [ ] 生产多轮对话可以读取上一轮文件。
+- [ ] 生产多轮 session 文件连续性成立。
 - [ ] `workspace_uploaded` 事件仍然正常。
-- [ ] stop / rerun 不会切换 workspace 根目录。
+- [ ] stop / rerun 不会错误切换 workspace 根目录。
 - [ ] SSE 历史仍然按 `task_id` / `invocation_id` 区分轮次。
-
-### Phase 4：Bohrium 远程对齐
-
-目标：
-
-- 让 SSH / Bohrium 远程运行也使用同一套 session workspace 约定。
-
-工作项：
-
-- [ ] Bohrium 远程 working dir 指向 `/share/workspace/{session_id}`。
-- [ ] 保持同一 Bohrium 项目内 `/share` 可共享。
-- [ ] 检查远程 skill 同步、远程文件回调、路径解析是否还带旧目录假设。
-
-建议修改文件：
-
-- `src/services/agent_run_bohrium.py`
-- `evomaster/core/playground_session.py`
-- 若远程回调里依赖旧路径规则，也一并修改
-
-验证项：
-
-- [ ] session A 的输出写在自己的 session 根目录下。
-- [ ] 同一 Bohrium 项目下的 session B 能读取共享 `/share` 内容。
-- [ ] session A 和 B 不会互相覆盖各自 session 根目录。
 
 ## 前端实施策略
 
@@ -287,9 +302,8 @@
 
 ### Local Direct
 
-- [ ] 新 session 创建 `/share/workspace/{session_id}`
-- [ ] 第二轮能读到上一轮文件
-- [ ] 上传文件落到 session 根目录
+- [ ] 保持当前 task-scoped 行为不回归
+- [ ] 上传、预览、下载逻辑不回归
 
 ### Local Planner
 
@@ -316,14 +330,13 @@
 
 ## 待确认问题
 
-- [ ] 第一版前端是否只展示 session 目录，不展示共享目录？
 - [ ] workspace 上传未来是做“整个 session 上传”还是“增量上传”？
 - [ ] 旧的 task workspace 目录要不要做迁移，还是直接视为历史遗留？
 - [ ] 是否还有 MCP / skill / callback 代码写死了 `/personal/workspace`？
+- [ ] 是否需要把远端 skill sync 根目录也从 `/personal/workspace/.evomaster` 调整出去？
 
 ## 全量迁移完成后的清理项
 
-- [ ] 如果不再需要回滚，移除 task-mode 开关。
 - [ ] 清理 UI 和文档里“最近一次 task workspace”的旧表述。
 - [ ] 删除仍按 `task_id` 解析主 workspace 的死代码。
 - [ ] 行为稳定后，补充架构文档和 AGENTS 约定。
@@ -338,3 +351,11 @@
 - 确认 MatMaster-Evo 当前主 workspace 模型仍然是 task-scoped。
 - 确认 `scimaster-bohr-chat` 已经把项目共享存储和会话存储拆分建模。
 - 确认继续复用 Bohrium `project_id`，不引入新的业务项目概念。
+- 决策调整为“SSH / Bohrium 优先，本地 workspace 后置”。
+- 完成 Phase 0：新增统一 workspace resolver，并在生产 / 本地 Web / Playground 入口接入；本地继续保持 task-scoped，SSH 远端单独走 `remote_session_workspace_root`。
+- 为 SSH 远端新增 `remote_session_workspace_root` 配置能力，当前目标根路径为 `/share/workspace`。
+- 已将生产 Bohrium attach、本地 Web Bohrium attach、Agent `/share` 提示、`monitor_job` SSH fallback 调整到新的 session workspace 语义。
+- 已完成最小验证：`uv run pytest tests/test_workspace_resolver.py` 通过，关键 import smoke test 通过。
+- 清理掉未准备投入使用的本地 session workspace 配置入口，只保留 SSH 远端相关配置。
+- 进一步移除本地 `workspace_root` / `MAT_MASTER_WORKSPACE_ROOT` override 支持，避免保留无用配置面。
+- 进一步移除 `MAT_MASTER_REMOTE_SESSION_WORKSPACE_ROOT` 环境变量分支，只保留 `config.yaml` 中的 `remote_session_workspace_root` 配置。
