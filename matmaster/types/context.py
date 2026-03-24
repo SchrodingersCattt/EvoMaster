@@ -54,6 +54,7 @@ class PlaygroundContext(BaseModel):
     session: Any = None  # EvoMaster BaseSession instance (per D-09)
     config_dir: Path | None = None  # Playground config directory (per D-10)
     llm_provider: Any = None  # LLMProvider instance (externally determined)
+    llm_config: Any = None  # LLMConfig instance (externally loaded)
 
     def with_bohrium(self, result: dict[str, Any]) -> "PlaygroundContext":
         """Return a new frozen instance with Bohrium result in run_meta.
