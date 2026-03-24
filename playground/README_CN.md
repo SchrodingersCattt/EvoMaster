@@ -2,17 +2,15 @@
 
 Playground 是开发者构建自己科研智能体的工作区。每个 playground 定义了一个完整的实验工作流，通过继承 EvoMaster 的基础组件（`BasePlayground`、`BaseExp`）来实现特定的科学实验自动化。
 
-**开发者应该在此目录下创建自己的 playground，实现自己的科研智能体。**
+**本仓库仅内置产品级 playground（`mat_master`）。若要新增其它 agent，可在 `playground/` 下自建目录，或参考 [EvoMaster 上游](https://github.com/sjtu-sai-agents/EvoMaster) 中的 minimal 与各类示例。**
 
-## 现有示例
+## 内置 Playground
 
 | Playground | 类型 | 说明 | 文档 |
 |---|---|---|---|
-| `minimal` | 单智能体 | 最简示例，仅继承 `BasePlayground`，适合快速了解框架 | [README](./minimal/README.md) |
-| `minimal_multi_agent` | 多智能体 | Planning + Coding 双智能体协作，演示多 Agent 工作流 | [README](./minimal_multi_agent/README.md) |
-| `minimal_kaggle` | 多智能体 | Kaggle 竞赛自动化，含 6 个角色 Agent（draft/debug/improve/research/knowledge/metric） | [README](./minimal_kaggle/README.md) |
-| `minimal_skill_task` | 单智能体 + Skills | 基于 RAG 技能的 Analyze → Plan → Search → Summarize 工作流 | [README](./minimal_skill_task/README.md) |
-| `x_master` | 多阶段并行 | 四阶段迭代工作流 Solve → Critique → Rewrite → Select，支持 MCP 工具 | [README](./x_master/README.md) |
+| `mat_master` | 产品 | MatMaster 前端/技能/Bohrium 与 MCP 集成等 | 见 `playground/mat_master/` 与 `configs/mat_master/` |
+
+命令行示例：`python run.py --agent mat_master --config configs/mat_master/config.yaml --task "你的任务"`。
 
 ## 快速开始：创建你的 Playground
 
@@ -42,7 +40,7 @@ class MyPlayground(BasePlayground):
         self.logger = logging.getLogger(self.__class__.__name__)
 ```
 
-这是最小实现。如果需要多智能体或自定义实验流程，可以覆盖 `setup()`、`_create_exp()`、`run()` 等方法，参考 `minimal_multi_agent` 和 `x_master`。
+这是最小实现。如果需要多智能体或自定义实验流程，可以覆盖 `setup()`、`_create_exp()`、`run()` 等方法，可参考本仓库 `playground/mat_master/` 或 EvoMaster 上游的 `playground/` 示例。
 
 ### 3. 编写提示词
 

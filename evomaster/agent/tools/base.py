@@ -85,7 +85,7 @@ class BaseTool(ABC):
     @abstractmethod
     def execute(
         self, session: BaseSession, args_json: str
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[str | dict[str, Any], dict[str, Any]]:
         """执行工具
 
         Args:
@@ -94,7 +94,7 @@ class BaseTool(ABC):
 
         Returns:
             (observation, info) 元组
-            - observation: 返回给 Agent 的观察结果
+            - observation: 返回给 Agent 的观察结果（字符串或结构化 dict，如 EditorTool）
             - info: 额外信息
         """
 

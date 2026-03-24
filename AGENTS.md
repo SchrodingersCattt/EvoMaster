@@ -93,7 +93,7 @@ import sys  # 不要插在常量或代码中间
 |------|-------------------------|----------------|
 | 定位 | 下游应用：基于 EvoMaster 的 evomaster 核心 + 自研 playground、服务端、MCP 适配 | 上游框架：Agent/Playground/Exp、Tools、Skills、Session 等通用实现 |
 | 当前基于版本 | v0.0.1 架构与 API | 上游已发布 v0.0.2（配置与多 Agent 等有较大变更） |
-| 代码对应 | 项目内 `evomaster/` 目录对应上游的 `evomaster/`；本仓库另有 `playground/mat_master/`、`src/`、`evomaster/adaptors/` 等自有代码 | 上游 `evomaster/` + `playground/minimal*`、`playground/x_master` 等 |
+| 代码对应 | 项目内 `evomaster/` 目录对应上游的 `evomaster/`；本仓库另有 `playground/mat_master/`、`src/`、`evomaster/adaptors/` 等自有代码 | 上游 `evomaster/` + 上游仓库内各类 `playground/` 示例 |
 
 ### 与本仓库直接相关的约定
 
@@ -137,6 +137,7 @@ import sys  # 不要插在常量或代码中间
 
 ## 其他约定
 
+- **配置目录**：产品主配置与 MCP JSON 位于 `configs/mat_master/`（仓库根目录不再保留泛用 `configs/config.yaml`）。`ConfigManager` / `get_config_manager()` 未指定 `config_dir` 时默认加载该目录下的 `config.yaml`。
 - **维护本文件**：在对话或开发过程中，若产生新的、值得固化的约定或逻辑（如架构决策、命名/用法约定、废弃说明等），应适时补充到 AGENTS.md，便于后续遵守。
 - **多实例与 Redis**：API 与 Worker 均可多实例部署。跨实例的协调一律使用 Redis（或其它共享存储）；事件顺序、用户回复、run 归属与存活判断等均依赖 Redis，不依赖进程内状态或「请求与执行同进程」的假设。
 - **服务重启**：新增或修改功能时需考虑服务重启场景。进程内内存（如 `SESSIONS`）在重启后会清空；若逻辑依赖跨请求的状态（如会话级鉴权、当前 run 所用资源），应区分「需持久化」与「仅当次 run 有效」：前者落库或共享存储，后者可保留在内存，并确保重启后新请求能从 DB/共享存储恢复必要信息继续工作。
