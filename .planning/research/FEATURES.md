@@ -1,240 +1,335 @@
-# Feature Research
+# Feature Landscape: v1.1 内置 Tool 套件 + SubAgent + Prompt 体系
 
-**Domain:** AI Agent Framework Kernel (科研场景 Agent 系统重构)
-**Researched:** 2026-03-21
-**Confidence:** HIGH
+**Domain:** AI Agent 内置工具套件与 SubAgent 生成机制
+**Researched:** 2026-03-24
+**Confidence:** HIGH (基于 Claude Code 系统提示分析 + OpenAI function calling 最佳实践 + 现有代码库分析)
 
-基于对 2025-2026 年主流 Agent 框架 (OpenAI Agents SDK, LangGraph, Microsoft Agent Framework/Semantic Kernel, CrewAI, nanobot) 的系统调研，以及 matmaster 现有代码和 PROJECT.md 中定义的重构目标，得出以下特性全景图。
+本次研究聚焦 v1.1 新增特性：matmaster 原生内置 tool 套件、SubAgent spawn 机制、prompt/description 精细化设计。不重复 v1 已完成的基础设施（AgentKernel、ToolRegistry、ContextBuilder 等），只关注在现有骨架上构建的新能力。
 
 ---
 
-## Feature Landscape
+## Table Stakes
 
-### Table Stakes (Agent Kernel 必备能力)
+v1.1 必须交付的能力。缺失任何一项都意味着 agent 无法独立执行任务。
 
-任何现代 agent kernel 都需要具备的基础能力。缺失任何一项都意味着框架不完整。
+### 1. 文件读取工具 (Read)
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **极简执行循环 (Agent Loop)** | 所有框架的核心：LLM 调用 -> tool 执行 -> 消息累积 -> 循环判断。nanobot 的 `_run_agent_loop()` 在 500 行内完成全部核心逻辑。OpenAI SDK 同样以极简 Runner 驱动 loop | MEDIUM | matmaster 现有 `BaseAgent.run()` 已实现，但混入了 config 装配逻辑。重构核心是将 loop 纯化：只消费 AgentRuntimeSpec，不做装配 |
-| **Tool Registry (注册制工具系统)** | 行业标准。所有框架均使用 name -> tool 的注册表 + JSON Schema 自描述。OpenAI SDK 通过 Pydantic model 或 raw schema 定义参数；nanobot 用 `ToolRegistry` 做 name-keyed dict | LOW | matmaster 的 `ToolRegistry` 已经是成熟实现（支持 register/unregister/get_tool_specs）。重构时保持接口不变，确保 MCP 工具和内置工具统一注册即可 |
-| **LLM Provider 抽象** | 多模型支持是基本要求。nanobot 定义 `LLMProvider` 抽象基类 + `chat_with_retry()` 接口；Microsoft Agent Framework 通过 Kernel 层统一 provider 调度。2025 年 LiteLLM 仍是 Python 生态最广泛的 provider 路由层 | MEDIUM | matmaster 已有 `BaseLLM` 抽象 + OpenAI/Anthropic/DeepSeek 实现。重构需要将其统一为 `LLMProvider` 协议接口，保证 `chat()` + `chat_with_retry()` 签名一致，且 streaming 是一等公民 |
-| **Context Builder (多源 Prompt 组装)** | Anthropic 官方指南强调 system prompt 应结构化分区（identity/instructions/tools/output）。nanobot 的 `ContextBuilder` 从 identity + bootstrap + memory + skills 多源组装 | MEDIUM | matmaster 现有 prompt 组装散落在 Agent 和 Playground 中。需要收拢为独立的 `ContextBuilder`，输入源包括：identity prompt、skill descriptions、memory/history、task description |
-| **Context Compaction (上下文压缩)** | 长运行 agent 的刚需。Microsoft Agent Framework 提供 truncation + summarization 两种策略；Anthropic 推荐 tool result clearing 作为最轻量方案；nanobot 用 MEMORY.md 做 token 超限时的 consolidation | HIGH | matmaster 已有成熟的 `CompactionConfig` + `ContextManager`，支持 sliding_window/summary/latest_half 策略。这是存量优势，重构时保持能力，将 compaction 配置收入 AgentRuntimeSpec |
-| **流式事件发射 (Event Emission)** | 2025 年所有框架都支持 streaming。Google ADK 引入 streaming tools；Microsoft Agent Framework 定义了 ExecutorInvokeEvent/CompleteEvent/ErrorEvent 等事件类型。实时反馈是 Web 应用必需 | MEDIUM | matmaster 现用 callback 模式 (`event_callback(source, type, content, **extra)`)。重构计划引入 MessageBus (async queue) 解耦 agent 和消费方，与 nanobot 模式对齐 |
-| **Termination Policy (终止策略)** | agent 何时停止执行。所有框架提供：max_turns 限制、finish tool 显式结束、stop_event 外部取消、异常终止。OpenAI SDK 的 Runner 支持 max_turns + tool-triggered finish | LOW | matmaster 已有 max_turns + FinishTool + stop_event。将终止策略抽象为 TerminationPolicy 类型，作为 AgentRuntimeSpec 的一部分 |
-| **Session / 环境隔离** | agent 执行需要隔离的工作环境。Microsoft Agent Framework 的 `AgentSession` 是 stateless agent + stateful session 的分离设计。matmaster 的场景更重：需要 Docker/Local/SSH 三种 session 类型 | LOW | matmaster 的 `BaseSession` 体系已成熟。重构时 session 信息收入 PlaygroundContext（属于 workspace 准备），agent kernel 不直接管理 session lifecycle |
-| **配置驱动初始化** | YAML/JSON 配置驱动 agent 行为是框架标配。nanobot 用 `config.json` + Pydantic schema 验证；matmaster 已有 YAML config 体系 | LOW | 保持 YAML 配置，但通过类型化契约 (PlaygroundContext / AgentRuntimeSpec) 替代 Dict[str, Any] 的隐式传递 |
-| **Human-in-the-Loop (确认交互)** | agent 执行高风险操作前暂停等待人类确认。OpenAI SDK 的 Guardrails 支持 input/output 验证 + 拦截；matmaster 已有 confirmation_request/reply 机制 | LOW | 已有实现。重构时 confirmation 作为 hook 注入 agent kernel，通过 AgentRuntimeSpec 的 hooks 字段配置 |
+| 维度 | 描述 |
+|------|------|
+| **Why Expected** | agent 理解代码/数据的基础操作。Claude Code 将 Read 作为最高频工具，所有分析/修改前置操作都依赖它 |
+| **Complexity** | LOW |
+| **Session 依赖** | YES -- 通过 `BaseSession.read_file()` / `BaseSession.download()` |
+| **参数设计** | `file_path` (必需, 绝对路径), `offset` (可选, 起始行号), `limit` (可选, 读取行数) |
+| **行为规范** | 默认读取前 2000 行; 输出 cat -n 格式带行号; 超长行截断; 二进制文件返回类型提示而非内容 |
+| **现有基础** | evomaster EditorTool 的 `view` 命令已有类似功能，但耦合在多命令工具中。需要拆分为独立 Read tool |
+| **关键设计点** | 与 Edit/Write 的 read-before-modify 协议: Read 记录已读文件集合，Write/Edit 拒绝操作未读文件 |
 
-### Differentiators (竞争优势 / 面向未来的能力)
+### 2. 文件写入工具 (Write)
 
-不是必须的，但能显著提升框架质量或为未来扩展铺路的能力。
+| 维度 | 描述 |
+|------|------|
+| **Why Expected** | agent 创建新文件的基本能力。区别于 Edit（修改已有文件），Write 用于全新文件创建或完整覆盖 |
+| **Complexity** | LOW |
+| **Session 依赖** | YES -- 通过 `BaseSession.write_file()` |
+| **参数设计** | `file_path` (必需, 绝对路径), `content` (必需, 完整文件内容) |
+| **行为规范** | 覆盖已有文件; 对已有文件必须先 Read 才能 Write (防止盲写); 自动创建中间目录 |
+| **现有基础** | evomaster EditorTool 的 `create` 命令 |
+| **关键设计点** | Write 的 description 中应明确告知 LLM: 优先用 Edit 修改已有文件，Write 只用于新建或完整重写 |
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Guard 系统分层 (通用 Guard + 业务 Guard)** | OpenAI SDK 将 Guardrails 作为四大原语之一（与 Agent/Tool/Handoff 并列），但其 guard 是通用的 input/output validation。matmaster 的独特价值在于将 guard 分为两层：kernel 内置通用 guard（loop 检测、auth failure 门控）+ exp 注入业务 guard（manuscript 完成门控、structure retrieval 门控）。这种分层在主流框架中不常见 | MEDIUM | 当前 `ToolGuard` 把 6 种 guard 混在一个类中。重构要拆分：通用 guard 内置于 agent kernel（属于安全机制），业务 guard 通过 AgentRuntimeSpec.guards 注入（属于可配置策略） |
-| **类型化层间契约 (PlaygroundContext / AgentRuntimeSpec)** | 主流框架中 Microsoft Agent Framework 的 `AgentSession` 做到了 agent stateless + session stateful 的清晰分离。matmaster 更进一步：三层抽象各有类型化契约，playground 输出 PlaygroundContext，exp 输出 AgentRuntimeSpec，agent 只消费 AgentRuntimeSpec。这种契约驱动的层间通信比 Dict[str, Any] 更安全 | MEDIUM | 这是本次重构的核心差异化。需要设计 PlaygroundContext (workdir/session type/cache/env) 和 AgentRuntimeSpec (prompt config/tool registry/llm provider/termination/hooks/guards) 的 Pydantic model |
-| **MessageBus 事件解耦** | 区别于 callback 直连，MessageBus (async queue) 实现 agent 和消费方的完全解耦。nanobot 用 `asyncio.Queue` 双通道；Confluent 提出 event bus 是多 agent 系统的基础设施。对未来多 agent 扩展是关键铺垫 | MEDIUM | matmaster 当前用 callback。重构引入 MessageBus 后，agent 发射事件到 bus，service 层从 bus 消费。为未来 agent-to-agent 通信预留接口 |
-| **Solver 作为 Exp 组合模式** | 多 agent 协作的轻量级形式。不是完整的 multi-agent orchestration，而是 exp 层用多个 agent 组合解决问题的高阶模式（如 planner + executor）。CrewAI 的 crew 模式和 OpenAI SDK 的 Handoff 都属于此类 | MEDIUM | 当前 solver 模式已存在但位置不清晰。收入 exp 层后，solver 成为 exp 组合 agent 的标准方式，不需要引入独立的 orchestration 层 |
-| **Skill 注册与加载系统** | skill 作为可复用的 prompt + tool 组合包，是 matmaster 科研场景的独特需求。nanobot 用 skills 目录做类似的事情，但没有注册制 | LOW | 已有 `SkillRegistry`。重构时 skill 加载收入 exp 层的能力装配流程，通过 ContextBuilder 将 skill descriptions 注入 prompt |
-| **MCP 协议集成** | MCP 在 2025 年 12 月由 Anthropic 捐给 Linux Foundation，成为事实标准。OpenAI SDK 内置 MCP server 支持；Microsoft Agent Framework 讨论了 MCP 驱动的 multi-agent 模式 | LOW | matmaster 已有 MCP 客户端集成。重构时将 MCP 工具统一到 ToolRegistry，不需要特殊路径 |
-| **Workspace Snapshot / 状态快照** | 在 agent 执行前后保存工作区状态，用于实验可复现性和 debug。这是科研场景的特殊需求 | LOW | 属于 playground 层的 workspace 管理能力。重构时归入 PlaygroundContext 的生命周期 |
+### 3. 文件编辑工具 (Edit)
 
-### Anti-Features (明确不在 Kernel 中构建的能力)
+| 维度 | 描述 |
+|------|------|
+| **Why Expected** | agent 修改代码/配置的核心能力。str_replace 模式是 2025-2026 年 coding agent 的标准做法 (Claude Code, Aider, OpenHands 均采用) |
+| **Complexity** | MEDIUM |
+| **Session 依赖** | YES -- 通过 `BaseSession.read_file()` + `BaseSession.write_file()` |
+| **参数设计** | `file_path` (必需), `old_string` (必需, 要替换的精确文本), `new_string` (必需, 替换后文本) |
+| **行为规范** | old_string 必须在文件中唯一匹配; 匹配失败返回有意义的错误 (包括最近似匹配位置); 替换后返回上下文片段供 LLM 验证; 必须先 Read 才能 Edit |
+| **现有基础** | evomaster EditorTool 的 `str_replace` 命令。现有实现质量较高，包含 strip 重试、多匹配检测、undo 历史 |
+| **关键设计点** | 从 evomaster EditorTool 提取 str_replace 逻辑，去掉 view/create/insert/undo_edit 等附属命令(这些功能由 Read/Write 覆盖) |
 
-这些能力看起来有价值，但在 agent kernel 中构建会破坏简洁性或引入不必要的复杂度。
+### 4. 命令执行工具 (Bash)
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| **完整的 Multi-Agent 编排引擎** | LangGraph 的 graph-based workflow、CrewAI 的 crew 模式都很吸引人。似乎 agent framework 应该支持复杂的多 agent 协调 | 引入 graph runtime、state machine、agent discovery 等重量级抽象，与极简 kernel 设计相悖。PROJECT.md 明确标记 out of scope。先完成单 agent 解耦才有资格谈编排 | Solver 模式（exp 层组合多 agent）覆盖当前需求。未来需要时在 exp 层之上构建编排层，kernel 保持不变 |
-| **Agent 内置 Memory/Knowledge Store** | nanobot 有 MEMORY.md；LangGraph 有 state persistence；似乎 agent 应该有持久化记忆 | kernel 管理 memory persistence 会引入 I/O 依赖、存储后端耦合、一致性问题。agent kernel 应该只管执行循环中的 in-context messages | Context compaction 处理 in-session 记忆。跨 session 记忆通过 ContextBuilder 从外部注入（如 memory retrieval service），不在 kernel 内部 |
-| **配置热更新** | 运行时动态修改 agent 配置（切换 model、调整 max_turns 等）看起来很灵活 | 增加状态一致性复杂度。agent 正在执行循环时修改配置可能导致不可预测行为 | AgentRuntimeSpec 在创建时冻结（Pydantic frozen=True），重新创建 agent 实例来应用新配置 |
-| **内置 Observability/Tracing** | OpenAI SDK 内置 tracing；LangSmith 为 LangGraph 提供 observability | 把 telemetry 耦合进 kernel 会增加依赖和复杂度。不同部署环境的 tracing 需求差异大 | 通过 MessageBus 事件流实现。消费方自行接入 tracing backend（OpenTelemetry、日志等）。kernel 只负责发射事件 |
-| **前端协议内置 (ag-ui/SSE)** | 当前 event_callback 直接生成 SSE 格式事件，agent 似乎应该知道前端协议 | agent kernel 不应知道传输协议。直接耦合 SSE 格式会限制在 CLI、batch、WebSocket 等场景的复用 | agent 发射领域事件到 MessageBus。Service 层负责将领域事件转换为 ag-ui/SSE 格式。协议转换在边界层完成 |
-| **多租户隔离** | 生产环境需要用户间的资源隔离 | 属于运维/部署能力，不是 agent kernel 的职责 | 通过 PlaygroundContext 提供 workspace 隔离；用户级隔离在 Service 层通过 session + auth 实现 |
-| **Tool 执行沙箱** | 看起来 tool 应该在隔离环境中执行以确保安全 | tool 执行环境由 Session (Docker/Local/SSH) 提供，不是 kernel 的职责。把沙箱逻辑放进 kernel 会过度耦合 | Session 类型决定执行环境的隔离级别。kernel 只通过 Session 接口调用 tool.execute() |
-| **Prompt 版本管理** | 科研场景需要 prompt 可复现性和实验追踪 | 属于实验管理层面的能力，不是执行 kernel 的职责 | Playground 层在创建 PlaygroundContext 时记录 prompt 版本；实验追踪在 exp 层或外部工具中完成 |
+| 维度 | 描述 |
+|------|------|
+| **Why Expected** | agent 与环境交互的通用后门。安装依赖、运行测试、编译代码、检查进程状态等操作都通过 Bash |
+| **Complexity** | LOW (适配已有 BashTool) |
+| **Session 依赖** | YES -- 通过 `BaseSession.exec_bash()` |
+| **参数设计** | `command` (必需), `timeout` (可选, 秒), `description` (可选, 5-10 词简述) |
+| **行为规范** | 持久 shell session (环境变量/工作目录保持); 输出截断 (建议 30000 字符上限); 危险命令拦截; 返回 exit_code + stdout + working_dir |
+| **现有基础** | evomaster BashTool 已有完整实现，包含危险命令检测、代理清除、超时处理 |
+| **关键设计点** | description 中应引导 LLM: 不要用 bash grep/find/cat，改用专用 Grep/Glob/Read 工具 |
+
+### 5. 文件搜索工具 (Glob)
+
+| 维度 | 描述 |
+|------|------|
+| **Why Expected** | agent 在大型项目中定位文件的高效手段。比 `find` 命令更快且结果按修改时间排序 |
+| **Complexity** | LOW |
+| **Session 依赖** | YES -- 通过 `BaseSession.exec_bash()` 执行 glob 展开 |
+| **参数设计** | `pattern` (必需, glob 模式如 `**/*.py`), `path` (可选, 搜索根目录, 默认 workspace) |
+| **行为规范** | 结果按修改时间排序 (最近修改优先); 支持 `*`, `**`, `?`, `{a,b}` 模式; 排除隐藏文件和常见忽略目录 (.git, __pycache__, node_modules) |
+| **现有基础** | 无直接对应。当前 agent 通过 bash `find` 命令实现，效率低且无排序 |
+| **关键设计点** | session-dependent 实现: 通过 exec_bash 执行 `find + stat + sort` 组合命令; session-free 实现 (本地 DevShell): 直接用 Python pathlib.glob |
+
+### 6. 内容搜索工具 (Grep)
+
+| 维度 | 描述 |
+|------|------|
+| **Why Expected** | agent 在文件内容中搜索模式的核心能力。比 bash grep 更结构化: 支持多种输出模式、上下文控制 |
+| **Complexity** | LOW-MEDIUM |
+| **Session 依赖** | YES -- 通过 `BaseSession.exec_bash()` 执行 grep/rg |
+| **参数设计** | `pattern` (必需, 正则表达式), `path` (可选, 搜索路径), `include` (可选, 文件过滤 glob), `output_mode` (可选, files_with_matches/content/count), `context_lines` (可选) |
+| **行为规范** | 默认返回匹配文件路径列表 (files_with_matches 模式); content 模式返回匹配行及上下文; 结果数量有上限防止 token 爆炸 |
+| **现有基础** | 无直接对应。当前 agent 通过 bash grep 实现 |
+| **关键设计点** | 远程环境可能没有 ripgrep，需要降级到 grep -rn; description 中应说明正则语法 |
+
+### 7. Tool Description / JSON Schema 精细化
+
+| 维度 | 描述 |
+|------|------|
+| **Why Expected** | tool description 的质量直接决定 LLM 调用工具的准确率。Gorilla 研究实证: description 精度与调用准确率强正相关 |
+| **Complexity** | MEDIUM (设计密集型，非代码密集型) |
+| **Session 依赖** | N/A |
+| **行为规范** | 每个 tool 的 description 必须包含: (1) 功能说明 (2) 何时使用 (3) 何时不使用 (4) 参数行为说明 (5) 返回格式说明 |
+| **现有基础** | evomaster 工具的 description 来自 Pydantic model docstring (BashToolParams/EditorToolParams)，质量中等 |
+| **关键设计点** | Claude Code 的实践: 将大量行为规范嵌入 description 本身而非 system prompt; 用 "CRITICAL"/"IMPORTANT" 标记关键规则; 用 "Best Practices" 列表引导 LLM 行为 |
+
+---
+
+## Differentiators
+
+不是立即必须的，但能显著提升 agent 能力上限的特性。
+
+### 8. SubAgent Spawn 机制
+
+| 维度 | 描述 |
+|------|------|
+| **Value Proposition** | 允许 agent 将子任务委派给独立 agent 执行，实现探索/执行分离、并行研究、上下文隔离。Claude Code 的 Task tool 证明了这一模式的有效性 |
+| **Complexity** | HIGH |
+| **Session 依赖** | 间接 -- SubAgent 共享父 agent 的 workspace (同一 session) |
+| **实现机制** | LLM 发出 tool_call → SubAgent tool 接收 → 通过 Exp 创建子 AgentRuntimeSpec → 子 AgentKernel.run() → 结果作为 ToolMessage 返回 |
+| **参数设计** | `description` (必需, 3-5 词任务摘要), `prompt` (必需, 详细任务指令), `tools` (可选, 限制子 agent 可用工具), `max_turns` (可选) |
+| **行为规范** | 子 agent 独立上下文窗口; 无状态 (每次调用全新实例); 子 agent 不能 spawn 子子 agent (防止无限递归); 共享 workspace 但独立消息历史 |
+| **现有基础** | 无。但 Exp + AgentKernel 的分层设计天然支持: Exp 可以创建多个 AgentRuntimeSpec 实例 |
+| **关键设计点** | SubAgent 是一个注册在 ToolRegistry 中的 tool，其 execute() 内部创建子 Exp → assemble → kernel.run()。这保持了 kernel 的纯净性 -- kernel 不知道 SubAgent 的存在 |
+| **依赖** | 依赖 Read/Write/Edit/Bash/Glob/Grep 工具套件已就位 (子 agent 需要可用工具) |
+
+### 9. System Prompt 模板化管理
+
+| 维度 | 描述 |
+|------|------|
+| **Value Proposition** | 当前 ContextBuilder 的 section 内容硬编码或来自简单 config string。模板化允许: TOML 中定义 prompt 模板 → 运行时变量替换 → 组装为 system prompt |
+| **Complexity** | MEDIUM |
+| **现有基础** | ContextBuilder 已有 section 分区机制 (identity/mode_contract/skills/tools/memory/task)。ExpConfig 有 `developer_instructions` 字段 |
+| **关键设计点** | 扩展 ExpConfig 的 prompt 配置: 支持 Jinja2 或简单 `{variable}` 替换; 模板存储在 TOML 中或独立 .md 文件; 运行时注入 workdir、session_type、tool 列表等变量 |
+| **依赖** | 依赖 tool 套件完成 (ContextBuilder._build_tools 需要知道最终 tool 列表) |
+
+### 10. SubAgent 工具限制 (Tool Subset)
+
+| 维度 | 描述 |
+|------|------|
+| **Value Proposition** | 不同类型的子 agent 应该有不同的工具访问权限。探索型子 agent 只需 Read/Glob/Grep (只读); 执行型子 agent 需要全部工具 |
+| **Complexity** | LOW (在 SubAgent spawn 机制之上) |
+| **现有基础** | ToolRegistry 已支持 source-based 过滤 (`get_tools_by_source`)。可以扩展为 name-based 过滤 |
+| **关键设计点** | SubAgent tool 的 `tools` 参数接受工具名列表; spawn 时从父 registry 过滤创建子 registry |
+
+### 11. Read-Before-Modify 安全协议
+
+| 维度 | 描述 |
+|------|------|
+| **Value Proposition** | 防止 LLM 盲目覆盖文件。Claude Code 强制: Write/Edit 工具会拒绝操作当前 session 中未通过 Read 读取过的文件 |
+| **Complexity** | LOW |
+| **现有基础** | 无。evomaster EditorTool 没有这个限制 |
+| **关键设计点** | 在 tool 套件层维护 `_read_files: set[str]` 状态; Read 执行时记录路径; Write/Edit 执行前检查路径是否在集合中; 新建文件 (path 不存在) 豁免检查 |
+
+---
+
+## Anti-Features
+
+明确不在 v1.1 中构建的能力。
+
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| **MultiEdit (批量编辑)** | 增加 JSON schema 复杂度 (嵌套数组结构导致 LLM 调用出错率上升)。Claude Code 有 MultiEdit 但很少被 LLM 主动使用 | 让 LLM 多次调用 Edit tool。单次编辑的可靠性远高于批量编辑 |
+| **NotebookRead/NotebookEdit** | Jupyter notebook 是特殊格式，需要额外的 JSON cell 解析逻辑。当前科研场景中 notebook 不是主要交互方式 | 通过 Read 以文本形式读取 .ipynb (JSON 格式); 通过 Write 覆盖写入; 未来如有需求再单独实现 |
+| **WebFetch/WebSearch** | 远程环境 (Docker/SSH) 可能无外网访问; 引入 HTTP 客户端增加依赖; 不是科研 agent 的核心路径 | 科研信息检索通过 MCP tools 实现 (如 AISSQ 文献搜索); 通用 web 访问通过 Bash + curl |
+| **TodoRead/TodoWrite** | 任务追踪状态管理增加 tool 数量和 token 消耗; LLM 维护 TODO 列表的可靠性不高 | system prompt 中引导 LLM 自行管理执行计划; 通过 Write 工具写 plan 文件实现类似效果 |
+| **undo_edit 功能** | 增加状态管理复杂度 (file history stack); LLM 很少主动使用 undo; 通过重新 Edit 可以达到同样效果 | 如果编辑错误，LLM 应该再次 Read 文件并执行新的 Edit 来修正 |
+| **insert 行插入功能** | 行号定位容易出错 (LLM 对行号的记忆不可靠); str_replace 模式更稳健 | 统一使用 str_replace 模式。需要插入时，old_string 取插入点附近的上下文，new_string 包含上下文+新内容 |
+| **消除 evomaster session 依赖** | PROJECT.md 明确标记 out of scope。v1.1 的 session-dependent tools 仍通过 BaseSession 操作 | 保持 BaseSession 作为 tool 的环境接口; 未来 v2 再考虑直接 OS 操作路径 |
+| **前端 UI 改动** | v1.1 只涉及后端框架层 | 前端保持现状 |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[LLM Provider 抽象]
+[Tool Description 精细化 (7)]  ← 贯穿所有 tool 的设计
     |
     v
-[Agent Loop (执行循环)]
+[Read Tool (1)] ← 最基础的工具，其他工具的前置
     |
-    +--requires--> [Tool Registry]
-    |                  |
-    |                  +--requires--> [Tool 基类 (BaseTool + JSON Schema)]
-    |                  +--requires--> [MCP 集成 (统一注册)]
+    +--enables--> [Write Tool (2)]  (read-before-write 协议)
     |
-    +--requires--> [Context Builder]
-    |                  |
-    |                  +--requires--> [Skill Registry]
-    |                  +--requires--> [Context Compaction]
+    +--enables--> [Edit Tool (3)]   (read-before-edit 协议)
     |
-    +--requires--> [Termination Policy]
+    +--independent--> [Bash Tool (4)]  (已有 evomaster 实现，仅适配)
     |
-    +--requires--> [通用 Guard (loop 检测)]
+    +--independent--> [Glob Tool (5)]  (文件发现，无前置依赖)
     |
-    +--enhances--> [MessageBus 事件系统]
-                       |
-                       +--enhances--> [Service 层 SSE 转换]
+    +--independent--> [Grep Tool (6)]  (内容搜索，无前置依赖)
 
-[PlaygroundContext 契约]
+[Read-Before-Modify 协议 (11)]
     |
-    +--requires--> [Session 体系 (Docker/Local/SSH)]
-    +--requires--> [Workspace 管理 (workdir/cache)]
+    +--requires--> [Read (1)] + [Write (2)] + [Edit (3)] 共享状态
 
-[AgentRuntimeSpec 契约]
+[SubAgent Spawn (8)]
     |
-    +--requires--> [LLM Provider 抽象]
-    +--requires--> [Tool Registry]
-    +--requires--> [Context Builder 配置]
-    +--requires--> [Termination Policy]
-    +--requires--> [通用 Guard + 业务 Guard 注入]
-    +--requires--> [Hooks (confirmation/event)]
+    +--requires--> Tools 1-6 已就位 (子 agent 需要可用工具)
+    +--requires--> Exp 层装配能力 (创建子 AgentRuntimeSpec)
+    +--requires--> Tool Description 精细化 (子 agent 的 prompt 引导)
+    |
+    +--enhances--> [SubAgent 工具限制 (10)]  (在 spawn 之上的增量)
 
-[Solver 模式]
+[System Prompt 模板化 (9)]
     |
-    +--requires--> [Agent Loop]
-    +--requires--> [AgentRuntimeSpec]
-    +--组合模式--> [Exp 层装配]
-
-[业务 Guard (manuscript/structure)]
-    |
-    +--requires--> [Guard 基类接口]
-    +--injected via--> [AgentRuntimeSpec.guards]
+    +--requires--> Tool Description 精细化 (7) (工具信息是 prompt 的组成部分)
+    +--requires--> ContextBuilder 扩展 (已有基础)
+    +--enhances--> SubAgent Spawn (子 agent 可用不同 prompt 模板)
 ```
 
 ### Dependency Notes
 
-- **Agent Loop requires LLM Provider:** loop 的每个迭代都需要调用 LLM，provider 必须先就位
-- **Agent Loop requires Tool Registry:** loop 中需要查找和执行 tool，registry 是 tool dispatch 的基础
-- **Context Builder requires Skill Registry:** skill descriptions 是 system prompt 的组成部分之一
-- **AgentRuntimeSpec requires 所有核心组件:** 这是 exp 层装配的产物，汇聚了 agent 执行所需的一切
-- **MessageBus enhances Agent Loop:** loop 可以没有 MessageBus（直接 return），但有 MessageBus 才能实现实时事件流
-- **Solver 模式 requires Agent Loop + AgentRuntimeSpec:** solver 是在 exp 层用多个 agent 组合的高阶模式，基础 agent 能力必须先完成
-- **业务 Guard injected via AgentRuntimeSpec:** 业务 guard 不在 kernel 内部，通过 spec 注入，所以 guard 接口要先定义好
+- **Read 是所有文件操作工具的锚点**: Write/Edit 的 read-before-modify 协议依赖 Read 先执行
+- **Bash 独立于其他 tool**: 已有成熟实现，只需适配为 matmaster Tool Protocol
+- **Glob/Grep 独立开发**: 不依赖 Read/Write，可并行实现
+- **SubAgent 是最后构建的**: 需要所有基础 tool 就位后才有意义
+- **Tool Description 贯穿始终**: 不是独立阶段，而是每个 tool 实现时同步完成
 
 ---
 
-## MVP Definition
+## MVP Recommendation
 
-### Launch With (v1 - 核心 Kernel + 契约)
+### Phase 1: 原生 Tool 套件 (核心六件套)
 
-最小可用的重构产物 -- 新三层骨架能跑通 mat_master 的基本流程。
+优先实现:
+1. **Read** -- 所有操作的前置; 从 EditorTool.view 提取重构
+2. **Write** -- 文件创建; 从 EditorTool.create 提取重构
+3. **Edit** -- 文件修改; 从 EditorTool.str_replace 提取重构
+4. **Bash** -- 适配已有 BashTool 为 matmaster Tool Protocol (最低工作量)
+5. **Glob** -- 新实现，基于 exec_bash 或 Python pathlib
+6. **Grep** -- 新实现，基于 exec_bash (grep -rn 或 rg)
+7. **Read-Before-Modify 协议** -- 跨 Read/Write/Edit 的共享状态
 
-- [ ] **AgentRuntimeSpec 类型化契约** -- 替代 Dict[str, Any] 的 agent 配置传递，是整个重构的锚点
-- [ ] **PlaygroundContext 类型化契约** -- playground 层输出的环境信息结构化
-- [ ] **纯化 Agent Loop** -- 剥离 config 装配逻辑，只消费 AgentRuntimeSpec
-- [ ] **LLM Provider 抽象接口** -- `chat()` + `chat_with_retry()` + streaming 的统一协议
-- [ ] **Tool Registry (保持 + 统一 MCP)** -- 内置工具和 MCP 工具统一注册路径
-- [ ] **Context Builder** -- 从 identity/skills/memory/task 多源组装 system prompt
-- [ ] **通用 Guard (loop 检测)** -- kernel 内置安全机制
-- [ ] **Termination Policy** -- max_turns / finish tool / stop_event 的统一抽象
-- [ ] **mat_master 完整迁移** -- 在新骨架上跑通 mat_master 全流程
+**实现策略:** 所有 session-dependent tool 通过 BaseSession 接口操作。每个 tool 是独立类，满足 matmaster `Tool` Protocol (name, description, json_schema, execute)。不再经过 EvoToolAdapter -- 直接实现 Protocol。
 
-### Add After Validation (v1.x - 解耦完善)
+### Phase 2: Tool Description 精细化
 
-核心跑通后添加的能力，提升框架完整性。
+同步于 Phase 1，但独立验证:
+- 每个 tool 的 description 按最佳实践重写
+- JSON Schema 精简 (去除冗余字段，显式标记 required)
+- ContextBuilder._build_tools 增强 (不仅列出名称，还包含使用提示)
+- ExpConfig 扩展 prompt 相关字段
 
-- [ ] **MessageBus 事件系统** -- 替代 callback 直连，实现 agent 与消费方解耦。触发条件：core loop 稳定后
-- [ ] **Guard 分层注入** -- 业务 guard 通过 AgentRuntimeSpec 注入。触发条件：通用 guard 接口稳定后
-- [ ] **Solver 收入 exp 层** -- 作为 exp 组合 agent 的高阶模式。触发条件：基础 exp 装配跑通后
-- [ ] **minimal playground 迁移** -- 验证框架通用性
-- [ ] **兼容适配层 (Compatibility Adapter)** -- 桥接旧入口到新契约。触发条件：新骨架稳定后
-- [ ] **单元测试覆盖** -- 三层契约的测试
+### Phase 3: SubAgent Spawn
 
-### Future Consideration (v2+ - 扩展能力)
+在 Phase 1/2 完成后:
+- 实现 SubAgentTool (满足 Tool Protocol)
+- SubAgent 的 execute() 内部: 创建子 ExpConfig → Exp.assemble() → 子 kernel.run()
+- 工具限制: 子 registry 从父 registry 过滤
+- 防递归: 子 agent 的工具集不包含 SubAgentTool
 
-在框架解耦完成、验证稳定后再考虑的能力。
+### Defer: System Prompt 模板化
 
-- [ ] **Multi-Agent 编排层** -- 在 exp 之上构建。defer 原因：先完成单 agent 解耦
-- [ ] **跨 Session 记忆服务** -- 外部 memory retrieval。defer 原因：不是 kernel 职责
-- [ ] **x_master 迁移** -- 低优先级的 playground 类型
-- [ ] **Observability 集成** -- 通过 MessageBus 接入 tracing。defer 原因：需要 MessageBus 先稳定
-- [ ] **Handoff 协议 (Agent-to-Agent)** -- 参考 OpenAI SDK 的 handoff 模式。defer 原因：需要 multi-agent 编排层先设计
-
----
-
-## Feature Prioritization Matrix
-
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| AgentRuntimeSpec 契约 | HIGH | MEDIUM | P1 |
-| PlaygroundContext 契约 | HIGH | LOW | P1 |
-| 纯化 Agent Loop | HIGH | MEDIUM | P1 |
-| LLM Provider 抽象 | HIGH | MEDIUM | P1 |
-| Context Builder | HIGH | MEDIUM | P1 |
-| Tool Registry 统一 | HIGH | LOW | P1 |
-| 通用 Guard (loop 检测) | HIGH | LOW | P1 |
-| Termination Policy | MEDIUM | LOW | P1 |
-| mat_master 迁移 | HIGH | HIGH | P1 |
-| MessageBus 事件系统 | MEDIUM | MEDIUM | P2 |
-| Guard 分层注入 | MEDIUM | MEDIUM | P2 |
-| Solver 收入 exp 层 | MEDIUM | MEDIUM | P2 |
-| minimal 迁移 | MEDIUM | LOW | P2 |
-| 兼容适配层 | MEDIUM | MEDIUM | P2 |
-| 单元测试 | HIGH | MEDIUM | P2 |
-| Context Compaction 迁移 | HIGH | LOW | P1 |
-
-**Priority key:**
-- P1: v1 必须交付，框架不可用则无意义
-- P2: v1.x 尽快跟进，完善框架完整性
-- P3: v2+ 未来考虑
+- 当前 ExpConfig.developer_instructions 简单字符串足以支撑 v1.1
+- 模板化是 v1.2 的优化项，不阻塞当前功能
 
 ---
 
-## Competitor Feature Analysis
+## Tool Description 设计原则 (从 Claude Code 提炼)
 
-| Feature | OpenAI Agents SDK | nanobot | LangGraph | Microsoft Agent Framework | matmaster (重构目标) |
-|---------|-------------------|---------|-----------|---------------------------|---------------------|
-| **核心原语数量** | 4 (Agent/Tool/Handoff/Guardrail) | 5 (AgentLoop/ToolRegistry/LLMProvider/ContextBuilder/MessageBus) | 3 (Graph/Node/Edge) | 3 (Agent/Thread/Kernel) | 5 (AgentLoop/ToolRegistry/LLMProvider/ContextBuilder/MessageBus) |
-| **Loop 设计** | Runner 驱动，极简 | `_run_agent_loop()` < 500 行 | Graph state machine | Kernel invoke pattern | 纯化后的 Agent Loop，只消费 AgentRuntimeSpec |
-| **Tool 系统** | Pydantic/JSON Schema 自动生成 + MCP | ToolRegistry name-keyed dict + MCP | Tool nodes in graph | Kernel plugins + MCP | ToolRegistry + JSON Schema + MCP 统一注册 |
-| **Guard 系统** | Input/Output Guardrails (并行执行) | 无内置 guard | 无内置 guard | 无内置 guard | 分层 guard (通用 kernel 内置 + 业务 exp 注入) |
-| **事件系统** | Tracing + streaming | MessageBus (asyncio.Queue) | State checkpoint callbacks | Workflow events (invoke/complete/error) | MessageBus (async queue，解耦 agent 与消费方) |
-| **Context 管理** | Session 持久化 | ContextBuilder + MEMORY.md compaction | State persistence + reducers | AgentSession (serializable) | ContextBuilder + CompactionConfig (多策略) |
-| **Multi-Agent** | Handoff 原语 | 无 | Graph-based workflow | Handoff + Group Chat orchestration | Solver 模式 (exp 层组合)，未来编排层 |
-| **配置驱动** | Python code-first | config.json + Pydantic | Python/YAML | C#/Python/Java | YAML + Pydantic 类型化契约 |
-| **层间契约** | 无显式层 | 无显式层 | Graph state schema | Kernel -> Agent -> Thread | PlaygroundContext -> AgentRuntimeSpec -> Agent Loop |
+基于 Claude Code 系统提示和 OpenAI function calling 最佳实践的分析，总结以下原则:
 
-### 关键洞察
+### 原则 1: Description 是行为规范而非功能说明
 
-1. **OpenAI SDK 的极简主义值得学习**：4 个原语覆盖 80% 场景。matmaster 的重构也应追求类似的精简度
-2. **nanobot 的 kernel 哲学最接近重构目标**：极简 loop + registry 模式 + config 驱动。matmaster 的独特价值在于三层抽象带来的关注点分离
-3. **Guard 分层是 matmaster 的差异化点**：主流框架要么不内置 guard，要么像 OpenAI SDK 那样只做通用 I/O validation。matmaster 的业务 guard（manuscript/structure retrieval/auth failure）是科研场景的独特需求
-4. **类型化层间契约是架构优势**：主流框架多数用 dict/state 传递。Pydantic 契约能在编辑器级别提供类型安全
+**差的 description:**
+> "读取文件内容"
+
+**好的 description:**
+> "读取文件系统上的文件内容。默认读取前 2000 行。对于大文件，使用 offset 和 limit 参数读取特定部分。结果以 cat -n 格式返回 (带行号)。在修改文件之前必须先用此工具读取。"
+
+### 原则 2: 明确工具之间的分工
+
+Claude Code 的 Bash tool description 中有这样的关键规则:
+
+> "IMPORTANT: Avoid using this tool to run find, grep, cat, head, tail, sed, awk commands. Instead use the appropriate dedicated tool."
+
+这条规则将 bash 从 "万能工具" 收窄为 "专用命令执行器"，迫使 LLM 使用更结构化的 Glob/Grep/Read 工具。
+
+### 原则 3: 用结构化 Markdown 组织 description
+
+Claude Code 的工具 description 使用:
+- `###` 分区标题 (如 "### Command Execution", "### Best Practices")
+- 有序/无序列表
+- 加粗关键词
+- "CRITICAL"/"IMPORTANT" 标记
+
+这种结构比纯文本段落更利于 LLM 解析。
+
+### 原则 4: Schema 精简优先
+
+每个 tool definition 在每次 LLM 调用时都消耗 token。原则:
+- 只暴露 LLM 需要控制的参数
+- 内部实现细节不暴露为参数
+- 使用 `default` 值减少 LLM 决策负担
+- 显式标记 `required` 字段
+
+### 原则 5: 错误返回要有指导性
+
+工具执行失败时的返回信息应该告诉 LLM 如何修正:
+- "Error: file not found at /workspace/foo.py. Use Glob to search for the file."
+- "Error: old_string not found in file. The closest match is at line 42."
+- "Error: multiple matches found at lines [12, 45, 78]. Include more context to make old_string unique."
+
+---
+
+## 现有实现复用评估
+
+| 现有组件 | 复用策略 | 复用度 |
+|----------|----------|--------|
+| **evomaster BashTool** | 提取核心逻辑 (命令执行 + 危险检测 + 输出格式化)，去掉 evomaster BaseTool 依赖，直接实现 matmaster Tool Protocol | 70% |
+| **evomaster EditorTool** | 拆分为 3 个独立 tool: Read (view 逻辑), Write (create 逻辑), Edit (str_replace 逻辑)。去掉 undo_edit/insert/view_range 等次要功能 | 60% |
+| **EvoToolAdapter** | 保留用于 MonitorJobTool 等科研特有 tool 的适配。新内置 tool 直接实现 Protocol，不经过 adapter | 保持现状 |
+| **ContextBuilder** | 扩展 _build_tools section; 增加 developer_instructions 模板替换能力 | 90% 复用 |
+| **ExpConfig** | 扩展 tools.builtin 配置 (从 `["*"]` 改为具名列表); 增加 SubAgent 相关配置 | 80% 复用 |
+| **Exp._init_builtin_tools()** | 重构: 从 "创建 evomaster 工具 + EvoToolAdapter 包装" 改为 "创建 matmaster 原生工具 + 直接注册" | 完全重写 |
 
 ---
 
 ## Sources
 
-### Official Documentation & Guides
-- [Anthropic: Effective Context Engineering for AI Agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) -- context management best practices (HIGH confidence)
-- [OpenAI Agents SDK Documentation](https://openai.github.io/openai-agents-python/) -- core primitives design (HIGH confidence)
-- [OpenAI Agents SDK Guardrails](https://openai.github.io/openai-agents-python/guardrails/) -- guard patterns (HIGH confidence)
-- [Microsoft Agent Framework Overview](https://learn.microsoft.com/en-us/agent-framework/overview/) -- enterprise agent architecture (HIGH confidence)
-- [Microsoft Agent Framework: Compaction](https://learn.microsoft.com/en-us/agent-framework/agents/conversations/compaction) -- compaction strategies (HIGH confidence)
-- [Microsoft Agent Framework: Agent Memory](https://learn.microsoft.com/en-us/agent-framework/user-guide/agents/agent-memory) -- session/state patterns (HIGH confidence)
+### Claude Code 系统提示与工具实现
+- [Claude Code system prompts repository](https://github.com/Piebald-AI/claude-code-system-prompts) -- 18 builtin tool descriptions, sub agent prompts (HIGH confidence)
+- [Tools and system prompt of Claude Code (Gist)](https://gist.github.com/wong2/e0f34aac66caf890a332f7b6f9e2ba8f) -- full tool parameter schemas (HIGH confidence)
+- [Internal Claude Code tools implementation (Gist)](https://gist.github.com/bgauryy/0cdb9aa337d01ae5bd0c803943aa36bd) -- implementation details and behavioral rules (HIGH confidence)
+- [Claude Code SubAgent documentation](https://code.claude.com/docs/en/sub-agents) -- official subagent creation, lifecycle, tool access (HIGH confidence)
 
-### Framework Analysis
-- [nanobot DeepWiki Architecture](https://deepwiki.com/HKUDS/nanobot) -- kernel design philosophy (HIGH confidence)
-- [nanobot Roadmap: From Lightweight Agent to Agent Kernel](https://github.com/HKUDS/nanobot/discussions/431) -- kernel vision (MEDIUM confidence)
-- [Langfuse: Comparing Open-Source AI Agent Frameworks](https://langfuse.com/blog/2025-03-19-ai-agent-comparison) -- framework comparison (MEDIUM confidence)
-- [Composio: OpenAI Agents SDK vs LangGraph vs Autogen vs CrewAI](https://composio.dev/blog/openai-agents-sdk-vs-langgraph-vs-autogen-vs-crewai) -- comparison matrix (MEDIUM confidence)
+### LLM Function Calling 最佳实践
+- [Gorilla: Tool Description Precision vs Invocation Accuracy](https://www.scalifiai.com/blog/function-calling-tool-call-best%20practices) -- empirical evidence for description quality (MEDIUM confidence)
+- [OpenAI Function Calling Guide](https://platform.openai.com/docs/guides/function-calling) -- strict mode, schema best practices (HIGH confidence)
+- [OpenAI Community: Prompting Best Practices for Tool Use](https://community.openai.com/t/prompting-best-practices-for-tool-use-function-calling/1123036) -- naming, description, schema patterns (MEDIUM confidence)
+- [Simon Willison: How coding agents work](https://simonwillison.net/guides/agentic-engineering-patterns/how-coding-agents-work/) -- tool design patterns for coding agents (HIGH confidence)
 
-### Architecture & Patterns
-- [Google Developers: Architecting Context-Aware Multi-Agent Framework](https://developers.googleblog.com/architecting-efficient-context-aware-multi-agent-framework-for-production/) -- context patterns (MEDIUM confidence)
-- [Confluent: Four Design Patterns for Event-Driven Multi-Agent Systems](https://www.confluent.io/blog/event-driven-multi-agent-systems/) -- event bus patterns (MEDIUM confidence)
-- [JAVAPRO: Why AI Agents Need a Protocol-Flexible Event Bus](https://javapro.io/2025/11/06/why-ai-agents-need-a-protocol-flexible-event-bus/) -- event architecture (MEDIUM confidence)
-- [Towards Data Science: How Agent Handoffs Work](https://towardsdatascience.com/how-agent-handoffs-work-in-multi-agent-systems/) -- handoff patterns (MEDIUM confidence)
-- [Jason Liu: Context Engineering Compaction Experiments](https://jxnl.co/writing/2025/08/30/context-engineering-compaction/) -- compaction research (MEDIUM confidence)
+### 现有代码库分析
+- `matmaster/tools/tool_registry.py` -- Tool Protocol 定义 (name, description, json_schema, execute)
+- `evomaster/agent/tools/builtin/bash.py` -- BashTool 实现 + BashToolParams description
+- `evomaster/agent/tools/builtin/editor.py` -- EditorTool 实现 (view/create/str_replace/insert/undo_edit)
+- `evomaster/agent/session/base.py` -- BaseSession 接口 (exec_bash, read_file, write_file, path_exists, is_file, is_directory)
+- `matmaster/tools/evomaster_tool_adapter.py` -- EvoToolAdapter 适配逻辑
+- `matmaster/core/exp.py` -- Exp._init_builtin_tools() 当前注册流程
+- `matmaster/core/context_builder.py` -- ContextBuilder section 组装逻辑
 
 ---
-*Feature research for: AI Agent Framework Kernel (matmaster refactoring)*
-*Researched: 2026-03-21*
+*Feature research for: v1.1 内置 Tool 套件 + SubAgent + Prompt 体系*
+*Researched: 2026-03-24*
