@@ -1,8 +1,7 @@
 import logging
-from urllib.parse import parse_qs, quote
 
 from fastapi import APIRouter, Body, Depends, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import StreamingResponse
 
 from src.base.base_res import BaseResponse
 from src.models.chat import (
@@ -17,9 +16,6 @@ from src.models.chat import (
     ShareSetRequest,
     ShareStatusApiResponse,
     ShareStatusData,
-    WorkspaceEntry,
-    WorkspaceListApiResponse,
-    WorkspaceListData,
 )
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.quota_service import check_quota
@@ -30,10 +26,8 @@ from src.services.stream_service import (
 )
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
-from src.services.workspace_service import WorkspaceService, get_workspace_service
 from src.utils.constant import REDIS_URL
 from src.utils.exceptions import (
-    BadRequestErrorResponse,
     BaseErrorResponse,
     ConflictErrorResponse,
     ForbiddenErrorResponse,
@@ -307,61 +301,3 @@ def delete_session(
             msg='Session not found or you are not the owner',
         )
     return BaseResponse(msg='ok')
-
-
-@router.get('/{session_id}/workspace/list')
-def workspace_list(
-    session_id: str,
-    task_id: str,
-    path: str = '',
-    workspace_svc: WorkspaceService = Depends(get_workspace_service),
-):
-    """列出已上传到 OSS 的 workspace 在指定 path 下的一级子目录和文件。path 为空表示根。成功返回 code=0, msg, data；失败返回规范 JSON 及对应 HTTP 状态码。"""
-    path = (path or '').strip()
-    if '..' in path or path.startswith('/'):
-        raise BadRequestErrorResponse(msg='Invalid path')
-
-    entries = workspace_svc.workspace_list(session_id, task_id, path)
-    return WorkspaceListApiResponse(
-        data=WorkspaceListData(
-            path=path or '/',
-            entries=[WorkspaceEntry.model_validate(e) for e in entries],
-        )
-    )
-
-
-@router.get('/{session_id}/workspace/download')
-def workspace_download(
-    request: Request,
-    session_id: str,
-    task_id: str,
-    path: str | None = None,
-    workspace_svc: WorkspaceService = Depends(get_workspace_service),
-):
-    """下载已上传到 OSS 的 workspace 文件。成功返回文件流，失败返回规范 JSON（code, msg, data）。"""
-    path = (path or '').strip()
-    # 容错：前端误用第二个 ? 拼 path 时（如 ...&task_id=xxx?path=file.cif），从 query 中解析
-    if not path and request.url.query and '?' in request.url.query:
-        tail = request.url.query.split('?')[-1]
-        parsed = parse_qs(tail)
-        path = (parsed.get('path') or [''])[0]
-    path = (path or '').strip()
-    if not path or '..' in path or path.startswith('/'):
-        raise BadRequestErrorResponse(msg='Invalid path')
-
-    content, filename = workspace_svc.workspace_download(session_id, task_id, path)
-    # HTTP 头仅支持 latin-1，中文等非 ASCII 文件名用 RFC 5987 filename*=UTF-8'' 编码
-    ascii_fallback = (
-        ''.join(c for c in filename if ord(c) < 128 and c not in '"\\\r\n')
-        or 'download'
-    )
-    disposition = (
-        f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(filename)}"
-    )
-    return Response(
-        content=content,
-        media_type='application/octet-stream',
-        headers={
-            'Content-Disposition': disposition,
-        },
-    )
