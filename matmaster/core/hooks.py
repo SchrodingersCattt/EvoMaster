@@ -1,17 +1,18 @@
 """Hook Protocol, BaseHook defaults, HookAction enum, and run_* helper functions.
 
 Hooks allow external code to observe and intercept the kernel execution loop.
-Five hook points are defined:
+Six hook points are defined:
 
 - pre_tool_call: intercept before tool execution (CONTINUE/SKIP)
 - post_tool_call: observe after tool execution (no return)
 - pre_llm_call: observe before LLM call (no return)
 - should_continue: intercept loop continuation (True/False)
 - on_stream_chunk: observe streaming chunks (no return)
+- on_guard_blocked: observe guard denials (no return)
 
 Intercepting hooks (pre_tool_call, should_continue) short-circuit on the first
 non-default return. Observation hooks (post_tool_call, pre_llm_call,
-on_stream_chunk) execute all hooks without short-circuit.
+on_stream_chunk, on_guard_blocked) execute all hooks without short-circuit.
 
 EventEmitterHook bridges hook events to the MessageBus for SSE delivery.
 """
@@ -22,6 +23,7 @@ import enum
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from matmaster.types.events import ThoughtEvent, ToolCallEvent, ToolResultEvent
+from matmaster.types.guards import GuardResult
 from matmaster.types.messages import Message, StreamChunk, ToolCallData
 
 if TYPE_CHECKING:
@@ -53,6 +55,8 @@ class Hook(Protocol):
 
     def on_stream_chunk(self, chunk: StreamChunk) -> None: ...
 
+    def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None: ...
+
 
 class BaseHook:
     """Default hook implementation -- all methods are no-ops or return defaults.
@@ -75,6 +79,9 @@ class BaseHook:
         return True
 
     def on_stream_chunk(self, chunk: StreamChunk) -> None:
+        """Default: no-op observation."""
+
+    def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
         """Default: no-op observation."""
 
 
@@ -130,6 +137,20 @@ def run_on_stream_chunk(hooks: list[Hook], chunk: StreamChunk) -> None:
         hook.on_stream_chunk(chunk)
 
 
+def run_guard_blocked(
+    hooks: list[Hook], tool_call: ToolCallData, result: GuardResult
+) -> None:
+    """Run on_guard_blocked on all hooks (observation, no short-circuit).
+
+    Uses getattr for backward compatibility with Hook implementations
+    that predate the on_guard_blocked addition.
+    """
+    for hook in hooks:
+        fn = getattr(hook, "on_guard_blocked", None)
+        if fn is not None:
+            fn(tool_call, result)
+
+
 # ── EventEmitterHook ──────────────────────────────────
 
 
@@ -180,3 +201,6 @@ class EventEmitterHook(BaseHook):
                 reasoning_content=chunk.reasoning_content,
             )
         )
+
+    def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
+        """Guard blocks are not emitted to the bus by default."""

@@ -409,6 +409,35 @@ class TestGuardBlocks:
         assert "pre_tool_call" not in recording.calls
         assert "post_tool_call" not in recording.calls
 
+    def test_guard_block_triggers_hook(self) -> None:
+        from matmaster.core.agent import AgentKernel
+        from matmaster.core.hooks import BaseHook
+        from matmaster.types.guards import GuardResult
+
+        class GuardBlockRecorder(BaseHook):
+            def __init__(self) -> None:
+                self.blocked: list[tuple[str, str | None]] = []
+
+            def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
+                self.blocked.append((tool_call.name, result.reason))
+
+        tc = ToolCallData(id="tc-1", name="bad_tool", arguments={})
+        provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=1, final_content="ok")
+        recorder = GuardBlockRecorder()
+        tool_reg, _ = _make_tool_registry(["bad_tool"])
+        spec = _make_spec(
+            provider=provider,
+            tool_registry=tool_reg,
+            guards=[DenyGuard("bad_tool", reason="no access")],
+            hooks=[recorder],
+            max_turns=5,
+        )
+        kernel = AgentKernel()
+        kernel.run(spec, "test")
+
+        assert len(recorder.blocked) == 1
+        assert recorder.blocked[0] == ("bad_tool", "no access")
+
 
 class TestHookSkip:
     """Hook SKIP -> tool NOT executed, ToolMessage with 'skipped by hook'."""

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from matmaster.types.runtime import AgentRuntimeSpec, KernelRunResult
 from matmaster.core.hooks import (
     HookAction,
+    run_guard_blocked,
     run_on_stream_chunk,
     run_post_tool_call,
     run_pre_llm_call,
@@ -127,7 +128,8 @@ class AgentKernel:
                 # Guard evaluation (before hooks)
                 guard_result = guard_pipeline.evaluate(tc, turn, spec.max_turns)
                 if not guard_result.allowed:
-                    # Blocked: ToolMessage error response, NO hooks triggered
+                    # Blocked: notify hooks, then append ToolMessage error
+                    run_guard_blocked(spec.hooks, tc, guard_result)
                     blocked_content = f"BLOCKED: {guard_result.reason}"
                     if guard_result.guidance:
                         blocked_content += f"\n{guard_result.guidance}"

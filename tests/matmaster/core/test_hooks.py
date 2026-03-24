@@ -14,12 +14,14 @@ from matmaster.core.hooks import (
     EventEmitterHook,
     Hook,
     HookAction,
+    run_guard_blocked,
     run_on_stream_chunk,
     run_post_tool_call,
     run_pre_llm_call,
     run_pre_tool_call,
     run_should_continue,
 )
+from matmaster.types.guards import GuardResult
 from matmaster.types.messages import (
     AssistantMessage,
     Message,
@@ -285,3 +287,51 @@ class TestEventEmitterHook:
         event = bus.get_nowait()
         assert isinstance(event, ThoughtEvent)
         assert event.content == ""
+
+
+# ── run_guard_blocked ────────────────────────────────
+
+
+class TestRunGuardBlocked:
+    def test_calls_all_hooks(self) -> None:
+        class RecordingGuardHook(BaseHook):
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str | None]] = []
+
+            def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
+                self.calls.append((tool_call.name, result.reason))
+
+        h1 = RecordingGuardHook()
+        h2 = RecordingGuardHook()
+        tc = ToolCallData(id="tc-1", name="dangerous", arguments={})
+        gr = GuardResult(allowed=False, reason="forbidden")
+
+        run_guard_blocked([h1, h2], tc, gr)
+
+        assert len(h1.calls) == 1
+        assert h1.calls[0] == ("dangerous", "forbidden")
+        assert len(h2.calls) == 1
+
+    def test_no_hooks_no_error(self) -> None:
+        tc = ToolCallData(id="tc-1", name="tool", arguments={})
+        gr = GuardResult(allowed=False, reason="blocked")
+        run_guard_blocked([], tc, gr)  # Should not raise
+
+    def test_backward_compatible_with_old_hooks(self) -> None:
+        """Hooks that don't define on_guard_blocked are silently skipped."""
+        class OldHook:
+            """Hook without on_guard_blocked method."""
+            def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+                return HookAction.CONTINUE
+            def post_tool_call(self, tool_call: ToolCallData, result: str) -> None:
+                pass
+            def pre_llm_call(self, messages: list, turn: int) -> None:
+                pass
+            def should_continue(self, messages: list, turn: int) -> bool:
+                return True
+            def on_stream_chunk(self, chunk: StreamChunk) -> None:
+                pass
+
+        tc = ToolCallData(id="tc-1", name="tool", arguments={})
+        gr = GuardResult(allowed=False, reason="blocked")
+        run_guard_blocked([OldHook()], tc, gr)  # Should not raise
