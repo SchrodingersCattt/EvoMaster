@@ -48,6 +48,7 @@ calculation = [
 
 [project.scripts]
 matmaster = "playground.mat_master.cli.matmaster_cli:main"
+mm-devshell = "matmaster.devshell.cli:main"
 
 [build-system]
 requires = ["hatchling"]
