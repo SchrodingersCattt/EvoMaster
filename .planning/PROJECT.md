@@ -29,7 +29,17 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 
 ### Active
 
-(Next milestone requirements to be defined via /gsd:new-milestone)
+(v1.1 requirements to be defined — see Current Milestone below)
+
+## Current Milestone: v1.1 Agent 外围能力构建
+
+**Goal:** 构建 matmaster 原生内置 tool 套件、SubAgent spawn 机制和配套 prompt/description 体系，使 agent 具备完整的独立执行能力。
+
+**Target features:**
+- 参照 Claude Code tool 集实现 matmaster 原生内置 tool 套件，session-dependent tool 通过 BaseSession 操作，session-free tool 不依赖 evomaster
+- SubAgent spawn 机制（tool_call 触发 → Exp 创建子 agent → 共享 workspace → 结果作为 tool result 返回）
+- Tool description/schema 精细化设计 + Exp 级别 system prompt 模板化管理
+- 保留 MonitorJob 等科研场景特有 tool
 
 ### Out of Scope
 
@@ -37,6 +47,7 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 - src/ Web Service 层重构 — 保持现状，不在本次范围
 - x_master playground 迁移 — 优先 mat_master 和 minimal
 - 前端 UI 改动 — 本次只涉及后端框架层
+- 消除 evomaster session 依赖 — v1.1 维持现状，session-dependent tool 仍通过 BaseSession
 
 ## Context
 
@@ -128,4 +139,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-24 after syncing with post-v1 codebase state*
+*Last updated: 2026-03-24 after starting milestone v1.1*
