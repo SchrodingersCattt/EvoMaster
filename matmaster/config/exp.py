@@ -1,17 +1,15 @@
 """Exp assembly configuration models.
 
-Typed config for ``matmaster.core.exp.Exp``. Models only the fields that
-``Exp.assemble()`` actually reads, replacing the hardcoded dict in
-``agent_run_service.py``.
+Typed config for ``matmaster.core.exp.Exp``. Loaded from toml files
+in ``matmaster/exps/``.
 
 Usage::
 
-    cfg = ExpConfig.model_validate(agents_general_dict)
-    exp = Exp(cfg.model_dump())
+    from matmaster.config.loader import load_exp_config
+    cfg = load_exp_config("direct")
+    exp = Exp(cfg)
 """
 from __future__ import annotations
-
-from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,12 +24,11 @@ class ExpToolsConfig(BaseModel):
 class ExpConfig(BaseModel):
     """Exp assembly configuration.
 
-    Default values match what ``Exp.assemble()`` and ``agent_run_service.py``
-    previously hardcoded. When loaded from YAML ``agents.general``, YAML
-    values override these defaults.
+    Loaded from ``matmaster/exps/{name}.toml``. Default values are fallbacks
+    when fields are absent from the toml file.
 
-    ``extra="ignore"`` allows loading from the full ``agents.general`` dict,
-    discarding fields not consumed by Exp (context, system_prompt_file, etc.).
+    ``extra="ignore"`` allows forward-compatible loading when toml files
+    contain fields not yet modeled.
     """
 
     name: str = "direct"
@@ -39,8 +36,6 @@ class ExpConfig(BaseModel):
     max_turns: int = 100
     guards: list[str] = Field(default_factory=list)
     tools: ExpToolsConfig = Field(default_factory=ExpToolsConfig)
-    skills: dict[str, Any] = Field(default_factory=dict)
-    mcp: dict[str, Any] = Field(default_factory=dict)
-    compaction: dict[str, Any] = Field(default_factory=dict)
+    developer_instructions: str = ""
 
     model_config = ConfigDict(extra="ignore")
