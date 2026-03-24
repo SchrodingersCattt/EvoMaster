@@ -332,6 +332,50 @@ class TestChatStreamContent:
                 assert isinstance(chunk, StreamChunk)
 
 
+class TestChatStreamUsage:
+    def test_stream_options_included_in_kwargs(self) -> None:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
+            mock_client = MagicMock()
+            mock_cls.return_value = mock_client
+            mock_client.chat.completions.create.return_value = iter([])
+
+            provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+            list(provider.chat_stream([{"role": "user", "content": "hi"}]))
+
+            call_kwargs = mock_client.chat.completions.create.call_args
+            assert call_kwargs.kwargs.get("stream_options") == {
+                "include_usage": True
+            }
+
+    def test_usage_emitted_as_final_chunk(self) -> None:
+        usage = MagicMock()
+        usage.prompt_tokens = 10
+        usage.completion_tokens = 5
+        usage.total_tokens = 15
+
+        usage_only_chunk = MagicMock()
+        usage_only_chunk.choices = []
+        usage_only_chunk.usage = usage
+
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
+            mock_client = MagicMock()
+            mock_cls.return_value = mock_client
+            mock_client.chat.completions.create.return_value = iter([
+                _make_stream_chunk(content="answer", finish_reason="stop"),
+                usage_only_chunk,
+            ])
+
+            provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+            chunks = list(provider.chat_stream([{"role": "user", "content": "Hi"}]))
+
+            assert len(chunks) == 2
+            assert chunks[1].usage == {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+            }
+
+
 # ── Error handling ──────────────────────────────────────
 
 
