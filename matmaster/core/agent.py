@@ -80,6 +80,9 @@ class AgentKernel:
         ]
         guard_pipeline = GuardPipeline(spec.guards)
         turn = 0
+        if spec.compactor:
+            spec.compactor.update_message_count(len(messages))
+        last_usage: dict[str, int] = {}
 
         while turn < spec.max_turns:
             # External cancel check (before each turn)
@@ -95,8 +98,15 @@ class AgentKernel:
             if not run_should_continue(spec.hooks, messages, turn):
                 return self._finish(spec, messages, "hook_stopped")
 
+            # Context compaction check
+            if spec.compactor:
+                spec.compactor.compact_if_needed(messages, last_usage, turn)
+
             # LLM call (streaming by default)
             response = self._call_llm(spec, messages)
+            last_usage = response.usage
+            if spec.compactor:
+                spec.compactor.update_message_count(len(messages))
 
             # Natural finish: no tool_calls
             if not response.tool_calls:
@@ -191,6 +201,7 @@ class AgentKernel:
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
         stream_id = f"turn-{len(messages)}"
+        usage: dict[str, int] = {}
 
         run_on_stream_chunk(
             spec.hooks,
@@ -215,6 +226,8 @@ class AgentKernel:
                     reasoning_parts.append(chunk.reasoning_content)
                 if chunk.finish_reason:
                     finish_reason = chunk.finish_reason
+                if chunk.usage:
+                    usage = chunk.usage
                 if chunk.tool_call_deltas:
                     for delta in chunk.tool_call_deltas:
                         idx = delta.get("index", 0)
@@ -251,6 +264,7 @@ class AgentKernel:
             reasoning_content="".join(reasoning_parts) or None,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
+            usage=usage,
         )
 
     @staticmethod

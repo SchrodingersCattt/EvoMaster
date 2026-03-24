@@ -31,8 +31,7 @@ class ExpConfig(BaseModel):
     values override these defaults.
 
     ``extra="ignore"`` allows loading from the full ``agents.general`` dict,
-    discarding fields not consumed by Exp (context, compaction,
-    system_prompt_file, etc.).
+    discarding fields not consumed by Exp (context, system_prompt_file, etc.).
     """
 
     name: str = "direct"
@@ -42,5 +41,6 @@ class ExpConfig(BaseModel):
     tools: ExpToolsConfig = Field(default_factory=ExpToolsConfig)
     skills: dict[str, Any] = Field(default_factory=dict)
     mcp: dict[str, Any] = Field(default_factory=dict)
+    compaction: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(extra="ignore")

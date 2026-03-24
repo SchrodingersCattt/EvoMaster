@@ -31,7 +31,7 @@ from matmaster.types.messages import (
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import (
     FinishEvent,
-    ThoughtEvent,
+    ResponseEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
@@ -213,10 +213,10 @@ class TestMatMasterE2EPipeline:
         assert finish.event.reason == "natural"
         assert finish.event.status == "completed"
 
-        # MessageBus received ThoughtEvent from streaming
+        # MessageBus received ResponseEvent from streaming content
         events = _collect_bus_events(bus)
-        thought_events = [e for e in events if isinstance(e, ThoughtEvent)]
-        assert len(thought_events) >= 1
+        response_events = [e for e in events if isinstance(e, ResponseEvent)]
+        assert len(response_events) >= 1
 
     def test_mat_master_e2e_with_tool_call(self, tmp_path: Path) -> None:
         """E2E: Pipeline with a tool call and tool result."""

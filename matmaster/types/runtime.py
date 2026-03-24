@@ -32,8 +32,8 @@ class CompactionConfig(BaseModel):
 
     enabled: bool = False
     context_window_tokens: int = 128_000
-    trigger_ratio: float = 0.7
-    strategy: str = "sliding_window"  # 'sliding_window' | 'summary' | 'latest_half'
+    trigger_ratio: float = 0.9
+    strategy: str = "summary"  # 'sliding_window' | 'summary' | 'latest_half'
     compaction_llm: str | None = None  # key in config.llm
 
 
@@ -67,6 +67,7 @@ class AgentRuntimeSpec(BaseModel):
     # Context
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     system_prompt: str = ""
+    compactor: Any | None = None
 
     # Mode
     mode: str = "direct"  # 'direct' | 'planner'

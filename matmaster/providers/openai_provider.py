@@ -188,10 +188,26 @@ class OpenAIProvider:
             kwargs["tools"] = tools
         if self._extra_kwargs:
             kwargs.update(self._extra_kwargs)
+        stream_options = kwargs.get("stream_options", {})
+        if not isinstance(stream_options, dict):
+            stream_options = {}
+        kwargs["stream_options"] = {**stream_options, "include_usage": True}
 
         stream = self._client.chat.completions.create(**kwargs)
+        last_chunk_usage: dict[str, int] | None = None
 
         for chunk in stream:
+            usage = getattr(chunk, "usage", None)
+            if (
+                isinstance(getattr(usage, "prompt_tokens", None), int)
+                and isinstance(getattr(usage, "completion_tokens", None), int)
+                and isinstance(getattr(usage, "total_tokens", None), int)
+            ):
+                last_chunk_usage = {
+                    "prompt_tokens": usage.prompt_tokens,
+                    "completion_tokens": usage.completion_tokens,
+                    "total_tokens": usage.total_tokens,
+                }
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
@@ -219,6 +235,9 @@ class OpenAIProvider:
                 tool_call_deltas=tool_call_deltas,
                 finish_reason=finish_reason,
             )
+
+        if last_chunk_usage is not None:
+            yield StreamChunk(usage=last_chunk_usage)
 
     @staticmethod
     def _parse_arguments(raw: str | None) -> dict[str, Any]:
