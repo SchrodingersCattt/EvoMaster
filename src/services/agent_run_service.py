@@ -359,7 +359,8 @@ class AgentRunService:
 
             # Add external hooks to spec
             external_hooks = [
-                ConfirmationHook(reply_queue, bus),
+                # TODO: re-enable with confirm_tools=<async MCP tools> once MCP registration lands
+                # ConfirmationHook(reply_queue, bus),
                 OutputProcessorHook(bus),
                 SkillHitHook(bus),
                 AssistantStateHook(bus),
