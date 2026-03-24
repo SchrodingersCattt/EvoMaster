@@ -140,3 +140,4 @@ class StreamChunk(BaseModel):
     finish_reason: str | None = None
     stream_state: str | None = None
     stream_id: str | None = None
+    usage: dict[str, int] | None = None
