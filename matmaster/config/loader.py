@@ -70,29 +70,41 @@ def load_llm_config(source: dict[str, Any] | str | Path) -> LLMConfig:
 
 
 def load_exp_config(
-    source: dict[str, Any] | str | Path,
-    agent_name: str = "general",
+    name: str,
     *,
-    runtime: dict[str, Any] | None = None,
+    exps_dir: Path | None = None,
 ) -> ExpConfig:
-    """Load ``agents.{agent_name}`` section into ``ExpConfig``.
+    """Load ``matmaster/exps/{name}.toml`` into ``ExpConfig``.
 
     Args:
-        source: YAML file path or pre-loaded config dict.
-        agent_name: Agent profile key (default ``"general"``).
-        runtime: Shallow-merged on top of the YAML-loaded dict.
-            Primary use case: injecting ``skills`` and ``mcp`` dicts
-            from ``pg_ctx.run_meta`` at call time.
+        name: Exp definition name (matches toml filename without extension).
+        exps_dir: Override directory to search for toml files.
+            Defaults to ``matmaster/exps/`` relative to this package.
 
     Returns:
-        Validated ``ExpConfig``.  Unknown fields are silently ignored
-        (``extra="ignore"``).
+        Validated ``ExpConfig``.
+
+    Raises:
+        FileNotFoundError: If no toml file matches *name*.
     """
-    raw = _load_raw(source)
-    agents = raw.get("agents", {})
-    agent_dict: dict[str, Any] = agents.get(agent_name, {})
+    import tomllib
 
-    if runtime:
-        agent_dict = {**agent_dict, **runtime}
+    if exps_dir is None:
+        exps_dir = Path(__file__).resolve().parent.parent / "exps"
 
-    return ExpConfig.model_validate(agent_dict)
+    toml_path = exps_dir / f"{name}.toml"
+    if not toml_path.exists():
+        available = sorted(p.stem for p in exps_dir.glob("*.toml"))
+        raise FileNotFoundError(
+            f"Exp definition not found: {toml_path}, "
+            f"available: {available}"
+        )
+
+    with open(toml_path, "rb") as f:
+        raw = tomllib.load(f)
+
+    # Preserve developer_instructions verbatim (avoid ${...} misexpansion)
+    dev_instr = raw.pop("developer_instructions", "")
+    raw = _expand_env_vars(raw)
+    raw["developer_instructions"] = dev_instr
+    return ExpConfig.model_validate(raw)

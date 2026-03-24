@@ -99,34 +99,66 @@ routes:
 
 
 class TestLoadExpConfig:
-    def test_from_yaml_path(self, yaml_file: Path) -> None:
-        cfg = load_exp_config(yaml_file)
+    """Tests for load_exp_config() -- toml-based loading."""
+
+    def test_load_direct(self, tmp_path):
+        """Load a valid toml file by name."""
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "direct.toml").write_text(
+            'name = "direct"\nmode = "direct"\nmax_turns = 200\n'
+            'developer_instructions = "You are Mat Master."\n'
+            "\n[tools]\nbuiltin = ['*']\nmcp = '*'\n",
+            encoding="utf-8",
+        )
+        cfg = load_exp_config("direct", exps_dir=exps_dir)
         assert isinstance(cfg, ExpConfig)
-        assert cfg.max_turns == 200  # from YAML, not default 100
+        assert cfg.name == "direct"
+        assert cfg.max_turns == 200
+        assert cfg.developer_instructions == "You are Mat Master."
 
-    def test_from_dict(self) -> None:
-        raw = {
-            "agents": {
-                "general": {"max_turns": 150, "tools": {"builtin": ["bash"]}}
-            }
-        }
-        cfg = load_exp_config(raw)
-        assert cfg.max_turns == 150
-        assert cfg.tools.builtin == ["bash"]
+    def test_unknown_name_raises(self, tmp_path):
+        """Unknown exp name raises FileNotFoundError with available list."""
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "direct.toml").write_text('name = "direct"\n')
+        with pytest.raises(FileNotFoundError, match="unknown_exp"):
+            load_exp_config("unknown_exp", exps_dir=exps_dir)
 
-    def test_runtime_override(self, yaml_file: Path) -> None:
-        cfg = load_exp_config(yaml_file, runtime={"skills": {"enabled": True}})
-        assert cfg.skills == {"enabled": True}
-        assert cfg.max_turns == 200  # YAML value preserved
+    def test_error_message_lists_available(self, tmp_path):
+        """FileNotFoundError message includes available exp names."""
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "direct.toml").write_text('name = "direct"\n')
+        (exps_dir / "planner.toml").write_text('name = "planner"\n')
+        with pytest.raises(FileNotFoundError, match="direct") as exc_info:
+            load_exp_config("nope", exps_dir=exps_dir)
+        assert "planner" in str(exc_info.value)
 
-    def test_custom_agent_name(self, tmp_path: Path) -> None:
-        yaml = 'agents:\n  solver:\n    max_turns: 50\n    tools:\n      builtin: ["bash"]\n'
-        f = tmp_path / "config.yaml"
-        f.write_text(yaml)
-        cfg = load_exp_config(f, agent_name="solver")
-        assert cfg.max_turns == 50
+    def test_env_var_expansion(self, tmp_path, monkeypatch):
+        """${ENV} patterns are expanded in non-developer_instructions fields."""
+        monkeypatch.setenv("TEST_MCP", "custom")
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "test.toml").write_text(
+            'name = "test"\n\n[tools]\nbuiltin = ["*"]\nmcp = "${TEST_MCP}"\n'
+        )
+        cfg = load_exp_config("test", exps_dir=exps_dir)
+        assert cfg.tools.mcp == "custom"
 
-    def test_missing_agent_uses_defaults(self) -> None:
-        raw = {"agents": {}}
-        cfg = load_exp_config(raw, agent_name="missing")
-        assert cfg.max_turns == 100  # ExpConfig default
+    def test_developer_instructions_not_expanded(self, tmp_path, monkeypatch):
+        """${...} in developer_instructions is preserved, not expanded."""
+        monkeypatch.setenv("FOO", "bar")
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "test.toml").write_text(
+            'name = "test"\n'
+            "developer_instructions = 'Use ${FOO} as template var'\n"
+        )
+        cfg = load_exp_config("test", exps_dir=exps_dir)
+        assert "${FOO}" in cfg.developer_instructions
+
+    def test_default_exps_dir(self):
+        """Default exps_dir resolves to matmaster/exps/ and can load direct.toml."""
+        cfg = load_exp_config("direct")
+        assert cfg.name == "direct"
