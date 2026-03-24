@@ -205,7 +205,7 @@ class TestEventsToMessagesPersistenceRoundTrip:
     """Persisted public content shape remains readable by ChatHistoryConverter."""
 
     def test_tool_call_public_shape_round_trips(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
         from matmaster.types.events import ToolCallEvent
 
         event = ToolCallEvent(
@@ -229,7 +229,7 @@ class TestEventsToMessagesPersistenceRoundTrip:
         assert tc.arguments == {"cmd": "ls"}
 
     def test_tool_result_public_shape_round_trips(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
         from matmaster.types.events import ToolResultEvent
 
         event = ToolResultEvent(
@@ -251,7 +251,7 @@ class TestEventsToMessagesPersistenceRoundTrip:
         assert tool_msgs[0].content == "file.txt"
 
     def test_run_result_dict_shape_round_trips(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
         from matmaster.types.events import RunResultEvent
 
         event = RunResultEvent(

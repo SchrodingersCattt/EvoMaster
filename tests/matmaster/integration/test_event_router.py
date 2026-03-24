@@ -38,12 +38,9 @@ from matmaster.types.events import (
     ToolCallEvent,
     ToolResultEvent,
 )
-from matmaster.integration.event_router import (
-    EventHandler,
-    EventRouter,
-    PersistenceHandler,
-    SSEHandler,
-)
+from matmaster.integration.event_router import EventHandler, EventRouter
+from matmaster.integration.persistence_handler import PersistenceHandler
+from matmaster.integration.sse_handler import SSEHandler
 
 
 # ── EventRouter Tests ────────────────────────────────────
@@ -853,7 +850,7 @@ class TestPublicContentForEvent:
     """_public_content_for_event covers every persisted public event family."""
 
     def test_run_result_extracts_final_content(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
 
         payload = {
             "type": "run_result",
@@ -870,7 +867,7 @@ class TestPublicContentForEvent:
         }
 
     def test_finish_alias_uses_same_shape(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
 
         payload = {
             "type": "finish",
@@ -887,7 +884,7 @@ class TestPublicContentForEvent:
         }
 
     def test_assistant_state_returns_state_dict(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
 
         state = {"role": "assistant", "content": "hi", "tool_calls": []}
         payload = {"type": "assistant_state", "source": "Agent", "state": state}
@@ -895,7 +892,7 @@ class TestPublicContentForEvent:
         assert _public_content_for_event("assistant_state", payload) == state
 
     def test_skill_hit_returns_skill_name(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
 
         payload = {"type": "skill_hit", "source": "Agent", "skill_name": "search"}
 
@@ -904,7 +901,7 @@ class TestPublicContentForEvent:
         }
 
     def test_cancelled_returns_reason(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
 
         payload = {"type": "cancelled", "source": "System", "reason": "user stop"}
 
@@ -913,7 +910,7 @@ class TestPublicContentForEvent:
         }
 
     def test_confirmation_timeout_returns_question_and_default(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
 
         payload = {
             "type": "confirmation_timeout",
@@ -928,7 +925,7 @@ class TestPublicContentForEvent:
         }
 
     def test_exp_run_returns_exp_name(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
 
         payload = {"type": "exp_run", "source": "System", "exp_name": "vasp-relax"}
 
@@ -937,14 +934,14 @@ class TestPublicContentForEvent:
         }
 
     def test_response_uses_content_field(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
 
         payload = {"type": "response", "source": "Agent", "content": "hello"}
 
         assert _public_content_for_event("response", payload) == "hello"
 
     def test_unknown_type_without_content_extracts_business_fields(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
 
         payload = {
             "type": "new_future_event",
@@ -960,7 +957,7 @@ class TestPublicContentForEvent:
         }
 
     def test_unknown_type_with_content_keeps_existing_behavior(self) -> None:
-        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.integration.event_payloads import _public_content_for_event
 
         payload = {"type": "future_event", "source": "System", "content": "data"}
 
