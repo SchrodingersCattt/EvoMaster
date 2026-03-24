@@ -127,6 +127,31 @@ def _public_content_for_event(
     if event_type == "context_compaction":
         return payload.get("payload")
 
+    if event_type in ("run_result", "finish"):
+        return {
+            "content": payload.get("final_content") or "",
+            "status": payload.get("status"),
+            "reason": payload.get("reason"),
+        }
+
+    if event_type == "assistant_state":
+        return payload.get("state")
+
+    if event_type == "skill_hit":
+        return {"skill_name": payload.get("skill_name")}
+
+    if event_type == "cancelled":
+        return {"reason": payload.get("reason", "")}
+
+    if event_type == "confirmation_timeout":
+        return {
+            "question": payload.get("question"),
+            "default_reply": payload.get("default_reply"),
+        }
+
+    if event_type == "exp_run":
+        return {"exp_name": payload.get("exp_name")}
+
     return payload.get("content")
 
 logger = logging.getLogger(__name__)
