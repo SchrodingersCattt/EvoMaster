@@ -67,6 +67,7 @@ class AgentRuntimeSpec(BaseModel):
     # Context
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     system_prompt: str = ""
+    compactor: Any | None = None
 
     # Mode
     mode: str = "direct"  # 'direct' | 'planner'
