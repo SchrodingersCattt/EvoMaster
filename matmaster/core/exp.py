@@ -1,6 +1,6 @@
 """Exp -- config-driven assembly layer.
 
-Exp is a concrete class that transforms a config dict + PlaygroundContext
+Exp is a concrete class that transforms an ExpConfig + PlaygroundContext
 into an AgentRuntimeSpec (assemble), builds runtime resources (build_runtime),
 and executes the agent loop (run).
 
@@ -21,6 +21,7 @@ import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from matmaster.config.exp import ExpConfig
 from matmaster.core.bus import MessageBus
 from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.hooks import EventEmitterHook
@@ -38,15 +39,15 @@ if TYPE_CHECKING:
 class Exp:
     """Config-driven assembly layer.
 
-    Instantiated with a plain dict config. exp_name comes from
-    config['name'] (defaults to 'unnamed').
+    Instantiated with an ExpConfig. exp_name comes from config.name
+    (defaults to 'direct').
 
     assemble() is a pure data transform: config + ctx -> AgentRuntimeSpec.
     build_runtime() creates resources (ToolRegistry, ContextBuilder, Kernel).
     run() delegates to build_runtime then kernel.run with cleanup guarantee.
     """
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: ExpConfig) -> None:
         self._config = config
         self._cleanup_callbacks: list[Callable[[], None]] = []
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -55,8 +56,8 @@ class Exp:
 
     @property
     def exp_name(self) -> str:
-        """From config['name'], defaults to 'unnamed'."""
-        return self._config.get("name", "unnamed")
+        """From config.name, defaults to 'direct'."""
+        return self._config.name
 
     # ── Cleanup infrastructure ───────────────────────────
 
@@ -84,33 +85,14 @@ class Exp:
     # ── Phase 1: assemble ────────────────────────────────
 
     def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
-        """Data transform: config + ctx -> AgentRuntimeSpec.
-
-        Maps config fields to AgentRuntimeSpec fields. Stores prompt
-        templates, MCP/skill config in spec.meta. Does NOT create
-        ToolRegistry or build system_prompt (that is build_runtime's job).
-        """
-        max_turns = self._config.get("max_turns", 100)
-        guards = list(self._config.get("guards", []))
-        mode = self._config.get("mode", "direct")
-        compaction_raw = self._config.get("compaction", {})
-        compaction = (
-            CompactionConfig(**compaction_raw) if compaction_raw else CompactionConfig()
-        )
-
-        # Build meta bag from config keys that need downstream processing
-        meta: dict[str, Any] = {}
-        for key in ("prompt_template", "skills", "mcp"):
-            if key in self._config:
-                meta[key] = self._config[key]
-
+        """Data transform: config + ctx -> AgentRuntimeSpec."""
         return AgentRuntimeSpec(
             llm_provider=ctx.llm_provider,
-            max_turns=max_turns,
-            guards=guards,
-            mode=mode,
-            compaction=compaction,
-            meta=meta,
+            max_turns=self._config.max_turns,
+            guards=[],  # Guard instantiation deferred to build_runtime
+            mode=self._config.mode,
+            compaction=CompactionConfig(),
+            meta={},
         )
 
     # ── Phase 2: build_runtime ───────────────────────────
@@ -120,53 +102,45 @@ class Exp:
         ctx: PlaygroundContext,
         *,
         bus: MessageBus | None = None,
+        skills: dict[str, Any] | None = None,
+        mcp: dict[str, Any] | None = None,
     ) -> AgentRuntime:
-        """Resource creation: assemble -> tools -> MCP -> prompt -> kernel.
-
-        Steps:
-        1. Call assemble() to get base spec
-        2. Create ToolRegistry + register builtin tools from ctx.session
-        3. Init skill tools if config.skills.enabled (stub)
-        4. Init MCP tools if config.mcp.servers (stub)
-        5. Build system_prompt via ContextBuilder (needs ToolRegistry)
-        6. Create EventEmitterHook if bus provided
-        7. Update spec via model_copy with runtime-built fields
-        8. Create AgentKernel
-        9. Return AgentRuntime(kernel, spec, cleanup=self._run_cleanup_callbacks)
-        """
-        # 1. Assemble base spec
+        """Resource creation: assemble -> tools -> prompt -> kernel."""
         spec = self.assemble(ctx)
 
-        # 2. Create ToolRegistry and register builtin tools
+        # 1. Register ALL tools before building system prompt
         registry = ToolRegistry()
-        builtin_cfg = self._config.get("tools", {}).get("builtin", [])
+        builtin_cfg = self._config.tools.builtin
         if "*" in builtin_cfg and ctx.session is not None:
             self._init_builtin_tools(ctx, registry)
 
-        # 3. Skill tools (stub -- factory mechanism refined later)
-        self._init_skill_tools(ctx, registry)
+        # 2. Skills/MCP: runtime-injected (must be before system prompt)
+        if skills:
+            self._init_skill_tools(ctx, registry, skills)
+        if mcp:
+            self._init_mcp_tools(ctx, registry, mcp)
 
-        # 4. MCP tools (stub -- factory mechanism refined later)
-        self._init_mcp_tools(ctx, registry)
-
-        # 5. Build system_prompt via ContextBuilder
+        # 3. System prompt via ContextBuilder
         builder = ContextBuilder()
-        identity = self._config.get("identity")
+        identity = self._config.developer_instructions or None
         system_prompt = builder.build(ctx, registry, mode=spec.mode, identity=identity)
 
-        # 6. Hooks: EventEmitterHook if bus provided
+        # 4. Hooks
         hooks = list(spec.hooks)
         if bus is not None:
             emitter_hook = EventEmitterHook(bus, source=self.exp_name)
             hooks.append(emitter_hook)
 
+        # 5. Compaction: unchanged, managed by separate process
         compactor = None
         if spec.compaction.enabled and spec.llm_provider is not None:
             from matmaster.core.context_compactor import ContextCompactor
 
             summary_provider = spec.llm_provider
             if spec.compaction.compaction_llm:
-                resolved = self._resolve_compaction_llm(spec.compaction.compaction_llm, ctx)
+                resolved = self._resolve_compaction_llm(
+                    spec.compaction.compaction_llm, ctx
+                )
                 if resolved:
                     from matmaster.providers.openai_provider import OpenAIProvider
 
@@ -183,7 +157,6 @@ class Exp:
                 bus=bus,
             )
 
-        # 7. Update spec with runtime-built fields
         spec = spec.model_copy(
             update={
                 "tool_registry": registry,
@@ -193,12 +166,10 @@ class Exp:
             }
         )
 
-        # 8. Create AgentKernel
-        from matmaster.core.agent import AgentKernel  # lazy import to avoid circular
+        from matmaster.core.agent import AgentKernel
 
         kernel = AgentKernel()
 
-        # 9. Return AgentRuntime bundle
         return AgentRuntime(
             kernel=kernel,
             spec=spec,
@@ -211,20 +182,7 @@ class Exp:
         """Resolve compaction LLM profile from PlaygroundContext.llm_config."""
         llm_config = getattr(ctx, "llm_config", None)
         if llm_config is None:
-            # Fallback: try legacy _llm_profiles dict
-            llm_dict = self._config.get("_llm_profiles", {})
-            profile = llm_dict.get(key)
-            if not profile or not isinstance(profile, dict):
-                return None
-            return {
-                "model": profile["model"],
-                "api_key": profile["api_key"],
-                "base_url": profile.get("base_url"),
-                "temperature": profile.get("temperature", 0.3),
-                "max_tokens": profile.get("max_tokens"),
-                "timeout": profile.get("timeout", 120.0),
-            }
-
+            return None
         try:
             profile = llm_config.get_profile(key)
         except KeyError:
@@ -248,20 +206,11 @@ class Exp:
         bus: MessageBus | None = None,
         history: list[Message] | None = None,
         stop_event: threading.Event | None = None,
+        skills: dict[str, Any] | None = None,
+        mcp: dict[str, Any] | None = None,
     ) -> RunResultEvent:
-        """build_runtime -> kernel.run -> cleanup.
-
-        Args:
-            ctx: Playground environment context.
-            task: The user's current task/prompt.
-            bus: Optional MessageBus for event delivery.
-            history: Optional multi-turn conversation history.
-            stop_event: External cancellation signal.
-
-        Cleanup callbacks registered during build_runtime() are guaranteed
-        to run in the finally block, even when kernel.run() raises.
-        """
-        runtime = self.build_runtime(ctx, bus=bus)
+        """build_runtime -> kernel.run -> cleanup."""
+        runtime = self.build_runtime(ctx, bus=bus, skills=skills, mcp=mcp)
         try:
             result = runtime.kernel.run(
                 runtime.spec, task, history=history, stop_event=stop_event
@@ -297,25 +246,18 @@ class Exp:
         self.logger.debug("Registered 3 builtin tools via EvoToolAdapter")
 
     def _init_skill_tools(
-        self, ctx: PlaygroundContext, registry: ToolRegistry
+        self,
+        ctx: PlaygroundContext,
+        registry: ToolRegistry,
+        config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize skill tools (stub -- factory mechanism refined later)."""
 
     def _init_mcp_tools(
-        self, ctx: PlaygroundContext, registry: ToolRegistry
+        self,
+        ctx: PlaygroundContext,
+        registry: ToolRegistry,
+        config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize MCP tools (stub -- factory mechanism refined later)."""
 
-    # ── Utilities ────────────────────────────────────────
-
-    @staticmethod
-    def _load_file_content(path: str | None) -> str:
-        """Read file content or return empty string if path is None/missing."""
-        if path is None:
-            return ""
-        try:
-            from pathlib import Path
-
-            return Path(path).read_text(encoding="utf-8")
-        except (OSError, FileNotFoundError):
-            return ""
