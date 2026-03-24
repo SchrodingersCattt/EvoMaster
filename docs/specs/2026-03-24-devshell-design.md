@@ -44,6 +44,36 @@ mm-devshell --workdir ./workspace --log-dir ./logs --config dev.yaml
 
 Each user input triggers a new Exp.run() call, consistent with production behavior.
 
+### Multi-Turn History Management
+
+DevRunner maintains a session-level `history: list[Message]` across runs:
+
+1. First run: history is empty, Exp.run() receives `history=None`
+2. After each run completes: DevRunner extracts the messages from the run (AssistantMessage + ToolMessages) and appends them to history
+3. Next run: the accumulated history is passed to Exp.run(), giving the agent cross-turn context
+
+The `/history` command shows a summary of the accumulated history. History is not persisted to disk (lost on REPL exit); the JSONL event log serves as the durable record.
+
+### Threading Model
+
+REPL uses a background thread for agent execution:
+
+1. REPL main thread: handles input, signal (SIGINT), and display
+2. Per-run worker thread: executes `Exp.run()` (blocking call with LLM streaming + tool execution)
+3. SIGINT handler (main thread): sets `stop_event` on the current run's threading.Event, which AgentKernel checks at each turn boundary
+4. Main thread blocks on `worker_thread.join()` after dispatching, waking on SIGINT to set stop_event
+
+This is the same pattern used by the production `AgentRunService` (ThreadPoolExecutor).
+
+### Hook Architecture
+
+Two hooks coexist, serving different purposes:
+
+- **EventEmitterHook** (created by `Exp.build_runtime()` automatically when bus is provided): bridges kernel events to MessageBus. EventLogger consumes the bus for JSONL persistence.
+- **DevStreamHook** (injected as additional hook via Exp config): implements Hook protocol directly for real-time terminal output. Receives streaming chunks, tool calls, and tool results from the kernel without going through the bus.
+
+For GuardBlock display: guard evaluation results are not emitted as events. DevStreamHook monitors `post_tool_call` for tool results that contain guard block indicators (the kernel writes guard block info as ToolMessage content). In verbose mode, guard evaluation details are also shown.
+
 ## Module Structure
 
 ```
@@ -66,7 +96,7 @@ matmaster/
 | `cli.py` | Arg parsing + entry point. Routes to REPL or future batch runner |
 | `config.py` | DevConfig definition, YAML loading, env var expansion |
 | `repl.py` | REPL loop, readline, builtin command dispatch, Ctrl+C handling |
-| `runner.py` | Per-run assembly: construct PlaygroundContext, create Exp, call run(), return result |
+| `runner.py` | Per-run assembly: construct PlaygroundContext, create Exp, call run(), accumulate history |
 | `stream_hook.py` | Implements Hook protocol, formats events for terminal display |
 | `event_logger.py` | Consumes MessageBus events, aggregates streaming thoughts, writes JSONL |
 
@@ -92,18 +122,18 @@ agent:
 session:
   type: "local"  # local / docker / ssh
 
-# Tools config
+# Tools config (use "*" to register all builtin tools, matching Exp's registration logic)
 tools:
   builtin:
-    - bash
-    - editor
-    - monitor_job
+    - "*"
 ```
 
 Design points:
 - Flat structure, no nested Playground config schema
-- Environment variable expansion via existing `${VAR}` mechanism
+- Environment variable expansion via `matmaster.config.loader._expand_env_vars()` (existing utility)
 - DevConfig Pydantic model with sensible defaults; runs with zero config if env vars are set
+- `tools.builtin` uses `"*"` wildcard to match `Exp.build_runtime()` registration logic (which checks `if "*" in builtin_cfg`)
+- `agent.system_prompt` override: requires a small change in `Exp.build_runtime()` to read an `identity` field from config and pass it to `ContextBuilder.build(identity=...)`. Currently `build_runtime()` does not forward this field. This is a targeted Exp enhancement as part of devshell implementation.
 - MCP/Skill config sections added later when `--mcp`/`--skills` flags are implemented
 
 ## CLI Interface
@@ -206,6 +236,28 @@ def main():
 ```
 
 `runner.py`'s `DevRunner` class is REPL-agnostic: accepts a task string, returns a result. Both REPL and batch modes can call it.
+
+## DevRunner Initialization Flow
+
+DevRunner.__init__() performs one-time setup:
+
+1. Load DevConfig from YAML (or defaults)
+2. Create LLMProvider (OpenAIProvider with config.llm fields)
+3. Create session based on config.session.type:
+   - LocalSession: create instance, call `session.open()`
+   - Set `session.config.workspace_path = workdir` (mirrors Playground._sync_workspace_to_session_config())
+4. Construct PlaygroundContext (frozen Pydantic model):
+   - workdir, session_type, cache_area (workdir/.cache), session, llm_provider
+5. Build Exp config dict from DevConfig (agent name, mode, max_turns, tools, identity override, hooks: [DevStreamHook instance])
+6. Initialize history list (empty)
+
+DevRunner.run(task: str) per-invocation:
+
+1. Create MessageBus instance
+2. Create Exp(config) with the prepared config dict
+3. Call Exp.run(pg_context, task, bus, history=self.history, stop_event=stop_event)
+4. Append run messages to self.history
+5. Return RunResultEvent
 
 ## pyproject.toml Registration
 
