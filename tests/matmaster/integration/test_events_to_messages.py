@@ -199,3 +199,89 @@ class TestEventsToMessagesPreservesOrder:
         assert len(result) == 1
         assert isinstance(result[-1], AssistantMessage)
         assert result[-1].content == "legacy answer"
+
+
+class TestEventsToMessagesPersistenceRoundTrip:
+    """Persisted public content shape remains readable by ChatHistoryConverter."""
+
+    def test_tool_call_public_shape_round_trips(self) -> None:
+        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.types.events import ToolCallEvent
+
+        event = ToolCallEvent(
+            source="Agent",
+            call_id="tc_1",
+            tool_name="bash",
+            arguments={"cmd": "ls"},
+        )
+        persisted = _public_content_for_event("tool_call", event.model_dump(mode="json"))
+        db_event = {"source": "MatMaster", "type": "tool_call", "content": persisted}
+
+        result = ChatHistoryConverter.events_to_messages(
+            [_user_event("run"), db_event, _tool_result_event("tc_1", "bash", "ok")]
+        )
+
+        assistant_msgs = [m for m in result if isinstance(m, AssistantMessage)]
+        assert len(assistant_msgs) >= 1
+        tc = assistant_msgs[0].tool_calls[0]
+        assert tc.id == "tc_1"
+        assert tc.name == "bash"
+        assert tc.arguments == {"cmd": "ls"}
+
+    def test_tool_result_public_shape_round_trips(self) -> None:
+        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.types.events import ToolResultEvent
+
+        event = ToolResultEvent(
+            source="Agent",
+            call_id="tc_1",
+            tool_name="bash",
+            result="file.txt",
+        )
+        persisted = _public_content_for_event("tool_result", event.model_dump(mode="json"))
+        db_event = {"source": "MatMaster", "type": "tool_result", "content": persisted}
+
+        result = ChatHistoryConverter.events_to_messages(
+            [_user_event("run"), _tool_call_event("tc_1", "bash"), db_event]
+        )
+
+        tool_msgs = [m for m in result if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 1
+        assert tool_msgs[0].tool_call_id == "tc_1"
+        assert tool_msgs[0].content == "file.txt"
+
+    def test_run_result_dict_shape_round_trips(self) -> None:
+        from matmaster.integration.event_router import _public_content_for_event
+        from matmaster.types.events import RunResultEvent
+
+        event = RunResultEvent(
+            source="Agent",
+            status="completed",
+            reason="natural",
+            final_content="here are your files",
+        )
+        persisted = _public_content_for_event("run_result", event.model_dump(mode="json"))
+        db_event = {"source": "MatMaster", "type": "run_result", "content": persisted}
+
+        result = ChatHistoryConverter.events_to_messages(
+            [_user_event("list files"), db_event]
+        )
+
+        assistant_msgs = [m for m in result if isinstance(m, AssistantMessage)]
+        assert len(assistant_msgs) == 1
+        assert assistant_msgs[0].content == "here are your files"
+
+    def test_legacy_run_result_string_still_round_trips(self) -> None:
+        db_event = {
+            "source": "MatMaster",
+            "type": "run_result",
+            "content": "legacy string answer",
+        }
+
+        result = ChatHistoryConverter.events_to_messages(
+            [_user_event("question"), db_event]
+        )
+
+        assistant_msgs = [m for m in result if isinstance(m, AssistantMessage)]
+        assert len(assistant_msgs) == 1
+        assert assistant_msgs[0].content == "legacy string answer"
