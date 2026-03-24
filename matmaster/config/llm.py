@@ -20,6 +20,7 @@ YAML example::
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
@@ -137,25 +138,42 @@ class LLMProfileConfig(BaseModel):
         return None
 
 
-class LLMConfig(BaseModel):
-    """Top-level LLM configuration: named profiles + default selection.
+# ── Route schema ───────────────────────────────────────────────────────────────
 
-    The YAML ``llm`` block mixes profile dicts with a scalar ``default``
-    key at the same level.  The ``model_validator`` separates them into
-    ``profiles`` dict and ``default`` string so downstream code has
-    typed access via ``config.llm.profiles["litellm"]``.
-    """
+
+class LLMRouteConfig(BaseModel):
+    """External route key -> internal profile mapping."""
+
+    profile: str
+    model: str | None = None
+
+
+@dataclass(frozen=True)
+class ResolvedLLMRoute:
+    """Runtime-resolved LLM routing result."""
+
+    route_key: str | None
+    profile_key: str
+    provider: str
+    model: str
+
+
+# ── Top-level LLM config ──────────────────────────────────────────────────────
+
+
+class LLMConfig(BaseModel):
+    """Top-level LLM configuration: profiles + routes + default."""
 
     profiles: dict[str, LLMProfileConfig] = Field(default_factory=dict)
+    routes: dict[str, LLMRouteConfig] = Field(default_factory=dict)
     default: str = "litellm"
 
     @model_validator(mode="before")
     @classmethod
-    def _separate_profiles_from_default(cls, data: Any) -> Any:
-        """Extract profile dicts and ``default`` from a flat YAML dict."""
+    def _normalize_legacy_or_explicit_schema(cls, data: Any) -> Any:
+        """Support both normalized and legacy flat YAML formats."""
         if not isinstance(data, dict):
             return data
-        # Already in normalized form
         if "profiles" in data:
             return data
         default = data.pop("default", "litellm")
@@ -165,57 +183,84 @@ class LLMConfig(BaseModel):
                 profiles[key] = value
         return {"profiles": profiles, "default": default}
 
+    @model_validator(mode="after")
+    def _validate_internal_references(self) -> "LLMConfig":
+        """Fail-fast: verify all internal references are valid."""
+        if self.default not in self.profiles:
+            raise ValueError(
+                f"default profile '{self.default}' not found, "
+                f"available: {list(self.profiles)}"
+            )
+        for route_key, route in self.routes.items():
+            if route.profile not in self.profiles:
+                raise ValueError(
+                    f"route '{route_key}' references profile '{route.profile}' "
+                    f"which does not exist, available: {list(self.profiles)}"
+                )
+        return self
+
     def get_profile(self, key: str | None = None) -> LLMProfileConfig:
-        """Return profile by key, falling back to ``self.default``."""
+        """Return profile by key, falling back to self.default."""
         k = key or self.default
         if k not in self.profiles:
             raise KeyError(f"LLM profile '{k}' not found, available: {list(self.profiles)}")
         return self.profiles[k]
 
+    def resolve_route(
+        self,
+        *,
+        model_override: str | None = None,
+        llm_override: str | None = None,
+        default_key: str | None = None,
+    ) -> ResolvedLLMRoute:
+        """Resolve external input to internal profile + model.
+        Resolution order:
+        1. model_override non-empty: exact route table lookup (fail on miss)
+        2. llm_override non-empty: treat as profile key (compat layer)
+        3. Both empty: use default_key or self.default
+        """
+        effective_default = default_key or self.default
+        if model_override:
+            route = self.routes.get(model_override)
+            if route is None:
+                raise KeyError(
+                    f"Unknown LLM route key: {model_override!r}, "
+                    f"available routes: {list(self.routes)}"
+                )
+            profile = self.get_profile(route.profile)
+            return ResolvedLLMRoute(
+                route_key=model_override,
+                profile_key=route.profile,
+                provider=profile.provider,
+                model=route.model or profile.model,
+            )
+        profile_key = llm_override or effective_default
+        profile = self.get_profile(profile_key)
+        return ResolvedLLMRoute(
+            route_key=None,
+            profile_key=profile_key,
+            provider=profile.provider,
+            model=profile.model,
+        )
+
+    # Keep resolve_profile for backward compatibility during migration
     def resolve_profile(
         self,
         model_override: str | None = None,
         default_key: str | None = None,
     ) -> tuple[str, LLMProfileConfig]:
-        """Three-level profile resolution chain.
-
-        When *model_override* is ``None``, return the profile at *default_key*
-        (falls back to ``self.default``).
-
-        When *model_override* is set:
-          1. Search profiles whose ``model`` field matches *model_override*.
-          2. Check if *model_override* is itself a profile key.
-          3. Fall back to the *default_key* profile.
-
-        Args:
-            model_override: Model name or profile key to resolve.
-            default_key: Agent-level default (e.g. ``agents.general.llm``).
-                Falls back to ``self.default`` when ``None``.
-
-        Returns:
-            ``(profile_key, LLMProfileConfig)`` tuple.
-
-        Raises:
-            KeyError: When the resolved key is not found in profiles.
-        """
+        """Legacy three-level profile resolution (kept for compat)."""
         effective_default = default_key or self.default
         if effective_default not in self.profiles:
             raise KeyError(
                 f"LLM profile '{effective_default}' not found, "
                 f"available: {list(self.profiles)}"
             )
-
         if not model_override:
             return effective_default, self.profiles[effective_default]
-
-        # 1. Search by model name
         for key, profile in self.profiles.items():
             if profile.model == model_override:
                 return key, profile
-
-        # 2. Search by profile key
         if model_override in self.profiles:
             return model_override, self.profiles[model_override]
-
-        # 3. Fallback
         return effective_default, self.profiles[effective_default]
