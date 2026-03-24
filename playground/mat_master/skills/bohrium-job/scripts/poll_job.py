@@ -55,8 +55,16 @@ def _get_job_detail(job_id: int) -> dict:
     return response.get('data', {})
 
 
-def poll_until_done(job_id: int, max_polls: int, interval: int) -> str:
-    """Poll /openapi/v1/job/{job_id} until terminal status."""
+def poll_until_done(
+    job_id: int, max_polls: int, interval: int
+) -> tuple[str, int]:
+    """Poll /openapi/v1/job/{job_id} until terminal status.
+
+    Returns a tuple ``(status, polls_done)`` where *polls_done* is the number
+    of poll iterations actually executed.  When the budget exhausts while the
+    job is still in a running state the returned status is ``'Timeout'``
+    (sentinel); the caller converts this to ``'still_running'`` with exit 0.
+    """
     print(
         f"[poll] job_id={job_id}, max_polls={max_polls}, interval={interval}s",
         flush=True,
@@ -64,15 +72,17 @@ def poll_until_done(job_id: int, max_polls: int, interval: int) -> str:
     failure_confirms = 0
     unknown_count = 0
     last_non_running_status = 'Timeout'
+    polls_done = 0
 
     for idx in range(max_polls):
+        polls_done = idx + 1
         detail = _get_job_detail(job_id)
         code = detail.get('status', 0)
         name = _STATUS_MAP.get(code, f"Unknown({code})")
         print(f"[poll] [{idx + 1:02d}/{max_polls}] {name}", flush=True)
 
         if code == _SUCCESS_CODE:
-            return name
+            return name, polls_done
 
         if code in _FAILURE_CODES:
             failure_confirms += 1
@@ -82,7 +92,7 @@ def poll_until_done(job_id: int, max_polls: int, interval: int) -> str:
                 flush=True,
             )
             if failure_confirms >= _MAX_FAILURE_CONFIRMS:
-                return name
+                return name, polls_done
             time.sleep(min(interval, 10))
             continue
 
@@ -94,7 +104,7 @@ def poll_until_done(job_id: int, max_polls: int, interval: int) -> str:
                 flush=True,
             )
             if unknown_count >= _MAX_UNKNOWN_COUNT:
-                return f"Unknown({code})"
+                return f"Unknown({code})", polls_done
             time.sleep(min(interval, 10))
             continue
 
@@ -102,7 +112,7 @@ def poll_until_done(job_id: int, max_polls: int, interval: int) -> str:
         unknown_count = 0
         time.sleep(interval)
 
-    return last_non_running_status
+    return last_non_running_status, polls_done
 
 
 def read_log_from_dir(extract_dir: Path, max_chars: int = 4000) -> str:
@@ -164,6 +174,16 @@ def main() -> None:
         '--poll-interval', type=int, default=30, help='Seconds between polls'
     )
     parser.add_argument(
+        '--timeout-minutes',
+        type=float,
+        default=None,
+        help=(
+            'Optional convenience shortcut: compute max_polls from '
+            'timeout_minutes * 60 / poll_interval. '
+            'Overrides --max-polls when provided.'
+        ),
+    )
+    parser.add_argument(
         '--result-dir',
         default=None,
         help='Directory to save results (default: results/run_<job_id>)',
@@ -174,8 +194,15 @@ def main() -> None:
         print(json.dumps({'success': False, 'error': 'BOHRIUM_ACCESS_KEY not set'}))
         sys.exit(1)
 
+    # --timeout-minutes overrides --max-polls when provided
+    max_polls = args.max_polls
+    if args.timeout_minutes is not None:
+        max_polls = max(1, int(args.timeout_minutes * 60 / args.poll_interval))
+
     job_id = int(args.job_id)
-    status = poll_until_done(job_id, args.max_polls, args.poll_interval)
+    start_time = time.time()
+    status, polls_done = poll_until_done(job_id, max_polls, args.poll_interval)
+    elapsed_seconds = time.time() - start_time
 
     detail = {}
     try:
@@ -184,26 +211,32 @@ def main() -> None:
         detail = {}
     bohr_job_id = detail.get('bohrJobId') or job_id
 
-    # Timeout means the loop exhausted before a terminal status — job may still be running.
+    # Timeout means the loop exhausted before a terminal status — job is still running.
+    # Return success=true with status="still_running" (exit 0) so the caller can decide
+    # whether to re-poll or finish with task_completed=partial.
     if status == 'Timeout':
         print(
             json.dumps(
                 {
-                    'success': False,
+                    'success': True,
                     'job_id': job_id,
                     'bohr_job_id': bohr_job_id,
-                    'status': status,
+                    'status': 'still_running',
+                    'polls_done': polls_done,
+                    'elapsed_seconds': round(elapsed_seconds, 1),
                     'log_tail': '',
-                    'error': (
-                        f"Polling exhausted (max_polls={args.max_polls}). "
-                        f"Job may still be running on Bohrium (job_id={job_id}). "
-                        'Re-run poll_job.py with --max-polls to continue polling.'
+                    'message': (
+                        f"Poll budget exhausted ({polls_done}/{max_polls} polls, "
+                        f"{round(elapsed_seconds / 60, 1)} min). "
+                        f"Job is still running on Bohrium (job_id={job_id}). "
+                        'Re-invoke poll_job.py with the same --job-id to continue monitoring, '
+                        'or finish with task_completed=partial.'
                     ),
                 },
                 ensure_ascii=False,
             )
         )
-        sys.exit(1)
+        sys.exit(0)
 
     # Finished or Failed: always attempt to download result zip (failed jobs also produce logs).
     result_dir = (
@@ -235,6 +268,8 @@ def main() -> None:
                     'job_id': job_id,
                     'bohr_job_id': bohr_job_id,
                     'status': status,
+                    'polls_done': polls_done,
+                    'elapsed_seconds': round(elapsed_seconds, 1),
                     'result_dir': str(extract_dir.resolve()) if extract_dir else None,
                     'files': files,
                     'log_tail': log_tail,
@@ -253,6 +288,8 @@ def main() -> None:
                     'job_id': job_id,
                     'bohr_job_id': bohr_job_id,
                     'status': status,
+                    'polls_done': polls_done,
+                    'elapsed_seconds': round(elapsed_seconds, 1),
                     'log_tail': log_tail,
                     'error': f"download failed: {download_error}",
                 },
@@ -268,6 +305,8 @@ def main() -> None:
                 'job_id': job_id,
                 'bohr_job_id': bohr_job_id,
                 'status': status,
+                'polls_done': polls_done,
+                'elapsed_seconds': round(elapsed_seconds, 1),
                 'result_dir': str(extract_dir.resolve()),
                 'files': files,
                 'log_tail': log_tail,
