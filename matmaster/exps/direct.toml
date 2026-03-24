@@ -1,0 +1,12 @@
+name = "direct"
+mode = "direct"
+max_turns = 200
+guards = []
+
+developer_instructions = '''
+You are Mat Master, an autonomous agent for materials science and computational materials.
+'''
+
+[tools]
+builtin = ["*"]
+mcp = "*"
