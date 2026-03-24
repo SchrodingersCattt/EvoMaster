@@ -320,7 +320,7 @@ class AgentRunService:
             )
 
             # -- Stage 4: Exp assembly --
-            from matmaster.config.loader import load_llm_config
+            from matmaster.config.loader import load_exp_config, load_llm_config
             from matmaster.core.exp import Exp
             from matmaster.providers.llm_factory import build_provider
 
@@ -347,19 +347,15 @@ class AgentRunService:
                 }
             )
 
-            exp_config = {
-                "name": "direct",
-                "tools": {"builtin": ["*"]},
-                "guards": [],
-                "termination": {"max_turns": 100},
-                "prompt": {},
-                "context": {},
-                "skills": pg_ctx.run_meta.get("skill_config", {}),
-                "mcp": pg_ctx.run_meta.get("mcp_config", {}),
-            }
-
+            exp_name = mode or "direct"
+            exp_config = load_exp_config(exp_name)
             exp = Exp(exp_config)
-            runtime = exp.build_runtime(pg_ctx, bus=bus)
+            runtime = exp.build_runtime(
+                pg_ctx,
+                bus=bus,
+                skills=pg_ctx.run_meta.get("skill_config"),
+                mcp=pg_ctx.run_meta.get("mcp_config"),
+            )
 
             # Add external hooks to spec
             external_hooks = [
