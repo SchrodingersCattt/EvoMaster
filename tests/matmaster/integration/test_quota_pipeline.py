@@ -38,6 +38,20 @@ class _SuccessLLM:
         yield StreamChunk(content="success", finish_reason="stop")
 
 
+class _InvalidFinishLLM:
+    """Mock LLM: streams content but ends with a non-committable finish reason."""
+
+    def chat(self, messages, tools=None) -> LLMResponse:
+        return LLMResponse(content="partial", finish_reason="length")
+
+    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
+        return self.chat(messages, tools)
+
+    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+        yield StreamChunk(content="partial")
+        yield StreamChunk(finish_reason="length")
+
+
 class _ErrorLLM:
     """Mock LLM: raises exception."""
 
@@ -80,7 +94,7 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
     return svc, mock_pg
 
 
-def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None):
+def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None, send_cb=None):
     """Run agent with standard patches and return whether use_quota was called."""
     with (
         patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
@@ -114,7 +128,7 @@ def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None):
         svc.run_agent_sync(
             session_id="sess-q",
             user_prompt="quota test",
-            send_cb=MagicMock(),
+            send_cb=send_cb or MagicMock(),
             loop=None,
             stop_event=stop_event or threading.Event(),
             mode="direct",
@@ -144,6 +158,49 @@ class TestQuotaDeductedOnSuccess:
         called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
         assert called, "use_quota should be called on success"
 
+    def test_run_result_event_is_sent_on_success(self, tmp_path: Path) -> None:
+        """Verify run_agent_sync emits run_result and stream_closed on success."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _SuccessLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        payloads: list[dict[str, Any]] = []
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        _run_with_quota_mock(
+            svc,
+            mock_pg,
+            use_quota_mock,
+            send_cb=lambda payload: payloads.append(payload),
+        )
+
+        run_result_payload = next(
+            (payload for payload in payloads if payload.get("type") == "run_result"),
+            None,
+        )
+        assert run_result_payload is not None
+        assert run_result_payload["status"] == "completed"
+        assert run_result_payload["reason"] == "natural"
+        assert run_result_payload["final_content"] == "success"
+        assert run_result_payload["source"] == "MatMaster"
+
+        stream_closed_payload = next(
+            (
+                payload
+                for payload in payloads
+                if payload.get("type") == "stream_closed"
+            ),
+            None,
+        )
+        assert stream_closed_payload is not None
+        assert stream_closed_payload["source"] == "System"
+        assert stream_closed_payload["task_completed"] is True
+        assert stream_closed_payload["end_reason"] == "natural"
+        payload_types = [payload.get("type") for payload in payloads]
+        assert payload_types.index("run_result") < payload_types.index("stream_closed")
+
 
 class TestQuotaNotDeductedOnCancel:
     """Verify use_quota NOT called when task is cancelled."""
@@ -165,6 +222,43 @@ class TestQuotaNotDeductedOnCancel:
         called = _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=stop_event)
         assert not called, "use_quota should NOT be called on cancel"
 
+    def test_cancelled_run_emits_stream_closed_event(self, tmp_path: Path) -> None:
+        """Verify cancelled runs still emit stream_closed for frontend stream closure."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _SuccessLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        payloads: list[dict[str, Any]] = []
+
+        stop_event = threading.Event()
+        stop_event.set()
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        _run_with_quota_mock(
+            svc,
+            mock_pg,
+            use_quota_mock,
+            stop_event=stop_event,
+            send_cb=lambda payload: payloads.append(payload),
+        )
+
+        assert any(payload.get("type") == "cancelled" for payload in payloads)
+        stream_closed_payload = next(
+            (
+                payload
+                for payload in payloads
+                if payload.get("type") == "stream_closed"
+            ),
+            None,
+        )
+        assert stream_closed_payload is not None
+        assert stream_closed_payload["task_completed"] is False
+        assert stream_closed_payload["end_reason"] == "cancelled"
+        payload_types = [payload.get("type") for payload in payloads]
+        assert payload_types.index("cancelled") < payload_types.index("stream_closed")
+
 
 class TestQuotaNotDeductedOnError:
     """Verify use_quota NOT called when kernel raises exception."""
@@ -181,6 +275,93 @@ class TestQuotaNotDeductedOnError:
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
         called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
         assert not called, "use_quota should NOT be called on error"
+
+    def test_error_run_emits_stream_closed_event(self, tmp_path: Path) -> None:
+        """Verify error runs emit stream_closed after the error event."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _ErrorLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        payloads: list[dict[str, Any]] = []
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        _run_with_quota_mock(
+            svc,
+            mock_pg,
+            use_quota_mock,
+            send_cb=lambda payload: payloads.append(payload),
+        )
+
+        assert any(payload.get("type") == "error" for payload in payloads)
+        stream_closed_payload = next(
+            (
+                payload
+                for payload in payloads
+                if payload.get("type") == "stream_closed"
+            ),
+            None,
+        )
+        assert stream_closed_payload is not None
+        assert stream_closed_payload["task_completed"] is False
+        assert stream_closed_payload["end_reason"] == "error"
+        assert stream_closed_payload["treat_as_failure"] is True
+        payload_types = [payload.get("type") for payload in payloads]
+        assert payload_types.index("error") < payload_types.index("stream_closed")
+
+    def test_quota_not_deducted_on_invalid_finish(self, tmp_path: Path) -> None:
+        """Verify use_quota NOT called when run_result validation fails."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _InvalidFinishLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
+        assert not called, "use_quota should NOT be called on invalid finish"
+
+    def test_invalid_finish_emits_stream_closed_event(self, tmp_path: Path) -> None:
+        """Verify invalid finishes still close the stream."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _InvalidFinishLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        payloads: list[dict[str, Any]] = []
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        _run_with_quota_mock(
+            svc,
+            mock_pg,
+            use_quota_mock,
+            send_cb=lambda payload: payloads.append(payload),
+        )
+
+        run_result_payload = next(
+            (payload for payload in payloads if payload.get("type") == "run_result"),
+            None,
+        )
+        assert run_result_payload is not None
+        assert run_result_payload["status"] == "failed"
+        assert run_result_payload["reason"] == "invalid_finish"
+        stream_closed_payload = next(
+            (
+                payload
+                for payload in payloads
+                if payload.get("type") == "stream_closed"
+            ),
+            None,
+        )
+        assert stream_closed_payload is not None
+        assert stream_closed_payload["task_completed"] is False
+        assert stream_closed_payload["end_reason"] == "invalid_finish"
+        assert stream_closed_payload["treat_as_failure"] is True
+        payload_types = [payload.get("type") for payload in payloads]
+        assert payload_types.index("run_result") < payload_types.index("stream_closed")
 
 
 class TestQuotaAsyncMode:

@@ -1,8 +1,9 @@
 """Agent execution service: new matmaster pipeline orchestration.
 
 Rewritten per D-12: run_agent_sync() is a thin orchestration layer using:
-  Playground.prepare() -> Bohrium -> Exp.assemble() -> ChatHistory ->
-  EventRouter -> Kernel.run() -> post-processing
+  Playground.prepare() -> get_chat_events_table() -> EventRouter bootstrap ->
+  Bohrium -> WorkspaceHandler attachment -> Exp.assemble() -> ChatHistory ->
+  Kernel.run() -> post-processing
 
 Method signature (12 parameters) unchanged -- zero caller modifications.
 """
@@ -21,6 +22,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from matmaster.core.bus import MessageBus
+from matmaster.types.context import WorkspaceArchivalConfig
 
 from matmaster.hooks import (
     AssistantStateHook,
@@ -36,7 +38,7 @@ from matmaster.integration import (
 )
 from matmaster.integration.bohrium_setup import BohriumSetupService
 from matmaster.core.playground import Playground
-from matmaster.types.events import CancelledEvent, ErrorEvent
+from matmaster.types.events import CancelledEvent, ErrorEvent, StreamClosedEvent
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.chat_history import ChatHistoryConverter
@@ -127,6 +129,27 @@ def _resolve_temperature(
     if temperature_policy == 'force_one_when_reasoning':
         return 1.0
     return temperature
+
+
+def _build_workspace_upload_fn(
+    archival_config: WorkspaceArchivalConfig | None,
+) -> Callable[..., Any] | None:
+    """Build workspace upload closure when archival is enabled.
+
+    Lazy-imports oss_io to avoid hard oss2 dependency when archival
+    is disabled.
+    """
+    if not archival_config or not archival_config.enabled:
+        return None
+    oss_prefix = (archival_config.oss_prefix or "").strip("/")
+
+    def _do_upload(session_id: str, task_id: str, workspace_path: Path) -> None:
+        from src.dao.oss_io import upload_dir_to_oss
+
+        key_prefix = "/".join(part for part in (oss_prefix, session_id) if part)
+        upload_dir_to_oss(workspace_path, key_prefix)
+
+    return _do_upload
 
 
 @runtime_checkable
@@ -340,8 +363,9 @@ class AgentRunService:
     ) -> None:
         """Execute agent in background thread using new matmaster pipeline.
 
-        Pipeline: Playground.prepare() -> Bohrium -> Exp.assemble() ->
-        ChatHistory -> EventRouter -> Kernel.run() -> post-processing.
+        Pipeline: Playground.prepare() -> get_chat_events_table() ->
+        EventRouter bootstrap -> Bohrium -> WorkspaceHandler attachment ->
+        Exp.assemble() -> ChatHistory -> Kernel.run() -> post-processing.
 
         Method signature unchanged per D-12: all 12 parameters preserved.
         """
@@ -376,8 +400,31 @@ class AgentRunService:
                     "task_id": task_id,
                 }
             )
+            events_table = get_chat_events_table()
 
-            # -- Stage 2: Bohrium credentials + SSH --
+            # -- Stage 2: EventRouter bootstrap --
+            router = EventRouter(
+                bus=bus,
+                handlers=[
+                    PersistenceHandler(
+                        events_table,
+                        session_id,
+                        task_id,
+                        invocation_id,
+                    ),
+                    SSEHandler(
+                        send_cb,
+                        loop,
+                        session_id,
+                        task_id,
+                        invocation_id,
+                        mode,
+                    ),
+                ],
+            )
+            router.start()
+
+            # -- Stage 3: Bohrium credentials + SSH --
             bohrium_svc = BohriumSetupService(self._sessions_service, bus)
             run_creds, user_id_for_ak, org_id = bohrium_svc.load_credentials(
                 session_id
@@ -418,8 +465,19 @@ class AgentRunService:
             if bohrium_result.abort_result is not None:
                 return
             pg_ctx = pg_ctx.with_bohrium(bohrium_result._asdict())
+            # Workspace handling depends on the finalized Bohrium/archival context.
+            router.add_handler(
+                WorkspaceHandler(
+                    session_id=session_id,
+                    task_id=task_id,
+                    ssh_attached=ssh_attached,
+                    archival_config=pg_ctx.archival,
+                    workspace_path=pg_ctx.workdir,
+                    upload_fn=_build_workspace_upload_fn(pg_ctx.archival),
+                )
+            )
 
-            # -- Stage 3: Exp assembly --
+            # -- Stage 4: Exp assembly --
             from matmaster.core.exp import Exp
 
             exp_config = {
@@ -455,8 +513,7 @@ class AgentRunService:
                 update={"hooks": [*runtime.spec.hooks, *external_hooks]}
             )
 
-            # -- Stage 4: History --
-            events_table = get_chat_events_table()
+            # -- Stage 5: History --
             raw_events = (
                 events_table.get_session_events(
                     session_id, limit=_DIALOG_HISTORY_MAX_EVENTS
@@ -464,40 +521,12 @@ class AgentRunService:
                 if events_table
                 else []
             )
-            history = ChatHistoryConverter.events_to_messages(raw_events)
-
-            # -- Stage 5: EventRouter --
-            workspace_path = pg_ctx.workdir
-            router = EventRouter(
-                bus=bus,
-                handlers=[
-                    PersistenceHandler(
-                        events_table,
-                        session_id,
-                        task_id,
-                        invocation_id,
-                    ),
-                    SSEHandler(
-                        send_cb,
-                        loop,
-                        session_id,
-                        task_id,
-                        invocation_id,
-                        mode,
-                    ),
-                    WorkspaceHandler(
-                        session_id=session_id,
-                        task_id=task_id,
-                        ssh_attached=ssh_attached,
-                        archival_config=pg_ctx.archival,
-                        workspace_path=workspace_path,
-                    ),
-                ],
+            history = ChatHistoryConverter.events_to_messages(
+                ChatHistoryConverter.exclude_task_events(raw_events, task_id)
             )
-            router.start()
 
             # -- Stage 6: Kernel execution --
-            finish_event = runtime.kernel.run(
+            run_result_event = runtime.kernel.run(
                 spec=spec,
                 task=user_prompt,
                 history=history,
@@ -505,25 +534,42 @@ class AgentRunService:
             )
 
             # -- Post-processing --
-            if finish_event.reason == "cancelled":
+            if run_result_event.reason == "cancelled":
                 bus.emit(
                     CancelledEvent(
                         source="System", reason="Task cancelled by user."
                     )
                 )
-            else:
-                # Quota deduction (per QUAL-05: success only)
-                user_id = self._sessions_service.get_session_user_id(
-                    session_id
+                bus.emit(
+                    StreamClosedEvent(
+                        source="System",
+                        end_reason="cancelled",
+                        task_completed=False,
+                    )
                 )
-                if user_id:
-                    if loop is not None:
-                        future = asyncio.run_coroutine_threadsafe(
-                            use_quota(user_id), loop
-                        )
-                        future.result(timeout=10)
-                    else:
-                        asyncio.run(use_quota(user_id))
+            else:
+                bus.emit(run_result_event)
+                bus.emit(
+                    StreamClosedEvent(
+                        source="System",
+                        task_completed=run_result_event.reason == "natural",
+                        end_reason=run_result_event.reason,
+                        treat_as_failure=run_result_event.status == "failed" or None,
+                    )
+                )
+                # Quota deduction (per QUAL-05: success only)
+                if run_result_event.status == "completed":
+                    user_id = self._sessions_service.get_session_user_id(
+                        session_id
+                    )
+                    if user_id:
+                        if loop is not None:
+                            future = asyncio.run_coroutine_threadsafe(
+                                use_quota(user_id), loop
+                            )
+                            future.result(timeout=10)
+                        else:
+                            asyncio.run(use_quota(user_id))
 
         except Exception as exc:
             logger.exception(
@@ -531,6 +577,14 @@ class AgentRunService:
             )
             try:
                 bus.emit(ErrorEvent(source="System", message=str(exc)))
+                bus.emit(
+                    StreamClosedEvent(
+                        source="System",
+                        end_reason="error",
+                        task_completed=False,
+                        treat_as_failure=True,
+                    )
+                )
             except Exception:
                 pass
         finally:

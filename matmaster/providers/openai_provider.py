@@ -196,6 +196,7 @@ class OpenAIProvider:
                 continue
             delta = chunk.choices[0].delta
             finish_reason = chunk.choices[0].finish_reason
+            reasoning_content = getattr(delta, "reasoning_content", None)
 
             # Map tool_call deltas
             tool_call_deltas: list[dict[str, Any]] | None = None
@@ -214,6 +215,7 @@ class OpenAIProvider:
 
             yield StreamChunk(
                 content=delta.content,
+                reasoning_content=reasoning_content,
                 tool_call_deltas=tool_call_deltas,
                 finish_reason=finish_reason,
             )

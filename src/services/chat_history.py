@@ -16,6 +16,13 @@ class ChatHistoryConverter:
     """将 get_session_events 返回的事件列表转为 task.meta['dialog_history'] 所需的 Message 序列化列表。"""
 
     @staticmethod
+    def exclude_task_events(events: list[dict], task_id: str | None) -> list[dict]:
+        """Drop in-flight task events when the current user turn is passed separately."""
+        if not task_id:
+            return list(events)
+        return [ev for ev in events if ev.get("task_id") != task_id]
+
+    @staticmethod
     def _user_content(ev: dict) -> str:
         """从 User/query 事件中取出纯文本 content。"""
         c = ev.get('content')
@@ -27,7 +34,7 @@ class ChatHistoryConverter:
 
     @staticmethod
     def _assistant_content(ev: dict) -> str:
-        """从 thought/finish 等事件中取出文本。"""
+        """从 thought/run_result 等事件中取出文本。"""
         c = ev.get('content')
         if isinstance(c, str):
             return c
@@ -79,7 +86,7 @@ class ChatHistoryConverter:
         - User/query -> UserMessage
         - thought|planner_reply -> AssistantMessage(content)
         - tool_call -> 与后续 tool_result 配对，先输出 AssistantMessage(tool_calls)，再输出 ToolMessage
-        - finish -> AssistantMessage(content)
+        - run_result|finish -> AssistantMessage(content)
         """
         out: list[dict] = []
         pending_tool_calls: list[dict] = []
@@ -159,7 +166,7 @@ class ChatHistoryConverter:
                     )
                 continue
 
-            if source == 'MatMaster' and typ == 'finish':
+            if source == 'MatMaster' and typ in ('run_result', 'finish'):
                 flush_tool_calls()
                 assistant_state_tool_ids.clear()
                 last_assistant_text_idx = None

@@ -459,7 +459,7 @@ def setup_bohrium_for_run(
         try:
             event_callback(
                 'System',
-                'end',
+                'stream_closed',
                 'Bohrium 节点创建失败，会话已结束.',
                 elapsed_ms=elapsed_ms,
             )

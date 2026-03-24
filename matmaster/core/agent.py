@@ -2,7 +2,7 @@
 
 Consumes an AgentRuntimeSpec and executes the LLM -> guard -> hook -> tool
 -> message accumulate -> loop cycle. All termination paths go through
-_finish() which produces a FinishEvent.
+_finish() which produces a RunResultEvent.
 
 Termination conditions:
 - natural: LLM returns no tool_calls
@@ -18,7 +18,7 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any
 
-from matmaster.types.events import FinishEvent
+from matmaster.types.events import RunResultEvent
 from matmaster.core.guard_pipeline import GuardPipeline
 
 if TYPE_CHECKING:
@@ -54,7 +54,7 @@ class AgentKernel:
         task: str,
         history: list[Message] | None = None,
         stop_event: threading.Event | None = None,
-    ) -> FinishEvent:
+    ) -> RunResultEvent:
         """Execute the agent loop until termination.
 
         Termination conditions:
@@ -70,7 +70,7 @@ class AgentKernel:
                      SystemMessage and UserMessage(task).
             stop_event: External cancellation signal.
 
-        Returns FinishEvent with the reason.
+        Returns RunResultEvent with the reason.
         """
         messages: list[Message] = [
             SystemMessage(content=spec.system_prompt),
@@ -99,6 +99,8 @@ class AgentKernel:
 
             # Natural finish: no tool_calls
             if not response.tool_calls:
+                if not self._is_valid_natural_finish(response):
+                    return self._finish(spec, messages, "invalid_finish")
                 messages.append(
                     AssistantMessage(
                         content=response.content,
@@ -182,28 +184,51 @@ class AgentKernel:
         reasoning_parts: list[str] = []
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
+        stream_id = f"turn-{len(messages)}"
 
-        for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs):
-            # Forward chunk to hooks
-            run_on_stream_chunk(spec.hooks, chunk)
+        run_on_stream_chunk(
+            spec.hooks,
+            StreamChunk(stream_state="start", stream_id=stream_id),
+        )
+        try:
+            for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs):
+                if chunk.content or chunk.reasoning_content:
+                    run_on_stream_chunk(
+                        spec.hooks,
+                        chunk.model_copy(
+                            update={
+                                "stream_state": "streaming",
+                                "stream_id": stream_id,
+                            }
+                        ),
+                    )
 
-            if chunk.content:
-                content_parts.append(chunk.content)
-            if chunk.reasoning_content:
-                reasoning_parts.append(chunk.reasoning_content)
-            if chunk.finish_reason:
-                finish_reason = chunk.finish_reason
-            if chunk.tool_call_deltas:
-                for delta in chunk.tool_call_deltas:
-                    idx = delta.get("index", 0)
-                    if idx not in tool_calls_acc:
-                        tool_calls_acc[idx] = {"id": "", "name": "", "arguments": ""}
-                    if delta.get("id"):
-                        tool_calls_acc[idx]["id"] = delta["id"]
-                    if delta.get("name"):
-                        tool_calls_acc[idx]["name"] += delta["name"]
-                    if delta.get("arguments"):
-                        tool_calls_acc[idx]["arguments"] += delta["arguments"]
+                if chunk.content:
+                    content_parts.append(chunk.content)
+                if chunk.reasoning_content:
+                    reasoning_parts.append(chunk.reasoning_content)
+                if chunk.finish_reason:
+                    finish_reason = chunk.finish_reason
+                if chunk.tool_call_deltas:
+                    for delta in chunk.tool_call_deltas:
+                        idx = delta.get("index", 0)
+                        if idx not in tool_calls_acc:
+                            tool_calls_acc[idx] = {
+                                "id": "",
+                                "name": "",
+                                "arguments": "",
+                            }
+                        if delta.get("id"):
+                            tool_calls_acc[idx]["id"] = delta["id"]
+                        if delta.get("name"):
+                            tool_calls_acc[idx]["name"] += delta["name"]
+                        if delta.get("arguments"):
+                            tool_calls_acc[idx]["arguments"] += delta["arguments"]
+        finally:
+            run_on_stream_chunk(
+                spec.hooks,
+                StreamChunk(stream_state="end", stream_id=stream_id),
+            )
 
         # Assemble tool_calls from accumulated deltas
         tool_calls: list[ToolCallData] | None = None
@@ -234,15 +259,25 @@ class AgentKernel:
             return {"_raw": raw}
 
     @staticmethod
+    def _is_valid_natural_finish(response: LLMResponse) -> bool:
+        """Only commit a natural finish when the stream terminates cleanly."""
+        return not response.tool_calls and response.finish_reason == "stop"
+
+    @staticmethod
     def _finish(
         spec: AgentRuntimeSpec,
         messages: list[Message],
         reason: str,
         final_content: str | None = None,
-    ) -> FinishEvent:
+    ) -> RunResultEvent:
         """Unified exit path -- all termination goes through here."""
-        status = "cancelled" if reason == "cancelled" else "completed"
-        return FinishEvent(
+        if reason == "cancelled":
+            status = "cancelled"
+        elif reason == "invalid_finish":
+            status = "failed"
+        else:
+            status = "completed"
+        return RunResultEvent(
             source="agent",
             status=status,
             reason=reason,

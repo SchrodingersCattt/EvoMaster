@@ -212,6 +212,7 @@ class TestChatContent:
 
 def _make_stream_chunk(
     content: str | None = None,
+    reasoning_content: str | None = None,
     tool_calls: list[Any] | None = None,
     finish_reason: str | None = None,
 ) -> MagicMock:
@@ -219,6 +220,7 @@ def _make_stream_chunk(
     mock = MagicMock()
     choice = MagicMock()
     choice.delta.content = content
+    choice.delta.reasoning_content = reasoning_content
     choice.delta.tool_calls = tool_calls
     choice.finish_reason = finish_reason
     mock.choices = [choice]
@@ -226,6 +228,25 @@ def _make_stream_chunk(
 
 
 class TestChatStreamContent:
+    def test_chat_stream_reasoning_content(self) -> None:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
+            mock_client = MagicMock()
+            mock_cls.return_value = mock_client
+            mock_client.chat.completions.create.return_value = iter([
+                _make_stream_chunk(reasoning_content="thinking..."),
+                _make_stream_chunk(content="answer", finish_reason="stop"),
+            ])
+
+            provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+            chunks = list(
+                provider.chat_stream([{"role": "user", "content": "Hi"}])
+            )
+
+            assert len(chunks) == 2
+            assert chunks[0].reasoning_content == "thinking..."
+            assert chunks[1].content == "answer"
+            assert chunks[1].finish_reason == "stop"
+
     def test_chat_stream_content(self) -> None:
         with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             mock_client = MagicMock()

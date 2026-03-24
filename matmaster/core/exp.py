@@ -27,7 +27,7 @@ from matmaster.core.hooks import EventEmitterHook
 from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.events import FinishEvent
+from matmaster.types.events import RunResultEvent
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
 
 if TYPE_CHECKING:
@@ -185,7 +185,7 @@ class Exp:
         bus: MessageBus | None = None,
         history: list[Message] | None = None,
         stop_event: threading.Event | None = None,
-    ) -> FinishEvent:
+    ) -> RunResultEvent:
         """build_runtime -> kernel.run -> cleanup.
 
         Args:

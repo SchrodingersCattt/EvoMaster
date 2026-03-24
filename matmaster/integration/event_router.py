@@ -25,6 +25,110 @@ from typing import Any, Callable, Protocol, runtime_checkable
 from matmaster.core.bus import MessageBus
 from matmaster.types.events import BusEvent, ThoughtEvent
 
+
+def _normalize_public_source(source: object) -> str:
+    """Collapse internal source labels to the public SSE set."""
+    raw = str(source or "").strip()
+    if raw in {"User", "System"}:
+        return raw
+    return "MatMaster"
+
+
+def _flatten_bohrium_content(raw_payload: object) -> object:
+    """Unwrap Bohrium callback payloads into the frontend-facing content shape."""
+    if not isinstance(raw_payload, dict):
+        return raw_payload
+
+    nested = raw_payload.get("content")
+    extras = {
+        key: value
+        for key, value in raw_payload.items()
+        if key not in {"content", "type"}
+    }
+
+    if isinstance(nested, dict):
+        content: dict[str, Any] = {**nested, **extras}
+    elif nested is None:
+        content = extras
+    else:
+        content = {"message": nested, **extras}
+
+    event_type = raw_payload.get("type")
+    if event_type is not None and "event_type" not in content:
+        content["event_type"] = event_type
+
+    return content
+
+
+def _public_content_for_event(
+    event_type: str, payload: dict[str, Any]
+) -> object | None:
+    """Adapt internal event payloads to the frontend SSE contract."""
+    if event_type == "tool_call":
+        call_id = payload.get("call_id")
+        return {
+            "id": call_id,
+            "call_id": call_id,
+            "name": payload.get("tool_name"),
+            "args": payload.get("arguments") or {},
+        }
+
+    if event_type == "tool_result":
+        call_id = payload.get("call_id")
+        return {
+            "id": call_id,
+            "call_id": call_id,
+            "name": payload.get("tool_name"),
+            "result": payload.get("result"),
+            "info": payload.get("info") or {},
+        }
+
+    if event_type == "confirmation_request":
+        return {
+            "question": payload.get("question"),
+            "mode": payload.get("mode"),
+            "timeout_seconds": payload.get("timeout_seconds"),
+            "context": payload.get("context"),
+            "actions": payload.get("actions") or [],
+            "origin": payload.get("origin"),
+        }
+
+    if event_type == "error":
+        return {
+            "message": payload.get("message"),
+            "traceback": payload.get("traceback"),
+        }
+
+    if event_type == "workspace_upload_error":
+        return {"message": payload.get("message")}
+
+    if event_type == "bohrium_node":
+        return _flatten_bohrium_content(payload.get("payload"))
+
+    if event_type == "mcp_server_status":
+        detail = payload.get("detail")
+        content = {
+            "server_name": payload.get("server_name"),
+            "transport": payload.get("transport"),
+            "phase": payload.get("phase"),
+        }
+        if isinstance(detail, dict):
+            content.update(detail)
+        return content
+
+    if event_type == "mcp_connect":
+        return {
+            "phase": payload.get("phase"),
+            "message": payload.get("message"),
+            "elapsed_ms": payload.get("elapsed_ms"),
+            "error": payload.get("error"),
+        }
+
+    if event_type == "context_compaction":
+        return payload.get("payload")
+
+    return payload.get("content")
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,7 +155,7 @@ class EventRouter:
 
     Lifecycle bound to a single run (D-15):
     - start(): spawns daemon thread
-    - stop(drain_timeout): drains remaining events, joins thread
+    - stop(drain_timeout): joins consumer, drains queue, closes handlers
     """
 
     def __init__(self, bus: MessageBus, handlers: list[EventHandler]) -> None:
@@ -68,14 +172,22 @@ class EventRouter:
         )
         self._thread.start()
 
+    def add_handler(self, handler: EventHandler) -> None:
+        """Register a new handler for future dispatches."""
+        self._handlers = [*self._handlers, handler]
+
     def stop(self, drain_timeout: float = 2.0) -> None:
-        """Signal stop, drain remaining events, join thread.
+        """Signal stop, wait for consumer, drain remaining events, close handlers.
 
         Args:
             drain_timeout: max seconds to spend draining queued events
-                after signaling stop.
+                after the consumer thread exits.
         """
         self._stop_event.set()
+
+        if self._thread is not None:
+            self._thread.join()
+            self._thread = None
 
         # Drain remaining events from bus within deadline
         deadline = time.monotonic() + drain_timeout
@@ -86,9 +198,7 @@ class EventRouter:
             except queue.Empty:
                 break
 
-        if self._thread is not None:
-            self._thread.join(timeout=1.0)
-            self._thread = None
+        self._close_handlers()
 
     def _consume_loop(self) -> None:
         """Main consume loop -- runs in background thread."""
@@ -101,7 +211,8 @@ class EventRouter:
 
     def _dispatch(self, event: BusEvent) -> None:  # type: ignore[arg-type]
         """Dispatch event to all handlers, catching exceptions."""
-        for handler in self._handlers:
+        handlers = self._handlers
+        for handler in handlers:
             try:
                 handler.handle(event)
             except Exception:
@@ -109,6 +220,21 @@ class EventRouter:
                     "Handler %s raised exception for event type=%s",
                     type(handler).__name__,
                     getattr(event, "type", "?"),
+                    exc_info=True,
+                )
+
+    def _close_handlers(self) -> None:
+        """Flush handler-owned resources after dispatch stops."""
+        for handler in self._handlers:
+            close = getattr(handler, "close", None)
+            if not callable(close):
+                continue
+            try:
+                close()
+            except Exception:
+                logger.warning(
+                    "Handler %s raised during close()",
+                    type(handler).__name__,
                     exc_info=True,
                 )
 
@@ -125,7 +251,7 @@ class PersistenceHandler:
     - Persist: everything else
     """
 
-    _SKIP_TYPES = frozenset({"log_line", "llm_token"})
+    _SKIP_TYPES = frozenset({"log_line", "llm_token", "stream_closed", "end"})
     _STREAMING_STATES = frozenset({"start", "streaming", "end"})
 
     def __init__(
@@ -152,7 +278,10 @@ class PersistenceHandler:
             return
 
         payload = event.model_dump()
-        content = payload.get("content")
+        if event_type == "bohrium_node":
+            content = payload.get("payload")
+        else:
+            content = payload.get("content")
 
         try:
             self._events_table.add_event(
@@ -213,7 +342,11 @@ class SSEHandler:
         if self._should_skip(event):
             return
 
-        payload = event.model_dump()
+        payload = event.model_dump(mode="json")
+        content = _public_content_for_event(str(payload.get("type", "")), payload)
+        if content is not None:
+            payload["content"] = content
+        payload["source"] = _normalize_public_source(payload.get("source"))
         payload["session_id"] = self._session_id
         payload["task_id"] = self._task_id
         if self._invocation_id is not None:
