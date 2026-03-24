@@ -201,6 +201,42 @@ class TestQuotaDeductedOnSuccess:
         payload_types = [payload.get("type") for payload in payloads]
         assert payload_types.index("run_result") < payload_types.index("stream_closed")
 
+    def test_success_emits_response_before_run_result_and_stream_closed(
+        self, tmp_path: Path
+    ) -> None:
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _SuccessLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        payloads: list[dict[str, Any]] = []
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        _run_with_quota_mock(
+            svc,
+            mock_pg,
+            use_quota_mock,
+            send_cb=lambda payload: payloads.append(payload),
+        )
+
+        response_payload = next(
+            (
+                payload
+                for payload in payloads
+                if payload.get("type") == "response"
+                and payload.get("stream_state") is None
+            ),
+            None,
+        )
+        assert response_payload is not None
+        assert response_payload["content"] == "success"
+        assert response_payload["source"] == "MatMaster"
+
+        payload_types = [payload.get("type") for payload in payloads]
+        assert payload_types.index("response") < payload_types.index("run_result")
+        assert payload_types.index("run_result") < payload_types.index("stream_closed")
+
 
 class TestQuotaNotDeductedOnCancel:
     """Verify use_quota NOT called when task is cancelled."""

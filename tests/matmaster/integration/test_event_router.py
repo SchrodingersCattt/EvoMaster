@@ -27,6 +27,7 @@ from matmaster.types.events import (
     ErrorEvent,
     McpConnectEvent,
     McpServerStatusEvent,
+    ResponseEvent,
     RunResultEvent,
     StreamClosedEvent,
     ThoughtEvent,
@@ -311,6 +312,22 @@ class TestPersistenceHandler:
         )
 
         events_table.add_event.assert_called_once()
+
+    def test_persists_non_streaming_response(self) -> None:
+        handler, events_table = self._make_handler()
+
+        handler.handle(ResponseEvent(source="Agent", content="done"))
+
+        events_table.add_event.assert_called_once()
+
+    def test_skips_streaming_response_in_persistence(self) -> None:
+        handler, events_table = self._make_handler()
+
+        handler.handle(
+            ResponseEvent(source="Agent", content="tok", stream_state="streaming")
+        )
+
+        events_table.add_event.assert_not_called()
 
     def test_persists_bohrium_node_payload_as_content(self) -> None:
         """handle() persists Bohrium node payload as the content field."""
@@ -618,6 +635,25 @@ class TestSSEHandler:
         assert payload["type"] == "stream_closed"
         assert payload["source"] == "System"
         assert payload["task_completed"] is True
+
+    def test_sse_handler_sends_response_payload(self) -> None:
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id=None,
+            mode="direct",
+        )
+
+        handler.handle(ResponseEvent(source="Agent", content="hello"))
+
+        send_cb.assert_called_once()
+        payload = send_cb.call_args[0][0]
+        assert payload["type"] == "response"
+        assert payload["source"] == "MatMaster"
+        assert payload["content"] == "hello"
 
     def test_skips_assistant_state(self) -> None:
         """handle() skips AssistantStateEvent."""
