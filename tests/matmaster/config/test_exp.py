@@ -1,91 +1,69 @@
-"""Tests for ExpConfig -- typed Exp assembly configuration."""
+"""Tests for matmaster.config.exp -- ExpConfig model."""
+
 from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
 
 from matmaster.config.exp import ExpConfig, ExpToolsConfig
 
 
 class TestExpToolsConfig:
-    def test_defaults(self) -> None:
-        t = ExpToolsConfig()
-        assert t.builtin == ["*"]
-        assert t.mcp == "*"
+    def test_defaults(self):
+        cfg = ExpToolsConfig()
+        assert cfg.builtin == ["*"]
+        assert cfg.mcp == "*"
 
 
 class TestExpConfig:
-    def test_defaults_match_exp_assemble(self) -> None:
-        """Default values match what Exp.assemble() previously hardcoded."""
+    def test_defaults(self):
         cfg = ExpConfig()
         assert cfg.name == "direct"
         assert cfg.mode == "direct"
         assert cfg.max_turns == 100
         assert cfg.guards == []
+        assert cfg.developer_instructions == ""
         assert cfg.tools.builtin == ["*"]
-        assert cfg.skills == {}
-        assert cfg.mcp == {}
 
-    def test_from_agents_general_dict(self) -> None:
-        """Load from a dict shaped like YAML agents.general section.
-
-        extra='ignore' discards fields not in ExpConfig (context, etc.).
-        """
-        raw = {
-            "llm": "litellm",
+    def test_from_toml_dict(self):
+        """Simulate what tomllib.load() would produce from direct.toml."""
+        data = {
+            "name": "direct",
+            "mode": "direct",
             "max_turns": 200,
+            "guards": [],
+            "developer_instructions": "You are Mat Master.",
             "tools": {"builtin": ["*"], "mcp": "*"},
-            "context": {"max_tokens": 180000},
-            "system_prompt_file": "prompts/system.txt",
         }
-        cfg = ExpConfig.model_validate(raw)
+        cfg = ExpConfig.model_validate(data)
+        assert cfg.name == "direct"
         assert cfg.max_turns == 200
-        assert cfg.tools.mcp == "*"
-        # extra fields silently ignored
-        assert not hasattr(cfg, "context")
-        assert not hasattr(cfg, "system_prompt_file")
+        assert cfg.developer_instructions == "You are Mat Master."
 
-    def test_runtime_override(self) -> None:
-        """Runtime dict merges on top of YAML-loaded values."""
-        base = {"max_turns": 200, "tools": {"builtin": ["*"]}}
-        runtime = {"skills": {"enabled": True}, "mcp": {"servers": ["s1"]}}
-        merged = {**base, **runtime}
-        cfg = ExpConfig.model_validate(merged)
-        assert cfg.max_turns == 200
-        assert cfg.skills == {"enabled": True}
-        assert cfg.mcp == {"servers": ["s1"]}
+    def test_extra_fields_ignored(self):
+        """Unknown fields from toml are silently ignored."""
+        data = {"name": "test", "unknown_field": "value", "another": 123}
+        cfg = ExpConfig.model_validate(data)
+        assert cfg.name == "test"
+        assert not hasattr(cfg, "unknown_field")
 
-    def test_model_dump_for_exp(self) -> None:
-        """model_dump() produces a dict consumable by Exp(config=...)."""
-        cfg = ExpConfig(name="planner", mode="planner", max_turns=50)
-        d = cfg.model_dump()
-        assert d["name"] == "planner"
-        assert d["mode"] == "planner"
-        assert d["max_turns"] == 50
-
-
-class TestExpConfigCompaction:
-    def test_compaction_default_empty(self) -> None:
-        cfg = ExpConfig()
-        assert cfg.compaction == {}
-
-    def test_compaction_from_yaml_dict(self) -> None:
-        raw = {
-            "max_turns": 100,
-            "compaction": {
-                "enabled": True,
-                "context_window_tokens": 200000,
-                "trigger_ratio": 0.9,
-                "compaction_llm": "compaction",
-            },
-        }
-        cfg = ExpConfig.model_validate(raw)
-        assert cfg.compaction["enabled"] is True
-        assert cfg.compaction["compaction_llm"] == "compaction"
-
-    def test_extra_fields_still_ignored(self) -> None:
-        raw = {
+    def test_skills_mcp_compaction_not_accepted(self):
+        """These fields were removed -- they should be silently ignored via extra=ignore."""
+        data = {
+            "name": "test",
+            "skills": {"enabled": True},
+            "mcp": {"servers": []},
             "compaction": {"enabled": True},
-            "context": {"max_tokens": 180000},
-            "system_prompt_file": "prompts/system.txt",
         }
-        cfg = ExpConfig.model_validate(raw)
-        assert cfg.compaction == {"enabled": True}
-        assert not hasattr(cfg, "context")
+        cfg = ExpConfig.model_validate(data)
+        assert cfg.name == "test"
+        assert not hasattr(cfg, "skills")
+        assert not hasattr(cfg, "compaction")
+
+    def test_developer_instructions_multiline(self):
+        """Multiline strings from toml are preserved."""
+        data = {
+            "developer_instructions": "Line 1\nLine 2\nLine 3",
+        }
+        cfg = ExpConfig.model_validate(data)
+        assert "Line 2" in cfg.developer_instructions
