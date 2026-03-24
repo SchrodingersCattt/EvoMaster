@@ -557,7 +557,7 @@ agent = Agent(
 
 ## 参考
 
-- **完整示例**: `examples/llm_example.py`
+- **完整示例**: 本仓库见 `playground/mat_master/` 与 `configs/mat_master/`；通用示例见 [EvoMaster 上游](https://github.com/sjtu-sai-agents/EvoMaster) 的 `playground/`。
 - **LLM 文档**: `evomaster/utils/README.md`
 - **快速开始**: `QUICKSTART.md`
 - **项目设计**: `CLAUDE.md`

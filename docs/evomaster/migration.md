@@ -60,7 +60,7 @@
 ### 阶段 4：业务 Playground 与服务
 
 - **4.1** MatMaster 通过 `_setup_agents(skill_registry)` 填充 `self.agents`，`_create_agent` 使用 `tool_config`、`llm_config`、`skill_config`；保留 MCP、SSH、MatMasterSkillRegistry 等定制。
-- **4.2** minimal_multi_agent、minimal_skill_task、x_master 等均使用 `_setup_agents` 与 `get_agent_tools_config`/`get_agent_skills_config`。
+- **4.2** 上游 EvoMaster 中的多 Agent 示例 playground 等均使用 `_setup_agents` 与 `get_agent_tools_config`/`get_agent_skills_config`（本仓库仅保留 MatMaster 业务 playground，示例可参考 [EvoMaster 上游](https://github.com/sjtu-sai-agents/EvoMaster)）。
 - **4.3** `agent_run_service`、`playground/mat_master/service/server.py` 克隆 agent 时传入 `enabled_tool_names`、`enable_tools`，与 base 一致。
 
 ---
@@ -91,7 +91,7 @@
 
 ### Skills 已与上游对齐（已完成）
 
-- **配置层**：已移除 `SkillConfig`、`KnowledgeSkillConfig`、`OperatorSkillConfig`、`EvoMasterConfig.skill`、`get_skill_config()`；`configs/config.yaml` 已删除 `skill:` 段；`evomaster/__init__.py` 已去掉上述导出。
+- **配置层**：已移除 `SkillConfig`、`KnowledgeSkillConfig`、`OperatorSkillConfig`、`EvoMasterConfig.skill`、`get_skill_config()`；产品配置（如 `configs/mat_master/config.yaml`）已删除 `skill:` 段；`evomaster/__init__.py` 已去掉上述导出。
 - **Skills 实现层**：已移除 `KnowledgeSkill` 类；`SkillRegistry._load_skills()` 仅从 `skills_root` 子目录加载统一类型 `Skill`；`get_meta_info_context()` 不再区分类型；已删除 `get_knowledge_skills()` / `get_operator_skills()`。
 - **文档**：`docs/skills.md`、`docs/zh/skills.md` 已更新为仅描述 `Skill` 与统一加载方式。
 
@@ -103,7 +103,7 @@
 - `get_agents_config()` 空时 `raise ValueError`；`_require_dict` 用于 llm/agent/session 等校验。
 - 顶层 `tools: ToolConfig`（builtin/mcp 为 list）；per-agent 由 `get_agent_tools_config` 返回 dict（builtin list、mcp str）。
 - `get_agent_tools_config` / `get_agent_skills_config` 解析规则与上游一致（含 `"default"`、`["*"]`、空值等）。
-- `_create_agent` 仅新签名；BasePlayground、MatMaster、x_master、minimal_skill_task 及测试均使用新签名。
+- `_create_agent` 仅新签名；BasePlayground、MatMaster 及测试均使用新签名。
 - 每 agent 独立 ToolRegistry：`_create_tools_for_agent(skill_registry, tool_config)`，MCP 通过 `register_tools_into(registry)` 按需注入；子类可覆盖以增加 playground 级工具。
 - Agent 运行时参数 `enable_tools`（由 tool_config 推导）、`enabled_tool_names`；克隆 agent 时传递 `enabled_tool_names`、`enable_tools`。
 - **Skills**：仅 `Skill` 类型；无 `SkillConfig`/`get_skill_config`/顶层 `skill`；`SkillRegistry` 从 skills_root 子目录统一加载 `Skill`，无 `get_knowledge_skills`/`get_operator_skills`，`get_meta_info_context()` 不区分类型。
