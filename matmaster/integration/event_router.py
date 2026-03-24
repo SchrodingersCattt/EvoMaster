@@ -302,11 +302,10 @@ class PersistenceHandler:
         if isinstance(event, (ThoughtEvent, ResponseEvent)) and event.stream_state in self._STREAMING_STATES:
             return
 
-        payload = event.model_dump()
-        if event_type == "bohrium_node":
-            content = payload.get("payload")
-        else:
-            content = payload.get("content")
+        # Use the same JSON-safe payload mode as SSEHandler so persistence
+        # and live SSE derive content from the same normalized field values.
+        payload = event.model_dump(mode="json")
+        content = _public_content_for_event(event_type, payload)
 
         try:
             self._events_table.add_event(
