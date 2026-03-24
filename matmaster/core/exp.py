@@ -28,7 +28,7 @@ from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import RunResultEvent
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
+from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, CompactionConfig
 
 if TYPE_CHECKING:
     from matmaster.core.agent import AgentKernel
@@ -93,6 +93,10 @@ class Exp:
         max_turns = self._config.get("max_turns", 100)
         guards = list(self._config.get("guards", []))
         mode = self._config.get("mode", "direct")
+        compaction_raw = self._config.get("compaction", {})
+        compaction = (
+            CompactionConfig(**compaction_raw) if compaction_raw else CompactionConfig()
+        )
 
         # Build meta bag from config keys that need downstream processing
         meta: dict[str, Any] = {}
@@ -105,6 +109,7 @@ class Exp:
             max_turns=max_turns,
             guards=guards,
             mode=mode,
+            compaction=compaction,
             meta=meta,
         )
 
@@ -155,12 +160,36 @@ class Exp:
             emitter_hook = EventEmitterHook(bus, source=self.exp_name)
             hooks.append(emitter_hook)
 
+        compactor = None
+        if spec.compaction.enabled and spec.llm_provider is not None:
+            from matmaster.core.context_compactor import ContextCompactor
+
+            summary_provider = spec.llm_provider
+            if spec.compaction.compaction_llm:
+                resolved = self._resolve_compaction_llm(spec.compaction.compaction_llm)
+                if resolved:
+                    from matmaster.providers.openai_provider import OpenAIProvider
+
+                    summary_provider = OpenAIProvider(**resolved)
+                else:
+                    self.logger.warning(
+                        "compaction_llm key=%r not found, falling back to main provider",
+                        spec.compaction.compaction_llm,
+                    )
+
+            compactor = ContextCompactor(
+                config=spec.compaction,
+                summary_provider=summary_provider,
+                bus=bus,
+            )
+
         # 7. Update spec with runtime-built fields
         spec = spec.model_copy(
             update={
                 "tool_registry": registry,
                 "system_prompt": system_prompt,
                 "hooks": hooks,
+                "compactor": compactor,
             }
         )
 
@@ -175,6 +204,21 @@ class Exp:
             spec=spec,
             cleanup=self._run_cleanup_callbacks,
         )
+
+    def _resolve_compaction_llm(self, key: str) -> dict[str, Any] | None:
+        """Resolve a compaction LLM profile into OpenAIProvider kwargs."""
+        llm_dict = self._config.get("_llm_profiles", {})
+        profile = llm_dict.get(key)
+        if not profile or not isinstance(profile, dict):
+            return None
+        return {
+            "model": profile["model"],
+            "api_key": profile["api_key"],
+            "base_url": profile.get("base_url"),
+            "temperature": profile.get("temperature", 0.3),
+            "max_tokens": profile.get("max_tokens"),
+            "timeout": profile.get("timeout", 120.0),
+        }
 
     # ── Phase 3: run ─────────────────────────────────────
 
