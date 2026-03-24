@@ -22,7 +22,7 @@ from matmaster.types.events import RunResultEvent
 from matmaster.core.guard_pipeline import GuardPipeline
 
 if TYPE_CHECKING:
-    from matmaster.types.runtime import AgentRuntimeSpec
+    from matmaster.types.runtime import AgentRuntimeSpec, KernelRunResult
 from matmaster.core.hooks import (
     HookAction,
     run_on_stream_chunk,
@@ -54,7 +54,7 @@ class AgentKernel:
         task: str,
         history: list[Message] | None = None,
         stop_event: threading.Event | None = None,
-    ) -> RunResultEvent:
+    ) -> KernelRunResult:
         """Execute the agent loop until termination.
 
         Termination conditions:
@@ -70,7 +70,7 @@ class AgentKernel:
                      SystemMessage and UserMessage(task).
             stop_event: External cancellation signal.
 
-        Returns RunResultEvent with the reason.
+        Returns KernelRunResult with event and message transcript.
         """
         messages: list[Message] = [
             SystemMessage(content=spec.system_prompt),
@@ -269,7 +269,7 @@ class AgentKernel:
         messages: list[Message],
         reason: str,
         final_content: str | None = None,
-    ) -> RunResultEvent:
+    ) -> KernelRunResult:
         """Unified exit path -- all termination goes through here."""
         if reason == "cancelled":
             status = "cancelled"
@@ -277,9 +277,12 @@ class AgentKernel:
             status = "failed"
         else:
             status = "completed"
-        return RunResultEvent(
+        event = RunResultEvent(
             source="agent",
             status=status,
             reason=reason,
             final_content=final_content,
         )
+        from matmaster.types.runtime import KernelRunResult  # lazy to avoid circular
+
+        return KernelRunResult(event=event, messages=list(messages))

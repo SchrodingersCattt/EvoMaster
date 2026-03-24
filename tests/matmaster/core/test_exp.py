@@ -10,7 +10,7 @@ import pytest
 from matmaster.core.exp import Exp
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import FinishEvent
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
+from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelRunResult
 from tests.matmaster.core.conftest import MockLLMProvider
 
 
@@ -201,9 +201,10 @@ class TestExpRun:
         exp = Exp({"name": "test"})
         ctx = _make_ctx(with_llm=True)
         mock_finish = FinishEvent(source="agent", status="completed", reason="natural")
+        mock_kernel_result = KernelRunResult(event=mock_finish, messages=[])
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = mock_finish
+        mock_kernel.run.return_value = mock_kernel_result
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
@@ -227,7 +228,7 @@ class TestExpRun:
         mock_finish = FinishEvent(source="agent", status="completed", reason="natural")
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = mock_finish
+        mock_kernel.run.return_value = KernelRunResult(event=mock_finish, messages=[])
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
@@ -248,7 +249,7 @@ class TestExpRun:
         history = [MagicMock()]
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = mock_finish
+        mock_kernel.run.return_value = KernelRunResult(event=mock_finish, messages=[])
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
@@ -274,7 +275,7 @@ class TestExpCleanup:
         mock_finish = FinishEvent(source="agent", status="completed", reason="natural")
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = mock_finish
+        mock_kernel.run.return_value = KernelRunResult(event=mock_finish, messages=[])
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)

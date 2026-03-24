@@ -209,9 +209,9 @@ class TestMatMasterE2EPipeline:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "test task")
 
-        assert isinstance(finish, FinishEvent)
-        assert finish.reason == "natural"
-        assert finish.status == "completed"
+        assert isinstance(finish.event, FinishEvent)
+        assert finish.event.reason == "natural"
+        assert finish.event.status == "completed"
 
         # MessageBus received ThoughtEvent from streaming
         events = _collect_bus_events(bus)
@@ -233,8 +233,8 @@ class TestMatMasterE2EPipeline:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "call echo tool")
 
-        assert isinstance(finish, FinishEvent)
-        assert finish.reason == "natural"
+        assert isinstance(finish.event, FinishEvent)
+        assert finish.event.reason == "natural"
 
         # Collect bus events -- should have ToolCallEvent and ToolResultEvent
         events = _collect_bus_events(bus)
@@ -261,7 +261,7 @@ class TestMatMasterE2EPipeline:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "new task", history=history)
 
-        assert finish.reason == "natural"
+        assert finish.event.reason == "natural"
         # Verify messages passed to LLM include history
         assert len(mock_llm.captured_messages) == 1
         llm_messages = mock_llm.captured_messages[0]

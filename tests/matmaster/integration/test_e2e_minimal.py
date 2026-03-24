@@ -70,10 +70,10 @@ class TestMinimalE2EPipeline:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "minimal test task")
 
-        assert isinstance(finish, FinishEvent)
-        assert finish.reason == "natural"
-        assert finish.status == "completed"
-        assert finish.final_content == "minimal response"
+        assert isinstance(finish.event, FinishEvent)
+        assert finish.event.reason == "natural"
+        assert finish.event.status == "completed"
+        assert finish.event.final_content == "minimal response"
 
         # Bus should have received thought events from streaming
         events = []

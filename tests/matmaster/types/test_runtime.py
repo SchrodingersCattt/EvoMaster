@@ -278,3 +278,39 @@ class TestAgentRuntime:
 
         with pytest.raises(FrozenInstanceError):
             runtime.kernel = object()  # type: ignore[misc]
+
+
+# ── KernelRunResult ────────────────────────────────────
+
+
+class TestKernelRunResult:
+    """KernelRunResult frozen dataclass — return value of AgentKernel.run()."""
+
+    def test_frozen_construction(self) -> None:
+        from matmaster.types.runtime import KernelRunResult
+        from matmaster.types.events import RunResultEvent
+
+        event = RunResultEvent(source="agent", status="completed", reason="natural")
+        result = KernelRunResult(event=event, messages=[])
+        assert result.event is event
+        assert result.messages == []
+
+    def test_messages_preserved(self) -> None:
+        from matmaster.types.runtime import KernelRunResult
+        from matmaster.types.events import RunResultEvent
+        from matmaster.types.messages import UserMessage, AssistantMessage
+
+        event = RunResultEvent(source="agent", status="completed", reason="natural")
+        msgs = [UserMessage(content="hi"), AssistantMessage(content="hello")]
+        result = KernelRunResult(event=event, messages=msgs)
+        assert len(result.messages) == 2
+        assert result.messages[0].content == "hi"
+
+    def test_frozen_rejects_mutation(self) -> None:
+        from matmaster.types.runtime import KernelRunResult
+        from matmaster.types.events import RunResultEvent
+
+        event = RunResultEvent(source="agent", status="completed", reason="natural")
+        result = KernelRunResult(event=event, messages=[])
+        with pytest.raises(FrozenInstanceError):
+            result.event = event  # type: ignore[misc]

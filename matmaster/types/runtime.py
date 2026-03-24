@@ -18,6 +18,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.core.hooks import Hook
+from matmaster.types.events import RunResultEvent
+from matmaster.types.messages import Message
 from .llm_provider import LLMProvider
 
 from .guards import Guard
@@ -84,3 +86,15 @@ class AgentRuntime:
     kernel: Any  # AgentKernel (avoid circular import)
     spec: AgentRuntimeSpec
     cleanup: Callable[[], None]
+
+
+@dataclass(frozen=True)
+class KernelRunResult:
+    """Return value of AgentKernel.run().
+
+    Bundles the terminal event with the full message transcript,
+    enabling callers to extract conversation history for multi-turn.
+    """
+
+    event: RunResultEvent
+    messages: list[Message]
