@@ -24,6 +24,45 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+# ── Model family defaults ─────────────────────────────────────────────────────
+
+MODEL_FAMILY_DEFAULTS: dict[str, dict[str, str]] = {
+    "claude-4.6": {
+        "reasoning_protocol": "anthropic_adaptive_thinking",
+        "temperature_policy": "force_one_when_reasoning",
+    },
+    "gpt-5": {
+        "reasoning_protocol": "openai_reasoning_effort",
+        "temperature_policy": "default",
+    },
+    "deepseek-reasoner": {
+        "reasoning_protocol": "openai_reasoning_effort",
+        "temperature_policy": "default",
+    },
+    "gemini-3-flash-preview": {
+        "temperature_policy": "default",
+    },
+}
+
+
+def _infer_model_family(model: str) -> str | None:
+    """Infer model family from model name string."""
+    name = (model or "").strip().lower()
+    if "claude-sonnet-4-6" in name or "claude-opus-4-6" in name:
+        return "claude-4.6"
+    if "claude-haiku-4-5" in name:
+        return "claude-haiku-4.5"
+    if "gpt-5" in name:
+        return "gpt-5"
+    if "deepseek-reasoner" in name:
+        return "deepseek-reasoner"
+    if "gemini-3-flash-preview" in name:
+        return "gemini-3-flash-preview"
+    return None
+
+
+# ── Profile config ─────────────────────────────────────────────────────────────
+
 
 class LLMProfileConfig(BaseModel):
     """Single LLM provider profile."""
@@ -57,6 +96,45 @@ class LLMProfileConfig(BaseModel):
     # Retry
     max_retries: int = 3
     retry_delay: float = 1.0
+
+    # ── Semantic methods ───────────────────────────────────────────────────
+
+    def effective_family(self) -> str | None:
+        """Explicit model_family > infer from model name."""
+        return self.model_family or _infer_model_family(self.model)
+
+    def effective_temperature(self) -> float:
+        """Apply temperature_policy. claude-4.6 forces temperature=1.0."""
+        family = self.effective_family()
+        policy = self.temperature_policy or MODEL_FAMILY_DEFAULTS.get(
+            family or "", {}
+        ).get("temperature_policy")
+        if policy == "force_one_when_reasoning":
+            return 1.0
+        return self.temperature
+
+    def build_extra_kwargs(self) -> dict[str, Any] | None:
+        """Build vendor-specific reasoning parameters.
+        Returns None when no reasoning parameters are configured.
+        OpenAIProvider.__init__ converts None to {} via ``extra_kwargs or {}``.
+        """
+        family = self.effective_family()
+        protocol = self.reasoning_protocol or MODEL_FAMILY_DEFAULTS.get(
+            family or "", {}
+        ).get("reasoning_protocol")
+        effort = (self.thinking_effort or "").strip().lower()
+        if not protocol or not effort:
+            return None
+        if protocol == "anthropic_adaptive_thinking":
+            return {
+                "extra_body": {
+                    "thinking": {"type": "adaptive"},
+                    "output_config": {"effort": effort},
+                },
+            }
+        if protocol == "openai_reasoning_effort":
+            return {"reasoning_effort": effort}
+        return None
 
 
 class LLMConfig(BaseModel):
