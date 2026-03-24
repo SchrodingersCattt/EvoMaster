@@ -212,6 +212,24 @@ class TestAgentRuntimeSpec:
         assert len(spec.guards) == 1
 
 
+class TestAgentRuntimeSpecCompactor:
+    def test_compactor_default_none(self) -> None:
+        spec = AgentRuntimeSpec()
+        assert spec.compactor is None
+
+    def test_compactor_accepts_object(self) -> None:
+        class FakeCompactor:
+            pass
+
+        spec = AgentRuntimeSpec(compactor=FakeCompactor())
+        assert spec.compactor is not None
+
+    def test_compactor_frozen_reference(self) -> None:
+        spec = AgentRuntimeSpec()
+        with pytest.raises(Exception):
+            spec.compactor = "new"
+
+
 # ── Edge case tests (QUAL-01) ─────────────────────────
 
 
