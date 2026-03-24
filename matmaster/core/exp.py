@@ -166,7 +166,7 @@ class Exp:
 
             summary_provider = spec.llm_provider
             if spec.compaction.compaction_llm:
-                resolved = self._resolve_compaction_llm(spec.compaction.compaction_llm)
+                resolved = self._resolve_compaction_llm(spec.compaction.compaction_llm, ctx)
                 if resolved:
                     from matmaster.providers.openai_provider import OpenAIProvider
 
@@ -205,19 +205,37 @@ class Exp:
             cleanup=self._run_cleanup_callbacks,
         )
 
-    def _resolve_compaction_llm(self, key: str) -> dict[str, Any] | None:
-        """Resolve a compaction LLM profile into OpenAIProvider kwargs."""
-        llm_dict = self._config.get("_llm_profiles", {})
-        profile = llm_dict.get(key)
-        if not profile or not isinstance(profile, dict):
+    def _resolve_compaction_llm(
+        self, key: str, ctx: PlaygroundContext
+    ) -> dict[str, Any] | None:
+        """Resolve compaction LLM profile from PlaygroundContext.llm_config."""
+        llm_config = getattr(ctx, "llm_config", None)
+        if llm_config is None:
+            # Fallback: try legacy _llm_profiles dict
+            llm_dict = self._config.get("_llm_profiles", {})
+            profile = llm_dict.get(key)
+            if not profile or not isinstance(profile, dict):
+                return None
+            return {
+                "model": profile["model"],
+                "api_key": profile["api_key"],
+                "base_url": profile.get("base_url"),
+                "temperature": profile.get("temperature", 0.3),
+                "max_tokens": profile.get("max_tokens"),
+                "timeout": profile.get("timeout", 120.0),
+            }
+
+        try:
+            profile = llm_config.get_profile(key)
+        except KeyError:
             return None
         return {
-            "model": profile["model"],
-            "api_key": profile["api_key"],
-            "base_url": profile.get("base_url"),
-            "temperature": profile.get("temperature", 0.3),
-            "max_tokens": profile.get("max_tokens"),
-            "timeout": profile.get("timeout", 120.0),
+            "model": profile.model,
+            "api_key": profile.api_key,
+            "base_url": profile.base_url,
+            "temperature": profile.effective_temperature(),
+            "max_tokens": profile.max_tokens,
+            "timeout": profile.timeout,
         }
 
     # ── Phase 3: run ─────────────────────────────────────
