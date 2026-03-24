@@ -203,3 +203,15 @@ class TestStreamChunk:
         assert chunk.finish_reason is None
         assert chunk.stream_state is None
         assert chunk.stream_id is None
+
+
+class TestStreamChunkUsage:
+    def test_usage_default_none(self) -> None:
+        chunk = StreamChunk(content="hello")
+        assert chunk.usage is None
+
+    def test_usage_round_trip(self) -> None:
+        usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
+        chunk = StreamChunk(content="hello", usage=usage)
+        assert chunk.usage == usage
+        assert chunk.usage["prompt_tokens"] == 100
