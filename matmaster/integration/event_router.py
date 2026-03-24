@@ -23,7 +23,7 @@ import time
 from typing import Any, Callable, Protocol, runtime_checkable
 
 from matmaster.core.bus import MessageBus
-from matmaster.types.events import BusEvent, ThoughtEvent
+from matmaster.types.events import BusEvent, ResponseEvent, ThoughtEvent
 
 
 def _normalize_public_source(source: object) -> str:
@@ -247,7 +247,7 @@ class PersistenceHandler:
 
     Filter rules migrated from _should_persist_event in agent_run_service.py:
     - Skip: log_line, llm_token
-    - Skip: ThoughtEvent with stream_state in (start, streaming, end)
+    - Skip: streaming ThoughtEvent / ResponseEvent deltas
     - Persist: everything else
     """
 
@@ -273,8 +273,8 @@ class PersistenceHandler:
         if not self._should_persist_type(event_type):
             return
 
-        # Skip streaming thought events (ephemeral deltas)
-        if isinstance(event, ThoughtEvent) and event.stream_state in self._STREAMING_STATES:
+        # Skip streaming thought/response events (ephemeral deltas)
+        if isinstance(event, (ThoughtEvent, ResponseEvent)) and event.stream_state in self._STREAMING_STATES:
             return
 
         payload = event.model_dump()

@@ -20,6 +20,7 @@ from matmaster.types.events import (
     ExpRunEvent,
     McpConnectEvent,
     McpServerStatusEvent,
+    ResponseEvent,
     RunResultEvent,
     SkillHitEvent,
     StreamClosedEvent,
@@ -57,6 +58,22 @@ class TestThoughtEvent:
         )
         assert evt.stream_state == "start"
         assert evt.stream_id == "s1"
+
+
+class TestResponseEvent:
+    def test_instantiation(self) -> None:
+        evt = ResponseEvent(source="agent", content="hello")
+        assert evt.type == "response"
+        assert evt.source == "agent"
+        assert evt.content == "hello"
+        assert isinstance(evt.timestamp, datetime)
+
+    def test_response_event_defaults(self) -> None:
+        evt = ResponseEvent(source="agent")
+        assert evt.type == "response"
+        assert evt.content == ""
+        assert evt.stream_state is None
+        assert evt.stream_id is None
 
 
 class TestToolCallEvent:
@@ -207,6 +224,7 @@ class TestAgentEventDiscriminator:
     def test_all_agent_types(self) -> None:
         payloads = [
             {"type": "thought", "source": "a"},
+            {"type": "response", "source": "a", "content": "hello"},
             {"type": "tool_call", "source": "a", "call_id": "c", "tool_name": "t", "arguments": {}},
             {"type": "tool_result", "source": "a", "call_id": "c", "tool_name": "t", "result": "r"},
             {"type": "run_result", "source": "a"},
@@ -215,7 +233,7 @@ class TestAgentEventDiscriminator:
             {"type": "skill_hit", "source": "a", "skill_name": "s"},
         ]
         expected_types = [
-            ThoughtEvent, ToolCallEvent, ToolResultEvent, RunResultEvent,
+            ThoughtEvent, ResponseEvent, ToolCallEvent, ToolResultEvent, RunResultEvent,
             ErrorEvent, AssistantStateEvent, SkillHitEvent,
         ]
         for payload, expected in zip(payloads, expected_types):
@@ -255,11 +273,12 @@ class TestSystemEventDiscriminator:
 
 
 class TestBusEventUnion:
-    def test_validates_all_17_types(self) -> None:
-        """BusEvent union can validate all 17 event types."""
+    def test_validates_all_18_types(self) -> None:
+        """BusEvent union can validate all 18 event types."""
         payloads = [
-            # 7 AgentEvent types
+            # 8 AgentEvent types
             {"type": "thought", "source": "a"},
+            {"type": "response", "source": "a", "content": "hello"},
             {"type": "tool_call", "source": "a", "call_id": "c", "tool_name": "t", "arguments": {}},
             {"type": "tool_result", "source": "a", "call_id": "c", "tool_name": "t", "result": "r"},
             {"type": "run_result", "source": "a"},
@@ -282,6 +301,11 @@ class TestBusEventUnion:
             result = _bus_event_adapter.validate_python(payload)
             assert result.type == payload["type"]
 
+    def test_bus_event_union_accepts_response_event(self) -> None:
+        payload = {"type": "response", "source": "agent", "content": "hello"}
+        result = _bus_event_adapter.validate_python(payload)
+        assert isinstance(result, ResponseEvent)
+
     def test_invalid_type_raises(self) -> None:
         with pytest.raises(ValidationError):
             _bus_event_adapter.validate_python(
@@ -294,6 +318,7 @@ class TestEventSerializationRoundtrip:
         """For each event type, model_dump -> validate_python returns same class."""
         events = [
             ThoughtEvent(source="a", content="hello"),
+            ResponseEvent(source="a", content="hello"),
             ToolCallEvent(source="a", call_id="c", tool_name="t", arguments={}),
             ToolResultEvent(source="a", call_id="c", tool_name="t", result="r"),
             RunResultEvent(source="a"),
@@ -320,18 +345,18 @@ class TestEventSerializationRoundtrip:
 
 
 class TestNoTypeCollision:
-    def test_all_17_type_literals_are_unique(self) -> None:
-        """All 17 type literals must be globally unique strings."""
+    def test_all_18_type_literals_are_unique(self) -> None:
+        """All 18 type literals must be globally unique strings."""
         type_values = [
-            "thought", "tool_call", "tool_result", "run_result", "error",
+            "thought", "response", "tool_call", "tool_result", "run_result", "error",
             "assistant_state", "skill_hit",
             "confirmation_request", "confirmation_timeout",
             "context_compaction", "exp_run", "cancelled", "stream_closed",
             "workspace_upload_error", "bohrium_node",
             "mcp_server_status", "mcp_connect",
         ]
-        assert len(type_values) == 17
-        assert len(set(type_values)) == 17
+        assert len(type_values) == 18
+        assert len(set(type_values)) == 18
 
 
 # ── Edge case tests (QUAL-01) ─────────────────────────
@@ -339,6 +364,7 @@ class TestNoTypeCollision:
 
 _ALL_EVENT_CLASSES = [
     ThoughtEvent,
+    ResponseEvent,
     ToolCallEvent,
     ToolResultEvent,
     RunResultEvent,
@@ -378,7 +404,7 @@ def _make_event_instance(cls):
 
 
 class TestBusEventDiscriminatedUnionRoundtrip:
-    """QUAL-01: For each of the 16 event types, create -> dump -> validate -> assert match."""
+    """QUAL-01: For each event type, create -> dump -> validate -> assert match."""
 
     def test_bus_event_discriminated_union_roundtrip(self) -> None:
         for cls in _ALL_EVENT_CLASSES:

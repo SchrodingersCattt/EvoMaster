@@ -38,7 +38,12 @@ from matmaster.integration import (
 )
 from matmaster.integration.bohrium_setup import BohriumSetupService
 from matmaster.core.playground import Playground
-from matmaster.types.events import CancelledEvent, ErrorEvent, StreamClosedEvent
+from matmaster.types.events import (
+    CancelledEvent,
+    ErrorEvent,
+    ResponseEvent,
+    StreamClosedEvent,
+)
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.chat_history import ChatHistoryConverter
@@ -548,6 +553,16 @@ class AgentRunService:
                     )
                 )
             else:
+                if (
+                    run_result_event.reason == "natural"
+                    and run_result_event.final_content
+                ):
+                    bus.emit(
+                        ResponseEvent(
+                            source=run_result_event.source,
+                            content=run_result_event.final_content,
+                        )
+                    )
                 bus.emit(run_result_event)
                 bus.emit(
                     StreamClosedEvent(
