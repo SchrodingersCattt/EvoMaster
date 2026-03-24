@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.core.bus import MessageBus
+from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.stream_hook import DevStreamHook
@@ -67,17 +68,15 @@ class DevRunner:
         return session
 
     @staticmethod
-    def _build_exp_config(config: DevConfig) -> dict[str, Any]:
-        """Convert DevConfig to Exp config dict."""
-        exp_cfg: dict[str, Any] = {
-            "name": config.agent.name,
-            "mode": config.agent.mode,
-            "max_turns": config.agent.max_turns,
-            "tools": {"builtin": config.tools.builtin},
-        }
-        if config.agent.identity is not None:
-            exp_cfg["identity"] = config.agent.identity
-        return exp_cfg
+    def _build_exp_config(config: DevConfig) -> ExpConfig:
+        """Convert DevConfig to ExpConfig."""
+        return ExpConfig(
+            name=config.agent.name,
+            mode=config.agent.mode,
+            max_turns=config.agent.max_turns,
+            tools=ExpToolsConfig(builtin=config.tools.builtin),
+            developer_instructions=config.agent.identity or "",
+        )
 
     def run(
         self,
