@@ -347,3 +347,55 @@ class TestIdentityOverride:
         runtime = exp.build_runtime(ctx)
 
         assert "helpful AI assistant" in runtime.spec.system_prompt
+
+
+class TestExpCompaction:
+    def test_assemble_passes_compaction_config(self) -> None:
+        from matmaster.types.runtime import CompactionConfig
+
+        config = {
+            "name": "test",
+            "compaction": {
+                "enabled": True,
+                "context_window_tokens": 200000,
+                "trigger_ratio": 0.9,
+            },
+        }
+        exp = Exp(config)
+        ctx = MagicMock()
+        ctx.llm_provider = None
+
+        spec = exp.assemble(ctx)
+        assert isinstance(spec.compaction, CompactionConfig)
+        assert spec.compaction.enabled is True
+        assert spec.compaction.context_window_tokens == 200000
+        assert spec.compaction.trigger_ratio == 0.9
+
+    def test_assemble_default_compaction(self) -> None:
+        config = {"name": "test"}
+        exp = Exp(config)
+        ctx = MagicMock()
+        ctx.llm_provider = None
+
+        spec = exp.assemble(ctx)
+        assert spec.compaction.enabled is False
+
+    def test_build_runtime_creates_compactor_when_enabled(self) -> None:
+        from matmaster.core.context_compactor import ContextCompactor
+
+        config = {
+            "name": "test",
+            "tools": {"builtin": []},
+            "compaction": {
+                "enabled": True,
+                "context_window_tokens": 200000,
+                "trigger_ratio": 0.9,
+            },
+        }
+        exp = Exp(config)
+        ctx = _make_ctx(with_llm=True)
+
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = exp.build_runtime(ctx)
+
+        assert isinstance(runtime.spec.compactor, ContextCompactor)
