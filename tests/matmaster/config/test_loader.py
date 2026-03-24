@@ -75,6 +75,29 @@ class TestLoadLlmConfig:
         assert cfg.profiles["p1"].api_key == "sk-secret"
 
 
+class TestLoadLlmConfigNormalized:
+    """load_llm_config with normalized schema (profiles + routes)."""
+
+    def test_load_normalized_yaml(self, tmp_path: Path) -> None:
+        yaml_content = """
+default: "p1"
+profiles:
+  p1:
+    model: "test-model"
+    api_key: "test-key"
+routes:
+  test-route:
+    profile: "p1"
+    model: "test-model"
+"""
+        f = tmp_path / "llm_config.yaml"
+        f.write_text(yaml_content)
+        cfg = load_llm_config(f)
+        assert "p1" in cfg.profiles
+        assert "test-route" in cfg.routes
+        assert cfg.routes["test-route"].profile == "p1"
+
+
 class TestLoadExpConfig:
     def test_from_yaml_path(self, yaml_file: Path) -> None:
         cfg = load_exp_config(yaml_file)
