@@ -32,6 +32,9 @@ from playground.mat_master.core.run_helpers import (
     should_persist_chat_event,
     should_skip_push_for_frontend,
 )
+from playground.mat_master.core.workspace_resolver import (
+    resolve_workspace_path,
+)
 from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_dir_to_oss
@@ -140,7 +143,7 @@ class AgentRunService:
         pg = get_playground_class('mat_master', config_path=config_path)
         run_dir = _project_root / 'runs' / RUN_ID_WEB
         run_dir.mkdir(parents=True, exist_ok=True)
-        pg.set_run_dir(run_dir, task_id=session_id)
+        pg.set_run_dir(run_dir, task_id=session_id, session_id=session_id)
         if callable(event_callback):
 
             def _on_mcp_progress(progress: dict[str, Any]) -> None:
@@ -206,17 +209,25 @@ class AgentRunService:
         return self._executor
 
     def _get_run_workspace_path(
-        self, run_id: str, task_id: str | None = None
+        self,
+        run_id: str,
+        task_id: str | None = None,
+        session_id: str | None = None,
     ) -> Path | None:
         """解析某次 run 的 workspace 目录路径。"""
         runs = _project_root / 'runs'
         run_path = runs / run_id
         if not run_path.is_dir():
             return None
-        if task_id:
-            ws = run_path / 'workspaces' / task_id
-            if ws.is_dir():
-                return ws
+        resolution = resolve_workspace_path(
+            run_path,
+            task_id=task_id,
+            session_id=session_id,
+            create=False,
+        )
+        if resolution.path.is_dir():
+            return resolution.path
+        if task_id or session_id:
             return None
         ws = run_path / 'workspace'
         if ws.is_dir():
@@ -254,7 +265,9 @@ class AgentRunService:
         event_callback: Callable[..., None],
     ) -> bool:
         """将当前任务的工作目录上传到 OSS，并通过 event_callback 推送 workspace_uploaded 或 workspace_upload_error。返回是否成功。"""
-        workspace_path = self._get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
+        workspace_path = self._get_run_workspace_path(
+            RUN_ID_WEB, task_id=task_id, session_id=session_id
+        )
         if not workspace_path or not workspace_path.is_dir():
             logger.debug(
                 'skip OSS upload: no workspace session_id=%s task_id=%s',
@@ -428,7 +441,7 @@ class AgentRunService:
                     return
                 _last_workspace_check_time[0] = now
                 workspace_path = self._get_run_workspace_path(
-                    RUN_ID_WEB, task_id=task_id
+                    RUN_ID_WEB, task_id=task_id, session_id=session_id
                 )
                 if not workspace_path or not workspace_path.is_dir():
                     logger.debug(
@@ -481,7 +494,7 @@ class AgentRunService:
             pg = self._get_or_create_playground(
                 session_id, event_callback=event_callback
             )
-            pg.set_run_dir(run_dir, task_id=task_id)
+            pg.set_run_dir(run_dir, task_id=task_id, session_id=session_id)
             pg_for_run = pg
             logger.debug(
                 'run_agent_sync: using playground for session_id=%s run_dir=%s task_id=%s',

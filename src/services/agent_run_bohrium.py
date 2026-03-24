@@ -3,8 +3,13 @@
 import logging
 import os
 import time
+from pathlib import Path
 from typing import Any, Callable, NamedTuple
 
+from playground.mat_master.core.workspace_resolver import (
+    get_remote_session_workspace_root,
+    load_workspace_config_dict,
+)
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.services.bohrium_node_service import get_bohrium_node_service
 from src.services.sessions_service import SESSIONS
@@ -12,6 +17,7 @@ from src.services.user_service import UserService
 from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 
 logger = logging.getLogger(__name__)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _clear_remote_proxy_shell() -> str:
@@ -130,6 +136,15 @@ def apply_run_credentials_to_session(session: Any, run_creds: dict[str, Any]) ->
     """Attach transient Bohrium credentials to the active session object."""
     if run_creds and session:
         session._bohrium_credentials = run_creds
+
+
+def _remote_session_workspace_root() -> str:
+    """Return Bohrium SSH session workspace root."""
+    return str(
+        get_remote_session_workspace_root(
+            load_workspace_config_dict(_PROJECT_ROOT), project_root=_PROJECT_ROOT
+        )
+    )
 
 
 def _creator_id_from_user(user_id: str | None) -> int:
@@ -407,6 +422,7 @@ def setup_bohrium_for_run(
             if session_id not in SESSIONS:
                 SESSIONS[session_id] = {}
             SESSIONS[session_id]['bohrium_node_id'] = node_id
+            remote_workspace_root = _remote_session_workspace_root()
             _emit_node_status(
                 event_callback,
                 node_id,
@@ -417,13 +433,15 @@ def setup_bohrium_for_run(
             pg.attach_ssh_session(
                 host=node_ip,
                 password=node_pwd,
-                working_dir='/personal/workspace',
+                working_dir=remote_workspace_root,
                 session_id=session_id,
             )
             apply_run_credentials_to_session(base.session, run_creds)
             logger.info(
-                'run_agent_sync: SSH session attached to Bohrium node ip=%s',
+                'run_agent_sync: SSH session attached to Bohrium node ip=%s workspace=%s/%s',
                 node_ip,
+                remote_workspace_root.rstrip('/'),
+                session_id,
             )
             _run_clear_remote_proxy(pg, 'post_ssh')
             try:

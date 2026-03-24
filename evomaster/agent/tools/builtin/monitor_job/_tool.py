@@ -122,7 +122,11 @@ class MonitorJobTool(BaseTool):
         workspace = params.workspace
         if not workspace or workspace == '.':
             if isinstance(session, SSHSession):
-                workspace = session.config.working_dir or '/personal/workspace'
+                workspace = (
+                    session.config.working_dir
+                    or getattr(session.config, 'workspace_path', None)
+                    or '/share/workspace'
+                )
             else:
                 workspace = getattr(session.config, 'workspace_path', None) or '.'
 
