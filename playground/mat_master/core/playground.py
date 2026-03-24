@@ -77,6 +77,8 @@ class MatMasterPlayground(BasePlayground):
             )
             root.setLevel(level)
         self.memory_service.run_dir = Path(run_dir) if run_dir else None
+        if task_id:
+            self.memory_service.set_session_id(task_id)
         # When reusing cached pg, session was created at startup with a different workspace.
         # Point it to this run's workspace so downloads and tool outputs go to workspaces/<task_id>.
         if self.session is not None and run_dir is not None:
