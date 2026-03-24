@@ -942,3 +942,26 @@ class TestPublicContentForEvent:
         payload = {"type": "response", "source": "Agent", "content": "hello"}
 
         assert _public_content_for_event("response", payload) == "hello"
+
+    def test_unknown_type_without_content_extracts_business_fields(self) -> None:
+        from matmaster.integration.event_router import _public_content_for_event
+
+        payload = {
+            "type": "new_future_event",
+            "source": "System",
+            "timestamp": "2026-03-24T00:00:00",
+            "custom_data": {"key": "value"},
+            "detail": "info",
+        }
+
+        assert _public_content_for_event("new_future_event", payload) == {
+            "custom_data": {"key": "value"},
+            "detail": "info",
+        }
+
+    def test_unknown_type_with_content_keeps_existing_behavior(self) -> None:
+        from matmaster.integration.event_router import _public_content_for_event
+
+        payload = {"type": "future_event", "source": "System", "content": "data"}
+
+        assert _public_content_for_event("future_event", payload) == "data"
