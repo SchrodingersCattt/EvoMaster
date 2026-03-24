@@ -276,10 +276,12 @@ class TestMatMasterE2EPipeline:
 class TestMatMasterRunAgentSyncE2E:
     """QUAL-02: run_agent_sync() with mock LLM provider injected."""
 
-    def test_mat_master_run_agent_sync_e2e(self, tmp_path: Path) -> None:
-        """E2E: run_agent_sync() with mock LLM provider injected.
-        Validates full pipeline despite _build_llm_provider NotImplementedError stub.
-        """
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider")
+    def test_mat_master_run_agent_sync_e2e(
+        self, mock_build_provider, mock_load_config, tmp_path: Path
+    ) -> None:
+        """E2E: run_agent_sync() with mock LLM provider injected."""
         from src.services.agent_run_service import AgentRunService
 
         mock_sessions_svc = MagicMock()
@@ -287,9 +289,10 @@ class TestMatMasterRunAgentSyncE2E:
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
 
-        # Patch _build_llm_provider to return mock LLM
+        # Patch build_provider to return mock LLM
         mock_llm = MockLLMProvider("E2E test response")
-        svc._build_llm_provider = MagicMock(return_value=mock_llm)
+        mock_build_provider.return_value = mock_llm
+        mock_load_config.return_value = MagicMock()
 
         # Patch Playground to return test context
         mock_pg = MagicMock()
@@ -366,8 +369,10 @@ class TestMatMasterRunAgentSyncE2E:
             # so add_event may not be called for this minimal mock. That's correct behavior.
             # The key E2E validation is: kernel ran -> finish -> use_quota called.
 
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider")
     def test_run_agent_sync_excludes_current_task_query_from_history(
-        self, tmp_path: Path
+        self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
         """Current task query should not be replayed into history for the LLM."""
         from src.services.agent_run_service import AgentRunService
@@ -378,7 +383,8 @@ class TestMatMasterRunAgentSyncE2E:
         svc = AgentRunService(sessions_service=mock_sessions_svc)
 
         mock_llm = MockLLMProviderCapturingMessages()
-        svc._build_llm_provider = MagicMock(return_value=mock_llm)
+        mock_build_provider.return_value = mock_llm
+        mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
@@ -467,8 +473,10 @@ class TestMatMasterRunAgentSyncE2E:
             "new question",
         ]
 
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider")
     def test_events_table_failure_returns_cleanly_without_router_lifecycle(
-        self, tmp_path: Path
+        self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
         """Regression: events table failure exits before router bootstrap."""
         from src.services.agent_run_service import AgentRunService
@@ -478,7 +486,7 @@ class TestMatMasterRunAgentSyncE2E:
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
         svc._playground_init_done.set()
-        svc._build_llm_provider = MagicMock()
+        mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
@@ -521,7 +529,7 @@ class TestMatMasterRunAgentSyncE2E:
         mock_router_cls.return_value.start.assert_not_called()
         mock_router_cls.return_value.stop.assert_not_called()
         mock_bohrium_cls.assert_not_called()
-        svc._build_llm_provider.assert_not_called()
+        mock_build_provider.assert_not_called()
         mock_use_quota.assert_not_called()
         assert sse_payloads == []
         mock_redis_fn.return_value.delete_stop_requested.assert_called_once_with(
@@ -530,8 +538,10 @@ class TestMatMasterRunAgentSyncE2E:
         )
         mock_pg.cleanup.assert_called_once()
 
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider")
     def test_bohrium_events_reach_sse_before_setup_returns(
-        self, tmp_path: Path
+        self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
         """Bohrium setup events must reach SSE before setup() returns."""
         from src.services.agent_run_service import AgentRunService
@@ -540,9 +550,8 @@ class TestMatMasterRunAgentSyncE2E:
         mock_sessions_svc.get_session_user_id.return_value = "user-123"
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
-        svc._build_llm_provider = MagicMock(
-            return_value=MockLLMProvider("Bohrium event test response")
-        )
+        mock_build_provider.return_value = MockLLMProvider("Bohrium event test response")
+        mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
@@ -630,8 +639,10 @@ class TestMatMasterRunAgentSyncE2E:
         assert bohrium_payload["payload"]["type"] == "node_ready"
         assert bohrium_payload["payload"]["content"] == "node is ready"
 
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider")
     def test_bohrium_setup_exception_is_sent_to_sse_when_router_starts_early(
-        self, tmp_path: Path
+        self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
         """Bohrium-stage exceptions should surface through SSE error payloads."""
         from src.services.agent_run_service import AgentRunService
@@ -640,9 +651,8 @@ class TestMatMasterRunAgentSyncE2E:
         mock_sessions_svc.get_session_user_id.return_value = "user-123"
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
-        svc._build_llm_provider = MagicMock(
-            return_value=MockLLMProvider("Bohrium exception test response")
-        )
+        mock_build_provider.return_value = MockLLMProvider("Bohrium exception test response")
+        mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)

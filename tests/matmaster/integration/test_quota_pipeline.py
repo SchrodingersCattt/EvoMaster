@@ -83,7 +83,8 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
         mock_sessions_svc.get_session_user_id.return_value = "user-123"
 
     svc = AgentRunService(sessions_service=mock_sessions_svc)
-    svc._build_llm_provider = MagicMock(return_value=mock_llm)
+    # mock_llm stored for _run_with_quota_mock to wire up via build_provider patch
+    svc._test_mock_llm = mock_llm
 
     mock_pg = MagicMock()
     if mock_pg_ctx is not None:
@@ -106,6 +107,11 @@ def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None, send_cb=
         ) as mock_events_fn,
         patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
         patch("src.services.agent_run_service.use_quota", use_quota_mock),
+        patch(
+            "matmaster.providers.llm_factory.build_provider",
+            return_value=svc._test_mock_llm,
+        ),
+        patch("matmaster.config.loader.load_llm_config", return_value=MagicMock()),
     ):
         mock_bohrium_result = MagicMock()
         mock_bohrium_result.ssh_attached = False
@@ -403,7 +409,11 @@ class TestQuotaNotDeductedOnError:
 class TestQuotaAsyncMode:
     """Verify use_quota called via run_coroutine_threadsafe when loop present."""
 
-    def test_quota_async_mode(self, tmp_path: Path) -> None:
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider")
+    def test_quota_async_mode(
+        self, mock_build_provider, mock_load_config, tmp_path: Path
+    ) -> None:
         """Verify use_quota called via asyncio.run_coroutine_threadsafe when loop present."""
         from src.services.agent_run_service import AgentRunService
 
@@ -413,7 +423,8 @@ class TestQuotaAsyncMode:
         mock_sessions_svc.get_session_user_id.return_value = "user-123"
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
-        svc._build_llm_provider = MagicMock(return_value=mock_llm)
+        mock_build_provider.return_value = mock_llm
+        mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
         mock_pg.prepare.return_value = pg_ctx
