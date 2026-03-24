@@ -352,3 +352,116 @@ def test_sse_frames_match_frontend_contract_without_mysql():
     assert frames[8]['final_content'] == 'done'
     assert frames[9]['task_completed'] is True
     assert frames[9]['end_reason'] == 'natural'
+
+
+def test_generate_send_stream_normalizes_replayed_history_source():
+    from src.services.stream_service import ChatStreamService, SendStreamContext
+
+    sessions_service = MagicMock()
+    sessions_service.get_session_status_payload.return_value = {
+        'source': 'System',
+        'type': 'status',
+        'content': '',
+        'session_id': 'sess-1',
+    }
+    events_service = MagicMock()
+    events_service.get_session_events.return_value = [
+        {
+            'source': 'Planner',
+            'type': 'run_result',
+            'content': 'old answer',
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        }
+    ]
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        agent_run_service=MagicMock(),
+        deploy_state_service=MagicMock(),
+    )
+
+    async def _collect_frames() -> list[dict]:
+        ctx = SendStreamContext(
+            task_id='task-1',
+            invocation_id='inv-1',
+            mode='direct',
+            user_msg={
+                'source': 'User',
+                'type': 'query',
+                'content': 'new question',
+                'mode': 'direct',
+                'session_id': 'sess-1',
+                'task_id': 'task-1',
+                'invocation_id': 'inv-1',
+            },
+            request_event_queue=asyncio.Queue(),
+            reply_queue=MagicMock(),
+        )
+        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        try:
+            return [
+                _decode_sse_payload(await gen.__anext__()),
+                _decode_sse_payload(await gen.__anext__()),
+                _decode_sse_payload(await gen.__anext__()),
+            ]
+        finally:
+            await gen.aclose()
+
+    frames = asyncio.run(_collect_frames())
+
+    history_frames = [frame for frame in frames if frame['type'] == 'run_result']
+    assert len(history_frames) == 1
+    assert history_frames[0]['source'] == 'MatMaster'
+    assert history_frames[0]['content'] == 'old answer'
+
+
+def test_generate_subscribe_stream_normalizes_replayed_history_source():
+    from src.services.stream_service import ChatStreamService
+
+    sessions_service = MagicMock()
+    sessions_service.get_session_status_payload.return_value = {
+        'source': 'System',
+        'type': 'status',
+        'content': '',
+        'session_id': 'sess-1',
+        'status': 'idle',
+    }
+    sessions_service.is_session_running_on_this_pod.return_value = False
+    sessions_service.is_session_run_on_another_pod.return_value = False
+
+    events_service = MagicMock()
+    events_service.get_session_events.return_value = [
+        {
+            'source': 'Planner',
+            'type': 'run_result',
+            'content': 'old answer',
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        }
+    ]
+
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        agent_run_service=MagicMock(),
+        deploy_state_service=MagicMock(),
+    )
+
+    async def _collect_frames() -> list[dict]:
+        gen = service.generate_subscribe_stream('sess-1')
+        try:
+            return [
+                _decode_sse_payload(await gen.__anext__()),
+                _decode_sse_payload(await gen.__anext__()),
+            ]
+        finally:
+            await gen.aclose()
+
+    with patch('src.services.stream_service.REDIS_URL', None):
+        frames = asyncio.run(_collect_frames())
+
+    history_frames = [frame for frame in frames if frame['type'] == 'run_result']
+    assert len(history_frames) == 1
+    assert history_frames[0]['source'] == 'MatMaster'
+    assert history_frames[0]['content'] == 'old answer'

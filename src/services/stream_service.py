@@ -33,6 +33,7 @@ from src.services.events_service import ChatEventsService, get_events_service
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
+from src.utils.chat_event_source import normalize_event_source
 from src.utils.constant import AG_UI_EVENT, CURRENT_ENV, REDIS_URL
 from src.utils.feishu_notifier import (
     CARD_TEMPLATE_ORANGE,
@@ -54,6 +55,13 @@ def _should_emit_event_to_sse(event: dict) -> bool:
     if t == 'assistant_state':
         return False
     return True
+
+
+def _normalize_replayed_event(event: dict) -> dict:
+    """Normalize source labels in replayed history events to the public set."""
+    replay_event = dict(event)
+    replay_event['source'] = normalize_event_source(replay_event.get('source'))
+    return replay_event
 
 
 class InMemoryReplyQueue:
@@ -447,7 +455,7 @@ class ChatStreamService:
                 events = self._inject_elapsed_for_history(events)
                 for event in events:
                     if _should_emit_event_to_sse(event):
-                        yield self.sse_format(event)
+                        yield self.sse_format(_normalize_replayed_event(event))
 
             # 保持流打开直到 Worker 上的 run 结束，或「已入队未接手」结束；仅队列模式，run 不在 API 进程
             def _run_still_active() -> bool:
@@ -721,7 +729,7 @@ class ChatStreamService:
         history = self._inject_elapsed_for_history(history)
         for event in history:
             if _should_emit_event_to_sse(event):
-                yield self.sse_format(event)
+                yield self.sse_format(_normalize_replayed_event(event))
         yield self.sse_format(ctx.user_msg)
 
         def send_cb(payload: dict):
