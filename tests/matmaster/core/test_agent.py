@@ -775,3 +775,40 @@ class TestKernelRunResultMessages:
         assert isinstance(result.messages[3], ToolMessage)
         assert isinstance(result.messages[4], AssistantMessage)
         assert result.messages[4].content == "final"
+
+
+class TestToolExecutionException:
+    """Tool that raises exception -> error ToolMessage, run continues."""
+
+    def test_tool_exception_becomes_error_message(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        class ExplodingTool:
+            @property
+            def name(self) -> str:
+                return "boom"
+
+            @property
+            def description(self) -> str:
+                return "explodes"
+
+            @property
+            def json_schema(self) -> dict[str, Any]:
+                return {"type": "object", "properties": {}}
+
+            def execute(self, arguments: dict[str, Any]) -> str:
+                raise RuntimeError("kaboom!")
+
+        registry = ToolRegistry()
+        registry.register(ExplodingTool(), source="test")
+
+        tc = ToolCallData(id="tc-1", name="boom", arguments={})
+        provider = ToolCallingProvider(
+            tool_calls=[tc], max_tool_turns=1, final_content="recovered"
+        )
+        spec = _make_spec(provider=provider, tool_registry=registry, max_turns=5)
+        kernel = AgentKernel()
+        result = kernel.run(spec, "test")
+
+        assert result.event.reason == "natural"
+        assert result.event.final_content == "recovered"
