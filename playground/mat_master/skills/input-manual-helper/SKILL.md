@@ -1,93 +1,286 @@
 ---
-name: input-manual-helper
-description: "Parameter-dispatch engine for CP2K, QE, ABINIT, LAMMPS, ORCA, PySCF. LLM outputs overrides and paths; prepare_* MCP tools generate inputs (PySCF uses run_pyscf direct run). Route by engine capability; validate by physical-sense review. Structure files must be pymatgen-instanceable."
 skill_type: operator
+name: input-manual-helper
+display_name: 计算输入文件助手（LSP 引擎版）
+description: >
+  基于 LSP（Language Server Protocol）架构的科学计算输入文件引擎。
+  支持 5 个软件的输入文件生成、诊断、参数补全和文档查询：
+  CP2K、ORCA、Quantum ESPRESSO、ABINIT、LAMMPS。
+version: "2.0.0"
 ---
 
-# Input Manual Helper Skill
+# Input Manual Helper Skill（LSP 引擎版）
 
-> **Skip condition**: If the user has already provided a complete, ready-to-run input file for the target software (and it needs no further modification), **skip this skill entirely** and submit via **`bohrium-job`** skill (`submit_job.py` + `poll_job.py`). This applies to all supported software including **GROMACS**, CP2K, QE, ABINIT, LAMMPS, and ORCA.
+> **跳过条件**：若用户已提供完整的、可直接运行的输入文件，**跳过本 Skill**，直接使用 **`bohrium-job`** Skill 提交。适用于所有支持的软件（CP2K、QE、ABINIT、LAMMPS、ORCA）。
 
-Generate or adapt input files for computational software by **dispatching parameters and paths** to the appropriate prepare_* MCP tool. Do not hand-write or text-edit input file contents for software that has a prepare_* tool; use overrides and structure_file/template paths instead.
+## 概述
 
-## Routing by engine
+本 Skill 基于 **LSP（Language Server Protocol）** 引擎架构，提供对 5 种科学计算软件的全面支持：
 
-| Engine | Route type | input_file | structure_file |
-|--------|------------|------------|----------------|
-| ABINIT (program=abinit) | Direct generation | Optional | Must be pymatgen-readable |
-| QE pw.x | Direct generation | Optional | Must be pymatgen-readable |
-| CP2K | Placeholder injection | Optional (use cp2k/minimal_periodic.inp if user provides none) | pymatgen-readable |
-| ORCA | Flexible | Optional (see ORCA modes below) | pymatgen-readable |
-| LAMMPS | Data decoupled | Optional | pymatgen-readable (prepare generates .data) |
-| PySCF | Direct run (no prepare) | N/A | XYZ recommended; pymatgen-readable fallback |
+```
+用户意图
+  │
+  ▼
+RenderIntent（task_type, params, structure_file）
+  │
+  ▼
+SoftwareBackend（parse → diagnostics → completion → render）
+  │
+  ├─ render_input.py     生成输入文件
+  ├─ diagnose_input.py   诊断/校验输入文件
+  ├─ complete_param.py   参数补全
+  └─ describe_param.py   参数文档查询
+```
 
-Use the MCP tool schema as the source of truth for parameters; the table above is context only.
+引擎核心流水线：
+- **Schema**：每个软件的参数元数据（类型、范围、枚举值、文档）
+- **Parser**：将输入文件文本解析为 `DocumentModel`（sections + params + ranges）
+- **Diagnostics**：基于 Schema 做静态校验 + 物理规则检查
+- **Completion**：按光标所在 section/context 返回参数建议
+- **Renderer**：根据 `RenderIntent` 生成可运行的输入文件
 
-### ORCA input modes
+## 支持的软件
 
-ORCA's `prepare_orca_job` supports three input modes:
+| 软件 | 格式 | 默认测试体系 | 支持任务类型 |
+|------|------|------------|------------|
+| **CP2K** | `&SECTION ... &END` 嵌套 | Si 金刚石（GPW/PBE） | scf, opt, md, band |
+| **ORCA** | `! keyword` + `%block` | H₂O 分子（B3LYP/def2-SVP） | scf, opt, freq, tddft |
+| **Quantum ESPRESSO** | Fortran namelist + cards | Si 金刚石（pw.x SCF） | scf, relax, vc-relax, md, nscf, bands |
+| **ABINIT** | 扁平 key-value | Si 金刚石（primitive FCC） | scf, relax, cellopt |
+| **LAMMPS** | 命令式脚本 | LJ FCC（能量最小化） | minimize, md, nvt, npt |
 
-| Mode | input_file | structure_file | Behaviour |
-|------|------------|----------------|-----------|
-| Template + structure | Provided (template with `{{COORD}}` placeholder) | Provided | Placeholder is replaced with actual coordinates |
-| Template only | Provided (template with inline coordinates) | Optional / omitted | Parameters and inline coords are modified in place |
-| Structure only | Omitted | Provided | Tool builds a minimal input from scratch using the structure; falls back to `orca/minimal_molecule.inp` as the base |
+## 脚本说明
 
-When `input_file` is omitted, use `orca/minimal_molecule.inp` as the fallback template or let the tool build from scratch if the schema supports it. When the user supplies an existing `.inp` with inline coordinates (no placeholder), pass it as `input_file` without a separate `structure_file`.
+### `render_input.py` — 生成输入文件
 
-### PySCF (run_pyscf)
+根据软件名和任务类型生成可运行的输入文件（含内建测试结构）。
 
-PySCF is invoked via the **run_pyscf** MCP tool (direct run). There is no prepare_* step and no validate_input gate; call `run_pyscf` with `structure_file` and parameters.
+```bash
+# 基本用法
+uv run python scripts/render_input.py --software qe --task scf
 
-- **structure_file**: Path to molecular structure. XYZ is preferred; other formats readable by pymatgen (e.g. CIF, POSCAR-style) are supported.
-- **task**: `"single_point"` | `"optimize"` | `"tddft"` (frequency not implemented).
-- **charge** (int): Total charge. **spin** (int): 2S (unpaired electrons).
-- **method**: `"DFT"` | `"HF"` | `"MP2"` | `"TDHF"`. For DFT, set **functional** (e.g. `"B3LYP"`). **basis**: e.g. `"def2-SVP"`.
-- **properties** (optional list): Subset of `["energy","dipole","mo_energies","homo_energy","lumo_energy","gap","density_matrix","mulliken_population"]`; default `["energy"]`.
-- **scf** (optional dict): SCF overrides, e.g. `max_cycle`, `conv_tol`, `level_shift`, `diis_space`.
-- **response** (optional dict): For `task="tddft"`, e.g. `{"n_states": 10}`.
-- **work_dir** (optional): Output directory; defaults to `structure_file.parent`. **log_file** (optional): Log filename; default `"pyscf.log"` in work_dir.
+# 覆盖参数
+uv run python scripts/render_input.py --software abinit --task scf \
+  --param ecut=20 --param nstep=100
 
-Returns: `success`, `code`, `command`, `stdout`, `stderr`, `log_file` (Path), `properties` (dict of computed values), `result_files` (e.g. `optimized_structure`, `tddft_summary`, `density_matrix`, `mulliken`). For MP2 single_point, see `energy_mp2_corr_h` / `energy_mp2_total_h`; for TDDFT, see `tddft_summary` and `n_excitations`.
+# 指定结构文件（需 pymatgen 可读）
+uv run python scripts/render_input.py --software qe --task relax \
+  --structure /path/to/structure.cif
 
-## Structure file format
+# 输出到文件
+uv run python scripts/render_input.py --software cp2k --task opt \
+  -o output.inp
+```
 
-`structure_file` must be in a format pymatgen can instantiate: e.g. CIF (`.cif`), VASP POSCAR/CONTCAR (no extension or `.vasp`), XYZ (`.xyz`), Materials Project JSON. LAMMPS `.data` is produced by prepare_lammps_job from the structure file; do not pass .data as structure_file. Do not use proprietary or single-software-only formats as the generic structure input.
+**参数：**
+- `--software`：`cp2k` | `orca` | `qe` | `abinit` | `lammps`
+- `--task`：任务类型（见支持软件表）
+- `--param KEY=VALUE`：覆盖默认参数（可多次指定）
+- `--structure PATH`：结构文件路径（pymatgen 可读格式）
+- `-o / --output`：输出文件路径（默认 stdout）
 
-## Workflow
+### `diagnose_input.py` — 诊断输入文件
 
-1. **Choose software and task type** — Determine which prepare_* tool (or run_pyscf for PySCF) applies from the routing table and MCP schema. For PySCF, skip steps 2–6 and call **run_pyscf** with structure_file and parameters only.
-0. **User-provided ready file check (exit early)** — Before doing anything else, check whether the user has already provided a complete, ready-to-run input file. If yes (file exists in the workspace, no structural changes or parameter overrides are required), **stop here**: do NOT call prepare_*, do NOT run validate_input.py. For CP2K/QE/ABINIT/LAMMPS/ORCA/GROMACS, go to **`bohrium-job`** and pass the directory as `--input-dir`.
+解析输入文件，输出 diagnostics（error/warning/info）列表。
 
-1. **Choose software and task type** — Determine which prepare_* tool applies from the routing table and MCP schema.
-2. **Resolve template** — For CP2K, obtain an input template (user-provided or get_reference). For ORCA, determine the input mode: template+structure, template-only (inline coords), or structure-only (omit input_file). Use get_reference for a suitable ORCA template when needed (e.g. `orca/minimal_molecule.inp`, `orca/std_dft.inp`).
-3. **Confirm structure_file** — Ensure the structure path exists and is pymatgen-instanceable; do not assume formats the engine cannot read.
-4. **Build overrides** — Set physical parameters (cutoff, functional, k-points, etc.) via the overrides dict exposed by the prepare_* schema; do not inject them by editing the template text.
-5. **Call prepare_*** — Invoke the prepare_* MCP tool with input_file (template path), structure_file (when applicable), and overrides.
-6. **Validate once** — Run `validate_input.py --input_file <path> --software <name>`. Validation is **physical-sense review**: check that key parameters are in a reasonable range, functional matches the system, and required sections are present. If something looks wrong, use ask_human; on timeout, treat as pass and proceed. The script exits 0 so submit is allowed.
+```bash
+# 诊断文件
+uv run python scripts/diagnose_input.py --software qe --input input.in
 
-## Scripts
+# 从 stdin 读取（与 render 管道连用）
+uv run python scripts/render_input.py --software qe 2>/dev/null | \
+  uv run python scripts/diagnose_input.py --software qe --input -
 
-- **list_references.py** — List available reference templates by software.
-- **get_reference** (via use_skill) — Fetch template content by name (e.g. `cp2k/minimal_periodic.inp`, `orca/minimal_molecule.inp`, `abinit/gs_scf.abi`, `lammps/gcmc_adsorption.lammps`).
-- **validate_input.py** — Run after prepare. Reads the prepared file and exits 0; you perform a physical-sense review. If doubtful, ask_human; on timeout, pass. Do not skip this step when submitting jobs for software covered by the validation gate.
+# JSON 格式输出
+uv run python scripts/diagnose_input.py --software abinit --input run.abi --format json
+```
 
-## Physical checks to consider (not a procedure)
+**参数：**
+- `--software`：软件名
+- `--input`：输入文件路径（`-` 表示 stdin）
+- `--format`：`text`（默认）| `json`
 
-- Cutoff energy and grid settings appropriate for the basis and system size.
-- Functional choice consistent with the system (e.g. hybrid for band gaps, meta-GGA when needed).
-- K-point sampling consistent with cell size and symmetry.
-- Required blocks or keywords present and not contradictory (e.g. SCF convergence, geometry/MD settings).
+**退出码：**
+- `0`：无 error（可能有 warning/info）
+- `1`：至少有一个 error 级别诊断
 
-Use domain judgment; do not follow a fixed checklist.
+### `complete_param.py` — 参数补全
 
-## Knowledge source
+在指定行列位置返回参数补全建议。
 
-When a parameter or keyword is uncertain, use **official documentation** with a site-restricted search (e.g. site:manual.cp2k.org, site:docs.lammps.org). Do not re-query the same path that already returned no useful result.
+```bash
+uv run python scripts/complete_param.py --software qe --input input.in --line 5 --col 0
+uv run python scripts/complete_param.py --software cp2k --input input.inp --line 10 --col 4
+```
 
-## Principles
+**参数：**
+- `--line`：光标行号（1-based）
+- `--col`：光标列号（0-based）
+- `--limit`：返回条数上限（默认 20）
 
-- **Do not** directly edit .inp, .in, .abi, or other input file text for software that has a prepare_* MCP tool; use overrides and template/structure paths only.
-- **Do not** assume prepare tools have fixed capabilities; read the current MCP tool schema.
-- **Gaussian / PSI4**: No prepare_* tool yet; use reference templates as the final input and do not apply the prepare-only workflow or the validation gate to them.
-- **PySCF**: Use **run_pyscf** only; no prepare_* or validate_input. Structure_file (XYZ or pymatgen-readable) and parameters are passed directly to the tool.
+### `describe_param.py` — 参数文档查询
+
+查询指定参数的文档（类型、默认值、范围、说明）。
+
+```bash
+uv run python scripts/describe_param.py --software qe --param ecutwfc
+uv run python scripts/describe_param.py --software abinit --param ecut
+uv run python scripts/describe_param.py --software cp2k --param CUTOFF
+```
+
+### `list_references.py` — 列出参考模板
+
+列出 `references/` 目录下可用的参考模板文件。
+
+```bash
+uv run python scripts/list_references.py
+uv run python scripts/list_references.py --software cp2k
+```
+
+### `validate_input.py` — 旧版验证（兼容保留）
+
+旧版验证脚本，已被 `diagnose_input.py` 替代，但仍保留以兼容旧工作流。
+
+```bash
+uv run python scripts/validate_input.py --input_file input.in --software qe
+```
+
+> **注意**：新工作流请使用 `diagnose_input.py`，支持更多软件和更精确的诊断。
+
+## Bohrium 提交
+
+镜像、机型和运行命令的**权威来源**是 **bohrium-job** Skill。提交前务必先查阅：
+
+```python
+use_skill(skill_name="bohrium-job", action="get_info")
+```
+
+查阅 `## Software Reference` 表中对应软件的 Image、Machine 和 Command。
+
+> ⚠️ **不要**从本 Skill 的文档中获取镜像名——本 Skill 不维护镜像信息。
+
+### 赝势注意事项
+
+**Quantum ESPRESSO**：
+- `render_input.py` 输出的 `pseudo_dir` 已指向 bohrium-job SKILL.md 中 QE 镜像内置赝势路径，无需额外配置
+
+**ABINIT**：
+- ⚠️ `ppdirpath` **不是** ABINIT v9.10 的合法关键字，render 输出中已移除
+- 运行前可能需手动复制赝势到工作目录（参见 bohrium-job SKILL.md 中的 ABINIT 说明）
+
+**CP2K**：
+- 使用内置 GTH 赝势（`GTH_POTENTIALS` 文件内置于镜像）
+- 基组文件：`BASIS_MOLOPT`、`BASIS_ADMM`、`BASIS_ADMM_UZH`（内置）
+- 无需额外配置
+
+**ORCA**：
+- 使用内置 def2-SVP 基组，无需额外赝势文件
+
+**LAMMPS**：
+- 默认使用 LJ 解析势，无需外部势函数文件
+- 若使用 EAM/MEAM 等，需在 `pair_coeff` 中指定势函数文件路径
+
+## 使用示例
+
+### 示例 1：生成 QE SCF 输入并诊断
+
+```bash
+# 生成输入
+uv run python scripts/render_input.py --software qe --task scf -o input.in
+
+# 诊断（应无 error）
+uv run python scripts/diagnose_input.py --software qe --input input.in
+```
+
+### 示例 2：生成 ABINIT 弛豫输入
+
+```bash
+uv run python scripts/render_input.py --software abinit --task relax \
+  --param ecut=20 --param nstep=100 \
+  -o run.abi
+```
+
+### 示例 3：管道验证（5 个软件批量）
+
+```bash
+for sw in cp2k orca qe abinit lammps; do
+  echo "=== $sw ==="
+  uv run python scripts/render_input.py --software $sw 2>/dev/null | \
+    uv run python scripts/diagnose_input.py --software $sw --input -
+done
+```
+
+### 示例 4：查询 QE 参数文档
+
+```bash
+uv run python scripts/describe_param.py --software qe --param ecutwfc
+uv run python scripts/describe_param.py --software qe --param conv_thr
+```
+
+### 示例 5：CP2K 参数补全
+
+```bash
+# 在第 10 行第 4 列查询可用参数
+uv run python scripts/complete_param.py --software cp2k \
+  --input references/cp2k/minimal_periodic.inp \
+  --line 10 --col 4
+```
+
+## 参数覆盖
+
+通过 `--param KEY=VALUE` 可覆盖任意默认参数：
+
+```bash
+# QE：自定义截断能和 k 点
+uv run python scripts/render_input.py --software qe --task scf \
+  --param ecutwfc=50 --param ecutrho=400
+
+# ABINIT：自定义截断能
+uv run python scripts/render_input.py --software abinit --task scf \
+  --param ecut=20 --param ngkpt="6 6 6"
+
+# CP2K：自定义 SCF 精度
+uv run python scripts/render_input.py --software cp2k --task scf \
+  --param EPS_SCF=1.0E-8 --param MAX_SCF=100
+
+# ORCA：使用不同泛函和基组
+uv run python scripts/render_input.py --software orca --task opt \
+  --param functional=PBE0 --param basis=def2-TZVP
+
+# LAMMPS：使用不同系综
+uv run python scripts/render_input.py --software lammps --task nvt \
+  --param temp=300 --param run=50000
+```
+
+## 工作流（Agent 调用）
+
+1. **确定软件和任务类型** — 从用户需求确定目标软件和计算类型
+2. **检查是否已有输入文件** — 若用户已提供完整输入文件，直接跳至步骤 6
+3. **调用 render_input.py** — 生成初始输入文件（含内建测试结构或用户结构文件）
+4. **调用 diagnose_input.py** — 检查输入文件是否有 error
+5. **根据诊断结果修正** — 若有 error，用 `--param` 覆盖修正后重新渲染；若只有 warning/info，判断是否需要调整
+6. **提交到 Bohrium** — 使用 `bohrium-job` Skill，传入输入文件所在目录和上方表格中对应的运行命令
+
+## 架构说明
+
+```
+engine/
+├── schema.py       参数元数据注册表（SchemaRegistry, ParamTag）
+├── document.py     文档模型（DocumentModel, ParsedSection, ParsedParam）
+├── diagnostics.py  诊断数据结构（Diagnostic）
+├── completion.py   补全数据结构（CompletionItem）
+├── renderer.py     渲染意图（RenderIntent）
+└── software/
+    ├── base.py     SoftwareBackend 抽象基类
+    ├── qe.py       Quantum ESPRESSO 后端
+    ├── abinit.py   ABINIT 后端
+    ├── cp2k.py     CP2K 后端
+    ├── orca.py     ORCA 后端
+    └── lammps.py   LAMMPS 后端
+```
+
+每个后端实现四个核心方法：
+- `parse(text)` → `DocumentModel`
+- `render(intent)` → `str`（输入文件文本）
+- `get_diagnostics(doc, schema)` → `list[Diagnostic]`
+- `get_completions(doc, line, col, schema)` → `list[CompletionItem]`
