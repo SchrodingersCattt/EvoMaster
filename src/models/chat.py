@@ -15,7 +15,7 @@ ag-ui 协议（前后端约定）：
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
-from typing import List, Literal, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -61,29 +61,6 @@ class RunStatusData(BaseModel):
 
 class RunStatusApiResponse(BaseResponse[RunStatusData]):
     """GET /chat/sessions/run_status 规范响应：code, msg, data"""
-
-
-# ---------- Workspace OSS 列表 ----------
-
-
-class WorkspaceEntry(BaseModel):
-    """workspace 列表：单项（目录或文件），按 entries 顺序展示即可。"""
-
-    type: Literal['directory', 'file']
-    name: str
-    path: str
-    download_url: Optional[str] = None  # 仅 type=file 时有值
-
-
-class WorkspaceListData(BaseModel):
-    """GET /chat/sessions/{session_id}/workspace/list 的 data 字段。entries 已按目录在前、文件在后、同类型按 name 排序。"""
-
-    path: str
-    entries: List[WorkspaceEntry]
-
-
-class WorkspaceListApiResponse(BaseResponse[WorkspaceListData]):
-    """GET /chat/sessions/{session_id}/workspace/list 规范响应：code, msg, data"""
 
 
 # ---------- 会话分享 ----------
