@@ -39,9 +39,9 @@ class _ToolCallThenFinishLLM:
     def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
-            # Emit a thought chunk first
+            # Emit a reasoning chunk first so EventEmitterHook produces ThoughtEvent
             yield StreamChunk(
-                content="Let me use the tool.",
+                reasoning_content="Let me use the tool.",
                 stream_state="start",
                 stream_id="s1",
             )
@@ -58,8 +58,11 @@ class _ToolCallThenFinishLLM:
                 finish_reason="tool_calls",
             )
         else:
-            # Second turn: natural finish with thought
-            yield StreamChunk(content="Task complete.", finish_reason="stop")
+            # Second turn: natural finish with reasoning
+            yield StreamChunk(
+                reasoning_content="Task complete.",
+                finish_reason="stop",
+            )
 
 
 class _SimpleTool:
