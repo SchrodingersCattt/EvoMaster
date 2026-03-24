@@ -511,6 +511,7 @@ class CalculationPathAdaptor:
         access_key: str | None = None,
         project_id: int | str | None = None,
         user_id: int | str | None = None,
+        user_no: str | None = None,
     ) -> dict[str, Any] | None:
         """Return executor for this (server, tool)."""
         server_cfg = self.calculation_executors.get(server_name)
@@ -525,6 +526,7 @@ class CalculationPathAdaptor:
                 access_key=access_key,
                 project_id=project_id,
                 user_id=user_id,
+                user_no=user_no,
             )
         executor_map = server_cfg.get('executor_map')
         if executor_map and isinstance(executor_map, dict):
@@ -539,6 +541,7 @@ class CalculationPathAdaptor:
                     access_key=access_key,
                     project_id=project_id,
                     user_id=user_id,
+                    user_no=user_no,
                 )
         executor_template = server_cfg.get('executor')
         if not executor_template or not isinstance(executor_template, dict):
@@ -548,6 +551,7 @@ class CalculationPathAdaptor:
             access_key=access_key,
             project_id=project_id,
             user_id=user_id,
+            user_no=user_no,
         )
 
     def _is_async_remote_tool(self, server_name: str, remote_tool_name: str) -> bool:
@@ -612,6 +616,7 @@ class CalculationPathAdaptor:
         access_key: str | None = None,
         project_id: int | str | None = None,
         user_id: int | str | None = None,
+        user_no: str | None = None,
         session: BaseSession | None = None,
     ) -> dict[str, Any]:
         """Inject executor, storage and resolve Path-typed args → OSS URL.
@@ -660,6 +665,7 @@ class CalculationPathAdaptor:
             access_key=access_key,
             project_id=project_id,
             user_id=user_id,
+            user_no=user_no,
         )
         if is_async_tool:
             self._validate_executor_profile(

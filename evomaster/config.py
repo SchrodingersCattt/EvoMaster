@@ -227,13 +227,13 @@ class ConfigManager:
         """初始化配置管理器
 
         Args:
-            config_dir: 配置文件目录，默认为项目根目录的 configs/
+            config_dir: 配置文件目录，默认为项目根目录的 configs/mat_master/
             config_file: 配置文件名，默认为 config.yaml
         """
         if config_dir is None:
-            # 默认配置目录：项目根目录/configs
+            # 默认配置目录：本仓库仅保留 MatMaster 产品配置
             project_root = Path(__file__).parent.parent
-            config_dir = project_root / 'configs'
+            config_dir = project_root / 'configs' / 'mat_master'
 
         self.config_dir = Path(config_dir)
         self.config_file = config_file or self.DEFAULT_CONFIG_FILE
@@ -551,7 +551,7 @@ def get_config_manager(config_dir: str | Path | None = None) -> ConfigManager:
     """获取全局配置管理器
 
     Args:
-        config_dir: 配置目录（首次调用时设置）
+        config_dir: 配置目录（首次调用时设置；默认 `configs/mat_master`）
 
     Returns:
         配置管理器实例

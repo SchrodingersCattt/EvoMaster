@@ -145,10 +145,12 @@ class MCPTool(BaseTool):
                 access_key = None
                 project_id = None
                 user_id = None
+                user_no = None
                 if bohrium_creds:
                     access_key = bohrium_creds.get('access_key')
                     project_id = bohrium_creds.get('project_id')
                     user_id = bohrium_creds.get('user_id')
+                    user_no = bohrium_creds.get('user_no')
                 if not (access_key and str(access_key).strip()):
                     self.logger.warning(
                         'MCP tool %s: no access_key in session._bohrium_credentials '
@@ -166,6 +168,7 @@ class MCPTool(BaseTool):
                     access_key=access_key,
                     project_id=project_id,
                     user_id=user_id,
+                    user_no=user_no,
                     session=session,
                 )
 

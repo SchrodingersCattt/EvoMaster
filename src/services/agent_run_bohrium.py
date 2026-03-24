@@ -119,6 +119,10 @@ def load_run_credentials(
         run_creds['access_key'] = (
             UserService.get_bohrium_access_key(user_id_for_ak, org_id) or ''
         )
+    if user_id_for_ak:
+        user_no = UserService.get_user_no_by_user_id(user_id_for_ak)
+        if user_no:
+            run_creds['user_no'] = user_no
     return run_creds, user_id_for_ak, org_id
 
 
