@@ -60,6 +60,9 @@ def _flatten_bohrium_content(raw_payload: object) -> object:
     return content
 
 
+_CONTENT_META_KEYS = frozenset({"type", "source", "timestamp"})
+
+
 def _public_content_for_event(
     event_type: str, payload: dict[str, Any]
 ) -> object | None:
@@ -152,7 +155,21 @@ def _public_content_for_event(
     if event_type == "exp_run":
         return {"exp_name": payload.get("exp_name")}
 
-    return payload.get("content")
+    raw_content = payload.get("content")
+    if raw_content is not None:
+        return raw_content
+
+    extracted = {
+        key: value for key, value in payload.items() if key not in _CONTENT_META_KEYS
+    }
+    if extracted:
+        logger.warning(
+            "No explicit content mapping for event type=%s, using extracted fields",
+            event_type,
+        )
+        return extracted
+
+    return None
 
 logger = logging.getLogger(__name__)
 
