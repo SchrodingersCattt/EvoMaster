@@ -4,48 +4,6 @@
 
 ---
 
-## Import 规范
-
-**所有 import 必须放在文件最前面。**
-
-- 每个源文件顶部的 import 应紧接在文件开头（可在 shebang、编码声明或 docstring 之后），且**不得**在 import 块之后、再在文件中间或函数/类内部插入新的 import。
-- 新增依赖时，将 `import` / `from ... import ...` 统一放在文件顶部的 import 区域，并按项目既有风格分组排序（如：标准库 → 第三方 → 本地包）。
-
-### ✅ 正确示例
-
-```python
-# 标准库
-import asyncio
-import json
-from datetime import datetime
-
-# 第三方
-from fastapi import FastAPI
-
-# 本地
-from src.utils.logger import setup_logging
-
-def main():
-    ...
-```
-
-### ❌ 避免
-
-```python
-def main():
-    import json  # 不要写在函数内部
-    ...
-```
-
-```python
-import os
-
-SOME_CONST = 1
-
-import sys  # 不要插在常量或代码中间
-```
-
----
 
 ## 异常处理
 
