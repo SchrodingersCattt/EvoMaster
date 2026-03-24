@@ -1,7 +1,7 @@
 # Requirements: MatMaster v1.1
 
 **Defined:** 2026-03-24
-**Core Value:** 三层抽象（playground→exp→agent）必须具有清晰、稳定、可测试的职责边界
+**Core Value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
 
 ## v1.1 Requirements
 
@@ -64,30 +64,30 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TOOL-01 | — | Pending |
-| TOOL-02 | — | Pending |
-| TOOL-03 | — | Pending |
-| TOOL-04 | — | Pending |
-| TOOL-05 | — | Pending |
-| TOOL-06 | — | Pending |
-| TOOL-07 | — | Pending |
-| TOOL-08 | — | Pending |
-| TOOL-09 | — | Pending |
-| SUBA-01 | — | Pending |
-| SUBA-02 | — | Pending |
-| SUBA-03 | — | Pending |
-| SUBA-04 | — | Pending |
-| SUBA-05 | — | Pending |
-| SUBA-06 | — | Pending |
-| PRMT-01 | — | Pending |
-| PRMT-02 | — | Pending |
-| PRMT-03 | — | Pending |
+| TOOL-01 | Phase 9 | Pending |
+| TOOL-02 | Phase 9 | Pending |
+| TOOL-03 | Phase 9 | Pending |
+| TOOL-04 | Phase 8 | Pending |
+| TOOL-05 | Phase 9 | Pending |
+| TOOL-06 | Phase 9 | Pending |
+| TOOL-07 | Phase 8 | Pending |
+| TOOL-08 | Phase 9 | Pending |
+| TOOL-09 | Phase 8 | Pending |
+| SUBA-01 | Phase 11 | Pending |
+| SUBA-02 | Phase 11 | Pending |
+| SUBA-03 | Phase 11 | Pending |
+| SUBA-04 | Phase 11 | Pending |
+| SUBA-05 | Phase 11 | Pending |
+| SUBA-06 | Phase 11 | Pending |
+| PRMT-01 | Phase 10 | Pending |
+| PRMT-02 | Phase 10 | Pending |
+| PRMT-03 | Phase 11 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️
+- Mapped to phases: 18
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-24*
-*Last updated: 2026-03-24 after initial definition*
+*Last updated: 2026-03-24 after roadmap creation*
