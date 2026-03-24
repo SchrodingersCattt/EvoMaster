@@ -146,7 +146,8 @@ class Exp:
 
         # 5. Build system_prompt via ContextBuilder
         builder = ContextBuilder()
-        system_prompt = builder.build(ctx, registry, mode=spec.mode)
+        identity = self._config.get("identity")
+        system_prompt = builder.build(ctx, registry, mode=spec.mode, identity=identity)
 
         # 6. Hooks: EventEmitterHook if bus provided
         hooks = list(spec.hooks)
