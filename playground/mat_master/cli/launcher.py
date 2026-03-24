@@ -20,7 +20,7 @@ def get_project_root() -> Path:
 
 
 def _is_windows() -> bool:
-    return sys.platform in ("win32", "cygwin") or os.environ.get("MSYSTEM")
+    return sys.platform in ('win32', 'cygwin') or os.environ.get('MSYSTEM')
 
 
 def _release_port(port: int) -> None:
@@ -28,7 +28,7 @@ def _release_port(port: int) -> None:
     try:
         if _is_windows():
             out = subprocess.run(
-                ["netstat", "-ano"],
+                ['netstat', '-ano'],
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -37,7 +37,7 @@ def _release_port(port: int) -> None:
                 return
             pids_to_kill: set[str] = set()
             for line in out.stdout.splitlines():
-                if f":{port}" in line and "LISTENING" in line.upper():
+                if f":{port}" in line and 'LISTENING' in line.upper():
                     parts = line.split()
                     if parts and parts[-1].isdigit():
                         pids_to_kill.add(parts[-1])
@@ -46,24 +46,31 @@ def _release_port(port: int) -> None:
                 return
             for pid in pids_to_kill:
                 subprocess.run(
-                    ["taskkill", "/F", "/T", "/PID", pid],
+                    ['taskkill', '/F', '/T', '/PID', pid],
                     capture_output=True,
                     timeout=5,
                 )
-            print(f"  -> Released port {port} (PIDs {', '.join(pids_to_kill)})", flush=True)
+            print(
+                f"  -> Released port {port} (PIDs {', '.join(pids_to_kill)})",
+                flush=True,
+            )
             # Wait briefly until the port is actually free
             import time
+
             for _ in range(10):
                 time.sleep(0.3)
-                chk = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=3)
+                chk = subprocess.run(
+                    ['netstat', '-ano'], capture_output=True, text=True, timeout=3
+                )
                 if chk.returncode == 0 and not any(
-                    f":{port}" in ln and "LISTENING" in ln.upper() for ln in chk.stdout.splitlines()
+                    f":{port}" in ln and 'LISTENING' in ln.upper()
+                    for ln in chk.stdout.splitlines()
                 ):
                     break
         else:
             # Prefer lsof then fuser
             out = subprocess.run(
-                ["lsof", "-ti", f":{port}"],
+                ['lsof', '-ti', f":{port}"],
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -72,13 +79,15 @@ def _release_port(port: int) -> None:
                 pids = out.stdout.strip().split()
                 for pid in pids:
                     try:
-                        subprocess.run(["kill", "-9", pid], capture_output=True, timeout=3)
+                        subprocess.run(
+                            ['kill', '-9', pid], capture_output=True, timeout=3
+                        )
                     except Exception:
                         pass
                 print(f"  -> Released port {port}", flush=True)
                 return
             out = subprocess.run(
-                ["fuser", "-k", f"{port}/tcp"],
+                ['fuser', '-k', f"{port}/tcp"],
                 capture_output=True,
                 timeout=5,
             )
@@ -91,18 +100,19 @@ def _release_port(port: int) -> None:
 
 
 def _get_public_host() -> str:
-    if os.environ.get("PUBLIC_HOST", "").strip():
-        return os.environ.get("PUBLIC_HOST", "").strip()
+    if os.environ.get('PUBLIC_HOST', '').strip():
+        return os.environ.get('PUBLIC_HOST', '').strip()
     try:
         import socket
+
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(0.5)
-        s.connect(("8.8.8.8", 80))
+        s.connect(('8.8.8.8', 80))
         host = s.getsockname()[0]
         s.close()
         return host
     except Exception:
-        return "127.0.0.1"
+        return '127.0.0.1'
 
 
 def run(
@@ -127,36 +137,50 @@ def run(
     def out(msg: str) -> None:
         print(msg, flush=True)
 
-    out("MatMaster: work_dir=%s" % work_dir)
-    out("Releasing ports %s, %s (if in use)..." % (backend_port, frontend_port))
+    out('MatMaster: work_dir=%s' % work_dir)
+    out('Releasing ports {}, {} (if in use)...'.format(backend_port, frontend_port))
     _release_port(backend_port)
     _release_port(frontend_port)
 
     env = os.environ.copy()
-    env["MAT_MASTER_RUN_DIR"] = str(work_dir)
-    env["MAT_MASTER_WORKSPACE_ROOT"] = str(work_dir)  # shared workspace: files go in work_dir directly
-    env["NEXT_PUBLIC_API_URL"] = f"http://{host}:{backend_port}"
-    env["NEXT_PUBLIC_WS_URL"] = f"ws://{host}:{backend_port}/ws/chat"
+    env['MAT_MASTER_RUN_DIR'] = str(work_dir)
+    env['NEXT_PUBLIC_API_URL'] = f"http://{host}:{backend_port}"
+    env['NEXT_PUBLIC_WS_URL'] = f"ws://{host}:{backend_port}/ws/chat"
 
     python = sys.executable
-    venv_python = project_root / ".venv" / "bin" / "python"
+    venv_python = project_root / '.venv' / 'bin' / 'python'
     if not venv_python.exists():
-        venv_python = project_root / ".venv" / "Scripts" / "python.exe"
+        venv_python = project_root / '.venv' / 'Scripts' / 'python.exe'
     if venv_python.exists():
         python = str(venv_python)
-    env.setdefault("PYTHONPATH", str(project_root))
-    if "PYTHONPATH" in os.environ and str(project_root) not in env["PYTHONPATH"].split(os.pathsep):
-        env["PYTHONPATH"] = str(project_root) + os.pathsep + env["PYTHONPATH"]
+    env.setdefault('PYTHONPATH', str(project_root))
+    if 'PYTHONPATH' in os.environ and str(project_root) not in env['PYTHONPATH'].split(
+        os.pathsep
+    ):
+        env['PYTHONPATH'] = str(project_root) + os.pathsep + env['PYTHONPATH']
 
     backend_cmd = [
-        python, "-m", "uvicorn",
-        "playground.mat_master.service.server:app",
-        "--host", "0.0.0.0",
-        "--port", str(backend_port),
-        "--reload",
+        python,
+        '-m',
+        'uvicorn',
+        'playground.mat_master.service.server:app',
+        '--host',
+        '0.0.0.0',
+        '--port',
+        str(backend_port),
+        '--reload',
     ]
-    frontend_dir = project_root / "playground" / "mat_master" / "frontend"
-    frontend_cmd = ["npm", "run", "dev", "--", "-H", "0.0.0.0", "-p", str(frontend_port)]
+    frontend_dir = project_root / 'playground' / 'mat_master' / 'frontend'
+    frontend_cmd = [
+        'npm',
+        'run',
+        'dev',
+        '--',
+        '-H',
+        '0.0.0.0',
+        '-p',
+        str(frontend_port),
+    ]
 
     procs: list[subprocess.Popen] = []
 
@@ -176,12 +200,15 @@ def run(
         sys.exit(128 + (signum if signum is not None else 0))
 
     atexit.register(kill_all)
-    if hasattr(signal, "SIGINT"):
+    if hasattr(signal, 'SIGINT'):
         signal.signal(signal.SIGINT, on_signal)
-    if hasattr(signal, "SIGTERM"):
+    if hasattr(signal, 'SIGTERM'):
         signal.signal(signal.SIGTERM, on_signal)
 
-    out("Starting backend (FastAPI) on 0.0.0.0:%s... (loading tools may take a moment)" % backend_port)
+    out(
+        'Starting backend (FastAPI) on 0.0.0.0:%s... (loading tools may take a moment)'
+        % backend_port
+    )
     p_backend = subprocess.Popen(
         backend_cmd,
         cwd=str(project_root),
@@ -191,26 +218,26 @@ def run(
     )
     procs.append(p_backend)
 
-    out("Starting frontend (Next.js) on 0.0.0.0:%s..." % frontend_port)
+    out('Starting frontend (Next.js) on 0.0.0.0:%s...' % frontend_port)
     p_frontend = subprocess.Popen(
         frontend_cmd,
         cwd=str(frontend_dir),
         env=env,
-        shell=sys.platform == "win32",
+        shell=sys.platform == 'win32',
         stdout=None,
         stderr=None,
     )
     procs.append(p_frontend)
 
-    out("")
-    out("========================================================================")
-    out("  MatMaster running")
-    out("  Work dir : %s" % work_dir)
-    out("  Dashboard: http://%s:%s" % (host, frontend_port))
-    out("  Backend  : http://%s:%s" % (host, backend_port))
-    out("  Press Ctrl+C to stop")
-    out("========================================================================")
-    out("")
+    out('')
+    out('========================================================================')
+    out('  MatMaster running')
+    out('  Work dir : %s' % work_dir)
+    out('  Dashboard: http://{}:{}'.format(host, frontend_port))
+    out('  Backend  : http://{}:{}'.format(host, backend_port))
+    out('  Press Ctrl+C to stop')
+    out('========================================================================')
+    out('')
 
     try:
         # Wait for first process to exit
@@ -222,6 +249,7 @@ def run(
                     return ret
             try:
                 import time
+
                 time.sleep(0.5)
             except KeyboardInterrupt:
                 kill_all()
