@@ -258,6 +258,40 @@ class TestRunScript:
         assert "MANDATORY WORKFLOW" in result
         assert "Deep mode workflow instructions" in result
 
+    def test_injects_credentials_before_exec(self, tmp_path: Path) -> None:
+        """run_script injects session credentials into the command."""
+        from matmaster.skills.registry import SkillRegistry
+        from matmaster.tools.skill_tool import SkillTool
+
+        skill_dir = _make_skill(tmp_path, "calc")
+        _make_script(skill_dir, "run.py")
+        registry = SkillRegistry(tmp_path)
+        session = _mock_session()
+        session._bohrium_credentials = {
+            "access_key": "test_ak",
+            "project_id": 123,
+        }
+        tool = SkillTool(registry, session)
+
+        tool.execute({
+            "skill_name": "calc",
+            "action": "run_script",
+            "script_name": "run.py",
+        })
+
+        # write_file should have been called with credential content
+        session.write_file.assert_called_once()
+        content = session.write_file.call_args[0][1]
+        assert "BOHRIUM_ACCESS_KEY" in content
+
+        # exec_bash called twice: chmod + actual command
+        assert session.exec_bash.call_count == 2
+        chmod_call = session.exec_bash.call_args_list[0][0][0]
+        assert "chmod 600" in chmod_call
+        run_call = session.exec_bash.call_args_list[1][0][0]
+        assert "run.py" in run_call
+        assert ". /tmp/.mm_env_" in run_call
+
 
 # ---------------------------------------------------------------------------
 # Error handling tests

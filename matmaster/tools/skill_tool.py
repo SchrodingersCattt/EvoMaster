@@ -262,6 +262,10 @@ class SkillTool:
             script_path, project_root, script_args, self._session,
         )
 
+        from matmaster.tools.script_env import inject as inject_env
+
+        cmd = inject_env(cmd, self._session)
+
         result = self._session.exec_bash(cmd, timeout=script_timeout)
 
         stdout = result.get("stdout", "")
