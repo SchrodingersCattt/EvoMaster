@@ -111,7 +111,7 @@ class Exp:
         # 1. Register ALL tools before building system prompt
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
-        if "*" in builtin_cfg and ctx.session is not None:
+        if builtin_cfg and ctx.session is not None:
             self._init_builtin_tools(ctx, registry)
 
         # 2. Skills/MCP: runtime-injected (must be before system prompt)
@@ -234,8 +234,9 @@ class Exp:
     ) -> None:
         """Register builtin tools: native (source='builtin') + evo adapter (source='builtin_evo').
 
-        Native tools: BashTool, ListDirTool, TaskCreate/Get/List/Update/Complete.
-        Evo adapter: EditorTool (Phase 9 replaces), MonitorJobTool (retained).
+        Native tools (12): BashTool, ListDirTool, ReadTool, WriteTool, EditTool,
+        GlobTool, GrepTool, TaskCreate/Get/List/Update/Complete.
+        Evo adapter (1): MonitorJobTool (science-specific, retained).
         """
         if ctx.session is None:
             self.logger.warning(
@@ -246,17 +247,32 @@ class Exp:
         # 1. Native builtin tools (source="builtin")
         from matmaster.tools.builtin import (
             BashTool,
+            EditTool,
+            GlobTool,
+            GrepTool,
             ListDirTool,
+            ReadTool,
+            ReadTracker,
             TaskCompleteTool,
             TaskCreateTool,
             TaskGetTool,
             TaskListTool,
             TaskUpdateTool,
+            WriteTool,
         )
+
+        # Create ReadTracker shared instance for Read-Before-Modify protocol
+        tracker = ReadTracker()
+        self._register_cleanup(tracker.clear)
 
         native_tools = [
             BashTool(session=ctx.session, workdir=ctx.workdir),
             ListDirTool(session=ctx.session, workdir=ctx.workdir),
+            ReadTool(session=ctx.session, workdir=ctx.workdir, tracker=tracker),
+            WriteTool(session=ctx.session, workdir=ctx.workdir, tracker=tracker),
+            EditTool(session=ctx.session, workdir=ctx.workdir, tracker=tracker),
+            GlobTool(session=ctx.session, workdir=ctx.workdir),
+            GrepTool(session=ctx.session, workdir=ctx.workdir),
             TaskCreateTool(workdir=ctx.workdir),
             TaskGetTool(workdir=ctx.workdir),
             TaskListTool(workdir=ctx.workdir),
@@ -266,18 +282,15 @@ class Exp:
         for tool in native_tools:
             registry.register(tool, source="builtin")
 
-        # 2. Evo adapter tools (source="builtin_evo") -- transitional
-        #    EditorTool retained until Phase 9 delivers native Read/Write/Edit
+        # 2. Evo adapter tools (source="builtin_evo")
         #    MonitorJobTool retained (science-specific, no native migration planned)
-        from evomaster.agent.tools.builtin.editor import EditorTool
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
 
-        for evo_tool in [EditorTool(), MonitorJobTool()]:
-            adapted = EvoToolAdapter(evo_tool, ctx.session)
-            registry.register(adapted, source="builtin_evo")
+        adapted = EvoToolAdapter(MonitorJobTool(), ctx.session)
+        registry.register(adapted, source="builtin_evo")
 
         self.logger.debug(
-            "Registered %d native + 2 evo-adapted builtin tools",
+            "Registered %d native + 1 evo-adapted builtin tools",
             len(native_tools),
         )
 
