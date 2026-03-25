@@ -1,0 +1,15 @@
+K_POINTS
+6
+Line
+# High-symmetry k-path for Si (FCC Brillouin zone)
+# Format: label  kx  ky  kz  npoints
+# The last segment uses 1 point (just the endpoint label)
+G   0.000  0.000  0.000  30   # Gamma
+X   0.500  0.000  0.500  30   # X
+W   0.500  0.250  0.750  30   # W
+L   0.500  0.500  0.500  30   # L
+G   0.000  0.000  0.000  30   # Gamma
+K   0.375  0.375  0.750  1    # K (endpoint)
+#
+# Adjust npoints (e.g. 50) for smoother band plots.
+# Use SeekPath or SeeK-path to generate k-paths for other structures.

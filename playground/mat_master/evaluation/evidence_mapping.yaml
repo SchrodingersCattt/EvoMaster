@@ -65,40 +65,34 @@ mappings:
     detail: "MCP DPA potential calculation"
 
   # -------------------------------------------------------------------------
-  # ABACUS DFT calculations (MCP mat_abacus)
+  # ABACUS DFT calculations (input-manual-helper + bohrium-job skill)
+  # mat_abacus MCP server retired; ABACUS now uses skill-based workflow.
   # -------------------------------------------------------------------------
-  - pattern: "mat_abacus_submit_abacus_eos"
+  - pattern: "*abacus*"
     event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "Submitted ABACUS EOS calculation"
-
-  - pattern: "mat_abacus_submit_*"
-    event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "Submitted ABACUS DFT calculation"
-
-  - pattern: "mat_abacus_get_*"
-    event_type: "data_analysis"
-    source_type: "mcp_tool"
-    detail: "Retrieved ABACUS calculation results"
-
-  - pattern: "mat_abacus_*"
-    event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "MCP ABACUS DFT operation"
+    source_type: "skill_script"
+    detail: "ABACUS DFT calculation via input-manual-helper + bohrium-job skill"
 
   # -------------------------------------------------------------------------
-  # GROMACS MD simulations (MCP mat_binary_calc / GROMACS)
+  # GROMACS MD simulations (bohrium-job skill)
   # -------------------------------------------------------------------------
-  - pattern: "submit_run_gromacs"
-    event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "Submitted GROMACS MD simulation"
-
   - pattern: "*gromacs*"
     event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "GROMACS MD operation"
+    source_type: "skill_script"
+    detail: "GROMACS MD operation via bohrium-job skill"
+
+  # -------------------------------------------------------------------------
+  # PySCF / PyATB calculations (bohrium-job skill)
+  # -------------------------------------------------------------------------
+  - pattern: "*pyscf*"
+    event_type: "calculation_execution"
+    source_type: "skill_script"
+    detail: "PySCF quantum chemistry calculation via bohrium-job skill"
+
+  - pattern: "*pyatb*"
+    event_type: "calculation_execution"
+    source_type: "skill_script"
+    detail: "PyATB band-structure post-processing via bohrium-job skill"
 
   # -------------------------------------------------------------------------
   # XRD / diffraction analysis (MCP mat_xrd)
