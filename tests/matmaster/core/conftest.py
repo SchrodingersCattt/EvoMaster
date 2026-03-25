@@ -60,6 +60,8 @@ class MockLLMProvider:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> Iterator[StreamChunk]:
         yield StreamChunk(content="hello", finish_reason="stop")
 

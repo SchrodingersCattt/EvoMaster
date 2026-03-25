@@ -105,6 +105,8 @@ class StreamingProvider:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> Iterator[StreamChunk]:
         yield from self._chunks
 
@@ -144,6 +146,8 @@ class ToolCallingProvider:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> Iterator[StreamChunk]:
         self._call_count += 1
         if self._call_count <= self._max_tool_turns:
@@ -358,6 +362,8 @@ class TestExternalCancel:
                 self,
                 messages: list,
                 tools: list | None = None,
+                *,
+                timeout: float | None = None,
             ) -> Iterator[StreamChunk]:
                 self._call_count += 1
                 if self._call_count == 1:
@@ -562,7 +568,11 @@ class TestToolCallDelta:
                 return self.chat(messages, tools)
 
             def chat_stream(
-                self, messages: list, tools: list | None = None
+                self,
+                messages: list,
+                tools: list | None = None,
+                *,
+                timeout: float | None = None,
             ) -> Iterator[StreamChunk]:
                 self._call_count += 1
                 if self._call_count == 1:
@@ -626,7 +636,7 @@ class TestHistoryParameter:
             def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages: list, tools: list | None = None) -> Iterator[StreamChunk]:
+            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
@@ -662,7 +672,7 @@ class TestHistoryParameter:
             def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages: list, tools: list | None = None) -> Iterator[StreamChunk]:
+            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
@@ -690,7 +700,7 @@ class TestHistoryParameter:
             def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages: list, tools: list | None = None) -> Iterator[StreamChunk]:
+            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
@@ -852,7 +862,7 @@ class TestCallLlmUsageCapture:
             ):
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages, tools=None):
+            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 yield StreamChunk(content="hello")
                 yield StreamChunk(finish_reason="stop", usage=usage_data)
 
@@ -954,7 +964,7 @@ class TestCompactorIntegration:
             ):
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages, tools=None):
+            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 yield StreamChunk(
                     content="done", finish_reason="stop", usage=usage_data
                 )
@@ -1006,7 +1016,7 @@ class TestKernelResultFields:
             def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages, tools=None):
+            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 self._call_count += 1
                 if self._call_count == 1:
                     yield StreamChunk(
