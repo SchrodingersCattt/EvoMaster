@@ -59,13 +59,12 @@ json_schema = {
 ### Tool Description
 
 ```
-Read the contents of a file with line numbers (cat -n format).
+Read file contents with line numbers (cat -n format).
 
 Usage:
 - ALWAYS use read_file to read files. NEVER use cat/head/tail via execute_bash.
-- By default reads up to 2000 lines from the beginning.
-- For large files, use offset and limit to read specific portions.
-- When you already know which part of the file you need, only read that part.
+- Files up to 2000 lines are returned in full. Larger files return an error with preview.
+- Use offset and limit to read specific portions of large files.
 - Always read a file before attempting to edit or overwrite it.
 ```
 
@@ -121,7 +120,7 @@ Preview (first {PREVIEW_LINES} lines):
 
 ### Key Behaviors
 
-1. **mark_read 时机**：仅在成功返回文件内容时标记（全文模式未超限、或范围读取模式）。超限报错 + 预览时**不标记**，因为 Agent 只看到了前 50 行，允许其 edit 文件任意位置违背 Read-Before-Modify 的安全意图。Agent 需要先用 offset/limit 显式读取目标区域，才能获得编辑权限。
+1. **mark_read 时机**：仅在成功返回**未被截断**的文件内容时标记。以下情况**不标记**：全文超限（error + preview）、字符数兜底截断（`_apply_char_limit` 触发）。Agent 需要先用 offset/limit 读取到未被截断的内容，才能获得编辑权限。
 2. **范围读取截断通知**：当实际返回行数少于请求范围（无论原因是 limit 超过 MAX_READ_LINES、还是 offset-only 模式命中上限），都在输出末尾附加提示，告知 Agent 还有多少行未读。避免任何形式的静默截断。
 3. **只传 offset 不传 limit**：从 offset 行开始，读到文件末尾，但总量不超过 MAX_READ_LINES 行。如果被截断，附加通知。
 4. **只传 limit 不传 offset**：从第 1 行开始，读取 limit 行（受 MAX_READ_LINES 上限约束）。
