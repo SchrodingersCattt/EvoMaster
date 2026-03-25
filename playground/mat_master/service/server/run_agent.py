@@ -45,6 +45,14 @@ _REMOTE_WORKSPACE_ROOT = str(
 )
 
 
+def _build_dialog_history(events: list[dict]) -> list[dict]:
+    """Build parent-only dialog history for the local Web debug backend."""
+    parent_events = ChatHistoryConverter.exclude_spawn_events(events)
+    if not parent_events:
+        return []
+    return ChatHistoryConverter.events_to_dialog_messages(parent_events)
+
+
 def _run_agent_sync(
     session_id: str,
     user_prompt: str,
@@ -255,11 +263,7 @@ def _run_agent_sync(
         prior_events = trim_events_for_dialog_history(
             all_events, state.DIALOG_HISTORY_MAX_EVENTS
         )
-        dialog_history = (
-            ChatHistoryConverter.events_to_dialog_messages(prior_events)
-            if prior_events
-            else []
-        )
+        dialog_history = _build_dialog_history(prior_events)
         if prior_events:
             ev_types = Counter((e.get('type') or '?') for e in prior_events)
             logger.info(
