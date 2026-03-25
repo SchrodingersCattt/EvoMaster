@@ -1,4 +1,5 @@
 name = "direct"
+description = "Full-capability execution agent with all tools, MCP access, and skills for completing tasks"
 max_turns = 200
 guards = []
 
