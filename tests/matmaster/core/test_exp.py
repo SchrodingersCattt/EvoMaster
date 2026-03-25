@@ -94,20 +94,6 @@ class TestExpAssemble:
         spec = exp.assemble(ctx)
         assert spec.meta == {}
 
-    def test_mode_from_config(self) -> None:
-        """mode in config propagates to spec."""
-        exp = Exp(ExpConfig(name="test", mode="planner"))
-        ctx = _make_ctx()
-        spec = exp.assemble(ctx)
-        assert spec.mode == "planner"
-
-    def test_mode_default(self) -> None:
-        """Default mode is 'direct'."""
-        exp = Exp(ExpConfig(name="test"))
-        ctx = _make_ctx()
-        spec = exp.assemble(ctx)
-        assert spec.mode == "direct"
-
     def test_llm_provider_from_ctx(self) -> None:
         """llm_provider comes from ctx, not config."""
         exp = Exp(ExpConfig(name="test"))

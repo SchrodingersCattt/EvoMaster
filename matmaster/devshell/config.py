@@ -23,7 +23,6 @@ class AgentConfig(BaseModel):
     """Agent behavior settings."""
 
     name: str = "general"
-    mode: str = "direct"
     max_turns: int = 20
     identity: str | None = None
     system_prompt: str = ""

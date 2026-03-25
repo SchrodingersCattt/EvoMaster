@@ -1,5 +1,4 @@
 name = "explore"
-mode = "direct"
 max_turns = 50
 guards = []
 
@@ -30,11 +29,6 @@ and report findings back to the parent agent.
 - Stay within the workspace directory
 - Do not make assumptions about files you have not read
 - If you cannot find the requested information, say so clearly
-'''
-
-mode_contract = '''
-You are a read-only exploration sub-agent. Gather the requested information using
-available tools and return a concise summary of your findings. Do not modify any files.
 '''
 
 [tools]

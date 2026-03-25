@@ -170,8 +170,7 @@ def _show_config(config: DevConfig) -> None:
     """Display current configuration."""
     print(f"LLM: model={config.llm.model}, base_url={config.llm.base_url}")
     print(
-        f"Agent: name={config.agent.name}, mode={config.agent.mode}, "
-        f"max_turns={config.agent.max_turns}"
+        f"Agent: name={config.agent.name}, max_turns={config.agent.max_turns}"
     )
     print(f"Session: type={config.session.type}")
     print(f"Tools: builtin={config.tools.builtin}")

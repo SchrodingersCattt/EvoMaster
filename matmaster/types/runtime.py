@@ -69,9 +69,6 @@ class AgentRuntimeSpec(BaseModel):
     system_prompt: str = ""
     compactor: Any | None = None
 
-    # Mode
-    mode: str = "direct"  # 'direct' | 'planner'
-
     # Extensible metadata bag (prompt templates, MCP/skill config, etc.)
     meta: dict[str, Any] = Field(default_factory=dict)
 

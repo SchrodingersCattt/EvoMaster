@@ -130,7 +130,6 @@ class TestAgentRuntimeSpec:
         assert spec.max_turns == 100
         assert spec.hooks == []
         assert spec.system_prompt == ""
-        assert spec.mode == "direct"
         assert isinstance(spec.compaction, CompactionConfig)
 
     def test_frozen(self) -> None:
@@ -168,12 +167,10 @@ class TestAgentRuntimeSpec:
             tool_registry=ToolRegistry(),
             max_turns=50,
             system_prompt="You are a scientist.",
-            mode="planner",
         )
         data = spec.model_dump()
         assert data["max_turns"] == 50
         assert data["system_prompt"] == "You are a scientist."
-        assert data["mode"] == "planner"
         assert "llm_provider" in data
         assert "tool_registry" in data
         assert "guards" in data
@@ -253,8 +250,6 @@ class TestAgentRuntimeSpecFrozenRejectMutation:
             spec.max_turns = 50
         with pytest.raises(ValidationError):
             spec.system_prompt = "changed"
-        with pytest.raises(ValidationError):
-            spec.mode = "planner"
 
 
 class TestAgentRuntimeSpecDefaults:
@@ -265,7 +260,6 @@ class TestAgentRuntimeSpecDefaults:
             llm_provider=_MockLLMProvider(),
         )
         assert spec.max_turns == 100
-        assert spec.mode == "direct"
         assert spec.system_prompt == ""
         assert spec.guards == []
         assert spec.hooks == []
