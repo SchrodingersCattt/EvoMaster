@@ -1,0 +1,41 @@
+INPUT_PARAMETERS
+# ============================================================
+# ABACUS NVT molecular dynamics
+# task_md_nvt: NVT (Berendsen thermostat) at 300 K
+# ============================================================
+
+suffix                  ABACUS
+ntype                   1
+calculation             md
+
+# Pseudopotential and orbital directories
+pseudo_dir              ./pseudopotentials/
+orbital_dir             ./orbitals/
+
+# Electronic structure
+ecutwfc                 50
+basis_type              lcao
+nspin                   1
+smearing_method         gauss
+smearing_sigma          0.015
+
+# SCF convergence (tight for MD)
+scf_thr                 1e-7
+scf_nmax                100
+mixing_type             broyden
+mixing_beta             0.7
+mixing_ndim             8
+
+# MD settings
+md_type                 nvt
+md_nstep                1000
+md_dt                   1.0
+md_tfirst               300
+md_tfreq                0.04
+md_dumpfreq             10
+md_restartfreq          100
+
+# Forces required for MD
+cal_force               1
+cal_stress              0
+init_vel                0

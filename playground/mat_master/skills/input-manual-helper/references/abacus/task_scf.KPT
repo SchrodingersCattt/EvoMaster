@@ -1,0 +1,12 @@
+K_POINTS
+0
+Gamma
+4 4 4 0 0 0
+// Format: Nx Ny Nz  shift_x shift_y shift_z
+// shift 0 0 0 = Gamma-centered Monkhorst-Pack grid
+// shift 1 1 1 = offset grid (may avoid Gamma point)
+//
+// Convergence notes:
+//   - Insulators/semiconductors: 4x4x4 usually sufficient
+//   - Metals: 8x8x8 or finer recommended
+//   - Large supercells: 1x1x1 (Gamma-only) often adequate
