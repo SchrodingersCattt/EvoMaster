@@ -44,12 +44,6 @@
       "transport": "sse",
       "url": "http://root@pkfz1410356.bohrium.tech:50002/sse",
       "headers": {}
-    },
-    "mat_abacus_RETIRED": {
-      "_comment": "mat_abacus MCP server retired. ABACUS now uses input-manual-helper + bohrium-job skill.",
-      "transport": "sse",
-      "url": "http://toyl1410396.bohrium.tech:50001/sse",
-      "headers": {}
     }
   }
 }
