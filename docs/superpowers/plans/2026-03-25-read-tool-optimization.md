@@ -15,7 +15,7 @@
 | File | Action | Responsibility |
 |------|--------|----------------|
 | `matmaster/tools/builtin/read_tool.py` | Rewrite | Constants, schema, description, `_execute` logic, `_format_with_line_numbers` |
-| `tests/matmaster/tools/test_read_tool.py` | Rewrite | 23 test cases (15 from spec + 8 protocol/regression) |
+| `tests/matmaster/tools/test_read_tool.py` | Rewrite | 24 test cases (15 from spec + 9 protocol/regression) |
 
 No new files created. No other files modified.
 
@@ -286,6 +286,17 @@ class TestCharLimit:
         # Output should be truncated and contain notice
         assert "[Output truncated" in result
         assert len(result) <= MAX_READ_CHARS + 500  # some margin for the notice text
+
+    def test_char_truncated_ranged_read_not_marked(self) -> None:
+        session = MagicMock()
+        session.is_file.return_value = True
+        huge_line = "x" * (MAX_READ_CHARS // 5)
+        session.read_file.return_value = "\n".join([huge_line] * 10)
+        tracker = ReadTracker()
+        tool = ReadTool(session=session, tracker=tracker)
+        result = tool.execute({"file_path": "/workspace/huge.json", "offset": 1, "limit": 10})
+        assert "[Output truncated" in result
+        assert tracker.has_been_read("/workspace/huge.json") is False
 ```
 
 - [ ] **Step 2: Run tests to verify they all fail**
@@ -340,8 +351,8 @@ class ReadTool(BuiltinTool):
         "Read file contents with line numbers (cat -n format).\n\n"
         "Usage:\n"
         "- ALWAYS use read_file to read files. NEVER use cat/head/tail via execute_bash.\n"
-        "- By default reads up to 2000 lines from the beginning.\n"
-        "- For large files, use offset and limit to read specific portions.\n"
+        "- Files up to 2000 lines are returned in full. Larger files return an error with preview.\n"
+        "- Use offset and limit to read specific portions of large files.\n"
         "- Always read a file before attempting to edit or overwrite it."
     )
     json_schema: ClassVar[dict[str, Any]] = {
@@ -419,14 +430,16 @@ class ReadTool(BuiltinTool):
         self, file_path: str, lines: list[str], total: int
     ) -> str:
         if total <= MAX_READ_LINES:
-            self._mark(file_path)
             output = self._format_lines(lines, file_path, init_line=1)
-            return self._apply_char_limit(output)
+            truncated, result = self._apply_char_limit(output)
+            if not truncated:
+                self._mark(file_path)
+            return result
 
-        # Overlimit: error + preview (no mark_read)
+        # Overlimit: error + preview (no mark_read regardless)
         preview = lines[:PREVIEW_LINES]
         preview_text = self._format_lines(preview, file_path, init_line=1)
-        return self._apply_char_limit(
+        _, result = self._apply_char_limit(
             f"Error: file has {total} lines, exceeds read limit "
             f"({MAX_READ_LINES} lines).\n"
             f"Use offset and limit to read portions, e.g. "
@@ -434,6 +447,7 @@ class ReadTool(BuiltinTool):
             f"Preview (first {PREVIEW_LINES} lines):\n"
             f"{preview_text}"
         )
+        return result
 
     # ------------------------------------------------------------------
     # Ranged-read mode
@@ -454,8 +468,6 @@ class ReadTool(BuiltinTool):
                 f"Error: offset {start} is out of range [1, {total}]."
             )
 
-        self._mark(file_path)  # mark only after validation passes
-
         remaining = total - start + 1
         requested = limit if limit is not None else remaining
         count = min(requested, remaining, MAX_READ_LINES)
@@ -464,14 +476,17 @@ class ReadTool(BuiltinTool):
         selected = lines[start - 1 : end]
         output = self._format_lines(selected, file_path, init_line=start)
 
-        # Truncation notice
+        # Truncation notice (appended before char limit so it's part of content)
         if count < requested:
             output += (
                 f"\n[Note: showing {count} of {remaining} remaining lines, "
                 f"capped at {MAX_READ_LINES}. Use offset={end + 1} to continue reading.]"
             )
 
-        return self._apply_char_limit(output)
+        truncated, result = self._apply_char_limit(output)
+        if not truncated:
+            self._mark(file_path)
+        return result
 
     # ------------------------------------------------------------------
     # Helpers
@@ -496,11 +511,14 @@ class ReadTool(BuiltinTool):
         )
 
     @staticmethod
-    def _apply_char_limit(output: str) -> str:
-        """Truncate output if it exceeds MAX_READ_CHARS."""
+    def _apply_char_limit(output: str) -> tuple[bool, str]:
+        """Truncate output if it exceeds MAX_READ_CHARS.
+
+        Returns (truncated, output) so callers can decide whether to mark_read.
+        """
         if len(output) <= MAX_READ_CHARS:
-            return output
-        return (
+            return False, output
+        return True, (
             output[:MAX_READ_CHARS]
             + "\n[Output truncated at "
             + str(MAX_READ_CHARS)
@@ -511,7 +529,7 @@ class ReadTool(BuiltinTool):
 - [ ] **Step 5: Run all ReadTool tests**
 
 Run: `uv run pytest tests/matmaster/tools/test_read_tool.py -v`
-Expected: All 23 tests PASS.
+Expected: All 24 tests PASS.
 
 - [ ] **Step 6: Run description/routing tests to verify no regression**
 
