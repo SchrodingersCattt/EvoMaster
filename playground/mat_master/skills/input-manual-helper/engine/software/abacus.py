@@ -125,17 +125,20 @@ _KNOWN_PARAMS: frozenset[str] = frozenset({
     # system
     "suffix", "ntype", "calculation", "esolver_type", "pseudo_dir", "orbital_dir",
     "stru_file", "kpoint_file", "symmetry", "vdw_method", "vdw_s6",
+    "kpar", "bndpar", "init_wfc", "mem_saver",
     # electronic
-    "ecutwfc", "basis_type", "nspin", "nbands", "dft_functional",
+    "ecutwfc", "ecutrho", "basis_type", "nspin", "nbands", "dft_functional",
     "smearing_method", "smearing_sigma", "gamma_only", "kspacing",
     "noncolin", "lspinorb", "ks_solver", "pw_diag_thr", "pw_diag_nmax",
-    "npool", "nband_istate", "mem_saver", "lda_plus_u", "hubbard_u",
+    "npool", "nband_istate", "lda_plus_u", "hubbard_u",
     "orbital_corr", "nupdown", "sc_mag_switch",
+    # vdw
+    "vdw_s8",
     # scf
     "scf_thr", "scf_nmax", "mixing_type", "mixing_beta", "mixing_ndim",
     "init_chg", "scf_os_ndim",
     # ionic / relax
-    "force_thr", "stress_thr", "relax_nmax", "relax_method",
+    "force_thr", "force_thr_ev", "stress_thr", "relax_nmax", "relax_method",
     "cal_force", "cal_stress", "fixed_atoms",
     # md
     "md_type", "md_nstep", "md_dt", "md_tfirst", "md_tlast",
@@ -314,12 +317,23 @@ class AbacusBackend(SoftwareBackend):
         }
 
         # 任务类型定制
-        if task in ("relax", "cell-relax"):
+        if task == "relax":
             params.update({
-                "calculation": task,
+                "calculation": "relax",
+                "cal_force": 1,
+                "cal_stress": 0,
+                "force_thr": "1e-3",
+                "relax_nmax": 100,
+                "relax_method": "bfgs",
+                "out_stru": 1,
+            })
+        elif task == "cell_relax" or task == "cell-relax":
+            params.update({
+                "calculation": "cell-relax",
                 "cal_force": 1,
                 "cal_stress": 1,
                 "force_thr": "1e-3",
+                "stress_thr": 10.0,
                 "relax_nmax": 100,
                 "relax_method": "bfgs",
                 "out_stru": 1,
@@ -350,14 +364,6 @@ class AbacusBackend(SoftwareBackend):
                 "cal_force": 1,
                 "init_vel": 0,
             })
-        elif task == "cell-relax":
-            params.update({
-                "calculation": "cell-relax",
-                "cal_force": 1,
-                "cal_stress": 1,
-                "stress_thr": 10.0,
-            })
-
         # 覆盖用户指定参数
         for k, v in overrides.items():
             params[k.lower()] = v
@@ -563,29 +569,35 @@ class AbacusBackend(SoftwareBackend):
             ))
 
         # ------------------------------------------------------------------
-        # Rule 5: relax without cal_force
+        # Rule 5: relax without cal_force / cal_stress
+        # ABACUS defaults cal_force=0, so relax/cell-relax without an explicit
+        # cal_force=1 will silently compute wrong results.
         # ------------------------------------------------------------------
         if calc in ("relax", "cell-relax"):
             cal_force = _get_int("cal_force")
-            if cal_force is not None and cal_force == 0:
+            # Trigger when absent (default=0) OR explicitly set to 0
+            if cal_force is None or cal_force == 0:
                 p = present.get("cal_force")
                 _ln = _line(p) if p else 0
                 diags.append(Diagnostic(
                     severity="error",
-                    message="cal_force=0 but calculation='relax'/'cell-relax' requires forces. Set cal_force=1.",
+                    message="calculation='relax'/'cell-relax' requires forces. Set cal_force=1.",
                     range=_make_range(_ln, 0, 0),
                     param="cal_force",
+                    suggestion="Add: cal_force  1",
                 ))
             if calc == "cell-relax":
                 cal_stress = _get_int("cal_stress")
-                if cal_stress is not None and cal_stress == 0:
+                # Trigger when absent (default=0) OR explicitly set to 0
+                if cal_stress is None or cal_stress == 0:
                     p = present.get("cal_stress")
                     _ln = _line(p) if p else 0
                     diags.append(Diagnostic(
                         severity="error",
-                        message="cal_stress=0 but calculation='cell-relax' requires stress. Set cal_stress=1.",
+                        message="calculation='cell-relax' requires stress tensor. Set cal_stress=1.",
                         range=_make_range(_ln, 0, 0),
                         param="cal_stress",
+                        suggestion="Add: cal_stress  1",
                     ))
 
         # ------------------------------------------------------------------
@@ -631,17 +643,21 @@ class AbacusBackend(SoftwareBackend):
 
         # ------------------------------------------------------------------
         # Rule 8: MD requires cal_force=1
+        # ABACUS defaults cal_force=0, so md without explicit cal_force=1
+        # will produce incorrect dynamics (no force-driven motion).
         # ------------------------------------------------------------------
         if calc == "md":
             cal_force = _get_int("cal_force")
-            if cal_force is not None and cal_force == 0:
+            # Trigger when absent (default=0) OR explicitly set to 0
+            if cal_force is None or cal_force == 0:
                 p = present.get("cal_force")
                 _ln = _line(p) if p else 0
                 diags.append(Diagnostic(
                     severity="error",
-                    message="cal_force=0 but calculation='md' requires forces. Set cal_force=1.",
+                    message="calculation='md' requires forces. Set cal_force=1.",
                     range=_make_range(_ln, 0, 0),
                     param="cal_force",
+                    suggestion="Add: cal_force  1",
                 ))
             md_dt = _get_float("md_dt")
             if md_dt is not None and md_dt > 5.0:
