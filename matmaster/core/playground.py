@@ -361,33 +361,36 @@ class PlaygroundManager:
         """
         if self._init_done.is_set():
             return
+        with self._lock:
+            if self._init_done.is_set():
+                return
 
-        for pg_type in ("mat_master", "minimal"):
-            config_path = self._project_root / "configs" / pg_type / "config.yaml"
-            if not config_path.exists():
-                self._logger.warning("Config not found: %s", config_path)
-                continue
-            with open(config_path) as f:
-                cfg = yaml.safe_load(f)
-            if not isinstance(cfg, dict) or "agents" not in cfg:
-                self._logger.warning(
-                    "Config missing 'agents' key: %s", config_path
+            for pg_type in ("mat_master", "minimal"):
+                config_path = self._project_root / "configs" / pg_type / "config.yaml"
+                if not config_path.exists():
+                    self._logger.warning("Config not found: %s", config_path)
+                    continue
+                with open(config_path, encoding="utf-8") as f:
+                    cfg = yaml.safe_load(f)
+                if not isinstance(cfg, dict) or "agents" not in cfg:
+                    self._logger.warning(
+                        "Config missing 'agents' key: %s", config_path
+                    )
+
+            # Deprecation warnings for old modules (per D-02)
+            try:
+                import evomaster  # noqa: F401
+
+                warnings.warn(
+                    "evomaster package is deprecated. Use matmaster instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
                 )
+            except ImportError:
+                pass
 
-        # Deprecation warnings for old modules (per D-02)
-        try:
-            import evomaster  # noqa: F401
-
-            warnings.warn(
-                "evomaster package is deprecated. Use matmaster instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        except ImportError:
-            pass
-
-        self._init_done.set()
-        self._logger.info("Playground config validation complete.")
+            self._init_done.set()
+            self._logger.info("Playground config validation complete.")
 
     def get_or_create(
         self, session_id: str, playground_type: str = "mat_master"

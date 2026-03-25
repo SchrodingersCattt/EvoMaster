@@ -132,16 +132,19 @@ class TestGetOrCreate:
         with pytest.raises(Exception):
             mgr.get_or_create("session-1", playground_type="nonexistent_type")
 
-    def test_thread_safety(self, tmp_path: Path) -> None:
+    def test_thread_safety_different_sessions(self, tmp_path: Path) -> None:
         root = _setup_project_root(tmp_path)
         mgr = PlaygroundManager(root)
 
-        results: dict[str, Playground] = {}
+        results: list[tuple[str, Playground]] = []
+        results_lock = threading.Lock()
         errors: list[Exception] = []
 
         def create(sid: str) -> None:
             try:
-                results[sid] = mgr.get_or_create(sid)
+                pg = mgr.get_or_create(sid)
+                with results_lock:
+                    results.append((sid, pg))
             except Exception as e:
                 errors.append(e)
 
@@ -154,6 +157,29 @@ class TestGetOrCreate:
         assert not errors
         assert len(results) == 10
 
+    def test_thread_safety_same_session(self, tmp_path: Path) -> None:
+        root = _setup_project_root(tmp_path)
+        mgr = PlaygroundManager(root)
+
+        results: list[Playground] = []
+        results_lock = threading.Lock()
+        barrier = threading.Barrier(10)
+
+        def create() -> None:
+            barrier.wait()
+            pg = mgr.get_or_create("same-session")
+            with results_lock:
+                results.append(pg)
+
+        threads = [threading.Thread(target=create) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(results) == 10
+        assert all(pg is results[0] for pg in results)
+
 
 # ---------------------------------------------------------------------------
 # release()
@@ -164,12 +190,13 @@ class TestRelease:
         root = _setup_project_root(tmp_path)
         mgr = PlaygroundManager(root)
 
-        mgr.get_or_create("session-1")
+        pg1 = mgr.get_or_create("session-1")
         mgr.release("session-1")
 
         # Next get_or_create should create a new instance
         pg2 = mgr.get_or_create("session-1")
         assert isinstance(pg2, Playground)
+        assert pg1 is not pg2
 
     def test_calls_cleanup(self, tmp_path: Path) -> None:
         root = _setup_project_root(tmp_path)
