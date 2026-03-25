@@ -19,9 +19,11 @@ class GrepTool(BuiltinTool):
 
     name: ClassVar[str] = "grep"
     description: ClassVar[str] = (
-        "Search file content for a regex pattern (e.g. 'import os', 'def foo') "
-        "within the workspace directory. Returns matching lines with file paths "
-        "and line numbers. Optionally filter by file type with include."
+        "Search file content for a regex pattern within the workspace.\n\n"
+        "Usage:\n"
+        "- ALWAYS use grep for content search. NEVER use grep/rg via execute_bash.\n"
+        "- Supports regex syntax (e.g. 'import os', 'def foo.*:').\n"
+        "- Use include to filter by file type (e.g. '*.py')."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
@@ -36,7 +38,7 @@ class GrepTool(BuiltinTool):
             },
             "include": {
                 "type": "string",
-                "description": "File glob filter, e.g. '*.py' to only search Python files.",
+                "description": "File glob filter (e.g. '*.py') to restrict search scope.",
             },
         },
         "required": ["pattern"],

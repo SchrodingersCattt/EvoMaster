@@ -21,9 +21,11 @@ class WriteTool(BuiltinTool):
 
     name: ClassVar[str] = "write_file"
     description: ClassVar[str] = (
-        "Write content to a file. If the file exists, you MUST read it first "
-        "using read_file. New files can be created directly. "
-        "Always provide the complete file content."
+        "Write content to a file, creating parent directories as needed.\n\n"
+        "Usage:\n"
+        "- ALWAYS use write_file to create files. NEVER use echo/heredoc via execute_bash.\n"
+        "- If the file exists, you MUST read it first using read_file.\n"
+        "- Always provide the complete intended file content."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",

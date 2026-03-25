@@ -18,15 +18,18 @@ class GlobTool(BuiltinTool):
 
     name: ClassVar[str] = "glob"
     description: ClassVar[str] = (
-        "Search for files matching a glob pattern (e.g. '*.py', 'test_*.txt') "
-        "within the workspace directory. Returns matching file paths."
+        "Search for files matching a glob pattern within the workspace.\n\n"
+        "Usage:\n"
+        "- ALWAYS use glob for file search. NEVER use find/ls via execute_bash.\n"
+        "- Supports patterns like '*.py', 'test_*.txt', '**/*.yaml'.\n"
+        "- Returns matching file paths, up to 200 results."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
             "pattern": {
                 "type": "string",
-                "description": "Glob pattern to match file names, e.g. '*.py', 'test_*.txt'.",
+                "description": "Glob pattern to match file names (e.g. '*.py', 'test_*.txt').",
             },
             "path": {
                 "type": "string",
