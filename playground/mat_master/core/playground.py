@@ -507,49 +507,18 @@ class MatMasterPlayground(BasePlayground):
         progress_cb = getattr(self, '_mcp_progress_callback', None)
         if callable(progress_cb):
             manager.set_progress_callback(progress_cb)
-        if mcp_config.get('path_adaptor') == 'calculation':
-            from evomaster.adaptors.calculation import get_calculation_path_adaptor
+        from matmaster.tools.lazy_mcp import configure_mcp_manager
 
-            calc_servers = mcp_config.get('calculation_servers')
-            if calc_servers:
-                manager.path_adaptor_servers = set(calc_servers)
-            else:
-                manager.path_adaptor_servers = {
-                    s.get('name') for s in servers if s.get('name')
-                }
-            manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(
-                mcp_config
-            )
+        all_names = {s.get('name') for s in servers if s.get('name')}
+        configure_mcp_manager(manager, mcp_config, all_server_names=all_names)
+
+        if manager.path_adaptor_servers:
             self.logger.info(
                 'Path adaptor enabled for servers: %s', manager.path_adaptor_servers
             )
-            # Per-server sync_tools: do not register submit_* when base tool is in sync_tools (sync version only).
-            executors = mcp_config.get('calculation_executors') or {}
-            manager.sync_tools_by_server = {
-                name: set(cfg.get('sync_tools') or [])
-                for name, cfg in executors.items()
-                if isinstance(cfg, dict) and cfg.get('sync_tools')
-            }
-            if manager.sync_tools_by_server:
-                self.logger.info(
-                    'MCP sync_tools_by_server set (submit_* excluded for sync tools): %s',
-                    list(manager.sync_tools_by_server.keys()),
-                )
-
-        # mat_master：仅在此处设置 tool_include_only，基类 core 不包含此逻辑
-        include_only = mcp_config.get('tool_include_only')
-        if include_only and isinstance(include_only, dict):
-            manager.tool_include_only = {
-                k: list(v) if isinstance(v, (list, tuple)) else []
-                for k, v in include_only.items()
-            }
+        if manager.sync_tools_by_server:
             self.logger.info(
-                'MCP tool_include_only set for servers: %s (per-server allowlist applied)',
-                list(manager.tool_include_only.keys()),
-            )
-        else:
-            self.logger.info(
-                'MCP tool_include_only not set or empty; all tools from each server will be registered'
+                'MCP sync_tools_by_server set: %s', list(manager.sync_tools_by_server.keys())
             )
 
         async def init_mcp_servers():
