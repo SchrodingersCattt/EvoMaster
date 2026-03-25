@@ -114,6 +114,7 @@ class Playground:
             workdir=workspace_path,
             session_type=session_type,
             cache_area=cache_area,
+            execution_workdir=str(workspace_path),
             env_vars=self._collect_env_vars(),
             archival=self._build_archival_config(),
             run_meta=dict(run_meta),

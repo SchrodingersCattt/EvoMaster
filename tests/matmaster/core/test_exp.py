@@ -491,6 +491,92 @@ class TestExpBuiltinTools:
         assert len(native) == 0
 
 
+# ── TestExecutionWorkdirBinding ─────────────────────────
+
+
+class TestExecutionWorkdirBinding:
+    """Builtin tools: execution plane vs control-plane (task) workdirs."""
+
+    @staticmethod
+    def _ctx(
+        tmp_path: Path,
+        *,
+        control: Path,
+        execution: Path,
+    ) -> PlaygroundContext:
+        return PlaygroundContext(
+            workdir=control,
+            execution_workdir=str(execution),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=MagicMock(),
+            llm_provider=MockLLMProvider(),
+        )
+
+    def test_execution_side_tools_use_execution_workdir(self, tmp_path: Path) -> None:
+        from matmaster.tools.tool_registry import ToolRegistry
+
+        control = tmp_path / "control"
+        execution = tmp_path / "execution"
+        control.mkdir()
+        execution.mkdir()
+        ctx = self._ctx(tmp_path, control=control, execution=execution)
+        exp = Exp(ExpConfig(name="test"))
+        registry = ToolRegistry()
+        exp._init_builtin_tools(ctx, registry)
+        by_name = {t.name: t for t in registry.all_tools}
+        for name in (
+            "execute_bash",
+            "list_dir",
+            "read_file",
+            "write_file",
+            "edit_file",
+            "glob",
+            "grep",
+        ):
+            assert by_name[name]._workdir == execution, name
+
+    def test_task_tools_use_local_workdir(self, tmp_path: Path) -> None:
+        from matmaster.tools.tool_registry import ToolRegistry
+
+        control = tmp_path / "control"
+        execution = tmp_path / "execution"
+        control.mkdir()
+        execution.mkdir()
+        ctx = self._ctx(tmp_path, control=control, execution=execution)
+        exp = Exp(ExpConfig(name="test"))
+        registry = ToolRegistry()
+        exp._init_builtin_tools(ctx, registry)
+        by_name = {t.name: t for t in registry.all_tools}
+        for name in (
+            "task_create",
+            "task_get",
+            "task_list",
+            "task_update",
+            "task_complete",
+        ):
+            assert by_name[name]._workdir == control, name
+
+    def test_sub_agent_tool_uses_execution_workdir(self, tmp_path: Path) -> None:
+        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+
+        control = tmp_path / "control"
+        execution = tmp_path / "execution"
+        control.mkdir()
+        execution.mkdir()
+        ctx = self._ctx(tmp_path, control=control, execution=execution)
+        exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=["*"])))
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = exp.build_runtime(ctx)
+        subs = [
+            t
+            for t in runtime.spec.tool_registry.all_tools
+            if isinstance(t, SubAgentTool)
+        ]
+        assert len(subs) == 1
+        assert subs[0]._workdir == execution
+
+
 class TestExpCompaction:
     def test_assemble_compaction_defaults_disabled(self) -> None:
         from matmaster.types.runtime import CompactionConfig
