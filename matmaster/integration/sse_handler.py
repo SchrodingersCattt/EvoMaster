@@ -81,6 +81,10 @@ class SSEHandler:
         if event_type == "assistant_state":
             return True
 
+        # skill_hit is persist-only, not pushed to frontend
+        if event_type == "skill_hit":
+            return True
+
         if isinstance(event, ThoughtEvent):
             is_streaming = event.stream_state in ("start", "streaming", "end")
 
