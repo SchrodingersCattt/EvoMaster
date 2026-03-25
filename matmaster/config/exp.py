@@ -30,6 +30,7 @@ class ExpSkillsConfig(BaseModel):
     cache_dir: str = ""
     config_dir: str = ""
     mcp_config_file: str = ""
+    mcp_runtime_file: str = "mcp.yaml"
 
 
 class ExpConfig(BaseModel):

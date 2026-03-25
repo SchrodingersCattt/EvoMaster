@@ -92,6 +92,7 @@ class TestExpSkillsConfig:
         assert cfg.cache_dir == ""
         assert cfg.config_dir == ""
         assert cfg.mcp_config_file == ""
+        assert cfg.mcp_runtime_file == "mcp.yaml"
 
     def test_from_dict(self):
         cfg = ExpSkillsConfig(
