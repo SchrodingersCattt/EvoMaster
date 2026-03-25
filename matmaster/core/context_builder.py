@@ -4,9 +4,9 @@ Constructs the system prompt from multiple sources in a fixed order.
 LLM prompt caching benefits from stable prefix, so high-frequency change
 sections (task, memory) are placed last.
 
-Section order: identity -> mode_contract -> skills -> tools -> memory -> task
+Section order: system_prompt -> identity -> skills -> tools -> memory -> task
 
-All static text (identity, mode_contract) comes from the caller (toml config).
+All static text (system_prompt, identity) comes from the caller (toml config).
 ContextBuilder has no default text of its own -- empty string means the
 section is skipped entirely.
 """
@@ -22,7 +22,7 @@ from matmaster.types.context import PlaygroundContext
 class ContextBuilder:
     """Sectioned system prompt assembler.
 
-    Section order (fixed): identity -> mode_contract -> skills -> tools -> memory -> task
+    Section order (fixed): system_prompt -> identity -> skills -> tools -> memory -> task
     LLM prompt caching benefits from stable prefix, so high-frequency change sections
     (task, memory) are placed last.
 
@@ -31,15 +31,15 @@ class ContextBuilder:
 
     SEPARATOR = "\n\n---\n\n"
 
-    SECTION_ORDER = ("identity", "mode_contract", "skills", "tools", "memory", "task")
+    SECTION_ORDER = ("system_prompt", "identity", "skills", "tools", "memory", "task")
 
     def build(
         self,
         ctx: PlaygroundContext,
         tool_registry: ToolRegistry,
         *,
+        system_prompt: str = "",
         identity: str = "",
-        mode_contract: str = "",
         skill_registry: Any = None,
         memory_context: str | None = None,
         task_context: str | None = None,
@@ -50,8 +50,8 @@ class ContextBuilder:
         Args:
             ctx: PlaygroundContext from Playground.prepare().
             tool_registry: ToolRegistry with registered tools.
+            system_prompt: Universal base text from _base.toml.
             identity: Identity text from toml developer_instructions.
-            mode_contract: Mode contract text from toml mode_contract.
             skill_registry: Optional skill registry with get_meta_info_context().
             memory_context: Optional memory/conversation summary text.
             task_context: Optional task description text.
@@ -70,8 +70,8 @@ class ContextBuilder:
 
             content = self._build_section(
                 section_name,
+                system_prompt=system_prompt,
                 identity=identity,
-                mode_contract=mode_contract,
                 skill_registry=skill_registry,
                 tool_registry=tool_registry,
                 memory_context=memory_context,
@@ -87,18 +87,18 @@ class ContextBuilder:
         self,
         name: str,
         *,
+        system_prompt: str,
         identity: str,
-        mode_contract: str,
         skill_registry: Any,
         tool_registry: ToolRegistry,
         memory_context: str | None,
         task_context: str | None,
     ) -> str:
         """Dispatch to the appropriate section builder."""
+        if name == "system_prompt":
+            return self._build_system_prompt(system_prompt)
         if name == "identity":
             return self._build_identity(identity)
-        if name == "mode_contract":
-            return self._build_mode_contract(mode_contract)
         if name == "skills":
             return self._build_skills(skill_registry)
         if name == "tools":
@@ -110,6 +110,14 @@ class ContextBuilder:
         return ""
 
     @staticmethod
+    def _build_system_prompt(system_prompt: str) -> str:
+        """Build the system prompt section. Empty string = skip."""
+        text = system_prompt.strip()
+        if not text:
+            return ""
+        return f"# System\n\n{text}"
+
+    @staticmethod
     def _build_identity(identity: str) -> str:
         """Build the identity section. Empty string = skip."""
         text = identity.strip()
@@ -118,20 +126,8 @@ class ContextBuilder:
         return f"# Identity\n\n{text}"
 
     @staticmethod
-    def _build_mode_contract(mode_contract: str) -> str:
-        """Build the mode contract section. Empty string = skip."""
-        text = mode_contract.strip()
-        if not text:
-            return ""
-        return f"# Mode Contract\n\n{text}"
-
-    @staticmethod
     def _build_skills(skill_registry: Any) -> str:
-        """Build the skills section from skill registry.
-
-        Returns empty string if skill_registry is None or lacks
-        get_meta_info_context().
-        """
+        """Build the skills section from skill registry."""
         if skill_registry is None:
             return ""
         method = getattr(skill_registry, "get_meta_info_context", None)
@@ -144,10 +140,7 @@ class ContextBuilder:
 
     @staticmethod
     def _build_tools(tool_registry: ToolRegistry) -> str:
-        """Build the available tools section.
-
-        Lists each tool as a bullet with name and description.
-        """
+        """Build the available tools section."""
         tools = tool_registry.all_tools
         if not tools:
             return ""
