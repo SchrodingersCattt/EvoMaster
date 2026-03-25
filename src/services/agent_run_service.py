@@ -161,7 +161,7 @@ class AgentRunService:
         invocation_id: str | None = None,
         llm_override: str | None = None,
         model_override: str | None = None,
-    ) -> None:
+    ) -> tuple[bool | tuple[bool, str], int]:
         """Execute agent in background thread using new matmaster pipeline.
 
         Pipeline: Playground.prepare() -> get_chat_events_table() ->
@@ -169,7 +169,14 @@ class AgentRunService:
         Exp.assemble() -> ChatHistory -> Kernel.run() -> post-processing.
 
         Method signature unchanged per D-12: all 12 parameters preserved.
+        Returns ``(run_result, elapsed_ms)`` where ``run_result`` is ``True``
+        on success or ``(False, reason)`` on failure/cancel, so Worker can
+        derive session status and notifications consistently.
         """
+
+        def _elapsed_ms() -> int:
+            return int((time.monotonic() - run_started_at) * 1000)
+
         prompt_preview = (
             (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
         )
@@ -373,6 +380,7 @@ class AgentRunService:
                         task_completed=False,
                     )
                 )
+                return ((False, 'cancelled'), _elapsed_ms())
             else:
                 if (
                     run_result_event.reason == 'natural'
@@ -404,6 +412,16 @@ class AgentRunService:
                             future.result(timeout=10)
                         else:
                             asyncio.run(use_quota(user_id))
+                    return (True, _elapsed_ms())
+                fail_reason = (
+                    run_result_event.reason or run_result_event.status or 'failed'
+                )
+                if (
+                    run_result_event.status == 'cancelled'
+                    or run_result_event.reason == 'cancelled'
+                ):
+                    fail_reason = 'cancelled'
+                return ((False, fail_reason), _elapsed_ms())
 
         except Exception as exc:
             logger.exception('run_agent_sync error: session_id=%s', session_id)
@@ -419,6 +437,7 @@ class AgentRunService:
                 )
             except Exception:
                 pass
+            return ((False, str(exc)), _elapsed_ms())
         finally:
             elapsed = time.monotonic() - run_started_at
             logger.info(
