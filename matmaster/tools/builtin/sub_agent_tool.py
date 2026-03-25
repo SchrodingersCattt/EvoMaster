@@ -10,6 +10,7 @@ further children (schema-layer guard in TOML + runtime guard here).
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from typing import Any, ClassVar
 
@@ -64,10 +65,11 @@ class SubAgentTool(BuiltinTool):
         *,
         session: Any | None = None,
         workdir: Any | None = None,
-        spawn_fn: Callable[[str, str], str] | None = None,
+        spawn_fn: Callable[..., str] | None = None,
     ) -> None:
         super().__init__(session=session, workdir=workdir)
         self._spawn_fn = spawn_fn
+        self._stop_event: threading.Event | None = None
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         """Execute sub-agent spawn.
@@ -87,4 +89,4 @@ class SubAgentTool(BuiltinTool):
         if not exp_name or not task:
             return "Error: Both exp_name and task are required"
 
-        return self._spawn_fn(exp_name, task)
+        return self._spawn_fn(exp_name, task, self._stop_event)
