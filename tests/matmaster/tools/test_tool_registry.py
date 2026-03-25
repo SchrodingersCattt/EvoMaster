@@ -11,9 +11,28 @@ from typing import Any
 
 import pytest
 
+from matmaster.tools.tool_result import ToolResult
 from matmaster.tools.tool_registry import Tool, ToolRegistry
 
 from .conftest import MockTool
+
+
+class _ErrorStrTool:
+    name = "error_tool"
+    description = "returns error string"
+    json_schema = {"type": "object", "properties": {}}
+
+    def execute(self, arguments: dict[str, Any]) -> str:
+        return "Error: invalid input"
+
+
+class _ExplicitToolResultTool:
+    name = "explicit_tool_result"
+    description = "returns explicit ToolResult"
+    json_schema = {"type": "object", "properties": {}}
+
+    def execute(self, arguments: dict[str, Any]) -> ToolResult:
+        return ToolResult(status="success", content="Error: literal")
 
 
 class TestToolProtocol:
@@ -35,7 +54,9 @@ class TestToolRegistryBasic:
         registry.register(tool, source="builtin")
 
         result = registry.execute("greet", {})
-        assert result == "hello!"
+        assert isinstance(result, ToolResult)
+        assert result.content == "hello!"
+        assert result.status == "success"
 
     def test_register_unknown_tool_execute(self) -> None:
         """Execute non-existent tool returns error string with 'not found'."""
@@ -43,8 +64,9 @@ class TestToolRegistryBasic:
         registry.register(MockTool(name="exists"), source="builtin")
 
         result = registry.execute("missing_tool", {})
-        assert "not found" in result.lower()
-        assert "exists" in result  # lists available tools
+        assert result.status == "error"
+        assert "not found" in result.content.lower()
+        assert "exists" in result.content  # lists available tools
 
     def test_get_tool_definitions(self) -> None:
         """Returns list of dicts in OpenAI function calling format."""
@@ -67,7 +89,26 @@ class TestToolRegistryBasic:
         assert defs == []
 
         result = registry.execute("anything", {})
-        assert "not found" in result.lower()
+        assert result.status == "error"
+        assert "not found" in result.content.lower()
+
+    def test_error_prefixed_string_normalizes_to_error(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_ErrorStrTool(), source="test")
+
+        result = registry.execute("error_tool", {})
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert result.content == "Error: invalid input"
+
+    def test_explicit_tool_result_preserves_success_status(self) -> None:
+        registry = ToolRegistry()
+        registry.register(_ExplicitToolResultTool(), source="test")
+
+        result = registry.execute("explicit_tool_result", {})
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert result.content == "Error: literal"
 
 
 class TestToolRegistryOverride:
@@ -84,7 +125,8 @@ class TestToolRegistryOverride:
             registry.register(tool_b, source="mcp")
 
         # Second tool overwrites first
-        assert registry.execute("shared", {}) == "second"
+        result = registry.execute("shared", {})
+        assert result.content == "second"
 
         # Warning was logged mentioning the tool name
         assert any("shared" in record.message for record in caplog.records)
@@ -107,7 +149,8 @@ class TestToolRegistryOverride:
         registry.register(MockTool(name="overlap", result="mcp"), source="mcp")
         registry.register(MockTool(name="overlap", result="skill"), source="skill")
 
-        assert registry.execute("overlap", {}) == "skill"
+        result = registry.execute("overlap", {})
+        assert result.content == "skill"
 
 
 class TestToolRegistryProperties:

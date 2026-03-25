@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 from typing import Any
 
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.messages import StreamChunk, ToolCallData
 from matmaster.types.guards import GuardResult
 
@@ -44,7 +45,7 @@ class TestDevStreamHook:
     def test_post_tool_call_success(self) -> None:
         hook, buf = self._make_hook()
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        hook.post_tool_call(tc, "file1.py\nfile2.py")
+        hook.post_tool_call(tc, ToolResult(content="file1.py\nfile2.py"))
 
         output = buf.getvalue()
         assert "tool_result:" in output
@@ -54,10 +55,22 @@ class TestDevStreamHook:
         hook, buf = self._make_hook()
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
         long_result = "x" * 2000
-        hook.post_tool_call(tc, long_result)
+        hook.post_tool_call(tc, ToolResult(content=long_result))
 
         output = buf.getvalue()
         assert "..." in output or len(output) < 2000
+
+    def test_post_tool_call_error_status(self) -> None:
+        hook, buf = self._make_hook()
+        tc = ToolCallData(id="tc-1", name="bash", arguments={})
+        hook.post_tool_call(
+            tc,
+            ToolResult(status="error", content="Error: boom"),
+        )
+
+        output = buf.getvalue()
+        assert "tool_error:" in output
+        assert "Error: boom" in output
 
     def test_guard_blocked(self) -> None:
         hook, buf = self._make_hook()

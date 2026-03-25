@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from matmaster.tools.tool_result import ToolResult
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.guards import Guard, GuardContext, GuardResult
 from matmaster.types.runtime import AgentRuntimeSpec, KernelResult
@@ -208,7 +209,7 @@ class RecordingHook(BaseHook):
         self.calls.append("pre_tool_call")
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: str) -> None:
+    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         self.calls.append("post_tool_call")
 
     def pre_llm_call(self, messages: list[Message], turn: int) -> None:

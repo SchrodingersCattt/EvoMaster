@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from matmaster.tools.tool_result import ToolResult
 from matmaster.tools.tool_registry import Tool
 from matmaster.tools.lazy_mcp import LazyMCPTool, configure_mcp_manager
 
@@ -94,7 +95,10 @@ class TestLazyMCPToolExecution:
             description="", input_schema={}, connector=connector,
         )
         result = tool.execute({})
-        assert result == "hello world"
+        assert isinstance(result, ToolResult)
+        assert result.content == "hello world"
+        assert result.status == "success"
+        assert result.info == {}
 
     def test_execute_serializes_dict_observation(self):
         connector = FakeConnector()
@@ -104,7 +108,39 @@ class TestLazyMCPToolExecution:
             description="", input_schema={}, connector=connector,
         )
         result = tool.execute({})
-        assert json.loads(result) == {"key": "val"}
+        assert json.loads(result.content) == {"key": "val"}
+
+    def test_execute_returns_tool_result_with_info(self):
+        connector = FakeConnector()
+        connector._fake_tool.execute.return_value = ("result", {"saved_path": "/tmp/x"})
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+        )
+
+        result = tool.execute({})
+        assert result.status == "success"
+        assert result.info == {"saved_path": "/tmp/x"}
+
+    def test_execute_error_prefixed_observation_is_error_without_info_key(self):
+        connector = FakeConnector()
+        connector._fake_tool.execute.return_value = ("Error: remote failure", {})
+        tool = LazyMCPTool(
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
+        )
+
+        result = tool.execute({})
+        assert result.status == "error"
+        assert result.content == "Error: remote failure"
 
 
 class FakeMCPManager:

@@ -68,6 +68,7 @@ class ToolResultEvent(BaseModel):
     call_id: str
     tool_name: str
     result: Any  # str | dict
+    status: str = "success"
     info: dict[str, Any] = Field(default_factory=dict)
 
 

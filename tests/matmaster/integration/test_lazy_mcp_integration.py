@@ -80,7 +80,7 @@ class TestLazyMCPIntegration:
         result = registry.execute("use_skill", {"skill_name": "test-skill", "action": "get_info"})
 
         # Verify use_skill returned successfully
-        assert not result.startswith("Error:"), f"use_skill failed: {result}"
+        assert result.status == "success", f"use_skill failed: {result.content}"
 
         # After skill trigger: mat_sg tools should be injected
         assert "mat_sg_build_bulk" in registry
@@ -165,7 +165,7 @@ class TestLazyMCPIntegration:
 
         # Trigger skill with uncached server
         result = registry.execute("use_skill", {"skill_name": "uncached-skill", "action": "get_info"})
-        assert not result.startswith("Error:")
+        assert result.status == "success"
 
         # No tools injected (cache miss)
         assert "unknown_server_" not in str(list(registry._tools.keys()))
@@ -219,7 +219,7 @@ class TestExpMCPSelfLoad:
 
         # Trigger skill to verify lazy tools get injected
         result = registry.execute("use_skill", {"skill_name": "test-skill", "action": "get_info"})
-        assert not result.startswith("Error:"), f"use_skill failed: {result}"
+        assert result.status == "success", f"use_skill failed: {result.content}"
         assert "mat_sg_build_bulk" in registry
 
     def test_raises_when_mcp_yaml_missing(self, tmp_path):

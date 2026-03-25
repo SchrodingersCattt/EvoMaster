@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -52,13 +53,14 @@ def _decode_sse_payload(frame: str) -> dict:
     return json.loads(frame.split('data: ', 1)[1].strip())
 
 
-def test_chat_stream_returns_503_when_redis_url_missing():
+def test_chat_stream_returns_503_when_redis_url_missing(tmp_path):
     """无 REDIS_URL 时 POST /stream 返回 503（仅 Worker 队列模式，发送需 Redis）。"""
     mock_sessions = _mock_sessions_table()
     mock_events = _mock_events_table()
 
     patches = [
         patch('src.apis.chat_api.REDIS_URL', None),
+        patch.dict(os.environ, {'LOG_DIR': str(tmp_path / 'logs')}),
         patch(
             'src.base.base_table.BaseTable.get_connection',
             side_effect=lambda self: _NoDbConnection(),
@@ -315,6 +317,7 @@ def test_sse_frames_match_frontend_contract_without_mysql():
         'call_id': 'call-1',
         'name': 'bash',
         'result': {'status': 'success', 'stdout': 'ok'},
+        'status': 'success',
         'info': {'auto_save': True},
     }
     assert frames[2]['content'] == {

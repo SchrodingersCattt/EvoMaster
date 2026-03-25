@@ -24,6 +24,7 @@ from __future__ import annotations
 import enum
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.events import (
     ResponseEvent,
     ThoughtEvent,
@@ -54,7 +55,7 @@ class Hook(Protocol):
 
     def pre_tool_call(self, tool_call: ToolCallData) -> HookAction: ...
 
-    def post_tool_call(self, tool_call: ToolCallData, result: str) -> None: ...
+    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None: ...
 
     def pre_llm_call(self, messages: list[Message], turn: int) -> None: ...
 
@@ -79,7 +80,7 @@ class BaseHook:
         """Default: allow tool call to proceed."""
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: str) -> None:
+    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         """Default: no-op observation."""
 
     def pre_llm_call(self, messages: list[Message], turn: int) -> None:
@@ -140,7 +141,7 @@ def run_pre_llm_call(
 
 
 def run_post_tool_call(
-    hooks: list[Hook], tool_call: ToolCallData, result: str
+    hooks: list[Hook], tool_call: ToolCallData, result: ToolResult
 ) -> None:
     """Run post_tool_call on all hooks (observation, no short-circuit)."""
     for hook in hooks:
@@ -210,14 +211,16 @@ class EventEmitterHook(BaseHook):
         )
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: str) -> None:
+    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         """Emit ToolResultEvent after tool execution."""
         self._bus.emit(
             ToolResultEvent(
                 source=self._source,
                 call_id=tool_call.id,
                 tool_name=tool_call.name,
-                result=result,
+                result=result.content,
+                status=result.status,
+                info=result.info,
             )
         )
 
