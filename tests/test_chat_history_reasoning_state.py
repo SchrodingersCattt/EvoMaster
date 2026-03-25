@@ -104,3 +104,21 @@ def test_streaming_agent_emits_private_assistant_state_event():
         event for event in events if event['type'] == 'assistant_state'
     )
     assert assistant_state_event['content']['meta']['reasoning_content'] == 'r'
+
+
+def test_exclude_spawn_events_omits_subagent_from_dialog_messages():
+    """Sub-agent rows must not appear in parent dialog reconstruction."""
+    events = [
+        {'source': 'User', 'type': 'query', 'content': 'hi', 'task_id': 't1'},
+        {
+            'source': 'MatMaster',
+            'type': 'response',
+            'content': 'from subagent',
+            'task_id': 't1',
+            'spawn_id': 'sp-1',
+        },
+    ]
+    filtered = ChatHistoryConverter.exclude_spawn_events(events)
+    msgs = ChatHistoryConverter.events_to_dialog_messages(filtered)
+    assert len(msgs) == 1
+    assert msgs[0]['role'] == 'user'

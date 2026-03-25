@@ -195,6 +195,7 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
     ]
     assert frames[3]['type'] == 'query'
     assert frames[3]['mode'] == 'direct'
+    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
 
 def test_sse_frames_match_frontend_contract_without_mysql():
@@ -417,6 +418,7 @@ def test_generate_send_stream_normalizes_replayed_history_source():
     assert len(history_frames) == 1
     assert history_frames[0]['source'] == 'MatMaster'
     assert history_frames[0]['content'] == 'old answer'
+    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
 
 def test_generate_send_stream_replay_prefers_response_over_run_result():
@@ -493,6 +495,7 @@ def test_generate_send_stream_replay_prefers_response_over_run_result():
     assert [frame['type'] for frame in frames] == ['status', 'query', 'response', 'query']
     assert frames[2]['content'] == 'old answer'
     assert frames[3]['content'] == 'new question'
+    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
 
 def test_generate_subscribe_stream_normalizes_replayed_history_source():
@@ -544,6 +547,7 @@ def test_generate_subscribe_stream_normalizes_replayed_history_source():
     assert len(history_frames) == 1
     assert history_frames[0]['source'] == 'MatMaster'
     assert history_frames[0]['content'] == 'old answer'
+    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
 
 def test_generate_subscribe_stream_replay_prefers_response_over_run_result():
@@ -600,3 +604,4 @@ def test_generate_subscribe_stream_replay_prefers_response_over_run_result():
 
     assert [frame['type'] for frame in frames] == ['status', 'response']
     assert frames[1]['content'] == 'old answer'
+    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)

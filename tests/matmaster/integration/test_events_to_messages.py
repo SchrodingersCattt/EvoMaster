@@ -333,3 +333,43 @@ class TestEventsToMessagesPersistenceRoundTrip:
         assistant_msgs = [m for m in result if isinstance(m, AssistantMessage)]
         assert len(assistant_msgs) == 1
         assert assistant_msgs[0].content == "legacy string answer"
+
+
+class TestExcludeSpawnForParentDialog:
+    """Parent LLM history must ignore persisted sub-agent rows (spawn_id set)."""
+
+    def test_exclude_spawn_events_drops_subagent_rows(self) -> None:
+        events = [
+            _user_event("hello"),
+            {
+                **_response_event("parent"),
+                "task_id": "t1",
+                "spawn_id": None,
+            },
+            {
+                **_response_event("subagent only"),
+                "task_id": "t1",
+                "spawn_id": "sp-1",
+            },
+        ]
+        filtered = ChatHistoryConverter.exclude_spawn_events(events)
+        assert len(filtered) == 2
+        assert all(ev.get("spawn_id") is None for ev in filtered)
+        msgs = ChatHistoryConverter.events_to_messages(filtered)
+        assistant = [m for m in msgs if isinstance(m, AssistantMessage)]
+        assert len(assistant) == 1
+        assert assistant[0].content == "parent"
+
+    def test_agent_run_style_pipeline_excludes_spawn_before_task_filter(self) -> None:
+        """Mirrors agent_run_service: exclude_spawn -> exclude_task_events -> events_to_messages."""
+        raw = [
+            _user_event("q"),
+            {**_response_event("current turn"), "task_id": "t-new", "spawn_id": None},
+            {**_response_event("sub"), "task_id": "t-new", "spawn_id": "s1"},
+        ]
+        step1 = ChatHistoryConverter.exclude_spawn_events(raw)
+        step2 = ChatHistoryConverter.exclude_task_events(step1, "t-new")
+        msgs = ChatHistoryConverter.events_to_messages(step2)
+        assert len(msgs) == 1
+        assert isinstance(msgs[0], UserMessage)
+        assert msgs[0].content == "q"
