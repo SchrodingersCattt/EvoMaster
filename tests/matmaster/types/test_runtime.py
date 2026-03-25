@@ -9,7 +9,14 @@ import pytest
 from pydantic import ValidationError
 
 from matmaster.types.guards import Guard, GuardContext, GuardResult
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, CompactionConfig
+from matmaster.types.runtime import (
+    AgentRuntime,
+    AgentRuntimeSpec,
+    CompactionConfig,
+    KernelResult,
+    KernelRunResult,
+)
+from matmaster.types.events import RunResultEvent
 from matmaster.core.hooks import BaseHook, Hook
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -324,30 +331,80 @@ class TestKernelRunResult:
     """KernelRunResult frozen dataclass — return value of AgentKernel.run()."""
 
     def test_frozen_construction(self) -> None:
-        from matmaster.types.runtime import KernelRunResult
-        from matmaster.types.events import RunResultEvent
-
-        event = RunResultEvent(source="agent", status="completed", reason="natural")
-        result = KernelRunResult(event=event, messages=[])
-        assert result.event is event
+        kr = KernelResult(status="completed", reason="natural")
+        result = KernelRunResult(result=kr, messages=[])
+        assert result.result is kr
         assert result.messages == []
 
     def test_messages_preserved(self) -> None:
-        from matmaster.types.runtime import KernelRunResult
-        from matmaster.types.events import RunResultEvent
         from matmaster.types.messages import UserMessage, AssistantMessage
 
-        event = RunResultEvent(source="agent", status="completed", reason="natural")
+        kr = KernelResult(status="completed", reason="natural")
         msgs = [UserMessage(content="hi"), AssistantMessage(content="hello")]
-        result = KernelRunResult(event=event, messages=msgs)
+        result = KernelRunResult(result=kr, messages=msgs)
         assert len(result.messages) == 2
         assert result.messages[0].content == "hi"
 
     def test_frozen_rejects_mutation(self) -> None:
-        from matmaster.types.runtime import KernelRunResult
-        from matmaster.types.events import RunResultEvent
-
-        event = RunResultEvent(source="agent", status="completed", reason="natural")
-        result = KernelRunResult(event=event, messages=[])
+        kr = KernelResult(status="completed", reason="natural")
+        result = KernelRunResult(result=kr, messages=[])
         with pytest.raises(FrozenInstanceError):
-            result.event = event  # type: ignore[misc]
+            result.result = kr  # type: ignore[misc]
+
+
+# ── KernelResult ───────────────────────────────────────
+
+
+class TestKernelResult:
+    """KernelResult dataclass construction and to_run_result_event()."""
+
+    def test_construction_with_defaults(self) -> None:
+        kr = KernelResult(status="completed", reason="natural")
+        assert kr.status == "completed"
+        assert kr.reason == "natural"
+        assert kr.final_content is None
+        assert kr.num_turns == 0
+        assert kr.stop_reason is None
+        assert kr.usage == {}
+
+    def test_construction_with_all_fields(self) -> None:
+        kr = KernelResult(
+            status="completed",
+            reason="natural",
+            final_content="hello",
+            num_turns=3,
+            stop_reason="stop",
+            usage={"prompt_tokens": 100, "completion_tokens": 50},
+        )
+        assert kr.final_content == "hello"
+        assert kr.num_turns == 3
+        assert kr.stop_reason == "stop"
+        assert kr.usage == {"prompt_tokens": 100, "completion_tokens": 50}
+
+    def test_frozen(self) -> None:
+        kr = KernelResult(status="completed", reason="natural")
+        with pytest.raises(AttributeError):
+            kr.status = "failed"  # type: ignore[misc]
+
+    def test_to_run_result_event(self) -> None:
+        kr = KernelResult(
+            status="completed",
+            reason="natural",
+            final_content="done",
+            num_turns=5,
+            stop_reason="stop",
+            usage={"prompt_tokens": 200},
+        )
+        event = kr.to_run_result_event()
+        assert event.source == "agent"
+        assert event.status == "completed"
+        assert event.reason == "natural"
+        assert event.final_content == "done"
+        # usage/num_turns/stop_reason should NOT be in RunResultEvent's schema
+        assert "num_turns" not in RunResultEvent.model_fields
+        assert "usage" not in RunResultEvent.model_fields
+
+    def test_to_run_result_event_custom_source(self) -> None:
+        kr = KernelResult(status="cancelled", reason="cancelled")
+        event = kr.to_run_result_event(source="worker")
+        assert event.source == "worker"
