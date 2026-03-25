@@ -70,13 +70,19 @@ class DevRunner:
     @staticmethod
     def _build_exp_config(config: DevConfig) -> ExpConfig:
         """Convert DevConfig to ExpConfig."""
+        from matmaster.config.loader import load_base_system_prompt
+
+        system_prompt = config.agent.system_prompt
+        if not system_prompt:
+            system_prompt = load_base_system_prompt()
+
         return ExpConfig(
             name=config.agent.name,
             mode=config.agent.mode,
             max_turns=config.agent.max_turns,
             tools=ExpToolsConfig(builtin=config.tools.builtin),
             developer_instructions=config.agent.identity or "",
-            mode_contract=config.agent.mode_contract,
+            system_prompt=system_prompt,
         )
 
     def run(

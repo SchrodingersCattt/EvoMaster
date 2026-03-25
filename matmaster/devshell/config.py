@@ -26,7 +26,7 @@ class AgentConfig(BaseModel):
     mode: str = "direct"
     max_turns: int = 20
     identity: str | None = None
-    mode_contract: str = ""
+    system_prompt: str = ""
 
 
 class SessionConfig(BaseModel):
