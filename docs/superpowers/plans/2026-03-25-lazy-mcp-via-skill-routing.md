@@ -246,7 +246,7 @@ mcp_config_file = "mcp_config.json"
 
 - [ ] **Step 6: Run config loader test to verify toml parses**
 
-Run: `uv run pytest tests/matmaster/core/test_config_loader.py -v`
+Run: `uv run pytest tests/matmaster/config/test_loader.py -v`
 Expected: PASS (extra="ignore" allows new fields)
 
 - [ ] **Step 7: Add matmaster/cache/ to .gitignore**
@@ -599,7 +599,7 @@ class FakeMCPManager:
 
 
 class TestConfigureMCPManager:
-    def test_sets_path_adaptor_servers(self):
+    def test_sets_path_adaptor_servers_from_explicit_list(self):
         manager = FakeMCPManager()
         config = {
             "path_adaptor": "calculation",
@@ -608,15 +608,37 @@ class TestConfigureMCPManager:
         configure_mcp_manager(manager, config)
         assert manager.path_adaptor_servers == {"mat_sg", "mat_dpa"}
 
-    def test_sets_sync_tools(self):
+    def test_path_adaptor_servers_fallback_to_all_servers(self):
+        """When calculation_servers is absent, fallback to all_server_names."""
+        manager = FakeMCPManager()
+        config = {"path_adaptor": "calculation"}
+        configure_mcp_manager(
+            manager, config, all_server_names={"mat_sg", "mat_sn", "mat_doc"}
+        )
+        assert manager.path_adaptor_servers == {"mat_sg", "mat_sn", "mat_doc"}
+
+    def test_sync_tools_only_inside_calculation_branch(self):
+        """sync_tools_by_server is only set when path_adaptor == calculation."""
+        manager = FakeMCPManager()
+        config = {
+            "path_adaptor": "calculation",
+            "calculation_executors": {
+                "mat_sg": {"sync_tools": ["build_bulk_structure_by_wyckoff"]},
+            },
+        }
+        configure_mcp_manager(manager, config)
+        assert "build_bulk_structure_by_wyckoff" in manager.sync_tools_by_server["mat_sg"]
+
+    def test_sync_tools_not_set_without_calculation(self):
+        """Without path_adaptor=calculation, sync_tools_by_server stays empty."""
         manager = FakeMCPManager()
         config = {
             "calculation_executors": {
                 "mat_sg": {"sync_tools": ["build_bulk_structure_by_wyckoff"]},
-            }
+            },
         }
         configure_mcp_manager(manager, config)
-        assert "build_bulk_structure_by_wyckoff" in manager.sync_tools_by_server["mat_sg"]
+        assert manager.sync_tools_by_server == {}
 
     def test_sets_tool_include_only(self):
         manager = FakeMCPManager()
@@ -649,18 +671,31 @@ Expected: FAIL — configure_mcp_manager not found
 Add to `matmaster/tools/lazy_mcp.py`:
 
 ```python
-def configure_mcp_manager(manager: Any, mcp_config: dict) -> None:
+def configure_mcp_manager(
+    manager: Any,
+    mcp_config: dict,
+    all_server_names: set[str] | None = None,
+) -> None:
     """Inject MatMaster domain-specific config into MCPToolManager.
 
     Extracted from playground._setup_mcp_tools() for shared use by
-    LazyMCPConnector and the old playground path.
+    LazyMCPConnector and the old playground path. Behavior-preserving:
+    matches the original playground code exactly.
 
-    Injects: path_adaptor, sync_tools_by_server, tool_include_only.
+    Args:
+        manager: MCPToolManager instance
+        mcp_config: Full mcp section from config.yaml
+        all_server_names: All known server names (for fallback when
+            calculation_servers is absent). Playground passes parsed
+            server names; LazyMCPConnector passes server_config keys.
     """
     if mcp_config.get("path_adaptor") == "calculation":
         calc_servers = mcp_config.get("calculation_servers")
         if calc_servers:
             manager.path_adaptor_servers = set(calc_servers)
+        elif all_server_names:
+            # Fallback: all servers (matches playground.py:516-519)
+            manager.path_adaptor_servers = set(all_server_names)
         try:
             from evomaster.adaptors.calculation import get_calculation_path_adaptor
 
@@ -670,13 +705,15 @@ def configure_mcp_manager(manager: Any, mcp_config: dict) -> None:
         except ImportError:
             logger.warning("evomaster.adaptors.calculation not available, skipping path_adaptor")
 
-    executors = mcp_config.get("calculation_executors") or {}
-    manager.sync_tools_by_server = {
-        name: set(cfg.get("sync_tools") or [])
-        for name, cfg in executors.items()
-        if cfg.get("sync_tools")
-    }
+        # sync_tools ONLY inside calculation branch (matches playground.py:527-532)
+        executors = mcp_config.get("calculation_executors") or {}
+        manager.sync_tools_by_server = {
+            name: set(cfg.get("sync_tools") or [])
+            for name, cfg in executors.items()
+            if isinstance(cfg, dict) and cfg.get("sync_tools")
+        }
 
+    # tool_include_only is OUTSIDE the calculation branch (matches playground.py:539-553)
     include_only = mcp_config.get("tool_include_only")
     if include_only and isinstance(include_only, dict):
         # Match old playground behavior: non-list values become [] (block all tools)
@@ -712,14 +749,19 @@ In `playground/mat_master/core/playground.py`, the `_setup_mcp_tools` method (ar
 ```python
         from matmaster.tools.lazy_mcp import configure_mcp_manager
 
-        # ... (after manager = MCPToolManager(), progress_cb setup)
+        # ... (after manager = MCPToolManager(), progress_cb setup, and servers = self._parse_mcp_servers())
 
-        configure_mcp_manager(manager, mcp_config)
+        all_names = {s.get('name') for s in servers if s.get('name')}
+        configure_mcp_manager(manager, mcp_config, all_server_names=all_names)
 
-        # Logging (keep existing info log about path_adaptor_servers)
+        # Logging (keep existing info logs)
         if manager.path_adaptor_servers:
             self.logger.info(
                 'Path adaptor enabled for servers: %s', manager.path_adaptor_servers
+            )
+        if manager.sync_tools_by_server:
+            self.logger.info(
+                'MCP sync_tools_by_server set: %s', list(manager.sync_tools_by_server.keys())
             )
 ```
 
@@ -832,7 +874,11 @@ class LazyMCPConnector:
         loop = self._ensure_loop()
         self._manager = MCPToolManager()
         self._manager.loop = loop
-        configure_mcp_manager(self._manager, self._mcp_config)
+        configure_mcp_manager(
+            self._manager,
+            self._mcp_config,
+            all_server_names=set(self._server_config.keys()),
+        )
         return self._manager
 
     def connect_and_get_tool(self, server_name: str, remote_tool_name: str) -> Any:
@@ -1072,6 +1118,33 @@ class TestExpInitSkillTools:
         exp._init_skill_tools(ctx, registry)
 
         assert "use_skill" not in registry
+
+    def test_build_runtime_activates_skills_from_config(self, tmp_path):
+        """Critical: build_runtime must call _init_skill_tools when
+        config.skills.enabled is True, even without runtime skills param."""
+        skills_root = self._make_skill_dir(tmp_path)
+        cache_dir = self._make_cache(tmp_path)
+        (tmp_path / "mcp_config.json").write_text('{"mcpServers": {}}')
+
+        cfg = ExpConfig.model_validate({
+            "name": "test",
+            "skills": {
+                "enabled": True,
+                "skills_root": str(skills_root),
+                "cache_dir": str(cache_dir),
+                "config_dir": str(tmp_path),
+                "mcp_config_file": "mcp_config.json",
+            },
+        })
+        exp = Exp(cfg)
+        ctx = MagicMock()
+        ctx.session = MagicMock()
+        ctx.llm_provider = None
+        ctx.llm_config = None
+
+        # Call build_runtime WITHOUT skills param — should still activate
+        runtime = exp.build_runtime(ctx)
+        assert "use_skill" in runtime.spec.tool_registry
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1123,7 +1196,10 @@ In `matmaster/core/exp.py`, replace the stub `_init_skill_tools` (line 248-254):
                 pass
 
         # Load server connection config from JSON
-        # (spec's load_mcp_server_config is inlined here — no such function exists in codebase)
+        # (spec's load_mcp_server_config is inlined — no such function exists in codebase)
+        # NOTE: __EVOMASTER_WORKSPACES__ placeholder replacement is handled by
+        # the playground layer BEFORE config reaches Exp. The mcp dict passed
+        # via build_runtime(mcp=...) already has placeholders resolved.
         import json
 
         server_config = {}
@@ -1133,23 +1209,6 @@ In `matmaster/core/exp.py`, replace the stub `_init_skill_tools` (line 248-254):
                 server_config = raw.get("mcpServers", {})
             except Exception as e:
                 self.logger.warning("Failed to load MCP server config: %s", e)
-
-        # __EVOMASTER_WORKSPACES__ placeholder replacement (matches playground.py:470-498)
-        _PLACEHOLDER = "__EVOMASTER_WORKSPACES__"
-        workspace_root = getattr(ctx, "workspace_path", None)
-        if workspace_root and _PLACEHOLDER in json.dumps(server_config):
-
-            def _deep_replace(obj, old: str, new: str):
-                if isinstance(obj, str):
-                    return obj.replace(old, new)
-                if isinstance(obj, list):
-                    return [_deep_replace(x, old, new) for x in obj]
-                if isinstance(obj, dict):
-                    return {k: _deep_replace(v, old, new) for k, v in obj.items()}
-                return obj
-
-            server_config = _deep_replace(server_config, _PLACEHOLDER, str(workspace_root))
-            self.logger.info("Replaced %s -> %s in MCP config", _PLACEHOLDER, workspace_root)
 
         connector = LazyMCPConnector(
             mcp_server_config=server_config,
@@ -1190,9 +1249,24 @@ In `matmaster/core/exp.py`, replace the stub `_init_skill_tools` (line 248-254):
         self._skill_registry = skill_registry
 ```
 
-- [ ] **Step 4: Update build_runtime to pass skill_registry to ContextBuilder**
+- [ ] **Step 4: Update build_runtime activation logic + ContextBuilder**
 
-In `matmaster/core/exp.py`, update line 126:
+In `matmaster/core/exp.py`, two changes:
+
+1. Fix activation logic (line 117-121) — call `_init_skill_tools` when config enables it, not just when runtime `skills` param is passed:
+
+```python
+        # 2. Skills/MCP: runtime-injected (must be before system prompt)
+        if skills:
+            self._init_skill_tools(ctx, registry, skills)
+        elif self._config.skills.enabled:
+            # Lazy MCP: config-driven skill loading (no runtime param needed)
+            self._init_skill_tools(ctx, registry)
+        if mcp:
+            self._init_mcp_tools(ctx, registry, mcp)
+```
+
+2. Pass skill_registry to ContextBuilder (line 126):
 
 ```python
         system_prompt = builder.build(
