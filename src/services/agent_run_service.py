@@ -351,7 +351,7 @@ class AgentRunService:
                 history=history,
                 stop_event=stop_event,
             )
-            run_result_event = kernel_result.event
+            run_result_event = kernel_result.result.to_run_result_event()
 
             # -- Post-processing --
             if run_result_event.reason == "cancelled":
