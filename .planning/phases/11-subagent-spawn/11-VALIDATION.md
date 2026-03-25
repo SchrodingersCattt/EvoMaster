@@ -36,15 +36,13 @@ created: 2026-03-25
 
 ## Per-Task Verification Map
 
-| Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 11-01-01 | 01 | 1 | SUBA-01 | unit | `uv run pytest tests/test_subagent_tool.py -k spawn_fn` | ❌ W0 | ⬜ pending |
-| 11-01-02 | 01 | 1 | SUBA-02 | unit | `uv run pytest tests/test_subagent_tool.py -k config` | ❌ W0 | ⬜ pending |
-| 11-02-01 | 02 | 1 | SUBA-03 | unit | `uv run pytest tests/test_subagent_tool.py -k recursion` | ❌ W0 | ⬜ pending |
-| 11-02-02 | 02 | 1 | SUBA-04 | unit | `uv run pytest tests/test_subagent_tool.py -k cancel` | ❌ W0 | ⬜ pending |
-| 11-03-01 | 03 | 2 | SUBA-05 | unit | `uv run pytest tests/test_subagent_tool.py -k event_routing` | ❌ W0 | ⬜ pending |
-| 11-03-02 | 03 | 2 | SUBA-06 | unit | `uv run pytest tests/test_subagent_tool.py -k source_normalize` | ❌ W0 | ⬜ pending |
-| 11-03-03 | 03 | 2 | PRMT-03 | unit | `uv run pytest tests/test_subagent_tool.py -k system_prompt` | ❌ W0 | ⬜ pending |
+| Task ID | Plan | Wave | Requirement | Test Type | Automated Command | Test File | Status |
+|---------|------|------|-------------|-----------|-------------------|-----------|--------|
+| 11-01-01 | 01 | 1 | SUBA-01, SUBA-02, SUBA-04, PRMT-03 | unit | `uv run pytest tests/matmaster/tools/test_sub_agent_tool.py -x -v` | tests/matmaster/tools/test_sub_agent_tool.py | ⬜ pending |
+| 11-02-01 | 02 | 2 | SUBA-01, SUBA-03, SUBA-05 | unit | `uv run pytest tests/matmaster/core/test_exp.py -x -v -k "sub_agent or spawn or source_override"` | tests/matmaster/core/test_exp.py | ⬜ pending |
+| 11-02-02 | 02 | 2 | SUBA-03, SUBA-05 | integration | `uv run pytest tests/matmaster/integration/test_subagent_spawn.py -x -v` | tests/matmaster/integration/test_subagent_spawn.py | ⬜ pending |
+| 11-03-01 | 03 | 3 | SUBA-05, SUBA-06 | unit | `uv run python -c "from src.utils.chat_event_source import normalize_event_source; assert normalize_event_source('MatMaster:explore') == 'MatMaster:explore'; print('OK')"` | (inline verify) | ⬜ pending |
+| 11-03-02 | 03 | 3 | SUBA-06 | integration | `uv run pytest tests/matmaster/integration/test_subagent_event_routing.py -x -v` | tests/matmaster/integration/test_subagent_event_routing.py | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -52,10 +50,12 @@ created: 2026-03-25
 
 ## Wave 0 Requirements
 
-- [ ] `tests/test_subagent_tool.py` — test stubs for SUBA-01 through SUBA-06, PRMT-03
+- [ ] `tests/matmaster/tools/test_sub_agent_tool.py` — created by Plan 01 Task 1 (TDD: tests written first)
+- [ ] `tests/matmaster/integration/test_subagent_spawn.py` — created by Plan 02 Task 2 (TDD: tests written first)
+- [ ] `tests/matmaster/integration/test_subagent_event_routing.py` — created by Plan 03 Task 2 (TDD: tests written first)
 - [ ] `tests/conftest.py` — shared fixtures (extend existing if present)
 
-*Existing test infrastructure (pytest, conftest) covers framework needs. Wave 0 adds test file stubs only.*
+*All test files are created by TDD tasks within their respective plans. No separate Wave 0 plan needed.*
 
 ---
 
@@ -63,7 +63,7 @@ created: 2026-03-25
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| Frontend observes sub-agent events in real-time | SUBA-05 | Requires running frontend + backend with SSE streaming | Start API server, open frontend, trigger sub-agent spawn, verify sub-agent events appear in chat UI |
+| Frontend observes sub-agent events in real-time | SUBA-06 | Requires running frontend + backend with SSE streaming | Start API server, open frontend, trigger sub-agent spawn, verify sub-agent events appear in chat UI |
 
 ---
 
