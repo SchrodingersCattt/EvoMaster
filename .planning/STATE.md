@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Agent 外围能力构建
 status: Ready to execute
-stopped_at: Completed 11-01-PLAN.md
-last_updated: "2026-03-25T07:39:15.411Z"
+stopped_at: Completed 11-02-PLAN.md
+last_updated: "2026-03-25T07:52:33.437Z"
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 ## Current Position
 
 Phase: 11 (subagent-spawn) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Accumulated Context
 
@@ -50,6 +50,9 @@ Recent decisions affecting current work:
 - [Phase 11]: spawn_fn typed as Callable[[str, str], str] | None for Plan 02 forward compat
 - [Phase 11]: Test stubs use Mock(return_value=...) not lambda to survive Plan 02 3-arg signature change
 - [Phase 11]: explore.toml max_turns=50, mcp='', skills.enabled=false for bounded sub-agent scope
+- [Phase 11]: spawn_fn uses Callable[..., str] type annotation for flexibility
+- [Phase 11]: stop_event injected via tool._stop_event attribute mutation in Exp.run()
+- [Phase 11]: source_override defaults to None for backward compat with existing callers
 
 ### Pending Todos
 
@@ -63,6 +66,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T07:39:15.408Z
-Stopped at: Completed 11-01-PLAN.md
+Last session: 2026-03-25T07:52:33.435Z
+Stopped at: Completed 11-02-PLAN.md
 Resume file: None
