@@ -89,7 +89,7 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
     mock_pg = MagicMock()
     if mock_pg_ctx is not None:
         mock_pg.prepare.return_value = mock_pg_ctx
-    mock_pg.config_path = Path("configs/mat_master/config.yaml")
+    mock_pg.config_path = Path("matmaster_config/config.yaml")
     mock_pg.session = None
 
     return svc, mock_pg
@@ -98,7 +98,7 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
 def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None, send_cb=None):
     """Run agent with standard patches and return whether use_quota was called."""
     with (
-        patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
+        patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
         patch(
             "src.services.agent_run_service.BohriumSetupService"
         ) as mock_bohrium_cls,
@@ -428,7 +428,7 @@ class TestQuotaAsyncMode:
 
         mock_pg = MagicMock()
         mock_pg.prepare.return_value = pg_ctx
-        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.config_path = Path("matmaster_config/config.yaml")
         mock_pg.session = None
 
         # Create a running event loop in another thread
@@ -443,7 +443,7 @@ class TestQuotaAsyncMode:
                 use_quota_calls.append(uid)
 
             with (
-                patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
+                patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
                 patch(
                     "src.services.agent_run_service.BohriumSetupService"
                 ) as mock_bohrium_cls,
