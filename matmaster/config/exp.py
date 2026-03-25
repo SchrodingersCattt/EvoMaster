@@ -49,5 +49,6 @@ class ExpConfig(BaseModel):
     tools: ExpToolsConfig = Field(default_factory=ExpToolsConfig)
     skills: ExpSkillsConfig = Field(default_factory=ExpSkillsConfig)
     developer_instructions: str = ""
+    mode_contract: str = ""
 
     model_config = ConfigDict(extra="ignore")
