@@ -9,14 +9,14 @@ Requirements for Agent 外围能力构建。Each maps to roadmap phases.
 
 ### Builtin Tools
 
-- [ ] **TOOL-01**: Agent 可以通过 Read tool 读取远程文件内容（支持行范围指定）
-- [ ] **TOOL-02**: Agent 可以通过 Write tool 创建或覆盖远程文件
-- [ ] **TOOL-03**: Agent 可以通过 Edit tool 对远程文件进行精确字符串替换
+- [x] **TOOL-01**: Agent 可以通过 Read tool 读取远程文件内容（支持行范围指定）
+- [x] **TOOL-02**: Agent 可以通过 Write tool 创建或覆盖远程文件
+- [x] **TOOL-03**: Agent 可以通过 Edit tool 对远程文件进行精确字符串替换
 - [x] **TOOL-04**: Agent 可以通过 Bash tool 在远程环境执行 shell 命令
 - [x] **TOOL-05**: Agent 可以通过 Glob tool 按模式搜索远程文件路径
 - [x] **TOOL-06**: Agent 可以通过 Grep tool 按正则搜索远程文件内容
 - [x] **TOOL-07**: Agent 可以通过 ListDir tool 列出远程目录结构
-- [ ] **TOOL-08**: Write/Edit tool 执行前强制要求先 Read 目标文件（Read-Before-Modify 协议）
+- [x] **TOOL-08**: Write/Edit tool 执行前强制要求先 Read 目标文件（Read-Before-Modify 协议）
 - [x] **TOOL-09**: Agent 可以通过 Task 套件创建、更新、查询任务状态用于工作追踪
 
 ### SubAgent
@@ -64,14 +64,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TOOL-01 | Phase 9 | Pending |
-| TOOL-02 | Phase 9 | Pending |
-| TOOL-03 | Phase 9 | Pending |
+| TOOL-01 | Phase 9 | Complete |
+| TOOL-02 | Phase 9 | Complete |
+| TOOL-03 | Phase 9 | Complete |
 | TOOL-04 | Phase 8 | Complete |
 | TOOL-05 | Phase 9 | Complete |
 | TOOL-06 | Phase 9 | Complete |
 | TOOL-07 | Phase 8 | Complete |
-| TOOL-08 | Phase 9 | Pending |
+| TOOL-08 | Phase 9 | Complete |
 | TOOL-09 | Phase 8 | Complete |
 | SUBA-01 | Phase 11 | Pending |
 | SUBA-02 | Phase 11 | Pending |

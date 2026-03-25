@@ -59,10 +59,10 @@ Plans:
   2. Agent 可以通过 Write tool 创建或覆盖文件、通过 Edit tool 精确字符串替换
   3. Write/Edit 执行前强制要求先 Read 目标文件，未 Read 时返回错误提示
   4. Agent 可以通过 Glob tool 按模式搜索文件路径、通过 Grep tool 按正则搜索文件内容
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
-- [ ] 09-01-PLAN.md -- ReadTracker + ReadTool + WriteTool + EditTool 实现与测试
+- [x] 09-01-PLAN.md -- ReadTracker + ReadTool + WriteTool + EditTool 实现与测试
 - [x] 09-02-PLAN.md -- GlobTool + GrepTool 实现与测试
 - [ ] 09-03-PLAN.md -- Exp 集成改造：注册新 tools、移除 EditorTool、ExpConfig 显式列举
 
@@ -103,6 +103,6 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11
 | 6. Service Layer Wiring | v1 | 2/2 | Complete | 2026-03-22 |
 | 7. Cleanup and Traceability | v1 | 2/2 | Complete | 2026-03-22 |
 | 8. BuiltinTool 基础设施与核心 Tools | v1.1 | 0/3 | Planning | - |
-| 9. 文件操作 Tools | v1.1 | 0/3 | Planning | - |
+| 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 0/? | Not started | - |
 | 11. SubAgent Spawn 机制 | v1.1 | 0/? | Not started | - |
