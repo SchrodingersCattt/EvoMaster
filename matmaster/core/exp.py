@@ -224,10 +224,10 @@ class Exp:
     def _init_builtin_tools(
         self, ctx: PlaygroundContext, registry: ToolRegistry
     ) -> None:
-        """Construct and register builtin tools using ctx.session.
+        """Register builtin tools: native (source='builtin') + evo adapter (source='builtin_evo').
 
-        Builtin tools: BashTool, EditorTool, MonitorJobTool.
-        Each is wrapped with EvoToolAdapter for matmaster Tool Protocol.
+        Native tools: BashTool, ListDirTool, TaskCreate/Get/List/Update/Complete.
+        Evo adapter: EditorTool (Phase 9 replaces), MonitorJobTool (retained).
         """
         if ctx.session is None:
             self.logger.warning(
@@ -235,15 +235,43 @@ class Exp:
             )
             return
 
-        from evomaster.agent.tools.builtin.bash import BashTool
+        # 1. Native builtin tools (source="builtin")
+        from matmaster.tools.builtin import (
+            BashTool,
+            ListDirTool,
+            TaskCompleteTool,
+            TaskCreateTool,
+            TaskGetTool,
+            TaskListTool,
+            TaskUpdateTool,
+        )
+
+        native_tools = [
+            BashTool(session=ctx.session, workdir=ctx.workdir),
+            ListDirTool(session=ctx.session, workdir=ctx.workdir),
+            TaskCreateTool(workdir=ctx.workdir),
+            TaskGetTool(workdir=ctx.workdir),
+            TaskListTool(workdir=ctx.workdir),
+            TaskUpdateTool(workdir=ctx.workdir),
+            TaskCompleteTool(workdir=ctx.workdir),
+        ]
+        for tool in native_tools:
+            registry.register(tool, source="builtin")
+
+        # 2. Evo adapter tools (source="builtin_evo") -- transitional
+        #    EditorTool retained until Phase 9 delivers native Read/Write/Edit
+        #    MonitorJobTool retained (science-specific, no native migration planned)
         from evomaster.agent.tools.builtin.editor import EditorTool
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
 
-        for evo_tool in [BashTool(), EditorTool(), MonitorJobTool()]:
+        for evo_tool in [EditorTool(), MonitorJobTool()]:
             adapted = EvoToolAdapter(evo_tool, ctx.session)
-            registry.register(adapted, source="builtin")
+            registry.register(adapted, source="builtin_evo")
 
-        self.logger.debug("Registered 3 builtin tools via EvoToolAdapter")
+        self.logger.debug(
+            "Registered %d native + 2 evo-adapted builtin tools",
+            len(native_tools),
+        )
 
     def _init_skill_tools(
         self,
