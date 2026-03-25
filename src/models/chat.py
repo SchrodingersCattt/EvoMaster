@@ -27,6 +27,7 @@ class SessionListQuery(BaseModel):
 
     limit: int = Field(default=20, ge=1, le=100, description='每页条数')
     offset: int = Field(default=0, ge=0, description='偏移量')
+    project_id: Optional[int] = Field(default=None, description='项目 ID，可选')
 
 
 class SessionItem(BaseModel):

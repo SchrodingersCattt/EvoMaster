@@ -54,7 +54,10 @@ def list_sessions(
 ):
     """会话列表，分页：首屏传 limit=20&offset=0，「加载更多」时增大 offset。"""
     sessions, total = chat_svc.list_sessions(
-        user_id=user_id, limit=query.limit, offset=query.offset
+        user_id=user_id,
+        limit=query.limit,
+        offset=query.offset,
+        project_id=query.project_id,
     )
     has_more = query.offset + len(sessions) < total
     return SessionListApiResponse(
