@@ -34,7 +34,8 @@ from matmaster.integration import (
     SSEHandler,
     WorkspaceHandler,
 )
-from matmaster.integration.bohrium_setup import BohriumSetupService
+from matmaster.config.exp import ExpConfig
+from matmaster.integration.bohrium_setup import BohriumSetupService, SkillSyncSpec
 from matmaster.core.playground import Playground, PlaygroundManager
 from matmaster.types.events import (
     CancelledEvent,
@@ -85,6 +86,56 @@ def _build_workspace_upload_fn(
         upload_dir_to_oss(workspace_path, key_prefix)
 
     return _do_upload
+
+
+def _derive_skill_sync_spec(
+    exp_config: ExpConfig,
+    playground: Any,
+    *,
+    project_root: Path,
+) -> SkillSyncSpec | None:
+    """Build SkillSyncSpec from Exp skills config and optional mat_master.skill_evolution.
+
+    ``remote_project_root`` is fixed to ``/personal/workspace/.evomaster``.
+    When ``exp_config.skills`` is disabled or has no ``skills_root``, returns
+    ``None`` (no fallback to unrelated default evomaster paths).
+    """
+    skills = exp_config.skills
+    if not skills.enabled:
+        return None
+    root_rel = (skills.skills_root or "").strip()
+    if not root_rel:
+        return None
+    skills_path = Path(root_rel)
+    if not skills_path.is_absolute():
+        skills_path = (project_root / root_rel).resolve()
+    else:
+        skills_path = skills_path.resolve()
+    if not skills_path.is_dir():
+        return None
+
+    local_user: str | None = None
+    remote_user: str | None = None
+    if hasattr(playground, "config"):
+        try:
+            cfg = playground.config.model_dump()
+        except Exception:
+            cfg = {}
+    else:
+        cfg = {}
+    evo = (cfg.get("mat_master") or {}).get("skill_evolution") or {}
+    loc_raw = evo.get("local_user_skills_root")
+    rem_raw = evo.get("remote_user_skills_root")
+    if loc_raw and rem_raw:
+        local_user = str(Path(str(loc_raw)).expanduser().resolve())
+        remote_user = str(rem_raw).strip()
+
+    return SkillSyncSpec(
+        project_skill_roots=[str(skills_path)],
+        local_user_skills_root=local_user,
+        remote_user_skills_root=remote_user,
+        remote_project_root="/personal/workspace/.evomaster",
+    )
 
 
 @runtime_checkable
@@ -229,6 +280,14 @@ class AgentRunService:
             )
             router.start()
 
+            exp_name = mode or "direct"
+            from matmaster.config.loader import load_exp_config
+
+            exp_config = load_exp_config(exp_name)
+            skill_sync_spec = _derive_skill_sync_spec(
+                exp_config, playground, project_root=_project_root
+            )
+
             # -- Stage 3: Bohrium credentials + SSH --
             bohrium_svc = BohriumSetupService(self._sessions_service, bus)
             run_creds, user_id_for_ak, org_id = bohrium_svc.load_credentials(
@@ -259,7 +318,7 @@ class AgentRunService:
             bohrium_result = bohrium_svc.setup(
                 session_id=session_id,
                 pg=playground,
-                base=getattr(playground, "agent", playground),
+                skill_sync_spec=skill_sync_spec,
                 run_creds=run_creds,
                 user_id_for_ak=user_id_for_ak,
                 org_id=org_id,
@@ -269,7 +328,17 @@ class AgentRunService:
             ssh_attached = bohrium_result.ssh_attached
             if bohrium_result.abort_result is not None:
                 return
-            pg_ctx = pg_ctx.with_bohrium(bohrium_result._asdict())
+            bohrium_meta = dict(bohrium_result._asdict())
+            bohrium_meta.pop("execution_session", None)
+            pg_ctx = pg_ctx.with_bohrium(bohrium_meta)
+            if bohrium_result.execution_session is not None:
+                ew = bohrium_result.execution_workdir or ""
+                st = bohrium_result.session_type or "ssh"
+                pg_ctx = pg_ctx.with_execution(
+                    session=bohrium_result.execution_session,
+                    session_type=st,
+                    execution_workdir=ew,
+                )
             # Workspace handling depends on the finalized Bohrium/archival context.
             router.add_handler(
                 WorkspaceHandler(
@@ -283,7 +352,7 @@ class AgentRunService:
             )
 
             # -- Stage 4: Exp assembly --
-            from matmaster.config.loader import load_exp_config, load_llm_config
+            from matmaster.config.loader import load_llm_config
             from matmaster.core.exp import Exp
             from matmaster.providers.llm_factory import build_provider
 
@@ -310,8 +379,6 @@ class AgentRunService:
                 }
             )
 
-            exp_name = mode or "direct"
-            exp_config = load_exp_config(exp_name)
             exp = Exp(exp_config)
             runtime = exp.build_runtime(
                 pg_ctx,

@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
@@ -183,7 +184,7 @@ class Exp:
 
             spawn_fn = self._make_spawn_fn(ctx, bus, source_prefix="MatMaster")
             sub_tool = SubAgentTool(
-                session=ctx.session, workdir=ctx.workdir, spawn_fn=spawn_fn
+                session=ctx.session, workdir=Path(ctx.execution_workdir), spawn_fn=spawn_fn
             )
             registry.register(sub_tool, source="builtin")
 
@@ -321,14 +322,17 @@ class Exp:
         tracker = ReadTracker()
         self._register_cleanup(tracker.clear)
 
+        exec_wd = Path(ctx.execution_workdir)
         native_tools = [
-            BashTool(session=ctx.session, workdir=ctx.workdir),
-            ListDirTool(session=ctx.session, workdir=ctx.workdir),
-            ReadTool(session=ctx.session, workdir=ctx.workdir, tracker=tracker),
-            WriteTool(session=ctx.session, workdir=ctx.workdir, tracker=tracker),
-            EditTool(session=ctx.session, workdir=ctx.workdir, tracker=tracker),
-            GlobTool(session=ctx.session, workdir=ctx.workdir),
-            GrepTool(session=ctx.session, workdir=ctx.workdir),
+            BashTool(session=ctx.session, workdir=exec_wd),
+            ListDirTool(session=ctx.session, workdir=exec_wd),
+            ReadTool(session=ctx.session, workdir=exec_wd, tracker=tracker),
+            WriteTool(session=ctx.session, workdir=exec_wd, tracker=tracker),
+            EditTool(session=ctx.session, workdir=exec_wd, tracker=tracker),
+            GlobTool(session=ctx.session, workdir=exec_wd),
+            GrepTool(session=ctx.session, workdir=exec_wd),
+            # Task tools stay on the local control-plane workdir (not execution_workdir):
+            # .tasks.json must remain local to the session/task ledger.
             TaskCreateTool(workdir=ctx.workdir),
             TaskGetTool(workdir=ctx.workdir),
             TaskListTool(workdir=ctx.workdir),

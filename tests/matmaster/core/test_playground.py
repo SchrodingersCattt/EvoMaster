@@ -73,6 +73,17 @@ class TestPrepare:
         assert ctx.session_type == "local"
         pg.cleanup()
 
+    def test_prepare_sets_execution_workdir(self, tmp_path: Path) -> None:
+        config_path = _write_config(tmp_path)
+        pg = Playground(config_path=config_path)
+        run_dir = tmp_path / "runs" / "run-exec"
+        run_dir.mkdir(parents=True)
+
+        ctx = pg.prepare({"run_dir": str(run_dir), "task_id": "t1"})
+
+        assert ctx.execution_workdir == str(ctx.workdir)
+        pg.cleanup()
+
     def test_workspace_created_under_run_dir_with_task_id(self, tmp_path: Path) -> None:
         config_path = _write_config(tmp_path)
         pg = Playground(config_path=config_path)
