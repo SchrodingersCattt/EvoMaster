@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Agent 外围能力构建
-status: Ready to plan
-stopped_at: Phase 11 context gathered
-last_updated: "2026-03-25T06:54:27.571Z"
+status: Ready to execute
+stopped_at: Completed 11-01-PLAN.md
+last_updated: "2026-03-25T07:39:15.411Z"
 progress:
   total_phases: 4
   completed_phases: 3
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 11
+  completed_plans: 9
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 10 — tool-description-system-prompt
+**Current focus:** Phase 11 — subagent-spawn
 
 ## Current Position
 
-Phase: 11
-Plan: Not started
+Phase: 11 (subagent-spawn) — EXECUTING
+Plan: 2 of 3
 
 ## Accumulated Context
 
@@ -47,6 +47,9 @@ Recent decisions affecting current work:
 - [Phase 09]: ReadTracker.clear registered as cleanup callback for state reset between agent runs
 - [Phase 10]: Tool descriptions follow Claude Code overview + Usage bullets pattern, all under 400 char budget
 - [Phase 10]: developer_instructions uses 5-section structure covering all D-02 dimensions in 1632 chars
+- [Phase 11]: spawn_fn typed as Callable[[str, str], str] | None for Plan 02 forward compat
+- [Phase 11]: Test stubs use Mock(return_value=...) not lambda to survive Plan 02 3-arg signature change
+- [Phase 11]: explore.toml max_turns=50, mcp='', skills.enabled=false for bounded sub-agent scope
 
 ### Pending Todos
 
@@ -60,6 +63,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T06:54:27.567Z
-Stopped at: Phase 11 context gathered
-Resume file: .planning/phases/11-subagent-spawn/11-CONTEXT.md
+Last session: 2026-03-25T07:39:15.408Z
+Stopped at: Completed 11-01-PLAN.md
+Resume file: None
