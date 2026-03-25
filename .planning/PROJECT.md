@@ -26,34 +26,43 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 - ✓ EventRouter SRP 拆分 (event_payloads + PersistenceHandler + SSEHandler) — post-v1
 - ✓ DevShell 本地开发 REPL (DevConfig + DevRunner + CLI entry) — post-v1
 - ✓ Kernel 强化 (KernelRunResult + on_guard_blocked + tool 异常捕获 + stream finish 校验) — post-v1
+- ✓ BuiltinTool 体系 (base ABC + BashTool/ListDirTool/TaskTools + session 注入 + Exp 双源注册) — v1.1 (TOOL-04,07,09)
+- ✓ 文件操作 Tools (Read/Write/Edit/Glob/Grep + ReadTracker + Read-Before-Modify 协议) — v1.1 (TOOL-01~06,08)
+- ✓ Tool Description/Schema 精细化 + developer_instructions system prompt — v1.1 (PRMT-01~02)
+- ✓ SubAgent Spawn 机制 (SubAgentTool + spawn_fn 闭包 + 事件路由 + stop_event 级联) — v1.1 (SUBA-01~06, PRMT-03)
 
 ### Active
 
-(v1.1 requirements to be defined — see Current Milestone below)
+(v2.0 requirements to be defined — see Current Milestone below)
 
-## Current Milestone: v1.1 Agent 外围能力构建
+## Current Milestone: v2.0 matmaster 协程改造
 
-**Goal:** 构建 matmaster 原生内置 tool 套件、SubAgent spawn 机制和配套 prompt/description 体系，使 agent 具备完整的独立执行能力。
+**Goal:** 将 matmaster 框架从同步架构全链路改造为 async/await，为多 agent 编排做准备
 
 **Target features:**
-- 参照 Claude Code tool 集实现 matmaster 原生内置 tool 套件，session-dependent tool 通过 BaseSession 操作，session-free tool 不依赖 evomaster
-- SubAgent spawn 机制（tool_call 触发 → Exp 创建子 agent → 共享 workspace → 结果作为 tool result 返回）
-- Tool description/schema 精细化设计 + Exp 级别 system prompt 模板化管理
-- 保留 MonitorJob 等科研场景特有 tool
+- AgentKernel async 化 — run() → async generator，tool dispatch / LLM call / guard / hook 全部 await
+- LLMProvider Protocol async 化 — chat / chat_stream / chat_with_retry 改为 async 方法，OpenAIProvider 使用 AsyncOpenAI
+- 全部 BuiltinTool async 化 — run() → async，BashTool 用 asyncio.create_subprocess_exec
+- Exp 生命周期 async 化 — assemble() / build_runtime() / run() 全部 async
+- Hook 和 Guard Protocol async 化 — 所有 hook/guard 的 Protocol 定义改为 async
+- MessageBus async 兼容 — 支持 asyncio.Queue 或类似异步原语
+- ContextCompactor async 化 — 内部 LLM 调用改 async
+- SubAgent spawn async 化 — spawn_fn 变 async，子 agent 作为协程执行
 
 ### Out of Scope
 
-- 多 agent 编排能力 — 先完成单 agent 框架解耦，编排后续设计
+- 多 agent 编排能力 — v2.0 只做 async 基础设施，编排层后续设计
 - src/ Web Service 层重构 — 保持现状，不在本次范围
 - x_master playground 迁移 — 优先 mat_master 和 minimal
 - 前端 UI 改动 — 本次只涉及后端框架层
-- 消除 evomaster session 依赖 — v1.1 维持现状，session-dependent tool 仍通过 BaseSession
+- 消除 evomaster session 依赖 — v2.0 维持现状，session-dependent tool 仍通过 BaseSession
+- DevShell async 改造 — 延后，用 asyncio.run() 包装调用即可
 
 ## Context
 
 ### Current State
 
-**Post-v1** (2026-03-25): Phase 11 complete — v1.1 milestone 全部完成。SubAgent spawn 机制实现：SubAgentTool 通过 spawn_fn 闭包触发子 agent，子 agent 有独立 exp 配置（explore.toml）但共享父 workspace/session，递归深度=1 防护（schema 层 + runtime 层双保险），stop_event 级联传播，事件通过 MessageBus 路由并保留 MatMaster:* source 前缀。863 tests passed.
+**Post-v1.1** (2026-03-26): v1.1 milestone 全部完成。完整 BuiltinTool 体系（12 tools）、SubAgent spawn 机制、Tool description/schema 精细化、developer_instructions system prompt。863 tests passed。当前全链路同步，准备进入 v2.0 async 改造。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI (not refactored), OpenAI SDK, tiktoken.
 
@@ -139,4 +148,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after completing Phase 11 (SubAgent Spawn 机制) — v1.1 milestone complete*
+*Last updated: 2026-03-26 after starting Milestone v2.0 (matmaster 协程改造)*
