@@ -557,8 +557,8 @@ class TestExecutionWorkdirBinding:
         ):
             assert by_name[name]._workdir == control, name
 
-    def test_sub_agent_tool_uses_execution_workdir(self, tmp_path: Path) -> None:
-        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+    def test_spawn_tool_uses_execution_workdir(self, tmp_path: Path) -> None:
+        from matmaster.tools.builtin.spawn_tool import SpawnTool
 
         control = tmp_path / "control"
         execution = tmp_path / "execution"
@@ -571,7 +571,7 @@ class TestExecutionWorkdirBinding:
         subs = [
             t
             for t in runtime.spec.tool_registry.all_tools
-            if isinstance(t, SubAgentTool)
+            if isinstance(t, SpawnTool)
         ]
         assert len(subs) == 1
         assert subs[0]._workdir == execution
