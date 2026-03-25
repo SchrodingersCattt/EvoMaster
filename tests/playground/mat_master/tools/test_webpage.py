@@ -6,7 +6,11 @@ import time
 
 import pytest
 
-from playground.mat_master.tools.webpage import _fetch_webpage_content
+from playground.mat_master.tools.webpage import (
+    ExtractWebpageTool,
+    _WebpageDiskCache,
+    _fetch_webpage_content,
+)
 
 
 class _FakeResponse:
@@ -136,3 +140,93 @@ class TestPostCleaning:
         assert 'Cleantexthere' in result or 'Clean text here' in result
         assert '\x00' not in result
         assert '\x01' not in result
+
+
+class TestWebpageDiskCache:
+    """P1-b: _WebpageDiskCache unit tests."""
+
+    def test_put_and_get(self, tmp_path):
+        cache = _WebpageDiskCache(tmp_path / 'cache')
+        cache.put('https://example.com', '# Hello')
+        assert cache.get('https://example.com') == '# Hello'
+
+    def test_miss_returns_none(self, tmp_path):
+        cache = _WebpageDiskCache(tmp_path / 'cache')
+        assert cache.get('https://never-stored.com') is None
+
+    def test_expired_entry_returns_none(self, tmp_path):
+        cache = _WebpageDiskCache(tmp_path / 'cache')
+        cache.put('https://example.com', 'old content')
+        key = cache._key('https://example.com')
+        path = cache._dir / f'{key}.json'
+        data = json.loads(path.read_text())
+        data['fetched_at'] = time.time() - cache.TTL - 10
+        path.write_text(json.dumps(data))
+        assert cache.get('https://example.com') is None
+
+    def test_eviction_removes_oldest(self, tmp_path):
+        cache = _WebpageDiskCache(tmp_path / 'cache')
+        cache.MAX_ENTRIES = 3
+        for i in range(3):
+            cache.put(f'https://example.com/{i}', f'content_{i}')
+            time.sleep(0.01)
+        cache.put('https://example.com/new', 'new_content')
+        assert cache.get('https://example.com/0') is None
+        assert cache.get('https://example.com/1') is not None
+        assert cache.get('https://example.com/new') == 'new_content'
+
+    def test_malformed_cache_file_treated_as_miss(self, tmp_path):
+        cache = _WebpageDiskCache(tmp_path / 'cache')
+        cache.put('https://example.com', 'content')
+        key = cache._key('https://example.com')
+        path = cache._dir / f'{key}.json'
+        path.write_text('NOT VALID JSON{{{')
+        assert cache.get('https://example.com') is None
+
+    def test_cache_isolation_between_workspaces(self, tmp_path):
+        cache_a = _WebpageDiskCache(tmp_path / 'ws_a' / '_tmp' / 'web_cache')
+        cache_b = _WebpageDiskCache(tmp_path / 'ws_b' / '_tmp' / 'web_cache')
+        cache_a.put('https://example.com', 'content_a')
+        assert cache_b.get('https://example.com') is None
+
+
+class TestCacheIntegration:
+    """P1-b: cache integration in ExtractWebpageTool."""
+
+    def test_tool_with_no_cache_dir(self):
+        tool = ExtractWebpageTool(cache_dir=None)
+        assert tool._cache is None
+
+    def test_tool_with_cache_dir(self, tmp_path):
+        tool = ExtractWebpageTool(cache_dir=tmp_path / 'cache')
+        assert tool._cache is not None
+
+
+class TestMarkdownifyCircuitBreaker:
+    """Spec verification #3: markdownify exception must NOT trip circuit breaker."""
+
+    def test_markdownify_exception_no_circuit_breaker(self, monkeypatch):
+        from unittest.mock import Mock
+        import markdownify as md
+        monkeypatch.setattr(md, 'markdownify', Mock(side_effect=ValueError('bad HTML')))
+        fake = _FakeResponse('<html><body><p>Hello World</p></body></html>')
+        monkeypatch.setattr(
+            'playground.mat_master.tools.webpage.requests.Session',
+            lambda: type('S', (), {
+                'get': lambda self, *a, **kw: fake,
+                '__enter__': lambda s: s,
+                '__exit__': lambda *a: None,
+            })(),
+        )
+        tool = ExtractWebpageTool()
+        result, info = tool.execute(
+            session=Mock(), args_json='{"url": ["https://example.com"]}'
+        )
+        parsed = json.loads(result)
+        content_found = any(
+            isinstance(v, dict) and 'content' in v
+            for v in parsed.values()
+        )
+        assert content_found, f"Expected content in result, got: {parsed}"
+        assert len(tool._domain_circuit.open_circuits) == 0
+        assert tool._domain_circuit.failures == {}
