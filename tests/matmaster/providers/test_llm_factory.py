@@ -105,3 +105,33 @@ class TestBuildProvider:
             llm_override="opus",
         )
         assert provider._model == "claude-sonnet-4-6"
+
+    @patch("matmaster.providers.openai_provider.openai.OpenAI")
+    def test_stream_timeout_passed(self, _mock_client) -> None:
+        """stream_timeout and stream_idle_timeout from profile are passed to provider."""
+        from matmaster.config.llm import LLMRouteConfig
+
+        config = LLMConfig(
+            profiles={
+                "opus": LLMProfileConfig(
+                    provider="openai",
+                    model="claude-opus-4-6",
+                    model_family="claude-4.6",
+                    api_key="sk-test-opus",
+                    base_url="http://litellm-proxy",
+                    thinking_effort="high",
+                    reasoning_protocol="anthropic_adaptive_thinking",
+                    temperature_policy="force_one_when_reasoning",
+                    temperature=0.7,
+                    stream_timeout=120.0,
+                    stream_idle_timeout=60.0,
+                ),
+            },
+            routes={"claude-opus-4-6": LLMRouteConfig(profile="opus")},
+            default="opus",
+        )
+
+        provider = build_provider(config)
+
+        assert provider.stream_timeout == 120.0
+        assert provider.stream_idle_timeout == 60.0
