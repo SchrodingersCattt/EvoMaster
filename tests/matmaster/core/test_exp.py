@@ -10,8 +10,7 @@ import pytest
 from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.events import FinishEvent
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelRunResult
+from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult, KernelRunResult
 from tests.matmaster.core.conftest import MockLLMProvider
 
 
@@ -192,8 +191,8 @@ class TestExpRun:
         """run() delegates to build_runtime then kernel.run."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
-        mock_finish = FinishEvent(source="agent", status="completed", reason="natural")
-        mock_kernel_result = KernelRunResult(event=mock_finish, messages=[])
+        mock_kr = KernelResult(status="completed", reason="natural")
+        mock_kernel_result = KernelRunResult(result=mock_kr, messages=[])
 
         mock_kernel = MagicMock()
         mock_kernel.run.return_value = mock_kernel_result
@@ -208,7 +207,7 @@ class TestExpRun:
         mock_kernel.run.assert_called_once_with(
             mock_spec, "do something", history=None, stop_event=None
         )
-        assert result is mock_finish
+        assert result is mock_kr
 
     def test_run_forwards_bus(self) -> None:
         """run() passes bus to build_runtime."""
@@ -217,10 +216,10 @@ class TestExpRun:
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
         bus = MessageBus()
-        mock_finish = FinishEvent(source="agent", status="completed", reason="natural")
+        mock_kr = KernelResult(status="completed", reason="natural")
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = KernelRunResult(event=mock_finish, messages=[])
+        mock_kernel.run.return_value = KernelRunResult(result=mock_kr, messages=[])
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
@@ -236,12 +235,12 @@ class TestExpRun:
 
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
-        mock_finish = FinishEvent(source="agent", status="completed", reason="natural")
+        mock_kr = KernelResult(status="completed", reason="natural")
         stop = threading.Event()
         history = [MagicMock()]
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = KernelRunResult(event=mock_finish, messages=[])
+        mock_kernel.run.return_value = KernelRunResult(result=mock_kr, messages=[])
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
@@ -264,10 +263,10 @@ class TestExpCleanup:
         """Cleanup is called after successful kernel.run via run()."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
-        mock_finish = FinishEvent(source="agent", status="completed", reason="natural")
+        mock_kr = KernelResult(status="completed", reason="natural")
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = KernelRunResult(event=mock_finish, messages=[])
+        mock_kernel.run.return_value = KernelRunResult(result=mock_kr, messages=[])
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
