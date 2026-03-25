@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Agent 外围能力构建
 status: Ready to execute
-stopped_at: Completed 09-01-PLAN.md and 09-02-PLAN.md
-last_updated: "2026-03-25T04:15:22.951Z"
+stopped_at: Completed 09-03-PLAN.md
+last_updated: "2026-03-25T04:29:39.937Z"
 progress:
   total_phases: 4
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 6
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-24)
 ## Current Position
 
 Phase: 09 (tools) — EXECUTING
-Plan: 2 of 3 (09-01 and 09-02 complete)
+Plan: 3 of 3 (09-01 and 09-02 complete)
 
 ## Accumulated Context
 
@@ -42,6 +42,9 @@ Recent decisions affecting current work:
 - [Phase 09]: Import SNIPPET_LINES/maybe_truncate from evomaster editor (internal dep, avoid duplication)
 - [Phase 09]: ReadTracker uses posixpath.normpath for remote Linux path normalization
 - [Phase 09]: tracker=None disables Read-Before-Modify enforcement (backward compat)
+- [Phase 09]: build_runtime condition changed from wildcard-only to any non-empty builtin list
+- [Phase 09]: EditorTool fully removed from Exp assembly, replaced by native ReadTool/WriteTool/EditTool
+- [Phase 09]: ReadTracker.clear registered as cleanup callback for state reset between agent runs
 
 ### Pending Todos
 
@@ -55,6 +58,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T04:15:22.949Z
-Stopped at: Completed Wave 1 (09-01, 09-02)
+Last session: 2026-03-25T04:29:39.935Z
+Stopped at: Completed 09-03-PLAN.md
 Resume file: None
