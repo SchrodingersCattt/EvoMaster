@@ -6,8 +6,9 @@ sections (task, memory) are placed last.
 
 Section order: identity -> mode_contract -> skills -> tools -> memory -> task
 
-Used by all Exp.assemble() implementations to build system prompts for
-AgentRuntimeSpec.
+All static text (identity, mode_contract) comes from the caller (toml config).
+ContextBuilder has no default text of its own -- empty string means the
+section is skipped entirely.
 """
 
 from __future__ import annotations
@@ -24,32 +25,21 @@ class ContextBuilder:
     Section order (fixed): identity -> mode_contract -> skills -> tools -> memory -> task
     LLM prompt caching benefits from stable prefix, so high-frequency change sections
     (task, memory) are placed last.
+
+    All static text is caller-supplied. Empty string = section skipped.
     """
 
     SEPARATOR = "\n\n---\n\n"
 
     SECTION_ORDER = ("identity", "mode_contract", "skills", "tools", "memory", "task")
 
-    _DEFAULT_IDENTITY = "You are a helpful AI assistant."
-
-    _MODE_CONTRACTS: dict[str, str] = {
-        "direct": (
-            "You are in direct execution mode. "
-            "Complete the user's task directly using available tools."
-        ),
-        "planner": (
-            "You are in planner mode. "
-            "Break down the task into steps, plan each step, then execute."
-        ),
-    }
-
     def build(
         self,
         ctx: PlaygroundContext,
         tool_registry: ToolRegistry,
         *,
-        mode: str = "direct",
-        identity: str | None = None,
+        identity: str = "",
+        mode_contract: str = "",
         skill_registry: Any = None,
         memory_context: str | None = None,
         task_context: str | None = None,
@@ -58,10 +48,10 @@ class ContextBuilder:
         """Assemble system prompt from sections in fixed order.
 
         Args:
-            ctx: PlaygroundContext from Playground.setup().
+            ctx: PlaygroundContext from Playground.prepare().
             tool_registry: ToolRegistry with registered tools.
-            mode: Execution mode ('direct' or 'planner').
-            identity: Custom identity text. Defaults to standard assistant identity.
+            identity: Identity text from toml developer_instructions.
+            mode_contract: Mode contract text from toml mode_contract.
             skill_registry: Optional skill registry with get_meta_info_context().
             memory_context: Optional memory/conversation summary text.
             task_context: Optional task description text.
@@ -72,7 +62,6 @@ class ContextBuilder:
         """
         disabled = disabled_sections or set()
 
-        # Map section names to their builder calls
         section_builders: dict[str, str] = {}
 
         for section_name in self.SECTION_ORDER:
@@ -82,7 +71,7 @@ class ContextBuilder:
             content = self._build_section(
                 section_name,
                 identity=identity,
-                mode=mode,
+                mode_contract=mode_contract,
                 skill_registry=skill_registry,
                 tool_registry=tool_registry,
                 memory_context=memory_context,
@@ -98,8 +87,8 @@ class ContextBuilder:
         self,
         name: str,
         *,
-        identity: str | None,
-        mode: str,
+        identity: str,
+        mode_contract: str,
         skill_registry: Any,
         tool_registry: ToolRegistry,
         memory_context: str | None,
@@ -107,9 +96,9 @@ class ContextBuilder:
     ) -> str:
         """Dispatch to the appropriate section builder."""
         if name == "identity":
-            return self._build_identity(identity or self._DEFAULT_IDENTITY)
+            return self._build_identity(identity)
         if name == "mode_contract":
-            return self._build_mode_contract(mode)
+            return self._build_mode_contract(mode_contract)
         if name == "skills":
             return self._build_skills(skill_registry)
         if name == "tools":
@@ -122,17 +111,19 @@ class ContextBuilder:
 
     @staticmethod
     def _build_identity(identity: str) -> str:
-        """Build the identity section."""
-        return f"# Identity\n\n{identity}"
+        """Build the identity section. Empty string = skip."""
+        text = identity.strip()
+        if not text:
+            return ""
+        return f"# Identity\n\n{text}"
 
-    def _build_mode_contract(self, mode: str) -> str:
-        """Build the mode contract section.
-
-        Supported modes: 'direct', 'planner'. Unknown modes fall back
-        to the mode string itself as description.
-        """
-        contract_text = self._MODE_CONTRACTS.get(mode, f"Mode: {mode}")
-        return f"# Mode Contract\n\n{contract_text}"
+    @staticmethod
+    def _build_mode_contract(mode_contract: str) -> str:
+        """Build the mode contract section. Empty string = skip."""
+        text = mode_contract.strip()
+        if not text:
+            return ""
+        return f"# Mode Contract\n\n{text}"
 
     @staticmethod
     def _build_skills(skill_registry: Any) -> str:

@@ -77,14 +77,35 @@ def builder() -> ContextBuilder:
 # ---------------------------------------------------------------------------
 
 
-def test_build_default_sections(
+def test_build_no_args_produces_empty(
     builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
 ) -> None:
-    """Build with identity and tool_registry only -- output contains identity
-    section header and tools section, separated by SEPARATOR."""
+    """Build with all defaults (empty identity, empty mode_contract, no tools)
+    produces empty string -- no sections to include."""
     result = builder.build(ctx, tool_registry)
+    assert result == ""
+
+
+def test_build_with_identity_only(
+    builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
+) -> None:
+    """Passing identity produces only the identity section."""
+    result = builder.build(ctx, tool_registry, identity="I am Mat Master.")
     assert "# Identity" in result
-    assert ContextBuilder.SEPARATOR in result
+    assert "I am Mat Master." in result
+    assert "# Mode Contract" not in result
+
+
+def test_build_with_mode_contract_only(
+    builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
+) -> None:
+    """Passing mode_contract produces only the mode_contract section."""
+    result = builder.build(
+        ctx, tool_registry, mode_contract="Execute tasks directly."
+    )
+    assert "# Mode Contract" in result
+    assert "Execute tasks directly." in result
+    assert "# Identity" not in result
 
 
 def test_section_order_fixed(
@@ -98,6 +119,8 @@ def test_section_order_fixed(
     result = builder.build(
         ctx,
         reg,
+        identity="Test identity",
+        mode_contract="Test mode contract",
         skill_registry=MockSkillRegistry(),
         memory_context="some memory",
         task_context="some task",
@@ -136,27 +159,29 @@ def test_disable_multiple_sections(
     assert "# Memory" not in result
 
 
-def test_direct_mode_contract(
+def test_mode_contract_text_passthrough(
     builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
 ) -> None:
-    """mode='direct' -- mode_contract section contains 'direct' description."""
-    result = builder.build(ctx, tool_registry, mode="direct")
+    """mode_contract text is passed through verbatim (after strip)."""
+    text = "You are in direct execution mode. Complete tasks."
+    result = builder.build(ctx, tool_registry, mode_contract=text)
     assert "# Mode Contract" in result
-    assert "direct execution mode" in result.lower()
+    assert text in result
 
 
-def test_planner_mode_contract(
+def test_different_mode_contracts_produce_different_prompts(
     builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
 ) -> None:
-    """mode='planner' -- mode_contract section contains 'planner' description,
-    differs from direct."""
-    direct_result = builder.build(ctx, tool_registry, mode="direct")
-    planner_result = builder.build(ctx, tool_registry, mode="planner")
-
-    assert "# Mode Contract" in planner_result
-    assert "planner mode" in planner_result.lower()
-    # Content must differ
-    assert direct_result != planner_result
+    """Different mode_contract strings produce different outputs."""
+    direct = builder.build(
+        ctx, tool_registry, mode_contract="Direct mode."
+    )
+    planner = builder.build(
+        ctx, tool_registry, mode_contract="Planner mode."
+    )
+    assert direct != planner
+    assert "Direct mode." in direct
+    assert "Planner mode." in planner
 
 
 def test_identity_custom(
@@ -165,6 +190,20 @@ def test_identity_custom(
     """identity='Custom Identity' -- output contains that text."""
     result = builder.build(ctx, tool_registry, identity="Custom Identity")
     assert "Custom Identity" in result
+
+
+def test_strip_trailing_newlines(
+    builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
+) -> None:
+    """TOML multi-line strings may have trailing newlines -- stripped."""
+    result = builder.build(
+        ctx, tool_registry,
+        identity="\nMat Master\n",
+        mode_contract="\nDirect mode.\n",
+    )
+    # No double newline after header from trailing \n
+    assert "# Identity\n\nMat Master\n\n---" in result
+    assert "# Mode Contract\n\nDirect mode." in result
 
 
 def test_tools_section_lists_tool_names(
