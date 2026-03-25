@@ -123,7 +123,11 @@ class AgentRunService:
         import yaml
 
         for pg_type in ("mat_master", "minimal"):
-            llm_config_path = _project_root / "configs" / pg_type / "llm_config.yaml"
+            if pg_type == "mat_master":
+                cfg_dir = _project_root / "matmaster_config"
+            else:
+                cfg_dir = _project_root / "configs" / pg_type
+            llm_config_path = cfg_dir / "llm_config.yaml"
             if not llm_config_path.exists():
                 logger.warning("LLM config not found: %s", llm_config_path)
                 continue
@@ -132,7 +136,7 @@ class AgentRunService:
             except Exception:
                 logger.exception("Failed to load LLM config: %s", llm_config_path)
                 continue
-            config_path = _project_root / "configs" / pg_type / "config.yaml"
+            config_path = cfg_dir / "config.yaml"
             if config_path.exists():
                 with open(config_path) as f:
                     main_cfg = yaml.safe_load(f)
