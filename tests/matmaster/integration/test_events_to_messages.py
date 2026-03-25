@@ -59,6 +59,23 @@ def _response_event(content: str = "done") -> dict:
     return {"source": "MatMaster", "type": "response", "content": content}
 
 
+def _assistant_state_event(
+    *,
+    content: str = "",
+    reasoning_content: str | None = None,
+    tool_calls: list[dict] | None = None,
+) -> dict:
+    """Build a MatMaster assistant_state event dict."""
+    payload: dict = {
+        "role": "assistant",
+        "content": content,
+        "tool_calls": tool_calls or [],
+    }
+    if reasoning_content is not None:
+        payload["reasoning_content"] = reasoning_content
+    return {"source": "MatMaster", "type": "assistant_state", "content": payload}
+
+
 class TestEventsToMessagesUserEvent:
     """events_to_messages converts user event dict to UserMessage."""
 
@@ -191,6 +208,21 @@ class TestEventsToMessagesPreservesOrder:
         assert isinstance(result[-1], AssistantMessage)
         assert result[-1].content == "answer"
 
+    def test_thought_and_response_merge_into_single_assistant_message(self):
+        events = [
+            _user_event("q"),
+            _thought_event("thinking first"),
+            _response_event("answer"),
+            _run_result_event("answer"),
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assert len(result) == 2
+        assert isinstance(result[-1], AssistantMessage)
+        assert result[-1].content == "answer"
+        assert result[-1].reasoning_content == "thinking first"
+
     def test_run_result_is_only_legacy_fallback_when_response_missing(self):
         events = [_run_result_event("legacy answer")]
 
@@ -199,6 +231,22 @@ class TestEventsToMessagesPreservesOrder:
         assert len(result) == 1
         assert isinstance(result[-1], AssistantMessage)
         assert result[-1].content == "legacy answer"
+
+    def test_assistant_state_reasoning_round_trips_to_matmaster_messages(self):
+        events = [
+            _user_event("q"),
+            _assistant_state_event(
+                content="answer",
+                reasoning_content="hidden reasoning",
+            ),
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assert len(result) == 2
+        assert isinstance(result[-1], AssistantMessage)
+        assert result[-1].content == "answer"
+        assert result[-1].reasoning_content == "hidden reasoning"
 
 
 class TestEventsToMessagesPersistenceRoundTrip:
@@ -285,3 +333,43 @@ class TestEventsToMessagesPersistenceRoundTrip:
         assistant_msgs = [m for m in result if isinstance(m, AssistantMessage)]
         assert len(assistant_msgs) == 1
         assert assistant_msgs[0].content == "legacy string answer"
+
+
+class TestExcludeSpawnForParentDialog:
+    """Parent LLM history must ignore persisted sub-agent rows (spawn_id set)."""
+
+    def test_exclude_spawn_events_drops_subagent_rows(self) -> None:
+        events = [
+            _user_event("hello"),
+            {
+                **_response_event("parent"),
+                "task_id": "t1",
+                "spawn_id": None,
+            },
+            {
+                **_response_event("subagent only"),
+                "task_id": "t1",
+                "spawn_id": "sp-1",
+            },
+        ]
+        filtered = ChatHistoryConverter.exclude_spawn_events(events)
+        assert len(filtered) == 2
+        assert all(ev.get("spawn_id") is None for ev in filtered)
+        msgs = ChatHistoryConverter.events_to_messages(filtered)
+        assistant = [m for m in msgs if isinstance(m, AssistantMessage)]
+        assert len(assistant) == 1
+        assert assistant[0].content == "parent"
+
+    def test_agent_run_style_pipeline_excludes_spawn_before_task_filter(self) -> None:
+        """Mirrors agent_run_service: exclude_spawn -> exclude_task_events -> events_to_messages."""
+        raw = [
+            _user_event("q"),
+            {**_response_event("current turn"), "task_id": "t-new", "spawn_id": None},
+            {**_response_event("sub"), "task_id": "t-new", "spawn_id": "s1"},
+        ]
+        step1 = ChatHistoryConverter.exclude_spawn_events(raw)
+        step2 = ChatHistoryConverter.exclude_task_events(step1, "t-new")
+        msgs = ChatHistoryConverter.events_to_messages(step2)
+        assert len(msgs) == 1
+        assert isinstance(msgs[0], UserMessage)
+        assert msgs[0].content == "q"

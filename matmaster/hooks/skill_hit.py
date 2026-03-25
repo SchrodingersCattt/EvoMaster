@@ -10,6 +10,7 @@ import logging
 
 from matmaster.core.bus import MessageBus
 from matmaster.core.hooks import BaseHook
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.messages import ToolCallData
 from matmaster.types.events import SkillHitEvent
 
@@ -29,7 +30,7 @@ class SkillHitHook(BaseHook):
         self._bus = bus
         self._source = source
 
-    def post_tool_call(self, tool_call: ToolCallData, result: str) -> None:
+    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         """Emit SkillHitEvent if tool is use_skill with a valid skill_name."""
         if tool_call.name != _SKILL_TOOL_NAME:
             return

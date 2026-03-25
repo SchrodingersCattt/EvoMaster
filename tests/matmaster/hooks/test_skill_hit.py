@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.messages import ToolCallData
 
 
@@ -22,7 +23,7 @@ class TestSkillHitHook:
             name="use_skill",
             arguments={"skill_name": "bohrium-job", "action": "get_info"},
         )
-        hook.post_tool_call(tc, "result")
+        hook.post_tool_call(tc, ToolResult(content="result"))
 
         bus.emit.assert_called_once()
         emitted = bus.emit.call_args[0][0]
@@ -37,7 +38,7 @@ class TestSkillHitHook:
         bus = MagicMock()
         hook = SkillHitHook(bus=bus)
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        hook.post_tool_call(tc, "result")
+        hook.post_tool_call(tc, ToolResult(content="result"))
 
         bus.emit.assert_not_called()
 
@@ -48,7 +49,7 @@ class TestSkillHitHook:
         bus = MagicMock()
         hook = SkillHitHook(bus=bus)
         tc = ToolCallData(id="tc-1", name="use_skill", arguments={"action": "get_info"})
-        hook.post_tool_call(tc, "result")
+        hook.post_tool_call(tc, ToolResult(content="result"))
 
         bus.emit.assert_not_called()
 
@@ -59,6 +60,6 @@ class TestSkillHitHook:
         bus = MagicMock()
         hook = SkillHitHook(bus=bus)
         tc = ToolCallData(id="tc-1", name="use_skill", arguments={"skill_name": 123})
-        hook.post_tool_call(tc, "result")
+        hook.post_tool_call(tc, ToolResult(content="result"))
 
         bus.emit.assert_not_called()

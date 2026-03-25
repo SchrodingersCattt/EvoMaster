@@ -52,6 +52,8 @@ def build_provider(
         temperature=profile.effective_temperature(),
         max_tokens=profile.max_tokens,
         timeout=profile.timeout,
+        stream_timeout=profile.stream_timeout,
+        stream_idle_timeout=profile.stream_idle_timeout,
         max_retries=profile.max_retries,
         retry_delay=profile.retry_delay,
         extra_kwargs=profile.build_extra_kwargs(),

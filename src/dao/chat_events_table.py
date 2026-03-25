@@ -15,18 +15,24 @@ class ChatEventsTable(BaseTable):
     table_name = 'evo_chat_events'
 
     def get_session_events(
-        self, session_id: str, limit: Optional[int] = None
+        self,
+        session_id: str,
+        limit: Optional[int] = None,
+        include_spawn: bool = False,
     ) -> List[Dict]:
         """
         获取会话历史事件列表。按 run（task_id）分组后再按时间排，避免两 pod 并发写时
         （旧 pod 优雅退出期间仍写第一轮、新 pod 写 run_interrupted/重跑）导致两轮事件按 created_at 交错。
+
+        默认仅返回父级事件（spawn_id IS NULL）；include_spawn=True 时包含子 agent 行。
         """
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
+                spawn_filter = "" if include_spawn else " AND spawn_id IS NULL"
                 sql = f'''
-                    SELECT id, session_id, source, type, content, task_id, invocation_id, created_at
+                    SELECT id, session_id, source, type, content, task_id, invocation_id, spawn_id, created_at
                     FROM {self.table_name}
-                    WHERE session_id = %s
+                    WHERE session_id = %s{spawn_filter}
                     ORDER BY created_at ASC, id ASC
                 '''
                 if limit:
@@ -63,6 +69,7 @@ class ChatEventsTable(BaseTable):
                         'session_id': row['session_id'],
                         'task_id': row.get('task_id'),
                         'invocation_id': row.get('invocation_id'),
+                        'spawn_id': row.get('spawn_id'),
                     }
                     # 供刷新后回放时计算 stream_started_at / elapsed_ms
                     if row.get('created_at') is not None:
@@ -132,10 +139,12 @@ class ChatEventsTable(BaseTable):
         source: str,
         event_type: str,
         content: any,
+        *,
         task_id: Optional[str] = None,
         invocation_id: Optional[str] = None,
+        spawn_id: Optional[str] = None,
     ) -> bool:
-        """添加事件到数据库。invocation_id 为本轮调用标识，用于前端区分轮次。"""
+        """添加事件到数据库。invocation_id 为本轮调用标识；spawn_id 标记子 agent 事件（NULL=父级）。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 # 将 content 转换为 JSON 字符串
@@ -144,8 +153,8 @@ class ChatEventsTable(BaseTable):
                 cursor.execute(
                     f'''
                     INSERT INTO {self.table_name}
-                    (session_id, source, type, content, task_id, invocation_id, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                    (session_id, source, type, content, task_id, invocation_id, spawn_id, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                     ''',
                     (
                         session_id,
@@ -154,6 +163,7 @@ class ChatEventsTable(BaseTable):
                         content_json,
                         task_id,
                         invocation_id,
+                        spawn_id,
                     ),
                 )
                 conn.commit()

@@ -63,8 +63,9 @@ class PersistenceHandler:
                 event.source,
                 event_type,
                 content,
-                self._task_id,
+                task_id=self._task_id,
                 invocation_id=self._invocation_id,
+                spawn_id=getattr(event, "spawn_id", None),
             )
         except Exception:
             logger.error(

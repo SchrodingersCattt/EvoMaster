@@ -12,6 +12,7 @@ Tests cover:
 
 from __future__ import annotations
 
+import re
 import threading
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -169,6 +170,47 @@ class TestSpawnFnLifecycle:
         # Verify source_override is "MatMaster:explore"
         call_kwargs = mock_br.call_args[1]
         assert call_kwargs["source_override"] == "MatMaster:explore"
+
+    def test_spawn_fn_passes_fresh_child_spawn_id_to_build_runtime(self) -> None:
+        """Each spawn generates uuid.uuid4().hex[:16] and passes it to child build_runtime."""
+        ctx = _make_ctx()
+        mock_kr = KernelResult(
+            status="completed", reason="natural", final_content="ok"
+        )
+        mock_run_result = KernelRunResult(result=mock_kr, messages=[])
+        mock_kernel = MagicMock()
+        mock_kernel.run.return_value = mock_run_result
+        mock_runtime = AgentRuntime(
+            kernel=mock_kernel, spec=MagicMock(), cleanup=MagicMock()
+        )
+        hex16 = re.compile(r"^[0-9a-f]{16}$")
+
+        with (
+            patch("matmaster.config.loader.load_exp_config") as mock_load,
+            patch.object(Exp, "build_runtime", return_value=mock_runtime) as mock_br,
+        ):
+            mock_load.return_value = ExpConfig(name="explore")
+            spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
+            spawn_fn("explore", "task")
+
+        call_kwargs = mock_br.call_args[1]
+        assert "spawn_id" in call_kwargs
+        sid1 = call_kwargs["spawn_id"]
+        assert sid1 is not None
+        assert hex16.match(sid1)
+
+        with (
+            patch("matmaster.config.loader.load_exp_config") as mock_load,
+            patch.object(Exp, "build_runtime", return_value=mock_runtime) as mock_br,
+        ):
+            mock_load.return_value = ExpConfig(name="explore")
+            spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
+            spawn_fn("explore", "task")
+
+        sid2 = mock_br.call_args[1]["spawn_id"]
+        assert sid2 is not None
+        assert hex16.match(sid2)
+        assert sid1 != sid2
 
 
 class TestStopEventPropagation:

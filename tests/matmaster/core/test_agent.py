@@ -13,7 +13,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from matmaster.tools.tool_result import ToolResult
 from matmaster.tools.tool_registry import ToolRegistry
+from matmaster.types.errors import LLMError
 from matmaster.types.guards import Guard, GuardContext, GuardResult
 from matmaster.types.runtime import AgentRuntimeSpec, KernelResult
 from matmaster.core.hooks import BaseHook, HookAction
@@ -104,6 +106,8 @@ class StreamingProvider:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> Iterator[StreamChunk]:
         yield from self._chunks
 
@@ -143,6 +147,8 @@ class ToolCallingProvider:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> Iterator[StreamChunk]:
         self._call_count += 1
         if self._call_count <= self._max_tool_turns:
@@ -208,7 +214,7 @@ class RecordingHook(BaseHook):
         self.calls.append("pre_tool_call")
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: str) -> None:
+    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         self.calls.append("post_tool_call")
 
     def pre_llm_call(self, messages: list[Message], turn: int) -> None:
@@ -230,6 +236,18 @@ class ChunkRecordingHook(BaseHook):
 
     def on_stream_chunk(self, chunk: StreamChunk) -> None:
         self.chunks.append(chunk)
+
+
+class SegmentRecordingHook(BaseHook):
+    """Hook that records completed logical segments."""
+
+    def __init__(self) -> None:
+        self.segments: list[tuple[str, str, str | None]] = []
+
+    def on_segment_complete(
+        self, segment_type: str, content: str, stream_id: str | None
+    ) -> None:
+        self.segments.append((segment_type, content, stream_id))
 
 
 def _make_spec(
@@ -345,6 +363,8 @@ class TestExternalCancel:
                 self,
                 messages: list,
                 tools: list | None = None,
+                *,
+                timeout: float | None = None,
             ) -> Iterator[StreamChunk]:
                 self._call_count += 1
                 if self._call_count == 1:
@@ -549,7 +569,11 @@ class TestToolCallDelta:
                 return self.chat(messages, tools)
 
             def chat_stream(
-                self, messages: list, tools: list | None = None
+                self,
+                messages: list,
+                tools: list | None = None,
+                *,
+                timeout: float | None = None,
             ) -> Iterator[StreamChunk]:
                 self._call_count += 1
                 if self._call_count == 1:
@@ -613,7 +637,7 @@ class TestHistoryParameter:
             def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages: list, tools: list | None = None) -> Iterator[StreamChunk]:
+            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
@@ -649,7 +673,7 @@ class TestHistoryParameter:
             def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages: list, tools: list | None = None) -> Iterator[StreamChunk]:
+            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
@@ -677,7 +701,7 @@ class TestHistoryParameter:
             def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages: list, tools: list | None = None) -> Iterator[StreamChunk]:
+            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
@@ -839,7 +863,7 @@ class TestCallLlmUsageCapture:
             ):
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages, tools=None):
+            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 yield StreamChunk(content="hello")
                 yield StreamChunk(finish_reason="stop", usage=usage_data)
 
@@ -850,6 +874,29 @@ class TestCallLlmUsageCapture:
         assert result.result.reason == "natural"
         response = kernel._call_llm(spec, [UserMessage(content="test")])
         assert response.usage == usage_data
+
+    def test_segment_complete_hooks_run_for_reasoning_and_response(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = StreamingProvider(
+            [
+                StreamChunk(reasoning_content="think "),
+                StreamChunk(content="answer"),
+                StreamChunk(finish_reason="stop"),
+            ]
+        )
+        segment_hook = SegmentRecordingHook()
+        spec = _make_spec(provider=provider, hooks=[segment_hook])
+        kernel = AgentKernel()
+
+        response = kernel._call_llm(spec, [UserMessage(content="test")])
+
+        assert response.reasoning_content == "think "
+        assert response.content == "answer"
+        assert segment_hook.segments == [
+            ("thought", "think ", "turn-1"),
+            ("response", "answer", "turn-1"),
+        ]
 
 
 class TestCompactorIntegration:
@@ -918,7 +965,7 @@ class TestCompactorIntegration:
             ):
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages, tools=None):
+            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 yield StreamChunk(
                     content="done", finish_reason="stop", usage=usage_data
                 )
@@ -970,7 +1017,7 @@ class TestKernelResultFields:
             def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages, tools=None):
+            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 self._call_count += 1
                 if self._call_count == 1:
                     yield StreamChunk(
@@ -1047,3 +1094,105 @@ class TestKernelResultFields:
         assert result.result.reason == "invalid_finish"
         assert result.result.num_turns == 1
         assert result.result.stop_reason == "length"
+
+
+class ErrorThenSuccessProvider:
+    """Provider that raises LLMError N times, then succeeds."""
+
+    def __init__(self, fail_count: int, error: LLMError) -> None:
+        self._fail_count = fail_count
+        self._error = error
+        self._call_count = 0
+        self.stream_timeout = 10.0
+        self.max_retries = 3
+        self.retry_delay = 0.0  # no sleep in tests
+
+    def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
+        return self.chat(messages, tools)
+
+    def chat_stream(self, messages, tools=None, *, timeout=None):
+        self._call_count += 1
+        if self._call_count <= self._fail_count:
+            raise self._error
+        yield StreamChunk(content="recovered", finish_reason="stop")
+
+
+class TestCallLlmRetry:
+    def test_retry_on_retryable_error(self) -> None:
+        """_call_llm retries on retryable LLMError and succeeds."""
+        provider = ErrorThenSuccessProvider(
+            fail_count=1,
+            error=LLMError("timeout", retryable=True),
+        )
+        spec = AgentRuntimeSpec(
+            llm_provider=provider,
+            system_prompt="test",
+        )
+        from matmaster.core.agent import AgentKernel
+        kernel = AgentKernel()
+        response = kernel._call_llm(spec, [UserMessage(content="hi")])
+        assert response.content == "recovered"
+        assert provider._call_count == 2
+
+    def test_no_retry_on_non_retryable_error(self) -> None:
+        """_call_llm raises immediately on non-retryable LLMError."""
+        provider = ErrorThenSuccessProvider(
+            fail_count=1,
+            error=LLMError("auth failed", retryable=False),
+        )
+        spec = AgentRuntimeSpec(
+            llm_provider=provider,
+            system_prompt="test",
+        )
+        from matmaster.core.agent import AgentKernel
+        kernel = AgentKernel()
+        with pytest.raises(LLMError, match="auth failed"):
+            kernel._call_llm(spec, [UserMessage(content="hi")])
+        assert provider._call_count == 1
+
+    def test_all_retries_exhausted(self) -> None:
+        """_call_llm raises RuntimeError after all retries exhausted."""
+        provider = ErrorThenSuccessProvider(
+            fail_count=99,
+            error=LLMError("timeout", retryable=True),
+        )
+        spec = AgentRuntimeSpec(
+            llm_provider=provider,
+            system_prompt="test",
+        )
+        from matmaster.core.agent import AgentKernel
+        kernel = AgentKernel()
+        with pytest.raises(RuntimeError, match="LLM stream failed"):
+            kernel._call_llm(spec, [UserMessage(content="hi")])
+        assert provider._call_count == 3  # max_retries default
+
+    def test_timeout_doubles_on_retry(self) -> None:
+        """Each retry doubles the timeout passed to chat_stream."""
+        timeouts_seen: list[float | None] = []
+
+        class TimeoutTracker:
+            stream_timeout = 10.0
+            max_retries = 3
+            retry_delay = 0.0
+
+            def chat(self, messages, tools=None):
+                return LLMResponse(content="", finish_reason="stop")
+            def chat_with_retry(self, messages, tools=None, **kw):
+                return self.chat(messages, tools)
+            def chat_stream(self, messages, tools=None, *, timeout=None):
+                timeouts_seen.append(timeout)
+                if len(timeouts_seen) < 3:
+                    raise LLMError("timeout", retryable=True)
+                yield StreamChunk(content="ok", finish_reason="stop")
+
+        spec = AgentRuntimeSpec(
+            llm_provider=TimeoutTracker(),
+            system_prompt="test",
+        )
+        from matmaster.core.agent import AgentKernel
+        kernel = AgentKernel()
+        kernel._call_llm(spec, [UserMessage(content="hi")])
+        assert timeouts_seen == [10.0, 20.0, 40.0]
