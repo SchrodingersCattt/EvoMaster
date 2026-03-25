@@ -158,6 +158,32 @@ class TestLoadExpConfig:
         cfg = load_exp_config("test", exps_dir=exps_dir)
         assert "${FOO}" in cfg.developer_instructions
 
+    def test_mode_contract_not_expanded(self, tmp_path, monkeypatch):
+        """${...} in mode_contract is preserved, not expanded."""
+        monkeypatch.setenv("FOO", "bar")
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "test.toml").write_text(
+            'name = "test"\n'
+            "mode_contract = 'Use ${FOO} as template var'\n"
+        )
+        cfg = load_exp_config("test", exps_dir=exps_dir)
+        assert "${FOO}" in cfg.mode_contract
+
+    def test_mode_contract_loaded(self, tmp_path):
+        """mode_contract field is loaded from toml."""
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "direct.toml").write_text(
+            'name = "direct"\n'
+            'mode_contract = "Execute directly."\n'
+            'developer_instructions = "You are Mat Master."\n'
+            "\n[tools]\nbuiltin = ['*']\nmcp = '*'\n",
+            encoding="utf-8",
+        )
+        cfg = load_exp_config("direct", exps_dir=exps_dir)
+        assert cfg.mode_contract == "Execute directly."
+
     def test_default_exps_dir(self):
         """Default exps_dir resolves to matmaster/exps/ and can load direct.toml."""
         cfg = load_exp_config("direct")
