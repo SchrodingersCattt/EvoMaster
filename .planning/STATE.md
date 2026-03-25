@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Agent 外围能力构建
-status: Ready to execute
-stopped_at: Completed 11-02-PLAN.md
-last_updated: "2026-03-25T07:52:33.437Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 11-03-PLAN.md
+last_updated: "2026-03-25T08:05:24.321Z"
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
 ---
 
 # Project State
@@ -53,6 +53,8 @@ Recent decisions affecting current work:
 - [Phase 11]: spawn_fn uses Callable[..., str] type annotation for flexibility
 - [Phase 11]: stop_event injected via tool._stop_event attribute mutation in Exp.run()
 - [Phase 11]: source_override defaults to None for backward compat with existing callers
+- [Phase 11]: _is_matmaster_source helper centralizes MatMaster prefix matching in chat_history.py
+- [Phase 11]: startswith('MatMaster:') guard in normalize functions preserves sub-agent source prefix
 
 ### Pending Todos
 
@@ -66,6 +68,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T07:52:33.435Z
-Stopped at: Completed 11-02-PLAN.md
+Last session: 2026-03-25T08:05:24.317Z
+Stopped at: Completed 11-03-PLAN.md
 Resume file: None

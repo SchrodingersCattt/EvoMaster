@@ -29,7 +29,7 @@ Full details: milestones/v1-ROADMAP.md
 - [ ] **Phase 8: BuiltinTool 基础设施与核心 Tools** - 建立 BuiltinTool 基类、session 注入模式，交付 BashTool/ListDirTool/TaskTool
 - [ ] **Phase 9: 文件操作 Tools** - 交付 Read/Write/Edit/Glob/Grep 五个文件操作工具及 Read-Before-Modify 协议
 - [x] **Phase 10: Tool Description 与 System Prompt 设计** - 为所有 builtin tool 编写精细化 description/schema，设计 direct 模式 system prompt (completed 2026-03-25)
-- [ ] **Phase 11: SubAgent Spawn 机制** - 实现子 agent spawn/执行/取消/事件路由完整生命周期
+- [x] **Phase 11: SubAgent Spawn 机制** - 实现子 agent spawn/执行/取消/事件路由完整生命周期 (completed 2026-03-25)
 
 ## Phase Details
 
@@ -90,12 +90,12 @@ Plans:
   3. 子 agent 禁止再次 spawn 子 agent（递归深度 = 1），违反时返回错误
   4. 父 agent 取消时 stop_event 级联传播到正在运行的子 agent，子 agent 立即终止
   5. 子 agent 的流式事件通过父 agent 的 MessageBus 路由，前端可实时观察子 agent 执行过程
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 11-01-PLAN.md -- SubAgentTool 类实现 + explore.toml 子 exp 定义 + 单元测试
 - [x] 11-02-PLAN.md -- Exp 层 spawn_fn 闭包创建 + SubAgentTool 注册 + source_override + 集成测试
-- [ ] 11-03-PLAN.md -- 事件路由 source 前缀兼容 + chat_history 改造 + service 层 stop_event 注入
+- [x] 11-03-PLAN.md -- 事件路由 source 前缀兼容 + chat_history 改造 + service 层 stop_event 注入
 
 ## Progress
 
@@ -114,4 +114,4 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11
 | 8. BuiltinTool 基础设施与核心 Tools | v1.1 | 0/3 | Planning | - |
 | 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete    | 2026-03-25 |
-| 11. SubAgent Spawn 机制 | v1.1 | 2/3 | In Progress|  |
+| 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete   | 2026-03-25 |
