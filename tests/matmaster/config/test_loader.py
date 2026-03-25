@@ -184,6 +184,35 @@ class TestLoadExpConfig:
         cfg = load_exp_config("direct", exps_dir=exps_dir)
         assert cfg.mode_contract == "Execute directly."
 
+    def test_mode_contract_reaches_system_prompt(self, tmp_path):
+        """End-to-end: toml mode_contract appears in built system prompt."""
+        from matmaster.core.exp import Exp
+        from matmaster.types.context import PlaygroundContext
+        from tests.matmaster.core.conftest import MockLLMProvider
+
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "test.toml").write_text(
+            'name = "test"\n'
+            'developer_instructions = "I am Test Agent."\n'
+            'mode_contract = "Execute tasks in test mode."\n'
+            "\n[tools]\nbuiltin = []\nmcp = ''\n",
+            encoding="utf-8",
+        )
+        cfg = load_exp_config("test", exps_dir=exps_dir)
+        exp = Exp(cfg)
+
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            llm_provider=MockLLMProvider(),
+        )
+        runtime = exp.build_runtime(ctx)
+
+        assert "I am Test Agent." in runtime.spec.system_prompt
+        assert "Execute tasks in test mode." in runtime.spec.system_prompt
+
     def test_default_exps_dir(self):
         """Default exps_dir resolves to matmaster/exps/ and can load direct.toml."""
         cfg = load_exp_config("direct")
