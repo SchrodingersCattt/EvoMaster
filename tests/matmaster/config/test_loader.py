@@ -12,19 +12,19 @@ from matmaster.config.loader import load_base_system_prompt, load_exp_config, lo
 # Minimal YAML content for tests
 _YAML_CONTENT = """\
 llm:
-  litellm:
+  opus:
     provider: "openai"
     model: "claude-opus-4-6"
     temperature: 0.7
-  azure:
+  sonnet:
     provider: "openai"
-    model: "azure/gpt-5"
+    model: "claude-sonnet-4-6"
     temperature: 0.5
-  default: "litellm"
+  default: "opus"
 
 agents:
   general:
-    llm: "litellm"
+    llm: "opus"
     max_turns: 200
     tools:
       builtin: ["*"]
@@ -45,12 +45,12 @@ class TestLoadLlmConfig:
     def test_from_yaml_path(self, yaml_file: Path) -> None:
         cfg = load_llm_config(yaml_file)
         assert isinstance(cfg, LLMConfig)
-        assert cfg.default == "litellm"
-        assert cfg.profiles["litellm"].model == "claude-opus-4-6"
+        assert cfg.default == "opus"
+        assert cfg.profiles["opus"].model == "claude-opus-4-6"
 
     def test_from_string_path(self, yaml_file: Path) -> None:
         cfg = load_llm_config(str(yaml_file))
-        assert "azure" in cfg.profiles
+        assert "sonnet" in cfg.profiles
 
     def test_from_dict(self) -> None:
         raw = {

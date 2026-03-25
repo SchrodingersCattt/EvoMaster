@@ -73,7 +73,7 @@ def _get_llm_by_alias(alias: str | None = None):
     )
     cfg = config_mgr.load()
     llm_section = cfg.llm if isinstance(cfg.llm, dict) else {}
-    llm_alias = (alias or llm_section.get('default') or 'litellm').strip()
+    llm_alias = (alias or llm_section.get('default') or 'opus').strip()
     llm_raw = llm_section.get(llm_alias)
     if not isinstance(llm_raw, dict):
         raise RuntimeError(f'LLM alias not found in config: {llm_alias}')
