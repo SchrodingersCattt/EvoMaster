@@ -97,6 +97,35 @@ def load_base_system_prompt(*, exps_dir: Path | None = None) -> str:
     return _load_base_system_prompt(exps_dir)
 
 
+def list_available_exps(
+    *,
+    exps_dir: Path | None = None,
+) -> list[tuple[str, str]]:
+    """Return (name, description) pairs for all non-reserved exp definitions.
+
+    Scans ``matmaster/exps/*.toml``, skipping underscore-prefixed files.
+    Used by SpawnTool to populate the exp_name enum and description.
+    """
+    import tomllib
+
+    if exps_dir is None:
+        exps_dir = Path(__file__).resolve().parent.parent / "exps"
+
+    result: list[tuple[str, str]] = []
+    for p in sorted(exps_dir.glob("*.toml")):
+        if p.stem.startswith("_"):
+            continue
+        try:
+            with open(p, "rb") as f:
+                raw = tomllib.load(f)
+            name = raw.get("name", p.stem)
+            desc = raw.get("description", "")
+            result.append((name, desc))
+        except Exception:
+            _logger.warning("Failed to read exp definition: %s", p, exc_info=True)
+    return result
+
+
 def load_exp_config(
     name: str,
     *,

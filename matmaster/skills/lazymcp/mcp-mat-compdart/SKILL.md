@@ -7,10 +7,9 @@ mcp_server: mat_compdart
 
 # mat_compdart — 成分优化与遗传算法
 
-## MCP 服务器
+## 连接方式
 
-- 传输协议: http
-- 地址: `https://dart-uuid1754393230.appspace.bohrium.com/mcp?token=b3a955c99823427683843616328023d8`
+调用本 skill 后，下列工具已自动注册到你的工具列表中，可直接按工具名调用。无需手动连接 MCP 服务器。
 
 ## 工具列表
 

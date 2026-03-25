@@ -179,11 +179,15 @@ class Exp:
         # 4b. SpawnTool: register with spawn_fn if "spawn" in config
         builtin_cfg = self._config.tools.builtin
         if ("spawn" in builtin_cfg or builtin_cfg == ["*"]) and ctx.session is not None:
+            from matmaster.config.loader import list_available_exps
             from matmaster.tools.builtin.spawn_tool import SpawnTool
 
             spawn_fn = self._make_spawn_fn(ctx, bus, source_prefix="MatMaster")
             spawn_tool = SpawnTool(
-                session=ctx.session, workdir=Path(ctx.execution_workdir), spawn_fn=spawn_fn
+                session=ctx.session,
+                workdir=Path(ctx.execution_workdir),
+                spawn_fn=spawn_fn,
+                available_exps=list_available_exps(),
             )
             registry.register(spawn_tool, source="builtin")
 
