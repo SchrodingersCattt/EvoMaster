@@ -11,7 +11,7 @@ profiles:
     model: "claude-opus-4-6"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
-    thinking_effort: "high"
+    thinking_effort: "max"
     reasoning_protocol: "anthropic_adaptive_thinking"
     temperature_policy: "force_one_when_reasoning"
     temperature: 0.7
@@ -60,6 +60,33 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
+  gemini-pro:
+    provider: "openai"
+    model: "gemini-3.1-pro-preview"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "high"
+    temperature: 1.0
+    timeout: 300
+    stream_timeout: 20
+    stream_idle_timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+
+  gpt54:
+    provider: "openai"
+    model: "GPT-5.4"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "medium"
+    timeout: 300
+    stream_timeout: 20
+    stream_idle_timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+
   compaction:
     provider: "openai"
     model: "gemini-3-flash-preview"
@@ -83,5 +110,9 @@ routes:
     profile: haiku
   "gemini-3-flash-preview":
     profile: gemini
+  "gemini-3.1-pro-preview":
+    profile: gemini-pro
+  "cds/GPT-5.4":
+    profile: gpt54
 
 default: "opus"
