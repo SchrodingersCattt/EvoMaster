@@ -13,7 +13,7 @@
 | 项 | 选择 |
 |---|---|
 | 截断策略 | 混合：超限报错 + 总行数 + 前 50 行预览 |
-| 度量单位 | 纯行数 |
+| 度量单位 | 行数为主 + 字符数兜底 |
 | 默认限制 | 2000 行 |
 | Session 层 | 不改动（全量读取后在 ReadTool 层切片） |
 | 参数命名 | `offset` + `limit` 替换 `line_range` |
@@ -26,7 +26,8 @@
 在 `matmaster/tools/builtin/read_tool.py` 顶部定义：
 
 ```python
-MAX_READ_LINES = 2000       # 无 offset/limit 时的默认行数上限
+MAX_READ_LINES = 2000       # 默认行数上限
+MAX_READ_CHARS = 200_000    # 字符数硬上限（兜底：防 minified JSON / base64 等少行大内容）
 PREVIEW_LINES = 50          # 超限报错时附带的预览行数
 ```
 
@@ -61,6 +62,7 @@ json_schema = {
 Read the contents of a file with line numbers (cat -n format).
 
 Usage:
+- ALWAYS use read_file to read files. NEVER use cat/head/tail via execute_bash.
 - By default reads up to 2000 lines from the beginning.
 - For large files, use offset and limit to read specific portions.
 - When you already know which part of the file you need, only read that part.
@@ -74,21 +76,34 @@ _execute(arguments):
   1. 提取参数: file_path, offset (可选), limit (可选)
   2. session.is_file(file_path) — 不存在则报错
   3. session.read_file(file_path) — 全量读取
-  4. tracker.mark_read(file_path) — 无论后续是否超限都标记
+  4. (mark_read 延迟到成功返回内容时，见下)
   5. lines = content.splitlines(), total = len(lines)
      (使用 splitlines() 统一处理 \n 和 \r\n，且不会因末尾换行多出空行)
   6. 分支:
 
+  参数校验:
+    offset 若提供则必须 >= 1, 否则报错
+    limit 若提供则必须 >= 1, 否则报错
+
   无 offset/limit (全文读取模式):
-    total <= MAX_READ_LINES → 正常返回全部内容 (带行号)
-    total > MAX_READ_LINES  → 返回超限报错 + 总行数 + 前 PREVIEW_LINES 行预览
+    total <= MAX_READ_LINES → mark_read() + 正常返回全部内容 (带行号)
+    total > MAX_READ_LINES  → 不 mark_read + 返回超限报错 + 总行数 + 前 PREVIEW_LINES 行预览
 
   有 offset 和/或 limit (范围读取模式):
+    mark_read() (Agent 主动指定了范围，视为有意读取)
     start = offset (默认 1)
     count = limit (默认 total - start + 1, 上限 MAX_READ_LINES)
     校验: 1 <= start <= total, 否则报错
     end = min(start + count - 1, total)
+    actual_count = end - start + 1
     返回 lines[start-1:end] (带行号, init_line=start)
+    如果 actual_count < 请求的 count (无论 count 来自显式 limit 还是隐式上限):
+      在输出末尾附加: [Note: showing {actual_count} of {remaining} remaining lines. ...]
+
+  字符数兜底 (适用于所有模式):
+    对最终要返回的格式化内容检查总字符数
+    如果超过 MAX_READ_CHARS, 按字符截断并附加提示:
+      [Output truncated at {MAX_READ_CHARS} chars. Use offset/limit for smaller ranges.]
 ```
 
 ### Over-Limit Error Format
@@ -106,15 +121,17 @@ Preview (first {PREVIEW_LINES} lines):
 
 ### Key Behaviors
 
-1. **mark_read 时机**：`session.read_file()` 成功后立即标记，不管是否超限。确保 Agent 后续可以用 edit_file 修改该文件（Read-Before-Modify 协议不受影响）。
-2. **limit 隐式截断 + 通知**：如果 Agent 显式传入的 `limit` 超过 MAX_READ_LINES，实际返回 MAX_READ_LINES 行，并在输出末尾附加提示：`[Note: requested {limit} lines, capped at {MAX_READ_LINES}. Use offset to continue reading.]`。避免 Agent 误以为已读到全部请求内容。
-3. **只传 offset 不传 limit**：从 offset 行开始，读到文件末尾，但总量不超过 MAX_READ_LINES 行。
+1. **mark_read 时机**：仅在成功返回文件内容时标记（全文模式未超限、或范围读取模式）。超限报错 + 预览时**不标记**，因为 Agent 只看到了前 50 行，允许其 edit 文件任意位置违背 Read-Before-Modify 的安全意图。Agent 需要先用 offset/limit 显式读取目标区域，才能获得编辑权限。
+2. **范围读取截断通知**：当实际返回行数少于请求范围（无论原因是 limit 超过 MAX_READ_LINES、还是 offset-only 模式命中上限），都在输出末尾附加提示，告知 Agent 还有多少行未读。避免任何形式的静默截断。
+3. **只传 offset 不传 limit**：从 offset 行开始，读到文件末尾，但总量不超过 MAX_READ_LINES 行。如果被截断，附加通知。
 4. **只传 limit 不传 offset**：从第 1 行开始，读取 limit 行（受 MAX_READ_LINES 上限约束）。
-5. **移除 evomaster 依赖**：不再导入 `MAX_OUTPUT_SIZE` 和 `maybe_truncate`。保留 `_format_with_line_numbers` 方法但移除内部的 `maybe_truncate` 调用（行数限制已在上游完成）。
+5. **参数校验**：offset 和 limit 若提供则必须 >= 1，否则返回明确错误。
+6. **字符数兜底**：最终输出内容超过 MAX_READ_CHARS (200,000) 时，按字符截断并附加提示。防止 minified JSON、base64 等少行大内容撑爆 token 预算。
+7. **移除 evomaster 依赖**：不再导入 `MAX_OUTPUT_SIZE` 和 `maybe_truncate`。保留 `_format_with_line_numbers` 方法但移除内部的 `maybe_truncate` 调用（行数限制 + 字符兜底已在上游完成）。
 
 ### Impact on Other Components
 
-- **EditTool / WriteTool**：无需改动。依赖 `ReadTracker.has_been_read()`，新 ReadTool 无论超限与否都 `mark_read()`。注意 EditTool 仍保留对 `evomaster.agent.tools.builtin.editor` 的 `maybe_truncate` / `MAX_OUTPUT_SIZE` / `SNIPPET_LINES` 依赖，这些在后续 EditTool 独立化时处理，不在本次范围内。
+- **EditTool / WriteTool**：无需改动。依赖 `ReadTracker.has_been_read()`。新 ReadTool 在全文超限时不 mark_read，Agent 必须先用 offset/limit 读取目标区域才能获得编辑权限。这强化了 Read-Before-Modify 协议的语义：只有真正读到了内容才允许编辑。注意 EditTool 仍保留对 `evomaster.agent.tools.builtin.editor` 的 `maybe_truncate` / `MAX_OUTPUT_SIZE` / `SNIPPET_LINES` 依赖，这些在后续 EditTool 独立化时处理，不在本次范围内。
 - **ReadTracker**：无需改动。
 - **Exp 组装**（`matmaster/core/exp.py`）：`ReadTool(session=..., workdir=..., tracker=...)` 构造签名不变，无需改动。
 
@@ -129,11 +146,16 @@ Preview (first {PREVIEW_LINES} lines):
 | `test_read_with_offset_and_limit` | offset=100, limit=50 返回第 100-149 行 |
 | `test_read_with_offset_only` | 只传 offset，读到末尾但不超过 MAX_READ_LINES |
 | `test_read_with_limit_exceeds_max` | limit=5000 被截断为 MAX_READ_LINES 且输出包含截断通知 |
+| `test_offset_only_truncated_with_notice` | 只传 offset 时被 MAX_READ_LINES 截断，输出包含通知 |
 | `test_offset_out_of_range` | offset > 总行数时报错 |
-| `test_tracker_marked_on_overlimit` | 超限时仍然 mark_read |
+| `test_tracker_not_marked_on_overlimit` | 全文超限时不 mark_read |
+| `test_tracker_marked_on_ranged_read` | 范围读取时 mark_read |
 | `test_read_with_only_limit` | 只传 limit 不传 offset，从第 1 行开始 |
 | `test_read_empty_file` | 空文件正常返回，不报错 |
 | `test_file_with_trailing_newline` | 末尾有 `\n` 的文件行数计算正确（splitlines 处理） |
+| `test_offset_zero_rejected` | offset=0 报错 |
+| `test_limit_negative_rejected` | limit=-1 报错 |
+| `test_char_limit_truncation` | 少行但超 MAX_READ_CHARS 的内容被字符截断并附通知 |
 
 ## Files Changed
 
