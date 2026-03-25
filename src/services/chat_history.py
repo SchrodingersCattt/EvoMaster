@@ -62,6 +62,11 @@ class ChatHistoryConverter:
     """将 get_session_events 返回的事件列表转为 task.meta['dialog_history'] 所需的 Message 序列化列表。"""
 
     @staticmethod
+    def exclude_spawn_events(events: list[dict]) -> list[dict]:
+        """Drop sub-agent rows (spawn_id set) when building parent LLM dialog history."""
+        return [ev for ev in events if ev.get('spawn_id') is None]
+
+    @staticmethod
     def exclude_task_events(events: list[dict], task_id: str | None) -> list[dict]:
         """Drop in-flight task events when the current user turn is passed separately."""
         if not task_id:
