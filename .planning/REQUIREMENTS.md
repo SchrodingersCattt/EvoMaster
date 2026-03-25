@@ -31,7 +31,7 @@ Requirements for Agent 外围能力构建。Each maps to roadmap phases.
 ### Prompt/Description
 
 - [x] **PRMT-01**: 每个 builtin tool 具有精细化的 description 和 json_schema，优化 LLM 调用准确率
-- [ ] **PRMT-02**: Exp system prompt（developer_instructions）针对 direct 模式设计完整的 agent 行为指导
+- [x] **PRMT-02**: Exp system prompt（developer_instructions）针对 direct 模式设计完整的 agent 行为指导
 - [ ] **PRMT-03**: SubAgent 的 exp 定义包含针对子任务场景的专用 system prompt
 
 ## Future Requirements
@@ -80,7 +80,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SUBA-05 | Phase 11 | Pending |
 | SUBA-06 | Phase 11 | Pending |
 | PRMT-01 | Phase 10 | Complete |
-| PRMT-02 | Phase 10 | Pending |
+| PRMT-02 | Phase 10 | Complete |
 | PRMT-03 | Phase 11 | Pending |
 
 **Coverage:**
