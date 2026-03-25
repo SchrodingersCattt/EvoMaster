@@ -15,6 +15,11 @@ from evomaster.utils.types import (
 from src.utils.chat_event_source import normalize_event_source
 
 
+def _is_matmaster_source(source: str) -> bool:
+    """Check if source is MatMaster or MatMaster:subtype."""
+    return source == 'MatMaster' or source.startswith('MatMaster:')
+
+
 def _summarize_assistant_state_content_for_log(raw: Any) -> str:
     """失败时单行描述 content 形态，避免整段 JSON 撑爆日志。"""
     if raw is None:
@@ -268,7 +273,7 @@ class ChatHistoryConverter:
                 out.append(UserMessage(content=text).model_dump())
                 continue
 
-            if source == 'MatMaster' and typ in ('thought', 'planner_reply'):
+            if _is_matmaster_source(source) and typ in ('thought', 'planner_reply'):
                 flush_tool_calls()
                 assistant_state_tool_ids.clear()
                 last_assistant_text_idx = None
@@ -278,7 +283,7 @@ class ChatHistoryConverter:
                     last_assistant_text_idx = len(out) - 1
                 continue
 
-            if source == 'MatMaster' and typ == 'response':
+            if _is_matmaster_source(source) and typ == 'response':
                 flush_tool_calls()
                 assistant_state_tool_ids.clear()
                 last_assistant_text_idx = None
@@ -289,7 +294,7 @@ class ChatHistoryConverter:
                     response_seen_in_turn = True
                 continue
 
-            if source == 'MatMaster' and typ == 'assistant_state':
+            if _is_matmaster_source(source) and typ == 'assistant_state':
                 flush_tool_calls()
                 raw_content = ev.get('content')
                 try:
@@ -341,7 +346,7 @@ class ChatHistoryConverter:
                     )
                 continue
 
-            if source == 'MatMaster' and typ in ('run_result', 'finish'):
+            if _is_matmaster_source(source) and typ in ('run_result', 'finish'):
                 flush_tool_calls()
                 assistant_state_tool_ids.clear()
                 last_assistant_text_idx = None
