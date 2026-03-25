@@ -4,6 +4,8 @@ description: "Specialized skill for WRITING long-form academic content (Papers, 
 skill_type: operator
 ---
 
+<!-- multi-server: mat_sn, mat_doc -->
+
 # Manuscript Scribe Skill
 
 The "Ghostwriter" for MatMaster. Primary output is **files**. In planner mode, full-document chat output is expected for final delivery; in direct mode, default to concise summary + file path unless the user asks for full text.

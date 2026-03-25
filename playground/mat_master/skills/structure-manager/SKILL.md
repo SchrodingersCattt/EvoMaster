@@ -4,6 +4,8 @@ description: "Skill for searching, obtaining, validating, and converting atomic 
 skill_type: operator
 ---
 
+<!-- multi-server: mat_struct_db, mat_sg, mat_sn, mat_doc -->
+
 # Structure Manager Skill
 
 Handles downloading structure files (from direct URLs or HTML pages), validating atomic structures (CIF, POSCAR, XYZ), and converting between file formats (dpdata).

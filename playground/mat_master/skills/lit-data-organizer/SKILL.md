@@ -4,6 +4,8 @@ description: Consolidate any multi-source literature evidence into one canonical
 skill_type: operator
 ---
 
+<!-- multi-server: mat_sn, mat_doc -->
+
 # Lit Data Organizer Skill
 
 Builds one canonical evidence table from structured literature outputs and exports it as CSV or JSONL.
