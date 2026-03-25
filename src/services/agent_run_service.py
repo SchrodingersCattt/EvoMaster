@@ -12,10 +12,8 @@ import asyncio
 import gc
 import logging
 import os
-import threading
 import time
 import uuid
-import warnings
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
@@ -37,7 +35,7 @@ from matmaster.integration import (
     WorkspaceHandler,
 )
 from matmaster.integration.bohrium_setup import BohriumSetupService
-from matmaster.core.playground import Playground
+from matmaster.core.playground import Playground, PlaygroundManager
 from matmaster.types.events import (
     CancelledEvent,
     ErrorEvent,
@@ -64,6 +62,7 @@ _DIALOG_HISTORY_MAX_EVENTS = int(
 )
 
 _project_root = Path(__file__).resolve().parent.parent.parent
+_config_root = _project_root / "matmaster_config"  # 平铺配置目录
 RUN_ID_WEB = 'mat_master_web'
 
 
@@ -108,82 +107,43 @@ class AgentRunService:
     def __init__(self, sessions_service=None):
         self._sessions_service = sessions_service or get_sessions_service()
         self._executor = ThreadPoolExecutor(max_workers=_AGENT_MAX_WORKERS)
-        self._playgrounds: dict[str, Any] = {}
-        self._playground_init_done = threading.Event()
+        self._pg_manager = PlaygroundManager(_project_root)
 
     def init_playground_sync(self) -> None:
-        """Validate config YAML existence at startup -- no dynamic module import (D-04)."""
+        """Validate configs at startup -- delegates to PlaygroundManager + LLM check."""
+        self._pg_manager.validate_startup()
+        self._validate_llm_configs()
+
+    def _validate_llm_configs(self) -> None:
+        """启动时 LLM 配置快速失败检查。
+
+        校验 agents.general.llm 与 llm_config.yaml profiles 的一致性。
+        TODO: 后续迁入 Exp 层 startup validation 接口。
+        """
+        from matmaster.config.loader import load_llm_config
         import yaml
 
-        for pg_type in ("mat_master", "minimal"):
-            config_path = _project_root / "configs" / pg_type / "config.yaml"
-            if not config_path.exists():
-                logger.warning("Config not found: %s", config_path)
-                continue
-            with open(config_path) as f:
-                cfg = yaml.safe_load(f)
-            if not isinstance(cfg, dict) or "agents" not in cfg:
-                logger.warning("Config missing 'agents' key: %s", config_path)
-
-        # Validate llm_config.yaml at startup (fail-fast)
-        from matmaster.config.loader import load_llm_config
-
-        for pg_type in ("mat_master", "minimal"):
-            llm_config_path = _project_root / "configs" / pg_type / "llm_config.yaml"
-            if not llm_config_path.exists():
-                logger.warning("LLM config not found: %s", llm_config_path)
-                continue
-            try:
-                llm_cfg = load_llm_config(llm_config_path)
-            except Exception:
-                logger.exception("Failed to load LLM config: %s", llm_config_path)
-                continue
-            # Cross-validate agents.general.llm against llm_config profiles
-            config_path = _project_root / "configs" / pg_type / "config.yaml"
-            if config_path.exists():
-                import yaml
-                with open(config_path) as f:
-                    main_cfg = yaml.safe_load(f)
-                agents = (main_cfg or {}).get("agents", {})
-                general_llm = agents.get("general", {}).get("llm")
-                if general_llm and general_llm not in llm_cfg.profiles:
-                    logger.error(
-                        "agents.general.llm='%s' not found in llm_config profiles: %s",
-                        general_llm,
-                        list(llm_cfg.profiles),
-                    )
-
-        # Deprecation warnings for old modules (per D-02)
+        llm_config_path = _config_root / "llm_config.yaml"
+        if not llm_config_path.exists():
+            logger.warning("LLM config not found: %s", llm_config_path)
+            return
         try:
-            import evomaster  # noqa: F401
-
-            warnings.warn(
-                "evomaster package is deprecated. Use matmaster instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        except ImportError:
-            pass
-
-        self._playground_init_done.set()
-        logger.info("MatMaster chat: playground config validation complete.")
-
-    def _get_or_create_playground(
-        self,
-        session_id: str,
-        playground_type: str = "mat_master",
-    ) -> Playground:
-        """Return or create Playground by session_id. Per D-03: x_master raises ValueError."""
-        if playground_type == "x_master":
-            raise ValueError(
-                "x_master playground_type is not supported in the new pipeline"
-            )
-        if session_id in self._playgrounds:
-            return self._playgrounds[session_id]
-        config_path = _project_root / "configs" / playground_type / "config.yaml"
-        pg = Playground(config_path=config_path)
-        self._playgrounds[session_id] = pg
-        return pg
+            llm_cfg = load_llm_config(llm_config_path)
+        except Exception:
+            logger.exception("Failed to load LLM config: %s", llm_config_path)
+            return
+        config_path = _config_root / "config.yaml"
+        if config_path.exists():
+            with open(config_path) as f:
+                main_cfg = yaml.safe_load(f)
+            agents = (main_cfg or {}).get("agents", {})
+            general_llm = agents.get("general", {}).get("llm")
+            if general_llm and general_llm not in llm_cfg.profiles:
+                logger.error(
+                    "agents.general.llm='%s' not found in llm_config profiles: %s",
+                    general_llm,
+                    list(llm_cfg.profiles),
+                )
 
     def get_executor(self) -> ThreadPoolExecutor:
         """Return the thread pool for agent execution."""
@@ -231,10 +191,9 @@ class AgentRunService:
 
         try:
             # -- Stage 1: Playground --
-            if not self._playground_init_done.is_set():
-                self.init_playground_sync()
+            self.init_playground_sync()
             task_id = task_id or ("ws_" + uuid.uuid4().hex[:16])
-            playground = self._get_or_create_playground(session_id)
+            playground = self._pg_manager.get_or_create(session_id)
             run_dir = str(_project_root / "runs" / RUN_ID_WEB)
             pg_ctx = playground.prepare(
                 {
@@ -479,9 +438,7 @@ class AgentRunService:
                 except Exception:
                     logger.warning("Bohrium cleanup error", exc_info=True)
             get_redis_dao().delete_stop_requested(session_id, task_id)
-            pg = self._playgrounds.pop(session_id, None)
-            if pg:
-                pg.cleanup()
+            self._pg_manager.release(session_id)
             gc.collect()
 
 

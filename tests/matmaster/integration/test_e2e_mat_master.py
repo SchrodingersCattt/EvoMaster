@@ -290,11 +290,11 @@ class TestMatMasterRunAgentSyncE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.config_path = Path("matmaster_config/config.yaml")
         mock_pg.session = None
 
         with (
-            patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
             patch(
                 "src.services.agent_run_service.BohriumSetupService"
             ) as mock_bohrium_cls,
@@ -381,7 +381,7 @@ class TestMatMasterRunAgentSyncE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.config_path = Path("matmaster_config/config.yaml")
         mock_pg.session = None
 
         current_task_id = "task-1"
@@ -407,7 +407,7 @@ class TestMatMasterRunAgentSyncE2E:
         ]
 
         with (
-            patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
             patch(
                 "src.services.agent_run_service.BohriumSetupService"
             ) as mock_bohrium_cls,
@@ -477,18 +477,19 @@ class TestMatMasterRunAgentSyncE2E:
         mock_sessions_svc.get_session_user_id.return_value = "user-123"
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
-        svc._playground_init_done.set()
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.config_path = Path("matmaster_config/config.yaml")
         mock_pg.session = None
-        svc._playgrounds["sess-events-table-error"] = mock_pg
+
+        # Pre-populate the PlaygroundManager cache so release() finds the mock
+        svc._pg_manager._playgrounds["sess-events-table-error"] = mock_pg
 
         with (
-            patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
             patch("src.services.agent_run_service.EventRouter") as mock_router_cls,
             patch(
                 "src.services.agent_run_service.BohriumSetupService"
@@ -548,11 +549,11 @@ class TestMatMasterRunAgentSyncE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.config_path = Path("matmaster_config/config.yaml")
         mock_pg.session = None
 
         with (
-            patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
             patch(
                 "src.services.agent_run_service.BohriumSetupService"
             ) as mock_bohrium_cls,
@@ -649,11 +650,11 @@ class TestMatMasterRunAgentSyncE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.config_path = Path("matmaster_config/config.yaml")
         mock_pg.session = None
 
         with (
-            patch.object(svc, "_get_or_create_playground", return_value=mock_pg),
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
             patch(
                 "src.services.agent_run_service.BohriumSetupService"
             ) as mock_bohrium_cls,
