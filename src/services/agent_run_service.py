@@ -275,7 +275,8 @@ class AgentRunService:
             )
             ssh_attached = bohrium_result.ssh_attached
             if bohrium_result.abort_result is not None:
-                return
+                # 必须返回 abort_result，供 Worker 识别失败并发「Worker 执行失败」飞书；裸 return None 会被误判为成功。
+                return bohrium_result.abort_result
             pg_ctx = pg_ctx.with_bohrium(bohrium_result._asdict())
             # Workspace handling depends on the finalized Bohrium/archival context.
             router.add_handler(
