@@ -3,6 +3,8 @@ name: mcp-mat-electron-microscope
 description: 当需要分析电子显微镜图像时调用本 skill。支持 SEM/TEM 图像的自动识别与特征分析。
 skill_type: mcp-loader
 mcp_server: mat_electron_microscope
+mcp_transport: sse
+mcp_url: http://root@pkfz1410356.bohrium.tech:50002/sse
 ---
 
 # mat_electron_microscope — 电子显微镜图像分析
