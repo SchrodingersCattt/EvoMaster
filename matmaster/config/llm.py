@@ -42,6 +42,10 @@ MODEL_FAMILY_DEFAULTS: dict[str, dict[str, str]] = {
     "gemini-3-flash-preview": {
         "temperature_policy": "default",
     },
+    "gemini-3.1-pro": {
+        "reasoning_protocol": "openai_reasoning_effort",
+        "temperature_policy": "default",
+    },
 }
 
 
@@ -56,6 +60,8 @@ def _infer_model_family(model: str) -> str | None:
         return "gpt-5"
     if "deepseek-reasoner" in name:
         return "deepseek-reasoner"
+    if "gemini-3.1-pro" in name:
+        return "gemini-3.1-pro"
     if "gemini-3-flash-preview" in name:
         return "gemini-3-flash-preview"
     return None
