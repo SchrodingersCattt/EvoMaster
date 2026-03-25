@@ -174,6 +174,7 @@ mat_master:
       - "GROMACS"
       - "OpenBabel"
       # MCP server prefixes (planner validation)
+      - "mat_abacus"
       - "mat_dpa"
       - "mat_compdart"
       - "mat_sg"
@@ -281,7 +282,7 @@ mat_master:
 # calculation_servers: 仅对这些服务器启用 path adaptor（本地文件参数会自动上传 OSS 并改写为 URL）
 # calculation_executors: 每服务器可配置 executor 与 sync_tools；sync_tools 用于 MCP 侧过滤 submit_*；Path Adaptor 对 sync_tools 中工具固定注入 type:local + Bohrium 鉴权（与 MatMaster LOCAL_EXECUTOR 对齐）
 # 结构数据库检索（当前）: mat_struct_db
-# 第一性原理计算: input-manual-helper skill + bohrium-job skill（ABACUS、CP2K、QE 等）
+# 第一性原理计算: mat_abacus
 mcp:
   config_file: "mcp_config.json"
   enabled: true
@@ -291,6 +292,8 @@ mcp:
     - "mat_dpa"
     - "mat_compdart"
     - "mat_doc"
+    - "mat_abacus"
+    - "mat_binary_calc"
     - "mat_struct_db"
     - "mat_nmr"
     - "mat_xrd"
@@ -308,6 +311,8 @@ mcp:
       - "xrd_phase_identification"
     mat_electron_microscope:
       - "get_electron_microscope_recognize"
+    mat_binary_calc:
+      - prepare_pyatb_job
   # Per-server executor and sync_tools: sync_tools 过滤 MCP 注册的 submit_*；sync_tools 内工具 Path Adaptor 固定注入 local + Bohrium 鉴权（覆盖服务器级 dispatcher）。
   calculation_executors:
     mat_sg:
@@ -398,6 +403,120 @@ mcp:
         env: {}
       sync_tools:
         - fetch_structures_from_db
+    mat_abacus:
+      executor:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/dp/native/prod-22618/abacusagenttools-matmaster-new-tool:v0.2.3"
+            platform: "ali"
+            machine_type: "c32_m128_cpu"
+            app_key: "agent"
+        resources:
+          envs: {}
+      sync_tools:
+        - abacus_prepare
+        - abacus_modify_input
+        - abacus_modify_stru
+        - abacus_collect_data
+    # Binary Calc: 同一 MCP server 下不同工具使用不同镜像/机型，通过 executor_map 按工具名分发
+    mat_binary_calc:
+      executor: null
+      executor_map:
+        run_lammps:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/lammps-agent:03810da8"
+              platform: "ali"
+              machine_type: "c16_m64_1 * NVIDIA 4090"
+              app_key: "agent"
+          resources:
+            envs: {}
+        run_cp2k:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/cp2k:2024.1"
+              platform: "ali"
+              machine_type: "c32_m128_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
+        run_pyscf:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260305"
+              platform: "ali"
+              machine_type: "c32_m128_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
+        run_abinit:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/dp/native/prod-19853/abinit:v9.10.3_pp"
+              platform: "ali"
+              machine_type: "c32_m128_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
+        run_quantum_espresso:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/quantum-espresso:7.1"
+              platform: "ali"
+              machine_type: "c32_m128_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
+        run_orca:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/dp/native/prod-19853/orca:v6.1.1"
+              platform: "ali"
+              machine_type: "c32_m128_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
+        run_gromacs:
+          type: "dispatcher"
+          machine:
+            batch_type: "OpenAPI"
+            context_type: "OpenAPI"
+            remote_profile:
+              image_address: "registry.dp.tech/dptech/gromacs:2022.2"
+              platform: "ali"
+              machine_type: "c32_m128_cpu"
+              app_key: "agent"
+          resources:
+            envs: {}
+      sync_tools:
+        - prepare_abinit_job
+        - prepare_cp2k_job
+        - prepare_qe_job
+        - prepare_lammps_job
+        - prepare_orca_job
+        - prepare_pyatb_job
+
 # ============================================
 # Skills（约束 Mat 工具调用方式，注入 meta 到上下文）
 # ============================================

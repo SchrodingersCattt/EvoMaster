@@ -1,7 +1,7 @@
 """Stateful tool-call guard: loop prevention, manuscript gate,
-structure-retrieval gate, auth-failure stop, dangerous script gate.
+structure-retrieval gate, prepare gate, auth-failure stop, dangerous script gate.
 
-Five independent concerns, each with its own state and public method:
+Six independent concerns, each with its own state and public method:
 
 1. **Loop detection** (``evaluate`` / ``record_tool_call``): Blocks repeated
    calls with identical arguments within a sliding window.
@@ -13,11 +13,14 @@ Five independent concerns, each with its own state and public method:
    confidence (fallback_level), enforces ``task_completed=partial`` when no
    CIF is delivered, and blocks low-value repeated retrieval when the stop
    condition is already met.
-4. **Auth-failure stop gate** (``evaluate`` / ``update_after_tool``): After
+4. **Prepare gate** (``evaluate``): Blocks ``mat_binary_calc_prepare_*`` when
+   ``input_file`` was created by ``str_replace_editor`` instead of sourced
+   via ``input-manual-helper get_reference``.
+5. **Auth-failure stop gate** (``evaluate`` / ``update_after_tool``): After
    AUTH_FAILURE_THRESHOLD consecutive authentication errors from mat_* MCP
    tools, blocks further execute_bash and str_replace_editor calls to prevent
    autonomous credential hunting.
-5. **Dangerous script gate** (``evaluate``): Scans Python file content on
+6. **Dangerous script gate** (``evaluate``): Scans Python file content on
    str_replace_editor create and on execute_bash python <script> for dangerous
    patterns (os.environ, credential hunting, etc.).
 """
@@ -257,6 +260,27 @@ class ToolGuard:
             'quantum_espresso': 'Quantum Espresso',
         }
         return mapping.get(software, software.upper())
+
+    @staticmethod
+    def _infer_binary_submit_software(tool_name: str) -> str:
+        m = re.match(r'^mat_binary_calc_submit_run_(.+)$', tool_name or '')
+        if not m:
+            return ''
+        token = m.group(1).lower()
+        mapping = {
+            'cp2k': 'cp2k',
+            'abinit': 'abinit',
+            'lammps': 'lammps',
+            'orca': 'orca',
+            'pyatb': 'pyatb',
+            'quantum_espresso': 'quantum_espresso',
+        }
+        return mapping.get(token, token)
+
+    @staticmethod
+    def _infer_prepare_software(tool_name: str) -> str:
+        m = re.match(r'^mat_binary_calc_prepare_(.+?)_job$', tool_name or '')
+        return m.group(1).lower() if m else ''
 
     # ── fingerprinting ─────────────────────────────────────────
 
@@ -812,7 +836,10 @@ class ToolGuard:
         if (
             self._survey_writes > 0
             and self._survey_retrieval_count < self._survey_min_retrieval_calls
-            and tool_name.startswith('mat_struct_db_')
+            and (
+                tool_name.startswith('mat_struct_db_')
+                or re.match(r'^mat_binary_calc_submit_', tool_name)
+            )
         ):
             return GuardDecision(
                 blocked=True,
@@ -829,6 +856,27 @@ class ToolGuard:
                     'survey_min_retrieval_calls': self._survey_min_retrieval_calls,
                 },
             )
+
+        # prepare_* gate: block hand-written input files
+        if re.match(r'^mat_binary_calc_prepare_', tool_name):
+            args = self._parse_tool_args(tool_call)
+            inp = self._normalize_input_path(args.get('input_file'))
+            if inp and inp in self._str_replace_created_paths:
+                sw = self._infer_prepare_software(tool_call.function.name)
+                return GuardDecision(
+                    blocked=True,
+                    message=(
+                        f"⚠️ PREPARE GATE: `input_file` was created by `str_replace_editor` "
+                        f"and cannot be passed to `{tool_call.function.name}` directly.\n\n"
+                        f"Use `use_skill input-manual-helper get_reference` to obtain a "
+                        f"validated template, then call the prepare tool with that reference path."
+                    ),
+                    info={
+                        'reason': 'prepare_hand_written_input',
+                        'software': sw,
+                        'path': inp,
+                    },
+                )
 
         # Loop detection
         is_loop, loop_info = self._is_loop(tool_call)

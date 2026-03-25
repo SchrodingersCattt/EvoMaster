@@ -61,14 +61,18 @@ TOOL_GROUPS = [
         'Crystal/structure retrieval and database search; tools like mat_struct_db_*',
     ),
     (
-        'input-manual-helper + bohrium-job',
-        'DFT/MD Calculation (Skill-based)',
-        'Input file generation, validation, and HPC submission for all DFT/MD codes: '
-        'CP2K, Quantum ESPRESSO, ABINIT, LAMMPS, ORCA, ABACUS, GROMACS, PySCF, PyATB. '
-        'Use input-manual-helper skill (render_input.py + diagnose_input.py) to generate and validate input, '
-        'then submit via bohrium-job skill (submit_job.py + poll_job.py). '
-        'PySCF/PyATB: write Python scripts directly, then submit via bohrium-job. '
-        'There are no MCP submit tools for these codes — use bohrium-job exclusively.',
+        'mat_abacus',
+        'ABACUS first-principles',
+        'Structure relaxation, SCF, bands, phonons, elasticity, etc.; tools like mat_abacus_*',
+    ),
+    (
+        'mat_binary_calc',
+        'Binary Calculators',
+        'Input preparation: prepare_lammps_job, prepare_cp2k_job, prepare_qe_job, '
+        'prepare_abinit_job, prepare_orca_job, prepare_pyatb_job. '
+        'Submit after prepare_* via bohrium-job skill (no mat_binary_calc_submit_* MCP tools). '
+        'GROMACS: also submit via bohrium-job skill (image registry.dp.tech/dptech/gromacs:2022.2, '
+        'machine c32_m128_cpu), not via mat_binary_calc_submit_run_gromacs.',
     ),
 ]
 
