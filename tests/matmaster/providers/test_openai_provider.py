@@ -55,12 +55,13 @@ class TestConstruction:
     def test_construction(self) -> None:
         with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-            mock_cls.assert_called_once_with(
-                api_key="sk-test",
-                base_url=None,
-                timeout=300.0,
-                max_retries=0,
-            )
+            mock_cls.assert_called_once()
+            call_kwargs = mock_cls.call_args.kwargs
+            assert call_kwargs["api_key"] == "sk-test"
+            assert call_kwargs["base_url"] is None
+            assert call_kwargs["timeout"] == 300.0
+            assert call_kwargs["max_retries"] == 0
+            assert "http_client" in call_kwargs
 
     def test_custom_base_url(self) -> None:
         with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
@@ -69,12 +70,13 @@ class TestConstruction:
                 api_key="sk-test",
                 base_url="https://custom.api",
             )
-            mock_cls.assert_called_once_with(
-                api_key="sk-test",
-                base_url="https://custom.api",
-                timeout=300.0,
-                max_retries=0,
-            )
+            mock_cls.assert_called_once()
+            call_kwargs = mock_cls.call_args.kwargs
+            assert call_kwargs["api_key"] == "sk-test"
+            assert call_kwargs["base_url"] == "https://custom.api"
+            assert call_kwargs["timeout"] == 300.0
+            assert call_kwargs["max_retries"] == 0
+            assert "http_client" in call_kwargs
 
     def test_custom_config(self) -> None:
         with patch("matmaster.providers.openai_provider.openai.OpenAI"):
@@ -94,12 +96,10 @@ class TestConstruction:
                 model="gpt-4o-mini", api_key="sk-test", max_retries=5
             )
             assert provider._max_retries == 5
-            mock_cls.assert_called_once_with(
-                api_key="sk-test",
-                base_url=None,
-                timeout=300.0,
-                max_retries=0,
-            )
+            mock_cls.assert_called_once()
+            call_kwargs = mock_cls.call_args.kwargs
+            assert call_kwargs["max_retries"] == 0
+            assert "http_client" in call_kwargs
 
     def test_retry_delay_stored(self) -> None:
         """Custom retry_delay stored as _retry_delay."""
@@ -110,6 +110,74 @@ class TestConstruction:
                 retry_delay=2.0,
             )
             assert provider._retry_delay == 2.0
+
+
+# ── Stream timeout construction ─────────────────────────
+
+
+class TestStreamTimeoutConstruction:
+    def test_stream_timeout_stored(self) -> None:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
+            provider = OpenAIProvider(
+                model="gpt-4o-mini",
+                api_key="sk-test",
+                stream_timeout=120.0,
+                stream_idle_timeout=60.0,
+            )
+        assert provider.stream_timeout == 120.0
+        assert provider.stream_idle_timeout == 60.0
+
+    def test_stream_timeout_defaults_none(self) -> None:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
+            provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        assert provider.stream_timeout is None
+        assert provider.stream_idle_timeout is None
+
+    def test_max_retries_property(self) -> None:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
+            provider = OpenAIProvider(
+                model="gpt-4o-mini", api_key="sk-test", max_retries=5
+            )
+        assert provider.max_retries == 5
+
+    def test_retry_delay_property(self) -> None:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
+            provider = OpenAIProvider(
+                model="gpt-4o-mini", api_key="sk-test", retry_delay=2.0
+            )
+        assert provider.retry_delay == 2.0
+
+    def test_custom_httpx_client_created(self) -> None:
+        """When stream timeouts provided, custom httpx.Client is passed to OpenAI."""
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
+            OpenAIProvider(
+                model="gpt-4o-mini",
+                api_key="sk-test",
+                timeout=1200.0,
+                stream_timeout=120.0,
+                stream_idle_timeout=60.0,
+            )
+            call_kwargs = mock_cls.call_args
+            assert "http_client" in call_kwargs.kwargs
+            http_client = call_kwargs.kwargs["http_client"]
+            # read timeout = max(60, 120) + 10 = 130
+            assert http_client.timeout.read == 130.0
+            assert http_client.timeout.connect == 15.0
+            assert http_client.timeout.write == 30.0
+            assert http_client.timeout.pool == 15.0
+
+    def test_httpx_client_fallback_without_stream_timeouts(self) -> None:
+        """Without stream timeouts, httpx client uses general timeout for read."""
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
+            OpenAIProvider(
+                model="gpt-4o-mini",
+                api_key="sk-test",
+                timeout=300.0,
+            )
+            call_kwargs = mock_cls.call_args
+            http_client = call_kwargs.kwargs["http_client"]
+            # read timeout = max(300, 300) + 10 = 310
+            assert http_client.timeout.read == 310.0
 
 
 # ── chat() response mapping ────────────────────────────

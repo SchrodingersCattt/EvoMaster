@@ -37,6 +37,8 @@ class OpenAIProvider:
         temperature: float = 0.7,
         max_tokens: int | None = None,
         timeout: float = 300.0,
+        stream_timeout: float | None = None,
+        stream_idle_timeout: float | None = None,
         max_retries: int = 3,
         retry_delay: float = 1.0,
         extra_kwargs: dict[str, Any] | None = None,
@@ -44,15 +46,51 @@ class OpenAIProvider:
         self._model = model
         self._temperature = temperature
         self._max_tokens = max_tokens
+        self._timeout = timeout
+        self._stream_timeout = stream_timeout
+        self._stream_idle_timeout = stream_idle_timeout
         self._max_retries = max_retries
         self._retry_delay = retry_delay
         self._extra_kwargs = extra_kwargs or {}
+
+        import httpx
+
+        _first_token_t = stream_timeout if stream_timeout is not None else timeout
+        _idle_t = stream_idle_timeout if stream_idle_timeout is not None else timeout
+        _read_t = float(max(_idle_t, _first_token_t) + 10)
+
+        http_client = httpx.Client(
+            timeout=httpx.Timeout(
+                connect=15.0,
+                read=_read_t,
+                write=30.0,
+                pool=15.0,
+            )
+        )
+
         self._client = openai.OpenAI(
             api_key=api_key,
             base_url=base_url,
             timeout=timeout,
             max_retries=0,  # retry handled by chat_with_retry, not SDK
+            http_client=http_client,
         )
+
+    @property
+    def stream_timeout(self) -> float | None:
+        return self._stream_timeout
+
+    @property
+    def stream_idle_timeout(self) -> float | None:
+        return self._stream_idle_timeout
+
+    @property
+    def max_retries(self) -> int:
+        return self._max_retries
+
+    @property
+    def retry_delay(self) -> float:
+        return self._retry_delay
 
     def chat(
         self,
