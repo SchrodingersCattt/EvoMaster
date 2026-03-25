@@ -3,7 +3,7 @@
 
 agents:
   general:
-    llm: "litellm"
+    llm: "opus"
 
 # env: retained as stub -- EvoMasterConfig.env requires cluster/docker/scheduler
 # sub-fields with no defaults. Removing causes Pydantic validation error.

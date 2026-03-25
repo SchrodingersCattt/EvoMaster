@@ -7,6 +7,11 @@ mcp_server: mat_dpa
 
 # mat_dpa — DPA 通用势计算
 
+## MCP 服务器
+
+- 传输协议: http
+- 地址: `https://dpa-uuid1750659890.appspace.bohrium.com/mcp?token=b2b94c52d10141e992514f9d17bcca23`
+
 ## 工具列表
 
 | 工具名 | 类型 | 说明 |

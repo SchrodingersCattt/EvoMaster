@@ -7,6 +7,11 @@ mcp_server: mat_doc
 
 # mat_doc — PDF 文档数据提取
 
+## MCP 服务器
+
+- 传输协议: http
+- 地址: `http://pfmx1355864.bohrium.tech:50001/mcp`
+
 ## 工具列表
 
 | 工具名 | 类型 | 说明 |

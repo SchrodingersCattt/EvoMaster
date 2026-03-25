@@ -7,6 +7,11 @@ mcp_server: mat_struct_db
 
 # mat_struct_db — 结构数据库检索
 
+## MCP 服务器
+
+- 传输协议: http
+- 地址: `https://mrdice-uuid1772180309.appspace.bohrium.com/mcp?token=a0d973885b6441eca858e165e90ae9c7`
+
 ## 工具列表
 
 | 工具名 | 类型 | 说明 |

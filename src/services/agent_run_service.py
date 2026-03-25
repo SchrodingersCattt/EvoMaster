@@ -171,40 +171,34 @@ class AgentRunService:
         self._validate_llm_configs()
 
     def _validate_llm_configs(self) -> None:
-        """启动时 LLM 配置快速失败检查。
-
-        校验 agents.general.llm 与 llm_config.yaml profiles 的一致性。
-        TODO: 后续迁入 Exp 层 startup validation 接口。
-        """
+        """启动时校验 agents.general.llm 与 llm_config.yaml profiles 的一致性。"""
         import yaml
         from matmaster.config.loader import load_llm_config
 
-        for pg_type in ("mat_master", "minimal"):
-            if pg_type == "mat_master":
-                cfg_dir = _project_root / "matmaster_config"
-            else:
-                cfg_dir = _project_root / "configs" / pg_type
-            llm_config_path = cfg_dir / "llm_config.yaml"
-            if not llm_config_path.exists():
-                logger.warning('LLM config not found: %s', llm_config_path)
-                continue
-            try:
-                llm_cfg = load_llm_config(llm_config_path)
-            except Exception:
-                logger.exception('Failed to load LLM config: %s', llm_config_path)
-                continue
-            config_path = cfg_dir / "config.yaml"
-            if config_path.exists():
-                with open(config_path) as f:
-                    main_cfg = yaml.safe_load(f)
-                agents = (main_cfg or {}).get('agents', {})
-                general_llm = agents.get('general', {}).get('llm')
-                if general_llm and general_llm not in llm_cfg.profiles:
-                    logger.error(
-                        "agents.general.llm='%s' not found in llm_config profiles: %s",
-                        general_llm,
-                        list(llm_cfg.profiles),
-                    )
+        from matmaster.config.loader import load_llm_config
+
+        cfg_dir = _project_root / "matmaster_config"
+        llm_config_path = cfg_dir / "llm_config.yaml"
+        if not llm_config_path.exists():
+            logger.warning("LLM config not found: %s", llm_config_path)
+            return
+        try:
+            llm_cfg = load_llm_config(llm_config_path)
+        except Exception:
+            logger.exception("Failed to load LLM config: %s", llm_config_path)
+            return
+        config_path = cfg_dir / "config.yaml"
+        if not config_path.exists():
+            return
+        with open(config_path) as f:
+            main_cfg = yaml.safe_load(f)
+        general_llm = (main_cfg or {}).get("agents", {}).get("general", {}).get("llm")
+        if general_llm and general_llm not in llm_cfg.profiles:
+            logger.error(
+                "agents.general.llm='%s' not found in llm_config profiles: %s",
+                general_llm,
+                list(llm_cfg.profiles),
+            )
 
     def get_executor(self) -> ThreadPoolExecutor:
         """Return the thread pool for agent execution."""

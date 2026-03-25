@@ -7,6 +7,11 @@ mcp_server: mat_sn
 
 # mat_sn — 学术论文检索
 
+## MCP 服务器
+
+- 传输协议: sse
+- 地址: `http://bohrium-mcp-internal.dp.tech:11003/sse`
+
 ## 工具列表
 
 | 工具名 | 类型 | 说明 |

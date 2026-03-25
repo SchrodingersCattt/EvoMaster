@@ -7,6 +7,11 @@ mcp_server: mat_sg
 
 # mat_sg — 结构生成与修改
 
+## MCP 服务器
+
+- 传输协议: http
+- 地址: `https://structure-generator-uuid1767674194.appspace.bohrium.com/mcp?token=a297dc122dc74368af3d2e725991d559`
+
 ## 工具列表
 
 | 工具名 | 类型 | 说明 |

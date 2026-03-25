@@ -7,6 +7,11 @@ mcp_server: mat_electron_microscope
 
 # mat_electron_microscope — 电子显微镜图像分析
 
+## MCP 服务器
+
+- 传输协议: sse
+- 地址: `http://root@pkfz1410356.bohrium.tech:50002/sse`
+
 ## 工具列表
 
 | 工具名 | 类型 | 说明 |
