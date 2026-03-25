@@ -45,7 +45,7 @@ questions:
       - key: "used_dpa_optimizer"
         value:
           - "mat_dpa_submit_optimize_structure"
-          - "mat_abacus_submit_abacus_eos"
+          - "submit_job"
       - key: "a0_A"
         value: 4.04
         tolerance: 0.08
@@ -195,7 +195,7 @@ questions:
     data_files: []
     reference_answers:
       - key: "used_band_calc"
-        value: "mat_abacus_submit_abacus_cal_band"
+        value: "submit_job"
       - key: "gap_type"
         value: "indirect"
       - key: "gap_value_eV"
@@ -222,7 +222,7 @@ questions:
         dimension: "accuracy"
       # --- grounding ---
       - id: "used_band_calc"
-        criterion: "Used ABACUS band structure calculation tool (mat_abacus_submit_abacus_cal_band) to compute actual bands."
+        criterion: "Used ABACUS band structure calculation via input-manual-helper + bohrium-job skill (submit_job.py) to compute actual bands."
         weight: 0.60
         verify: "tool_called"
         dimension: "grounding"
@@ -397,7 +397,7 @@ questions:
       - key: "used_amorphous_builder"
         value: "mat_sg_make_amorphous_structure"
       - key: "used_dos_calc"
-        value: "mat_abacus_submit_abacus_dos_run"
+        value: "submit_job"
       - key: "gap_value_eV"
         value: 6.2
         tolerance: 1.2
@@ -422,7 +422,7 @@ questions:
         verify: "tool_called"
         dimension: "grounding"
       - id: "used_dos_calc"
-        criterion: "Used ABACUS DOS calculation (mat_abacus_submit_abacus_dos_run) for gap extraction."
+        criterion: "Used ABACUS DOS calculation via input-manual-helper + bohrium-job skill (submit_job.py) for gap extraction."
         weight: 0.35
         verify: "tool_called"
         dimension: "grounding"

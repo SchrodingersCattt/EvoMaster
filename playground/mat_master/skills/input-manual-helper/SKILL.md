@@ -48,6 +48,7 @@ SoftwareBackend（parse → diagnostics → completion → render）
 | **Quantum ESPRESSO** | Fortran namelist + cards | Si 金刚石（pw.x SCF） | scf, relax, vc-relax, md, nscf, bands |
 | **ABINIT** | 扁平 key-value | Si 金刚石（primitive FCC） | scf, relax, cellopt |
 | **LAMMPS** | 命令式脚本 | LJ FCC（能量最小化） | minimize, md, nvt, npt |
+| **ABACUS** | `INPUT_PARAMETERS` key-value + STRU + KPT | Si 金刚石（conventional cubic，LCAO） | scf, relax, cell-relax, nscf, band, dos, md |
 
 ## 脚本说明
 
@@ -73,7 +74,7 @@ uv run python scripts/render_input.py --software cp2k --task opt \
 ```
 
 **参数：**
-- `--software`：`cp2k` | `orca` | `qe` | `abinit` | `lammps`
+- `--software`：`cp2k` | `orca` | `qe` | `abinit` | `lammps` | `abacus`
 - `--task`：任务类型（见支持软件表）
 - `--param KEY=VALUE`：覆盖默认参数（可多次指定）
 - `--structure PATH`：结构文件路径（pymatgen 可读格式）
