@@ -89,6 +89,15 @@ class TestToolCallEvent:
         assert evt.tool_name == "bash"
         assert evt.arguments == {"cmd": "ls"}
 
+    def test_spawn_id_defaults_to_none(self) -> None:
+        evt = ToolCallEvent(
+            source="agent",
+            call_id="c1",
+            tool_name="bash",
+            arguments={"cmd": "ls"},
+        )
+        assert evt.spawn_id is None
+
 
 class TestToolResultEvent:
     def test_instantiation(self) -> None:
@@ -240,6 +249,23 @@ class TestAgentEventDiscriminator:
         for payload, expected in zip(payloads, expected_types):
             result = _agent_event_adapter.validate_python(payload)
             assert isinstance(result, expected), f"Expected {expected.__name__}, got {type(result).__name__}"
+
+
+class TestSharedSpawnIdField:
+    def test_bus_event_round_trips_spawn_id(self) -> None:
+        result = _bus_event_adapter.validate_python(
+            {
+                "type": "tool_call",
+                "source": "a",
+                "call_id": "c",
+                "tool_name": "t",
+                "arguments": {},
+                "spawn_id": "deadbeefcafebabe",
+            }
+        )
+
+        assert isinstance(result, ToolCallEvent)
+        assert result.spawn_id == "deadbeefcafebabe"
 
 
 class TestSystemEventDiscriminator:
