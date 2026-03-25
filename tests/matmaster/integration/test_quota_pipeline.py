@@ -34,7 +34,7 @@ class _SuccessLLM:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         yield StreamChunk(content="success", finish_reason="stop")
 
 
@@ -47,7 +47,7 @@ class _InvalidFinishLLM:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         yield StreamChunk(content="partial")
         yield StreamChunk(finish_reason="length")
 
@@ -61,7 +61,7 @@ class _ErrorLLM:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         raise RuntimeError("LLM error")
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         raise RuntimeError("LLM error during streaming")
 
 
