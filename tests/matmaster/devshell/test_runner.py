@@ -68,8 +68,8 @@ class TestDevRunner:
         runner = self._make_runner(tmp_path)
         result = runner.run("hello")
 
-        assert result.event.reason == "natural"
-        assert result.event.final_content == "hello"
+        assert result.result.reason == "natural"
+        assert result.result.final_content == "hello"
 
     def test_history_accumulates(self, tmp_path: Path) -> None:
         runner = self._make_runner(tmp_path)
@@ -92,4 +92,4 @@ class TestDevRunner:
         stop = threading.Event()
         stop.set()
         result = runner.run("test", stop_event=stop)
-        assert result.event.reason == "cancelled"
+        assert result.result.reason == "cancelled"

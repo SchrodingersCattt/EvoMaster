@@ -158,7 +158,7 @@ def run_repl(
                 print(f"\nerror: {error_holder[0]}\n")
             elif result_holder:
                 result = result_holder[0]
-                event_logger.log_event(result.event)
+                event_logger.log_event(result.result.to_run_result_event())
 
         finally:
             signal.signal(signal.SIGINT, original_handler)
