@@ -1,0 +1,91 @@
+"""GrepTool -- search file content by regex via session.
+
+Uses session.exec_bash to run 'grep -rn' within the workdir.
+Enforces workdir boundary (path traversal blocked) and truncates output
+via head -200 to prevent token explosion. Supports optional --include
+filter for file type restriction.
+"""
+
+from __future__ import annotations
+
+import posixpath
+from typing import Any, ClassVar
+
+from .base import BuiltinTool
+
+
+class GrepTool(BuiltinTool):
+    """Search file content by regex pattern within the workspace."""
+
+    name: ClassVar[str] = "grep"
+    description: ClassVar[str] = (
+        "Search file content for a regex pattern (e.g. 'import os', 'def foo') "
+        "within the workspace directory. Returns matching lines with file paths "
+        "and line numbers. Optionally filter by file type with include."
+    )
+    json_schema: ClassVar[dict[str, Any]] = {
+        "type": "object",
+        "properties": {
+            "pattern": {
+                "type": "string",
+                "description": "Regex pattern to search for in file content.",
+            },
+            "path": {
+                "type": "string",
+                "description": "Directory to search in. Defaults to workspace root.",
+            },
+            "include": {
+                "type": "string",
+                "description": "File glob filter, e.g. '*.py' to only search Python files.",
+            },
+        },
+        "required": ["pattern"],
+    }
+
+    def _resolve_safe_path(self, user_path: str) -> str:
+        """Resolve user-provided path to a safe absolute path within workdir.
+
+        Path traversal attempts (../, absolute paths outside workdir) are
+        silently resolved back to workdir root.
+        """
+        workdir = str(self._workdir) if self._workdir else "/workspace"
+
+        if not user_path or user_path == ".":
+            return workdir
+
+        # Absolute path: normalize and check containment
+        if user_path.startswith("/"):
+            normalized = posixpath.normpath(user_path)
+            if normalized.startswith(workdir):
+                return normalized
+            # Traversal detected -- fall back to workdir
+            return workdir
+
+        # Relative path: join with workdir, normalize, check containment
+        joined = posixpath.join(workdir, user_path)
+        normalized = posixpath.normpath(joined)
+        if normalized.startswith(workdir):
+            return normalized
+        # Traversal detected -- fall back to workdir
+        return workdir
+
+    def _execute(self, arguments: dict[str, Any]) -> str:
+        session = self._require_session()
+
+        pattern: str = arguments["pattern"]
+        path: str = arguments.get("path", ".") or "."
+        include: str = arguments.get("include", "") or ""
+        safe_path = self._resolve_safe_path(path)
+
+        include_flag = f' --include="{include}"' if include else ""
+        command = (
+            f'grep -rn{include_flag} "{pattern}" "{safe_path}" 2>/dev/null | head -200'
+        )
+        result = session.exec_bash(command=command, timeout=30, is_input=False)
+
+        output = result.get("output", "") or result.get("stdout", "")
+
+        if not output.strip():
+            return f"No matches for pattern '{pattern}' in {safe_path}"
+
+        return output
