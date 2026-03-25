@@ -38,6 +38,7 @@ class SessionItem(BaseModel):
     """会话列表项"""
 
     id: str
+    project_id: Optional[int] = None  # 归属项目 ID；历史数据或未归属项目时可为 None
     status: str = (
         'idle'  # idle=空闲/已结束，active=运行中，waiting=已入队等待 worker（用于限流与前端展示）
     )
@@ -65,6 +66,7 @@ class SessionListApiResponse(BaseResponse[SessionListResponse]):
                     'sessions': [
                         {
                             'id': 'session-001',
+                            'project_id': 42,
                             'status': 'idle',
                             'history_length': 6,
                             'first_user_message': '帮我分析这个材料结构',
