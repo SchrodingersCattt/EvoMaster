@@ -3,6 +3,8 @@ name: mcp-mat-compdart
 description: 当需要进行多组分成分优化或遗传算法搜索时调用本 skill。支持 DART GA 成分空间探索和目标性能优化。
 skill_type: mcp-loader
 mcp_server: mat_compdart
+mcp_transport: http
+mcp_url: https://dart-uuid1754393230.appspace.bohrium.com/mcp?token=b3a955c99823427683843616328023d8
 ---
 
 # mat_compdart — 成分优化与遗传算法

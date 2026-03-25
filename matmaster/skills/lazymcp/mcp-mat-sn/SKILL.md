@@ -3,6 +3,8 @@ name: mcp-mat-sn
 description: 当需要检索学术论文或文献证据时调用本 skill。提供增强版论文搜索，返回标题、摘要、DOI 等结构化结果。
 skill_type: mcp-loader
 mcp_server: mat_sn
+mcp_transport: sse
+mcp_url: http://bohrium-mcp-internal.dp.tech:11003/sse
 ---
 
 # mat_sn — 学术论文检索

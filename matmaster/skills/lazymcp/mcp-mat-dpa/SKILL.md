@@ -3,6 +3,8 @@ name: mcp-mat-dpa
 description: 当需要使用 DPA 通用势进行分子动力学模拟或结构优化时调用本 skill。支持能量计算、结构弛豫、MD 模拟等。
 skill_type: mcp-loader
 mcp_server: mat_dpa
+mcp_transport: http
+mcp_url: https://dpa-uuid1750659890.appspace.bohrium.com/mcp?token=b2b94c52d10141e992514f9d17bcca23
 ---
 
 # mat_dpa — DPA 通用势计算
