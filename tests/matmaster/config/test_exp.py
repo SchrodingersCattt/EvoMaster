@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from matmaster.config.exp import ExpConfig, ExpToolsConfig
+from matmaster.config.exp import ExpConfig, ExpSkillsConfig, ExpToolsConfig
 
 
 class TestExpToolsConfig:
@@ -48,7 +48,7 @@ class TestExpConfig:
         assert not hasattr(cfg, "unknown_field")
 
     def test_skills_mcp_compaction_not_accepted(self):
-        """These fields were removed -- they should be silently ignored via extra=ignore."""
+        """mcp and compaction fields are silently ignored; skills is now a real field."""
         data = {
             "name": "test",
             "skills": {"enabled": True},
@@ -57,7 +57,10 @@ class TestExpConfig:
         }
         cfg = ExpConfig.model_validate(data)
         assert cfg.name == "test"
-        assert not hasattr(cfg, "skills")
+        # skills is now a real field
+        assert cfg.skills.enabled is True
+        # mcp and compaction are still ignored
+        assert not hasattr(cfg, "mcp") or not isinstance(getattr(cfg, "mcp", None), dict)
         assert not hasattr(cfg, "compaction")
 
     def test_developer_instructions_multiline(self):
@@ -67,3 +70,45 @@ class TestExpConfig:
         }
         cfg = ExpConfig.model_validate(data)
         assert "Line 2" in cfg.developer_instructions
+
+
+class TestExpSkillsConfig:
+    def test_defaults(self):
+        cfg = ExpSkillsConfig()
+        assert cfg.enabled is False
+        assert cfg.skills_root == ""
+        assert cfg.cache_dir == ""
+        assert cfg.config_dir == ""
+        assert cfg.mcp_config_file == ""
+
+    def test_from_dict(self):
+        cfg = ExpSkillsConfig(
+            enabled=True,
+            skills_root="playground/mat_master/skills",
+            cache_dir="matmaster/cache",
+            config_dir="configs/mat_master",
+            mcp_config_file="mcp_config.json",
+        )
+        assert cfg.enabled is True
+        assert cfg.skills_root == "playground/mat_master/skills"
+
+
+class TestExpConfigWithSkills:
+    def test_exp_config_includes_skills(self):
+        data = {
+            "name": "direct",
+            "skills": {
+                "enabled": True,
+                "skills_root": "playground/mat_master/skills",
+                "cache_dir": "matmaster/cache",
+                "config_dir": "configs/mat_master",
+                "mcp_config_file": "mcp_config.json",
+            },
+        }
+        cfg = ExpConfig.model_validate(data)
+        assert cfg.skills.enabled is True
+        assert cfg.skills.cache_dir == "matmaster/cache"
+
+    def test_exp_config_skills_defaults_when_absent(self):
+        cfg = ExpConfig.model_validate({"name": "direct"})
+        assert cfg.skills.enabled is False

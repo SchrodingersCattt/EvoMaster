@@ -10,3 +10,10 @@ You are Mat Master, an autonomous agent for materials science and computational 
 [tools]
 builtin = ["*"]
 mcp = "*"
+
+[skills]
+enabled = true
+skills_root = "playground/mat_master/skills"
+cache_dir = "matmaster/cache"
+config_dir = "configs/mat_master"
+mcp_config_file = "mcp_config.json"

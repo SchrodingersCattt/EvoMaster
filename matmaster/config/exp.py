@@ -21,6 +21,16 @@ class ExpToolsConfig(BaseModel):
     mcp: str = "*"
 
 
+class ExpSkillsConfig(BaseModel):
+    """Skill registration and lazy MCP loading settings."""
+
+    enabled: bool = False
+    skills_root: str = ""
+    cache_dir: str = ""
+    config_dir: str = ""
+    mcp_config_file: str = ""
+
+
 class ExpConfig(BaseModel):
     """Exp assembly configuration.
 
@@ -36,6 +46,7 @@ class ExpConfig(BaseModel):
     max_turns: int = 100
     guards: list[str] = Field(default_factory=list)
     tools: ExpToolsConfig = Field(default_factory=ExpToolsConfig)
+    skills: ExpSkillsConfig = Field(default_factory=ExpSkillsConfig)
     developer_instructions: str = ""
 
     model_config = ConfigDict(extra="ignore")
