@@ -1,26 +1,27 @@
 ATOMIC_SPECIES
-Si  28.085  Si_ONCV_PBE-1.0.upf  # pseudopotential file (UPF format)
+Si  28.085  Si_ONCV_PBE-1.0.upf  // label; mass; pseudo_file
 
 NUMERICAL_ORBITAL
-Si_gga_9au_100Ry_2s2p1d.orb  # LCAO orbital file
+Si_gga_9au_100Ry_2s2p1d.orb  // LCAO orbital file (only for basis_type=lcao)
 
 LATTICE_CONSTANT
-1.8897259886  # 1 Angstrom in Bohr (do not change)
+1.8897259886  // 1 Angstrom in Bohr; lattice vectors below are in Angstrom
 
 LATTICE_VECTORS
-5.431  0.000  0.000  # a1 (Angstrom)
-0.000  5.431  0.000  # a2
-0.000  0.000  5.431  # a3
+5.431  0.000  0.000
+0.000  5.431  0.000
+0.000  0.000  5.431
 
 ATOMIC_POSITIONS
-Cartesian_angstrom  # coordinate unit
-Si  0  0           # atom type, initial magnetic moment, no-relax flag
-8                  # number of Si atoms (conventional cubic cell)
-0.000  0.000  0.000  1  1  1
-1.358  1.358  1.358  1  1  1
-2.716  2.716  0.000  1  1  1
-4.073  4.073  1.358  1  1  1
-2.716  0.000  2.716  1  1  1
-4.073  1.358  4.073  1  1  1
-0.000  2.716  2.716  1  1  1
-1.358  4.073  4.073  1  1  1
+Cartesian_angstrom  // coordinate unit; also: Direct, Cartesian_au
+Si                  // element type
+0.0                 // initial magnetic moment (Bohr mag, not spin fraction)
+8                   // number of Si atoms (conventional cubic cell)
+0.000  0.000  0.000  m 1 1 1
+1.358  1.358  1.358  m 1 1 1
+2.716  2.716  0.000  m 1 1 1
+4.073  4.073  1.358  m 1 1 1
+2.716  0.000  2.716  m 1 1 1
+4.073  1.358  4.073  m 1 1 1
+0.000  2.716  2.716  m 1 1 1
+1.358  4.073  4.073  m 1 1 1
