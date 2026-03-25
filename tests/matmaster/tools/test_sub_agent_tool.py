@@ -20,7 +20,7 @@ class TestSubAgentToolExecute:
     """Tests for SubAgentTool._execute behavior."""
 
     def test_execute_calls_spawn_fn(self) -> None:
-        """SubAgentTool with mock spawn_fn calls it with (exp_name, task)."""
+        """SubAgentTool with mock spawn_fn calls it with (exp_name, task, stop_event)."""
         from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
 
         mock_spawn = Mock(return_value="exploration result: found 3 files")
@@ -28,7 +28,8 @@ class TestSubAgentToolExecute:
 
         result = tool.execute({"exp_name": "explore", "task": "find files"})
 
-        mock_spawn.assert_called_once_with("explore", "find files")
+        # 3-arg call: (exp_name, task, _stop_event=None)
+        mock_spawn.assert_called_once_with("explore", "find files", None)
         assert result == "exploration result: found 3 files"
 
     def test_recursion_guard_spawn_fn_none(self) -> None:
