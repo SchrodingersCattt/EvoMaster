@@ -59,15 +59,16 @@ content = ' '.join(chunk for chunk in chunks if chunk)
 
 **New**:
 ```python
+_used_markdownify = False
 try:
     import markdownify
     content = markdownify.markdownify(
         str(soup),
         heading_style="ATX",
         strip=['img', 'svg'],
-        newline_style="backslash",
     )
     content = re.sub(r'\n{3,}', '\n\n', content)
+    _used_markdownify = True
 except ImportError:
     logger.warning('markdownify not available; falling back to plain text extraction')
     # existing get_text() logic as fallback
@@ -76,15 +77,38 @@ except ImportError:
     content = ' '.join(chunk for chunk in chunks if chunk)
 ```
 
+**Post-cleaning adjustment** (replaces current lines 159-160):
+
+Current post-cleaning applies to both HTML and PDF paths:
+```python
+content = re.sub(r'\s+', ' ', content)                    # line 159: collapse all whitespace
+content = re.sub(r'[^\x20-\x7E\x0A\x0D]', '', content)   # line 160: strip non-ASCII
+```
+
+Both lines must be changed:
+- Line 159 collapses `\n` into spaces, destroying Markdown heading/list/code structure. For the Markdown path, skip this; for the plain-text fallback path, keep it.
+- Line 160 strips all non-ASCII characters including CJK (Chinese/Japanese/Korean), Greek letters, and Unicode chemical symbols. This is a pre-existing bug that silently destroys content from Chinese journals, formulas with Greek letters (alpha, beta, gamma), etc. Replace with a targeted control-character filter that preserves Unicode text.
+
+```python
+# Replace lines 159-160 with:
+if not _used_markdownify:
+    # Plain-text path: collapse whitespace (Markdown path already handled above)
+    content = re.sub(r'\s+', ' ', content)
+# Both paths: strip control characters but preserve Unicode text (CJK, Greek, symbols)
+content = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', content)
+```
+
+The new regex `[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]` removes only C0 control characters while preserving `\x09` (tab), `\x0A` (LF), `\x0D` (CR), and all Unicode text (CJK, Greek, math symbols, etc.).
+
 **New dependency**: `markdownify` added to `pyproject.toml`.
 
-**Graceful degradation**: If `markdownify` import fails, falls back to current `get_text()` logic with a warning log.
+**Graceful degradation**: If `markdownify` import fails, falls back to current `get_text()` logic with a warning log. The `_used_markdownify` flag ensures correct post-cleaning path selection.
 
 **Downstream compatibility**:
-- `compact_extract_webpage_observation`: reads `content` as string, truncates to 500 char preview. Compatible.
+- `compact_extract_webpage_observation`: reads `content` as opaque string, truncates to 500 char preview. Compatible.
 - `tool_guard._observation_has_content`: checks for `webpage_detailed_contents` key existence. Compatible.
 - `auto_save_tool_output`: saves raw JSON. Compatible.
-- `collect_evidence.py` (deep-survey): reads content field for text matching. Markdown does not break matching. Compatible.
+- `collect_evidence.py` (deep-survey): does not consume `extract_info_from_webpage` outputs (only reads `mat_sn_*` and `web-search` subdirs). No impact.
 - `_MAX_CONTENT_LENGTH = 50_000` truncation: unchanged, applies to markdown text equally.
 
 ### P1-b: Per-Workspace Disk Cache
@@ -107,8 +131,9 @@ class _WebpageDiskCache:
     def get(self, url: str) -> str | None:
         """Return cached content if exists and not expired, else None."""
 
-    def put(self, url: str, content: str, content_type: str) -> None:
-        """Write cache entry. Evict oldest if over MAX_ENTRIES."""
+    def put(self, url: str, content: str) -> None:
+        """Write cache entry via atomic temp-file rename. Evict oldest if over MAX_ENTRIES.
+        Eviction uses a threading.Lock to prevent races in ThreadPoolExecutor."""
 ```
 
 **Cache file format**: `{workspace}/_tmp/web_cache/{url_hash}.json`
@@ -117,8 +142,7 @@ class _WebpageDiskCache:
 {
   "url": "https://example.com/paper",
   "content": "# Paper Title\n\n...",
-  "fetched_at": 1711353600.0,
-  "content_type": "html"
+  "fetched_at": 1711353600.0
 }
 ```
 
@@ -134,7 +158,7 @@ class ExtractWebpageTool(BaseTool):
 
 In `_process(url)`:
 1. Check `self._cache.get(url)` first — hit returns immediately, no HTTP request
-2. On successful fetch, call `self._cache.put(url, content, content_type)`
+2. On successful fetch, call `self._cache.put(url, content)`
 3. Cache hits do not count toward domain circuit breaker failures
 
 **Factory function signature change**:
@@ -188,6 +212,8 @@ registry.register(get_extract_webpage_tool(cache_dir=cache_dir))
 | Noise pattern false positive removes article content | Conservative pattern (only `cookie\|banner\|sidebar\|menu`); no class patterns like `ad` or `promo` |
 | Disk cache corruption (e.g. partial write) | JSON write to temp file + atomic rename; malformed cache entries treated as miss |
 | Cache directory not writable | Cache is optional (`None` if no `run_dir`); errors logged, never raised |
+| Concurrent eviction race in ThreadPoolExecutor | Eviction guarded by `threading.Lock`; concurrent `put()` to different files is safe (different paths) |
+| `markdownify` strips inline SVG formulas | Acceptable trade-off: LLM cannot process SVG; formula info usually available as text elsewhere on the page |
 
 ## Non-Goals
 
