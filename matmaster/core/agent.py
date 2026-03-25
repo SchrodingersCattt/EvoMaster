@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 from matmaster.core.hooks import (
     HookAction,
     run_guard_blocked,
+    run_on_segment_complete,
     run_on_stream_chunk,
     run_post_tool_call,
     run_pre_llm_call,
@@ -208,6 +209,8 @@ class AgentKernel:
         finish_reason: str | None = None
         stream_id = f"turn-{len(messages)}"
         usage: dict[str, int] = {}
+        producing_reasoning = False
+        producing_content = False
 
         run_on_stream_chunk(
             spec.hooks,
@@ -226,15 +229,43 @@ class AgentKernel:
                         ),
                     )
 
-                if chunk.content:
-                    content_parts.append(chunk.content)
                 if chunk.reasoning_content:
                     reasoning_parts.append(chunk.reasoning_content)
+                    producing_reasoning = True
+
+                if chunk.content:
+                    if producing_reasoning:
+                        run_on_segment_complete(
+                            spec.hooks,
+                            "thought",
+                            "".join(reasoning_parts),
+                            stream_id,
+                        )
+                        producing_reasoning = False
+                    content_parts.append(chunk.content)
+                    producing_content = True
+
                 if chunk.finish_reason:
                     finish_reason = chunk.finish_reason
                 if chunk.usage:
                     usage = chunk.usage
                 if chunk.tool_call_deltas:
+                    if producing_reasoning:
+                        run_on_segment_complete(
+                            spec.hooks,
+                            "thought",
+                            "".join(reasoning_parts),
+                            stream_id,
+                        )
+                        producing_reasoning = False
+                    if producing_content:
+                        run_on_segment_complete(
+                            spec.hooks,
+                            "response",
+                            "".join(content_parts),
+                            stream_id,
+                        )
+                        producing_content = False
                     for delta in chunk.tool_call_deltas:
                         idx = delta.get("index", 0)
                         if idx not in tool_calls_acc:
@@ -250,6 +281,20 @@ class AgentKernel:
                         if delta.get("arguments"):
                             tool_calls_acc[idx]["arguments"] += delta["arguments"]
         finally:
+            if producing_reasoning:
+                run_on_segment_complete(
+                    spec.hooks,
+                    "thought",
+                    "".join(reasoning_parts),
+                    stream_id,
+                )
+            if producing_content:
+                run_on_segment_complete(
+                    spec.hooks,
+                    "response",
+                    "".join(content_parts),
+                    stream_id,
+                )
             run_on_stream_chunk(
                 spec.hooks,
                 StreamChunk(stream_state="end", stream_id=stream_id),

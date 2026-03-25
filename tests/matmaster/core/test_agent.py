@@ -232,6 +232,18 @@ class ChunkRecordingHook(BaseHook):
         self.chunks.append(chunk)
 
 
+class SegmentRecordingHook(BaseHook):
+    """Hook that records completed logical segments."""
+
+    def __init__(self) -> None:
+        self.segments: list[tuple[str, str, str | None]] = []
+
+    def on_segment_complete(
+        self, segment_type: str, content: str, stream_id: str | None
+    ) -> None:
+        self.segments.append((segment_type, content, stream_id))
+
+
 def _make_spec(
     *,
     provider: Any | None = None,
@@ -850,6 +862,29 @@ class TestCallLlmUsageCapture:
         assert result.result.reason == "natural"
         response = kernel._call_llm(spec, [UserMessage(content="test")])
         assert response.usage == usage_data
+
+    def test_segment_complete_hooks_run_for_reasoning_and_response(self) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = StreamingProvider(
+            [
+                StreamChunk(reasoning_content="think "),
+                StreamChunk(content="answer"),
+                StreamChunk(finish_reason="stop"),
+            ]
+        )
+        segment_hook = SegmentRecordingHook()
+        spec = _make_spec(provider=provider, hooks=[segment_hook])
+        kernel = AgentKernel()
+
+        response = kernel._call_llm(spec, [UserMessage(content="test")])
+
+        assert response.reasoning_content == "think "
+        assert response.content == "answer"
+        assert segment_hook.segments == [
+            ("thought", "think ", "turn-1"),
+            ("response", "answer", "turn-1"),
+        ]
 
 
 class TestCompactorIntegration:

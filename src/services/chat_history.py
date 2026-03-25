@@ -198,6 +198,21 @@ class ChatHistoryConverter:
         return str(c) if c is not None else ''
 
     @staticmethod
+    def _assistant_reasoning_content(raw: Any) -> str | None:
+        """从 assistant_state 序列化内容中提取 reasoning_content。"""
+        if not isinstance(raw, dict):
+            return None
+        direct = raw.get('reasoning_content')
+        if isinstance(direct, str) and direct:
+            return direct
+        meta = raw.get('meta')
+        if isinstance(meta, dict):
+            fallback = meta.get('reasoning_content')
+            if isinstance(fallback, str) and fallback:
+                return fallback
+        return None
+
+    @staticmethod
     def _tool_call_from_event(ev: dict) -> dict | None:
         """从 type=tool_call 的事件 content 构建 ToolCall 的序列化 dict。"""
         c = ev.get('content')
@@ -239,13 +254,14 @@ class ChatHistoryConverter:
 
         事件类型映射：
         - User/query -> UserMessage
-        - thought|planner_reply -> AssistantMessage(content)
+        - thought|planner_reply -> 缓存为 pending_reasoning
         - tool_call -> 与后续 tool_result 配对，先输出 AssistantMessage(tool_calls)，再输出 ToolMessage
-        - response -> AssistantMessage(content)
-        - run_result|finish -> AssistantMessage(content)（仅 response 缺失时作为兼容兜底）
+        - response -> AssistantMessage(content, reasoning_content=...)
+        - run_result|finish -> AssistantMessage(content, reasoning_content=...)（仅 response 缺失时作为兼容兜底）
         """
         out: list[dict] = []
         pending_tool_calls: list[dict] = []
+        pending_reasoning: str | None = None
         last_assistant_text_idx: int | None = None
         assistant_state_tool_ids: set[str] = set()
         response_seen_in_turn = False
@@ -265,6 +281,14 @@ class ChatHistoryConverter:
             typ = (ev.get('type') or '').strip()
 
             if source == 'User' and typ == 'query':
+                if pending_reasoning:
+                    out.append(
+                        AssistantMessage(
+                            content='',
+                            reasoning_content=pending_reasoning,
+                        ).model_dump()
+                    )
+                    pending_reasoning = None
                 flush_tool_calls()
                 last_assistant_text_idx = None
                 assistant_state_tool_ids.clear()
@@ -279,8 +303,7 @@ class ChatHistoryConverter:
                 last_assistant_text_idx = None
                 text = cls._assistant_content(ev)
                 if text:
-                    out.append(AssistantMessage(content=text).model_dump())
-                    last_assistant_text_idx = len(out) - 1
+                    pending_reasoning = (pending_reasoning or '') + text
                 continue
 
             if _is_matmaster_source(source) and typ == 'response':
@@ -288,10 +311,16 @@ class ChatHistoryConverter:
                 assistant_state_tool_ids.clear()
                 last_assistant_text_idx = None
                 text = cls._assistant_content(ev)
-                if text:
-                    out.append(AssistantMessage(content=text).model_dump())
+                if text or pending_reasoning:
+                    out.append(
+                        AssistantMessage(
+                            content=text or '',
+                            reasoning_content=pending_reasoning,
+                        ).model_dump()
+                    )
                     last_assistant_text_idx = len(out) - 1
                     response_seen_in_turn = True
+                pending_reasoning = None
                 continue
 
             if _is_matmaster_source(source) and typ == 'assistant_state':
@@ -311,6 +340,9 @@ class ChatHistoryConverter:
                         e,
                     )
                     continue
+                assistant_reasoning = cls._assistant_reasoning_content(raw_content)
+                if pending_reasoning and not assistant_reasoning:
+                    msg = msg.model_copy(update={'reasoning_content': pending_reasoning})
                 if (
                     last_assistant_text_idx is not None
                     and last_assistant_text_idx == len(out) - 1
@@ -321,6 +353,7 @@ class ChatHistoryConverter:
                 assistant_state_tool_ids = {
                     tc.id for tc in (msg.tool_calls or []) if getattr(tc, 'id', None)
                 }
+                pending_reasoning = None
                 continue
 
             if typ == 'tool_call':
@@ -351,14 +384,28 @@ class ChatHistoryConverter:
                 assistant_state_tool_ids.clear()
                 last_assistant_text_idx = None
                 if response_seen_in_turn:
+                    pending_reasoning = None
                     continue
                 text = cls._assistant_content(ev)
-                if text:
-                    out.append(AssistantMessage(content=text).model_dump())
+                if text or pending_reasoning:
+                    out.append(
+                        AssistantMessage(
+                            content=text or '',
+                            reasoning_content=pending_reasoning,
+                        ).model_dump()
+                    )
                     last_assistant_text_idx = len(out) - 1
+                pending_reasoning = None
                 continue
 
         flush_tool_calls()
+        if pending_reasoning:
+            out.append(
+                AssistantMessage(
+                    content='',
+                    reasoning_content=pending_reasoning,
+                ).model_dump()
+            )
 
         sid: str | None = None
         tid: str | None = None
@@ -402,6 +449,11 @@ class ChatHistoryConverter:
                 messages.append(MMUserMessage(content=d.get("content", "")))
             elif role == "assistant":
                 msg_kwargs: dict = {"content": d.get("content")}
+                reasoning_content = d.get("reasoning_content")
+                if reasoning_content is None and isinstance(d.get("meta"), dict):
+                    reasoning_content = d["meta"].get("reasoning_content")
+                if reasoning_content is not None:
+                    msg_kwargs["reasoning_content"] = reasoning_content
                 if d.get("tool_calls"):
                     import json as _json
 

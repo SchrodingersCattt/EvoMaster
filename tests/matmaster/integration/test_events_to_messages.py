@@ -59,6 +59,23 @@ def _response_event(content: str = "done") -> dict:
     return {"source": "MatMaster", "type": "response", "content": content}
 
 
+def _assistant_state_event(
+    *,
+    content: str = "",
+    reasoning_content: str | None = None,
+    tool_calls: list[dict] | None = None,
+) -> dict:
+    """Build a MatMaster assistant_state event dict."""
+    payload: dict = {
+        "role": "assistant",
+        "content": content,
+        "tool_calls": tool_calls or [],
+    }
+    if reasoning_content is not None:
+        payload["reasoning_content"] = reasoning_content
+    return {"source": "MatMaster", "type": "assistant_state", "content": payload}
+
+
 class TestEventsToMessagesUserEvent:
     """events_to_messages converts user event dict to UserMessage."""
 
@@ -191,6 +208,21 @@ class TestEventsToMessagesPreservesOrder:
         assert isinstance(result[-1], AssistantMessage)
         assert result[-1].content == "answer"
 
+    def test_thought_and_response_merge_into_single_assistant_message(self):
+        events = [
+            _user_event("q"),
+            _thought_event("thinking first"),
+            _response_event("answer"),
+            _run_result_event("answer"),
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assert len(result) == 2
+        assert isinstance(result[-1], AssistantMessage)
+        assert result[-1].content == "answer"
+        assert result[-1].reasoning_content == "thinking first"
+
     def test_run_result_is_only_legacy_fallback_when_response_missing(self):
         events = [_run_result_event("legacy answer")]
 
@@ -199,6 +231,22 @@ class TestEventsToMessagesPreservesOrder:
         assert len(result) == 1
         assert isinstance(result[-1], AssistantMessage)
         assert result[-1].content == "legacy answer"
+
+    def test_assistant_state_reasoning_round_trips_to_matmaster_messages(self):
+        events = [
+            _user_event("q"),
+            _assistant_state_event(
+                content="answer",
+                reasoning_content="hidden reasoning",
+            ),
+        ]
+
+        result = ChatHistoryConverter.events_to_messages(events)
+
+        assert len(result) == 2
+        assert isinstance(result[-1], AssistantMessage)
+        assert result[-1].content == "answer"
+        assert result[-1].reasoning_content == "hidden reasoning"
 
 
 class TestEventsToMessagesPersistenceRoundTrip:
