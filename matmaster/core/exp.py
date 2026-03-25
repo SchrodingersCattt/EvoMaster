@@ -123,8 +123,8 @@ class Exp:
         builder = ContextBuilder()
         system_prompt = builder.build(
             ctx, registry,
+            system_prompt=self._config.system_prompt,
             identity=self._config.developer_instructions,
-            mode_contract=self._config.mode_contract,
             skill_registry=getattr(self, "_skill_registry", None),
         )
 
