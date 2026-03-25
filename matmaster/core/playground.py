@@ -349,6 +349,16 @@ class PlaygroundManager:
         self._init_done = threading.Event()
         self._logger = logging.getLogger(self.__class__.__name__)
 
+    def _config_dir_for(self, playground_type: str) -> Path:
+        """Return config directory for a playground type.
+
+        mat_master uses the flat matmaster_config/ layout;
+        other types (minimal, etc.) retain configs/{type}/.
+        """
+        if playground_type == "mat_master":
+            return self._project_root / "matmaster_config"
+        return self._project_root / "configs" / playground_type
+
     def validate_startup(self) -> None:
         """启动时快速失败验证。幂等：重复调用直接跳过。
 
@@ -366,7 +376,7 @@ class PlaygroundManager:
                 return
 
             for pg_type in ("mat_master", "minimal"):
-                config_path = self._project_root / "configs" / pg_type / "config.yaml"
+                config_path = self._config_dir_for(pg_type) / "config.yaml"
                 if not config_path.exists():
                     self._logger.warning("Config not found: %s", config_path)
                     continue
@@ -407,9 +417,7 @@ class PlaygroundManager:
         with self._lock:
             if session_id in self._playgrounds:
                 return self._playgrounds[session_id]
-            config_path = (
-                self._project_root / "configs" / playground_type / "config.yaml"
-            )
+            config_path = self._config_dir_for(playground_type) / "config.yaml"
             pg = Playground(config_path=config_path)
             self._playgrounds[session_id] = pg
             return pg
