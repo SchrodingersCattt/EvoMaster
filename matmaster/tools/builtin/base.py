@@ -28,7 +28,6 @@ class BuiltinTool(ABC):
     - Implement _execute(arguments) -> str
     """
 
-    # Subclass MUST override these
     name: ClassVar[str]
     description: ClassVar[str]
     json_schema: ClassVar[dict[str, Any]]
