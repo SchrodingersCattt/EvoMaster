@@ -618,7 +618,7 @@ class ChatStreamService:
         llm = (req.llm or '').strip() or None
         model = (
             req.model or ''
-        ).strip() or None  # 本轮模型名，如 gemini-3-flash-preview / azure/gpt-5
+        ).strip() or None  # 本轮模型名，如 gemini-3-flash-preview / claude-sonnet-4-6
 
         # Bohrium：org_id / project_id 直接入库，需要时从库读，不常驻内存
         if req.bohrium_project_id is not None or org_id is not None:
