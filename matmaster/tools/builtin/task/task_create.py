@@ -13,7 +13,11 @@ class TaskCreateTool(BuiltinTool):
     """Create a new task and return its JSON representation."""
 
     name: ClassVar[str] = "task_create"
-    description: ClassVar[str] = "Create a new task for tracking work progress."
+    description: ClassVar[str] = (
+        "Create a task for tracking work progress.\n\n"
+        "When to use: Multi-step tasks, complex requests needing planning.\n"
+        "When NOT to use: Simple single-step tasks completable immediately."
+    )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {

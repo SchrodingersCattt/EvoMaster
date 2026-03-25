@@ -19,11 +19,11 @@ from matmaster.core.bus import MessageBus
 from matmaster.core.exp import Exp
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import (
-    FinishEvent,
     ResponseEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
+from matmaster.types.runtime import AgentRuntimeSpec, KernelResult
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -194,9 +194,9 @@ class TestMatMasterE2EPipeline:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, 'test task')
 
-        assert isinstance(finish.event, FinishEvent)
-        assert finish.event.reason == 'natural'
-        assert finish.event.status == 'completed'
+        assert isinstance(finish.result, KernelResult)
+        assert finish.result.reason == "natural"
+        assert finish.result.status == "completed"
 
         # MessageBus received ResponseEvent from streaming content
         events = _collect_bus_events(bus)
@@ -218,8 +218,8 @@ class TestMatMasterE2EPipeline:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, 'call echo tool')
 
-        assert isinstance(finish.event, FinishEvent)
-        assert finish.event.reason == 'natural'
+        assert isinstance(finish.result, KernelResult)
+        assert finish.result.reason == "natural"
 
         # Collect bus events -- should have ToolCallEvent and ToolResultEvent
         events = _collect_bus_events(bus)
@@ -246,7 +246,7 @@ class TestMatMasterE2EPipeline:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, 'new task', history=history)
 
-        assert finish.event.reason == 'natural'
+        assert finish.result.reason == "natural"
         # Verify messages passed to LLM include history
         assert len(mock_llm.captured_messages) == 1
         llm_messages = mock_llm.captured_messages[0]
@@ -301,9 +301,15 @@ class TestMatMasterRunAgentSyncE2E:
             mock_bohrium_result = MagicMock()
             mock_bohrium_result.ssh_attached = False
             mock_bohrium_result.abort_result = None
+            mock_bohrium_result.execution_session = None
+            mock_bohrium_result.execution_workdir = None
+            mock_bohrium_result.session_type = None
             mock_bohrium_result._asdict.return_value = {
-                'ssh_attached': False,
-                'abort_result': None,
+                "ssh_attached": False,
+                "abort_result": None,
+                "execution_session": None,
+                "execution_workdir": None,
+                "session_type": None,
             }
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
@@ -413,9 +419,15 @@ class TestMatMasterRunAgentSyncE2E:
             mock_bohrium_result = MagicMock()
             mock_bohrium_result.ssh_attached = False
             mock_bohrium_result.abort_result = None
+            mock_bohrium_result.execution_session = None
+            mock_bohrium_result.execution_workdir = None
+            mock_bohrium_result.session_type = None
             mock_bohrium_result._asdict.return_value = {
-                'ssh_attached': False,
-                'abort_result': None,
+                "ssh_attached": False,
+                "abort_result": None,
+                "execution_session": None,
+                "execution_workdir": None,
+                "session_type": None,
             }
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
@@ -561,9 +573,15 @@ class TestMatMasterRunAgentSyncE2E:
             mock_bohrium_result = MagicMock()
             mock_bohrium_result.ssh_attached = False
             mock_bohrium_result.abort_result = None
+            mock_bohrium_result.execution_session = None
+            mock_bohrium_result.execution_workdir = None
+            mock_bohrium_result.session_type = None
             mock_bohrium_result._asdict.return_value = {
-                'ssh_attached': False,
-                'abort_result': None,
+                "ssh_attached": False,
+                "abort_result": None,
+                "execution_session": None,
+                "execution_workdir": None,
+                "session_type": None,
             }
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')

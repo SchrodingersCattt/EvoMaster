@@ -1,0 +1,247 @@
+# MCP service config
+# Endpoint addresses defined in mcp_config.{env}.json
+
+path_adaptor: "calculation"
+calculation_servers:
+  - "mat_sg"
+  - "mat_dpa"
+  - "mat_compdart"
+  - "mat_doc"
+  - "mat_abacus"
+  - "mat_binary_calc"
+  - "mat_struct_db"
+  - "mat_nmr"
+  - "mat_xrd"
+  - "mat_electron_microscope"
+# Per-server tool filter: only register these tools (original names). Omitted servers register all tools.
+tool_include_only:
+  mat_sn: ["search-papers-enhanced"]
+  mat_doc:
+    - extract_material_data_from_pdf
+  mat_nmr:
+    - "NMR_search_tool"
+    - "NMR_predict_tool"
+    - "NMR_reverse_predict_tool"
+  mat_xrd:
+    - "xrd_phase_identification"
+  mat_electron_microscope:
+    - "get_electron_microscope_recognize"
+  mat_binary_calc:
+    - prepare_abinit_job
+    - prepare_cp2k_job
+    - prepare_qe_job
+    - prepare_lammps_job
+    - prepare_orca_job
+    - prepare_pyatb_job
+    # MCP exposes submit_run_gromacs; executor_map uses run_gromacs (path_adaptor strips submit_)
+    - submit_run_gromacs
+# Per-server executor (image/machine_type) and sync_tools. Sync tools → executor None; others → Bohrium executor with env auth.
+calculation_executors:
+  mat_sg:
+    executor:
+      type: "dispatcher"
+      machine:
+        batch_type: "OpenAPI"
+        context_type: "OpenAPI"
+        remote_profile:
+          image_address: "registry.dp.tech/dptech/dpa-calculator:5a6b85f0"
+          platform: "ali"
+          machine_type: "c8_m32_1 * NVIDIA 4090"
+          app_key: "agent"
+      resources:
+        envs: {}
+    sync_tools:
+      - add_hydrogens
+      - generate_ordered_replicas
+      - apply_structure_transformation
+      - remove_solvents
+      - build_bulk_structure_by_template
+      - build_bulk_structure_by_wyckoff
+      - extract_molecules_from_crystal
+      - make_supercell_structure
+      - make_defect_structure
+      - make_doped_structure
+      - make_amorphous_structure
+      - make_crosslinked_structure
+      - build_polymer_chain
+      - build_molecule_structures_from_smiles
+      - add_cell_for_molecules
+      - build_surface_slab
+      - build_surface_adsorbate
+      - build_surface_interface
+      - analyze_wyckoff_positions
+      - get_structure_info
+      - get_molecule_info
+  mat_dpa:
+    executor:
+      type: "dispatcher"
+      machine:
+        batch_type: "OpenAPI"
+        context_type: "OpenAPI"
+        remote_profile:
+          image_address: "registry.dp.tech/dptech/dpa-calculator:cd96ac21"
+          platform: "ali"
+          machine_type: "c16_m64_1 * NVIDIA 4090"
+          app_key: "agent"
+      resources:
+        envs: {}
+    sync_tools: []
+  mat_compdart:
+    executor:
+      type: "dispatcher"
+      machine:
+        batch_type: "OpenAPI"
+        context_type: "OpenAPI"
+        remote_profile:
+          image_address: "registry.dp.tech/dptech/dpa-calculator:9ef99f94"
+          platform: "ali"
+          machine_type: "c16_m64_1 * NVIDIA 4090"
+          app_key: "agent"
+      resources:
+        envs: {}
+    sync_tools: []
+  mat_doc:
+    executor: null
+    sync_tools:
+      - extract_material_data_from_pdf
+  mat_nmr:
+    executor: null
+    sync_tools:
+      - NMR_search_tool
+      - NMR_predict_tool
+      - NMR_reverse_predict_tool
+  mat_xrd:
+    executor: null
+    sync_tools:
+      - xrd_phase_identification
+  mat_electron_microscope:
+    executor: null
+    sync_tools:
+      - get_electron_microscope_recognize
+  # 结构数据库检索：走 local，仅注入 BOHRIUM_ACCESS_KEY / BOHRIUM_PROJECT_ID 到 env；仅用同步工具
+  mat_struct_db:
+    executor:
+      type: "local"
+      env: {}
+    sync_tools:
+      - fetch_structures_from_db
+  mat_abacus:
+    executor:
+      type: "dispatcher"
+      machine:
+        batch_type: "OpenAPI"
+        context_type: "OpenAPI"
+        remote_profile:
+          image_address: "registry.dp.tech/dptech/dp/native/prod-22618/abacusagenttools-matmaster-new-tool:v0.2.3"
+          platform: "ali"
+          machine_type: "c32_m128_cpu"
+          app_key: "agent"
+      resources:
+        envs: {}
+    sync_tools:
+      - abacus_prepare
+      - abacus_modify_input
+      - abacus_modify_stru
+      - abacus_collect_data
+  # Binary Calc: 同一 MCP server 下不同工具使用不同镜像/机型，通过 executor_map 按工具名分发
+  mat_binary_calc:
+    executor: null
+    executor_map:
+      run_lammps:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/lammps-agent:03810da8"
+            platform: "ali"
+            machine_type: "c16_m64_1 * NVIDIA 4090"
+            app_key: "agent"
+        resources:
+          envs: {}
+      run_cp2k:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/cp2k:2024.1"
+            platform: "ali"
+            machine_type: "c32_m128_cpu"
+            app_key: "agent"
+        resources:
+          envs: {}
+      run_pyscf:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260305"
+            platform: "ali"
+            machine_type: "c32_m128_cpu"
+            app_key: "agent"
+        resources:
+          envs: {}
+      run_abinit:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/dp/native/prod-19853/abinit:v9.10.3_pp"
+            platform: "ali"
+            machine_type: "c32_m128_cpu"
+            app_key: "agent"
+        resources:
+          envs: {}
+      run_quantum_espresso:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/quantum-espresso:7.1"
+            platform: "ali"
+            machine_type: "c32_m128_cpu"
+            app_key: "agent"
+        resources:
+          envs: {}
+      run_orca:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/dp/native/prod-19853/orca:v6.1.1"
+            platform: "ali"
+            machine_type: "c32_m128_cpu"
+            app_key: "agent"
+        resources:
+          envs: {}
+      run_gromacs:
+        type: "dispatcher"
+        machine:
+          batch_type: "OpenAPI"
+          context_type: "OpenAPI"
+          remote_profile:
+            image_address: "registry.dp.tech/dptech/gromacs:2022.2"
+            platform: "ali"
+            machine_type: "c32_m128_cpu"
+            app_key: "agent"
+        resources:
+          envs: {}
+    # MCP 可能将 List[Path] 暴露为 array of string（无 items.format:path）；submit 工具 description 常为短句。
+    # 在此按「远程工具名」声明需走 OSS 上传的参数名（须出现在 inputSchema.properties）；可与 run_* 共用一条。
+    path_params_by_tool:
+      submit_run_gromacs:
+        - input_files
+      run_gromacs:
+        - input_files
+    sync_tools:
+      - prepare_abinit_job
+      - prepare_cp2k_job
+      - prepare_qe_job
+      - prepare_lammps_job
+      - prepare_orca_job
+      - prepare_pyatb_job

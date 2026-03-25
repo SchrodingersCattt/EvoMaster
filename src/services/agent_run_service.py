@@ -32,7 +32,9 @@ from matmaster.integration import (
     SSEHandler,
     WorkspaceHandler,
 )
-from matmaster.integration.bohrium_setup import BohriumSetupService
+from matmaster.config.exp import ExpConfig
+from matmaster.integration.bohrium_setup import BohriumSetupService, SkillSyncSpec
+from matmaster.core.playground import Playground, PlaygroundManager
 from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.events import (
     BohriumNodeEvent,
@@ -85,6 +87,63 @@ def _build_workspace_upload_fn(
     return _do_upload
 
 
+def _derive_skill_sync_spec(
+    exp_config: ExpConfig,
+    playground: Any,
+    *,
+    project_root: Path,
+) -> SkillSyncSpec | None:
+    """Build SkillSyncSpec from Exp skills config and optional mat_master.skill_evolution.
+
+    ``remote_project_root`` is fixed to ``/personal/workspace/.evomaster``.
+    When ``exp_config.skills`` is disabled or has no ``skills_root``, returns
+    ``None`` (no fallback to unrelated default evomaster paths).
+    """
+    skills = exp_config.skills
+    if not skills.enabled:
+        return None
+    # skills_root can be str | list[str]
+    roots_raw = skills.skills_root
+    if isinstance(roots_raw, list):
+        rel_list = [r.strip() for r in roots_raw if r and r.strip()]
+    else:
+        s = (roots_raw or "").strip()
+        rel_list = [s] if s else []
+    if not rel_list:
+        return None
+    resolved_roots: list[str] = []
+    for root_rel in rel_list:
+        p = Path(root_rel)
+        p = p.resolve() if p.is_absolute() else (project_root / root_rel).resolve()
+        if p.is_dir():
+            resolved_roots.append(str(p))
+    if not resolved_roots:
+        return None
+
+    local_user: str | None = None
+    remote_user: str | None = None
+    if hasattr(playground, "config"):
+        try:
+            cfg = playground.config.model_dump()
+        except Exception:
+            cfg = {}
+    else:
+        cfg = {}
+    evo = (cfg.get("mat_master") or {}).get("skill_evolution") or {}
+    loc_raw = evo.get("local_user_skills_root")
+    rem_raw = evo.get("remote_user_skills_root")
+    if loc_raw and rem_raw:
+        local_user = str(Path(str(loc_raw)).expanduser().resolve())
+        remote_user = str(rem_raw).strip()
+
+    return SkillSyncSpec(
+        project_skill_roots=resolved_roots,
+        local_user_skills_root=local_user,
+        remote_user_skills_root=remote_user,
+        remote_project_root="/personal/workspace/.evomaster",
+    )
+
+
 @runtime_checkable
 class ReplyQueueLike(Protocol):
     """Confirmation reply queue abstraction: put content/cancel, blocking get."""
@@ -119,10 +178,12 @@ class AgentRunService:
         """
         import yaml
 
-        from matmaster.config.loader import load_llm_config
-
-        for pg_type in ('mat_master', 'minimal'):
-            llm_config_path = _project_root / 'configs' / pg_type / 'llm_config.yaml'
+        for pg_type in ("mat_master", "minimal"):
+            if pg_type == "mat_master":
+                cfg_dir = _project_root / "matmaster_config"
+            else:
+                cfg_dir = _project_root / "configs" / pg_type
+            llm_config_path = cfg_dir / "llm_config.yaml"
             if not llm_config_path.exists():
                 logger.warning('LLM config not found: %s', llm_config_path)
                 continue
@@ -131,7 +192,7 @@ class AgentRunService:
             except Exception:
                 logger.exception('Failed to load LLM config: %s', llm_config_path)
                 continue
-            config_path = _project_root / 'configs' / pg_type / 'config.yaml'
+            config_path = cfg_dir / "config.yaml"
             if config_path.exists():
                 with open(config_path) as f:
                     main_cfg = yaml.safe_load(f)
@@ -224,6 +285,14 @@ class AgentRunService:
             )
             router.start()
 
+            exp_name = mode or "direct"
+            from matmaster.config.loader import load_exp_config
+
+            exp_config = load_exp_config(exp_name)
+            skill_sync_spec = _derive_skill_sync_spec(
+                exp_config, playground, project_root=_project_root
+            )
+
             # -- Stage 3: Bohrium credentials + SSH --
             bohrium_svc = BohriumSetupService(self._sessions_service, bus)
             run_creds, user_id_for_ak, org_id = bohrium_svc.load_credentials(session_id)
@@ -266,7 +335,7 @@ class AgentRunService:
             bohrium_result = bohrium_svc.setup(
                 session_id=session_id,
                 pg=playground,
-                base=getattr(playground, 'agent', playground),
+                skill_sync_spec=skill_sync_spec,
                 run_creds=run_creds,
                 user_id_for_ak=user_id_for_ak,
                 org_id=org_id,
@@ -277,7 +346,17 @@ class AgentRunService:
             if bohrium_result.abort_result is not None:
                 # 必须返回 abort_result，供 Worker 识别失败并发「Worker 执行失败」飞书；裸 return None 会被误判为成功。
                 return bohrium_result.abort_result
-            pg_ctx = pg_ctx.with_bohrium(bohrium_result._asdict())
+            bohrium_meta = dict(bohrium_result._asdict())
+            bohrium_meta.pop("execution_session", None)
+            pg_ctx = pg_ctx.with_bohrium(bohrium_meta)
+            if bohrium_result.execution_session is not None:
+                ew = bohrium_result.execution_workdir or ""
+                st = bohrium_result.session_type or "ssh"
+                pg_ctx = pg_ctx.with_execution(
+                    session=bohrium_result.execution_session,
+                    session_type=st,
+                    execution_workdir=ew,
+                )
             # Workspace handling depends on the finalized Bohrium/archival context.
             router.add_handler(
                 WorkspaceHandler(
@@ -291,7 +370,7 @@ class AgentRunService:
             )
 
             # -- Stage 4: Exp assembly --
-            from matmaster.config.loader import load_exp_config, load_llm_config
+            from matmaster.config.loader import load_llm_config
             from matmaster.core.exp import Exp
             from matmaster.providers.llm_factory import build_provider
 
@@ -318,8 +397,6 @@ class AgentRunService:
                 }
             )
 
-            exp_name = mode or 'direct'
-            exp_config = load_exp_config(exp_name)
             exp = Exp(exp_config)
             runtime = exp.build_runtime(
                 pg_ctx,
@@ -340,6 +417,13 @@ class AgentRunService:
                 update={'hooks': [*runtime.spec.hooks, *external_hooks]}
             )
 
+            # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
+            if stop_event is not None and spec.tool_registry is not None:
+                from matmaster.tools.builtin.spawn_tool import SpawnTool
+                for tool in spec.tool_registry.all_tools:
+                    if isinstance(tool, SpawnTool):
+                        tool._stop_event = stop_event
+
             # -- Stage 5: History --
             raw_events = (
                 events_table.get_session_events(
@@ -359,7 +443,7 @@ class AgentRunService:
                 history=history,
                 stop_event=stop_event,
             )
-            run_result_event = kernel_result.event
+            run_result_event = kernel_result.result.to_run_result_event()
 
             # -- Post-processing --
             if run_result_event.reason == 'cancelled':
@@ -374,16 +458,6 @@ class AgentRunService:
                     )
                 )
             else:
-                if (
-                    run_result_event.reason == 'natural'
-                    and run_result_event.final_content
-                ):
-                    bus.emit(
-                        ResponseEvent(
-                            source=run_result_event.source,
-                            content=run_result_event.final_content,
-                        )
-                    )
                 bus.emit(run_result_event)
                 bus.emit(
                     StreamClosedEvent(

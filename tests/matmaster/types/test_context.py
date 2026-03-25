@@ -58,6 +58,14 @@ class TestPlaygroundContext:
         assert ctx.session_type == "docker"
         assert ctx.cache_area == Path("/tmp/cache")
 
+    def test_execution_workdir_defaults_to_local_workdir(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="local",
+            cache_area=Path("/tmp/cache"),
+        )
+        assert ctx.execution_workdir == str(ctx.workdir)
+
     def test_frozen_rejects_assignment(self) -> None:
         ctx = PlaygroundContext(
             workdir=Path("/tmp/work"),
@@ -128,12 +136,14 @@ class TestPlaygroundContext:
         assert "session_type" in data
         assert "env_vars" in data
         assert "archival" in data
+        assert "execution_workdir" in data
 
         restored = PlaygroundContext.model_validate(data)
         assert restored.workdir == ctx.workdir
         assert restored.session_type == ctx.session_type
         assert restored.env_vars == ctx.env_vars
         assert restored.run_meta == ctx.run_meta
+        assert restored.execution_workdir == ctx.execution_workdir
         assert restored.archival is not None
         assert restored.archival.enabled is True
         assert restored.archival.oss_bucket == "b"
@@ -149,6 +159,7 @@ class TestPlaygroundContext:
         data = ctx.model_dump()
         restored = PlaygroundContext.model_validate(data)
         assert restored.workdir == ctx.workdir
+        assert restored.execution_workdir == ctx.execution_workdir
         assert restored.archival is None
 
     def test_custom_env_vars(self) -> None:
@@ -159,6 +170,30 @@ class TestPlaygroundContext:
             env_vars={"API_KEY": "secret"},
         )
         assert ctx.env_vars == {"API_KEY": "secret"}
+
+
+class TestWithExecution:
+    """PlaygroundContext.with_execution() returns new frozen instance."""
+
+    def test_with_execution_returns_new_instance_and_does_not_mutate_original(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="local",
+            cache_area=Path("/tmp/cache"),
+        )
+        sentinel = object()
+        other = ctx.with_execution(
+            session=sentinel,
+            session_type="ssh",
+            execution_workdir="/remote/exec",
+        )
+        assert other is not ctx
+        assert other.session is sentinel
+        assert other.session_type == "ssh"
+        assert other.execution_workdir == "/remote/exec"
+        assert ctx.session is None
+        assert ctx.session_type == "local"
+        assert ctx.execution_workdir == str(ctx.workdir)
 
 
 class TestWithBohrium:
@@ -195,6 +230,17 @@ class TestWithBohrium:
         _ = ctx.with_bohrium({"ssh_attached": True})
         assert "bohrium" not in ctx.run_meta
         assert ctx.run_meta == {"task_id": "t1"}
+
+    def test_with_bohrium_preserves_execution_workdir(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="local",
+            cache_area=Path("/tmp/cache"),
+            execution_workdir="/custom/exec",
+        )
+        result = ctx.with_bohrium({"ok": True})
+        assert result.execution_workdir == "/custom/exec"
+        assert ctx.execution_workdir == "/custom/exec"
 
 
 # ── Edge case tests (QUAL-01) ─────────────────────────

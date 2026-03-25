@@ -53,15 +53,15 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 
 ### Current State
 
-**Post-v1** (2026-03-25): Phase 8 complete — BuiltinTool 体系建立，BashTool/ListDirTool/TaskTools 就位。681 tests passed.
+**Post-v1** (2026-03-25): Phase 11 complete — v1.1 milestone 全部完成。SubAgent spawn 机制实现：SubAgentTool 通过 spawn_fn 闭包触发子 agent，子 agent 有独立 exp 配置（explore.toml）但共享父 workspace/session，递归深度=1 防护（schema 层 + runtime 层双保险），stop_event 级联传播，事件通过 MessageBus 路由并保留 MatMaster:* source 前缀。863 tests passed.
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI (not refactored), OpenAI SDK, tiktoken.
 
 Architecture (current):
 - `matmaster/core/` — AgentKernel, GuardPipeline, Hooks, Exp (config-driven), ContextBuilder, ContextCompactor, MessageBus, Playground
 - `matmaster/config/` — ExpConfig, LLMConfig (profiles/routes), loader (YAML + TOML)
-- `matmaster/exps/` — TOML exp 定义 (direct.toml)
-- `matmaster/tools/` — ToolRegistry, EvoToolAdapter, BuiltinTool (base + BashTool/ListDirTool/TaskTools)
+- `matmaster/exps/` — TOML exp 定义 (direct.toml, explore.toml)
+- `matmaster/tools/` — ToolRegistry, EvoToolAdapter, BuiltinTool (base + BashTool/ListDirTool/TaskTools/SubAgentTool)
 - `matmaster/types/` — PlaygroundContext, AgentRuntimeSpec, AgentEvent, CompactionConfig, KernelRunResult, Guards, LLMProvider, Messages, WorkerRegistry
 - `matmaster/providers/` — OpenAIProvider, llm_factory (build_provider)
 - `matmaster/hooks/` — ConfirmationHook, OutputProcessorHook, SkillHitHook, AssistantStateHook
@@ -139,4 +139,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after completing Phase 8 (BuiltinTool 基础设施)*
+*Last updated: 2026-03-25 after completing Phase 11 (SubAgent Spawn 机制) — v1.1 milestone complete*

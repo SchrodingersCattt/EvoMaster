@@ -4,10 +4,11 @@ Constructs the system prompt from multiple sources in a fixed order.
 LLM prompt caching benefits from stable prefix, so high-frequency change
 sections (task, memory) are placed last.
 
-Section order: identity -> mode_contract -> skills -> tools -> memory -> task
+Section order: system_prompt -> identity -> skills -> tools -> memory -> task
 
-Used by all Exp.assemble() implementations to build system prompts for
-AgentRuntimeSpec.
+All static text (system_prompt, identity) comes from the caller (toml config).
+ContextBuilder has no default text of its own -- empty string means the
+section is skipped entirely.
 """
 
 from __future__ import annotations
@@ -21,35 +22,24 @@ from matmaster.types.context import PlaygroundContext
 class ContextBuilder:
     """Sectioned system prompt assembler.
 
-    Section order (fixed): identity -> mode_contract -> skills -> tools -> memory -> task
+    Section order (fixed): system_prompt -> identity -> skills -> tools -> memory -> task
     LLM prompt caching benefits from stable prefix, so high-frequency change sections
     (task, memory) are placed last.
+
+    All static text is caller-supplied. Empty string = section skipped.
     """
 
     SEPARATOR = "\n\n---\n\n"
 
-    SECTION_ORDER = ("identity", "mode_contract", "skills", "tools", "memory", "task")
-
-    _DEFAULT_IDENTITY = "You are a helpful AI assistant."
-
-    _MODE_CONTRACTS: dict[str, str] = {
-        "direct": (
-            "You are in direct execution mode. "
-            "Complete the user's task directly using available tools."
-        ),
-        "planner": (
-            "You are in planner mode. "
-            "Break down the task into steps, plan each step, then execute."
-        ),
-    }
+    SECTION_ORDER = ("system_prompt", "identity", "skills", "tools", "memory", "task")
 
     def build(
         self,
         ctx: PlaygroundContext,
         tool_registry: ToolRegistry,
         *,
-        mode: str = "direct",
-        identity: str | None = None,
+        system_prompt: str = "",
+        identity: str = "",
         skill_registry: Any = None,
         memory_context: str | None = None,
         task_context: str | None = None,
@@ -58,10 +48,10 @@ class ContextBuilder:
         """Assemble system prompt from sections in fixed order.
 
         Args:
-            ctx: PlaygroundContext from Playground.setup().
+            ctx: PlaygroundContext from Playground.prepare().
             tool_registry: ToolRegistry with registered tools.
-            mode: Execution mode ('direct' or 'planner').
-            identity: Custom identity text. Defaults to standard assistant identity.
+            system_prompt: Universal base text from _base.toml.
+            identity: Identity text from toml developer_instructions.
             skill_registry: Optional skill registry with get_meta_info_context().
             memory_context: Optional memory/conversation summary text.
             task_context: Optional task description text.
@@ -72,7 +62,6 @@ class ContextBuilder:
         """
         disabled = disabled_sections or set()
 
-        # Map section names to their builder calls
         section_builders: dict[str, str] = {}
 
         for section_name in self.SECTION_ORDER:
@@ -81,8 +70,8 @@ class ContextBuilder:
 
             content = self._build_section(
                 section_name,
+                system_prompt=system_prompt,
                 identity=identity,
-                mode=mode,
                 skill_registry=skill_registry,
                 tool_registry=tool_registry,
                 memory_context=memory_context,
@@ -98,18 +87,18 @@ class ContextBuilder:
         self,
         name: str,
         *,
-        identity: str | None,
-        mode: str,
+        system_prompt: str,
+        identity: str,
         skill_registry: Any,
         tool_registry: ToolRegistry,
         memory_context: str | None,
         task_context: str | None,
     ) -> str:
         """Dispatch to the appropriate section builder."""
+        if name == "system_prompt":
+            return self._build_system_prompt(system_prompt)
         if name == "identity":
-            return self._build_identity(identity or self._DEFAULT_IDENTITY)
-        if name == "mode_contract":
-            return self._build_mode_contract(mode)
+            return self._build_identity(identity)
         if name == "skills":
             return self._build_skills(skill_registry)
         if name == "tools":
@@ -121,26 +110,24 @@ class ContextBuilder:
         return ""
 
     @staticmethod
+    def _build_system_prompt(system_prompt: str) -> str:
+        """Build the system prompt section. Empty string = skip."""
+        text = system_prompt.strip()
+        if not text:
+            return ""
+        return f"# System\n\n{text}"
+
+    @staticmethod
     def _build_identity(identity: str) -> str:
-        """Build the identity section."""
-        return f"# Identity\n\n{identity}"
-
-    def _build_mode_contract(self, mode: str) -> str:
-        """Build the mode contract section.
-
-        Supported modes: 'direct', 'planner'. Unknown modes fall back
-        to the mode string itself as description.
-        """
-        contract_text = self._MODE_CONTRACTS.get(mode, f"Mode: {mode}")
-        return f"# Mode Contract\n\n{contract_text}"
+        """Build the identity section. Empty string = skip."""
+        text = identity.strip()
+        if not text:
+            return ""
+        return f"# Identity\n\n{text}"
 
     @staticmethod
     def _build_skills(skill_registry: Any) -> str:
-        """Build the skills section from skill registry.
-
-        Returns empty string if skill_registry is None or lacks
-        get_meta_info_context().
-        """
+        """Build the skills section from skill registry."""
         if skill_registry is None:
             return ""
         method = getattr(skill_registry, "get_meta_info_context", None)
@@ -153,10 +140,7 @@ class ContextBuilder:
 
     @staticmethod
     def _build_tools(tool_registry: ToolRegistry) -> str:
-        """Build the available tools section.
-
-        Lists each tool as a bullet with name and description.
-        """
+        """Build the available tools section."""
         tools = tool_registry.all_tools
         if not tools:
             return ""

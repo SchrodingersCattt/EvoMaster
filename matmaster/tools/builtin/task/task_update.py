@@ -14,8 +14,10 @@ class TaskUpdateTool(BuiltinTool):
 
     name: ClassVar[str] = "task_update"
     description: ClassVar[str] = (
-        "Update a task's description or status. "
-        "Status can be 'open', 'in_progress', or 'completed'."
+        "Update a task's description or status.\n\n"
+        "Usage:\n"
+        "- Set status to 'in_progress' when starting work on a task.\n"
+        "- Update description to reflect scope changes or progress notes."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",

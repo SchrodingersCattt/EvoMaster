@@ -70,6 +70,8 @@ def _should_emit_event_to_sse(event: dict) -> bool:
         return False
     if t == 'assistant_state':
         return False
+    if t == 'skill_hit':
+        return False
     return True
 
 
