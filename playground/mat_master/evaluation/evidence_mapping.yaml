@@ -65,40 +65,24 @@ mappings:
     detail: "MCP DPA potential calculation"
 
   # -------------------------------------------------------------------------
-  # ABACUS DFT calculations (MCP mat_abacus)
+  # ABACUS DFT calculations (via bohrium-job skill + input-manual-helper)
   # -------------------------------------------------------------------------
-  - pattern: "mat_abacus_submit_abacus_eos"
+  - pattern: "execute_bash"
+    when_args_contains:
+      command: "submit_job.py"
     event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "Submitted ABACUS EOS calculation"
-
-  - pattern: "mat_abacus_submit_*"
-    event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "Submitted ABACUS DFT calculation"
-
-  - pattern: "mat_abacus_get_*"
-    event_type: "data_analysis"
-    source_type: "mcp_tool"
-    detail: "Retrieved ABACUS calculation results"
-
-  - pattern: "mat_abacus_*"
-    event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "MCP ABACUS DFT operation"
+    source_type: "bash_script"
+    detail: "Submitted Bohrium job (ABACUS or other DFT via bohrium-job skill)"
 
   # -------------------------------------------------------------------------
-  # GROMACS MD simulations (MCP mat_binary_calc / GROMACS)
+  # GROMACS MD simulations (via bohrium-job skill)
   # -------------------------------------------------------------------------
-  - pattern: "submit_run_gromacs"
+  - pattern: "execute_bash"
+    when_args_contains:
+      command: "gromacs"
     event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "Submitted GROMACS MD simulation"
-
-  - pattern: "*gromacs*"
-    event_type: "calculation_execution"
-    source_type: "mcp_tool"
-    detail: "GROMACS MD operation"
+    source_type: "bash_script"
+    detail: "GROMACS MD operation via bohrium-job skill"
 
   # -------------------------------------------------------------------------
   # XRD / diffraction analysis (MCP mat_xrd)

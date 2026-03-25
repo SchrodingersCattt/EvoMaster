@@ -17,8 +17,6 @@ EXPECTED_SKILLS = {
     "mcp-mat-nmr": "mat_nmr",
     "mcp-mat-xrd": "mat_xrd",
     "mcp-mat-electron-microscope": "mat_electron_microscope",
-    "mcp-mat-abacus": "mat_abacus",
-    "mcp-mat-binary-calc": "mat_binary_calc",
 }
 
 
