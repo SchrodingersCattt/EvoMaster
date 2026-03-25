@@ -115,11 +115,8 @@ class Exp:
             self._init_builtin_tools(ctx, registry)
 
         # 2. Skills/MCP: runtime-injected (must be before system prompt)
-        if skills:
-            self._init_skill_tools(ctx, registry, skills)
-        elif self._config.skills.enabled:
-            # Lazy MCP: config-driven skill loading (no runtime param needed)
-            self._init_skill_tools(ctx, registry)
+        if skills or self._config.skills.enabled:
+            self._init_skill_tools(ctx, registry, skills_config=skills)
         if mcp:
             self._init_mcp_tools(ctx, registry, mcp)
 
@@ -297,7 +294,7 @@ class Exp:
         self,
         ctx: PlaygroundContext,
         registry: ToolRegistry,
-        config: dict[str, Any] | None = None,
+        skills_config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize skill tools with lazy MCP schema injection."""
         skills_cfg = self._config.skills
@@ -316,8 +313,20 @@ class Exp:
         skill_registry = SkillRegistry(Path(skills_cfg.skills_root))
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
 
-        # MCP config: merge runtime config with static config
-        mcp_config = config or {}
+        # MCP runtime config: ALWAYS self-load from config_dir.
+        # Independent of skills_config -- MCP runtime config (path_adaptor,
+        # calculation_executors) is a separate concern from skill routing.
+        from matmaster.config.loader import _load_raw
+
+        mcp_runtime_path = Path(skills_cfg.config_dir) / skills_cfg.mcp_runtime_file
+        if mcp_runtime_path.exists():
+            mcp_config = _load_raw(mcp_runtime_path)
+        else:
+            raise FileNotFoundError(
+                f"MCP runtime config not found: {mcp_runtime_path}. "
+                f"Required when skills.enabled=true."
+            )
+
         mcp_config_file = mcp_config.get("config_file", skills_cfg.mcp_config_file)
         config_path = Path(mcp_config_file)
         if not config_path.is_absolute():
