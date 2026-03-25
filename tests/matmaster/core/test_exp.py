@@ -346,30 +346,30 @@ class TestIdentityOverride:
         assert "# Identity" not in runtime.spec.system_prompt
 
 
-class TestModeContractOverride:
-    """mode_contract from config is forwarded to ContextBuilder.build()."""
+class TestSystemPromptOverride:
+    """system_prompt from config is forwarded to ContextBuilder.build()."""
 
-    def test_mode_contract_from_config(self) -> None:
+    def test_system_prompt_from_config(self) -> None:
         exp = Exp(ExpConfig(
             name="test",
-            mode_contract="Execute directly.",
+            system_prompt="Base persona text.",
             tools=ExpToolsConfig(builtin=[]),
         ))
         ctx = _make_ctx(with_llm=True)
         runtime = exp.build_runtime(ctx)
 
-        assert "Execute directly." in runtime.spec.system_prompt
+        assert "Base persona text." in runtime.spec.system_prompt
 
-    def test_empty_mode_contract_skips_section(self) -> None:
+    def test_empty_system_prompt_skips_section(self) -> None:
         exp = Exp(ExpConfig(
             name="test",
-            mode_contract="",
+            system_prompt="",
             tools=ExpToolsConfig(builtin=[]),
         ))
         ctx = _make_ctx(with_llm=True)
         runtime = exp.build_runtime(ctx)
 
-        assert "# Mode Contract" not in runtime.spec.system_prompt
+        assert "# System" not in runtime.spec.system_prompt
 
 
 # ── TestExpBuiltinTools ─────────────────────────────────
