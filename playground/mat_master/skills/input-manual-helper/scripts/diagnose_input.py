@@ -22,29 +22,31 @@ from engine.schema import SchemaRegistry
 
 def _get_backend(software: str):
     """根据软件名返回对应 Backend 实例。"""
+    from engine.software.abacus import AbacusBackend
     from engine.software.abinit import ABINITBackend
     from engine.software.cp2k import CP2KBackend
     from engine.software.lammps import LAMMPSBackend
     from engine.software.orca import ORCABackend
     from engine.software.qe import QEBackend
-
-    backends = {
-        "cp2k": CP2KBackend,
-        "orca": ORCABackend,
-        "qe": QEBackend,
-        "quantum-espresso": QEBackend,
-        "abinit": ABINITBackend,
-        "lammps": LAMMPSBackend,
-    }
-    key = software.lower().strip()
-    if key not in backends:
-        supported = ", ".join(sorted(set(backends.keys())))
-        print(
-            f"Error: unsupported software '{software}'. Supported: {supported}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return backends[key]()
+    
+        backends = {
+            "cp2k": CP2KBackend,
+            "orca": ORCABackend,
+            "qe": QEBackend,
+            "quantum-espresso": QEBackend,
+            "abinit": ABINITBackend,
+            "lammps": LAMMPSBackend,
+            "abacus": AbacusBackend,
+        }
+        key = software.lower().strip()
+        if key not in backends:
+            supported = ", ".join(sorted(set(backends.keys())))
+            print(
+                f"Error: unsupported software '{software}'. Supported: {supported}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return backends[key]()
 
 
 def main() -> None:

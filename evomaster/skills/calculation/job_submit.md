@@ -69,7 +69,7 @@ execute_bash(cmd="curl -o output.cif 'https://bohrium.oss-.../out.cif'")
 
 ## 5. Upload: local files as calculation input
 
-- Calculation MCP tools (mat_sg_*, mat_dpa_*, mat_doc_*, mat_abacus_*) require **OSS or HTTP URLs** for path arguments (e.g. structure_path, input_structure, pdf_path). The **path adaptor** handles upload automatically when you pass a **local path**.
+- Calculation MCP tools (mat_sg_*, mat_dpa_*, mat_doc_*) require **OSS or HTTP URLs** for path arguments (e.g. structure_path, input_structure, pdf_path). The **path adaptor** handles upload automatically when you pass a **local path**.
 - If the file is in the **workspace** (e.g. user-uploaded CIF, PDF, or a file you created), you may pass its path as-is (e.g. `Fe_bcc.cif`, `/workspace/data/input.cif`, or a path relative to workspace). The system will upload it to OSS and pass the resulting URL to the MCP tool. Ensure OSS env vars (OSS_ENDPOINT, OSS_BUCKET_NAME, OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET) are set at project root if you use local paths.
 - Prefer **chaining URLs** from previous tool output when possible; use local path only when the file exists only in the workspace.
 
