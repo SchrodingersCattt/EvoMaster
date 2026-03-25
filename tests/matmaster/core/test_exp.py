@@ -346,6 +346,86 @@ class TestIdentityOverride:
         assert "helpful AI assistant" in runtime.spec.system_prompt
 
 
+# ── TestExpBuiltinTools ─────────────────────────────────
+
+
+class TestExpBuiltinTools:
+    """_init_builtin_tools dual-source registration: native + evo adapter."""
+
+    def _make_ctx_with_session(self, tmp_path: Path) -> PlaygroundContext:
+        """Create PlaygroundContext with a mock session for builtin tool tests."""
+        return PlaygroundContext(
+            workdir=tmp_path,
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=MagicMock(),
+            llm_provider=MockLLMProvider(),
+        )
+
+    def _build_registry(self, tmp_path: Path) -> tuple[Exp, ToolRegistry]:
+        """Build an Exp and run _init_builtin_tools, returning (exp, registry)."""
+        from matmaster.tools.tool_registry import ToolRegistry
+
+        exp = Exp(ExpConfig(name="test"))
+        ctx = self._make_ctx_with_session(tmp_path)
+        registry = ToolRegistry()
+        exp._init_builtin_tools(ctx, registry)
+        return exp, registry
+
+    def test_init_builtin_tools_registers_native_tools(self, tmp_path: Path) -> None:
+        """7 native tools registered with source='builtin'."""
+        _, registry = self._build_registry(tmp_path)
+        native = registry.get_tools_by_source("builtin")
+        assert len(native) == 7
+
+    def test_init_builtin_tools_native_tool_names(self, tmp_path: Path) -> None:
+        """All expected native tool names are present in registry."""
+        _, registry = self._build_registry(tmp_path)
+        expected_names = [
+            "execute_bash",
+            "list_dir",
+            "task_create",
+            "task_get",
+            "task_list",
+            "task_update",
+            "task_complete",
+        ]
+        for name in expected_names:
+            assert name in registry, f"Expected tool '{name}' not found in registry"
+
+    def test_init_builtin_tools_registers_evo_adapter_tools(
+        self, tmp_path: Path
+    ) -> None:
+        """2 evo adapter tools registered with source='builtin_evo'."""
+        _, registry = self._build_registry(tmp_path)
+        evo = registry.get_tools_by_source("builtin_evo")
+        assert len(evo) == 2
+        evo_names = {t.name for t in evo}
+        assert "str_replace_editor" in evo_names
+        assert "monitor_job" in evo_names
+
+    def test_init_builtin_tools_total_count(self, tmp_path: Path) -> None:
+        """Total tools = 7 native + 2 evo adapter = 9."""
+        _, registry = self._build_registry(tmp_path)
+        assert len(registry) == 9
+
+    def test_init_builtin_tools_no_session(self, tmp_path: Path) -> None:
+        """session=None skips all tool registration."""
+        from matmaster.tools.tool_registry import ToolRegistry
+
+        exp = Exp(ExpConfig(name="test"))
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=None,
+            llm_provider=MockLLMProvider(),
+        )
+        registry = ToolRegistry()
+        exp._init_builtin_tools(ctx, registry)
+        assert len(registry) == 0
+
+
 class TestExpCompaction:
     def test_assemble_compaction_defaults_disabled(self) -> None:
         from matmaster.types.runtime import CompactionConfig
