@@ -15,16 +15,20 @@ mcp_server: mat_compdart
 
 | 工具名 | 类型 | 说明 |
 |--------|------|------|
-| (MCP Server 注册的所有工具) | async | 所有工具均通过 Bohrium GPU 异步执行 |
+| submit_run_dart_ga | async | 遗传算法成分优化，支持多目标优化、代理模型/线性混合目标、成分约束（元素分数范围）、初始种群 |
+| query_job_status | async | 查询计算任务状态 (Running/Succeeded/Failed) |
+| terminate_job | async | 终止计算任务 |
+| get_job_results | async | 获取计算任务结果 |
 
 ## 典型用法
 
-- DART GA 成分空间探索: 调用 MCP Server 暴露的遗传算法工具
-- 多目标性能优化: 调用 MCP Server 暴露的优化工具
+- 遗传算法成分优化: `mat_compdart_submit_run_dart_ga`
+- 查询任务状态: `mat_compdart_query_job_status`
+- 获取优化结果: `mat_compdart_get_job_results`
 
 ## 注意事项
 
-- 未配置 tool_include_only，注册 MCP Server 暴露的所有工具
-- sync_tools 为空列表，所有工具均为异步执行，任务提交到 Bohrium GPU 集群
-- 异步工具需要通过 monitor_job 轮询任务状态
+- 未配置 tool_include_only，注册 MCP Server 暴露的所有工具（共 4 个）
+- sync_tools 为空，所有工具均为异步执行，任务提交到 Bohrium GPU 集群
+- 异步工具提交后使用 query_job_status 轮询状态，完成后用 get_job_results 获取结果
 - 使用 NVIDIA 4090 GPU 机型 (c16_m64_1 * NVIDIA 4090)
