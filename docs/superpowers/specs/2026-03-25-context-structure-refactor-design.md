@@ -49,10 +49,11 @@ system_prompt → identity → skills → tools → memory → task
 
 `load_exp_config()` 变更：
 
-1. 自动加载 `_base.toml`（不存在则跳过）
-2. `system_prompt` 合并逻辑：exp toml 定义则覆盖 base，否则用 base 值
-3. `system_prompt` 与 `developer_instructions` 一样，pop 出来不做 `${VAR}` 展开
-4. 删除 `mode_contract` 处理逻辑
+1. 自动加载 `_base.toml`（不存在则 log warning 并跳过）
+2. **仅提取** `_base.toml` 中的 `system_prompt` 字段，不合并其他字段（避免 base 中意外存在的 `name`/`mode` 等字段污染 exp 配置）
+3. `system_prompt` 合并逻辑：exp toml 定义则覆盖 base，否则用 base 值
+4. `system_prompt` 与 `developer_instructions` 一样，pop 出来不做 `${VAR}` 展开
+5. 删除 `mode_contract` 处理逻辑
 
 ### `matmaster/core/context_builder.py`
 
@@ -60,7 +61,7 @@ system_prompt → identity → skills → tools → memory → task
 - `build()` 签名：新增 `system_prompt: str = ""`，删除 `mode_contract: str = ""`
 - 新增 `_build_system_prompt()` 静态方法
 - 删除 `_build_mode_contract()` 静态方法
-- `_build_section()` 分发逻辑同步更新
+- `_build_section()` 分发逻辑同步更新：新增 `system_prompt` 参数传递和 `if name == "system_prompt"` 分支，删除 `mode_contract` 相关分支和参数
 
 ### `matmaster/core/exp.py`
 
@@ -71,7 +72,7 @@ system_prompt → identity → skills → tools → memory → task
 ### `matmaster/exps/direct.toml`
 
 - 删除 `mode_contract = '''...'''` 段
-- 将原 mode_contract 内容合并入 `developer_instructions` 尾部
+- 将原 mode_contract 内容作为 `# Execution Mode` 小节合并入 `developer_instructions` 尾部
 
 ### `matmaster/devshell/config.py`
 
@@ -91,9 +92,14 @@ system_prompt → identity → skills → tools → memory → task
 - `tests/matmaster/integration/test_direct_toml_prompt.py`
 - `tests/matmaster/devshell/test_runner.py`
 
+## Naming Note
+
+`AgentRuntimeSpec.system_prompt`（`matmaster/types/runtime.py`）存储的是 `ContextBuilder.build()` 的最终拼接结果（完整系统提示）。本 spec 新增的 `system_prompt` section 是该完整提示的一个子段（来自 `_base.toml` 的通用前缀）。两者同名但语义不同，不会造成运行时冲突（`ContextBuilder.build()` 返回拼接后的完整字符串赋值给 `AgentRuntimeSpec.system_prompt`），但阅读代码时需注意区分。
+
 ## Not Changed
 
 - `playground/mat_master/prompts/build_prompt.py` — 旧架构 prompt builder，有独立的 `_mode_contract()` 函数。属于 test 分支旧流程，不在本次范围内。
+- `.planning/` 目录下约 40+ 处 `mode_contract` 历史引用 — 规划文档，不影响运行时，不在本次变更范围内。
 - skills / tools / memory / task sections — 不变
 - 对外调用方（`Exp.run()`、service 层）— 完全透明
 
