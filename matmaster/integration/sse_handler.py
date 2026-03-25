@@ -67,6 +67,7 @@ class SSEHandler:
         payload["task_id"] = self._task_id
         if self._invocation_id is not None:
             payload["invocation_id"] = self._invocation_id
+        payload["spawn_id"] = getattr(event, "spawn_id", None)
 
         self._send(payload)
 
