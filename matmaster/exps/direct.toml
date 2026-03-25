@@ -54,6 +54,7 @@ builtin = [
     "task_list",
     "task_update",
     "task_complete",
+    "sub_agent",
 ]
 mcp = "*"
 
