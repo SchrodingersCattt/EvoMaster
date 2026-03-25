@@ -13,9 +13,10 @@ Add a `spawn_id` field to the event model, tagged at emission time and written t
 
 - Persistence: all events written (parent + subagent), differentiated by `spawn_id`
 - SSE: all events pushed (parent + subagent), `spawn_id` included in payload for frontend grouping
-- History reconstruction: `get_session_events()` defaults to `WHERE spawn_id IS NULL`, excluding subagent internals from LLM dialog context
+- History reconstruction: for rows written by the new code path after rollout, `get_session_events()` defaults to `WHERE spawn_id IS NULL`, excluding subagent internals from LLM dialog context
 - Frontend history replay: `stream_service.py` passes `include_spawn=True` so subagent events are replayed on reconnect
 - Subagent `final_content` remains the parent's spawn tool_result -- sufficient as folded summary
+- Rollout scope: **forward-only**. Existing rows written before deployment (and any rows written by old workers during a rolling deploy) keep `spawn_id=NULL`; they are not backfilled and may still pollute legacy history reconstruction.
 
 ## Design
 
@@ -37,12 +38,14 @@ DB `evo_chat_events` table:
 
 ```sql
 ALTER TABLE evo_chat_events ADD COLUMN spawn_id VARCHAR(64) NULL;
-CREATE INDEX idx_chat_events_spawn_id ON evo_chat_events (session_id, spawn_id);
+CREATE INDEX idx_session_spawn_id ON evo_chat_events (session_id, spawn_id);
 ```
 
 Rollback: `ALTER TABLE evo_chat_events DROP COLUMN spawn_id;`
 
-Deployment order: run migration first (add column), then deploy new code. Between migration and deploy, old code writes NULL spawn_id (column default), which is correct for parent events.
+Bootstrap SQL in `src/sql/create_chat_tables.sql` must also be updated so fresh environments create the column from day 1. Incremental migration lives in `src/sql/migrate_add_spawn_id.sql`, mirroring the existing `migrate_add_invocation_id.sql` pattern but intentionally omitting `AFTER invocation_id` so it can run safely on older schemas as well.
+
+Deployment order: update bootstrap SQL, run migration first (add column), then deploy new code. Between migration and deploy, old code writes NULL spawn_id (column default), which is acceptable under the forward-only rollout scope.
 
 ### Event Emission
 
@@ -77,20 +80,20 @@ Parent `build_runtime()` does not pass `spawn_id` -- defaults to `None`.
 **PersistenceHandler** (`matmaster/integration/persistence_handler.py`): reads `event.spawn_id` (guaranteed by `EventBase`), passes to `events_table.add_event()` as keyword argument. No filtering -- all events persisted.
 
 **ChatEventsTable** (`src/dao/chat_events_table.py`):
-- `add_event()`: accepts `spawn_id: str | None = None` parameter, writes to DB column
+- `add_event()`: accepts keyword-only `task_id`, `invocation_id`, and `spawn_id: str | None = None` parameters, writes `spawn_id` to DB column. This avoids positional argument drift at existing call sites.
 - `get_session_events()`: adds `WHERE spawn_id IS NULL` by default; accepts `include_spawn: bool = False` parameter -- when `True`, omits the spawn_id filter
 
 **ChatEventsService** (`src/services/events_service.py`):
 - `get_session_events()`: passes through `include_spawn` parameter to `self.table.get_session_events()`
 - `add_history_event()`: no changes needed -- only writes User events which have no spawn_id
 
-**SSEHandler** (`matmaster/integration/sse_handler.py`): no filtering. Adds `spawn_id` to SSE payload alongside existing `source`, `session_id`, `task_id`. Since `EventBase` includes `spawn_id`, `event.model_dump()` naturally includes it in the payload dict.
+**SSEHandler** (`matmaster/integration/sse_handler.py`): no filtering. Adds `spawn_id` to live SSE payload alongside existing `source`, `session_id`, `task_id`. Since `EventBase` includes `spawn_id`, `event.model_dump()` naturally includes it in the payload dict.
 
-**ChatHistoryConverter** (`src/services/chat_history.py`): no changes needed. Called from `agent_run_service.py` which uses default `get_session_events()` (spawn events excluded). Defensive note: if called with unfiltered events (e.g. `include_spawn=True` results), the converter would incorrectly pair subagent tool_calls -- callers must filter before passing to the converter.
+**ChatHistoryConverter** (`src/services/chat_history.py`): parsing logic is unchanged, but add a small helper to exclude events with non-NULL `spawn_id`. `agent_run_service.py` uses this helper defensively before converting DB rows into LLM dialog history. This only protects newly written rows with populated `spawn_id`; legacy `NULL` child rows remain out of scope for this rollout.
 
-**stream_service.py** (`src/services/stream_service.py`): both history replay paths must pass `include_spawn=True` to `events_service.get_session_events()`, so subagent events are replayed to the frontend on reconnect -- consistent with live SSE behavior. Two call sites: `generate_send_stream()` (primary stream) and the subscribe-only reconnection path.
+**stream_service.py** (`src/services/stream_service.py`): both history replay paths must pass `include_spawn=True` to `events_service.get_session_events()`, so subagent events are replayed to the frontend on reconnect -- consistent with live SSE behavior for this field. Replay dedupe must key by `(task_id, spawn_id)` rather than `task_id` alone; otherwise a child `response` can incorrectly suppress the parent's `run_result`.
 
-**agent_run_service.py** (`src/services/agent_run_service.py`): calls `events_table.get_session_events()` directly for LLM dialog history construction. Default `include_spawn=False` is correct -- parent events only for LLM context. No changes needed.
+**agent_run_service.py** (`src/services/agent_run_service.py`): still loads parent-only rows by default for LLM dialog history construction, and additionally applies the defensive `exclude_spawn_events()` helper before dialog conversion.
 
 **Worker mode**: SSEHandler's `send_cb` in worker mode is `redis_dao.publish_stream_event()`. Since `spawn_id` is already in the payload dict, it passes through Redis to the API pod transparently. No additional changes needed.
 
@@ -108,8 +111,9 @@ Parent `build_runtime()` does not pass `spawn_id` -- defaults to `None`.
 | `matmaster/core/hooks.py` | `EventEmitterHook` accept `spawn_id` in constructor; stamp on all 6 event construction points |
 | `matmaster/core/exp.py` | `build_runtime` accept and pass `spawn_id`; `_make_spawn_fn` generate spawn_id per invocation |
 | `matmaster/integration/persistence_handler.py` | Read `event.spawn_id`, pass to `add_event()` |
-| `matmaster/integration/sse_handler.py` | `spawn_id` included via `model_dump()`, no explicit injection needed |
-| `src/dao/chat_events_table.py` | `add_event` accept and write `spawn_id`; `get_session_events` accept `include_spawn` param, default filter `WHERE spawn_id IS NULL` |
-| `src/services/events_service.py` | `get_session_events` pass through `include_spawn` param |
-| `src/services/stream_service.py` | Both replay paths call `get_session_events` with `include_spawn=True` |
+| `matmaster/integration/sse_handler.py` | Live SSE payload keeps `spawn_id`; replay reads it back from DB rows |
+| `src/dao/chat_events_table.py` | `add_event` accept keyword-only `spawn_id` and write it; `get_session_events` accept `include_spawn` param, default filter `WHERE spawn_id IS NULL` |
+| `src/services/events_service.py` | `get_session_events` pass through `include_spawn` param; existing `add_event()` calls use explicit keyword arguments |
+| `src/services/chat_history.py` | Add `exclude_spawn_events()` helper for defensive parent-only dialog reconstruction |
+| `src/services/stream_service.py` | Both replay paths call `get_session_events` with `include_spawn=True`; replay dedupe keys by `(task_id, spawn_id)` |
 | DB migration | Add `spawn_id` column + index |
