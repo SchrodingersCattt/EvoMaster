@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -106,8 +107,12 @@ class Exp:
             child_config = load_exp_config(exp_name)
             child_exp = Exp(child_config)
             child_source = f"{source_prefix}:{exp_name}"
+            child_spawn_id = uuid.uuid4().hex[:16]
             child_runtime = child_exp.build_runtime(
-                ctx, bus=bus, source_override=child_source
+                ctx,
+                bus=bus,
+                source_override=child_source,
+                spawn_id=child_spawn_id,
             )
             try:
                 run_result = child_runtime.kernel.run(
@@ -144,6 +149,7 @@ class Exp:
         skills: dict[str, Any] | None = None,
         mcp: dict[str, Any] | None = None,
         source_override: str | None = None,
+        spawn_id: str | None = None,
     ) -> AgentRuntime:
         """Resource creation: assemble -> tools -> prompt -> kernel."""
         spec = self.assemble(ctx)
@@ -173,7 +179,9 @@ class Exp:
         hooks = list(spec.hooks)
         if bus is not None:
             emitter_source = source_override or self.exp_name
-            emitter_hook = EventEmitterHook(bus, source=emitter_source)
+            emitter_hook = EventEmitterHook(
+                bus, emitter_source, spawn_id=spawn_id
+            )
             hooks.append(emitter_hook)
 
         # 4b. SpawnTool: register with spawn_fn if "spawn" in config

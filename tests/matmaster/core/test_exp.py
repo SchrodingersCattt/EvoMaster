@@ -10,6 +10,7 @@ import pytest
 from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.types.context import PlaygroundContext
+from matmaster.types.messages import ToolCallData
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult, KernelRunResult
 from tests.matmaster.core.conftest import MockLLMProvider
 
@@ -142,6 +143,52 @@ class TestExpBuildRuntime:
 
         emitter_hooks = [h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)]
         assert len(emitter_hooks) == 1
+
+    def test_build_runtime_threads_spawn_id_into_emitter_hook(self) -> None:
+        """Child runtimes pass spawn_id through EventEmitterHook into emitted events."""
+        from matmaster.core.bus import MessageBus
+        from matmaster.core.hooks import EventEmitterHook
+        from matmaster.types.events import ToolCallEvent
+
+        exp = Exp(ExpConfig(name="test"))
+        ctx = _make_ctx(with_llm=True)
+        bus = MessageBus()
+        tool_call = ToolCallData(id="tc-1", name="spawn", arguments={"task": "demo"})
+
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = exp.build_runtime(ctx, bus=bus, spawn_id="childdeadbeef123")
+
+        emitter_hook = next(
+            h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
+        )
+        emitter_hook.pre_tool_call(tool_call)
+
+        event = bus.get_nowait()
+        assert isinstance(event, ToolCallEvent)
+        assert event.spawn_id == "childdeadbeef123"
+
+    def test_parent_runtime_emits_none_spawn_id_by_default(self) -> None:
+        """Parent runtimes keep spawn_id=None unless one is explicitly provided."""
+        from matmaster.core.bus import MessageBus
+        from matmaster.core.hooks import EventEmitterHook
+        from matmaster.types.events import ToolCallEvent
+
+        exp = Exp(ExpConfig(name="test"))
+        ctx = _make_ctx(with_llm=True)
+        bus = MessageBus()
+        tool_call = ToolCallData(id="tc-1", name="spawn", arguments={"task": "demo"})
+
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = exp.build_runtime(ctx, bus=bus)
+
+        emitter_hook = next(
+            h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
+        )
+        emitter_hook.pre_tool_call(tool_call)
+
+        event = bus.get_nowait()
+        assert isinstance(event, ToolCallEvent)
+        assert event.spawn_id is None
 
     def test_no_bus_no_emitter(self) -> None:
         """Without bus, no EventEmitterHook in spec.hooks."""

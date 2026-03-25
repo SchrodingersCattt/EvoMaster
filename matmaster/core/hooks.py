@@ -195,15 +195,23 @@ class EventEmitterHook(BaseHook):
     - on_segment_complete -> persisted ThoughtEvent / ResponseEvent snapshot
     """
 
-    def __init__(self, bus: MessageBus, source: str) -> None:
+    def __init__(
+        self,
+        bus: MessageBus,
+        source: str,
+        *,
+        spawn_id: str | None = None,
+    ) -> None:
         self._bus = bus
         self._source = source
+        self._spawn_id = spawn_id
 
     def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         """Emit ToolCallEvent and continue execution."""
         self._bus.emit(
             ToolCallEvent(
                 source=self._source,
+                spawn_id=self._spawn_id,
                 call_id=tool_call.id,
                 tool_name=tool_call.name,
                 arguments=tool_call.arguments,
@@ -216,6 +224,7 @@ class EventEmitterHook(BaseHook):
         self._bus.emit(
             ToolResultEvent(
                 source=self._source,
+                spawn_id=self._spawn_id,
                 call_id=tool_call.id,
                 tool_name=tool_call.name,
                 result=result.content,
@@ -230,6 +239,7 @@ class EventEmitterHook(BaseHook):
             self._bus.emit(
                 ThoughtEvent(
                     source=self._source,
+                    spawn_id=self._spawn_id,
                     content=chunk.reasoning_content,
                     stream_state=chunk.stream_state,
                     stream_id=chunk.stream_id,
@@ -240,6 +250,7 @@ class EventEmitterHook(BaseHook):
             self._bus.emit(
                 ResponseEvent(
                     source=self._source,
+                    spawn_id=self._spawn_id,
                     content=chunk.content,
                     stream_state=chunk.stream_state,
                     stream_id=chunk.stream_id,
@@ -254,6 +265,7 @@ class EventEmitterHook(BaseHook):
             self._bus.emit(
                 ThoughtEvent(
                     source=self._source,
+                    spawn_id=self._spawn_id,
                     content=content,
                     stream_state="complete",
                     stream_id=stream_id,
@@ -266,6 +278,7 @@ class EventEmitterHook(BaseHook):
             self._bus.emit(
                 ResponseEvent(
                     source=self._source,
+                    spawn_id=self._spawn_id,
                     content=content,
                     stream_state="complete",
                     stream_id=stream_id,

@@ -21,6 +21,7 @@ from matmaster.core.hooks import (
     Hook,
     HookAction,
     run_guard_blocked,
+    run_on_segment_complete,
     run_on_stream_chunk,
     run_post_tool_call,
     run_pre_llm_call,
@@ -331,6 +332,59 @@ class TestEventEmitterHook:
         hook = EventEmitterHook(bus, "agent-1")
         hook.on_stream_chunk(StreamChunk())
         assert bus.empty
+
+
+class TestEventEmitterHookSpawnId:
+    """Task 2: EventEmitterHook stamps spawn_id on every emitted bus event."""
+
+    _SPAWN = "a1b2c3d4e5f67890"
+
+    def test_pre_and_post_tool_call_events_carry_spawn_id(
+        self, sample_tool_call: ToolCallData
+    ) -> None:
+        bus = MessageBus()
+        hook = EventEmitterHook(bus, "agent-1", spawn_id=self._SPAWN)
+        hook.pre_tool_call(sample_tool_call)
+        hook.post_tool_call(sample_tool_call, ToolResult(content="ok"))
+        e1 = bus.get_nowait()
+        e2 = bus.get_nowait()
+        assert isinstance(e1, ToolCallEvent)
+        assert isinstance(e2, ToolResultEvent)
+        assert e1.spawn_id == self._SPAWN
+        assert e2.spawn_id == self._SPAWN
+
+    def test_on_stream_chunk_both_branches_carry_spawn_id(
+        self, sample_chunk: StreamChunk
+    ) -> None:
+        bus = MessageBus()
+        hook = EventEmitterHook(bus, "agent-1", spawn_id=self._SPAWN)
+        hook.on_stream_chunk(sample_chunk)
+        thought = bus.get_nowait()
+        response = bus.get_nowait()
+        assert isinstance(thought, ThoughtEvent)
+        assert isinstance(response, ResponseEvent)
+        assert thought.spawn_id == self._SPAWN
+        assert response.spawn_id == self._SPAWN
+
+    def test_on_segment_complete_thought_and_response_carry_spawn_id(self) -> None:
+        bus = MessageBus()
+        hook = EventEmitterHook(bus, "agent-1", spawn_id=self._SPAWN)
+        hook.on_segment_complete("thought", "t", "sid1")
+        hook.on_segment_complete("response", "r", "sid2")
+        t_evt = bus.get_nowait()
+        r_evt = bus.get_nowait()
+        assert isinstance(t_evt, ThoughtEvent)
+        assert isinstance(r_evt, ResponseEvent)
+        assert t_evt.spawn_id == self._SPAWN
+        assert r_evt.spawn_id == self._SPAWN
+
+    def test_run_on_segment_complete_propagates_to_emitter(self) -> None:
+        bus = MessageBus()
+        hook = EventEmitterHook(bus, "agent-1", spawn_id=self._SPAWN)
+        run_on_segment_complete([hook], "thought", "done", "z")
+        evt = bus.get_nowait()
+        assert isinstance(evt, ThoughtEvent)
+        assert evt.spawn_id == self._SPAWN
 
 
 # ── run_guard_blocked ────────────────────────────────
