@@ -17,7 +17,7 @@ ag-ui 协议（前后端约定）：
 
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.base.base_res import BaseResponse
 
@@ -27,7 +27,11 @@ class SessionListQuery(BaseModel):
 
     limit: int = Field(default=20, ge=1, le=100, description='每页条数')
     offset: int = Field(default=0, ge=0, description='偏移量')
-    project_id: Optional[int] = Field(default=None, description='项目 ID，可选')
+    project_id: Optional[int] = Field(
+        default=None,
+        description='项目 ID；传入后只返回该项目下的会话，不传则返回当前用户全部会话。',
+        examples=[42],
+    )
 
 
 class SessionItem(BaseModel):
@@ -52,6 +56,27 @@ class SessionListResponse(BaseModel):
 class SessionListApiResponse(BaseResponse[SessionListResponse]):
     """GET /api/sessions 规范响应：code, msg, data"""
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            'example': {
+                'code': 0,
+                'msg': 'success',
+                'data': {
+                    'sessions': [
+                        {
+                            'id': 'session-001',
+                            'status': 'idle',
+                            'history_length': 6,
+                            'first_user_message': '帮我分析这个材料结构',
+                        }
+                    ],
+                    'total': 1,
+                    'has_more': False,
+                },
+            }
+        }
+    )
+
 
 class RunStatusData(BaseModel):
     """GET /chat/sessions/run_status 的 data 字段：执行中数、排队数"""
@@ -62,6 +87,19 @@ class RunStatusData(BaseModel):
 
 class RunStatusApiResponse(BaseResponse[RunStatusData]):
     """GET /chat/sessions/run_status 规范响应：code, msg, data"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'example': {
+                'code': 0,
+                'msg': 'success',
+                'data': {
+                    'active_count': 2,
+                    'queued_count': 5,
+                },
+            }
+        }
+    )
 
 
 # ---------- 会话分享 ----------
@@ -76,11 +114,29 @@ class ShareStatusData(BaseModel):
 class ShareStatusApiResponse(BaseResponse[ShareStatusData]):
     """GET/PUT /chat/sessions/{session_id}/share 规范响应：code, msg, data"""
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            'example': {
+                'code': 0,
+                'msg': 'success',
+                'data': {'enabled': True},
+            }
+        }
+    )
+
 
 class ShareSetRequest(BaseModel):
     """PUT /chat/sessions/{session_id}/share 设置分享状态请求体"""
 
     enabled: bool
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'example': {
+                'enabled': True,
+            }
+        }
+    )
 
 
 # ---------- ag-ui 协议：客户端 -> 服务端 (REST Body) ----------
@@ -108,8 +164,46 @@ class ChatSendRequest(BaseModel):
         None  # 可选的 Bohrium user id（MCP 计算类工具需要）
     )
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            'examples': [
+                {
+                    'content': '帮我总结这个项目下最近三轮会话的结论',
+                    'mode': 'direct',
+                    'bohrium_project_id': 42,
+                },
+                {
+                    'content': '',
+                    'mode': 'direct',
+                },
+            ]
+        }
+    )
+
 
 class ChatPlannerReplyRequest(BaseModel):
     """POST /chat/sessions/{session_id}/confirmation_reply 用户确认回复（planner / ask_human 统一）"""
 
     content: str
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'example': {
+                'content': '确认，继续执行',
+            }
+        }
+    )
+
+
+class ErrorApiResponse(BaseResponse[None]):
+    """错误响应示例。"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            'example': {
+                'code': 403,
+                'msg': '无权限访问该会话',
+                'data': None,
+            }
+        }
+    )
