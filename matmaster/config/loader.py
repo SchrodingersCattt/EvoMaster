@@ -7,7 +7,7 @@ dict.  These are the matmaster-specific counterpart to
 Usage::
 
     # From YAML (independent entry)
-    llm = load_llm_config("configs/mat_master/config.yaml")
+    llm = load_llm_config("matmaster_config/config.yaml")
 
     # From ConfigManager dict (dual entry)
     llm = LLMConfig.model_validate(playground.config.llm)
