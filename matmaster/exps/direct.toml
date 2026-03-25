@@ -1,5 +1,4 @@
 name = "direct"
-mode = "direct"
 max_turns = 200
 guards = []
 

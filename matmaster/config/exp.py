@@ -44,7 +44,6 @@ class ExpConfig(BaseModel):
     """
 
     name: str = "direct"
-    mode: str = "direct"
     max_turns: int = 100
     guards: list[str] = Field(default_factory=list)
     tools: ExpToolsConfig = Field(default_factory=ExpToolsConfig)

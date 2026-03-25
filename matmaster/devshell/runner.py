@@ -78,7 +78,6 @@ class DevRunner:
 
         return ExpConfig(
             name=config.agent.name,
-            mode=config.agent.mode,
             max_turns=config.agent.max_turns,
             tools=ExpToolsConfig(builtin=config.tools.builtin),
             developer_instructions=config.agent.identity or "",

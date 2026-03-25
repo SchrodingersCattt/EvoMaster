@@ -129,7 +129,6 @@ class Exp:
             llm_provider=ctx.llm_provider,
             max_turns=self._config.max_turns,
             guards=[],  # Guard instantiation deferred to build_runtime
-            mode=self._config.mode,
             compaction=CompactionConfig(),
             meta={},
         )
