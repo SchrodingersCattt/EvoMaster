@@ -12,6 +12,7 @@ def test_list_sessions_filters_by_project_id():
         [
             {
                 'id': 'session-project-1',
+                'project_id': 42,
                 'status': 'idle',
                 'history_length': 3,
                 'first_user_message': 'hello',
@@ -34,6 +35,7 @@ def test_list_sessions_filters_by_project_id():
         assert data['data']['total'] == 1
         assert data['data']['has_more'] is False
         assert data['data']['sessions'][0]['id'] == 'session-project-1'
+        assert data['data']['sessions'][0]['project_id'] == 42
         mock_chat_svc.list_sessions.assert_called_once_with(
             user_id='test-user-1',
             limit=20,

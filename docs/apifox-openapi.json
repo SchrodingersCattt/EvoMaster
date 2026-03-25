@@ -325,6 +325,17 @@
             "title": "Id",
             "type": "string"
           },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
           "status": {
             "default": "idle",
             "title": "Status",
@@ -349,6 +360,7 @@
                 "first_user_message": "帮我分析这个材料结构",
                 "history_length": 6,
                 "id": "session-001",
+                "project_id": 42,
                 "status": "idle"
               }
             ],
