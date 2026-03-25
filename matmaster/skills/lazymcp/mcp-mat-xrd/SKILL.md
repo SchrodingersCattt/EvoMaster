@@ -7,10 +7,9 @@ mcp_server: mat_xrd
 
 # mat_xrd — XRD 物相鉴定
 
-## MCP 服务器
+## 连接方式
 
-- 传输协议: sse
-- 地址: `http://root@pkfz1410356.bohrium.tech:50001/sse`
+调用本 skill 后，下列工具已自动注册到你的工具列表中，可直接按工具名调用。无需手动连接 MCP 服务器。
 
 ## 工具列表
 

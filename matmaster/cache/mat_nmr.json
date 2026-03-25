@@ -1,0 +1,289 @@
+[
+  {
+    "name": "NMR_search_tool",
+    "description": "Database search for molecules based on NMR spectroscopic data. For more accurate but slower reverse prediction, use NMR_reverse_predict tool.\n    \n    This tool performs molecular structure database searching using Nuclear Magnetic Resonance (NMR) spectroscopic data.\n    Input 1H/13C NMR chemical shifts to find matching molecular structures from database. Allows constraints on elemental composition.\n    \n    Returns: Formatted list of candidate molecules with SMILES, similarity scores, and structure images\n    ",
+    "input_schema": {
+      "properties": {
+        "H_shifts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "H Shifts"
+        },
+        "C_shifts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "C Shifts"
+        },
+        "allowed_elements": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Allowed Elements"
+        },
+        "topk": {
+          "default": 10,
+          "title": "Topk",
+          "type": "integer"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "required": [
+        "H_shifts",
+        "C_shifts",
+        "allowed_elements"
+      ],
+      "title": "NMR_search_toolArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "NMR_predict_tool",
+    "description": "Predict NMR spectroscopic properties for molecular structures.\n    \n    This tool calculates simulated 1H and 13C NMR chemical shifts for given molecular structures.\n    \n    You can provide **either**:\n    - `smiles_list`: a list of SMILES strings, or\n    - `molecule_file`: one or more structure files (XYZ, PDB, SDF, MOL, MOL2, local path or HTTP/HTTPS URL)\n    \n    At least one of `smiles_list` or `molecule_file` must be provided; if both are provided,\n    SMILES from files will be extracted and **merged** with the given `smiles_list`.\n    \n    If `H_shifts` and/or `C_shifts` are provided, the tool will also calculate similarity scores by comparing\n    predicted spectra with reference spectra. If no reference shifts are provided, only predictions are returned\n    without similarity scores.\n    \n    Returns: Formatted list of molecules with predicted NMR data. Similarity scores are included only\n    if reference `H_shifts` and/or `C_shifts` are provided.\n    ",
+    "input_schema": {
+      "properties": {
+        "smiles_list": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Smiles List"
+        },
+        "molecule_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Molecule File"
+        },
+        "H_shifts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "H Shifts"
+        },
+        "C_shifts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "C Shifts"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "title": "NMR_predict_toolArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "NMR_reverse_predict_tool",
+    "description": "Reverse NMR analysis to propose molecular structures using molecular optimization. For fast database searching, use NMR_search tool.\n\n    This tool generates candidate molecular structures from Nuclear Magnetic Resonance (NMR) spectroscopic data.\n    Input 1H/13C NMR chemical shifts to identify compounds and determine structures. Allows constraints on elemental composition and molecular formula.\n    \n    Returns: Formatted list of candidate molecules with SMILES, similarity scores, and structure images\n    ",
+    "input_schema": {
+      "properties": {
+        "H_shifts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "H Shifts"
+        },
+        "C_shifts": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "C Shifts"
+        },
+        "allowed_elements": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Allowed Elements"
+        },
+        "formula": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Formula"
+        },
+        "topk": {
+          "default": 10,
+          "title": "Topk",
+          "type": "integer"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "required": [
+        "H_shifts",
+        "C_shifts",
+        "allowed_elements",
+        "formula"
+      ],
+      "title": "NMR_reverse_predict_toolArguments",
+      "type": "object"
+    }
+  }
+]

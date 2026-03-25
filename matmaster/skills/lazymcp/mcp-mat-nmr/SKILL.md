@@ -7,10 +7,9 @@ mcp_server: mat_nmr
 
 # mat_nmr — NMR 波谱分析
 
-## MCP 服务器
+## 连接方式
 
-- 传输协议: sse
-- 地址: `https://nmr-server-matmaster-uuid1764741165.appspace.bohrium.com/sse?token=1467bc01801642c09273966fcd04e3a6`
+调用本 skill 后，下列工具已自动注册到你的工具列表中，可直接按工具名调用。无需手动连接 MCP 服务器。
 
 ## 工具列表
 
