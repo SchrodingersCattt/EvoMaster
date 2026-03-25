@@ -43,7 +43,12 @@ Full details: milestones/v1-ROADMAP.md
   3. Agent 可以通过 TaskTool 创建、更新、查询任务状态
   4. BuiltinTool 基类区分 session-dependent 和 session-free 两种模式，session 通过构造注入
   5. Exp 装配层能够根据 ExpConfig 自动注册 builtin tools（不走 EvoToolAdapter）
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 08-01-PLAN.md -- BuiltinTool ABC 基类 + BashTool + ListDirTool 实现与测试
+- [ ] 08-02-PLAN.md -- TaskStore + 5 个 TaskTool 实现与测试
+- [ ] 08-03-PLAN.md -- Exp._init_builtin_tools 双源注册改造与集成测试
 
 ### Phase 9: 文件操作 Tools
 **Goal**: Agent 具备完整的文件读写搜索能力，并通过 Read-Before-Modify 协议防止盲写
@@ -92,7 +97,7 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11
 | 5. Integration and Quality | v1 | 5/5 | Complete | 2026-03-22 |
 | 6. Service Layer Wiring | v1 | 2/2 | Complete | 2026-03-22 |
 | 7. Cleanup and Traceability | v1 | 2/2 | Complete | 2026-03-22 |
-| 8. BuiltinTool 基础设施与核心 Tools | v1.1 | 0/? | Not started | - |
+| 8. BuiltinTool 基础设施与核心 Tools | v1.1 | 0/3 | Planning | - |
 | 9. 文件操作 Tools | v1.1 | 0/? | Not started | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 0/? | Not started | - |
 | 11. SubAgent Spawn 机制 | v1.1 | 0/? | Not started | - |
