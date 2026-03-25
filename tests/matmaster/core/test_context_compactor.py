@@ -136,7 +136,7 @@ class MockSummaryProvider:
     def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None):
+    def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(content=self._summary, finish_reason="stop")
 
 
@@ -149,7 +149,7 @@ class FailingSummaryProvider:
     def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None):
+    def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(content="", finish_reason="stop")
 
 
@@ -361,7 +361,7 @@ class TestEndToEndCompaction:
             ):
                 return self.chat(messages, tools)
 
-            def chat_stream(self, messages, tools=None):
+            def chat_stream(self, messages, tools=None, *, timeout=None):
                 nonlocal call_count
                 call_count += 1
                 if call_count <= 5:

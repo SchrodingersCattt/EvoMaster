@@ -61,7 +61,7 @@ class _SlowMockLLM:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self._call_count += 1
         # Add a small delay to give stop_event time to be set
         time.sleep(0.05)
@@ -80,7 +80,7 @@ class _NeverFinishLLM:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self._call_count += 1
         # Always yield a natural finish to avoid infinite loop
         yield StreamChunk(content=f"Turn {self._call_count}", finish_reason="stop")
@@ -95,7 +95,7 @@ class _QuickMockLLM:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         yield StreamChunk(content="quick", finish_reason="stop")
 
 

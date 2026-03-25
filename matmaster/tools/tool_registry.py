@@ -13,6 +13,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Protocol, runtime_checkable
 
+from matmaster.tools.tool_result import ToolResult, normalize_tool_result
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +35,7 @@ class Tool(Protocol):
     @property
     def json_schema(self) -> dict[str, Any]: ...
 
-    def execute(self, arguments: dict[str, Any]) -> str: ...
+    def execute(self, arguments: dict[str, Any]) -> str | ToolResult | None: ...
 
 
 class ToolRegistry:
@@ -61,7 +63,7 @@ class ToolRegistry:
         self._tools[tool.name] = tool
         self._sources[tool.name] = source
 
-    def execute(self, name: str, arguments: dict[str, Any]) -> str:
+    def execute(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         """Dispatch execution to the named tool.
 
         Returns error string if tool name not found, listing available tools.
@@ -69,8 +71,11 @@ class ToolRegistry:
         tool = self._tools.get(name)
         if tool is None:
             available = ", ".join(sorted(self._tools))
-            return f"Error: Tool '{name}' not found. Available: {available}"
-        return tool.execute(arguments)
+            return ToolResult(
+                status="error",
+                content=f"Error: Tool '{name}' not found. Available: {available}",
+            )
+        return normalize_tool_result(tool.execute(arguments))
 
     def get_tool_definitions(self) -> list[dict[str, Any]]:
         """Return tool definitions in OpenAI function calling format."""

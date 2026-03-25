@@ -19,7 +19,7 @@ from matmaster.integration.event_payloads import (
     _normalize_public_source,
     _public_content_for_event,
 )
-from matmaster.types.events import BusEvent, ThoughtEvent
+from matmaster.types.events import BusEvent, ResponseEvent, ThoughtEvent
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,7 @@ class SSEHandler:
         payload["task_id"] = self._task_id
         if self._invocation_id is not None:
             payload["invocation_id"] = self._invocation_id
+        payload["spawn_id"] = getattr(event, "spawn_id", None)
 
         self._send(payload)
 
@@ -76,6 +77,12 @@ class SSEHandler:
         Migrated from _should_skip_push in agent_run_service.py.
         """
         event_type = getattr(event, "type", "")
+
+        if (
+            isinstance(event, (ThoughtEvent, ResponseEvent))
+            and event.stream_state == "complete"
+        ):
+            return True
 
         # Internal-only: never push assistant_state to frontend
         if event_type == "assistant_state":

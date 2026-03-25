@@ -39,6 +39,31 @@ class TestAssistantStateHook:
         assert emitted.state["role"] == "assistant"
         assert emitted.state["content"] == "I will run a command"
 
+    def test_emits_reasoning_content_in_assistant_state(self) -> None:
+        """pre_llm_call preserves reasoning_content for tool-use turns."""
+        from matmaster.hooks.assistant_state import AssistantStateHook
+        from matmaster.types.events import AssistantStateEvent
+
+        bus = MagicMock()
+        hook = AssistantStateHook(bus=bus, source="MatMaster")
+        tc = ToolCallData(id="tc-1", name="bash", arguments={"cmd": "ls"})
+        messages: list[Message] = [
+            SystemMessage(content="system"),
+            UserMessage(content="task"),
+            AssistantMessage(
+                content="I will run a command",
+                tool_calls=[tc],
+                reasoning_content="Need to inspect the workspace first.",
+            ),
+        ]
+
+        hook.pre_llm_call(messages, turn=2)
+
+        bus.emit.assert_called_once()
+        emitted = bus.emit.call_args[0][0]
+        assert isinstance(emitted, AssistantStateEvent)
+        assert emitted.state["reasoning_content"] == "Need to inspect the workspace first."
+
     def test_does_nothing_when_no_assistant_message(self) -> None:
         """pre_llm_call does nothing on first turn (no AssistantMessage)."""
         from matmaster.hooks.assistant_state import AssistantStateHook

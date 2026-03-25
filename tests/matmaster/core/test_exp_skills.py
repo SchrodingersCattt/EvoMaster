@@ -110,7 +110,7 @@ class TestExpInitSkillTools:
         result = registry.execute(
             "use_skill", {"skill_name": "test-skill", "action": "get_info"}
         )
-        assert not result.startswith("Error:"), f"use_skill failed: {result}"
+        assert result.status == "success", f"use_skill failed: {result.content}"
 
         # After skill trigger: mat_sg tools should be injected
         assert "mat_sg_build_bulk" in registry

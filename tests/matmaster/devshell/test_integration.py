@@ -36,7 +36,7 @@ class SimpleProvider:
     ):
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         yield StreamChunk(
             content=f"Reply to msg #{len(messages)}", finish_reason="stop"
         )
@@ -58,7 +58,7 @@ class ToolCallingProvider:
     ):
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
             # Emit tool call delta (same format as test_agent.py)

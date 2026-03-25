@@ -16,6 +16,7 @@ import pytest
 
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.providers.openai_provider import OpenAIProvider
+from matmaster.types.errors import LLMError
 from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
 
 
@@ -55,12 +56,13 @@ class TestConstruction:
     def test_construction(self) -> None:
         with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
             OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-            mock_cls.assert_called_once_with(
-                api_key="sk-test",
-                base_url=None,
-                timeout=300.0,
-                max_retries=0,
-            )
+            mock_cls.assert_called_once()
+            call_kwargs = mock_cls.call_args.kwargs
+            assert call_kwargs["api_key"] == "sk-test"
+            assert call_kwargs["base_url"] is None
+            assert call_kwargs["timeout"] == 300.0
+            assert call_kwargs["max_retries"] == 0
+            assert "http_client" in call_kwargs
 
     def test_custom_base_url(self) -> None:
         with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
@@ -69,12 +71,13 @@ class TestConstruction:
                 api_key="sk-test",
                 base_url="https://custom.api",
             )
-            mock_cls.assert_called_once_with(
-                api_key="sk-test",
-                base_url="https://custom.api",
-                timeout=300.0,
-                max_retries=0,
-            )
+            mock_cls.assert_called_once()
+            call_kwargs = mock_cls.call_args.kwargs
+            assert call_kwargs["api_key"] == "sk-test"
+            assert call_kwargs["base_url"] == "https://custom.api"
+            assert call_kwargs["timeout"] == 300.0
+            assert call_kwargs["max_retries"] == 0
+            assert "http_client" in call_kwargs
 
     def test_custom_config(self) -> None:
         with patch("matmaster.providers.openai_provider.openai.OpenAI"):
@@ -94,12 +97,10 @@ class TestConstruction:
                 model="gpt-4o-mini", api_key="sk-test", max_retries=5
             )
             assert provider._max_retries == 5
-            mock_cls.assert_called_once_with(
-                api_key="sk-test",
-                base_url=None,
-                timeout=300.0,
-                max_retries=0,
-            )
+            mock_cls.assert_called_once()
+            call_kwargs = mock_cls.call_args.kwargs
+            assert call_kwargs["max_retries"] == 0
+            assert "http_client" in call_kwargs
 
     def test_retry_delay_stored(self) -> None:
         """Custom retry_delay stored as _retry_delay."""
@@ -110,6 +111,74 @@ class TestConstruction:
                 retry_delay=2.0,
             )
             assert provider._retry_delay == 2.0
+
+
+# ── Stream timeout construction ─────────────────────────
+
+
+class TestStreamTimeoutConstruction:
+    def test_stream_timeout_stored(self) -> None:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
+            provider = OpenAIProvider(
+                model="gpt-4o-mini",
+                api_key="sk-test",
+                stream_timeout=120.0,
+                stream_idle_timeout=60.0,
+            )
+        assert provider.stream_timeout == 120.0
+        assert provider.stream_idle_timeout == 60.0
+
+    def test_stream_timeout_defaults_none(self) -> None:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
+            provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        assert provider.stream_timeout is None
+        assert provider.stream_idle_timeout is None
+
+    def test_max_retries_property(self) -> None:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
+            provider = OpenAIProvider(
+                model="gpt-4o-mini", api_key="sk-test", max_retries=5
+            )
+        assert provider.max_retries == 5
+
+    def test_retry_delay_property(self) -> None:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI"):
+            provider = OpenAIProvider(
+                model="gpt-4o-mini", api_key="sk-test", retry_delay=2.0
+            )
+        assert provider.retry_delay == 2.0
+
+    def test_custom_httpx_client_created(self) -> None:
+        """When stream timeouts provided, custom httpx.Client is passed to OpenAI."""
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
+            OpenAIProvider(
+                model="gpt-4o-mini",
+                api_key="sk-test",
+                timeout=1200.0,
+                stream_timeout=120.0,
+                stream_idle_timeout=60.0,
+            )
+            call_kwargs = mock_cls.call_args
+            assert "http_client" in call_kwargs.kwargs
+            http_client = call_kwargs.kwargs["http_client"]
+            # read timeout = max(60, 120) + 10 = 130
+            assert http_client.timeout.read == 130.0
+            assert http_client.timeout.connect == 15.0
+            assert http_client.timeout.write == 30.0
+            assert http_client.timeout.pool == 15.0
+
+    def test_httpx_client_fallback_without_stream_timeouts(self) -> None:
+        """Without stream timeouts, httpx client uses general timeout for read."""
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
+            OpenAIProvider(
+                model="gpt-4o-mini",
+                api_key="sk-test",
+                timeout=300.0,
+            )
+            call_kwargs = mock_cls.call_args
+            http_client = call_kwargs.kwargs["http_client"]
+            # read timeout = max(300, 300) + 10 = 310
+            assert http_client.timeout.read == 310.0
 
 
 # ── chat() response mapping ────────────────────────────
@@ -639,3 +708,117 @@ class TestChatWithRetry:
         # Backoff: 0.5 * 2^0 = 0.5, 0.5 * 2^1 = 1.0
         mock_sleep.assert_any_call(0.5)
         mock_sleep.assert_any_call(1.0)
+
+
+# ── chat_stream() exception translation ─────────────────
+
+
+class TestChatStreamExceptionTranslation:
+    def _make_provider(self) -> tuple[OpenAIProvider, MagicMock]:
+        with patch("matmaster.providers.openai_provider.openai.OpenAI") as mock_cls:
+            mock_client = MagicMock()
+            mock_cls.return_value = mock_client
+            provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        return provider, mock_client
+
+    def test_timeout_raises_retryable_llm_error(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.APITimeoutError(request=MagicMock())
+        )
+        with pytest.raises(LLMError) as exc_info:
+            list(provider.chat_stream([{"role": "user", "content": "Hi"}]))
+        assert exc_info.value.retryable is True
+        assert exc_info.value.__cause__ is not None
+
+    def test_connection_error_raises_retryable(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.APIConnectionError(request=MagicMock())
+        )
+        with pytest.raises(LLMError) as exc_info:
+            list(provider.chat_stream([{"role": "user", "content": "Hi"}]))
+        assert exc_info.value.retryable is True
+
+    def test_rate_limit_raises_retryable(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.RateLimitError(
+                response=MagicMock(status_code=429, headers={}),
+                body=None, message="rate limited",
+            )
+        )
+        with pytest.raises(LLMError) as exc_info:
+            list(provider.chat_stream([{"role": "user", "content": "Hi"}]))
+        assert exc_info.value.retryable is True
+
+    def test_internal_server_error_raises_retryable(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.InternalServerError(
+                response=MagicMock(status_code=500, headers={}),
+                body=None, message="server error",
+            )
+        )
+        with pytest.raises(LLMError) as exc_info:
+            list(provider.chat_stream([{"role": "user", "content": "Hi"}]))
+        assert exc_info.value.retryable is True
+
+    def test_auth_error_raises_non_retryable(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.AuthenticationError(
+                response=MagicMock(status_code=401, headers={}),
+                body=None, message="invalid key",
+            )
+        )
+        with pytest.raises(LLMError) as exc_info:
+            list(provider.chat_stream([{"role": "user", "content": "Hi"}]))
+        assert exc_info.value.retryable is False
+
+    def test_context_length_raises_non_retryable(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.BadRequestError(
+                response=MagicMock(status_code=400, headers={}),
+                body=None, message="context length exceeded",
+            )
+        )
+        with pytest.raises(LLMError) as exc_info:
+            list(provider.chat_stream([{"role": "user", "content": "Hi"}]))
+        assert exc_info.value.retryable is False
+
+    def test_generic_bad_request_raises_retryable(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.BadRequestError(
+                response=MagicMock(status_code=400, headers={}),
+                body=None, message="something went wrong",
+            )
+        )
+        with pytest.raises(LLMError) as exc_info:
+            list(provider.chat_stream([{"role": "user", "content": "Hi"}]))
+        assert exc_info.value.retryable is True
+
+    def test_httpx_read_timeout_raises_retryable(self) -> None:
+        provider, mock_client = self._make_provider()
+        import httpx
+        mock_client.chat.completions.create.side_effect = httpx.ReadTimeout(
+            "read timed out"
+        )
+        with pytest.raises(LLMError) as exc_info:
+            list(provider.chat_stream([{"role": "user", "content": "Hi"}]))
+        assert exc_info.value.retryable is True
+
+    def test_chat_stream_accepts_timeout_override(self) -> None:
+        """timeout kwarg is forwarded to SDK create call."""
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.return_value = iter([
+            _make_stream_chunk(content="ok", finish_reason="stop"),
+        ])
+        list(provider.chat_stream(
+            [{"role": "user", "content": "Hi"}],
+            timeout=600.0,
+        ))
+        call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+        assert call_kwargs.get("timeout") == 600.0

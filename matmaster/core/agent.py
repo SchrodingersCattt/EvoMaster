@@ -16,15 +16,19 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 from matmaster.core.guard_pipeline import GuardPipeline
+from matmaster.tools.tool_result import ToolResult
+from matmaster.types.errors import LLMError
 
 if TYPE_CHECKING:
     from matmaster.types.runtime import AgentRuntimeSpec, KernelResult, KernelRunResult
 from matmaster.core.hooks import (
     HookAction,
     run_guard_blocked,
+    run_on_segment_complete,
     run_on_stream_chunk,
     run_post_tool_call,
     run_pre_llm_call,
@@ -172,26 +176,69 @@ class AgentKernel:
 
                 # Tool execution
                 try:
-                    result = spec.tool_registry.execute(tc.name, tc.arguments)
+                    tool_result = spec.tool_registry.execute(tc.name, tc.arguments)
                 except Exception as e:
-                    result = f"Error executing tool '{tc.name}': {type(e).__name__}: {e}"
+                    tool_result = ToolResult(
+                        status="error",
+                        content=(
+                            f"Error executing tool '{tc.name}': "
+                            f"{type(e).__name__}: {e}"
+                        ),
+                    )
                     logger.exception("Tool execution failed: %s", tc.name)
                 messages.append(
                     ToolMessage(
                         tool_call_id=tc.id,
                         tool_name=tc.name,
-                        content=str(result),
+                        content=tool_result.content,
                     )
                 )
 
                 # post_tool_call hook (observation, all hooks called)
-                run_post_tool_call(spec.hooks, tc, str(result))
+                run_post_tool_call(spec.hooks, tc, tool_result)
 
         # max_turns exhausted
         return self._finish(spec, messages, "max_turns", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)
 
     def _call_llm(
         self, spec: AgentRuntimeSpec, messages: list[Message]
+    ) -> LLMResponse:
+        """Call LLM with timeout-doubling retry on transient errors."""
+        provider = spec.llm_provider
+        current_timeout = getattr(provider, "stream_timeout", None) or getattr(
+            provider, "_timeout", 300.0
+        )
+        max_retries = getattr(provider, "max_retries", 3)
+        retry_delay = getattr(provider, "retry_delay", 1.0)
+
+        last_error: LLMError | None = None
+        for attempt in range(max_retries):
+            try:
+                return self._do_stream_llm(spec, messages, timeout=current_timeout)
+            except LLMError as e:
+                if not e.retryable:
+                    raise
+                last_error = e
+                next_timeout = current_timeout * 2
+                logger.warning(
+                    "LLM stream timed out after %.0fs (attempt %d/%d). "
+                    "Retrying with timeout=%.0fs.",
+                    current_timeout,
+                    attempt + 1,
+                    max_retries,
+                    next_timeout,
+                )
+                current_timeout = next_timeout
+                if attempt < max_retries - 1:
+                    backoff = retry_delay * (2**attempt)
+                    time.sleep(backoff)
+
+        raise RuntimeError(
+            f"LLM stream failed after {max_retries} attempts"
+        ) from last_error
+
+    def _do_stream_llm(
+        self, spec: AgentRuntimeSpec, messages: list[Message], *, timeout: float | None = None
     ) -> LLMResponse:
         """Call LLM via streaming, accumulate chunks into LLMResponse."""
         api_messages = [m.to_api_dict() for m in messages]
@@ -208,13 +255,15 @@ class AgentKernel:
         finish_reason: str | None = None
         stream_id = f"turn-{len(messages)}"
         usage: dict[str, int] = {}
+        producing_reasoning = False
+        producing_content = False
 
         run_on_stream_chunk(
             spec.hooks,
             StreamChunk(stream_state="start", stream_id=stream_id),
         )
         try:
-            for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs):
+            for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs, timeout=timeout):
                 if chunk.content or chunk.reasoning_content:
                     run_on_stream_chunk(
                         spec.hooks,
@@ -226,15 +275,43 @@ class AgentKernel:
                         ),
                     )
 
-                if chunk.content:
-                    content_parts.append(chunk.content)
                 if chunk.reasoning_content:
                     reasoning_parts.append(chunk.reasoning_content)
+                    producing_reasoning = True
+
+                if chunk.content:
+                    if producing_reasoning:
+                        run_on_segment_complete(
+                            spec.hooks,
+                            "thought",
+                            "".join(reasoning_parts),
+                            stream_id,
+                        )
+                        producing_reasoning = False
+                    content_parts.append(chunk.content)
+                    producing_content = True
+
                 if chunk.finish_reason:
                     finish_reason = chunk.finish_reason
                 if chunk.usage:
                     usage = chunk.usage
                 if chunk.tool_call_deltas:
+                    if producing_reasoning:
+                        run_on_segment_complete(
+                            spec.hooks,
+                            "thought",
+                            "".join(reasoning_parts),
+                            stream_id,
+                        )
+                        producing_reasoning = False
+                    if producing_content:
+                        run_on_segment_complete(
+                            spec.hooks,
+                            "response",
+                            "".join(content_parts),
+                            stream_id,
+                        )
+                        producing_content = False
                     for delta in chunk.tool_call_deltas:
                         idx = delta.get("index", 0)
                         if idx not in tool_calls_acc:
@@ -250,6 +327,20 @@ class AgentKernel:
                         if delta.get("arguments"):
                             tool_calls_acc[idx]["arguments"] += delta["arguments"]
         finally:
+            if producing_reasoning:
+                run_on_segment_complete(
+                    spec.hooks,
+                    "thought",
+                    "".join(reasoning_parts),
+                    stream_id,
+                )
+            if producing_content:
+                run_on_segment_complete(
+                    spec.hooks,
+                    "response",
+                    "".join(content_parts),
+                    stream_id,
+                )
             run_on_stream_chunk(
                 spec.hooks,
                 StreamChunk(stream_state="end", stream_id=stream_id),

@@ -60,7 +60,7 @@ class MockLLMProvider:
         return self.chat(messages, tools)
 
     def chat_stream(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, timeout: float | None = None
     ) -> Iterator[StreamChunk]:
         yield StreamChunk(
             content=self._content,
@@ -86,7 +86,7 @@ class MockLLMProviderWithToolCall:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
             # First turn: tool call
@@ -118,7 +118,7 @@ class MockLLMProviderCapturingMessages:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self.captured_messages.append(list(messages))
         yield StreamChunk(content='Acknowledged history.', finish_reason='stop')
 

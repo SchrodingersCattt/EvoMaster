@@ -443,8 +443,9 @@ class AgentRunService:
                 if events_table
                 else []
             )
+            parent_events = ChatHistoryConverter.exclude_spawn_events(raw_events)
             history = ChatHistoryConverter.events_to_messages(
-                ChatHistoryConverter.exclude_task_events(raw_events, task_id)
+                ChatHistoryConverter.exclude_task_events(parent_events, task_id)
             )
 
             # -- Stage 6: Kernel execution --

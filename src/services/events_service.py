@@ -48,12 +48,21 @@ class ChatEventsService:
         task_id = payload.get('task_id')
         invocation_id = payload.get('invocation_id')
         self.table.add_event(
-            session_id, source, event_type, content, task_id, invocation_id
+            session_id,
+            source,
+            event_type,
+            content,
+            task_id=task_id,
+            invocation_id=invocation_id,
         )
 
-    def get_session_events(self, session_id: str) -> list:
-        """返回某会话的历史消息列表（从数据库读取）。"""
-        return self.table.get_session_events(session_id)
+    def get_session_events(
+        self, session_id: str, include_spawn: bool = False
+    ) -> list:
+        """返回某会话的历史消息列表（从数据库读取）。默认仅父级事件；include_spawn 含子 agent 行。"""
+        return self.table.get_session_events(
+            session_id, include_spawn=include_spawn
+        )
 
     def get_last_user_query(self, session_id: str):
         """

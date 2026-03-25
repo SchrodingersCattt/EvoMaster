@@ -17,7 +17,7 @@ class MockProvider:
     def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         yield StreamChunk(content="hello", finish_reason="stop")
 
 
