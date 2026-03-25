@@ -40,19 +40,11 @@ def _write_config(tmp_path: Path, overrides: dict[str, Any] | None = None) -> Pa
 
 
 def _setup_project_root(tmp_path: Path) -> Path:
-    """Create a fake project root with mat_master and minimal config dirs.
-
-    Also creates matmaster_config/ (the flat config directory used by
-    PlaygroundManager.get_or_create) with the same config content.
-    """
+    """Create a fake project root with mat_master and minimal config dirs."""
     for pg_type in ("mat_master", "minimal"):
         cfg_dir = tmp_path / "configs" / pg_type
         cfg_dir.mkdir(parents=True)
         _write_config(cfg_dir)
-    # PlaygroundManager._CONFIG_DIR = "matmaster_config"
-    flat_cfg_dir = tmp_path / "matmaster_config"
-    flat_cfg_dir.mkdir(parents=True, exist_ok=True)
-    _write_config(flat_cfg_dir)
     return tmp_path
 
 
@@ -133,14 +125,12 @@ class TestGetOrCreate:
         with pytest.raises(ValueError, match="x_master"):
             mgr.get_or_create("session-1", playground_type="x_master")
 
-    def test_unknown_playground_type_uses_default_config(self, tmp_path: Path) -> None:
-        """Non-x_master playground_type is accepted (config path is type-agnostic)."""
+    def test_invalid_playground_type_raises(self, tmp_path: Path) -> None:
         root = _setup_project_root(tmp_path)
         mgr = PlaygroundManager(root)
 
-        # Unknown type still resolves to matmaster_config/config.yaml
-        pg = mgr.get_or_create("session-1", playground_type="some_other_type")
-        assert isinstance(pg, Playground)
+        with pytest.raises(Exception):
+            mgr.get_or_create("session-1", playground_type="nonexistent_type")
 
     def test_thread_safety_different_sessions(self, tmp_path: Path) -> None:
         root = _setup_project_root(tmp_path)

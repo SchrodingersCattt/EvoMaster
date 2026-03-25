@@ -86,7 +86,7 @@ class TestExpSkillsConfig:
             enabled=True,
             skills_root="playground/mat_master/skills",
             cache_dir="matmaster/cache",
-            config_dir="matmaster_config",
+            config_dir="configs/mat_master",
             mcp_config_file="mcp_config.json",
         )
         assert cfg.enabled is True
@@ -101,7 +101,7 @@ class TestExpConfigWithSkills:
                 "enabled": True,
                 "skills_root": "playground/mat_master/skills",
                 "cache_dir": "matmaster/cache",
-                "config_dir": "matmaster_config",
+                "config_dir": "configs/mat_master",
                 "mcp_config_file": "mcp_config.json",
             },
         }
