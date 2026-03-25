@@ -3,11 +3,14 @@ name: mcp-mat-abacus
 description: 当需要使用 ABACUS 进行第一性原理计算时调用本 skill。支持输入准备、参数修改、结构修改和结果收集。
 skill_type: mcp-loader
 mcp_server: mat_abacus
-mcp_transport: sse
-mcp_url: http://toyl1410396.bohrium.tech:50001/sse
 ---
 
 # mat_abacus — ABACUS 第一性原理计算
+
+## MCP 服务器
+
+- 传输协议: sse
+- 地址: `http://toyl1410396.bohrium.tech:50001/sse`
 
 ## 工具列表
 

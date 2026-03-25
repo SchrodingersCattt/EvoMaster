@@ -3,11 +3,14 @@ name: mcp-mat-nmr
 description: 当需要进行 NMR 波谱分析时调用本 skill。支持 NMR 数据库检索、化学位移预测和反向预测（从谱图推结构）。
 skill_type: mcp-loader
 mcp_server: mat_nmr
-mcp_transport: sse
-mcp_url: https://nmr-server-matmaster-uuid1764741165.appspace.bohrium.com/sse?token=1467bc01801642c09273966fcd04e3a6
 ---
 
 # mat_nmr — NMR 波谱分析
+
+## MCP 服务器
+
+- 传输协议: sse
+- 地址: `https://nmr-server-matmaster-uuid1764741165.appspace.bohrium.com/sse?token=1467bc01801642c09273966fcd04e3a6`
 
 ## 工具列表
 

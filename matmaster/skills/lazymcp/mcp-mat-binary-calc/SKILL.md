@@ -3,11 +3,14 @@ name: mcp-mat-binary-calc
 description: 当需要为 CP2K/QE/ABINIT/LAMMPS/ORCA/PySCF/GROMACS 准备或提交计算任务时调用本 skill。各引擎有独立的 prepare 工具生成输入文件。
 skill_type: mcp-loader
 mcp_server: mat_binary_calc
-mcp_transport: http
-mcp_url: http://gjao1318755.bohrium.tech:50002/mcp
 ---
 
 # mat_binary_calc — 多引擎计算任务
+
+## MCP 服务器
+
+- 传输协议: http
+- 地址: `http://gjao1318755.bohrium.tech:50002/mcp`
 
 ## 工具列表
 

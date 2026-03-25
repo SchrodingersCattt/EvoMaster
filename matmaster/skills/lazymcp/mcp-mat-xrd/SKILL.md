@@ -3,11 +3,14 @@ name: mcp-mat-xrd
 description: 当需要进行 XRD 物相鉴定时调用本 skill。输入衍射数据，返回匹配的物相及置信度。
 skill_type: mcp-loader
 mcp_server: mat_xrd
-mcp_transport: sse
-mcp_url: http://root@pkfz1410356.bohrium.tech:50001/sse
 ---
 
 # mat_xrd — XRD 物相鉴定
+
+## MCP 服务器
+
+- 传输协议: sse
+- 地址: `http://root@pkfz1410356.bohrium.tech:50001/sse`
 
 ## 工具列表
 
