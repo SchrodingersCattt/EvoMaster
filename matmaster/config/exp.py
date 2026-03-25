@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class ExpToolsConfig(BaseModel):
     """Tool registration settings for Exp."""
 
+    # Default "*" means "all tools". Explicit list of tool names also supported.
     builtin: list[str] = Field(default_factory=lambda: ["*"])
     mcp: str = "*"
 

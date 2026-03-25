@@ -8,7 +8,20 @@ You are Mat Master, an autonomous agent for materials science and computational 
 '''
 
 [tools]
-builtin = ["*"]
+builtin = [
+    "execute_bash",
+    "list_dir",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "glob",
+    "grep",
+    "task_create",
+    "task_get",
+    "task_list",
+    "task_update",
+    "task_complete",
+]
 mcp = "*"
 
 [skills]
