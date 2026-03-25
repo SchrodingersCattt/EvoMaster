@@ -1,4 +1,5 @@
 name = "explore"
+description = "Read-only exploration agent for gathering information from files and codebase without making changes"
 max_turns = 50
 guards = []
 

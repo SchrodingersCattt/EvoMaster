@@ -66,10 +66,58 @@ class SpawnTool(BuiltinTool):
         session: Any | None = None,
         workdir: Any | None = None,
         spawn_fn: Callable[..., str] | None = None,
+        available_exps: list[tuple[str, str]] | None = None,
     ) -> None:
         super().__init__(session=session, workdir=workdir)
         self._spawn_fn = spawn_fn
         self._stop_event: threading.Event | None = None
+
+        # Override instance-level description/json_schema with available exps
+        if available_exps:
+            self._apply_available_exps(available_exps)
+
+    def _apply_available_exps(self, exps: list[tuple[str, str]]) -> None:
+        """Build instance-level description and json_schema from available exps.
+
+        Shadows the ClassVar so the ToolRegistry sees the dynamic version.
+        Adds enum constraint and per-exp descriptions to guide LLM selection.
+        """
+        names = [name for name, _ in exps]
+        lines = [f"  - {name}: {desc}" for name, desc in exps if desc]
+        if not lines:
+            lines = [f"  - {name}" for name in names]
+
+        exp_list_str = "\n".join(lines)
+        # Instance attribute shadows ClassVar
+        self.description = (  # type: ignore[misc]
+            "Spawn a sub-agent to execute a specific task. "
+            "Provide a complete task description with all necessary context "
+            "-- the sub-agent has no access to your conversation history. "
+            "Results are returned as text.\n\n"
+            f"Available sub-agent types:\n{exp_list_str}"
+        )
+        self.json_schema = {  # type: ignore[misc]
+            "type": "object",
+            "properties": {
+                "exp_name": {
+                    "type": "string",
+                    "enum": names,
+                    "description": (
+                        "Name of the sub-agent type to spawn. "
+                        "Available types:\n" + exp_list_str
+                    ),
+                },
+                "task": {
+                    "type": "string",
+                    "description": (
+                        "Task description for the sub-agent to execute. "
+                        "Include all necessary context -- the sub-agent has "
+                        "no access to your conversation history."
+                    ),
+                },
+            },
+            "required": ["exp_name", "task"],
+        }
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         """Execute sub-agent spawn.
