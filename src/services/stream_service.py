@@ -37,6 +37,7 @@ from src.utils.chat_event_source import normalize_event_source
 from src.utils.constant import AG_UI_EVENT, CURRENT_ENV, REDIS_URL
 from src.utils.feishu_notifier import (
     CARD_TEMPLATE_ORANGE,
+    format_llm_model_for_notify,
     notify_post_async,
 )
 from src.utils.worker_id import get_worker_id
@@ -816,6 +817,7 @@ class ChatStreamService:
                         ('会话ID', sid),
                         ('会话地址', session_url),
                         ('用户', user_info_display),
+                        ('模型', format_llm_model_for_notify(ctx.llm, ctx.model)),
                         ('用户问题', user_question or '-'),
                         ('排队数', str(queue_len)),
                         ('执行中', str(active_count)),
