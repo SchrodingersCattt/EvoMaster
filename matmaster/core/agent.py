@@ -16,10 +16,12 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.errors import LLMError
 
 if TYPE_CHECKING:
     from matmaster.types.runtime import AgentRuntimeSpec, KernelResult, KernelRunResult
@@ -201,6 +203,43 @@ class AgentKernel:
     def _call_llm(
         self, spec: AgentRuntimeSpec, messages: list[Message]
     ) -> LLMResponse:
+        """Call LLM with timeout-doubling retry on transient errors."""
+        provider = spec.llm_provider
+        current_timeout = getattr(provider, "stream_timeout", None) or getattr(
+            provider, "_timeout", 300.0
+        )
+        max_retries = getattr(provider, "max_retries", 3)
+        retry_delay = getattr(provider, "retry_delay", 1.0)
+
+        last_error: LLMError | None = None
+        for attempt in range(max_retries):
+            try:
+                return self._do_stream_llm(spec, messages, timeout=current_timeout)
+            except LLMError as e:
+                if not e.retryable:
+                    raise
+                last_error = e
+                next_timeout = current_timeout * 2
+                logger.warning(
+                    "LLM stream timed out after %.0fs (attempt %d/%d). "
+                    "Retrying with timeout=%.0fs.",
+                    current_timeout,
+                    attempt + 1,
+                    max_retries,
+                    next_timeout,
+                )
+                current_timeout = next_timeout
+                if attempt < max_retries - 1:
+                    backoff = retry_delay * (2**attempt)
+                    time.sleep(backoff)
+
+        raise RuntimeError(
+            f"LLM stream failed after {max_retries} attempts"
+        ) from last_error
+
+    def _do_stream_llm(
+        self, spec: AgentRuntimeSpec, messages: list[Message], *, timeout: float | None = None
+    ) -> LLMResponse:
         """Call LLM via streaming, accumulate chunks into LLMResponse."""
         api_messages = [m.to_api_dict() for m in messages]
         tool_defs = (
@@ -224,7 +263,7 @@ class AgentKernel:
             StreamChunk(stream_state="start", stream_id=stream_id),
         )
         try:
-            for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs):
+            for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs, timeout=timeout):
                 if chunk.content or chunk.reasoning_content:
                     run_on_stream_chunk(
                         spec.hooks,

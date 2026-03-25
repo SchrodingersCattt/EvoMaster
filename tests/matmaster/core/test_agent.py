@@ -15,6 +15,7 @@ import pytest
 
 from matmaster.tools.tool_result import ToolResult
 from matmaster.tools.tool_registry import ToolRegistry
+from matmaster.types.errors import LLMError
 from matmaster.types.guards import Guard, GuardContext, GuardResult
 from matmaster.types.runtime import AgentRuntimeSpec, KernelResult
 from matmaster.core.hooks import BaseHook, HookAction
@@ -1093,3 +1094,105 @@ class TestKernelResultFields:
         assert result.result.reason == "invalid_finish"
         assert result.result.num_turns == 1
         assert result.result.stop_reason == "length"
+
+
+class ErrorThenSuccessProvider:
+    """Provider that raises LLMError N times, then succeeds."""
+
+    def __init__(self, fail_count: int, error: LLMError) -> None:
+        self._fail_count = fail_count
+        self._error = error
+        self._call_count = 0
+        self.stream_timeout = 10.0
+        self.max_retries = 3
+        self.retry_delay = 0.0  # no sleep in tests
+
+    def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
+        return self.chat(messages, tools)
+
+    def chat_stream(self, messages, tools=None, *, timeout=None):
+        self._call_count += 1
+        if self._call_count <= self._fail_count:
+            raise self._error
+        yield StreamChunk(content="recovered", finish_reason="stop")
+
+
+class TestCallLlmRetry:
+    def test_retry_on_retryable_error(self) -> None:
+        """_call_llm retries on retryable LLMError and succeeds."""
+        provider = ErrorThenSuccessProvider(
+            fail_count=1,
+            error=LLMError("timeout", retryable=True),
+        )
+        spec = AgentRuntimeSpec(
+            llm_provider=provider,
+            system_prompt="test",
+        )
+        from matmaster.core.agent import AgentKernel
+        kernel = AgentKernel()
+        response = kernel._call_llm(spec, [UserMessage(content="hi")])
+        assert response.content == "recovered"
+        assert provider._call_count == 2
+
+    def test_no_retry_on_non_retryable_error(self) -> None:
+        """_call_llm raises immediately on non-retryable LLMError."""
+        provider = ErrorThenSuccessProvider(
+            fail_count=1,
+            error=LLMError("auth failed", retryable=False),
+        )
+        spec = AgentRuntimeSpec(
+            llm_provider=provider,
+            system_prompt="test",
+        )
+        from matmaster.core.agent import AgentKernel
+        kernel = AgentKernel()
+        with pytest.raises(LLMError, match="auth failed"):
+            kernel._call_llm(spec, [UserMessage(content="hi")])
+        assert provider._call_count == 1
+
+    def test_all_retries_exhausted(self) -> None:
+        """_call_llm raises RuntimeError after all retries exhausted."""
+        provider = ErrorThenSuccessProvider(
+            fail_count=99,
+            error=LLMError("timeout", retryable=True),
+        )
+        spec = AgentRuntimeSpec(
+            llm_provider=provider,
+            system_prompt="test",
+        )
+        from matmaster.core.agent import AgentKernel
+        kernel = AgentKernel()
+        with pytest.raises(RuntimeError, match="LLM stream failed"):
+            kernel._call_llm(spec, [UserMessage(content="hi")])
+        assert provider._call_count == 3  # max_retries default
+
+    def test_timeout_doubles_on_retry(self) -> None:
+        """Each retry doubles the timeout passed to chat_stream."""
+        timeouts_seen: list[float | None] = []
+
+        class TimeoutTracker:
+            stream_timeout = 10.0
+            max_retries = 3
+            retry_delay = 0.0
+
+            def chat(self, messages, tools=None):
+                return LLMResponse(content="", finish_reason="stop")
+            def chat_with_retry(self, messages, tools=None, **kw):
+                return self.chat(messages, tools)
+            def chat_stream(self, messages, tools=None, *, timeout=None):
+                timeouts_seen.append(timeout)
+                if len(timeouts_seen) < 3:
+                    raise LLMError("timeout", retryable=True)
+                yield StreamChunk(content="ok", finish_reason="stop")
+
+        spec = AgentRuntimeSpec(
+            llm_provider=TimeoutTracker(),
+            system_prompt="test",
+        )
+        from matmaster.core.agent import AgentKernel
+        kernel = AgentKernel()
+        kernel._call_llm(spec, [UserMessage(content="hi")])
+        assert timeouts_seen == [10.0, 20.0, 40.0]
