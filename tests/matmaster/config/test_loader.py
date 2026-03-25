@@ -7,7 +7,7 @@ import pytest
 
 from matmaster.config.exp import ExpConfig
 from matmaster.config.llm import LLMConfig
-from matmaster.config.loader import load_exp_config, load_llm_config
+from matmaster.config.loader import load_base_system_prompt, load_exp_config, load_llm_config
 
 # Minimal YAML content for tests
 _YAML_CONTENT = """\
@@ -158,62 +158,116 @@ class TestLoadExpConfig:
         cfg = load_exp_config("test", exps_dir=exps_dir)
         assert "${FOO}" in cfg.developer_instructions
 
-    def test_mode_contract_not_expanded(self, tmp_path, monkeypatch):
-        """${...} in mode_contract is preserved, not expanded."""
-        monkeypatch.setenv("FOO", "bar")
-        exps_dir = tmp_path / "exps"
-        exps_dir.mkdir()
-        (exps_dir / "test.toml").write_text(
-            'name = "test"\n'
-            "mode_contract = 'Use ${FOO} as template var'\n"
-        )
-        cfg = load_exp_config("test", exps_dir=exps_dir)
-        assert "${FOO}" in cfg.mode_contract
-
-    def test_mode_contract_loaded(self, tmp_path):
-        """mode_contract field is loaded from toml."""
-        exps_dir = tmp_path / "exps"
-        exps_dir.mkdir()
-        (exps_dir / "direct.toml").write_text(
-            'name = "direct"\n'
-            'mode_contract = "Execute directly."\n'
-            'developer_instructions = "You are Mat Master."\n'
-            "\n[tools]\nbuiltin = ['*']\nmcp = '*'\n",
-            encoding="utf-8",
-        )
-        cfg = load_exp_config("direct", exps_dir=exps_dir)
-        assert cfg.mode_contract == "Execute directly."
-
-    def test_mode_contract_reaches_system_prompt(self, tmp_path):
-        """End-to-end: toml mode_contract appears in built system prompt."""
-        from matmaster.core.exp import Exp
-        from matmaster.types.context import PlaygroundContext
-        from tests.matmaster.core.conftest import MockLLMProvider
-
-        exps_dir = tmp_path / "exps"
-        exps_dir.mkdir()
-        (exps_dir / "test.toml").write_text(
-            'name = "test"\n'
-            'developer_instructions = "I am Test Agent."\n'
-            'mode_contract = "Execute tasks in test mode."\n'
-            "\n[tools]\nbuiltin = []\nmcp = ''\n",
-            encoding="utf-8",
-        )
-        cfg = load_exp_config("test", exps_dir=exps_dir)
-        exp = Exp(cfg)
-
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            llm_provider=MockLLMProvider(),
-        )
-        runtime = exp.build_runtime(ctx)
-
-        assert "I am Test Agent." in runtime.spec.system_prompt
-        assert "Execute tasks in test mode." in runtime.spec.system_prompt
-
     def test_default_exps_dir(self):
         """Default exps_dir resolves to matmaster/exps/ and can load direct.toml."""
         cfg = load_exp_config("direct")
         assert cfg.name == "direct"
+
+
+class TestBaseTomlMerge:
+    """Tests for _base.toml system_prompt merge semantics."""
+
+    def test_base_present_exp_no_override(self, tmp_path):
+        """_base.toml system_prompt used when exp toml has none."""
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "_base.toml").write_text(
+            "system_prompt = 'Base system prompt'\n"
+        )
+        (exps_dir / "test.toml").write_text(
+            'name = "test"\ndeveloper_instructions = "DI"\n'
+        )
+        cfg = load_exp_config("test", exps_dir=exps_dir)
+        assert cfg.system_prompt == "Base system prompt"
+
+    def test_exp_overrides_base(self, tmp_path):
+        """Exp toml system_prompt overrides _base.toml."""
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "_base.toml").write_text(
+            "system_prompt = 'Base prompt'\n"
+        )
+        (exps_dir / "test.toml").write_text(
+            'name = "test"\nsystem_prompt = "Exp override"\n'
+        )
+        cfg = load_exp_config("test", exps_dir=exps_dir)
+        assert cfg.system_prompt == "Exp override"
+
+    def test_base_missing(self, tmp_path, caplog):
+        """Missing _base.toml yields empty system_prompt with warning."""
+        import logging
+
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "test.toml").write_text('name = "test"\n')
+        with caplog.at_level(logging.WARNING):
+            cfg = load_exp_config("test", exps_dir=exps_dir)
+        assert cfg.system_prompt == ""
+        assert "_base.toml" in caplog.text
+
+    def test_base_extra_fields_ignored(self, tmp_path):
+        """Non-system_prompt fields in _base.toml do not pollute ExpConfig."""
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "_base.toml").write_text(
+            'system_prompt = "Base"\nname = "SHOULD_NOT_LEAK"\nmode = "BAD"\n'
+        )
+        (exps_dir / "test.toml").write_text('name = "test"\nmode = "direct"\n')
+        cfg = load_exp_config("test", exps_dir=exps_dir)
+        assert cfg.name == "test"
+        assert cfg.mode == "direct"
+        assert cfg.system_prompt == "Base"
+
+    def test_base_system_prompt_not_env_expanded(self, tmp_path, monkeypatch):
+        """${...} in _base.toml system_prompt preserved verbatim."""
+        monkeypatch.setenv("FOO", "bar")
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "_base.toml").write_text(
+            "system_prompt = 'Use ${FOO} literally'\n"
+        )
+        (exps_dir / "test.toml").write_text('name = "test"\n')
+        cfg = load_exp_config("test", exps_dir=exps_dir)
+        assert "${FOO}" in cfg.system_prompt
+
+    def test_exp_discovery_excludes_underscore_prefix(self, tmp_path):
+        """Error message for unknown exp does not list _base."""
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "_base.toml").write_text("system_prompt = 'x'\n")
+        (exps_dir / "direct.toml").write_text('name = "direct"\n')
+        with pytest.raises(FileNotFoundError) as exc_info:
+            load_exp_config("nope", exps_dir=exps_dir)
+        assert "_base" not in str(exc_info.value)
+        assert "direct" in str(exc_info.value)
+
+    def test_underscore_prefix_name_rejected(self, tmp_path):
+        """load_exp_config('_base') raises ValueError, not silently loads."""
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "_base.toml").write_text("system_prompt = 'x'\n")
+        with pytest.raises(ValueError, match="reserved"):
+            load_exp_config("_base", exps_dir=exps_dir)
+
+
+class TestLoadBaseSystemPrompt:
+    """Tests for the standalone load_base_system_prompt() helper."""
+
+    def test_returns_system_prompt(self, tmp_path):
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "_base.toml").write_text(
+            "system_prompt = 'Hello from base'\n"
+        )
+        result = load_base_system_prompt(exps_dir=exps_dir)
+        assert result == "Hello from base"
+
+    def test_missing_base_returns_empty(self, tmp_path, caplog):
+        import logging
+
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        with caplog.at_level(logging.WARNING):
+            result = load_base_system_prompt(exps_dir=exps_dir)
+        assert result == ""
+        assert "_base.toml" in caplog.text
