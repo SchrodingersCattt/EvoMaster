@@ -75,7 +75,8 @@ _execute(arguments):
   2. session.is_file(file_path) — 不存在则报错
   3. session.read_file(file_path) — 全量读取
   4. tracker.mark_read(file_path) — 无论后续是否超限都标记
-  5. lines = content.split('\n'), total = len(lines)
+  5. lines = content.splitlines(), total = len(lines)
+     (使用 splitlines() 统一处理 \n 和 \r\n，且不会因末尾换行多出空行)
   6. 分支:
 
   无 offset/limit (全文读取模式):
@@ -94,7 +95,7 @@ _execute(arguments):
 
 ```
 Error: file has {total} lines, exceeds read limit ({MAX_READ_LINES} lines).
-Use offset and limit parameters to read specific portions.
+Use offset and limit to read portions, e.g. offset=1, limit=2000 for the first 2000 lines.
 
 Preview (first {PREVIEW_LINES} lines):
      1\t{line1}
@@ -106,13 +107,14 @@ Preview (first {PREVIEW_LINES} lines):
 ### Key Behaviors
 
 1. **mark_read 时机**：`session.read_file()` 成功后立即标记，不管是否超限。确保 Agent 后续可以用 edit_file 修改该文件（Read-Before-Modify 协议不受影响）。
-2. **limit 隐式上限**：即使 `limit=5000`，实际返回不超过 MAX_READ_LINES 行。
+2. **limit 隐式截断 + 通知**：如果 Agent 显式传入的 `limit` 超过 MAX_READ_LINES，实际返回 MAX_READ_LINES 行，并在输出末尾附加提示：`[Note: requested {limit} lines, capped at {MAX_READ_LINES}. Use offset to continue reading.]`。避免 Agent 误以为已读到全部请求内容。
 3. **只传 offset 不传 limit**：从 offset 行开始，读到文件末尾，但总量不超过 MAX_READ_LINES 行。
-4. **移除 evomaster 依赖**：不再导入 `MAX_OUTPUT_SIZE` 和 `maybe_truncate`。
+4. **只传 limit 不传 offset**：从第 1 行开始，读取 limit 行（受 MAX_READ_LINES 上限约束）。
+5. **移除 evomaster 依赖**：不再导入 `MAX_OUTPUT_SIZE` 和 `maybe_truncate`。保留 `_format_with_line_numbers` 方法但移除内部的 `maybe_truncate` 调用（行数限制已在上游完成）。
 
 ### Impact on Other Components
 
-- **EditTool / WriteTool**：无需改动。依赖 `ReadTracker.has_been_read()`，新 ReadTool 无论超限与否都 `mark_read()`。
+- **EditTool / WriteTool**：无需改动。依赖 `ReadTracker.has_been_read()`，新 ReadTool 无论超限与否都 `mark_read()`。注意 EditTool 仍保留对 `evomaster.agent.tools.builtin.editor` 的 `maybe_truncate` / `MAX_OUTPUT_SIZE` / `SNIPPET_LINES` 依赖，这些在后续 EditTool 独立化时处理，不在本次范围内。
 - **ReadTracker**：无需改动。
 - **Exp 组装**（`matmaster/core/exp.py`）：`ReadTool(session=..., workdir=..., tracker=...)` 构造签名不变，无需改动。
 
@@ -126,10 +128,12 @@ Preview (first {PREVIEW_LINES} lines):
 | `test_read_exceeds_limit_returns_error_and_preview` | > 2000 行文件返回报错 + 总行数 + 前 50 行预览 |
 | `test_read_with_offset_and_limit` | offset=100, limit=50 返回第 100-149 行 |
 | `test_read_with_offset_only` | 只传 offset，读到末尾但不超过 MAX_READ_LINES |
-| `test_read_with_limit_exceeds_max` | limit=5000 被隐式截断为 MAX_READ_LINES |
+| `test_read_with_limit_exceeds_max` | limit=5000 被截断为 MAX_READ_LINES 且输出包含截断通知 |
 | `test_offset_out_of_range` | offset > 总行数时报错 |
 | `test_tracker_marked_on_overlimit` | 超限时仍然 mark_read |
-| `test_old_line_range_ignored` | 传 line_range 参数被忽略 |
+| `test_read_with_only_limit` | 只传 limit 不传 offset，从第 1 行开始 |
+| `test_read_empty_file` | 空文件正常返回，不报错 |
+| `test_file_with_trailing_newline` | 末尾有 `\n` 的文件行数计算正确（splitlines 处理） |
 
 ## Files Changed
 
