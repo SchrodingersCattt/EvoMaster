@@ -63,9 +63,20 @@ def test_developer_instructions_reasonable_length():
     assert 500 <= length <= 3000, f"Length {length} outside [500, 3000]"
 
 
-def test_mode_contract_nonempty_and_direct():
-    """mode_contract is non-empty and references direct execution mode."""
+def test_mode_contract_removed():
+    """mode_contract field no longer exists on ExpConfig."""
     cfg = load_exp_config("direct")
-    mc = cfg.mode_contract
-    assert len(mc.strip()) > 0
-    assert "direct" in mc.lower()
+    assert not hasattr(cfg, "mode_contract")
+
+
+def test_execution_mode_in_developer_instructions():
+    """Former mode_contract content now lives in developer_instructions."""
+    cfg = load_exp_config("direct")
+    di = cfg.developer_instructions.lower()
+    assert "direct execution mode" in di
+
+
+def test_system_prompt_from_base():
+    """system_prompt is loaded from _base.toml."""
+    cfg = load_exp_config("direct")
+    assert len(cfg.system_prompt.strip()) > 0

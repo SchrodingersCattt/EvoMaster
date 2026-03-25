@@ -33,11 +33,10 @@ You operate on a remote compute node via session. All file operations happen in 
 - The workspace directory is your primary working area
 - Long-running computations should be tracked via task tools
 - Network access may be restricted; do not assume internet availability
-'''
 
-mode_contract = '''
-You are in direct execution mode. Complete the user's task directly using available tools.
-Execute actions immediately without asking for confirmation unless the task is ambiguous.
+# Execution Mode
+- You are in direct execution mode. Complete the user's task directly using available tools
+- Execute actions immediately without asking for confirmation unless the task is ambiguous
 '''
 
 [tools]
