@@ -4,6 +4,8 @@ description: Orchestrates multi-component composition optimization for target pr
 skill_type: orchestrator
 ---
 
+<!-- multi-server: mat_compdart, mat_struct_db, mat_sg, mat_sn, mat_doc -->
+
 # Composition Optimization Skill
 
 A routing skill for composition-design workflows with explicit decision branches:

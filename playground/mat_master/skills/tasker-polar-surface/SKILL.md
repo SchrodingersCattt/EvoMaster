@@ -3,6 +3,8 @@ name: tasker-polar-surface
 description: "Guides slab cutting for ionic and polar crystals using Tasker types (1/2/3). Use built-in script build_slab_tasker_fix.py as the default builder for all surface types, then validate with check_slab_tasker.py and assess_structure.py. If auto-fix fails, explicitly report to user and ask for manual adjustment or temporary acceptance."
 ---
 
+<!-- multi-server: mat_sg, mat_sn, mat_doc -->
+
 # Tasker Polar Surface Skill
 
 When cutting a surface slab from a bulk crystal (especially ionic or oxide), apply **Tasker's polar surface theory** so the slab is non-polar or correctly handled. Otherwise the cut may be polar and physically unreasonable (e.g. diverging surface energy for Type 3).

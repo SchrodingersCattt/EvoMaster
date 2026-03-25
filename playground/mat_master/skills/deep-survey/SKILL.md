@@ -4,6 +4,8 @@ description: "Retrieves literature evidence and always produces collected.json (
 skill_type: operator
 ---
 
+<!-- multi-server: mat_sn, mat_doc -->
+
 # Deep Survey Skill
 
 A systematic researcher that collects literature evidence and, for `standard`/`deep` depth, generates **detailed review reports saved as Markdown files**.

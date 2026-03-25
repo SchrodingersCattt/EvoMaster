@@ -2,6 +2,7 @@
 name: input-manual-helper
 description: "Parameter-dispatch engine for CP2K, QE, ABINIT, LAMMPS, ORCA, PySCF. LLM outputs overrides and paths; prepare_* MCP tools generate inputs (PySCF uses run_pyscf direct run). Route by engine capability; validate by physical-sense review. Structure files must be pymatgen-instanceable."
 skill_type: operator
+mcp_server: mat_binary_calc
 ---
 
 # Input Manual Helper Skill
