@@ -80,7 +80,7 @@ profiles:
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "medium"
+    thinking_effort: "xhigh"
     timeout: 300
     stream_timeout: 20
     stream_idle_timeout: 30
