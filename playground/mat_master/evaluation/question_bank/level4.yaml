@@ -11,12 +11,21 @@ rubric:
     "6.0": "Novel but mostly recombination of existing concepts."
     "3.0": "Speculative without operational falsification."
     "0.0": "Physically incoherent."
+  # v4 three-dimensional weights — visionary tasks are mostly accuracy; grounding penalizes
+  # unfounded speculation; efficiency is less critical for open-ended reasoning tasks.
+  grounding_weight: 0.7
+  efficiency_weight: 0.3
+  analysis_weights:
+    accuracy: 0.6
+    grounding: 0.25
+    efficiency: 0.15
+
 questions:
   - id: "L4_Q01"
     level: "L4"
     rubric_id: "R_L4_001"
     intent: "Propose an intrinsic quantum/topological mechanism to decouple energy density from mechanical sensitivity in energetic materials without mesoscale tricks; provide falsifiable design route."
-    human_prompt_seed: "不使用共晶或微胶囊这类介观手段，是否能在量子/分子拓扑层面提出‘高能量密度-低感度’解耦机制？请给可证伪路线。"
+    human_prompt_seed: "不使用共晶或微胶囊这类介观手段，是否能在量子/分子拓扑层面提出'高能量密度-低感度'解耦机制？请给可证伪路线。"
     tags: ["visionary", "energetic", "theory"]
     mode_scope: ["direct", "planner"]
     data_files:
@@ -28,18 +37,39 @@ questions:
       - key: "required_components"
         value: ["premise_change", "observable_shift", "falsification_route"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "required_components"
         criterion: "Answer explicitly includes premise change, observable shift, and falsification route."
         weight: 0.50
         verify: "contains_all"
+        dimension: "accuracy"
       - id: "theory_rigor"
         criterion: "Physical mechanism has internal consistency and avoids hand-waving."
         weight: 0.25
         verify: "llm_judge"
+        dimension: "accuracy"
       - id: "testability_rigor"
         criterion: "Validation route includes concrete measurable signatures."
         weight: 0.25
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_context"
+        criterion: "Proposed mechanism references specific physical/chemical concepts from the open_problem_note.md context; theory is not a generic restatement unrelated to the provided framing."
+        weight: 0.60
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      - id: "artifact_context"
+        criterion: "Agent reads and incorporates the open_problem_note.md context artifact in the response."
+        weight: 0.40
+        verify: "artifact_exists"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Visionary proposal is developed from the context without unnecessary exploratory tool calls; core insight is presented directly."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full:
         - "Changes core premise, predicts altered observables, and gives falsification protocol."
@@ -47,6 +77,7 @@ questions:
         - "Novel mechanism proposed but testability weak."
       fail:
         - "Speculative narrative with no physical closure."
+
   - id: "L4_Q02"
     level: "L4"
     rubric_id: "R_L4_001"
@@ -68,18 +99,39 @@ questions:
       - key: "required_components"
         value: ["physical_model", "dominant_descriptors", "falsification_protocol"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "required_components"
         criterion: "Answer includes physical model, descriptor hierarchy, and falsification route."
         weight: 0.50
         verify: "contains_all"
+        dimension: "accuracy"
       - id: "physics_rigor"
         criterion: "Model accounts for crystal packing, local field corrections, and orientational averaging."
         weight: 0.25
         verify: "llm_judge"
+        dimension: "accuracy"
       - id: "testability_rigor"
         criterion: "Validation route includes specific datasets, metrics (R2, RMSE), and failure criteria."
         weight: 0.25
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_context"
+        criterion: "Statistical framework references known physical relationships (e.g. oriented-gas model, Lorentz-Lorenz) rather than speculative unsupported claims; proposed dataset is realistic and citable."
+        weight: 0.60
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      - id: "artifact_context"
+        criterion: "Agent reads the open_problem_note.md context to frame the NLO problem."
+        weight: 0.40
+        verify: "artifact_exists"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "NLO framework is developed from the provided context without unnecessary exploratory tool calls."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full:
         - "Proposes quantitative model linking molecular beta/alpha/mu to crystal chi(2)."

@@ -24,6 +24,19 @@ CARD_TEMPLATE_ORANGE = 'orange'
 CARD_TEMPLATE_RED = 'red'
 
 
+def format_llm_model_for_notify(llm: str | None, model: str | None) -> str:
+    """拼接本轮 LLM 配置块与模型名，供飞书卡片「模型」行展示。"""
+    m = (model or '').strip()
+    l = (llm or '').strip()
+    if m and l:
+        return f'{m}（{l}）'
+    if m:
+        return m
+    if l:
+        return f'LLM: {l}'
+    return '默认'
+
+
 def _env_prefix() -> str:
     """消息前缀，含环境时如 [MatMaster-uat]，未配置时为 [MatMaster]。"""
     if not (CURRENT_ENV or '').strip():

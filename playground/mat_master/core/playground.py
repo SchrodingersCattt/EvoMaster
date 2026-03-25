@@ -9,7 +9,6 @@ mat_master 在此复写 _setup_mcp_tools、setup、_create_exp，不修改基类
 import asyncio
 import json
 import logging
-import os
 from pathlib import Path
 
 import yaml
@@ -21,6 +20,7 @@ from ..tools import get_peek_file_tool, get_web_search_tool
 from .agent import MatMasterAgent
 from .registry import MatMasterSkillRegistry
 from .solvers import DirectSolver, ResearchPlanner
+from .workspace_resolver import resolve_workspace_path
 
 
 def _project_root() -> Path:
@@ -66,8 +66,8 @@ class MatMasterPlayground(BasePlayground):
         if self._run_mode:
             self.logger.info('Mat Master mode (from --mode): %s', self._run_mode)
 
-    def set_run_dir(self, run_dir, task_id=None):
-        """Override: keep memory_service.run_dir in sync; sync session workspace to run_dir/workspaces/task_id so downloads and tool outputs go under the current session."""
+    def set_run_dir(self, run_dir, task_id=None, session_id=None):
+        """Override: keep memory_service.run_dir in sync and centralize workspace resolution."""
         super().set_run_dir(run_dir, task_id=task_id)
         # Ensure root logger level allows file handler to receive INFO (evo only adds handler, root default is WARNING)
         if run_dir and getattr(self, 'log_file_handler', None) is not None:
@@ -77,40 +77,34 @@ class MatMasterPlayground(BasePlayground):
             )
             root.setLevel(level)
         self.memory_service.run_dir = Path(run_dir) if run_dir else None
-        # When reusing cached pg, session was created at startup with a different workspace.
-        # Point it to this run's workspace so downloads and tool outputs go to workspaces/<task_id>.
-        if self.session is not None and run_dir is not None:
-            run_path = Path(run_dir).resolve()
-            ws_override = self._get_workspace_root_override()
-            if ws_override is not None:
-                ws_path = ws_override
-                ws_path.mkdir(parents=True, exist_ok=True)
-            elif task_id:
-                ws_path = run_path / 'workspaces' / task_id
-            else:
-                ws_path = run_path / 'workspace'
+        if task_id:
+            self.memory_service.set_session_id(task_id)
+        if run_dir is not None:
+            resolution = resolve_workspace_path(
+                run_dir,
+                task_id=task_id,
+                session_id=session_id,
+                create=True,
+            )
+            ws_path = resolution.path
             ws_str = str(ws_path)
+            # Keep config in sync before setup() creates the session.
+            self._update_workspace_path(ws_path)
+            self.logger.info(
+                'Workspace resolved: mode=%s source=%s session_id=%s task_id=%s path=%s',
+                resolution.mode,
+                resolution.source,
+                session_id or '',
+                task_id or '',
+                ws_str,
+            )
+        # When reusing cached pg, update the active session as well.
+        if self.session is not None and run_dir is not None:
             if hasattr(self.session.config, 'workspace_path'):
                 self.session.config.workspace_path = ws_str
             if hasattr(self.session.config, 'working_dir'):
                 self.session.config.working_dir = ws_str
             self.logger.debug('Session workspace updated to: %s', ws_str)
-
-    def _get_workspace_root_override(self) -> Path | None:
-        raw = (os.environ.get('MAT_MASTER_WORKSPACE_ROOT') or '').strip()
-        if not raw:
-            try:
-                config_dict = self.config.model_dump()
-            except Exception:
-                config_dict = {}
-            raw = (config_dict.get('mat_master') or {}).get('workspace_root') or ''
-        raw = raw.strip()
-        if not raw:
-            return None
-        p = Path(raw).expanduser()
-        if not p.is_absolute():
-            p = (_project_root() / p).resolve()
-        return p
 
     def _create_tools_for_agent(self, skill_registry, tool_config):
         """Override: 在基类 registry 上增加 memory、peek_file、extract_webpage、monitor_job、aissq（每 agent 独立 tools）。"""
@@ -120,7 +114,11 @@ class MatMasterPlayground(BasePlayground):
         memory_tools = get_memory_tools(self.memory_service)
         registry.register_many(memory_tools)
         registry.register(get_peek_file_tool())
-        from ..tools import get_aissq_download_tool, get_aissq_search_tool, get_extract_webpage_tool
+        from ..tools import (
+            get_aissq_download_tool,
+            get_aissq_search_tool,
+            get_extract_webpage_tool,
+        )
 
         registry.register(get_extract_webpage_tool())
         registry.register(get_web_search_tool())

@@ -76,8 +76,8 @@
 ## input-manual-helper (input file writing & validation)
 
 - When writing input files for software that has a **prepare_* MCP tool** (CP2K, QE, ABINIT, LAMMPS, ORCA), use the input-manual-helper skill. **Do not** directly write or text-replace the contents of .inp, .in, .abi, or other input files; pass a template path, structure_file, and **overrides** to the prepare_* tool. IMPORTANT: When the user does not provide an input file, obtain the template via `get_reference` to get correct template—strictly avoid hand-writing input content and passing it to prepare_*. Structure insert/change only via prepare_*'s structure_file parameter. (Gaussian, PSI4 have no prepare_* yet — use reference templates as final input for now; do not apply this ban to them. **PySCF**: use `run_pyscf` directly — no prepare_* or validate_input step; pass `structure_file` (XYZ preferred) and parameters directly. For molecular DFT tasks, prefer PySCF over ABACUS.)
-- **GROMACS**: Submit via MCP **`mat_binary_calc_submit_run_gromacs`**, then **`monitor_job`** with `software="gromacs"`. Do not use bohrium-job for GROMACS when this tool is registered.
-- **User-provided ready input file (skip prepare entirely)**: If the user has already uploaded or placed a complete, ready-to-run input file (e.g. a `.inp`, `.in`, `.abi`, `.lammps` file they confirm needs no further modification), **do NOT call prepare_* or input-manual-helper**. For LAMMPS/CP2K/QE/ABINIT/ORCA-class jobs, use **bohrium-job** (`submit_job.py` with `--input-dir` and `--cmd`). For **GROMACS**, use **`mat_binary_calc_submit_run_gromacs`** then **monitor_job**.
+- **GROMACS**: Use **bohrium-job** skill (`submit_job.py` + `poll_job.py`) — same as CP2K/QE/ABINIT/LAMMPS/ORCA. Image: `registry.dp.tech/dptech/gromacs:2022.2`, machine: `c32_m128_cpu`. Do NOT call `mat_binary_calc_submit_run_gromacs` or `monitor_job` for GROMACS.
+- **User-provided ready input file (skip prepare entirely)**: If the user has already uploaded or placed a complete, ready-to-run input file (e.g. a `.inp`, `.in`, `.abi`, `.lammps`, `.gro`, `.mdp` file they confirm needs no further modification), **do NOT call prepare_* or input-manual-helper**. For LAMMPS/CP2K/QE/ABINIT/ORCA/GROMACS-class jobs, use **bohrium-job** (`submit_job.py` with `--input-dir` and `--cmd`).
 
 - **structure_file**: Must be in a format pymatgen can read: e.g. CIF (.cif), VASP POSCAR/CONTCAR (no ext or .vasp), XYZ (.xyz), Materials Project JSON. LAMMPS .data is produced by prepare_lammps_job; do not pass .data as structure_file.
 - **Prepare tools**: Capabilities and parameters come from the mat_binary_calc tool schema; check schema when choosing and calling. Use workflow parameters (e.g. workflow_type) when the tool exposes them instead of hand-assembling inputs.
@@ -126,6 +126,13 @@
 ## Manuscript writing: retrieval before writing
 - Before calling manuscript-scribe write_section or init_manuscript, run literature search (mat_sn_search-papers-normal, mat_sn_scholar-search, web-search) for the section topic unless the user already provided source files.
 - Do not write sections from memory only; ground content in retrieved material and cite it. When citing papers use: In [year], [first author] et al. [did what / found that ...]; [n](url).
+
+## HPC job monitoring: still_running / running status (MANDATORY)
+- When a job monitoring tool returns `status: "still_running"` (poll_job.py) or `status: "running"` (monitor_job), the job is **alive on Bohrium** — this is NOT a failure or timeout error.
+- You MUST choose one of two responses:
+  1. **Re-invoke the monitor** with the same job_id to continue watching (preferred when the session budget allows).
+  2. **Call `finish` with `task_completed=partial`** and report the job_id so the user knows it is still running.
+- **Do NOT start unrelated tasks** (web search, literature retrieval, structure building, etc.) while waiting for HPC jobs to complete.
 
 ## Calculation job failure: diagnose, fix, or abort (MANDATORY)
 - When **monitor_job** returns `status='failed'`:

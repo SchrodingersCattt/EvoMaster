@@ -1,0 +1,25 @@
+Schema tags: 38
+--- Rendered ORCA input ---
+! B3LYP def2-SVP tightSCF
+%maxcore 4000
+%pal nprocs 4 end
+
+* xyz 0 1
+O   0.000000   0.000000   0.117300
+H   0.000000   0.757200   -0.469200
+H   0.000000   -0.757200   -0.469200
+*
+
+---
+Parsed: 10 params, 4 sections, 0 errors
+Diagnostics: 0 items
+--- Rendered ORCA opt input ---
+! PBE0 def2-TZVP tightSCF Opt
+%maxcore 4000
+%pal nprocs 4 end
+
+* xyz 0 1
+O   0.000000   0.000000   0.117300
+H   0.000000   0.757200   -0.469200
+H   0.000000   -0.757200   -0.469200
+*

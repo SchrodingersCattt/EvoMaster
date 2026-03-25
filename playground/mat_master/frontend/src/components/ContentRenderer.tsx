@@ -31,6 +31,136 @@ const JsonBlock = React.memo(function JsonBlock({ data }: { data: unknown }) {
   );
 });
 
+const STR_REPLACE_EDITOR_TOOL = "str_replace_editor";
+
+function isStrReplaceEditorPayload(o: unknown): o is Record<string, unknown> {
+  return (
+    typeof o === "object" &&
+    o !== null &&
+    (o as Record<string, unknown>).tool === STR_REPLACE_EDITOR_TOOL &&
+    typeof (o as Record<string, unknown>).kind === "string"
+  );
+}
+
+/** 从 tool_result 外层（含 status/observation）或裸 payload 中取出编辑器结构化结果 */
+function unwrapStrReplaceEditorPayload(content: unknown): Record<string, unknown> | null {
+  if (!content || typeof content !== "object") return null;
+  const c = content as Record<string, unknown>;
+  if (isStrReplaceEditorPayload(c)) return c;
+  const obs = c.observation;
+  if (obs && typeof obs === "object" && isStrReplaceEditorPayload(obs)) {
+    return obs as Record<string, unknown>;
+  }
+  const res = c.result;
+  if (res && typeof res === "object") {
+    const r = res as Record<string, unknown>;
+    if (isStrReplaceEditorPayload(r)) return r;
+    const inner = r.observation;
+    if (inner && typeof inner === "object" && isStrReplaceEditorPayload(inner)) {
+      return inner as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
+const StrReplaceEditorPayloadView = React.memo(function StrReplaceEditorPayloadView({
+  payload,
+}: {
+  payload: Record<string, unknown>;
+}) {
+  const kind = String(payload.kind ?? "");
+
+  if (kind === "numbered_content") {
+    const lines = (payload.lines as Array<{ line_no?: number; text?: string }>) ?? [];
+    const descriptor = String(payload.descriptor ?? "");
+    return (
+      <div className="space-y-2">
+        {descriptor ? (
+          <div
+            className="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono truncate"
+            title={descriptor}
+          >
+            {descriptor}
+          </div>
+        ) : null}
+        <div className="border border-zinc-200 dark:border-zinc-700 rounded-md overflow-hidden text-xs font-mono">
+          <table className="w-full border-collapse">
+            <tbody>
+              {lines.map((row, i) => (
+                <tr
+                  key={`${row.line_no ?? i}-${i}`}
+                  className="border-b border-zinc-100 dark:border-zinc-800 last:border-0"
+                >
+                  <td className="align-top pr-2 py-0.5 text-right text-zinc-400 select-none w-12 shrink-0 bg-zinc-50 dark:bg-zinc-900/50">
+                    {row.line_no ?? i + 1}
+                  </td>
+                  <td className="align-top py-0.5 text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-words">
+                    {row.text ?? ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  if (kind === "directory_listing") {
+    const listing = String(payload.listing ?? "");
+    const path = String(payload.path ?? "");
+    return (
+      <div className="space-y-1">
+        <div className="text-[11px] text-zinc-500 dark:text-zinc-400 font-mono truncate">{path}</div>
+        <pre className="text-xs whitespace-pre-wrap break-words bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md border border-zinc-200 dark:border-zinc-700">
+          {listing}
+        </pre>
+      </div>
+    );
+  }
+
+  if (kind === "edit_success") {
+    const msg = String(payload.message ?? "");
+    const snippet = payload.snippet;
+    return (
+      <div className="space-y-2">
+        <div className="text-sm text-zinc-700 dark:text-zinc-300">{msg}</div>
+        {snippet && typeof snippet === "object" && isStrReplaceEditorPayload(snippet) && (
+          <StrReplaceEditorPayloadView payload={snippet as Record<string, unknown>} />
+        )}
+      </div>
+    );
+  }
+
+  if (kind === "create_success") {
+    return (
+      <div className="text-sm text-zinc-700 dark:text-zinc-300 space-y-1">
+        <div className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+          {String(payload.path ?? "")}
+          {payload.overwritten ? (
+            <span className="ml-2 text-amber-600 dark:text-amber-400">(overwritten)</span>
+          ) : null}
+        </div>
+        <div>{String(payload.message ?? "")}</div>
+      </div>
+    );
+  }
+
+  if (kind === "undo_success") {
+    const restored = payload.restored;
+    return (
+      <div className="space-y-2">
+        <div className="text-sm text-zinc-700 dark:text-zinc-300">{String(payload.message ?? "")}</div>
+        {restored && typeof restored === "object" && isStrReplaceEditorPayload(restored) && (
+          <StrReplaceEditorPayloadView payload={restored as Record<string, unknown>} />
+        )}
+      </div>
+    );
+  }
+
+  return <JsonBlock data={payload} />;
+});
+
 const MarkdownContent = React.memo(function MarkdownContent({ text }: { text: string }) {
   try {
     return (
@@ -98,6 +228,10 @@ export const ContentRenderer = React.memo(function ContentRenderer({
     if (!text) return <span className="text-zinc-500 italic">(无文本输出)</span>;
     const parsed = tryParseJSON(text);
     if (parsed !== null) {
+      const editor = unwrapStrReplaceEditorPayload(parsed);
+      if (editor) {
+        return <StrReplaceEditorPayloadView payload={editor} />;
+      }
       return <JsonBlock data={parsed} />;
     }
     if (looksLikeMarkdown(text)) {
@@ -110,6 +244,10 @@ export const ContentRenderer = React.memo(function ContentRenderer({
     );
   }
   if (typeof content === "object") {
+    const editor = unwrapStrReplaceEditorPayload(content);
+    if (editor) {
+      return <StrReplaceEditorPayloadView payload={editor} />;
+    }
     return <JsonBlock data={content} />;
   }
   return <span>{String(content)}</span>;

@@ -27,7 +27,7 @@ Full details: milestones/v1-ROADMAP.md
 **Milestone Goal:** 构建 matmaster 原生内置 tool 套件、SubAgent spawn 机制和配套 prompt/description 体系，使 agent 具备完整的独立执行能力。
 
 - [ ] **Phase 8: BuiltinTool 基础设施与核心 Tools** - 建立 BuiltinTool 基类、session 注入模式，交付 BashTool/ListDirTool/TaskTool
-- [ ] **Phase 9: 文件操作 Tools** - 交付 Read/Write/Edit/Glob/Grep 六个文件操作工具及 Read-Before-Modify 协议
+- [ ] **Phase 9: 文件操作 Tools** - 交付 Read/Write/Edit/Glob/Grep 五个文件操作工具及 Read-Before-Modify 协议
 - [ ] **Phase 10: Tool Description 与 System Prompt 设计** - 为所有 builtin tool 编写精细化 description/schema，设计 direct 模式 system prompt
 - [ ] **Phase 11: SubAgent Spawn 机制** - 实现子 agent spawn/执行/取消/事件路由完整生命周期
 
@@ -59,7 +59,12 @@ Plans:
   2. Agent 可以通过 Write tool 创建或覆盖文件、通过 Edit tool 精确字符串替换
   3. Write/Edit 执行前强制要求先 Read 目标文件，未 Read 时返回错误提示
   4. Agent 可以通过 Glob tool 按模式搜索文件路径、通过 Grep tool 按正则搜索文件内容
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 09-01-PLAN.md -- ReadTracker + ReadTool + WriteTool + EditTool 实现与测试
+- [ ] 09-02-PLAN.md -- GlobTool + GrepTool 实现与测试
+- [ ] 09-03-PLAN.md -- Exp 集成改造：注册新 tools、移除 EditorTool、ExpConfig 显式列举
 
 ### Phase 10: Tool Description 与 System Prompt 设计
 **Goal**: 每个 builtin tool 具有精细化的 description/schema 以优化 LLM 调用准确率，direct 模式具有完整的行为指导 prompt
@@ -98,6 +103,6 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11
 | 6. Service Layer Wiring | v1 | 2/2 | Complete | 2026-03-22 |
 | 7. Cleanup and Traceability | v1 | 2/2 | Complete | 2026-03-22 |
 | 8. BuiltinTool 基础设施与核心 Tools | v1.1 | 0/3 | Planning | - |
-| 9. 文件操作 Tools | v1.1 | 0/? | Not started | - |
+| 9. 文件操作 Tools | v1.1 | 0/3 | Planning | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 0/? | Not started | - |
 | 11. SubAgent Spawn 机制 | v1.1 | 0/? | Not started | - |

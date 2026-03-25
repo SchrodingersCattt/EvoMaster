@@ -10,6 +10,21 @@ EvoMaster is a framework for building scientific agents. It provides MCP tooling
 
 MatMaster is a scientific agent for materials research, with a Next.js frontend and FastAPI backend. Development runs backend and frontend together via a single script.
 
+### Two backends (entrypoints and ports)
+
+This repo exposes **two HTTP stacks** for MatMaster-related work. Do not mix up ports or treat the local dev server as the production API:
+
+| | **Platform API (`src/` + root `app.py`)** | **Local MatMaster Web (`playground/mat_master/service/server`)** |
+|------|-------------------------------------------|-------------------------------------------------------------------|
+| **Role** | Production-style integration: DB sessions, SSE, Redis + Worker | Local debugging: Next dashboard under `playground/mat_master`, WebSocket chat, in-memory sessions, fixed workspace |
+| **Typical entry** | `uv run python app.py` (default **8000**) | `python -m playground.mat_master.service.server` or `start_dev.sh` (default **BACKEND_PORT=50001**) |
+| **Protocol** | REST + SSE (e.g. `/api/v1/.../chat/sessions/...`) | WebSocket `/ws/chat`, etc. |
+| **Notes** | Multi-process layout: see **Service architecture** in `AGENTS.md` | See [playground/mat_master/README_WEB.md](playground/mat_master/README_WEB.md) |
+
+The platform API and the local Web stack use **different `run_agent_sync` implementations** (persistence, OSS, Bohrium, event push rules, etc.). See [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md).
+
+The **Start development** section below refers to the **local Web** stack (default port 50001).
+
 ### Start development (frontend + backend)
 
 From the project root:
@@ -81,7 +96,7 @@ EvoMaster/
 ├── evomaster/           # Core (agent, session, tools, skills, LLM)
 ├── playground/
 │   └── mat_master/      # MatMaster app (frontend + service + start_dev.sh)
-├── configs/             # Agent/config YAML
+├── configs/mat_master/  # MatMaster YAML + mcp_config*.json
 └── docs/                # Documentation
 ```
 
@@ -91,26 +106,20 @@ EvoMaster/
 
 You can run agents from the command line without the web UI.
 
-**Prerequisites:** `uv sync` (or `pip install -e .`). Configure LLM and Bohrium in `.env` and/or in the YAML under `configs/`.
+**Prerequisites:** `uv sync` (or `pip install -e .`). Configure LLM and Bohrium in `.env` and/or in `configs/mat_master/config.yaml` (and MCP JSON as needed).
 
 ```bash
-# Default agent and task
-python run.py --agent minimal --task "Your task"
-
-# Custom config
-python run.py --agent minimal --config configs/minimal/config.yaml --task "Your task"
+# MatMaster agent (default config under configs/mat_master/)
+python run.py --agent mat_master --config configs/mat_master/config.yaml --task "Your task"
 
 # Task from file
-python run.py --agent minimal --task task.txt
+python run.py --agent mat_master --config configs/mat_master/config.yaml --task task.txt
 
 # Interactive
-python run.py --agent minimal --interactive
-```
+python run.py --agent mat_master --config configs/mat_master/config.yaml --interactive
 
-Example with a specific playground config:
-
-```bash
-python run.py --agent minimal_multi_agent --config configs/minimal_multi_agent/deepseek-v3.2-example.yaml --task "Describe your task here"
+# Planner vs direct mode (MatMaster)
+python run.py --agent mat_master --config configs/mat_master/config.yaml --mode planner --task "Your task"
 ```
 
 ---
