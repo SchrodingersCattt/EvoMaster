@@ -103,8 +103,10 @@ def load_exp_config(
     with open(toml_path, "rb") as f:
         raw = tomllib.load(f)
 
-    # Preserve developer_instructions verbatim (avoid ${...} misexpansion)
+    # Preserve prompt fields verbatim (avoid ${...} misexpansion)
     dev_instr = raw.pop("developer_instructions", "")
+    mode_contract = raw.pop("mode_contract", "")
     raw = _expand_env_vars(raw)
     raw["developer_instructions"] = dev_instr
+    raw["mode_contract"] = mode_contract
     return ExpConfig.model_validate(raw)
