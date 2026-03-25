@@ -176,16 +176,16 @@ class Exp:
             emitter_hook = EventEmitterHook(bus, source=emitter_source)
             hooks.append(emitter_hook)
 
-        # 4b. SubAgentTool: register with spawn_fn if "sub_agent" in config
+        # 4b. SpawnTool: register with spawn_fn if "spawn" in config
         builtin_cfg = self._config.tools.builtin
-        if ("sub_agent" in builtin_cfg or builtin_cfg == ["*"]) and ctx.session is not None:
-            from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+        if ("spawn" in builtin_cfg or builtin_cfg == ["*"]) and ctx.session is not None:
+            from matmaster.tools.builtin.spawn_tool import SpawnTool
 
             spawn_fn = self._make_spawn_fn(ctx, bus, source_prefix="MatMaster")
-            sub_tool = SubAgentTool(
+            spawn_tool = SpawnTool(
                 session=ctx.session, workdir=ctx.workdir, spawn_fn=spawn_fn
             )
-            registry.register(sub_tool, source="builtin")
+            registry.register(spawn_tool, source="builtin")
 
         # 5. Compaction: unchanged, managed by separate process
         compactor = None
@@ -267,13 +267,13 @@ class Exp:
     ) -> KernelResult:
         """build_runtime -> kernel.run -> cleanup."""
         runtime = self.build_runtime(ctx, bus=bus, skills=skills, mcp=mcp)
-        # Inject stop_event into SubAgentTool for cancel propagation (SUBA-05)
+        # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
         tool_registry = getattr(runtime.spec, "tool_registry", None)
         if stop_event is not None and tool_registry is not None:
-            from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+            from matmaster.tools.builtin.spawn_tool import SpawnTool
 
             for tool in tool_registry.all_tools:
-                if isinstance(tool, SubAgentTool):
+                if isinstance(tool, SpawnTool):
                     tool._stop_event = stop_event
         try:
             result = runtime.kernel.run(

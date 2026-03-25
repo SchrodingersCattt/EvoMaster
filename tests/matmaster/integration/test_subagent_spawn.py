@@ -5,8 +5,8 @@ Tests cover:
 - Cleanup guarantee via finally block (success and error paths)
 - Shared context propagation (SUBA-03)
 - Source prefix for child EventEmitterHook (D-02)
-- stop_event propagation through SubAgentTool -> spawn_fn -> child kernel (SUBA-05)
-- Recursion guard: child exp (explore) has no sub_agent tool (D-04)
+- stop_event propagation through SpawnTool -> spawn_fn -> child kernel (SUBA-05)
+- Recursion guard: child exp (explore) has no spawn tool (D-04)
 - Plan 01 test backward compatibility
 """
 
@@ -20,7 +20,7 @@ import pytest
 
 from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
-from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+from matmaster.tools.builtin.spawn_tool import SpawnTool
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult, KernelRunResult
 
@@ -172,7 +172,7 @@ class TestSpawnFnLifecycle:
 
 
 class TestStopEventPropagation:
-    """Tests for stop_event flow: SubAgentTool._stop_event -> spawn_fn -> child kernel (SUBA-05)."""
+    """Tests for stop_event flow: SpawnTool._stop_event -> spawn_fn -> child kernel (SUBA-05)."""
 
     def test_stop_event_propagation(self) -> None:
         """stop_event passed to spawn_fn reaches child kernel.run."""
@@ -202,10 +202,10 @@ class TestStopEventPropagation:
         assert call_kwargs["stop_event"] is stop_event
 
     def test_sub_agent_tool_stop_event_injection(self) -> None:
-        """SubAgentTool._execute passes _stop_event as 3rd arg to spawn_fn."""
+        """SpawnTool._execute passes _stop_event as 3rd arg to spawn_fn."""
         stop_event = threading.Event()
         mock_spawn = Mock(return_value="result")
-        tool = SubAgentTool(spawn_fn=mock_spawn)
+        tool = SpawnTool(spawn_fn=mock_spawn)
         tool._stop_event = stop_event
 
         result = tool.execute({"exp_name": "explore", "task": "find files"})
@@ -215,18 +215,18 @@ class TestStopEventPropagation:
 
 
 class TestRecursionGuard:
-    """Tests for recursion guard: child exp has no sub_agent tool."""
+    """Tests for recursion guard: child exp has no spawn tool."""
 
-    def test_recursion_guard_child_no_sub_agent(self) -> None:
-        """explore.toml does not include sub_agent in tools.builtin."""
+    def test_recursion_guard_child_no_spawn(self) -> None:
+        """explore.toml does not include spawn in tools.builtin."""
         from matmaster.config.loader import load_exp_config
 
         cfg = load_exp_config("explore")
-        assert "sub_agent" not in cfg.tools.builtin
+        assert "spawn" not in cfg.tools.builtin
 
 
 class TestPlan01Compat:
-    """Verify Plan 01 test suite still passes after sub_agent_tool.py changes."""
+    """Verify Plan 01 test suite still passes after spawn_tool.py changes."""
 
     def test_plan01_tests_still_pass(self) -> None:
         """Run Plan 01 tests inline to confirm backward compat.
@@ -235,7 +235,7 @@ class TestPlan01Compat:
         so adding _stop_event as 3rd arg should not break them.
         """
         mock_spawn = Mock(return_value="exploration result: found 3 files")
-        tool = SubAgentTool(spawn_fn=mock_spawn)
+        tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = tool.execute({"exp_name": "explore", "task": "find files"})
 

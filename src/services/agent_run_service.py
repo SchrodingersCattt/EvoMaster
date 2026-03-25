@@ -332,11 +332,11 @@ class AgentRunService:
                 update={"hooks": [*runtime.spec.hooks, *external_hooks]}
             )
 
-            # Inject stop_event into SubAgentTool for cancel propagation (SUBA-05)
+            # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
             if stop_event is not None and spec.tool_registry is not None:
-                from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+                from matmaster.tools.builtin.spawn_tool import SpawnTool
                 for tool in spec.tool_registry.all_tools:
-                    if isinstance(tool, SubAgentTool):
+                    if isinstance(tool, SpawnTool):
                         tool._stop_event = stop_event
 
             # -- Stage 5: History --
