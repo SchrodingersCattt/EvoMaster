@@ -33,7 +33,10 @@ _NOISE_PATTERN = re.compile(r'cookie|banner|sidebar|menu', re.I)
 
 ```python
 # Phase 1: Remove non-content structural tags
-for tag in soup(['script', 'style', 'nav', 'footer', 'header',
+# NOTE: <header> is intentionally excluded — on academic publisher sites
+# (ScienceDirect, Springer, Wiley), <header> often wraps article title,
+# author list, and abstract metadata. Removing it would delete core content.
+for tag in soup(['script', 'style', 'nav', 'footer',
                   'aside', 'noscript', 'iframe']):
     tag.decompose()
 
@@ -44,7 +47,9 @@ for tag in soup.find_all(attrs={'id': _NOISE_PATTERN}):
     tag.decompose()
 ```
 
-**Rationale**: Academic publisher pages (ScienceDirect, Springer, Wiley) and documentation sites have heavy navigation, cookie consent banners, and sidebars. These waste tokens without contributing content. The pattern list is intentionally conservative (no `ad|promo|popup|modal`) to avoid false positives on article content.
+**Rationale**: Academic publisher pages and documentation sites have heavy navigation, cookie consent banners, and sidebars that waste tokens. The tag and pattern lists are intentionally conservative:
+- `<header>` is kept because it frequently wraps article metadata on publisher sites.
+- Class/id pattern avoids overly generic words (`ad`, `promo`, `popup`) that could match article content containers.
 
 ### P1-a: HTML to Markdown
 
@@ -69,8 +74,15 @@ try:
     )
     content = re.sub(r'\n{3,}', '\n\n', content)
     _used_markdownify = True
-except ImportError:
-    logger.warning('markdownify not available; falling back to plain text extraction')
+except Exception as exc:
+    # Catches both ImportError (missing dependency) and runtime errors
+    # (malformed HTML causing markdownify to fail). Without this broad catch,
+    # a conversion error would propagate to _process()'s outer except-Exception
+    # handler and incorrectly increment the domain circuit breaker.
+    if not isinstance(exc, ImportError):
+        logger.warning('markdownify conversion failed, falling back to plain text: %s', exc)
+    else:
+        logger.warning('markdownify not available; falling back to plain text extraction')
     # existing get_text() logic as fallback
     lines = (line.strip() for line in soup.get_text().splitlines())
     chunks = (phrase.strip() for line in lines for phrase in line.split('  '))
@@ -102,7 +114,7 @@ The new regex `[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]` removes only C0 control charact
 
 **New dependency**: `markdownify` added to `pyproject.toml`.
 
-**Graceful degradation**: If `markdownify` import fails, falls back to current `get_text()` logic with a warning log. The `_used_markdownify` flag ensures correct post-cleaning path selection.
+**Graceful degradation**: Falls back to `get_text()` on both `ImportError` (missing dependency) and runtime exceptions (malformed HTML). The broad `except Exception` prevents conversion failures from propagating to `_process()`'s outer handler, which would incorrectly increment the domain circuit breaker. The `_used_markdownify` flag ensures correct post-cleaning path selection.
 
 **Downstream compatibility**:
 - `compact_extract_webpage_observation`: reads `content` as opaque string, truncates to 500 char preview. Compatible.
@@ -168,16 +180,28 @@ def get_extract_webpage_tool(cache_dir: Path | None = None) -> ExtractWebpageToo
     return ExtractWebpageTool(cache_dir=cache_dir)
 ```
 
-**Registration in `playground.py`**:
+**Registration in `playground.py`** (`_create_tools_for_agent`):
 
 ```python
 # Current
 registry.register(get_extract_webpage_tool())
 
-# New
-cache_dir = Path(self.run_dir) / '_tmp' / 'web_cache' if self.run_dir else None
+# New — derive workspace path from run_dir + task_id (same logic as set_run_dir/resolve_workspace_path)
+cache_dir = None
+if self.run_dir is not None:
+    run_path = Path(self.run_dir)
+    if self.task_id:
+        ws_path = run_path / 'workspaces' / self.task_id
+    else:
+        ws_path = run_path / 'workspace'
+    cache_dir = ws_path / '_tmp' / 'web_cache'
 registry.register(get_extract_webpage_tool(cache_dir=cache_dir))
 ```
+
+**Why workspace path, not run_dir**: In batch mode, multiple tasks create separate
+workspaces under `run_dir/workspaces/{task_id}/`. Using `run_dir/_tmp/web_cache` would
+leak cached pages across task workspaces, violating the per-workspace isolation guarantee.
+Using `ws_path/_tmp/web_cache` keeps each task's cache independent.
 
 **Key decisions**:
 - TTL 15 minutes: matches Claude Code; sufficient to cover multi-round deep-survey without re-fetching
@@ -200,7 +224,7 @@ registry.register(get_extract_webpage_tool(cache_dir=cache_dir))
 | `playground/mat_master/core/agent_tool_observation.py` | Reads `content` as opaque string |
 | `playground/mat_master/core/agent_tool_execution.py` | Calls compaction functions, no format assumption |
 | `playground/mat_master/core/tool_guard.py` | Checks key name prefix only |
-| `playground/mat_master/skills/deep-survey/scripts/collect_evidence.py` | Text matching on content field |
+| `playground/mat_master/skills/deep-survey/scripts/collect_evidence.py` | Does not consume `extract_info_from_webpage` outputs; only reads `mat_sn_*` and `web-search` subdirs |
 | `playground/mat_master/skills/structure-manager/scripts/fetch_web_structure.py` | Only imports `BROWSER_HEADERS` constant |
 | `playground/mat_master/tools/__init__.py` | Re-exports unchanged names |
 
@@ -214,6 +238,57 @@ registry.register(get_extract_webpage_tool(cache_dir=cache_dir))
 | Cache directory not writable | Cache is optional (`None` if no `run_dir`); errors logged, never raised |
 | Concurrent eviction race in ThreadPoolExecutor | Eviction guarded by `threading.Lock`; concurrent `put()` to different files is safe (different paths) |
 | `markdownify` strips inline SVG formulas | Acceptable trade-off: LLM cannot process SVG; formula info usually available as text elsewhere on the page |
+
+## Verification Plan
+
+Three targeted tests for the riskiest behaviors:
+
+### 1. Noise filter preserves article content in `<header>`
+
+```python
+def test_noise_filter_preserves_header_content():
+    """<header> with article title/abstract must NOT be removed."""
+    html = '<html><body><header><h1>Crystal Structure of ZnO</h1><p>Abstract: ...</p></header><nav>Home | About</nav></body></html>'
+    content = _fetch_webpage_content_from_html(html)  # test helper wrapping the parsing branch
+    assert 'Crystal Structure of ZnO' in content
+    assert 'Home' not in content  # <nav> should be removed
+```
+
+### 2. Batch-mode cache isolation across workspaces
+
+```python
+def test_cache_isolation_between_task_workspaces(tmp_path):
+    """Two tasks under the same run_dir must NOT share web cache."""
+    run_dir = tmp_path / 'run'
+    # Task A
+    ws_a = run_dir / 'workspaces' / 'task_a'
+    cache_a = ws_a / '_tmp' / 'web_cache'
+    tool_a = ExtractWebpageTool(cache_dir=cache_a)
+    tool_a._cache.put('https://example.com', 'content_a')
+    # Task B
+    ws_b = run_dir / 'workspaces' / 'task_b'
+    cache_b = ws_b / '_tmp' / 'web_cache'
+    tool_b = ExtractWebpageTool(cache_dir=cache_b)
+    assert tool_b._cache.get('https://example.com') is None  # no cross-leak
+```
+
+### 3. markdownify runtime exception falls back without tripping circuit breaker
+
+```python
+def test_markdownify_exception_no_circuit_breaker(monkeypatch):
+    """If markdownify raises during conversion, fall back to get_text() without
+    incrementing domain circuit breaker failure count."""
+    import markdownify as md
+    monkeypatch.setattr(md, 'markdownify', Mock(side_effect=ValueError('bad HTML')))
+    tool = ExtractWebpageTool()
+    # Fetch a page (mocked HTTP) — should succeed with plain text fallback
+    result, info = tool.execute(session=Mock(), args_json='{"url": ["https://example.com"]}')
+    parsed = json.loads(result)
+    # Content should be present (plain text fallback)
+    assert any('content' in v for v in parsed.values() if isinstance(v, dict))
+    # Circuit breaker should NOT have been tripped
+    assert len(tool._domain_circuit.open_circuits) == 0
+```
 
 ## Non-Goals
 
