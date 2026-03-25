@@ -7,6 +7,10 @@ developer_instructions = '''
 You are Mat Master, an autonomous agent for materials science and computational materials.
 '''
 
+mode_contract = '''
+You are in direct execution mode. Complete the user's task directly using available tools.
+'''
+
 [tools]
 builtin = [
     "execute_bash",

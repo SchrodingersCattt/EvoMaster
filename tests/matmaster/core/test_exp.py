@@ -336,6 +336,7 @@ class TestIdentityOverride:
         assert "I am a materials scientist." in runtime.spec.system_prompt
 
     def test_default_identity_when_not_set(self) -> None:
+        """Empty developer_instructions means no identity section in prompt."""
         exp = Exp(ExpConfig(
             name="test",
             tools=ExpToolsConfig(builtin=[]),
@@ -343,7 +344,33 @@ class TestIdentityOverride:
         ctx = _make_ctx(with_llm=True)
         runtime = exp.build_runtime(ctx)
 
-        assert "helpful AI assistant" in runtime.spec.system_prompt
+        assert "# Identity" not in runtime.spec.system_prompt
+
+
+class TestModeContractOverride:
+    """mode_contract from config is forwarded to ContextBuilder.build()."""
+
+    def test_mode_contract_from_config(self) -> None:
+        exp = Exp(ExpConfig(
+            name="test",
+            mode_contract="Execute directly.",
+            tools=ExpToolsConfig(builtin=[]),
+        ))
+        ctx = _make_ctx(with_llm=True)
+        runtime = exp.build_runtime(ctx)
+
+        assert "Execute directly." in runtime.spec.system_prompt
+
+    def test_empty_mode_contract_skips_section(self) -> None:
+        exp = Exp(ExpConfig(
+            name="test",
+            mode_contract="",
+            tools=ExpToolsConfig(builtin=[]),
+        ))
+        ctx = _make_ctx(with_llm=True)
+        runtime = exp.build_runtime(ctx)
+
+        assert "# Mode Contract" not in runtime.spec.system_prompt
 
 
 # ── TestExpBuiltinTools ─────────────────────────────────

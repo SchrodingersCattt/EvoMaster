@@ -125,11 +125,10 @@ class Exp:
 
         # 3. System prompt via ContextBuilder
         builder = ContextBuilder()
-        identity = self._config.developer_instructions or None
         system_prompt = builder.build(
             ctx, registry,
-            mode=spec.mode,
-            identity=identity,
+            identity=self._config.developer_instructions,
+            mode_contract=self._config.mode_contract,
             skill_registry=getattr(self, "_skill_registry", None),
         )
 
