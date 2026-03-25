@@ -74,10 +74,10 @@ Plans:
   1. 每个 builtin tool 的 json_schema 包含精确的参数约束和使用示例，description 控制在 100 token 以内
   2. direct 模式的 system prompt（developer_instructions）包含完整的 agent 行为指导（工具使用规范、输出格式、错误处理策略）
   3. DevShell 中使用完整 tool 集和 system prompt 进行多轮对话，LLM 能正确调用工具完成文件操作任务
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 10-01-PLAN.md -- 12 个 builtin tool description/schema 精细化与验证测试
+- [x] 10-01-PLAN.md -- 12 个 builtin tool description/schema 精细化与验证测试
 - [ ] 10-02-PLAN.md -- developer_instructions + mode_contract 设计与集成测试
 
 ### Phase 11: SubAgent Spawn 机制
@@ -108,5 +108,5 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11
 | 7. Cleanup and Traceability | v1 | 2/2 | Complete | 2026-03-22 |
 | 8. BuiltinTool 基础设施与核心 Tools | v1.1 | 0/3 | Planning | - |
 | 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
-| 10. Tool Description 与 System Prompt 设计 | v1.1 | 0/2 | Planning | - |
+| 10. Tool Description 与 System Prompt 设计 | v1.1 | 1/2 | In Progress|  |
 | 11. SubAgent Spawn 机制 | v1.1 | 0/? | Not started | - |
