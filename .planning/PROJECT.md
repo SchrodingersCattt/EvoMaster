@@ -53,7 +53,7 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 
 ### Current State
 
-**Post-v1** (2026-03-25): Phase 8 complete — BuiltinTool 体系建立，BashTool/ListDirTool/TaskTools 就位。681 tests passed.
+**Post-v1** (2026-03-25): Phase 9 complete — 5 个文件操作工具（ReadTool/WriteTool/EditTool/GlobTool/GrepTool）就位，Read-Before-Modify 协议完整实现，EditorTool 退役。12 native tools + 1 evo adapter 注册。198 phase tests + 771 full suite passed.
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI (not refactored), OpenAI SDK, tiktoken.
 
@@ -139,4 +139,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-25 after completing Phase 8 (BuiltinTool 基础设施)*
+*Last updated: 2026-03-25 after completing Phase 9 (Tools — 文件操作与搜索工具)*
