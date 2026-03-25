@@ -239,6 +239,7 @@ class ChatSessionsTable(BaseTable):
                     params.append(int(project_id))
                 sql = f'''
                     SELECT s.session_id,
+                           s.project_id,
                            s.status,
                            COUNT(e.id) as history_length,
                            (SELECT e2.content
@@ -251,7 +252,7 @@ class ChatSessionsTable(BaseTable):
                     FROM {self.table_name} s
                     LEFT JOIN evo_chat_events e ON s.session_id = e.session_id
                     {where_clause}
-                    GROUP BY s.session_id, s.status
+                    GROUP BY s.session_id, s.project_id, s.status
                     ORDER BY s.created_at DESC
                     LIMIT %s OFFSET %s
                 '''
@@ -282,6 +283,7 @@ class ChatSessionsTable(BaseTable):
                     sessions.append(
                         {
                             'id': row['session_id'],
+                            'project_id': row.get('project_id'),
                             'status': row.get('status', 'idle'),
                             'history_length': row['history_length'],
                             'first_user_message': first_user_message,
