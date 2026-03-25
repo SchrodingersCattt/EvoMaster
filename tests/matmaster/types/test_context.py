@@ -278,9 +278,9 @@ class TestPlaygroundContextSessionAndConfigDir:
             workdir=Path("/tmp/work"),
             session_type="docker",
             cache_area=Path("/tmp/cache"),
-            config_dir=Path("/configs/mat_master"),
+            config_dir=Path("/matmaster_config"),
         )
-        assert ctx.config_dir == Path("/configs/mat_master")
+        assert ctx.config_dir == Path("/matmaster_config")
 
     def test_session_and_config_dir_default_none(self) -> None:
         """Both fields default to None when not provided."""

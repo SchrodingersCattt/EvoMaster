@@ -35,7 +35,7 @@ class Playground:
 
     Usage::
 
-        pg = Playground(config_path="configs/mat_master/config.yaml")
+        pg = Playground(config_path="matmaster_config/config.yaml")
         ctx = pg.prepare({"run_dir": "/tmp/runs/run-001", "task_id": "t1"})
         # ... pass ctx to Exp.assemble() ...
         pg.cleanup()
@@ -342,8 +342,12 @@ class PlaygroundManager:
     release() 和 get_or_create()。
     """
 
+    # 重构后的平铺配置目录（不含 playground_type 子目录）
+    _CONFIG_DIR = "matmaster_config"
+
     def __init__(self, project_root: Path) -> None:
         self._project_root = project_root
+        self._config_root = project_root / self._CONFIG_DIR
         self._playgrounds: dict[str, Playground] = {}
         self._lock = threading.Lock()
         self._init_done = threading.Event()
@@ -353,8 +357,7 @@ class PlaygroundManager:
         """启动时快速失败验证。幂等：重复调用直接跳过。
 
         检查内容：
-        - config YAML 文件存在性（mat_master、minimal）
-        - config 中 agents key 存在性
+        - matmaster_config/config.yaml 存在性与 agents key
         - evomaster 废弃警告
 
         不检查：LLM 配置交叉校验（属于 Exp 层职责）。
@@ -365,11 +368,10 @@ class PlaygroundManager:
             if self._init_done.is_set():
                 return
 
-            for pg_type in ("mat_master", "minimal"):
-                config_path = self._project_root / "configs" / pg_type / "config.yaml"
-                if not config_path.exists():
-                    self._logger.warning("Config not found: %s", config_path)
-                    continue
+            config_path = self._config_root / "config.yaml"
+            if not config_path.exists():
+                self._logger.warning("Config not found: %s", config_path)
+            else:
                 with open(config_path, encoding="utf-8") as f:
                     cfg = yaml.safe_load(f)
                 if not isinstance(cfg, dict) or "agents" not in cfg:
@@ -407,9 +409,7 @@ class PlaygroundManager:
         with self._lock:
             if session_id in self._playgrounds:
                 return self._playgrounds[session_id]
-            config_path = (
-                self._project_root / "configs" / playground_type / "config.yaml"
-            )
+            config_path = self._config_root / "config.yaml"
             pg = Playground(config_path=config_path)
             self._playgrounds[session_id] = pg
             return pg
