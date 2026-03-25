@@ -63,17 +63,23 @@ class TestExpConfig:
         assert not hasattr(cfg, "mcp") or not isinstance(getattr(cfg, "mcp", None), dict)
         assert not hasattr(cfg, "compaction")
 
-    def test_mode_contract_default(self):
+    def test_system_prompt_default(self):
         cfg = ExpConfig()
-        assert cfg.mode_contract == ""
+        assert cfg.system_prompt == ""
 
-    def test_mode_contract_from_dict(self):
+    def test_system_prompt_from_dict(self):
         data = {
             "name": "direct",
-            "mode_contract": "Execute tasks directly.",
+            "system_prompt": "You are Mat Master.",
         }
         cfg = ExpConfig.model_validate(data)
-        assert cfg.mode_contract == "Execute tasks directly."
+        assert cfg.system_prompt == "You are Mat Master."
+
+    def test_mode_contract_rejected(self):
+        """mode_contract field is ignored (extra='ignore')."""
+        data = {"name": "direct", "mode_contract": "Execute directly."}
+        cfg = ExpConfig.model_validate(data)
+        assert not hasattr(cfg, "mode_contract")
 
     def test_developer_instructions_multiline(self):
         """Multiline strings from toml are preserved."""

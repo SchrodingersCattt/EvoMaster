@@ -49,7 +49,7 @@ class ExpConfig(BaseModel):
     guards: list[str] = Field(default_factory=list)
     tools: ExpToolsConfig = Field(default_factory=ExpToolsConfig)
     skills: ExpSkillsConfig = Field(default_factory=ExpSkillsConfig)
+    system_prompt: str = ""
     developer_instructions: str = ""
-    mode_contract: str = ""
 
     model_config = ConfigDict(extra="ignore")
