@@ -8,6 +8,8 @@
 
 **Tech Stack:** Python 3.10+, Pydantic, tomllib, pytest
 
+**Scope:** This plan covers the `matmaster/` new architecture path and `devshell` path only. The old `playground/mat_master/core/agent.py` local Web path (which uses `build_mat_master_system_prompt()`) is intentionally out of scope — it will be unified when the old architecture is replaced. See spec "Not Changed" section for details on the known behavioral divergence.
+
 ---
 
 ## Chunk 1: Config Layer (`ExpConfig` + `loader.py`)
@@ -175,6 +177,14 @@ class TestBaseTomlMerge:
         assert "_base" not in str(exc_info.value)
         assert "direct" in str(exc_info.value)
 
+    def test_underscore_prefix_name_rejected(self, tmp_path):
+        """load_exp_config('_base') raises ValueError, not silently loads."""
+        exps_dir = tmp_path / "exps"
+        exps_dir.mkdir()
+        (exps_dir / "_base.toml").write_text("system_prompt = 'x'\n")
+        with pytest.raises(ValueError, match="reserved"):
+            load_exp_config("_base", exps_dir=exps_dir)
+
 
 class TestLoadBaseSystemPrompt:
     """Tests for the standalone load_base_system_prompt() helper."""
@@ -257,6 +267,12 @@ def load_exp_config(
 
     if exps_dir is None:
         exps_dir = Path(__file__).resolve().parent.parent / "exps"
+
+    if name.startswith("_"):
+        raise ValueError(
+            f"Exp name '{name}' is reserved (underscore prefix). "
+            f"Use load_base_system_prompt() to access _base.toml."
+        )
 
     toml_path = exps_dir / f"{name}.toml"
     if not toml_path.exists():
@@ -788,13 +804,15 @@ class TestBuildExpConfig:
         assert exp_cfg.system_prompt == "Custom prompt."
 
     def test_system_prompt_fallback_to_base(self):
-        """_build_exp_config loads _base.toml when system_prompt is empty."""
+        """_build_exp_config calls load_base_system_prompt when system_prompt is empty."""
+        from unittest.mock import patch
         from matmaster.devshell.config import DevConfig
         from matmaster.devshell.runner import DevRunner
         config = DevConfig()
-        exp_cfg = DevRunner._build_exp_config(config)
-        # Falls back to real _base.toml which contains "Mat Master"
-        assert "Mat Master" in exp_cfg.system_prompt
+        with patch("matmaster.devshell.runner.load_base_system_prompt", return_value="Mocked base") as mock_load:
+            exp_cfg = DevRunner._build_exp_config(config)
+        mock_load.assert_called_once()
+        assert exp_cfg.system_prompt == "Mocked base"
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
