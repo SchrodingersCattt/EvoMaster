@@ -8,22 +8,21 @@ Root cause: `Tool.execute()` was simplified from `(observation, info)` tuple to 
 
 ## Design
 
-### ToolResult data class
+### ToolResult model
 
-New file `matmaster/types/tool_result.py`:
+New file `matmaster/tools/tool_result.py`:
 
 ```python
-from dataclasses import dataclass, field
+from pydantic import BaseModel, Field
 from typing import Any
 
-@dataclass
-class ToolResult:
+class ToolResult(BaseModel):
     status: str = "success"          # "success" | "error"
     content: str = ""                # tool output (consumed by LLM)
-    info: dict[str, Any] = field(default_factory=dict)  # metadata (auto_save, error detail, etc.)
+    info: dict[str, Any] = Field(default_factory=dict)  # metadata (auto_save, error detail, etc.)
 ```
 
-Uses dataclass (not Pydantic) -- internal data structure, no serialization/validation overhead needed.
+Uses Pydantic BaseModel. Although it lives in `matmaster/tools/` (co-located with Tool protocol), Pydantic is used for consistency with `matmaster/types/` patterns and seamless unpacking into ToolResultEvent.
 
 ### Tool protocol + ToolRegistry normalization
 
@@ -38,9 +37,12 @@ Existing `str`-returning tools satisfy `str | ToolResult` without modification.
 
 `ToolRegistry.execute()` returns `ToolResult` (normalization point):
 
-- `tool.execute()` returns `str` -> `ToolResult(status="success", content=str_result)`
 - `tool.execute()` returns `ToolResult` -> pass through
+- `tool.execute()` returns `str` -> `ToolResult(status="success", content=str_result)`
+- `tool.execute()` returns `None` -> `ToolResult(status="success", content="")`
 - Tool not found -> `ToolResult(status="error", content="Error: Tool '...' not found. Available: ...")`
+
+Note: `ToolRegistry.execute()` does NOT catch exceptions from `tool.execute()`. Exceptions propagate to AgentKernel's try/except which constructs `ToolResult(status="error")`.
 
 ### AgentKernel execution logic
 
@@ -57,7 +59,9 @@ Existing `str`-returning tools satisfy `str | ToolResult` without modification.
 
 - `Hook` protocol, `BaseHook` default, `run_post_tool_call` helper all updated
 - `EventEmitterHook.post_tool_call` unpacks `ToolResult` into `ToolResultEvent` fields
-- `OutputProcessorHook` (if it implements `post_tool_call`) must also update signature
+- All Hook implementations must update signature (see affected files table)
+
+This is a breaking change to the internal Hook protocol. All implementations are within this codebase and will be updated simultaneously. No external consumers exist.
 
 ### ToolResultEvent + SSE payload
 
@@ -90,20 +94,40 @@ return {
 
 ### Difference from old architecture
 
-Old: status nested inside `result.status` (because result was JSON-wrapped by `format_tool_observation`).
-New: status is a top-level payload field, cleaner separation of concerns.
+Old architecture: `format_tool_observation()` wraps tool output into `{"status": "success", "observation": ...}` JSON string, stored as `ToolMessage.content`. The SSE `tool_result` event's `result` field contains this JSON, so frontend reads status at `result.status` path.
+
+New architecture: `status` is a top-level field in the SSE payload, sibling to `result`. Frontend reads status at `content.status` (which maps to the `_public_content_for_event` return dict).
+
+Frontend compatibility: the existing frontend code (`useEvoSSEHandler.ts:555-564`) already checks both `content.status` and `content.result.status` paths, so both old persisted events and new events work without frontend changes.
 
 ## Affected files
 
+### Source files
+
 | File | Change |
 |------|--------|
-| `matmaster/types/tool_result.py` | New file: ToolResult dataclass |
+| `matmaster/tools/tool_result.py` | New file: ToolResult Pydantic model |
 | `matmaster/tools/tool_registry.py` | Tool.execute return type -> `str \| ToolResult`; ToolRegistry.execute returns ToolResult with normalization |
 | `matmaster/core/agent.py` | Tool execution uses ToolResult; passes to run_post_tool_call |
 | `matmaster/core/hooks.py` | Hook.post_tool_call, BaseHook, run_post_tool_call signature: result `str` -> `ToolResult`; EventEmitterHook unpacks into ToolResultEvent |
 | `matmaster/types/events.py` | ToolResultEvent gains `status: str = "success"` |
 | `matmaster/integration/event_payloads.py` | tool_result payload includes `status` |
-| `matmaster/hooks/output_processor.py` | Update post_tool_call signature if implemented |
+| `matmaster/hooks/output_processor.py` | Update post_tool_call signature: `result: str` -> `result: ToolResult` |
+| `matmaster/hooks/skill_hit.py` | Update post_tool_call signature: `result: str` -> `result: ToolResult` (result unused in body, signature-only change) |
+| `matmaster/devshell/stream_hook.py` | Update post_tool_call signature + replace `result.startswith("Error executing tool")` with `result.status == "error"` |
+
+### Test files
+
+All test files calling `post_tool_call(tc, "some_string")` or constructing ToolResultEvent must be updated to use ToolResult:
+
+| File | Change |
+|------|--------|
+| `tests/matmaster/core/test_hooks.py` | post_tool_call calls: str -> ToolResult |
+| `tests/matmaster/core/test_agent.py` | RecordingHook.post_tool_call signature + assertions |
+| `tests/matmaster/hooks/test_output_processor.py` | post_tool_call calls: str -> ToolResult |
+| `tests/matmaster/hooks/test_skill_hit.py` | post_tool_call calls: str -> ToolResult |
+| `tests/matmaster/devshell/test_stream_hook.py` | post_tool_call calls: str -> ToolResult + error detection assertions |
+| `tests/matmaster/integration/test_events_to_messages.py` | ToolResultEvent construction may need status field |
 
 ## Status values
 
@@ -119,3 +143,9 @@ New: status is a top-level payload field, cleaner separation of concerns.
 - Existing tools returning `str` work without changes (ToolRegistry normalizes to ToolResult)
 - Tools that need to report errors without raising exceptions can gradually migrate to returning `ToolResult(status="error", ...)`
 - MCP tool wrappers and skill wrappers are priority migration targets
+
+### Known limitation: BuiltinTool error-as-string
+
+`BuiltinTool.execute()` (`matmaster/tools/builtin/base.py:45-51`) catches all exceptions and returns `f"Error: {e}"` as a plain string. After normalization, these become `ToolResult(status="success", content="Error: ...")` -- semantically a mismatch.
+
+This is accepted for now. The correct fix is for `BuiltinTool.execute()` to return `ToolResult(status="error")` on exception, which is a natural part of the gradual migration. Not included in this change to keep scope focused.
