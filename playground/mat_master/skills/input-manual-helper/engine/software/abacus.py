@@ -65,15 +65,16 @@ def _line(p: ParsedParam) -> int:
 _SI_ALAT_ANG = 5.431  # Angstrom
 
 # STRU 模板（ABACUS 格式）
+# 官方格式参考: https://abacus.deepmodeling.com/en/latest/advanced/input_files/stru.html
 _SI_STRU = """\
 ATOMIC_SPECIES
-Si 28.085 Si_ONCV_PBE-1.0.upf
+Si 28.085 Si_ONCV_PBE-1.0.upf  // label; mass; pseudo_file
 
 NUMERICAL_ORBITAL
-Si_gga_9au_100Ry_2s2p1d.orb
+Si_gga_9au_100Ry_2s2p1d.orb  // LCAO orbital file (only for basis_type=lcao)
 
 LATTICE_CONSTANT
-1.8897259886     # Bohr per Angstrom conversion
+1.8897259886  // 1 Angstrom in Bohr; lattice vectors below are in Angstrom
 
 LATTICE_VECTORS
 {a}  0.0  0.0
@@ -81,17 +82,18 @@ LATTICE_VECTORS
 0.0  0.0  {a}
 
 ATOMIC_POSITIONS
-Cartesian_angstrom  # unit of coordinates
-Si  0  0  # mag, No-fixed
-8
-0.000  0.000  0.000  1  1  1
-1.358  1.358  1.358  1  1  1
-2.716  2.716  0.000  1  1  1
-4.073  4.073  1.358  1  1  1
-2.716  0.000  2.716  1  1  1
-4.073  1.358  4.073  1  1  1
-0.000  2.716  2.716  1  1  1
-1.358  4.073  4.073  1  1  1
+Cartesian_angstrom  // coordinate unit; also: Direct, Cartesian_au, Cartesian
+Si                  // element type
+0.0                 // initial magnetic moment (Bohr mag, not spin fraction)
+8                   // number of Si atoms (conventional cubic cell)
+0.000  0.000  0.000  m 1 1 1
+1.358  1.358  1.358  m 1 1 1
+2.716  2.716  0.000  m 1 1 1
+4.073  4.073  1.358  m 1 1 1
+2.716  0.000  2.716  m 1 1 1
+4.073  1.358  4.073  m 1 1 1
+0.000  2.716  2.716  m 1 1 1
+1.358  4.073  4.073  m 1 1 1
 """.format(a=_SI_ALAT_ANG)
 
 # KPT 模板（Monkhorst-Pack）
@@ -103,16 +105,17 @@ Gamma
 """
 
 # KPT 模板（高对称 k 路径，用于 band 计算）
+# 官方格式: 每行仅有坐标和点数，标签用 // 注释
 _BAND_KPT = """\
 K_POINTS
 6
 Line
-G       0.0  0.0  0.0  20
-X       0.5  0.0  0.5  20
-W       0.5  0.25 0.75 20
-L       0.5  0.5  0.5  20
-G       0.0  0.0  0.0  20
-K       0.375 0.375 0.75 1
+0.000  0.000  0.000  20  // G (Gamma)
+0.500  0.000  0.500  20  // X
+0.500  0.250  0.750  20  // W
+0.500  0.500  0.500  20  // L
+0.000  0.000  0.000  20  // G (Gamma)
+0.375  0.375  0.750  1   // K (endpoint)
 """
 
 # ---------------------------------------------------------------------------
