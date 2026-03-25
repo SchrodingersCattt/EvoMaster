@@ -9,8 +9,9 @@
 - Profile 命名风格：短名 + routes 桥接（非模型标识符直接作 profile 名）
 - `litellm` 重命名为 `opus`
 - 删除 `azure_gpt5`、`deepseek_reasoner`（前端未使用）
-- 删除 `configs/mat_master/` 旧配置目录
 - YAML 中去掉 `model_family`（自动推断覆盖所有剩余模型）和 `fallback_group`
+- `configs/mat_master/` 旧目录：同步 `llm_config.yaml` 变更，不在此 spec 中删除整个目录（evomaster/、run.py、多个测试仍引用该目录，全面清理属独立任务）
+- `MODEL_FAMILY_DEFAULTS` 和 `_infer_model_family()` 中 gpt-5/deepseek-reasoner 条目：有意保留，不影响运行，为未来重新启用留口
 
 ## 变更范围
 
@@ -65,16 +66,25 @@ routes:
 
 `agents.general.llm: "litellm"` -> `"opus"`
 
-### 3. configs/mat_master/
+### 3. configs/mat_master/llm_config.yaml
 
-整个目录删除。
+同步变更（与 matmaster_config/llm_config.yaml 保持一致），不删除整个 `configs/mat_master/` 目录。
 
 ### 4. matmaster/config/llm.py
 
 - 行 169：`default: str = "litellm"` -> `default: str = "opus"`
+- 行 179：`_normalize_legacy_or_explicit_schema` 中 `data.pop("default", "litellm")` -> `data.pop("default", "opus")`
 - 行 9, 18：docstring 示例中 profile 名更新
 
-### 5. 测试文件
+### 5. src/models/chat.py
+
+- 行 160：注释 `（如 litellm/azure/deepseek）` 更新为 `（如 opus/sonnet/haiku）`
+
+### 6. matmaster/config/loader.py
+
+- 行 10：docstring 中 `configs/mat_master/config.yaml` 路径更新为 `matmaster_config/llm_config.yaml`
+
+### 7. 测试文件
 
 | 文件 | 变更 |
 |------|------|
@@ -87,9 +97,16 @@ routes:
 ## 不变的部分
 
 - 前端代码（model key 已正确）
-- `_infer_model_family()` / `MODEL_FAMILY_DEFAULTS`（按 model 字符串推断，不依赖 profile 名）
+- `_infer_model_family()` / `MODEL_FAMILY_DEFAULTS`（按 model 字符串推断，不依赖 profile 名；gpt-5/deepseek 条目有意保留）
 - `llm_factory.py`、`agent_run_service.py`、`stream_service.py`（通过变量传递 profile key，无硬编码）
 - `LLMProfileConfig.model_family` Pydantic 字段保留（作为未来显式覆盖口）
+- `evomaster/` 旧架构代码（独立清理任务）
+
+## 部署注意事项
+
+- `matmaster_config/llm_config.yaml` 与 `matmaster_config/config.yaml` 必须同步更新，否则 `agents.general.llm` 引用不存在的 profile 会导致启动校验失败
+- API 与 Worker 分离部署时，两端必须同时更新配置和代码，旧 Worker 读新配置（无 `litellm` profile）会崩溃
+- 如需灰度部署，可临时在新 YAML 中保留 `litellm` 作为 `opus` 的别名 profile（参数相同），待全量切换后再移除
 
 ## 前后端映射关系（最终状态）
 
