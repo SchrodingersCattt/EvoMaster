@@ -1,4 +1,4 @@
-"""SubAgentTool -- spawn a child agent to execute a specific task.
+"""SpawnTool -- spawn a child agent to execute a specific task.
 
 The parent agent uses this tool to delegate tasks to specialized sub-agents.
 Each sub-agent type is defined by an exp TOML (e.g. explore.toml) with its
@@ -17,7 +17,7 @@ from typing import Any, ClassVar
 from matmaster.tools.builtin.base import BuiltinTool
 
 
-class SubAgentTool(BuiltinTool):
+class SpawnTool(BuiltinTool):
     """Spawn a sub-agent to execute a specific task.
 
     Overview: Delegates a task to a specialized sub-agent that runs
@@ -30,7 +30,7 @@ class SubAgentTool(BuiltinTool):
     - Results are returned as a text summary
     """
 
-    name: ClassVar[str] = "sub_agent"
+    name: ClassVar[str] = "spawn"
     description: ClassVar[str] = (
         "Spawn a sub-agent to execute a specific task. "
         "Use exp_name to select the sub-agent type (e.g. 'explore' for "
@@ -79,7 +79,7 @@ class SubAgentTool(BuiltinTool):
         """
         if self._spawn_fn is None:
             return (
-                "Error: SubAgent spawning is not available in this context "
+                "Error: Spawn is not available in this context "
                 "(recursion depth limit reached)"
             )
 

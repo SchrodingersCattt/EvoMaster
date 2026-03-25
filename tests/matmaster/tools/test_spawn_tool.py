@@ -1,4 +1,4 @@
-"""Unit tests for SubAgentTool.
+"""Unit tests for SpawnTool.
 
 Tests cover:
 - spawn_fn invocation with correct arguments
@@ -16,15 +16,15 @@ from unittest.mock import Mock
 import pytest
 
 
-class TestSubAgentToolExecute:
-    """Tests for SubAgentTool._execute behavior."""
+class TestSpawnToolExecute:
+    """Tests for SpawnTool._execute behavior."""
 
     def test_execute_calls_spawn_fn(self) -> None:
-        """SubAgentTool with mock spawn_fn calls it with (exp_name, task, stop_event)."""
-        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+        """SpawnTool with mock spawn_fn calls it with (exp_name, task, stop_event)."""
+        from matmaster.tools.builtin.spawn_tool import SpawnTool
 
         mock_spawn = Mock(return_value="exploration result: found 3 files")
-        tool = SubAgentTool(spawn_fn=mock_spawn)
+        tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = tool.execute({"exp_name": "explore", "task": "find files"})
 
@@ -33,10 +33,10 @@ class TestSubAgentToolExecute:
         assert result == "exploration result: found 3 files"
 
     def test_recursion_guard_spawn_fn_none(self) -> None:
-        """SubAgentTool(spawn_fn=None) returns error containing 'not available'."""
-        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+        """SpawnTool(spawn_fn=None) returns error containing 'not available'."""
+        from matmaster.tools.builtin.spawn_tool import SpawnTool
 
-        tool = SubAgentTool(spawn_fn=None)
+        tool = SpawnTool(spawn_fn=None)
 
         result = tool.execute({"exp_name": "x", "task": "y"})
 
@@ -44,10 +44,10 @@ class TestSubAgentToolExecute:
 
     def test_missing_exp_name(self) -> None:
         """execute({"task": "y"}) returns error containing 'required'."""
-        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+        from matmaster.tools.builtin.spawn_tool import SpawnTool
 
         mock_spawn = Mock(return_value="ok")
-        tool = SubAgentTool(spawn_fn=mock_spawn)
+        tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = tool.execute({"task": "y"})
 
@@ -56,10 +56,10 @@ class TestSubAgentToolExecute:
 
     def test_missing_task(self) -> None:
         """execute({"exp_name": "x"}) returns error containing 'required'."""
-        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+        from matmaster.tools.builtin.spawn_tool import SpawnTool
 
         mock_spawn = Mock(return_value="ok")
-        tool = SubAgentTool(spawn_fn=mock_spawn)
+        tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = tool.execute({"exp_name": "x"})
 
@@ -68,10 +68,10 @@ class TestSubAgentToolExecute:
 
     def test_empty_exp_name(self) -> None:
         """execute({"exp_name": "", "task": "y"}) returns error containing 'required'."""
-        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+        from matmaster.tools.builtin.spawn_tool import SpawnTool
 
         mock_spawn = Mock(return_value="ok")
-        tool = SubAgentTool(spawn_fn=mock_spawn)
+        tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = tool.execute({"exp_name": "", "task": "y"})
 
@@ -80,10 +80,10 @@ class TestSubAgentToolExecute:
 
     def test_empty_task(self) -> None:
         """execute({"exp_name": "x", "task": ""}) returns error containing 'required'."""
-        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+        from matmaster.tools.builtin.spawn_tool import SpawnTool
 
         mock_spawn = Mock(return_value="ok")
-        tool = SubAgentTool(spawn_fn=mock_spawn)
+        tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = tool.execute({"exp_name": "x", "task": ""})
 
@@ -92,10 +92,10 @@ class TestSubAgentToolExecute:
 
     def test_spawn_fn_exception_handled(self) -> None:
         """spawn_fn raises ValueError, execute returns 'Error: ...' via BuiltinTool wrapper."""
-        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+        from matmaster.tools.builtin.spawn_tool import SpawnTool
 
         mock_spawn = Mock(side_effect=ValueError("unknown exp: bad_name"))
-        tool = SubAgentTool(spawn_fn=mock_spawn)
+        tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = tool.execute({"exp_name": "bad_name", "task": "do stuff"})
 
@@ -103,18 +103,18 @@ class TestSubAgentToolExecute:
         assert "unknown exp: bad_name" in result
 
 
-class TestSubAgentToolClassVars:
-    """Tests for SubAgentTool class-level attributes (Tool Protocol)."""
+class TestSpawnToolClassVars:
+    """Tests for SpawnTool class-level attributes (Tool Protocol)."""
 
     def test_class_vars(self) -> None:
-        """SubAgentTool satisfies Tool Protocol class vars."""
-        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+        """SpawnTool satisfies Tool Protocol class vars."""
+        from matmaster.tools.builtin.spawn_tool import SpawnTool
 
-        assert SubAgentTool.name == "sub_agent"
-        assert isinstance(SubAgentTool.description, str)
-        assert len(SubAgentTool.description) > 0
+        assert SpawnTool.name == "spawn"
+        assert isinstance(SpawnTool.description, str)
+        assert len(SpawnTool.description) > 0
 
-        schema = SubAgentTool.json_schema
+        schema = SpawnTool.json_schema
         assert schema["type"] == "object"
         assert "exp_name" in schema["properties"]
         assert "task" in schema["properties"]
@@ -132,7 +132,7 @@ class TestExploreToml:
         cfg = load_exp_config("explore")
 
         assert cfg.name == "explore"
-        assert "sub_agent" not in cfg.tools.builtin
+        assert "spawn" not in cfg.tools.builtin
         assert len(cfg.developer_instructions) > 0
 
     def test_explore_toml_mode(self) -> None:
