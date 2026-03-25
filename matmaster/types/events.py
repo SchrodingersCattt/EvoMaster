@@ -16,10 +16,18 @@ from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, Field
 
 
+class EventBase(BaseModel):
+    """Shared fields for all bus events."""
+
+    source: str
+    timestamp: datetime = Field(default_factory=datetime.now)
+    spawn_id: str | None = None
+
+
 # ── AgentEvent: kernel-layer events ─────────────────────
 
 
-class ThoughtEvent(BaseModel):
+class ThoughtEvent(EventBase):
     """LLM thought/reasoning event.
 
     Streaming and non-streaming are unified; use ``stream_state`` to
@@ -27,8 +35,6 @@ class ThoughtEvent(BaseModel):
     """
 
     type: Literal["thought"] = "thought"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     content: str = ""
     stream_state: str | None = None  # 'start' | 'streaming' | 'end' | 'complete' | None
     stream_id: str | None = None
@@ -37,34 +43,28 @@ class ThoughtEvent(BaseModel):
     reasoning_content: str | None = None
 
 
-class ResponseEvent(BaseModel):
+class ResponseEvent(EventBase):
     """Visible assistant response event."""
 
     type: Literal["response"] = "response"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     content: str = ""
     stream_state: str | None = None  # 'start' | 'streaming' | 'end' | 'complete' | None
     stream_id: str | None = None
 
 
-class ToolCallEvent(BaseModel):
+class ToolCallEvent(EventBase):
     """Tool call event -- emitted when the LLM requests a tool invocation."""
 
     type: Literal["tool_call"] = "tool_call"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     call_id: str
     tool_name: str
     arguments: dict[str, Any]
 
 
-class ToolResultEvent(BaseModel):
+class ToolResultEvent(EventBase):
     """Tool execution result event."""
 
     type: Literal["tool_result"] = "tool_result"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     call_id: str
     tool_name: str
     result: Any  # str | dict
@@ -72,7 +72,7 @@ class ToolResultEvent(BaseModel):
     info: dict[str, Any] = Field(default_factory=dict)
 
 
-class RunResultEvent(BaseModel):
+class RunResultEvent(EventBase):
     """Business terminal event for a run outcome.
 
     Canonical type is ``run_result``. Legacy ``finish`` payloads are still
@@ -80,50 +80,40 @@ class RunResultEvent(BaseModel):
     """
 
     type: Literal["run_result", "finish"] = "run_result"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     status: str = "completed"  # 'completed' | 'failed' | 'cancelled'
     reason: str = ""
     final_content: str | None = None
 
 
-class ErrorEvent(BaseModel):
+class ErrorEvent(EventBase):
     """Agent execution error event."""
 
     type: Literal["error"] = "error"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     message: str
     traceback: str | None = None
 
 
-class AssistantStateEvent(BaseModel):
+class AssistantStateEvent(EventBase):
     """Full assistant message state (including tool_calls list) for persistence."""
 
     type: Literal["assistant_state"] = "assistant_state"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     state: dict[str, Any]  # AssistantMessage.model_dump() content
 
 
-class SkillHitEvent(BaseModel):
+class SkillHitEvent(EventBase):
     """Skill hit tracking event."""
 
     type: Literal["skill_hit"] = "skill_hit"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     skill_name: str
 
 
 # ── SystemEvent: service-layer events ───────────────────
 
 
-class ConfirmationRequestEvent(BaseModel):
+class ConfirmationRequestEvent(EventBase):
     """User confirmation request event."""
 
     type: Literal["confirmation_request"] = "confirmation_request"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     question: str
     mode: str  # 'timeout' | 'block'
     timeout_seconds: int | None = None
@@ -132,44 +122,36 @@ class ConfirmationRequestEvent(BaseModel):
     origin: str | None = None
 
 
-class ConfirmationTimeoutEvent(BaseModel):
+class ConfirmationTimeoutEvent(EventBase):
     """Confirmation timeout event."""
 
     type: Literal["confirmation_timeout"] = "confirmation_timeout"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     question: str
     default_reply: str | None = None
 
 
-class ContextCompactionEvent(BaseModel):
+class ContextCompactionEvent(EventBase):
     """Context compaction event."""
 
     type: Literal["context_compaction"] = "context_compaction"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     payload: dict[str, Any]
 
 
-class ExpRunEvent(BaseModel):
+class ExpRunEvent(EventBase):
     """Experiment run event."""
 
     type: Literal["exp_run"] = "exp_run"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     exp_name: str
 
 
-class CancelledEvent(BaseModel):
+class CancelledEvent(EventBase):
     """Agent execution cancelled event."""
 
     type: Literal["cancelled"] = "cancelled"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     reason: str = ""
 
 
-class StreamClosedEvent(BaseModel):
+class StreamClosedEvent(EventBase):
     """Transport-level marker indicating the live SSE stream can close.
 
     Canonical type is ``stream_closed``. Legacy ``end`` payloads are still
@@ -177,50 +159,40 @@ class StreamClosedEvent(BaseModel):
     """
 
     type: Literal["stream_closed", "end"] = "stream_closed"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     content: str = ""
     task_completed: bool = False
     end_reason: str | None = None
     treat_as_failure: bool | None = None
 
 
-class WorkspaceUploadErrorEvent(BaseModel):
+class WorkspaceUploadErrorEvent(EventBase):
     """Workspace upload error event."""
 
     type: Literal["workspace_upload_error"] = "workspace_upload_error"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     message: str
 
 
-class BohriumNodeEvent(BaseModel):
+class BohriumNodeEvent(EventBase):
     """Bohrium node status event."""
 
     type: Literal["bohrium_node"] = "bohrium_node"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
-class McpServerStatusEvent(BaseModel):
+class McpServerStatusEvent(EventBase):
     """MCP server status event."""
 
     type: Literal["mcp_server_status"] = "mcp_server_status"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     server_name: str
     transport: str | None = None
     phase: str = ""
     detail: dict[str, Any] = Field(default_factory=dict)
 
 
-class McpConnectEvent(BaseModel):
+class McpConnectEvent(EventBase):
     """MCP connection lifecycle event."""
 
     type: Literal["mcp_connect"] = "mcp_connect"
-    source: str
-    timestamp: datetime = Field(default_factory=datetime.now)
     phase: str = ""  # 'start' | 'ready' | 'failed'
     message: str = ""
     elapsed_ms: int | None = None
