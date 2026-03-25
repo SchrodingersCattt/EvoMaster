@@ -82,6 +82,38 @@ def _normalize_replayed_event(event: dict) -> dict:
     return replay_event
 
 
+def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
+    """Hide replayed run_result when the same task already has a replayable response.
+
+    Live SSE already streamed the final `response` content. After adding
+    persisted complete response segments, replaying the trailing `run_result`
+    would duplicate the final answer after reconnect. We only suppress the
+    terminal event when the previous replayable event for that task is a
+    `response`, so tool-use turns that still rely on `run_result` remain
+    visible.
+    """
+    deduped: list[dict] = []
+    last_replayed_type_by_task: dict[str, str] = {}
+
+    for event in events:
+        task_id = event.get('task_id')
+        task_key = str(task_id) if task_id is not None else None
+        event_type = str(event.get('type') or '')
+        if (
+            task_key is not None
+            and event_type in {'run_result', 'finish'}
+            and last_replayed_type_by_task.get(task_key) == 'response'
+        ):
+            continue
+
+        deduped.append(event)
+
+        if task_key is not None and _should_emit_event_to_sse(event):
+            last_replayed_type_by_task[task_key] = event_type
+
+    return deduped
+
+
 class InMemoryReplyQueue:
     """进程内队列封装，实现 ReplyQueueLike。"""
 
@@ -470,6 +502,7 @@ class ChatStreamService:
                 yield self.sse_format(payload)
             events = self._events_service.get_session_events(sid)
             if events:
+                events = _dedupe_replayed_terminal_events(events)
                 events = self._inject_elapsed_for_history(events)
                 for event in events:
                     if _should_emit_event_to_sse(event):
@@ -744,6 +777,7 @@ class ChatStreamService:
         yield self.sse_format(payload)
         history = self._events_service.get_session_events(sid) or []
         history = ChatHistoryConverter.exclude_task_events(history, ctx.task_id)
+        history = _dedupe_replayed_terminal_events(history)
         history = self._inject_elapsed_for_history(history)
         for event in history:
             if _should_emit_event_to_sse(event):

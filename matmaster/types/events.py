@@ -23,14 +23,14 @@ class ThoughtEvent(BaseModel):
     """LLM thought/reasoning event.
 
     Streaming and non-streaming are unified; use ``stream_state`` to
-    distinguish: 'start' | 'streaming' | 'end' | None (non-streaming).
+    distinguish: 'start' | 'streaming' | 'end' | 'complete' | None.
     """
 
     type: Literal["thought"] = "thought"
     source: str
     timestamp: datetime = Field(default_factory=datetime.now)
     content: str = ""
-    stream_state: str | None = None  # 'start' | 'streaming' | 'end' | None
+    stream_state: str | None = None  # 'start' | 'streaming' | 'end' | 'complete' | None
     stream_id: str | None = None
     token_count: int = 0
     context: str | None = None  # e.g. 'step_execution'
@@ -44,7 +44,7 @@ class ResponseEvent(BaseModel):
     source: str
     timestamp: datetime = Field(default_factory=datetime.now)
     content: str = ""
-    stream_state: str | None = None  # 'start' | 'streaming' | 'end' | None
+    stream_state: str | None = None  # 'start' | 'streaming' | 'end' | 'complete' | None
     stream_id: str | None = None
 
 

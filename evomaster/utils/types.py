@@ -68,6 +68,7 @@ class AssistantMessage(BaseMessage):
 
     role: MessageRole = MessageRole.ASSISTANT
     tool_calls: list[ToolCall] | None = Field(default=None, description='工具调用列表')
+    reasoning_content: str | None = None
 
 
 class ToolMessage(BaseMessage):

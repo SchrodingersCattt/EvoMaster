@@ -788,6 +788,27 @@ class TestSSEHandler:
 
         send_cb.assert_not_called()
 
+    def test_skips_complete_segment_events(self) -> None:
+        """handle() skips persisted complete-segment snapshots on the live SSE path."""
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id=None,
+            mode="direct",
+        )
+
+        handler.handle(
+            ThoughtEvent(source="Agent", content="full thought", stream_state="complete")
+        )
+        handler.handle(
+            ResponseEvent(source="Agent", content="full answer", stream_state="complete")
+        )
+
+        send_cb.assert_not_called()
+
     def test_async_send_with_loop(self) -> None:
         """handle() uses asyncio.run_coroutine_threadsafe when loop is present."""
         loop = asyncio.new_event_loop()

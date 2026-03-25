@@ -1,18 +1,20 @@
 """Hook Protocol, BaseHook defaults, HookAction enum, and run_* helper functions.
 
 Hooks allow external code to observe and intercept the kernel execution loop.
-Six hook points are defined:
+Seven hook points are defined:
 
 - pre_tool_call: intercept before tool execution (CONTINUE/SKIP)
 - post_tool_call: observe after tool execution (no return)
 - pre_llm_call: observe before LLM call (no return)
 - should_continue: intercept loop continuation (True/False)
 - on_stream_chunk: observe streaming chunks (no return)
+- on_segment_complete: observe completed logical thought/response segments
 - on_guard_blocked: observe guard denials (no return)
 
 Intercepting hooks (pre_tool_call, should_continue) short-circuit on the first
 non-default return. Observation hooks (post_tool_call, pre_llm_call,
-on_stream_chunk, on_guard_blocked) execute all hooks without short-circuit.
+on_stream_chunk, on_segment_complete, on_guard_blocked) execute all hooks
+without short-circuit.
 
 EventEmitterHook bridges hook events to the MessageBus for SSE delivery.
 """
@@ -46,7 +48,7 @@ class HookAction(enum.Enum):
 class Hook(Protocol):
     """Hook interface for observing and intercepting kernel execution.
 
-    All five methods must be implemented. Use BaseHook as a base class
+    All hook methods should be available. Use BaseHook as a base class
     to get default implementations for all hook points.
     """
 
@@ -59,6 +61,10 @@ class Hook(Protocol):
     def should_continue(self, messages: list[Message], turn: int) -> bool: ...
 
     def on_stream_chunk(self, chunk: StreamChunk) -> None: ...
+
+    def on_segment_complete(
+        self, segment_type: str, content: str, stream_id: str | None
+    ) -> None: ...
 
     def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None: ...
 
@@ -84,6 +90,11 @@ class BaseHook:
         return True
 
     def on_stream_chunk(self, chunk: StreamChunk) -> None:
+        """Default: no-op observation."""
+
+    def on_segment_complete(
+        self, segment_type: str, content: str, stream_id: str | None
+    ) -> None:
         """Default: no-op observation."""
 
     def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
@@ -142,6 +153,20 @@ def run_on_stream_chunk(hooks: list[Hook], chunk: StreamChunk) -> None:
         hook.on_stream_chunk(chunk)
 
 
+def run_on_segment_complete(
+    hooks: list[Hook], segment_type: str, content: str, stream_id: str | None
+) -> None:
+    """Run on_segment_complete on all hooks (observation, no short-circuit).
+
+    Uses getattr for backward compatibility with Hook implementations
+    that predate the on_segment_complete addition.
+    """
+    for hook in hooks:
+        fn = getattr(hook, "on_segment_complete", None)
+        if fn is not None:
+            fn(segment_type, content, stream_id)
+
+
 def run_guard_blocked(
     hooks: list[Hook], tool_call: ToolCallData, result: GuardResult
 ) -> None:
@@ -166,6 +191,7 @@ class EventEmitterHook(BaseHook):
     - pre_tool_call -> ToolCallEvent (returns CONTINUE)
     - post_tool_call -> ToolResultEvent
     - on_stream_chunk -> ThoughtEvent / ResponseEvent
+    - on_segment_complete -> persisted ThoughtEvent / ResponseEvent snapshot
     """
 
     def __init__(self, bus: MessageBus, source: str) -> None:
@@ -214,6 +240,32 @@ class EventEmitterHook(BaseHook):
                     content=chunk.content,
                     stream_state=chunk.stream_state,
                     stream_id=chunk.stream_id,
+                )
+            )
+
+    def on_segment_complete(
+        self, segment_type: str, content: str, stream_id: str | None
+    ) -> None:
+        """Emit a persisted snapshot when a logical segment is complete."""
+        if segment_type == "thought":
+            self._bus.emit(
+                ThoughtEvent(
+                    source=self._source,
+                    content=content,
+                    stream_state="complete",
+                    stream_id=stream_id,
+                    reasoning_content=content,
+                )
+            )
+            return
+
+        if segment_type == "response":
+            self._bus.emit(
+                ResponseEvent(
+                    source=self._source,
+                    content=content,
+                    stream_state="complete",
+                    stream_id=stream_id,
                 )
             )
 

@@ -19,15 +19,15 @@
 - 不引入新事件类型（复用 ThoughtEvent / ResponseEvent）
 - 不引入 tool_calls 段落的持久化（已有 ToolCallEvent / ToolResultEvent 覆盖）
 - 不改动 PersistenceHandler 的过滤逻辑
-- 不改动 stream_service.py 的回放逻辑
+- 不改动 DB schema（`evo_chat_events` 仍只存 `type/source/content/task_id/...`）
 - 不处理跨 turn 的段落合并（每次 `_call_llm` 调用独立产生段落事件）
 
-## Key Design Decision: 复用已有事件类型 + stream_state="complete"
+## Key Design Decision: 复用已有事件类型 + stream_state="complete"（仅 live bus 可见）
 
-不引入新的 `SegmentCompleteEvent`，而是复用 `ThoughtEvent` / `ResponseEvent`，用 `stream_state="complete"` 标记段落完成。理由：
+不引入新的 `SegmentCompleteEvent`，而是复用 `ThoughtEvent` / `ResponseEvent`，用 `stream_state="complete"` 标记段落完成。该标记只用于 **live bus 路由**，不会落到 DB 列结构中；DB 仍只持久化既有的 `type + public content`。理由：
 
 1. **PersistenceHandler** 的 `_STREAMING_STATES = {"start", "streaming", "end"}` 不含 `"complete"` → 自动持久化，无需改动
-2. **stream_service.py** 回放路径已知如何处理 thought/response → 自动支持断线恢复，无需改动
+2. **回放路径** 仍复用 thought/response 既有事件类型，无需引入新的 payload shape；但需在 `stream_service.py` 增加去重逻辑，避免 `response(complete)` 与 `run_result` 双重回放
 3. **SSEHandler** 仅需新增一行：跳过 `stream_state="complete"` 的事件（live 推送时前端已从流式 chunk 获得内容）
 
 对比引入新事件类型 `SegmentCompleteEvent` 的方案，该方案避免了：
@@ -141,7 +141,22 @@ stream_state: str | None = None  # 'start' | 'streaming' | 'end' | 'complete' | 
 
 无功能改动，仅注释。
 
-### 6. AssistantMessage 类型扩展（`evomaster/utils/types.py`）
+### 6. assistant_state reasoning 保真（`matmaster/hooks/assistant_state.py`）
+
+`AssistantStateHook` 当前使用 `last_assistant.to_api_dict()` 持久化 tool-use turn 的 assistant state。该序列化不包含 `reasoning_content`，会让 `reasoning -> tool_calls` 场景中的 reasoning 在历史重建时丢失。
+
+需要改为持久化完整消息：
+
+```python
+AssistantStateEvent(
+    source=self._source,
+    state=last_assistant.model_dump(mode="json"),
+)
+```
+
+这样 `assistant_state` 事件可直接携带 `reasoning_content`。
+
+### 7. AssistantMessage 类型扩展（`evomaster/utils/types.py`）
 
 `chat_history.py` 导入的是 `evomaster.utils.types.AssistantMessage`，该类当前只有 `content` 和 `tool_calls` 字段，没有 `reasoning_content`。需要添加：
 
@@ -154,7 +169,7 @@ class AssistantMessage(BaseMessage):
 
 不添加此字段会导致下方 chat_history.py 合并逻辑中 `reasoning_content=pending_reasoning` 参数被 Pydantic 静默忽略，reasoning 内容丢失。
 
-### 7. chat_history.py thought 缓存合并（`src/services/chat_history.py`）
+### 8. chat_history.py thought 缓存合并（`src/services/chat_history.py`）
 
 **问题**：引入 thought(complete) 持久化后，同一 turn 中 DB 会同时存在 thought 和 response 事件。当前 chat_history.py 为每个 thought 和 response 各创建一个 AssistantMessage，导致：
 - reasoning 文本被放入 AssistantMessage.content（语义错误，应放入 reasoning_content）
@@ -225,16 +240,24 @@ if _is_matmaster_source(source) and typ in ('run_result', 'finish'):
     continue
 ```
 
-**assistant_state 处理**（原 297-324 行）— 清除 pending_reasoning：
+**assistant_state 处理**（原 297-324 行）— 优先使用 assistant_state 自带 reasoning，缺失时合并 pending_reasoning：
 
-在 `assistant_state` 分支中加入 `pending_reasoning = None`。`assistant_state` 包含完整的 AssistantMessage（含 tool_calls 和 reasoning_content），不需要外部缓冲的 reasoning：
+`assistant_state` 来自两种历史来源：
+- 新路径：`AssistantStateHook.model_dump(mode="json")`，顶层包含 `reasoning_content`
+- 旧路径：legacy `assistant_state` 可能只有 `meta.reasoning_content`，甚至完全没有 reasoning
+
+因此不能无条件清空 `pending_reasoning`，而应在 `assistant_state` 缺少 reasoning 时补进去：
 
 ```python
 if _is_matmaster_source(source) and typ == 'assistant_state':
     flush_tool_calls()
-    pending_reasoning = None  # assistant_state 已包含完整消息
     raw_content = ev.get('content')
     ...
+    assistant_reasoning = cls._assistant_reasoning_content(raw_content)
+    if pending_reasoning and not assistant_reasoning:
+        msg = msg.model_copy(update={'reasoning_content': pending_reasoning})
+    ...
+    pending_reasoning = None
 ```
 
 **turn 边界重置**（query 处理中，原 267-274 行）— flush 残留缓存：
@@ -253,7 +276,26 @@ if source == 'User' and typ == 'query':
     pending_reasoning = None
 ```
 
+**补充**：`events_to_messages()` 还需把序列化 dict 中的 `reasoning_content`（以及 legacy `meta.reasoning_content`）继续传给 `matmaster.types.messages.AssistantMessage`，否则 reasoning 只能存在于 dialog dict，进不到 runtime Message 层。
+
 **向后兼容性**：此改动同时改善了现有 direct 模式的行为。改前 direct 模式会为 thought 和 run_result 各创建一个 AssistantMessage（重复）；改后合并为 `AssistantMessage(reasoning_content=thinking, content=final_content)`（正确）。
+
+### 9. replay 去重（`src/services/stream_service.py`）
+
+因为新增了持久化的 `response(complete)`，断线重连时若继续原样回放 DB，将会同时看到：
+- `response`：完整最终答案
+- `run_result`：同一轮的最终答案包装
+
+需要在 replay 前做轻量去重：
+
+```python
+def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
+    ...
+```
+
+规则：若某个 `task_id` 的上一个 **可回放事件** 已经是 `response`，则跳过该 task 的 `run_result` / `finish`。这样：
+- 最终答案不会双重回放
+- 仍保留 tool-use turn 中依赖 `run_result` 兜底的旧数据
 
 ## Data Flow
 
@@ -265,7 +307,7 @@ _call_llm 检测段落边界
     → EventEmitterHook.on_segment_complete()
       → bus.emit(ThoughtEvent/ResponseEvent(stream_state="complete", ...))
         → EventRouter 分发
-          → PersistenceHandler: "complete" ∉ _STREAMING_STATES → 持久化 ✓
+          → PersistenceHandler: "complete" ∉ _STREAMING_STATES → 按既有 type/content 契约持久化 ✓
           → SSEHandler: stream_state="complete" → 跳过 ✗（前端已有）
 ```
 
@@ -274,9 +316,10 @@ _call_llm 检测段落边界
 ```
 stream_service.py: generate_subscribe_stream()
   → get_session_events() 读取 DB
-    → 包含 thought/response(stream_state="complete") 事件
+    → 包含持久化后的 thought/response 内容（DB 不存 stream_state）
+  → _dedupe_replayed_terminal_events()：若 response 已是该 task 最后一个可回放事件，则跳过 run_result
   → _should_emit_event_to_sse(): thought/response 不在 skip list → 回放 ✓
-    → 前端收到完整段落内容，渲染断线期间的 thinking/response
+    → 前端收到完整段落内容，且不会重复看到最终 run_result
 ```
 
 ### 多轮历史（chat_history.py）
@@ -294,10 +337,12 @@ events_to_dialog_messages()
 |------|----------|------|
 | `matmaster/core/agent.py` | 修改 | `_call_llm` 增加边界检测和 `run_on_segment_complete` 调用 |
 | `matmaster/core/hooks.py` | 修改 | Hook Protocol + BaseHook + runner + EventEmitterHook 实现 + 文档字符串 |
+| `matmaster/hooks/assistant_state.py` | 修改 | `assistant_state` 改为持久化完整 AssistantMessage，保留 reasoning_content |
 | `matmaster/integration/sse_handler.py` | 修改 | `_should_skip` 跳过 `stream_state="complete"` |
 | `matmaster/types/events.py` | 修改 | stream_state 注释加入 `"complete"` |
 | `evomaster/utils/types.py` | 修改 | AssistantMessage 添加 `reasoning_content` 字段 |
-| `src/services/chat_history.py` | 修改 | thought 缓存 + response/run_result/assistant_state 合并逻辑 |
+| `src/services/chat_history.py` | 修改 | thought 缓存 + response/run_result/assistant_state 合并逻辑 + reasoning 传递到 matmaster Message 层 |
+| `src/services/stream_service.py` | 修改 | replay 前按 task 去重 `response`/`run_result` 最终答案 |
 
 ## Files NOT Changed (by design)
 
@@ -305,7 +350,6 @@ events_to_dialog_messages()
 |------|------|
 | `matmaster/integration/persistence_handler.py` | `"complete"` 不在 `_STREAMING_STATES` 中，自动持久化 |
 | `matmaster/integration/event_payloads.py` | thought/response 已有内容映射（fallback 路径） |
-| `src/services/stream_service.py` | thought/response 已正常回放 |
 
 ## Edge Cases
 
@@ -313,7 +357,8 @@ events_to_dialog_messages()
 - LLM 只产出 content 无 reasoning（模型不支持 extended thinking）：正常检测 content 段落完成；pending_reasoning 为 None，AssistantMessage 无 reasoning_content
 - 空内容段落（`content_parts` 为空列表）：`"".join([])` 得到空字符串，仍发射事件（保留审计记录）；chat_history 中空字符串为 falsy，不创建 AssistantMessage
 - 流异常中断（provider 抛异常）：finally 块确保已产出的段落仍被持久化
-- reasoning → tool_calls（无 content 段落）：reasoning 段落由 finally 块持久化；chat_history 中 pending_reasoning 在 assistant_state 分支被显式清除（assistant_state 包含完整消息）
+- reasoning → tool_calls（无 content 段落）：reasoning 段落由 finally 块持久化；新路径下 assistant_state 自带 `reasoning_content`，旧路径下 chat_history 会把 `pending_reasoning` 合并进 assistant_state，避免丢失
 - 同一 chunk 携带 reasoning_content + content：处理顺序约束确保先累积 reasoning 再检测转换，最后一个 reasoning token 不丢失
-- run_result 与 response(complete) 重复：chat_history.py 的 response_seen_in_turn 去重逻辑防止重复 Message
+- `stream_state="complete"` 不会持久化到 DB 行结构：Replay 依赖的是 persisted `type=thought/response`，不是 persisted `stream_state`
+- run_result 与 response(complete) 重复：chat_history.py 的 `response_seen_in_turn` 防止多轮历史重复 Message，`stream_service.py` 的 replay 去重防止断线恢复重复 SSE frame
 - direct 模式向后兼容：thought 缓存 + run_result 合并产出 `AssistantMessage(reasoning_content=thinking, content=response)`，比改前（两个独立 AssistantMessage）更正确

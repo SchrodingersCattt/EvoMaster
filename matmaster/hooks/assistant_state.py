@@ -43,7 +43,9 @@ class AssistantStateHook(BaseHook):
         self._bus.emit(
             AssistantStateEvent(
                 source=self._source,
-                state=last_assistant.to_api_dict(),
+                # Persist the full assistant state so history replay can retain
+                # reasoning_content in tool-use turns.
+                state=last_assistant.model_dump(mode="json"),
             )
         )
 
