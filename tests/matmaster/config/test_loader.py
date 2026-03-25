@@ -210,12 +210,11 @@ class TestBaseTomlMerge:
         exps_dir = tmp_path / "exps"
         exps_dir.mkdir()
         (exps_dir / "_base.toml").write_text(
-            'system_prompt = "Base"\nname = "SHOULD_NOT_LEAK"\nmode = "BAD"\n'
+            'system_prompt = "Base"\nname = "SHOULD_NOT_LEAK"\n'
         )
-        (exps_dir / "test.toml").write_text('name = "test"\nmode = "direct"\n')
+        (exps_dir / "test.toml").write_text('name = "test"\n')
         cfg = load_exp_config("test", exps_dir=exps_dir)
         assert cfg.name == "test"
-        assert cfg.mode == "direct"
         assert cfg.system_prompt == "Base"
 
     def test_base_system_prompt_not_env_expanded(self, tmp_path, monkeypatch):
