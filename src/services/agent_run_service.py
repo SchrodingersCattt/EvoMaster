@@ -62,7 +62,6 @@ _DIALOG_HISTORY_MAX_EVENTS = int(
 )
 
 _project_root = Path(__file__).resolve().parent.parent.parent
-_config_root = _project_root / "matmaster_config"  # 平铺配置目录
 RUN_ID_WEB = 'mat_master_web'
 
 
@@ -123,27 +122,28 @@ class AgentRunService:
         from matmaster.config.loader import load_llm_config
         import yaml
 
-        llm_config_path = _config_root / "llm_config.yaml"
-        if not llm_config_path.exists():
-            logger.warning("LLM config not found: %s", llm_config_path)
-            return
-        try:
-            llm_cfg = load_llm_config(llm_config_path)
-        except Exception:
-            logger.exception("Failed to load LLM config: %s", llm_config_path)
-            return
-        config_path = _config_root / "config.yaml"
-        if config_path.exists():
-            with open(config_path) as f:
-                main_cfg = yaml.safe_load(f)
-            agents = (main_cfg or {}).get("agents", {})
-            general_llm = agents.get("general", {}).get("llm")
-            if general_llm and general_llm not in llm_cfg.profiles:
-                logger.error(
-                    "agents.general.llm='%s' not found in llm_config profiles: %s",
-                    general_llm,
-                    list(llm_cfg.profiles),
-                )
+        for pg_type in ("mat_master", "minimal"):
+            llm_config_path = _project_root / "configs" / pg_type / "llm_config.yaml"
+            if not llm_config_path.exists():
+                logger.warning("LLM config not found: %s", llm_config_path)
+                continue
+            try:
+                llm_cfg = load_llm_config(llm_config_path)
+            except Exception:
+                logger.exception("Failed to load LLM config: %s", llm_config_path)
+                continue
+            config_path = _project_root / "configs" / pg_type / "config.yaml"
+            if config_path.exists():
+                with open(config_path) as f:
+                    main_cfg = yaml.safe_load(f)
+                agents = (main_cfg or {}).get("agents", {})
+                general_llm = agents.get("general", {}).get("llm")
+                if general_llm and general_llm not in llm_cfg.profiles:
+                    logger.error(
+                        "agents.general.llm='%s' not found in llm_config profiles: %s",
+                        general_llm,
+                        list(llm_cfg.profiles),
+                    )
 
     def get_executor(self) -> ThreadPoolExecutor:
         """Return the thread pool for agent execution."""

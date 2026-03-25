@@ -21,8 +21,8 @@ from matmaster.types.context import PlaygroundContext
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]  # repo root
 
-MAT_MASTER_CONFIG = _PROJECT_ROOT / "matmaster_config" / "config.yaml"
-MINIMAL_CONFIG = _PROJECT_ROOT / "configs" / "minimal" / "config.yaml"  # minimal 暂未迁移
+MAT_MASTER_CONFIG = _PROJECT_ROOT / "configs" / "mat_master" / "config.yaml"
+MINIMAL_CONFIG = _PROJECT_ROOT / "configs" / "minimal" / "config.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ MINIMAL_CONFIG = _PROJECT_ROOT / "configs" / "minimal" / "config.yaml"  # minima
 
 
 class TestMatMasterConfigPath:
-    """Prove that matmaster_config/config.yaml drives the unified Playground."""
+    """Prove that configs/mat_master/config.yaml drives the unified Playground."""
 
     def test_mat_master_config_path(self, tmp_path: Path) -> None:
         pg = Playground(MAT_MASTER_CONFIG)
