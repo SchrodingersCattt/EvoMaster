@@ -103,15 +103,22 @@ def _derive_skill_sync_spec(
     skills = exp_config.skills
     if not skills.enabled:
         return None
-    root_rel = (skills.skills_root or "").strip()
-    if not root_rel:
-        return None
-    skills_path = Path(root_rel)
-    if not skills_path.is_absolute():
-        skills_path = (project_root / root_rel).resolve()
+    # skills_root can be str | list[str]
+    roots_raw = skills.skills_root
+    if isinstance(roots_raw, list):
+        rel_list = [r.strip() for r in roots_raw if r and r.strip()]
     else:
-        skills_path = skills_path.resolve()
-    if not skills_path.is_dir():
+        s = (roots_raw or "").strip()
+        rel_list = [s] if s else []
+    if not rel_list:
+        return None
+    resolved_roots: list[str] = []
+    for root_rel in rel_list:
+        p = Path(root_rel)
+        p = p.resolve() if p.is_absolute() else (project_root / root_rel).resolve()
+        if p.is_dir():
+            resolved_roots.append(str(p))
+    if not resolved_roots:
         return None
 
     local_user: str | None = None
@@ -131,7 +138,7 @@ def _derive_skill_sync_spec(
         remote_user = str(rem_raw).strip()
 
     return SkillSyncSpec(
-        project_skill_roots=[str(skills_path)],
+        project_skill_roots=resolved_roots,
         local_user_skills_root=local_user,
         remote_user_skills_root=remote_user,
         remote_project_root="/personal/workspace/.evomaster",
