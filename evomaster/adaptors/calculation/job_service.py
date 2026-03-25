@@ -122,11 +122,9 @@ def _extract_bohr_job_id(
 
     MCP ``job_id`` format: ``"{timestamp}/{task_id}"``.
 
-    * **binary_calc** servers (CP2K, LAMMPS …):
-      ``task_id`` is numeric → *is* the Bohrium job ID.
-    * **dpdispatcher** servers (ABACUS …):
-      ``task_id`` is a hex hash; the real Bohrium job ID lives in
-      ``extra_info.bohr_job_id`` returned by the submit tool.
+    * Numeric ``task_id`` → *is* the Bohrium job ID directly.
+    * Hex hash ``task_id`` (dpdispatcher convention): the real Bohrium job ID
+      lives in ``extra_info.bohr_job_id`` returned by the submit tool.
 
     Parameters
     ----------
@@ -151,7 +149,7 @@ def _extract_bohr_job_id(
     parts = job_id.rsplit('/', 1)
     candidate = (parts[1] if len(parts) == 2 else job_id).strip()
 
-    # Numeric → Bohrium job ID directly (binary_calc convention)
+    # Numeric → Bohrium job ID directly
     if candidate.isdigit():
         return candidate
 
