@@ -21,6 +21,32 @@ class MockProvider:
         yield StreamChunk(content="hello", finish_reason="stop")
 
 
+class TestBuildExpConfig:
+    def test_mode_contract_default(self):
+        """AgentConfig defaults mode_contract to empty string."""
+        from matmaster.devshell.config import AgentConfig
+        cfg = AgentConfig()
+        assert cfg.mode_contract == ""
+
+    def test_mode_contract_forwarded(self):
+        """_build_exp_config forwards mode_contract to ExpConfig."""
+        from matmaster.devshell.config import AgentConfig, DevConfig
+        from matmaster.devshell.runner import DevRunner
+        config = DevConfig(
+            agent=AgentConfig(mode_contract="Execute directly.")
+        )
+        exp_cfg = DevRunner._build_exp_config(config)
+        assert exp_cfg.mode_contract == "Execute directly."
+
+    def test_mode_contract_empty_forwarded(self):
+        """Empty mode_contract is forwarded as-is."""
+        from matmaster.devshell.config import AgentConfig, DevConfig
+        from matmaster.devshell.runner import DevRunner
+        config = DevConfig(agent=AgentConfig(mode_contract=""))
+        exp_cfg = DevRunner._build_exp_config(config)
+        assert exp_cfg.mode_contract == ""
+
+
 class TestDevRunner:
     def _make_runner(self, tmp_path: Path) -> Any:
         from matmaster.devshell.config import DevConfig

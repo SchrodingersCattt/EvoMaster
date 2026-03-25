@@ -76,6 +76,7 @@ class DevRunner:
             max_turns=config.agent.max_turns,
             tools=ExpToolsConfig(builtin=config.tools.builtin),
             developer_instructions=config.agent.identity or "",
+            mode_contract=config.agent.mode_contract,
         )
 
     def run(
