@@ -28,8 +28,7 @@ from matmaster.core.hooks import EventEmitterHook
 from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.events import RunResultEvent
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, CompactionConfig
+from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, CompactionConfig, KernelResult
 
 if TYPE_CHECKING:
     from matmaster.core.agent import AgentKernel
@@ -212,14 +211,14 @@ class Exp:
         stop_event: threading.Event | None = None,
         skills: dict[str, Any] | None = None,
         mcp: dict[str, Any] | None = None,
-    ) -> RunResultEvent:
+    ) -> KernelResult:
         """build_runtime -> kernel.run -> cleanup."""
         runtime = self.build_runtime(ctx, bus=bus, skills=skills, mcp=mcp)
         try:
             result = runtime.kernel.run(
                 runtime.spec, task, history=history, stop_event=stop_event
             )
-            return result.event
+            return result.result
         finally:
             runtime.cleanup()
 
