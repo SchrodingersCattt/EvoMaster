@@ -29,25 +29,25 @@ def _get_backend(software: str):
     from engine.software.lammps import LAMMPSBackend
     from engine.software.orca import ORCABackend
     from engine.software.qe import QEBackend
-    
-        backends = {
-            "cp2k": CP2KBackend,
-            "orca": ORCABackend,
-            "qe": QEBackend,
-            "quantum-espresso": QEBackend,
-            "abinit": ABINITBackend,
-            "lammps": LAMMPSBackend,
-            "abacus": AbacusBackend,
-        }
-        key = software.lower().strip()
-        if key not in backends:
-            supported = ", ".join(sorted(set(backends.keys())))
-            print(
-                f"Error: unsupported software '{software}'. Supported: {supported}",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        return backends[key]()
+
+    backends = {
+        "cp2k": CP2KBackend,
+        "orca": ORCABackend,
+        "qe": QEBackend,
+        "quantum-espresso": QEBackend,
+        "abinit": ABINITBackend,
+        "lammps": LAMMPSBackend,
+        "abacus": AbacusBackend,
+    }
+    key = software.lower().strip()
+    if key not in backends:
+        supported = ", ".join(sorted(set(backends.keys())))
+        print(
+            f"Error: unsupported software '{software}'. Supported: {supported}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return backends[key]()
 
 
 def _parse_params(param_list: list[str]) -> dict:

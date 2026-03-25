@@ -11,8 +11,6 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-import oss2
-
 logger = logging.getLogger(__name__)
 
 
@@ -77,16 +75,6 @@ def get_signed_url(
     expires = int(time.time()) + expire_seconds
     signed = bucket.sign_url('GET', key, expires)
     return signed
-
-
-def get_object_bytes(oss_key: str) -> bytes:
-    """按 OSS key 读取对象内容，返回字节。"""
-    bucket, _e, _b = _get_bucket()
-    key = oss_key.strip().lstrip('/')
-    if not key:
-        raise ValueError('oss_key 为空')
-    result = bucket.get_object(key)
-    return result.read()
 
 
 def upload_file_to_oss(
@@ -163,53 +151,3 @@ def upload_dir_to_oss(
         dir_name,
     )
     return urls, rel_paths
-
-
-def list_workspace(
-    oss_prefix: str,
-    path: str = '',
-) -> list[dict[str, str]]:
-    """列出 OSS 上某 workspace 前缀下、指定 path 的一级子目录与文件（模拟目录列表）。
-
-    Args:
-        oss_prefix: OSS key 前缀，如 matmaster_evo/chat_workspace/{session_id}/{task_id}
-        path: 相对 oss_prefix 的子路径，空字符串表示根。如 "" 或 "data" 或 "data/out"
-
-    Returns:
-        entries: [{"name": "...", "path": "...", "type": "directory"|"file"}, ...]
-        - type="directory": path 用于下次 list 的 path 参数
-        - type="file": path 为相对 workspace 根的路径，用于拼 download_url
-    """
-
-    bucket, _e, _b = _get_bucket()
-    base = oss_prefix.rstrip('/') + '/'
-    sub = (path.strip().rstrip('/') + '/') if path.strip() else ''
-    full_prefix = base + sub
-
-    entries: list[dict[str, str]] = []
-
-    it = oss2.ObjectIterator(bucket, prefix=full_prefix, delimiter='/')
-
-    for obj in it:
-        key = getattr(obj, 'key', None) or getattr(obj, 'name', str(obj))
-        if not key or not key.startswith(full_prefix):
-            continue
-        is_prefix = getattr(obj, 'is_prefix', None)
-        if callable(is_prefix):
-            is_prefix = is_prefix()
-        elif is_prefix is None:
-            is_prefix = key.endswith('/')
-        rel = key[len(base) :]
-        if is_prefix:
-            # 如 data/subdir/ -> path="data/subdir", name="subdir"
-            seg = rel.rstrip('/')
-            name = seg.split('/')[-1] if '/' in seg else seg
-            if name:
-                entries.append({'name': name, 'path': seg, 'type': 'directory'})
-        else:
-            # 如 data/file.cif -> path="data/file.cif", name="file.cif"
-            name = rel.split('/')[-1] if '/' in rel else rel
-            if name:
-                entries.append({'name': name, 'path': rel, 'type': 'file'})
-
-    return entries

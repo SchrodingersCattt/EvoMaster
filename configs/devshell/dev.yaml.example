@@ -1,0 +1,25 @@
+# MatMaster DevShell Configuration
+# Copy to dev.yaml and adjust values.
+
+# LLM connection
+llm:
+  api_key: ${OPENAI_API_KEY}
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-4o"
+  temperature: 0.7
+
+# Agent behavior
+agent:
+  name: "general"
+  mode: "direct"
+  max_turns: 20
+  # identity: "You are a materials science AI assistant."
+
+# Session type
+session:
+  type: "local"  # local / docker / ssh
+
+# Tool registration ("*" = all builtin tools)
+tools:
+  builtin:
+    - "*"
