@@ -40,11 +40,20 @@ def _write_config(tmp_path: Path, overrides: dict[str, Any] | None = None) -> Pa
 
 
 def _setup_project_root(tmp_path: Path) -> Path:
-    """Create a fake project root with mat_master and minimal config dirs."""
-    for pg_type in ("mat_master", "minimal"):
-        cfg_dir = tmp_path / "configs" / pg_type
-        cfg_dir.mkdir(parents=True)
-        _write_config(cfg_dir)
+    """Create a fake project root with mat_master and minimal config dirs.
+
+    mat_master uses matmaster_config/ (flat layout);
+    minimal uses configs/minimal/ (nested layout).
+    """
+    # mat_master → matmaster_config/
+    mm_dir = tmp_path / "matmaster_config"
+    mm_dir.mkdir(parents=True)
+    _write_config(mm_dir)
+
+    # minimal → configs/minimal/
+    min_dir = tmp_path / "configs" / "minimal"
+    min_dir.mkdir(parents=True)
+    _write_config(min_dir)
     return tmp_path
 
 
@@ -80,7 +89,7 @@ class TestValidateStartup:
 
     def test_warns_missing_agents_key(self, tmp_path: Path) -> None:
         root = tmp_path / "root"
-        cfg_dir = root / "configs" / "mat_master"
+        cfg_dir = root / "matmaster_config"
         cfg_dir.mkdir(parents=True)
         # Config without agents key
         (cfg_dir / "config.yaml").write_text(yaml.dump({"session": {"type": "local"}}))

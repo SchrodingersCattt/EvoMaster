@@ -6,6 +6,9 @@ import time
 from pathlib import Path
 from typing import Any, Callable, NamedTuple
 
+from evomaster.agent.session.ssh import SSHSession, SSHSessionConfig
+
+from matmaster.integration.bohrium_setup import SkillSyncSpec
 from playground.mat_master.core.workspace_resolver import (
     get_remote_session_workspace_root,
     load_workspace_config_dict,
@@ -48,6 +51,153 @@ def _clear_remote_proxy_shell() -> str:
         'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY '
         'NO_PROXY no_proxy ftp_proxy FTP_PROXY WGETRC 2>/dev/null; '
     )
+
+
+_SKILL_SYNC_EXCLUDE = frozenset(
+    {
+        '__pycache__',
+        '.git',
+        'node_modules',
+        '.mypy_cache',
+        '.pytest_cache',
+    }
+)
+
+
+def _store_bohrium_runtime(
+    session_id: str,
+    *,
+    original_session: Any,
+    original_owns_session: bool,
+    ssh_session: Any,
+) -> None:
+    """Persist Bohrium SSH swap state for cleanup (SESSIONS[session_id]['bohrium_runtime'])."""
+    if session_id not in SESSIONS:
+        SESSIONS[session_id] = {}
+    SESSIONS[session_id]['bohrium_runtime'] = {
+        'original_session': original_session,
+        'original_owns_session': original_owns_session,
+        'ssh_session': ssh_session,
+    }
+
+
+def _restore_playground_session(
+    pg: Any,
+    original_session: Any,
+    original_owns_session: bool,
+) -> None:
+    """Restore pg.session / _owns_session / agent.session after a transient SSH swap."""
+    pg.session = original_session
+    pg._owns_session = original_owns_session
+    _agent = getattr(pg, 'agent', None)
+    if _agent is not None:
+        _agent.session = original_session
+
+
+def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
+    """Pop runtime state, close SSH session, restore original playground session."""
+    sess = SESSIONS.get(session_id)
+    if not sess:
+        return
+    runtime = sess.pop('bohrium_runtime', None)
+    if not runtime:
+        return
+    ssh = runtime.get('ssh_session')
+    orig = runtime.get('original_session')
+    orig_owns = runtime.get('original_owns_session', True)
+    if ssh is not None:
+        try:
+            if getattr(ssh, 'is_open', False):
+                ssh.close()
+        except Exception as close_err:
+            logger.warning(
+                'run_agent_sync: close Bohrium SSH session during cleanup failed: %s',
+                close_err,
+            )
+    if pg is not None:
+        _restore_playground_session(pg, orig, orig_owns)
+
+
+def _upload_directory(
+    env: Any, local_dir: str, remote_dir: str, exclude: set[str] | None = None
+) -> None:
+    """Upload a directory tree; prefer tarball when SSHEnv supports it."""
+    ex = exclude or set()
+    if hasattr(env, 'upload_directory_tarball'):
+        env.upload_directory_tarball(local_dir, remote_dir, exclude=ex)
+    else:
+        env.upload_directory(local_dir, remote_dir, exclude=ex)
+
+
+def _sync_skills_to_ssh_session(
+    ssh_session: Any,
+    skill_sync_spec: SkillSyncSpec | None,
+    pg: Any,
+) -> bool:
+    """Upload skill trees and set remote_project_root / user skill path fields on SSHSession.
+
+    Returns True if at least one directory was uploaded without error; False if
+    skipped, nothing uploaded, or sync failed.
+    """
+    spec = skill_sync_spec
+    if spec is None:
+        logger.debug('run_agent_sync: skill sync skipped (no SkillSyncSpec)')
+        return False
+    if not isinstance(ssh_session, SSHSession):
+        logger.debug('run_agent_sync: skill sync skipped (session is not SSHSession)')
+        return False
+    try:
+        env = ssh_session._env
+        exclude = set(_SKILL_SYNC_EXCLUDE)
+        synced_any = False
+        for local_root in spec.project_skill_roots:
+            lp = Path(local_root)
+            if not lp.is_dir():
+                logger.warning(
+                    'run_agent_sync: skill sync skip missing dir %s', local_root
+                )
+                continue
+            try:
+                rel = lp.resolve().relative_to(_PROJECT_ROOT.resolve())
+                remote_dest = (
+                    f"{spec.remote_project_root.rstrip('/')}/{rel.as_posix()}"
+                )
+            except ValueError:
+                remote_dest = (
+                    f"{spec.remote_project_root.rstrip('/')}/{lp.name}"
+                )
+            _upload_directory(env, str(lp), remote_dest, exclude)
+            synced_any = True
+        if spec.local_user_skills_root and spec.remote_user_skills_root:
+            lu = Path(spec.local_user_skills_root)
+            if lu.is_dir():
+                _upload_directory(
+                    env,
+                    str(lu),
+                    spec.remote_user_skills_root.rstrip('/'),
+                    exclude,
+                )
+                synced_any = True
+        ssh_session.remote_project_root = spec.remote_project_root
+        ssh_session.remote_user_skills_root = spec.remote_user_skills_root
+        ssh_session.local_user_skills_root = spec.local_user_skills_root
+        if synced_any:
+            logger.info(
+                'run_agent_sync: skills synced to SSH, remote_project_root=%s',
+                spec.remote_project_root,
+            )
+        else:
+            logger.warning(
+                'run_agent_sync: skill sync produced no uploads (empty or missing roots)'
+            )
+        return synced_any
+    except Exception as sync_err:
+        logger.warning(
+            'run_agent_sync: sync skills to SSH failed: %s',
+            sync_err,
+            exc_info=True,
+        )
+        return False
 
 
 def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
@@ -99,6 +249,9 @@ class BohriumSetupResult(NamedTuple):
 
     ssh_attached: bool
     abort_result: tuple[Any, int] | None
+    execution_session: Any | None
+    execution_workdir: str | None
+    session_type: str | None
 
 
 def load_run_credentials(
@@ -180,7 +333,7 @@ def setup_bohrium_for_run(
     *,
     session_id: str,
     pg: Any,
-    base: Any,
+    skill_sync_spec: SkillSyncSpec | None,
     run_creds: dict[str, Any],
     user_id_for_ak: str | None,
     org_id: str,
@@ -188,21 +341,31 @@ def setup_bohrium_for_run(
     run_started_at: float,
 ) -> BohriumSetupResult:
     """Prepare Bohrium node and SSH session for the run when credentials exist."""
+    if skill_sync_spec is not None:
+        logger.debug(
+            'run_agent_sync: skill_sync_spec: project_skill_roots=%s local_user=%s '
+            'remote_user=%s remote_project_root=%s',
+            len(skill_sync_spec.project_skill_roots),
+            bool(skill_sync_spec.local_user_skills_root),
+            bool(skill_sync_spec.remote_user_skills_root),
+            skill_sync_spec.remote_project_root,
+        )
+
     if not run_creds:
-        return BohriumSetupResult(False, None)
+        return BohriumSetupResult(False, None, None, None, None)
 
     project_id = run_creds.get('project_id')
     if project_id is not None:
         project_id = int(project_id)
     access_key = (run_creds.get('access_key') or '').strip()
     if not access_key or project_id is None:
-        return BohriumSetupResult(False, None)
+        return BohriumSetupResult(False, None, None, None, None)
 
+    node_id: int | None = None
+    node_ip = None
+    node_pwd = None
     try:
         node_svc = get_bohrium_node_service()
-        node_id = None
-        node_ip = None
-        node_pwd = None
         use_reuse_table = bool(user_id_for_ak and org_id)
         if not use_reuse_table and (user_id_for_ak or org_id):
             logger.info(
@@ -430,44 +593,84 @@ def setup_bohrium_for_run(
                 'Bohrium 节点已就绪',
                 ip=node_ip,
             )
-            pg.attach_ssh_session(
+            remote_workspace_root = remote_workspace_root.rstrip('/')
+            ssh_working_dir = f'{remote_workspace_root}/{session_id}'
+            original_session = pg.session
+            original_owns_session = pg._owns_session
+            ssh_config = SSHSessionConfig(
                 host=node_ip,
                 password=node_pwd,
-                working_dir=remote_workspace_root,
-                session_id=session_id,
+                working_dir=ssh_working_dir,
+                workspace_path=ssh_working_dir,
             )
-            apply_run_credentials_to_session(base.session, run_creds)
-            logger.info(
-                'run_agent_sync: SSH session attached to Bohrium node ip=%s workspace=%s/%s',
-                node_ip,
-                remote_workspace_root.rstrip('/'),
-                session_id,
-            )
-            _run_clear_remote_proxy(pg, 'post_ssh')
+            ssh_session = SSHSession(ssh_config)
+            swapped = False
+            ssh_session.open()
             try:
-                pg.sync_skills_to_remote()
+                apply_run_credentials_to_session(ssh_session, run_creds)
+                pg.session = ssh_session
+                pg._owns_session = False
+                _agent = getattr(pg, 'agent', None)
+                if _agent is not None:
+                    _agent.session = ssh_session
+                swapped = True
+                _store_bohrium_runtime(
+                    session_id,
+                    original_session=original_session,
+                    original_owns_session=original_owns_session,
+                    ssh_session=ssh_session,
+                )
+                logger.info(
+                    'run_agent_sync: SSH session attached to Bohrium node ip=%s workspace=%s',
+                    node_ip,
+                    ssh_working_dir,
+                )
+                _run_clear_remote_proxy(pg, 'post_ssh')
+                try:
+                    skills_sync_ok = _sync_skills_to_ssh_session(
+                        ssh_session, skill_sync_spec, pg
+                    )
+                    if skills_sync_ok:
+                        _emit_node_status(
+                            event_callback,
+                            node_id,
+                            'skills_synced',
+                            'Skills 已同步到远程节点',
+                            ip=node_ip,
+                        )
+                except Exception as sync_err:
+                    logger.warning(
+                        'run_agent_sync: skills sync phase failed: %s',
+                        sync_err,
+                        exc_info=True,
+                    )
+                _run_clear_remote_proxy(pg, 'post_skills_sync')
                 _emit_node_status(
                     event_callback,
                     node_id,
-                    'skills_synced',
-                    'Skills 已同步到远程节点',
+                    'connected',
+                    f'已连接到 Bohrium 节点 {node_ip}',
                     ip=node_ip,
                 )
-            except Exception as sync_err:
-                logger.warning(
-                    'sync_skills_to_remote failed: %s',
-                    sync_err,
-                    exc_info=True,
-                )
-            _run_clear_remote_proxy(pg, 'post_skills_sync')
-            _emit_node_status(
-                event_callback,
-                node_id,
-                'connected',
-                f'已连接到 Bohrium 节点 {node_ip}',
-                ip=node_ip,
+            except Exception:
+                if swapped:
+                    _restore_playground_session(
+                        pg, original_session, original_owns_session
+                    )
+                    SESSIONS.get(session_id, {}).pop('bohrium_runtime', None)
+                try:
+                    ssh_session.close()
+                except Exception:
+                    pass
+                raise
+            return BohriumSetupResult(
+                True,
+                None,
+                ssh_session,
+                ssh_working_dir,
+                'ssh',
             )
-        return BohriumSetupResult(bool(node_ip), None)
+        return BohriumSetupResult(False, None, None, None, None)
     except Exception as e:
         reason = f'Bohrium 节点创建失败: {e}'
         logger.warning(
@@ -475,7 +678,7 @@ def setup_bohrium_for_run(
             e,
             exc_info=True,
         )
-        _emit_node_status(event_callback, None, 'failed', reason)
+        _emit_node_status(event_callback, node_id, 'failed', reason)
         event_callback('System', 'error', reason)
         elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
         try:
@@ -487,7 +690,7 @@ def setup_bohrium_for_run(
             )
         except Exception:
             pass
-        return BohriumSetupResult(False, ((False, reason), elapsed_ms))
+        return BohriumSetupResult(False, ((False, reason), elapsed_ms), None, None, None)
 
 
 def cleanup_bohrium_after_run(
@@ -498,16 +701,19 @@ def cleanup_bohrium_after_run(
     pg_for_run: Any,
     ssh_attached: bool,
 ) -> None:
-    """Restore session state and cleanup or release Bohrium node."""
-    if ssh_attached and pg_for_run is not None:
-        try:
-            pg_for_run.detach_session()
-            pg_for_run._setup_session()
-            logger.info(
-                'run_agent_sync: SSH session detached, default session restored'
-            )
-        except Exception as e:
-            logger.warning('run_agent_sync: session restore failed: %s', e)
+    """Restore session state and cleanup or release Bohrium node.
+
+    Session restore is driven by ``SESSIONS[session_id]['bohrium_runtime']``.
+    ``ssh_attached`` is retained for public API compatibility and logging, but
+    it no longer gates whether the original session is restored.
+    """
+    logger.debug(
+        'cleanup_bohrium_after_run: session_id=%s ssh_attached=%s',
+        session_id,
+        ssh_attached,
+    )
+    # Runtime restore is keyed off stored Bohrium swap state, not ssh_attached.
+    _restore_bohrium_runtime_state(session_id, pg_for_run)
 
     session_data = SESSIONS.get(session_id, {})
     node_id = session_data.pop('bohrium_node_id', None)

@@ -30,6 +30,7 @@ dependencies = [
     "beautifulsoup4",
     "lxml",
     "pymupdf",
+    "markdownify>=0.14.1",
     "tiktoken>=0.7.0",
 ]
 

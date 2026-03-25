@@ -2,7 +2,7 @@
 
 Consumes an AgentRuntimeSpec and executes the LLM -> guard -> hook -> tool
 -> message accumulate -> loop cycle. All termination paths go through
-_finish() which produces a RunResultEvent.
+_finish() which produces a KernelResult.
 
 Termination conditions:
 - natural: LLM returns no tool_calls
@@ -18,11 +18,10 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any
 
-from matmaster.types.events import RunResultEvent
 from matmaster.core.guard_pipeline import GuardPipeline
 
 if TYPE_CHECKING:
-    from matmaster.types.runtime import AgentRuntimeSpec, KernelRunResult
+    from matmaster.types.runtime import AgentRuntimeSpec, KernelResult, KernelRunResult
 from matmaster.core.hooks import (
     HookAction,
     run_guard_blocked,
@@ -83,11 +82,13 @@ class AgentKernel:
         if spec.compactor:
             spec.compactor.update_message_count(len(messages))
         last_usage: dict[str, int] = {}
+        total_usage: dict[str, int] = {}
+        last_stop_reason: str | None = None
 
         while turn < spec.max_turns:
             # External cancel check (before each turn)
             if stop_event and stop_event.is_set():
-                return self._finish(spec, messages, "cancelled")
+                return self._finish(spec, messages, "cancelled", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)
 
             turn += 1
 
@@ -96,7 +97,7 @@ class AgentKernel:
 
             # should_continue hook (intercepting, short-circuit)
             if not run_should_continue(spec.hooks, messages, turn):
-                return self._finish(spec, messages, "hook_stopped")
+                return self._finish(spec, messages, "hook_stopped", num_turns=turn - 1, stop_reason=last_stop_reason, usage=total_usage)
 
             # Context compaction check
             if spec.compactor:
@@ -105,13 +106,15 @@ class AgentKernel:
             # LLM call (streaming by default)
             response = self._call_llm(spec, messages)
             last_usage = response.usage
+            self._accumulate_usage(total_usage, response.usage)
+            last_stop_reason = response.finish_reason
             if spec.compactor:
                 spec.compactor.update_message_count(len(messages))
 
             # Natural finish: no tool_calls
             if not response.tool_calls:
                 if not self._is_valid_natural_finish(response):
-                    return self._finish(spec, messages, "invalid_finish")
+                    return self._finish(spec, messages, "invalid_finish", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)
                 messages.append(
                     AssistantMessage(
                         content=response.content,
@@ -123,6 +126,9 @@ class AgentKernel:
                     messages,
                     "natural",
                     final_content=response.content,
+                    num_turns=turn,
+                    stop_reason=response.finish_reason,
+                    usage=total_usage,
                 )
 
             # Has tool_calls: append assistant message then process each serially
@@ -182,7 +188,7 @@ class AgentKernel:
                 run_post_tool_call(spec.hooks, tc, str(result))
 
         # max_turns exhausted
-        return self._finish(spec, messages, "max_turns")
+        return self._finish(spec, messages, "max_turns", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)
 
     def _call_llm(
         self, spec: AgentRuntimeSpec, messages: list[Message]
@@ -284,11 +290,21 @@ class AgentKernel:
         return not response.tool_calls and response.finish_reason == "stop"
 
     @staticmethod
+    def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
+        """Accumulate per-turn usage into running total."""
+        for k, v in delta.items():
+            total[k] = total.get(k, 0) + v
+
+    @staticmethod
     def _finish(
         spec: AgentRuntimeSpec,
         messages: list[Message],
         reason: str,
         final_content: str | None = None,
+        *,
+        num_turns: int = 0,
+        stop_reason: str | None = None,
+        usage: dict[str, int] | None = None,
     ) -> KernelRunResult:
         """Unified exit path -- all termination goes through here."""
         if reason == "cancelled":
@@ -297,12 +313,14 @@ class AgentKernel:
             status = "failed"
         else:
             status = "completed"
-        event = RunResultEvent(
-            source="agent",
+        from matmaster.types.runtime import KernelResult, KernelRunResult  # lazy to avoid circular
+
+        result = KernelResult(
             status=status,
             reason=reason,
             final_content=final_content,
+            num_turns=num_turns,
+            stop_reason=stop_reason,
+            usage=dict(usage) if usage else {},
         )
-        from matmaster.types.runtime import KernelRunResult  # lazy to avoid circular
-
-        return KernelRunResult(event=event, messages=list(messages))
+        return KernelRunResult(result=result, messages=list(messages))

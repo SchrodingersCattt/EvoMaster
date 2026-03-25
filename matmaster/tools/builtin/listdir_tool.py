@@ -15,14 +15,17 @@ class ListDirTool(BuiltinTool):
 
     name: ClassVar[str] = "list_dir"
     description: ClassVar[str] = (
-        "List files and directories at the specified path."
+        "List files and directories at the specified path (ls -la format).\n\n"
+        "Usage:\n"
+        "- Use for quick directory overview before navigating the workspace.\n"
+        "- Returns file permissions, sizes, and timestamps."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
             "path": {
                 "type": "string",
-                "description": "The directory path to list. Defaults to current directory.",
+                "description": "Directory path to list contents of. Defaults to current directory.",
             },
         },
     }

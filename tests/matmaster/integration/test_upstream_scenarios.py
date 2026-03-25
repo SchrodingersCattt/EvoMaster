@@ -27,12 +27,14 @@ from matmaster.types.messages import (
     ToolCallData,
 )
 from matmaster.hooks.confirmation import ConfirmationHook
-from matmaster.integration.bohrium_setup import BohriumSetupService
+from matmaster.integration.bohrium_setup import BohriumSetupService, SkillSyncSpec
+from src.services.agent_run_bohrium import BohriumSetupResult
 from matmaster.integration.event_router import EventRouter
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
+from matmaster.types.runtime import KernelResult
 from matmaster.types.events import (
     AssistantStateEvent,
     ConfirmationRequestEvent,
@@ -133,9 +135,9 @@ class TestRunInterruptedDetection:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "long task", stop_event=stop_event)
 
-        assert isinstance(finish.event, FinishEvent)
-        assert finish.event.reason == "cancelled"
-        assert finish.event.status == "cancelled"
+        assert isinstance(finish.result, KernelResult)
+        assert finish.result.reason == "cancelled"
+        assert finish.result.status == "cancelled"
 
     def test_run_interrupted_detection_restart(self, tmp_path: Path) -> None:
         """Verify stop_event from Redis stop key detected (same mechanism)."""
@@ -153,7 +155,7 @@ class TestRunInterruptedDetection:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "restart task", stop_event=stop_event)
 
-        assert finish.event.reason == "cancelled"
+        assert finish.result.reason == "cancelled"
 
 
 # ── QUAL-04: Workspace upload scenarios ──────────────
@@ -243,14 +245,24 @@ class TestBohriumSetupLifecycle:
                 "src.services.agent_run_bohrium.cleanup_bohrium_after_run"
             ) as mock_cleanup,
         ):
-            mock_setup.return_value = MagicMock(
-                ssh_attached=False, abort_result=None
+            skill_sync_spec = SkillSyncSpec(
+                project_skill_roots=["/proj/skills"],
+                local_user_skills_root="/local/user/skills",
+                remote_user_skills_root="/remote/user/skills",
+                remote_project_root="/remote/project",
+            )
+            mock_setup.return_value = BohriumSetupResult(
+                ssh_attached=False,
+                abort_result=None,
+                execution_session=None,
+                execution_workdir="/remote/exec/wd",
+                session_type=None,
             )
 
             result = svc.setup(
                 session_id="sess-1",
                 pg=MagicMock(),
-                base=MagicMock(),
+                skill_sync_spec=skill_sync_spec,
                 run_creds={"key": "val"},
                 user_id_for_ak="user-1",
                 org_id="org-1",
@@ -259,7 +271,11 @@ class TestBohriumSetupLifecycle:
             )
 
             assert mock_setup.called
+            call_kw = mock_setup.call_args.kwargs
+            assert call_kw["skill_sync_spec"] is skill_sync_spec
+            assert "base" not in call_kw
             assert result.ssh_attached is False
+            assert result.execution_workdir == "/remote/exec/wd"
 
             svc.cleanup(
                 session_id="sess-1",
