@@ -227,20 +227,38 @@ Add to `tests/matmaster/config/test_config_consolidation.py`:
 
 ```python
 class TestConfigDirRouting:
-    def test_mat_master_routes_to_matmaster_config(self):
+    def test_mat_master_routes_to_matmaster_config(self, tmp_path):
         from matmaster.core.playground import PlaygroundManager
-        mgr = PlaygroundManager(Path("."))
-        assert mgr._config_dir_for("mat_master") == Path(".") / "matmaster_config"
+        mgr = PlaygroundManager(tmp_path)
+        assert mgr._config_dir_for("mat_master") == tmp_path / "matmaster_config"
 
-    def test_minimal_routes_to_configs(self):
+    def test_minimal_routes_to_configs(self, tmp_path):
         from matmaster.core.playground import PlaygroundManager
-        mgr = PlaygroundManager(Path("."))
-        assert mgr._config_dir_for("minimal") == Path(".") / "configs" / "minimal"
+        mgr = PlaygroundManager(tmp_path)
+        assert mgr._config_dir_for("minimal") == tmp_path / "configs" / "minimal"
 
-    def test_unknown_routes_to_configs(self):
+    def test_unknown_routes_to_configs(self, tmp_path):
         from matmaster.core.playground import PlaygroundManager
-        mgr = PlaygroundManager(Path("."))
-        assert mgr._config_dir_for("other") == Path(".") / "configs" / "other"
+        mgr = PlaygroundManager(tmp_path)
+        assert mgr._config_dir_for("other") == tmp_path / "configs" / "other"
+
+    def test_get_or_create_uses_matmaster_config_dir(self, tmp_path):
+        """Verify get_or_create() actually uses _config_dir_for(), not hardcoded path."""
+        from matmaster.core.playground import PlaygroundManager
+        from unittest.mock import patch
+
+        mgr = PlaygroundManager(tmp_path)
+        # Create matmaster_config/config.yaml so Playground.__init__ can load it
+        cfg_dir = tmp_path / "matmaster_config"
+        cfg_dir.mkdir()
+        # Patch Playground to avoid full init, just verify the path passed
+        with patch("matmaster.core.playground.Playground") as mock_pg:
+            mock_pg.return_value = mock_pg
+            mgr.get_or_create("test-session", "mat_master")
+            call_args = mock_pg.call_args
+            config_path = call_args.kwargs.get("config_path") or call_args[0][0]
+            assert "matmaster_config" in str(config_path)
+            assert "configs/mat_master" not in str(config_path)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -431,8 +449,9 @@ git commit -m "feat: add mcp_runtime_file field to ExpSkillsConfig"
 **Files:**
 - Modify: `matmaster/core/exp.py:117-124,297-335`
 - Modify: `tests/matmaster/integration/test_lazy_mcp_integration.py`
+- Modify: `tests/matmaster/core/test_exp_skills.py`
 
-- [ ] **Step 1: Write integration test for MCP self-load**
+- [ ] **Step 1: Write new integration test for MCP self-load**
 
 Add to `tests/matmaster/integration/test_lazy_mcp_integration.py`:
 
@@ -441,27 +460,35 @@ class TestExpMCPSelfLoad:
     """Verify Exp._init_skill_tools() self-loads mcp.yaml when no runtime config injected."""
 
     def test_self_loads_mcp_yaml(self, tmp_path):
-        """When config=None, mcp.yaml is loaded from config_dir."""
+        """mcp.yaml is loaded from config_dir and passed to LazyMCPConnector."""
         import yaml
 
         # Create minimal mcp.yaml
-        mcp_yaml = tmp_path / "mcp.yaml"
-        mcp_yaml.write_text(yaml.dump({
+        (tmp_path / "mcp.yaml").write_text(yaml.dump({
             "path_adaptor": "calculation",
             "calculation_servers": ["mat_sg"],
         }))
+        (tmp_path / "mcp_config.json").write_text('{"mcpServers": {}}')
 
-        # Create minimal mcp_config.json
+        # Create skill dir (required by SkillRegistry)
+        skill_dir = tmp_path / "skills" / "test-skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: test-skill\ndescription: Test\nmcp_server: mat_sg\n---\nBody\n"
+        )
+
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        schemas = [{"name": "build_bulk", "description": "Build", "input_schema": {}}]
         import json
-        mcp_json = tmp_path / "mcp_config.json"
-        mcp_json.write_text(json.dumps({"mcpServers": {}}))
+        (cache_dir / "mat_sg.json").write_text(json.dumps(schemas))
 
         from matmaster.config.exp import ExpConfig, ExpSkillsConfig
         cfg = ExpConfig(
             skills=ExpSkillsConfig(
                 enabled=True,
-                skills_root="playground/mat_master/skills",
-                cache_dir=str(tmp_path / "cache"),
+                skills_root=str(tmp_path / "skills"),
+                cache_dir=str(cache_dir),
                 config_dir=str(tmp_path),
                 mcp_config_file="mcp_config.json",
                 mcp_runtime_file="mcp.yaml",
@@ -470,26 +497,20 @@ class TestExpMCPSelfLoad:
 
         from matmaster.core.exp import Exp
         exp = Exp(cfg)
+        registry = ToolRegistry()
+        ctx = MagicMock(spec=PlaygroundContext)
+        ctx.session = MagicMock()
 
-        # Patch out the heavy imports to isolate the self-load logic
-        from unittest.mock import patch, MagicMock
+        # Run _init_skill_tools -- should self-load mcp.yaml
+        exp._init_skill_tools(ctx, registry)
 
-        mock_registry = MagicMock()
-        mock_registry.__contains__ = MagicMock(return_value=False)
-        mock_ctx = MagicMock()
-        mock_ctx.session = MagicMock()
+        # use_skill registered means the full path worked
+        assert "use_skill" in registry
 
-        with patch("matmaster.core.exp.SkillTool", autospec=True), \
-             patch("matmaster.core.exp.SkillRegistry", autospec=True), \
-             patch("matmaster.core.exp.ToolSchemaCache", autospec=True), \
-             patch("matmaster.core.exp.LazyMCPConnector") as mock_connector_cls, \
-             patch("matmaster.core.exp.EvoToolAdapter", autospec=True):
-            exp._init_skill_tools(mock_ctx, mock_registry)
-            # Verify LazyMCPConnector received the self-loaded mcp_config
-            call_kwargs = mock_connector_cls.call_args
-            mcp_config_passed = call_kwargs.kwargs.get("mcp_config") or call_kwargs[1].get("mcp_config")
-            assert mcp_config_passed["path_adaptor"] == "calculation"
-            assert mcp_config_passed["calculation_servers"] == ["mat_sg"]
+        # Trigger skill to verify lazy tools get injected
+        result = registry.execute("use_skill", {"skill_name": "test-skill", "action": "get_info"})
+        assert not result.startswith("Error:"), f"use_skill failed: {result}"
+        assert "mat_sg_build_bulk" in registry
 
     def test_raises_when_mcp_yaml_missing(self, tmp_path):
         """When mcp.yaml does not exist, FileNotFoundError is raised."""
@@ -497,7 +518,7 @@ class TestExpMCPSelfLoad:
         cfg = ExpConfig(
             skills=ExpSkillsConfig(
                 enabled=True,
-                skills_root="playground/mat_master/skills",
+                skills_root=str(tmp_path / "skills"),
                 cache_dir=str(tmp_path / "cache"),
                 config_dir=str(tmp_path),
                 mcp_config_file="mcp_config.json",
@@ -508,7 +529,6 @@ class TestExpMCPSelfLoad:
         from matmaster.core.exp import Exp
         exp = Exp(cfg)
 
-        from unittest.mock import MagicMock
         import pytest as _pytest
         with _pytest.raises(FileNotFoundError, match="MCP runtime config not found"):
             exp._init_skill_tools(MagicMock(), MagicMock())
@@ -618,9 +638,13 @@ In `matmaster/core/exp.py`, change `_init_skill_tools` method signature and add 
 
 The rest of the method (on_skill_hit callback, SkillTool creation, registry.register) stays exactly as-is.
 
-- [ ] **Step 5: Fix existing integration tests that now require mcp.yaml**
+- [ ] **Step 5: Fix ALL existing tests that call `_init_skill_tools()` to provide mcp.yaml**
 
-In `tests/matmaster/integration/test_lazy_mcp_integration.py`, update `_setup_env()` to create a `mcp.yaml` file. Add after the `mcp_config.json` creation (line ~38):
+After the `FileNotFoundError` change, every test that calls `_init_skill_tools()` with `enabled=True` needs a `mcp.yaml` in its `config_dir`. Three files are affected:
+
+**File 1: `tests/matmaster/integration/test_lazy_mcp_integration.py`**
+
+Update `_setup_env()` to create `mcp.yaml`. Add after line 38 (`mcp_config.json` creation):
 
 ```python
         # MCP runtime config (required by _init_skill_tools self-load)
@@ -631,23 +655,41 @@ In `tests/matmaster/integration/test_lazy_mcp_integration.py`, update `_setup_en
         }))
 ```
 
-Also update the `ExpConfig.model_validate()` calls in `test_full_flow_skill_triggers_schema_injection` and `test_multiple_skills_same_server_no_duplicate` to include `mcp_runtime_file`:
+Update all `ExpConfig.model_validate()` calls in this file to include `"mcp_runtime_file": "mcp.yaml"` in the skills dict. This affects:
+- `test_full_flow_skill_triggers_schema_injection` (line ~47)
+- `test_multiple_skills_same_server_no_duplicate` (line ~89)
+- `test_no_cache_warns_but_doesnt_crash` (line ~134) -- also add `mcp.yaml` creation before `ExpConfig`:
 
 ```python
-        cfg = ExpConfig.model_validate({
-            "name": "test",
-            "skills": {
-                "enabled": True,
-                "skills_root": str(env / "skills"),
-                "cache_dir": str(env / "cache"),
-                "config_dir": str(env),
-                "mcp_config_file": "mcp_config.json",
-                "mcp_runtime_file": "mcp.yaml",
-            },
-        })
+        import yaml as _yaml
+        (tmp_path / "mcp.yaml").write_text(_yaml.dump({
+            "path_adaptor": "calculation",
+            "calculation_servers": [],
+        }))
 ```
 
-And update `_init_skill_tools` call sites from `exp._init_skill_tools(ctx, registry)` to `exp._init_skill_tools(ctx, registry)` (no change needed -- the parameter rename only affects keyword usage).
+**File 2: `tests/matmaster/core/test_exp_skills.py`**
+
+Add a helper function after `_make_cache()`:
+
+```python
+def _make_mcp_yaml(tmp_path: Path) -> None:
+    import yaml
+    (tmp_path / "mcp.yaml").write_text(yaml.dump({
+        "path_adaptor": "calculation",
+        "calculation_servers": ["mat_sg"],
+    }))
+```
+
+Call `_make_mcp_yaml(tmp_path)` at the start of:
+- `test_skill_tools_registered_when_enabled` (line ~33)
+- `test_skill_trigger_injects_lazy_tools` (line ~70)
+
+Also add `"mcp_runtime_file": "mcp.yaml"` to their `ExpConfig.model_validate()` skills dicts.
+
+`test_skill_tools_skipped_when_disabled` does NOT need changes (`enabled=False` returns early before self-load).
+
+**File 3: No other test files call `_init_skill_tools()` directly.**
 
 - [ ] **Step 6: Run integration tests**
 
