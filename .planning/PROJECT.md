@@ -53,7 +53,7 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 
 ### Current State
 
-**Post-v1** (2026-03-24): 5,369 LOC matmaster/ + 12,422 LOC tests/ (624 tests collected). 107 commits since v1 shipped.
+**Post-v1** (2026-03-25): Phase 8 complete — BuiltinTool 体系建立，BashTool/ListDirTool/TaskTools 就位。681 tests passed.
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI (not refactored), OpenAI SDK, tiktoken.
 
@@ -61,7 +61,7 @@ Architecture (current):
 - `matmaster/core/` — AgentKernel, GuardPipeline, Hooks, Exp (config-driven), ContextBuilder, ContextCompactor, MessageBus, Playground
 - `matmaster/config/` — ExpConfig, LLMConfig (profiles/routes), loader (YAML + TOML)
 - `matmaster/exps/` — TOML exp 定义 (direct.toml)
-- `matmaster/tools/` — ToolRegistry, EvoToolAdapter
+- `matmaster/tools/` — ToolRegistry, EvoToolAdapter, BuiltinTool (base + BashTool/ListDirTool/TaskTools)
 - `matmaster/types/` — PlaygroundContext, AgentRuntimeSpec, AgentEvent, CompactionConfig, KernelRunResult, Guards, LLMProvider, Messages, WorkerRegistry
 - `matmaster/providers/` — OpenAIProvider, llm_factory (build_provider)
 - `matmaster/hooks/` — ConfirmationHook, OutputProcessorHook, SkillHitHook, AssistantStateHook
@@ -139,4 +139,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-24 after starting milestone v1.1*
+*Last updated: 2026-03-25 after completing Phase 8 (BuiltinTool 基础设施)*
