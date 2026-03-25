@@ -135,12 +135,12 @@ class TestExploreToml:
         assert "spawn" not in cfg.tools.builtin
         assert len(cfg.developer_instructions) > 0
 
-    def test_explore_toml_mode(self) -> None:
-        """explore.toml uses direct mode."""
+    def test_explore_toml_name(self) -> None:
+        """explore.toml has name='explore'."""
         from matmaster.config.loader import load_exp_config
 
         cfg = load_exp_config("explore")
-        assert cfg.mode == "direct"
+        assert cfg.name == "explore"
 
     def test_explore_toml_max_turns(self) -> None:
         """explore.toml has lower max_turns than direct.toml (50 vs 200)."""
