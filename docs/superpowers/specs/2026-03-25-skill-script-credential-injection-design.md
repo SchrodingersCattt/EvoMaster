@@ -42,41 +42,44 @@ Adding a new credential type means adding one tuple to this list.
 
 ### Injection Strategies
 
-**Strategy selection**: duck-type check `hasattr(session, "write_file") and callable(session.write_file)`.
+**Strategy selection**: always attempt file-based injection first via `session.write_file()`. All session types (SSH, Docker, Local) implement `write_file` in `BaseSession`, so the file strategy is the default path. Inline prefix is a failure-only fallback when `write_file` raises.
 
-**Remote file** (SSH sessions with `write_file`):
+**File-based** (default for all session types):
 
 ```bash
-# Writes /tmp/.mm_env_<uuid12>:
-export BOHRIUM_ACCESS_KEY='xxx'
-export BOHRIUM_PROJECT_ID='123'
-export BOHRIUM_BASE_URL='https://open.bohrium.com'
+# 1. write_file() writes /tmp/.mm_env_<uuid12> via SFTP/copy (off tmux channel)
+# 2. exec_bash() tightens permissions immediately after
+chmod 600 /tmp/.mm_env_<uuid12>
 
-# Wraps command as:
+# 3. Command wrapped as:
 ( . /tmp/.mm_env_<id> && <original_cmd>; _ec=$?; rm -f /tmp/.mm_env_<id>; exit $_ec )
 ```
 
-- Credentials never appear in tmux command history
+- Credentials written via SFTP/file copy, never appear in tmux command history
+- `chmod 600` immediately after write -- race window mitigated by UUID unpredictability (uuid4 = 122 bits entropy)
 - `_ec` preserves original exit code through `rm` cleanup
 - Subshell `( )` isolates env vars from tmux session state
 
-**Inline prefix** (local sessions, or `write_file` failure fallback):
+**Inline prefix** (fallback when `write_file` or `chmod` raises):
 
 ```bash
 BOHRIUM_ACCESS_KEY='xxx' BOHRIUM_PROJECT_ID='123' <original_cmd>
 ```
 
-- Credentials visible in command string (acceptable for local dev)
-- Used as automatic fallback if `write_file` raises
+- Credentials visible in command string (acceptable: only reached on transport failure)
+- Logged as warning when triggered
 
 ### `_collect` Validation Rules
 
-Matches `build_bohrium_skill_remote_env()` in `evomaster/env/bohrium.py`:
+Based on `build_bohrium_skill_remote_env()` in `evomaster/env/bohrium.py`, with one deliberate relaxation:
 
 - `_bohrium_credentials` must be a `dict`; skip otherwise
-- Each value: skip if `None`, empty string, or `"-1"` after strip
-- `access_key` empty returns empty dict (no partial injection)
-- All values stored as `str`
+- `access_key` empty or missing returns empty dict (no partial injection)
+- `project_id` validated as `int()` -- non-integer values are silently dropped (not injected), matching old helper. This prevents `submit_job.py` from crashing on malformed session data.
+- `user_id`, `user_no`: skip if `None`, empty, or `"-1"` after strip
+- All injected values stored as `str`
+
+**Deliberate relaxation from old helper**: `project_id` is no longer required for injection to proceed. The old `build_bohrium_skill_remote_env()` returns empty dict when `project_id` is missing or non-integer, blocking all scripts. The new `_collect` injects `access_key` alone when `project_id` is absent, allowing `list_images.py` and `list_machines.py` (which only need `BOHRIUM_ACCESS_KEY`) to work. `submit_job.py` still validates `BOHRIUM_PROJECT_ID` internally and emits its own JSON error if missing.
 
 ### SkillTool Integration
 
@@ -99,13 +102,29 @@ No changes to `_build_command()`, `__init__()`, or the Tool Protocol interface.
 | `matmaster/tools/script_env.py` | Create (~55 lines) |
 | `matmaster/tools/skill_tool.py` | Edit (add 2 lines in `_run_script`) |
 
+## Test Plan
+
+| Test | What it covers |
+|------|----------------|
+| `test_collect_full_credentials` | `_collect` with complete `_bohrium_credentials` returns all env vars |
+| `test_collect_ak_only` | `_collect` without `project_id` still returns `BOHRIUM_ACCESS_KEY` (deliberate relaxation) |
+| `test_collect_rejects_non_int_project_id` | `project_id="abc"` is silently dropped, AK still injected |
+| `test_collect_empty_creds` | Missing or empty `_bohrium_credentials` returns empty dict |
+| `test_collect_skips_sentinel_values` | `user_id="-1"`, empty strings are excluded |
+| `test_inject_via_file` | Mock `session.write_file` + `session.exec_bash`; verify temp file content, chmod call, subshell wrapping |
+| `test_inject_file_permissions` | Verify `exec_bash("chmod 600 ...")` is called after `write_file` |
+| `test_inject_fallback_on_write_failure` | `write_file` raises; verify fallback to inline prefix with warning log |
+| `test_inject_inline_format` | Verify inline prefix format with proper `shlex.quote` escaping |
+| `test_inject_no_creds_passthrough` | No credentials on session; cmd returned unchanged |
+| `test_skill_tool_integration` | End-to-end: `SkillTool._run_script` calls `inject_env` before `exec_bash` |
+
 ## Properties
 
 | Dimension | Assessment |
 |-----------|------------|
-| evomaster coupling | Zero -- duck-type `write_file`, no imports |
+| evomaster coupling | Zero -- uses `session.write_file` / `session.exec_bash` (BaseSession protocol) |
 | Extensibility | Add credential source = add one tuple to mapping list |
-| Security | SSH path: credentials off command line (same as main branch) |
-| Degradation | `write_file` failure auto-falls back to inline prefix |
-| Testability | `_collect` and `_inline` are pure functions; no mock needed |
+| Security | File strategy: credentials via SFTP (off tmux), chmod 600, UUID-named temp file |
+| Degradation | `write_file`/`chmod` failure auto-falls back to inline prefix with warning |
+| Testability | `_collect` is pure; injection testable with mock session (2 methods) |
 | Invasion | SkillTool adds 1 import + 1 line call; no interface changes |
