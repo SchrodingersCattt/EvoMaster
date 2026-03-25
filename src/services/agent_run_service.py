@@ -177,6 +177,7 @@ class AgentRunService:
         TODO: 后续迁入 Exp 层 startup validation 接口。
         """
         import yaml
+        from matmaster.config.loader import load_llm_config
 
         for pg_type in ("mat_master", "minimal"):
             if pg_type == "mat_master":
@@ -475,6 +476,16 @@ class AgentRunService:
                 )
                 return ((False, 'cancelled'), _elapsed_ms())
             else:
+                if (
+                    run_result_event.reason == 'natural'
+                    and run_result_event.final_content
+                ):
+                    bus.emit(
+                        ResponseEvent(
+                            source=run_result_event.source,
+                            content=run_result_event.final_content,
+                        )
+                    )
                 bus.emit(run_result_event)
                 bus.emit(
                     StreamClosedEvent(
