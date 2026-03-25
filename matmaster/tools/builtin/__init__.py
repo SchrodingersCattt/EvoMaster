@@ -11,6 +11,7 @@ from matmaster.tools.builtin.grep_tool import GrepTool
 from matmaster.tools.builtin.listdir_tool import ListDirTool
 from matmaster.tools.builtin.read_tool import ReadTool
 from matmaster.tools.builtin.read_tracker import ReadTracker
+from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
 from matmaster.tools.builtin.write_tool import WriteTool
 from matmaster.tools.builtin.task import (
     TaskCompleteTool,
@@ -29,6 +30,7 @@ __all__ = [
     "ListDirTool",
     "ReadTool",
     "ReadTracker",
+    "SubAgentTool",
     "WriteTool",
     "TaskCompleteTool",
     "TaskCreateTool",

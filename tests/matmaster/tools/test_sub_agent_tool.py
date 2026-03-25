@@ -1,0 +1,163 @@
+"""Unit tests for SubAgentTool.
+
+Tests cover:
+- spawn_fn invocation with correct arguments
+- Recursion guard (spawn_fn=None returns error)
+- Input validation (missing/empty exp_name and task)
+- Exception handling via BuiltinTool.execute wrapper
+- ClassVar protocol satisfaction (name, description, json_schema)
+- explore.toml loading and schema-layer recursion guard
+"""
+
+from __future__ import annotations
+
+from unittest.mock import Mock
+
+import pytest
+
+
+class TestSubAgentToolExecute:
+    """Tests for SubAgentTool._execute behavior."""
+
+    def test_execute_calls_spawn_fn(self) -> None:
+        """SubAgentTool with mock spawn_fn calls it with (exp_name, task)."""
+        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+
+        mock_spawn = Mock(return_value="exploration result: found 3 files")
+        tool = SubAgentTool(spawn_fn=mock_spawn)
+
+        result = tool.execute({"exp_name": "explore", "task": "find files"})
+
+        mock_spawn.assert_called_once_with("explore", "find files")
+        assert result == "exploration result: found 3 files"
+
+    def test_recursion_guard_spawn_fn_none(self) -> None:
+        """SubAgentTool(spawn_fn=None) returns error containing 'not available'."""
+        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+
+        tool = SubAgentTool(spawn_fn=None)
+
+        result = tool.execute({"exp_name": "x", "task": "y"})
+
+        assert "not available" in result.lower()
+
+    def test_missing_exp_name(self) -> None:
+        """execute({"task": "y"}) returns error containing 'required'."""
+        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+
+        mock_spawn = Mock(return_value="ok")
+        tool = SubAgentTool(spawn_fn=mock_spawn)
+
+        result = tool.execute({"task": "y"})
+
+        assert "required" in result.lower()
+        mock_spawn.assert_not_called()
+
+    def test_missing_task(self) -> None:
+        """execute({"exp_name": "x"}) returns error containing 'required'."""
+        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+
+        mock_spawn = Mock(return_value="ok")
+        tool = SubAgentTool(spawn_fn=mock_spawn)
+
+        result = tool.execute({"exp_name": "x"})
+
+        assert "required" in result.lower()
+        mock_spawn.assert_not_called()
+
+    def test_empty_exp_name(self) -> None:
+        """execute({"exp_name": "", "task": "y"}) returns error containing 'required'."""
+        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+
+        mock_spawn = Mock(return_value="ok")
+        tool = SubAgentTool(spawn_fn=mock_spawn)
+
+        result = tool.execute({"exp_name": "", "task": "y"})
+
+        assert "required" in result.lower()
+        mock_spawn.assert_not_called()
+
+    def test_empty_task(self) -> None:
+        """execute({"exp_name": "x", "task": ""}) returns error containing 'required'."""
+        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+
+        mock_spawn = Mock(return_value="ok")
+        tool = SubAgentTool(spawn_fn=mock_spawn)
+
+        result = tool.execute({"exp_name": "x", "task": ""})
+
+        assert "required" in result.lower()
+        mock_spawn.assert_not_called()
+
+    def test_spawn_fn_exception_handled(self) -> None:
+        """spawn_fn raises ValueError, execute returns 'Error: ...' via BuiltinTool wrapper."""
+        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+
+        mock_spawn = Mock(side_effect=ValueError("unknown exp: bad_name"))
+        tool = SubAgentTool(spawn_fn=mock_spawn)
+
+        result = tool.execute({"exp_name": "bad_name", "task": "do stuff"})
+
+        assert result.startswith("Error:")
+        assert "unknown exp: bad_name" in result
+
+
+class TestSubAgentToolClassVars:
+    """Tests for SubAgentTool class-level attributes (Tool Protocol)."""
+
+    def test_class_vars(self) -> None:
+        """SubAgentTool satisfies Tool Protocol class vars."""
+        from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+
+        assert SubAgentTool.name == "sub_agent"
+        assert isinstance(SubAgentTool.description, str)
+        assert len(SubAgentTool.description) > 0
+
+        schema = SubAgentTool.json_schema
+        assert schema["type"] == "object"
+        assert "exp_name" in schema["properties"]
+        assert "task" in schema["properties"]
+        assert "exp_name" in schema["required"]
+        assert "task" in schema["required"]
+
+
+class TestExploreToml:
+    """Tests for explore.toml exp definition."""
+
+    def test_explore_toml_loads(self) -> None:
+        """load_exp_config('explore') returns valid ExpConfig."""
+        from matmaster.config.loader import load_exp_config
+
+        cfg = load_exp_config("explore")
+
+        assert cfg.name == "explore"
+        assert "sub_agent" not in cfg.tools.builtin
+        assert len(cfg.developer_instructions) > 0
+
+    def test_explore_toml_mode(self) -> None:
+        """explore.toml uses direct mode."""
+        from matmaster.config.loader import load_exp_config
+
+        cfg = load_exp_config("explore")
+        assert cfg.mode == "direct"
+
+    def test_explore_toml_max_turns(self) -> None:
+        """explore.toml has lower max_turns than direct.toml (50 vs 200)."""
+        from matmaster.config.loader import load_exp_config
+
+        cfg = load_exp_config("explore")
+        assert cfg.max_turns == 50
+
+    def test_explore_toml_skills_disabled(self) -> None:
+        """explore.toml has skills disabled."""
+        from matmaster.config.loader import load_exp_config
+
+        cfg = load_exp_config("explore")
+        assert cfg.skills.enabled is False
+
+    def test_explore_toml_no_mcp(self) -> None:
+        """explore.toml has no MCP access."""
+        from matmaster.config.loader import load_exp_config
+
+        cfg = load_exp_config("explore")
+        assert cfg.tools.mcp == ""
