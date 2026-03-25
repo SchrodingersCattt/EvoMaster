@@ -22,6 +22,7 @@ from engine.schema import SchemaRegistry
 
 def _get_backend(software: str):
     """根据软件名返回对应 Backend 实例。"""
+    from engine.software.abacus import AbacusBackend
     from engine.software.abinit import ABINITBackend
     from engine.software.cp2k import CP2KBackend
     from engine.software.lammps import LAMMPSBackend
@@ -35,6 +36,7 @@ def _get_backend(software: str):
         "quantum-espresso": QEBackend,
         "abinit": ABINITBackend,
         "lammps": LAMMPSBackend,
+        "abacus": AbacusBackend,
     }
     key = software.lower().strip()
     if key not in backends:
