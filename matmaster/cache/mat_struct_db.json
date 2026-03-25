@@ -1,0 +1,158 @@
+[
+  {
+    "name": "fetch_structures_from_db",
+    "description": "\n    Unified search entry with complete preprocessing, parallel search, and postprocessing.\n    \n    Flow:\n    1. Preprocessing: intent recognition -> parameter construction\n    2. Parallel search: search multiple databases in parallel\n    3. Postprocessing: ranking and response building\n    ",
+    "input_schema": {
+      "properties": {
+        "query": {
+          "title": "Query",
+          "type": "string"
+        },
+        "n_results": {
+          "default": 5,
+          "title": "N Results",
+          "type": "integer"
+        },
+        "output_format": {
+          "default": "cif",
+          "title": "Output Format",
+          "type": "string"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "title": "fetch_structures_from_dbArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "query_job_status",
+    "description": "\n    Query status of a calculation job\n    Args:\n        job_id (str): The ID of the calculation job\n    Returns:\n        status (str): One of \"Running\", \"Succeeded\" or \"Failed\"\n    ",
+    "input_schema": {
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "title": "query_job_statusArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "terminate_job",
+    "description": "\n    Terminate a calculation job\n    Args:\n        job_id (str): The ID of the calculation job\n    ",
+    "input_schema": {
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "title": "terminate_jobArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "get_job_results",
+    "description": "\n    Get results of a calculation job\n    Args:\n        job_id (str): The ID of the calculation job\n    Returns:\n        results (Any): results of the calculation job\n    ",
+    "input_schema": {
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "required": [
+        "job_id"
+      ],
+      "title": "get_job_resultsArguments",
+      "type": "object"
+    }
+  }
+]

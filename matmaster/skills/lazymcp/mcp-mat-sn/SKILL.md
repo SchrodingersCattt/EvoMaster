@@ -7,10 +7,9 @@ mcp_server: mat_sn
 
 # mat_sn — 学术论文检索
 
-## MCP 服务器
+## 连接方式
 
-- 传输协议: sse
-- 地址: `http://bohrium-mcp-internal.dp.tech:11003/sse`
+调用本 skill 后，下列工具已自动注册到你的工具列表中，可直接按工具名调用。无需手动连接 MCP 服务器。
 
 ## 工具列表
 
