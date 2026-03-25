@@ -90,10 +90,10 @@ _execute(arguments):
     total > MAX_READ_LINES  → 不 mark_read + 返回超限报错 + 总行数 + 前 PREVIEW_LINES 行预览
 
   有 offset 和/或 limit (范围读取模式):
-    mark_read() (Agent 主动指定了范围，视为有意读取)
     start = offset (默认 1)
-    count = limit (默认 total - start + 1, 上限 MAX_READ_LINES)
     校验: 1 <= start <= total, 否则报错
+    mark_read() (校验通过后标记，Agent 主动指定了范围视为有意读取)
+    count = limit (默认 total - start + 1, 上限 MAX_READ_LINES)
     end = min(start + count - 1, total)
     actual_count = end - start + 1
     返回 lines[start-1:end] (带行号, init_line=start)
