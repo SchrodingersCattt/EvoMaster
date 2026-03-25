@@ -375,16 +375,6 @@ class AgentRunService:
                     )
                 )
             else:
-                if (
-                    run_result_event.reason == "natural"
-                    and run_result_event.final_content
-                ):
-                    bus.emit(
-                        ResponseEvent(
-                            source=run_result_event.source,
-                            content=run_result_event.final_content,
-                        )
-                    )
                 bus.emit(run_result_event)
                 bus.emit(
                     StreamClosedEvent(
