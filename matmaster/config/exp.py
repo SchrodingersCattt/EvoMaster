@@ -26,7 +26,7 @@ class ExpSkillsConfig(BaseModel):
     """Skill registration and lazy MCP loading settings."""
 
     enabled: bool = False
-    skills_root: str = ""
+    skills_root: str | list[str] = ""
     cache_dir: str = ""
     config_dir: str = ""
     mcp_config_file: str = ""

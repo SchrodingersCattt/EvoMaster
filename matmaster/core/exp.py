@@ -364,13 +364,24 @@ class Exp:
         import json as _json
         from pathlib import Path
 
-        from evomaster.agent.tools.skill import SkillTool
-        from evomaster.skills.base import SkillRegistry
-
+        from matmaster.skills.registry import SkillRegistry
         from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
         from matmaster.tools.schema_cache import ToolSchemaCache
+        from matmaster.tools.skill_tool import SkillTool
 
-        skill_registry = SkillRegistry(Path(skills_cfg.skills_root))
+        # Build root list from str | list[str]
+        roots_raw = skills_cfg.skills_root
+        if isinstance(roots_raw, list):
+            roots = [Path(r) for r in roots_raw if r]
+        else:
+            roots = [Path(roots_raw)] if roots_raw else []
+        if not roots:
+            self.logger.warning(
+                "skills.enabled=true but skills_root is empty, skipping skill init"
+            )
+            return
+
+        skill_registry = SkillRegistry(roots)
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
 
         # MCP runtime config: ALWAYS self-load from config_dir.
@@ -439,9 +450,10 @@ class Exp:
                 )
                 registry.register(lazy_tool, source="mcp")
 
-        skill_tool = SkillTool(skill_registry, on_skill_hit=on_skill_hit)
-        adapted = EvoToolAdapter(skill_tool, ctx.session)
-        registry.register(adapted, source="skill")
+        skill_tool = SkillTool(
+            skill_registry, session=ctx.session, on_skill_hit=on_skill_hit
+        )
+        registry.register(skill_tool, source="skill")
 
         self._skill_registry = skill_registry
 
