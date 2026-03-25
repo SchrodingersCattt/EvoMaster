@@ -350,7 +350,7 @@ class TestIdentityOverride:
 
 
 class TestExpBuiltinTools:
-    """_init_builtin_tools dual-source registration: native + evo adapter."""
+    """_init_builtin_tools dual-source registration: 12 native + 1 evo adapter."""
 
     def _make_ctx_with_session(self, tmp_path: Path) -> PlaygroundContext:
         """Create PlaygroundContext with a mock session for builtin tool tests."""
@@ -362,7 +362,7 @@ class TestExpBuiltinTools:
             llm_provider=MockLLMProvider(),
         )
 
-    def _build_registry(self, tmp_path: Path) -> tuple[Exp, ToolRegistry]:
+    def _build_registry(self, tmp_path: Path) -> tuple[Exp, "ToolRegistry"]:
         """Build an Exp and run _init_builtin_tools, returning (exp, registry)."""
         from matmaster.tools.tool_registry import ToolRegistry
 
@@ -372,42 +372,66 @@ class TestExpBuiltinTools:
         exp._init_builtin_tools(ctx, registry)
         return exp, registry
 
-    def test_init_builtin_tools_registers_native_tools(self, tmp_path: Path) -> None:
-        """7 native tools registered with source='builtin'."""
+    def test_native_tools_count(self, tmp_path: Path) -> None:
+        """12 native tools registered with source='builtin'."""
         _, registry = self._build_registry(tmp_path)
         native = registry.get_tools_by_source("builtin")
-        assert len(native) == 7
+        assert len(native) == 12
 
-    def test_init_builtin_tools_native_tool_names(self, tmp_path: Path) -> None:
-        """All expected native tool names are present in registry."""
+    def test_native_tool_names(self, tmp_path: Path) -> None:
+        """All 12 expected native tool names are present in registry."""
         _, registry = self._build_registry(tmp_path)
-        expected_names = [
+        expected_native = {
             "execute_bash",
             "list_dir",
+            "read_file",
+            "write_file",
+            "edit_file",
+            "glob",
+            "grep",
             "task_create",
             "task_get",
             "task_list",
             "task_update",
             "task_complete",
-        ]
-        for name in expected_names:
+        }
+        for name in expected_native:
             assert name in registry, f"Expected tool '{name}' not found in registry"
 
-    def test_init_builtin_tools_registers_evo_adapter_tools(
-        self, tmp_path: Path
-    ) -> None:
-        """2 evo adapter tools registered with source='builtin_evo'."""
+    def test_evo_adapted_tools_count(self, tmp_path: Path) -> None:
+        """1 evo adapter tool registered with source='builtin_evo' (MonitorJobTool only)."""
         _, registry = self._build_registry(tmp_path)
         evo = registry.get_tools_by_source("builtin_evo")
-        assert len(evo) == 2
+        assert len(evo) == 1
+
+    def test_editor_tool_removed(self, tmp_path: Path) -> None:
+        """str_replace_editor (EditorTool) is NOT in the registry."""
+        _, registry = self._build_registry(tmp_path)
+        assert "str_replace_editor" not in registry
+
+    def test_monitor_job_retained(self, tmp_path: Path) -> None:
+        """MonitorJobTool is still registered with source='builtin_evo'."""
+        _, registry = self._build_registry(tmp_path)
+        evo = registry.get_tools_by_source("builtin_evo")
         evo_names = {t.name for t in evo}
-        assert "str_replace_editor" in evo_names
         assert "monitor_job" in evo_names
 
-    def test_init_builtin_tools_total_count(self, tmp_path: Path) -> None:
-        """Total tools = 7 native + 2 evo adapter = 9."""
+    def test_total_count(self, tmp_path: Path) -> None:
+        """Total tools = 12 native + 1 evo adapter = 13."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 9
+        assert len(registry) == 13
+
+    def test_read_tracker_cleanup_registered(self, tmp_path: Path) -> None:
+        """ReadTracker.clear is registered as a cleanup callback after _init_builtin_tools."""
+        exp, _ = self._build_registry(tmp_path)
+        # At least one cleanup callback should be registered (ReadTracker.clear)
+        assert len(exp._cleanup_callbacks) >= 1
+        # The callback should be the bound clear method of a ReadTracker instance
+        cb = exp._cleanup_callbacks[-1]
+        assert hasattr(cb, "__self__")
+        from matmaster.tools.builtin import ReadTracker
+
+        assert isinstance(cb.__self__, ReadTracker)
 
     def test_init_builtin_tools_no_session(self, tmp_path: Path) -> None:
         """session=None skips all tool registration."""
@@ -424,6 +448,35 @@ class TestExpBuiltinTools:
         registry = ToolRegistry()
         exp._init_builtin_tools(ctx, registry)
         assert len(registry) == 0
+
+    def test_explicit_builtin_config_triggers_init(self, tmp_path: Path) -> None:
+        """Non-empty explicit tool list (not wildcard) still triggers _init_builtin_tools."""
+        exp = Exp(ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=["execute_bash", "read_file"]),
+        ))
+        ctx = self._make_ctx_with_session(tmp_path)
+
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = exp.build_runtime(ctx)
+
+        # If _init_builtin_tools ran, native tools should be in the registry
+        native = runtime.spec.tool_registry.get_tools_by_source("builtin")
+        assert len(native) == 12  # All native tools registered regardless of config list
+
+    def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
+        """Empty builtin list skips _init_builtin_tools entirely."""
+        exp = Exp(ExpConfig(
+            name="test",
+            tools=ExpToolsConfig(builtin=[]),
+        ))
+        ctx = self._make_ctx_with_session(tmp_path)
+
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = exp.build_runtime(ctx)
+
+        native = runtime.spec.tool_registry.get_tools_by_source("builtin")
+        assert len(native) == 0
 
 
 class TestExpCompaction:
