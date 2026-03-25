@@ -25,7 +25,7 @@ class TestCleanedConfigYaml:
         assert cfg.env is not None  # env stub loaded
 
     def test_has_agents_general_llm(self, cleaned_config):
-        assert cleaned_config["agents"]["general"]["llm"] == "litellm"
+        assert cleaned_config["agents"]["general"]["llm"] == "opus"
 
     def test_no_dead_sections(self, cleaned_config):
         dead = {"llm", "mat_master", "llm_output", "logging", "skills",
