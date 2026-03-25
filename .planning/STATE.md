@@ -2,16 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Agent 外围能力构建
-status: planning
-stopped_at: Phase 8 context gathered
-last_updated: "2026-03-24T16:25:14.890Z"
-last_activity: 2026-03-24 -- Roadmap created for v1.1
+status: Ready to execute
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-03-25T02:30:30.178Z"
 progress:
   total_phases: 4
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 3
+  completed_plans: 1
 ---
 
 # Project State
@@ -21,16 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 8 - BuiltinTool 基础设施与核心 Tools
+**Current focus:** Phase 08 — builtintool-tools
 
 ## Current Position
 
-Phase: 8 of 11 (BuiltinTool 基础设施与核心 Tools)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-03-24 -- Roadmap created for v1.1
-
-Progress: [░░░░░░░░░░] 0% (v1.1: 0/? plans)
+Phase: 08 (builtintool-tools) — EXECUTING
+Plan: 2 of 3
 
 ## Accumulated Context
 
@@ -41,6 +35,7 @@ Recent decisions affecting current work:
 
 - [v1.1 init]: BuiltinTool 直接实现 Tool Protocol，不走 EvoToolAdapter
 - [v1.1 init]: SubAgent 同步执行（不引入 asyncio），spawn_fn 闭包注入解耦 tool 与 Exp
+- [Phase 08]: Created BuiltinTool base.py inline in Plan 02 since Plan 01 runs in parallel
 
 ### Pending Todos
 
@@ -54,6 +49,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-24T16:25:14.881Z
-Stopped at: Phase 8 context gathered
-Resume file: .planning/phases/08-builtintool-tools/08-CONTEXT.md
+Last session: 2026-03-25T02:30:30.174Z
+Stopped at: Completed 08-02-PLAN.md
+Resume file: None

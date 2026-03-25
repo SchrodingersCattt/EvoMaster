@@ -17,7 +17,7 @@ Requirements for Agent 外围能力构建。Each maps to roadmap phases.
 - [ ] **TOOL-06**: Agent 可以通过 Grep tool 按正则搜索远程文件内容
 - [ ] **TOOL-07**: Agent 可以通过 ListDir tool 列出远程目录结构
 - [ ] **TOOL-08**: Write/Edit tool 执行前强制要求先 Read 目标文件（Read-Before-Modify 协议）
-- [ ] **TOOL-09**: Agent 可以通过 Task 套件创建、更新、查询任务状态用于工作追踪
+- [x] **TOOL-09**: Agent 可以通过 Task 套件创建、更新、查询任务状态用于工作追踪
 
 ### SubAgent
 
@@ -72,7 +72,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TOOL-06 | Phase 9 | Pending |
 | TOOL-07 | Phase 8 | Pending |
 | TOOL-08 | Phase 9 | Pending |
-| TOOL-09 | Phase 8 | Pending |
+| TOOL-09 | Phase 8 | Complete |
 | SUBA-01 | Phase 11 | Pending |
 | SUBA-02 | Phase 11 | Pending |
 | SUBA-03 | Phase 11 | Pending |

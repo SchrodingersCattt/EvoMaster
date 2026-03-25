@@ -46,8 +46,8 @@ Full details: milestones/v1-ROADMAP.md
 **Plans:** 3 plans
 
 Plans:
-- [ ] 08-01-PLAN.md -- BuiltinTool ABC 基类 + BashTool + ListDirTool 实现与测试
-- [ ] 08-02-PLAN.md -- TaskStore + 5 个 TaskTool 实现与测试
+- [x] 08-01-PLAN.md -- BuiltinTool ABC 基类 + BashTool + ListDirTool 实现与测试
+- [x] 08-02-PLAN.md -- TaskStore + 5 个 TaskTool 实现与测试
 - [ ] 08-03-PLAN.md -- Exp._init_builtin_tools 双源注册改造与集成测试
 
 ### Phase 9: 文件操作 Tools
