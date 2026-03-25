@@ -63,7 +63,7 @@ Plans:
 
 Plans:
 - [ ] 09-01-PLAN.md -- ReadTracker + ReadTool + WriteTool + EditTool 实现与测试
-- [ ] 09-02-PLAN.md -- GlobTool + GrepTool 实现与测试
+- [x] 09-02-PLAN.md -- GlobTool + GrepTool 实现与测试
 - [ ] 09-03-PLAN.md -- Exp 集成改造：注册新 tools、移除 EditorTool、ExpConfig 显式列举
 
 ### Phase 10: Tool Description 与 System Prompt 设计
