@@ -7,7 +7,7 @@ wave_0_complete: false
 created: 2026-03-25
 ---
 
-# Phase 9 — Validation Strategy
+# Phase 9 -- Validation Strategy
 
 > Per-phase validation contract for feedback sampling during execution.
 
@@ -38,30 +38,28 @@ created: 2026-03-25
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 09-01-01 | 01 | 1 | TOOL-08 | unit | `uv run pytest tests/matmaster/tools/test_read_tracker.py -x` | ❌ W0 | ⬜ pending |
-| 09-02-01 | 02 | 1 | TOOL-01 | unit | `uv run pytest tests/matmaster/tools/test_read_tool.py -x` | ❌ W0 | ⬜ pending |
-| 09-02-02 | 02 | 1 | TOOL-02 | unit | `uv run pytest tests/matmaster/tools/test_write_tool.py -x` | ❌ W0 | ⬜ pending |
-| 09-02-03 | 02 | 1 | TOOL-03 | unit | `uv run pytest tests/matmaster/tools/test_edit_tool.py -x` | ❌ W0 | ⬜ pending |
-| 09-03-01 | 03 | 1 | TOOL-05 | unit | `uv run pytest tests/matmaster/tools/test_glob_tool.py -x` | ❌ W0 | ⬜ pending |
-| 09-03-02 | 03 | 1 | TOOL-06 | unit | `uv run pytest tests/matmaster/tools/test_grep_tool.py -x` | ❌ W0 | ⬜ pending |
-| 09-04-01 | 04 | 2 | INT-01 | integration | `uv run pytest tests/matmaster/core/test_exp_builtin_registration.py -x` | ❌ W0 | ⬜ pending |
-| 09-04-02 | 04 | 2 | INT-02 | integration | `uv run pytest tests/matmaster/core/test_exp_builtin_registration.py -x` | ❌ W0 | ⬜ pending |
+| 09-01-T1 | 01 | 1 | TOOL-01, TOOL-02, TOOL-03, TOOL-08 | unit | `uv run pytest tests/matmaster/tools/test_read_tracker.py tests/matmaster/tools/test_read_tool.py tests/matmaster/tools/test_write_tool.py tests/matmaster/tools/test_edit_tool.py -x` | W0 | pending |
+| 09-01-T2 | 01 | 1 | TOOL-01, TOOL-02, TOOL-03, TOOL-08 | unit | `uv run pytest tests/matmaster/tools/test_read_tracker.py tests/matmaster/tools/test_read_tool.py tests/matmaster/tools/test_write_tool.py tests/matmaster/tools/test_edit_tool.py -x` | W0 | pending |
+| 09-02-T1 | 02 | 1 | TOOL-05, TOOL-06 | unit | `uv run pytest tests/matmaster/tools/test_glob_tool.py tests/matmaster/tools/test_grep_tool.py -x` | W0 | pending |
+| 09-02-T2 | 02 | 1 | TOOL-05, TOOL-06 | unit | `uv run pytest tests/matmaster/tools/test_glob_tool.py tests/matmaster/tools/test_grep_tool.py -x` | W0 | pending |
+| 09-03-T1 | 03 | 2 | TOOL-01, TOOL-02, TOOL-03, TOOL-05, TOOL-06, TOOL-08 | integration | `uv run pytest tests/matmaster/core/test_exp.py -x` | exists | pending |
+| 09-03-T2 | 03 | 2 | TOOL-01, TOOL-02, TOOL-03, TOOL-05, TOOL-06, TOOL-08 | integration | `uv run pytest tests/matmaster/core/test_exp.py -x` | exists | pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: pending / green / red / flaky*
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `tests/matmaster/tools/test_read_tracker.py` — stubs for TOOL-08 (ReadTracker mark/check/clear/normalization)
-- [ ] `tests/matmaster/tools/test_read_tool.py` — stubs for TOOL-01 (ReadTool basic/line_range/format/tracker registration)
-- [ ] `tests/matmaster/tools/test_write_tool.py` — stubs for TOOL-02 (WriteTool create/overwrite/read-before-modify)
-- [ ] `tests/matmaster/tools/test_edit_tool.py` — stubs for TOOL-03 (EditTool str_replace/unique_match/read-before-modify)
-- [ ] `tests/matmaster/tools/test_glob_tool.py` — stubs for TOOL-05 (GlobTool find/workdir_safety/truncation)
-- [ ] `tests/matmaster/tools/test_grep_tool.py` — stubs for TOOL-06 (GrepTool grep/workdir_safety/truncation)
-- [ ] `tests/matmaster/core/test_exp_builtin_registration.py` — stubs for INT-01/INT-02 (Exp builtin tool registration)
+- [ ] `tests/matmaster/tools/test_read_tracker.py` -- stubs for TOOL-08 (ReadTracker mark/check/clear/normalization)
+- [ ] `tests/matmaster/tools/test_read_tool.py` -- stubs for TOOL-01 (ReadTool basic/line_range/format/tracker registration)
+- [ ] `tests/matmaster/tools/test_write_tool.py` -- stubs for TOOL-02 (WriteTool create/overwrite/read-before-modify)
+- [ ] `tests/matmaster/tools/test_edit_tool.py` -- stubs for TOOL-03 (EditTool str_replace/unique_match/read-before-modify)
+- [ ] `tests/matmaster/tools/test_glob_tool.py` -- stubs for TOOL-05 (GlobTool find/workdir_safety/truncation)
+- [ ] `tests/matmaster/tools/test_grep_tool.py` -- stubs for TOOL-06 (GrepTool grep/workdir_safety/truncation)
+- [ ] `tests/matmaster/core/test_exp.py` -- exists; Plan 03 Task 2 updates with new integration assertions
 
-*Existing infrastructure covers pytest framework. Wave 0 creates test stubs only.*
+*Existing infrastructure covers pytest framework. Wave 0 creates test stubs for Plan 01/02 tool tests. test_exp.py already exists and will be updated in Plan 03.*
 
 ---
 
@@ -69,7 +67,7 @@ created: 2026-03-25
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| *None* | — | — | — |
+| *None* | -- | -- | -- |
 
 *All phase behaviors have automated verification.*
 
