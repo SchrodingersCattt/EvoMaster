@@ -223,7 +223,7 @@ class AsyncToolRegistry:
         return ', '.join(self.software_names)
 
     def server_mapping_str(self) -> str:
-        """``"mat_dpa_* for DPA; mat_abacus_* for ABACUS; ..."``"""
+        """``"mat_dpa_* for DPA; mat_abacus_* for ABACUS; mat_binary_calc_* for LAMMPS, CP2K, ..."``"""
         by_server: dict[str, list[str]] = {}
         for e in self._entries:
             by_server.setdefault(e.server_prefix, []).append(e.software_name)
