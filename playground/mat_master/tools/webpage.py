@@ -293,10 +293,10 @@ class ExtractWebpageTool(BaseTool):
     name: ClassVar[str] = 'extract_info_from_webpage'
     params_class: ClassVar[type[BaseToolParams]] = ExtractWebpageToolParams
 
-    def __init__(self) -> None:
+    def __init__(self, cache_dir: Path | None = None) -> None:
         super().__init__()
-        # Per-run state kept on the tool instance (no globals).
         self._domain_circuit = _DomainCircuitState()
+        self._cache = _WebpageDiskCache(cache_dir) if cache_dir else None
 
     def execute(self, session: Any, args_json: str) -> tuple[str, dict]:
         try:
@@ -338,9 +338,16 @@ class ExtractWebpageTool(BaseTool):
                                 ),
                             },
                         )
-                    content = _fetch_webpage_content(
-                        u
-                    )  # uses BROWSER_HEADERS + Session
+                    # P1-b: check disk cache before HTTP fetch
+                    if self._cache is not None:
+                        cached = self._cache.get(u)
+                        if cached is not None:
+                            logger.info('Cache hit for %s', u)
+                            return u, cached, _time.time() - t0, None
+                    content = _fetch_webpage_content(u)
+                    # P1-b: store successful fetch in cache
+                    if self._cache is not None:
+                        self._cache.put(u, content)
                     return u, content, _time.time() - t0, None
                 except requests.HTTPError as exc:
                     status = None
@@ -484,6 +491,6 @@ class ExtractWebpageTool(BaseTool):
             return f"Error: {exc}", {'error': str(exc)}
 
 
-def get_extract_webpage_tool() -> ExtractWebpageTool:
-    """Return a single ExtractWebpageTool instance for registration."""
-    return ExtractWebpageTool()
+def get_extract_webpage_tool(cache_dir: Path | None = None) -> ExtractWebpageTool:
+    """Return an ExtractWebpageTool instance for registration."""
+    return ExtractWebpageTool(cache_dir=cache_dir)
