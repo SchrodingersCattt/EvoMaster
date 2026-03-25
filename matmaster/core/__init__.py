@@ -9,7 +9,7 @@ from .bus import MessageBus
 from .context_builder import ContextBuilder
 from .guard_pipeline import GuardPipeline, LoopDetectionGuard
 from .hooks import BaseHook, EventEmitterHook, Hook, HookAction
-from .playground import Playground
+from .playground import Playground, PlaygroundManager
 
 __all__ = [
     "AgentKernel",
@@ -23,6 +23,7 @@ __all__ = [
     "LoopDetectionGuard",
     "MessageBus",
     "Playground",
+    "PlaygroundManager",
 ]
 
 

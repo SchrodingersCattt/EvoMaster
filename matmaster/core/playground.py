@@ -16,8 +16,12 @@ Non-responsibilities (belong to Exp / Service layers):
 from __future__ import annotations
 
 import logging
+import threading
+import warnings
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from evomaster.agent.session.base import BaseSession
 from evomaster.agent.session.local import LocalSession, LocalSessionConfig
@@ -326,3 +330,90 @@ class Playground:
         if isinstance(session_dict, dict):
             return session_dict.get("type", "local")
         return "local"
+
+
+class PlaygroundManager:
+    """Playground 实例的生命周期管理器。
+
+    职责：创建、缓存、启动验证、销毁。
+    不涉及 Playground 内部的物理环境准备逻辑（workspace、session、logging）。
+
+    并发前置条件：调用方保证同一 session_id 不会并发执行
+    release() 和 get_or_create()。
+    """
+
+    def __init__(self, project_root: Path) -> None:
+        self._project_root = project_root
+        self._playgrounds: dict[str, Playground] = {}
+        self._lock = threading.Lock()
+        self._init_done = threading.Event()
+        self._logger = logging.getLogger(self.__class__.__name__)
+
+    def validate_startup(self) -> None:
+        """启动时快速失败验证。幂等：重复调用直接跳过。
+
+        检查内容：
+        - config YAML 文件存在性（mat_master、minimal）
+        - config 中 agents key 存在性
+        - evomaster 废弃警告
+
+        不检查：LLM 配置交叉校验（属于 Exp 层职责）。
+        """
+        if self._init_done.is_set():
+            return
+
+        for pg_type in ("mat_master", "minimal"):
+            config_path = self._project_root / "configs" / pg_type / "config.yaml"
+            if not config_path.exists():
+                self._logger.warning("Config not found: %s", config_path)
+                continue
+            with open(config_path) as f:
+                cfg = yaml.safe_load(f)
+            if not isinstance(cfg, dict) or "agents" not in cfg:
+                self._logger.warning(
+                    "Config missing 'agents' key: %s", config_path
+                )
+
+        # Deprecation warnings for old modules (per D-02)
+        try:
+            import evomaster  # noqa: F401
+
+            warnings.warn(
+                "evomaster package is deprecated. Use matmaster instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        except ImportError:
+            pass
+
+        self._init_done.set()
+        self._logger.info("Playground config validation complete.")
+
+    def get_or_create(
+        self, session_id: str, playground_type: str = "mat_master"
+    ) -> Playground:
+        """线程安全地获取或创建 Playground 实例。
+
+        Raises:
+            ValueError: playground_type == "x_master" 时拒绝。
+        """
+        if playground_type == "x_master":
+            raise ValueError(
+                "x_master playground_type is not supported in the new pipeline"
+            )
+        with self._lock:
+            if session_id in self._playgrounds:
+                return self._playgrounds[session_id]
+            config_path = (
+                self._project_root / "configs" / playground_type / "config.yaml"
+            )
+            pg = Playground(config_path=config_path)
+            self._playgrounds[session_id] = pg
+            return pg
+
+    def release(self, session_id: str) -> None:
+        """从缓存移除并调用 cleanup()。线程安全。"""
+        with self._lock:
+            pg = self._playgrounds.pop(session_id, None)
+        if pg:
+            pg.cleanup()
