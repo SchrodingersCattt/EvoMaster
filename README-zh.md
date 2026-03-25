@@ -10,6 +10,21 @@ EvoMaster是用于构建科学智能体的框架，提供MCP工具、技能与�
 
 MatMaster是面向材料研究的科学智能体，前端为Next.js，后端为FastAPI。开发时通过一键脚本同时启动前后端。
 
+### 两套后端（入口与端口）
+
+本仓库里与 MatMaster 相关的 **HTTP 服务有两套**，用途不同，请勿混用端口或把本地调试后端当成生产 API：
+
+| | **平台 API（`src/` + 根目录 `app.py`）** | **本地 MatMaster Web（`playground/mat_master/service/server`）** |
+|------|-------------------------------------------|-------------------------------------------------------------------|
+| **用途** | 生产/集成：会话落库、SSE、与 Worker 经 Redis 协作 | 本地调试：与 `playground/mat_master` 下 Next 仪表盘配套，WebSocket 对话、内存会话、固定 workspace |
+| **典型入口** | `uv run python app.py`（默认 **8000**） | `python -m playground.mat_master.service.server` 或 `start_dev.sh`（默认 **BACKEND_PORT=50001**） |
+| **协议** | REST + SSE（如 `/api/v1/.../chat/sessions/...`） | WebSocket `/ws/chat` 等 |
+| **说明** | 部署与多进程约定见 `AGENTS.md`「服务架构」 | 详见 [playground/mat_master/README_WEB.md](playground/mat_master/README_WEB.md) |
+
+平台 API 与本地 Web 各自对应的 **`run_agent_sync` 实现不同**（落库、OSS、Bohrium、事件推送等），维护时勿混为一谈；对照说明见 [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md)。
+
+下文「启动前端调试」中的后端指 **本地 Web** 这一套（默认 50001）。
+
 ### 启动前端调试（前后端一体）
 
 在项目根目录下执行：
@@ -79,7 +94,7 @@ EvoMaster/
 ├── evomaster/           # 核心库（agent、session、tools、skills、LLM）
 ├── playground/
 │   └── mat_master/      # MatMaster应用（前端 + 服务 + start_dev.sh）
-├── configs/             # 智能体/配置YAML
+├── configs/mat_master/  # MatMaster 配置与 mcp_config*.json
 └── docs/                # 文档
 ```
 
@@ -89,26 +104,20 @@ EvoMaster/
 
 不启动Web时，可通过命令行运行智能体。
 
-**准备：** 安装依赖 `uv sync`（或 `pip install -e .`），并在 `.env` 或 `configs/` 下 YAML 中配置 LLM 与 Bohrium。
+**准备：** 安装依赖 `uv sync`（或 `pip install -e .`），并在 `.env` 或 `configs/mat_master/config.yaml`（及所需 MCP JSON）中配置 LLM 与 Bohrium。
 
 ```bash
-# 默认智能体与任务
-python run.py --agent minimal --task "你的任务"
-
-# 指定配置
-python run.py --agent minimal --config configs/minimal/config.yaml --task "你的任务"
+# MatMaster（配置见 configs/mat_master/）
+python run.py --agent mat_master --config configs/mat_master/config.yaml --task "你的任务"
 
 # 从文件读取任务
-python run.py --agent minimal --task task.txt
+python run.py --agent mat_master --config configs/mat_master/config.yaml --task task.txt
 
 # 交互模式
-python run.py --agent minimal --interactive
-```
+python run.py --agent mat_master --config configs/mat_master/config.yaml --interactive
 
-指定playground配置示例：
-
-```bash
-python run.py --agent minimal_multi_agent --config configs/minimal_multi_agent/deepseek-v3.2-example.yaml --task "在此描述任务"
+# direct / planner 模式
+python run.py --agent mat_master --config configs/mat_master/config.yaml --mode planner --task "你的任务"
 ```
 
 ---

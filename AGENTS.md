@@ -51,7 +51,7 @@
 |------|-------------------------|----------------|
 | 定位 | 下游应用：基于 EvoMaster 的 evomaster 核心 + 自研 playground、服务端、MCP 适配 | 上游框架：Agent/Playground/Exp、Tools、Skills、Session 等通用实现 |
 | 当前基于版本 | v0.0.1 架构与 API | 上游已发布 v0.0.2（配置与多 Agent 等有较大变更） |
-| 代码对应 | 项目内 `evomaster/` 目录对应上游的 `evomaster/`；本仓库另有 `playground/mat_master/`、`src/`、`evomaster/adaptors/` 等自有代码 | 上游 `evomaster/` + `playground/minimal*`、`playground/x_master` 等 |
+| 代码对应 | 项目内 `evomaster/` 目录对应上游的 `evomaster/`；本仓库另有 `playground/mat_master/`、`src/`、`evomaster/adaptors/` 等自有代码 | 上游 `evomaster/` + 上游仓库内各类 `playground/` 示例 |
 
 ### 与本仓库直接相关的约定
 
@@ -72,6 +72,12 @@
 
 - **协调方式**：API 与 Worker 之间通过 Redis 通信：任务队列、stream 事件发布/订阅、`session_run_owner` / `worker_alive`、stop 请求等。新增或修改功能时，不得依赖「处理当前 HTTP 请求的进程」与「执行该会话 agent 的进程」为同一进程。
 
+### MatMaster：平台 API 与本地 Web 调试后端
+
+除上表 **API / Worker** 外，仓库内还有一套 **仅用于本地调试** 的 FastAPI 应用：`playground/mat_master/service/server/`（`python -m playground.mat_master.service.server`，环境变量 `BACKEND_PORT`，默认 **50001**）。它与根目录 `app.py` **并行存在**，不是生产部署中 API 的替代进程，而是配合 `playground/mat_master/frontend` 的裸机开发（WebSocket、同进程内 run、固定 workspace 等）。修改会话、流式推送、鉴权或 agent 执行路径时，应明确改动落在 `src/` / `app.py` 还是 `playground/.../service/server/`，避免只验证本地 Web 却误以为已覆盖生产路径。更完整的说明见根目录 [README-zh.md](README-zh.md) 中的「两套后端」。
+
+**两套 `run_agent_sync`：** 生产为 `AgentRunService.run_agent_sync`（`src/services/agent_run_service.py`），本地 Web 为 `_run_agent_sync`（`playground/mat_master/service/server/run_agent.py`）。行为差异（落库、Bohrium、OSS、推送过滤、配额等）见 [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md)。
+
 ---
 
 ## Python 与运行环境
@@ -89,6 +95,7 @@
 
 ## 其他约定
 
+- **配置目录**：产品主配置与 MCP JSON 位于 `configs/mat_master/`（仓库根目录不再保留泛用 `configs/config.yaml`）。`ConfigManager` / `get_config_manager()` 未指定 `config_dir` 时默认加载该目录下的 `config.yaml`。
 - **维护本文件**：在对话或开发过程中，若产生新的、值得固化的约定或逻辑（如架构决策、命名/用法约定、废弃说明等），应适时补充到 AGENTS.md，便于后续遵守。
 - **多实例与 Redis**：API 与 Worker 均可多实例部署。跨实例的协调一律使用 Redis（或其它共享存储）；事件顺序、用户回复、run 归属与存活判断等均依赖 Redis，不依赖进程内状态或「请求与执行同进程」的假设。
 - **服务重启**：新增或修改功能时需考虑服务重启场景。进程内内存（如 `SESSIONS`）在重启后会清空；若逻辑依赖跨请求的状态（如会话级鉴权、当前 run 所用资源），应区分「需持久化」与「仅当次 run 有效」：前者落库或共享存储，后者可保留在内存，并确保重启后新请求能从 DB/共享存储恢复必要信息继续工作。

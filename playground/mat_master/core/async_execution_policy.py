@@ -2,10 +2,12 @@
 
 This policy centralizes:
 1) Which tool specs are exposed to LLM (submit-only async surface).
-   Non-submit async tools (e.g. legacy ``run_gromacs``) are hidden; use
-   ``submit_run_gromacs`` so the MCP tool name matches ``submit_*`` and is exposed.
+   Async tools whose remote name starts with ``submit_`` are kept; others are
+   dropped so the model only sees submit-style MCP calls.
 2) Which tool calls are allowed while async jobs are pending.
 """
+
+import json
 
 
 class AsyncExecutionPolicy:
@@ -23,8 +25,8 @@ class AsyncExecutionPolicy:
     def filter_tool_specs_for_llm(self, specs: list) -> list:
         """Apply submit-only async surface and hide lifecycle tools.
 
-        Async tools whose remote name starts with ``submit_`` (e.g. ``submit_run_gromacs``)
-        are kept; others are dropped so the model only sees submit-style MCP calls.
+        Async tools whose remote name starts with ``submit_`` are kept; others
+        are dropped so the model only sees submit-style MCP calls.
         """
         if not specs:
             return specs
@@ -85,6 +87,16 @@ class AsyncExecutionPolicy:
             return True
         if name == 'monitor_job':
             return True
+        if name == 'use_skill':
+            # Only allow bohrium-job skill (for poll_job.py re-invocation) during pending
+            try:
+                args = json.loads(tool_call.function.arguments or '{}')
+                skill_name = (args.get('skill_name') or '').strip().lower()
+                if skill_name == 'bohrium-job':
+                    return True
+            except Exception:
+                pass
+            return False
         return False
 
     @staticmethod

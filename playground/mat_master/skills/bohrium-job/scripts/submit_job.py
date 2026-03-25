@@ -9,7 +9,6 @@ This script performs only the 3 submission steps:
 import argparse
 import json
 import os
-import re
 import sys
 import tempfile
 import zipfile
@@ -26,59 +25,14 @@ except ImportError:
 
 ACCESS_KEY = os.environ.get('BOHRIUM_ACCESS_KEY', '').strip()
 PROJECT_ID = int(os.environ.get('BOHRIUM_PROJECT_ID', '-1') or '-1')
-OPENAPI_BASE = os.environ.get('BOHRIUM_BASE_URL', 'https://openapi.dp.tech').rstrip('/')
+try:
+    from src.utils.constant import BOHRIUM_OPENAPI_HOST
+
+    OPENAPI_BASE = BOHRIUM_OPENAPI_HOST
+except ImportError:
+    OPENAPI_BASE = os.environ.get('BOHRIUM_BASE_URL', 'https://open.bohrium.com').rstrip('/')
 
 _AUTH_HEADER = {'accessKey': ACCESS_KEY, 'Content-Type': 'application/json'}
-
-
-def _is_gromacs_submission(cmd: str, image: str, software: str) -> bool:
-    """Detect GROMACS-style runs that must use MCP submit_run_gromacs instead of this script."""
-    c = (cmd or '').lower()
-    i = (image or '').lower()
-    s = (software or '').strip().lower()
-    if s == 'gromacs':
-        return True
-    if 'gromacs' in i:
-        return True
-    if 'gromacs' in c:
-        return True
-    if re.search(r'\bgmx(?:_mpi)?\b', c):
-        return True
-    if 'grompp' in c or 'mdrun' in c:
-        return True
-    return False
-
-
-_GROMACS_REJECT_MSG = (
-    'GROMACS must not be submitted via bohrium-job/submit_job.py. '
-    'Use the MCP tool mat_binary_calc_submit_run_gromacs (submit_run_gromacs on '
-    'server mat_binary_calc), then monitor_job with software="gromacs".'
-)
-
-
-def _get_argv_flag(argv: list[str], flag: str) -> str | None:
-    """Next token after ``flag`` in argv, or None."""
-    i = 0
-    while i < len(argv):
-        if argv[i] == flag and i + 1 < len(argv):
-            return argv[i + 1]
-        i += 1
-    return None
-
-
-def _reject_gromacs_before_argparse(argv: list[str]) -> None:
-    """Run before parse_args so missing --image does not hide GROMACS detection."""
-    cmd = _get_argv_flag(argv, '--cmd') or ''
-    image = _get_argv_flag(argv, '--image') or ''
-    software = _get_argv_flag(argv, '--software') or 'unknown'
-    if _is_gromacs_submission(cmd, image, software):
-        print(
-            json.dumps(
-                {'success': False, 'error': _GROMACS_REJECT_MSG},
-                ensure_ascii=False,
-            )
-        )
-        sys.exit(1)
 
 
 def _post(path: str, payload: dict, timeout: int = 30) -> dict:
@@ -200,7 +154,6 @@ def main() -> None:
         '--software', default='unknown', help='Software label for default job name'
     )
     parser.add_argument('--disk-size', type=int, default=50, help='Disk size in GB')
-    _reject_gromacs_before_argparse(sys.argv)
 
     args = parser.parse_args()
 
@@ -220,15 +173,6 @@ def main() -> None:
         print(
             json.dumps(
                 {'success': False, 'error': f"input_dir not found: {args.input_dir}"}
-            )
-        )
-        sys.exit(1)
-
-    if _is_gromacs_submission(args.cmd, args.image, args.software):
-        print(
-            json.dumps(
-                {'success': False, 'error': _GROMACS_REJECT_MSG},
-                ensure_ascii=False,
             )
         )
         sys.exit(1)

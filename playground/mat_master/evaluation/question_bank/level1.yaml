@@ -10,6 +10,13 @@ rubric:
     "1.0": "All required outputs are present and verifiable within tolerance."
     "0.5": "Main workflow is correct but misses one critical numeric/structural requirement."
     "0.0": "Outputs are non-verifiable, inconsistent, or physically invalid."
+  # v4 three-dimensional weights
+  grounding_weight: 0.4
+  efficiency_weight: 0.6
+  analysis_weights:
+    accuracy: 0.6
+    grounding: 0.2
+    efficiency: 0.2
 
 questions:
   # ============================================================
@@ -40,18 +47,39 @@ questions:
       - key: "used_ordered_replica_tool"
         value: "mat_sg_generate_ordered_replicas"
     scoring_checklist:
+      # --- accuracy ---
       - id: "structures_processed"
         criterion: "All 10 structures are processed."
         weight: 0.35
         verify: "numerical_range"
-      - id: "used_ordered_replica_tool"
-        criterion: "Used the MCP ordered replica generation tool."
-        weight: 0.20
-        verify: "tool_called"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Each result includes ordered configuration count, output CIF files, and space group information."
         weight: 0.45
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "used_ordered_replica_tool"
+        criterion: "Used the MCP ordered replica generation tool (mat_sg_generate_ordered_replicas)."
+        weight: 0.20
+        verify: "tool_called"
+        dimension: "grounding"
+      - id: "grounding_source"
+        criterion: "Structure enumeration is performed using the registered MCP structure-generation tool rather than a self-written script."
+        weight: 0.60
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "no_retries_batch"
+        criterion: "No repeated identical tool calls for the same structure (no retry loops)."
+        weight: 0.60
+        verify: "no_retries"
+        dimension: "efficiency"
+      - id: "efficiency_judge"
+        criterion: "The agent completes 10-structure batch processing in a reasonable number of steps without unnecessary exploration."
+        weight: 0.40
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["All 10 structures resolved with enumerated ordered configurations."]
       partial: ["Most structures resolved but 1-2 skipped or incomplete."]
@@ -82,18 +110,44 @@ questions:
       - key: "required_fields"
         value: ["poscar_file", "fe_count", "ni_count", "random_seed"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "supercells_built"
         criterion: "All 10 supercells are constructed."
         weight: 0.35
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "atoms_per_supercell"
         criterion: "Each supercell contains exactly 108 atoms."
         weight: 0.30
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Output includes POSCAR file, Fe/Ni atom counts, and random seed per composition."
         weight: 0.35
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_source"
+        criterion: "Supercell structures are built using an MCP structure tool or a verifiable script that reads composition from the provided manifest."
+        weight: 0.70
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      - id: "source_type_structure"
+        criterion: "At least one tool call has source_type = structure_generation."
+        weight: 0.30
+        verify: "source_type_used"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "no_retries_batch"
+        criterion: "No repeated identical tool calls for the same composition."
+        weight: 0.50
+        verify: "no_retries"
+        dimension: "efficiency"
+      - id: "efficiency_judge"
+        criterion: "10-supercell construction completes without redundant intermediate steps."
+        weight: 0.50
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["All 10 supercells with correct composition and reproducible seeds."]
       partial: ["Most supercells correct, 1-2 with wrong atom count."]
@@ -126,18 +180,39 @@ questions:
           - "mat_sg_build_bulk_structure_by_template"
           - "mat_sg_build_bulk_structure_by_wyckoff"
     scoring_checklist:
+      # --- accuracy ---
       - id: "structures_doped"
         criterion: "All 10 doped structures are generated."
         weight: 0.35
         verify: "numerical_range"
-      - id: "used_db_fetch"
-        criterion: "Used the structure database to fetch host structures."
-        weight: 0.20
-        verify: "tool_called"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Each output includes doped structure file, actual dopant count, and actual doping fraction."
         weight: 0.45
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "used_db_fetch"
+        criterion: "Used the structure database (mat_struct_db_fetch_structures_from_db) or MCP builder to fetch host structures."
+        weight: 0.40
+        verify: "tool_called"
+        dimension: "grounding"
+      - id: "grounding_source"
+        criterion: "Host structures originate from a registered structure database or generator, not from LLM-fabricated coordinates."
+        weight: 0.60
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "no_retries_batch"
+        criterion: "No repeated identical tool calls for the same host-dopant pair."
+        weight: 0.60
+        verify: "no_retries"
+        dimension: "efficiency"
+      - id: "efficiency_judge"
+        criterion: "The doping workflow is completed without unnecessary re-fetching or re-building of previously constructed structures."
+        weight: 0.40
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["All 10 doped supercells generated with correct composition."]
       partial: ["Most structures doped, 1-2 with wrong fraction."]
@@ -168,14 +243,29 @@ questions:
       - key: "required_fields"
         value: ["root_cause", "evidence", "fix_ISPIN", "fix_MAGMOM"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "root_cause"
         criterion: "Correctly identifies missing spin polarization (ISPIN=1 on magnetic Fe2O3) as root cause."
         weight: 0.40
         verify: "llm_judge"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Provides root cause, evidence from SCF energy oscillation, and concrete INCAR fixes (ISPIN=2 and MAGMOM)."
         weight: 0.60
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Diagnosis is grounded in the provided case_bundle.json data (INCAR parameters, OUTCAR energy profile), not generic DFT advice."
+        weight: 1.00
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Agent reads the provided bundle and diagnoses directly without excessive exploratory tool calls."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Identifies ISPIN=1 bug, explains why Fe2O3 needs AFM spin, gives MAGMOM."]
       partial: ["Suggests enabling spin but no MAGMOM guidance."]
@@ -201,14 +291,29 @@ questions:
       - key: "required_fields"
         value: ["root_cause", "evidence", "fix_ISMEAR", "fix_SIGMA"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "root_cause"
         criterion: "Correctly identifies ISMEAR/SIGMA mismatch (Methfessel-Paxton on semiconductor Si) as root cause."
         weight: 0.40
         verify: "llm_judge"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Provides root cause, evidence from fractional occupation, and concrete fixes (ISMEAR=0 or -5, reduce SIGMA)."
         weight: 0.60
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Diagnosis is grounded in the provided INCAR/OUTCAR data from case_bundle.json, citing specific parameter values."
+        weight: 1.00
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Agent diagnoses directly from the bundle without unnecessary tool exploration."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Identifies ISMEAR=1+SIGMA=0.4 is wrong for semiconductors, recommends ISMEAR=0 or -5."]
       partial: ["Suggests reducing SIGMA but misses the ISMEAR issue."]
@@ -235,14 +340,29 @@ questions:
       - key: "required_fields"
         value: ["root_cause", "evidence", "fix_EDIFF", "ediff_ediffg_rule"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "root_cause"
         criterion: "Correctly identifies EDIFF too loose (1E-3 causing force noise in LiCoO2 relax) as root cause."
         weight: 0.40
         verify: "llm_judge"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Explains force noise mechanism from loose EDIFF, and recommends tightening EDIFF to 1E-5 or 1E-6."
         weight: 0.60
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Diagnosis references specific values from the case_bundle.json (EDIFF=1E-3, force oscillation range, rapid SCF convergence pattern)."
+        weight: 1.00
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Agent reaches diagnosis without redundant tool calls beyond reading the provided bundle."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Links SCF precision to force noise, recommends EDIFF=1E-5 or 1E-6."]
       partial: ["Suggests tightening EDIFF without explaining the mechanism."]
@@ -269,14 +389,29 @@ questions:
       - key: "required_fields"
         value: ["root_cause", "evidence", "fix_POTIM", "fix_initial_structure"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "root_cause"
         criterion: "Identifies both POTIM too large (1.0) and wrong initial phase (cubic vs orthorhombic CsPbI3)."
         weight: 0.40
         verify: "llm_judge"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Provides evidence from energy/force divergence trajectory, and recommends both reducing POTIM and using correct Pnma phase."
         weight: 0.60
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Both root causes are evidenced by specific data from case_bundle.json (POTIM=1.0 in INCAR, energy/force explosion pattern in OUTCAR)."
+        weight: 1.00
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Dual root cause is identified efficiently without repeated re-reading of the same file."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Identifies POTIM=1.0 overshooting + wrong phase, recommends POTIM=0.1 and Pnma start."]
       partial: ["Identifies POTIM issue only without phase discussion."]
@@ -308,18 +443,34 @@ questions:
       - key: "required_fields"
         value: ["v0", "b0", "fit_quality"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "v0_A3"
         criterion: "V0 is within tolerance."
         weight: 0.35
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "b0_GPa"
         criterion: "B0 is within tolerance."
         weight: 0.35
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Reports V0, B0, and some measure of fit quality (R-squared, residuals, or similar)."
         weight: 0.30
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_source"
+        criterion: "EOS fitting uses the data from ev_curve.json; fit parameters are derived from the provided E-V points, not hallucinated."
+        weight: 1.00
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "EOS fitting is accomplished in a single fitting step without redundant re-runs or parameter sweeps."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Reports EOS parameters with fit quality."]
       partial: ["Only one EOS parameter reported."]
@@ -350,18 +501,34 @@ questions:
       - key: "required_fields"
         value: ["cj_velocity", "cj_pressure", "hugoniot_fit", "rayleigh_line"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "cj_velocity_m_s"
         criterion: "C-J detonation velocity is within tolerance."
         weight: 0.30
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "cj_pressure_GPa"
         criterion: "C-J detonation pressure is within tolerance."
         weight: 0.30
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Includes Hugoniot curve fitting details, Rayleigh line analysis, and C-J velocity/pressure values."
         weight: 0.40
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_source"
+        criterion: "C-J parameters are derived from the provided msst_hugoniot.json data, with filtered reaction-complete points shown."
+        weight: 1.00
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Hugoniot fitting and C-J determination are performed in a direct computation pipeline without unnecessary retries."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Reports C-J point with Hugoniot and Rayleigh line analysis."]
       partial: ["C-J values reported without fitting details."]
@@ -392,18 +559,34 @@ questions:
       - key: "required_fields"
         value: ["gap_type", "gap_value", "vbm_kpoint", "cbm_kpoint"]
     scoring_checklist:
+      # --- accuracy ---
       - id: "gap_type"
         criterion: "Band-gap type is correctly identified as indirect (not direct)."
         weight: 0.35
         verify: "llm_judge"
+        dimension: "accuracy"
       - id: "gap_value_eV"
         criterion: "Band-gap value is in tolerance."
         weight: 0.35
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Reports band gap type, band gap value in eV, VBM k-point location, and CBM k-point location."
         weight: 0.30
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "grounding_source"
+        criterion: "Gap type and value are derived from band_edges.json data, not from LLM knowledge of Si band gap."
+        weight: 1.00
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Band gap classification is achieved by directly reading the provided data file without extra computation."
+        weight: 1.00
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Correctly identifies indirect gap and value with k-points."]
       partial: ["Type correct but VBM/CBM k-points missing."]
@@ -437,18 +620,39 @@ questions:
       - key: "used_interface_builder"
         value: "mat_sg_build_surface_interface"
     scoring_checklist:
+      # --- accuracy ---
       - id: "mismatch_percent"
         criterion: "Lattice mismatch is below 2%."
         weight: 0.30
         verify: "numerical_range"
-      - id: "used_interface_builder"
-        criterion: "Used the MCP surface interface builder tool for heterostructure."
-        weight: 0.20
-        verify: "tool_called"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Output includes structure file (POSCAR/CIF), lattice mismatch percentage, total atom count, and interlayer distance."
         weight: 0.50
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "used_interface_builder"
+        criterion: "Used the MCP surface interface builder tool (mat_sg_build_surface_interface) for heterostructure construction."
+        weight: 0.50
+        verify: "tool_called"
+        dimension: "grounding"
+      - id: "grounding_source"
+        criterion: "Heterostructure is assembled using the registered MCP interface builder, not constructed by writing raw coordinates."
+        weight: 0.50
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "Interface builder is called without excessive retries for the same parameter set."
+        weight: 0.50
+        verify: "no_retries"
+        dimension: "efficiency"
+      - id: "efficiency_judge"
+        criterion: "Heterostructure construction completes in a direct workflow without redundant structure rebuilds."
+        weight: 0.50
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Heterostructure built with correct stacking, mismatch, and vacuum."]
       partial: ["Structure built but mismatch or vacuum incorrect."]
@@ -478,18 +682,39 @@ questions:
       - key: "used_interface_builder"
         value: "mat_sg_build_surface_interface"
     scoring_checklist:
+      # --- accuracy ---
       - id: "mismatch_percent"
         criterion: "Lattice mismatch is below 5%."
         weight: 0.30
         verify: "numerical_range"
-      - id: "used_interface_builder"
-        criterion: "Used the MCP surface interface builder tool for heterostructure."
-        weight: 0.20
-        verify: "tool_called"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Output includes structure file, lattice mismatch percentage, supercell dimensions, and total atom count."
         weight: 0.50
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "used_interface_builder"
+        criterion: "Used the MCP surface interface builder tool (mat_sg_build_surface_interface)."
+        weight: 0.50
+        verify: "tool_called"
+        dimension: "grounding"
+      - id: "grounding_source"
+        criterion: "TMD heterostructure is built via the registered MCP tool rather than hand-written coordinates."
+        weight: 0.50
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "No repeated calls with the same interface builder parameters."
+        weight: 0.50
+        verify: "no_retries"
+        dimension: "efficiency"
+      - id: "efficiency_judge"
+        criterion: "MoS2/WSe2 heterostructure is assembled in a single coherent workflow."
+        weight: 0.50
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Commensurate heterostructure with correct layer stacking."]
       partial: ["Structure built but mismatch not reported."]
@@ -527,22 +752,44 @@ questions:
         tool_name: "mat_sg_build_surface_slab"
         tool_arg: "miller_index"
     scoring_checklist:
-      - id: "used_slab_builder"
-        criterion: "Used the MCP surface slab builder tool."
-        weight: 0.15
-        verify: "tool_called"
-      - id: "correct_miller"
-        criterion: "Slab built with correct (111) Miller index."
-        weight: 0.20
-        verify: "tool_args_match"
+      # --- accuracy ---
       - id: "total_atoms"
         criterion: "Total atom count is correct (36 for 4-layer 3x3 FCC(111))."
         weight: 0.30
         verify: "numerical_range"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Output includes structure file, total atom count, surface area, and which layers are fixed."
         weight: 0.35
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "used_slab_builder"
+        criterion: "Used the MCP surface slab builder tool (mat_sg_build_surface_slab)."
+        weight: 0.25
+        verify: "tool_called"
+        dimension: "grounding"
+      - id: "correct_miller"
+        criterion: "Slab built with correct (111) Miller index passed to mat_sg_build_surface_slab."
+        weight: 0.40
+        verify: "tool_args_match"
+        dimension: "grounding"
+      - id: "grounding_source"
+        criterion: "Cu(111) slab is constructed via the registered MCP slab builder with the exact Miller index from surface_spec.json."
+        weight: 0.35
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "Slab builder is not called repeatedly with wrong parameters."
+        weight: 0.50
+        verify: "no_retries"
+        dimension: "efficiency"
+      - id: "efficiency_judge"
+        criterion: "Cu(111) slab construction completes without excessive exploratory calls."
+        weight: 0.50
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Correct 4-layer Cu(111) slab with vacuum and fixed layers."]
       partial: ["Slab built but wrong layer count or vacuum."]
@@ -575,22 +822,44 @@ questions:
         tool_name: "mat_sg_build_surface_slab"
         tool_arg: "miller_index"
     scoring_checklist:
-      - id: "used_slab_builder"
-        criterion: "Used the MCP surface slab builder tool."
-        weight: 0.15
-        verify: "tool_called"
-      - id: "correct_miller"
-        criterion: "Slab built with correct (110) Miller index."
-        weight: 0.20
-        verify: "tool_args_match"
+      # --- accuracy ---
       - id: "termination_type"
         criterion: "Surface termination includes bridging oxygen and 5-coordinated Ti atoms on rutile TiO2(110)."
         weight: 0.30
         verify: "llm_judge"
+        dimension: "accuracy"
       - id: "required_fields"
         criterion: "Output includes structure file and verification of bridging-O and 5c-Ti surface termination."
         weight: 0.35
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "used_slab_builder"
+        criterion: "Used the MCP surface slab builder tool (mat_sg_build_surface_slab)."
+        weight: 0.25
+        verify: "tool_called"
+        dimension: "grounding"
+      - id: "correct_miller"
+        criterion: "Slab built with correct (110) Miller index passed to mat_sg_build_surface_slab."
+        weight: 0.40
+        verify: "tool_args_match"
+        dimension: "grounding"
+      - id: "grounding_source"
+        criterion: "TiO2(110) slab is generated by the MCP slab builder; termination verification references the output structure file."
+        weight: 0.35
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "Slab builder is not called repeatedly with wrong Miller index."
+        weight: 0.50
+        verify: "no_retries"
+        dimension: "efficiency"
+      - id: "efficiency_judge"
+        criterion: "TiO2(110) slab construction and termination verification complete without excessive tool calls."
+        weight: 0.50
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Correct (110) slab with bridging-O termination verified."]
       partial: ["Slab cut but termination not verified."]
@@ -625,18 +894,39 @@ questions:
       - key: "passivation_quality"
         value: "H atoms added to satisfy 4-coordination on bottom Si atoms"
     scoring_checklist:
-      - id: "used_slab_builder"
-        criterion: "Used MCP surface slab builder tool."
-        weight: 0.20
-        verify: "tool_called"
-      - id: "correct_miller"
-        criterion: "Slab built with correct (100) Miller index."
-        weight: 0.25
-        verify: "tool_args_match"
+      # --- accuracy ---
       - id: "passivation_quality"
         criterion: "Bottom Si atoms passivated with H to achieve 4-coordination, with Si-H bond length ~1.48 A."
         weight: 0.55
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "used_slab_builder"
+        criterion: "Used MCP surface slab builder tool (mat_sg_build_surface_slab) to construct Si(100) slab."
+        weight: 0.30
+        verify: "tool_called"
+        dimension: "grounding"
+      - id: "correct_miller"
+        criterion: "Slab built with correct (100) Miller index passed to mat_sg_build_surface_slab."
+        weight: 0.35
+        verify: "tool_args_match"
+        dimension: "grounding"
+      - id: "grounding_source"
+        criterion: "Si(100) slab is built via MCP tool; H passivation is applied to the MCP-generated structure."
+        weight: 0.35
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "Slab builder and passivation are called without repeated identical attempts."
+        weight: 0.50
+        verify: "no_retries"
+        dimension: "efficiency"
+      - id: "efficiency_judge"
+        criterion: "Passivation workflow completes in a direct pipeline without unnecessary intermediate structure rebuilds."
+        weight: 0.50
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["All bottom dangling bonds passivated, verified 4-coordinated."]
       partial: ["H added but some bonds missed."]
@@ -667,18 +957,39 @@ questions:
         tool_name: "mat_sg_build_surface_slab"
         tool_arg: "miller_index"
     scoring_checklist:
-      - id: "used_slab_builder"
-        criterion: "Used MCP surface slab builder tool for cleaving."
-        weight: 0.15
-        verify: "tool_called"
-      - id: "correct_miller"
-        criterion: "Slab cleaved with correct (001) Miller index."
-        weight: 0.20
-        verify: "tool_args_match"
+      # --- accuracy ---
       - id: "required_fields"
         criterion: "Output includes passivated structure, identification of undercoordinated Pb/I atoms, passivation strategy, and charge neutrality verification."
         weight: 0.65
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "used_slab_builder"
+        criterion: "Used MCP surface slab builder tool (mat_sg_build_surface_slab) for cleaving."
+        weight: 0.25
+        verify: "tool_called"
+        dimension: "grounding"
+      - id: "correct_miller"
+        criterion: "Slab cleaved with correct (001) Miller index passed to mat_sg_build_surface_slab."
+        weight: 0.35
+        verify: "tool_args_match"
+        dimension: "grounding"
+      - id: "grounding_source"
+        criterion: "MAPbI3 slab is generated by MCP tool; undercoordinated atom identification references the generated structure."
+        weight: 0.40
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "Slab construction and passivation are completed without repeated identical tool calls."
+        weight: 0.50
+        verify: "no_retries"
+        dimension: "efficiency"
+      - id: "efficiency_judge"
+        criterion: "MAPbI3 passivation workflow is completed efficiently without redundant structure rebuilds."
+        weight: 0.50
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["All undercoordinated atoms passivated with charge neutrality."]
       partial: ["Partial passivation or charge imbalance."]
@@ -714,18 +1025,39 @@ questions:
         tool_name: "mat_sg_build_surface_slab"
         tool_arg: "vacuum"
     scoring_checklist:
-      - id: "used_slab_builder"
-        criterion: "Used MCP surface slab builder for exfoliation."
-        weight: 0.20
-        verify: "tool_called"
-      - id: "correct_vacuum"
-        criterion: "Vacuum layer set to ~20 A in slab builder call."
-        weight: 0.20
-        verify: "tool_args_match"
+      # --- accuracy ---
       - id: "required_fields"
         criterion: "Monolayer POSCAR output with verified MoS2 stoichiometry, reported layer thickness (~3.1 A), and vacuum layer (~20 A)."
         weight: 0.60
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "used_slab_builder"
+        criterion: "Used MCP surface slab builder (mat_sg_build_surface_slab) for monolayer exfoliation."
+        weight: 0.30
+        verify: "tool_called"
+        dimension: "grounding"
+      - id: "correct_vacuum"
+        criterion: "Vacuum layer set to ~20 A in slab builder call."
+        weight: 0.30
+        verify: "tool_args_match"
+        dimension: "grounding"
+      - id: "grounding_source"
+        criterion: "MoS2 monolayer is obtained via the MCP slab builder, not hand-crafted coordinates."
+        weight: 0.40
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "Slab builder is not called repeatedly with the same vacuum parameter."
+        weight: 0.50
+        verify: "no_retries"
+        dimension: "efficiency"
+      - id: "efficiency_judge"
+        criterion: "Monolayer exfoliation and stoichiometry verification complete in a direct workflow."
+        weight: 0.50
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Correct MoS2 monolayer with S-Mo-S trilayer and 20 A vacuum."]
       partial: ["Monolayer extracted but bilayer or wrong vacuum."]
@@ -755,14 +1087,34 @@ questions:
           - "mat_sg_build_bulk_structure_by_template"
           - "mat_sg_build_bulk_structure_by_wyckoff"
     scoring_checklist:
-      - id: "used_db_fetch"
-        criterion: "Used structure database or builder tool to obtain Ti3AlC2 MAX phase structure."
-        weight: 0.20
-        verify: "tool_called"
+      # --- accuracy ---
       - id: "required_fields"
         criterion: "MXene POSCAR output with no residual Al atoms, OH surface termination, and verified Ti3C2(OH)2 stoichiometry."
         weight: 0.80
         verify: "llm_judge"
+        dimension: "accuracy"
+      # --- grounding ---
+      - id: "used_db_fetch"
+        criterion: "Used structure database or builder tool (mat_struct_db_fetch_structures_from_db or mat_sg_build_bulk_*) to obtain Ti3AlC2 MAX phase structure."
+        weight: 0.50
+        verify: "tool_called"
+        dimension: "grounding"
+      - id: "grounding_source"
+        criterion: "Ti3AlC2 starting structure comes from a registered structure source; Al removal and OH termination are applied to the retrieved structure."
+        weight: 0.50
+        verify: "llm_judge_grounding"
+        dimension: "grounding"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "No repeated fetching of the same MAX phase structure."
+        weight: 0.50
+        verify: "no_retries"
+        dimension: "efficiency"
+      - id: "efficiency_judge"
+        criterion: "MXene derivation completes in a direct pipeline: fetch MAX → remove Al → add OH → verify stoichiometry."
+        weight: 0.50
+        verify: "llm_judge_efficiency"
+        dimension: "efficiency"
     touchpoints:
       full: ["Ti3C2(OH)2 with correct stoichiometry and no Al."]
       partial: ["Al removed but no termination added."]

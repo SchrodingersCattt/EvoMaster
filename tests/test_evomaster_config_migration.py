@@ -1,13 +1,19 @@
 """阶段 1.3 / 2.4 验收：配置与 Playground 多 Agent 行为。"""
 
+from pathlib import Path
+
 from evomaster.config import ConfigManager
 from evomaster.core.playground import BasePlayground
+
+_FIXTURE_CONFIG_DIR = (
+    Path(__file__).resolve().parent / 'fixtures' / 'evomaster_multi_agent'
+)
 
 
 def test_stage_1_3_acceptance_enable_tools_normalized_to_tools():
     """现有带 enable_tools 的 YAML 经 getter 得到 tools 规范化结果。"""
     mgr = ConfigManager(
-        config_dir='configs/minimal_multi_agent',
+        config_dir=_FIXTURE_CONFIG_DIR,
         config_file='config.yaml',
     )
     cfg = mgr.load()
@@ -32,8 +38,7 @@ def test_stage_1_3_acceptance_enable_tools_normalized_to_tools():
 
 def test_stage_2_4_multi_agent_stored_in_agents_slots():
     """阶段 2.4 验收：多 agent 模式下每个 agent 正确存入 self.agents，self.agent 为其中之一。"""
-    # 使用 minimal_multi_agent 配置（含 planning / coding 两个 agent）
-    config_dir = 'configs/minimal_multi_agent'
+    config_dir = _FIXTURE_CONFIG_DIR
 
     class MockSession:
         is_open = True

@@ -33,6 +33,9 @@ DIRECTORY_TRUNCATED_NOTICE = (
 SNIPPET_LINES = 4
 MAX_OUTPUT_SIZE = 16000
 
+# 结构化 observation 中使用的工具标识，供前端识别
+EDITOR_TOOL_ID = 'str_replace_editor'
+
 
 def maybe_truncate(
     content: str,
@@ -50,7 +53,7 @@ class EditorToolParams(BaseToolParams):
     """Custom editing tool for viewing, creating and editing files in plain-text format.
 
     * State is persistent across command calls and discussions with the user
-    * If `path` is a text file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep
+    * If `path` is a text file, `view` returns structured line-numbered content (same semantics as `cat -n`). If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep
     * The `create` command will overwrite an existing file; the previous content is saved to undo history so `undo_edit` can restore it
     * If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
     * The `undo_edit` command will revert the last edit made to the file at `path`
@@ -118,7 +121,7 @@ class EditorTool(BaseTool):
 
     def execute(
         self, session: BaseSession, args_json: str
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[str | dict[str, Any], dict[str, Any]]:
         """执行编辑操作"""
         try:
             params = self.parse_params(args_json)
@@ -237,7 +240,7 @@ class EditorTool(BaseTool):
         path: str,
         view_range: list[int],
         path_type: Literal['file', 'dir', 'not_exist'],
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """查看文件或目录"""
         # 再次检查路径类型，确保判断正确（防止 path_type 误判）
         if path_type == 'dir' or session.is_directory(path):
@@ -258,7 +261,15 @@ class EditorTool(BaseTool):
             )
 
             return (
-                f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{output}",
+                {
+                    'tool': EDITOR_TOOL_ID,
+                    'kind': 'directory_listing',
+                    'path': path,
+                    'note': (
+                        'Files and directories up to 2 levels deep, excluding hidden items'
+                    ),
+                    'listing': output,
+                },
                 {},
             )
 
@@ -307,7 +318,7 @@ class EditorTool(BaseTool):
 
     def _create(
         self, session: BaseSession, path: str, file_text: str
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """创建文件；若文件已存在则覆盖，并将旧内容保存到 undo 历史。"""
         if session.is_file(path):
             old_content = session.read_file(path)
@@ -316,13 +327,30 @@ class EditorTool(BaseTool):
             self._file_history[path].append((old_content, 'utf-8'))
             session.write_file(path, file_text)
             return (
-                f"File overwritten successfully at: {path} "
-                f"(previous content saved to undo history; use `undo_edit` to restore).",
+                {
+                    'tool': EDITOR_TOOL_ID,
+                    'kind': 'create_success',
+                    'path': path,
+                    'overwritten': True,
+                    'message': (
+                        f'File overwritten successfully at: {path} '
+                        '(previous content saved to undo history; use `undo_edit` to restore).'
+                    ),
+                },
                 {},
             )
         session.write_file(path, file_text)
         self._file_history[path] = [(file_text, 'utf-8')]
-        return f"File created successfully at: {path}", {}
+        return (
+            {
+                'tool': EDITOR_TOOL_ID,
+                'kind': 'create_success',
+                'path': path,
+                'overwritten': False,
+                'message': f'File created successfully at: {path}',
+            },
+            {},
+        )
 
     def _str_replace(
         self,
@@ -330,7 +358,7 @@ class EditorTool(BaseTool):
         path: str,
         old_str: str,
         new_str: str,
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """替换字符串"""
         if new_str == old_str:
             raise ToolParameterError(
@@ -392,11 +420,22 @@ class EditorTool(BaseTool):
         end_line = replacement_line + SNIPPET_LINES + new_str.count('\n') + 1
         snippet = '\n'.join(new_content.split('\n')[start_line : end_line + 1])
 
-        msg = f"The file {path} has been edited. "
-        msg += self._format_output(snippet, f"a snippet of {path}", start_line + 1)
-        msg += 'Review the changes and make sure they are as expected. Edit the file again if necessary.'
-
-        return msg, {}
+        return (
+            {
+                'tool': EDITOR_TOOL_ID,
+                'kind': 'edit_success',
+                'path': path,
+                'message': (
+                    f'The file {path} has been edited. '
+                    'Review the changes and make sure they are as expected. '
+                    'Edit the file again if necessary.'
+                ),
+                'snippet': self._format_output(
+                    snippet, f'a snippet of {path}', start_line + 1
+                ),
+            },
+            {},
+        )
 
     def _insert(
         self,
@@ -404,7 +443,7 @@ class EditorTool(BaseTool):
         path: str,
         insert_line: int,
         new_str: str,
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """插入内容"""
         content = session.read_file(path)
         lines = content.rstrip('\n').split('\n')
@@ -436,15 +475,26 @@ class EditorTool(BaseTool):
         )
         snippet = '\n'.join(snippet_lines)
 
-        msg = f"The file {path} has been edited. "
-        msg += self._format_output(
-            snippet, 'a snippet of the edited file', start_line + 1
+        return (
+            {
+                'tool': EDITOR_TOOL_ID,
+                'kind': 'edit_success',
+                'path': path,
+                'message': (
+                    f'The file {path} has been edited. '
+                    'Review the changes and make sure they are as expected. '
+                    'Edit the file again if necessary.'
+                ),
+                'snippet': self._format_output(
+                    snippet, 'a snippet of the edited file', start_line + 1
+                ),
+            },
+            {},
         )
-        msg += 'Review the changes and make sure they are as expected. Edit the file again if necessary.'
 
-        return msg, {}
-
-    def _undo_edit(self, session: BaseSession, path: str) -> tuple[str, dict[str, Any]]:
+    def _undo_edit(
+        self, session: BaseSession, path: str
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """撤销编辑"""
         if path not in self._file_history or not self._file_history[path]:
             raise ToolError(f"No edit history found for {path}.")
@@ -453,18 +503,29 @@ class EditorTool(BaseTool):
         session.write_file(path, old_content, old_encoding)
 
         return (
-            f"Last edit to {path} undone successfully. {self._format_output(old_content, path)}",
+            {
+                'tool': EDITOR_TOOL_ID,
+                'kind': 'undo_success',
+                'path': path,
+                'message': f'Last edit to {path} undone successfully.',
+                'restored': self._format_output(old_content, path),
+            },
             {},
         )
 
-    def _format_output(self, content: str, descriptor: str, init_line: int = 1) -> str:
-        """格式化输出（添加行号）"""
+    def _format_output(
+        self, content: str, descriptor: str, init_line: int = 1
+    ) -> dict[str, Any]:
+        """将文件片段格式化为带行号的结构化结果（语义等价于 cat -n，非 shell 执行）。"""
         content = maybe_truncate(content, max_size=MAX_OUTPUT_SIZE)
-        numbered_lines = [
-            f"{i + init_line:6}\t{line}" for i, line in enumerate(content.split('\n'))
+        lines = [
+            {'line_no': i + init_line, 'text': line}
+            for i, line in enumerate(content.split('\n'))
         ]
-        return (
-            f"Here's the result of running `cat -n` on {descriptor}:\n"
-            + '\n'.join(numbered_lines)
-            + '\n'
-        )
+        return {
+            'tool': EDITOR_TOOL_ID,
+            'kind': 'numbered_content',
+            'descriptor': descriptor,
+            'start_line': init_line,
+            'lines': lines,
+        }

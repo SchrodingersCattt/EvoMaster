@@ -468,7 +468,10 @@ class CalculationPathAdaptor:
 
     For tools covered by this adaptor:
     - local file paths are rewritten to OSS URLs
-    - sync tools → executor None; async tools → Bohrium executor with env auth
+    - ``sync_tools`` (MatMaster-aligned): always use ``type: local`` +
+      ``inject_bohrium_executor`` (Bohrium AK in ``executor.env``), overriding
+      server-level dispatcher / executor_map for those tool names. MCP-side
+      ``submit_*`` filtering still uses ``sync_tools`` (see MCPToolManager).
     """
 
     def __init__(self, calculation_executors: dict[str, Any] | None = None):
@@ -508,6 +511,7 @@ class CalculationPathAdaptor:
         access_key: str | None = None,
         project_id: int | str | None = None,
         user_id: int | str | None = None,
+        user_no: str | None = None,
     ) -> dict[str, Any] | None:
         """Return executor for this (server, tool)."""
         server_cfg = self.calculation_executors.get(server_name)
@@ -515,7 +519,15 @@ class CalculationPathAdaptor:
             return None
         sync_tools = server_cfg.get('sync_tools') or []
         if remote_tool_name in sync_tools:
-            return None
+            # MatMaster private_callback: sync tools → LOCAL_EXECUTOR ({'type': 'local'}),
+            # not None and not dispatcher; Bohrium auth goes to executor.env.
+            return inject_bohrium_executor(
+                {'type': 'local', 'env': {}},
+                access_key=access_key,
+                project_id=project_id,
+                user_id=user_id,
+                user_no=user_no,
+            )
         executor_map = server_cfg.get('executor_map')
         if executor_map and isinstance(executor_map, dict):
             tool_executor = executor_map.get(remote_tool_name)
@@ -529,6 +541,7 @@ class CalculationPathAdaptor:
                     access_key=access_key,
                     project_id=project_id,
                     user_id=user_id,
+                    user_no=user_no,
                 )
         executor_template = server_cfg.get('executor')
         if not executor_template or not isinstance(executor_template, dict):
@@ -538,6 +551,7 @@ class CalculationPathAdaptor:
             access_key=access_key,
             project_id=project_id,
             user_id=user_id,
+            user_no=user_no,
         )
 
     def _is_async_remote_tool(self, server_name: str, remote_tool_name: str) -> bool:
@@ -602,6 +616,7 @@ class CalculationPathAdaptor:
         access_key: str | None = None,
         project_id: int | str | None = None,
         user_id: int | str | None = None,
+        user_no: str | None = None,
         session: BaseSession | None = None,
     ) -> dict[str, Any]:
         """Inject executor, storage and resolve Path-typed args → OSS URL.
@@ -650,6 +665,7 @@ class CalculationPathAdaptor:
             access_key=access_key,
             project_id=project_id,
             user_id=user_id,
+            user_no=user_no,
         )
         if is_async_tool:
             self._validate_executor_profile(

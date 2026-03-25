@@ -21,8 +21,8 @@ llm:
     temperature: 0.7
     # max_tokens: 16384
     timeout: 300              # 非流式整包超时（秒）；大模型长输出需要 2-3 分钟
-    stream_timeout: 20        # 流式首 token 超时（秒）；等多久没出字就报错；不填则回退到 timeout
-    stream_idle_timeout: 30   # 流式 chunk 间最大空闲（秒）；已开始流后，停顿超过此值则超时
+    stream_timeout: 90        # 流式首 token 超时（秒）；长上下文/网关慢时易超过 20s，不宜过小
+    stream_idle_timeout: 60   # 流式 chunk 间最大空闲（秒）；公网网关建议 60~120
     max_retries: 3
     retry_delay: 1.0
 
@@ -40,8 +40,8 @@ llm:
     temperature: 0.7
     max_tokens: 16384
     timeout: 300              # 非流式整包超时（秒）
-    stream_timeout: 20        # 流式首 token 超时（秒）
-    stream_idle_timeout: 30   # 流式 chunk 间最大空闲（秒）
+    stream_timeout: 90        # 流式首 token 超时（秒）
+    stream_idle_timeout: 60   # 流式 chunk 间最大空闲（秒）
     max_retries: 3
     retry_delay: 1.0
 
@@ -58,8 +58,8 @@ llm:
     temperature: 0.7
     max_tokens: 16384
     timeout: 300              # 非流式整包超时（秒）
-    stream_timeout: 20        # 流式首 token 超时（秒）
-    stream_idle_timeout: 30   # 流式 chunk 间最大空闲（秒）
+    stream_timeout: 90        # 流式首 token 超时（秒）
+    stream_idle_timeout: 60   # 流式 chunk 间最大空闲（秒）
     max_retries: 3
     retry_delay: 1.0
 
@@ -153,9 +153,9 @@ agents:
 # Mat Master：Mode 通过命令行 --mode 切换（direct | planner），不在此配置
 # ============================================
 mat_master:
-  # 可选：指定 workspace 根目录（与 MAT_MASTER_WORKSPACE_ROOT 相同）
-  # 设置后前端文件树与 agent 的工作目录都指向此路径
-  # workspace_root: "./"
+  # 可选：SSH/Bohrium 远端 session 工作目录根
+  # 远端 attach_ssh_session(session_id=...) 时会落到 {remote_session_workspace_root}/{session_id}
+  # remote_session_workspace_root: "/share/workspace"
 
   # ── CRP 许可证防火墙 ──
   # 决定哪些软件可以执行、哪些被阻止、以及默认替代方案。
@@ -204,7 +204,7 @@ mat_master:
     # 工具结果自动落盘：名称以此列表任一前缀开头的工具，执行成功后会将 observation 写入工作区 _tmp/tool_outputs/<工具名>/
     # 便于多批次文献汇总等任务从文件合并，避免上下文截断导致最终 CSV 不全
     # 含 web-search：内置 web-search 与 MCP mat_sn_web-search 结果均会落盘
-    tool_output_auto_save_patterns: ["mat_sn_", "mat_doc_", "web-search"]
+    tool_output_auto_save_patterns: ["mat_sn_", "mat_doc_", "web-search", "extract_info_from_webpage"]
 
     # Feature C: 超大工具结果摘要化
     # 当工具 observation 字符数超过阈值时，将其替换为结构化摘要 + 文件路径引用，减少 context 占用
@@ -280,7 +280,7 @@ mat_master:
 # ============================================
 # path_adaptor: "calculation" 为历史命名；对所列服务器统一做路径解析与 executor/storage 注入
 # calculation_servers: 仅对这些服务器启用 path adaptor（本地文件参数会自动上传 OSS 并改写为 URL）
-# calculation_executors: 每服务器可配置 executor（镜像/机型）与 sync_tools；同步任务传 executor=null，否则传 Bohrium executor（鉴权从 .env BOHRIUM_* 注入）
+# calculation_executors: 每服务器可配置 executor 与 sync_tools；sync_tools 用于 MCP 侧过滤 submit_*；Path Adaptor 对 sync_tools 中工具固定注入 type:local + Bohrium 鉴权（与 MatMaster LOCAL_EXECUTOR 对齐）
 # 结构数据库检索（当前）: mat_struct_db
 # 第一性原理计算: mat_abacus
 mcp:
@@ -312,15 +312,8 @@ mcp:
     mat_electron_microscope:
       - "get_electron_microscope_recognize"
     mat_binary_calc:
-      - prepare_abinit_job
-      - prepare_cp2k_job
-      - prepare_qe_job
-      - prepare_lammps_job
-      - prepare_orca_job
       - prepare_pyatb_job
-      # MCP exposes submit_run_gromacs; executor_map uses run_gromacs (path_adaptor strips submit_)
-      - submit_run_gromacs
-  # Per-server executor (image/machine_type) and sync_tools. Sync tools → executor None; others → Bohrium executor with env auth.
+  # Per-server executor and sync_tools: sync_tools 过滤 MCP 注册的 submit_*；sync_tools 内工具 Path Adaptor 固定注入 local + Bohrium 鉴权（覆盖服务器级 dispatcher）。
   calculation_executors:
     mat_sg:
       executor:
@@ -403,7 +396,7 @@ mcp:
       executor: null
       sync_tools:
         - get_electron_microscope_recognize
-    # 结构数据库检索：走 local，仅注入 BOHRIUM_ACCESS_KEY / BOHRIUM_PROJECT_ID 到 env；仅用同步工具
+    # 结构数据库检索：sync_tools 会固定 local+鉴权（与下方 executor 一致）；保留 executor 块便于阅读
     mat_struct_db:
       executor:
         type: "local"
@@ -516,13 +509,6 @@ mcp:
               app_key: "agent"
           resources:
             envs: {}
-      # MCP 可能将 List[Path] 暴露为 array of string（无 items.format:path）；submit 工具 description 常为短句。
-      # 在此按「远程工具名」声明需走 OSS 上传的参数名（须出现在 inputSchema.properties）；可与 run_* 共用一条。
-      path_params_by_tool:
-        submit_run_gromacs:
-          - input_files
-        run_gromacs:
-          - input_files
       sync_tools:
         - prepare_abinit_job
         - prepare_cp2k_job

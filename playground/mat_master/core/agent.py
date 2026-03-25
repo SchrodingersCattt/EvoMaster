@@ -20,22 +20,18 @@ from evomaster.utils.types import (
     UserMessage,
 )
 
-from .agent_finish_message import extract_json_from_reply, generate_finish_report
-from .agent_tool_observation import (
-    auto_save_tool_output,
-    compact_mat_sn_papers_observation,
-    format_tool_observation,
-    summarize_large_tool_observation,
-)
+from .agent_dialog import sanitize_dialog_history
+from .agent_finish_gates import MatMasterFinishGatesMixin
+from .agent_finish_message import generate_finish_report
+from .agent_tool_execution import MatMasterToolExecutionMixin
 from .async_execution_policy import AsyncExecutionPolicy
 from .callback import MatToolCallbacks, ToolCallbackPipeline
-from .execution import BatchExecutor, ExecutionTask
 from .execution_journal import ExecutionJournal
 from .job_registry import JobRegistry
 from .tool_guard import ToolGuard
 
 
-class MatMasterAgent(Agent):
+class MatMasterAgent(MatMasterFinishGatesMixin, MatMasterToolExecutionMixin, Agent):
     """Agent that ends the run when the finish tool is called with task_completed=true or partial.
 
     If the agent calls finish with task_completed=false, we add the
@@ -81,10 +77,16 @@ class MatMasterAgent(Agent):
         _mat = (config_dict or {}).get('mat_master') or {}
         _exec = _mat.get('execution') or {}
         self._tool_output_auto_save_patterns: list[str] = _exec.get(
-            'tool_output_auto_save_patterns', ['mat_sn_', 'mat_doc_', 'web-search']
+            'tool_output_auto_save_patterns',
+            ['mat_sn_', 'mat_doc_', 'web-search', 'extract_info_from_webpage'],
         )
         if not isinstance(self._tool_output_auto_save_patterns, list):
-            self._tool_output_auto_save_patterns = ['mat_sn_', 'mat_doc_', 'web-search']
+            self._tool_output_auto_save_patterns = [
+                'mat_sn_',
+                'mat_doc_',
+                'web-search',
+                'extract_info_from_webpage',
+            ]
         self._tool_output_save_counter = 0
         self._execution_journal = ExecutionJournal()
         # 超大工具结果摘要化：匹配以下前缀的工具 observation 超过阈值时自动替换为结构化摘要
@@ -185,93 +187,6 @@ class MatMasterAgent(Agent):
                 _compaction_llm_key or 'agent_llm',
             )
 
-    @staticmethod
-    def _sanitize_dialog_history(
-        messages: list,
-        logger=None,
-    ) -> list:
-        """Ensure every AssistantMessage with tool_calls has matching ToolMessages.
-
-        Claude/Bedrock requires that each ``tool_use`` block is immediately
-        followed by a ``tool_result`` block.  When a session is interrupted
-        mid-step the tool results may never have been recorded, leaving orphaned
-        tool_calls in the history.  This method inserts placeholder ToolMessages
-        for any such orphans so the dialog is structurally valid before it is
-        sent to the LLM.
-
-        Args:
-            messages: Parsed message objects (UserMessage / AssistantMessage /
-                ToolMessage).
-            logger: Optional logger for warning about injected placeholders.
-
-        Returns:
-            A new list with placeholder ToolMessages inserted where needed.
-        """
-        sanitized: list = []
-        i = 0
-        while i < len(messages):
-            msg = messages[i]
-            sanitized.append(msg)
-
-            tool_calls = getattr(msg, 'tool_calls', None) or []
-            if not tool_calls:
-                i += 1
-                continue
-
-            # Collect the tool_call_ids that are expected
-            expected_ids: dict[str, str] = {}  # id -> function name
-            for tc in tool_calls:
-                tc_id = getattr(tc, 'id', None) or ''
-                tc_name = ''
-                fn = getattr(tc, 'function', None)
-                if fn is not None:
-                    tc_name = getattr(fn, 'name', '') or ''
-                expected_ids[tc_id] = tc_name
-
-            # Collect tool_call_ids that are already present in subsequent
-            # ToolMessages (they may be interleaved with other messages in
-            # some edge cases, but we only look at the immediately following
-            # block to stay conservative).
-            found_ids: set[str] = set()
-            j = i + 1
-            while j < len(messages):
-                next_msg = messages[j]
-                tc_id = getattr(next_msg, 'tool_call_id', None)
-                if tc_id is None:
-                    break  # non-ToolMessage encountered — stop scanning
-                found_ids.add(tc_id)
-                j += 1
-
-            missing_ids = set(expected_ids.keys()) - found_ids
-            if missing_ids:
-                if logger is not None:
-                    logger.warning(
-                        '_sanitize_dialog_history: %d orphaned tool_call(s) '
-                        'detected; injecting placeholder tool_result(s): %s',
-                        len(missing_ids),
-                        missing_ids,
-                    )
-                for tc in tool_calls:
-                    tc_id = getattr(tc, 'id', None) or ''
-                    if tc_id not in missing_ids:
-                        continue
-                    tc_name = expected_ids.get(tc_id, 'unknown')
-                    sanitized.append(
-                        ToolMessage(
-                            tool_call_id=tc_id,
-                            name=tc_name,
-                            content={
-                                'status': 'interrupted',
-                                'observation': (
-                                    'Tool call was interrupted before completion; '
-                                    'result is unavailable. Please retry if needed.'
-                                ),
-                            },
-                        )
-                    )
-            i += 1
-        return sanitized
-
     def _initialize(self, task) -> None:
         """Override: 支持 task.meta['dialog_history'] 多轮对话；否则与基类一致并重置 tool output 计数。"""
         history_raw = task.meta.get('dialog_history') if task.meta else None
@@ -304,7 +219,7 @@ class MatMasterAgent(Agent):
                     )
             # Defensive: ensure every tool_use has a matching tool_result so
             # the dialog is structurally valid for all LLM providers.
-            history_messages = self._sanitize_dialog_history(
+            history_messages = sanitize_dialog_history(
                 history_messages, logger=self.logger
             )
             self._current_task_description = getattr(task, 'description', '') or ''
@@ -322,7 +237,9 @@ class MatMasterAgent(Agent):
             # prepare_for_query() call.  This avoids the "compaction fires on every
             # continuation" problem where full raw DB history is replayed each time.
             if self.context_manager.should_compact(self.current_dialog):
-                tokens_before = self.context_manager.estimate_tokens(self.current_dialog)
+                tokens_before = self.context_manager.estimate_tokens(
+                    self.current_dialog
+                )
                 self.logger.info(
                     '[Agent] _initialize: pre-compacting dialog_history '
                     '(tokens=%d exceeds trigger=%d)',
@@ -390,6 +307,12 @@ class MatMasterAgent(Agent):
         working_dir_abs = str(Path(working_dir).absolute())
         working_dir_info = f"\n\nYou must perform all operations in this working directory; do not change directory. All file operations and commands must be run under: {working_dir_abs}"
         prompt = base + working_dir_info
+        if working_dir_abs.startswith('/share/workspace/'):
+            prompt += (
+                '\n\nThis session workspace is under /share/workspace/{session_id}. '
+                'The parent /share directory is the Bohrium project-scoped shared storage. '
+                'Files in the current session directory are session-specific; shared project files may also exist elsewhere under /share.'
+            )
 
         # Mandatory citation and output format for survey/manuscript — agent MUST follow this
         _citation_format_path = (
@@ -423,313 +346,6 @@ You can use the 'use_skill' tool to:
         specs = super()._get_tool_specs()
         return self._async_execution_policy.filter_tool_specs_for_llm(specs)
 
-    def _precheck_finish_gates(
-        self, requested_task_completed: str
-    ) -> tuple[list[str], dict[str, Any]]:
-        """Validate finish gates before executing the finish tool.
-
-        Quality gates (manuscript, survey) are subject to a safety cap: after
-        ``finish_block_max`` consecutive blocks the gates are force-passed so
-        the agent never loops indefinitely.  Async-job gates are **not** capped
-        because orphan jobs can leak resources.
-        """
-        blocked_msgs: list[str] = []
-        gate_info: dict[str, Any] = {}
-        if requested_task_completed not in ('true', 'partial'):
-            return blocked_msgs, gate_info
-
-        self._job_registry.refresh_pending()
-        can_finish, gate_info = self._job_registry.can_finish()
-
-        # Async-job gate is never force-passed (risk of orphan jobs).
-        if not can_finish:
-            blocked_msgs.append(
-                '[finish_attempt_gate] Blocked: pending async jobs still running. '
-                'Continue monitoring until pending_jobs_check passes.'
-            )
-
-        # Quality gates: skip checking once the safety cap is reached.
-        force_pass = self._finish_block_count >= self._finish_block_max
-        if force_pass:
-            self.logger.warning(
-                '[finish_attempt_gate] Quality gates force-passed after %d '
-                'consecutive blocks (cap=%d).',
-                self._finish_block_count,
-                self._finish_block_max,
-            )
-            gate_info['finish_force_passed'] = True
-        else:
-            workspace = getattr(self.session.config, 'workspace_path', '') or ''
-            task_description = getattr(self, '_current_task_description', '')
-
-            # When running inside a ResearchPlanner step the task_description
-            # is the step prompt (contains "[Task of This Step]" / "step N of M").
-            # The planner's own _llm_verify_step_outcome already validated
-            # completion before the agent called finish, so skip the LLM gate
-            # here — it would only see the step prompt and incorrectly block.
-            _is_planner_step = (
-                '[Task of This Step]' in task_description
-                or '[Original Intent]' in task_description
-            )
-            if _is_planner_step:
-                self.logger.debug(
-                    '[finish_attempt_gate] Planner step detected — '
-                    'skipping LLM gate (planner already verified completion).'
-                )
-            else:
-                gate_eval = self._llm_finish_gate_check(
-                    task_description=task_description,
-                    requested_task_completed=requested_task_completed,
-                    workspace_path=workspace,
-                )
-
-                if not gate_eval.get('approved', False):
-                    reason = gate_eval.get(
-                        'reason', 'Task completion requirements not met'
-                    )
-                    blocked_msgs.append(
-                        f'[finish_attempt_gate] Blocked: {reason}\n'
-                        f'Task: {task_description[:100]}{"..." if len(task_description) > 100 else ""}'
-                    )
-        if blocked_msgs:
-            self._finish_block_count += 1
-            gate_info['finish_block_count'] = self._finish_block_count
-            gate_info['finish_block_max'] = self._finish_block_max
-        else:
-            self._finish_block_count = 0
-
-        # Guidance: if quality gates keep blocking and the run is likely stuck
-        # due to external web access limits (403/404/paywall), encourage the model
-        # to finish with task_completed='partial' and clear caveats instead of looping.
-        # NOTE: This does not force-pass any gate. It only adds info to help the LLM replan.
-        if blocked_msgs and requested_task_completed == 'true':
-            gate_info.setdefault(
-                'finish_hint',
-                (
-                    'If you are blocked by unavailable/paywalled web sources (403/404/etc.), '
-                    "switch to alternative open sources or finish with task_completed='partial' "
-                    'and include explicit limitations/caveats.'
-                ),
-            )
-
-        return blocked_msgs, gate_info
-
-    def _llm_finish_gate_check(
-        self,
-        task_description: str,
-        requested_task_completed: str,
-        workspace_path: str,
-    ) -> dict[str, Any]:
-        """Use LLM to decide whether finish is appropriate given the actual task requirements.
-
-        Evaluates whether the user's requested task has been accomplished, rather than
-        checking hardcoded gates that may not match the actual requirements.
-
-        Returns dict with 'approved' (bool) and 'reason' (str).
-        """
-        if not task_description or not task_description.strip():
-            # No task description available, allow finish
-            return {'approved': True, 'reason': ''}
-
-        prompt = f"""TASK DESCRIPTION:
-{task_description}
-
-USER REQUESTED: task_completed={requested_task_completed}
-
-Question: Has the user's requested task been accomplished?
-- Do NOT gate on mandatory manuscript validation or survey markdown quality.
-- Only block if the core deliverable requested by the user is clearly missing or incomplete.
-- Be permissive: if the task is substantially done, return approved=true.
-
-Return exactly one JSON object:
-{{
-  "approved": true,
-  "reason": ""
-}}
-
-If NOT approved, reason should be specific (e.g. "Requested CSV file not found in workspace").
-"""
-
-        dialog = Dialog(
-            messages=[
-                SystemMessage(
-                    content='You are a strict task completion validator. Output only JSON. Do not require manuscript quality gates or survey markdown gates unless the user explicitly asked for a written document.'
-                ),
-                UserMessage(content=prompt),
-            ],
-            tools=[],
-        )
-
-        default = {'approved': True, 'reason': ''}
-        try:
-            reply = self.llm.query(dialog)
-            raw = extract_json_from_reply(reply.content or '')
-            if not raw:
-                return default
-            result = json.loads(raw)
-            approved = bool(result.get('approved', True))
-            reason = str(result.get('reason', '') or '')
-            return {'approved': approved, 'reason': reason}
-        except Exception as e:
-            self.logger.debug('LLM finish gate check failed: %s', e)
-            return default
-
-    # ------------------------------------------------------------------
-    # Tool execution (formatting helpers in agent_tool_observation)
-    # ------------------------------------------------------------------
-
-    def _execute_tool(self, tool_call) -> tuple[str, dict[str, Any]]:
-        """Execute tool with MAT callbacks.
-
-        Overrides the base class so that:
-        1. **All** errors include the full Python traceback.
-        2. **All** observations are returned as JSON text.
-        3. ``execute_bash`` results include ``status`` + command metadata.
-        """
-        import traceback as _tb
-
-        try:
-            self._tool_callback_pipeline.run_before(tool_call)
-            # Emit tool_call event AFTER before-callbacks have patched the args,
-            # so the frontend/log shows the resolved arguments (e.g. DPA model
-            # alias -> OSS URL, patched bohr_job_id, etc.).
-            self._on_tool_call_start(tool_call)
-
-            tool_name = tool_call.function.name
-            tool_args = tool_call.function.arguments
-            self._log_tool_start(tool_name, tool_args)
-
-            tool = self.tools.get_tool(tool_name)
-            if tool is None:
-                error_msg = f"Unknown tool: {tool_name}"
-                self._log_tool_end(tool_name, error_msg, {'error': 'tool_not_found'})
-                obs, inf = self._tool_callback_pipeline.run_after(
-                    tool_call, error_msg, {'error': 'tool_not_found'}
-                )
-                return format_tool_observation(self.logger, tool_name, obs, inf), inf
-
-            try:
-                observation, info = tool.execute(self.session, tool_args)
-                self._log_tool_end(tool_name, observation, info)
-            except Exception as e:
-                tb_str = _tb.format_exc()
-                error_msg = f"Tool execution error: {e}\n\nTraceback:\n{tb_str}"
-                self.logger.error('Tool execution failed:\n%s', tb_str)
-                self._log_tool_end(tool_name, error_msg, {'error': str(e)})
-                observation, info = error_msg, {'error': str(e)}
-
-            # Record tool outcome in the execution journal (skip finish — handled separately).
-            # Note: recorded before run_after so the raw observation is captured; the journal
-            # is used for artifact tracking, not for LLM context.
-            #
-            # str_replace_editor is not in _tool_output_auto_save_patterns, so its created files
-            # would never appear in execution_journal.saved_path. Inject the path explicitly so
-            # _build_artifacts_block() can list it under ## Produced Artifacts.
-            if tool_name == 'str_replace_editor' and 'error' not in info:
-                try:
-                    _editor_args = (
-                        json.loads(tool_args)
-                        if isinstance(tool_args, str)
-                        else tool_args
-                    )
-                    if (
-                        isinstance(_editor_args, dict)
-                        and _editor_args.get('command') == 'create'
-                        and _editor_args.get('path')
-                    ):
-                        info = {**info, 'auto_saved_path': _editor_args['path']}
-                except Exception:
-                    pass
-
-            if tool_name != 'finish':
-                self._execution_journal.record(
-                    step=self._step_count,
-                    tool=tool_name,
-                    status='error' if 'error' in info else 'success',
-                    info=info,
-                    observation=observation if isinstance(observation, str) else '',
-                )
-
-            # finish 工具从源头返回 dict，直接透传（不经过 run_after / _format_tool_observation，避免 callbacks 假定 observation 为 str）
-            if tool_name == 'finish' and isinstance(observation, dict):
-                return observation, info
-
-            # Run after-callbacks (clean SN fields, survey reminder, etc.)
-            observation, info = self._tool_callback_pipeline.run_after(
-                tool_call,
-                observation,
-                info,
-            )
-
-            # 工具结果自动落盘在 callback pipeline 之后，落盘的是清洗后的数据
-            saved_path: str | None = None
-            if isinstance(info, dict) and 'error' not in info:
-                saved_path, self._tool_output_save_counter = auto_save_tool_output(
-                    self.logger,
-                    self.session,
-                    tool_name,
-                    observation,
-                    save_patterns=self._tool_output_auto_save_patterns,
-                    save_counter=self._tool_output_save_counter,
-                    step_count=getattr(self, '_step_count', 0),
-                )
-                if saved_path:
-                    if isinstance(observation, str):
-                        observation = (
-                            observation.rstrip() + f"\n\n[Auto-saved to: {saved_path}]"
-                        )
-                    info = {**info, 'auto_saved_path': saved_path}
-
-            # mat_sn 论文检索：落盘后仅向上下文返回路径 + 条数 + 少量题录（完整 JSON 仅在磁盘）
-            if isinstance(info, dict) and 'error' not in info and saved_path:
-                _compact = compact_mat_sn_papers_observation(
-                    tool_name, observation, saved_path
-                )
-                if _compact is not None:
-                    observation = _compact
-                    info = {**info, 'obs_summarized': True}
-                    self.logger.info(
-                        '[FeatureC] Compact mat_sn papers observation for %s → data_count=%s',
-                        tool_name,
-                        _compact.get('data_count'),
-                    )
-
-            # 超大 observation 摘要化在 callback pipeline 之后，基于清洗后的 observation
-            if isinstance(info, dict) and 'error' not in info:
-                _summary = summarize_large_tool_observation(
-                    tool_name,
-                    observation,
-                    saved_path,
-                    summarize_patterns=self._tool_obs_summarize_patterns,
-                    summarize_threshold=self._tool_obs_summarize_threshold,
-                )
-                if _summary is not None:
-                    self.logger.info(
-                        '[FeatureC] Summarized large observation for %s (%d→%d chars)',
-                        tool_name,
-                        len(observation) if isinstance(observation, str) else 0,
-                        len(_summary),
-                    )
-                    observation = _summary
-                    info = {**info, 'obs_summarized': True}
-
-            return (
-                format_tool_observation(self.logger, tool_name, observation, info),
-                info,
-            )
-
-        except Exception as exc:
-            # Catch-all: callback pipeline or any other unexpected error
-            tb_str = _tb.format_exc()
-            error_msg = f"Tool execution error: {exc}\n\nTraceback:\n{tb_str}"
-            self.logger.error('_execute_tool failed:\n%s', tb_str)
-            return format_tool_observation(
-                self.logger,
-                'internal_error',
-                error_msg,
-                {'error': str(exc)},
-            ), {'error': str(exc)}
-
     def _on_assistant_message(self, msg: AssistantMessage) -> None:
         """Optional hook after assistant message is added. Override in subclasses (e.g. streaming)."""
 
@@ -742,51 +358,6 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
 
     def _on_tool_message(self, msg: ToolMessage) -> None:
         """Optional hook after each tool message is added. Override in subclasses (e.g. streaming)."""
-
-    def _execute_tools_parallel(
-        self,
-        tool_calls: list,
-        *,
-        max_workers: int = 4,
-    ) -> list[tuple[Any, str, dict[str, Any]]]:
-        """Execute multiple tool calls concurrently via the unified BatchExecutor.
-
-        When the LLM returns N tool calls in a single response they are
-        conceptually independent, so we run them in parallel.
-
-        Returns a list of ``(tool_call, observation, info)`` in original order.
-        """
-        if not tool_calls:
-            return []
-
-        # Build ExecutionTask list — each task wraps _execute_tool for one tool_call
-        batch_tasks: list[ExecutionTask] = []
-        for idx, tc in enumerate(tool_calls):
-            batch_tasks.append(
-                ExecutionTask(
-                    task_id=str(idx),
-                    func=self._execute_tool,
-                    kwargs={'tool_call': tc},
-                    meta={'tool_call_index': idx},
-                )
-            )
-
-        # Use shared BatchExecutor (true concurrency for I/O-bound tool calls)
-        executor = BatchExecutor(max_workers=max_workers, rate_limit=self._rate_limit)
-        results = executor.execute_batch(batch_tasks)
-
-        # Map results back to (tool_call, observation, info) triples
-        ordered: list[tuple[Any, str, dict[str, Any]]] = []
-        for idx, res in enumerate(results):
-            tc = tool_calls[idx]
-            if res.status == 'success':
-                ordered.append((tc, res.output, res.info))
-            else:
-                # On failure, surface the error message as the observation
-                ordered.append(
-                    (tc, res.output or res.error or 'Unknown error', res.info)
-                )
-        return ordered
 
     # Marker embedded in periodic reminder system messages so they can be
     # identified and replaced on the next injection cycle.
@@ -845,6 +416,10 @@ If NOT approved, reason should be specific (e.g. "Requested CSV file not found i
             self.current_dialog.add_message(SystemMessage(content=reminder))
 
         dialog_for_query = self.context_manager.prepare_for_query(self.current_dialog)
+        # 若 prepare_for_query 发生了压缩/截断，将结果回写到 current_dialog，
+        # 避免下一个 step 再次对未压缩的原始 dialog 重复触发压缩。
+        if dialog_for_query is not self.current_dialog:
+            self.current_dialog = dialog_for_query
         assistant_message = self._query_with_context_recovery(dialog_for_query)
         self.current_dialog.add_message(assistant_message)
         self._on_assistant_message(assistant_message)

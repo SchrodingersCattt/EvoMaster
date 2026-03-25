@@ -8,6 +8,28 @@ import re
 import uuid
 from typing import Any
 
+# Tool ``execute`` often returns ``info`` with the same payload as ``observation`` under
+# ``result`` (or peek_file decode branches). Those keys must not appear in the outer
+# JSON ``info`` / ToolMessage.meta — they only bloat LLM context and SSE/DB.
+_INFO_KEYS_REDUNDANT_WITH_OBSERVATION = frozenset(
+    {
+        'result',
+        'direct_parsing',
+        'base64_decoding',
+        'utf16_decoding',
+        'gzip_decompression',
+    }
+)
+
+
+def slim_tool_info_for_payload(info: dict[str, Any] | None) -> dict[str, Any]:
+    """Keep only lightweight ``info`` keys; drop blobs duplicated in ``observation``."""
+    if not info:
+        return {}
+    return {
+        k: v for k, v in info.items() if k not in _INFO_KEYS_REDUNDANT_WITH_OBSERVATION
+    }
+
 
 def format_bash_observation(observation: str, info: dict[str, Any]) -> dict[str, Any]:
     """Build structured JSON object for ``execute_bash`` results."""
@@ -214,6 +236,84 @@ def compact_mat_sn_papers_observation(
             'Full JSON (including abstracts) is saved at full_result_path. '
             'Read that file via str_replace_editor view, execute_bash, or skills '
             '(collect_evidence, build_lit_table); do not assume full text is in chat.'
+        ),
+    }
+
+
+def compact_extract_webpage_observation(
+    tool_name: str,
+    observation: Any,
+    saved_path: str | None,
+) -> dict | None:
+    """After disk save, shrink extract_info_from_webpage JSON for LLM context."""
+    if not saved_path or tool_name != 'extract_info_from_webpage':
+        return None
+    payload = parse_tool_observation_to_dict(observation)
+    if payload is None or not isinstance(payload, dict):
+        return None
+
+    prefix = 'webpage_detailed_contents from '
+    pages: list[dict[str, Any]] = []
+    preview_cap = 500
+
+    for key, val in payload.items():
+        if key in (
+            'total_processing_time_seconds',
+            'time_saving_json_seconds',
+            'web_fetch_circuit',
+            'web_fetch_guidance',
+        ):
+            continue
+        if not isinstance(key, str) or not key.startswith(prefix):
+            continue
+        url = key[len(prefix) :].strip()
+        if not isinstance(val, dict):
+            pages.append({'url': url, 'summary': str(val)[:300]})
+            continue
+        if val.get('error') is not None:
+            err = val['error']
+            if isinstance(err, dict):
+                pages.append(
+                    {
+                        'url': url,
+                        'status': 'error',
+                        'error': (
+                            err.get('message')
+                            or err.get('reason')
+                            or json.dumps(err, ensure_ascii=False)[:400]
+                        ),
+                        'http_status': err.get('http_status'),
+                        'blocked': err.get('blocked', False),
+                    }
+                )
+            else:
+                pages.append({'url': url, 'status': 'error', 'error': str(err)[:400]})
+            continue
+
+        content = val.get('content')
+        text = content if isinstance(content, str) else ''
+        preview = text[:preview_cap] + ('…' if len(text) > preview_cap else '')
+        pages.append(
+            {
+                'url': url,
+                'status': 'ok',
+                'content_chars': len(text),
+                'content_preview': preview,
+                'processing_time_seconds': val.get('processing_time_seconds'),
+            }
+        )
+
+    return {
+        'data_count': len(pages),
+        'pages': pages,
+        'total_processing_time_seconds': payload.get('total_processing_time_seconds'),
+        'web_fetch_circuit': payload.get('web_fetch_circuit'),
+        'web_fetch_guidance': payload.get('web_fetch_guidance'),
+        'full_result_path': saved_path,
+        '_note': (
+            'Full extracted text per URL is saved at full_result_path. '
+            'Read that file with str_replace_editor view or execute_bash; '
+            'do not assume full page text is in chat.'
         ),
     }
 

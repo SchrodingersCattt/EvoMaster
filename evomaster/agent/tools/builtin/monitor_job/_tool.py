@@ -99,6 +99,14 @@ class MonitorJobParams(BaseToolParams):
             '设为正整数可限制单次调用的轮询次数（用于调试或缩短单次占用）。'
         ),
     )
+    timeout_minutes: float | None = Field(
+        default=None,
+        description=(
+            'Convenience shortcut: limit this call to at most timeout_minutes of wall time. '
+            'Computes max_polls_per_call = max(1, timeout_minutes * 60 // poll_interval). '
+            'Ignored when max_polls_per_call is already set explicitly.'
+        ),
+    )
 
 
 class MonitorJobTool(BaseTool):
@@ -122,7 +130,11 @@ class MonitorJobTool(BaseTool):
         workspace = params.workspace
         if not workspace or workspace == '.':
             if isinstance(session, SSHSession):
-                workspace = session.config.working_dir or '/personal/workspace'
+                workspace = (
+                    session.config.working_dir
+                    or getattr(session.config, 'workspace_path', None)
+                    or '/share/workspace'
+                )
             else:
                 workspace = getattr(session.config, 'workspace_path', None) or '.'
 
@@ -138,6 +150,9 @@ class MonitorJobTool(BaseTool):
         max_ppc = params.max_polls_per_call
         if max_ppc is not None and max_ppc <= 0:
             max_ppc = None
+        # Derive max_polls_per_call from timeout_minutes when not explicitly provided
+        if max_ppc is None and params.timeout_minutes is not None:
+            max_ppc = max(1, int(params.timeout_minutes * 60 // params.poll_interval))
         stop_ev = getattr(session, '_stop_event', None)
         result = _run_lifecycle(
             job_id=params.job_id,
