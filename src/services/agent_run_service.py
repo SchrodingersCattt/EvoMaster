@@ -268,7 +268,16 @@ class AgentRunService:
                     'task_id': task_id,
                 }
             )
-            events_table = get_chat_events_table()
+            try:
+                events_table = get_chat_events_table()
+            except Exception:
+                # EventRouter is not started yet. Keep this failure silent for
+                # callers so we do not emit partial SSE/error lifecycle events.
+                logger.exception(
+                    'run_agent_sync pre-router setup failed: session_id=%s',
+                    session_id,
+                )
+                return None
 
             # -- Stage 2: EventRouter bootstrap --
             router = EventRouter(
