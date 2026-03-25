@@ -212,8 +212,19 @@ class OpenAIProvider:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> Iterator[StreamChunk]:
-        """Streaming chat completion, yields StreamChunk per delta."""
+        """Streaming chat completion, yields StreamChunk per delta.
+
+        Translates all SDK exceptions to LLMError so callers only need to
+        catch one type. retryable=True for transient errors (timeout,
+        connection, rate-limit, server); retryable=False for permanent errors
+        (auth, context-length exceeded).
+        """
+        from matmaster.types.errors import LLMError
+        import httpx as _httpx
+
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
@@ -230,52 +241,72 @@ class OpenAIProvider:
         if not isinstance(stream_options, dict):
             stream_options = {}
         kwargs["stream_options"] = {**stream_options, "include_usage": True}
+        if timeout is not None:
+            kwargs["timeout"] = timeout
 
-        stream = self._client.chat.completions.create(**kwargs)
-        last_chunk_usage: dict[str, int] | None = None
+        try:
+            stream = self._client.chat.completions.create(**kwargs)
+            last_chunk_usage: dict[str, int] | None = None
 
-        for chunk in stream:
-            usage = getattr(chunk, "usage", None)
-            if (
-                isinstance(getattr(usage, "prompt_tokens", None), int)
-                and isinstance(getattr(usage, "completion_tokens", None), int)
-                and isinstance(getattr(usage, "total_tokens", None), int)
-            ):
-                last_chunk_usage = {
-                    "prompt_tokens": usage.prompt_tokens,
-                    "completion_tokens": usage.completion_tokens,
-                    "total_tokens": usage.total_tokens,
-                }
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            finish_reason = chunk.choices[0].finish_reason
-            reasoning_content = getattr(delta, "reasoning_content", None)
+            for chunk in stream:
+                usage = getattr(chunk, "usage", None)
+                if (
+                    isinstance(getattr(usage, "prompt_tokens", None), int)
+                    and isinstance(getattr(usage, "completion_tokens", None), int)
+                    and isinstance(getattr(usage, "total_tokens", None), int)
+                ):
+                    last_chunk_usage = {
+                        "prompt_tokens": usage.prompt_tokens,
+                        "completion_tokens": usage.completion_tokens,
+                        "total_tokens": usage.total_tokens,
+                    }
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                finish_reason = chunk.choices[0].finish_reason
+                reasoning_content = getattr(delta, "reasoning_content", None)
 
-            # Map tool_call deltas
-            tool_call_deltas: list[dict[str, Any]] | None = None
-            if delta.tool_calls:
-                tool_call_deltas = []
-                for tc_delta in delta.tool_calls:
-                    d: dict[str, Any] = {"index": tc_delta.index}
-                    if tc_delta.id:
-                        d["id"] = tc_delta.id
-                    if tc_delta.function:
-                        if tc_delta.function.name:
-                            d["name"] = tc_delta.function.name
-                        if tc_delta.function.arguments:
-                            d["arguments"] = tc_delta.function.arguments
-                    tool_call_deltas.append(d)
+                # Map tool_call deltas
+                tool_call_deltas: list[dict[str, Any]] | None = None
+                if delta.tool_calls:
+                    tool_call_deltas = []
+                    for tc_delta in delta.tool_calls:
+                        d: dict[str, Any] = {"index": tc_delta.index}
+                        if tc_delta.id:
+                            d["id"] = tc_delta.id
+                        if tc_delta.function:
+                            if tc_delta.function.name:
+                                d["name"] = tc_delta.function.name
+                            if tc_delta.function.arguments:
+                                d["arguments"] = tc_delta.function.arguments
+                        tool_call_deltas.append(d)
 
-            yield StreamChunk(
-                content=delta.content,
-                reasoning_content=reasoning_content,
-                tool_call_deltas=tool_call_deltas,
-                finish_reason=finish_reason,
-            )
+                yield StreamChunk(
+                    content=delta.content,
+                    reasoning_content=reasoning_content,
+                    tool_call_deltas=tool_call_deltas,
+                    finish_reason=finish_reason,
+                )
 
-        if last_chunk_usage is not None:
-            yield StreamChunk(usage=last_chunk_usage)
+            if last_chunk_usage is not None:
+                yield StreamChunk(usage=last_chunk_usage)
+
+        except (
+            openai.APITimeoutError,
+            openai.APIConnectionError,
+            openai.RateLimitError,
+            openai.InternalServerError,
+        ) as exc:
+            raise LLMError(str(exc), retryable=True) from exc
+        except _httpx.ReadTimeout as exc:
+            raise LLMError(str(exc), retryable=True) from exc
+        except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
+            raise LLMError(str(exc), retryable=False) from exc
+        except openai.BadRequestError as exc:
+            err_str = str(exc).lower()
+            if "context" in err_str and ("length" in err_str or "token" in err_str):
+                raise LLMError(str(exc), retryable=False) from exc
+            raise LLMError(str(exc), retryable=True) from exc
 
     @staticmethod
     def _parse_arguments(raw: str | None) -> dict[str, Any]:
