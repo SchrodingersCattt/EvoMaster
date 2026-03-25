@@ -14,6 +14,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 from urllib.parse import urlparse
+import hashlib
+import tempfile
+import threading
+from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
@@ -60,6 +64,82 @@ _DEFAULT_DOMAIN_FAILURE_THRESHOLD = 3
 
 # P0: class/id patterns for noise elements (cookie banners, sidebars, menus).
 _NOISE_PATTERN = re.compile(r'cookie|banner|sidebar|menu', re.I)
+
+
+class _WebpageDiskCache:
+    """Workspace-scoped disk cache for fetched web pages.
+
+    Each cache entry is a JSON file at ``{cache_dir}/{url_hash}.json``.
+    TTL-based expiry; oldest-first eviction when MAX_ENTRIES exceeded.
+    Thread-safe eviction via ``_evict_lock``.
+    """
+
+    TTL: int = 900  # 15 minutes
+    MAX_ENTRIES: int = 200
+
+    def __init__(self, cache_dir: Path) -> None:
+        self._dir = Path(cache_dir)
+        self._evict_lock = threading.Lock()
+
+    def _key(self, url: str) -> str:
+        return hashlib.sha256(url.encode()).hexdigest()[:16]
+
+    def get(self, url: str) -> str | None:
+        """Return cached content if entry exists and is not expired, else None."""
+        path = self._dir / f'{self._key(url)}.json'
+        if not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+            if _time.time() - data.get('fetched_at', 0) > self.TTL:
+                return None
+            return data.get('content')
+        except Exception:
+            return None
+
+    def put(self, url: str, content: str) -> None:
+        """Write cache entry via atomic temp-file rename."""
+        self._dir.mkdir(parents=True, exist_ok=True)
+        entry = {
+            'url': url,
+            'content': content,
+            'fetched_at': _time.time(),
+        }
+        target = self._dir / f'{self._key(url)}.json'
+        try:
+            fd = tempfile.NamedTemporaryFile(
+                mode='w',
+                dir=str(self._dir),
+                suffix='.tmp',
+                delete=False,
+                encoding='utf-8',
+            )
+            try:
+                json.dump(entry, fd, ensure_ascii=False)
+                fd.flush()
+            finally:
+                fd.close()
+            Path(fd.name).replace(target)
+        except Exception:
+            logger.warning('Failed to write cache entry for %s', url, exc_info=True)
+            return
+        self._maybe_evict()
+
+    def _maybe_evict(self) -> None:
+        """Remove oldest entries if cache exceeds MAX_ENTRIES."""
+        with self._evict_lock:
+            try:
+                entries = sorted(self._dir.glob('*.json'), key=lambda p: p.stat().st_mtime)
+            except Exception:
+                return
+            excess = len(entries) - self.MAX_ENTRIES
+            if excess <= 0:
+                return
+            for path in entries[:excess]:
+                try:
+                    path.unlink()
+                except Exception:
+                    pass
 
 
 def _extract_domain(url: str) -> str:
