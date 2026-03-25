@@ -31,10 +31,14 @@ class MatMasterFinishGatesMixin:
         self._job_registry.refresh_pending()
         can_finish, gate_info = self._job_registry.can_finish()
 
-        if not can_finish:
+        # When task_completed='partial' the agent is explicitly acknowledging that work
+        # is incomplete (e.g. job still running), so the pending-jobs gate is skipped.
+        # Only block on pending jobs when the agent claims full completion ('true').
+        if not can_finish and requested_task_completed == 'true':
             blocked_msgs.append(
                 '[finish_attempt_gate] Blocked: pending async jobs still running. '
-                'Continue monitoring until pending_jobs_check passes.'
+                'Continue monitoring until pending_jobs_check passes, '
+                "or finish with task_completed='partial' to yield while the job runs."
             )
 
         force_pass = self._finish_block_count >= self._finish_block_max
