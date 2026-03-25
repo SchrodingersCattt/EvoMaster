@@ -2,11 +2,18 @@
 
 > matmaster_config/ 配置整理：消除重叠、删除死配置、拆分 MCP、修复运行时注入
 
+## Scope
+
+本次改动作用于重构分支 `refactor/matmaster-playground-exp-agent-v2` 的 `matmaster_config/` 目录。
+`test` 分支仍使用 `configs/mat_master/`，不受影响 -- 两个分支各自独立的配置目录，无共享。
+
+当前代码中部分路径仍指向旧目录 `configs/mat_master/`（如 `direct.toml`、`cache_mcp_schemas.py` 默认值、`agent_run_service.py` 校验逻辑）。这些路径修正包含在本次实施范围内。
+
 ## Problem
 
 `matmaster_config/config.yaml`（620 行）存在三个问题：
 
-1. **重叠**：`llm:` 段（115 行）与 `llm_config.yaml`（122 行）几乎完全重复
+1. **重叠**：`llm:` 段（115 行）与 `llm_config.yaml`（122 行）内容实质相同但结构有差异 -- `config.yaml` 用 `llm.{name}` 平铺，`llm_config.yaml` 用 `profiles.{name}` + `routes` + `default` 结构化。后者是前者的超集和升级，删除 `llm:` 段安全。
 2. **死配置**：`mat_master:`、`env:`、`llm_output:`、`logging:` 等段在重构后的 `matmaster/` 代码中零引用（仅旧 `evomaster/` 使用）
 3. **MCP 运行时配置丢失**：web 路径下 `LazyMCPConnector` 收到空 dict，导致 `path_adaptor` 和 `calculation_executors` 不生效
 
@@ -32,12 +39,14 @@
 
 | Section | Consumer | Access Pattern |
 |---------|----------|----------------|
-| `agents.general.llm` | `src/services/agent_run_service.py:290-295` | dict.get() |
+| `agents.general.llm` | `src/services/agent_run_service.py:290-295` | dict.get() -- service 层路由 LLM profile 的 key，其他 agents 字段已迁入 ExpConfig/toml |
 | `mcp:` (runtime fields) | `matmaster/tools/lazy_mcp.py` via `configure_mcp_manager()` | dict.get() |
 | `skills:` | `matmaster/core/exp.py` via `ExpConfig` | Pydantic |
 | `session:` | `matmaster/core/playground.py:157-178` | dict -> Pydantic |
 | `playground:` | `matmaster/core/playground.py:289-311` | dict -> Pydantic |
 | `workspace:` | `matmaster/core/playground.py:200` | attribute |
+
+Note: `playground.py:375` 的 `validate_startup()` 校验 `"agents" in cfg`，清理后仍保留 `agents` 段所以不受影响。
 
 ### MCP Field Classification
 
@@ -177,6 +186,8 @@ class ExpSkillsConfig(BaseModel):
     mcp_runtime_file: str = "mcp.yaml"   # New: runtime MCP config filename
 ```
 
+Note: `mcp_runtime_file` defaults to `"mcp.yaml"` via Pydantic, not declared in toml.
+
 #### Exp._init_skill_tools() change
 
 ```python
@@ -186,36 +197,51 @@ def _init_skill_tools(self, ctx, registry, config=None):
         return
 
     # Runtime MCP config: prefer injected, else self-load from config_dir
+    # Uses _load_raw() to get ${VAR} expansion for any future env var refs
     if config:
         mcp_config = config
     else:
+        from matmaster.config.loader import _load_raw
         mcp_runtime_path = Path(skills_cfg.config_dir) / skills_cfg.mcp_runtime_file
         if mcp_runtime_path.exists():
-            import yaml
-            mcp_config = yaml.safe_load(mcp_runtime_path.read_text()) or {}
+            mcp_config = _load_raw(mcp_runtime_path)
         else:
+            self.logger.warning(
+                "MCP runtime config not found: %s, MCP tools will have no path adaptor",
+                mcp_runtime_path,
+            )
             mcp_config = {}
 
-    # Rest unchanged: reads path_adaptor, calculation_servers, etc. from mcp_config
+    # mcp_config_file fallback to skills_cfg.mcp_config_file (from toml)
+    # mcp.yaml does not contain config_file field -- this always hits the default
     mcp_config_file = mcp_config.get("config_file", skills_cfg.mcp_config_file)
     # ...
 ```
 
 ### cache_mcp_schemas.py adaptation
 
-Update to read `mcp.yaml` instead of `config.yaml`'s `mcp:` section:
+Update to read `mcp.yaml` instead of `config.yaml`'s `mcp:` section.
+No fallback -- `mcp.yaml` is the single source of truth; missing file is a hard error.
 
 ```python
-# Try mcp.yaml first, fallback to config.yaml mcp: key
 mcp_yaml = config_dir / "mcp.yaml"
-if mcp_yaml.exists():
-    with open(mcp_yaml) as f:
-        mcp_config = yaml.safe_load(f)
-else:
-    config_yaml = config_dir / "config.yaml"
-    with open(config_yaml) as f:
-        mcp_config = yaml.safe_load(f).get("mcp", {})
+if not mcp_yaml.exists():
+    logger.error("mcp.yaml not found at %s", mcp_yaml)
+    sys.exit(1)
+with open(mcp_yaml) as f:
+    mcp_config = yaml.safe_load(f)
 ```
+
+Also update `--config-dir` default from `"configs/mat_master"` to `"matmaster_config"`.
+
+## Path Fixes in Scope
+
+Besides config file changes, the following hardcoded paths need updating to `matmaster_config`:
+
+- `matmaster/exps/direct.toml` -- `config_dir = "configs/mat_master"` -> `"matmaster_config"`
+- `matmaster/tools/cache_mcp_schemas.py` -- `--config-dir` default `"configs/mat_master"` -> `"matmaster_config"`
+- `matmaster/core/playground.py` -- `validate_startup()` path `configs/{pg_type}/config.yaml`. Note: this method also validates `minimal` playground type which still lives under `configs/minimal/`. For this consolidation, only the `mat_master` path should route to `matmaster_config/`; `minimal` retains `configs/minimal/`.
+- `src/services/agent_run_service.py:126` -- `_project_root / "configs" / pg_type / "llm_config.yaml"` in `_validate_llm_configs()`
 
 ## Unchanged Components
 
@@ -223,10 +249,17 @@ else:
 - `mcp_config.*.json` -- no changes (endpoint addresses)
 - `matmaster/config/loader.py` -- no changes (mcp loading is in Exp)
 - `matmaster/tools/lazy_mcp.py` -- no changes (receives dict, source-agnostic)
-- `src/services/agent_run_service.py` -- no changes (`mcp=None` now handled by Exp)
+- `src/services/agent_run_service.py` -- orchestration logic unchanged (`mcp=None` now handled by Exp); only path constants updated
 
 ## Constraints
 
 - MCP servers must ONLY connect when a skill triggers them (lazy load contract preserved)
 - `configure_mcp_manager()` runs during `LazyMCPConnector._ensure_manager()`, which is called on first `LazyMCPTool.execute()` -- lazy contract maintained
 - Schema filtering (`tool_include_only`, `sync_tools`) is baked into cache at generation time, not re-applied at runtime
+
+## Testing
+
+- Existing `test_lazy_mcp_loading` E2E test needs update to cover Exp self-loading `mcp.yaml` path (config=None branch)
+- Verify `cache_mcp_schemas.py` works with `--config-dir matmaster_config` pointing to new layout
+- Verify `path_adaptor` is correctly initialized when `LazyMCPTool.execute()` fires (mcp_config no longer empty)
+- Update `tests/matmaster/config/test_exp.py` -- `TestExpSkillsConfig.test_defaults()` must cover new `mcp_runtime_file` field
