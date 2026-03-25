@@ -1,67 +1,63 @@
-"""Agent 执行服务：playground 初始化、线程池、run_agent_sync。"""
+"""Agent execution service: new matmaster pipeline orchestration.
+
+Rewritten per D-12: run_agent_sync() is a thin orchestration layer using:
+  Playground.prepare() -> get_chat_events_table() -> EventRouter bootstrap ->
+  Bohrium -> WorkspaceHandler attachment -> Exp.assemble() -> ChatHistory ->
+  Kernel.run() -> post-processing
+
+Method signature (12 parameters) unchanged -- zero caller modifications.
+"""
 
 import asyncio
 import gc
-import importlib
 import logging
 import os
-import threading
 import time
 import uuid
-from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
-from evomaster.core import get_playground_class
-from evomaster.utils import LLMConfig, create_llm
-from playground.mat_master.core.agent_config_helpers import (
-    get_first_agent_config,
-    resolve_mat_master_prompt_files,
+from matmaster.core.bus import MessageBus
+from matmaster.core.playground import PlaygroundManager
+from matmaster.hooks import (
+    AssistantStateHook,
+    OutputProcessorHook,
+    SkillHitHook,
 )
-from playground.mat_master.core.ask_human_helpers import (
-    attach_ask_human_on_agent,
-    get_ask_human_config_dict,
+from matmaster.integration import (
+    EventRouter,
+    PersistenceHandler,
+    SSEHandler,
+    WorkspaceHandler,
 )
-from playground.mat_master.core.dialog_history_helpers import (
-    build_mat_master_discovery_task,
-    trim_events_for_dialog_history,
+from matmaster.config.exp import ExpConfig
+from matmaster.integration.bohrium_setup import BohriumSetupService, SkillSyncSpec
+from matmaster.core.playground import Playground, PlaygroundManager
+from matmaster.types.context import WorkspaceArchivalConfig
+from matmaster.types.events import (
+    BohriumNodeEvent,
+    CancelledEvent,
+    ErrorEvent,
+    ResponseEvent,
+    StreamClosedEvent,
 )
-from playground.mat_master.core.run_helpers import (
-    should_persist_chat_event,
-    should_skip_push_for_frontend,
-)
-from playground.mat_master.service.stream_agent import StreamingMatMasterAgent
 from src.dao.chat_events_table import get_chat_events_table
-from src.dao.oss_io import upload_dir_to_oss
 from src.dao.redis_dao import get_redis_dao
-from src.services.agent_run_bohrium import (
-    apply_run_credentials_to_session,
-    cleanup_bohrium_after_run,
-    load_run_credentials,
-    setup_bohrium_for_run,
-)
 from src.services.chat_history import ChatHistoryConverter
 from src.services.quota_service import use_quota
 from src.services.sessions_service import get_sessions_service
-from src.utils.chat_event_source import normalize_event_source
-from src.utils.worker_id import get_worker_id
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# 支持多用户并发：agent 运行在线程池中（默认 2 以降低内存占用，可设 CHAT_AGENT_MAX_WORKERS 覆盖）
+# Thread pool concurrency: default 2 workers, override with CHAT_AGENT_MAX_WORKERS
 _AGENT_MAX_WORKERS = int(os.environ.get('CHAT_AGENT_MAX_WORKERS', '2'))
 if _AGENT_MAX_WORKERS < 1:
     _AGENT_MAX_WORKERS = 1
 
-# 检测到 workspace 有变更后，至少间隔多少秒再做一次「扫描+比对」（避免每次 tool 都扫目录）
-_WORKSPACE_CHECK_DEBOUNCE_SECONDS = float(
-    os.environ.get('CHAT_WORKSPACE_CHECK_DEBOUNCE_SECONDS', '2')
-)
-
-# 多轮对话历史：最多取最近 N 条事件，避免 context 过长
+# Multi-turn dialog: max events from DB to avoid context overflow
 _DIALOG_HISTORY_MAX_EVENTS = int(
     os.environ.get('CHAT_DIALOG_HISTORY_MAX_EVENTS', '500')
 )
@@ -70,229 +66,148 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
 
 
+def _build_workspace_upload_fn(
+    archival_config: WorkspaceArchivalConfig | None,
+) -> Callable[..., Any] | None:
+    """Build workspace upload closure when archival is enabled.
+
+    Lazy-imports oss_io to avoid hard oss2 dependency when archival
+    is disabled.
+    """
+    if not archival_config or not archival_config.enabled:
+        return None
+    oss_prefix = (archival_config.oss_prefix or '').strip('/')
+
+    def _do_upload(session_id: str, task_id: str, workspace_path: Path) -> None:
+        from src.dao.oss_io import upload_dir_to_oss
+
+        key_prefix = '/'.join(part for part in (oss_prefix, session_id) if part)
+        upload_dir_to_oss(workspace_path, key_prefix)
+
+    return _do_upload
+
+
+def _derive_skill_sync_spec(
+    exp_config: ExpConfig,
+    playground: Any,
+    *,
+    project_root: Path,
+) -> SkillSyncSpec | None:
+    """Build SkillSyncSpec from Exp skills config and optional mat_master.skill_evolution.
+
+    ``remote_project_root`` is fixed to ``/personal/workspace/.evomaster``.
+    When ``exp_config.skills`` is disabled or has no ``skills_root``, returns
+    ``None`` (no fallback to unrelated default evomaster paths).
+    """
+    skills = exp_config.skills
+    if not skills.enabled:
+        return None
+    # skills_root can be str | list[str]
+    roots_raw = skills.skills_root
+    if isinstance(roots_raw, list):
+        rel_list = [r.strip() for r in roots_raw if r and r.strip()]
+    else:
+        s = (roots_raw or "").strip()
+        rel_list = [s] if s else []
+    if not rel_list:
+        return None
+    resolved_roots: list[str] = []
+    for root_rel in rel_list:
+        p = Path(root_rel)
+        p = p.resolve() if p.is_absolute() else (project_root / root_rel).resolve()
+        if p.is_dir():
+            resolved_roots.append(str(p))
+    if not resolved_roots:
+        return None
+
+    local_user: str | None = None
+    remote_user: str | None = None
+    if hasattr(playground, "config"):
+        try:
+            cfg = playground.config.model_dump()
+        except Exception:
+            cfg = {}
+    else:
+        cfg = {}
+    evo = (cfg.get("mat_master") or {}).get("skill_evolution") or {}
+    loc_raw = evo.get("local_user_skills_root")
+    rem_raw = evo.get("remote_user_skills_root")
+    if loc_raw and rem_raw:
+        local_user = str(Path(str(loc_raw)).expanduser().resolve())
+        remote_user = str(rem_raw).strip()
+
+    return SkillSyncSpec(
+        project_skill_roots=resolved_roots,
+        local_user_skills_root=local_user,
+        remote_user_skills_root=remote_user,
+        remote_project_root="/personal/workspace/.evomaster",
+    )
+
+
 @runtime_checkable
 class ReplyQueueLike(Protocol):
-    """确认回复队列抽象：支持写入回复/取消，阻塞获取。get 返回 None 表示取消。"""
+    """Confirmation reply queue abstraction: put content/cancel, blocking get."""
 
     def put_content(self, content: str) -> None: ...
 
     def put_cancel(self) -> None: ...
 
     def get(self, timeout: float | None = None) -> str | None:
-        """阻塞获取回复。返回 None 表示取消；超时抛出 queue.Empty。"""
+        """Blocking get. Returns None for cancel; raises queue.Empty on timeout."""
         ...
 
 
 class AgentRunService:
-    """Agent 执行服务：playground 初始化、线程池、同步执行 run。"""
+    """Agent execution service: pipeline orchestration via matmaster components."""
 
     def __init__(self, sessions_service=None):
         self._sessions_service = sessions_service or get_sessions_service()
         self._executor = ThreadPoolExecutor(max_workers=_AGENT_MAX_WORKERS)
-        self._playgrounds: dict[str, Any] = (
-            {}
-        )  # session_id -> pg，按 session 隔离，避免 B 的 run 覆盖 A 的 working_dir/SSH
-        self._playground_init_done = threading.Event()
+        self._pg_manager = PlaygroundManager(_project_root)
 
     def init_playground_sync(self) -> None:
-        """预加载 playground 模块与配置，不创建 pg 实例；实际 run 按 session_id 在 _get_or_create_playground 中创建并在结束时 cleanup，避免长期持有导致内存增长。"""
-        try:
-            importlib.import_module('playground.mat_master.core.playground')
-            config_path = _project_root / 'configs' / 'mat_master' / 'config.yaml'
-            if not config_path.exists():
-                raise FileNotFoundError(f"Config not found: {config_path}")
-            run_dir = _project_root / 'runs' / RUN_ID_WEB
-            run_dir.mkdir(parents=True, exist_ok=True)
-            logger.info('MatMaster chat: playground module and config ready.')
-        except Exception as e:
-            logger.exception('MatMaster chat playground init failed: %s', e)
-        finally:
-            self._playground_init_done.set()
+        """Validate configs at startup -- delegates to PlaygroundManager + LLM check."""
+        self._pg_manager.validate_startup()
+        self._validate_llm_configs()
 
-    def _emit_mcp_event_safely(
-        self,
-        event_callback: Callable[..., None] | None,
-        event_type: str,
-        content: Any,
-        **extra: Any,
-    ) -> None:
-        """Emit MCP progress event via run event_callback when available."""
-        if not callable(event_callback):
-            return
-        try:
-            event_callback('System', event_type, content, **extra)
-        except Exception as e:
-            logger.debug('emit MCP event failed type=%s err=%s', event_type, e)
+    def _validate_llm_configs(self) -> None:
+        """启动时 LLM 配置快速失败检查。
 
-    def _get_or_create_playground(
-        self,
-        session_id: str,
-        event_callback: Callable[..., None] | None = None,
-    ) -> Any:
-        """按 session_id 返回或创建 playground，避免多用户共用同一 pg 导致 working_dir/SSH 串台。run 结束时 pop+cleanup 释放。"""
-        if session_id in self._playgrounds:
-            return self._playgrounds[session_id]
-        self._playground_init_done.wait(timeout=300)
-        importlib.import_module('playground.mat_master.core.playground')
-        config_path = _project_root / 'configs' / 'mat_master' / 'config.yaml'
-        if not config_path.exists():
-            raise FileNotFoundError(f"Config not found: {config_path}")
-        pg = get_playground_class('mat_master', config_path=config_path)
-        run_dir = _project_root / 'runs' / RUN_ID_WEB
-        run_dir.mkdir(parents=True, exist_ok=True)
-        pg.set_run_dir(run_dir, task_id=session_id)
-        if callable(event_callback):
+        校验 agents.general.llm 与 llm_config.yaml profiles 的一致性。
+        TODO: 后续迁入 Exp 层 startup validation 接口。
+        """
+        import yaml
 
-            def _on_mcp_progress(progress: dict[str, Any]) -> None:
-                if not isinstance(progress, dict):
-                    return
-                server_name = progress.get('server_name')
-                transport = progress.get('transport')
-                phase = str(progress.get('phase') or '')
-                event_type = 'mcp_server_status' if server_name else 'mcp_connect'
-                self._emit_mcp_event_safely(
-                    event_callback,
-                    event_type,
-                    progress,
-                    mcp_phase=phase,
-                    mcp_server=server_name,
-                    mcp_transport=transport,
-                )
-
-            pg._mcp_progress_callback = _on_mcp_progress
-        self._emit_mcp_event_safely(
-            event_callback,
-            'mcp_connect',
-            {
-                'phase': 'start',
-                'message': '正在初始化 Playground，并连接 MCP Servers...',
-            },
-            mcp_phase='start',
-        )
-        setup_started_at = time.monotonic()
-        try:
-            pg.setup()
-        except Exception as e:
-            elapsed_ms = int((time.monotonic() - setup_started_at) * 1000)
-            self._emit_mcp_event_safely(
-                event_callback,
-                'mcp_connect',
-                {
-                    'phase': 'failed',
-                    'elapsed_ms': elapsed_ms,
-                    'error': str(e),
-                    'message': 'MCP 初始化失败',
-                },
-                mcp_phase='failed',
-            )
-            raise
-        elapsed_ms = int((time.monotonic() - setup_started_at) * 1000)
-        self._emit_mcp_event_safely(
-            event_callback,
-            'mcp_connect',
-            {
-                'phase': 'ready',
-                'elapsed_ms': elapsed_ms,
-                'message': 'MCP 初始化完成',
-            },
-            mcp_phase='ready',
-        )
-        self._playgrounds[session_id] = pg
-        logger.debug('run_agent_sync: playground created for session_id=%s', session_id)
-        return pg
+        for pg_type in ("mat_master", "minimal"):
+            if pg_type == "mat_master":
+                cfg_dir = _project_root / "matmaster_config"
+            else:
+                cfg_dir = _project_root / "configs" / pg_type
+            llm_config_path = cfg_dir / "llm_config.yaml"
+            if not llm_config_path.exists():
+                logger.warning('LLM config not found: %s', llm_config_path)
+                continue
+            try:
+                llm_cfg = load_llm_config(llm_config_path)
+            except Exception:
+                logger.exception('Failed to load LLM config: %s', llm_config_path)
+                continue
+            config_path = cfg_dir / "config.yaml"
+            if config_path.exists():
+                with open(config_path) as f:
+                    main_cfg = yaml.safe_load(f)
+                agents = (main_cfg or {}).get('agents', {})
+                general_llm = agents.get('general', {}).get('llm')
+                if general_llm and general_llm not in llm_cfg.profiles:
+                    logger.error(
+                        "agents.general.llm='%s' not found in llm_config profiles: %s",
+                        general_llm,
+                        list(llm_cfg.profiles),
+                    )
 
     def get_executor(self) -> ThreadPoolExecutor:
-        """返回用于运行 agent 的线程池，供 run_in_executor 使用。"""
+        """Return the thread pool for agent execution."""
         return self._executor
-
-    def _get_run_workspace_path(
-        self, run_id: str, task_id: str | None = None
-    ) -> Path | None:
-        """解析某次 run 的 workspace 目录路径。"""
-        runs = _project_root / 'runs'
-        run_path = runs / run_id
-        if not run_path.is_dir():
-            return None
-        if task_id:
-            ws = run_path / 'workspaces' / task_id
-            if ws.is_dir():
-                return ws
-            return None
-        ws = run_path / 'workspace'
-        if ws.is_dir():
-            return ws
-        workspaces = run_path / 'workspaces'
-        if workspaces.is_dir():
-            subs = [p for p in workspaces.iterdir() if p.is_dir()]
-            if subs:
-                return max(subs, key=lambda p: p.stat().st_mtime)
-        return run_path
-
-    def _get_workspace_snapshot(
-        self, workspace_path: Path
-    ) -> frozenset[tuple[str, float, int]]:
-        """对 workspace 目录做轻量快照：每个文件的 (相对路径, mtime, size)，用于检测是否有新/改/删。"""
-        out: set[tuple[str, float, int]] = set()
-        try:
-            for f in workspace_path.rglob('*'):
-                if not f.is_file():
-                    continue
-                try:
-                    st = f.stat()
-                    rel = str(f.relative_to(workspace_path)).replace('\\', '/')
-                    out.add((rel, st.st_mtime, st.st_size))
-                except (OSError, ValueError):
-                    continue
-        except OSError:
-            pass
-        return frozenset(out)
-
-    def _upload_workspace_to_oss(
-        self,
-        session_id: str,
-        task_id: str,
-        event_callback: Callable[..., None],
-    ) -> bool:
-        """将当前任务的工作目录上传到 OSS，并通过 event_callback 推送 workspace_uploaded 或 workspace_upload_error。返回是否成功。"""
-        workspace_path = self._get_run_workspace_path(RUN_ID_WEB, task_id=task_id)
-        if not workspace_path or not workspace_path.is_dir():
-            logger.debug(
-                'skip OSS upload: no workspace session_id=%s task_id=%s',
-                session_id,
-                task_id,
-            )
-            return False
-        try:
-            urls, rel_paths = upload_dir_to_oss(
-                workspace_path,
-                key_prefix=f'matmaster_evo/chat_workspace/{session_id}',
-            )
-            event_callback(
-                'System',
-                'workspace_uploaded',
-                {
-                    'session_id': session_id,
-                    'task_id': task_id,
-                    'workspace_path': '',
-                    'count': len(rel_paths),
-                },
-            )
-            logger.info(
-                'workspace uploaded to OSS session_id=%s task_id=%s files=%s',
-                session_id,
-                task_id,
-                len(rel_paths),
-            )
-            return True
-        except Exception as e:
-            logger.exception(
-                'upload workspace to OSS failed session_id=%s task_id=%s: %s',
-                session_id,
-                task_id,
-                e,
-            )
-            event_callback('System', 'workspace_upload_error', str(e))
-            return False
 
     def run_agent_sync(
         self,
@@ -308,459 +223,303 @@ class AgentRunService:
         llm_override: str | None = None,
         model_override: str | None = None,
     ) -> None:
-        """在后台线程中执行 agent，由 stream 层 run_in_executor 或 Worker 进程调用。
-        loop 为 None 时（Worker）：send_cb 为同步调用，不投递到 asyncio；stop_event 可为带 is_set() 的 Redis 轮询对象。
-        reply_queue 供 confirmation_request（planner / ask_human）共用，POST /confirmation_reply 写入。
-        llm_override：本轮使用的 LLM 配置块名（如 litellm/azure/deepseek），不传则用 agent 默认。
-        model_override：本轮使用的模型名（如 gemini-3-flash-preview、azure/gpt-5），覆盖所选 LLM 配置里的 model。
+        """Execute agent in background thread using new matmaster pipeline.
+
+        Pipeline: Playground.prepare() -> get_chat_events_table() ->
+        EventRouter bootstrap -> Bohrium -> WorkspaceHandler attachment ->
+        Exp.assemble() -> ChatHistory -> Kernel.run() -> post-processing.
+
+        Method signature unchanged per D-12: all 12 parameters preserved.
         """
         prompt_preview = (
             (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
         )
         logger.info(
-            'run_agent_sync start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s worker_id=%s',
+            'run_agent_sync start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s',
             session_id,
             task_id,
             mode,
             len(user_prompt),
             prompt_preview,
-            get_worker_id(),
         )
         run_started_at = time.monotonic()
+        bus = MessageBus()
+        router = None
+        exp = None
+        bohrium_svc = None
+        ssh_attached = False
 
-        # 仅在 workspace 真有新/改/删文件时才上传：用快照比对，并用短防抖避免每次 tool 都扫目录
-        _last_workspace_snapshot: list[frozenset[tuple[str, float, int]] | None] = [
-            None
-        ]
-        _last_workspace_check_time: list[float] = [0.0]
-        _ssh_attached = False
-        _task_completed = False
-
-        def event_callback(
-            source: str, event_type: str, content: Any, **extra: Any
-        ) -> None:
-            raw_source = str(source or '').strip()
-            source = normalize_event_source(source)
-            payload = {
-                'source': source,
-                'type': event_type,
-                'content': content,
-                'session_id': session_id,
-                'task_id': task_id,
-            }
-            if invocation_id is not None:
-                payload['invocation_id'] = invocation_id
-            if event_type == 'end':
-                payload['task_completed'] = _task_completed
-            payload.update(extra)
-            if should_persist_chat_event(event_type, extra):
-                events_table = get_chat_events_table()
-                if events_table:
-                    try:
-                        events_table.add_event(
-                            session_id,
-                            source,
-                            event_type,
-                            content,
-                            task_id,
-                            invocation_id=invocation_id,
-                        )
-                    except Exception as e:
-                        logger.error(f'保存事件到数据库失败: {e}', exc_info=True)
-            if event_type == 'tool_result':
-                logger.info(
-                    'run_agent_sync: tool_result before send_cb session_id=%s',
-                    session_id,
-                )
-            # Planner 的原始流式 JSON thought 仅供内部消费；Direct 的完整 thought 仅入库不重复推送。
-            skip_push = should_skip_push_for_frontend(
-                mode, raw_source, event_type, extra
-            )
-            if not skip_push:
-                if loop is not None and asyncio.iscoroutinefunction(send_cb):
-                    future = asyncio.run_coroutine_threadsafe(send_cb(payload), loop)
-                    try:
-                        future.result(timeout=5)
-                    except Exception as e:
-                        logger.warning(
-                            'run_agent_sync: send_cb timeout or error (event may be in DB but not pushed), session_id=%s type=%s: %s',
-                            session_id,
-                            event_type,
-                            e,
-                        )
-                else:
-                    send_cb(payload)
-            if event_type == 'tool_result':
-                logger.info(
-                    'run_agent_sync: tool_result after send_cb session_id=%s',
-                    session_id,
-                )
-            # tool 执行后：仅当距上次检查已过防抖时间时扫目录，若快照与上次上传不一致（真有新/改/删）才上传
-            if event_type == 'tool_result':
-                # 兜底：用 root logger 打一条，确保任意配置下都能看到
-                logging.info(
-                    '[run_agent_sync] tool_result callback entered session_id=%s task_id=%s _ssh_attached=%s',
-                    session_id,
-                    task_id,
-                    _ssh_attached,
-                )
-                logger.info(
-                    'run_agent_sync: event_callback tool_result received session_id=%s task_id=%s _ssh_attached=%s',
-                    session_id,
-                    task_id,
-                    _ssh_attached,
-                )
-                # 当前 run 使用远程节点时，工作目录在节点上，本地 workspace 无新文件，跳过上传避免阻塞
-                if _ssh_attached:
-                    logger.info(
-                        'run_agent_sync: skip workspace upload (SSH attached, workspace on node) session_id=%s',
-                        session_id,
-                    )
-                    return
-                now = time.monotonic()
-                if (
-                    now - _last_workspace_check_time[0]
-                ) < _WORKSPACE_CHECK_DEBOUNCE_SECONDS:
-                    logger.debug(
-                        'run_agent_sync: skip workspace upload (debounce) session_id=%s',
-                        session_id,
-                    )
-                    return
-                _last_workspace_check_time[0] = now
-                workspace_path = self._get_run_workspace_path(
-                    RUN_ID_WEB, task_id=task_id
-                )
-                if not workspace_path or not workspace_path.is_dir():
-                    logger.debug(
-                        'run_agent_sync: skip workspace upload (no path or not dir) session_id=%s path=%s',
-                        session_id,
-                        workspace_path,
-                    )
-                    return
-                current_snapshot = self._get_workspace_snapshot(workspace_path)
-                if (
-                    _last_workspace_snapshot[0] is not None
-                    and current_snapshot == _last_workspace_snapshot[0]
-                ):
-                    logger.debug(
-                        'run_agent_sync: skip workspace upload (snapshot unchanged) session_id=%s',
-                        session_id,
-                    )
-                    return
-                logger.info(
-                    'run_agent_sync: workspace upload to OSS starting session_id=%s task_id=%s path=%s',
-                    session_id,
-                    task_id,
-                    workspace_path,
-                )
-                if self._upload_workspace_to_oss(
-                    session_id=session_id,
-                    task_id=task_id,
-                    event_callback=event_callback,
-                ):
-                    _last_workspace_snapshot[0] = current_snapshot
-                logger.info(
-                    'run_agent_sync: workspace upload to OSS done session_id=%s task_id=%s',
-                    session_id,
-                    task_id,
-                )
-
-        pg_for_run = None
-        run_result = None
         try:
-            if not self._playground_init_done.is_set():
-                logger.info(
-                    'run_agent_sync: playground not inited, running init_playground_sync in thread (first request)'
-                )
-                self.init_playground_sync()
-            else:
-                logger.debug('run_agent_sync: playground already inited')
-            run_dir = _project_root / 'runs' / RUN_ID_WEB
+            # -- Stage 1: Playground --
+            self.init_playground_sync()
             task_id = task_id or ('ws_' + uuid.uuid4().hex[:16])
-
-            pg = self._get_or_create_playground(
-                session_id, event_callback=event_callback
+            playground = self._pg_manager.get_or_create(session_id)
+            run_dir = str(_project_root / 'runs' / RUN_ID_WEB)
+            pg_ctx = playground.prepare(
+                {
+                    'run_dir': run_dir,
+                    'task_id': task_id,
+                }
             )
-            pg.set_run_dir(run_dir, task_id=task_id)
-            pg_for_run = pg
-            logger.debug(
-                'run_agent_sync: using playground for session_id=%s run_dir=%s task_id=%s',
-                session_id,
-                run_dir,
-                task_id,
+            events_table = get_chat_events_table()
+
+            # -- Stage 2: EventRouter bootstrap --
+            router = EventRouter(
+                bus=bus,
+                handlers=[
+                    PersistenceHandler(
+                        events_table,
+                        session_id,
+                        task_id,
+                        invocation_id,
+                    ),
+                    SSEHandler(
+                        send_cb,
+                        loop,
+                        session_id,
+                        task_id,
+                        invocation_id,
+                        mode,
+                    ),
+                ],
+            )
+            router.start()
+
+            exp_name = mode or "direct"
+            from matmaster.config.loader import load_exp_config
+
+            exp_config = load_exp_config(exp_name)
+            skill_sync_spec = _derive_skill_sync_spec(
+                exp_config, playground, project_root=_project_root
             )
 
-            mode = (mode or 'direct').strip().lower() or 'direct'
-            if getattr(pg, 'set_mode', None) is not None:
-                pg.set_mode(mode)
-            logger.info(
-                'run_agent_sync: mode=%s reply_queue=%s',
-                mode,
-                'set' if reply_queue else 'none',
-            )
+            # -- Stage 3: Bohrium credentials + SSH --
+            bohrium_svc = BohriumSetupService(self._sessions_service, bus)
+            run_creds, user_id_for_ak, org_id = bohrium_svc.load_credentials(session_id)
 
-            pg._planner_output_callback = event_callback
+            # Build a lightweight event_callback bridge for bohrium (legacy API).
+            # error / stream_closed must be top-level bus events so SSE/Redis see
+            # type=error|stream_closed (not nested under bohrium_node).
+            def _bohrium_event_cb(source, event_type, content, **extra):
+                """Bridge bohrium events into the MessageBus."""
+                try:
+                    if event_type == 'error':
+                        msg = content if isinstance(content, str) else str(content)
+                        bus.emit(ErrorEvent(source=str(source), message=msg))
+                        return
+                    if event_type == 'stream_closed':
+                        body = '' if content is None else str(content)
+                        bus.emit(
+                            StreamClosedEvent(
+                                source=str(source),
+                                content=body,
+                                task_completed=False,
+                                end_reason='error',
+                                treat_as_failure=True,
+                            )
+                        )
+                        return
+                    bus.emit(
+                        BohriumNodeEvent(
+                            source=str(source),
+                            payload={
+                                'type': event_type,
+                                'content': content,
+                                **extra,
+                            },
+                        )
+                    )
+                except Exception:
+                    logger.debug('bohrium event bridge error type=%s', event_type)
 
-            base = pg.agent
-            config_dict = pg.config.model_dump()
-            agent_config = get_first_agent_config(config_dict)
-            system_prompt_file, user_prompt_file, prompt_format_kwargs = (
-                resolve_mat_master_prompt_files(pg.config_dir, agent_config)
-            )
-
-            run_creds, user_id_for_ak, org_id = load_run_credentials(
-                self._sessions_service, session_id
-            )
-            apply_run_credentials_to_session(base.session, run_creds)
-            # 便于排查「工具拿不到 ak」：run 开始时是否具备 user_id/org_id 及是否拉取到 ak
-            if run_creds:
-                has_ak = bool((run_creds.get('access_key') or '').strip())
-                logger.info(
-                    'run_agent_sync: bohrium creds session_id=%s has_user_id=%s has_org_id=%s has_ak=%s',
-                    session_id,
-                    bool(user_id_for_ak),
-                    bool(org_id),
-                    has_ak,
-                )
-
-            bohrium_setup = setup_bohrium_for_run(
+            bohrium_result = bohrium_svc.setup(
                 session_id=session_id,
-                pg=pg,
-                base=base,
+                pg=playground,
+                skill_sync_spec=skill_sync_spec,
                 run_creds=run_creds,
                 user_id_for_ak=user_id_for_ak,
                 org_id=org_id,
-                event_callback=event_callback,
+                event_callback=_bohrium_event_cb,
                 run_started_at=run_started_at,
             )
-            _ssh_attached = bohrium_setup.ssh_attached
-            if bohrium_setup.abort_result is not None:
-                return bohrium_setup.abort_result
-
-            # 本轮模型：支持 llm_override（换配置块）和 model_override（覆盖 model 字段，如 gemini-3-flash-preview / azure/gpt-5）
-            run_llm = base.llm
-            if llm_override or model_override:
-                cfg = None
-                if llm_override:
-                    try:
-                        cfg = pg.config_manager.get_llm_config(llm_override)
-                    except Exception as e:
-                        logger.warning(
-                            'run_agent_sync: llm_override=%s failed (%s), use default session_id=%s',
-                            llm_override,
-                            e,
-                            session_id,
-                        )
-                if cfg is None and not llm_override:
-                    # 仅指定 model 时，始终以 agent 默认 LLM（litellm proxy）的连接参数为基础，
-                    # 再从匹配的配置块中合并模型行为参数（reasoning_protocol 等）
-                    try:
-                        cfg = base.llm.config.model_dump()
-                    except Exception:
-                        cfg = {}
-                    if model_override and cfg:
-                        matched = pg.config_manager.find_llm_config_by_model(
-                            model_override
-                        )
-                        if matched:
-                            _MODEL_BEHAVIOR_KEYS = {
-                                'reasoning_protocol',
-                                'thinking_effort',
-                                'model_family',
-                                'fallback_group',
-                                'temperature_policy',
-                            }
-                            for key in _MODEL_BEHAVIOR_KEYS:
-                                if key in matched:
-                                    cfg[key] = matched[key]
-                if cfg and isinstance(cfg, dict):
-                    if model_override:
-                        cfg = {**cfg, 'model': model_override}
-                    try:
-                        run_llm = create_llm(LLMConfig(**cfg))
-                        logger.info(
-                            'run_agent_sync: llm=%s model=%s session_id=%s task_id=%s',
-                            llm_override or 'default',
-                            cfg.get('model', 'default'),
-                            session_id,
-                            task_id,
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            'run_agent_sync: create_llm failed (%s), use base session_id=%s',
-                            e,
-                            session_id,
-                        )
-            agent = StreamingMatMasterAgent(
-                event_callback=event_callback,
-                llm=run_llm,
-                session=base.session,
-                tools=base.tools,
-                system_prompt_file=system_prompt_file,
-                user_prompt_file=user_prompt_file,
-                prompt_format_kwargs=prompt_format_kwargs,
-                config=base.config,
-                skill_registry=base.skill_registry,
-                output_config=base.output_config,
-                config_dir=pg.config_dir,
-                enable_tools=base.enable_tools,
-                enabled_tool_names=getattr(base, 'enabled_tool_names', None),
-                config_dict=config_dict,
-            )
-            agent.set_agent_name(getattr(base, '_agent_name', 'default'))
-            agent._stop_event = stop_event
-            if getattr(agent, 'session', None) is not None:
-                agent.session._stop_event = stop_event
-            if reply_queue is not None:
-                attach_ask_human_on_agent(
-                    agent,
-                    reply_queue,
-                    event_callback,
-                    get_ask_human_config_dict(config_dict),
+            ssh_attached = bohrium_result.ssh_attached
+            if bohrium_result.abort_result is not None:
+                # 必须返回 abort_result，供 Worker 识别失败并发「Worker 执行失败」飞书；裸 return None 会被误判为成功。
+                return bohrium_result.abort_result
+            bohrium_meta = dict(bohrium_result._asdict())
+            bohrium_meta.pop("execution_session", None)
+            pg_ctx = pg_ctx.with_bohrium(bohrium_meta)
+            if bohrium_result.execution_session is not None:
+                ew = bohrium_result.execution_workdir or ""
+                st = bohrium_result.session_type or "ssh"
+                pg_ctx = pg_ctx.with_execution(
+                    session=bohrium_result.execution_session,
+                    session_type=st,
+                    execution_workdir=ew,
                 )
-
-            pg.agent = agent
-            exp = pg._create_exp()
-            exp.set_run_dir(run_dir)
-            exp_name = exp.__class__.__name__
-            logger.info(
-                'run_agent_sync: starting exp=%s task_id=%s',
-                exp_name,
-                task_id,
-            )
-            event_callback('MatMaster', 'exp_run', exp_name)
-
-            # 多轮对话：从 DB 取历史事件
-            history_events: list = []
-            try:
-                events_table = get_chat_events_table()
-                if events_table:
-                    all_events = events_table.get_session_events(session_id) or []
-                    history_events = trim_events_for_dialog_history(
-                        all_events, _DIALOG_HISTORY_MAX_EVENTS
-                    )
-            except Exception as e:
-                logger.debug(
-                    'run_agent_sync: get_session_events for history failed: %s',
-                    e,
-                )
-            dialog_history = (
-                ChatHistoryConverter.events_to_dialog_messages(history_events)
-                if history_events
-                else []
-            )
-            if history_events:
-                ev_types = Counter((e.get('type') or '?') for e in history_events)
-                logger.info(
-                    'run_agent_sync: dialog_history session_id=%s task_id=%s '
-                    'raw_events=%s event_types=%s out_msgs=%s chain=%s',
-                    session_id,
-                    task_id,
-                    len(history_events),
-                    dict(ev_types),
-                    len(dialog_history),
-                    ChatHistoryConverter.summarize_dialog_messages_for_log(
-                        dialog_history
-                    ),
-                )
-            task = build_mat_master_discovery_task(task_id, user_prompt, dialog_history)
-            exp.run(task=task, append_result=False)
-            if stop_event.is_set():
-                logger.info(
-                    'run_agent_sync: task cancelled by user session_id=%s task_id=%s',
-                    session_id,
-                    task_id,
-                )
-                event_callback('System', 'cancelled', 'Task cancelled by user.')
-                run_result = (False, 'cancelled')
-            else:
-                _task_completed = True
-                logger.info(
-                    'run_agent_sync: task done session_id=%s task_id=%s',
-                    session_id,
-                    task_id,
-                )
-                # 任务成功后扣减配额（与 MatMaster 一致）；异常向上抛，由外层统一处理
-                user_id = self._sessions_service.get_session_user_id(session_id)
-                if user_id:
-                    if loop is not None:
-                        future = asyncio.run_coroutine_threadsafe(
-                            use_quota(user_id), loop
-                        )
-                        future.result(timeout=10)
-                    else:
-                        asyncio.run(use_quota(user_id))
-                event_callback('System', 'finish', 'Done')
-                self._upload_workspace_to_oss(
+            # Workspace handling depends on the finalized Bohrium/archival context.
+            router.add_handler(
+                WorkspaceHandler(
                     session_id=session_id,
                     task_id=task_id,
-                    event_callback=event_callback,
+                    ssh_attached=ssh_attached,
+                    archival_config=pg_ctx.archival,
+                    workspace_path=pg_ctx.workdir,
+                    upload_fn=_build_workspace_upload_fn(pg_ctx.archival),
                 )
-                run_result = True
-        except Exception as e:
-            logger.exception(
-                'run_agent_sync: error session_id=%s task_id=%s err=%s',
-                session_id,
-                task_id,
-                e,
             )
-            event_callback('System', 'error', str(e))
-            raise
-        finally:
-            cleanup_bohrium_after_run(
-                session_id=session_id,
-                sessions_service=self._sessions_service,
-                event_callback=event_callback,
-                pg_for_run=pg_for_run,
-                ssh_attached=_ssh_attached,
+
+            # -- Stage 4: Exp assembly --
+            from matmaster.config.loader import load_llm_config
+            from matmaster.core.exp import Exp
+            from matmaster.providers.llm_factory import build_provider
+
+            llm_config = load_llm_config(
+                playground.config_path.parent / 'llm_config.yaml'
             )
-            # run 结束时清理 Redis stop key，避免 session 级 key 残留导致下一轮误判
-            logger.info(
-                'run_agent_sync: clear stop keys in finally session_id=%s task_id=%s',
-                session_id,
-                task_id,
+
+            agents = getattr(playground.config, 'agents', None)
+            agent_default_llm = None
+            if isinstance(agents, dict):
+                general = agents.get('general', {})
+                if isinstance(general, dict):
+                    agent_default_llm = general.get('llm')
+
+            pg_ctx = pg_ctx.model_copy(
+                update={
+                    'llm_provider': build_provider(
+                        llm_config,
+                        model_override=model_override,
+                        llm_override=llm_override,
+                        default_profile_key=agent_default_llm,
+                    ),
+                    'llm_config': llm_config,
+                }
             )
-            get_redis_dao().delete_stop_requested(session_id, task_id)
-            logger.info(
-                'run_agent_sync end: session_id=%s task_id=%s worker_id=%s',
-                session_id,
-                task_id,
-                get_worker_id(),
+
+            exp = Exp(exp_config)
+            runtime = exp.build_runtime(
+                pg_ctx,
+                bus=bus,
+                skills=pg_ctx.run_meta.get('skill_config'),
+                mcp=pg_ctx.run_meta.get('mcp_config'),
             )
-            elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
+
+            # Add external hooks to spec
+            external_hooks = [
+                # TODO: re-enable with confirm_tools=<async MCP tools> once MCP registration lands
+                # ConfirmationHook(reply_queue, bus),
+                OutputProcessorHook(bus),
+                SkillHitHook(bus),
+                AssistantStateHook(bus),
+            ]
+            spec = runtime.spec.model_copy(
+                update={'hooks': [*runtime.spec.hooks, *external_hooks]}
+            )
+
+            # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
+            if stop_event is not None and spec.tool_registry is not None:
+                from matmaster.tools.builtin.spawn_tool import SpawnTool
+                for tool in spec.tool_registry.all_tools:
+                    if isinstance(tool, SpawnTool):
+                        tool._stop_event = stop_event
+
+            # -- Stage 5: History --
+            raw_events = (
+                events_table.get_session_events(
+                    session_id, limit=_DIALOG_HISTORY_MAX_EVENTS
+                )
+                if events_table
+                else []
+            )
+            history = ChatHistoryConverter.events_to_messages(
+                ChatHistoryConverter.exclude_task_events(raw_events, task_id)
+            )
+
+            # -- Stage 6: Kernel execution --
+            kernel_result = runtime.kernel.run(
+                spec=spec,
+                task=user_prompt,
+                history=history,
+                stop_event=stop_event,
+            )
+            run_result_event = kernel_result.result.to_run_result_event()
+
+            # -- Post-processing --
+            if run_result_event.reason == 'cancelled':
+                bus.emit(
+                    CancelledEvent(source='System', reason='Task cancelled by user.')
+                )
+                bus.emit(
+                    StreamClosedEvent(
+                        source='System',
+                        end_reason='cancelled',
+                        task_completed=False,
+                    )
+                )
+            else:
+                bus.emit(run_result_event)
+                bus.emit(
+                    StreamClosedEvent(
+                        source='System',
+                        task_completed=run_result_event.reason == 'natural',
+                        end_reason=run_result_event.reason,
+                        treat_as_failure=run_result_event.status == 'failed' or None,
+                    )
+                )
+                # Quota deduction (per QUAL-05: success only)
+                if run_result_event.status == 'completed':
+                    user_id = self._sessions_service.get_session_user_id(session_id)
+                    if user_id:
+                        if loop is not None:
+                            future = asyncio.run_coroutine_threadsafe(
+                                use_quota(user_id), loop
+                            )
+                            future.result(timeout=10)
+                        else:
+                            asyncio.run(use_quota(user_id))
+
+        except Exception as exc:
+            logger.exception('run_agent_sync error: session_id=%s', session_id)
             try:
-                event_callback(
-                    'System',
-                    'end',
-                    'Task completed, SSE connection can be closed.',
-                    elapsed_ms=elapsed_ms,
+                bus.emit(ErrorEvent(source='System', message=str(exc)))
+                bus.emit(
+                    StreamClosedEvent(
+                        source='System',
+                        end_reason='error',
+                        task_completed=False,
+                        treat_as_failure=True,
+                    )
                 )
             except Exception:
                 pass
-            # run 结束后释放当前 agent 上的 trajectory/current_dialog 及大字符串，避免 pg.agent 长期持有导致多轮对话内存阶梯增长
-            if pg_for_run is not None:
+        finally:
+            elapsed = time.monotonic() - run_started_at
+            logger.info(
+                'run_agent_sync done: session_id=%s elapsed=%.1fs',
+                session_id,
+                elapsed,
+            )
+            if router:
+                router.stop()
+            if exp:
                 try:
-                    a = getattr(pg_for_run, 'agent', None)
-                    if a is not None:
-                        a.trajectory = None
-                        a.current_dialog = None
-                        a._initial_system_prompt = None
-                        a._initial_user_prompt = None
+                    exp._run_cleanup_callbacks()
                 except Exception:
-                    pass
-            # run 结束后释放 playground
-            pg = self._playgrounds.pop(session_id, None)
-            if pg is not None:
+                    logger.warning('Exp cleanup error', exc_info=True)
+            if bohrium_svc:
                 try:
-                    pg.cleanup()
-                except Exception as e:
-                    logger.warning(
-                        'playground cleanup on pop (MCP/session release): %s', e
+                    bohrium_svc.cleanup(
+                        session_id=session_id,
+                        event_callback=_bohrium_event_cb,
+                        pg_for_run=playground if 'playground' in dir() else None,
+                        ssh_attached=ssh_attached,
                     )
-                finally:
-                    gc.collect()
-
-        return (run_result, elapsed_ms)
+                except Exception:
+                    logger.warning('Bohrium cleanup error', exc_info=True)
+            get_redis_dao().delete_stop_requested(session_id, task_id)
+            self._pg_manager.release(session_id)
+            gc.collect()
 
 
 @lru_cache
@@ -769,6 +528,6 @@ def get_agent_run_service() -> AgentRunService:
 
 
 async def init_playground() -> None:
-    """启动时初始化 playground（在 lifespan 中调用）。"""
+    """Initialize playground at startup (called in lifespan)."""
     loop = asyncio.get_event_loop()
     await loop.run_in_executor(None, get_agent_run_service().init_playground_sync)

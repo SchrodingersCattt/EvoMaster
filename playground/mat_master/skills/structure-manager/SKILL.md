@@ -2,7 +2,10 @@
 name: structure-manager
 description: "Skill for searching, obtaining, validating, and converting atomic structures. Capabilities: (1) Literature-based structure search — search papers (mat_sn_*), fetch full pages (extract_info_from_webpage), extract crystal data (space group, lattice, CCDC/ICSD ID), attempt CIF download or report identifiers. (2) Download a CIF/POSCAR from a direct file URL (fetch_web_structure.py --url). (3) Scan an HTML page for structure file links and download (fetch_web_structure.py --page). (4) Validate: dimensionality, sanity, formula (assess_structure.py). (5) Convert between formats: CIF/POSCAR/LAMMPS/XYZ/etc. (convert_format.py). For any structure retrieval beyond a trivial open-DB formula lookup, call use_skill get_info first."
 skill_type: operator
+depends_on: mcp-mat-struct-db, mcp-mat-sg, mcp-mat-sn, mcp-mat-doc
 ---
+
+<!-- multi-server: mat_struct_db, mat_sg, mat_sn, mat_doc -->
 
 # Structure Manager Skill
 

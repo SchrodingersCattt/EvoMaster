@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import shlex
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -60,14 +61,18 @@ class SkillTool(BaseTool):
     name: ClassVar[str] = 'use_skill'
     params_class: ClassVar[type[BaseToolParams]] = SkillToolParams
 
-    def __init__(self, skill_registry: SkillRegistry):
+    def __init__(self, skill_registry: SkillRegistry,
+                 on_skill_hit: Callable[[str], None] | None = None):
         """初始化 SkillTool
 
         Args:
             skill_registry: SkillRegistry 实例
+            on_skill_hit: 可选回调，当命中含 mcp_server 的 skill 时调用，
+                          参数为 mcp_server 名称
         """
         super().__init__()
         self.skill_registry = skill_registry
+        self._on_skill_hit = on_skill_hit
 
     def execute(
         self, session: BaseSession, args_json: str
@@ -160,6 +165,12 @@ class SkillTool(BaseTool):
             (observation, info) 元组
         """
         full_info = skill.get_full_info()
+
+        # Trigger callback for lazy MCP schema injection
+        mcp_server = skill.meta_info.extras.get("mcp_server")
+        if mcp_server and self._on_skill_hit:
+            self._on_skill_hit(mcp_server)
+
         return (
             f"# Skill: {skill.meta_info.name}\n\n{full_info}",
             {'action': 'get_info', 'skill_name': skill.meta_info.name},

@@ -153,9 +153,9 @@ agents:
 # Mat Master：Mode 通过命令行 --mode 切换（direct | planner），不在此配置
 # ============================================
 mat_master:
-  # 可选：指定 workspace 根目录（与 MAT_MASTER_WORKSPACE_ROOT 相同）
-  # 设置后前端文件树与 agent 的工作目录都指向此路径
-  # workspace_root: "./"
+  # 可选：SSH/Bohrium 远端 session 工作目录根
+  # 远端 attach_ssh_session(session_id=...) 时会落到 {remote_session_workspace_root}/{session_id}
+  # remote_session_workspace_root: "/share/workspace"
 
   # ── CRP 许可证防火墙 ──
   # 决定哪些软件可以执行、哪些被阻止、以及默认替代方案。
@@ -468,6 +468,17 @@ logging:
   file: null
   console: true
   log_path: "./logs/evomaster.log"
+
+# ============================================
+# Playground 配置（Phase 4: 物理环境层）
+# ============================================
+playground:
+  cache_dir: ".cache/matmaster"
+  archival:
+    enabled: true
+    oss_bucket: "${OSS_BUCKET_NAME}"
+    oss_prefix: "matmaster_evo/chat_workspace"
+    credential_ref: "env:aliyun-oss"
 
 project_root: "."
 workspace: "./workspace"

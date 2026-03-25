@@ -130,12 +130,19 @@ class ChatSessionsService:
         user_id: str,
         limit: int | None = 20,
         offset: int | None = 0,
+        project_id: int | None = None,
     ) -> tuple[list[dict], int]:
         """返回 (sessions, total)。limit 默认 20，最大 100；不传或 0 表示使用默认。"""
         sessions = (
-            self.table.list_sessions(user_id=user_id, limit=limit, offset=offset) or []
+            self.table.list_sessions(
+                user_id=user_id,
+                limit=limit,
+                offset=offset,
+                project_id=project_id,
+            )
+            or []
         )
-        total = self.table.count_sessions_by_user(user_id)
+        total = self.table.count_sessions_by_user(user_id, project_id=project_id)
         return sessions, total
 
     def get_active_sessions_count(self) -> int:

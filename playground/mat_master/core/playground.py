@@ -9,7 +9,6 @@ mat_master 在此复写 _setup_mcp_tools、setup、_create_exp，不修改基类
 import asyncio
 import json
 import logging
-import os
 from pathlib import Path
 
 import yaml
@@ -21,6 +20,7 @@ from ..tools import get_peek_file_tool, get_web_search_tool
 from .agent import MatMasterAgent
 from .registry import MatMasterSkillRegistry
 from .solvers import DirectSolver, ResearchPlanner
+from .workspace_resolver import resolve_workspace_path
 
 
 def _project_root() -> Path:
@@ -66,8 +66,8 @@ class MatMasterPlayground(BasePlayground):
         if self._run_mode:
             self.logger.info('Mat Master mode (from --mode): %s', self._run_mode)
 
-    def set_run_dir(self, run_dir, task_id=None):
-        """Override: keep memory_service.run_dir in sync; sync session workspace to run_dir/workspaces/task_id so downloads and tool outputs go under the current session."""
+    def set_run_dir(self, run_dir, task_id=None, session_id=None):
+        """Override: keep memory_service.run_dir in sync and centralize workspace resolution."""
         super().set_run_dir(run_dir, task_id=task_id)
         # Ensure root logger level allows file handler to receive INFO (evo only adds handler, root default is WARNING)
         if run_dir and getattr(self, 'log_file_handler', None) is not None:
@@ -79,40 +79,32 @@ class MatMasterPlayground(BasePlayground):
         self.memory_service.run_dir = Path(run_dir) if run_dir else None
         if task_id:
             self.memory_service.set_session_id(task_id)
-        # When reusing cached pg, session was created at startup with a different workspace.
-        # Point it to this run's workspace so downloads and tool outputs go to workspaces/<task_id>.
-        if self.session is not None and run_dir is not None:
-            run_path = Path(run_dir).resolve()
-            ws_override = self._get_workspace_root_override()
-            if ws_override is not None:
-                ws_path = ws_override
-                ws_path.mkdir(parents=True, exist_ok=True)
-            elif task_id:
-                ws_path = run_path / 'workspaces' / task_id
-            else:
-                ws_path = run_path / 'workspace'
+        if run_dir is not None:
+            resolution = resolve_workspace_path(
+                run_dir,
+                task_id=task_id,
+                session_id=session_id,
+                create=True,
+            )
+            ws_path = resolution.path
             ws_str = str(ws_path)
+            # Keep config in sync before setup() creates the session.
+            self._update_workspace_path(ws_path)
+            self.logger.info(
+                'Workspace resolved: mode=%s source=%s session_id=%s task_id=%s path=%s',
+                resolution.mode,
+                resolution.source,
+                session_id or '',
+                task_id or '',
+                ws_str,
+            )
+        # When reusing cached pg, update the active session as well.
+        if self.session is not None and run_dir is not None:
             if hasattr(self.session.config, 'workspace_path'):
                 self.session.config.workspace_path = ws_str
             if hasattr(self.session.config, 'working_dir'):
                 self.session.config.working_dir = ws_str
             self.logger.debug('Session workspace updated to: %s', ws_str)
-
-    def _get_workspace_root_override(self) -> Path | None:
-        raw = (os.environ.get('MAT_MASTER_WORKSPACE_ROOT') or '').strip()
-        if not raw:
-            try:
-                config_dict = self.config.model_dump()
-            except Exception:
-                config_dict = {}
-            raw = (config_dict.get('mat_master') or {}).get('workspace_root') or ''
-        raw = raw.strip()
-        if not raw:
-            return None
-        p = Path(raw).expanduser()
-        if not p.is_absolute():
-            p = (_project_root() / p).resolve()
-        return p
 
     def _create_tools_for_agent(self, skill_registry, tool_config):
         """Override: 在基类 registry 上增加 memory、peek_file、extract_webpage、monitor_job、aissq（每 agent 独立 tools）。"""
@@ -122,9 +114,22 @@ class MatMasterPlayground(BasePlayground):
         memory_tools = get_memory_tools(self.memory_service)
         registry.register_many(memory_tools)
         registry.register(get_peek_file_tool())
-        from ..tools import get_aissq_download_tool, get_aissq_search_tool, get_extract_webpage_tool
+        from ..tools import (
+            get_aissq_download_tool,
+            get_aissq_search_tool,
+            get_extract_webpage_tool,
+        )
 
-        registry.register(get_extract_webpage_tool())
+        # P1-b: derive workspace-scoped cache dir (not run_dir, to isolate batch tasks)
+        _cache_dir = None
+        if self.run_dir is not None:
+            _run_path = Path(self.run_dir)
+            if self.task_id:
+                _ws = _run_path / 'workspaces' / self.task_id
+            else:
+                _ws = _run_path / 'workspace'
+            _cache_dir = _ws / '_tmp' / 'web_cache'
+        registry.register(get_extract_webpage_tool(cache_dir=_cache_dir))
         registry.register(get_web_search_tool())
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
 
@@ -509,49 +514,18 @@ class MatMasterPlayground(BasePlayground):
         progress_cb = getattr(self, '_mcp_progress_callback', None)
         if callable(progress_cb):
             manager.set_progress_callback(progress_cb)
-        if mcp_config.get('path_adaptor') == 'calculation':
-            from evomaster.adaptors.calculation import get_calculation_path_adaptor
+        from matmaster.tools.lazy_mcp import configure_mcp_manager
 
-            calc_servers = mcp_config.get('calculation_servers')
-            if calc_servers:
-                manager.path_adaptor_servers = set(calc_servers)
-            else:
-                manager.path_adaptor_servers = {
-                    s.get('name') for s in servers if s.get('name')
-                }
-            manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(
-                mcp_config
-            )
+        all_names = {s.get('name') for s in servers if s.get('name')}
+        configure_mcp_manager(manager, mcp_config, all_server_names=all_names)
+
+        if manager.path_adaptor_servers:
             self.logger.info(
                 'Path adaptor enabled for servers: %s', manager.path_adaptor_servers
             )
-            # Per-server sync_tools: do not register submit_* when base tool is in sync_tools (sync version only).
-            executors = mcp_config.get('calculation_executors') or {}
-            manager.sync_tools_by_server = {
-                name: set(cfg.get('sync_tools') or [])
-                for name, cfg in executors.items()
-                if isinstance(cfg, dict) and cfg.get('sync_tools')
-            }
-            if manager.sync_tools_by_server:
-                self.logger.info(
-                    'MCP sync_tools_by_server set (submit_* excluded for sync tools): %s',
-                    list(manager.sync_tools_by_server.keys()),
-                )
-
-        # mat_master：仅在此处设置 tool_include_only，基类 core 不包含此逻辑
-        include_only = mcp_config.get('tool_include_only')
-        if include_only and isinstance(include_only, dict):
-            manager.tool_include_only = {
-                k: list(v) if isinstance(v, (list, tuple)) else []
-                for k, v in include_only.items()
-            }
+        if manager.sync_tools_by_server:
             self.logger.info(
-                'MCP tool_include_only set for servers: %s (per-server allowlist applied)',
-                list(manager.tool_include_only.keys()),
-            )
-        else:
-            self.logger.info(
-                'MCP tool_include_only not set or empty; all tools from each server will be registered'
+                'MCP sync_tools_by_server set: %s', list(manager.sync_tools_by_server.keys())
             )
 
         async def init_mcp_servers():

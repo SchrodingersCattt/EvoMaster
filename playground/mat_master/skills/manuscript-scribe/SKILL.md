@@ -2,7 +2,10 @@
 name: manuscript-scribe
 description: "Specialized skill for WRITING long-form academic content (Papers, Grants, Reports, Patents, Theses). BYPASSES the chat output limit by writing directly to local Markdown files, with optional Word (.docx) export. Use when: (1) User asks to write or draft a paper, report, patent, thesis chapter, or computational write-up. (2) User provides bullet points or data and wants sections written to files. (3) User wants to polish or formalize existing sections. Do NOT use for short replies in chat—only when the deliverable is a file."
 skill_type: operator
+depends_on: mcp-mat-sn, mcp-mat-doc
 ---
+
+<!-- multi-server: mat_sn, mat_doc -->
 
 # Manuscript Scribe Skill
 

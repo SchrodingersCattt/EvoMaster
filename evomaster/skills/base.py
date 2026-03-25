@@ -9,7 +9,7 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic import BaseModel, Field
 
@@ -27,6 +27,7 @@ class SkillMetaInfo(BaseModel):
     name: str = Field(description='技能名称')
     description: str = Field(description='技能描述，包含使用场景和触发条件')
     license: str | None = Field(default=None, description='许可证信息')
+    extras: dict[str, Any] = Field(default_factory=dict, description='扩展字段')
 
 
 class BaseSkill(ABC):
@@ -87,10 +88,14 @@ class BaseSkill(ABC):
                 key, value = line.split(':', 1)
                 frontmatter_data[key.strip()] = value.strip()
 
+        known_keys = {'name', 'description', 'license'}
+        extras = {k: v for k, v in frontmatter_data.items() if k not in known_keys}
+
         return SkillMetaInfo(
             name=frontmatter_data.get('name', self.skill_path.name),
             description=frontmatter_data.get('description', ''),
             license=frontmatter_data.get('license'),
+            extras=extras,
         )
 
     def get_full_info(self) -> str:
