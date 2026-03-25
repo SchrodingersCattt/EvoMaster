@@ -117,13 +117,21 @@ class Exp:
         # 2. Skills/MCP: runtime-injected (must be before system prompt)
         if skills:
             self._init_skill_tools(ctx, registry, skills)
+        elif self._config.skills.enabled:
+            # Lazy MCP: config-driven skill loading (no runtime param needed)
+            self._init_skill_tools(ctx, registry)
         if mcp:
             self._init_mcp_tools(ctx, registry, mcp)
 
         # 3. System prompt via ContextBuilder
         builder = ContextBuilder()
         identity = self._config.developer_instructions or None
-        system_prompt = builder.build(ctx, registry, mode=spec.mode, identity=identity)
+        system_prompt = builder.build(
+            ctx, registry,
+            mode=spec.mode,
+            identity=identity,
+            skill_registry=getattr(self, "_skill_registry", None),
+        )
 
         # 4. Hooks
         hooks = list(spec.hooks)
@@ -279,7 +287,82 @@ class Exp:
         registry: ToolRegistry,
         config: dict[str, Any] | None = None,
     ) -> None:
-        """Initialize skill tools (stub -- factory mechanism refined later)."""
+        """Initialize skill tools with lazy MCP schema injection."""
+        skills_cfg = self._config.skills
+        if not skills_cfg.enabled:
+            return
+
+        import json as _json
+        from pathlib import Path
+
+        from evomaster.agent.tools.skill import SkillTool
+        from evomaster.skills.base import SkillRegistry
+
+        from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
+        from matmaster.tools.schema_cache import ToolSchemaCache
+
+        skill_registry = SkillRegistry(Path(skills_cfg.skills_root))
+        schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
+
+        # MCP config: merge runtime config with static config
+        mcp_config = config or {}
+        mcp_config_file = mcp_config.get("config_file", skills_cfg.mcp_config_file)
+        config_path = Path(mcp_config_file)
+        if not config_path.is_absolute():
+            config_path = Path(skills_cfg.config_dir) / config_path
+
+        if mcp_config.get("path_adaptor") == "calculation":
+            try:
+                from evomaster.adaptors.calculation import resolve_mcp_config_path
+
+                config_path = resolve_mcp_config_path(config_path)
+            except ImportError:
+                pass
+
+        # Load server connection config from JSON
+        server_config: dict = {}
+        if config_path.exists():
+            try:
+                raw = _json.loads(config_path.read_text(encoding="utf-8"))
+                server_config = raw.get("mcpServers", {})
+            except Exception as e:
+                self.logger.warning("Failed to load MCP server config: %s", e)
+
+        connector = LazyMCPConnector(
+            mcp_server_config=server_config,
+            mcp_config=mcp_config,
+            session=ctx.session,
+        )
+        self._register_cleanup(connector.cleanup)
+
+        def on_skill_hit(mcp_server: str) -> None:
+            schemas = schema_cache.load(mcp_server)
+            if not schemas:
+                self.logger.warning(
+                    "No cached schema for MCP server '%s', tools not injected",
+                    mcp_server,
+                )
+                return
+            for tool_schema in schemas:
+                original_name = tool_schema["name"]
+                prefixed_name = f"{mcp_server}_{original_name}"
+                if prefixed_name in registry:
+                    continue
+                lazy_tool = LazyMCPTool(
+                    server_name=mcp_server,
+                    tool_name=prefixed_name,
+                    remote_tool_name=original_name,
+                    description=tool_schema.get("description", ""),
+                    input_schema=tool_schema.get("input_schema", {}),
+                    connector=connector,
+                )
+                registry.register(lazy_tool, source="mcp")
+
+        skill_tool = SkillTool(skill_registry, on_skill_hit=on_skill_hit)
+        adapted = EvoToolAdapter(skill_tool, ctx.session)
+        registry.register(adapted, source="skill")
+
+        self._skill_registry = skill_registry
 
     def _init_mcp_tools(
         self,
