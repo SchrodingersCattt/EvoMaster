@@ -13,7 +13,6 @@ class TestDevConfig:
 
         cfg = DevConfig()
         assert cfg.llm.model == "gpt-4o"
-        assert cfg.agent.mode == "direct"
         assert cfg.agent.max_turns == 20
         assert cfg.session.type == "local"
         assert cfg.tools.builtin == ["*"]

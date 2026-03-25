@@ -19,7 +19,6 @@ class TestExpConfig:
     def test_defaults(self):
         cfg = ExpConfig()
         assert cfg.name == "direct"
-        assert cfg.mode == "direct"
         assert cfg.max_turns == 100
         assert cfg.guards == []
         assert cfg.developer_instructions == ""
@@ -29,7 +28,6 @@ class TestExpConfig:
         """Simulate what tomllib.load() would produce from direct.toml."""
         data = {
             "name": "direct",
-            "mode": "direct",
             "max_turns": 200,
             "guards": [],
             "developer_instructions": "You are Mat Master.",
