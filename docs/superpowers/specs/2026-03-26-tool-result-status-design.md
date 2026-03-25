@@ -115,6 +115,9 @@ Frontend compatibility: the existing frontend code (`useEvoSSEHandler.ts:555-564
 | `matmaster/hooks/output_processor.py` | Update post_tool_call signature: `result: str` -> `result: ToolResult` |
 | `matmaster/hooks/skill_hit.py` | Update post_tool_call signature: `result: str` -> `result: ToolResult` (result unused in body, signature-only change) |
 | `matmaster/devshell/stream_hook.py` | Update post_tool_call signature + replace `result.startswith("Error executing tool")` with `result.status == "error"` |
+| `matmaster/tools/builtin/base.py` | `BuiltinTool.execute()` exception path: return `ToolResult(status="error", content=f"Error: {e}")` instead of plain string |
+| `matmaster/tools/evomaster_tool_adapter.py` | `EvoToolAdapter.execute()`: return `ToolResult`, derive status from `info` dict (`"error" in info`), pass `info` through |
+| `matmaster/tools/lazy_mcp.py` | `LazyMCPTool.execute()`: return `ToolResult`, derive status from `info` dict, pass `info` through |
 
 ### Test files
 
@@ -128,6 +131,11 @@ All test files calling `post_tool_call(tc, "some_string")` or constructing ToolR
 | `tests/matmaster/hooks/test_skill_hit.py` | post_tool_call calls: str -> ToolResult |
 | `tests/matmaster/devshell/test_stream_hook.py` | post_tool_call calls: str -> ToolResult + error detection assertions |
 | `tests/matmaster/integration/test_events_to_messages.py` | ToolResultEvent construction may need status field |
+| `tests/matmaster/integration/test_event_router.py` | Persisted tool_result shape + SSE payload assertions |
+| `tests/matmaster/types/test_events.py` | ToolResultEvent instantiation/serialization tests |
+| `tests/matmaster/devshell/test_event_logger.py` | JSONL output assertions for tool_result events |
+| `tests/matmaster/integration/test_workspace_handler.py` | If references tool_result event shape |
+| `tests/test_chat_stream_direct.py` | End-to-end SSE payload shape validation |
 
 ## Status values
 
@@ -140,12 +148,40 @@ All test files calling `post_tool_call(tc, "some_string")` or constructing ToolR
 
 ## Migration strategy
 
-- Existing tools returning `str` work without changes (ToolRegistry normalizes to ToolResult)
-- Tools that need to report errors without raising exceptions can gradually migrate to returning `ToolResult(status="error", ...)`
-- MCP tool wrappers and skill wrappers are priority migration targets
+Three tool sources are migrated in this change to return `ToolResult` with correct status:
 
-### Known limitation: BuiltinTool error-as-string
+### BuiltinTool (in scope)
 
-`BuiltinTool.execute()` (`matmaster/tools/builtin/base.py:45-51`) catches all exceptions and returns `f"Error: {e}"` as a plain string. After normalization, these become `ToolResult(status="success", content="Error: ...")` -- semantically a mismatch.
+`BuiltinTool.execute()` (`matmaster/tools/builtin/base.py:45-51`) catches all exceptions and returns `f"Error: {e}"` as a plain string. Direct mode (`direct.toml`) enables 13+ builtin tools -- this is the most exercised tool surface.
 
-This is accepted for now. The correct fix is for `BuiltinTool.execute()` to return `ToolResult(status="error")` on exception, which is a natural part of the gradual migration. Not included in this change to keep scope focused.
+Fix: change the exception path to return `ToolResult(status="error", content=f"Error: {e}")`. Success path continues returning `str` (normalized by ToolRegistry).
+
+### EvoToolAdapter (in scope)
+
+`EvoToolAdapter.execute()` (`matmaster/tools/evomaster_tool_adapter.py:49-54`) already receives `(observation, _info)` from upstream EvoMaster tools but discards `_info`.
+
+Fix: derive status from `info` dict (`"error" in info` -> `status="error"`), pass `info` through to `ToolResult.info`.
+
+```python
+def execute(self, arguments: dict[str, Any]) -> ToolResult:
+    args_json = json.dumps(arguments, ensure_ascii=False)
+    observation, info = self._tool.execute(self._session, args_json)
+    content = observation if isinstance(observation, str) else json.dumps(observation, ensure_ascii=False, default=str)
+    status = "error" if isinstance(info, dict) and "error" in info else "success"
+    return ToolResult(status=status, content=content, info=info if isinstance(info, dict) else {})
+```
+
+### LazyMCPTool (in scope)
+
+`LazyMCPTool.execute()` (`matmaster/tools/lazy_mcp.py:57-68`) same pattern as EvoToolAdapter -- discards `_info`.
+
+Fix: same approach. Derive status from `info`, pass `info` through.
+
+### Remaining str-returning tools
+
+Other tools (e.g. custom tools added later) that return plain `str` continue to work via ToolRegistry normalization. They can migrate to `ToolResult` at their own pace.
+
+## Scope notes
+
+- `blocked` (guard) and `skipped` (hook) paths do not emit `ToolResultEvent` in the current kernel. These are out of scope.
+- Frontend code already handles both `content.status` and `content.result.status` paths, so no frontend changes needed.
