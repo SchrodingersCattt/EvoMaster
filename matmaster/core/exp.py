@@ -81,6 +81,46 @@ class Exp:
                 )
         self._cleanup_callbacks.clear()
 
+    # ── Spawn function factory ────────────────────────────
+
+    @staticmethod
+    def _make_spawn_fn(
+        ctx: PlaygroundContext,
+        bus: MessageBus | None,
+        source_prefix: str,
+    ) -> Callable[[str, str, threading.Event | None], str]:
+        """Create spawn_fn closure capturing parent runtime context.
+
+        The returned callable creates a child Exp from exp_name, runs it with
+        the parent's PlaygroundContext and MessageBus, and returns the result.
+        """
+
+        def spawn_fn(
+            exp_name: str,
+            task: str,
+            stop_event: threading.Event | None = None,
+        ) -> str:
+            from matmaster.config.loader import load_exp_config
+
+            child_config = load_exp_config(exp_name)
+            child_exp = Exp(child_config)
+            child_source = f"{source_prefix}:{exp_name}"
+            child_runtime = child_exp.build_runtime(
+                ctx, bus=bus, source_override=child_source
+            )
+            try:
+                run_result = child_runtime.kernel.run(
+                    child_runtime.spec, task, stop_event=stop_event
+                )
+                result = run_result.result
+                if result.status == "completed" and result.final_content:
+                    return result.final_content
+                return f"SubAgent finished with status={result.status}, reason={result.reason}"
+            finally:
+                child_runtime.cleanup()
+
+        return spawn_fn
+
     # ── Phase 1: assemble ────────────────────────────────
 
     def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
@@ -103,6 +143,7 @@ class Exp:
         bus: MessageBus | None = None,
         skills: dict[str, Any] | None = None,
         mcp: dict[str, Any] | None = None,
+        source_override: str | None = None,
     ) -> AgentRuntime:
         """Resource creation: assemble -> tools -> prompt -> kernel."""
         spec = self.assemble(ctx)
@@ -131,8 +172,20 @@ class Exp:
         # 4. Hooks
         hooks = list(spec.hooks)
         if bus is not None:
-            emitter_hook = EventEmitterHook(bus, source=self.exp_name)
+            emitter_source = source_override or self.exp_name
+            emitter_hook = EventEmitterHook(bus, source=emitter_source)
             hooks.append(emitter_hook)
+
+        # 4b. SubAgentTool: register with spawn_fn if "sub_agent" in config
+        builtin_cfg = self._config.tools.builtin
+        if ("sub_agent" in builtin_cfg or builtin_cfg == ["*"]) and ctx.session is not None:
+            from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+
+            spawn_fn = self._make_spawn_fn(ctx, bus, source_prefix="MatMaster")
+            sub_tool = SubAgentTool(
+                session=ctx.session, workdir=ctx.workdir, spawn_fn=spawn_fn
+            )
+            registry.register(sub_tool, source="builtin")
 
         # 5. Compaction: unchanged, managed by separate process
         compactor = None
@@ -214,6 +267,14 @@ class Exp:
     ) -> KernelResult:
         """build_runtime -> kernel.run -> cleanup."""
         runtime = self.build_runtime(ctx, bus=bus, skills=skills, mcp=mcp)
+        # Inject stop_event into SubAgentTool for cancel propagation (SUBA-05)
+        tool_registry = getattr(runtime.spec, "tool_registry", None)
+        if stop_event is not None and tool_registry is not None:
+            from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+
+            for tool in tool_registry.all_tools:
+                if isinstance(tool, SubAgentTool):
+                    tool._stop_event = stop_event
         try:
             result = runtime.kernel.run(
                 runtime.spec, task, history=history, stop_event=stop_event
