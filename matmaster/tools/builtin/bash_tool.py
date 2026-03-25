@@ -29,14 +29,22 @@ class BashTool(BuiltinTool):
 
     name: ClassVar[str] = "execute_bash"
     description: ClassVar[str] = (
-        "Execute a bash command in the terminal within a persistent shell session."
+        "Execute a bash command in the session shell.\n\n"
+        "IMPORTANT: Avoid using this tool to run cat, head, tail, "
+        "sed, awk, find, ls, grep, rg, echo commands. "
+        "Use dedicated tools instead:\n"
+        "- Read files: Use read_file (NOT cat/head/tail)\n"
+        "- Edit files: Use edit_file (NOT sed/awk)\n"
+        "- Write files: Use write_file (NOT echo/heredoc)\n"
+        "- File search: Use glob (NOT find/ls)\n"
+        "- Content search: Use grep (NOT grep/rg)"
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
             "command": {
                 "type": "string",
-                "description": "The bash command to execute.",
+                "description": "The bash command to execute. Prefer dedicated tools for file operations.",
             },
             "is_input": {
                 "type": "string",
@@ -46,7 +54,7 @@ class BashTool(BuiltinTool):
             },
             "timeout": {
                 "type": "number",
-                "description": "Hard timeout in seconds for command execution.",
+                "description": "Hard timeout in seconds. Use -1 for no limit.",
                 "default": -1,
             },
         },

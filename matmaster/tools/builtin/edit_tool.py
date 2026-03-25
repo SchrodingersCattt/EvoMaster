@@ -29,9 +29,11 @@ class EditTool(BuiltinTool):
 
     name: ClassVar[str] = "edit_file"
     description: ClassVar[str] = (
-        "Edit a file by replacing an exact string match. The old_str must "
-        "match exactly one location in the file. Provide enough context "
-        "(3-5 lines) to ensure uniqueness. You must read the file first."
+        "Edit a file by replacing an exact string match (str_replace).\n\n"
+        "Usage:\n"
+        "- ALWAYS use edit_file for edits. NEVER use sed/awk via execute_bash.\n"
+        "- old_str must match exactly one location. Include 3-5 lines of context.\n"
+        "- You must read the file first using read_file."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",

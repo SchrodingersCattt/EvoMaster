@@ -22,9 +22,11 @@ class ReadTool(BuiltinTool):
 
     name: ClassVar[str] = "read_file"
     description: ClassVar[str] = (
-        "Read the contents of a file. Output will be line-numbered (cat -n format). "
-        "Use line_range to read specific lines (1-indexed). "
-        "Always read a file before attempting to edit or overwrite it."
+        "Read the contents of a file with line numbers (cat -n format).\n\n"
+        "Usage:\n"
+        "- ALWAYS use read_file to read files. NEVER use cat/head/tail via execute_bash.\n"
+        "- Use line_range for partial reads (1-indexed, -1 for end of file).\n"
+        "- Always read a file before attempting to edit or overwrite it."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
