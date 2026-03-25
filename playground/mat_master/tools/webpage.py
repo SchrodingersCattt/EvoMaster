@@ -58,6 +58,9 @@ REQUEST_DELAY_SECONDS = 0.5
 MAX_CONCURRENT_PER_DOMAIN = 1
 _DEFAULT_DOMAIN_FAILURE_THRESHOLD = 3
 
+# P0: class/id patterns for noise elements (cookie banners, sidebars, menus).
+_NOISE_PATTERN = re.compile(r'cookie|banner|sidebar|menu', re.I)
+
 
 def _extract_domain(url: str) -> str:
     try:
@@ -132,6 +135,9 @@ def _fetch_webpage_content(
         'application/octet-stream' in content_type and url.lower().endswith('.pdf')
     )
 
+    raw = response.text
+    _used_markdownify = False
+
     if is_pdf:
         if fitz is None:
             raise RuntimeError(
@@ -141,23 +147,46 @@ def _fetch_webpage_content(
         text = ''.join(page.get_text() for page in doc)
         doc.close()
         content = text
-    else:
-        raw = response.text
-        if raw.strip().startswith('<'):
-            try:
-                soup = BeautifulSoup(raw, 'lxml')
-            except Exception:
-                soup = BeautifulSoup(raw, 'html.parser')
-            for tag in soup(['script', 'style']):
-                tag.decompose()
+    elif raw.strip().startswith('<'):
+        try:
+            soup = BeautifulSoup(raw, 'lxml')
+        except Exception:
+            soup = BeautifulSoup(raw, 'html.parser')
+
+        # P0: noise tag removal
+        for tag in soup(['script', 'style', 'nav', 'footer',
+                          'aside', 'noscript', 'iframe']):
+            tag.decompose()
+        # P0: noise class/id removal
+        for tag in soup.find_all(attrs={'class': _NOISE_PATTERN}):
+            tag.decompose()
+        for tag in soup.find_all(attrs={'id': _NOISE_PATTERN}):
+            tag.decompose()
+
+        # P1-a: HTML → Markdown (with plain-text fallback)
+        try:
+            import markdownify as _md
+            content = _md.markdownify(
+                str(soup),
+                heading_style="ATX",
+                strip=['img', 'svg'],
+            )
+            content = re.sub(r'\n{3,}', '\n\n', content)
+            _used_markdownify = True
+        except Exception as exc:
+            if isinstance(exc, ImportError):
+                logger.warning('markdownify not available; falling back to plain text')
+            else:
+                logger.warning('markdownify conversion failed, falling back to plain text: %s', exc)
             lines = (line.strip() for line in soup.get_text().splitlines())
             chunks = (phrase.strip() for line in lines for phrase in line.split('  '))
             content = ' '.join(chunk for chunk in chunks if chunk)
-        else:
-            content = raw
+    else:
+        content = raw
 
-    content = re.sub(r'\s+', ' ', content)
-    content = re.sub(r'[^\x20-\x7E\x0A\x0D]', '', content)
+    if not _used_markdownify:
+        content = re.sub(r'\s+', ' ', content)
+    content = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\uFFFD]', '', content)
     if len(content) > _MAX_CONTENT_LENGTH:
         content = content[:_MAX_CONTENT_LENGTH]
         logger.warning('Webpage content truncated to %d chars', _MAX_CONTENT_LENGTH)
