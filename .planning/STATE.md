@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Agent 外围能力构建
-status: Ready to execute
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-03-25T02:31:26.178Z"
+status: Phase complete — ready for verification
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-03-25T02:38:12.520Z"
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -37,6 +37,7 @@ Recent decisions affecting current work:
 - [v1.1 init]: SubAgent 同步执行（不引入 asyncio），spawn_fn 闭包注入解耦 tool 与 Exp
 - [Phase 08]: Created BuiltinTool base.py inline in Plan 02 since Plan 01 runs in parallel
 - [Phase 08]: BuiltinTool uses ClassVar for Protocol satisfaction, session constructor injection with None default
+- [Phase 08]: Native tools source='builtin', evo adapter tools source='builtin_evo' for provenance tracking
 
 ### Pending Todos
 
@@ -50,6 +51,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T02:31:26.175Z
-Stopped at: Completed 08-01-PLAN.md
+Last session: 2026-03-25T02:38:12.518Z
+Stopped at: Completed 08-03-PLAN.md
 Resume file: None
