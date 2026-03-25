@@ -19,6 +19,7 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 from matmaster.core.guard_pipeline import GuardPipeline
+from matmaster.tools.tool_result import ToolResult
 
 if TYPE_CHECKING:
     from matmaster.types.runtime import AgentRuntimeSpec, KernelResult, KernelRunResult
@@ -173,20 +174,26 @@ class AgentKernel:
 
                 # Tool execution
                 try:
-                    result = spec.tool_registry.execute(tc.name, tc.arguments)
+                    tool_result = spec.tool_registry.execute(tc.name, tc.arguments)
                 except Exception as e:
-                    result = f"Error executing tool '{tc.name}': {type(e).__name__}: {e}"
+                    tool_result = ToolResult(
+                        status="error",
+                        content=(
+                            f"Error executing tool '{tc.name}': "
+                            f"{type(e).__name__}: {e}"
+                        ),
+                    )
                     logger.exception("Tool execution failed: %s", tc.name)
                 messages.append(
                     ToolMessage(
                         tool_call_id=tc.id,
                         tool_name=tc.name,
-                        content=str(result),
+                        content=tool_result.content,
                     )
                 )
 
                 # post_tool_call hook (observation, all hooks called)
-                run_post_tool_call(spec.hooks, tc, str(result))
+                run_post_tool_call(spec.hooks, tc, tool_result)
 
         # max_turns exhausted
         return self._finish(spec, messages, "max_turns", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)

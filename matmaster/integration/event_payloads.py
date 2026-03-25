@@ -72,6 +72,7 @@ def _public_content_for_event(
             "call_id": call_id,
             "name": payload.get("tool_name"),
             "result": payload.get("result"),
+            "status": payload.get("status", "success"),
             "info": payload.get("info") or {},
         }
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.messages import ToolCallData
 
 
@@ -21,12 +22,20 @@ class TestOutputProcessorHook:
             auto_save_patterns=["write_file", "save_"],
         )
         tc = ToolCallData(id="tc-1", name="write_file", arguments={})
-        hook.post_tool_call(tc, "file written")
+        hook.post_tool_call(
+            tc,
+            ToolResult(
+                status="error",
+                content="file written",
+                info={"error": "boom"},
+            ),
+        )
 
         bus.emit.assert_called()
         emitted = bus.emit.call_args[0][0]
         assert isinstance(emitted, ToolResultEvent)
-        assert emitted.info.get("auto_save") is True
+        assert emitted.status == "error"
+        assert emitted.info == {"error": "boom", "auto_save": True}
 
     def test_emits_summarize_when_tool_matches_pattern(self) -> None:
         """post_tool_call emits ToolResultEvent with summarize info when matched."""
@@ -39,12 +48,22 @@ class TestOutputProcessorHook:
             summarize_patterns=["read_large", "fetch_data"],
         )
         tc = ToolCallData(id="tc-1", name="read_large_document", arguments={})
-        hook.post_tool_call(tc, "very long text...")
+        hook.post_tool_call(
+            tc,
+            ToolResult(
+                content="very long text...",
+                info={"saved_path": "/tmp/out.txt"},
+            ),
+        )
 
         bus.emit.assert_called()
         emitted = bus.emit.call_args[0][0]
         assert isinstance(emitted, ToolResultEvent)
-        assert emitted.info.get("summarize") is True
+        assert emitted.status == "success"
+        assert emitted.info == {
+            "saved_path": "/tmp/out.txt",
+            "summarize": True,
+        }
 
     def test_does_nothing_when_no_pattern_matches(self) -> None:
         """post_tool_call does nothing when tool_name matches no patterns."""
@@ -57,7 +76,7 @@ class TestOutputProcessorHook:
             summarize_patterns=["read_large"],
         )
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        hook.post_tool_call(tc, "result")
+        hook.post_tool_call(tc, ToolResult(content="result"))
 
         bus.emit.assert_not_called()
 
@@ -68,6 +87,6 @@ class TestOutputProcessorHook:
         bus = MagicMock()
         hook = OutputProcessorHook(bus=bus)
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        hook.post_tool_call(tc, "result")
+        hook.post_tool_call(tc, ToolResult(content="result"))
 
         bus.emit.assert_not_called()

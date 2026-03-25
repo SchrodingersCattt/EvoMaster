@@ -369,6 +369,7 @@ class TestPersistenceHandler:
             "call_id": "c1",
             "name": "bash",
             "result": "file.txt",
+            "status": "success",
             "info": {"auto_save": True},
         }
 
@@ -530,6 +531,7 @@ class TestSSEHandler:
             "call_id": "call-1",
             "name": "bash",
             "result": {"status": "success", "stdout": "ok"},
+            "status": "success",
             "info": {"auto_save": True},
         }
 

@@ -100,6 +100,7 @@ class TestToolResultEvent:
         )
         assert evt.type == "tool_result"
         assert evt.result == "output"
+        assert evt.status == "success"
         assert evt.info == {}
 
 

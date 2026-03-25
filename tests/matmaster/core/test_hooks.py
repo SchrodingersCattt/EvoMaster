@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from matmaster.core.bus import MessageBus
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.events import (
     ResponseEvent,
     ThoughtEvent,
@@ -82,7 +83,7 @@ class TestHookProtocol:
         self, sample_tool_call: ToolCallData
     ) -> None:
         hook = BaseHook()
-        result = hook.post_tool_call(sample_tool_call, "result")
+        result = hook.post_tool_call(sample_tool_call, ToolResult(content="result"))
         assert result is None
 
     def test_base_hook_pre_llm_call_default(
@@ -147,7 +148,7 @@ class TrackingHook(BaseHook):
         self.pre_tool_call_called = True
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: str) -> None:
+    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         self.post_tool_call_called = True
 
     def pre_llm_call(self, messages: list[Message], turn: int) -> None:
@@ -214,7 +215,7 @@ class TestHookShortCircuit:
         """Observation hook -- both hooks called (no short-circuit)."""
         h1 = TrackingHook()
         h2 = TrackingHook()
-        run_post_tool_call([h1, h2], sample_tool_call, "result")
+        run_post_tool_call([h1, h2], sample_tool_call, ToolResult(content="result"))
         assert h1.post_tool_call_called is True
         assert h2.post_tool_call_called is True
 
@@ -259,7 +260,14 @@ class TestEventEmitterHook:
     ) -> None:
         bus = MessageBus()
         hook = EventEmitterHook(bus, "agent-1")
-        hook.post_tool_call(sample_tool_call, "result_data")
+        hook.post_tool_call(
+            sample_tool_call,
+            ToolResult(
+                status="error",
+                content="result_data",
+                info={"error": "x"},
+            ),
+        )
         assert not bus.empty
         event = bus.get_nowait()
         assert isinstance(event, ToolResultEvent)
@@ -267,6 +275,8 @@ class TestEventEmitterHook:
         assert event.call_id == sample_tool_call.id
         assert event.tool_name == sample_tool_call.name
         assert event.result == "result_data"
+        assert event.status == "error"
+        assert event.info == {"error": "x"}
 
     def test_on_stream_chunk_emits_thought_event(
         self, sample_chunk: StreamChunk
@@ -357,7 +367,9 @@ class TestRunGuardBlocked:
             """Hook without on_guard_blocked method."""
             def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
                 return HookAction.CONTINUE
-            def post_tool_call(self, tool_call: ToolCallData, result: str) -> None:
+            def post_tool_call(
+                self, tool_call: ToolCallData, result: ToolResult
+            ) -> None:
                 pass
             def pre_llm_call(self, messages: list, turn: int) -> None:
                 pass
