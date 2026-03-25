@@ -22,29 +22,32 @@ class MockProvider:
 
 
 class TestBuildExpConfig:
-    def test_mode_contract_default(self):
-        """AgentConfig defaults mode_contract to empty string."""
+    def test_system_prompt_default(self):
+        """AgentConfig defaults system_prompt to empty string."""
         from matmaster.devshell.config import AgentConfig
         cfg = AgentConfig()
-        assert cfg.mode_contract == ""
+        assert cfg.system_prompt == ""
 
-    def test_mode_contract_forwarded(self):
-        """_build_exp_config forwards mode_contract to ExpConfig."""
+    def test_system_prompt_forwarded(self):
+        """_build_exp_config uses explicit system_prompt when provided."""
         from matmaster.devshell.config import AgentConfig, DevConfig
         from matmaster.devshell.runner import DevRunner
         config = DevConfig(
-            agent=AgentConfig(mode_contract="Execute directly.")
+            agent=AgentConfig(system_prompt="Custom prompt.")
         )
         exp_cfg = DevRunner._build_exp_config(config)
-        assert exp_cfg.mode_contract == "Execute directly."
+        assert exp_cfg.system_prompt == "Custom prompt."
 
-    def test_mode_contract_empty_forwarded(self):
-        """Empty mode_contract is forwarded as-is."""
-        from matmaster.devshell.config import AgentConfig, DevConfig
+    def test_system_prompt_fallback_to_base(self):
+        """_build_exp_config calls load_base_system_prompt when system_prompt is empty."""
+        from unittest.mock import patch
+        from matmaster.devshell.config import DevConfig
         from matmaster.devshell.runner import DevRunner
-        config = DevConfig(agent=AgentConfig(mode_contract=""))
-        exp_cfg = DevRunner._build_exp_config(config)
-        assert exp_cfg.mode_contract == ""
+        config = DevConfig()
+        with patch("matmaster.config.loader.load_base_system_prompt", return_value="Mocked base") as mock_load:
+            exp_cfg = DevRunner._build_exp_config(config)
+        mock_load.assert_called_once()
+        assert exp_cfg.system_prompt == "Mocked base"
 
 
 class TestDevRunner:
