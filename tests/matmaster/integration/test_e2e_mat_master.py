@@ -307,9 +307,15 @@ class TestMatMasterRunAgentSyncE2E:
             mock_bohrium_result = MagicMock()
             mock_bohrium_result.ssh_attached = False
             mock_bohrium_result.abort_result = None
+            mock_bohrium_result.execution_session = None
+            mock_bohrium_result.execution_workdir = None
+            mock_bohrium_result.session_type = None
             mock_bohrium_result._asdict.return_value = {
                 "ssh_attached": False,
                 "abort_result": None,
+                "execution_session": None,
+                "execution_workdir": None,
+                "session_type": None,
             }
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
@@ -419,9 +425,15 @@ class TestMatMasterRunAgentSyncE2E:
             mock_bohrium_result = MagicMock()
             mock_bohrium_result.ssh_attached = False
             mock_bohrium_result.abort_result = None
+            mock_bohrium_result.execution_session = None
+            mock_bohrium_result.execution_workdir = None
+            mock_bohrium_result.session_type = None
             mock_bohrium_result._asdict.return_value = {
                 "ssh_attached": False,
                 "abort_result": None,
+                "execution_session": None,
+                "execution_workdir": None,
+                "session_type": None,
             }
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
@@ -565,9 +577,15 @@ class TestMatMasterRunAgentSyncE2E:
             mock_bohrium_result = MagicMock()
             mock_bohrium_result.ssh_attached = False
             mock_bohrium_result.abort_result = None
+            mock_bohrium_result.execution_session = None
+            mock_bohrium_result.execution_workdir = None
+            mock_bohrium_result.session_type = None
             mock_bohrium_result._asdict.return_value = {
                 "ssh_attached": False,
                 "abort_result": None,
+                "execution_session": None,
+                "execution_workdir": None,
+                "session_type": None,
             }
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
