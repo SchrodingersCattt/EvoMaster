@@ -20,11 +20,9 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 from matmaster.core.bus import MessageBus
-from matmaster.types.context import WorkspaceArchivalConfig
-
+from matmaster.core.playground import PlaygroundManager
 from matmaster.hooks import (
     AssistantStateHook,
-    ConfirmationHook,
     OutputProcessorHook,
     SkillHitHook,
 )
@@ -37,7 +35,9 @@ from matmaster.integration import (
 from matmaster.config.exp import ExpConfig
 from matmaster.integration.bohrium_setup import BohriumSetupService, SkillSyncSpec
 from matmaster.core.playground import Playground, PlaygroundManager
+from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.events import (
+    BohriumNodeEvent,
     CancelledEvent,
     ErrorEvent,
     ResponseEvent,
@@ -66,7 +66,6 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
 
 
-
 def _build_workspace_upload_fn(
     archival_config: WorkspaceArchivalConfig | None,
 ) -> Callable[..., Any] | None:
@@ -77,12 +76,12 @@ def _build_workspace_upload_fn(
     """
     if not archival_config or not archival_config.enabled:
         return None
-    oss_prefix = (archival_config.oss_prefix or "").strip("/")
+    oss_prefix = (archival_config.oss_prefix or '').strip('/')
 
     def _do_upload(session_id: str, task_id: str, workspace_path: Path) -> None:
         from src.dao.oss_io import upload_dir_to_oss
 
-        key_prefix = "/".join(part for part in (oss_prefix, session_id) if part)
+        key_prefix = '/'.join(part for part in (oss_prefix, session_id) if part)
         upload_dir_to_oss(workspace_path, key_prefix)
 
     return _do_upload
@@ -177,7 +176,6 @@ class AgentRunService:
         校验 agents.general.llm 与 llm_config.yaml profiles 的一致性。
         TODO: 后续迁入 Exp 层 startup validation 接口。
         """
-        from matmaster.config.loader import load_llm_config
         import yaml
 
         for pg_type in ("mat_master", "minimal"):
@@ -187,19 +185,19 @@ class AgentRunService:
                 cfg_dir = _project_root / "configs" / pg_type
             llm_config_path = cfg_dir / "llm_config.yaml"
             if not llm_config_path.exists():
-                logger.warning("LLM config not found: %s", llm_config_path)
+                logger.warning('LLM config not found: %s', llm_config_path)
                 continue
             try:
                 llm_cfg = load_llm_config(llm_config_path)
             except Exception:
-                logger.exception("Failed to load LLM config: %s", llm_config_path)
+                logger.exception('Failed to load LLM config: %s', llm_config_path)
                 continue
             config_path = cfg_dir / "config.yaml"
             if config_path.exists():
                 with open(config_path) as f:
                     main_cfg = yaml.safe_load(f)
-                agents = (main_cfg or {}).get("agents", {})
-                general_llm = agents.get("general", {}).get("llm")
+                agents = (main_cfg or {}).get('agents', {})
+                general_llm = agents.get('general', {}).get('llm')
                 if general_llm and general_llm not in llm_cfg.profiles:
                     logger.error(
                         "agents.general.llm='%s' not found in llm_config profiles: %s",
@@ -234,10 +232,10 @@ class AgentRunService:
         Method signature unchanged per D-12: all 12 parameters preserved.
         """
         prompt_preview = (
-            (user_prompt[:80] + "...") if len(user_prompt) > 80 else user_prompt
+            (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
         )
         logger.info(
-            "run_agent_sync start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s",
+            'run_agent_sync start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s',
             session_id,
             task_id,
             mode,
@@ -254,13 +252,13 @@ class AgentRunService:
         try:
             # -- Stage 1: Playground --
             self.init_playground_sync()
-            task_id = task_id or ("ws_" + uuid.uuid4().hex[:16])
+            task_id = task_id or ('ws_' + uuid.uuid4().hex[:16])
             playground = self._pg_manager.get_or_create(session_id)
-            run_dir = str(_project_root / "runs" / RUN_ID_WEB)
+            run_dir = str(_project_root / 'runs' / RUN_ID_WEB)
             pg_ctx = playground.prepare(
                 {
-                    "run_dir": run_dir,
-                    "task_id": task_id,
+                    'run_dir': run_dir,
+                    'task_id': task_id,
                 }
             )
             events_table = get_chat_events_table()
@@ -297,30 +295,42 @@ class AgentRunService:
 
             # -- Stage 3: Bohrium credentials + SSH --
             bohrium_svc = BohriumSetupService(self._sessions_service, bus)
-            run_creds, user_id_for_ak, org_id = bohrium_svc.load_credentials(
-                session_id
-            )
+            run_creds, user_id_for_ak, org_id = bohrium_svc.load_credentials(session_id)
 
-            # Build a lightweight event_callback bridge for bohrium (legacy API)
+            # Build a lightweight event_callback bridge for bohrium (legacy API).
+            # error / stream_closed must be top-level bus events so SSE/Redis see
+            # type=error|stream_closed (not nested under bohrium_node).
             def _bohrium_event_cb(source, event_type, content, **extra):
                 """Bridge bohrium events into the MessageBus."""
                 try:
-                    from matmaster.types.events import BohriumNodeEvent
-
+                    if event_type == 'error':
+                        msg = content if isinstance(content, str) else str(content)
+                        bus.emit(ErrorEvent(source=str(source), message=msg))
+                        return
+                    if event_type == 'stream_closed':
+                        body = '' if content is None else str(content)
+                        bus.emit(
+                            StreamClosedEvent(
+                                source=str(source),
+                                content=body,
+                                task_completed=False,
+                                end_reason='error',
+                                treat_as_failure=True,
+                            )
+                        )
+                        return
                     bus.emit(
                         BohriumNodeEvent(
                             source=str(source),
                             payload={
-                                "type": event_type,
-                                "content": content,
+                                'type': event_type,
+                                'content': content,
                                 **extra,
                             },
                         )
                     )
                 except Exception:
-                    logger.debug(
-                        "bohrium event bridge error type=%s", event_type
-                    )
+                    logger.debug('bohrium event bridge error type=%s', event_type)
 
             bohrium_result = bohrium_svc.setup(
                 session_id=session_id,
@@ -334,7 +344,8 @@ class AgentRunService:
             )
             ssh_attached = bohrium_result.ssh_attached
             if bohrium_result.abort_result is not None:
-                return
+                # 必须返回 abort_result，供 Worker 识别失败并发「Worker 执行失败」飞书；裸 return None 会被误判为成功。
+                return bohrium_result.abort_result
             bohrium_meta = dict(bohrium_result._asdict())
             bohrium_meta.pop("execution_session", None)
             pg_ctx = pg_ctx.with_bohrium(bohrium_meta)
@@ -364,25 +375,25 @@ class AgentRunService:
             from matmaster.providers.llm_factory import build_provider
 
             llm_config = load_llm_config(
-                playground.config_path.parent / "llm_config.yaml"
+                playground.config_path.parent / 'llm_config.yaml'
             )
 
-            agents = getattr(playground.config, "agents", None)
+            agents = getattr(playground.config, 'agents', None)
             agent_default_llm = None
             if isinstance(agents, dict):
-                general = agents.get("general", {})
+                general = agents.get('general', {})
                 if isinstance(general, dict):
-                    agent_default_llm = general.get("llm")
+                    agent_default_llm = general.get('llm')
 
             pg_ctx = pg_ctx.model_copy(
                 update={
-                    "llm_provider": build_provider(
+                    'llm_provider': build_provider(
                         llm_config,
                         model_override=model_override,
                         llm_override=llm_override,
                         default_profile_key=agent_default_llm,
                     ),
-                    "llm_config": llm_config,
+                    'llm_config': llm_config,
                 }
             )
 
@@ -390,8 +401,8 @@ class AgentRunService:
             runtime = exp.build_runtime(
                 pg_ctx,
                 bus=bus,
-                skills=pg_ctx.run_meta.get("skill_config"),
-                mcp=pg_ctx.run_meta.get("mcp_config"),
+                skills=pg_ctx.run_meta.get('skill_config'),
+                mcp=pg_ctx.run_meta.get('mcp_config'),
             )
 
             # Add external hooks to spec
@@ -403,7 +414,7 @@ class AgentRunService:
                 AssistantStateHook(bus),
             ]
             spec = runtime.spec.model_copy(
-                update={"hooks": [*runtime.spec.hooks, *external_hooks]}
+                update={'hooks': [*runtime.spec.hooks, *external_hooks]}
             )
 
             # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
@@ -435,16 +446,14 @@ class AgentRunService:
             run_result_event = kernel_result.result.to_run_result_event()
 
             # -- Post-processing --
-            if run_result_event.reason == "cancelled":
+            if run_result_event.reason == 'cancelled':
                 bus.emit(
-                    CancelledEvent(
-                        source="System", reason="Task cancelled by user."
-                    )
+                    CancelledEvent(source='System', reason='Task cancelled by user.')
                 )
                 bus.emit(
                     StreamClosedEvent(
-                        source="System",
-                        end_reason="cancelled",
+                        source='System',
+                        end_reason='cancelled',
                         task_completed=False,
                     )
                 )
@@ -452,17 +461,15 @@ class AgentRunService:
                 bus.emit(run_result_event)
                 bus.emit(
                     StreamClosedEvent(
-                        source="System",
-                        task_completed=run_result_event.reason == "natural",
+                        source='System',
+                        task_completed=run_result_event.reason == 'natural',
                         end_reason=run_result_event.reason,
-                        treat_as_failure=run_result_event.status == "failed" or None,
+                        treat_as_failure=run_result_event.status == 'failed' or None,
                     )
                 )
                 # Quota deduction (per QUAL-05: success only)
-                if run_result_event.status == "completed":
-                    user_id = self._sessions_service.get_session_user_id(
-                        session_id
-                    )
+                if run_result_event.status == 'completed':
+                    user_id = self._sessions_service.get_session_user_id(session_id)
                     if user_id:
                         if loop is not None:
                             future = asyncio.run_coroutine_threadsafe(
@@ -473,15 +480,13 @@ class AgentRunService:
                             asyncio.run(use_quota(user_id))
 
         except Exception as exc:
-            logger.exception(
-                "run_agent_sync error: session_id=%s", session_id
-            )
+            logger.exception('run_agent_sync error: session_id=%s', session_id)
             try:
-                bus.emit(ErrorEvent(source="System", message=str(exc)))
+                bus.emit(ErrorEvent(source='System', message=str(exc)))
                 bus.emit(
                     StreamClosedEvent(
-                        source="System",
-                        end_reason="error",
+                        source='System',
+                        end_reason='error',
                         task_completed=False,
                         treat_as_failure=True,
                     )
@@ -491,7 +496,7 @@ class AgentRunService:
         finally:
             elapsed = time.monotonic() - run_started_at
             logger.info(
-                "run_agent_sync done: session_id=%s elapsed=%.1fs",
+                'run_agent_sync done: session_id=%s elapsed=%.1fs',
                 session_id,
                 elapsed,
             )
@@ -501,17 +506,17 @@ class AgentRunService:
                 try:
                     exp._run_cleanup_callbacks()
                 except Exception:
-                    logger.warning("Exp cleanup error", exc_info=True)
+                    logger.warning('Exp cleanup error', exc_info=True)
             if bohrium_svc:
                 try:
                     bohrium_svc.cleanup(
                         session_id=session_id,
                         event_callback=_bohrium_event_cb,
-                        pg_for_run=playground if "playground" in dir() else None,
+                        pg_for_run=playground if 'playground' in dir() else None,
                         ssh_attached=ssh_attached,
                     )
                 except Exception:
-                    logger.warning("Bohrium cleanup error", exc_info=True)
+                    logger.warning('Bohrium cleanup error', exc_info=True)
             get_redis_dao().delete_stop_requested(session_id, task_id)
             self._pg_manager.release(session_id)
             gc.collect()

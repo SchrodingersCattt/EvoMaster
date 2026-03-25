@@ -14,15 +14,24 @@ from pathlib import Path
 from matmaster.core.playground import Playground
 from matmaster.types.context import PlaygroundContext
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]  # repo root
 
-MAT_MASTER_CONFIG = _PROJECT_ROOT / "configs" / "mat_master" / "config.yaml"
-MINIMAL_CONFIG = _PROJECT_ROOT / "configs" / "minimal" / "config.yaml"
+def _repo_root() -> Path:
+    """Resolve repository root regardless of test file depth (e.g. tests/ vs tests/tests/)."""
+    here = Path(__file__).resolve().parent
+    for parent in [here, *here.parents]:
+        if (parent / 'pyproject.toml').is_file():
+            return parent
+    raise RuntimeError('Could not locate repository root (pyproject.toml not found)')
+
+
+_PROJECT_ROOT = _repo_root()
+
+MAT_MASTER_CONFIG = _PROJECT_ROOT / 'configs' / 'mat_master' / 'config.yaml'
+MINIMAL_CONFIG = _PROJECT_ROOT / 'configs' / 'minimal' / 'config.yaml'
 
 
 # ---------------------------------------------------------------------------
@@ -36,17 +45,17 @@ class TestMatMasterConfigPath:
     def test_mat_master_config_path(self, tmp_path: Path) -> None:
         pg = Playground(MAT_MASTER_CONFIG)
 
-        ctx = pg.prepare({"run_dir": tmp_path / "runs", "task_id": "matmaster-case"})
+        ctx = pg.prepare({'run_dir': tmp_path / 'runs', 'task_id': 'matmaster-case'})
 
         try:
             assert isinstance(ctx, PlaygroundContext)
-            assert ctx.session_type == "local"
-            assert str(ctx.workdir).endswith("runs/workspaces/matmaster-case")
+            assert ctx.session_type == 'local'
+            assert str(ctx.workdir).endswith('runs/workspaces/matmaster-case')
 
             # Archival must be populated and enabled
             assert ctx.archival is not None
             assert ctx.archival.enabled is True
-            assert ctx.archival.oss_prefix == "matmaster_evo/chat_workspace"
+            assert ctx.archival.oss_prefix == 'matmaster_evo/chat_workspace'
 
             # Session config workspace_path must be synchronised with workdir.
             # For local sessions only workspace_path exists (working_dir is
@@ -54,7 +63,7 @@ class TestMatMasterConfigPath:
             cfg = pg.session.config
             ws_abs = str(ctx.workdir.absolute())
             assert cfg.workspace_path == ws_abs
-            if hasattr(cfg, "working_dir"):
+            if hasattr(cfg, 'working_dir'):
                 assert cfg.working_dir == ws_abs
         finally:
             pg.cleanup()
@@ -71,12 +80,12 @@ class TestMinimalConfigPath:
     def test_minimal_config_path(self, tmp_path: Path) -> None:
         pg = Playground(MINIMAL_CONFIG)
 
-        ctx = pg.prepare({"run_dir": tmp_path / "runs", "task_id": "minimal-case"})
+        ctx = pg.prepare({'run_dir': tmp_path / 'runs', 'task_id': 'minimal-case'})
 
         try:
             assert isinstance(ctx, PlaygroundContext)
-            assert ctx.session_type == "local"
-            assert str(ctx.workdir).endswith("runs/workspaces/minimal-case")
+            assert ctx.session_type == 'local'
+            assert str(ctx.workdir).endswith('runs/workspaces/minimal-case')
 
             # Archival must be present but disabled
             assert ctx.archival is not None
@@ -86,7 +95,7 @@ class TestMinimalConfigPath:
             cfg = pg.session.config
             ws_abs = str(ctx.workdir.absolute())
             assert cfg.workspace_path == ws_abs
-            if hasattr(cfg, "working_dir"):
+            if hasattr(cfg, 'working_dir'):
                 assert cfg.working_dir == ws_abs
         finally:
             pg.cleanup()
@@ -103,13 +112,13 @@ class TestCacheDirFromConfig:
     def test_mat_master_cache_dir_from_config(self, tmp_path: Path) -> None:
         """Cache area resolves playground.cache_dir relative to workspace."""
         pg = Playground(MAT_MASTER_CONFIG)
-        ctx = pg.prepare({"run_dir": tmp_path / "runs", "task_id": "cache-test"})
+        ctx = pg.prepare({'run_dir': tmp_path / 'runs', 'task_id': 'cache-test'})
 
         try:
             # playground.cache_dir = ".cache/matmaster" (relative)
             # Resolved under workspace_path
-            assert ctx.cache_area.name == "matmaster"
-            assert ".cache" in str(ctx.cache_area)
+            assert ctx.cache_area.name == 'matmaster'
+            assert '.cache' in str(ctx.cache_area)
             assert ctx.cache_area.is_dir()
         finally:
             pg.cleanup()
@@ -117,12 +126,12 @@ class TestCacheDirFromConfig:
     def test_minimal_cache_dir_from_config(self, tmp_path: Path) -> None:
         """Minimal config also gets its own cache_dir."""
         pg = Playground(MINIMAL_CONFIG)
-        ctx = pg.prepare({"run_dir": tmp_path / "runs", "task_id": "cache-min"})
+        ctx = pg.prepare({'run_dir': tmp_path / 'runs', 'task_id': 'cache-min'})
 
         try:
             # playground.cache_dir = ".cache/minimal" (relative)
-            assert ctx.cache_area.name == "minimal"
-            assert ".cache" in str(ctx.cache_area)
+            assert ctx.cache_area.name == 'minimal'
+            assert '.cache' in str(ctx.cache_area)
             assert ctx.cache_area.is_dir()
         finally:
             pg.cleanup()

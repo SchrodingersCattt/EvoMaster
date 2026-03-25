@@ -326,99 +326,125 @@ def _run_worker_loop() -> None:
                 sessions_service.release_session_run(
                     session_id, run_success=run_success
                 )
-                queue_len = redis_dao.llen_agent_run_queue()
-                active_count = get_worker_registry_service().count_active_runs()
-                session_url = _session_url(session_id)
-                user_question = (user_prompt or '').strip()
-                if len(user_question) > 500:
-                    user_question = user_question[:500] + '…'
-                # 优先使用 run_agent_sync 返回的 elapsed_ms（与 end 事件、前端展示一致），异常路径无返回值时用 Worker 侧计时
-                if elapsed_ms is not None:
-                    duration_sec = elapsed_ms / 1000.0
-                else:
-                    duration_sec = time.monotonic() - run_start_time
-                if duration_sec < 60:
-                    duration_str = f'{duration_sec:.1f} 秒'
-                elif duration_sec < 3600:
-                    m = int(duration_sec // 60)
-                    s = int(duration_sec % 60)
-                    duration_str = f'{m} 分 {s} 秒'
-                else:
-                    h = int(duration_sec // 3600)
-                    m = int((duration_sec % 3600) // 60)
-                    duration_str = f'{h} 小时 {m} 分'
-                rows = [
-                    ('会话ID', session_id),
-                    ('会话地址', session_url),
-                    ('用户', user_info_display),
-                    ('模型', format_llm_model_for_notify(llm_override, model_override)),
-                    ('用户问题', user_question or '-'),
-                    ('执行节点', get_worker_id()),
-                    (
-                        '结果',
+                try:
+                    queue_len = redis_dao.llen_agent_run_queue()
+                    active_count = get_worker_registry_service().count_active_runs()
+                    session_url = _session_url(session_id)
+                    user_question = (user_prompt or '').strip()
+                    if len(user_question) > 500:
+                        user_question = user_question[:500] + '…'
+                    # 优先使用 run_agent_sync 返回的 elapsed_ms（与 end 事件、前端展示一致），异常路径无返回值时用 Worker 侧计时
+                    if elapsed_ms is not None:
+                        duration_sec = elapsed_ms / 1000.0
+                    else:
+                        duration_sec = time.monotonic() - run_start_time
+                    if duration_sec < 60:
+                        duration_str = f'{duration_sec:.1f} 秒'
+                    elif duration_sec < 3600:
+                        m = int(duration_sec // 60)
+                        s = int(duration_sec % 60)
+                        duration_str = f'{m} 分 {s} 秒'
+                    else:
+                        h = int(duration_sec // 3600)
+                        m = int((duration_sec % 3600) // 60)
+                        duration_str = f'{h} 小时 {m} 分'
+                    rows = [
+                        ('会话ID', session_id),
+                        ('会话地址', session_url),
+                        ('用户', user_info_display),
                         (
+                            '模型',
+                            format_llm_model_for_notify(llm_override, model_override),
+                        ),
+                        ('用户问题', user_question or '-'),
+                        ('执行节点', get_worker_id()),
+                        (
+                            '结果',
+                            (
+                                '成功'
+                                if run_success
+                                else (
+                                    '已取消' if fail_reason == 'cancelled' else '失败'
+                                )
+                            ),
+                        ),
+                        ('运行时间', duration_str),
+                        ('执行中', str(active_count)),
+                        ('排队数', str(queue_len)),
+                    ]
+                    fail_reason_str = (
+                        str(fail_reason).strip() if fail_reason is not None else ''
+                    )
+                    if (
+                        not run_success
+                        and fail_reason_str
+                        and fail_reason_str != 'cancelled'
+                    ):
+                        reason = (fail_reason_str or '-')[:500]
+                        if len(fail_reason_str) > 500:
+                            reason = reason + '…'
+                        rows.insert(7, ('失败原因', reason))  # 插在「结果」之后
+                    if fail_reason == 'cancelled':
+                        title = '用户取消运行'
+                        template = CARD_TEMPLATE_ORANGE
+                    else:
+                        title = 'Worker 执行成功' if run_success else 'Worker 执行失败'
+                        template = (
+                            CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
+                        )
+                    notify_post_async(title, rows, template=template)
+                    logger.info(
+                        'Agent worker: Feishu completion card queued session_id=%s title=%s',
+                        session_id,
+                        title,
+                    )
+                    # 会话完成/失败时给用户发邮件（模板：会话已执行完成+链接），与飞书通知并行
+                    if (
+                        session_user_id
+                        and user_info.get('email')
+                        and user_info.get('email') != '-'
+                    ):
+                        submitted_at_raw = payload.get('submitted_at') or ''
+                        try:
+                            if submitted_at_raw:
+                                dt = datetime.fromisoformat(
+                                    submitted_at_raw.replace('Z', '+00:00')
+                                )
+                                submitted_at_str = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+                            else:
+                                submitted_at_str = ''
+                        except (ValueError, TypeError):
+                            submitted_at_str = submitted_at_raw or ''
+                        result_status = (
                             '成功'
                             if run_success
                             else ('已取消' if fail_reason == 'cancelled' else '失败')
-                        ),
-                    ),
-                    ('运行时间', duration_str),
-                    ('执行中', str(active_count)),
-                    ('排队数', str(queue_len)),
-                ]
-                if not run_success and fail_reason and fail_reason != 'cancelled':
-                    reason = (fail_reason.strip() or '-')[:500]
-                    if len(fail_reason.strip()) > 500:
-                        reason = reason + '…'
-                    rows.insert(7, ('失败原因', reason))  # 插在「结果」之后
-                if fail_reason == 'cancelled':
-                    title = '用户取消运行'
-                    template = CARD_TEMPLATE_ORANGE
-                else:
-                    title = 'Worker 执行成功' if run_success else 'Worker 执行失败'
-                    template = CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
-                notify_post_async(title, rows, template=template)
-                # 会话完成/失败时给用户发邮件（模板：会话已执行完成+链接），与飞书通知并行
-                if (
-                    session_user_id
-                    and user_info.get('email')
-                    and user_info.get('email') != '-'
-                ):
-                    submitted_at_raw = payload.get('submitted_at') or ''
-                    try:
-                        if submitted_at_raw:
-                            dt = datetime.fromisoformat(
-                                submitted_at_raw.replace('Z', '+00:00')
-                            )
-                            submitted_at_str = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
-                        else:
-                            submitted_at_str = ''
-                    except (ValueError, TypeError):
-                        submitted_at_str = submitted_at_raw or ''
-                    result_status = (
-                        '成功'
-                        if run_success
-                        else ('已取消' if fail_reason == 'cancelled' else '失败')
-                    )
-                    fail_reason_for_email = (
-                        (fail_reason or '').strip()
-                        if not run_success and fail_reason != 'cancelled'
-                        else ''
-                    )
-                    if len(fail_reason_for_email) > 500:
-                        fail_reason_for_email = fail_reason_for_email[:500] + '…'
-                    send_session_complete_email_async(
-                        session_url,
-                        session_user_id,
-                        user_info['email'],
-                        user_question=user_question or '',
-                        submitted_at=submitted_at_str,
-                        duration=duration_str,
-                        result_status=result_status,
-                        fail_reason=fail_reason_for_email,
-                        completed_at=datetime.now(timezone.utc).strftime(
-                            '%Y-%m-%d %H:%M:%S UTC'
-                        ),
+                        )
+                        fail_reason_for_email = (
+                            fail_reason_str
+                            if not run_success and fail_reason_str != 'cancelled'
+                            else ''
+                        )
+                        if len(fail_reason_for_email) > 500:
+                            fail_reason_for_email = fail_reason_for_email[:500] + '…'
+                        send_session_complete_email_async(
+                            session_url,
+                            session_user_id,
+                            user_info['email'],
+                            user_question=user_question or '',
+                            submitted_at=submitted_at_str,
+                            duration=duration_str,
+                            result_status=result_status,
+                            fail_reason=fail_reason_for_email,
+                            completed_at=datetime.now(timezone.utc).strftime(
+                                '%Y-%m-%d %H:%M:%S UTC'
+                            ),
+                        )
+                except Exception:
+                    logger.exception(
+                        'Agent worker: completion notify block failed session_id=%s task_id=%s',
+                        session_id,
+                        task_id,
                     )
         if _drain_requested:
             logger.info(
