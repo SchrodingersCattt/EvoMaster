@@ -290,7 +290,7 @@ class TestMatMasterRunAgentSyncE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("matmaster_config/config.yaml")
+        mock_pg.config_path = Path("configs/mat_master/config.yaml")
         mock_pg.session = None
 
         with (
@@ -381,7 +381,7 @@ class TestMatMasterRunAgentSyncE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("matmaster_config/config.yaml")
+        mock_pg.config_path = Path("configs/mat_master/config.yaml")
         mock_pg.session = None
 
         current_task_id = "task-1"
@@ -482,7 +482,7 @@ class TestMatMasterRunAgentSyncE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("matmaster_config/config.yaml")
+        mock_pg.config_path = Path("configs/mat_master/config.yaml")
         mock_pg.session = None
 
         # Pre-populate the PlaygroundManager cache so release() finds the mock
@@ -549,7 +549,7 @@ class TestMatMasterRunAgentSyncE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("matmaster_config/config.yaml")
+        mock_pg.config_path = Path("configs/mat_master/config.yaml")
         mock_pg.session = None
 
         with (
@@ -650,7 +650,7 @@ class TestMatMasterRunAgentSyncE2E:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_pg_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
-        mock_pg.config_path = Path("matmaster_config/config.yaml")
+        mock_pg.config_path = Path("configs/mat_master/config.yaml")
         mock_pg.session = None
 
         with (
