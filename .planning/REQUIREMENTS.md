@@ -21,10 +21,10 @@ Requirements for Agent 外围能力构建。Each maps to roadmap phases.
 
 ### SubAgent
 
-- [ ] **SUBA-01**: Agent 可以通过 SubAgent tool 调用 spawn 子 agent 执行特定任务，结果作为 tool_call result 返回
-- [ ] **SUBA-02**: 子 agent 通过 ExpConfig 配置独立的 tool 集和 system prompt
+- [x] **SUBA-01**: Agent 可以通过 SubAgent tool 调用 spawn 子 agent 执行特定任务，结果作为 tool_call result 返回
+- [x] **SUBA-02**: 子 agent 通过 ExpConfig 配置独立的 tool 集和 system prompt
 - [ ] **SUBA-03**: 子 agent 共享父 agent 的 PlaygroundContext（workspace/session）
-- [ ] **SUBA-04**: 子 agent 禁止再次 spawn 子 agent（递归深度保护）
+- [x] **SUBA-04**: 子 agent 禁止再次 spawn 子 agent（递归深度保护）
 - [ ] **SUBA-05**: 父 agent 取消时 stop_event 级联传播到子 agent
 - [ ] **SUBA-06**: 子 agent 的事件通过父 agent 的 MessageBus 路由到前端
 
@@ -32,7 +32,7 @@ Requirements for Agent 外围能力构建。Each maps to roadmap phases.
 
 - [x] **PRMT-01**: 每个 builtin tool 具有精细化的 description 和 json_schema，优化 LLM 调用准确率
 - [x] **PRMT-02**: Exp system prompt（developer_instructions）针对 direct 模式设计完整的 agent 行为指导
-- [ ] **PRMT-03**: SubAgent 的 exp 定义包含针对子任务场景的专用 system prompt
+- [x] **PRMT-03**: SubAgent 的 exp 定义包含针对子任务场景的专用 system prompt
 
 ## Future Requirements
 
@@ -73,15 +73,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TOOL-07 | Phase 8 | Complete |
 | TOOL-08 | Phase 9 | Complete |
 | TOOL-09 | Phase 8 | Complete |
-| SUBA-01 | Phase 11 | Pending |
-| SUBA-02 | Phase 11 | Pending |
+| SUBA-01 | Phase 11 | Complete |
+| SUBA-02 | Phase 11 | Complete |
 | SUBA-03 | Phase 11 | Pending |
-| SUBA-04 | Phase 11 | Pending |
+| SUBA-04 | Phase 11 | Complete |
 | SUBA-05 | Phase 11 | Pending |
 | SUBA-06 | Phase 11 | Pending |
 | PRMT-01 | Phase 10 | Complete |
 | PRMT-02 | Phase 10 | Complete |
-| PRMT-03 | Phase 11 | Pending |
+| PRMT-03 | Phase 11 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 18 total
