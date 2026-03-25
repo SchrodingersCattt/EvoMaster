@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Agent 外围能力构建
-status: Ready to plan
-stopped_at: Phase 9 context gathered
-last_updated: "2026-03-25T03:15:11.532Z"
+status: Ready to execute
+stopped_at: Completed 09-02-PLAN.md
+last_updated: "2026-03-25T04:12:13.690Z"
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_plans: 6
+  completed_plans: 4
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 08 — builtintool-tools
+**Current focus:** Phase 09 — tools
 
 ## Current Position
 
-Phase: 9
-Plan: Not started
+Phase: 09 (tools) — EXECUTING
+Plan: 2 of 3
 
 ## Accumulated Context
 
@@ -38,6 +38,7 @@ Recent decisions affecting current work:
 - [Phase 08]: Created BuiltinTool base.py inline in Plan 02 since Plan 01 runs in parallel
 - [Phase 08]: BuiltinTool uses ClassVar for Protocol satisfaction, session constructor injection with None default
 - [Phase 08]: Native tools source='builtin', evo adapter tools source='builtin_evo' for provenance tracking
+- [Phase 09]: Inline _resolve_safe_path in each tool class for zero coupling
 
 ### Pending Todos
 
@@ -51,6 +52,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T03:15:11.524Z
-Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-tools/09-CONTEXT.md
+Last session: 2026-03-25T04:12:13.687Z
+Stopped at: Completed 09-02-PLAN.md
+Resume file: None
