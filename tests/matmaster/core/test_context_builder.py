@@ -80,7 +80,7 @@ def builder() -> ContextBuilder:
 def test_build_no_args_produces_empty(
     builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
 ) -> None:
-    """Build with all defaults (empty identity, empty mode_contract, no tools)
+    """Build with all defaults (empty system_prompt, empty identity, no tools)
     produces empty string -- no sections to include."""
     result = builder.build(ctx, tool_registry)
     assert result == ""
@@ -93,25 +93,13 @@ def test_build_with_identity_only(
     result = builder.build(ctx, tool_registry, identity="I am Mat Master.")
     assert "# Identity" in result
     assert "I am Mat Master." in result
-    assert "# Mode Contract" not in result
-
-
-def test_build_with_mode_contract_only(
-    builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
-) -> None:
-    """Passing mode_contract produces only the mode_contract section."""
-    result = builder.build(
-        ctx, tool_registry, mode_contract="Execute tasks directly."
-    )
-    assert "# Mode Contract" in result
-    assert "Execute tasks directly." in result
-    assert "# Identity" not in result
+    assert "# System" not in result
 
 
 def test_section_order_fixed(
     builder: ContextBuilder, ctx: PlaygroundContext
 ) -> None:
-    """All sections enabled -- fixed order identity < mode_contract < skills
+    """All sections enabled -- fixed order system_prompt < identity < skills
     < tools < memory < task."""
     reg = ToolRegistry()
     reg.register(MockTool("t1"))
@@ -119,21 +107,21 @@ def test_section_order_fixed(
     result = builder.build(
         ctx,
         reg,
+        system_prompt="Test system prompt",
         identity="Test identity",
-        mode_contract="Test mode contract",
         skill_registry=MockSkillRegistry(),
         memory_context="some memory",
         task_context="some task",
     )
 
+    idx_system = result.index("# System")
     idx_identity = result.index("# Identity")
-    idx_mode = result.index("# Mode Contract")
     idx_skills = result.index("# Skills")
     idx_tools = result.index("# Available Tools")
     idx_memory = result.index("# Memory")
     idx_task = result.index("# Task Context")
 
-    assert idx_identity < idx_mode < idx_skills < idx_tools < idx_memory < idx_task
+    assert idx_system < idx_identity < idx_skills < idx_tools < idx_memory < idx_task
 
 
 def test_disable_section(
@@ -159,31 +147,6 @@ def test_disable_multiple_sections(
     assert "# Memory" not in result
 
 
-def test_mode_contract_text_passthrough(
-    builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
-) -> None:
-    """mode_contract text is passed through verbatim (after strip)."""
-    text = "You are in direct execution mode. Complete tasks."
-    result = builder.build(ctx, tool_registry, mode_contract=text)
-    assert "# Mode Contract" in result
-    assert text in result
-
-
-def test_different_mode_contracts_produce_different_prompts(
-    builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
-) -> None:
-    """Different mode_contract strings produce different outputs."""
-    direct = builder.build(
-        ctx, tool_registry, mode_contract="Direct mode."
-    )
-    planner = builder.build(
-        ctx, tool_registry, mode_contract="Planner mode."
-    )
-    assert direct != planner
-    assert "Direct mode." in direct
-    assert "Planner mode." in planner
-
-
 def test_identity_custom(
     builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
 ) -> None:
@@ -198,12 +161,11 @@ def test_strip_trailing_newlines(
     """TOML multi-line strings may have trailing newlines -- stripped."""
     result = builder.build(
         ctx, tool_registry,
+        system_prompt="\nBase prompt\n",
         identity="\nMat Master\n",
-        mode_contract="\nDirect mode.\n",
     )
-    # No double newline after header from trailing \n
-    assert "# Identity\n\nMat Master\n\n---" in result
-    assert "# Mode Contract\n\nDirect mode." in result
+    assert "# System\n\nBase prompt\n\n---" in result
+    assert "# Identity\n\nMat Master" in result
 
 
 def test_tools_section_lists_tool_names(
@@ -261,3 +223,13 @@ def test_skills_section_from_registry(
     assert "# Skills" in result
     assert "Skill A: does X" in result
     assert "Skill B: does Y" in result
+
+
+def test_build_with_system_prompt_only(
+    builder: ContextBuilder, ctx: PlaygroundContext, tool_registry: ToolRegistry
+) -> None:
+    """Passing system_prompt produces only the system section."""
+    result = builder.build(ctx, tool_registry, system_prompt="Base persona.")
+    assert "# System" in result
+    assert "Base persona." in result
+    assert "# Identity" not in result
