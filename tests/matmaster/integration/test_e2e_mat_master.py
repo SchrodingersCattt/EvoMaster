@@ -31,12 +31,11 @@ from matmaster.types.messages import (
 )
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import (
-    FinishEvent,
     ResponseEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from matmaster.types.runtime import AgentRuntimeSpec
+from matmaster.types.runtime import AgentRuntimeSpec, KernelResult
 
 
 # ── Mock LLM provider ────────────────────────────────
@@ -201,9 +200,9 @@ class TestMatMasterE2EPipeline:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "test task")
 
-        assert isinstance(finish.event, FinishEvent)
-        assert finish.event.reason == "natural"
-        assert finish.event.status == "completed"
+        assert isinstance(finish.result, KernelResult)
+        assert finish.result.reason == "natural"
+        assert finish.result.status == "completed"
 
         # MessageBus received ResponseEvent from streaming content
         events = _collect_bus_events(bus)
@@ -225,8 +224,8 @@ class TestMatMasterE2EPipeline:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "call echo tool")
 
-        assert isinstance(finish.event, FinishEvent)
-        assert finish.event.reason == "natural"
+        assert isinstance(finish.result, KernelResult)
+        assert finish.result.reason == "natural"
 
         # Collect bus events -- should have ToolCallEvent and ToolResultEvent
         events = _collect_bus_events(bus)
@@ -253,7 +252,7 @@ class TestMatMasterE2EPipeline:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "new task", history=history)
 
-        assert finish.event.reason == "natural"
+        assert finish.result.reason == "natural"
         # Verify messages passed to LLM include history
         assert len(mock_llm.captured_messages) == 1
         llm_messages = mock_llm.captured_messages[0]

@@ -17,7 +17,8 @@ from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
 from matmaster.types.messages import StreamChunk, LLMResponse
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.events import FinishEvent, ResponseEvent
+from matmaster.types.events import ResponseEvent
+from matmaster.types.runtime import KernelResult
 
 
 class MinimalMockLLMProvider:
@@ -62,10 +63,10 @@ class TestMinimalE2EPipeline:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "minimal test task")
 
-        assert isinstance(finish.event, FinishEvent)
-        assert finish.event.reason == "natural"
-        assert finish.event.status == "completed"
-        assert finish.event.final_content == "minimal response"
+        assert isinstance(finish.result, KernelResult)
+        assert finish.result.reason == "natural"
+        assert finish.result.status == "completed"
+        assert finish.result.final_content == "minimal response"
 
         # Bus should have received response events from streaming content
         events = []
