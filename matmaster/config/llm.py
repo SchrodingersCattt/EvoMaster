@@ -6,16 +6,15 @@ LLM backend (provider, model, auth, reasoning, timeout, retry).
 YAML example::
 
     llm:
-      litellm:
+      opus:
         provider: "openai"
         model: "claude-opus-4-6"
-        model_family: "claude-4.6"
         api_key: "${LITELLM_PROXY_API_KEY}"
         base_url: "${LITELLM_PROXY_API_BASE}"
         thinking_effort: "high"
         reasoning_protocol: "anthropic_adaptive_thinking"
         ...
-      default: "litellm"
+      default: "opus"
 """
 
 from __future__ import annotations
@@ -166,7 +165,7 @@ class LLMConfig(BaseModel):
 
     profiles: dict[str, LLMProfileConfig] = Field(default_factory=dict)
     routes: dict[str, LLMRouteConfig] = Field(default_factory=dict)
-    default: str = "litellm"
+    default: str = "opus"
 
     @model_validator(mode="before")
     @classmethod
@@ -176,7 +175,7 @@ class LLMConfig(BaseModel):
             return data
         if "profiles" in data:
             return data
-        default = data.pop("default", "litellm")
+        default = data.pop("default", "opus")
         profiles: dict[str, Any] = {}
         for key, value in data.items():
             if isinstance(value, dict):
