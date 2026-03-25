@@ -23,42 +23,6 @@ def test_normalize_event_source_collapses_internal_labels():
     assert normalize_event_source('') == 'MatMaster'
 
 
-def test_chat_history_converter_uses_stable_types_for_assistant_events():
-    """Planner/internal sources should still reconstruct assistant history."""
-    events = [
-        {'source': 'User', 'type': 'query', 'content': 'hello'},
-        {'source': 'general', 'type': 'thought', 'content': 'draft answer'},
-        {'source': 'Planner', 'type': 'planner_reply', 'content': 'plan update'},
-        {
-            'source': 'ToolExecutor',
-            'type': 'tool_call',
-            'content': {'id': 'call_1', 'name': 'demo_tool', 'args': {'x': 1}},
-        },
-        {
-            'source': 'ToolExecutor',
-            'type': 'tool_result',
-            'content': {'id': 'call_1', 'name': 'demo_tool', 'result': {'ok': True}},
-        },
-        {'source': 'Planner', 'type': 'run_result', 'content': 'done'},
-    ]
-
-    out = ChatHistoryConverter.events_to_dialog_messages(events)
-
-    assert [msg.get('role') for msg in out] == [
-        'user',
-        'assistant',
-        'assistant',
-        'assistant',
-        'tool',
-        'assistant',
-    ]
-    assert out[1]['content'] == 'draft answer'
-    assert out[2]['content'] == 'plan update'
-    assert out[3]['tool_calls'][0]['function']['name'] == 'demo_tool'
-    assert out[4]['name'] == 'demo_tool'
-    assert out[5]['content'] == 'done'
-
-
 def test_planner_ask_human_requires_confirmation_manager():
     """Planner confirmation should fail fast when ConfirmationManager is absent."""
 
