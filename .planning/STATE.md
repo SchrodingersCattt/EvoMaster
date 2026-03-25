@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Agent 外围能力构建
-status: Ready to plan
-stopped_at: Phase 10 context gathered
-last_updated: "2026-03-25T05:29:44.864Z"
+status: Ready to execute
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-03-25T06:21:39.238Z"
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 8
+  completed_plans: 7
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-24)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 09 — tools
+**Current focus:** Phase 10 — tool-description-system-prompt
 
 ## Current Position
 
-Phase: 10
-Plan: Not started
+Phase: 10 (tool-description-system-prompt) — EXECUTING
+Plan: 2 of 2
 
 ## Accumulated Context
 
@@ -45,6 +45,7 @@ Recent decisions affecting current work:
 - [Phase 09]: build_runtime condition changed from wildcard-only to any non-empty builtin list
 - [Phase 09]: EditorTool fully removed from Exp assembly, replaced by native ReadTool/WriteTool/EditTool
 - [Phase 09]: ReadTracker.clear registered as cleanup callback for state reset between agent runs
+- [Phase 10]: Tool descriptions follow Claude Code overview + Usage bullets pattern, all under 400 char budget
 
 ### Pending Todos
 
@@ -58,6 +59,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-25T05:29:44.860Z
-Stopped at: Phase 10 context gathered
-Resume file: .planning/phases/10-tool-description-system-prompt/10-CONTEXT.md
+Last session: 2026-03-25T06:21:39.235Z
+Stopped at: Completed 10-01-PLAN.md
+Resume file: None
