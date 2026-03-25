@@ -15,9 +15,9 @@ profiles:
     reasoning_protocol: "anthropic_adaptive_thinking"
     temperature_policy: "force_one_when_reasoning"
     temperature: 0.7
-    timeout: 300
-    stream_timeout: 20
-    stream_idle_timeout: 30
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
 
@@ -30,9 +30,9 @@ profiles:
     reasoning_protocol: "anthropic_adaptive_thinking"
     temperature_policy: "force_one_when_reasoning"
     temperature: 0.7
-    timeout: 300
-    stream_timeout: 20
-    stream_idle_timeout: 30
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
 
@@ -41,9 +41,9 @@ profiles:
     model: "claude-haiku-4-5"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
-    timeout: 120
-    stream_timeout: 15
-    stream_idle_timeout: 20
+    timeout: 1200
+    stream_timeout: 60
+    stream_idle_timeout: 30
     max_retries: 3
     retry_delay: 1.0
 
@@ -54,9 +54,9 @@ profiles:
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "high"
-    timeout: 120
-    stream_timeout: 15
-    stream_idle_timeout: 20
+    timeout: 1200
+    stream_timeout: 60
+    stream_idle_timeout: 30
     max_retries: 3
     retry_delay: 1.0
 
@@ -68,9 +68,9 @@ profiles:
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "high"
     temperature: 1.0
-    timeout: 300
-    stream_timeout: 20
-    stream_idle_timeout: 30
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
 
@@ -81,9 +81,9 @@ profiles:
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "xhigh"
-    timeout: 300
-    stream_timeout: 20
-    stream_idle_timeout: 30
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
 
@@ -94,9 +94,9 @@ profiles:
     base_url: "${LITELLM_PROXY_API_BASE}"
     temperature: 0.3
     max_tokens: 4096
-    timeout: 120
-    stream_timeout: 15
-    stream_idle_timeout: 20
+    timeout: 1200
+    stream_timeout: 60
+    stream_idle_timeout: 30
     max_retries: 2
     retry_delay: 1.0
 
