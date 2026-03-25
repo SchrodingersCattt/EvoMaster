@@ -332,6 +332,13 @@ class AgentRunService:
                 update={"hooks": [*runtime.spec.hooks, *external_hooks]}
             )
 
+            # Inject stop_event into SubAgentTool for cancel propagation (SUBA-05)
+            if stop_event is not None and spec.tool_registry is not None:
+                from matmaster.tools.builtin.sub_agent_tool import SubAgentTool
+                for tool in spec.tool_registry.all_tools:
+                    if isinstance(tool, SubAgentTool):
+                        tool._stop_event = stop_event
+
             # -- Stage 5: History --
             raw_events = (
                 events_table.get_session_events(
