@@ -27,9 +27,6 @@ class MinimalMockLLMProvider:
     def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="minimal response", finish_reason="stop")
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
     def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         yield StreamChunk(content="minimal response", finish_reason="stop")
 
