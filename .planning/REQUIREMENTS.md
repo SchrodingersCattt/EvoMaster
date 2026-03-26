@@ -34,6 +34,16 @@ Requirements for Agent 外围能力构建。Each maps to roadmap phases.
 - [x] **PRMT-02**: Exp system prompt（developer_instructions）针对 direct 模式设计完整的 agent 行为指导
 - [x] **PRMT-03**: SubAgent 的 exp 定义包含针对子任务场景的专用 system prompt
 
+## v2.0 Requirements
+
+Requirements for matmaster 协程改造。Each maps to roadmap phases.
+
+### LLM Provider
+
+- [x] **LLMP-01**: LLMProvider Protocol chat/chat_stream 为 async 方法，使用 AsyncOpenAI client
+- [x] **LLMP-02**: LLMProvider Protocol 声明 __aenter__/__aexit__ 作为 async context manager 生命周期契约
+- [x] **LLMP-03**: validate_async_protocol 可验证 Provider 实现是否满足 async Protocol
+
 ## Future Requirements
 
 ### Deferred Tools
@@ -83,11 +93,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PRMT-02 | Phase 10 | Complete |
 | PRMT-03 | Phase 11 | Complete |
 
+| LLMP-01 | Phase 13 | Complete |
+| LLMP-02 | Phase 13 | Complete |
+| LLMP-03 | Phase 13 | Complete |
+
 **Coverage:**
-- v1.1 requirements: 18 total
-- Mapped to phases: 18
-- Unmapped: 0
+- v1.1 requirements: 18 total, mapped: 18, unmapped: 0
+- v2.0 requirements: 3 total, mapped: 3, unmapped: 0
 
 ---
 *Requirements defined: 2026-03-24*
-*Last updated: 2026-03-24 after roadmap creation*
+*Last updated: 2026-03-27 after Phase 13 Plan 01 execution*
