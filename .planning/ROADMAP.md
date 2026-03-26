@@ -76,8 +76,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- OpenAIProvider async context manager + chat/chat_stream async 实现 + 测试迁移
-- [ ] 13-02-PLAN.md -- ContextCompactor async 化 + AgentKernel sync-async 桥接 + 测试适配
+- [ ] 13-01-PLAN.md -- LLMProvider Protocol __aenter__/__aexit__ + OpenAIProvider async 实现 + provider 测试迁移
+- [ ] 13-02-PLAN.md -- ContextCompactor async + Kernel 共享 bridge loop + test_agent/devshell 全面适配
 
 ### Phase 14: Tool 系统异步化
 **Goal**: 所有 tool 的 execute 方法为 async，session-dependent tool 通过 asyncio.to_thread 桥接同步 evomaster API
