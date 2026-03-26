@@ -60,7 +60,10 @@ Full details: milestones/v1.1-ROADMAP.md
   3. Hook Protocol 全部 7 个方法签名为 async def，Guard Protocol 的 evaluate 保持 sync 不变
   4. 运行 `pytest --co` 可成功收集测试，pytest-asyncio auto mode 配置生效，async def test_* 自动识别
   5. async validation helper (inspect.iscoroutinefunction) 可检测出 sync 实现误匹配 async Protocol
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 12-01-PLAN.md -- Protocol/ABC 签名全部改为 async (LLMProvider, Tool, Hook, Guard, EventHandler, ReplyQueueLike, BuiltinTool ABC, 删除 chat_with_retry)
+- [ ] 12-02-PLAN.md -- Validation helper + pytest-asyncio 安装 + async mock factories + 现有测试适配
 
 ### Phase 13: LLM Provider 异步实现
 **Goal**: LLM 调用全链路非阻塞，OpenAIProvider 使用 AsyncOpenAI，streaming 通过 AsyncIterator 消费
@@ -162,7 +165,7 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 9. 文件操作 Tools | v1.1 | 3/3 | Complete | 2026-03-25 |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete | 2026-03-25 |
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete | 2026-03-25 |
-| 12. Protocol 层 + 测试基础设施 | v2.0 | 0/0 | Not started | - |
+| 12. Protocol 层 + 测试基础设施 | v2.0 | 0/2 | Planning | - |
 | 13. LLM Provider 异步实现 | v2.0 | 0/0 | Not started | - |
 | 14. Tool 系统异步化 | v2.0 | 0/0 | Not started | - |
 | 15. Hook 系统异步化 | v2.0 | 0/0 | Not started | - |
