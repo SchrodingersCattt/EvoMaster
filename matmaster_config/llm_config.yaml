@@ -76,7 +76,7 @@ profiles:
 
   gpt54:
     provider: "openai"
-    model: "GPT-5.4"
+    model: "cds/GPT-5.4"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
