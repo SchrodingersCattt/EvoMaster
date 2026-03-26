@@ -74,9 +74,19 @@ def _build_llm_provider(args: argparse.Namespace, config: "DevConfig") -> "OpenA
             sys.exit(1)
 
         model_override = args.model
+        resolved = llm_config.resolve_route(model_override=model_override)
+        profile = llm_config.get_profile(resolved.profile_key)
+
+        if not profile.api_key:
+            print(
+                f"Error: LLM profile '{resolved.profile_key}' has empty api_key. "
+                f"Check env vars referenced in {llm_config_path.name}.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
         provider = build_provider(llm_config, model_override=model_override)
-        profile_key = llm_config.resolve_route(model_override=model_override).profile_key
-        print(f"LLM: profile={profile_key} (from {llm_config_path.name})")
+        print(f"LLM: profile={resolved.profile_key} model={resolved.model} (from {llm_config_path.name})")
         return provider
 
     # Fallback: use DevConfig.LLMConfig + env var
