@@ -30,10 +30,14 @@ from matmaster.core.hooks import EventEmitterHook
 from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, CompactionConfig, KernelResult
+from matmaster.types.runtime import (
+    AgentRuntime,
+    AgentRuntimeSpec,
+    CompactionConfig,
+    KernelResult,
+)
 
 if TYPE_CHECKING:
-    from matmaster.core.agent import AgentKernel
     from matmaster.types.messages import Message
 
 
@@ -77,7 +81,7 @@ class Exp:
                 cb()
             except Exception:
                 self.logger.warning(
-                    "Cleanup callback %s raised, continuing with remaining callbacks",
+                    'Cleanup callback %s raised, continuing with remaining callbacks',
                     cb,
                     exc_info=True,
                 )
@@ -119,7 +123,7 @@ class Exp:
                     child_runtime.spec, task, stop_event=stop_event
                 )
                 result = run_result.result
-                if result.status == "completed" and result.final_content:
+                if result.status == 'completed' and result.final_content:
                     return result.final_content
                 return f"SubAgent finished with status={result.status}, reason={result.reason}"
             finally:
@@ -169,35 +173,34 @@ class Exp:
         # 3. System prompt via ContextBuilder
         builder = ContextBuilder()
         system_prompt = builder.build(
-            ctx, registry,
+            ctx,
+            registry,
             system_prompt=self._config.system_prompt,
             identity=self._config.developer_instructions,
-            skill_registry=getattr(self, "_skill_registry", None),
+            skill_registry=getattr(self, '_skill_registry', None),
         )
 
         # 4. Hooks
         hooks = list(spec.hooks)
         if bus is not None:
             emitter_source = source_override or self.exp_name
-            emitter_hook = EventEmitterHook(
-                bus, emitter_source, spawn_id=spawn_id
-            )
+            emitter_hook = EventEmitterHook(bus, emitter_source, spawn_id=spawn_id)
             hooks.append(emitter_hook)
 
         # 4b. SpawnTool: register with spawn_fn if "spawn" in config
         builtin_cfg = self._config.tools.builtin
-        if ("spawn" in builtin_cfg or builtin_cfg == ["*"]) and ctx.session is not None:
+        if ('spawn' in builtin_cfg or builtin_cfg == ['*']) and ctx.session is not None:
             from matmaster.config.loader import list_available_exps
             from matmaster.tools.builtin.spawn_tool import SpawnTool
 
-            spawn_fn = self._make_spawn_fn(ctx, bus, source_prefix="MatMaster")
+            spawn_fn = self._make_spawn_fn(ctx, bus, source_prefix='MatMaster')
             spawn_tool = SpawnTool(
                 session=ctx.session,
                 workdir=Path(ctx.execution_workdir),
                 spawn_fn=spawn_fn,
                 available_exps=list_available_exps(),
             )
-            registry.register(spawn_tool, source="builtin")
+            registry.register(spawn_tool, source='builtin')
 
         # 5. Compaction: unchanged, managed by separate process
         compactor = None
@@ -215,7 +218,7 @@ class Exp:
                     summary_provider = OpenAIProvider(**resolved)
                 else:
                     self.logger.warning(
-                        "compaction_llm key=%r not found, falling back to main provider",
+                        'compaction_llm key=%r not found, falling back to main provider',
                         spec.compaction.compaction_llm,
                     )
 
@@ -227,10 +230,10 @@ class Exp:
 
         spec = spec.model_copy(
             update={
-                "tool_registry": registry,
-                "system_prompt": system_prompt,
-                "hooks": hooks,
-                "compactor": compactor,
+                'tool_registry': registry,
+                'system_prompt': system_prompt,
+                'hooks': hooks,
+                'compactor': compactor,
             }
         )
 
@@ -248,7 +251,7 @@ class Exp:
         self, key: str, ctx: PlaygroundContext
     ) -> dict[str, Any] | None:
         """Resolve compaction LLM profile from PlaygroundContext.llm_config."""
-        llm_config = getattr(ctx, "llm_config", None)
+        llm_config = getattr(ctx, 'llm_config', None)
         if llm_config is None:
             return None
         try:
@@ -256,12 +259,12 @@ class Exp:
         except KeyError:
             return None
         return {
-            "model": profile.model,
-            "api_key": profile.api_key,
-            "base_url": profile.base_url,
-            "temperature": profile.effective_temperature(),
-            "max_tokens": profile.max_tokens,
-            "timeout": profile.timeout,
+            'model': profile.model,
+            'api_key': profile.api_key,
+            'base_url': profile.base_url,
+            'temperature': profile.effective_temperature(),
+            'max_tokens': profile.max_tokens,
+            'timeout': profile.timeout,
         }
 
     # ── Phase 3: run ─────────────────────────────────────
@@ -280,7 +283,7 @@ class Exp:
         """build_runtime -> kernel.run -> cleanup."""
         runtime = self.build_runtime(ctx, bus=bus, skills=skills, mcp=mcp)
         # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
-        tool_registry = getattr(runtime.spec, "tool_registry", None)
+        tool_registry = getattr(runtime.spec, 'tool_registry', None)
         if stop_event is not None and tool_registry is not None:
             from matmaster.tools.builtin.spawn_tool import SpawnTool
 
@@ -304,11 +307,12 @@ class Exp:
 
         Native tools (12): BashTool, ListDirTool, ReadTool, WriteTool, EditTool,
         GlobTool, GrepTool, TaskCreate/Get/List/Update/Complete.
-        Evo adapter (1): MonitorJobTool (science-specific, retained).
+        Evo adapters (2): MonitorJobTool and web-search (retained from legacy
+        MatMaster playground for literature/web retrieval continuity).
         """
         if ctx.session is None:
             self.logger.warning(
-                "No session in PlaygroundContext, skipping builtin tools"
+                'No session in PlaygroundContext, skipping builtin tools'
             )
             return
 
@@ -351,18 +355,24 @@ class Exp:
             TaskCompleteTool(workdir=ctx.workdir),
         ]
         for tool in native_tools:
-            registry.register(tool, source="builtin")
+            registry.register(tool, source='builtin')
 
         # 2. Evo adapter tools (source="builtin_evo")
-        #    MonitorJobTool retained (science-specific, no native migration planned)
+        #    Retain legacy science-specific tools that have not been ported natively.
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
+        from playground.mat_master.tools.web_search import get_web_search_tool
 
-        adapted = EvoToolAdapter(MonitorJobTool(), ctx.session)
-        registry.register(adapted, source="builtin_evo")
+        evo_tools = [
+            MonitorJobTool(),
+            get_web_search_tool(),
+        ]
+        for tool in evo_tools:
+            registry.register(EvoToolAdapter(tool, ctx.session), source='builtin_evo')
 
         self.logger.debug(
-            "Registered %d native + 1 evo-adapted builtin tools",
+            'Registered %d native + %d evo-adapted builtin tools',
             len(native_tools),
+            len(evo_tools),
         )
 
     def _init_skill_tools(
@@ -392,7 +402,7 @@ class Exp:
             roots = [Path(roots_raw)] if roots_raw else []
         if not roots:
             self.logger.warning(
-                "skills.enabled=true but skills_root is empty, skipping skill init"
+                'skills.enabled=true but skills_root is empty, skipping skill init'
             )
             return
 
@@ -413,12 +423,12 @@ class Exp:
                 f"Required when skills.enabled=true."
             )
 
-        mcp_config_file = mcp_config.get("config_file", skills_cfg.mcp_config_file)
+        mcp_config_file = mcp_config.get('config_file', skills_cfg.mcp_config_file)
         config_path = Path(mcp_config_file)
         if not config_path.is_absolute():
             config_path = Path(skills_cfg.config_dir) / config_path
 
-        if mcp_config.get("path_adaptor") == "calculation":
+        if mcp_config.get('path_adaptor') == 'calculation':
             try:
                 from evomaster.adaptors.calculation import resolve_mcp_config_path
 
@@ -430,10 +440,10 @@ class Exp:
         server_config: dict = {}
         if config_path.exists():
             try:
-                raw = _json.loads(config_path.read_text(encoding="utf-8"))
-                server_config = raw.get("mcpServers", {})
+                raw = _json.loads(config_path.read_text(encoding='utf-8'))
+                server_config = raw.get('mcpServers', {})
             except Exception as e:
-                self.logger.warning("Failed to load MCP server config: %s", e)
+                self.logger.warning('Failed to load MCP server config: %s', e)
 
         connector = LazyMCPConnector(
             mcp_server_config=server_config,
@@ -451,7 +461,7 @@ class Exp:
                 )
                 return
             for tool_schema in schemas:
-                original_name = tool_schema["name"]
+                original_name = tool_schema['name']
                 prefixed_name = f"{mcp_server}_{original_name}"
                 if prefixed_name in registry:
                     continue
@@ -459,16 +469,16 @@ class Exp:
                     server_name=mcp_server,
                     tool_name=prefixed_name,
                     remote_tool_name=original_name,
-                    description=tool_schema.get("description", ""),
-                    input_schema=tool_schema.get("input_schema", {}),
+                    description=tool_schema.get('description', ''),
+                    input_schema=tool_schema.get('input_schema', {}),
                     connector=connector,
                 )
-                registry.register(lazy_tool, source="mcp")
+                registry.register(lazy_tool, source='mcp')
 
         skill_tool = SkillTool(
             skill_registry, session=ctx.session, on_skill_hit=on_skill_hit
         )
-        registry.register(skill_tool, source="skill")
+        registry.register(skill_tool, source='skill')
 
         self._skill_registry = skill_registry
 
@@ -479,4 +489,3 @@ class Exp:
         config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize MCP tools (stub -- factory mechanism refined later)."""
-
