@@ -87,6 +87,11 @@ def main(argv: list[str] | None = None) -> None:
         base_url=config.llm.base_url,
         temperature=config.llm.temperature,
         max_tokens=config.llm.max_tokens,
+        timeout=config.llm.timeout,
+        stream_timeout=config.llm.stream_timeout,
+        stream_idle_timeout=config.llm.stream_idle_timeout,
+        max_retries=config.llm.max_retries,
+        retry_delay=config.llm.retry_delay,
     )
 
     # Create stream hook and runner
