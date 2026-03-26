@@ -37,7 +37,7 @@ class BashTool(BuiltinTool):
         '- write_file (NOT echo/heredoc)\n'
         '- glob (NOT find/ls)\n'
         '- grep (NOT grep/rg)\n\n'
-        'Prefer relative paths; Bohrium: /share not /workspace.'
+        'Bohrium: /share not /workspace.'
     )
     json_schema: ClassVar[dict[str, Any]] = {
         'type': 'object',
@@ -46,8 +46,7 @@ class BashTool(BuiltinTool):
                 'type': 'string',
                 'description': (
                     'The bash command to execute. Prefer dedicated tools for file operations. '
-                    'Prefer relative paths from the shell cwd; '
-                    'on Bohrium remote shared storage is typically /share (not /workspace).'
+                    'On Bohrium remote shared storage is typically /share (not /workspace).'
                 ),
             },
             'is_input': {
