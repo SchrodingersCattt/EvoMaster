@@ -73,7 +73,11 @@ Plans:
   2. OpenAIProvider.chat_stream() 返回 AsyncIterator[StreamChunk]，可通过 async for 消费
   3. provider 支持 async context manager 生命周期管理（进入时创建 client，退出时关闭连接）
   4. 所有 provider 测试通过 pytest-asyncio 运行，mock 使用 async def
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md -- OpenAIProvider async context manager + chat/chat_stream async 实现 + 测试迁移
+- [ ] 13-02-PLAN.md -- ContextCompactor async 化 + AgentKernel sync-async 桥接 + 测试适配
 
 ### Phase 14: Tool 系统异步化
 **Goal**: 所有 tool 的 execute 方法为 async，session-dependent tool 通过 asyncio.to_thread 桥接同步 evomaster API
@@ -165,7 +169,7 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete | 2026-03-25 |
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete | 2026-03-25 |
 | 12. Protocol 层 + 测试基础设施 | v2.0 | 2/2 | Complete | 2026-03-26 |
-| 13. LLM Provider 异步实现 | v2.0 | 0/0 | Not started | - |
+| 13. LLM Provider 异步实现 | v2.0 | 0/2 | In progress | - |
 | 14. Tool 系统异步化 | v2.0 | 0/0 | Not started | - |
 | 15. Hook 系统异步化 | v2.0 | 0/0 | Not started | - |
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/0 | Not started | - |
