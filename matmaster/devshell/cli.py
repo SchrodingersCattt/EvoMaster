@@ -125,6 +125,15 @@ def main(argv: list[str] | None = None) -> None:
     """Entry point for mm-devshell."""
     args = parse_args(argv)
 
+    # Load .env files (same as main app in src/utils/constant.py)
+    import os
+
+    from dotenv import find_dotenv, load_dotenv
+
+    load_dotenv()
+    current_env = os.getenv("SERVICE_ENV", "test")
+    load_dotenv(find_dotenv(f".env.{current_env}"))
+
     from matmaster.devshell.config import DevConfig, load_dev_config
 
     if args.config:
