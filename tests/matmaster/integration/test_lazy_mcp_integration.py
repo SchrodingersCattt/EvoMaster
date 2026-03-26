@@ -4,10 +4,10 @@ Tests the full flow: Exp.build_runtime with skills enabled -> use_skill
 triggers schema injection -> LazyMCPTool appears in registry.
 Does NOT require real MCP connections.
 """
+
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import yaml as _yaml
@@ -22,45 +22,55 @@ class TestLazyMCPIntegration:
     def _setup_env(self, tmp_path):
         """Create skill dir + cache dir + mcp_config.json + mcp.yaml."""
         # Skill
-        skill_dir = tmp_path / "skills" / "test-skill"
+        skill_dir = tmp_path / 'skills' / 'test-skill'
         skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: test-skill\ndescription: Test\nmcp_server: mat_sg\n---\nUse mat_sg tools.\n"
+        (skill_dir / 'SKILL.md').write_text(
+            '---\nname: test-skill\ndescription: Test\nmcp_server: mat_sg\n---\nUse mat_sg tools.\n'
         )
 
         # Cache
-        cache_dir = tmp_path / "cache"
+        cache_dir = tmp_path / 'cache'
         cache_dir.mkdir()
         schemas = [
-            {"name": "build_bulk", "description": "Build bulk", "input_schema": {"type": "object"}},
+            {
+                'name': 'build_bulk',
+                'description': 'Build bulk',
+                'input_schema': {'type': 'object'},
+            },
         ]
-        (cache_dir / "mat_sg.json").write_text(json.dumps(schemas))
+        (cache_dir / 'mat_sg.json').write_text(json.dumps(schemas))
 
         # MCP config (not used for real connections in this test)
-        (tmp_path / "mcp_config.json").write_text(json.dumps({"mcpServers": {}}))
+        (tmp_path / 'mcp_config.json').write_text(json.dumps({'mcpServers': {}}))
 
         # MCP runtime config (required by _init_skill_tools self-load)
-        (tmp_path / "mcp.yaml").write_text(_yaml.dump({
-            "path_adaptor": "calculation",
-            "calculation_servers": ["mat_sg"],
-        }))
+        (tmp_path / 'mcp.yaml').write_text(
+            _yaml.dump(
+                {
+                    'path_adaptor': 'calculation',
+                    'calculation_servers': ['mat_sg'],
+                }
+            )
+        )
 
         return tmp_path
 
     def test_full_flow_skill_triggers_schema_injection(self, tmp_path):
         env = self._setup_env(tmp_path)
 
-        cfg = ExpConfig.model_validate({
-            "name": "test",
-            "skills": {
-                "enabled": True,
-                "skills_root": str(env / "skills"),
-                "cache_dir": str(env / "cache"),
-                "config_dir": str(env),
-                "mcp_config_file": "mcp_config.json",
-                "mcp_runtime_file": "mcp.yaml",
-            },
-        })
+        cfg = ExpConfig.model_validate(
+            {
+                'name': 'test',
+                'skills': {
+                    'enabled': True,
+                    'skills_root': str(env / 'skills'),
+                    'cache_dir': str(env / 'cache'),
+                    'config_dir': str(env),
+                    'mcp_config_file': 'mcp_config.json',
+                    'mcp_runtime_file': 'mcp.yaml',
+                },
+            }
+        )
         exp = Exp(cfg)
         registry = ToolRegistry()
 
@@ -71,48 +81,53 @@ class TestLazyMCPIntegration:
         exp._init_skill_tools(ctx, registry)
 
         # use_skill should be registered
-        assert "use_skill" in registry
+        assert 'use_skill' in registry
 
         # Before skill trigger: no MCP tools
-        assert "mat_sg_build_bulk" not in registry
+        assert 'mat_sg_build_bulk' not in registry
 
         # Simulate skill trigger via use_skill tool
-        result = registry.execute("use_skill", {"skill_name": "test-skill", "action": "get_info"})
+        result = registry.execute(
+            'use_skill', {'skill_name': 'test-skill', 'action': 'get_info'}
+        )
 
         # Verify use_skill returned successfully
-        assert result.status == "success", f"use_skill failed: {result.content}"
+        assert result.status == 'success', f"use_skill failed: {result.content}"
 
         # After skill trigger: mat_sg tools should be injected
-        assert "mat_sg_build_bulk" in registry
+        assert 'mat_sg_build_bulk' in registry
 
         # Verify it's a LazyMCPTool
         from matmaster.tools.lazy_mcp import LazyMCPTool
-        lazy = registry._tools["mat_sg_build_bulk"]
+
+        lazy = registry._tools['mat_sg_build_bulk']
         assert isinstance(lazy, LazyMCPTool)
-        assert lazy.name == "mat_sg_build_bulk"
+        assert lazy.name == 'mat_sg_build_bulk'
 
     def test_multiple_skills_same_server_no_duplicate(self, tmp_path):
         """Two skills mapping to same MCP server don't duplicate tools."""
         env = self._setup_env(tmp_path)
 
         # Add a second skill pointing to same server
-        skill_dir2 = env / "skills" / "second-skill"
+        skill_dir2 = env / 'skills' / 'second-skill'
         skill_dir2.mkdir()
-        (skill_dir2 / "SKILL.md").write_text(
-            "---\nname: second-skill\ndescription: Another\nmcp_server: mat_sg\n---\nAlso mat_sg.\n"
+        (skill_dir2 / 'SKILL.md').write_text(
+            '---\nname: second-skill\ndescription: Another\nmcp_server: mat_sg\n---\nAlso mat_sg.\n'
         )
 
-        cfg = ExpConfig.model_validate({
-            "name": "test",
-            "skills": {
-                "enabled": True,
-                "skills_root": str(env / "skills"),
-                "cache_dir": str(env / "cache"),
-                "config_dir": str(env),
-                "mcp_config_file": "mcp_config.json",
-                "mcp_runtime_file": "mcp.yaml",
-            },
-        })
+        cfg = ExpConfig.model_validate(
+            {
+                'name': 'test',
+                'skills': {
+                    'enabled': True,
+                    'skills_root': str(env / 'skills'),
+                    'cache_dir': str(env / 'cache'),
+                    'config_dir': str(env),
+                    'mcp_config_file': 'mcp_config.json',
+                    'mcp_runtime_file': 'mcp.yaml',
+                },
+            }
+        )
         exp = Exp(cfg)
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
@@ -121,41 +136,51 @@ class TestLazyMCPIntegration:
         exp._init_skill_tools(ctx, registry)
 
         # Trigger first skill
-        registry.execute("use_skill", {"skill_name": "test-skill", "action": "get_info"})
-        assert "mat_sg_build_bulk" in registry
+        registry.execute(
+            'use_skill', {'skill_name': 'test-skill', 'action': 'get_info'}
+        )
+        assert 'mat_sg_build_bulk' in registry
 
         # Trigger second skill — should NOT duplicate
-        registry.execute("use_skill", {"skill_name": "second-skill", "action": "get_info"})
+        registry.execute(
+            'use_skill', {'skill_name': 'second-skill', 'action': 'get_info'}
+        )
         # Still only one mat_sg_build_bulk
-        assert "mat_sg_build_bulk" in registry
+        assert 'mat_sg_build_bulk' in registry
 
     def test_no_cache_warns_but_doesnt_crash(self, tmp_path):
         """When cache is empty, skill trigger warns but doesn't crash."""
         # Skill pointing to uncached server
-        skill_dir = tmp_path / "skills" / "uncached-skill"
+        skill_dir = tmp_path / 'skills' / 'uncached-skill'
         skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: uncached-skill\ndescription: Test\nmcp_server: unknown_server\n---\nBody\n"
+        (skill_dir / 'SKILL.md').write_text(
+            '---\nname: uncached-skill\ndescription: Test\nmcp_server: unknown_server\n---\nBody\n'
         )
-        cache_dir = tmp_path / "cache"
+        cache_dir = tmp_path / 'cache'
         cache_dir.mkdir()
-        (tmp_path / "mcp_config.json").write_text('{"mcpServers": {}}')
-        (tmp_path / "mcp.yaml").write_text(_yaml.dump({
-            "path_adaptor": "calculation",
-            "calculation_servers": [],
-        }))
+        (tmp_path / 'mcp_config.json').write_text('{"mcpServers": {}}')
+        (tmp_path / 'mcp.yaml').write_text(
+            _yaml.dump(
+                {
+                    'path_adaptor': 'calculation',
+                    'calculation_servers': [],
+                }
+            )
+        )
 
-        cfg = ExpConfig.model_validate({
-            "name": "test",
-            "skills": {
-                "enabled": True,
-                "skills_root": str(tmp_path / "skills"),
-                "cache_dir": str(cache_dir),
-                "config_dir": str(tmp_path),
-                "mcp_config_file": "mcp_config.json",
-                "mcp_runtime_file": "mcp.yaml",
-            },
-        })
+        cfg = ExpConfig.model_validate(
+            {
+                'name': 'test',
+                'skills': {
+                    'enabled': True,
+                    'skills_root': str(tmp_path / 'skills'),
+                    'cache_dir': str(cache_dir),
+                    'config_dir': str(tmp_path),
+                    'mcp_config_file': 'mcp_config.json',
+                    'mcp_runtime_file': 'mcp.yaml',
+                },
+            }
+        )
         exp = Exp(cfg)
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
@@ -164,11 +189,62 @@ class TestLazyMCPIntegration:
         exp._init_skill_tools(ctx, registry)
 
         # Trigger skill with uncached server
-        result = registry.execute("use_skill", {"skill_name": "uncached-skill", "action": "get_info"})
-        assert result.status == "success"
+        result = registry.execute(
+            'use_skill', {'skill_name': 'uncached-skill', 'action': 'get_info'}
+        )
+        assert result.status == 'success'
 
         # No tools injected (cache miss)
-        assert "unknown_server_" not in str(list(registry._tools.keys()))
+        assert 'unknown_server_' not in str(list(registry._tools.keys()))
+
+    def test_tool_exclude_blocks_cached_tool_injection(self, tmp_path):
+        env = self._setup_env(tmp_path)
+
+        cache_dir = env / 'cache'
+        (cache_dir / 'mat_sg.json').write_text(
+            json.dumps(
+                [
+                    {
+                        'name': 'build_bulk',
+                        'description': 'Build bulk',
+                        'input_schema': {'type': 'object'},
+                    },
+                    {
+                        'name': 'get_structure_info',
+                        'description': 'Get info',
+                        'input_schema': {'type': 'object'},
+                    },
+                ]
+            )
+        )
+
+        cfg = ExpConfig.model_validate(
+            {
+                'name': 'test',
+                'skills': {
+                    'enabled': True,
+                    'skills_root': str(env / 'skills'),
+                    'cache_dir': str(cache_dir),
+                    'config_dir': str(env),
+                    'mcp_config_file': 'mcp_config.json',
+                    'mcp_runtime_file': 'mcp.yaml',
+                },
+            }
+        )
+        exp = Exp(cfg)
+        registry = ToolRegistry()
+
+        ctx = MagicMock(spec=PlaygroundContext)
+        ctx.session = MagicMock()
+
+        exp._init_skill_tools(ctx, registry)
+        result = registry.execute(
+            'use_skill', {'skill_name': 'test-skill', 'action': 'get_info'}
+        )
+
+        assert result.status == 'success', f"use_skill failed: {result.content}"
+        assert 'mat_sg_build_bulk' in registry
+        assert 'mat_sg_get_structure_info' not in registry
 
 
 class TestExpMCPSelfLoad:
@@ -177,32 +253,36 @@ class TestExpMCPSelfLoad:
     def test_self_loads_mcp_yaml(self, tmp_path):
         """mcp.yaml is loaded from config_dir and passed to LazyMCPConnector."""
         # Create minimal mcp.yaml
-        (tmp_path / "mcp.yaml").write_text(_yaml.dump({
-            "path_adaptor": "calculation",
-            "calculation_servers": ["mat_sg"],
-        }))
-        (tmp_path / "mcp_config.json").write_text('{"mcpServers": {}}')
+        (tmp_path / 'mcp.yaml').write_text(
+            _yaml.dump(
+                {
+                    'path_adaptor': 'calculation',
+                    'calculation_servers': ['mat_sg'],
+                }
+            )
+        )
+        (tmp_path / 'mcp_config.json').write_text('{"mcpServers": {}}')
 
         # Create skill dir (required by SkillRegistry)
-        skill_dir = tmp_path / "skills" / "test-skill"
+        skill_dir = tmp_path / 'skills' / 'test-skill'
         skill_dir.mkdir(parents=True)
-        (skill_dir / "SKILL.md").write_text(
-            "---\nname: test-skill\ndescription: Test\nmcp_server: mat_sg\n---\nBody\n"
+        (skill_dir / 'SKILL.md').write_text(
+            '---\nname: test-skill\ndescription: Test\nmcp_server: mat_sg\n---\nBody\n'
         )
 
-        cache_dir = tmp_path / "cache"
+        cache_dir = tmp_path / 'cache'
         cache_dir.mkdir()
-        schemas = [{"name": "build_bulk", "description": "Build", "input_schema": {}}]
-        (cache_dir / "mat_sg.json").write_text(json.dumps(schemas))
+        schemas = [{'name': 'build_bulk', 'description': 'Build', 'input_schema': {}}]
+        (cache_dir / 'mat_sg.json').write_text(json.dumps(schemas))
 
         cfg = ExpConfig(
             skills=ExpSkillsConfig(
                 enabled=True,
-                skills_root=str(tmp_path / "skills"),
+                skills_root=str(tmp_path / 'skills'),
                 cache_dir=str(cache_dir),
                 config_dir=str(tmp_path),
-                mcp_config_file="mcp_config.json",
-                mcp_runtime_file="mcp.yaml",
+                mcp_config_file='mcp_config.json',
+                mcp_runtime_file='mcp.yaml',
             )
         )
 
@@ -215,23 +295,25 @@ class TestExpMCPSelfLoad:
         exp._init_skill_tools(ctx, registry)
 
         # use_skill registered means the full path worked
-        assert "use_skill" in registry
+        assert 'use_skill' in registry
 
         # Trigger skill to verify lazy tools get injected
-        result = registry.execute("use_skill", {"skill_name": "test-skill", "action": "get_info"})
-        assert result.status == "success", f"use_skill failed: {result.content}"
-        assert "mat_sg_build_bulk" in registry
+        result = registry.execute(
+            'use_skill', {'skill_name': 'test-skill', 'action': 'get_info'}
+        )
+        assert result.status == 'success', f"use_skill failed: {result.content}"
+        assert 'mat_sg_build_bulk' in registry
 
     def test_raises_when_mcp_yaml_missing(self, tmp_path):
         """When mcp.yaml does not exist, FileNotFoundError is raised."""
         cfg = ExpConfig(
             skills=ExpSkillsConfig(
                 enabled=True,
-                skills_root=str(tmp_path / "skills"),
-                cache_dir=str(tmp_path / "cache"),
+                skills_root=str(tmp_path / 'skills'),
+                cache_dir=str(tmp_path / 'cache'),
                 config_dir=str(tmp_path),
-                mcp_config_file="mcp_config.json",
-                mcp_runtime_file="mcp.yaml",
+                mcp_config_file='mcp_config.json',
+                mcp_runtime_file='mcp.yaml',
             )
         )
 
@@ -239,5 +321,5 @@ class TestExpMCPSelfLoad:
 
         import pytest as _pytest
 
-        with _pytest.raises(FileNotFoundError, match="MCP runtime config not found"):
+        with _pytest.raises(FileNotFoundError, match='MCP runtime config not found'):
             exp._init_skill_tools(MagicMock(), MagicMock())
