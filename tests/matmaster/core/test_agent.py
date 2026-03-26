@@ -8,7 +8,7 @@ reassembly, full cycle, and execution order verification.
 from __future__ import annotations
 
 import threading
-from typing import Any, Iterator
+from typing import Any, AsyncIterator
 from unittest.mock import MagicMock
 
 import pytest
@@ -85,21 +85,28 @@ class StreamingProvider:
     def __init__(self, chunks: list[StreamChunk]) -> None:
         self._chunks = chunks
 
-    def chat(
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         return LLMResponse(content="not used", finish_reason="stop")
 
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
-        yield from self._chunks
+    ) -> AsyncIterator[StreamChunk]:
+        for chunk in self._chunks:
+            yield chunk
 
 
 class ToolCallingProvider:
@@ -116,20 +123,26 @@ class ToolCallingProvider:
         self._final_content = final_content
         self._call_count = 0
 
-    def chat(
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         return LLMResponse(content="not used", finish_reason="stop")
 
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
+    ) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count <= self._max_tool_turns:
             for tc in self._tool_calls:
@@ -326,19 +339,24 @@ class TestExternalCancel:
             def __init__(self) -> None:
                 self._call_count = 0
 
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_stream(
+            async def chat_stream(
                 self,
                 messages: list,
                 tools: list | None = None,
                 *,
                 timeout: float | None = None,
-            ) -> Iterator[StreamChunk]:
+            ) -> AsyncIterator[StreamChunk]:
                 self._call_count += 1
                 if self._call_count == 1:
-                    tc = ToolCallData(id="tc-1", name="tool", arguments={})
                     yield StreamChunk(
                         tool_call_deltas=[
                             {"index": 0, "id": "tc-1", "name": "tool", "arguments": "{}"}
@@ -525,19 +543,26 @@ class TestToolCallDelta:
             def __init__(self) -> None:
                 self._call_count = 0
 
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_stream(
+            async def chat_stream(
                 self,
                 messages: list,
                 tools: list | None = None,
                 *,
                 timeout: float | None = None,
-            ) -> Iterator[StreamChunk]:
+            ) -> AsyncIterator[StreamChunk]:
                 self._call_count += 1
                 if self._call_count == 1:
-                    yield from chunks
+                    for chunk in chunks:
+                        yield chunk
                 else:
                     yield StreamChunk(content="done", finish_reason="stop")
 
@@ -591,10 +616,16 @@ class TestHistoryParameter:
         captured_messages: list[list[dict[str, Any]]] = []
 
         class CapturingProvider:
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
+            async def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> AsyncIterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
@@ -624,10 +655,16 @@ class TestHistoryParameter:
         captured_messages: list[list[dict[str, Any]]] = []
 
         class CapturingProvider:
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
+            async def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> AsyncIterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
@@ -649,10 +686,16 @@ class TestHistoryParameter:
         captured_messages: list[list[dict[str, Any]]] = []
 
         class CapturingProvider:
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
+            async def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> AsyncIterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
@@ -801,10 +844,16 @@ class TestCallLlmUsageCapture:
         }
 
         class UsageProvider:
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages, tools=None):
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
+            async def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 yield StreamChunk(content="hello")
                 yield StreamChunk(finish_reason="stop", usage=usage_data)
 
@@ -851,7 +900,7 @@ class TestCompactorIntegration:
         class SpyCompactor:
             _last_llm_message_count = 0
 
-            def compact_if_needed(self, messages, last_usage, turn):
+            async def compact_if_needed(self, messages, last_usage, turn):
                 call_log.append((len(messages), turn))
 
             def update_message_count(self, count):
@@ -880,7 +929,7 @@ class TestCompactorIntegration:
         class UsageSpyCompactor:
             _last_llm_message_count = 0
 
-            def compact_if_needed(self, messages, last_usage, turn):
+            async def compact_if_needed(self, messages, last_usage, turn):
                 usage_log.append(dict(last_usage))
 
             def update_message_count(self, count):
@@ -893,10 +942,16 @@ class TestCompactorIntegration:
         }
 
         class UsageTrackingProvider:
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages, tools=None):
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
+            async def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 yield StreamChunk(
                     content="done", finish_reason="stop", usage=usage_data
                 )
@@ -942,10 +997,16 @@ class TestKernelResultFields:
             def __init__(self) -> None:
                 self._call_count = 0
 
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages, tools=None):
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
+            async def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 self._call_count += 1
                 if self._call_count == 1:
                     yield StreamChunk(
@@ -1035,10 +1096,16 @@ class ErrorThenSuccessProvider:
         self.max_retries = 3
         self.retry_delay = 0.0  # no sleep in tests
 
-    def chat(self, messages, tools=None):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
         return LLMResponse(content="not used", finish_reason="stop")
 
-    def chat_stream(self, messages, tools=None, *, timeout=None):
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         self._call_count += 1
         if self._call_count <= self._fail_count:
             raise self._error
@@ -1103,9 +1170,16 @@ class TestCallLlmRetry:
             max_retries = 3
             retry_delay = 0.0
 
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages, tools=None):
                 return LLMResponse(content="", finish_reason="stop")
-            def chat_stream(self, messages, tools=None, *, timeout=None):
+
+            async def chat_stream(self, messages, tools=None, *, timeout=None):
                 timeouts_seen.append(timeout)
                 if len(timeouts_seen) < 3:
                     raise LLMError("timeout", retryable=True)
