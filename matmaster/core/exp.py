@@ -30,7 +30,7 @@ from matmaster.core.hooks import EventEmitterHook
 from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, CompactionConfig, KernelResult
+from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
 
 if TYPE_CHECKING:
     from matmaster.core.agent import AgentKernel
@@ -135,7 +135,7 @@ class Exp:
             llm_provider=ctx.llm_provider,
             max_turns=self._config.max_turns,
             guards=[],  # Guard instantiation deferred to build_runtime
-            compaction=CompactionConfig(),
+            compaction=self._config.compaction,
             meta={},
         )
 
