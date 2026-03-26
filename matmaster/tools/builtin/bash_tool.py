@@ -27,47 +27,51 @@ _PROXY_CLEAR_PREFIX = (
 class BashTool(BuiltinTool):
     """Execute bash commands in the session shell."""
 
-    name: ClassVar[str] = "execute_bash"
+    name: ClassVar[str] = 'execute_bash'
     description: ClassVar[str] = (
-        "Execute a bash command in the session shell.\n\n"
-        "IMPORTANT: Avoid using this tool to run cat, head, tail, "
-        "sed, awk, find, ls, grep, rg, echo commands. "
-        "Use dedicated tools instead:\n"
-        "- Read files: Use read_file (NOT cat/head/tail)\n"
-        "- Edit files: Use edit_file (NOT sed/awk)\n"
-        "- Write files: Use write_file (NOT echo/heredoc)\n"
-        "- File search: Use glob (NOT find/ls)\n"
-        "- Content search: Use grep (NOT grep/rg)"
+        'Execute a bash command in the session shell.\n\n'
+        'IMPORTANT: Avoid using this tool to run cat, head, tail, sed, awk, find, ls, grep, rg, echo. '
+        'Use dedicated tools instead:\n'
+        '- read_file (NOT cat/head/tail)\n'
+        '- edit_file (NOT sed/awk)\n'
+        '- write_file (NOT echo/heredoc)\n'
+        '- glob (NOT find/ls)\n'
+        '- grep (NOT grep/rg)\n\n'
+        'Prefer relative paths; Bohrium: /share not /workspace.'
     )
     json_schema: ClassVar[dict[str, Any]] = {
-        "type": "object",
-        "properties": {
-            "command": {
-                "type": "string",
-                "description": "The bash command to execute. Prefer dedicated tools for file operations.",
+        'type': 'object',
+        'properties': {
+            'command': {
+                'type': 'string',
+                'description': (
+                    'The bash command to execute. Prefer dedicated tools for file operations. '
+                    'Prefer relative paths from the shell cwd; '
+                    'on Bohrium remote shared storage is typically /share (not /workspace).'
+                ),
             },
-            "is_input": {
-                "type": "string",
-                "enum": ["true", "false"],
-                "description": "If true, the command is input to a running process.",
-                "default": "false",
+            'is_input': {
+                'type': 'string',
+                'enum': ['true', 'false'],
+                'description': 'If true, the command is input to a running process.',
+                'default': 'false',
             },
-            "timeout": {
-                "type": "number",
-                "description": "Hard timeout in seconds. Use -1 for no limit.",
-                "default": -1,
+            'timeout': {
+                'type': 'number',
+                'description': 'Hard timeout in seconds. Use -1 for no limit.',
+                'default': -1,
             },
         },
-        "required": ["command"],
+        'required': ['command'],
     }
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         session = self._require_session()
 
-        command: str = arguments.get("command", "").strip()
-        is_input_str: str = arguments.get("is_input", "false")
-        is_input = is_input_str == "true"
-        timeout_val = arguments.get("timeout", -1)
+        command: str = arguments.get('command', '').strip()
+        is_input_str: str = arguments.get('is_input', 'false')
+        is_input = is_input_str == 'true'
+        timeout_val = arguments.get('timeout', -1)
         timeout = int(timeout_val) if timeout_val and float(timeout_val) > 0 else None
 
         # Block dangerous commands
@@ -76,7 +80,7 @@ class BashTool(BuiltinTool):
             return f"Blocked: {reason}"
 
         # Inject proxy clear prefix for non-input commands on non-Windows
-        if not is_input and command and sys.platform != "win32":
+        if not is_input and command and sys.platform != 'win32':
             command = _PROXY_CLEAR_PREFIX + command
 
         result = session.exec_bash(
@@ -85,9 +89,9 @@ class BashTool(BuiltinTool):
             is_input=is_input,
         )
 
-        output = result.get("output", "") or result.get("stdout", "")
-        exit_code = result.get("exit_code", -1)
-        working_dir = result.get("working_dir", "")
+        output = result.get('output', '') or result.get('stdout', '')
+        exit_code = result.get('exit_code', -1)
+        working_dir = result.get('working_dir', '')
 
         obs = output
         if working_dir:
