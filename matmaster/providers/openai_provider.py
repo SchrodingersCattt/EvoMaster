@@ -1,9 +1,10 @@
 """Concrete LLMProvider implementation using the OpenAI Python SDK.
 
 Provides OpenAIProvider that satisfies the LLMProvider Protocol, wrapping
-the openai.OpenAI client for synchronous chat, retry-aware chat, and
-streaming calls. Retry strategy is handled explicitly in chat_with_retry()
-with exponential backoff, not delegated to SDK.
+the openai.AsyncOpenAI client for async chat and streaming calls.
+Client lifecycle is managed via async context manager: __aenter__ creates
+the AsyncOpenAI + httpx.AsyncClient, __aexit__ closes connections.
+Retry strategy is handled by Kernel._call_llm(), not by the provider.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Iterator
+from typing import Any, AsyncIterator
 
 import openai
 
@@ -24,8 +25,9 @@ logger = logging.getLogger(__name__)
 class OpenAIProvider:
     """LLMProvider implementation backed by the OpenAI Python SDK.
 
-    Satisfies the LLMProvider Protocol. Retry strategy is handled explicitly
-    in chat_with_retry() with exponential backoff, not delegated to SDK.
+    Satisfies the LLMProvider Protocol. Uses async context manager for
+    client lifecycle: __init__ stores parameters only, __aenter__ creates
+    AsyncOpenAI client, __aexit__ closes connections.
     """
 
     def __init__(
@@ -44,6 +46,8 @@ class OpenAIProvider:
         extra_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self._model = model
+        self._api_key = api_key
+        self._base_url = base_url
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._timeout = timeout
@@ -52,14 +56,24 @@ class OpenAIProvider:
         self._max_retries = max_retries
         self._retry_delay = retry_delay
         self._extra_kwargs = extra_kwargs or {}
+        self._client: openai.AsyncOpenAI | None = None
 
+    async def __aenter__(self) -> OpenAIProvider:
         import httpx
 
-        _first_token_t = stream_timeout if stream_timeout is not None else timeout
-        _idle_t = stream_idle_timeout if stream_idle_timeout is not None else timeout
+        _first_token_t = (
+            self._stream_timeout
+            if self._stream_timeout is not None
+            else self._timeout
+        )
+        _idle_t = (
+            self._stream_idle_timeout
+            if self._stream_idle_timeout is not None
+            else self._timeout
+        )
         _read_t = float(max(_idle_t, _first_token_t) + 10)
 
-        http_client = httpx.Client(
+        http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(
                 connect=15.0,
                 read=_read_t,
@@ -67,14 +81,27 @@ class OpenAIProvider:
                 pool=15.0,
             )
         )
-
-        self._client = openai.OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            timeout=timeout,
-            max_retries=0,  # retry handled by chat_with_retry, not SDK
+        self._client = openai.AsyncOpenAI(
+            api_key=self._api_key,
+            base_url=self._base_url,
+            timeout=self._timeout,
+            max_retries=0,
             http_client=http_client,
         )
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore[type-arg]
+        if self._client is not None:
+            await self._client.close()
+            self._client = None
+
+    def _ensure_client(self) -> openai.AsyncOpenAI:
+        if self._client is None:
+            raise RuntimeError(
+                "OpenAIProvider must be used as async context manager: "
+                "'async with provider:'"
+            )
+        return self._client
 
     @property
     def stream_timeout(self) -> float | None:
@@ -92,12 +119,13 @@ class OpenAIProvider:
     def retry_delay(self) -> float:
         return self._retry_delay
 
-    def chat(
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
-        """Non-streaming chat completion."""
+        """Non-streaming async chat completion."""
+        client = self._ensure_client()
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
@@ -110,7 +138,7 @@ class OpenAIProvider:
         if self._extra_kwargs:
             kwargs.update(self._extra_kwargs)
 
-        response = self._client.chat.completions.create(**kwargs)
+        response = await client.chat.completions.create(**kwargs)
         choice = response.choices[0]
         message = choice.message
 
@@ -154,16 +182,22 @@ class OpenAIProvider:
     ) -> LLMResponse:
         """Chat with explicit retry and exponential backoff.
 
+        NOTE: This is a legacy sync method retained for backward compatibility
+        during the async migration. It will be removed when Kernel is fully async.
         Retries on transient errors (connection, timeout, rate limit, server error).
         Raises immediately on non-retryable errors (auth, context length exceeded).
         """
+        import asyncio
+
         retries = max_retries if max_retries is not None else self._max_retries
         delay = retry_delay if retry_delay is not None else self._retry_delay
 
         last_error: Exception | None = None
         for attempt in range(retries):
             try:
-                return self.chat(messages, tools)
+                return asyncio.get_event_loop().run_until_complete(
+                    self.chat(messages, tools)
+                )
             except (
                 openai.APIConnectionError,
                 openai.APITimeoutError,
@@ -208,14 +242,14 @@ class OpenAIProvider:
             f"LLM call failed after {retries} attempts"
         ) from last_error
 
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
-        """Streaming chat completion, yields StreamChunk per delta.
+    ) -> AsyncIterator[StreamChunk]:
+        """Streaming async chat completion, yields StreamChunk per delta.
 
         Translates all SDK exceptions to LLMError so callers only need to
         catch one type. retryable=True for transient errors (timeout,
@@ -225,6 +259,7 @@ class OpenAIProvider:
         from matmaster.types.errors import LLMError
         import httpx as _httpx
 
+        client = self._ensure_client()
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
@@ -245,10 +280,10 @@ class OpenAIProvider:
             kwargs["timeout"] = timeout
 
         try:
-            stream = self._client.chat.completions.create(**kwargs)
+            stream = await client.chat.completions.create(**kwargs)
             last_chunk_usage: dict[str, int] | None = None
 
-            for chunk in stream:
+            async for chunk in stream:
                 usage = getattr(chunk, "usage", None)
                 if (
                     isinstance(getattr(usage, "prompt_tokens", None), int)
