@@ -1,7 +1,7 @@
 # Requirements: MatMaster v2.0 协程改造
 
 **Defined:** 2026-03-26
-**Core Value:** 三层抽象（playground→exp→agent）必须具有清晰、稳定、可测试的职责边界
+**Core Value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
 
 ## v2.0 Requirements
 
@@ -102,51 +102,49 @@
 
 ## Traceability
 
-（路线图创建后填充）
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROT-01 | — | Pending |
-| PROT-02 | — | Pending |
-| PROT-03 | — | Pending |
-| PROT-04 | — | Pending |
-| PROT-05 | — | Pending |
-| LLMP-01 | — | Pending |
-| LLMP-02 | — | Pending |
-| LLMP-03 | — | Pending |
-| TOOL-01 | — | Pending |
-| TOOL-02 | — | Pending |
-| TOOL-03 | — | Pending |
-| TOOL-04 | — | Pending |
-| TOOL-05 | — | Pending |
-| TOOL-06 | — | Pending |
-| HOOK-01 | — | Pending |
-| HOOK-02 | — | Pending |
-| HOOK-03 | — | Pending |
-| KERN-01 | — | Pending |
-| KERN-02 | — | Pending |
-| KERN-03 | — | Pending |
-| KERN-04 | — | Pending |
-| KERN-05 | — | Pending |
-| KERN-06 | — | Pending |
-| INFR-01 | — | Pending |
-| INFR-02 | — | Pending |
-| INFR-03 | — | Pending |
-| EXPL-01 | — | Pending |
-| EXPL-02 | — | Pending |
-| EXPL-03 | — | Pending |
-| EXPL-04 | — | Pending |
-| BRDG-01 | — | Pending |
-| BRDG-02 | — | Pending |
-| TEST-01 | — | Pending |
-| TEST-02 | — | Pending |
-| TEST-03 | — | Pending |
+| PROT-01 | Phase 12 | Pending |
+| PROT-02 | Phase 12 | Pending |
+| PROT-03 | Phase 12 | Pending |
+| PROT-04 | Phase 12 | Pending |
+| PROT-05 | Phase 12 | Pending |
+| LLMP-01 | Phase 13 | Pending |
+| LLMP-02 | Phase 13 | Pending |
+| LLMP-03 | Phase 13 | Pending |
+| TOOL-01 | Phase 14 | Pending |
+| TOOL-02 | Phase 14 | Pending |
+| TOOL-03 | Phase 14 | Pending |
+| TOOL-04 | Phase 14 | Pending |
+| TOOL-05 | Phase 14 | Pending |
+| TOOL-06 | Phase 19 | Pending |
+| HOOK-01 | Phase 15 | Pending |
+| HOOK-02 | Phase 15 | Pending |
+| HOOK-03 | Phase 15 | Pending |
+| KERN-01 | Phase 17 | Pending |
+| KERN-02 | Phase 17 | Pending |
+| KERN-03 | Phase 17 | Pending |
+| KERN-04 | Phase 17 | Pending |
+| KERN-05 | Phase 17 | Pending |
+| KERN-06 | Phase 17 | Pending |
+| INFR-01 | Phase 16 | Pending |
+| INFR-02 | Phase 16 | Pending |
+| INFR-03 | Phase 16 | Pending |
+| EXPL-01 | Phase 18 | Pending |
+| EXPL-02 | Phase 18 | Pending |
+| EXPL-03 | Phase 18 | Pending |
+| EXPL-04 | Phase 18 | Pending |
+| BRDG-01 | Phase 19 | Pending |
+| BRDG-02 | Phase 19 | Pending |
+| TEST-01 | Phase 12 | Pending |
+| TEST-02 | Phase 17 | Pending |
+| TEST-03 | Phase 17 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 35 total
-- Mapped to phases: 0 (awaiting roadmap)
-- Unmapped: 35
+- Mapped to phases: 35
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-26 after initial definition*
+*Last updated: 2026-03-26 after roadmap creation (phases 12-19 mapped)*
