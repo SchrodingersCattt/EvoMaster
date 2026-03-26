@@ -1,3 +1,4 @@
+# DEPRECATED: v4 format, kept for backward compat. Use v5 files in subdirectories.
 version: "v2"
 level: "L1"
 rubric:

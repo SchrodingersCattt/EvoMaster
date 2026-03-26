@@ -1,0 +1,243 @@
+version: "v5"
+capability: "structure_construction"
+domain: "struct"
+
+questions:
+  # ============================================================
+  # SC_struct_001 ← L1_Q11 (graphene/h-BN异质结)
+  # ============================================================
+  - id: "SC_struct_001"
+    capability: "structure_construction"
+    domain: "struct"
+    intent: "Build a graphene/h-BN vertical van der Waals heterostructure with controlled lattice mismatch."
+    human_prompt_seed: >
+      读取 `hetero_spec.json`，构建 graphene/h-BN 垂直范德华异质结。
+      要求：(1) 构建共度超胞使晶格失配 < 2%；(2) AB 堆叠，层间距 3.35 A；
+      (3) z 方向加 15 A 真空层。输出 POSCAR 和 CIF，报告实际失配度和总原子数。
+    tags: ["heterostructure", "vdw", "graphene", "hBN", "structure_build"]
+    mode_scope: ["direct", "planner"]
+    required_tools: ["mat_sg_build_surface_interface"]
+    optional_tools: []
+    data_files:
+      - key: "hetero_spec"
+        path: "data/L1_Q11/hetero_spec.json"
+        oss_url: ""
+        description: "Specification for graphene/h-BN heterostructure construction."
+    reference_answers:
+      - key: "mismatch_percent"
+        value: 1.6
+        tolerance: 1.0
+      - key: "required_fields"
+        value: ["structure_file", "lattice_mismatch", "total_atoms", "interlayer_distance"]
+      - key: "used_interface_builder"
+        value: "mat_sg_build_surface_interface"
+    scoring_checklist:
+      # --- correctness ---
+      - id: "mismatch_percent"
+        criterion: "Lattice mismatch is below 2%."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Output includes structure file (POSCAR/CIF), lattice mismatch percentage, total atom count, and interlayer distance."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "used_interface_builder"
+        criterion: "Used the MCP surface interface builder tool (mat_sg_build_surface_interface) for heterostructure construction."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "grounding_source"
+        criterion: "Heterostructure is assembled using the registered MCP interface builder, not constructed by writing raw coordinates."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "Interface builder is called without excessive retries for the same parameter set."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "efficiency_judge"
+        criterion: "Heterostructure construction completes in a direct workflow without redundant structure rebuilds."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # SC_struct_002 ← L1_Q13 (Cu(111)表面slab)
+  # ============================================================
+  - id: "SC_struct_002"
+    capability: "structure_construction"
+    domain: "struct"
+    intent: "Cut a Cu(111) surface slab from bulk FCC copper with vacuum and fixed bottom layers."
+    human_prompt_seed: >
+      读取 `surface_spec.json`，从 FCC Cu 体相切出 (111) 表面 slab。
+      要求：4 层原子层，底部 2 层固定，3x3 横向超胞，15 A 真空层。
+      输出 POSCAR，报告总原子数和表面面积。
+    tags: ["surface_slab", "Cu111", "vacuum", "structure_build"]
+    mode_scope: ["direct", "planner"]
+    required_tools: ["mat_sg_build_surface_slab"]
+    optional_tools: []
+    data_files:
+      - key: "surface_spec"
+        path: "data/L1_Q13/surface_spec.json"
+        oss_url: ""
+        description: "Specification for Cu(111) surface slab construction."
+    reference_answers:
+      - key: "total_atoms"
+        value: 36
+        tolerance: 0.0
+      - key: "required_fields"
+        value: ["structure_file", "total_atoms", "surface_area", "fixed_layers"]
+      - key: "used_slab_builder"
+        value: "mat_sg_build_surface_slab"
+      - key: "correct_miller"
+        value: [1, 1, 1]
+        tool_name: "mat_sg_build_surface_slab"
+        tool_arg: "miller_index"
+    scoring_checklist:
+      # --- correctness ---
+      - id: "total_atoms"
+        criterion: "Total atom count is correct (36 for 4-layer 3x3 FCC(111))."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Output includes structure file, total atom count, surface area, and which layers are fixed."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "used_slab_builder"
+        criterion: "Used the MCP surface slab builder tool (mat_sg_build_surface_slab)."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "correct_miller"
+        criterion: "Slab built with correct (111) Miller index passed to mat_sg_build_surface_slab."
+        axis: "grounding"
+        verify: "tool_args_match"
+      - id: "grounding_source"
+        criterion: "Cu(111) slab is constructed via the registered MCP slab builder with the exact Miller index from surface_spec.json."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "Slab builder is not called repeatedly with wrong parameters."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "efficiency_judge"
+        criterion: "Cu(111) slab construction completes without excessive exploratory calls."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # SC_struct_003 ← L1_Q15 (Si(100)氢钝化)
+  # ============================================================
+  - id: "SC_struct_003"
+    capability: "structure_construction"
+    domain: "struct"
+    intent: "Passivate dangling bonds on Si(100) surface slab bottom with hydrogen atoms."
+    human_prompt_seed: >
+      读取 `hydrogen_cap_spec.json`，对 Si(100) slab 底部的悬挂键进行氢饱和。
+      要求：识别底部欠配位 Si 原子，添加 H 使其达到四配位。
+      Si-H 键长约 1.48 A。输出 POSCAR 并报告添加的 H 原子数。
+    tags: ["hydrogen_passivation", "Si100", "dangling_bond", "structure_build"]
+    mode_scope: ["direct", "planner"]
+    required_tools: ["mat_sg_build_surface_slab"]
+    optional_tools: []
+    data_files:
+      - key: "hydrogen_cap_spec"
+        path: "data/L1_Q15/hydrogen_cap_spec.json"
+        oss_url: ""
+        description: "Specification for Si(100) surface hydrogen passivation."
+    reference_answers:
+      - key: "used_slab_builder"
+        value: "mat_sg_build_surface_slab"
+      - key: "correct_miller"
+        value: [1, 0, 0]
+        tool_name: "mat_sg_build_surface_slab"
+        tool_arg: "miller_index"
+      - key: "passivation_quality"
+        value: "H atoms added to satisfy 4-coordination on bottom Si atoms"
+    scoring_checklist:
+      # --- correctness ---
+      - id: "passivation_quality"
+        criterion: "Bottom Si atoms passivated with H to achieve 4-coordination, with Si-H bond length ~1.48 A."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "used_slab_builder"
+        criterion: "Used MCP surface slab builder tool (mat_sg_build_surface_slab) to construct Si(100) slab."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "correct_miller"
+        criterion: "Slab built with correct (100) Miller index passed to mat_sg_build_surface_slab."
+        axis: "grounding"
+        verify: "tool_args_match"
+      - id: "grounding_source"
+        criterion: "Si(100) slab is built via MCP tool; H passivation is applied to the MCP-generated structure."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "Slab builder and passivation are called without repeated identical attempts."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "efficiency_judge"
+        criterion: "Passivation workflow completes in a direct pipeline without unnecessary intermediate structure rebuilds."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # SC_struct_004 ← L1_Q17 (MoS₂单层剥离)
+  # ============================================================
+  - id: "SC_struct_004"
+    capability: "structure_construction"
+    domain: "struct"
+    intent: "Exfoliate a MoS2 monolayer from bulk 2H-MoS2 and verify the 2D structure."
+    human_prompt_seed: >
+      读取 `twod_spec.json`，从体相 2H-MoS2 中剥离单层 MoS2。
+      添加 20 A z 方向真空层，验证化学计量比为 MoS2，层厚约 3.1 A。
+      输出 POSCAR。
+    tags: ["2d_material", "exfoliation", "MoS2", "monolayer"]
+    mode_scope: ["direct", "planner"]
+    required_tools: ["mat_sg_build_surface_slab"]
+    optional_tools: []
+    data_files:
+      - key: "twod_spec"
+        path: "data/L1_Q17/twod_spec.json"
+        oss_url: ""
+        description: "Specification for MoS2 monolayer exfoliation."
+    reference_answers:
+      - key: "required_fields"
+        value: ["structure_file", "stoichiometry_verified", "layer_thickness_A", "vacuum_A"]
+      - key: "used_slab_builder"
+        value: "mat_sg_build_surface_slab"
+      - key: "correct_vacuum"
+        value: 20
+        tolerance: 2.0
+        tool_name: "mat_sg_build_surface_slab"
+        tool_arg: "vacuum"
+    scoring_checklist:
+      # --- correctness ---
+      - id: "required_fields"
+        criterion: "Monolayer POSCAR output with verified MoS2 stoichiometry, reported layer thickness (~3.1 A), and vacuum layer (~20 A)."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "used_slab_builder"
+        criterion: "Used MCP surface slab builder (mat_sg_build_surface_slab) for monolayer exfoliation."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "correct_vacuum"
+        criterion: "Vacuum layer set to ~20 A in slab builder call."
+        axis: "grounding"
+        verify: "tool_args_match"
+      - id: "grounding_source"
+        criterion: "MoS2 monolayer is obtained via the MCP slab builder, not hand-crafted coordinates."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "Slab builder is not called repeatedly with the same vacuum parameter."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "efficiency_judge"
+        criterion: "Monolayer exfoliation and stoichiometry verification complete in a direct workflow."
+        axis: "efficiency"
+        verify: "llm_binary_judge"

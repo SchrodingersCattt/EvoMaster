@@ -183,11 +183,50 @@ def expand_run_plan(
 
 
 def load_question_banks(bank_dir: Path) -> list[QuestionBank]:
-    """Load all yaml question banks from directory."""
+    """Load all YAML question banks from a directory.
+
+    Supports both v5 YAML (version: 'v5') and v4 YAML (version: 'v2' or absent).
+    v4 files are converted via _convert_v4_to_v5() before validation.
+    Also recurses into one level of subdirectories to support the v5 directory
+    layout (capability/domain/*.yaml).
+
+    When v5 subdirectory banks are found, deprecated top-level v4 files
+    (level1.yaml, level2.yaml, safety_refusal.yaml) are skipped to avoid
+    double-counting.  Non-bank YAML files (e.g. manifest.yaml) are also
+    skipped automatically if they lack a ``questions`` key.
+    """
+    # Collect v5 subdirectory files first
+    v5_sub_paths: list[Path] = []
+    for subdir in sorted(bank_dir.iterdir()):
+        if subdir.is_dir() and subdir.name != 'data':
+            v5_sub_paths.extend(sorted(subdir.glob('*.yaml')))
+
+    # Top-level YAML files
+    top_paths: list[Path] = sorted(bank_dir.glob('*.yaml'))
+
+    # If v5 subdirectory banks exist, skip deprecated top-level v4 files
+    _deprecated_stems = {'level1', 'level2', 'level3', 'level4', 'safety_refusal'}
+    if v5_sub_paths:
+        top_paths = [
+            p for p in top_paths
+            if p.stem not in _deprecated_stems
+        ]
+
+    yaml_paths = top_paths + v5_sub_paths
+
     banks: list[QuestionBank] = []
-    for path in sorted(bank_dir.glob('*.yaml')):
-        data = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
-        banks.append(QuestionBank.model_validate(data))
+    for path in yaml_paths:
+        raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
+        # Skip non-bank YAML files (e.g. manifest.yaml, evidence_mapping.yaml)
+        if 'questions' not in raw:
+            _runner_logger.debug("Skipping non-bank YAML: %s", path.name)
+            continue
+        version = str(raw.get('version', 'v2'))
+        if version not in ('v5',):
+            # v2, v4 or anything else → run compatibility shim
+            raw = _convert_v4_to_v5(raw)
+        banks.append(QuestionBank.model_validate(raw))
+
     if not banks:
         raise ValueError(f"No question bank files found under {bank_dir}")
     return banks
