@@ -73,39 +73,39 @@ class TestHookProtocol:
         hook = BaseHook()
         assert isinstance(hook, Hook)
 
-    def test_base_hook_pre_tool_call_default(
+    async def test_base_hook_pre_tool_call_default(
         self, sample_tool_call: ToolCallData
     ) -> None:
         hook = BaseHook()
-        result = hook.pre_tool_call(sample_tool_call)
+        result = await hook.pre_tool_call(sample_tool_call)
         assert result == HookAction.CONTINUE
 
-    def test_base_hook_post_tool_call_default(
+    async def test_base_hook_post_tool_call_default(
         self, sample_tool_call: ToolCallData
     ) -> None:
         hook = BaseHook()
-        result = hook.post_tool_call(sample_tool_call, ToolResult(content="result"))
+        result = await hook.post_tool_call(sample_tool_call, ToolResult(content="result"))
         assert result is None
 
-    def test_base_hook_pre_llm_call_default(
+    async def test_base_hook_pre_llm_call_default(
         self, sample_messages: list[Message]
     ) -> None:
         hook = BaseHook()
-        result = hook.pre_llm_call(sample_messages, 1)
+        result = await hook.pre_llm_call(sample_messages, 1)
         assert result is None
 
-    def test_base_hook_should_continue_default(
+    async def test_base_hook_should_continue_default(
         self, sample_messages: list[Message]
     ) -> None:
         hook = BaseHook()
-        result = hook.should_continue(sample_messages, 1)
+        result = await hook.should_continue(sample_messages, 1)
         assert result is True
 
-    def test_base_hook_on_stream_chunk_default(
+    async def test_base_hook_on_stream_chunk_default(
         self, sample_chunk: StreamChunk
     ) -> None:
         hook = BaseHook()
-        result = hook.on_stream_chunk(sample_chunk)
+        result = await hook.on_stream_chunk(sample_chunk)
         assert result is None
 
 
@@ -124,10 +124,12 @@ class StopHook(BaseHook):
 
 class TestCustomHookOverrides:
     def test_pre_tool_call_skip(self, sample_tool_call: ToolCallData) -> None:
+        """SkipHook overrides async BaseHook with sync def -- returns value directly."""
         hook = SkipHook()
         assert hook.pre_tool_call(sample_tool_call) == HookAction.SKIP
 
     def test_should_continue_false(self, sample_messages: list[Message]) -> None:
+        """StopHook overrides async BaseHook with sync def -- returns value directly."""
         hook = StopHook()
         assert hook.should_continue(sample_messages, 1) is False
 
