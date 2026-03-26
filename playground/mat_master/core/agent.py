@@ -307,11 +307,11 @@ class MatMasterAgent(MatMasterFinishGatesMixin, MatMasterToolExecutionMixin, Age
         working_dir_abs = str(Path(working_dir).absolute())
         working_dir_info = f"\n\nYou must perform all operations in this working directory; do not change directory. All file operations and commands must be run under: {working_dir_abs}"
         prompt = base + working_dir_info
-        if working_dir_abs.startswith('/share/workspace/'):
+        if working_dir_abs == '/share' or working_dir_abs.startswith('/share/'):
             prompt += (
-                '\n\nThis session workspace is under /share/workspace/{session_id}. '
-                'The parent /share directory is the Bohrium project-scoped shared storage. '
-                'Files in the current session directory are session-specific; shared project files may also exist elsewhere under /share.'
+                '\n\nThis working directory is under /share. '
+                '/share is the Bohrium project-scoped shared storage, so files here may be shared across multiple sessions in the same project. '
+                'Do not assume session isolation when reading, overwriting, moving, or deleting files.'
             )
 
         # Mandatory citation and output format for survey/manuscript — agent MUST follow this

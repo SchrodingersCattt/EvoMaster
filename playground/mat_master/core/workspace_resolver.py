@@ -13,7 +13,7 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_REMOTE_SESSION_WORKSPACE_ROOT = '/share/workspace'
+_DEFAULT_REMOTE_SESSION_WORKSPACE_ROOT = '/share'
 
 
 def _default_project_root() -> Path:
@@ -78,7 +78,7 @@ def get_remote_session_workspace_root(
     *,
     project_root: Path | None = None,
 ) -> Path:
-    """Return the remote SSH root for session-scoped workspaces."""
+    """Return the remote SSH root for project-scoped shared workspaces."""
     raw = (
         _mat_master_value(config_dict, 'remote_session_workspace_root')
         or _DEFAULT_REMOTE_SESSION_WORKSPACE_ROOT
