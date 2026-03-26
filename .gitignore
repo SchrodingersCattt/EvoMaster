@@ -183,7 +183,9 @@ runs/
 # Agent plugin docs
 docs/superpowers/
 docs/plans/
-.planning/
+
+# Skill tool schema cache
+!matmaster/cache/
 
 # Worktrees
 .worktrees/

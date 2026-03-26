@@ -15,6 +15,11 @@ from evomaster.utils.types import (
 from src.utils.chat_event_source import normalize_event_source
 
 
+def _is_matmaster_source(source: str) -> bool:
+    """Check if source is MatMaster or MatMaster:subtype."""
+    return source == 'MatMaster' or source.startswith('MatMaster:')
+
+
 def _summarize_assistant_state_content_for_log(raw: Any) -> str:
     """失败时单行描述 content 形态，避免整段 JSON 撑爆日志。"""
     if raw is None:
@@ -55,6 +60,18 @@ def _serialized_message_role(m: dict) -> str:
 
 class ChatHistoryConverter:
     """将 get_session_events 返回的事件列表转为 task.meta['dialog_history'] 所需的 Message 序列化列表。"""
+
+    @staticmethod
+    def exclude_spawn_events(events: list[dict]) -> list[dict]:
+        """Drop sub-agent rows (spawn_id set) when building parent LLM dialog history."""
+        return [ev for ev in events if ev.get('spawn_id') is None]
+
+    @staticmethod
+    def exclude_task_events(events: list[dict], task_id: str | None) -> list[dict]:
+        """Drop in-flight task events when the current user turn is passed separately."""
+        if not task_id:
+            return list(events)
+        return [ev for ev in events if ev.get("task_id") != task_id]
 
     @staticmethod
     def summarize_dialog_messages_for_log(messages: list[dict]) -> str:
@@ -177,13 +194,28 @@ class ChatHistoryConverter:
 
     @staticmethod
     def _assistant_content(ev: dict) -> str:
-        """从 thought/finish 等事件中取出文本。"""
+        """从 thought/response/run_result 等事件中取出文本。"""
         c = ev.get('content')
         if isinstance(c, str):
             return c
         if isinstance(c, dict) and 'content' in c:
             return str(c.get('content') or '')
         return str(c) if c is not None else ''
+
+    @staticmethod
+    def _assistant_reasoning_content(raw: Any) -> str | None:
+        """从 assistant_state 序列化内容中提取 reasoning_content。"""
+        if not isinstance(raw, dict):
+            return None
+        direct = raw.get('reasoning_content')
+        if isinstance(direct, str) and direct:
+            return direct
+        meta = raw.get('meta')
+        if isinstance(meta, dict):
+            fallback = meta.get('reasoning_content')
+            if isinstance(fallback, str) and fallback:
+                return fallback
+        return None
 
     @staticmethod
     def _tool_call_from_event(ev: dict) -> dict | None:
@@ -227,14 +259,17 @@ class ChatHistoryConverter:
 
         事件类型映射：
         - User/query -> UserMessage
-        - thought|planner_reply -> AssistantMessage(content)
+        - thought|planner_reply -> 缓存为 pending_reasoning
         - tool_call -> 与后续 tool_result 配对，先输出 AssistantMessage(tool_calls)，再输出 ToolMessage
-        - finish -> AssistantMessage(content)
+        - response -> AssistantMessage(content, reasoning_content=...)
+        - run_result|finish -> AssistantMessage(content, reasoning_content=...)（仅 response 缺失时作为兼容兜底）
         """
         out: list[dict] = []
         pending_tool_calls: list[dict] = []
+        pending_reasoning: str | None = None
         last_assistant_text_idx: int | None = None
         assistant_state_tool_ids: set[str] = set()
+        response_seen_in_turn = False
 
         def flush_tool_calls() -> None:
             if not pending_tool_calls:
@@ -251,24 +286,49 @@ class ChatHistoryConverter:
             typ = (ev.get('type') or '').strip()
 
             if source == 'User' and typ == 'query':
+                if pending_reasoning:
+                    out.append(
+                        AssistantMessage(
+                            content='',
+                            reasoning_content=pending_reasoning,
+                        ).model_dump()
+                    )
+                    pending_reasoning = None
                 flush_tool_calls()
                 last_assistant_text_idx = None
                 assistant_state_tool_ids.clear()
+                response_seen_in_turn = False
                 text = cls._user_content(ev)
                 out.append(UserMessage(content=text).model_dump())
                 continue
 
-            if source == 'MatMaster' and typ in ('thought', 'planner_reply'):
+            if _is_matmaster_source(source) and typ in ('thought', 'planner_reply'):
                 flush_tool_calls()
                 assistant_state_tool_ids.clear()
                 last_assistant_text_idx = None
                 text = cls._assistant_content(ev)
                 if text:
-                    out.append(AssistantMessage(content=text).model_dump())
-                    last_assistant_text_idx = len(out) - 1
+                    pending_reasoning = (pending_reasoning or '') + text
                 continue
 
-            if source == 'MatMaster' and typ == 'assistant_state':
+            if _is_matmaster_source(source) and typ == 'response':
+                flush_tool_calls()
+                assistant_state_tool_ids.clear()
+                last_assistant_text_idx = None
+                text = cls._assistant_content(ev)
+                if text or pending_reasoning:
+                    out.append(
+                        AssistantMessage(
+                            content=text or '',
+                            reasoning_content=pending_reasoning,
+                        ).model_dump()
+                    )
+                    last_assistant_text_idx = len(out) - 1
+                    response_seen_in_turn = True
+                pending_reasoning = None
+                continue
+
+            if _is_matmaster_source(source) and typ == 'assistant_state':
                 flush_tool_calls()
                 raw_content = ev.get('content')
                 try:
@@ -285,6 +345,9 @@ class ChatHistoryConverter:
                         e,
                     )
                     continue
+                assistant_reasoning = cls._assistant_reasoning_content(raw_content)
+                if pending_reasoning and not assistant_reasoning:
+                    msg = msg.model_copy(update={'reasoning_content': pending_reasoning})
                 if (
                     last_assistant_text_idx is not None
                     and last_assistant_text_idx == len(out) - 1
@@ -295,6 +358,7 @@ class ChatHistoryConverter:
                 assistant_state_tool_ids = {
                     tc.id for tc in (msg.tool_calls or []) if getattr(tc, 'id', None)
                 }
+                pending_reasoning = None
                 continue
 
             if typ == 'tool_call':
@@ -320,17 +384,33 @@ class ChatHistoryConverter:
                     )
                 continue
 
-            if source == 'MatMaster' and typ == 'finish':
+            if _is_matmaster_source(source) and typ in ('run_result', 'finish'):
                 flush_tool_calls()
                 assistant_state_tool_ids.clear()
                 last_assistant_text_idx = None
+                if response_seen_in_turn:
+                    pending_reasoning = None
+                    continue
                 text = cls._assistant_content(ev)
-                if text:
-                    out.append(AssistantMessage(content=text).model_dump())
+                if text or pending_reasoning:
+                    out.append(
+                        AssistantMessage(
+                            content=text or '',
+                            reasoning_content=pending_reasoning,
+                        ).model_dump()
+                    )
                     last_assistant_text_idx = len(out) - 1
+                pending_reasoning = None
                 continue
 
         flush_tool_calls()
+        if pending_reasoning:
+            out.append(
+                AssistantMessage(
+                    content='',
+                    reasoning_content=pending_reasoning,
+                ).model_dump()
+            )
 
         sid: str | None = None
         tid: str | None = None
@@ -341,7 +421,7 @@ class ChatHistoryConverter:
                 tid = str(ev.get('task_id'))
         tc_ev = sum(1 for e in events if (e.get('type') or '').strip() == 'tool_call')
         tr_ev = sum(1 for e in events if (e.get('type') or '').strip() == 'tool_result')
-        ChatHistoryConverter.validate_dialog_messages_for_llm(
+        cls.validate_dialog_messages_for_llm(
             out,
             context='events_to_dialog_messages',
             session_id=sid,
@@ -351,3 +431,60 @@ class ChatHistoryConverter:
             raw_tool_result_events=tr_ev,
         )
         return out
+
+    @classmethod
+    def events_to_messages(cls, events: list[dict]) -> list:
+        """Convert DB events to matmaster Message types.
+
+        Reuses events_to_dialog_messages() logic, then converts each dict
+        to the corresponding matmaster.types.messages Message subclass.
+        """
+        from matmaster.types.messages import (
+            AssistantMessage as MMAssistantMessage,
+            ToolCallData as MMToolCallData,
+            ToolMessage as MMToolMessage,
+            UserMessage as MMUserMessage,
+        )
+
+        dialog_dicts = cls.events_to_dialog_messages(events)
+        messages = []
+        for d in dialog_dicts:
+            role = d.get("role")
+            if role == "user":
+                messages.append(MMUserMessage(content=d.get("content", "")))
+            elif role == "assistant":
+                msg_kwargs: dict = {"content": d.get("content")}
+                reasoning_content = d.get("reasoning_content")
+                if reasoning_content is None and isinstance(d.get("meta"), dict):
+                    reasoning_content = d["meta"].get("reasoning_content")
+                if reasoning_content is not None:
+                    msg_kwargs["reasoning_content"] = reasoning_content
+                if d.get("tool_calls"):
+                    import json as _json
+
+                    tcs = []
+                    for tc in d["tool_calls"]:
+                        func = tc.get("function", {})
+                        args_str = func.get("arguments", "{}")
+                        tcs.append(
+                            MMToolCallData(
+                                id=tc.get("id", ""),
+                                name=func.get("name", ""),
+                                arguments=(
+                                    _json.loads(args_str)
+                                    if isinstance(args_str, str)
+                                    else args_str
+                                ),
+                            )
+                        )
+                    msg_kwargs["tool_calls"] = tcs
+                messages.append(MMAssistantMessage(**msg_kwargs))
+            elif role == "tool":
+                messages.append(
+                    MMToolMessage(
+                        content=d.get("content", ""),
+                        tool_call_id=d.get("tool_call_id", ""),
+                        tool_name=d.get("name", ""),
+                    )
+                )
+        return messages

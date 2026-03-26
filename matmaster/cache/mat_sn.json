@@ -1,0 +1,44 @@
+[
+  {
+    "name": "search-papers-enhanced",
+    "description": "基于关键词和问题的智能增强论文搜索系统\n\n结合关键词匹配和语义理解的增强版论文搜索工具，支持自然语言问题描述。\n相比普通版本，支持复杂查询逻辑和可选的AI重排序功能。\n\n**核心功能：**\n- 智能关键词匹配和语义理解\n- 支持自然语言问题描述\n- 可选的AI重排序功能\n- 适用于文献综述和技术调研\n\n**Examples:**\n# 技术问题导向的搜索\nresults = search_papers_enhanced(\nwords=[\"natural language processing\", \"transformer\", \"BERT\"],\nquestion=\"如何使用Transformer模型改进文本分类任务的性能？\",\nstart_time=\"2021-01-01\",\nend_time=\"2024-12-31\",\npage_size=30,\nrerank=1\n)\n\n# 跨学科研究搜索\nresults = search_papers_enhanced(\nwords=[\"artificial intelligence\", \"healthcare\", \"diagnosis\"],\nquestion=\"人工智能在医疗诊断中的应用现状和发展趋势如何？\",\nstart_time=\"2020-01-01\",\nend_time=\"2024-06-30\",\npage_size=25\n)\n\n# 方法论比较研究\nresults = search_papers_enhanced(\nwords=[\"reinforcement learning\", \"supervised learning\", \"comparison\"],\nquestion=\"强化学习和监督学习在不同任务中的效果比较\",\nstart_time=\"2022-01-01\",\nend_time=\"2024-12-31\",\nrerank=1\n)\n\n**Note:**\n- 相比普通版本支持复杂查询和语义理解\n- 重排序功能可显著提高结果质量\n- 适合文献综述和深度分析场景",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "words": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "关键词列表，用于精确匹配搜索\n例如：[\"machine learning\", \"deep learning\", \"neural networks\"]\n建议3-8个核心关键词，使用专业术语"
+        },
+        "question": {
+          "type": "string",
+          "description": "研究问题的自然语言描述，用于语义理解\n例如：\"如何使用深度学习提高图像识别的准确率？\"\n应清晰表达研究意图和目标"
+        },
+        "start_time": {
+          "type": "string",
+          "description": "搜索的开始时间，格式：YYYY-MM-DD"
+        },
+        "end_time": {
+          "type": "string",
+          "description": "搜索的结束时间，格式：YYYY-MM-DD"
+        },
+        "page_size": {
+          "type": "integer",
+          "description": "返回的搜索结果数量，范围1-100，默认50"
+        },
+        "rerank": {
+          "type": "integer",
+          "description": "是否启用AI重排序功能，0-关闭，1-开启，默认0"
+        }
+      },
+      "required": [
+        "words",
+        "question",
+        "start_time",
+        "end_time"
+      ]
+    }
+  }
+]

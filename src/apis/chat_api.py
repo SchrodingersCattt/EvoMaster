@@ -1,13 +1,13 @@
 import logging
-from urllib.parse import parse_qs, quote
 
-from fastapi import APIRouter, Body, Depends, Request
-from fastapi.responses import Response, StreamingResponse
+from fastapi import APIRouter, Body, Depends, Path, Request
+from fastapi.responses import StreamingResponse
 
 from src.base.base_res import BaseResponse
 from src.models.chat import (
     ChatPlannerReplyRequest,
     ChatSendRequest,
+    ErrorApiResponse,
     RunStatusApiResponse,
     RunStatusData,
     SessionItem,
@@ -17,9 +17,6 @@ from src.models.chat import (
     ShareSetRequest,
     ShareStatusApiResponse,
     ShareStatusData,
-    WorkspaceEntry,
-    WorkspaceListApiResponse,
-    WorkspaceListData,
 )
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.quota_service import check_quota
@@ -30,17 +27,24 @@ from src.services.stream_service import (
 )
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
-from src.services.workspace_service import WorkspaceService, get_workspace_service
 from src.utils.constant import REDIS_URL
 from src.utils.exceptions import (
-    BadRequestErrorResponse,
     BaseErrorResponse,
     ConflictErrorResponse,
     ForbiddenErrorResponse,
     NotFoundErrorResponse,
 )
 
-router = APIRouter()
+COMMON_ERROR_RESPONSES = {
+    401: {'model': ErrorApiResponse, 'description': '缺少或无效的 X-User-Id'},
+    403: {'model': ErrorApiResponse, 'description': '无权限访问该资源'},
+    404: {'model': ErrorApiResponse, 'description': '资源不存在'},
+    409: {'model': ErrorApiResponse, 'description': '资源状态冲突'},
+    503: {'model': ErrorApiResponse, 'description': '服务暂不可用'},
+}
+
+
+router = APIRouter(tags=['Chat Sessions'])
 
 SSE_HEADERS = {
     'Cache-Control': 'no-cache',
@@ -52,7 +56,17 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-@router.get('/list', response_model=SessionListApiResponse)
+@router.get(
+    '/list',
+    response_model=SessionListApiResponse,
+    summary='查询会话列表',
+    description='按当前登录用户查询会话列表，支持分页和按 `project_id` 过滤。'
+    ' 当传入 `project_id` 时，仅返回该项目下的会话。',
+    operation_id='listChatSessions',
+    responses={
+        401: COMMON_ERROR_RESPONSES[401],
+    },
+)
 def list_sessions(
     query: SessionListQuery = Depends(),
     user_id: str = Depends(UserService.require_user_id),
@@ -60,7 +74,10 @@ def list_sessions(
 ):
     """会话列表，分页：首屏传 limit=20&offset=0，「加载更多」时增大 offset。"""
     sessions, total = chat_svc.list_sessions(
-        user_id=user_id, limit=query.limit, offset=query.offset
+        user_id=user_id,
+        limit=query.limit,
+        offset=query.offset,
+        project_id=query.project_id,
     )
     has_more = query.offset + len(sessions) < total
     return SessionListApiResponse(
@@ -72,7 +89,13 @@ def list_sessions(
     )
 
 
-@router.get('/run_status', response_model=RunStatusApiResponse)
+@router.get(
+    '/run_status',
+    response_model=RunStatusApiResponse,
+    summary='查询运行队列状态',
+    description='返回当前系统中执行中的任务数和排队中的任务数，无需认证。',
+    operation_id='getChatSessionRunStatus',
+)
 def get_run_status():
     """获取执行中与排队中的任务数（Redis session_run_owner + agent_run_queue），无需认证。"""
     registry = get_worker_registry_service()
@@ -84,12 +107,44 @@ def get_run_status():
     )
 
 
-@router.post('/{session_id}/stream')
+@router.post(
+    '/{session_id}/stream',
+    summary='发送消息或订阅会话流',
+    description='统一 SSE 流接口。'
+    ' `content` 为空或不传 body 时，仅订阅该会话的历史和心跳；'
+    ' `content` 非空时，发送消息并返回本次运行的 SSE 流。',
+    operation_id='streamChatSession',
+    responses={
+        401: COMMON_ERROR_RESPONSES[401],
+        403: COMMON_ERROR_RESPONSES[403],
+        409: COMMON_ERROR_RESPONSES[409],
+        503: COMMON_ERROR_RESPONSES[503],
+    },
+)
 async def chat_stream(
     request: Request,
-    session_id: str,
-    req: ChatSendRequest | None = Body(None),
+    session_id: str = Path(..., description='会话 ID', examples=['session-001']),
+    req: ChatSendRequest | None = Body(
+        None,
+        openapi_examples={
+            'subscribe_only': {
+                'summary': '仅订阅',
+                'description': '不发送新消息，只建立 SSE 订阅。',
+                'value': {'content': '', 'mode': 'direct'},
+            },
+            'send_message': {
+                'summary': '发送消息',
+                'description': '发送一条新消息，并返回本次运行的 SSE 流。',
+                'value': {
+                    'content': '请总结项目 42 下最近一次实验结果',
+                    'mode': 'direct',
+                    'bohrium_project_id': 42,
+                },
+            },
+        },
+    ),
     user_id: str | None = Depends(UserService.optional_user_id),
+    org_id: str | None = Depends(UserService.optional_org_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
     stream_svc: ChatStreamService = Depends(get_stream_service),
 ):
@@ -175,7 +230,6 @@ async def chat_stream(
             msg='队列服务不可用，请检查 REDIS_URL 配置',
         )
     # 发送消息并返回本次运行的 SSE 流（此时 req 必存在且 content 非空）；org_id 从上游 Header X-Org-Id 获取
-    org_id = UserService.get_org_id(request)
     logger.info(
         'stream prepare: session_id=%s user_id=%s has_org_id=%s',
         sid,
@@ -204,9 +258,18 @@ async def chat_stream(
     )
 
 
-@router.post('/{session_id}/stop', response_model=BaseResponse)
+@router.post(
+    '/{session_id}/stop',
+    response_model=BaseResponse,
+    summary='停止会话运行',
+    description='终止该会话当前正在运行的任务。若会话正在等待用户确认，也会同时唤醒并取消阻塞线程。',
+    operation_id='stopChatSession',
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+    },
+)
 def stop_session(
-    session_id: str,
+    session_id: str = Path(..., description='会话 ID', examples=['session-001']),
     user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
     stream_svc: ChatStreamService = Depends(get_stream_service),
@@ -226,9 +289,19 @@ def stop_session(
     return BaseResponse(msg='ok')
 
 
-@router.post('/{session_id}/confirmation_reply', response_model=BaseResponse)
+@router.post(
+    '/{session_id}/confirmation_reply',
+    response_model=BaseResponse,
+    summary='提交确认回复',
+    description='当会话流返回 `confirmation_request` 时，调用本接口提交用户回复，Agent 会继续执行。',
+    operation_id='replyChatSessionConfirmation',
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+        409: COMMON_ERROR_RESPONSES[409],
+    },
+)
 async def confirmation_reply(
-    session_id: str,
+    session_id: str = Path(..., description='会话 ID', examples=['session-001']),
     req: ChatPlannerReplyRequest = Body(...),
     user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
@@ -262,9 +335,18 @@ async def confirmation_reply(
     return BaseResponse(msg='ok')
 
 
-@router.get('/{session_id}/share', response_model=ShareStatusApiResponse)
+@router.get(
+    '/{session_id}/share',
+    response_model=ShareStatusApiResponse,
+    summary='查询会话分享状态',
+    description='查看会话是否已开启分享。已分享时任何人可查看；未分享时需为会话所有者。',
+    operation_id='getChatSessionShareStatus',
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+    },
+)
 def get_share_status(
-    session_id: str,
+    session_id: str = Path(..., description='会话 ID', examples=['session-001']),
     user_id: str | None = Depends(UserService.optional_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
 ):
@@ -277,10 +359,20 @@ def get_share_status(
     )
 
 
-@router.put('/{session_id}/share', response_model=ShareStatusApiResponse)
+@router.put(
+    '/{session_id}/share',
+    response_model=ShareStatusApiResponse,
+    summary='设置会话分享状态',
+    description='仅会话所有者可设置。开启分享后，其他人可在未登录场景下访问该会话的分享能力。',
+    operation_id='setChatSessionShareStatus',
+    responses={
+        401: COMMON_ERROR_RESPONSES[401],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
 def set_share_status(
-    session_id: str,
-    body: ShareSetRequest,
+    session_id: str = Path(..., description='会话 ID', examples=['session-001']),
+    body: ShareSetRequest = Body(...),
     user_id: str = Depends(UserService.require_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
 ):
@@ -294,9 +386,19 @@ def set_share_status(
     )
 
 
-@router.delete('/{session_id}', response_model=BaseResponse)
+@router.delete(
+    '/{session_id}',
+    response_model=BaseResponse,
+    summary='删除会话',
+    description='仅会话所有者可删除；关联聊天事件会随会话级联删除。',
+    operation_id='deleteChatSession',
+    responses={
+        401: COMMON_ERROR_RESPONSES[401],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
 def delete_session(
-    session_id: str,
+    session_id: str = Path(..., description='会话 ID', examples=['session-001']),
     user_id: str = Depends(UserService.require_user_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
 ):
@@ -307,61 +409,3 @@ def delete_session(
             msg='Session not found or you are not the owner',
         )
     return BaseResponse(msg='ok')
-
-
-@router.get('/{session_id}/workspace/list')
-def workspace_list(
-    session_id: str,
-    task_id: str,
-    path: str = '',
-    workspace_svc: WorkspaceService = Depends(get_workspace_service),
-):
-    """列出已上传到 OSS 的 workspace 在指定 path 下的一级子目录和文件。path 为空表示根。成功返回 code=0, msg, data；失败返回规范 JSON 及对应 HTTP 状态码。"""
-    path = (path or '').strip()
-    if '..' in path or path.startswith('/'):
-        raise BadRequestErrorResponse(msg='Invalid path')
-
-    entries = workspace_svc.workspace_list(session_id, task_id, path)
-    return WorkspaceListApiResponse(
-        data=WorkspaceListData(
-            path=path or '/',
-            entries=[WorkspaceEntry.model_validate(e) for e in entries],
-        )
-    )
-
-
-@router.get('/{session_id}/workspace/download')
-def workspace_download(
-    request: Request,
-    session_id: str,
-    task_id: str,
-    path: str | None = None,
-    workspace_svc: WorkspaceService = Depends(get_workspace_service),
-):
-    """下载已上传到 OSS 的 workspace 文件。成功返回文件流，失败返回规范 JSON（code, msg, data）。"""
-    path = (path or '').strip()
-    # 容错：前端误用第二个 ? 拼 path 时（如 ...&task_id=xxx?path=file.cif），从 query 中解析
-    if not path and request.url.query and '?' in request.url.query:
-        tail = request.url.query.split('?')[-1]
-        parsed = parse_qs(tail)
-        path = (parsed.get('path') or [''])[0]
-    path = (path or '').strip()
-    if not path or '..' in path or path.startswith('/'):
-        raise BadRequestErrorResponse(msg='Invalid path')
-
-    content, filename = workspace_svc.workspace_download(session_id, task_id, path)
-    # HTTP 头仅支持 latin-1，中文等非 ASCII 文件名用 RFC 5987 filename*=UTF-8'' 编码
-    ascii_fallback = (
-        ''.join(c for c in filename if ord(c) < 128 and c not in '"\\\r\n')
-        or 'download'
-    )
-    disposition = (
-        f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(filename)}"
-    )
-    return Response(
-        content=content,
-        media_type='application/octet-stream',
-        headers={
-            'Content-Disposition': disposition,
-        },
-    )

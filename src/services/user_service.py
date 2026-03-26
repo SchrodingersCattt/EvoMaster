@@ -2,10 +2,10 @@
 
 import logging
 from functools import lru_cache
-from typing import Any
+from typing import Annotated, Any
 
 import httpx
-from fastapi import HTTPException, Request, status
+from fastapi import Header, HTTPException, Request, status
 
 from src.utils.constant import ACCOUNT_API_BASE_URL, BOHRIUM_CORE_BASE_URL
 
@@ -38,14 +38,55 @@ class UserService:
         return user_id or None
 
     @staticmethod
-    def require_user_id(request: Request) -> str:
+    def require_user_id(
+        x_user_id: Annotated[
+            str,
+            Header(
+                alias='X-User-Id',
+                description='当前登录用户 ID，由上游网关注入。',
+                examples=['test-user-123'],
+            ),
+        ],
+    ) -> str:
         """FastAPI Depends 用：强制要求 X-User-Id，缺失则 401。"""
-        return UserService.get_user_id(request, required=True)  # type: ignore[return-value]
+        if not x_user_id:
+            logger.warning('未找到用户ID，Header中缺少X-User-Id')
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail='无法识别用户身份',
+            )
+        logger.info('用户上下文: user_id=%s', x_user_id)
+        return x_user_id
 
     @staticmethod
-    def optional_user_id(request: Request) -> str | None:
+    def optional_user_id(
+        x_user_id: Annotated[
+            str | None,
+            Header(
+                alias='X-User-Id',
+                description='当前登录用户 ID；未登录或匿名访问时可不传。',
+                examples=['test-user-123'],
+            ),
+        ] = None,
+    ) -> str | None:
         """FastAPI Depends 用：可选 X-User-Id，缺失返回 None。"""
-        return UserService.get_user_id(request, required=False)
+        if x_user_id:
+            logger.info('用户上下文: user_id=%s', x_user_id)
+        return x_user_id
+
+    @staticmethod
+    def optional_org_id(
+        x_org_id: Annotated[
+            str | None,
+            Header(
+                alias='X-Org-Id',
+                description='组织 ID，由上游网关注入；发送消息时可选，用于关联 Bohrium 组织。',
+                examples=['org-demo'],
+            ),
+        ] = None,
+    ) -> str | None:
+        """FastAPI Depends 用：可选 X-Org-Id，缺失返回 None。"""
+        return x_org_id
 
     @staticmethod
     def get_org_id(request: Request, *, required: bool = False) -> str | None:

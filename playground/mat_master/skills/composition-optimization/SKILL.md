@@ -2,7 +2,10 @@
 name: composition-optimization
 description: Orchestrates multi-component composition optimization for target properties. Use when users ask for alloy/composition search, DART GA optimization, seed composition design, or composition-only requests that must be converted to explicit structures. Handles branches for missing initial data (deep-survey + lit-data-organizer), optional surrogate models, and composition-to-structure heuristics required by DPA.
 skill_type: orchestrator
+depends_on: mcp-mat-compdart, mcp-mat-struct-db, mcp-mat-sg, mcp-mat-sn, mcp-mat-doc
 ---
+
+<!-- multi-server: mat_compdart, mat_struct_db, mat_sg, mat_sn, mat_doc -->
 
 # Composition Optimization Skill
 

@@ -1,0 +1,48 @@
+[
+  {
+    "name": "extract_material_data_from_pdf",
+    "description": "\n    Extract material data from PDF files.\n    \n    Args:\n        pdf_paths (List[Path]): PDF 文件的路径列表，可以是本地路径或 URL。\n    \n    Returns:\n        Dict[str, Any]: 包含每个 PDF 文件的原始文本内容或错误信息的字典。\n    ",
+    "input_schema": {
+      "properties": {
+        "pdf_paths": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Pdf Paths",
+          "type": "array"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "required": [
+        "pdf_paths"
+      ],
+      "title": "extract_material_data_from_pdfArguments",
+      "type": "object"
+    }
+  }
+]
