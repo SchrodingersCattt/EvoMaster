@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from matmaster.types.runtime import CompactionConfig
+
 _ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
 
@@ -65,6 +67,7 @@ class DevConfig(BaseModel):
     agent: AgentConfig = Field(default_factory=AgentConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    compaction: CompactionConfig = Field(default_factory=CompactionConfig)
 
 
 def load_dev_config(path: Path) -> DevConfig:
