@@ -32,6 +32,12 @@ class MockAsyncLLMProvider:
             StreamChunk(content="hello", finish_reason="stop")
         ]
 
+    async def __aenter__(self) -> MockAsyncLLMProvider:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
     async def chat(
         self,
         messages: list[dict[str, Any]],

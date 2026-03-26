@@ -14,6 +14,12 @@ from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
 class CompleteLLMProvider:
     """Mock that satisfies the async LLMProvider Protocol."""
 
+    async def __aenter__(self) -> CompleteLLMProvider:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
     async def chat(
         self,
         messages: list[dict[str, Any]],

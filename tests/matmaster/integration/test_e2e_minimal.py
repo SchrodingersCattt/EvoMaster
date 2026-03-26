@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import queue
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 
 
 from matmaster.config.exp import ExpConfig
@@ -24,10 +24,16 @@ from matmaster.types.runtime import KernelResult
 class MinimalMockLLMProvider:
     """Minimal mock LLM: single-turn natural finish."""
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> MinimalMockLLMProvider:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="minimal response", finish_reason="stop")
 
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(content="minimal response", finish_reason="stop")
 
 

@@ -3,18 +3,24 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 from unittest.mock import patch, MagicMock
 
 from matmaster.types.messages import StreamChunk, ToolCallData
 
 
 class MockProvider:
-    def chat(self, messages, tools=None):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        pass
+
+    async def chat(self, messages, tools=None):
         from matmaster.types.messages import LLMResponse
         return LLMResponse(content="mock", finish_reason="stop")
 
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(content="hello", finish_reason="stop")
 
 

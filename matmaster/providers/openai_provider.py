@@ -195,9 +195,13 @@ class OpenAIProvider:
         last_error: Exception | None = None
         for attempt in range(retries):
             try:
-                return asyncio.get_event_loop().run_until_complete(
-                    self.chat(messages, tools)
-                )
+                loop = asyncio.new_event_loop()
+                try:
+                    return loop.run_until_complete(
+                        self.chat(messages, tools)
+                    )
+                finally:
+                    loop.close()
             except (
                 openai.APIConnectionError,
                 openai.APITimeoutError,

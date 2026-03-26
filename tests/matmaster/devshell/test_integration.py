@@ -9,7 +9,7 @@ from __future__ import annotations
 import io
 import queue
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 from unittest.mock import MagicMock, patch
 
 from matmaster.core.bus import MessageBus
@@ -26,12 +26,18 @@ from matmaster.types.messages import StreamChunk, ToolCallData
 class SimpleProvider:
     """Mock that always returns a text reply (no tool calls)."""
 
-    def chat(self, messages, tools=None):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        pass
+
+    async def chat(self, messages, tools=None):
         from matmaster.types.messages import LLMResponse
 
         return LLMResponse(content="unused", finish_reason="stop")
 
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(
             content=f"Reply to msg #{len(messages)}", finish_reason="stop"
         )
@@ -43,12 +49,18 @@ class ToolCallingProvider:
     def __init__(self) -> None:
         self._call_count = 0
 
-    def chat(self, messages, tools=None):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        pass
+
+    async def chat(self, messages, tools=None):
         from matmaster.types.messages import LLMResponse
 
         return LLMResponse(content="unused", finish_reason="stop")
 
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
             # Emit tool call delta (same format as test_agent.py)
