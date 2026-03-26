@@ -45,6 +45,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--model", type=str, default=None,
         help="Model route key (e.g. claude-sonnet-4-6). Uses llm_config.yaml routes.",
     )
+    parser.add_argument(
+        "-c", "--command", type=str, default=None,
+        help="Execute a single task and exit (headless mode).",
+    )
+    parser.add_argument(
+        "--json", action="store_true", default=False,
+        help="Output result as JSON (only with -c).",
+    )
     return parser.parse_args(argv)
 
 
@@ -86,7 +94,10 @@ def _build_llm_provider(args: argparse.Namespace, config: "DevConfig") -> "OpenA
             sys.exit(1)
 
         provider = build_provider(llm_config, model_override=model_override)
-        print(f"LLM: profile={resolved.profile_key} model={resolved.model} (from {llm_config_path.name})")
+        print(
+            f"LLM: profile={resolved.profile_key} model={resolved.model} (from {llm_config_path.name})",
+            file=sys.stderr,
+        )
         return provider
 
     # Fallback: use DevConfig.LLMConfig + env var
@@ -166,7 +177,14 @@ def main(argv: list[str] | None = None) -> None:
     from matmaster.devshell.runner import DevRunner
     from matmaster.devshell.repl import run_repl
 
-    stream_hook = DevStreamHook(verbose=args.verbose)
+    # Suppress stream output in headless+json mode
+    if args.command and args.json:
+        import io
+
+        stream_hook = DevStreamHook(output=io.StringIO(), verbose=False)
+    else:
+        stream_hook = DevStreamHook(verbose=args.verbose)
+
     runner = DevRunner(
         config=config,
         workdir=args.workdir,
@@ -174,8 +192,64 @@ def main(argv: list[str] | None = None) -> None:
         stream_hook=stream_hook,
     )
 
-    # Start REPL
-    run_repl(runner, config, log_dir=args.log_dir, verbose=args.verbose)
+    if args.command:
+        _run_headless(runner, args.command, log_dir=args.log_dir, json_output=args.json)
+    else:
+        run_repl(runner, config, log_dir=args.log_dir, verbose=args.verbose)
+
+
+def _run_headless(
+    runner: "DevRunner",
+    task: str,
+    *,
+    log_dir: Path,
+    json_output: bool = False,
+) -> None:
+    """Execute a single task and exit."""
+    import json
+    import threading
+    from datetime import datetime
+
+    from matmaster.core.bus import MessageBus
+    from matmaster.devshell.event_logger import EventLogger
+
+    log_file = log_dir / f"events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+    event_logger = EventLogger(log_file, run_id="run-001")
+    bus = MessageBus()
+    stop_event = threading.Event()
+
+    try:
+        result = runner.run(task, stop_event=stop_event, bus=bus)
+    except Exception as e:
+        if json_output:
+            print(json.dumps({"status": "error", "error": str(e)}, ensure_ascii=False))
+        else:
+            print(f"\nerror: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        # Drain bus events
+        import queue
+
+        while True:
+            try:
+                event = bus.get_nowait()
+                event_logger.log_event(event)
+            except queue.Empty:
+                break
+        event_logger.close()
+
+    kr = result.result
+    if json_output:
+        print(json.dumps({
+            "status": kr.status,
+            "reason": kr.reason,
+            "content": kr.final_content,
+            "num_turns": kr.num_turns,
+            "usage": kr.usage,
+        }, ensure_ascii=False))
+    # Text mode: stream hook already displayed content, no need to reprint.
+
+    sys.exit(0 if kr.status == "completed" else 1)
 
 
 if __name__ == "__main__":
