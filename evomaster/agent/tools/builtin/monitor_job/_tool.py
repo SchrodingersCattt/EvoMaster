@@ -126,14 +126,14 @@ class MonitorJobTool(BaseTool):
         assert isinstance(params, MonitorJobParams)
 
         # Resolve workspace: fall back to the session's configured workspace so that
-        # downloads are isolated to the session's run directory, not the process CWD.
+        # downloads follow the active session directory instead of the process CWD.
         workspace = params.workspace
         if not workspace or workspace == '.':
             if isinstance(session, SSHSession):
                 workspace = (
                     session.config.working_dir
                     or getattr(session.config, 'workspace_path', None)
-                    or '/share/workspace'
+                    or '/share'
                 )
             else:
                 workspace = getattr(session.config, 'workspace_path', None) or '.'

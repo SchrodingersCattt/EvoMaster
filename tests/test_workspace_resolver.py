@@ -40,7 +40,7 @@ def test_remote_session_workspace_root_defaults_to_share_workspace(
 ) -> None:
     resolved = get_remote_session_workspace_root({}, project_root=tmp_path)
 
-    assert resolved == Path('/share/workspace')
+    assert resolved == Path('/share')
 
 
 def test_remote_session_workspace_root_supports_config_override(
