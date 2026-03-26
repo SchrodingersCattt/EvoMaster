@@ -307,27 +307,10 @@ class ChatStreamService:
 
     @staticmethod
     def sse_format(payload: dict) -> str:
-        """ag-ui 协议：单条 SSE 格式为 event: ag-ui\\ndata: {json}\\n\\n
-
-        实时事件来自 Pydantic model_dump，键序与库表回放不一致；此处统一为
-        source、type、content 在前，其余键保持原 dict 相对顺序。
-        """
-        ordered = ChatStreamService._order_ag_ui_payload(payload)
+        """ag-ui 协议：单条 SSE 格式为 event: ag-ui\\ndata: {json}\\n\\n"""
         return (
-            f"event: {AG_UI_EVENT}\ndata: {json.dumps(ordered, ensure_ascii=False)}\n\n"
+            f"event: {AG_UI_EVENT}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
         )
-
-    @staticmethod
-    def _order_ag_ui_payload(payload: dict) -> dict:
-        """JSON 键顺序：source、type、content，其余保持原 dict 相对顺序。"""
-        ordered: dict = {}
-        for key in ('source', 'type', 'content'):
-            if key in payload:
-                ordered[key] = payload[key]
-        for key, value in payload.items():
-            if key not in ordered:
-                ordered[key] = value
-        return ordered
 
     @staticmethod
     def _inject_elapsed_for_history(events: list[dict]) -> list[dict]:
