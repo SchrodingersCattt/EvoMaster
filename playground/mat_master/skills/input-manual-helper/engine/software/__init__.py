@@ -8,6 +8,7 @@ engine/software 包 — 各软件的 SoftwareBackend 实现。
   QEBackend       — Quantum ESPRESSO 后端骨架（Phase 1 实现）
   ABINITBackend   — ABINIT 后端骨架（Phase 1 实现）
   LAMMPSBackend   — LAMMPS 后端骨架（Phase 1 实现）
+  AbacusBackend   — ABACUS 后端（Phase 2 实现）
 """
 
 from engine.software.base import SoftwareBackend
@@ -16,6 +17,7 @@ from engine.software.orca import ORCABackend
 from engine.software.qe import QEBackend
 from engine.software.abinit import ABINITBackend
 from engine.software.lammps import LAMMPSBackend
+from engine.software.abacus import AbacusBackend
 
 __all__ = [
     "SoftwareBackend",
@@ -24,4 +26,5 @@ __all__ = [
     "QEBackend",
     "ABINITBackend",
     "LAMMPSBackend",
+    "AbacusBackend",
 ]

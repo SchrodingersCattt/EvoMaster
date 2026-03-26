@@ -51,7 +51,6 @@ def _derive_name(key: str) -> str:
     """Derive a human-readable software name from a config key.
 
     ``mat_dpa``  → ``DPA``
-    ``mat_abacus`` → ``ABACUS``
     ``run_lammps`` → ``LAMMPS``
     ``run_quantum_espresso`` → ``QUANTUM_ESPRESSO``
     """
@@ -77,7 +76,6 @@ _DEFAULT_CRP: dict[str, Any] = {
         'ABINIT',
         'ORCA',
         'OpenBabel',
-        'mat_abacus',
         'mat_dpa',
         'mat_sg',
         'mat_doc',
@@ -223,7 +221,7 @@ class AsyncToolRegistry:
         return ', '.join(self.software_names)
 
     def server_mapping_str(self) -> str:
-        """``"mat_dpa_* for DPA; mat_abacus_* for ABACUS; mat_binary_calc_* for LAMMPS, CP2K, ..."``"""
+        """``"mat_dpa_* for DPA; ..."``"""
         by_server: dict[str, list[str]] = {}
         for e in self._entries:
             by_server.setdefault(e.server_prefix, []).append(e.software_name)

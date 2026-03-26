@@ -155,6 +155,7 @@ class ValidatorRegistry:
         "qe": ("validators.qe_validator", "QEValidator"),
         "abinit": ("validators.abinit_validator", "ABINITValidator"),
         "lammps": ("validators.lammps_validator", "LAMMPSValidator"),
+        "abacus": ("validators.abacus_validator", "ABACUSValidator"),
     }
 
     # Canonical alias map (e.g. user may type "quantum espresso")
@@ -169,6 +170,7 @@ class ValidatorRegistry:
         "orca": "orca",
         "abinit": "abinit",
         "lammps": "lammps",
+        "abacus": "abacus",
     }
 
     def __init__(self) -> None:

@@ -1,0 +1,40 @@
+INPUT_PARAMETERS
+# ============================================================
+# ABACUS cell + ionic relaxation — optimize cell and atoms
+# task_cell_relax: relax until max force < force_thr
+#   AND all stress components < stress_thr (kbar)
+# ============================================================
+
+suffix                  ABACUS
+ntype                   1
+calculation             cell-relax
+
+# Pseudopotential and orbital directories
+pseudo_dir              ./pseudopotentials/
+orbital_dir             ./orbitals/
+
+# Electronic structure
+ecutwfc                 50
+basis_type              lcao
+nspin                   1
+smearing_method         gauss
+smearing_sigma          0.015
+
+# SCF convergence
+scf_thr                 1e-7
+scf_nmax                100
+mixing_type             broyden
+mixing_beta             0.7
+mixing_ndim             8
+
+# Cell + ionic relaxation
+cal_force               1
+cal_stress              1
+force_thr               1e-3
+stress_thr              10.0
+relax_nmax              200
+relax_method            bfgs
+out_stru                1
+
+# Output
+out_chg                 0
