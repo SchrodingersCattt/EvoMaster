@@ -157,10 +157,10 @@ class ChatSendRequest(BaseModel):
     )
     mode: str = 'direct'  # "direct" | "planner"
     llm: Optional[str] = (
-        None  # 可选，本轮使用的 LLM 配置块（如 litellm/azure/deepseek），不传则用 agent 默认
+        None  # 可选，本轮使用的 LLM 配置块（如 opus/sonnet/haiku），不传则用 agent 默认
     )
     model: Optional[str] = (
-        None  # 可选，本轮使用的模型名（如 gemini-3-flash-preview、azure/gpt-5），覆盖所选 LLM 配置里的 model
+        None  # 可选，本轮使用的模型名（如 gemini-3-flash-preview、claude-sonnet-4-6），覆盖所选 LLM 配置里的 model
     )
     bohrium_project_id: int | str | None = None  # 可选的 Bohrium project id
     bohrium_user_id: int | str | None = (

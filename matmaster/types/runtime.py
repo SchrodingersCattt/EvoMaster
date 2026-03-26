@@ -11,7 +11,7 @@ Layer 2 boundary contracts:
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -69,11 +69,36 @@ class AgentRuntimeSpec(BaseModel):
     system_prompt: str = ""
     compactor: Any | None = None
 
-    # Mode
-    mode: str = "direct"  # 'direct' | 'planner'
-
     # Extensible metadata bag (prompt templates, MCP/skill config, etc.)
     meta: dict[str, Any] = Field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class KernelResult:
+    """AgentKernel.run() 的终止结果摘要。
+
+    内核层专属，不参与总线传输。总线事件 RunResultEvent
+    由上层（service / runner）从 KernelResult 按需构造。
+
+    num_turns 语义：已完成 LLM 调用的轮数。cancelled 路径在 turn 递增前退出，
+    所以 num_turns 反映的是已完成的轮数，不含被中断的当前轮。
+    """
+
+    status: str
+    reason: str
+    final_content: str | None = None
+    num_turns: int = 0
+    stop_reason: str | None = None
+    usage: dict[str, int] = field(default_factory=dict)
+
+    def to_run_result_event(self, source: str = "agent") -> RunResultEvent:
+        """构造总线事件。上层发总线时统一走这个方法。"""
+        return RunResultEvent(
+            source=source,
+            status=self.status,
+            reason=self.reason,
+            final_content=self.final_content,
+        )
 
 
 @dataclass(frozen=True)
@@ -93,9 +118,9 @@ class AgentRuntime:
 class KernelRunResult:
     """Return value of AgentKernel.run().
 
-    Bundles the terminal event with the full message transcript,
+    Bundles the terminal result with the full message transcript,
     enabling callers to extract conversation history for multi-turn.
     """
 
-    event: RunResultEvent
+    result: KernelResult
     messages: list[Message]

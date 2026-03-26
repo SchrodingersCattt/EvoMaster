@@ -120,7 +120,16 @@ class MatMasterPlayground(BasePlayground):
             get_extract_webpage_tool,
         )
 
-        registry.register(get_extract_webpage_tool())
+        # P1-b: derive workspace-scoped cache dir (not run_dir, to isolate batch tasks)
+        _cache_dir = None
+        if self.run_dir is not None:
+            _run_path = Path(self.run_dir)
+            if self.task_id:
+                _ws = _run_path / 'workspaces' / self.task_id
+            else:
+                _ws = _run_path / 'workspace'
+            _cache_dir = _ws / '_tmp' / 'web_cache'
+        registry.register(get_extract_webpage_tool(cache_dir=_cache_dir))
         registry.register(get_web_search_tool())
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
 

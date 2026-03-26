@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from matmaster.tools.tool_result import ToolResult
+
 if TYPE_CHECKING:
     from evomaster.agent.tools.base import BaseTool
 
@@ -46,9 +48,18 @@ class EvoToolAdapter:
     def json_schema(self) -> dict[str, Any]:
         return self._tool.params_class.model_json_schema()
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    def execute(self, arguments: dict[str, Any]) -> ToolResult:
         args_json = json.dumps(arguments, ensure_ascii=False)
-        observation, _info = self._tool.execute(self._session, args_json)
-        if isinstance(observation, str):
-            return observation
-        return json.dumps(observation, ensure_ascii=False, default=str)
+        observation, info = self._tool.execute(self._session, args_json)
+        content = (
+            observation
+            if isinstance(observation, str)
+            else json.dumps(observation, ensure_ascii=False, default=str)
+        )
+        info_dict = info if isinstance(info, dict) else {}
+        status = (
+            "error"
+            if "error" in info_dict or content.lstrip().startswith("Error:")
+            else "success"
+        )
+        return ToolResult(status=status, content=content, info=info_dict)

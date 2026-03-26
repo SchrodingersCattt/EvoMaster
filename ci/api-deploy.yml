@@ -119,7 +119,7 @@ test:
       uv add pytest-cov pytest-xdist pytest-timer &&
       pytest -n 8 --cov=./ --cov-report term-missing --cov-report html:/app/htmlcov -sv
       "
-    - docker cp ${CI_PROJECT_DIR}/tests testcov:/app/tests
+    - docker cp ${CI_PROJECT_DIR}/tests/. testcov:/app/tests/
     - docker cp ${CI_PROJECT_DIR}/pytest.ini testcov:/app/pytest.ini
     - docker start -a testcov
     - docker cp testcov:/app/htmlcov ${CI_PROJECT_DIR}/htmlcov

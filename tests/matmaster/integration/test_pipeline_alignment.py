@@ -37,7 +37,7 @@ class _ToolCallThenFinishLLM:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
             # Emit a reasoning chunk first so EventEmitterHook produces ThoughtEvent
@@ -114,7 +114,7 @@ class TestEventSequenceAlignment:
         kernel = AgentKernel()
         finish = kernel.run(runtime.spec, "alignment test")
 
-        assert finish.event.reason == "natural"
+        assert finish.result.reason == "natural"
 
         # Collect events from bus
         events = []

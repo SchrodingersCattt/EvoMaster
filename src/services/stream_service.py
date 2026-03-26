@@ -70,6 +70,8 @@ def _should_emit_event_to_sse(event: dict) -> bool:
         return False
     if t == 'assistant_state':
         return False
+    if t == 'skill_hit':
+        return False
     return True
 
 
@@ -78,6 +80,51 @@ def _normalize_replayed_event(event: dict) -> dict:
     replay_event = dict(event)
     replay_event['source'] = normalize_event_source(replay_event.get('source'))
     return replay_event
+
+
+def _replay_terminal_dedupe_key(event: dict) -> tuple[str, str | None] | None:
+    """Key for replay dedupe: parent stream vs each sub-agent share task_id but differ by spawn_id."""
+    task_id = event.get('task_id')
+    if task_id is None:
+        return None
+    spawn_id = event.get('spawn_id')
+    if spawn_id is not None:
+        spawn_id = str(spawn_id)
+    return (str(task_id), spawn_id)
+
+
+def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
+    """Hide replayed run_result when the same task already has a replayable response.
+
+    Live SSE already streamed the final `response` content. After adding
+    persisted complete response segments, replaying the trailing `run_result`
+    would duplicate the final answer after reconnect. We only suppress the
+    terminal event when the previous replayable event for that task is a
+    `response`, so tool-use turns that still rely on `run_result` remain
+    visible.
+
+    Dedupe is keyed by (task_id, spawn_id) so a sub-agent `response` does not
+    suppress the parent stream's `run_result`.
+    """
+    deduped: list[dict] = []
+    last_replayed_type_by_key: dict[tuple[str, str | None], str] = {}
+
+    for event in events:
+        dedupe_key = _replay_terminal_dedupe_key(event)
+        event_type = str(event.get('type') or '')
+        if (
+            dedupe_key is not None
+            and event_type in {'run_result', 'finish'}
+            and last_replayed_type_by_key.get(dedupe_key) == 'response'
+        ):
+            continue
+
+        deduped.append(event)
+
+        if dedupe_key is not None and _should_emit_event_to_sse(event):
+            last_replayed_type_by_key[dedupe_key] = event_type
+
+    return deduped
 
 
 class InMemoryReplyQueue:
@@ -466,8 +513,9 @@ class ChatStreamService:
                     return
             else:
                 yield self.sse_format(payload)
-            events = self._events_service.get_session_events(sid)
+            events = self._events_service.get_session_events(sid, include_spawn=True)
             if events:
+                events = _dedupe_replayed_terminal_events(events)
                 events = self._inject_elapsed_for_history(events)
                 for event in events:
                     if _should_emit_event_to_sse(event):
@@ -616,7 +664,7 @@ class ChatStreamService:
         llm = (req.llm or '').strip() or None
         model = (
             req.model or ''
-        ).strip() or None  # 本轮模型名，如 gemini-3-flash-preview / azure/gpt-5
+        ).strip() or None  # 本轮模型名，如 gemini-3-flash-preview / claude-sonnet-4-6
 
         # Bohrium：org_id / project_id 直接入库，需要时从库读，不常驻内存
         if req.bohrium_project_id is not None or org_id is not None:
@@ -740,8 +788,9 @@ class ChatStreamService:
         payload['stream_started_at'] = start_time_ms
         payload['invocation_id'] = ctx.invocation_id
         yield self.sse_format(payload)
-        history = self._events_service.get_session_events(sid) or []
+        history = self._events_service.get_session_events(sid, include_spawn=True) or []
         history = ChatHistoryConverter.exclude_task_events(history, ctx.task_id)
+        history = _dedupe_replayed_terminal_events(history)
         history = self._inject_elapsed_for_history(history)
         for event in history:
             if _should_emit_event_to_sse(event):

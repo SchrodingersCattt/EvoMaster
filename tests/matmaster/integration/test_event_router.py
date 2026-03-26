@@ -259,6 +259,10 @@ class TestPersistenceHandler:
         assert args[0][0] == "sess1"  # session_id
         assert args[0][1] == "Agent"  # source
         assert args[0][2] == "tool_call"  # type
+        kwargs = args.kwargs or {}
+        assert kwargs.get("task_id") == "task1"
+        assert kwargs.get("invocation_id") == "inv1"
+        assert kwargs.get("spawn_id") is None
 
     def test_persists_tool_result_and_run_result(self) -> None:
         """handle() persists tool_result and run_result events."""
@@ -369,6 +373,7 @@ class TestPersistenceHandler:
             "call_id": "c1",
             "name": "bash",
             "result": "file.txt",
+            "status": "success",
             "info": {"auto_save": True},
         }
 
@@ -427,6 +432,24 @@ class TestPersistenceHandler:
             "phase": "ssh",
         }
 
+    def test_persists_spawn_id_kwarg_for_subagent_events(self) -> None:
+        """handle() passes event.spawn_id into add_event(spawn_id=...) for replay grouping."""
+        handler, events_table = self._make_handler()
+
+        handler.handle(
+            ToolCallEvent(
+                source="MatMaster:explore",
+                call_id="c1",
+                tool_name="read",
+                arguments={"path": "x"},
+                spawn_id="a1b2c3d4e5f67890",
+            )
+        )
+
+        events_table.add_event.assert_called_once()
+        kwargs = events_table.add_event.call_args.kwargs
+        assert kwargs.get("spawn_id") == "a1b2c3d4e5f67890"
+
 
 # ── SSEHandler Tests ────────────────────────────────────
 
@@ -453,6 +476,33 @@ class TestSSEHandler:
         assert payload["type"] == "run_result"
         assert payload["source"] == "MatMaster"
         assert payload["session_id"] == "sess1"
+        assert payload.get("spawn_id") is None
+
+    def test_sse_payload_includes_spawn_id_at_top_level(self) -> None:
+        """Live SSE payloads expose spawn_id next to session_id/task_id for subagent events."""
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id="inv1",
+            mode="planner",
+        )
+
+        handler.handle(
+            ToolCallEvent(
+                source="MatMaster:explore",
+                call_id="c1",
+                tool_name="bash",
+                arguments={"cmd": "ls"},
+                spawn_id="feedfacecafe0001",
+            )
+        )
+
+        payload = send_cb.call_args[0][0]
+        assert payload.get("spawn_id") == "feedfacecafe0001"
+        assert isinstance(payload.get("content"), dict)
 
     def test_sends_json_safe_payload(self) -> None:
         """handle() emits payloads that are safe for SSE/Redis JSON encoding."""
@@ -530,6 +580,7 @@ class TestSSEHandler:
             "call_id": "call-1",
             "name": "bash",
             "result": {"status": "success", "stdout": "ok"},
+            "status": "success",
             "info": {"auto_save": True},
         }
 
@@ -784,6 +835,27 @@ class TestSSEHandler:
 
         handler.handle(
             ThoughtEvent(source="Agent", content="full thought", stream_state=None)
+        )
+
+        send_cb.assert_not_called()
+
+    def test_skips_complete_segment_events(self) -> None:
+        """handle() skips persisted complete-segment snapshots on the live SSE path."""
+        send_cb = MagicMock()
+        handler = SSEHandler(
+            send_cb=send_cb,
+            loop=None,
+            session_id="sess1",
+            task_id="task1",
+            invocation_id=None,
+            mode="direct",
+        )
+
+        handler.handle(
+            ThoughtEvent(source="Agent", content="full thought", stream_state="complete")
+        )
+        handler.handle(
+            ResponseEvent(source="Agent", content="full answer", stream_state="complete")
         )
 
         send_cb.assert_not_called()

@@ -43,4 +43,6 @@ class LLMProvider(Protocol):
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> Iterator[StreamChunk]: ...

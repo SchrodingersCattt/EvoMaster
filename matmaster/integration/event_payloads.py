@@ -17,6 +17,9 @@ def _normalize_public_source(source: object) -> str:
     raw = str(source or "").strip()
     if raw in {"User", "System"}:
         return raw
+    # Preserve MatMaster:subtype prefix for sub-agent events
+    if raw.startswith("MatMaster:"):
+        return raw
     return "MatMaster"
 
 
@@ -69,6 +72,7 @@ def _public_content_for_event(
             "call_id": call_id,
             "name": payload.get("tool_name"),
             "result": payload.get("result"),
+            "status": payload.get("status", "success"),
             "info": payload.get("info") or {},
         }
 

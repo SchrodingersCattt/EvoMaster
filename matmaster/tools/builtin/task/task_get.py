@@ -13,7 +13,12 @@ class TaskGetTool(BuiltinTool):
     """Get a task by its ID and return its JSON representation."""
 
     name: ClassVar[str] = "task_get"
-    description: ClassVar[str] = "Get a task by its ID to check status and details."
+    description: ClassVar[str] = (
+        "Get a task by its ID to check current status and details.\n\n"
+        "Usage:\n"
+        "- Use after task_create to verify task was created correctly.\n"
+        "- Use to check task status before updating or completing."
+    )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {

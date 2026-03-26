@@ -35,6 +35,8 @@ class CompleteLLMProvider:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> Iterator[StreamChunk]:
         yield StreamChunk(content="hello", finish_reason="stop")
 
@@ -109,6 +111,8 @@ class MissingRetryProvider:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> Iterator[StreamChunk]:
         yield StreamChunk(content="hello", finish_reason="stop")
 
@@ -147,3 +151,15 @@ class TestChatWithRetryProtocol:
 
         provider = MockLLMProvider()
         assert isinstance(provider, LLMProvider)
+
+
+def test_chat_stream_accepts_timeout_kwarg() -> None:
+    """Protocol allows optional timeout keyword argument."""
+    import inspect
+    from matmaster.types.llm_provider import LLMProvider
+
+    sig = inspect.signature(LLMProvider.chat_stream)
+    assert "timeout" in sig.parameters
+    param = sig.parameters["timeout"]
+    assert param.default is None
+    assert param.kind == inspect.Parameter.KEYWORD_ONLY

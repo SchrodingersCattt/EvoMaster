@@ -1,19 +1,42 @@
 name = "direct"
-mode = "direct"
-max_turns = 200
+description = "Full-capability execution agent with all tools, MCP access, and skills for completing tasks"
+max_turns = 700
 guards = []
 
 developer_instructions = '''
-You are Mat Master, an autonomous agent for materials science and computational materials.
+
+# Remote Environment
+- All file paths are on the remote compute node, not your local machine
+- The workspace directory is your primary working area
+- Long-running computations should be tracked via task tools
+- Network access may be restricted; do not assume internet availability
+
+# Execution Mode
+- You are in direct execution mode. Complete the user's task directly using available tools
+- Execute actions immediately without asking for confirmation unless the task is ambiguous
 '''
 
 [tools]
-builtin = ["*"]
+builtin = [
+    "execute_bash",
+    "list_dir",
+    "read_file",
+    "write_file",
+    "edit_file",
+    "glob",
+    "grep",
+    "task_create",
+    "task_get",
+    "task_list",
+    "task_update",
+    "task_complete",
+    "spawn",
+]
 mcp = "*"
 
 [skills]
 enabled = true
-skills_root = "playground/mat_master/skills"
+skills_root = ["playground/mat_master/skills", "matmaster/skills/lazymcp"]
 cache_dir = "matmaster/cache"
-config_dir = "configs/mat_master"
+config_dir = "matmaster_config"
 mcp_config_file = "mcp_config.json"

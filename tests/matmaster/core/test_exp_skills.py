@@ -29,10 +29,20 @@ def _make_cache(tmp_path: Path) -> Path:
     return cache_dir
 
 
+def _make_mcp_yaml(tmp_path: Path) -> None:
+    import yaml
+
+    (tmp_path / "mcp.yaml").write_text(yaml.dump({
+        "path_adaptor": "calculation",
+        "calculation_servers": ["mat_sg"],
+    }))
+
+
 class TestExpInitSkillTools:
     def test_skill_tools_registered_when_enabled(self, tmp_path):
         skills_root = _make_skill_dir(tmp_path)
         cache_dir = _make_cache(tmp_path)
+        _make_mcp_yaml(tmp_path)
 
         cfg = ExpConfig.model_validate({
             "name": "test",
@@ -42,6 +52,7 @@ class TestExpInitSkillTools:
                 "cache_dir": str(cache_dir),
                 "config_dir": str(tmp_path),
                 "mcp_config_file": "mcp_config.json",
+                "mcp_runtime_file": "mcp.yaml",
             },
         })
         exp = Exp(cfg)
@@ -71,6 +82,7 @@ class TestExpInitSkillTools:
         """Simulating skill hit triggers lazy MCP tool injection."""
         skills_root = _make_skill_dir(tmp_path)
         cache_dir = _make_cache(tmp_path)
+        _make_mcp_yaml(tmp_path)
         (tmp_path / "mcp_config.json").write_text('{"mcpServers": {}}')
 
         cfg = ExpConfig.model_validate({
@@ -81,6 +93,7 @@ class TestExpInitSkillTools:
                 "cache_dir": str(cache_dir),
                 "config_dir": str(tmp_path),
                 "mcp_config_file": "mcp_config.json",
+                "mcp_runtime_file": "mcp.yaml",
             },
         })
         exp = Exp(cfg)
@@ -97,7 +110,7 @@ class TestExpInitSkillTools:
         result = registry.execute(
             "use_skill", {"skill_name": "test-skill", "action": "get_info"}
         )
-        assert not result.startswith("Error:"), f"use_skill failed: {result}"
+        assert result.status == "success", f"use_skill failed: {result.content}"
 
         # After skill trigger: mat_sg tools should be injected
         assert "mat_sg_build_bulk" in registry

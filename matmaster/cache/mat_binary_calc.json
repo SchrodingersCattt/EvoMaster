@@ -1,0 +1,905 @@
+[
+  {
+    "name": "submit_run_gromacs",
+    "description": "Submit a job",
+    "input_schema": {
+      "properties": {
+        "input_files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Input Files",
+          "type": "array"
+        },
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "stdin_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stdin Text"
+        },
+        "timeout": {
+          "default": 3600,
+          "title": "Timeout",
+          "type": "integer"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "required": [
+        "input_files",
+        "command"
+      ],
+      "title": "run_gromacsArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "prepare_abinit_job",
+    "description": "Prepare an ABINIT input file: resolve pseudopotentials, auto-fill ecut, and optionally\n    generate workflow inputs (NLO, phonons, bands, GW) using AbiPy.\n\n    At least one of input_file or structure_file must be provided.\n\n    Args:\n        input_file (Optional[Path]): Path to the .abi input file (template). Omit if generating from structure only.\n        structure_file (Optional[Path]): Path to structure file (CIF/POSCAR/etc.). Used to generate input or replace template structure.\n        program (str): ABINIT executable: \"abinit\" | \"optic\" | \"anaddb\" | \"mrgddb\".\n        pseudo_family (str): Built-in pseudo set: \"oncv_pbe_sr\" (NC psp8) or \"jth_pbe\" (PAW xml).\n        custom_pseudo_dir (Optional[str]): Directory with user-provided pseudos (overrides built-in).\n        workflow_type (Optional[str]): None | \"nlo\" | \"phonons\" | \"bands\" | \"gw\".\n            None     → only patch pseudos/ecut.\n            \"nlo\"    → AbiPy dte_from_gsinput() → DFPT multi-dataset + optic.inp.\n            \"phonons\"→ AbiPy phonons_from_gsinput().\n            \"bands\"  → AbiPy ebands_input().\n            \"gw\"     → AbiPy g0w0_with_ppmodel_inputs().\n        ecut_accuracy (str): \"low\" | \"medium\" | \"high\". Auto-fills ecut from pseudo hints if unset.\n        autoparal_ncpus (Optional[int]): If set, query ABINIT binary for optimal parallel config.\n        previous_calc_files (Optional[Dict[str, str]]): {ird_variable: file_path} for linking to previous outputs\n            (workflow_type=None only). E.g. {\"irdwfk\": \"/path/to/out_WFK\"}.\n        output_dir (Optional[str]): Output directory (defaults to input_file's or structure_file's parent).\n\n    Returns:\n        Dict[str, Any]: prepared_files (list[Path]), asset_manifest, runtime_hints, warnings.\n    ",
+    "input_schema": {
+      "properties": {
+        "input_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input File"
+        },
+        "structure_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Structure File"
+        },
+        "program": {
+          "default": "abinit",
+          "title": "Program",
+          "type": "string"
+        },
+        "pseudo_family": {
+          "default": "oncv_pbe_sr",
+          "title": "Pseudo Family",
+          "type": "string"
+        },
+        "custom_pseudo_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Custom Pseudo Dir"
+        },
+        "workflow_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Workflow Type"
+        },
+        "ecut_accuracy": {
+          "default": "medium",
+          "title": "Ecut Accuracy",
+          "type": "string"
+        },
+        "autoparal_ncpus": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Autoparal Ncpus"
+        },
+        "previous_calc_files": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Previous Calc Files"
+        },
+        "output_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Dir"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "title": "prepare_abinit_jobArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "prepare_cp2k_job",
+    "description": "Prepare a CP2K input file: patch file paths, KIND blocks, MGRID/KPOINTS, and\n    typed overrides (MD, GEO_OPT, CELL_OPT, NEB, VIBE, bands).\n\n    All modifications go through cp2k-input-tools parse→dict→merge→validate→generate,\n    validated against the full cp2k_input.xml keyword database.\n\n    Args:\n        input_file (Path): Path to the CP2K input file (.inp).\n        basis_set_files (Optional[list]): List of basis set file paths (BASIS_SET_FILE_NAME). Multiple allowed.\n        potential_files (Optional[list]): List of potential file paths (POTENTIAL_FILE_NAME). Multiple allowed.\n        structure_file (Optional[Path]): Structure file (CIF/POSCAR/XYZ/…) to inject into the input.\n            Replaces literal &COORD/&CELL blocks in the template with coordinates and lattice vectors\n            from the structure, and rebuilds &KIND entries to match the real element set.\n            Also supports magic-string placeholders __CELL_BLOCK__ / __ATOMIC_COORDINATES_BLOCK__.\n        wfn_restart_file (Optional[Path]): WFN restart file path (SCF/WFN_RESTART_FILE_NAME).\n        md_restart_file (Optional[Path]): MD restart file path (MOTION/MD/RESTART_FILE_NAME).\n        dftd3_data_dir (Optional[str]): DFT-D3 parameter file directory.\n        include_files (Optional[list]): Extra @INCLUDE files to copy to output_dir.\n        basis_set_map (Optional[Dict[str, str]]): Per-element basis set names, e.g. {\"Si\": \"DZVP-MOLOPT-SR-GTH\"}.\n        potential_map (Optional[Dict[str, str]]): Per-element GTH potential names, e.g. {\"Si\": \"GTH-PBE-q4\"}.\n        admm_basis_map (Optional[Dict[str, str]]): Per-element ADMM auxiliary basis sets. Also enables ADMM.\n        cutoff (Optional[float]): MGRID/CUTOFF [Ry].\n        rel_cutoff (Optional[float]): MGRID/REL_CUTOFF [Ry].\n        kpoints (Optional[str]): KPOINTS/SCHEME string, e.g. \"MONKHORST-PACK 3 3 3\".\n        neb_replica_files (Optional[list]): Ordered list of structure files for NEB replicas.\n        overrides (Optional[Dict[str, Any]]): Typed overrides dict (Cp2kOverrides-compatible) for run_type, SCF, MD,\n            GEO_OPT, CELL_OPT, NEB, VIBE, bands. Example:\n            {\"run_type\": \"MD\", \"motion\": {\"md\": {\"ensemble\": \"NVT\", \"temperature\": 300,\n            \"timestep\": 0.5, \"steps\": 10000}}}.\n        output_dir (Optional[str]): Output directory (defaults to input_file's parent).\n\n    Returns:\n        Dict[str, Any]: prepared_files (list[Path]), asset_manifest, runtime_hints, warnings.\n    ",
+    "input_schema": {
+      "properties": {
+        "input_file": {
+          "title": "Input File",
+          "type": "string"
+        },
+        "basis_set_files": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Basis Set Files"
+        },
+        "potential_files": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Potential Files"
+        },
+        "structure_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Structure File"
+        },
+        "wfn_restart_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Wfn Restart File"
+        },
+        "md_restart_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Md Restart File"
+        },
+        "dftd3_data_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dftd3 Data Dir"
+        },
+        "include_files": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Include Files"
+        },
+        "basis_set_map": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Basis Set Map"
+        },
+        "potential_map": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Potential Map"
+        },
+        "admm_basis_map": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Admm Basis Map"
+        },
+        "cutoff": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cutoff"
+        },
+        "rel_cutoff": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rel Cutoff"
+        },
+        "kpoints": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kpoints"
+        },
+        "neb_replica_files": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Neb Replica Files"
+        },
+        "overrides": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Overrides"
+        },
+        "output_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Dir"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "required": [
+        "input_file"
+      ],
+      "title": "prepare_cp2k_jobArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "prepare_qe_job",
+    "description": "Prepare a Quantum ESPRESSO input file.\n\n    At least one of input_file or structure_file must be provided.\n    pw.x is handled via pymatgen PWInput (structured). ph.x, neb.x, pp.x, bands.x,\n    dos.x are handled via targeted regex patching.\n\n    Args:\n        input_file (Optional[Path]): Path to the QE input file (template). Omit if generating from structure only.\n        structure_file (Optional[Path]): Structure file to inject or use to generate full input.\n        program (str): QE executable: \"pw.x\" | \"ph.x\" | \"neb.x\" | \"pp.x\" | \"bands.x\" | \"dos.x\".\n        outdir (Optional[str]): &CONTROL/outdir. Must match the SCF run's outdir for post-processing programs.\n        pseudo_dir (Optional[str]): &CONTROL/pseudo_dir (pw.x only).\n        calculation (Optional[str]): &CONTROL/calculation: \"scf\"|\"nscf\"|\"bands\"|\"relax\"|\"vc-relax\"|\"md\".\n        pseudo_map (Optional[Dict[str, str]]): Per-species pseudopotential filenames.\n        kpoints_mode (Optional[str]): K_POINTS mode: \"automatic\" | \"crystal_b\" | \"gamma\".\n        kpoints_grid (Optional[list]): K-point grid [nx, ny, nz] for automatic mode.\n        kpoints_path (Optional[list]): Band-structure k-path for crystal_b mode.\n        system_overrides (Optional[Dict[str, Any]]): Flat dict of &SYSTEM overrides, e.g. {\"ecutwfc\": 60}.\n        neb_replica_files (Optional[list]): Ordered list of structure files for NEB replicas.\n        output_dir (Optional[str]): Output directory (defaults to input_file's or structure_file's parent).\n        pseudo_family (str): Bundled pseudopotential family to use for auto-resolution. Currently supported: 'sssp_efficiency'.\n        auto_pseudo (bool): Enable automatic pseudopotential resolution from bundled library. When true, if no pseudo_dir is provided or the existing pseudo_dir is invalid, pseudopotentials will be auto-resolved from the bundled library. Set to false to disable this behavior.\n\n    Returns:\n        Dict[str, Any]: prepared_files (list[Path]), asset_manifest, runtime_hints, warnings.\n    ",
+    "input_schema": {
+      "properties": {
+        "input_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input File"
+        },
+        "structure_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Structure File"
+        },
+        "program": {
+          "default": "pw.x",
+          "title": "Program",
+          "type": "string"
+        },
+        "outdir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Outdir"
+        },
+        "pseudo_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pseudo Dir"
+        },
+        "calculation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Calculation"
+        },
+        "pseudo_map": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pseudo Map"
+        },
+        "kpoints_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kpoints Mode"
+        },
+        "kpoints_grid": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kpoints Grid"
+        },
+        "kpoints_path": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kpoints Path"
+        },
+        "system_overrides": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "System Overrides"
+        },
+        "neb_replica_files": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Neb Replica Files"
+        },
+        "output_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Dir"
+        },
+        "pseudo_family": {
+          "default": "sssp_efficiency",
+          "title": "Pseudo Family",
+          "type": "string"
+        },
+        "auto_pseudo": {
+          "default": true,
+          "title": "Auto Pseudo",
+          "type": "boolean"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "title": "prepare_qe_jobArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "prepare_lammps_job",
+    "description": "Prepare a LAMMPS input file: patch structure path and force field paths.\n\n    At least one of input_file or structure_file must be provided.\n    Uses pymatgen LammpsInputFile for structured patching (not regex).\n    Supports DeePMD, ReaxFF, and classical (EAM/Tersoff/SW/AIREBO) force fields.\n\n    Args:\n        input_file (Optional[Path]): Path to the LAMMPS input script. Omit to generate only structure data file.\n        structure_file (Optional[Path]): Structure file to use as read_data target or to generate .data file.\n        potential (Optional[Dict[str, Any]]): Force field specification dict. Exactly one of:\n            {\"deepmd\": {\"model_files\": [\"model.pb\"], \"type_map\": [\"Fe\", \"O\"]}}\n            {\"reaxff\": {\"ffield_file\": \"ffield.reax\", \"element_order\": [\"Fe\", \"O\"],\n                        \"control_file\": \"lmp_control\"}}\n            {\"classical\": {\"potential_file\": \"Fe.eam.alloy\", \"element_order\": [\"Fe\"]}}\n            Pass null/None for embedded force fields (OPLS/CHARMM/AMBER/LJ).\n        output_dir (Optional[str]): Output directory (defaults to input_file's or structure_file's parent).\n\n    Returns:\n        Dict[str, Any]: prepared_files (list[Path]), asset_manifest, runtime_hints, warnings.\n    ",
+    "input_schema": {
+      "properties": {
+        "input_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input File"
+        },
+        "structure_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Structure File"
+        },
+        "potential": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Potential"
+        },
+        "output_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Dir"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "title": "prepare_lammps_jobArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "prepare_orca_job",
+    "description": "Prepare an ORCA input file (three modes: template-only, structure-only, template+structure).\n\n    Three input modes (exactly one valid combination must hold):\n\n    1. Template-only: provide only input_file. The template is validated (must contain at least one\n       \"!\" line and balanced \"%...end\" blocks) and written as-is. Use when the template already\n       contains coordinates or you will fill them manually.\n\n    2. Structure-only: provide structure_file and orcasimpleinput (no input_file). A full .inp is\n       generated from the method line and structure coordinates. Use when you do not have a\n       template and want to generate the input from scratch.\n\n    3. Template+structure: provide input_file and structure_file. The template must contain either\n       __ATOMIC_COORDINATES_BLOCK__ or a * xyz charge mult ... * block. Coordinates from the\n       structure file are injected or replace that block. charge and multiplicity are used for\n       the coordinate block.\n\n    Template validation raises explicit errors (no silent fallbacks): missing \"!\" line, unclosed\n    \"%\" block, or (when structure is to be injected) missing coordinate slot — each error\n    message states the exact failure (e.g. line number, block name, or what is missing).\n\n    Args:\n        input_file (Optional[Path]): Path to ORCA input template (.inp). Required for\n            template-only and template+structure. File must exist; content must pass\n            validate_orca_template. If structure_file is also given, template must contain\n            __ATOMIC_COORDINATES_BLOCK__ or a * xyz ... * block.\n        structure_file (Optional[Path]): Path to structure file (CIF/POSCAR/XYZ/mol2). Required\n            for structure-only; optional with input_file to inject/replace coordinates.\n        orcasimpleinput (Optional[str]): Content of the \"!\" simple keyword line — everything\n            after the \"!\" character. Required for structure-only mode; ignored when input_file\n            is provided (the template owns the method line). Supported content includes any\n            valid ORCA simple keyword combination, for example:\n              - DFT:                 \"B3LYP def2-TZVP\"\n              - Hybrid DFT + D3:     \"B3LYP-D3BJ def2-TZVP TightSCF\"\n              - HF:                  \"HF def2-SVP\"\n              - MP2:                 \"MP2 def2-TZVP\"\n              - CCSD(T):             \"CCSD(T) def2-TZVPP\"\n              - TDDFT:               \"TD-B3LYP def2-TZVP\"\n              - Geometry opt:        \"B3LYP def2-TZVP Opt\"\n              - Frequency:           \"B3LYP def2-TZVP Freq\"\n              - NMR:                 \"B3LYP def2-TZVP NMR\"\n              - Solvation (CPCM):    \"B3LYP def2-TZVP CPCM(water)\"\n              Multiple keywords are space-separated on a single string; do not include the\n              leading \"!\".\n        orcablocks (Optional[str]): Raw text of one or more \"%...end\" input blocks.\n            Optional in all modes; used when generating from scratch (structure-only), appended\n            after the \"!\" line. Supported blocks include:\n              - Parallelism:         \"%pal\n  nprocs 8\nend\"\n              - Memory per core:     \"%maxcore 4000\"  (no 'end' required for single-variable blocks)\n              - SCF control:         \"%scf\n  convergence tight\n  maxiter 200\nend\"\n              - DFT grid:            \"%method\n  grid 5\n  finalgrid 6\nend\"\n              - Geometry opt:        \"%geom\n  maxiter 100\nend\"\n              - TDDFT:               \"%tddft\n  nroots 10\n  iroot 1\nend\"\n              - CASSCF:              \"%casscf\n  nel 6\n  norb 6\nend\"\n              - Basis per atom:      \"%basis\n  NewGTO C \"def2-TZVP\"\nend\"\n              - Output:              \"%output\n  print[p_mulliken] 1\nend\"\n              - Electric properties: \"%elprop\n  Dipole true\n  Quadrupole true\n  Polar true\n  Hyperpol true\nend\"\n                (keys are space-separated from values, no '=' needed; multiple properties per block)\n              Multiple blocks should be newline-separated within the single string.\n        charge (int): Total charge. Default 0. Used when building coordinates in structure-only\n            or template+structure mode.\n        multiplicity (int): Spin multiplicity (2S+1). Must be >= 1. Default 1.\n        output_dir (Optional[str]): Directory to write the prepared .inp. Defaults to\n            input_file's parent (template modes) or structure_file's parent (structure-only).\n\n    Returns:\n        Dict[str, Any]: prepared_files (list[Path]), asset_manifest (input_mode, structure_file,\n            charge, multiplicity, orcasimpleinput when applicable), runtime_hints, warnings.\n\n    Raises:\n        ValueError: Invalid parameter combination (e.g. no input_file and no structure_file+orcasimpleinput),\n            or multiplicity < 1. From template validation: missing \"!\" line, unclosed \"%\" block,\n            or (when structure_file given) no __ATOMIC_COORDINATES_BLOCK__ or * xyz ... * in template.\n            Message states the exact failure (e.g. \"Unclosed % block at line N: block name '...'\").\n        FileNotFoundError: input_file or structure_file path does not exist.\n\n    Example (template-only):\n        prepare_orca_job(input_file=Path(\"job.inp\"))\n    Example (structure-only):\n        prepare_orca_job(structure_file=Path(\"mol.xyz\"), orcasimpleinput=\"B3LYP def2-TZVP\")\n    Example (template+structure):\n        prepare_orca_job(input_file=Path(\"t.inp\"), structure_file=Path(\"mol.xyz\"), charge=0, multiplicity=1)\n    ",
+    "input_schema": {
+      "properties": {
+        "input_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input File"
+        },
+        "structure_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Structure File"
+        },
+        "orcasimpleinput": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orcasimpleinput"
+        },
+        "orcablocks": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Orcablocks"
+        },
+        "charge": {
+          "default": 0,
+          "title": "Charge",
+          "type": "integer"
+        },
+        "multiplicity": {
+          "default": 1,
+          "title": "Multiplicity",
+          "type": "integer"
+        },
+        "output_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Dir"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "title": "prepare_orca_jobArguments",
+      "type": "object"
+    }
+  },
+  {
+    "name": "prepare_pyatb_job",
+    "description": "Prepare a pyATB job: validate directory structure and bind ABACUS result directory.\n\n    Args:\n        work_dir (Path): Directory containing the pyATB Input file.\n        abacus_result_dir (Optional[Path]): Path to the ABACUS output directory containing HR.csr, SR.csr, etc.\n\n    Returns:\n        Dict[str, Any]: prepared_files (list[Path]), asset_manifest, runtime_hints, warnings.\n    ",
+    "input_schema": {
+      "properties": {
+        "work_dir": {
+          "title": "Work Dir",
+          "type": "string"
+        },
+        "abacus_result_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Abacus Result Dir"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "required": [
+        "work_dir"
+      ],
+      "title": "prepare_pyatb_jobArguments",
+      "type": "object"
+    }
+  }
+]
