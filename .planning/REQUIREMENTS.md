@@ -9,10 +9,10 @@
 
 ### Protocol 层
 
-- [ ] **PROT-01**: LLMProvider Protocol 的 chat() 和 chat_stream() 方法改为 async def，移除 chat_with_retry()（重试逻辑已在 Kernel._call_llm() 中）
-- [ ] **PROT-02**: Tool Protocol 的 run() 方法改为 async def，BuiltinTool ABC 的 execute() 改为 async def
-- [ ] **PROT-03**: Hook Protocol 全部 7 个方法改为 async def（on_agent_start, on_turn_start, on_tool_start, on_tool_end, on_turn_end, on_agent_end, on_guard_blocked）
-- [ ] **PROT-04**: Guard Protocol 的 evaluate() 保持同步（明确决策：纯计算无 I/O，async 增加开销无收益）
+- [x] **PROT-01**: LLMProvider Protocol 的 chat() 和 chat_stream() 方法改为 async def，移除 chat_with_retry()（重试逻辑已在 Kernel._call_llm() 中）
+- [x] **PROT-02**: Tool Protocol 的 run() 方法改为 async def，BuiltinTool ABC 的 execute() 改为 async def
+- [x] **PROT-03**: Hook Protocol 全部 7 个方法改为 async def（on_agent_start, on_turn_start, on_tool_start, on_tool_end, on_turn_end, on_agent_end, on_guard_blocked）
+- [x] **PROT-04**: Guard Protocol 的 evaluate() 保持同步（明确决策：纯计算无 I/O，async 增加开销无收益）
 - [x] **PROT-05**: 为 async Protocol 添加 runtime validation helper，解决 runtime_checkable 不区分 sync/async 签名的问题
 
 ### LLM Provider
@@ -104,10 +104,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROT-01 | Phase 12 | Pending |
-| PROT-02 | Phase 12 | Pending |
-| PROT-03 | Phase 12 | Pending |
-| PROT-04 | Phase 12 | Pending |
+| PROT-01 | Phase 12 | Complete |
+| PROT-02 | Phase 12 | Complete |
+| PROT-03 | Phase 12 | Complete |
+| PROT-04 | Phase 12 | Complete |
 | PROT-05 | Phase 12 | Complete |
 | LLMP-01 | Phase 13 | Pending |
 | LLMP-02 | Phase 13 | Pending |
