@@ -1,0 +1,88 @@
+# manifest.yaml — MATTER v5 Question Bank Registry
+# Lists all MCP tools referenced by any question, plus bank file index.
+version: "v5"
+
+tools:
+  # --- Structure database (MCP mat_struct_db) ---
+  mat_struct_db_fetch_structures_from_db:
+    server: "mat_struct_db"
+    category: "structure_retrieval"
+
+  # --- Structure construction (MCP mat_sg) ---
+  mat_sg_generate_ordered_replicas:
+    server: "mat_sg"
+    category: "structure_construction"
+  mat_sg_build_bulk_structure_by_template:
+    server: "mat_sg"
+    category: "structure_construction"
+  mat_sg_build_bulk_structure_by_wyckoff:
+    server: "mat_sg"
+    category: "structure_construction"
+  mat_sg_build_surface_slab:
+    server: "mat_sg"
+    category: "structure_construction"
+  mat_sg_build_surface_interface:
+    server: "mat_sg"
+    category: "structure_construction"
+  mat_sg_make_defect_structure:
+    server: "mat_sg"
+    category: "structure_construction"
+  mat_sg_make_amorphous_structure:
+    server: "mat_sg"
+    category: "structure_construction"
+
+  # --- DPA potential optimizer / MD (MCP mat_dpa) ---
+  mat_dpa_submit_optimize_structure:
+    server: "mat_dpa"
+    category: "calculation_execution"
+  mat_dpa_submit_md:
+    server: "mat_dpa"
+    category: "calculation_execution"
+
+  # --- Bash execution (bohrium-job skill, scripts) ---
+  execute_bash:
+    server: "builtin"
+    category: "script_execution"
+
+banks:
+  - path: "batch_processing/bp_struct.yaml"
+    capability: "batch_processing"
+    questions: 3
+
+  - path: "data_diagnosis/dd_general.yaml"
+    capability: "data_diagnosis"
+    questions: 5
+
+  - path: "data_fitting/df_mech.yaml"
+    capability: "property_prediction"
+    questions: 2
+
+  - path: "data_fitting/df_elec.yaml"
+    capability: "property_prediction"
+    questions: 1
+
+  - path: "structure_construction/sc_struct.yaml"
+    capability: "structure_construction"
+    questions: 4
+
+  - path: "workflow_orchestration/wo_mech.yaml"
+    capability: "workflow_orchestration"
+    questions: 2
+
+  - path: "workflow_orchestration/wo_struct.yaml"
+    capability: "workflow_orchestration"
+    questions: 2
+
+  - path: "workflow_orchestration/wo_elec.yaml"
+    capability: "workflow_orchestration"
+    questions: 2
+
+  - path: "workflow_orchestration/wo_kinetic.yaml"
+    capability: "workflow_orchestration"
+    questions: 1
+
+  - path: "safety_refusal/sr_general.yaml"
+    capability: "safety_refusal"
+    questions: 4
+
+# Total: 26 questions across 10 bank files

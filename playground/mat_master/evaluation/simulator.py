@@ -1,15 +1,15 @@
-"""Human simulator for MATTER evaluation.
+"""Human simulator for MATTER v5 evaluation.
 
 ``HumanSimulator`` accepts any *source* (``QuestionItem``, ``TaskSpec``,
 paper ``Path``, or free-text ``str``) and returns a unified
 ``SimulatedTask`` containing the prompt, expected values, and data-file
 references the runner needs.
 
-Prompt verbosity is controlled by the ``difficulty`` setting:
-
-- **1 (minimal)**: bare task, mat_master decides everything.
-- **2 (guided)**: method framework but no specific parameters.
-- **3 (detailed)**: explicit hints (structure source, scan range, etc.).
+v5 changes (vs v4):
+- spec_to_question() uses capability/domain instead of level/rubric_id
+- ScoringCheckItem no longer has weight field; uses axis instead of dimension
+- TouchpointBands and rubric_id references removed from spec_to_question()
+- Prompt verbosity controlled by difficulty setting (unchanged)
 """
 
 import json
@@ -28,7 +28,6 @@ from .schemas import (
     ScoringCheckItem,
     SimulatedTask,
     TaskSpec,
-    TouchpointBands,
 )
 
 # ---------------------------------------------------------------------------
@@ -197,13 +196,6 @@ Do not add any extra text.
 
 
 # ---------------------------------------------------------------------------
-# Rubric used when converting TaskSpec -> QuestionItem
-# ---------------------------------------------------------------------------
-
-_LIT_RUBRIC_ID = 'R_LIT_001'
-
-
-# ---------------------------------------------------------------------------
 # HumanSimulator
 # ---------------------------------------------------------------------------
 
@@ -257,12 +249,12 @@ class HumanSimulator:
         Parameters
         ----------
         source:
-            - ``QuestionItem``  -- existing evaluation question (backward compat).
+            - ``QuestionItem``  -- existing evaluation question.
             - ``TaskSpec``      -- lightweight literature task specification.
-            - ``Path``          -- paper PDF; planner pre-check will parse it.
+            - ``Path``          -- paper PDF; planner will parse it.
             - ``str``           -- free-text prompt passthrough.
         hint:
-            Optional focus hint for paper-based sources (e.g. ``"Si EOS"``).
+            Optional focus hint for paper-based sources.
         """
         if isinstance(source, QuestionItem):
             return self._from_question(source)
@@ -277,7 +269,7 @@ class HumanSimulator:
         return self.formulate(question).prompt
 
     # ------------------------------------------------------------------
-    # Backward-compat alias
+    # QuestionItem → SimulatedTask
     # ------------------------------------------------------------------
 
     def _from_question(self, q: QuestionItem) -> SimulatedTask:
@@ -302,7 +294,7 @@ class HumanSimulator:
         )
 
     # ------------------------------------------------------------------
-    # TaskSpec -> SimulatedTask
+    # TaskSpec → SimulatedTask
     # ------------------------------------------------------------------
 
     def _from_spec(self, spec: TaskSpec) -> SimulatedTask:
@@ -347,7 +339,7 @@ class HumanSimulator:
         return files
 
     # ------------------------------------------------------------------
-    # Paper PDF -> SimulatedTask (planner reads the paper autonomously)
+    # Paper PDF → SimulatedTask
     # ------------------------------------------------------------------
 
     def _from_paper(self, pdf_path: Path, hint: str) -> SimulatedTask:
@@ -368,7 +360,7 @@ class HumanSimulator:
         return SimulatedTask(prompt=text, expected=[])
 
     # ------------------------------------------------------------------
-    # LLM-based prompt rewriting (inherited from SingleTurnSimulator)
+    # LLM-based prompt rewriting
     # ------------------------------------------------------------------
 
     def _rewrite_prompt(self, question: QuestionItem) -> str:
@@ -392,16 +384,21 @@ class HumanSimulator:
             payload = _parse_json_payload(reply.content or '')
             prompt = str(payload.get('prompt', '')).strip()
             return prompt or question.human_prompt_seed
-        except Exception:
+        except Exception:  # noqa: BLE001
             return question.human_prompt_seed
 
     # ------------------------------------------------------------------
-    # TaskSpec -> QuestionItem conversion (for MATTER pipeline compat)
+    # TaskSpec → QuestionItem (v5 format)
     # ------------------------------------------------------------------
 
     def spec_to_question(self, spec: TaskSpec) -> QuestionItem:
-        """Build a full ``QuestionItem`` from a ``TaskSpec`` so it can be
-        fed directly into the existing MATTER runner/evaluator pipeline.
+        """Build a v5 ``QuestionItem`` from a ``TaskSpec``.
+
+        v5 changes vs v4:
+        - Uses capability='workflow_orchestration', domain='general'
+          instead of level='L3', rubric_id
+        - ScoringCheckItem uses axis='correctness' (no weight field)
+        - No TouchpointBands
         """
         prompt = self._generate_prompt(spec)
         data_files = self._discover_data_files(spec)
@@ -413,12 +410,11 @@ class HumanSimulator:
             for e in spec.expected
         ]
 
-        num = max(len(spec.expected), 1)
         checklist: list[ScoringCheckItem] = [
             ScoringCheckItem(
                 id=e.key,
-                criterion=f"{e.key} is within tolerance.",
-                weight=round(1.0 / num, 3),
+                criterion=f"{e.key} is within tolerance of the reference value.",
+                axis='correctness',
                 verify='numerical_range',
             )
             for e in spec.expected
@@ -429,8 +425,8 @@ class HumanSimulator:
 
         return QuestionItem(
             id=f"LIT_{spec.id}",
-            level='L3',
-            rubric_id=_LIT_RUBRIC_ID,
+            capability='workflow_orchestration',
+            domain='general',
             intent=(
                 f"Reproduce {spec.calc_type} calculation for {spec.formula} "
                 f"from paper {spec.paper_id}."
@@ -441,15 +437,6 @@ class HumanSimulator:
             data_files=data_files,
             reference_answers=ref_answers,
             scoring_checklist=checklist,
-            touchpoints=TouchpointBands(
-                full=[f"All {spec.calc_type} target values within tolerance."],
-                partial=[
-                    f"{spec.calc_type.capitalize()} workflow completed but values outside tolerance."
-                ],
-                fail=[
-                    'Calculation failed or produced physically inconsistent results.'
-                ],
-            ),
         )
 
 
@@ -484,5 +471,5 @@ def _parse_json_payload(text: str) -> dict[str, Any]:
     start = stripped.find('{')
     end = stripped.rfind('}')
     if start >= 0 and end > start:
-        return json.loads(stripped[start : end + 1])
+        return json.loads(stripped[start: end + 1])
     raise ValueError('No JSON object found in simulator output')
