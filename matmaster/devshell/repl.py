@@ -186,8 +186,8 @@ def _show_tools(runner: DevRunner) -> None:
     runtime = exp.build_runtime(runner._pg_ctx)
     try:
         registry = runtime.spec.tool_registry
-        if registry and registry.tools:
-            for tool in registry.tools:
+        if registry and registry.all_tools:
+            for tool in registry.all_tools:
                 desc = getattr(tool, "description", "")
                 name = getattr(tool, "name", str(tool))
                 print(f"  - {name}: {desc}")

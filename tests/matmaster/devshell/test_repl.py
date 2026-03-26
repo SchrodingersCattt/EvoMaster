@@ -89,3 +89,29 @@ class TestCliParsing:
         assert args.config is None
         assert args.session is None
         assert args.verbose is False
+
+
+class TestShowTools:
+    def test_show_tools_uses_all_tools(self) -> None:
+        """Verify _show_tools accesses registry.all_tools, not registry.tools."""
+        from unittest.mock import MagicMock, patch
+        from matmaster.devshell.repl import _show_tools
+
+        mock_runner = MagicMock()
+        mock_tool = MagicMock()
+        mock_tool.name = "test_tool"
+        mock_tool.description = "A test tool"
+
+        mock_registry = MagicMock()
+        mock_registry.all_tools = [mock_tool]
+        # Ensure .tools raises AttributeError (like real ToolRegistry)
+        del mock_registry.tools
+
+        mock_runtime = MagicMock()
+        mock_runtime.spec.tool_registry = mock_registry
+
+        with patch("matmaster.core.exp.Exp") as MockExp:
+            MockExp.return_value.build_runtime.return_value = mock_runtime
+            _show_tools(mock_runner)  # Should not raise
+
+        mock_runtime.cleanup.assert_called_once()
