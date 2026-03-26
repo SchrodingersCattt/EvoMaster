@@ -31,11 +31,6 @@ class SimpleProvider:
 
         return LLMResponse(content="unused", finish_reason="stop")
 
-    def chat_with_retry(
-        self, messages, tools=None, *, max_retries=3, retry_delay=1.0
-    ):
-        return self.chat(messages, tools)
-
     def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         yield StreamChunk(
             content=f"Reply to msg #{len(messages)}", finish_reason="stop"
@@ -52,11 +47,6 @@ class ToolCallingProvider:
         from matmaster.types.messages import LLMResponse
 
         return LLMResponse(content="unused", finish_reason="stop")
-
-    def chat_with_retry(
-        self, messages, tools=None, *, max_retries=3, retry_delay=1.0
-    ):
-        return self.chat(messages, tools)
 
     def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self._call_count += 1

@@ -13,7 +13,7 @@
 - [ ] **PROT-02**: Tool Protocol 的 run() 方法改为 async def，BuiltinTool ABC 的 execute() 改为 async def
 - [ ] **PROT-03**: Hook Protocol 全部 7 个方法改为 async def（on_agent_start, on_turn_start, on_tool_start, on_tool_end, on_turn_end, on_agent_end, on_guard_blocked）
 - [ ] **PROT-04**: Guard Protocol 的 evaluate() 保持同步（明确决策：纯计算无 I/O，async 增加开销无收益）
-- [ ] **PROT-05**: 为 async Protocol 添加 runtime validation helper，解决 runtime_checkable 不区分 sync/async 签名的问题
+- [x] **PROT-05**: 为 async Protocol 添加 runtime validation helper，解决 runtime_checkable 不区分 sync/async 签名的问题
 
 ### LLM Provider
 
@@ -65,7 +65,7 @@
 
 ### 测试基础设施
 
-- [ ] **TEST-01**: 配置 pytest-asyncio（asyncio_mode="auto"），建立 async 测试基础设施
+- [x] **TEST-01**: 配置 pytest-asyncio（asyncio_mode="auto"），建立 async 测试基础设施
 - [ ] **TEST-02**: 现有测试随实现阶段同步迁移为 async（不设独立测试迁移阶段）
 - [ ] **TEST-03**: 迁移后全部测试通过，无回归
 
@@ -108,7 +108,7 @@
 | PROT-02 | Phase 12 | Pending |
 | PROT-03 | Phase 12 | Pending |
 | PROT-04 | Phase 12 | Pending |
-| PROT-05 | Phase 12 | Pending |
+| PROT-05 | Phase 12 | Complete |
 | LLMP-01 | Phase 13 | Pending |
 | LLMP-02 | Phase 13 | Pending |
 | LLMP-03 | Phase 13 | Pending |
@@ -136,7 +136,7 @@
 | EXPL-04 | Phase 18 | Pending |
 | BRDG-01 | Phase 19 | Pending |
 | BRDG-02 | Phase 19 | Pending |
-| TEST-01 | Phase 12 | Pending |
+| TEST-01 | Phase 12 | Complete |
 | TEST-02 | Phase 17 | Pending |
 | TEST-03 | Phase 17 | Pending |
 

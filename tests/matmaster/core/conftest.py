@@ -35,8 +35,10 @@ class MockLLMProvider:
     """Mock LLM provider satisfying the LLMProvider Protocol.
 
     chat() returns LLMResponse with no tool_calls.
-    chat_with_retry() delegates to chat() (no real retry in mocks).
     chat_stream() yields a single StreamChunk with content="hello".
+
+    NOTE: Methods stay sync until Phase 17 (Kernel async migration).
+    Async mock: tests/conftest.py MockAsyncLLMProvider.
     """
 
     def chat(
@@ -45,16 +47,6 @@ class MockLLMProvider:
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         return LLMResponse(content="mock response", finish_reason="stop")
-
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-    ) -> LLMResponse:
-        return self.chat(messages, tools)
 
     def chat_stream(
         self,

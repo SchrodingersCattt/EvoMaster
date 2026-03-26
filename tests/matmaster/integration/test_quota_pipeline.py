@@ -26,9 +26,6 @@ class _SuccessLLM:
     def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='success', finish_reason='stop')
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
     def chat_stream(
         self, messages, tools=None, *, timeout=None
     ) -> Iterator[StreamChunk]:
@@ -41,9 +38,6 @@ class _InvalidFinishLLM:
     def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='partial', finish_reason='length')
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
     def chat_stream(
         self, messages, tools=None, *, timeout=None
     ) -> Iterator[StreamChunk]:
@@ -55,9 +49,6 @@ class _ErrorLLM:
     """Mock LLM: raises exception."""
 
     def chat(self, messages, tools=None) -> LLMResponse:
-        raise RuntimeError('LLM error')
-
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         raise RuntimeError('LLM error')
 
     def chat_stream(

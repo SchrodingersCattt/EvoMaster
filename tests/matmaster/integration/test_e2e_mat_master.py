@@ -49,16 +49,6 @@ class MockLLMProvider:
     ) -> LLMResponse:
         return LLMResponse(content=self._content, finish_reason='stop')
 
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-    ) -> LLMResponse:
-        return self.chat(messages, tools)
-
     def chat_stream(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, timeout: float | None = None
     ) -> Iterator[StreamChunk]:
@@ -82,9 +72,6 @@ class MockLLMProviderWithToolCall:
 
     def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='done', finish_reason='stop')
-
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
 
     def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self._call_count += 1
@@ -114,9 +101,6 @@ class MockLLMProviderCapturingMessages:
 
     def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='ok', finish_reason='stop')
-
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
 
     def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self.captured_messages.append(list(messages))

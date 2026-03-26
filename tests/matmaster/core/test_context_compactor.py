@@ -133,9 +133,6 @@ class MockSummaryProvider:
         self.calls.append(messages)
         return LLMResponse(content=self._summary, finish_reason="stop")
 
-    def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
-        return self.chat(messages, tools)
-
     def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(content=self._summary, finish_reason="stop")
 
@@ -145,9 +142,6 @@ class FailingSummaryProvider:
 
     def chat(self, messages, tools=None):
         raise RuntimeError("LLM unavailable")
-
-    def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
-        return self.chat(messages, tools)
 
     def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(content="", finish_reason="stop")
@@ -350,16 +344,6 @@ class TestEndToEndCompaction:
                     content="Summary of conversation.",
                     finish_reason="stop",
                 )
-
-            def chat_with_retry(
-                self,
-                messages,
-                tools=None,
-                *,
-                max_retries=3,
-                retry_delay=1.0,
-            ):
-                return self.chat(messages, tools)
 
             def chat_stream(self, messages, tools=None, *, timeout=None):
                 nonlocal call_count
