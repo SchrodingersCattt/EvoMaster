@@ -24,11 +24,11 @@ from src.services.agent_run_service import (
     ReplyQueueLike,
     get_agent_run_service,
 )
+from src.services.chat_history import ChatHistoryConverter
 from src.services.deploy_state_service import (
     DeployStateService,
     get_deploy_state_service,
 )
-from src.services.chat_history import ChatHistoryConverter
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.user_service import UserService

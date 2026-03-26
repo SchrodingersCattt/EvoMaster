@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Callable, NamedTuple
 
 from evomaster.agent.session.ssh import SSHSession, SSHSessionConfig
-
 from matmaster.integration.bohrium_setup import SkillSyncSpec
 from playground.mat_master.core.workspace_resolver import (
     get_remote_session_workspace_root,
@@ -159,13 +158,9 @@ def _sync_skills_to_ssh_session(
                 continue
             try:
                 rel = lp.resolve().relative_to(_PROJECT_ROOT.resolve())
-                remote_dest = (
-                    f"{spec.remote_project_root.rstrip('/')}/{rel.as_posix()}"
-                )
+                remote_dest = f"{spec.remote_project_root.rstrip('/')}/{rel.as_posix()}"
             except ValueError:
-                remote_dest = (
-                    f"{spec.remote_project_root.rstrip('/')}/{lp.name}"
-                )
+                remote_dest = f"{spec.remote_project_root.rstrip('/')}/{lp.name}"
             _upload_directory(env, str(lp), remote_dest, exclude)
             synced_any = True
         if spec.local_user_skills_root and spec.remote_user_skills_root:
@@ -292,7 +287,7 @@ def apply_run_credentials_to_session(session: Any, run_creds: dict[str, Any]) ->
 
 
 def _remote_session_workspace_root() -> str:
-    """Return Bohrium SSH session workspace root."""
+    """Return Bohrium SSH shared workspace root."""
     return str(
         get_remote_session_workspace_root(
             load_workspace_config_dict(_PROJECT_ROOT), project_root=_PROJECT_ROOT
@@ -593,8 +588,7 @@ def setup_bohrium_for_run(
                 'Bohrium 节点已就绪',
                 ip=node_ip,
             )
-            remote_workspace_root = remote_workspace_root.rstrip('/')
-            ssh_working_dir = f'{remote_workspace_root}/{session_id}'
+            ssh_working_dir = remote_workspace_root.rstrip('/') or '/'
             original_session = pg.session
             original_owns_session = pg._owns_session
             ssh_config = SSHSessionConfig(
@@ -690,7 +684,9 @@ def setup_bohrium_for_run(
             )
         except Exception:
             pass
-        return BohriumSetupResult(False, ((False, reason), elapsed_ms), None, None, None)
+        return BohriumSetupResult(
+            False, ((False, reason), elapsed_ms), None, None, None
+        )
 
 
 def cleanup_bohrium_after_run(
