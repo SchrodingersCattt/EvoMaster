@@ -130,4 +130,4 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11 -> 12
 | 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete    | 2026-03-25 |
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete    | 2026-03-25 |
-| 12. Protocol Async Signatures | v2.0 | 2/2 | Complete   | 2026-03-26 |
+| 12. Protocol Async Signatures | v2.0 | 2/2 | Complete    | 2026-03-26 |
