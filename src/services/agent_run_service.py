@@ -19,6 +19,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
+from matmaster.config.exp import ExpConfig
 from matmaster.core.bus import MessageBus
 from matmaster.core.playground import PlaygroundManager
 from matmaster.hooks import (
@@ -32,15 +33,12 @@ from matmaster.integration import (
     SSEHandler,
     WorkspaceHandler,
 )
-from matmaster.config.exp import ExpConfig
 from matmaster.integration.bohrium_setup import BohriumSetupService, SkillSyncSpec
-from matmaster.core.playground import Playground, PlaygroundManager
 from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.events import (
     BohriumNodeEvent,
     CancelledEvent,
     ErrorEvent,
-    ResponseEvent,
     StreamClosedEvent,
 )
 from src.dao.chat_events_table import get_chat_events_table
@@ -107,7 +105,7 @@ def _derive_skill_sync_spec(
     if isinstance(roots_raw, list):
         rel_list = [r.strip() for r in roots_raw if r and r.strip()]
     else:
-        s = (roots_raw or "").strip()
+        s = (roots_raw or '').strip()
         rel_list = [s] if s else []
     if not rel_list:
         return None
@@ -122,16 +120,16 @@ def _derive_skill_sync_spec(
 
     local_user: str | None = None
     remote_user: str | None = None
-    if hasattr(playground, "config"):
+    if hasattr(playground, 'config'):
         try:
             cfg = playground.config.model_dump()
         except Exception:
             cfg = {}
     else:
         cfg = {}
-    evo = (cfg.get("mat_master") or {}).get("skill_evolution") or {}
-    loc_raw = evo.get("local_user_skills_root")
-    rem_raw = evo.get("remote_user_skills_root")
+    evo = (cfg.get('mat_master') or {}).get('skill_evolution') or {}
+    loc_raw = evo.get('local_user_skills_root')
+    rem_raw = evo.get('remote_user_skills_root')
     if loc_raw and rem_raw:
         local_user = str(Path(str(loc_raw)).expanduser().resolve())
         remote_user = str(rem_raw).strip()
@@ -140,7 +138,7 @@ def _derive_skill_sync_spec(
         project_skill_roots=resolved_roots,
         local_user_skills_root=local_user,
         remote_user_skills_root=remote_user,
-        remote_project_root="/personal/workspace/.evomaster",
+        remote_project_root='/personal/workspace/.evomaster',
     )
 
 
@@ -176,22 +174,22 @@ class AgentRunService:
 
         from matmaster.config.loader import load_llm_config
 
-        cfg_dir = _project_root / "matmaster_config"
-        llm_config_path = cfg_dir / "llm_config.yaml"
+        cfg_dir = _project_root / 'matmaster_config'
+        llm_config_path = cfg_dir / 'llm_config.yaml'
         if not llm_config_path.exists():
-            logger.warning("LLM config not found: %s", llm_config_path)
+            logger.warning('LLM config not found: %s', llm_config_path)
             return
         try:
             llm_cfg = load_llm_config(llm_config_path)
         except Exception:
-            logger.exception("Failed to load LLM config: %s", llm_config_path)
+            logger.exception('Failed to load LLM config: %s', llm_config_path)
             return
-        config_path = cfg_dir / "config.yaml"
+        config_path = cfg_dir / 'config.yaml'
         if not config_path.exists():
             return
         with open(config_path) as f:
             main_cfg = yaml.safe_load(f)
-        general_llm = (main_cfg or {}).get("agents", {}).get("general", {}).get("llm")
+        general_llm = (main_cfg or {}).get('agents', {}).get('general', {}).get('llm')
         if general_llm and general_llm not in llm_cfg.profiles:
             logger.error(
                 "agents.general.llm='%s' not found in llm_config profiles: %s",
@@ -216,7 +214,7 @@ class AgentRunService:
         invocation_id: str | None = None,
         llm_override: str | None = None,
         model_override: str | None = None,
-    ) -> None:
+    ) -> tuple[bool | tuple[bool, str], int]:
         """Execute agent in background thread using new matmaster pipeline.
 
         Pipeline: Playground.prepare() -> get_chat_events_table() ->
@@ -224,7 +222,14 @@ class AgentRunService:
         Exp.assemble() -> ChatHistory -> Kernel.run() -> post-processing.
 
         Method signature unchanged per D-12: all 12 parameters preserved.
+        Returns ``(run_result, elapsed_ms)`` where ``run_result`` is ``True``
+        on success or ``(False, reason)`` on failure/cancel, so Worker can
+        derive session status and notifications consistently.
         """
+
+        def _elapsed_ms() -> int:
+            return int((time.monotonic() - run_started_at) * 1000)
+
         prompt_preview = (
             (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
         )
@@ -255,7 +260,16 @@ class AgentRunService:
                     'task_id': task_id,
                 }
             )
-            events_table = get_chat_events_table()
+            try:
+                events_table = get_chat_events_table()
+            except Exception:
+                # EventRouter is not started yet. Keep this failure silent for
+                # callers so we do not emit partial SSE/error lifecycle events.
+                logger.exception(
+                    'run_agent_sync pre-router setup failed: session_id=%s',
+                    session_id,
+                )
+                return None
 
             # -- Stage 2: EventRouter bootstrap --
             router = EventRouter(
@@ -279,7 +293,7 @@ class AgentRunService:
             )
             router.start()
 
-            exp_name = mode or "direct"
+            exp_name = mode or 'direct'
             from matmaster.config.loader import load_exp_config
 
             exp_config = load_exp_config(exp_name)
@@ -341,11 +355,11 @@ class AgentRunService:
                 # 必须返回 abort_result，供 Worker 识别失败并发「Worker 执行失败」飞书；裸 return None 会被误判为成功。
                 return bohrium_result.abort_result
             bohrium_meta = dict(bohrium_result._asdict())
-            bohrium_meta.pop("execution_session", None)
+            bohrium_meta.pop('execution_session', None)
             pg_ctx = pg_ctx.with_bohrium(bohrium_meta)
             if bohrium_result.execution_session is not None:
-                ew = bohrium_result.execution_workdir or ""
-                st = bohrium_result.session_type or "ssh"
+                ew = bohrium_result.execution_workdir or ''
+                st = bohrium_result.session_type or 'ssh'
                 pg_ctx = pg_ctx.with_execution(
                     session=bohrium_result.execution_session,
                     session_type=st,
@@ -414,6 +428,7 @@ class AgentRunService:
             # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
             if stop_event is not None and spec.tool_registry is not None:
                 from matmaster.tools.builtin.spawn_tool import SpawnTool
+
                 for tool in spec.tool_registry.all_tools:
                     if isinstance(tool, SpawnTool):
                         tool._stop_event = stop_event
@@ -452,6 +467,7 @@ class AgentRunService:
                         task_completed=False,
                     )
                 )
+                return ((False, 'cancelled'), _elapsed_ms())
             else:
                 bus.emit(run_result_event)
                 bus.emit(
@@ -473,6 +489,16 @@ class AgentRunService:
                             future.result(timeout=10)
                         else:
                             asyncio.run(use_quota(user_id))
+                    return (True, _elapsed_ms())
+                fail_reason = (
+                    run_result_event.reason or run_result_event.status or 'failed'
+                )
+                if (
+                    run_result_event.status == 'cancelled'
+                    or run_result_event.reason == 'cancelled'
+                ):
+                    fail_reason = 'cancelled'
+                return ((False, fail_reason), _elapsed_ms())
 
         except Exception as exc:
             logger.exception('run_agent_sync error: session_id=%s', session_id)
@@ -488,6 +514,7 @@ class AgentRunService:
                 )
             except Exception:
                 pass
+            return ((False, str(exc)), _elapsed_ms())
         finally:
             elapsed = time.monotonic() - run_started_at
             logger.info(
