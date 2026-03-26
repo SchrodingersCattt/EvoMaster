@@ -15,10 +15,7 @@ import asyncio
 import logging
 from typing import Any, Callable
 
-from matmaster.integration.event_payloads import (
-    _normalize_public_source,
-    _public_content_for_event,
-)
+from matmaster.integration.event_payloads import build_public_sse_payload_from_bus_dump
 from matmaster.types.events import BusEvent, ResponseEvent, ThoughtEvent
 
 logger = logging.getLogger(__name__)
@@ -58,17 +55,14 @@ class SSEHandler:
         if self._should_skip(event):
             return
 
-        payload = event.model_dump(mode="json")
-        content = _public_content_for_event(str(payload.get("type", "")), payload)
-        if content is not None:
-            payload["content"] = content
-        payload["source"] = _normalize_public_source(payload.get("source"))
-        payload["session_id"] = self._session_id
-        payload["task_id"] = self._task_id
-        if self._invocation_id is not None:
-            payload["invocation_id"] = self._invocation_id
-        payload["spawn_id"] = getattr(event, "spawn_id", None)
-
+        raw = event.model_dump(mode='json')
+        payload = build_public_sse_payload_from_bus_dump(
+            raw,
+            session_id=self._session_id,
+            task_id=self._task_id,
+            invocation_id=self._invocation_id,
+            spawn_id=getattr(event, 'spawn_id', None),
+        )
         self._send(payload)
 
     def _should_skip(self, event: BusEvent) -> bool:  # type: ignore[arg-type]
@@ -76,31 +70,31 @@ class SSEHandler:
 
         Migrated from _should_skip_push in agent_run_service.py.
         """
-        event_type = getattr(event, "type", "")
+        event_type = getattr(event, 'type', '')
 
         if (
             isinstance(event, (ThoughtEvent, ResponseEvent))
-            and event.stream_state == "complete"
+            and event.stream_state == 'complete'
         ):
             return True
 
         # Internal-only: never push assistant_state to frontend
-        if event_type == "assistant_state":
+        if event_type == 'assistant_state':
             return True
 
         # skill_hit is persist-only, not pushed to frontend
-        if event_type == "skill_hit":
+        if event_type == 'skill_hit':
             return True
 
         if isinstance(event, ThoughtEvent):
-            is_streaming = event.stream_state in ("start", "streaming", "end")
+            is_streaming = event.stream_state in ('start', 'streaming', 'end')
 
             # Planner streaming thoughts are internal JSON -- skip push
-            if event.source == "Planner" and is_streaming:
+            if event.source == 'Planner' and is_streaming:
                 return True
 
             # Direct mode: non-streaming complete thoughts are persist-only
-            if self._mode == "direct" and not is_streaming:
+            if self._mode == 'direct' and not is_streaming:
                 return True
 
         return False
@@ -115,9 +109,9 @@ class SSEHandler:
                 future.result(timeout=5)
             except Exception:
                 logger.warning(
-                    "SSE send_cb timeout or error session_id=%s type=%s",
+                    'SSE send_cb timeout or error session_id=%s type=%s',
                     self._session_id,
-                    payload.get("type"),
+                    payload.get('type'),
                     exc_info=True,
                 )
         else:
