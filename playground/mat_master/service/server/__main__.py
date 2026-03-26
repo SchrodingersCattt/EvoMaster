@@ -14,8 +14,10 @@ if str(_root) not in sys.path:
 import uvicorn
 
 if __name__ == '__main__':
-    force_reload = os.environ.get('RELOAD', '').lower() in ('1', 'true', 'yes')
-    use_reload = force_reload or (sys.platform != 'win32')
+    # `mat_master` writes histories and workspaces under the repo `runs/` tree.
+    # Enabling uvicorn reload by default causes the dev server to watch those
+    # runtime-generated files and can trigger self-reloads / apparent hangs.
+    use_reload = os.environ.get('RELOAD', '').lower() in ('1', 'true', 'yes')
     backend_port = int(os.environ.get('BACKEND_PORT', '50001'))
     uvicorn.run(
         'playground.mat_master.service.server.app:app',
