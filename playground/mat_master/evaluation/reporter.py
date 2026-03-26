@@ -1,10 +1,23 @@
-"""Report writers for MATTER evaluation."""
+"""Report writers for MATTER v5 evaluation.
+
+v5 changes (vs v4):
+- Markdown tables show pass/fail counts (N/M, %) instead of float scores
+- by_level tables replaced by by_capability and by_domain tables
+- Model comparison table uses pass rates instead of strict_final/analysis_final
+- Per-question table shows pass counts per axis
+- Tool contribution delta table added (when tool_contribution is populated)
+- Raw JSONL and JSON outputs unchanged in structure (schema fields changed)
+"""
 
 import json
 from pathlib import Path
-from typing import Any
 
-from .schemas import EvalRunRecord, EvaluationSummary
+from .schemas import AxisPassRates, EvalRunRecord, EvaluationSummary
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def write_reports(
@@ -14,10 +27,11 @@ def write_reports(
     summary: EvaluationSummary,
     prefix: str = '',
 ) -> dict[str, str]:
+    """Write all report files and return a dict of {label: path}."""
     output_dir.mkdir(parents=True, exist_ok=True)
     raw_runs_path = output_dir / f"{prefix}raw_runs.jsonl"
     by_question_path = output_dir / f"{prefix}scores_by_question.json"
-    by_level_path = output_dir / f"{prefix}scores_by_level.json"
+    by_capability_path = output_dir / f"{prefix}scores_by_capability.json"
     by_model_path = output_dir / f"{prefix}scores_by_model.json"
     final_report_path = output_dir / f"{prefix}final_report.md"
 
@@ -29,15 +43,32 @@ def write_reports(
             handle.write('\n')
 
     by_question_path.write_text(
-        json.dumps(summary.by_question, ensure_ascii=False, indent=2, default=str),
+        json.dumps(
+            {k: v.model_dump() for k, v in summary.by_question.items()},
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        ),
         encoding='utf-8',
     )
-    by_level_path.write_text(
+    by_capability_path.write_text(
         json.dumps(
             {
-                'by_level': summary.by_level,
-                'by_mode': summary.by_mode,
-                'overall': summary.overall,
+                'by_capability': {
+                    k: v.model_dump() for k, v in summary.by_capability.items()
+                },
+                'by_domain': {
+                    k: v.model_dump() for k, v in summary.by_domain.items()
+                },
+                'by_mode': {
+                    k: v.model_dump() for k, v in summary.by_mode.items()
+                },
+                'overall': {
+                    'total_runs': summary.total_runs,
+                    'total_criteria': summary.total_criteria,
+                    'total_passed': summary.total_passed,
+                    'pass_rate': summary.pass_rate,
+                },
                 'safety': summary.safety,
             },
             ensure_ascii=False,
@@ -47,7 +78,12 @@ def write_reports(
         encoding='utf-8',
     )
     by_model_path.write_text(
-        json.dumps(summary.by_model, ensure_ascii=False, indent=2, default=str),
+        json.dumps(
+            {k: v.model_dump() for k, v in summary.by_model.items()},
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        ),
         encoding='utf-8',
     )
     final_report_path.write_text(_render_markdown(summary), encoding='utf-8')
@@ -55,7 +91,7 @@ def write_reports(
     return {
         'raw_runs': str(raw_runs_path),
         'scores_by_question': str(by_question_path),
-        'scores_by_level': str(by_level_path),
+        'scores_by_capability': str(by_capability_path),
         'scores_by_model': str(by_model_path),
         'final_report': str(final_report_path),
     }
@@ -64,6 +100,7 @@ def write_reports(
 def append_raw_run(
     *, output_dir: Path, record: EvalRunRecord, filename: str = 'raw_runs.jsonl'
 ) -> Path:
+    """Append a single EvalRunRecord to the JSONL file."""
     output_dir.mkdir(parents=True, exist_ok=True)
     raw_runs_path = output_dir / filename
     with raw_runs_path.open('a', encoding='utf-8') as handle:
@@ -73,6 +110,7 @@ def append_raw_run(
 
 
 def load_records_from_jsonl(path: Path) -> list[EvalRunRecord]:
+    """Load EvalRunRecords from a JSONL file, skipping malformed lines."""
     records: list[EvalRunRecord] = []
     if not path.exists():
         raise FileNotFoundError(f"raw runs file not found: {path}")
@@ -84,8 +122,8 @@ def load_records_from_jsonl(path: Path) -> list[EvalRunRecord]:
             try:
                 payload = json.loads(text)
                 records.append(EvalRunRecord.model_validate(payload))
-            except Exception:
-                # Allow mid-run rating while the last line may be incomplete.
+            except Exception:  # noqa: BLE001
+                # Allow interim reads while the last line may be incomplete
                 continue
     return records
 
@@ -96,6 +134,7 @@ def generate_rating_from_raw_runs(
     output_dir: Path | None = None,
     prefix: str = 'interim_',
 ) -> dict[str, object]:
+    """Re-aggregate and re-render reports from an existing JSONL file."""
     from .aggregator import build_summary
 
     records = load_records_from_jsonl(raw_runs_path)
@@ -108,7 +147,7 @@ def generate_rating_from_raw_runs(
     )
     return {
         'total_runs': summary.total_runs,
-        'overall': summary.overall,
+        'pass_rate': summary.pass_rate,
         'report_paths': report_paths,
     }
 
@@ -117,111 +156,142 @@ def generate_rating_from_raw_runs(
 # Markdown rendering helpers
 # ---------------------------------------------------------------------------
 
-def _fmt(value: Any, precision: int = 4) -> str:
-    """Format a numeric value or return 'N/A' for None."""
-    if value is None:
-        return 'N/A'
-    try:
-        return f"{float(value):.{precision}f}"
-    except (TypeError, ValueError):
-        return str(value)
+
+def _fmt_pair(pair: tuple[int, int]) -> str:
+    """Format (passed, total) as 'N/M (P%)'."""
+    passed, total = pair
+    if total == 0:
+        return '—'
+    pct = 100.0 * passed / total
+    return f"{passed}/{total} ({pct:.1f}%)"
+
+
+def _axis_row(label: str, rates: AxisPassRates) -> str:
+    return (
+        f"| `{label}` "
+        f"| {_fmt_pair(rates.correctness)} "
+        f"| {_fmt_pair(rates.grounding)} "
+        f"| {_fmt_pair(rates.efficiency)} "
+        f"| {_fmt_pair(rates.overall)} |"
+    )
+
+
+_AXIS_TABLE_HEADER = (
+    '| Group | Correctness | Grounding | Efficiency | Overall |',
+    '|-------|-------------|-----------|------------|---------|',
+)
 
 
 def _render_markdown(summary: EvaluationSummary) -> str:
+    total_pct = (
+        f"{100 * summary.pass_rate:.1f}%"
+        if summary.total_criteria > 0
+        else 'N/A'
+    )
     lines: list[str] = [
-        '# MATTER Evaluation Report',
+        '# MATTER v5 Evaluation Report',
         '',
-        '## Overall',
+        f"## Overall: {summary.total_passed}/{summary.total_criteria} criteria passed ({total_pct})",
+        '',
         f"- Total runs: {summary.total_runs}",
-        f"- Mean band score: {_fmt(summary.overall.get('mean'))}",
-        f"- Std: {_fmt(summary.overall.get('std'))}",
-        f"- 95% CI half-width: {_fmt(summary.overall.get('ci95_half_width'))}",
-        f"- Safety veto rate: {_fmt(summary.overall.get('safety_veto_rate'))}",
+        f"- Total criteria evaluated: {summary.total_criteria}",
+        f"- Criteria passed: {summary.total_passed}",
+        f"- Pass rate: {total_pct}",
         '',
-        '### Three-Dimensional Scores (overall)',
-        '| Dimension | Mean | Std |',
-        '|-----------|------|-----|',
-        f"| accuracy  | {_fmt(summary.overall.get('accuracy_mean'))} | "
-        f"{_fmt(summary.overall.get('accuracy_std'))} |",
-        f"| grounding | {_fmt(summary.overall.get('grounding_mean'))} | "
-        f"{_fmt(summary.overall.get('grounding_std'))} |",
-        f"| efficiency | {_fmt(summary.overall.get('efficiency_mean'))} | "
-        f"{_fmt(summary.overall.get('efficiency_std'))} |",
-        f"| **strict_final** | {_fmt(summary.overall.get('strict_final_mean'))} | — |",
-        f"| **analysis_final** | {_fmt(summary.overall.get('analysis_final_mean'))} | — |",
-        '',
-        '## By Level',
-        '| Level | n | mean | accuracy | grounding | efficiency | strict_final | analysis_final |',
-        '|-------|---|------|----------|-----------|------------|--------------|----------------|',
     ]
 
-    for level, stats in sorted(summary.by_level.items()):
-        lines.append(
-            f"| `{level}` | {stats.get('n', 0)} "
-            f"| {_fmt(stats.get('mean'))} "
-            f"| {_fmt(stats.get('accuracy_mean'))} "
-            f"| {_fmt(stats.get('grounding_mean'))} "
-            f"| {_fmt(stats.get('efficiency_mean'))} "
-            f"| {_fmt(stats.get('strict_final_mean'))} "
-            f"| {_fmt(stats.get('analysis_final_mean'))} |"
-        )
+    # By capability
+    if summary.by_capability:
+        lines += [
+            '### By Capability',
+            _AXIS_TABLE_HEADER[0],
+            _AXIS_TABLE_HEADER[1],
+        ]
+        for cap in sorted(summary.by_capability):
+            lines.append(_axis_row(cap, summary.by_capability[cap]))
+        lines.append('')
 
-    lines.extend([
+    # By domain
+    if summary.by_domain:
+        lines += [
+            '### By Domain',
+            _AXIS_TABLE_HEADER[0],
+            _AXIS_TABLE_HEADER[1],
+        ]
+        for dom in sorted(summary.by_domain):
+            lines.append(_axis_row(dom, summary.by_domain[dom]))
+        lines.append('')
+
+    # By mode
+    if summary.by_mode:
+        lines += [
+            '### By Mode',
+            _AXIS_TABLE_HEADER[0],
+            _AXIS_TABLE_HEADER[1],
+        ]
+        for mode in sorted(summary.by_mode):
+            lines.append(_axis_row(mode, summary.by_mode[mode]))
+        lines.append('')
+
+    # Safety
+    lines += [
+        '## Safety',
+        f"- Triggered count: {summary.safety.get('triggered_count', 0)}",
+        f"- Triggered rate: {summary.safety.get('triggered_rate', 0.0):.3f}",
+        f"- Any triggered: {summary.safety.get('any_triggered', False)}",
         '',
-        '## By Mode',
-        '| Mode | n | mean | accuracy | grounding | efficiency | strict_final | analysis_final |',
-        '|------|---|------|----------|-----------|------------|--------------|----------------|',
-    ])
-    for mode, stats in sorted(summary.by_mode.items()):
-        lines.append(
-            f"| `{mode}` | {stats.get('n', 0)} "
-            f"| {_fmt(stats.get('mean'))} "
-            f"| {_fmt(stats.get('accuracy_mean'))} "
-            f"| {_fmt(stats.get('grounding_mean'))} "
-            f"| {_fmt(stats.get('efficiency_mean'))} "
-            f"| {_fmt(stats.get('strict_final_mean'))} "
-            f"| {_fmt(stats.get('analysis_final_mean'))} |"
-        )
+    ]
 
-    lines.extend(['', '## Safety'])
-    lines.append(f"- Triggered count: {summary.safety.get('triggered_count', 0)}")
-    lines.append(f"- Triggered rate: {_fmt(summary.safety.get('triggered_rate'))}")
-    lines.append(f"- Any triggered: {summary.safety.get('any_triggered', False)}")
-
-    # Model comparison table (v4)
+    # Model comparison
     if summary.by_model:
-        lines.extend([
-            '',
+        lines += [
             '## Model Comparison',
-            '| Model | n | band_score | strict_final | analysis_final | tokens/run (mean) | total_tokens |',
-            '|-------|---|-----------|--------------|----------------|-------------------|--------------|',
-        ])
-        for model_key, stats in sorted(summary.by_model.items()):
-            lines.append(
-                f"| `{model_key}` | {stats.get('n', 0)} "
-                f"| {_fmt(stats.get('mean'))} "
-                f"| {_fmt(stats.get('strict_final_mean'))} "
-                f"| {_fmt(stats.get('analysis_final_mean'))} "
-                f"| {_fmt(stats.get('total_tokens_mean'), precision=0)} "
-                f"| {stats.get('total_tokens_sum', 0)} |"
-            )
+            '| Model | Correctness | Grounding | Efficiency | Overall |',
+            '|-------|-------------|-----------|------------|---------|',
+        ]
+        for model_key in sorted(summary.by_model):
+            lines.append(_axis_row(model_key, summary.by_model[model_key]))
+        lines.append('')
 
-    lines.extend(['', '## Per Question (mode split)'])
-    lines.append(
-        '| Question:Mode | n | mean | accuracy | grounding | efficiency | strict_final | safety_veto |'
-    )
-    lines.append(
-        '|---------------|---|------|----------|-----------|------------|--------------|-------------|'
-    )
-    for key, row in sorted(summary.by_question.items()):
+    # Tool contribution delta
+    if summary.tool_contribution:
+        lines += [
+            '## Tool Contribution Delta',
+            '| Tool | Questions Requiring | Criteria Delta | Accept? |',
+            '|------|--------------------|--------------------|---------|',
+        ]
+        for tool_name in sorted(
+            summary.tool_contribution,
+            key=lambda t: -summary.tool_contribution[t].criteria_delta,
+        ):
+            tc = summary.tool_contribution[tool_name]
+            accept = '✓ YES' if tc.accepted else 'NO'
+            lines.append(
+                f"| `{tool_name}` "
+                f"| {tc.questions_requiring} "
+                f"| +{tc.criteria_delta} "
+                f"| {accept} |"
+            )
+        lines.append('')
+
+    # Per question
+    lines += [
+        '## Per Question (mode split)',
+        '| Question:Mode | Capability | Domain | Correctness | Grounding | Efficiency | Overall | Safety Veto |',
+        '|---------------|------------|--------|-------------|-----------|------------|---------|-------------|',
+    ]
+    for key in sorted(summary.by_question):
+        row = summary.by_question[key]
         lines.append(
-            f"| `{key}` | {row.get('n', 0)} "
-            f"| {_fmt(row.get('mean'))} "
-            f"| {_fmt(row.get('accuracy_mean'))} "
-            f"| {_fmt(row.get('grounding_mean'))} "
-            f"| {_fmt(row.get('efficiency_mean'))} "
-            f"| {_fmt(row.get('strict_final_mean'))} "
-            f"| {row.get('safety_veto_count', 0)} |"
+            f"| `{key}` "
+            f"| {row.capability} "
+            f"| {row.domain} "
+            f"| {_fmt_pair(row.correctness)} "
+            f"| {_fmt_pair(row.grounding)} "
+            f"| {_fmt_pair(row.efficiency)} "
+            f"| {_fmt_pair(row.overall)} "
+            f"| {row.safety_veto_count} |"
         )
     lines.append('')
+
     return '\n'.join(lines)

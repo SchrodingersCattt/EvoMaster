@@ -1,7 +1,12 @@
-"""MATTER evaluation module for Mat Master."""
+"""MATTER v5 evaluation module for Mat Master."""
 
 from .schemas import (
+    AxisLiteral,
+    AxisPassRates,
+    CapabilityLiteral,
+    CriterionResult,
     DataFileRef,
+    DomainLiteral,
     EvalConfig,
     EvalRunRecord,
     EvaluationSummary,
@@ -10,16 +15,23 @@ from .schemas import (
     ModeLiteral,
     QuestionBank,
     QuestionItem,
+    QuestionPassRate,
     ReferenceAnswer,
-    Rubric,
-    ScoringCheckItem,
     SafetyVetoRecord,
+    ScoringCheckItem,
     SimulatedTask,
     TaskSpec,
+    TokenUsageRecord,
+    ToolContribution,
 )
 
 __all__ = [
+    "AxisLiteral",
+    "AxisPassRates",
+    "CapabilityLiteral",
+    "CriterionResult",
     "DataFileRef",
+    "DomainLiteral",
     "EvalConfig",
     "EvalRunRecord",
     "EvaluationSummary",
@@ -28,10 +40,12 @@ __all__ = [
     "ModeLiteral",
     "QuestionBank",
     "QuestionItem",
+    "QuestionPassRate",
     "ReferenceAnswer",
-    "Rubric",
-    "ScoringCheckItem",
     "SafetyVetoRecord",
+    "ScoringCheckItem",
     "SimulatedTask",
     "TaskSpec",
+    "TokenUsageRecord",
+    "ToolContribution",
 ]
