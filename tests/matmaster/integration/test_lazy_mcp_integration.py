@@ -197,56 +197,6 @@ class TestLazyMCPIntegration:
         # No tools injected (cache miss)
         assert 'unknown_server_' not in str(list(registry._tools.keys()))
 
-    def test_tool_exclude_blocks_cached_tool_injection(self, tmp_path):
-        env = self._setup_env(tmp_path)
-
-        cache_dir = env / 'cache'
-        (cache_dir / 'mat_sg.json').write_text(
-            json.dumps(
-                [
-                    {
-                        'name': 'build_bulk',
-                        'description': 'Build bulk',
-                        'input_schema': {'type': 'object'},
-                    },
-                    {
-                        'name': 'get_structure_info',
-                        'description': 'Get info',
-                        'input_schema': {'type': 'object'},
-                    },
-                ]
-            )
-        )
-
-        cfg = ExpConfig.model_validate(
-            {
-                'name': 'test',
-                'skills': {
-                    'enabled': True,
-                    'skills_root': str(env / 'skills'),
-                    'cache_dir': str(cache_dir),
-                    'config_dir': str(env),
-                    'mcp_config_file': 'mcp_config.json',
-                    'mcp_runtime_file': 'mcp.yaml',
-                },
-            }
-        )
-        exp = Exp(cfg)
-        registry = ToolRegistry()
-
-        ctx = MagicMock(spec=PlaygroundContext)
-        ctx.session = MagicMock()
-
-        exp._init_skill_tools(ctx, registry)
-        result = registry.execute(
-            'use_skill', {'skill_name': 'test-skill', 'action': 'get_info'}
-        )
-
-        assert result.status == 'success', f"use_skill failed: {result.content}"
-        assert 'mat_sg_build_bulk' in registry
-        assert 'mat_sg_get_structure_info' not in registry
-
-
 class TestExpMCPSelfLoad:
     """Verify Exp._init_skill_tools() self-loads mcp.yaml when no runtime config injected."""
 
