@@ -115,3 +115,32 @@ class TestShowTools:
             _show_tools(mock_runner)  # Should not raise
 
         mock_runtime.cleanup.assert_called_once()
+
+
+class TestDevStreamHookSegment:
+    def test_on_segment_complete_thought_verbose(self) -> None:
+        import io
+        from matmaster.devshell.stream_hook import DevStreamHook
+
+        out = io.StringIO()
+        hook = DevStreamHook(output=out, verbose=True)
+        hook.on_segment_complete("thought", "some thought", "s1")
+        assert "thought complete" in out.getvalue()
+
+    def test_on_segment_complete_thought_non_verbose(self) -> None:
+        import io
+        from matmaster.devshell.stream_hook import DevStreamHook
+
+        out = io.StringIO()
+        hook = DevStreamHook(output=out, verbose=False)
+        hook.on_segment_complete("thought", "some thought", "s1")
+        assert out.getvalue() == ""
+
+    def test_on_segment_complete_response_silent(self) -> None:
+        import io
+        from matmaster.devshell.stream_hook import DevStreamHook
+
+        out = io.StringIO()
+        hook = DevStreamHook(output=out, verbose=True)
+        hook.on_segment_complete("response", "content", "s1")
+        assert out.getvalue() == ""
