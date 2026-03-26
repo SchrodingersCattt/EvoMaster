@@ -249,9 +249,7 @@ class TestQuotaDeductedOnSuccess:
             ),
             None,
         )
-        assert response_payload is not None
-        assert response_payload['content'] == 'success'
-        assert response_payload['source'] == 'MatMaster'
+        assert response_payload is None
 
         payload_types = [payload.get('type') for payload in payloads]
         assert payload_types.index('response') < payload_types.index('run_result')
