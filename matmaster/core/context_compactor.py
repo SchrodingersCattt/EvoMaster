@@ -148,7 +148,7 @@ class ContextCompactor:
         """Record the messages length after the last LLM call."""
         self._last_llm_message_count = count
 
-    def compact_if_needed(
+    async def compact_if_needed(
         self, messages: list[Message], last_usage: dict[str, int], turn: int
     ) -> None:
         """Check threshold and compact messages in place when needed."""
@@ -221,7 +221,7 @@ class ContextCompactor:
         flat_recent = [m for turn_messages in recent_turns for m in turn_messages]
 
         try:
-            summary = self._summarize(old_messages)
+            summary = await self._summarize(old_messages)
             compact_msg = SystemMessage(content=f"[Compacted Context]\n{summary}")
             messages[:] = [system_msg, compact_msg, initial_task_msg, *flat_recent]
         except Exception:
@@ -344,7 +344,7 @@ class ContextCompactor:
 
         return truncated
 
-    def _summarize(self, old_messages: list[Message]) -> str:
+    async def _summarize(self, old_messages: list[Message]) -> str:
         """Use the summary provider to condense old conversation messages."""
         conversation_text = "\n".join(
             f"[{msg.role.value}]: {msg.content or ''}" for msg in old_messages
@@ -356,7 +356,7 @@ class ContextCompactor:
                 "content": f"Summarize this conversation:\n\n{conversation_text}",
             },
         ]
-        response = self._summary_provider.chat(api_messages)
+        response = await self._summary_provider.chat(api_messages)
         if not response.content:
             raise ValueError("Summary LLM returned empty content")
         return response.content
