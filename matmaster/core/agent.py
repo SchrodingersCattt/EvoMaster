@@ -13,6 +13,7 @@ Termination conditions:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import threading
@@ -49,6 +50,32 @@ from matmaster.types.messages import (
 logger = logging.getLogger(__name__)
 
 
+def _sync_iterate_async(async_iter, loop: asyncio.AbstractEventLoop):
+    """Bridge async iterator to sync iterator using a shared event loop.
+
+    Temporary bridge for Phase 13-16 transition period.
+    Will be removed in Phase 17 when Kernel becomes fully async.
+    """
+    try:
+        while True:
+            try:
+                yield loop.run_until_complete(async_iter.__anext__())
+            except StopAsyncIteration:
+                break
+    except GeneratorExit:
+        # Caller abandoned iteration (e.g. break in for loop)
+        pass
+
+
+def _sync_call_async(coro, loop: asyncio.AbstractEventLoop):
+    """Bridge async coroutine to sync call using a shared event loop.
+
+    Temporary bridge for Phase 13-16 transition period.
+    Will be removed in Phase 17 when Kernel becomes fully async.
+    """
+    return loop.run_until_complete(coro)
+
+
 class AgentKernel:
     """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""
 
@@ -76,6 +103,44 @@ class AgentKernel:
 
         Returns KernelRunResult with event and message transcript.
         """
+        # Create shared bridge loop for all async calls (temporary Phase 13-16)
+        _bridge_loop = asyncio.new_event_loop()
+        try:
+            # Enter provider async context manager
+            _bridge_loop.run_until_complete(spec.llm_provider.__aenter__())
+            try:
+                # Enter summary_provider if it's a separate instance (addresses review HIGH-1)
+                _summary_provider = None
+                if spec.compactor and hasattr(spec.compactor, '_summary_provider'):
+                    sp = spec.compactor._summary_provider
+                    if sp is not spec.llm_provider:
+                        _summary_provider = sp
+                        _bridge_loop.run_until_complete(sp.__aenter__())
+
+                try:
+                    return self._run_loop(spec, task, history, stop_event, _bridge_loop)
+                finally:
+                    # Exit summary_provider if separate
+                    if _summary_provider is not None:
+                        _bridge_loop.run_until_complete(
+                            _summary_provider.__aexit__(None, None, None)
+                        )
+            finally:
+                _bridge_loop.run_until_complete(
+                    spec.llm_provider.__aexit__(None, None, None)
+                )
+        finally:
+            _bridge_loop.close()
+
+    def _run_loop(
+        self,
+        spec: AgentRuntimeSpec,
+        task: str,
+        history: list[Message] | None,
+        stop_event: threading.Event | None,
+        _bridge_loop: asyncio.AbstractEventLoop,
+    ) -> KernelRunResult:
+        """Internal execution loop with bridge loop for async calls."""
         messages: list[Message] = [
             SystemMessage(content=spec.system_prompt),
             *(history or []),
@@ -105,10 +170,13 @@ class AgentKernel:
 
             # Context compaction check
             if spec.compactor:
-                spec.compactor.compact_if_needed(messages, last_usage, turn)
+                _sync_call_async(
+                    spec.compactor.compact_if_needed(messages, last_usage, turn),
+                    _bridge_loop,
+                )
 
             # LLM call (streaming by default)
-            response = self._call_llm(spec, messages)
+            response = self._call_llm(spec, messages, _bridge_loop=_bridge_loop)
             last_usage = response.usage
             self._accumulate_usage(total_usage, response.usage)
             last_stop_reason = response.finish_reason
@@ -201,9 +269,19 @@ class AgentKernel:
         return self._finish(spec, messages, "max_turns", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)
 
     def _call_llm(
-        self, spec: AgentRuntimeSpec, messages: list[Message]
+        self,
+        spec: AgentRuntimeSpec,
+        messages: list[Message],
+        *,
+        _bridge_loop: asyncio.AbstractEventLoop | None = None,
     ) -> LLMResponse:
         """Call LLM with timeout-doubling retry on transient errors."""
+        # Create a temporary loop if called directly (e.g., from tests)
+        _owns_loop = False
+        if _bridge_loop is None:
+            _bridge_loop = asyncio.new_event_loop()
+            _owns_loop = True
+
         provider = spec.llm_provider
         current_timeout = getattr(provider, "stream_timeout", None) or getattr(
             provider, "_timeout", 300.0
@@ -212,33 +290,42 @@ class AgentKernel:
         retry_delay = getattr(provider, "retry_delay", 1.0)
 
         last_error: LLMError | None = None
-        for attempt in range(max_retries):
-            try:
-                return self._do_stream_llm(spec, messages, timeout=current_timeout)
-            except LLMError as e:
-                if not e.retryable:
-                    raise
-                last_error = e
-                next_timeout = current_timeout * 2
-                logger.warning(
-                    "LLM stream timed out after %.0fs (attempt %d/%d). "
-                    "Retrying with timeout=%.0fs.",
-                    current_timeout,
-                    attempt + 1,
-                    max_retries,
-                    next_timeout,
-                )
-                current_timeout = next_timeout
-                if attempt < max_retries - 1:
-                    backoff = retry_delay * (2**attempt)
-                    time.sleep(backoff)
+        try:
+            for attempt in range(max_retries):
+                try:
+                    return self._do_stream_llm(spec, messages, timeout=current_timeout, _bridge_loop=_bridge_loop)
+                except LLMError as e:
+                    if not e.retryable:
+                        raise
+                    last_error = e
+                    next_timeout = current_timeout * 2
+                    logger.warning(
+                        "LLM stream timed out after %.0fs (attempt %d/%d). "
+                        "Retrying with timeout=%.0fs.",
+                        current_timeout,
+                        attempt + 1,
+                        max_retries,
+                        next_timeout,
+                    )
+                    current_timeout = next_timeout
+                    if attempt < max_retries - 1:
+                        backoff = retry_delay * (2**attempt)
+                        time.sleep(backoff)
 
-        raise RuntimeError(
-            f"LLM stream failed after {max_retries} attempts"
-        ) from last_error
+            raise RuntimeError(
+                f"LLM stream failed after {max_retries} attempts"
+            ) from last_error
+        finally:
+            if _owns_loop:
+                _bridge_loop.close()
 
     def _do_stream_llm(
-        self, spec: AgentRuntimeSpec, messages: list[Message], *, timeout: float | None = None
+        self,
+        spec: AgentRuntimeSpec,
+        messages: list[Message],
+        *,
+        timeout: float | None = None,
+        _bridge_loop: asyncio.AbstractEventLoop | None = None,
     ) -> LLMResponse:
         """Call LLM via streaming, accumulate chunks into LLMResponse."""
         api_messages = [m.to_api_dict() for m in messages]
@@ -263,7 +350,10 @@ class AgentKernel:
             StreamChunk(stream_state="start", stream_id=stream_id),
         )
         try:
-            for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs, timeout=timeout):
+            for chunk in _sync_iterate_async(
+                spec.llm_provider.chat_stream(api_messages, tool_defs, timeout=timeout),
+                _bridge_loop,
+            ):
                 if chunk.content or chunk.reasoning_content:
                     run_on_stream_chunk(
                         spec.hooks,
