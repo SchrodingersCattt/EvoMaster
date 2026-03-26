@@ -102,7 +102,7 @@ Plans:
 
 **Milestone Goal:** 将 matmaster 框架从同步架构全链路改造为 async/await，为多 agent 编排做准备。
 
-- [ ] **Phase 13: LLM Provider 异步实现** - OpenAIProvider async 改造 + ContextCompactor async 改造
+- [x] **Phase 13: LLM Provider 异步实现** - OpenAIProvider async 改造 + ContextCompactor async 改造 (completed 2026-03-26)
 
 ## Phase Details (v2.0)
 
@@ -116,11 +116,11 @@ Plans:
   3. 未进入 async context 时调用 chat/chat_stream 抛出 RuntimeError
   4. build_provider() 保持 sync，返回未初始化的 provider
   5. 全部 provider 测试通过
-**Plans:** 1/2 plans complete
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 13-01-PLAN.md -- OpenAIProvider async 改造 + LLMProvider Protocol 扩展 + 测试迁移
-- [ ] 13-02-PLAN.md -- ContextCompactor async 改造
+- [x] 13-02-PLAN.md -- ContextCompactor async 改造
 
 ## Progress
 
@@ -140,4 +140,4 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11 -> 13+
 | 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete    | 2026-03-25 |
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete    | 2026-03-25 |
-| 13. LLM Provider 异步实现 | v2.0 | 1/2 | In Progress | - |
+| 13. LLM Provider 异步实现 | v2.0 | 2/2 | Complete   | 2026-03-26 |
