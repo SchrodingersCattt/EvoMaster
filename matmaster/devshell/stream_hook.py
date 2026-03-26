@@ -58,3 +58,10 @@ class DevStreamHook(BaseHook):
     def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
         self._out.write(f"\n\U0001f6e1\ufe0f guard_blocked: {result.reason}\n\n")
         self._out.flush()
+
+    def on_segment_complete(
+        self, segment_type: str, content: str, stream_id: str | None
+    ) -> None:
+        if segment_type == "thought" and self._verbose:
+            self._out.write("── thought complete ──\n")
+            self._out.flush()
