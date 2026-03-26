@@ -482,7 +482,90 @@ class TestRetainedTurnsSelection:
         assert count >= 3, "最低仍应保留 3 个"
 
 
-# ── Test 10: Kernel 集成端到端 ───────────────────────────
+# ── Test 10: tool_truncation 兜底策略 ────────────────────
+
+
+class TestToolTruncationFallback:
+    """验证 2 turn 占满上下文时 tool_truncation 兜底。"""
+
+    def test_truncation_when_single_turn_exceeds_threshold(self) -> None:
+        """1 个 turn 就超限 → 无可压缩旧 turn → 截断大 tool result。"""
+        from matmaster.core.bus import MessageBus
+        from matmaster.types.events import ContextCompactionEvent
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=500, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        bus = MessageBus()
+
+        # 构造：1 turn with 3 大 tool results (每个 2000+ chars)
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="task"),
+            AssistantMessage(
+                content="calling",
+                tool_calls=[
+                    ToolCallData(id=f"tc-{i}", name="bash", arguments={})
+                    for i in range(3)
+                ],
+            ),
+            ToolMessage(content="HEAD_A " + "a" * 2000 + " TAIL_A",
+                        tool_call_id="tc-0", tool_name="bash"),
+            ToolMessage(content="HEAD_B " + "b" * 2000 + " TAIL_B",
+                        tool_call_id="tc-1", tool_name="bash"),
+            ToolMessage(content="HEAD_C " + "c" * 2000 + " TAIL_C",
+                        tool_call_id="tc-2", tool_name="bash"),
+        ]
+
+        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor.update_message_count(len(msgs))
+
+        compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
+
+        # summary 不应被调用（没有旧 turn 可摘要）
+        assert provider.call_count == 0
+        # 但截断应发生
+        assert compactor._compaction_count == 1
+
+        # 至少 1 个 ToolMessage 被截断
+        truncated = [m for m in msgs if isinstance(m, ToolMessage) and "truncated" in (m.content or "")]
+        assert len(truncated) > 0, "应至少截断 1 个大 tool result"
+
+        # 截断后保留 head + tail
+        for m in truncated:
+            assert "HEAD_" in m.content
+            assert len(m.content) < 2000
+
+        # 事件 strategy=tool_truncation
+        event = bus.get_nowait()
+        assert isinstance(event, ContextCompactionEvent)
+        assert event.payload["strategy"] == "tool_truncation"
+
+    def test_no_truncation_below_threshold(self) -> None:
+        """即使只有 1 turn，未超阈值不截断。"""
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=128000, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="task"),
+            AssistantMessage(content="",
+                             tool_calls=[ToolCallData(id="tc-0", name="t", arguments={})]),
+            ToolMessage(content="big " + "x" * 2000, tool_call_id="tc-0", tool_name="t"),
+        ]
+
+        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor.update_message_count(len(msgs))
+
+        # prompt_tokens=1000 远低于 128000*0.9 → 不触发
+        compactor.compact_if_needed(msgs, {"prompt_tokens": 1000}, turn=3)
+        assert compactor._compaction_count == 0
+        assert "truncated" not in (msgs[3].content or "")
+
+
+# ── Test 11: Kernel 集成端到端 ───────────────────────────
 
 
 class TestKernelIntegration:
