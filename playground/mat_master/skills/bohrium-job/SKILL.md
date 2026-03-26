@@ -153,6 +153,51 @@ Use the `skuEnName` value as the `--machine` argument to `submit_job.py`.
 > For GPU-accelerated GROMACS runs, use `--machine "c6_m60_1 * NVIDIA 4090"` and add `-gpu_id 0` to `mdrun`. Run `list_machines.py --type gpu --keyword 4090` to see all GPU options.
 > If you need a different GROMACS version, run `list_images.py --keyword gromacs` to find available versions.
 
+### PySCF
+
+| Item | Value |
+|------|-------|
+| Image | `registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260305` |
+| Machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
+| Command | `python run_pyscf.py > log 2>&1` |
+
+> PySCF jobs are Python scripts — no `input-manual-helper` preparation is needed.
+> Write your PySCF calculation script (e.g. `run_pyscf.py`) directly, place it in an input directory, then submit via `submit_job.py --input-dir <dir> --cmd "python run_pyscf.py > log 2>&1"`.
+> Replace `run_pyscf.py` with the actual script filename. The script should write results to files (e.g. `output.json`, `results.txt`) so they are captured in the downloaded output archive.
+> If you need a different PySCF version or variant (e.g. with geometric optimizer), run `list_images.py --keyword pyscf` to find available images.
+
+### ABACUS
+
+| Item | Value |
+|------|-------|
+| Image | `registry.dp.tech/dptech/abacus:3.7.5` |
+| Machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
+| Command | `OMP_NUM_THREADS=4 mpirun -np 8 abacus > log 2>&1` |
+
+> ABACUS input files are prepared via the **input-manual-helper** skill:
+> ```bash
+> uv run python scripts/render_input.py --software abacus --task scf --output INPUT
+> uv run python scripts/diagnose_input.py --software abacus --input INPUT
+> ```
+> Place `INPUT`, `STRU`, `KPT`, pseudopotential files (`.upf`), and orbital files (`.orb`) in one directory before submitting.
+> Pseudopotentials: download from <https://github.com/deepmodeling/abacus-develop/tree/develop/tests/PP_ORB> or use `sg` tools to find SG15-type norm-conserving pseudopotentials.
+> Orbital files for LCAO: download from the ABACUS orbital repository at <http://abacus.deepmodeling.com/orbitals/> or use `list_images.py --keyword abacus-pp` to locate pre-bundled images.
+> For GPU-accelerated ABACUS runs, use `--machine "c8_m60_1 * NVIDIA 4090"` and set `basis_type pw` or the GPU-enabled image variant. Run `list_images.py --keyword abacus` to see all available versions.
+> If the image version changes, always run `list_images.py --keyword abacus` to find the current address before submitting.
+
+### PyATB
+
+| Item | Value |
+|------|-------|
+| Image | *(query with `list_images.py --keyword pyatb` to find the current image)* |
+| Machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
+| Command | `python run_pyatb.py > log 2>&1` |
+
+> PyATB (Python Ab initio Tight-Binding) jobs are Python-based band-structure post-processing.
+> Prepare your PyATB input script and any required input files (e.g. `HR.dat`, `SR.dat` from a prior ABACUS calculation) manually, place them in a directory, then submit via `submit_job.py`.
+> No `input-manual-helper` preparation is needed — write the PyATB script directly.
+> Always run `list_images.py --keyword pyatb` before submitting to get the current image address; do not assume a default.
+
 ## Scripts
 
 ### submit_job.py

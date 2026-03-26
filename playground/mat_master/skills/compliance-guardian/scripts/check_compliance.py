@@ -37,7 +37,7 @@ def _audit_check(allowed: bool, plan: str, command: str) -> None:
 RESTRICTED_SOFTWARE = {
     "vasp": {
         "pattern": r"(^|\s|/)(vasp_std|vasp_gam|vasp_ncl)(\s|$)",
-        "suggestion": "Local VASP execution is restricted. Use ABACUS (mat_abacus) as open-source alternative, or submit VASP jobs to remote clusters via MCP. You may write INCAR/KPOINTS/POSCAR and analyze outputs.",
+        "suggestion": "Local VASP execution is restricted. Use ABACUS (via input-manual-helper + bohrium-job) as open-source alternative, or submit VASP jobs to remote clusters. You may write INCAR/KPOINTS/POSCAR and analyze outputs.",
     },
     "gaussian": {
         "pattern": r"(^|\s|/)(g09|g16|gview|gaussian)(\s|$)",
