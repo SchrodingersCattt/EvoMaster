@@ -33,7 +33,7 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 
 ### Active
 
-(v2.0 requirements to be defined — see Current Milestone below)
+See REQUIREMENTS.md for full v2.0 requirement list (35 items, 6 complete after Phase 12).
 
 ## Current Milestone: v2.0 matmaster 协程改造
 
@@ -41,10 +41,10 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 
 **Target features:**
 - AgentKernel async 化 — run() → async generator，tool dispatch / LLM call / guard / hook 全部 await
-- LLMProvider Protocol async 化 — chat / chat_stream / chat_with_retry 改为 async 方法，OpenAIProvider 使用 AsyncOpenAI
+- LLMProvider Protocol async 化 — chat / chat_stream 改为 async 方法，OpenAIProvider 使用 AsyncOpenAI（chat_with_retry 已在 Phase 12 移除）
 - 全部 BuiltinTool async 化 — run() → async，BashTool 用 asyncio.create_subprocess_exec
 - Exp 生命周期 async 化 — assemble() / build_runtime() / run() 全部 async
-- Hook 和 Guard Protocol async 化 — 所有 hook/guard 的 Protocol 定义改为 async
+- Hook Protocol async 化 — 所有 hook 的 Protocol 定义改为 async（Guard 保持同步，Phase 12 决策）
 - MessageBus async 兼容 — 支持 asyncio.Queue 或类似异步原语
 - ContextCompactor async 化 — 内部 LLM 调用改 async
 - SubAgent spawn async 化 — spawn_fn 变 async，子 agent 作为协程执行
@@ -148,4 +148,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 after starting Milestone v2.0 (matmaster 协程改造)*
+*Last updated: 2026-03-26 after Phase 12 complete (Protocol async signatures + test infrastructure)*
