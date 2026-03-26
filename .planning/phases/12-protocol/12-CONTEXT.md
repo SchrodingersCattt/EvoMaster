@@ -26,7 +26,7 @@
 - **D-04:** chat_with_retry() 从 LLMProvider Protocol 移除，同时从 OpenAIProvider 实现中也删除。重试逻辑已在 Kernel._call_llm() 中，Provider 级别的 retry 是冗余的。
 
 ### Tool 签名
-- **D-05:** Tool Protocol 保持 execute 命名（不改为 run），REQUIREMENTS 中 PROT-02 的 run() 是笔误。Tool Protocol.execute() 和 BuiltinTool ABC 的 execute()/_execute() 全部改为 async def。
+- **D-05:** Tool Protocol 保持 execute 命名（不改为 run），REQUIREMENTS 中 PROT-02 的 run() 是笔误。Tool Protocol.execute() 改为 async def（合约声明）。BuiltinTool ABC 的 _execute() abstractmethod 改为 async def。BuiltinTool.execute() 具体方法体保持 sync，在 Phase 14 随 ToolRegistry 一起改造（D-01 优先：Phase 12 不改运行热路径）。
 
 ### 返回类型
 - **D-06:** Protocol 签名变更包括返回类型。LLMProvider.chat_stream() 返回类型从 Iterator[StreamChunk] 改为 AsyncIterator[StreamChunk]。这是合约定义的一部分，在 Phase 12 一并处理。
