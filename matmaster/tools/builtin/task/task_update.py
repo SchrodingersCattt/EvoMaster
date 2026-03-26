@@ -14,10 +14,11 @@ class TaskUpdateTool(BuiltinTool):
 
     name: ClassVar[str] = "task_update"
     description: ClassVar[str] = (
-        "Update a task's description or status.\n\n"
+        "Update a task or a specific sub-task.\n\n"
         "Usage:\n"
-        "- Set status to 'in_progress' when starting work on a task.\n"
-        "- Update description to reflect scope changes or progress notes."
+        "- With subtask_index: update that specific sub-task's status.\n"
+        "- Without subtask_index: update the parent task's description or status.\n"
+        "- Parent task status is auto-derived when updating sub-tasks."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
@@ -26,14 +27,21 @@ class TaskUpdateTool(BuiltinTool):
                 "type": "string",
                 "description": "The ID of the task to update.",
             },
+            "subtask_index": {
+                "type": "integer",
+                "description": (
+                    "0-based index of the sub-task to update. "
+                    "If provided, updates that specific sub-task's status."
+                ),
+            },
             "description": {
                 "type": "string",
-                "description": "New description for the task.",
+                "description": "New description for the task (parent-level only).",
             },
             "status": {
                 "type": "string",
                 "enum": ["open", "in_progress", "completed"],
-                "description": "New status for the task.",
+                "description": "New status.",
             },
         },
         "required": ["task_id"],
@@ -44,6 +52,14 @@ class TaskUpdateTool(BuiltinTool):
             return "Error: workdir not available for task tracking"
         store = TaskStore(self._workdir)
         task_id = arguments["task_id"]
+
+        if "subtask_index" in arguments:
+            status = arguments.get("status", "in_progress")
+            task = store.update_subtask(task_id, arguments["subtask_index"], status)
+            if task is None:
+                return f"Task or subtask not found: {task_id}[{arguments['subtask_index']}]"
+            return json.dumps(task, ensure_ascii=False)
+
         fields: dict[str, Any] = {}
         if "description" in arguments:
             fields["description"] = arguments["description"]
