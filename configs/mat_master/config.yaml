@@ -122,8 +122,8 @@ agents:
 # ============================================
 mat_master:
   # 可选：SSH/Bohrium 远端 session 工作目录根
-  # 远端 attach_ssh_session(session_id=...) 时会落到 {remote_session_workspace_root}/{session_id}
-  # remote_session_workspace_root: "/share/workspace"
+  # 默认直接使用 Bohrium project 共享目录 /share，不再为每个 session 单独创建子目录
+  # remote_session_workspace_root: "/share"
 
   # ── CRP 许可证防火墙 ──
   # 决定哪些软件可以执行、哪些被阻止、以及默认替代方案。

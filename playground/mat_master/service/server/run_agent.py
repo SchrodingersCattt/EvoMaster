@@ -178,14 +178,12 @@ def _run_agent_sync(
                             username=node_user,
                             password=node_pwd,
                             working_dir=_REMOTE_WORKSPACE_ROOT,
-                            session_id=session_id,
                         )
                         _ssh_attached = True
                         logger.info(
-                            'SSH session attached to Bohrium node host=%s workspace=%s/%s',
+                            'SSH session attached to Bohrium node host=%s workspace=%s',
                             ssh_host,
-                            _REMOTE_WORKSPACE_ROOT.rstrip('/'),
-                            session_id,
+                            _REMOTE_WORKSPACE_ROOT,
                         )
                         event_callback(
                             'System', 'status', f"已连接到 Bohrium 节点 {ssh_host}"
