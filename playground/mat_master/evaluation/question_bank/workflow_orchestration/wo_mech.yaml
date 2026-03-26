@@ -1,0 +1,135 @@
+version: "v5"
+capability: "workflow_orchestration"
+domain: "mech"
+
+questions:
+  # ============================================================
+  # WO_mech_001 ← L2_Q01 (Al FCC EOS)
+  # ============================================================
+  - id: "WO_mech_001"
+    capability: "workflow_orchestration"
+    domain: "mech"
+    intent: "Independently locate Al FCC structure, execute 5-point volume scan, fit EOS, report a0 and B0."
+    human_prompt_seed: >
+      对 FCC 铝进行状态方程拟合：从数据库获取 Al FCC 原胞结构，
+      在平衡体积附近做 5 点体积扫描（0.95, 0.975, 1.0, 1.025, 1.05 倍），
+      对每个体积点做单点能计算，拟合 Birch-Murnaghan EOS，
+      输出平衡晶格常数 a0 (A) 和体模量 B0 (GPa)。
+    tags: ["workflow_closure", "eos", "aluminum", "database_search"]
+    mode_scope: ["direct", "planner"]
+    required_tools:
+      - "mat_struct_db_fetch_structures_from_db"
+      - "mat_dpa_submit_optimize_structure"
+    optional_tools:
+      - "mat_sg_build_bulk_structure_by_template"
+      - "mat_sg_build_bulk_structure_by_wyckoff"
+    data_files: []
+    reference_answers:
+      - key: "used_db_fetch"
+        value:
+          - "mat_struct_db_fetch_structures_from_db"
+          - "mat_sg_build_bulk_structure_by_template"
+          - "mat_sg_build_bulk_structure_by_wyckoff"
+      - key: "used_dpa_optimizer"
+        value:
+          - "mat_dpa_submit_optimize_structure"
+      - key: "a0_A"
+        value: 4.04
+        tolerance: 0.08
+      - key: "b0_GPa"
+        value: 79.0
+        tolerance: 8.0
+      - key: "required_fields"
+        value: ["volume_points", "fit_model", "a0", "b0", "failure_handling"]
+    scoring_checklist:
+      # --- correctness ---
+      - id: "a0_A"
+        criterion: "Equilibrium lattice constant is in range."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "b0_GPa"
+        criterion: "Bulk modulus is in range."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Report includes volume scan points, fit model identification, a0 and b0 values, and any failure handling notes."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "used_db_fetch"
+        criterion: "Used structure database or builder tool to obtain Al FCC structure (not LLM-fabricated coordinates)."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "used_dpa_optimizer"
+        criterion: "Used DPA optimizer for volume-scan single-point calculations."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "grounding_source"
+        criterion: "Al structure originates from registered database; energy values come from MCP calculation tool, not from LLM estimation."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "No repeated identical database fetch or optimizer calls for the same volume point."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "call_count_range"
+        criterion: "Total MCP tool calls are in a reasonable range for a 5-point EOS workflow (e.g. 1 fetch + 5 calc + 1 fit)."
+        axis: "efficiency"
+        verify: "call_count_range"
+      - id: "efficiency_judge"
+        criterion: "EOS workflow is completed without unnecessary exploration or redundant intermediate steps."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # WO_mech_002 ← L2_Q05 (RDX爆速爆压)
+  # ============================================================
+  - id: "WO_mech_002"
+    capability: "workflow_orchestration"
+    domain: "mech"
+    intent: "Estimate detonation parameters for RDX: independently construct molecule, compute properties, apply Kamlet-Jacobs equations."
+    human_prompt_seed: >
+      估算 RDX (C3H6N6O6) 的爆速和爆压：
+      自行构造 RDX 分子结构（可用 SMILES 或手动构建），
+      查找或计算密度 (1.806 g/cm3) 和生成焓 (+70 kJ/mol)，
+      使用 Kamlet-Jacobs 经验公式计算爆速 D (m/s) 和爆压 P (GPa)。
+      输出完整的计算过程和单位换算。
+    tags: ["energetic", "detonation_metrics", "kamlet_jacobs", "molecule_construction"]
+    mode_scope: ["direct", "planner"]
+    required_tools: []
+    optional_tools: []
+    data_files: []
+    reference_answers:
+      - key: "detonation_velocity_m_s"
+        value: 8750.0
+        tolerance: 400.0
+      - key: "detonation_pressure_GPa"
+        value: 34.0
+        tolerance: 4.0
+      - key: "required_fields"
+        value: ["equation", "unit_consistency", "velocity", "pressure"]
+    scoring_checklist:
+      # --- correctness ---
+      - id: "detonation_velocity_m_s"
+        criterion: "Detonation velocity is in tolerance."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "detonation_pressure_GPa"
+        criterion: "Detonation pressure is in tolerance."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Report includes Kamlet-Jacobs equation, unit consistency check, velocity and pressure values."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "grounding_source"
+        criterion: "Detonation parameters are computed by explicitly applying Kamlet-Jacobs equations with the given density and heat of formation; formula inputs are stated."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Kamlet-Jacobs calculation is performed in a single computation step without unnecessary tool exploration."
+        axis: "efficiency"
+        verify: "llm_binary_judge"

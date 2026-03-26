@@ -1,0 +1,232 @@
+version: "v5"
+capability: "data_diagnosis"
+domain: "general"
+
+questions:
+  # ============================================================
+  # DD_general_001 ← L1_Q04 (Fe₂O₃ SCF不收敛诊断)
+  # ============================================================
+  - id: "DD_general_001"
+    capability: "data_diagnosis"
+    domain: "general"
+    intent: "Diagnose SCF non-convergence caused by missing spin polarization on a magnetic oxide."
+    human_prompt_seed: >
+      读取 `case_bundle.json`，其中包含一个 Fe2O3 计算的 INCAR 参数、POSCAR 摘要和 OUTCAR 能量迭代摘录。
+      SCF 迭代 60 步仍未收敛，能量振幅约 0.25 eV。请诊断根本原因，并给出修复方案。
+    tags: ["scf_diagnosis", "spin_polarization", "magnetic_oxide"]
+    mode_scope: ["direct", "planner"]
+    required_tools: []
+    optional_tools: []
+    data_files:
+      - key: "case_bundle"
+        path: "data/L1_Q04/case_bundle.json"
+        oss_url: ""
+        description: "VASP input/output bundle: Fe2O3 with ISPIN=1, SCF oscillates."
+    reference_answers:
+      - key: "root_cause"
+        value: "spin_not_enabled"
+      - key: "required_fields"
+        value: ["root_cause", "evidence", "fix_ISPIN", "fix_MAGMOM"]
+    scoring_checklist:
+      # --- correctness ---
+      - id: "root_cause"
+        criterion: "Correctly identifies missing spin polarization (ISPIN=1 on magnetic Fe2O3) as root cause."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "required_fields"
+        criterion: "Provides root cause, evidence from SCF energy oscillation, and concrete INCAR fixes (ISPIN=2 and MAGMOM)."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Diagnosis is grounded in the provided case_bundle.json data (INCAR parameters, OUTCAR energy profile), not generic DFT advice."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Agent reads the provided bundle and diagnoses directly without excessive exploratory tool calls."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # DD_general_002 ← L1_Q05 (Si SMEARING诊断)
+  # ============================================================
+  - id: "DD_general_002"
+    capability: "data_diagnosis"
+    domain: "general"
+    intent: "Diagnose SCF non-convergence caused by wrong SMEARING settings for a semiconductor."
+    human_prompt_seed: >
+      读取 `case_bundle.json`，其中包含一个 Si 计算的 INCAR 参数和 OUTCAR 能量迭代摘录。
+      SCF 100 步仍未收敛，能量振幅约 5 meV，且有分数占据。请诊断根本原因，并给出修复方案。
+    tags: ["scf_diagnosis", "smearing", "semiconductor"]
+    mode_scope: ["direct", "planner"]
+    required_tools: []
+    optional_tools: []
+    data_files:
+      - key: "case_bundle"
+        path: "data/L1_Q05/case_bundle.json"
+        oss_url: ""
+        description: "VASP input/output bundle: Si with ISMEAR=1 SIGMA=0.4, SCF oscillates."
+    reference_answers:
+      - key: "root_cause"
+        value: "smearing_wrong_for_semiconductor"
+      - key: "required_fields"
+        value: ["root_cause", "evidence", "fix_ISMEAR", "fix_SIGMA"]
+    scoring_checklist:
+      # --- correctness ---
+      - id: "root_cause"
+        criterion: "Correctly identifies ISMEAR/SIGMA mismatch (Methfessel-Paxton on semiconductor Si) as root cause."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "required_fields"
+        criterion: "Provides root cause, evidence from fractional occupation, and concrete fixes (ISMEAR=0 or -5, reduce SIGMA)."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Diagnosis is grounded in the provided INCAR/OUTCAR data from case_bundle.json, citing specific parameter values."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Agent diagnoses directly from the bundle without unnecessary tool exploration."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # DD_general_003 ← L1_Q06 (LiCoO₂ 弛豫不收敛诊断)
+  # ============================================================
+  - id: "DD_general_003"
+    capability: "data_diagnosis"
+    domain: "general"
+    intent: "Diagnose relaxation non-convergence caused by EDIFF being too loose relative to EDIFFG."
+    human_prompt_seed: >
+      读取 `case_bundle.json`，其中包含一个 LiCoO2 弛豫计算的 INCAR 参数和离子步摘录。
+      200 步 NSW 用完仍未收敛，力在 0.019-0.022 eV/A 之间振荡，且每步 SCF 仅 3 步就收敛了。
+      请诊断根本原因，并给出修复方案。
+    tags: ["relax_diagnosis", "ediff_precision", "force_noise"]
+    mode_scope: ["direct", "planner"]
+    required_tools: []
+    optional_tools: []
+    data_files:
+      - key: "case_bundle"
+        path: "data/L1_Q06/case_bundle.json"
+        oss_url: ""
+        description: "VASP input/output bundle: LiCoO2 relax with EDIFF=1E-3, force oscillates."
+    reference_answers:
+      - key: "root_cause"
+        value: "ediff_too_loose_for_relax"
+      - key: "required_fields"
+        value: ["root_cause", "evidence", "fix_EDIFF", "ediff_ediffg_rule"]
+    scoring_checklist:
+      # --- correctness ---
+      - id: "root_cause"
+        criterion: "Correctly identifies EDIFF too loose (1E-3 causing force noise in LiCoO2 relax) as root cause."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "required_fields"
+        criterion: "Explains force noise mechanism from loose EDIFF, and recommends tightening EDIFF to 1E-5 or 1E-6."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Diagnosis references specific values from the case_bundle.json (EDIFF=1E-3, force oscillation range, rapid SCF convergence pattern)."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Agent reaches diagnosis without redundant tool calls beyond reading the provided bundle."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # DD_general_004 ← L1_Q07 (CsPbI₃ 弛豫发散诊断)
+  # ============================================================
+  - id: "DD_general_004"
+    capability: "data_diagnosis"
+    domain: "general"
+    intent: "Diagnose relaxation divergence caused by POTIM too large combined with wrong initial phase."
+    human_prompt_seed: >
+      读取 `case_bundle.json`，其中包含一个 CsPbI3 弛豫计算的 INCAR 参数和离子步摘录。
+      5 步内能量从 -19 eV 升到 +8 eV，力从 2.3 爆炸到 48 eV/A，体积剧烈波动。
+      请诊断根本原因，并给出修复方案。
+    tags: ["relax_diagnosis", "potim", "initial_structure", "phase_mismatch"]
+    mode_scope: ["direct", "planner"]
+    required_tools: []
+    optional_tools: []
+    data_files:
+      - key: "case_bundle"
+        path: "data/L1_Q07/case_bundle.json"
+        oss_url: ""
+        description: "VASP input/output bundle: CsPbI3 cubic->orthorhombic relax with POTIM=1.0, diverges."
+    reference_answers:
+      - key: "root_cause"
+        value: "potim_too_large_and_bad_initial_structure"
+      - key: "required_fields"
+        value: ["root_cause", "evidence", "fix_POTIM", "fix_initial_structure"]
+    scoring_checklist:
+      # --- correctness ---
+      - id: "root_cause"
+        criterion: "Identifies both POTIM too large (1.0) and wrong initial phase (cubic vs orthorhombic CsPbI3)."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "required_fields"
+        criterion: "Provides evidence from energy/force divergence trajectory, and recommends both reducing POTIM and using correct Pnma phase."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "grounding_evidence"
+        criterion: "Both root causes are evidenced by specific data from case_bundle.json (POTIM=1.0 in INCAR, energy/force explosion pattern in OUTCAR)."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Dual root cause is identified efficiently without repeated re-reading of the same file."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # DD_general_005 ← L2_Q08 (批量DFT失败模式分类)
+  # ============================================================
+  - id: "DD_general_005"
+    capability: "data_diagnosis"
+    domain: "general"
+    intent: "Given descriptions of mixed failed-job scenarios, classify failure modes and provide parameterized retry strategy."
+    human_prompt_seed: >
+      假设你提交了一批 20 个 DFT 计算任务，其中 6 个失败了，失败原因如下：
+      Job 3, 7: SCF 不收敛（含过渡金属，ISPIN=1）；
+      Job 11: 内存不足（NCORE 设置不当）；
+      Job 15, 18: KPOINTS 太密导致超时；
+      Job 20: 输入文件 POTCAR 缺失。
+      请分类这些失败模式（至少 3 类），为每类给出参数化的重试方案和终止条件。
+    tags: ["failure_recovery", "batch_jobs", "retry_strategy"]
+    mode_scope: ["direct", "planner"]
+    required_tools: []
+    optional_tools: []
+    data_files: []
+    reference_answers:
+      - key: "failure_classes_count"
+        value: 3
+        tolerance: 1.0
+      - key: "required_fields"
+        value: ["classification_table", "retry_parameters", "fallback_rule", "stop_condition"]
+    scoring_checklist:
+      # --- correctness ---
+      - id: "failure_classes_count"
+        criterion: "Identifies expected number of failure classes (≥ 3)."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Report includes failure classification table, per-class retry parameters, fallback rule, and stop condition."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "grounding_source"
+        criterion: "Each failure class is grounded in the specific job descriptions provided in the prompt (Job IDs, error types); no generic advice without tracing to the prompt."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "efficiency_judge"
+        criterion: "Failure classification and retry policy are produced without unnecessary tool calls beyond reading the provided failure descriptions."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
