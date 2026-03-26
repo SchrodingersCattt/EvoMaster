@@ -51,7 +51,7 @@ class BuiltinTool(ABC):
             return f"Error: {e}"
 
     @abstractmethod
-    def _execute(self, arguments: dict[str, Any]) -> str:
+    async def _execute(self, arguments: dict[str, Any]) -> str:
         """Subclass implementation. Raise on error, return string on success."""
         ...
 
