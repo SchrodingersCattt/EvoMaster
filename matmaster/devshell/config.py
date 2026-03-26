@@ -1,12 +1,25 @@
 """DevConfig model and YAML loading for mm-devshell."""
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
-from matmaster.config.loader import _expand_env_vars
+_ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
+
+
+def _expand_env_vars(value: Any) -> Any:
+    """Recursively expand ${VAR} patterns in strings."""
+    if isinstance(value, str):
+        return _ENV_PATTERN.sub(lambda m: os.environ.get(m.group(1), ""), value)
+    if isinstance(value, dict):
+        return {k: _expand_env_vars(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_expand_env_vars(item) for item in value]
+    return value
 
 
 class LLMConfig(BaseModel):
@@ -17,6 +30,11 @@ class LLMConfig(BaseModel):
     model: str = "gpt-4o"
     temperature: float = 0.7
     max_tokens: int | None = None
+    timeout: float = 300.0
+    stream_timeout: float | None = None
+    stream_idle_timeout: float | None = None
+    max_retries: int = 3
+    retry_delay: float = 1.0
 
 
 class AgentConfig(BaseModel):
