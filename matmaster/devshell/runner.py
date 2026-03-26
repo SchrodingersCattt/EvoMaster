@@ -49,6 +49,9 @@ class DevRunner:
             cache_area=cache_area,
             session=session,
             llm_provider=llm_provider,
+            config_dir=None,
+            llm_config=None,
+            run_meta={"source": "devshell"},
         )
 
         # Exp config dict
@@ -59,11 +62,10 @@ class DevRunner:
 
     @staticmethod
     def _create_session(config: DevConfig, workdir: Path) -> Any:
-        """Create and open a session based on config."""
-        from evomaster.agent.session.local import LocalSession
+        """Create and open a local session."""
+        from matmaster.sessions.local import LocalSession
 
-        session = LocalSession()
-        session.config.workspace_path = str(workdir)
+        session = LocalSession(workspace_path=workdir)
         session.open()
         return session
 
