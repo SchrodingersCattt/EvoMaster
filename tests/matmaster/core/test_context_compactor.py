@@ -318,6 +318,119 @@ class TestCompactorEventEmission:
         compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
 
 
+class TestToolTruncationFallback:
+    """Tool result truncation when no old turns to compress."""
+
+    def test_truncates_when_no_compressible_turns(self) -> None:
+        """1 turn with huge tool results → falls back to tool_truncation."""
+        from matmaster.core.bus import MessageBus
+        from matmaster.core.context_compactor import ContextCompactor
+        from matmaster.types.events import ContextCompactionEvent
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=500, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        bus = MessageBus()
+
+        # 1 turn: Assistant with 3 tool calls + 3 large ToolMessages
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="task"),
+            AssistantMessage(
+                content="calling tools",
+                tool_calls=[
+                    ToolCallData(id=f"tc-{i}", name="bash", arguments={})
+                    for i in range(3)
+                ],
+            ),
+            ToolMessage(content="big result " + "A" * 2000, tool_call_id="tc-0", tool_name="bash"),
+            ToolMessage(content="big result " + "B" * 2000, tool_call_id="tc-1", tool_name="bash"),
+            ToolMessage(content="big result " + "C" * 2000, tool_call_id="tc-2", tool_name="bash"),
+        ]
+
+        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor.update_message_count(len(msgs))
+
+        compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
+
+        # summary provider should NOT be called (no old messages to summarize)
+        assert len(provider.calls) == 0
+
+        # But truncation should have happened
+        assert compactor._compaction_count == 1
+
+        # At least one ToolMessage should have been truncated
+        truncated_msgs = [
+            m for m in msgs
+            if isinstance(m, ToolMessage) and "truncated" in (m.content or "")
+        ]
+        assert len(truncated_msgs) > 0
+
+        # Event should have strategy=tool_truncation
+        event = bus.get_nowait()
+        assert isinstance(event, ContextCompactionEvent)
+        assert event.payload["strategy"] == "tool_truncation"
+
+    def test_no_truncation_for_small_tool_results(self) -> None:
+        """Small tool results (< 500 chars) are not truncated."""
+        from matmaster.core.context_compactor import ContextCompactor
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=500, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="task"),
+            AssistantMessage(
+                content="",
+                tool_calls=[ToolCallData(id="tc-0", name="t", arguments={})],
+            ),
+            ToolMessage(content="short result", tool_call_id="tc-0", tool_name="t"),
+        ]
+
+        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor.update_message_count(len(msgs))
+
+        compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
+
+        # Small content → not truncated (truncation skips content < 500 chars)
+        assert "truncated" not in (msgs[3].content or "")
+
+    def test_truncation_preserves_head_and_tail(self) -> None:
+        """Truncated content keeps head 200 + tail 100 chars."""
+        from matmaster.core.context_compactor import ContextCompactor
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=200, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        original_content = "HEAD_MARKER_" + "x" * 2000 + "_TAIL_MARKER"
+
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="task"),
+            AssistantMessage(
+                content="",
+                tool_calls=[ToolCallData(id="tc-0", name="t", arguments={})],
+            ),
+            ToolMessage(content=original_content, tool_call_id="tc-0", tool_name="t"),
+        ]
+
+        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor.update_message_count(len(msgs))
+
+        compactor.compact_if_needed(msgs, {"prompt_tokens": 300}, turn=3)
+
+        result_content = msgs[3].content or ""
+        assert "HEAD_MARKER_" in result_content  # head preserved
+        assert "_TAIL_MARKER" in result_content  # tail preserved
+        assert "truncated" in result_content  # marker present
+        assert len(result_content) < len(original_content)
+
+
 class TestEndToEndCompaction:
     """Full kernel loop with compaction enabled."""
 

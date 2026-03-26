@@ -184,6 +184,35 @@ class ContextCompactor:
         compressible_start = task_idx + 1
         compressible_end = len(messages) - sum(len(t) for t in recent_turns)
         if compressible_end <= compressible_start:
+            # No old turns to compress -- all turns are retained.
+            # Fall back to truncating large tool results within retained
+            # turns to prevent context overflow on the next LLM call.
+            truncated = self._truncate_tool_results(messages, estimated, threshold)
+            if truncated > 0:
+                self._compaction_count += 1
+                self._last_compaction_turn = turn
+                self._last_llm_message_count = len(messages)
+                logger.warning(
+                    "Context compaction #%d (tool_truncation) at turn %d: "
+                    "estimated=%d threshold=%d truncated_messages=%d",
+                    self._compaction_count,
+                    turn,
+                    estimated,
+                    int(threshold),
+                    truncated,
+                )
+                if self._bus is not None:
+                    self._bus.emit(
+                        ContextCompactionEvent(
+                            source="context_compactor",
+                            payload={
+                                "compaction_count": self._compaction_count,
+                                "trigger_tokens": estimated,
+                                "strategy": "tool_truncation",
+                                "retained_turns": kept_count,
+                            },
+                        )
+                    )
             return
 
         old_messages = messages[compressible_start:compressible_end]
@@ -256,6 +285,64 @@ class ContextCompactor:
 
         selected.reverse()
         return selected, len(selected)
+
+    @staticmethod
+    def _truncate_tool_results(
+        messages: list[Message],
+        estimated_tokens: int,
+        threshold: float,
+    ) -> int:
+        """Truncate large ToolMessage content in place when no old turns to compress.
+
+        Iterates tool messages from oldest to newest. For each oversized message,
+        keeps a head + tail preview with a truncation marker. Stops once estimated
+        tokens drop below threshold.
+
+        Returns the number of messages truncated.
+        """
+        # Collect (index, token_count) for ToolMessages, largest first
+        tool_indices: list[tuple[int, int]] = []
+        for i, msg in enumerate(messages):
+            if isinstance(msg, ToolMessage) and msg.content:
+                toks = estimate_tokens([msg])
+                tool_indices.append((i, toks))
+
+        if not tool_indices:
+            return 0
+
+        # Sort by token count descending -- truncate the biggest first
+        tool_indices.sort(key=lambda x: x[1], reverse=True)
+
+        truncated = 0
+        tokens_to_shed = int(estimated_tokens - threshold * 0.8)  # target 80% of threshold
+
+        for idx, toks in tool_indices:
+            if tokens_to_shed <= 0:
+                break
+            msg = messages[idx]
+            assert isinstance(msg, ToolMessage)
+            content = msg.content or ""
+            if len(content) < 500:
+                continue
+
+            # Keep first 200 chars + last 100 chars, insert marker
+            head = content[:200]
+            tail = content[-100:]
+            marker = (
+                f"\n\n... [truncated: {len(content)} chars → 300 chars "
+                f"to fit context window] ...\n\n"
+            )
+            new_content = head + marker + tail
+            messages[idx] = ToolMessage(
+                content=new_content,
+                tool_call_id=msg.tool_call_id,
+                tool_name=msg.tool_name,
+            )
+            saved = toks - estimate_tokens([messages[idx]])
+            tokens_to_shed -= saved
+            truncated += 1
+
+        return truncated
 
     def _summarize(self, old_messages: list[Message]) -> str:
         """Use the summary provider to condense old conversation messages."""
