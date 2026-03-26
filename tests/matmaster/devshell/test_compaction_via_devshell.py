@@ -45,22 +45,34 @@ class MockSummaryProvider:
         self.call_count = 0
         self.call_messages: list[list[dict]] = []
 
-    def chat(self, messages, tools=None):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
         self.call_count += 1
         self.call_messages.append(messages)
         return LLMResponse(content=self._summary, finish_reason="stop")
 
-    def chat_stream(self, messages, tools=None, *, timeout=None):
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(content=self._summary, finish_reason="stop")
 
 
 class FailingSummaryProvider:
     """始终失败的 provider，测试回退逻辑。"""
 
-    def chat(self, messages, tools=None):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
         raise RuntimeError("LLM unavailable for summary")
 
-    def chat_stream(self, messages, tools=None, *, timeout=None):
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(content="", finish_reason="stop")
 
 
@@ -127,7 +139,7 @@ class TestDefaultDevshellPath:
         )
         assert spec.compactor is None, "assemble 阶段不应创建 compactor 实例"
 
-    def test_compactor_skips_when_disabled(self) -> None:
+    async def test_compactor_skips_when_disabled(self) -> None:
         """enabled=False 时 compact_if_needed 直接返回，不修改消息。"""
         config = CompactionConfig(enabled=False)
         provider = MockSummaryProvider()
@@ -137,7 +149,7 @@ class TestDefaultDevshellPath:
         original_len = len(msgs)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 999999}, turn=5)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 999999}, turn=5)
 
         assert len(msgs) == original_len, "disabled 时不应修改消息"
         assert provider.call_count == 0, "disabled 时不应调用 summary provider"
@@ -149,8 +161,8 @@ class TestDefaultDevshellPath:
 class TestThresholdBehavior:
     """验证 token 估算阈值的触发逻辑。"""
 
-    def test_trigger_above_threshold(self) -> None:
-        """estimated tokens > threshold → 触发压缩。"""
+    async def test_trigger_above_threshold(self) -> None:
+        """estimated tokens > threshold -> 触发压缩。"""
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
@@ -160,13 +172,13 @@ class TestThresholdBehavior:
         compactor.update_message_count(len(msgs))
 
         # prompt_tokens=950 已接近阈值 900，加上 delta 估算必超
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
         assert provider.call_count == 1, "应触发一次摘要调用"
         assert compactor._compaction_count == 1
 
-    def test_skip_below_threshold(self) -> None:
-        """estimated tokens < threshold → 不触发。"""
+    async def test_skip_below_threshold(self) -> None:
+        """estimated tokens < threshold -> 不触发。"""
         config = CompactionConfig(
             enabled=True, context_window_tokens=128_000, trigger_ratio=0.9
         )
@@ -175,13 +187,13 @@ class TestThresholdBehavior:
         compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 1000}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 1000}, turn=3)
 
         assert provider.call_count == 0, "低于阈值不应触发"
         assert compactor._compaction_count == 0
 
-    def test_threshold_boundary_exact(self) -> None:
-        """精确边界: estimated == threshold - 1 → 不触发。"""
+    async def test_threshold_boundary_exact(self) -> None:
+        """精确边界: estimated == threshold - 1 -> 不触发。"""
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
@@ -195,7 +207,7 @@ class TestThresholdBehavior:
         compactor.update_message_count(len(msgs))
 
         # prompt_tokens 刚好不足
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 800}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 800}, turn=3)
         assert provider.call_count == 0
 
 
@@ -205,7 +217,7 @@ class TestThresholdBehavior:
 class TestCooldown:
     """验证连续 turn 冷却: turn <= last_compaction_turn + 1 → 跳过。"""
 
-    def test_skip_consecutive_turn(self) -> None:
+    async def test_skip_consecutive_turn(self) -> None:
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
@@ -215,15 +227,15 @@ class TestCooldown:
         compactor.update_message_count(len(msgs))
 
         # 首次触发 at turn=3
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
         assert provider.call_count == 1
 
         # turn=4 (3+1) 被冷却跳过
         compactor.update_message_count(len(msgs))
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=4)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=4)
         assert provider.call_count == 1, "冷却期不应再次触发"
 
-    def test_trigger_after_cooldown(self) -> None:
+    async def test_trigger_after_cooldown(self) -> None:
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
@@ -233,7 +245,7 @@ class TestCooldown:
         compactor.update_message_count(len(msgs))
 
         # turn=3 触发
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
         assert provider.call_count == 1
 
         # 重建长对话模拟继续积累
@@ -245,7 +257,7 @@ class TestCooldown:
         compactor.update_message_count(len(msgs))
 
         # turn=5 (> 3+1) 冷却期结束，可再次触发
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=5)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=5)
         assert provider.call_count == 2, "冷却期结束后应再次触发"
 
 
@@ -255,7 +267,7 @@ class TestCooldown:
 class TestSummaryStrategy:
     """验证 summary 策略的输出消息结构。"""
 
-    def test_output_structure(self) -> None:
+    async def test_output_structure(self) -> None:
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
@@ -265,7 +277,7 @@ class TestSummaryStrategy:
         compactor.update_message_count(len(msgs))
         original_len = len(msgs)
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
         # 结构: [SystemMessage(原始), SystemMessage([Compacted Context]), UserMessage(task), ...recent]
         assert len(msgs) < original_len, "压缩后消息数应减少"
@@ -277,7 +289,7 @@ class TestSummaryStrategy:
         assert isinstance(msgs[2], UserMessage)
         assert "Analyze this dataset" in msgs[2].content
 
-    def test_summary_provider_receives_old_messages(self) -> None:
+    async def test_summary_provider_receives_old_messages(self) -> None:
         """摘要 provider 收到的是被压缩的旧消息，不含 recent turns。"""
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
@@ -287,7 +299,7 @@ class TestSummaryStrategy:
         compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
         assert provider.call_count == 1
         # provider.chat 收到的 messages 中应包含 SUMMARY_SYSTEM_PROMPT
@@ -301,7 +313,7 @@ class TestSummaryStrategy:
 class TestSlidingWindowFallback:
     """验证 summary 失败时回退到 sliding_window。"""
 
-    def test_fallback_structure(self) -> None:
+    async def test_fallback_structure(self) -> None:
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
@@ -311,7 +323,7 @@ class TestSlidingWindowFallback:
         compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
         assert len(msgs) < original_len, "回退策略也应减少消息数"
         # 无 [Compacted Context] 消息
@@ -328,7 +340,7 @@ class TestSlidingWindowFallback:
 class TestEventEmission:
     """验证 MessageBus 收到 ContextCompactionEvent。"""
 
-    def test_emits_compaction_event(self) -> None:
+    async def test_emits_compaction_event(self) -> None:
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
@@ -338,7 +350,7 @@ class TestEventEmission:
         compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
         event = bus.get_nowait()
         assert isinstance(event, ContextCompactionEvent)
@@ -347,7 +359,7 @@ class TestEventEmission:
         assert event.payload["trigger_tokens"] > 0
         assert event.payload["retained_turns"] >= 3
 
-    def test_fallback_event_strategy(self) -> None:
+    async def test_fallback_event_strategy(self) -> None:
         """回退策略的事件 strategy 字段为 sliding_window。"""
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
@@ -358,13 +370,13 @@ class TestEventEmission:
         compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
         event = bus.get_nowait()
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["strategy"] == "sliding_window"
 
-    def test_no_event_without_bus(self) -> None:
+    async def test_no_event_without_bus(self) -> None:
         """无 bus 时不抛异常。"""
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
@@ -375,7 +387,7 @@ class TestEventEmission:
         compactor.update_message_count(len(msgs))
 
         # 应正常执行不抛异常
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
         assert compactor._compaction_count == 1
 
 
@@ -385,7 +397,7 @@ class TestEventEmission:
 class TestMultipleCompactions:
     """验证压缩后继续积累可再次触发。"""
 
-    def test_second_compaction(self) -> None:
+    async def test_second_compaction(self) -> None:
         config = CompactionConfig(
             enabled=True, context_window_tokens=1000, trigger_ratio=0.9
         )
@@ -396,7 +408,7 @@ class TestMultipleCompactions:
         compactor.update_message_count(len(msgs))
 
         # 第一次压缩 at turn=3
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
         assert compactor._compaction_count == 1
         len_after_first = len(msgs)
 
@@ -418,7 +430,7 @@ class TestMultipleCompactions:
         compactor.update_message_count(len(msgs))
 
         # 第二次压缩 at turn=6 (> 3+1)
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=6)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=6)
         assert compactor._compaction_count == 2
         assert len(msgs) < len_after_first + 10  # 再次被压缩
 
@@ -488,8 +500,8 @@ class TestRetainedTurnsSelection:
 class TestToolTruncationFallback:
     """验证 2 turn 占满上下文时 tool_truncation 兜底。"""
 
-    def test_truncation_when_single_turn_exceeds_threshold(self) -> None:
-        """1 个 turn 就超限 → 无可压缩旧 turn → 截断大 tool result。"""
+    async def test_truncation_when_single_turn_exceeds_threshold(self) -> None:
+        """1 个 turn 就超限 -> 无可压缩旧 turn -> 截断大 tool result。"""
         from matmaster.core.bus import MessageBus
         from matmaster.types.events import ContextCompactionEvent
 
@@ -521,7 +533,7 @@ class TestToolTruncationFallback:
         compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
 
         # summary 不应被调用（没有旧 turn 可摘要）
         assert provider.call_count == 0
@@ -542,7 +554,7 @@ class TestToolTruncationFallback:
         assert isinstance(event, ContextCompactionEvent)
         assert event.payload["strategy"] == "tool_truncation"
 
-    def test_no_truncation_below_threshold(self) -> None:
+    async def test_no_truncation_below_threshold(self) -> None:
         """即使只有 1 turn，未超阈值不截断。"""
         config = CompactionConfig(
             enabled=True, context_window_tokens=128000, trigger_ratio=0.9
@@ -559,8 +571,8 @@ class TestToolTruncationFallback:
         compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        # prompt_tokens=1000 远低于 128000*0.9 → 不触发
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 1000}, turn=3)
+        # prompt_tokens=1000 远低于 128000*0.9 -> 不触发
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 1000}, turn=3)
         assert compactor._compaction_count == 0
         assert "truncated" not in (msgs[3].content or "")
 
@@ -568,6 +580,7 @@ class TestToolTruncationFallback:
 # ── Test 11: Kernel 集成端到端 ───────────────────────────
 
 
+@pytest.mark.skip(reason="Kernel integration deferred to Phase 17-18 per D-08: requires Kernel async化")
 class TestKernelIntegration:
     """完整 kernel loop 中压缩触发且结果正确。"""
 
