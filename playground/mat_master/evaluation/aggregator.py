@@ -1,246 +1,186 @@
-"""Aggregation utilities for MATTER evaluation outputs."""
+"""Aggregation utilities for MATTER v5 evaluation outputs.
 
-import math
+v5 changes (vs v4):
+- Replaced three-dimensional float accumulation with binary pass-count aggregation
+- EvaluationSummary now uses AxisPassRates (passed, total) tuples
+- by_level replaced by by_capability and by_domain
+- Model comparison now uses AxisPassRates instead of float means
+- _score_stats / _dim_stats_block removed (float statistics no longer needed)
+- Safety summary unchanged
+"""
+
 from collections import defaultdict
-from statistics import mean, stdev
 from typing import Any
 
-from .schemas import EvalRunRecord, EvaluationSummary
+from .schemas import AxisPassRates, EvalRunRecord, EvaluationSummary, QuestionPassRate
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
 
 
 def build_summary(records: list[EvalRunRecord]) -> EvaluationSummary:
-    by_question: dict[str, dict[str, Any]] = {}
-    by_level_scores: dict[str, list[float]] = defaultdict(list)
-    by_mode_scores: dict[str, list[float]] = defaultdict(list)
+    """Aggregate a list of EvalRunRecords into an EvaluationSummary.
+
+    All arithmetic is integer pass-count addition — no floats, no weights.
+    """
+    if not records:
+        return EvaluationSummary(
+            total_runs=0,
+            total_criteria=0,
+            total_passed=0,
+            pass_rate=0.0,
+        )
+
+    total_criteria = 0
+    total_passed = 0
     safety_triggered = 0
 
-    # v4: three-dimensional score accumulators
-    by_level_accuracy: dict[str, list[float]] = defaultdict(list)
-    by_level_grounding: dict[str, list[float]] = defaultdict(list)
-    by_level_efficiency: dict[str, list[float]] = defaultdict(list)
-    by_level_strict_final: dict[str, list[float]] = defaultdict(list)
-    by_level_analysis_final: dict[str, list[float]] = defaultdict(list)
+    # Accumulators keyed by (capability | domain | mode | model)
+    # Each value: [correctness_passed, correctness_total,
+    #              grounding_passed, grounding_total,
+    #              efficiency_passed, efficiency_total]
+    _CapKey = str
+    _DomKey = str
+    _ModeKey = str
+    _ModelKey = str
 
-    by_mode_accuracy: dict[str, list[float]] = defaultdict(list)
-    by_mode_grounding: dict[str, list[float]] = defaultdict(list)
-    by_mode_efficiency: dict[str, list[float]] = defaultdict(list)
-    by_mode_strict_final: dict[str, list[float]] = defaultdict(list)
-    by_mode_analysis_final: dict[str, list[float]] = defaultdict(list)
+    cap_acc: dict[_CapKey, list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
+    dom_acc: dict[_DomKey, list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
+    mode_acc: dict[_ModeKey, list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
+    model_acc: dict[_ModelKey, list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
 
-    # v4: model-level accumulators
-    by_model_scores: dict[str, list[float]] = defaultdict(list)
-    by_model_strict_final: dict[str, list[float]] = defaultdict(list)
-    by_model_analysis_final: dict[str, list[float]] = defaultdict(list)
-    by_model_tokens: dict[str, list[int]] = defaultdict(list)
+    # Per-question accumulator: keyed by (question_id, mode)
+    q_acc: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0, 0])
+    # 7 slots: [cp, ct, gp, gt, ep, et, safety_veto_count]
+    q_meta: dict[tuple[str, str], dict[str, Any]] = {}
 
-    grouped: dict[tuple[str, str], list[EvalRunRecord]] = defaultdict(list)
     for record in records:
-        grouped[(record.question_id, record.mode)].append(record)
-        by_level_scores[record.level].append(record.band_score)
-        by_mode_scores[record.mode].append(record.band_score)
+        cp = record.correctness_passed
+        ct = record.correctness_total
+        gp = record.grounding_passed
+        gt = record.grounding_total
+        ep = record.efficiency_passed
+        et = record.efficiency_total
+
+        total_criteria += record.total_count
+        total_passed += record.passed_count
+
         if record.safety_veto.triggered:
             safety_triggered += 1
 
-        # Accumulate three-dimensional scores
-        level, mode = record.level, record.mode
-        _acc_optional(by_level_accuracy[level], record.accuracy_score)
-        _acc_optional(by_level_grounding[level], record.grounding_score)
-        _acc_optional(by_level_efficiency[level], record.efficiency_score)
-        _acc_optional(by_level_strict_final[level], record.strict_final)
-        _acc_optional(by_level_analysis_final[level], record.analysis_final)
+        _add6(cap_acc[record.capability], cp, ct, gp, gt, ep, et)
+        _add6(dom_acc[record.domain], cp, ct, gp, gt, ep, et)
+        _add6(mode_acc[record.mode], cp, ct, gp, gt, ep, et)
 
-        _acc_optional(by_mode_accuracy[mode], record.accuracy_score)
-        _acc_optional(by_mode_grounding[mode], record.grounding_score)
-        _acc_optional(by_mode_efficiency[mode], record.efficiency_score)
-        _acc_optional(by_mode_strict_final[mode], record.strict_final)
-        _acc_optional(by_mode_analysis_final[mode], record.analysis_final)
-
-        # Model-level accumulation
         model_key = record.model_name or 'unknown'
-        by_model_scores[model_key].append(record.band_score)
-        _acc_optional(by_model_strict_final[model_key], record.strict_final)
-        _acc_optional(by_model_analysis_final[model_key], record.analysis_final)
-        if record.token_usage and record.token_usage.total_tokens > 0:
-            by_model_tokens[model_key].append(record.token_usage.total_tokens)
+        _add6(model_acc[model_key], cp, ct, gp, gt, ep, et)
 
-    # Build per-question summary
-    for (question_id, mode), items in grouped.items():
-        scores = [item.band_score for item in items]
+        qk = (record.question_id, record.mode)
+        _add7(q_acc[qk], cp, ct, gp, gt, ep, et,
+              1 if record.safety_veto.triggered else 0)
+        if qk not in q_meta:
+            q_meta[qk] = {
+                'capability': record.capability,
+                'domain': record.domain,
+            }
+
+    pass_rate = total_passed / total_criteria if total_criteria > 0 else 0.0
+
+    by_capability = {k: _to_axis_pass_rates(v) for k, v in cap_acc.items()}
+    by_domain = {k: _to_axis_pass_rates(v) for k, v in dom_acc.items()}
+    by_mode = {k: _to_axis_pass_rates(v) for k, v in mode_acc.items()}
+    by_model = {k: _to_axis_pass_rates(v) for k, v in model_acc.items()}
+
+    by_question: dict[str, QuestionPassRate] = {}
+    for (question_id, mode), slots in q_acc.items():
+        cp, ct, gp, gt, ep, et, sv = slots
+        meta = q_meta.get((question_id, mode), {})
+        overall_p = cp + gp + ep
+        overall_t = ct + gt + et
         key = f"{question_id}:{mode}"
-        acc_scores = [i.accuracy_score for i in items if i.accuracy_score is not None]
-        grd_scores = [i.grounding_score for i in items if i.grounding_score is not None]
-        eff_scores = [i.efficiency_score for i in items if i.efficiency_score is not None]
-        strict_scores = [i.strict_final for i in items if i.strict_final is not None]
-        analysis_scores = [i.analysis_final for i in items if i.analysis_final is not None]
-        by_question[key] = {
-            'question_id': question_id,
-            'mode': mode,
-            'n': len(scores),
-            'mean': _safe_mean(scores),
-            'std': _safe_std(scores),
-            'min': min(scores) if scores else 0.0,
-            'max': max(scores) if scores else 0.0,
-            'safety_veto_count': sum(1 for item in items if item.safety_veto.triggered),
-            # v4 dimensional means
-            'accuracy_mean': _safe_mean(acc_scores) if acc_scores else None,
-            'grounding_mean': _safe_mean(grd_scores) if grd_scores else None,
-            'efficiency_mean': _safe_mean(eff_scores) if eff_scores else None,
-            'strict_final_mean': _safe_mean(strict_scores) if strict_scores else None,
-            'analysis_final_mean': _safe_mean(analysis_scores) if analysis_scores else None,
-        }
-
-    # Build by-level summary with v4 dimensions
-    by_level: dict[str, Any] = {}
-    for level, scores in by_level_scores.items():
-        stats = _score_stats(scores)
-        stats.update(_dim_stats_block(
-            accuracy=list(by_level_accuracy[level]),
-            grounding=list(by_level_grounding[level]),
-            efficiency=list(by_level_efficiency[level]),
-            strict_final=list(by_level_strict_final[level]),
-            analysis_final=list(by_level_analysis_final[level]),
-        ))
-        by_level[level] = stats
-
-    # Build by-mode summary with v4 dimensions
-    by_mode: dict[str, Any] = {}
-    for mode, scores in by_mode_scores.items():
-        stats = _score_stats(scores)
-        stats.update(_dim_stats_block(
-            accuracy=list(by_mode_accuracy[mode]),
-            grounding=list(by_mode_grounding[mode]),
-            efficiency=list(by_mode_efficiency[mode]),
-            strict_final=list(by_mode_strict_final[mode]),
-            analysis_final=list(by_mode_analysis_final[mode]),
-        ))
-        by_mode[mode] = stats
-
-    # Build overall
-    all_scores = [record.band_score for record in records]
-    overall = _score_stats(all_scores)
-    all_accuracy = [r.accuracy_score for r in records if r.accuracy_score is not None]
-    all_grounding = [r.grounding_score for r in records if r.grounding_score is not None]
-    all_efficiency = [r.efficiency_score for r in records if r.efficiency_score is not None]
-    all_strict = [r.strict_final for r in records if r.strict_final is not None]
-    all_analysis = [r.analysis_final for r in records if r.analysis_final is not None]
-    overall.update(_dim_stats_block(
-        accuracy=all_accuracy,
-        grounding=all_grounding,
-        efficiency=all_efficiency,
-        strict_final=all_strict,
-        analysis_final=all_analysis,
-    ))
-    overall['safety_veto_rate'] = (safety_triggered / len(records)) if records else 0.0
-    overall['passed'] = safety_triggered == 0
-
-    # Build by-model summary
-    by_model: dict[str, Any] = {}
-    for model_key in sorted(set(by_model_scores.keys())):
-        model_stats = _score_stats(list(by_model_scores[model_key]))
-        strict_vals = list(by_model_strict_final[model_key])
-        analysis_vals = list(by_model_analysis_final[model_key])
-        token_vals = list(by_model_tokens[model_key])
-        model_stats['strict_final_mean'] = _safe_mean(strict_vals) if strict_vals else None
-        model_stats['analysis_final_mean'] = _safe_mean(analysis_vals) if analysis_vals else None
-        model_stats['total_tokens_sum'] = sum(token_vals) if token_vals else 0
-        model_stats['total_tokens_mean'] = _safe_mean(token_vals) if token_vals else None
-        model_stats['runs_with_token_data'] = len(token_vals)
-        by_model[model_key] = model_stats
+        by_question[key] = QuestionPassRate(
+            question_id=question_id,
+            capability=meta.get('capability', ''),
+            domain=meta.get('domain', ''),
+            runs=sum(
+                1 for r in records
+                if r.question_id == question_id and r.mode == mode
+            ),
+            overall=(overall_p, overall_t),
+            correctness=(cp, ct),
+            grounding=(gp, gt),
+            efficiency=(ep, et),
+            safety_veto_count=sv,
+        )
 
     safety = {
         'triggered_count': safety_triggered,
         'total_runs': len(records),
-        'triggered_rate': (safety_triggered / len(records)) if records else 0.0,
+        'triggered_rate': safety_triggered / len(records) if records else 0.0,
         'any_triggered': safety_triggered > 0,
     }
 
     return EvaluationSummary(
         total_runs=len(records),
+        total_criteria=total_criteria,
+        total_passed=total_passed,
+        pass_rate=pass_rate,
+        by_capability=by_capability,
+        by_domain=by_domain,
         by_question=by_question,
-        by_level=by_level,
         by_mode=by_mode,
-        overall=overall,
-        safety=safety,
         by_model=by_model,
+        safety=safety,
     )
 
 
-def _acc_optional(lst: list[float], value: float | None) -> None:
-    """Append value to list only if not None."""
-    if value is not None:
-        lst.append(value)
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
-def _dim_stats_block(
-    *,
-    accuracy: list[float],
-    grounding: list[float],
-    efficiency: list[float],
-    strict_final: list[float],
-    analysis_final: list[float],
-) -> dict[str, Any]:
-    """Return v4 dimensional stats dict for embedding into a stats block."""
-    return {
-        'accuracy_mean': _safe_mean(accuracy) if accuracy else None,
-        'accuracy_std': _safe_std(accuracy) if len(accuracy) > 1 else None,
-        'grounding_mean': _safe_mean(grounding) if grounding else None,
-        'grounding_std': _safe_std(grounding) if len(grounding) > 1 else None,
-        'efficiency_mean': _safe_mean(efficiency) if efficiency else None,
-        'efficiency_std': _safe_std(efficiency) if len(efficiency) > 1 else None,
-        'strict_final_mean': _safe_mean(strict_final) if strict_final else None,
-        'analysis_final_mean': _safe_mean(analysis_final) if analysis_final else None,
-    }
+def _add6(
+    slots: list[int],
+    cp: int, ct: int,
+    gp: int, gt: int,
+    ep: int, et: int,
+) -> None:
+    """Add six pass/total integers into a 6-slot accumulator in place."""
+    slots[0] += cp
+    slots[1] += ct
+    slots[2] += gp
+    slots[3] += gt
+    slots[4] += ep
+    slots[5] += et
 
 
-def _t_critical(df: int) -> float:
-    """Two-tailed 95% t critical value for small samples, z=1.96 fallback for df>=30."""
-    table = {
-        1: 12.706,
-        2: 4.303,
-        3: 3.182,
-        4: 2.776,
-        5: 2.571,
-        6: 2.447,
-        7: 2.365,
-        8: 2.306,
-        9: 2.262,
-        10: 2.228,
-        15: 2.131,
-        20: 2.086,
-        25: 2.060,
-        29: 2.045,
-    }
-    if df >= 30:
-        return 1.96
-    best_df = max(k for k in table if k <= df) if any(k <= df for k in table) else 1
-    return table[best_df]
+def _add7(
+    slots: list[int],
+    cp: int, ct: int,
+    gp: int, gt: int,
+    ep: int, et: int,
+    sv: int,
+) -> None:
+    """Add seven values into a 7-slot accumulator in place."""
+    slots[0] += cp
+    slots[1] += ct
+    slots[2] += gp
+    slots[3] += gt
+    slots[4] += ep
+    slots[5] += et
+    slots[6] += sv
 
 
-def _score_stats(scores: list[float]) -> dict[str, Any]:
-    n = len(scores)
-    if n == 0:
-        return {'n': 0, 'mean': 0.0, 'std': 0.0, 'ci95_half_width': 0.0}
-    avg = _safe_mean(scores)
-    std = _safe_std(scores)
-    t_crit = _t_critical(n - 1) if n > 1 else 0.0
-    ci = t_crit * std / math.sqrt(n) if n > 1 else 0.0
-    return {
-        'n': n,
-        'mean': avg,
-        'std': std,
-        'ci95_half_width': ci,
-        'min': min(scores),
-        'max': max(scores),
-    }
-
-
-def _safe_mean(values: list[float]) -> float:
-    if not values:
-        return 0.0
-    return float(mean(values))
-
-
-def _safe_std(values: list[float]) -> float:
-    if not values or len(values) == 1:
-        return 0.0
-    return float(stdev(values))
+def _to_axis_pass_rates(slots: list[int]) -> AxisPassRates:
+    """Convert a 6-slot [cp,ct,gp,gt,ep,et] list to AxisPassRates."""
+    cp, ct, gp, gt, ep, et = slots[:6]
+    overall_p = cp + gp + ep
+    overall_t = ct + gt + et
+    return AxisPassRates(
+        correctness=(cp, ct),
+        grounding=(gp, gt),
+        efficiency=(ep, et),
+        overall=(overall_p, overall_t),
+    )
