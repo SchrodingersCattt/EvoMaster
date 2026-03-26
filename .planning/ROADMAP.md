@@ -106,11 +106,11 @@ Plans:
 **Goal**: 将 6 个 Protocol 的方法签名从 sync 改为 async def，建立 v2.0 async 改造的合约基础
 **Depends on**: Phase 11 (v1.1 completed)
 **Requirements**: PROT-01, PROT-02, PROT-03, PROT-04
-**Plans:** 1/2 plans complete
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 12-01-PLAN.md -- LLMProvider/Tool/BuiltinTool/Hook/EventHandler/ReplyQueueLike Protocol async 签名改造 + chat_with_retry 删除
-- [ ] 12-02-PLAN.md -- (pending)
+- [x] 12-02-PLAN.md -- (pending)
 
 ## Progress
 
@@ -130,4 +130,4 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11 -> 12
 | 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete    | 2026-03-25 |
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete    | 2026-03-25 |
-| 12. Protocol Async Signatures | v2.0 | 1/2 | In Progress | - |
+| 12. Protocol Async Signatures | v2.0 | 2/2 | Complete   | 2026-03-26 |

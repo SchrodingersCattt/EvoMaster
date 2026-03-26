@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: matmaster 协程改造
+milestone: v1.1
+milestone_name: Agent 外围能力构建
 status: executing
-stopped_at: Phase 12 context gathered
-last_updated: "2026-03-26T13:50:22.053Z"
-last_activity: 2026-03-26 -- Phase 12 execution started
+stopped_at: Completed 12-02-PLAN.md
+last_updated: "2026-03-26T14:19:26.833Z"
+last_activity: 2026-03-26
 progress:
-  total_phases: 8
-  completed_phases: 0
-  total_plans: 2
-  completed_plans: 0
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 11
+  completed_plans: 11
   percent: 0
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 12 (protocol) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 12
-Last activity: 2026-03-26 -- Phase 12 execution started
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-03-26
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -48,6 +48,8 @@ Progress: [░░░░░░░░░░] 0%
 
 ## Accumulated Context
 
+| Phase 12 P02 | 13min | 2 tasks | 19 files |
+
 ### Decisions
 
 Decisions logged in PROJECT.md Key Decisions table.
@@ -58,6 +60,9 @@ Recent decisions affecting current work:
 - [v2.0 init]: stop_event 保留 threading.Event（跨线程安全）
 - [v2.0 init]: DevShell 延后改造，用 asyncio.run() 包装调用
 - [v2.0 init]: Protocol hard cut（不维护 sync/async 双 Protocol）
+- [Phase 12]: validate_async_protocol uses _is_async_callable checking both iscoroutinefunction and isasyncgenfunction for async generator support
+- [Phase 12]: chat_with_retry fully eliminated from codebase (Protocol, OpenAIProvider, all 15 test files)
+- [Phase 12]: pytest-asyncio installed with auto mode for async test infrastructure
 
 ### Pending Todos
 
@@ -71,6 +76,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-26T09:52:41.622Z
-Stopped at: Phase 12 context gathered
-Resume file: .planning/phases/12-protocol/12-CONTEXT.md
+Last session: 2026-03-26T14:19:26.829Z
+Stopped at: Completed 12-02-PLAN.md
+Resume file: None
