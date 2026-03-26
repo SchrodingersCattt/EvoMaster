@@ -4,6 +4,7 @@
 
 - ✅ **v1 MatMaster Framework Refactoring** -- Phases 1-7 (shipped 2026-03-22)
 - 🚧 **v1.1 Agent 外围能力构建** -- Phases 8-11 (in progress)
+- 🚧 **v2.0 matmaster 协程改造** -- Phase 12+ (in progress)
 
 ## Phases
 
@@ -97,10 +98,24 @@ Plans:
 - [x] 11-02-PLAN.md -- Exp 层 spawn_fn 闭包创建 + SubAgentTool 注册 + source_override + 集成测试
 - [x] 11-03-PLAN.md -- 事件路由 source 前缀兼容 + chat_history 改造 + service 层 stop_event 注入
 
+### 🚧 v2.0 matmaster 协程改造 (In Progress)
+
+**Milestone Goal:** 将 matmaster 框架从同步架构全链路改造为 async/await，为多 agent 编排做准备
+
+#### Phase 12: Protocol Async Signatures
+**Goal**: 将 6 个 Protocol 的方法签名从 sync 改为 async def，建立 v2.0 async 改造的合约基础
+**Depends on**: Phase 11 (v1.1 completed)
+**Requirements**: PROT-01, PROT-02, PROT-03, PROT-04
+**Plans:** 1/2 plans complete
+
+Plans:
+- [x] 12-01-PLAN.md -- LLMProvider/Tool/BuiltinTool/Hook/EventHandler/ReplyQueueLike Protocol async 签名改造 + chat_with_retry 删除
+- [ ] 12-02-PLAN.md -- (pending)
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 8 -> 9 -> 10 -> 11
+Phases execute in numeric order: 8 -> 9 -> 10 -> 11 -> 12
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -115,3 +130,4 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11
 | 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete    | 2026-03-25 |
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete    | 2026-03-25 |
+| 12. Protocol Async Signatures | v2.0 | 1/2 | In Progress | - |
