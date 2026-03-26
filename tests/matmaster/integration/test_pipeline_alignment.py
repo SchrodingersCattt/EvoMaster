@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import queue
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
@@ -31,10 +31,16 @@ class _ToolCallThenFinishLLM:
     def __init__(self) -> None:
         self._call_count = 0
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> _ToolCallThenFinishLLM:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="done", finish_reason="stop")
 
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
             # Emit a reasoning chunk first so EventEmitterHook produces ThoughtEvent

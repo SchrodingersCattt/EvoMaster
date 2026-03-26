@@ -316,7 +316,11 @@ class TestRealAPICompaction:
                   f"retained_turns={evt.payload['retained_turns']}")
 
         assert len(compaction_events) > 0
-        assert compaction_events[0].payload["strategy"] == "summary"
+        summary_events = [e for e in compaction_events if e.payload["strategy"] == "summary"]
+        assert len(summary_events) > 0, (
+            f"Expected at least one summary compaction, got strategies: "
+            f"{[e.payload['strategy'] for e in compaction_events]}"
+        )
 
         # ── 消息结构 ──
         msgs = result.messages

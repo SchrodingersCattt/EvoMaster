@@ -10,7 +10,7 @@ import json
 import queue
 import threading
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 from unittest.mock import MagicMock, patch
 
 from matmaster.config.exp import ExpConfig
@@ -44,14 +44,20 @@ class MockLLMProvider:
     def __init__(self, content: str = 'Hello from mock LLM') -> None:
         self._content = content
 
-    def chat(
+    async def __aenter__(self) -> MockLLMProvider:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
     ) -> LLMResponse:
         return LLMResponse(content=self._content, finish_reason='stop')
 
-    def chat_stream(
+    async def chat_stream(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, timeout: float | None = None
-    ) -> Iterator[StreamChunk]:
+    ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(
             content=self._content,
             stream_state='start',
@@ -70,10 +76,16 @@ class MockLLMProviderWithToolCall:
     def __init__(self) -> None:
         self._call_count = 0
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> MockLLMProviderWithToolCall:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='done', finish_reason='stop')
 
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
             # First turn: tool call
@@ -99,10 +111,16 @@ class MockLLMProviderCapturingMessages:
     def __init__(self) -> None:
         self.captured_messages: list[list[dict]] = []
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> MockLLMProviderCapturingMessages:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='ok', finish_reason='stop')
 
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         self.captured_messages.append(list(messages))
         yield StreamChunk(content='Acknowledged history.', finish_reason='stop')
 

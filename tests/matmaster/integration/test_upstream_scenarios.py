@@ -10,7 +10,7 @@ import queue
 import threading
 import time
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -55,10 +55,16 @@ class _SlowMockLLM:
         self._turns = turns
         self._call_count = 0
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> _SlowMockLLM:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="done", finish_reason="stop")
 
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         # Add a small delay to give stop_event time to be set
         time.sleep(0.05)
@@ -71,10 +77,16 @@ class _NeverFinishLLM:
     def __init__(self) -> None:
         self._call_count = 0
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> _NeverFinishLLM:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="loop", finish_reason="stop")
 
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         # Always yield a natural finish to avoid infinite loop
         yield StreamChunk(content=f"Turn {self._call_count}", finish_reason="stop")
@@ -83,10 +95,16 @@ class _NeverFinishLLM:
 class _QuickMockLLM:
     """Simplest mock LLM: single turn, immediate finish."""
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> _QuickMockLLM:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="quick", finish_reason="stop")
 
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(content="quick", finish_reason="stop")
 
 

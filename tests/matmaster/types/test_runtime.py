@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 
 import pytest
 from pydantic import ValidationError
@@ -29,20 +29,26 @@ from matmaster.tools.tool_registry import ToolRegistry
 class _MockLLMProvider:
     """LLMProvider Protocol-conforming mock for runtime spec tests."""
 
-    def chat(
+    async def __aenter__(self) -> _MockLLMProvider:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         return LLMResponse(content="mock", finish_reason="stop")
 
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
+    ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(content="mock", finish_reason="stop")
 
 

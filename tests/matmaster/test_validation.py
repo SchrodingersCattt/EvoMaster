@@ -68,6 +68,12 @@ class SyncHook:
 
 
 class AsyncLLMProviderOK:
+    async def __aenter__(self) -> AsyncLLMProviderOK:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
     async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="async", finish_reason="stop")
 
@@ -79,6 +85,12 @@ class AsyncLLMProviderOK:
 
 class AsyncLLMProviderCoroutineOnly:
     """Both methods are coroutine functions (no yield). Also valid."""
+
+    async def __aenter__(self) -> AsyncLLMProviderCoroutineOnly:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
 
     async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="async", finish_reason="stop")
@@ -146,7 +158,9 @@ class TestValidateAsyncProtocol:
     def test_detects_sync_mismatch_on_llm_provider(self) -> None:
         """Sync LLMProvider implementation fails async Protocol validation."""
         errors = validate_async_protocol(SyncLLMProvider(), LLMProvider)
-        assert len(errors) == 2
+        assert len(errors) == 4
+        assert any("__aenter__" in e and "missing method" in e for e in errors)
+        assert any("__aexit__" in e and "missing method" in e for e in errors)
         assert any("chat()" in e and "expected async def" in e for e in errors)
         assert any("chat_stream()" in e and "expected async def" in e for e in errors)
 
@@ -197,7 +211,7 @@ class TestValidateAsyncProtocol:
             pass
 
         errors = validate_async_protocol(Empty(), LLMProvider)
-        assert len(errors) == 2
+        assert len(errors) == 4
         assert any("missing method" in e for e in errors)
 
 
