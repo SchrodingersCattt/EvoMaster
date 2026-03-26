@@ -1,0 +1,87 @@
+# LLM 配置（独立文件）
+# profiles: 定义每个 LLM 后端的完整参数
+# routes: 前端 model_override 字符串 → 内部 profile 映射
+# default: 未指定时使用的默认 profile key
+#
+# 鉴权凭据从 .env 读取，使用 ${VAR} 引用
+
+profiles:
+  opus:
+    provider: "openai"
+    model: "claude-opus-4-6"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    thinking_effort: "high"
+    reasoning_protocol: "anthropic_adaptive_thinking"
+    temperature_policy: "force_one_when_reasoning"
+    temperature: 0.7
+    timeout: 300
+    stream_timeout: 20
+    stream_idle_timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+
+  sonnet:
+    provider: "openai"
+    model: "claude-sonnet-4-6"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    thinking_effort: "high"
+    reasoning_protocol: "anthropic_adaptive_thinking"
+    temperature_policy: "force_one_when_reasoning"
+    temperature: 0.7
+    timeout: 300
+    stream_timeout: 20
+    stream_idle_timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+
+  haiku:
+    provider: "openai"
+    model: "claude-haiku-4-5"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    timeout: 120
+    stream_timeout: 15
+    stream_idle_timeout: 20
+    max_retries: 3
+    retry_delay: 1.0
+
+  gemini:
+    provider: "openai"
+    model: "gemini-3-flash-preview"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "high"
+    timeout: 120
+    stream_timeout: 15
+    stream_idle_timeout: 20
+    max_retries: 3
+    retry_delay: 1.0
+
+  compaction:
+    provider: "openai"
+    model: "gemini-3-flash-preview"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    temperature: 0.3
+    max_tokens: 4096
+    timeout: 120
+    stream_timeout: 15
+    stream_idle_timeout: 20
+    max_retries: 2
+    retry_delay: 1.0
+
+# 路由表：前端 model_override 字符串 → 内部 profile
+routes:
+  "claude-opus-4-6":
+    profile: opus
+  "claude-sonnet-4-6":
+    profile: sonnet
+  "claude-haiku-4-5":
+    profile: haiku
+  "gemini-3-flash-preview":
+    profile: gemini
+
+default: "opus"
