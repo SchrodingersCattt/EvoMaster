@@ -26,8 +26,8 @@ class PersistenceHandler:
     - Persist: everything else
     """
 
-    _SKIP_TYPES = frozenset({"log_line", "llm_token", "stream_closed", "end"})
-    _STREAMING_STATES = frozenset({"start", "streaming", "end"})
+    _SKIP_TYPES = frozenset({'log_line', 'llm_token'})
+    _STREAMING_STATES = frozenset({'start', 'streaming', 'end'})
 
     def __init__(
         self,
@@ -43,18 +43,21 @@ class PersistenceHandler:
 
     def handle(self, event: BusEvent) -> None:  # type: ignore[arg-type]
         """Persist event to DB if it passes filter rules."""
-        event_type = getattr(event, "type", "")
+        event_type = getattr(event, 'type', '')
 
         if not self._should_persist_type(event_type):
             return
 
         # Skip streaming thought/response events (ephemeral deltas)
-        if isinstance(event, (ThoughtEvent, ResponseEvent)) and event.stream_state in self._STREAMING_STATES:
+        if (
+            isinstance(event, (ThoughtEvent, ResponseEvent))
+            and event.stream_state in self._STREAMING_STATES
+        ):
             return
 
         # Use the same JSON-safe payload mode as SSEHandler so persistence
         # and live SSE derive content from the same normalized field values.
-        payload = event.model_dump(mode="json")
+        payload = event.model_dump(mode='json')
         content = _public_content_for_event(event_type, payload)
 
         try:
@@ -65,11 +68,11 @@ class PersistenceHandler:
                 content,
                 task_id=self._task_id,
                 invocation_id=self._invocation_id,
-                spawn_id=getattr(event, "spawn_id", None),
+                spawn_id=getattr(event, 'spawn_id', None),
             )
         except Exception:
             logger.error(
-                "Failed to persist event type=%s session_id=%s",
+                'Failed to persist event type=%s session_id=%s',
                 event_type,
                 self._session_id,
                 exc_info=True,
