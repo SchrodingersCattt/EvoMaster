@@ -1,15 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: matmaster 协程改造
-status: Executing
-stopped_at: "Completed 13-01-PLAN.md"
-last_updated: "2026-03-27T18:25:00.000Z"
+milestone: v1.1
+milestone_name: Agent 外围能力构建
+status: executing
+stopped_at: Completed 13-02-PLAN.md
+last_updated: "2026-03-26T18:46:28.040Z"
+last_activity: 2026-03-27 — Completed 13-01 (OpenAIProvider async + Protocol extension)
 progress:
-  total_phases: 1
-  completed_phases: 0
-  total_plans: 2
-  completed_plans: 1
+  total_phases: 4
+  completed_phases: 4
+  total_plans: 11
+  completed_plans: 11
 ---
 
 # Project State
@@ -44,6 +45,8 @@ Recent decisions affecting current work:
 - [13-01]: OpenAIProvider __init__ 只存参数，__aenter__ 创建 AsyncOpenAI + httpx.AsyncClient
 - [13-01]: chat_with_retry 保留为 sync legacy 桥接，Kernel async 化后移除
 - [13-01]: validate_async_protocol helper 创建用于 Protocol 一致性检查
+- [Phase 13]: AgentKernel uses single shared bridge loop for async provider lifecycle and streaming (Phase 13-16 transition)
+- [Phase 13]: ContextCompactor._summarize and compact_if_needed are async, summary_provider lifecycle managed separately in Kernel
 
 ### Pending Todos
 
@@ -59,9 +62,10 @@ None.
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | 13-llm-provider | 01 | 7min | 2 | 6 |
+| Phase 13 P02 | 13min | 2 tasks | 6 files |
 
 ## Session Continuity
 
-Last session: 2026-03-27T18:25:00.000Z
-Stopped at: Completed 13-01-PLAN.md
+Last session: 2026-03-26T18:46:28.037Z
+Stopped at: Completed 13-02-PLAN.md
 Resume file: None
