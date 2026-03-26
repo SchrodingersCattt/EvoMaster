@@ -6,7 +6,7 @@ and dumps the resulting tool schemas to matmaster/cache/<server>.json.
 
 Usage:
     uv run python -m matmaster.tools.cache_mcp_schemas
-    uv run python -m matmaster.tools.cache_mcp_schemas --config-dir configs/mat_master
+    uv run python -m matmaster.tools.cache_mcp_schemas --config-dir matmaster_config
 """
 from __future__ import annotations
 
@@ -25,8 +25,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate MCP tool schema cache")
     parser.add_argument(
         "--config-dir",
-        default="configs/mat_master",
-        help="Directory containing config.yaml and mcp_config*.json",
+        default="matmaster_config",
+        help="Directory containing mcp.yaml and mcp_config*.json",
     )
     parser.add_argument(
         "--output-dir",
@@ -42,17 +42,16 @@ async def generate_cache(config_dir: Path, output_dir: Path) -> None:
     from evomaster.agent.tools.mcp.mcp_manager import MCPToolManager
     from matmaster.tools.lazy_mcp import configure_mcp_manager
 
-    config_yaml = config_dir / "config.yaml"
-    if not config_yaml.exists():
-        logger.error("config.yaml not found at %s", config_yaml)
+    mcp_yaml = config_dir / "mcp.yaml"
+    if not mcp_yaml.exists():
+        logger.error("mcp.yaml not found at %s", mcp_yaml)
         sys.exit(1)
 
-    with open(config_yaml, encoding="utf-8") as f:
-        raw_config = yaml.safe_load(f)
+    with open(mcp_yaml, encoding="utf-8") as f:
+        mcp_config = yaml.safe_load(f)
 
-    mcp_config = raw_config.get("mcp", {})
     if not mcp_config:
-        logger.error("No 'mcp' section in config.yaml")
+        logger.error("mcp.yaml is empty")
         sys.exit(1)
 
     mcp_config_file = mcp_config.get("config_file", "mcp_config.json")

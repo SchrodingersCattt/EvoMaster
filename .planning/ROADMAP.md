@@ -28,8 +28,8 @@ Full details: milestones/v1-ROADMAP.md
 
 - [ ] **Phase 8: BuiltinTool 基础设施与核心 Tools** - 建立 BuiltinTool 基类、session 注入模式，交付 BashTool/ListDirTool/TaskTool
 - [ ] **Phase 9: 文件操作 Tools** - 交付 Read/Write/Edit/Glob/Grep 五个文件操作工具及 Read-Before-Modify 协议
-- [ ] **Phase 10: Tool Description 与 System Prompt 设计** - 为所有 builtin tool 编写精细化 description/schema，设计 direct 模式 system prompt
-- [ ] **Phase 11: SubAgent Spawn 机制** - 实现子 agent spawn/执行/取消/事件路由完整生命周期
+- [x] **Phase 10: Tool Description 与 System Prompt 设计** - 为所有 builtin tool 编写精细化 description/schema，设计 direct 模式 system prompt (completed 2026-03-25)
+- [x] **Phase 11: SubAgent Spawn 机制** - 实现子 agent spawn/执行/取消/事件路由完整生命周期 (completed 2026-03-25)
 
 ## Phase Details
 
@@ -59,12 +59,12 @@ Plans:
   2. Agent 可以通过 Write tool 创建或覆盖文件、通过 Edit tool 精确字符串替换
   3. Write/Edit 执行前强制要求先 Read 目标文件，未 Read 时返回错误提示
   4. Agent 可以通过 Glob tool 按模式搜索文件路径、通过 Grep tool 按正则搜索文件内容
-**Plans:** 3 plans
+**Plans:** 2/3 plans executed
 
 Plans:
-- [ ] 09-01-PLAN.md -- ReadTracker + ReadTool + WriteTool + EditTool 实现与测试
-- [ ] 09-02-PLAN.md -- GlobTool + GrepTool 实现与测试
-- [ ] 09-03-PLAN.md -- Exp 集成改造：注册新 tools、移除 EditorTool、ExpConfig 显式列举
+- [x] 09-01-PLAN.md -- ReadTracker + ReadTool + WriteTool + EditTool 实现与测试
+- [x] 09-02-PLAN.md -- GlobTool + GrepTool 实现与测试
+- [x] 09-03-PLAN.md -- Exp 集成改造：注册新 tools、移除 EditorTool、ExpConfig 显式列举
 
 ### Phase 10: Tool Description 与 System Prompt 设计
 **Goal**: 每个 builtin tool 具有精细化的 description/schema 以优化 LLM 调用准确率，direct 模式具有完整的行为指导 prompt
@@ -74,7 +74,11 @@ Plans:
   1. 每个 builtin tool 的 json_schema 包含精确的参数约束和使用示例，description 控制在 100 token 以内
   2. direct 模式的 system prompt（developer_instructions）包含完整的 agent 行为指导（工具使用规范、输出格式、错误处理策略）
   3. DevShell 中使用完整 tool 集和 system prompt 进行多轮对话，LLM 能正确调用工具完成文件操作任务
-**Plans**: TBD
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 10-01-PLAN.md -- 12 个 builtin tool description/schema 精细化与验证测试
+- [x] 10-02-PLAN.md -- developer_instructions + mode_contract 设计与集成测试
 
 ### Phase 11: SubAgent Spawn 机制
 **Goal**: Agent 可以通过 tool_call 触发子 agent 执行特定任务，子 agent 有独立配置但共享父环境，支持取消传播和事件路由
@@ -86,7 +90,12 @@ Plans:
   3. 子 agent 禁止再次 spawn 子 agent（递归深度 = 1），违反时返回错误
   4. 父 agent 取消时 stop_event 级联传播到正在运行的子 agent，子 agent 立即终止
   5. 子 agent 的流式事件通过父 agent 的 MessageBus 路由，前端可实时观察子 agent 执行过程
-**Plans**: TBD
+**Plans:** 3/3 plans complete
+
+Plans:
+- [x] 11-01-PLAN.md -- SubAgentTool 类实现 + explore.toml 子 exp 定义 + 单元测试
+- [x] 11-02-PLAN.md -- Exp 层 spawn_fn 闭包创建 + SubAgentTool 注册 + source_override + 集成测试
+- [x] 11-03-PLAN.md -- 事件路由 source 前缀兼容 + chat_history 改造 + service 层 stop_event 注入
 
 ## Progress
 
@@ -103,6 +112,6 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11
 | 6. Service Layer Wiring | v1 | 2/2 | Complete | 2026-03-22 |
 | 7. Cleanup and Traceability | v1 | 2/2 | Complete | 2026-03-22 |
 | 8. BuiltinTool 基础设施与核心 Tools | v1.1 | 0/3 | Planning | - |
-| 9. 文件操作 Tools | v1.1 | 0/3 | Planning | - |
-| 10. Tool Description 与 System Prompt 设计 | v1.1 | 0/? | Not started | - |
-| 11. SubAgent Spawn 机制 | v1.1 | 0/? | Not started | - |
+| 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
+| 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete    | 2026-03-25 |
+| 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete    | 2026-03-25 |

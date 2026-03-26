@@ -70,12 +70,18 @@ class DevRunner:
     @staticmethod
     def _build_exp_config(config: DevConfig) -> ExpConfig:
         """Convert DevConfig to ExpConfig."""
+        from matmaster.config.loader import load_base_system_prompt
+
+        system_prompt = config.agent.system_prompt
+        if not system_prompt:
+            system_prompt = load_base_system_prompt()
+
         return ExpConfig(
             name=config.agent.name,
-            mode=config.agent.mode,
             max_turns=config.agent.max_turns,
             tools=ExpToolsConfig(builtin=config.tools.builtin),
             developer_instructions=config.agent.identity or "",
+            system_prompt=system_prompt,
         )
 
     def run(
@@ -105,7 +111,7 @@ class DevRunner:
             # Accumulate history for non-cancelled runs.
             # Message layout: [System, *history, User(task), ...new_messages]
             # We skip System + existing history + User to extract only new messages.
-            if result.event.status != "cancelled":
+            if result.result.status != "cancelled":
                 skip_count = 1 + len(self.history) + 1  # System + history + User
                 new_messages = result.messages[skip_count:]
                 self.history.append(UserMessage(content=task))

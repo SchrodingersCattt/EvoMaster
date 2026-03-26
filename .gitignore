@@ -185,7 +185,7 @@ docs/superpowers/
 docs/plans/
 
 # Skill tool schema cache
-matmaster/cache/
+!matmaster/cache/
 
 # Worktrees
 .worktrees/

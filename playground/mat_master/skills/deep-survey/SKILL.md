@@ -2,6 +2,7 @@
 name: deep-survey
 description: "Retrieves literature evidence and always produces collected.json (structured evidence skeleton) regardless of depth. depth=brief outputs collected.json only (3-5 retrieval calls). depth=standard outputs collected.json + concise MD report (6-8 calls). depth=deep outputs collected.json + full 5-section review report (10-15+ calls). Use deep-survey when you need systematic literature coverage—not for quick one-off lookups or short chat answers."
 skill_type: operator
+depends_on: mcp-mat-sn, mcp-mat-doc
 ---
 
 <!-- multi-server: mat_sn, mat_doc -->

@@ -29,7 +29,9 @@ class _SuccessLLM:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(
+        self, messages, tools=None, *, timeout=None
+    ) -> Iterator[StreamChunk]:
         yield StreamChunk(content='success', finish_reason='stop')
 
 
@@ -42,7 +44,9 @@ class _InvalidFinishLLM:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(
+        self, messages, tools=None, *, timeout=None
+    ) -> Iterator[StreamChunk]:
         yield StreamChunk(content='partial')
         yield StreamChunk(finish_reason='length')
 
@@ -56,7 +60,9 @@ class _ErrorLLM:
     def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
         raise RuntimeError('LLM error')
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(
+        self, messages, tools=None, *, timeout=None
+    ) -> Iterator[StreamChunk]:
         raise RuntimeError('LLM error during streaming')
 
 
@@ -115,9 +121,15 @@ def _run_with_quota_mock(
         mock_bohrium_result = MagicMock()
         mock_bohrium_result.ssh_attached = False
         mock_bohrium_result.abort_result = None
+        mock_bohrium_result.execution_session = None
+        mock_bohrium_result.execution_workdir = None
+        mock_bohrium_result.session_type = None
         mock_bohrium_result._asdict.return_value = {
             'ssh_attached': False,
             'abort_result': None,
+            'execution_session': None,
+            'execution_workdir': None,
+            'session_type': None,
         }
         mock_bohrium_svc = mock_bohrium_cls.return_value
         mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
@@ -204,9 +216,14 @@ class TestQuotaDeductedOnSuccess:
         payload_types = [payload.get('type') for payload in payloads]
         assert payload_types.index('run_result') < payload_types.index('stream_closed')
 
-    def test_success_emits_response_before_run_result_and_stream_closed(
+    def test_success_emits_run_result_before_stream_closed(
         self, tmp_path: Path
     ) -> None:
+        """run_result is emitted before stream_closed on natural finish.
+
+        Note: post-kernel ResponseEvent was removed (910f537) because streaming
+        chunks already deliver content; the duplicate caused double-render.
+        """
         pg_ctx = _make_ctx(tmp_path)
         mock_llm = _SuccessLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
@@ -517,9 +534,15 @@ class TestQuotaAsyncMode:
                 mock_bohrium_result = MagicMock()
                 mock_bohrium_result.ssh_attached = False
                 mock_bohrium_result.abort_result = None
+                mock_bohrium_result.execution_session = None
+                mock_bohrium_result.execution_workdir = None
+                mock_bohrium_result.session_type = None
                 mock_bohrium_result._asdict.return_value = {
                     'ssh_attached': False,
                     'abort_result': None,
+                    'execution_session': None,
+                    'execution_workdir': None,
+                    'session_type': None,
                 }
                 mock_bohrium_svc = mock_bohrium_cls.return_value
                 mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')

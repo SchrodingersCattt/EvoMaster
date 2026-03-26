@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class ExpToolsConfig(BaseModel):
     """Tool registration settings for Exp."""
 
+    # Default "*" means "all tools". Explicit list of tool names also supported.
     builtin: list[str] = Field(default_factory=lambda: ["*"])
     mcp: str = "*"
 
@@ -25,10 +26,11 @@ class ExpSkillsConfig(BaseModel):
     """Skill registration and lazy MCP loading settings."""
 
     enabled: bool = False
-    skills_root: str = ""
+    skills_root: str | list[str] = ""
     cache_dir: str = ""
     config_dir: str = ""
     mcp_config_file: str = ""
+    mcp_runtime_file: str = "mcp.yaml"
 
 
 class ExpConfig(BaseModel):
@@ -42,11 +44,12 @@ class ExpConfig(BaseModel):
     """
 
     name: str = "direct"
-    mode: str = "direct"
+    description: str = ""
     max_turns: int = 100
     guards: list[str] = Field(default_factory=list)
     tools: ExpToolsConfig = Field(default_factory=ExpToolsConfig)
     skills: ExpSkillsConfig = Field(default_factory=ExpSkillsConfig)
+    system_prompt: str = ""
     developer_instructions: str = ""
 
     model_config = ConfigDict(extra="ignore")

@@ -6,6 +6,7 @@ import sys
 from typing import TextIO
 
 from matmaster.core.hooks import BaseHook, HookAction
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.guards import GuardResult
 from matmaster.types.messages import StreamChunk, ToolCallData
 
@@ -45,10 +46,12 @@ class DevStreamHook(BaseHook):
         self._out.flush()
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: str) -> None:
-        is_error = result.startswith("Error executing tool")
+    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
+        is_error = result.status == "error"
         prefix = "\u274c tool_error:" if is_error else "\u2705 tool_result:"
-        display = result if len(result) <= _MAX_RESULT_LEN else result[:_MAX_RESULT_LEN] + "..."
+        display = result.content
+        if len(display) > _MAX_RESULT_LEN:
+            display = display[:_MAX_RESULT_LEN] + "..."
         self._out.write(f"\n{prefix} {display}\n\n")
         self._out.flush()
 

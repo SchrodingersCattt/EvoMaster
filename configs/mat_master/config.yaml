@@ -1,22 +1,20 @@
 # Mat Master Playground 配置文件
-# 材料科学向 agent，支持 LiteLLM 与 Azure，接入 Mat MCP（Structure Generator、Science Navigator、Document Parser、DPA）
+# 材料科学向 agent，支持 LiteLLM 代理，接入 Mat MCP（Structure Generator、Science Navigator、Document Parser、DPA）
 # 鉴权从 .env 读取：LITELLM_PROXY_*、AZURE_*、DEEPSEEK_API_KEY 等，配置中使用 ${变量名} 引用
 
 # ============================================
-# LLM 配置（必须支持 litellm 与 azure 格式）
+# LLM 配置（通过 LiteLLM 代理统一路由）
 # ============================================
 # 均使用 provider: "openai"（OpenAI 兼容接口），通过 base_url + model 区分
-# .env 需提供：LITELLM_PROXY_API_BASE, LITELLM_PROXY_API_KEY, AZURE_API_BASE, AZURE_API_KEY
+# .env 需提供：LITELLM_PROXY_API_BASE, LITELLM_PROXY_API_KEY
 llm:
-  litellm:
+  opus:
     provider: "openai"
     model: "claude-opus-4-6"
-    model_family: "claude-4.6"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     thinking_effort: "high"
     reasoning_protocol: "anthropic_adaptive_thinking"
-    fallback_group: "claude-sonnet-4-6"
     temperature_policy: "force_one_when_reasoning"
     temperature: 0.7
     # max_tokens: 16384
@@ -26,40 +24,18 @@ llm:
     max_retries: 3
     retry_delay: 1.0
 
-  # Azure OpenAI：model 填你在 Azure 门户中的「部署名称」（可写 azure/部署名，如 azure/gpt-5 或 azure/gpt-5-chat）
-  azure:
+  sonnet:
     provider: "openai"
-    model: "azure/gpt-5"
-    model_family: "gpt-5"
-    api_key: "${AZURE_API_KEY}"
-    base_url: "${AZURE_API_BASE}"
-    api_version: "${AZURE_API_VERSION}"
+    model: "claude-sonnet-4-6"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
     thinking_effort: "high"
-    reasoning_protocol: "openai_reasoning_effort"
-    fallback_group: "gpt-5"
+    reasoning_protocol: "anthropic_adaptive_thinking"
+    temperature_policy: "force_one_when_reasoning"
     temperature: 0.7
-    max_tokens: 16384
-    timeout: 300              # 非流式整包超时（秒）
-    stream_timeout: 90        # 流式首 token 超时（秒）
-    stream_idle_timeout: 60   # 流式 chunk 间最大空闲（秒）
-    max_retries: 3
-    retry_delay: 1.0
-
-  # 可选：DeepSeek，.env 提供 DEEPSEEK_API_KEY
-  deepseek:
-    provider: "deepseek"
-    model: "deepseek-reasoner"
-    model_family: "deepseek-reasoner"
-    api_key: "${DEEPSEEK_API_KEY}"
-    base_url: "https://api.deepseek.com"
-    thinking_effort: "high"
-    reasoning_protocol: "openai_reasoning_effort"
-    fallback_group: "deepseek-reasoner"
-    temperature: 0.7
-    max_tokens: 16384
-    timeout: 300              # 非流式整包超时（秒）
-    stream_timeout: 90        # 流式首 token 超时（秒）
-    stream_idle_timeout: 60   # 流式 chunk 间最大空闲（秒）
+    timeout: 300
+    stream_timeout: 90
+    stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
 
@@ -67,12 +43,8 @@ llm:
   haiku:
     provider: "openai"
     model: "claude-haiku-4-5"
-    model_family: "claude-haiku-4.5"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
-    fallback_group: "claude-haiku-4.5"
-    reasoning_protocol: ~
-    thinking_effort: ~
     timeout: 120
     stream_timeout: 15
     stream_idle_timeout: 20
@@ -83,10 +55,8 @@ llm:
   gemini:
     provider: "openai"
     model: "gemini-3-flash-preview"
-    model_family: "gemini-3-flash-preview"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
-    fallback_group: "gemini-3-flash-preview"
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "high"
     timeout: 120
@@ -100,10 +70,8 @@ llm:
   compaction:
     provider: "openai"
     model: "gemini-3-flash-preview"
-    model_family: "gemini-3-flash-preview"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
-    fallback_group: "gemini-3-flash-preview"
     temperature: 0.3            # compaction 不需要创造性，低温更稳定
     max_tokens: 4096
     timeout: 120              # compaction 小模型，非流式超时适当缩短
@@ -112,14 +80,14 @@ llm:
     max_retries: 2
     retry_delay: 1.0
 
-  default: "litellm"
+  default: "opus"
 
 # ============================================
 # 多智能体配置（单 agent）
 # ============================================
 agents:
   general:
-    llm: "litellm"
+    llm: "opus"
     max_turns: 200
     tools:
       builtin: ["*"]

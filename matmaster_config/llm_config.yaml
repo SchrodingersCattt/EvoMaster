@@ -6,116 +6,113 @@
 # 鉴权凭据从 .env 读取，使用 ${VAR} 引用
 
 profiles:
-  litellm:
+  opus:
     provider: "openai"
     model: "claude-opus-4-6"
-    model_family: "claude-4.6"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    thinking_effort: "max"
+    reasoning_protocol: "anthropic_adaptive_thinking"
+    temperature_policy: "force_one_when_reasoning"
+    temperature: 0.7
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
+  sonnet:
+    provider: "openai"
+    model: "claude-sonnet-4-6"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     thinking_effort: "high"
     reasoning_protocol: "anthropic_adaptive_thinking"
-    fallback_group: "claude-sonnet-4-6"
     temperature_policy: "force_one_when_reasoning"
     temperature: 0.7
-    timeout: 300
-    stream_timeout: 20
-    stream_idle_timeout: 30
-    max_retries: 3
-    retry_delay: 1.0
-
-  azure_gpt5:
-    provider: "openai"
-    model: "azure/gpt-5"
-    model_family: "gpt-5"
-    api_key: "${AZURE_API_KEY}"
-    base_url: "${AZURE_API_BASE}"
-    api_version: "${AZURE_API_VERSION}"
-    thinking_effort: "high"
-    reasoning_protocol: "openai_reasoning_effort"
-    fallback_group: "gpt-5"
-    temperature: 0.7
-    max_tokens: 16384
-    timeout: 300
-    stream_timeout: 20
-    stream_idle_timeout: 30
-    max_retries: 3
-    retry_delay: 1.0
-
-  deepseek_reasoner:
-    provider: "deepseek"
-    model: "deepseek-reasoner"
-    model_family: "deepseek-reasoner"
-    api_key: "${DEEPSEEK_API_KEY}"
-    base_url: "https://api.deepseek.com"
-    thinking_effort: "high"
-    reasoning_protocol: "openai_reasoning_effort"
-    fallback_group: "deepseek-reasoner"
-    temperature: 0.7
-    max_tokens: 16384
-    timeout: 300
-    stream_timeout: 20
-    stream_idle_timeout: 30
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
 
   haiku:
     provider: "openai"
     model: "claude-haiku-4-5"
-    model_family: "claude-haiku-4.5"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
-    fallback_group: "claude-haiku-4.5"
-    timeout: 120
-    stream_timeout: 15
-    stream_idle_timeout: 20
+    timeout: 1200
+    stream_timeout: 60
+    stream_idle_timeout: 30
     max_retries: 3
     retry_delay: 1.0
 
   gemini:
     provider: "openai"
     model: "gemini-3-flash-preview"
-    model_family: "gemini-3-flash-preview"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
-    fallback_group: "gemini-3-flash-preview"
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "high"
-    timeout: 120
-    stream_timeout: 15
-    stream_idle_timeout: 20
+    timeout: 1200
+    stream_timeout: 60
+    stream_idle_timeout: 30
+    max_retries: 3
+    retry_delay: 1.0
+
+  gemini-pro:
+    provider: "openai"
+    model: "gemini-3.1-pro-preview"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "high"
+    temperature: 1.0
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
+  gpt54:
+    provider: "openai"
+    model: "GPT-5.4"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "xhigh"
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
 
   compaction:
     provider: "openai"
     model: "gemini-3-flash-preview"
-    model_family: "gemini-3-flash-preview"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
-    fallback_group: "gemini-3-flash-preview"
     temperature: 0.3
     max_tokens: 4096
-    timeout: 120
-    stream_timeout: 15
-    stream_idle_timeout: 20
+    timeout: 1200
+    stream_timeout: 60
+    stream_idle_timeout: 30
     max_retries: 2
     retry_delay: 1.0
 
 # 路由表：前端 model_override 字符串 → 内部 profile
 routes:
   "claude-opus-4-6":
-    profile: litellm
-  "litellm/claude-opus-4-6":
-    profile: litellm
-  "azure/gpt-5":
-    profile: azure_gpt5
-  "gpt-5":
-    profile: azure_gpt5
-  "deepseek-reasoner":
-    profile: deepseek_reasoner
+    profile: opus
+  "claude-sonnet-4-6":
+    profile: sonnet
   "claude-haiku-4-5":
     profile: haiku
   "gemini-3-flash-preview":
     profile: gemini
+  "gemini-3.1-pro-preview":
+    profile: gemini-pro
+  "cds/GPT-5.4":
+    profile: gpt54
 
-default: "litellm"
+default: "opus"

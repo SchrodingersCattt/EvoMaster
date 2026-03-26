@@ -14,6 +14,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 from urllib.parse import urlparse
+import hashlib
+import tempfile
+import threading
+from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
@@ -57,6 +61,85 @@ logger = logging.getLogger(__name__)
 REQUEST_DELAY_SECONDS = 0.5
 MAX_CONCURRENT_PER_DOMAIN = 1
 _DEFAULT_DOMAIN_FAILURE_THRESHOLD = 3
+
+# P0: class/id patterns for noise elements (cookie banners, sidebars, menus).
+_NOISE_PATTERN = re.compile(r'cookie|banner|sidebar|menu', re.I)
+
+
+class _WebpageDiskCache:
+    """Workspace-scoped disk cache for fetched web pages.
+
+    Each cache entry is a JSON file at ``{cache_dir}/{url_hash}.json``.
+    TTL-based expiry; oldest-first eviction when MAX_ENTRIES exceeded.
+    Thread-safe eviction via ``_evict_lock``.
+    """
+
+    TTL: int = 900  # 15 minutes
+    MAX_ENTRIES: int = 200
+
+    def __init__(self, cache_dir: Path) -> None:
+        self._dir = Path(cache_dir)
+        self._evict_lock = threading.Lock()
+
+    def _key(self, url: str) -> str:
+        return hashlib.sha256(url.encode()).hexdigest()[:16]
+
+    def get(self, url: str) -> str | None:
+        """Return cached content if entry exists and is not expired, else None."""
+        path = self._dir / f'{self._key(url)}.json'
+        if not path.is_file():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+            if _time.time() - data.get('fetched_at', 0) > self.TTL:
+                return None
+            return data.get('content')
+        except Exception:
+            return None
+
+    def put(self, url: str, content: str) -> None:
+        """Write cache entry via atomic temp-file rename."""
+        self._dir.mkdir(parents=True, exist_ok=True)
+        entry = {
+            'url': url,
+            'content': content,
+            'fetched_at': _time.time(),
+        }
+        target = self._dir / f'{self._key(url)}.json'
+        try:
+            fd = tempfile.NamedTemporaryFile(
+                mode='w',
+                dir=str(self._dir),
+                suffix='.tmp',
+                delete=False,
+                encoding='utf-8',
+            )
+            try:
+                json.dump(entry, fd, ensure_ascii=False)
+                fd.flush()
+            finally:
+                fd.close()
+            Path(fd.name).replace(target)
+        except Exception:
+            logger.warning('Failed to write cache entry for %s', url, exc_info=True)
+            return
+        self._maybe_evict()
+
+    def _maybe_evict(self) -> None:
+        """Remove oldest entries if cache exceeds MAX_ENTRIES."""
+        with self._evict_lock:
+            try:
+                entries = sorted(self._dir.glob('*.json'), key=lambda p: p.stat().st_mtime)
+            except Exception:
+                return
+            excess = len(entries) - self.MAX_ENTRIES
+            if excess <= 0:
+                return
+            for path in entries[:excess]:
+                try:
+                    path.unlink()
+                except Exception:
+                    pass
 
 
 def _extract_domain(url: str) -> str:
@@ -132,6 +215,9 @@ def _fetch_webpage_content(
         'application/octet-stream' in content_type and url.lower().endswith('.pdf')
     )
 
+    raw = response.text
+    _used_markdownify = False
+
     if is_pdf:
         if fitz is None:
             raise RuntimeError(
@@ -141,23 +227,46 @@ def _fetch_webpage_content(
         text = ''.join(page.get_text() for page in doc)
         doc.close()
         content = text
-    else:
-        raw = response.text
-        if raw.strip().startswith('<'):
-            try:
-                soup = BeautifulSoup(raw, 'lxml')
-            except Exception:
-                soup = BeautifulSoup(raw, 'html.parser')
-            for tag in soup(['script', 'style']):
-                tag.decompose()
+    elif raw.strip().startswith('<'):
+        try:
+            soup = BeautifulSoup(raw, 'lxml')
+        except Exception:
+            soup = BeautifulSoup(raw, 'html.parser')
+
+        # P0: noise tag removal
+        for tag in soup(['script', 'style', 'nav', 'footer',
+                          'aside', 'noscript', 'iframe']):
+            tag.decompose()
+        # P0: noise class/id removal
+        for tag in soup.find_all(attrs={'class': _NOISE_PATTERN}):
+            tag.decompose()
+        for tag in soup.find_all(attrs={'id': _NOISE_PATTERN}):
+            tag.decompose()
+
+        # P1-a: HTML → Markdown (with plain-text fallback)
+        try:
+            import markdownify as _md
+            content = _md.markdownify(
+                str(soup),
+                heading_style="ATX",
+                strip=['img', 'svg'],
+            )
+            content = re.sub(r'\n{3,}', '\n\n', content)
+            _used_markdownify = True
+        except Exception as exc:
+            if isinstance(exc, ImportError):
+                logger.warning('markdownify not available; falling back to plain text')
+            else:
+                logger.warning('markdownify conversion failed, falling back to plain text: %s', exc)
             lines = (line.strip() for line in soup.get_text().splitlines())
             chunks = (phrase.strip() for line in lines for phrase in line.split('  '))
             content = ' '.join(chunk for chunk in chunks if chunk)
-        else:
-            content = raw
+    else:
+        content = raw
 
-    content = re.sub(r'\s+', ' ', content)
-    content = re.sub(r'[^\x20-\x7E\x0A\x0D]', '', content)
+    if not _used_markdownify:
+        content = re.sub(r'\s+', ' ', content)
+    content = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F\uFFFD]', '', content)
     if len(content) > _MAX_CONTENT_LENGTH:
         content = content[:_MAX_CONTENT_LENGTH]
         logger.warning('Webpage content truncated to %d chars', _MAX_CONTENT_LENGTH)
@@ -184,10 +293,10 @@ class ExtractWebpageTool(BaseTool):
     name: ClassVar[str] = 'extract_info_from_webpage'
     params_class: ClassVar[type[BaseToolParams]] = ExtractWebpageToolParams
 
-    def __init__(self) -> None:
+    def __init__(self, cache_dir: Path | None = None) -> None:
         super().__init__()
-        # Per-run state kept on the tool instance (no globals).
         self._domain_circuit = _DomainCircuitState()
+        self._cache = _WebpageDiskCache(cache_dir) if cache_dir else None
 
     def execute(self, session: Any, args_json: str) -> tuple[str, dict]:
         try:
@@ -229,9 +338,16 @@ class ExtractWebpageTool(BaseTool):
                                 ),
                             },
                         )
-                    content = _fetch_webpage_content(
-                        u
-                    )  # uses BROWSER_HEADERS + Session
+                    # P1-b: check disk cache before HTTP fetch
+                    if self._cache is not None:
+                        cached = self._cache.get(u)
+                        if cached is not None:
+                            logger.info('Cache hit for %s', u)
+                            return u, cached, _time.time() - t0, None
+                    content = _fetch_webpage_content(u)
+                    # P1-b: store successful fetch in cache
+                    if self._cache is not None:
+                        self._cache.put(u, content)
                     return u, content, _time.time() - t0, None
                 except requests.HTTPError as exc:
                     status = None
@@ -375,6 +491,6 @@ class ExtractWebpageTool(BaseTool):
             return f"Error: {exc}", {'error': str(exc)}
 
 
-def get_extract_webpage_tool() -> ExtractWebpageTool:
-    """Return a single ExtractWebpageTool instance for registration."""
-    return ExtractWebpageTool()
+def get_extract_webpage_tool(cache_dir: Path | None = None) -> ExtractWebpageTool:
+    """Return an ExtractWebpageTool instance for registration."""
+    return ExtractWebpageTool(cache_dir=cache_dir)

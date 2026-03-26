@@ -17,38 +17,37 @@ from matmaster.providers.llm_factory import build_provider
 
 @pytest.fixture()
 def llm_config() -> LLMConfig:
-    """LLMConfig with 2 profiles and 3 routes for testing."""
+    """LLMConfig with 2 profiles and 2 routes for testing."""
     return LLMConfig(
         profiles={
-            "litellm": LLMProfileConfig(
+            "opus": LLMProfileConfig(
                 provider="openai",
                 model="claude-opus-4-6",
                 model_family="claude-4.6",
-                api_key="sk-test-litellm",
+                api_key="sk-test-opus",
                 base_url="http://litellm-proxy",
                 thinking_effort="high",
                 reasoning_protocol="anthropic_adaptive_thinking",
                 temperature_policy="force_one_when_reasoning",
                 temperature=0.7,
             ),
-            "azure_gpt5": LLMProfileConfig(
+            "sonnet": LLMProfileConfig(
                 provider="openai",
-                model="azure/gpt-5",
-                model_family="gpt-5",
-                api_key="sk-test-azure",
-                base_url="http://azure-proxy",
+                model="claude-sonnet-4-6",
+                model_family="claude-4.6",
+                api_key="sk-test-sonnet",
+                base_url="http://litellm-proxy",
                 thinking_effort="high",
-                reasoning_protocol="openai_reasoning_effort",
+                reasoning_protocol="anthropic_adaptive_thinking",
+                temperature_policy="force_one_when_reasoning",
                 temperature=0.7,
-                max_tokens=16384,
             ),
         },
         routes={
-            "claude-opus-4-6": LLMRouteConfig(profile="litellm"),
-            "azure/gpt-5": LLMRouteConfig(profile="azure_gpt5"),
-            "gpt-5": LLMRouteConfig(profile="azure_gpt5"),
+            "claude-opus-4-6": LLMRouteConfig(profile="opus"),
+            "claude-sonnet-4-6": LLMRouteConfig(profile="sonnet"),
         },
-        default="litellm",
+        default="opus",
     )
 
 
@@ -65,15 +64,9 @@ class TestBuildProvider:
 
     @patch("matmaster.providers.openai_provider.openai.OpenAI")
     def test_route_hit(self, _mock_client, llm_config: LLMConfig) -> None:
-        """model_override exact match -> azure profile."""
-        provider = build_provider(llm_config, model_override="azure/gpt-5")
-        assert provider._model == "azure/gpt-5"
-
-    @patch("matmaster.providers.openai_provider.openai.OpenAI")
-    def test_route_alias(self, _mock_client, llm_config: LLMConfig) -> None:
-        """model_override alias -> same profile, model from profile."""
-        provider = build_provider(llm_config, model_override="gpt-5")
-        assert provider._model == "azure/gpt-5"
+        """model_override exact match -> sonnet profile."""
+        provider = build_provider(llm_config, model_override="claude-sonnet-4-6")
+        assert provider._model == "claude-sonnet-4-6"
 
     @patch("matmaster.providers.openai_provider.openai.OpenAI")
     def test_unknown_route_raises(
@@ -88,8 +81,8 @@ class TestBuildProvider:
         self, _mock_client, llm_config: LLMConfig
     ) -> None:
         """llm_override (legacy) -> direct profile key lookup."""
-        provider = build_provider(llm_config, llm_override="azure_gpt5")
-        assert provider._model == "azure/gpt-5"
+        provider = build_provider(llm_config, llm_override="sonnet")
+        assert provider._model == "claude-sonnet-4-6"
 
     @patch("matmaster.providers.openai_provider.openai.OpenAI")
     def test_custom_default_key(
@@ -97,9 +90,9 @@ class TestBuildProvider:
     ) -> None:
         """default_profile_key overrides config default."""
         provider = build_provider(
-            llm_config, default_profile_key="azure_gpt5"
+            llm_config, default_profile_key="sonnet"
         )
-        assert provider._model == "azure/gpt-5"
+        assert provider._model == "claude-sonnet-4-6"
 
     @patch("matmaster.providers.openai_provider.openai.OpenAI")
     def test_model_override_precedence(
@@ -108,7 +101,37 @@ class TestBuildProvider:
         """model_override takes precedence over llm_override."""
         provider = build_provider(
             llm_config,
-            model_override="azure/gpt-5",
-            llm_override="litellm",
+            model_override="claude-sonnet-4-6",
+            llm_override="opus",
         )
-        assert provider._model == "azure/gpt-5"
+        assert provider._model == "claude-sonnet-4-6"
+
+    @patch("matmaster.providers.openai_provider.openai.OpenAI")
+    def test_stream_timeout_passed(self, _mock_client) -> None:
+        """stream_timeout and stream_idle_timeout from profile are passed to provider."""
+        from matmaster.config.llm import LLMRouteConfig
+
+        config = LLMConfig(
+            profiles={
+                "opus": LLMProfileConfig(
+                    provider="openai",
+                    model="claude-opus-4-6",
+                    model_family="claude-4.6",
+                    api_key="sk-test-opus",
+                    base_url="http://litellm-proxy",
+                    thinking_effort="high",
+                    reasoning_protocol="anthropic_adaptive_thinking",
+                    temperature_policy="force_one_when_reasoning",
+                    temperature=0.7,
+                    stream_timeout=120.0,
+                    stream_idle_timeout=60.0,
+                ),
+            },
+            routes={"claude-opus-4-6": LLMRouteConfig(profile="opus")},
+            default="opus",
+        )
+
+        provider = build_provider(config)
+
+        assert provider.stream_timeout == 120.0
+        assert provider.stream_idle_timeout == 60.0

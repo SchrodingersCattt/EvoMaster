@@ -75,7 +75,7 @@ class TestEndToEndRouteToProvider:
     def config(self) -> LLMConfig:
         return LLMConfig.model_validate({
             "profiles": {
-                "litellm": {
+                "opus": {
                     "provider": "openai",
                     "model": "claude-opus-4-6",
                     "model_family": "claude-4.6",
@@ -88,33 +88,29 @@ class TestEndToEndRouteToProvider:
                     "timeout": 300,
                     "max_retries": 3,
                 },
-                "azure_gpt5": {
+                "sonnet": {
                     "provider": "openai",
-                    "model": "azure/gpt-5",
-                    "model_family": "gpt-5",
-                    "api_key": "azure-key",
-                    "base_url": "https://azure.example.com",
-                    "reasoning_protocol": "openai_reasoning_effort",
+                    "model": "claude-sonnet-4-6",
+                    "model_family": "claude-4.6",
+                    "api_key": "test-key",
+                    "base_url": "https://test.example.com",
                     "thinking_effort": "high",
-                    "temperature": 0.5,
+                    "reasoning_protocol": "anthropic_adaptive_thinking",
+                    "temperature_policy": "force_one_when_reasoning",
+                    "temperature": 0.7,
                 },
             },
             "routes": {
-                "claude-opus-4-6": {"profile": "litellm", "model": "claude-opus-4-6"},
-                "azure/gpt-5": {"profile": "azure_gpt5", "model": "azure/gpt-5"},
-                "gpt-5": {"profile": "azure_gpt5", "model": "azure/gpt-5"},
+                "claude-opus-4-6": {"profile": "opus"},
+                "claude-sonnet-4-6": {"profile": "sonnet"},
             },
-            "default": "litellm",
+            "default": "opus",
         })
 
-    def test_route_azure_gpt5(self, config: LLMConfig) -> None:
-        provider = build_provider(config, model_override="azure/gpt-5")
-        assert provider._model == "azure/gpt-5"
-        assert provider._temperature == 0.5
-
-    def test_route_alias_gpt5(self, config: LLMConfig) -> None:
-        provider = build_provider(config, model_override="gpt-5")
-        assert provider._model == "azure/gpt-5"
+    def test_route_sonnet(self, config: LLMConfig) -> None:
+        provider = build_provider(config, model_override="claude-sonnet-4-6")
+        assert provider._model == "claude-sonnet-4-6"
+        assert provider._temperature == 1.0  # force_one_when_reasoning
 
     def test_route_claude(self, config: LLMConfig) -> None:
         provider = build_provider(config, model_override="claude-opus-4-6")
@@ -131,8 +127,8 @@ class TestEndToEndRouteToProvider:
             build_provider(config, model_override="nonexistent")
 
     def test_llm_override_compat(self, config: LLMConfig) -> None:
-        provider = build_provider(config, llm_override="azure_gpt5")
-        assert provider._model == "azure/gpt-5"
+        provider = build_provider(config, llm_override="sonnet")
+        assert provider._model == "claude-sonnet-4-6"
 
     def test_extra_kwargs_none_becomes_empty(self, config: LLMConfig) -> None:
         cfg = LLMConfig.model_validate({

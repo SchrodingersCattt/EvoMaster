@@ -1,0 +1,45 @@
+[
+  {
+    "name": "get_electron_microscope_recognize",
+    "description": "\n        Recognize and analyze particles in an electron microscope image.\n\n        Use this tool for:\n            - particle detection in electron microscopy (EM) images.\n            - Extracting particle boundaries and computing geometric descriptors.\n            - Converting pixel-based measurements into physical dimensions using scale bar information.\n            - Filtering and flagging invalid, edge-touching, or occluded particles.\n            - Producing summary statistics (size distribution, aspect ratio, circularity, etc.).\n            - Exporting structured measurement results for further quantitative analysis.\n            - Generating concise, human-readable summaries for downstream LLM reasoning.\n        Args:\n            img_path (Path): The path of the electron microscope image to analyze.\n                Supported formats: Common image formats (jpg, png, tif, etc.)\n\n        Returns:\n            Dict[str, Any]: Structured result object with the following fields:\n                - status (Literal[\"success\",\"error\"]):\n                    Execution status; \"success\" means the analysis completed, \"error\" means a failure occurred.\n                - file_name (str):\n                    The input image file name.\n                - scale (Dict):\n                    Scale bar and unit conversion info.\n                    - nm_per_pixel (Optional[float]): Nanometers per pixel (nm/px); None if unavailable.\n                    - scalebar_value_nm (Optional[float]): Physical length of the scale bar (nm).\n                    - scalebar_width_px (Optional[float]): Pixel width corresponding to the scale bar.\n                - counts (Dict):\n                    Particle counts.\n                    - total (int): Total detected particles.\n                    - valid (int): Valid particles (excluding edge and invalid).\n                    - edge (int): Edge-touching particles (is_edge == True).\n                    - invalid (int): Invalid particles (is_invalid == True).\n                    - occluded (int): Particles occluded by overlays or the scale bar.\n                - stats (Dict):\n                    Descriptive statistics computed on available, non-empty values.\n                    - area_nm2 (Dict): mean, p50, std, min, max for particle area (nm²).\n                    - diameter_nm (Dict): mean, p50, std, min, max for equivalent circle diameter (nm).\n                    - aspect_ratio (Dict): mean, p50, std, min, max for major/minor axis ratio.\n                    - circularity (Dict): mean, p50, std, min, max for circularity (4π·area / perimeter²).\n                - particles_sample (List[Dict]):\n                    Compact sample of particles (limited count; polygons not included), each with:\n                    - id (int): Sample index.\n                    - centroid_px (List[float, float]): Centroid in pixels [x, y].\n                    - diameter_nm (Optional[float]): Equivalent circle diameter (nm); None if no scale.\n                    - area_nm2 (Optional[float]): Area (nm²); None if no scale.\n                    - circularity (Optional[float]): Circularity metric.\n                    - aspect_ratio (Optional[float]): Major/minor axis ratio.\n                    - flags (Dict): Flags for quality control (edge/invalid/occluded).\n                - artifacts_csv_path (Path): Path to the CSV file.\n                - overlay_image_path (Optional[Path]): Path to the overlay image with detected particles drawn.  \n                - raw (Dict):\n                    Raw result summary.\n                    - data_count (int): Number of raw items in \"data\".\n                    - scalebar_present (bool): Whether usable scale bar info is present.\n                - llm_text (str):\n                    Human-readable summary for LLMs, covering counts, key stats, and scale info.\n        ",
+    "input_schema": {
+      "properties": {
+        "img_path": {
+          "title": "Img Path",
+          "type": "string"
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Executor"
+        },
+        "storage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Storage"
+        }
+      },
+      "required": [
+        "img_path"
+      ],
+      "title": "get_electron_microscope_recognizeArguments",
+      "type": "object"
+    }
+  }
+]

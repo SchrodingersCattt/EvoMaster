@@ -11,6 +11,8 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Any
 
+from matmaster.tools.tool_result import ToolResult
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -54,18 +56,27 @@ class LazyMCPTool:
     def json_schema(self) -> dict[str, Any]:
         return self._input_schema
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    def execute(self, arguments: dict[str, Any]) -> ToolResult:
         if self._real_tool is None:
             self._real_tool = self._connector.connect_and_get_tool(
                 self._server_name, self._remote_tool_name
             )
-        args_json = json.dumps(arguments)
-        observation, _info = self._real_tool.execute(
+        args_json = json.dumps(arguments, ensure_ascii=False)
+        observation, info = self._real_tool.execute(
             self._connector.session, args_json
         )
-        if isinstance(observation, str):
-            return observation
-        return json.dumps(observation, default=str)
+        content = (
+            observation
+            if isinstance(observation, str)
+            else json.dumps(observation, ensure_ascii=False, default=str)
+        )
+        info_dict = info if isinstance(info, dict) else {}
+        status = (
+            "error"
+            if "error" in info_dict or content.lstrip().startswith("Error:")
+            else "success"
+        )
+        return ToolResult(status=status, content=content, info=info_dict)
 
 
 def configure_mcp_manager(

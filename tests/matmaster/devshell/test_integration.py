@@ -36,7 +36,7 @@ class SimpleProvider:
     ):
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         yield StreamChunk(
             content=f"Reply to msg #{len(messages)}", finish_reason="stop"
         )
@@ -58,7 +58,7 @@ class ToolCallingProvider:
     ):
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
             # Emit tool call delta (same format as test_agent.py)
@@ -136,8 +136,8 @@ class TestDevShellIntegration:
         event_logger.close()
 
         # Verify result
-        assert result.event.reason == "natural"
-        assert result.event.final_content == "Done! I executed the command."
+        assert result.result.reason == "natural"
+        assert result.result.final_content == "Done! I executed the command."
 
         # Verify terminal output contains tool call
         terminal_output = output.getvalue()
@@ -210,5 +210,5 @@ class TestDevShellIntegration:
         stop.set()
         result = runner.run("should cancel", stop_event=stop)
 
-        assert result.event.reason == "cancelled"
+        assert result.result.reason == "cancelled"
         assert len(runner.history) == 0

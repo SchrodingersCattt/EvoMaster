@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import logging
 import threading
+import uuid
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
@@ -28,8 +30,7 @@ from matmaster.core.hooks import EventEmitterHook
 from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.events import RunResultEvent
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, CompactionConfig
+from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, CompactionConfig, KernelResult
 
 if TYPE_CHECKING:
     from matmaster.core.agent import AgentKernel
@@ -82,6 +83,50 @@ class Exp:
                 )
         self._cleanup_callbacks.clear()
 
+    # ── Spawn function factory ────────────────────────────
+
+    @staticmethod
+    def _make_spawn_fn(
+        ctx: PlaygroundContext,
+        bus: MessageBus | None,
+        source_prefix: str,
+    ) -> Callable[[str, str, threading.Event | None], str]:
+        """Create spawn_fn closure capturing parent runtime context.
+
+        The returned callable creates a child Exp from exp_name, runs it with
+        the parent's PlaygroundContext and MessageBus, and returns the result.
+        """
+
+        def spawn_fn(
+            exp_name: str,
+            task: str,
+            stop_event: threading.Event | None = None,
+        ) -> str:
+            from matmaster.config.loader import load_exp_config
+
+            child_config = load_exp_config(exp_name)
+            child_exp = Exp(child_config)
+            child_source = f"{source_prefix}:{exp_name}"
+            child_spawn_id = uuid.uuid4().hex[:16]
+            child_runtime = child_exp.build_runtime(
+                ctx,
+                bus=bus,
+                source_override=child_source,
+                spawn_id=child_spawn_id,
+            )
+            try:
+                run_result = child_runtime.kernel.run(
+                    child_runtime.spec, task, stop_event=stop_event
+                )
+                result = run_result.result
+                if result.status == "completed" and result.final_content:
+                    return result.final_content
+                return f"SubAgent finished with status={result.status}, reason={result.reason}"
+            finally:
+                child_runtime.cleanup()
+
+        return spawn_fn
+
     # ── Phase 1: assemble ────────────────────────────────
 
     def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
@@ -90,7 +135,6 @@ class Exp:
             llm_provider=ctx.llm_provider,
             max_turns=self._config.max_turns,
             guards=[],  # Guard instantiation deferred to build_runtime
-            mode=self._config.mode,
             compaction=CompactionConfig(),
             meta={},
         )
@@ -104,6 +148,8 @@ class Exp:
         bus: MessageBus | None = None,
         skills: dict[str, Any] | None = None,
         mcp: dict[str, Any] | None = None,
+        source_override: str | None = None,
+        spawn_id: str | None = None,
     ) -> AgentRuntime:
         """Resource creation: assemble -> tools -> prompt -> kernel."""
         spec = self.assemble(ctx)
@@ -111,33 +157,47 @@ class Exp:
         # 1. Register ALL tools before building system prompt
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
-        if "*" in builtin_cfg and ctx.session is not None:
+        if builtin_cfg and ctx.session is not None:
             self._init_builtin_tools(ctx, registry)
 
         # 2. Skills/MCP: runtime-injected (must be before system prompt)
-        if skills:
-            self._init_skill_tools(ctx, registry, skills)
-        elif self._config.skills.enabled:
-            # Lazy MCP: config-driven skill loading (no runtime param needed)
-            self._init_skill_tools(ctx, registry)
+        if skills or self._config.skills.enabled:
+            self._init_skill_tools(ctx, registry, skills_config=skills)
         if mcp:
             self._init_mcp_tools(ctx, registry, mcp)
 
         # 3. System prompt via ContextBuilder
         builder = ContextBuilder()
-        identity = self._config.developer_instructions or None
         system_prompt = builder.build(
             ctx, registry,
-            mode=spec.mode,
-            identity=identity,
+            system_prompt=self._config.system_prompt,
+            identity=self._config.developer_instructions,
             skill_registry=getattr(self, "_skill_registry", None),
         )
 
         # 4. Hooks
         hooks = list(spec.hooks)
         if bus is not None:
-            emitter_hook = EventEmitterHook(bus, source=self.exp_name)
+            emitter_source = source_override or self.exp_name
+            emitter_hook = EventEmitterHook(
+                bus, emitter_source, spawn_id=spawn_id
+            )
             hooks.append(emitter_hook)
+
+        # 4b. SpawnTool: register with spawn_fn if "spawn" in config
+        builtin_cfg = self._config.tools.builtin
+        if ("spawn" in builtin_cfg or builtin_cfg == ["*"]) and ctx.session is not None:
+            from matmaster.config.loader import list_available_exps
+            from matmaster.tools.builtin.spawn_tool import SpawnTool
+
+            spawn_fn = self._make_spawn_fn(ctx, bus, source_prefix="MatMaster")
+            spawn_tool = SpawnTool(
+                session=ctx.session,
+                workdir=Path(ctx.execution_workdir),
+                spawn_fn=spawn_fn,
+                available_exps=list_available_exps(),
+            )
+            registry.register(spawn_tool, source="builtin")
 
         # 5. Compaction: unchanged, managed by separate process
         compactor = None
@@ -216,14 +276,22 @@ class Exp:
         stop_event: threading.Event | None = None,
         skills: dict[str, Any] | None = None,
         mcp: dict[str, Any] | None = None,
-    ) -> RunResultEvent:
+    ) -> KernelResult:
         """build_runtime -> kernel.run -> cleanup."""
         runtime = self.build_runtime(ctx, bus=bus, skills=skills, mcp=mcp)
+        # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
+        tool_registry = getattr(runtime.spec, "tool_registry", None)
+        if stop_event is not None and tool_registry is not None:
+            from matmaster.tools.builtin.spawn_tool import SpawnTool
+
+            for tool in tool_registry.all_tools:
+                if isinstance(tool, SpawnTool):
+                    tool._stop_event = stop_event
         try:
             result = runtime.kernel.run(
                 runtime.spec, task, history=history, stop_event=stop_event
             )
-            return result.event
+            return result.result
         finally:
             runtime.cleanup()
 
@@ -234,8 +302,9 @@ class Exp:
     ) -> None:
         """Register builtin tools: native (source='builtin') + evo adapter (source='builtin_evo').
 
-        Native tools: BashTool, ListDirTool, TaskCreate/Get/List/Update/Complete.
-        Evo adapter: EditorTool (Phase 9 replaces), MonitorJobTool (retained).
+        Native tools (12): BashTool, ListDirTool, ReadTool, WriteTool, EditTool,
+        GlobTool, GrepTool, TaskCreate/Get/List/Update/Complete.
+        Evo adapter (1): MonitorJobTool (science-specific, retained).
         """
         if ctx.session is None:
             self.logger.warning(
@@ -246,17 +315,35 @@ class Exp:
         # 1. Native builtin tools (source="builtin")
         from matmaster.tools.builtin import (
             BashTool,
+            EditTool,
+            GlobTool,
+            GrepTool,
             ListDirTool,
+            ReadTool,
+            ReadTracker,
             TaskCompleteTool,
             TaskCreateTool,
             TaskGetTool,
             TaskListTool,
             TaskUpdateTool,
+            WriteTool,
         )
 
+        # Create ReadTracker shared instance for Read-Before-Modify protocol
+        tracker = ReadTracker()
+        self._register_cleanup(tracker.clear)
+
+        exec_wd = Path(ctx.execution_workdir)
         native_tools = [
-            BashTool(session=ctx.session, workdir=ctx.workdir),
-            ListDirTool(session=ctx.session, workdir=ctx.workdir),
+            BashTool(session=ctx.session, workdir=exec_wd),
+            ListDirTool(session=ctx.session, workdir=exec_wd),
+            ReadTool(session=ctx.session, workdir=exec_wd, tracker=tracker),
+            WriteTool(session=ctx.session, workdir=exec_wd, tracker=tracker),
+            EditTool(session=ctx.session, workdir=exec_wd, tracker=tracker),
+            GlobTool(session=ctx.session, workdir=exec_wd),
+            GrepTool(session=ctx.session, workdir=exec_wd),
+            # Task tools stay on the local control-plane workdir (not execution_workdir):
+            # .tasks.json must remain local to the session/task ledger.
             TaskCreateTool(workdir=ctx.workdir),
             TaskGetTool(workdir=ctx.workdir),
             TaskListTool(workdir=ctx.workdir),
@@ -266,18 +353,15 @@ class Exp:
         for tool in native_tools:
             registry.register(tool, source="builtin")
 
-        # 2. Evo adapter tools (source="builtin_evo") -- transitional
-        #    EditorTool retained until Phase 9 delivers native Read/Write/Edit
+        # 2. Evo adapter tools (source="builtin_evo")
         #    MonitorJobTool retained (science-specific, no native migration planned)
-        from evomaster.agent.tools.builtin.editor import EditorTool
         from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
 
-        for evo_tool in [EditorTool(), MonitorJobTool()]:
-            adapted = EvoToolAdapter(evo_tool, ctx.session)
-            registry.register(adapted, source="builtin_evo")
+        adapted = EvoToolAdapter(MonitorJobTool(), ctx.session)
+        registry.register(adapted, source="builtin_evo")
 
         self.logger.debug(
-            "Registered %d native + 2 evo-adapted builtin tools",
+            "Registered %d native + 1 evo-adapted builtin tools",
             len(native_tools),
         )
 
@@ -285,7 +369,7 @@ class Exp:
         self,
         ctx: PlaygroundContext,
         registry: ToolRegistry,
-        config: dict[str, Any] | None = None,
+        skills_config: dict[str, Any] | None = None,
     ) -> None:
         """Initialize skill tools with lazy MCP schema injection."""
         skills_cfg = self._config.skills
@@ -295,17 +379,40 @@ class Exp:
         import json as _json
         from pathlib import Path
 
-        from evomaster.agent.tools.skill import SkillTool
-        from evomaster.skills.base import SkillRegistry
-
+        from matmaster.skills.registry import SkillRegistry
         from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
         from matmaster.tools.schema_cache import ToolSchemaCache
+        from matmaster.tools.skill_tool import SkillTool
 
-        skill_registry = SkillRegistry(Path(skills_cfg.skills_root))
+        # Build root list from str | list[str]
+        roots_raw = skills_cfg.skills_root
+        if isinstance(roots_raw, list):
+            roots = [Path(r) for r in roots_raw if r]
+        else:
+            roots = [Path(roots_raw)] if roots_raw else []
+        if not roots:
+            self.logger.warning(
+                "skills.enabled=true but skills_root is empty, skipping skill init"
+            )
+            return
+
+        skill_registry = SkillRegistry(roots)
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
 
-        # MCP config: merge runtime config with static config
-        mcp_config = config or {}
+        # MCP runtime config: ALWAYS self-load from config_dir.
+        # Independent of skills_config -- MCP runtime config (path_adaptor,
+        # calculation_executors) is a separate concern from skill routing.
+        from matmaster.config.loader import _load_raw
+
+        mcp_runtime_path = Path(skills_cfg.config_dir) / skills_cfg.mcp_runtime_file
+        if mcp_runtime_path.exists():
+            mcp_config = _load_raw(mcp_runtime_path)
+        else:
+            raise FileNotFoundError(
+                f"MCP runtime config not found: {mcp_runtime_path}. "
+                f"Required when skills.enabled=true."
+            )
+
         mcp_config_file = mcp_config.get("config_file", skills_cfg.mcp_config_file)
         config_path = Path(mcp_config_file)
         if not config_path.is_absolute():
@@ -358,9 +465,10 @@ class Exp:
                 )
                 registry.register(lazy_tool, source="mcp")
 
-        skill_tool = SkillTool(skill_registry, on_skill_hit=on_skill_hit)
-        adapted = EvoToolAdapter(skill_tool, ctx.session)
-        registry.register(adapted, source="skill")
+        skill_tool = SkillTool(
+            skill_registry, session=ctx.session, on_skill_hit=on_skill_hit
+        )
+        registry.register(skill_tool, source="skill")
 
         self._skill_registry = skill_registry
 

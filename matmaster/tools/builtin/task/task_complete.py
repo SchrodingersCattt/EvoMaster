@@ -13,7 +13,12 @@ class TaskCompleteTool(BuiltinTool):
     """Mark a task as completed."""
 
     name: ClassVar[str] = "task_complete"
-    description: ClassVar[str] = "Mark a task as completed when it is done."
+    description: ClassVar[str] = (
+        "Mark a task as completed when all its work is done.\n\n"
+        "Usage:\n"
+        "- Only mark complete when the task's objective is fully achieved.\n"
+        "- Use task_update with status='in_progress' for partially done work."
+    )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {

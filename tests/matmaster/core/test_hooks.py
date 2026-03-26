@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from matmaster.core.bus import MessageBus
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.events import (
     ResponseEvent,
     ThoughtEvent,
@@ -20,6 +21,7 @@ from matmaster.core.hooks import (
     Hook,
     HookAction,
     run_guard_blocked,
+    run_on_segment_complete,
     run_on_stream_chunk,
     run_post_tool_call,
     run_pre_llm_call,
@@ -82,7 +84,7 @@ class TestHookProtocol:
         self, sample_tool_call: ToolCallData
     ) -> None:
         hook = BaseHook()
-        result = hook.post_tool_call(sample_tool_call, "result")
+        result = hook.post_tool_call(sample_tool_call, ToolResult(content="result"))
         assert result is None
 
     def test_base_hook_pre_llm_call_default(
@@ -147,7 +149,7 @@ class TrackingHook(BaseHook):
         self.pre_tool_call_called = True
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: str) -> None:
+    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         self.post_tool_call_called = True
 
     def pre_llm_call(self, messages: list[Message], turn: int) -> None:
@@ -214,7 +216,7 @@ class TestHookShortCircuit:
         """Observation hook -- both hooks called (no short-circuit)."""
         h1 = TrackingHook()
         h2 = TrackingHook()
-        run_post_tool_call([h1, h2], sample_tool_call, "result")
+        run_post_tool_call([h1, h2], sample_tool_call, ToolResult(content="result"))
         assert h1.post_tool_call_called is True
         assert h2.post_tool_call_called is True
 
@@ -259,7 +261,14 @@ class TestEventEmitterHook:
     ) -> None:
         bus = MessageBus()
         hook = EventEmitterHook(bus, "agent-1")
-        hook.post_tool_call(sample_tool_call, "result_data")
+        hook.post_tool_call(
+            sample_tool_call,
+            ToolResult(
+                status="error",
+                content="result_data",
+                info={"error": "x"},
+            ),
+        )
         assert not bus.empty
         event = bus.get_nowait()
         assert isinstance(event, ToolResultEvent)
@@ -267,6 +276,8 @@ class TestEventEmitterHook:
         assert event.call_id == sample_tool_call.id
         assert event.tool_name == sample_tool_call.name
         assert event.result == "result_data"
+        assert event.status == "error"
+        assert event.info == {"error": "x"}
 
     def test_on_stream_chunk_emits_thought_event(
         self, sample_chunk: StreamChunk
@@ -323,6 +334,59 @@ class TestEventEmitterHook:
         assert bus.empty
 
 
+class TestEventEmitterHookSpawnId:
+    """Task 2: EventEmitterHook stamps spawn_id on every emitted bus event."""
+
+    _SPAWN = "a1b2c3d4e5f67890"
+
+    def test_pre_and_post_tool_call_events_carry_spawn_id(
+        self, sample_tool_call: ToolCallData
+    ) -> None:
+        bus = MessageBus()
+        hook = EventEmitterHook(bus, "agent-1", spawn_id=self._SPAWN)
+        hook.pre_tool_call(sample_tool_call)
+        hook.post_tool_call(sample_tool_call, ToolResult(content="ok"))
+        e1 = bus.get_nowait()
+        e2 = bus.get_nowait()
+        assert isinstance(e1, ToolCallEvent)
+        assert isinstance(e2, ToolResultEvent)
+        assert e1.spawn_id == self._SPAWN
+        assert e2.spawn_id == self._SPAWN
+
+    def test_on_stream_chunk_both_branches_carry_spawn_id(
+        self, sample_chunk: StreamChunk
+    ) -> None:
+        bus = MessageBus()
+        hook = EventEmitterHook(bus, "agent-1", spawn_id=self._SPAWN)
+        hook.on_stream_chunk(sample_chunk)
+        thought = bus.get_nowait()
+        response = bus.get_nowait()
+        assert isinstance(thought, ThoughtEvent)
+        assert isinstance(response, ResponseEvent)
+        assert thought.spawn_id == self._SPAWN
+        assert response.spawn_id == self._SPAWN
+
+    def test_on_segment_complete_thought_and_response_carry_spawn_id(self) -> None:
+        bus = MessageBus()
+        hook = EventEmitterHook(bus, "agent-1", spawn_id=self._SPAWN)
+        hook.on_segment_complete("thought", "t", "sid1")
+        hook.on_segment_complete("response", "r", "sid2")
+        t_evt = bus.get_nowait()
+        r_evt = bus.get_nowait()
+        assert isinstance(t_evt, ThoughtEvent)
+        assert isinstance(r_evt, ResponseEvent)
+        assert t_evt.spawn_id == self._SPAWN
+        assert r_evt.spawn_id == self._SPAWN
+
+    def test_run_on_segment_complete_propagates_to_emitter(self) -> None:
+        bus = MessageBus()
+        hook = EventEmitterHook(bus, "agent-1", spawn_id=self._SPAWN)
+        run_on_segment_complete([hook], "thought", "done", "z")
+        evt = bus.get_nowait()
+        assert isinstance(evt, ThoughtEvent)
+        assert evt.spawn_id == self._SPAWN
+
+
 # ── run_guard_blocked ────────────────────────────────
 
 
@@ -357,7 +421,9 @@ class TestRunGuardBlocked:
             """Hook without on_guard_blocked method."""
             def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
                 return HookAction.CONTINUE
-            def post_tool_call(self, tool_call: ToolCallData, result: str) -> None:
+            def post_tool_call(
+                self, tool_call: ToolCallData, result: ToolResult
+            ) -> None:
                 pass
             def pre_llm_call(self, messages: list, turn: int) -> None:
                 pass

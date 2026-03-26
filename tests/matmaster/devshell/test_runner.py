@@ -17,8 +17,37 @@ class MockProvider:
     def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
         return self.chat(messages, tools)
 
-    def chat_stream(self, messages, tools=None) -> Iterator[StreamChunk]:
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         yield StreamChunk(content="hello", finish_reason="stop")
+
+
+class TestBuildExpConfig:
+    def test_system_prompt_default(self):
+        """AgentConfig defaults system_prompt to empty string."""
+        from matmaster.devshell.config import AgentConfig
+        cfg = AgentConfig()
+        assert cfg.system_prompt == ""
+
+    def test_system_prompt_forwarded(self):
+        """_build_exp_config uses explicit system_prompt when provided."""
+        from matmaster.devshell.config import AgentConfig, DevConfig
+        from matmaster.devshell.runner import DevRunner
+        config = DevConfig(
+            agent=AgentConfig(system_prompt="Custom prompt.")
+        )
+        exp_cfg = DevRunner._build_exp_config(config)
+        assert exp_cfg.system_prompt == "Custom prompt."
+
+    def test_system_prompt_fallback_to_base(self):
+        """_build_exp_config calls load_base_system_prompt when system_prompt is empty."""
+        from unittest.mock import patch
+        from matmaster.devshell.config import DevConfig
+        from matmaster.devshell.runner import DevRunner
+        config = DevConfig()
+        with patch("matmaster.config.loader.load_base_system_prompt", return_value="Mocked base") as mock_load:
+            exp_cfg = DevRunner._build_exp_config(config)
+        mock_load.assert_called_once()
+        assert exp_cfg.system_prompt == "Mocked base"
 
 
 class TestDevRunner:
@@ -42,8 +71,8 @@ class TestDevRunner:
         runner = self._make_runner(tmp_path)
         result = runner.run("hello")
 
-        assert result.event.reason == "natural"
-        assert result.event.final_content == "hello"
+        assert result.result.reason == "natural"
+        assert result.result.final_content == "hello"
 
     def test_history_accumulates(self, tmp_path: Path) -> None:
         runner = self._make_runner(tmp_path)
@@ -66,4 +95,4 @@ class TestDevRunner:
         stop = threading.Event()
         stop.set()
         result = runner.run("test", stop_event=stop)
-        assert result.event.reason == "cancelled"
+        assert result.result.reason == "cancelled"

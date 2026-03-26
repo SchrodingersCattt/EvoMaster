@@ -1,30 +1,32 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Agent 外围能力构建
-status: Ready to plan
-stopped_at: Phase 9 context gathered
-last_updated: "2026-03-25T03:15:11.532Z"
+milestone: v2.0
+milestone_name: matmaster 协程改造
+status: Defining requirements
+stopped_at: null
+last_updated: "2026-03-26T00:00:00.000Z"
 progress:
-  total_phases: 4
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-24)
+See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 08 — builtintool-tools
+**Current focus:** Not started (defining requirements)
 
 ## Current Position
 
-Phase: 9
-Plan: Not started
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-03-26 — Milestone v2.0 started
 
 ## Accumulated Context
 
@@ -33,11 +35,11 @@ Plan: Not started
 Decisions logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [v1.1 init]: BuiltinTool 直接实现 Tool Protocol，不走 EvoToolAdapter
-- [v1.1 init]: SubAgent 同步执行（不引入 asyncio），spawn_fn 闭包注入解耦 tool 与 Exp
-- [Phase 08]: Created BuiltinTool base.py inline in Plan 02 since Plan 01 runs in parallel
-- [Phase 08]: BuiltinTool uses ClassVar for Protocol satisfaction, session constructor injection with None default
-- [Phase 08]: Native tools source='builtin', evo adapter tools source='builtin_evo' for provenance tracking
+- [v2.0 init]: 全链路 async 改造（C 方案），包括 Kernel/Provider/Tool/Exp/Hook/Guard/MessageBus/Compactor
+- [v2.0 init]: Exp 生命周期三阶段（assemble/build_runtime/run）全部 async 化
+- [v2.0 init]: Hook 和 Guard Protocol 全部 async 化
+- [v2.0 init]: DevShell 延后改造，用 asyncio.run() 包装调用
+- [v2.0 init]: 驱动力为多 agent 编排准备，不包含编排层本身
 
 ### Pending Todos
 
@@ -45,12 +47,11 @@ None.
 
 ### Blockers/Concerns
 
-- ToolContext 决策: Tool Protocol 是否增加 ToolContext 参数需在 Phase 8 planning 时确定
 - tests/test_streaming_thought_protocol.py collection error (1 test file broken, from v1)
 - skills/mcp build_runtime stubs still need service layer factory injection (from v1)
 
 ## Session Continuity
 
-Last session: 2026-03-25T03:15:11.524Z
-Stopped at: Phase 9 context gathered
-Resume file: .planning/phases/09-tools/09-CONTEXT.md
+Last session: 2026-03-26T00:00:00.000Z
+Stopped at: Milestone v2.0 initialization
+Resume file: None
