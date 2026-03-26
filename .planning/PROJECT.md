@@ -15,7 +15,7 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 - ✓ PlaygroundContext/AgentRuntimeSpec/AgentEvent 类型化契约 — v1 (CONT-01~05)
 - ✓ MessageBus 同步事件队列 + SSEHandler 生产 SSE 路径 — v1 (EBUS-01~02)
 - ✓ AgentKernel 纯执行循环 + GuardPipeline + Hook API — v1 (KERN-01~04)
-- ✓ LLMProvider Protocol (chat + chat_with_retry + chat_stream) — v1 (LLMP-01)
+- ✓ LLMProvider Protocol (chat + chat_stream, async) — v1 (LLMP-01), async in Phase 12 (PROT-01)
 - ✓ Exp 装配层 (ToolRegistry + ContextBuilder + WorkerRegistry Protocol) — v1 (ASBL-01~06)
 - ✓ 统一 Playground + config YAML 驱动 + WorkspaceArchivalConfig — v1 (WKSP-01~04)
 - ✓ mat_master/minimal 端到端迁移 + E2E 测试 — v1 (MIGR-01~02)
@@ -62,7 +62,7 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 
 ### Current State
 
-**Post-v1.1** (2026-03-26): v1.1 milestone 全部完成。完整 BuiltinTool 体系（12 tools）、SubAgent spawn 机制、Tool description/schema 精细化、developer_instructions system prompt。863 tests passed。当前全链路同步，准备进入 v2.0 async 改造。
+**Phase 12 complete** (2026-03-26): Protocol 定义 async 化完成。6 个 Protocol 签名改为 async def（LLMProvider、Tool、Hook、EventHandler、ReplyQueueLike），Guard.evaluate 保持 sync。chat_with_retry 从 Protocol 和 OpenAIProvider 中移除。validate_async_protocol() 运行时检测工具就绪。pytest-asyncio + async mock factories 建立。976 tests passed。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI (not refactored), OpenAI SDK, tiktoken.
 
