@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: matmaster 协程改造
-status: Defining requirements
-stopped_at: null
-last_updated: "2026-03-26T00:00:00.000Z"
+status: Executing
+stopped_at: "Completed 13-01-PLAN.md"
+last_updated: "2026-03-27T18:25:00.000Z"
 progress:
-  total_phases: 0
+  total_phases: 1
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
 ---
 
 # Project State
@@ -19,14 +19,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Not started (defining requirements)
+**Current focus:** Phase 13 - LLM Provider async 改造
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-03-26 — Milestone v2.0 started
+Phase: 13-llm-provider (Plan 1/2 complete)
+Plan: 13-01 complete, 13-02 next
+Status: Executing
+Last activity: 2026-03-27 — Completed 13-01 (OpenAIProvider async + Protocol extension)
 
 ## Accumulated Context
 
@@ -40,6 +40,10 @@ Recent decisions affecting current work:
 - [v2.0 init]: Hook 和 Guard Protocol 全部 async 化
 - [v2.0 init]: DevShell 延后改造，用 asyncio.run() 包装调用
 - [v2.0 init]: 驱动力为多 agent 编排准备，不包含编排层本身
+- [13-01]: LLMProvider Protocol 声明 __aenter__/__aexit__ 作为生命周期契约
+- [13-01]: OpenAIProvider __init__ 只存参数，__aenter__ 创建 AsyncOpenAI + httpx.AsyncClient
+- [13-01]: chat_with_retry 保留为 sync legacy 桥接，Kernel async 化后移除
+- [13-01]: validate_async_protocol helper 创建用于 Protocol 一致性检查
 
 ### Pending Todos
 
@@ -50,8 +54,14 @@ None.
 - tests/test_streaming_thought_protocol.py collection error (1 test file broken, from v1)
 - skills/mcp build_runtime stubs still need service layer factory injection (from v1)
 
+## Performance Metrics
+
+| Phase | Plan | Duration | Tasks | Files |
+|-------|------|----------|-------|-------|
+| 13-llm-provider | 01 | 7min | 2 | 6 |
+
 ## Session Continuity
 
-Last session: 2026-03-26T00:00:00.000Z
-Stopped at: Milestone v2.0 initialization
+Last session: 2026-03-27T18:25:00.000Z
+Stopped at: Completed 13-01-PLAN.md
 Resume file: None

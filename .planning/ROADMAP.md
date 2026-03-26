@@ -4,6 +4,7 @@
 
 - ✅ **v1 MatMaster Framework Refactoring** -- Phases 1-7 (shipped 2026-03-22)
 - 🚧 **v1.1 Agent 外围能力构建** -- Phases 8-11 (in progress)
+- 🚧 **v2.0 matmaster 协程改造** -- Phases 13+ (in progress)
 
 ## Phases
 
@@ -97,10 +98,34 @@ Plans:
 - [x] 11-02-PLAN.md -- Exp 层 spawn_fn 闭包创建 + SubAgentTool 注册 + source_override + 集成测试
 - [x] 11-03-PLAN.md -- 事件路由 source 前缀兼容 + chat_history 改造 + service 层 stop_event 注入
 
+### 🚧 v2.0 matmaster 协程改造 (In Progress)
+
+**Milestone Goal:** 将 matmaster 框架从同步架构全链路改造为 async/await，为多 agent 编排做准备。
+
+- [ ] **Phase 13: LLM Provider 异步实现** - OpenAIProvider async 改造 + ContextCompactor async 改造
+
+## Phase Details (v2.0)
+
+### Phase 13: LLM Provider 异步实现
+**Goal**: OpenAIProvider 使用 AsyncOpenAI client，chat/chat_stream 为 async 方法，支持 async context manager 生命周期管理
+**Depends on**: Phase 11 (v1.1 completed)
+**Requirements**: LLMP-01, LLMP-02, LLMP-03
+**Success Criteria** (what must be TRUE):
+  1. LLMProvider Protocol 声明 __aenter__/__aexit__ 作为 async context manager 生命周期契约
+  2. OpenAIProvider 使用 AsyncOpenAI，chat/chat_stream 为 async 方法
+  3. 未进入 async context 时调用 chat/chat_stream 抛出 RuntimeError
+  4. build_provider() 保持 sync，返回未初始化的 provider
+  5. 全部 provider 测试通过
+**Plans:** 1/2 plans complete
+
+Plans:
+- [x] 13-01-PLAN.md -- OpenAIProvider async 改造 + LLMProvider Protocol 扩展 + 测试迁移
+- [ ] 13-02-PLAN.md -- ContextCompactor async 改造
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 8 -> 9 -> 10 -> 11
+Phases execute in numeric order: 8 -> 9 -> 10 -> 11 -> 13+
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -115,3 +140,4 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11
 | 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete    | 2026-03-25 |
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete    | 2026-03-25 |
+| 13. LLM Provider 异步实现 | v2.0 | 1/2 | In Progress | - |
