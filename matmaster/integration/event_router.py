@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class EventHandler(Protocol):
     """Protocol for event handlers consumed by EventRouter."""
 
-    def handle(self, event: BusEvent) -> None:  # type: ignore[arg-type]
+    async def handle(self, event: BusEvent) -> None:  # type: ignore[arg-type]
         """Process a single bus event."""
         ...
 

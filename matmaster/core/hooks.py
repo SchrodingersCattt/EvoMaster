@@ -53,21 +53,21 @@ class Hook(Protocol):
     to get default implementations for all hook points.
     """
 
-    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction: ...
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction: ...
 
-    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None: ...
+    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None: ...
 
-    def pre_llm_call(self, messages: list[Message], turn: int) -> None: ...
+    async def pre_llm_call(self, messages: list[Message], turn: int) -> None: ...
 
-    def should_continue(self, messages: list[Message], turn: int) -> bool: ...
+    async def should_continue(self, messages: list[Message], turn: int) -> bool: ...
 
-    def on_stream_chunk(self, chunk: StreamChunk) -> None: ...
+    async def on_stream_chunk(self, chunk: StreamChunk) -> None: ...
 
-    def on_segment_complete(
+    async def on_segment_complete(
         self, segment_type: str, content: str, stream_id: str | None
     ) -> None: ...
 
-    def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None: ...
+    async def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None: ...
 
 
 class BaseHook:
@@ -76,29 +76,29 @@ class BaseHook:
     Subclass and override specific methods to customize behavior.
     """
 
-    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         """Default: allow tool call to proceed."""
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
+    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         """Default: no-op observation."""
 
-    def pre_llm_call(self, messages: list[Message], turn: int) -> None:
+    async def pre_llm_call(self, messages: list[Message], turn: int) -> None:
         """Default: no-op observation."""
 
-    def should_continue(self, messages: list[Message], turn: int) -> bool:
+    async def should_continue(self, messages: list[Message], turn: int) -> bool:
         """Default: continue execution."""
         return True
 
-    def on_stream_chunk(self, chunk: StreamChunk) -> None:
+    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
         """Default: no-op observation."""
 
-    def on_segment_complete(
+    async def on_segment_complete(
         self, segment_type: str, content: str, stream_id: str | None
     ) -> None:
         """Default: no-op observation."""
 
-    def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
+    async def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
         """Default: no-op observation."""
 
 
