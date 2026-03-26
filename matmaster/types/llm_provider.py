@@ -17,8 +17,19 @@ class LLMProvider(Protocol):
 
     Implementations wrap a specific LLM API (OpenAI, Anthropic, etc.)
     and provide non-streaming (chat) and streaming (chat_stream) methods.
-    Both are async. Retry logic lives in Kernel._call_llm(), not in the provider.
+    Both are async. Provider lifecycle is managed via async context manager:
+    __aenter__ initializes the client, __aexit__ closes connections.
+    Retry logic lives in Kernel._call_llm(), not in the provider.
     """
+
+    async def __aenter__(self) -> LLMProvider: ...
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object | None,
+    ) -> None: ...
 
     async def chat(
         self,
