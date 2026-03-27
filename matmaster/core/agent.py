@@ -201,9 +201,9 @@ class AgentKernel:
                 if not guard_result.allowed:
                     # Blocked: notify hooks, then append ToolMessage error
                     run_guard_blocked(spec.hooks, tc, guard_result)
-                    blocked_content = f"BLOCKED: {guard_result.reason}"
+                    blocked_content = f'BLOCKED: {guard_result.reason}'
                     if guard_result.guidance:
-                        blocked_content += f"\n{guard_result.guidance}"
+                        blocked_content += f'\n{guard_result.guidance}'
                     messages.append(
                         ToolMessage(
                             tool_call_id=tc.id,
@@ -233,7 +233,7 @@ class AgentKernel:
                         status='error',
                         content=(
                             f"Error executing tool '{tc.name}': "
-                            f"{type(e).__name__}: {e}"
+                            f'{type(e).__name__}: {e}'
                         ),
                     )
                     logger.exception('Tool execution failed: %s', tc.name)
@@ -300,7 +300,7 @@ class AgentKernel:
                     self._sleep_backoff_with_stop(backoff, stop_event)
 
         raise RuntimeError(
-            f"LLM stream failed after {max_retries} attempts"
+            f'LLM stream failed after {max_retries} attempts'
         ) from last_error
 
     @staticmethod
@@ -343,7 +343,7 @@ class AgentKernel:
         reasoning_parts: list[str] = []
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
-        stream_id = f"turn-{len(messages)}"
+        stream_id = f'turn-{len(messages)}'
         usage: dict[str, int] = {}
         producing_reasoning = False
         producing_content = False
