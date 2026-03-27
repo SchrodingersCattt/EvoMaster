@@ -6,11 +6,13 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
 
     python -u -m matmaster.devshell run ... --prompt-file ... --json-out .../_devshell_summary.json
 
-Aggregate output: ``raw_runs.jsonl`` (one JSON object per line) + ``manifest.json``.
+Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
 
 Usage (from repository root)::
 
     uv run python scripts/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
+    uv run python scripts/run_devshell_eval.py --no-export-review --limit 3   # skip Markdown bundle
+    uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_*  # manual only
     uv run python scripts/run_devshell_eval.py --help
 
 This does **not** run MATTER's BinaryEvaluator or Playground ``run_mat_task``; it only
@@ -118,6 +120,16 @@ def main() -> int:
         type=Path,
         default=None,
         help="Python executable (default: sys.executable)",
+    )
+    parser.add_argument(
+        "--no-export-review",
+        action="store_true",
+        help="Do not write claude_review.md after the run (default: write it via export_devshell_review_bundle).",
+    )
+    parser.add_argument(
+        "--export-review-with-questions",
+        action="store_true",
+        help="When writing claude_review.md, include human_prompt_seed from the question bank.",
     )
     args = parser.parse_args()
 
@@ -299,6 +311,35 @@ def main() -> int:
         print(f"  [{status}] {task_id} exit={rc}", file=sys.stderr, flush=True)
 
     print(f"Wrote {raw_path}", file=sys.stderr)
+
+    if not args.no_export_review:
+        export_script = REPO_ROOT / "scripts" / "export_devshell_review_bundle.py"
+        review_md = run_dir / "claude_review.md"
+        export_cmd: list[str | Path] = [
+            py,
+            export_script,
+            "--run-dir",
+            run_dir,
+            "--out",
+            review_md,
+        ]
+        if args.export_review_with_questions:
+            export_cmd.append("--with-questions")
+        er = subprocess.run(export_cmd, cwd=cwd, env=env)
+        if er.returncode == 0:
+            print(f"Wrote claude_review: {review_md}", file=sys.stderr)
+        else:
+            print(
+                "Warning: claude_review.md export failed; run manually:\n"
+                f"  uv run python scripts/export_devshell_review_bundle.py --run-dir {run_dir}",
+                file=sys.stderr,
+            )
+    else:
+        print(
+            f"Pack for Claude (skipped): uv run python scripts/export_devshell_review_bundle.py --run-dir {run_dir}",
+            file=sys.stderr,
+        )
+
     return 1 if any_failed else 0
 
 
