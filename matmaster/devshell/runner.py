@@ -59,6 +59,19 @@ class DevRunner:
 
         # Exp config dict
         self._exp_config = self._build_exp_config(config)
+        # Local devshell is not Bohrium SSH; avoid model defaulting to /share from tool hints.
+        if config.session.type == "local":
+            wd = str(workdir.resolve())
+            hint = (
+                "\n\n## Local session\n"
+                f"- Workspace directory: `{wd}`\n"
+                "- `execute_bash` uses this directory as cwd; file tools resolve relative paths under it.\n"
+                "- **Do not** assume `/share/...` exists here; that path is for **Bohrium remote SSH** "
+                "project storage, not for typical local runs.\n"
+            )
+            self._exp_config = self._exp_config.model_copy(
+                update={"system_prompt": self._exp_config.system_prompt + hint}
+            )
 
         # Multi-turn history
         self.history: list[Message] = []

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import queue
 import sys
+import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -214,6 +217,60 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     return runner, config, llm_config, resolved
 
 
+def _run_with_event_log(runner: Any, prompt: str, log_dir: Path) -> tuple[Any, Path]:
+    """Run one task with MessageBus + EventLogger (same JSONL shape as REPL).
+
+    Writes ``log_dir/events_YYYYMMDD_HHMMSS.jsonl``.
+    """
+    from matmaster.core.bus import MessageBus
+    from matmaster.devshell.event_logger import EventLogger
+
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+    event_logger = EventLogger(log_file, run_id="run-001")
+    bus = MessageBus()
+
+    result_holder: list[Any] = []
+    error_holder: list[BaseException] = []
+
+    def _worker() -> None:
+        try:
+            r = runner.run(prompt, bus=bus)
+            result_holder.append(r)
+        except BaseException as e:
+            error_holder.append(e)
+
+    worker = threading.Thread(target=_worker, daemon=True)
+    worker.start()
+
+    while worker.is_alive():
+        try:
+            event = bus.get(timeout=0.1)
+            event_logger.log_event(event)
+        except queue.Empty:
+            continue
+
+    while True:
+        try:
+            event = bus.get_nowait()
+            event_logger.log_event(event)
+        except queue.Empty:
+            break
+
+    worker.join()
+
+    try:
+        if error_holder:
+            raise error_holder[0]
+        if not result_holder:
+            raise RuntimeError("run produced no result")
+        result = result_holder[0]
+        event_logger.log_event(result.result.to_run_result_event())
+        return result, log_file
+    finally:
+        event_logger.close()
+
+
 def _run_single(
     args: argparse.Namespace,
     runner: Any,
@@ -235,7 +292,9 @@ def _run_single(
         return 1
 
     try:
-        result = runner.run(prompt)
+        result, log_file = _run_with_event_log(runner, prompt, args.log_dir)
+        if args.verbose:
+            print(f"Event log: {log_file}", file=sys.stderr)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
