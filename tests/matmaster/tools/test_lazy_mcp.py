@@ -55,7 +55,7 @@ class TestLazyMCPToolProtocol:
 
 
 class TestLazyMCPToolExecution:
-    def test_first_execute_connects(self):
+    async def test_first_execute_connects(self):
         connector = FakeConnector()
         tool = LazyMCPTool(
             server_name="mat_sg",
@@ -65,12 +65,12 @@ class TestLazyMCPToolExecution:
             input_schema={},
             connector=connector,
         )
-        result = tool.execute({"param": "value"})
+        result = await tool.execute({"param": "value"})
         assert len(connector.connect_calls) == 1
         assert connector.connect_calls[0] == ("mat_sg", "build_bulk")
         connector._fake_tool.execute.assert_called_once()
 
-    def test_second_execute_reuses_connection(self):
+    async def test_second_execute_reuses_connection(self):
         connector = FakeConnector()
         tool = LazyMCPTool(
             server_name="mat_sg",
@@ -80,37 +80,37 @@ class TestLazyMCPToolExecution:
             input_schema={},
             connector=connector,
         )
-        tool.execute({"a": "1"})
-        tool.execute({"a": "2"})
+        await tool.execute({"a": "1"})
+        await tool.execute({"a": "2"})
         # Only connected once
         assert len(connector.connect_calls) == 1
         # But executed twice
         assert connector._fake_tool.execute.call_count == 2
 
-    def test_execute_returns_string(self):
+    async def test_execute_returns_string(self):
         connector = FakeConnector()
         connector._fake_tool.execute.return_value = ("hello world", {})
         tool = LazyMCPTool(
             server_name="s", tool_name="s_t", remote_tool_name="t",
             description="", input_schema={}, connector=connector,
         )
-        result = tool.execute({})
+        result = await tool.execute({})
         assert isinstance(result, ToolResult)
         assert result.content == "hello world"
         assert result.status == "success"
         assert result.info == {}
 
-    def test_execute_serializes_dict_observation(self):
+    async def test_execute_serializes_dict_observation(self):
         connector = FakeConnector()
         connector._fake_tool.execute.return_value = ({"key": "val"}, {})
         tool = LazyMCPTool(
             server_name="s", tool_name="s_t", remote_tool_name="t",
             description="", input_schema={}, connector=connector,
         )
-        result = tool.execute({})
+        result = await tool.execute({})
         assert json.loads(result.content) == {"key": "val"}
 
-    def test_execute_returns_tool_result_with_info(self):
+    async def test_execute_returns_tool_result_with_info(self):
         connector = FakeConnector()
         connector._fake_tool.execute.return_value = ("result", {"saved_path": "/tmp/x"})
         tool = LazyMCPTool(
@@ -122,11 +122,11 @@ class TestLazyMCPToolExecution:
             connector=connector,
         )
 
-        result = tool.execute({})
+        result = await tool.execute({})
         assert result.status == "success"
         assert result.info == {"saved_path": "/tmp/x"}
 
-    def test_execute_error_prefixed_observation_is_error_without_info_key(self):
+    async def test_execute_error_prefixed_observation_is_error_without_info_key(self):
         connector = FakeConnector()
         connector._fake_tool.execute.return_value = ("Error: remote failure", {})
         tool = LazyMCPTool(
@@ -138,7 +138,7 @@ class TestLazyMCPToolExecution:
             connector=connector,
         )
 
-        result = tool.execute({})
+        result = await tool.execute({})
         assert result.status == "error"
         assert result.content == "Error: remote failure"
 

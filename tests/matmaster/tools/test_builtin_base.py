@@ -1,8 +1,4 @@
-"""Tests for BuiltinTool ABC base class.
-
-BuiltinTool.execute() is async def + asyncio.to_thread.
-_execute() is sync def -- subclasses implement sync _execute() only.
-"""
+"""Tests for BuiltinTool ABC base class."""
 
 from __future__ import annotations
 
@@ -15,7 +11,7 @@ from matmaster.tools.tool_registry import Tool
 
 
 class ConcreteBuiltinTool(BuiltinTool):
-    """Concrete subclass with sync _execute for testing the ABC."""
+    """Concrete subclass for testing the ABC."""
 
     name: ClassVar[str] = "test_concrete"
     description: ClassVar[str] = "A concrete test tool"
@@ -29,7 +25,7 @@ class ConcreteBuiltinTool(BuiltinTool):
 
 
 class FailingBuiltinTool(BuiltinTool):
-    """Concrete subclass that raises in sync _execute."""
+    """Concrete subclass that raises in _execute."""
 
     name: ClassVar[str] = "test_failing"
     description: ClassVar[str] = "A failing test tool"
@@ -65,32 +61,21 @@ class TestRequireSession:
         assert tool._require_session() is sentinel
 
 
-class TestDirectExecute:
-    """Test _execute() directly (sync def)."""
-
-    def test_execute_returns_result_on_success(self) -> None:
-        tool = ConcreteBuiltinTool()
-        result = tool._execute({"arg1": "hello"})
-        assert result == "executed with {'arg1': 'hello'}"
-
-    def test_execute_raises_on_failure(self) -> None:
-        tool = FailingBuiltinTool()
-        with pytest.raises(ValueError, match="something went wrong"):
-            tool._execute({})
-
-
 class TestExecuteTemplateMethod:
-    """execute() template method -- async def with asyncio.to_thread."""
+    """execute() template method delegates to _execute() and handles errors."""
 
-    async def test_execute_async_returns_string_result(self) -> None:
-        """Async execute() delegates to sync _execute() via to_thread."""
+    async def test_execute_returns_result_on_success(self) -> None:
         tool = ConcreteBuiltinTool()
         result = await tool.execute({"arg1": "hello"})
         assert result == "executed with {'arg1': 'hello'}"
 
-    async def test_execute_async_catches_exception(self) -> None:
-        """execute() catches _execute() exceptions and returns error string."""
+    async def test_execute_catches_exception_returns_error_string(self) -> None:
         tool = FailingBuiltinTool()
         result = await tool.execute({})
-        assert isinstance(result, str)
+        assert result.startswith("Error:")
+        assert "something went wrong" in result
+
+    async def test_execute_error_string_contains_exception_message(self) -> None:
+        tool = FailingBuiltinTool()
+        result = await tool.execute({})
         assert "something went wrong" in result

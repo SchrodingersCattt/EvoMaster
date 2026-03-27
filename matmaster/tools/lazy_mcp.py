@@ -56,14 +56,15 @@ class LazyMCPTool:
     def json_schema(self) -> dict[str, Any]:
         return self._input_schema
 
-    def execute(self, arguments: dict[str, Any]) -> ToolResult:
+    async def execute(self, arguments: dict[str, Any]) -> ToolResult:
         if self._real_tool is None:
-            self._real_tool = self._connector.connect_and_get_tool(
-                self._server_name, self._remote_tool_name
+            self._real_tool = await asyncio.to_thread(
+                self._connector.connect_and_get_tool,
+                self._server_name, self._remote_tool_name,
             )
         args_json = json.dumps(arguments, ensure_ascii=False)
-        observation, info = self._real_tool.execute(
-            self._connector.session, args_json
+        observation, info = await asyncio.to_thread(
+            self._real_tool.execute, self._connector.session, args_json,
         )
         content = (
             observation
