@@ -12,6 +12,15 @@ random_seed: 7
 # Mat Master runtime config used by evaluator runner
 mat_config_path: "configs/mat_master/config.yaml"
 
+# Axis weights for weighted evaluation (v5+)
+# These control the relative importance of correctness, grounding, and efficiency.
+# Will be normalized during aggregation, so only relative ratios matter.
+# Default: equal weight (1.0 each) for all axes.
+axis_weights:
+  correctness: 1.0
+  grounding: 1.0
+  efficiency: 1.0
+
 # Optional simulator/evaluator LLM configs.
 # If omitted, simulator uses seed prompt directly and evaluator uses deterministic fallback.
 #

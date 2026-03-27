@@ -2,13 +2,21 @@
 
 Current v5 schema changes:
 - Rubric class REMOVED — binary scoring needs no rubric
-- ScoringCheckItem: weight field REMOVED, dimension renamed to axis
+- ScoringCheckItem: optional weight field added (default 1.0), dimension renamed to axis
 - New literals: CapabilityLiteral, DomainLiteral, AxisLiteral
 - QuestionItem: added capability/domain/required_tools/optional_tools; removed level/rubric_id/touchpoints/repeat_override
 - New CriterionResult model (per-criterion pass/fail + reason)
-- EvalRunRecord: replaces float scores with pass counts + criteria_results dict
-- EvaluationSummary: pass-rate oriented with AxisPassRates
+- EvalRunRecord: binary pass counts + weighted scores (axis_weights from config applied)
+- EvaluationSummary: pass-rate oriented with AxisPassRates + weighted equivalents
 - QuestionBank: no longer requires rubric field
+- EvalConfig: added axis_weights for weighted aggregation
+
+Scoring model:
+- LLM / deterministic verifiers produce binary (pass/fail) verdicts per checklist item
+- Each checklist item has optional weight (default 1.0)
+- Axis score = Σ(pass_i * weight_i) / Σ(weight_i) for items in that axis
+- Overall score = Σ(axis_weight_a * axis_score_a) / Σ(active_axis_weight_a)
+- Raw pass counts preserved for backward compatibility and debugging
 """
 
 from datetime import datetime, timezone
@@ -110,10 +118,11 @@ class ReferenceAnswer(BaseModel):
 
 
 class ScoringCheckItem(BaseModel):
-    """One verifiable scoring criterion (v5: binary, no weight).
+    """One verifiable scoring criterion (v5: binary with optional weight).
 
-    Every criterion counts as exactly 1 point and is attached to one scoring
+    Every criterion produces a pass/fail verdict and is attached to one scoring
     axis: correctness, grounding, or efficiency.
+    Weights are applied during aggregation; default weight is 1.0 if not specified.
     """
 
     id: str
@@ -128,6 +137,11 @@ class ScoringCheckItem(BaseModel):
         ),
     )
     verify: VerifyLiteral
+    weight: float = Field(
+        default=1.0,
+        ge=0.0,
+        description="Optional weight for this criterion in axis/overall score calculation. Default 1.0."
+    )
 
 
 class CriterionResult(BaseModel):
@@ -262,6 +276,16 @@ class EvalConfig(BaseModel):
     evaluator_llm: LLMRuntimeConfig | None = None
     include_capabilities: list[str] | None = None
     include_question_ids: list[str] | None = None
+    
+    # Axis weights for aggregation (default 1.0 each, normalized during calculation)
+    axis_weights: dict[AxisLiteral, float] = Field(
+        default_factory=lambda: {
+            'correctness': 1.0,
+            'grounding': 1.0,
+            'efficiency': 1.0,
+        },
+        description="Relative weights for correctness, grounding, efficiency axes. Will be normalized."
+    )
 
     @field_validator('k')
     @classmethod
@@ -330,6 +354,12 @@ class EvalRunRecord(BaseModel):
     grounding_total: int = 0
     efficiency_passed: int = 0
     efficiency_total: int = 0
+    
+    # v5+: weighted scores (axis_weights from config applied)
+    correctness_weighted_score: float = 0.0
+    grounding_weighted_score: float = 0.0
+    efficiency_weighted_score: float = 0.0
+    overall_weighted_score: float = 0.0
 
     # Meta
     model_name: str | None = None
@@ -391,12 +421,23 @@ class ToolContribution(BaseModel):
 
 
 class EvaluationSummary(BaseModel):
-    """Aggregated result object (v5): pass-rate oriented."""
+    """Aggregated result object (v5+): both raw pass-rates and weighted scores.
+    
+    Raw pass-rate fields (backward compatible):
+    - total_criteria, total_passed, pass_rate
+    - by_capability/domain/question/mode/model: AxisPassRates with integer tuples
+    
+    Weighted score fields (new):
+    - weighted_pass_rate, weighted_by_* (computed using axis_weights from config)
+    """
 
     total_runs: int
     total_criteria: int = 0
     total_passed: int = 0
     pass_rate: float = 0.0
+    
+    # Weighted equivalents (v5+)
+    weighted_pass_rate: float = 0.0
 
     by_capability: dict[str, AxisPassRates] = Field(default_factory=dict)
     by_domain: dict[str, AxisPassRates] = Field(default_factory=dict)

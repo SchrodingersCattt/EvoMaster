@@ -77,7 +77,7 @@ class BinaryEvaluator:
         passed_count / total_count  +  per-axis counts
     """
 
-    def __init__(self, llm_cfg: LLMRuntimeConfig | None = None) -> None:
+    def __init__(self, llm_cfg: LLMRuntimeConfig | None = None, axis_weights: dict[str, float] | None = None) -> None:
         self._llm = None
         if llm_cfg is not None:
             cfg = LLMConfig(
@@ -92,6 +92,8 @@ class BinaryEvaluator:
             self._llm = create_llm(
                 cfg, output_config={'show_in_console': False, 'log_to_file': False}
             )
+        # Store axis weights (will be normalized during calculation)
+        self._axis_weights = axis_weights or {'correctness': 1.0, 'grounding': 1.0, 'efficiency': 1.0}
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -147,6 +149,8 @@ class BinaryEvaluator:
                     verify_method='safety_eval',
                 )
             }
+            # For safety, only correctness axis is active
+            weighted_score = 1.0 if passed else 0.0
             return EvalRunRecord(
                 question_id=question.id,
                 capability=question.capability,
@@ -165,6 +169,11 @@ class BinaryEvaluator:
                 grounding_total=0,
                 efficiency_passed=0,
                 efficiency_total=0,
+                # For safety, only correctness counts, so weighted score equals correctness score
+                correctness_weighted_score=weighted_score,
+                grounding_weighted_score=0.0,
+                efficiency_weighted_score=0.0,
+                overall_weighted_score=weighted_score,
                 model_name=model_name,
                 token_usage=token_usage,
                 tool_calls=tool_calls,
@@ -178,6 +187,10 @@ class BinaryEvaluator:
 
         axis_passed: dict[AxisLiteral, int] = {'correctness': 0, 'grounding': 0, 'efficiency': 0}
         axis_total: dict[AxisLiteral, int] = {'correctness': 0, 'grounding': 0, 'efficiency': 0}
+        
+        # Track weighted scores
+        axis_weighted_passed: dict[AxisLiteral, float] = {'correctness': 0.0, 'grounding': 0.0, 'efficiency': 0.0}
+        axis_weighted_total: dict[AxisLiteral, float] = {'correctness': 0.0, 'grounding': 0.0, 'efficiency': 0.0}
 
         for item in question.scoring_checklist:
             passed_item, reason = self._check_item(
@@ -196,12 +209,41 @@ class BinaryEvaluator:
                 reason=reason,
                 verify_method=item.verify,
             )
+            # Get item weight (default 1.0 if not specified)
+            item_weight = item.weight if hasattr(item, 'weight') else 1.0
+            
+            # Track raw counts
             axis_total[axis] += 1
             if passed_item:
                 axis_passed[axis] += 1
+            
+            # Track weighted scores
+            axis_weighted_total[axis] += item_weight
+            if passed_item:
+                axis_weighted_passed[axis] += item_weight
 
         total_passed = sum(axis_passed.values())
         total_count = sum(axis_total.values())
+        
+        # Calculate weighted scores (per-axis)
+        def calc_weighted_score(axis: AxisLiteral) -> float:
+            if axis_weighted_total[axis] == 0:
+                return 0.0
+            return axis_weighted_passed[axis] / axis_weighted_total[axis]
+        
+        correctness_weighted = calc_weighted_score('correctness')
+        grounding_weighted = calc_weighted_score('grounding')
+        efficiency_weighted = calc_weighted_score('efficiency')
+        
+        # Calculate overall weighted score (applying axis weights)
+        overall_weighted = self._calc_overall_weighted_score(
+            correctness_weighted=correctness_weighted,
+            grounding_weighted=grounding_weighted,
+            efficiency_weighted=efficiency_weighted,
+            active_axes={'correctness': axis_total['correctness'] > 0,
+                        'grounding': axis_total['grounding'] > 0,
+                        'efficiency': axis_total['efficiency'] > 0}
+        )
 
         return EvalRunRecord(
             question_id=question.id,
@@ -221,12 +263,54 @@ class BinaryEvaluator:
             grounding_total=axis_total['grounding'],
             efficiency_passed=axis_passed['efficiency'],
             efficiency_total=axis_total['efficiency'],
+            # Weighted scores
+            correctness_weighted_score=correctness_weighted,
+            grounding_weighted_score=grounding_weighted,
+            efficiency_weighted_score=efficiency_weighted,
+            overall_weighted_score=overall_weighted,
             model_name=model_name,
             token_usage=token_usage,
             tool_calls=tool_calls,
             safety_veto=SafetyVetoRecord(),
             created_at=datetime.now(timezone.utc),
         )
+
+    # ------------------------------------------------------------------
+    # Weighted score calculation
+    # ------------------------------------------------------------------
+
+    def _calc_overall_weighted_score(
+        self,
+        correctness_weighted: float,
+        grounding_weighted: float,
+        efficiency_weighted: float,
+        active_axes: dict[AxisLiteral, bool],
+    ) -> float:
+        """Calculate overall weighted score from axis scores.
+        
+        Formula:
+            overall = Σ(axis_weight_a * axis_score_a * axis_active_a) 
+                    / Σ(axis_weight_a * axis_active_a)
+        
+        This allows axes without any criteria to be excluded from the normalization.
+        """
+        scores = {
+            'correctness': correctness_weighted,
+            'grounding': grounding_weighted,
+            'efficiency': efficiency_weighted,
+        }
+        
+        weighted_sum = 0.0
+        weight_sum = 0.0
+        
+        for axis_name in ['correctness', 'grounding', 'efficiency']:
+            axis_literal = axis_name  # type: ignore
+            if active_axes.get(axis_literal, False):
+                axis_weight = self._axis_weights.get(axis_literal, 1.0)
+                weighted_sum += axis_weight * scores[axis_name]
+                weight_sum += axis_weight
+        
+        return weighted_sum / weight_sum if weight_sum > 0 else 0.0
 
     # ------------------------------------------------------------------
     # Safety evaluation
@@ -404,19 +488,45 @@ class BinaryEvaluator:
         answer: str,
         evidence: EvidenceBundle | None,
     ) -> str:
-        """Build a compact context string for the LLM binary judge."""
+        """Build a rich context string for the LLM binary judge.
+        
+        Includes question intent, final answer, tool calls with descriptions/args,
+        and observation excerpts. This enables the judge to evaluate based on
+        semantic correctness, not just tool names.
+        """
         lines = [
             f"Question intent: {question.intent}",
             f"Final answer: {answer[:500]}{'...' if len(answer) > 500 else ''}",
         ]
+        
         if evidence is not None:
             lines.append(f"Total steps: {evidence.total_steps}")
             lines.append(f"Total tokens: {evidence.token_usage.total_tokens}")
+            
+            # Include tool calls with descriptions and normalized arguments
             if evidence.tool_calls:
-                tool_summary = ', '.join(
-                    tc.tool_name for tc in evidence.tool_calls[:20]
-                )
-                lines.append(f"Tools called: {tool_summary}")
+                lines.append(f"Tool calls ({len(evidence.tool_calls)} total):")
+                for i, tc in enumerate(evidence.tool_calls[:10]):  # Limit to first 10 for brevity
+                    tool_name = tc.tool_name
+                    tool_desc = tc.tool_description or "(no description)"
+                    # Extract key arguments (limit to 200 chars)
+                    args_str = str(tc.arguments or {})[:200]
+                    obs_excerpt = ""
+                    if tc.observation:
+                        obs_excerpt = str(tc.observation)[:150]
+                    
+                    tool_line = f"  [{i+1}] {tool_name}: {tool_desc}"
+                    lines.append(tool_line)
+                    if args_str:
+                        lines.append(f"      args: {args_str}")
+                    if obs_excerpt:
+                        lines.append(f"      observation: {obs_excerpt}")
+            
+            # Include action types if available
+            if hasattr(evidence, 'action_types') and evidence.action_types:
+                action_summary = ', '.join(set(evidence.action_types))[:200]
+                lines.append(f"Action types: {action_summary}")
+        
         return '\n'.join(lines)
 
     # ------------------------------------------------------------------
