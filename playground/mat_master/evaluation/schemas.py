@@ -1,6 +1,6 @@
 """Schemas for MATTER v5 evaluation workflows.
 
-v5 changes (vs v4):
+Current v5 schema changes:
 - Rubric class REMOVED — binary scoring needs no rubric
 - ScoringCheckItem: weight field REMOVED, dimension renamed to axis
 - New literals: CapabilityLiteral, DomainLiteral, AxisLiteral
@@ -8,8 +8,7 @@ v5 changes (vs v4):
 - New CriterionResult model (per-criterion pass/fail + reason)
 - EvalRunRecord: replaces float scores with pass counts + criteria_results dict
 - EvaluationSummary: pass-rate oriented with AxisPassRates
-- QuestionBank: no longer requires rubric field; supports v5 format
-- Backward-compat: v4 YAML shim lives in runner.py (_convert_v4_to_v5)
+- QuestionBank: no longer requires rubric field
 """
 
 from datetime import datetime, timezone
@@ -24,32 +23,21 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 ModeLiteral = Literal['direct', 'planner']
 
 VerifyLiteral = Literal[
-    # ---- legacy deterministic checks ----
     'exact_match',
     'numerical_range',
     'contains_all',
-    'llm_judge',            # legacy; kept for backward compat with old YAML
     'tool_called',
     'tool_args_match',
-    # ---- evidence-native deterministic checks ----
-    'event_type_called',    # EventRecord with matching event_type exists
-    'source_type_used',     # EventRecord with matching source_type exists
-    'call_count_range',     # total tool_call count is within [min, max]
-    'no_retries',           # no consecutive identical tool calls
-    'artifact_exists',      # ArtifactRecord with matching path/type exists
-    'token_budget',         # total_tokens within budget
-    # ---- v5 LLM judge (single binary verdict) ----
-    'llm_binary_judge',     # LLM returns {"pass": true/false, "reason": "..."}
-    # ---- v4 legacy LLM judges (accepted in shim, mapped to llm_binary_judge) ----
-    'llm_judge_grounding',
-    'llm_judge_efficiency',
+    'event_type_called',
+    'source_type_used',
+    'call_count_range',
+    'no_retries',
+    'artifact_exists',
+    'token_budget',
+    'llm_binary_judge',
 ]
 
-# v5: axis replaces v4 dimension; values renamed accuracy→correctness
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
-
-# v4 backward-compat alias (dimension field still accepted in shim)
-DimensionLiteral = Literal['accuracy', 'grounding', 'efficiency']
 
 CapabilityLiteral = Literal[
     'knowledge_recall',
@@ -121,10 +109,8 @@ class ReferenceAnswer(BaseModel):
 class ScoringCheckItem(BaseModel):
     """One verifiable scoring criterion (v5: binary, no weight).
 
-    v4 → v5 changes:
-    - ``weight`` field REMOVED — every criterion counts as exactly 1 point.
-    - ``dimension`` renamed to ``axis``; values: correctness/grounding/efficiency
-      (accuracy is the v4 name; the shim in runner.py translates it).
+    Every criterion counts as exactly 1 point and is attached to one scoring
+    axis: correctness, grounding, or efficiency.
     """
 
     id: str
@@ -159,10 +145,7 @@ class CriterionResult(BaseModel):
 class QuestionItem(BaseModel):
     """Single MATTER v5 question entry.
 
-    v4 → v5 changes:
-    - Added: capability, domain, required_tools, optional_tools
-    - Removed: level, rubric_id, touchpoints, repeat_override
-    - scoring_checklist items now use axis (not dimension), no weight field
+    Required structure for one runnable question in the v5 bank format.
     """
 
     id: str
@@ -226,11 +209,7 @@ class QuestionItem(BaseModel):
 
 
 class QuestionBank(BaseModel):
-    """Question bank file model (v5 format).
-
-    v4 ``version: 'v2'`` files are converted by the runner's shim before
-    reaching this model, so this model always sees v5-shaped data.
-    """
+    """Question bank file model (v5 format)."""
 
     version: str = 'v5'
     capability: CapabilityLiteral | None = None   # optional top-level hint
@@ -275,11 +254,8 @@ class EvalConfig(BaseModel):
     mat_config_path: str = 'configs/mat_master/config.yaml'
     simulator_llm: LLMRuntimeConfig | None = None
     evaluator_llm: LLMRuntimeConfig | None = None
-    # v5: filter by capability instead of level
     include_capabilities: list[str] | None = None
     include_question_ids: list[str] | None = None
-    # v4 backward-compat filter (still accepted, ignored in v5 question banks)
-    include_levels: list[str] | None = None
 
     @field_validator('k')
     @classmethod
@@ -324,14 +300,7 @@ class TokenUsageRecord(BaseModel):
 
 
 class EvalRunRecord(BaseModel):
-    """Atomic run record (v5): one question, one mode, one repeat.
-
-    v4 → v5 changes:
-    - Replaced band_score/accuracy_score/grounding_score/efficiency_score/
-      strict_final/analysis_final with binary pass counts + criteria_results.
-    - Added capability, domain fields mirroring the question.
-    - Removed touchpoints, deductions, confidence fields.
-    """
+    """Atomic run record: one question, one mode, one repeat."""
 
     question_id: str
     capability: str = ''     # mirrors QuestionItem.capability
@@ -433,7 +402,7 @@ class EvaluationSummary(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# HumanSimulator schemas (unchanged from v4)
+# HumanSimulator schemas
 # ---------------------------------------------------------------------------
 
 

@@ -1,12 +1,7 @@
 """Report writers for MATTER v5 evaluation.
 
-v5 changes (vs v4):
-- Markdown tables show pass/fail counts (N/M, %) instead of float scores
-- by_level tables replaced by by_capability and by_domain tables
-- Model comparison table uses pass rates instead of strict_final/analysis_final
-- Per-question table shows pass counts per axis
-- Tool contribution delta table added (when tool_contribution is populated)
-- Raw JSONL and JSON outputs unchanged in structure (schema fields changed)
+Reports include raw JSONL, grouped JSON summaries, and a Markdown report built
+from pass/fail counts.
 """
 
 import json

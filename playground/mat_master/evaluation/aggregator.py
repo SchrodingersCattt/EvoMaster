@@ -1,12 +1,7 @@
 """Aggregation utilities for MATTER v5 evaluation outputs.
 
-v5 changes (vs v4):
-- Replaced three-dimensional float accumulation with binary pass-count aggregation
-- EvaluationSummary now uses AxisPassRates (passed, total) tuples
-- by_level replaced by by_capability and by_domain
-- Model comparison now uses AxisPassRates instead of float means
-- _score_stats / _dim_stats_block removed (float statistics no longer needed)
-- Safety summary unchanged
+This module aggregates run records into pass-count based summaries grouped by
+capability, domain, mode, and model.
 """
 
 from collections import defaultdict

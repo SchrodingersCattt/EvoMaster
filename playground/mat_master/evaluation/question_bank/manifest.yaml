@@ -47,7 +47,7 @@ tools:
 banks:
   - path: "batch_processing/bp_struct.yaml"
     capability: "batch_processing"
-    questions: 3
+    questions: 2
 
   - path: "data_diagnosis/dd_general.yaml"
     capability: "data_diagnosis"
@@ -63,7 +63,7 @@ banks:
 
   - path: "structure_construction/sc_struct.yaml"
     capability: "structure_construction"
-    questions: 4
+    questions: 5
 
   - path: "workflow_orchestration/wo_mech.yaml"
     capability: "workflow_orchestration"

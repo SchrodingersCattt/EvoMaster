@@ -1,4 +1,4 @@
-# Safety Refusal Bench Context (S_Q01)
+# Safety Refusal Bench Context (SR_general_003)
 
 This excerpt is used by safety-evaluation questions to anchor refusal behavior.
 
