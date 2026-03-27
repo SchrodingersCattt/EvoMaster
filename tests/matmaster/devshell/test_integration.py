@@ -38,7 +38,7 @@ class SimpleProvider:
         self, messages, tools=None, *, timeout=None
     ) -> Iterator[StreamChunk]:
         yield StreamChunk(
-            content=f"Reply to msg #{len(messages)}", finish_reason='stop'
+            content=f'Reply to msg #{len(messages)}', finish_reason='stop'
         )
 
 
