@@ -13,15 +13,9 @@
 - context_manager.estimate_tokens()
 """
 
-# 添加项目根目录到 Python 路径，以便导入 evomaster 模块
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-project_root = Path(__file__).parent.parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -68,7 +62,7 @@ class MockSession(BaseSession):
     def close(self):
         self._is_open = False
 
-    def exec_bash(self, command: str, timeout=None, is_input=False):
+    def exec_bash(self, command: str, timeout=None, is_input=False, stop_event=None):
         return {'stdout': '', 'stderr': '', 'exit_code': 0}
 
     def upload(self, local_path: str, remote_path: str):
@@ -104,8 +98,6 @@ class TestAgentContextManagement(unittest.TestCase):
 
     def tearDown(self):
         """清理测试环境"""
-        import shutil
-
         if hasattr(self, 'tmpdir'):
             shutil.rmtree(self.tmpdir, ignore_errors=True)
 
@@ -307,7 +299,7 @@ class TestAgentContextManagement(unittest.TestCase):
         self.assertFalse(should_truncate)
 
         # 添加大量内容
-        for i in range(10):
+        for _ in range(10):
             agent.add_user_message('x' * 1000)  # 每次添加1000字符
             agent.add_assistant_message('y' * 1000)
 

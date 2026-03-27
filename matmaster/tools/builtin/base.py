@@ -47,7 +47,7 @@ class BuiltinTool(ABC):
         try:
             return self._execute(arguments)
         except Exception as e:
-            self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
+            self.logger.error('Tool %s failed: %s', self.name, e, exc_info=True)
             return f"Error: {e}"
 
     @abstractmethod
@@ -58,7 +58,14 @@ class BuiltinTool(ABC):
     def _require_session(self) -> Any:
         """Guard: raise if session not injected (session-dependent tools)."""
         if self._session is None:
-            raise RuntimeError(
-                f"{self.name} requires a session but none was injected"
-            )
+            raise RuntimeError(f"{self.name} requires a session but none was injected")
         return self._session
+
+    def _stop_event_for_exec(self) -> Any:
+        """Cancel signal for session.exec_bash (injected on tool by Exp / AgentRunService)."""
+        ev = getattr(self, '_stop_event', None)
+        if ev is not None:
+            return ev
+        if self._session is not None:
+            return getattr(self._session, '_stop_event', None)
+        return None

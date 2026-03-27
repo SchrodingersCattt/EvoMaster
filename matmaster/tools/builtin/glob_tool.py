@@ -16,27 +16,27 @@ from .base import BuiltinTool
 class GlobTool(BuiltinTool):
     """Search file paths by glob pattern within the workspace."""
 
-    name: ClassVar[str] = "glob"
+    name: ClassVar[str] = 'glob'
     description: ClassVar[str] = (
-        "Search for files matching a glob pattern within the workspace.\n\n"
-        "Usage:\n"
-        "- ALWAYS use glob for file search. NEVER use find/ls via execute_bash.\n"
+        'Search for files matching a glob pattern within the workspace.\n\n'
+        'Usage:\n'
+        '- ALWAYS use glob for file search. NEVER use find/ls via execute_bash.\n'
         "- Supports patterns like '*.py', 'test_*.txt', '**/*.yaml'.\n"
-        "- Returns matching file paths, up to 200 results."
+        '- Returns matching file paths, up to 200 results.'
     )
     json_schema: ClassVar[dict[str, Any]] = {
-        "type": "object",
-        "properties": {
-            "pattern": {
-                "type": "string",
-                "description": "Glob pattern to match file names (e.g. '*.py', 'test_*.txt').",
+        'type': 'object',
+        'properties': {
+            'pattern': {
+                'type': 'string',
+                'description': "Glob pattern to match file names (e.g. '*.py', 'test_*.txt').",
             },
-            "path": {
-                "type": "string",
-                "description": "Directory to search in. Defaults to workspace root.",
+            'path': {
+                'type': 'string',
+                'description': 'Directory to search in. Defaults to workspace root.',
             },
         },
-        "required": ["pattern"],
+        'required': ['pattern'],
     }
 
     def _resolve_safe_path(self, user_path: str) -> str:
@@ -45,13 +45,13 @@ class GlobTool(BuiltinTool):
         Path traversal attempts (../, absolute paths outside workdir) are
         silently resolved back to workdir root.
         """
-        workdir = str(self._workdir) if self._workdir else "/workspace"
+        workdir = str(self._workdir) if self._workdir else '/workspace'
 
-        if not user_path or user_path == ".":
+        if not user_path or user_path == '.':
             return workdir
 
         # Absolute path: normalize and check containment
-        if user_path.startswith("/"):
+        if user_path.startswith('/'):
             normalized = posixpath.normpath(user_path)
             if normalized.startswith(workdir):
                 return normalized
@@ -69,14 +69,21 @@ class GlobTool(BuiltinTool):
     def _execute(self, arguments: dict[str, Any]) -> str:
         session = self._require_session()
 
-        pattern: str = arguments["pattern"]
-        path: str = arguments.get("path", ".") or "."
+        pattern: str = arguments['pattern']
+        path: str = arguments.get('path', '.') or '.'
         safe_path = self._resolve_safe_path(path)
 
-        command = f'find "{safe_path}" -type f -name "{pattern}" 2>/dev/null | head -200'
-        result = session.exec_bash(command=command, timeout=30, is_input=False)
+        command = (
+            f'find "{safe_path}" -type f -name "{pattern}" 2>/dev/null | head -200'
+        )
+        result = session.exec_bash(
+            command=command,
+            timeout=30,
+            is_input=False,
+            stop_event=self._stop_event_for_exec(),
+        )
 
-        output = result.get("output", "") or result.get("stdout", "")
+        output = result.get('output', '') or result.get('stdout', '')
 
         if not output.strip():
             return f"No files matching pattern '{pattern}' found in {safe_path}"

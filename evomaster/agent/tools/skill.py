@@ -61,8 +61,11 @@ class SkillTool(BaseTool):
     name: ClassVar[str] = 'use_skill'
     params_class: ClassVar[type[BaseToolParams]] = SkillToolParams
 
-    def __init__(self, skill_registry: SkillRegistry,
-                 on_skill_hit: Callable[[str], None] | None = None):
+    def __init__(
+        self,
+        skill_registry: SkillRegistry,
+        on_skill_hit: Callable[[str], None] | None = None,
+    ):
         """初始化 SkillTool
 
         Args:
@@ -167,7 +170,7 @@ class SkillTool(BaseTool):
         full_info = skill.get_full_info()
 
         # Trigger callback for lazy MCP schema injection
-        mcp_server = skill.meta_info.extras.get("mcp_server")
+        mcp_server = skill.meta_info.extras.get('mcp_server')
         if mcp_server and self._on_skill_hit:
             self._on_skill_hit(mcp_server)
 
@@ -462,7 +465,14 @@ class SkillTool(BaseTool):
 
         # 使用 session 的 bash 工具执行脚本
         try:
-            result = session.exec_bash(cmd, timeout=script_timeout)
+            stop_event = getattr(self, '_stop_event', None) or getattr(
+                session, '_stop_event', None
+            )
+            result = session.exec_bash(
+                cmd,
+                timeout=script_timeout,
+                stop_event=stop_event,
+            )
             stdout = result.get('stdout', '')
             stderr = result.get('stderr', '')
             exit_code = result.get('exit_code', 0)

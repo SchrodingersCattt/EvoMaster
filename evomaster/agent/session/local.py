@@ -79,6 +79,7 @@ class LocalSession(BaseSession):
         command: str,
         timeout: int | None = None,
         is_input: bool = False,
+        stop_event: Any | None = None,
     ) -> dict[str, Any]:
         """执行 bash 命令
 
@@ -99,7 +100,11 @@ class LocalSession(BaseSession):
             }
 
         # 使用 LocalEnv 执行命令
-        result = self._env.local_exec(command, timeout=timeout)
+        result = self._env.local_exec(
+            command,
+            timeout=timeout,
+            stop_event=stop_event,
+        )
 
         # 获取工作目录
         workspace = self.config.workspace_path
