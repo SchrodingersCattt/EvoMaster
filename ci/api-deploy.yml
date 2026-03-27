@@ -23,6 +23,7 @@ before_script:
     export DOCKER_TAG SERVER_NAME DOCKER_NAME DOCKER_IMAGE AUTHOR_NAME
 
 stages:
+  - lint
   - build
   - test
   - deploy-test
@@ -47,6 +48,31 @@ stages:
   \"step_status\":\"$CI_JOB_STATUS\",
   \"gitlab_url\":\"$CI_PIPELINE_URL\",
   \"deploy_name\":\"${DEVOPS_DEPLOY_NAME:-$CI_JOB_NAME}\"}""" ${devops} > result.json
+
+# 与本地 .pre-commit-config.yaml 一致；先于 docker-build；仅检查本次 diff 内变更文件（见 ci/run_pre_commit_ci.sh）
+pre-commit:
+  stage: lint
+  image: $REGISTRY/public/ubuntu:gitlab-0.0.2
+  before_script:
+    - mkdir -p .ci-bin && ln -sf "$(command -v python3)" .ci-bin/python && export PATH="$CI_PROJECT_DIR/.ci-bin:$PATH"
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - uv sync --extra dev
+  script:
+    - bash "${CI_PROJECT_DIR}/ci/run_pre_commit_ci.sh"
+  tags:
+    - k8s-runner-ack
+  cache:
+    key:
+      files:
+        - .pre-commit-config.yaml
+        - uv.lock
+    paths:
+      - .cache/pre-commit
+      - .venv/
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_TAG'
+      when: on_success
 
 docker-build:
   variables:
