@@ -293,7 +293,21 @@ class AgentKernel:
         try:
             for attempt in range(max_retries):
                 try:
-                    return self._do_stream_llm(spec, messages, timeout=current_timeout, _bridge_loop=_bridge_loop)
+                    response = self._do_stream_llm(spec, messages, timeout=current_timeout, _bridge_loop=_bridge_loop)
+                    if (
+                        self._is_incomplete_response(response)
+                        and attempt < max_retries - 1
+                    ):
+                        logger.warning(
+                            "LLM returned reasoning without content "
+                            "(attempt %d/%d), retrying.",
+                            attempt + 1,
+                            max_retries,
+                        )
+                        backoff = retry_delay * (2**attempt)
+                        time.sleep(backoff)
+                        continue
+                    return response
                 except LLMError as e:
                     if not e.retryable:
                         raise
@@ -469,6 +483,19 @@ class AgentKernel:
     def _is_valid_natural_finish(response: LLMResponse) -> bool:
         """Only commit a natural finish when the stream terminates cleanly."""
         return not response.tool_calls and response.finish_reason == "stop"
+
+    @staticmethod
+    def _is_incomplete_response(response: LLMResponse) -> bool:
+        """Detect reasoning-only response with no visible content.
+
+        This can happen when an LLM proxy (e.g. LiteLLM) intermittently
+        drops the content block after streaming the thinking block.
+        """
+        return (
+            response.content is None
+            and response.reasoning_content is not None
+            and not response.tool_calls
+        )
 
     @staticmethod
     def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
