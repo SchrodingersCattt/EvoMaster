@@ -32,7 +32,7 @@ class ConfirmationHook(BaseHook):
         self,
         bus: MessageBus,
         *,
-        timeout_sec: int = 20,
+        timeout_sec: float = 20,
         confirm_tools: set[str] | None = None,
         source: str = "MatMaster",
     ) -> None:
@@ -64,7 +64,7 @@ class ConfirmationHook(BaseHook):
                 source=self._source,
                 question=f"Confirm tool call: {tool_call.name}?",
                 mode="timeout",
-                timeout_seconds=self._timeout_sec,
+                timeout_seconds=int(self._timeout_sec),
             )
         )
 
