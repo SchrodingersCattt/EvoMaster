@@ -104,12 +104,12 @@ Plans:
   2. ConfirmationHook 的 reply 等待机制从 queue.Queue.get() 改为 asyncio 兼容方案，跨线程 reply 推送正常工作
   3. EventEmitterHook 内部调用 await bus.emit(event) 而非同步 bus.emit()
   4. run_pre_tool_call / run_post_tool_call 等 helper 全部为 async def，内部 await 每个 hook
-**Plans**: 3 plans
+**Plans**: 3/3 plans complete
 
 Plans:
 - [x] 15-01-PLAN.md -- run_* helpers async + 5 Hook async (EventEmitter/OutputProcessor/AssistantState/SkillHit/DevStreamHook) + Kernel 桥接 + test_agent.py sync Hook 修复 + 测试迁移
 - [x] 15-02-PLAN.md -- ConfirmationHook Future 重构 + Kernel loop 注入 + src/ 层完整 confirmation 通路适配 (ConfirmationHookAdapter) + ReplyQueueLike deprecated
-- [ ] 15-03-PLAN.md -- Gap closure: _sync_call_async _bridge_loop 参数修复 + REQUIREMENTS.md 状态更新
+- [x] 15-03-PLAN.md -- Gap closure: _sync_call_async _bridge_loop 参数修复 + REQUIREMENTS.md 状态更新
 
 ### Phase 16: MessageBus + EventRouter 异步化
 **Goal**: 事件传输链路全面 async：MessageBus 使用 asyncio.Queue，EventRouter 作为 asyncio.Task 消费事件
@@ -180,7 +180,7 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 12. Protocol 层 + 测试基础设施 | v2.0 | 2/2 | Complete | 2026-03-26 |
 | 13. LLM Provider 异步实现 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 14. Tool 系统异步化 | v2.0 | 2/2 | Complete | 2026-03-27 |
-| 15. Hook 系统异步化 | v2.0 | 2/3 | Gaps found | 2026-03-27 |
+| 15. Hook 系统异步化 | v2.0 | 3/3 | Complete | 2026-03-27 |
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/0 | Not started | - |
 | 17. AgentKernel 异步化 | v2.0 | 0/0 | Not started | - |
 | 18. Exp 生命周期异步化 | v2.0 | 0/0 | Not started | - |

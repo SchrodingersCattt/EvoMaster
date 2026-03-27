@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: matmaster 协程改造
 status: executing
-stopped_at: Completed 15-02-PLAN.md
-last_updated: "2026-03-27T15:25:44Z"
+stopped_at: Completed 15-03-PLAN.md
+last_updated: "2026-03-27T16:17:10Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 8
-  completed_plans: 8
+  total_plans: 9
+  completed_plans: 9
   percent: 50
 ---
 
@@ -21,24 +21,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 15 — Hook 系统异步化 (complete)
+**Current focus:** Phase 15 — Hook 系统异步化 (all gaps closed, fully complete)
 
 ## Current Position
 
-Phase: 15 (complete)
-Plan: 2/2 complete
-Status: Phase 15 complete
+Phase: 15 (fully complete, including gap closure plan 03)
+Plan: 3/3 complete
+Status: Phase 15 fully complete
 Last activity: 2026-03-27
 
-Progress: [█████░░░░░] 50% (4/8 phases, 8/8 plans)
+Progress: [█████░░░░░] 50% (4/8 phases, 9/9 plans)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 6
-- Average duration: ~10min/plan
-- Total execution time: ~56 min
+- Total plans completed: 7
+- Average duration: ~9min/plan
+- Total execution time: ~61 min
 
 **By Phase:**
 
@@ -47,7 +47,7 @@ Progress: [█████░░░░░] 50% (4/8 phases, 8/8 plans)
 | 12 Protocol | 2/2 | ~26min | ~13min |
 | 13 LLM Provider | 2/2 | ~20min | ~10min |
 | 14 Tool | 2/2 | ~10min | ~5min |
-| 15 Hook | 2/2 | ~31min | ~15min |
+| 15 Hook | 3/3 | ~36min | ~12min |
 
 ## Accumulated Context
 
@@ -80,6 +80,8 @@ Recent decisions affecting current work:
 - [Phase 15-02]: resolve/cancel use atomic swap pattern to prevent race conditions
 - [Phase 15-02]: Kernel injects bridge loop via duck-typed hasattr(hook, "set_loop")
 - [Phase 15-02]: ConfirmationHookAdapter in stream_service.py bridges legacy ReplyQueueLike to hook API
+- [Phase 15-03]: All _sync_call_async calls in agent.py now pass per-run _bridge_loop (no module-level fallback)
+- [Phase 15-03]: tool_registry.execute call also updated for consistency
 
 ### Pending Todos
 
@@ -93,6 +95,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-27T15:25:44Z
-Stopped at: Completed 15-02-PLAN.md
+Last session: 2026-03-27T16:17:10Z
+Stopped at: Completed 15-03-PLAN.md (Phase 15 fully complete)
 Resume file: None
