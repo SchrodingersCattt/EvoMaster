@@ -16,6 +16,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, ClassVar
 
+from matmaster.tools.tool_result import ToolResult
+
 
 class BuiltinTool(ABC):
     """BuiltinTool base -- satisfies matmaster Tool Protocol.
@@ -25,7 +27,7 @@ class BuiltinTool(ABC):
 
     Subclasses:
     - Define name, description, json_schema as class-level attributes
-    - Implement _execute(arguments) -> str
+    - Implement _execute(arguments) -> str | ToolResult
     """
 
     name: ClassVar[str]
@@ -42,7 +44,7 @@ class BuiltinTool(ABC):
         self._workdir = workdir
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    def execute(self, arguments: dict[str, Any]) -> str | ToolResult:
         """Tool Protocol entry point. Delegates to _execute."""
         try:
             return self._execute(arguments)
@@ -51,8 +53,8 @@ class BuiltinTool(ABC):
             return f"Error: {e}"
 
     @abstractmethod
-    async def _execute(self, arguments: dict[str, Any]) -> str:
-        """Subclass implementation. Raise on error, return string on success."""
+    def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
+        """Subclass implementation. Raise on error, return string or ToolResult on success."""
         ...
 
     def _require_session(self) -> Any:
