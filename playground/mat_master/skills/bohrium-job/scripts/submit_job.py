@@ -1,9 +1,12 @@
 """submit_job.py - submit a Bohrium job and return job_id immediately.
 
 This script performs only the 3 submission steps:
-1) /openapi/v1/job/create
+1) /openapi/v1/job/create (or /openapi/v1/sandbox/job/create when sandbox mode)
 2) upload input.zip to Tiefblue
-3) /openapi/v2/job/add
+3) /openapi/v2/job/add (or /openapi/v1/sandbox/job/add when sandbox mode)
+
+Sandbox vs standard HPC OpenAPI paths are selected only via env ``BOHRIUM_USE_SANDBOX``
+(``1`` = sandbox; unset or ``0`` = standard HPC, **default**). Not a CLI flag. poll_job.py uses the same rule.
 """
 
 import argparse
@@ -30,9 +33,16 @@ try:
 
     OPENAPI_BASE = BOHRIUM_OPENAPI_HOST
 except ImportError:
-    OPENAPI_BASE = os.environ.get('BOHRIUM_BASE_URL', 'https://open.bohrium.com').rstrip('/')
+    OPENAPI_BASE = os.environ.get(
+        'BOHRIUM_BASE_URL', 'https://open.bohrium.com'
+    ).rstrip('/')
 
 _AUTH_HEADER = {'accessKey': ACCESS_KEY, 'Content-Type': 'application/json'}
+
+
+def _use_sandbox() -> bool:
+    """True only when BOHRIUM_USE_SANDBOX is ``1`` (default when unset: standard HPC)."""
+    return os.environ.get('BOHRIUM_USE_SANDBOX', '0').strip() == '1'
 
 
 def _post(path: str, payload: dict, timeout: int = 30) -> dict:
@@ -47,10 +57,14 @@ def _post(path: str, payload: dict, timeout: int = 30) -> dict:
 
 
 def _step1_create(job_name: str) -> dict:
-    response = _post(
-        '/openapi/v1/job/create',
-        {'projectId': PROJECT_ID, 'jobName': job_name},
-    )
+    if _use_sandbox():
+        # Align with bohrium-openapi-python-sdk Job.create_job (sandbox create body).
+        path = '/openapi/v1/sandbox/job/create'
+        payload = {'projectId': PROJECT_ID, 'name': job_name}
+    else:
+        path = '/openapi/v1/job/create'
+        payload = {'projectId': PROJECT_ID, 'jobName': job_name}
+    response = _post(path, payload)
     if response.get('code') != 0:
         raise RuntimeError(f"job/create failed: {response}")
     return response['data']
@@ -105,7 +119,10 @@ def _step3_add(
         'diskSize': disk_size,
         'logFiles': ['log'],
     }
-    response = _post('/openapi/v2/job/add', payload)
+    add_path = (
+        '/openapi/v1/sandbox/job/add' if _use_sandbox() else '/openapi/v2/job/add'
+    )
+    response = _post(add_path, payload)
     if response.get('code') != 0:
         raise RuntimeError(f"job/add failed: {response}")
     return response['data']
@@ -125,7 +142,7 @@ def submit_job(
     machine: str,
     job_name: str,
     disk_size: int,
-) -> tuple[int, int]:
+) -> tuple[int | str, int | str]:
     with tempfile.TemporaryDirectory(prefix='bsm_submit_') as tmp_dir:
         zip_path = Path(tmp_dir) / 'input.zip'
         _zip_directory(input_dir, zip_path)
@@ -134,8 +151,17 @@ def submit_job(
         oss_key = _step2_upload(create_data, zip_path)
         add_data = _step3_add(oss_key, job_name, image, cmd, machine, disk_size)
 
-    job_id = int(add_data['jobId'])
-    bohr_job_id = int(add_data.get('bohrJobId') or add_data['jobId'])
+    # Sandbox job/add returns UUID strings; standard HPC returns numeric ids.
+    if _use_sandbox():
+        raw_jid = add_data.get('jobId')
+        if raw_jid is None:
+            raise ValueError('missing jobId')
+        job_id = str(raw_jid).strip()
+        bohr_raw = add_data.get('bohrJobId')
+        bohr_job_id = str(bohr_raw).strip() if bohr_raw not in (None, '', 0) else job_id
+    else:
+        job_id = int(add_data['jobId'])
+        bohr_job_id = int(add_data.get('bohrJobId') or add_data['jobId'])
     return job_id, bohr_job_id
 
 
@@ -203,6 +229,7 @@ def main() -> None:
                 'job_id': job_id,
                 'bohr_job_id': bohr_job_id,
                 'status': 'Submitted',
+                'use_sandbox': _use_sandbox(),
             },
             ensure_ascii=False,
         )

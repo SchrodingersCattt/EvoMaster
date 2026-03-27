@@ -10,6 +10,16 @@ Submit an input directory to Bohrium HPC. There are two entry paths:
 - **Normal path**: call `input-manual-helper` first to generate the input files, then pass the resulting `output_dir` here.
 - **User-provided file path**: if the user has already supplied a complete, ready-to-run input file, **skip `input-manual-helper`** and pass the directory containing that file directly as `--input-dir`.
 
+### OpenAPI target: sandbox vs standard HPC (environment only)
+
+Submission and polling use the **same** process environment variable (not a script argument the Agent passes):
+
+- **`BOHRIUM_USE_SANDBOX`**: `1` = use sandbox OpenAPI paths (`/openapi/v1/sandbox/job/...`); **`0`** or unset = use standard HPC paths (`/openapi/v1/job/create`, `/openapi/v2/job/add`, `GET /openapi/v1/job/{id}`).
+
+**Default is standard HPC** when the variable is unset. Set `BOHRIUM_USE_SANDBOX=1` only when you need the sandbox API.
+
+The submit JSON includes **`use_sandbox`** (boolean) so logs can confirm which mode ran. Submit and poll must share the same setting or the job will not be visible on the wrong API.
+
 ## Workflow
 
 1. **Confirm input directory** — Either get the `output_dir` returned by `input-manual-helper`, or identify the directory that already contains the user-provided input file. List its contents to confirm the main input filename needed for `--cmd`.
@@ -25,7 +35,7 @@ Submit an input directory to Bohrium HPC. There are two entry paths:
      [--software <software>]
    ```
    The script: packages and uploads input dir → three-step job create/upload/add.
-   stdout JSON: `{"success": true, "job_id": ..., "bohr_job_id": ..., "status": "Submitted"}`.
+   stdout JSON: `{"success": true, "job_id": ..., "bohr_job_id": ..., "status": "Submitted", "use_sandbox": false}` by default (`use_sandbox` reflects env `BOHRIUM_USE_SANDBOX`: default off; `1` → `true`).
 
   **Log filename convention (MUST):** the run command in `--cmd` must redirect stdout/stderr to a file named exactly `log` (for example: `> log 2>&1`). Do not rename it to custom names like `caffeine.out`.
 
@@ -43,7 +53,7 @@ Submit an input directory to Bohrium HPC. There are two entry paths:
   >
   > ⚠️ **Do NOT reduce `--max-polls` below 2880** unless the user explicitly requests a shorter timeout. HPC jobs can take many hours; underestimating will cause poll timeout before the job finishes. When in doubt, keep the default (`--max-polls 2880`, `script_timeout 86400`).
 
-   The script: polls `/openapi/v1/job/{id}` until terminal status; downloads `out.zip` via `resultUrl` and extracts (for both `Finished` and `Failed`); reads `log_tail` from the local `log` file in the extracted directory.
+   The script: polls job detail until terminal status (sandbox vs standard `GET` path follows the same `BOHRIUM_USE_SANDBOX` rule as submit); downloads `out.zip` via `resultUrl` and extracts (for both `Finished` and `Failed`); reads `log_tail` from the local `log` file in the extracted directory.
    stdout JSON (success): `{"success": true, "job_id": ..., "status": "Finished", "result_dir": "...", "files": [...], "log_tail": "..."}`.
    stdout JSON (failed): `{"success": false, "job_id": ..., "status": "Failed", "result_dir": "...", "files": [...], "log_tail": "<error from log file>", "error": "..."}`.
 
