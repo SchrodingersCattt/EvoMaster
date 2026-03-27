@@ -50,7 +50,7 @@ from matmaster.types.messages import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Async bridge -- used by the sync Kernel to call async providers / tools.
+# Async bridge -- used by the sync Kernel to call async providers / tools / hooks.
 # A dedicated event loop (NOT running run_forever) is used via
 # run_until_complete for sequential sync→async bridging.
 # Removed in Phase 17 when the Kernel itself becomes async.
@@ -168,10 +168,10 @@ class AgentKernel:
             turn += 1
 
             # pre_llm_call hook (observation, all hooks called)
-            run_pre_llm_call(spec.hooks, messages, turn)
+            _sync_call_async(run_pre_llm_call(spec.hooks, messages, turn))
 
             # should_continue hook (intercepting, short-circuit)
-            if not run_should_continue(spec.hooks, messages, turn):
+            if not _sync_call_async(run_should_continue(spec.hooks, messages, turn)):
                 return self._finish(spec, messages, "hook_stopped", num_turns=turn - 1, stop_reason=last_stop_reason, usage=total_usage)
 
             # Context compaction check
@@ -223,7 +223,7 @@ class AgentKernel:
                 guard_result = guard_pipeline.evaluate(tc, turn, spec.max_turns)
                 if not guard_result.allowed:
                     # Blocked: notify hooks, then append ToolMessage error
-                    run_guard_blocked(spec.hooks, tc, guard_result)
+                    _sync_call_async(run_guard_blocked(spec.hooks, tc, guard_result))
                     blocked_content = f"BLOCKED: {guard_result.reason}"
                     if guard_result.guidance:
                         blocked_content += f"\n{guard_result.guidance}"
@@ -237,7 +237,7 @@ class AgentKernel:
                     continue
 
                 # pre_tool_call hook (intercepting, short-circuit)
-                action = run_pre_tool_call(spec.hooks, tc)
+                action = _sync_call_async(run_pre_tool_call(spec.hooks, tc))
                 if action == HookAction.SKIP:
                     messages.append(
                         ToolMessage(
@@ -271,7 +271,7 @@ class AgentKernel:
                 )
 
                 # post_tool_call hook (observation, all hooks called)
-                run_post_tool_call(spec.hooks, tc, tool_result)
+                _sync_call_async(run_post_tool_call(spec.hooks, tc, tool_result))
 
         # max_turns exhausted
         return self._finish(spec, messages, "max_turns", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)
@@ -367,17 +367,17 @@ class AgentKernel:
         producing_reasoning = False
         producing_content = False
 
-        run_on_stream_chunk(
+        _sync_call_async(run_on_stream_chunk(
             spec.hooks,
             StreamChunk(stream_state="start", stream_id=stream_id),
-        )
+        ))
         try:
             for chunk in _sync_iterate_async(
                 spec.llm_provider.chat_stream(api_messages, tool_defs, timeout=timeout),
                 _bridge_loop,
             ):
                 if chunk.content or chunk.reasoning_content:
-                    run_on_stream_chunk(
+                    _sync_call_async(run_on_stream_chunk(
                         spec.hooks,
                         chunk.model_copy(
                             update={
@@ -385,7 +385,7 @@ class AgentKernel:
                                 "stream_id": stream_id,
                             }
                         ),
-                    )
+                    ))
 
                 if chunk.reasoning_content:
                     reasoning_parts.append(chunk.reasoning_content)
@@ -393,12 +393,12 @@ class AgentKernel:
 
                 if chunk.content:
                     if producing_reasoning:
-                        run_on_segment_complete(
+                        _sync_call_async(run_on_segment_complete(
                             spec.hooks,
                             "thought",
                             "".join(reasoning_parts),
                             stream_id,
-                        )
+                        ))
                         producing_reasoning = False
                     content_parts.append(chunk.content)
                     producing_content = True
@@ -409,20 +409,20 @@ class AgentKernel:
                     usage = chunk.usage
                 if chunk.tool_call_deltas:
                     if producing_reasoning:
-                        run_on_segment_complete(
+                        _sync_call_async(run_on_segment_complete(
                             spec.hooks,
                             "thought",
                             "".join(reasoning_parts),
                             stream_id,
-                        )
+                        ))
                         producing_reasoning = False
                     if producing_content:
-                        run_on_segment_complete(
+                        _sync_call_async(run_on_segment_complete(
                             spec.hooks,
                             "response",
                             "".join(content_parts),
                             stream_id,
-                        )
+                        ))
                         producing_content = False
                     for delta in chunk.tool_call_deltas:
                         idx = delta.get("index", 0)
@@ -440,23 +440,23 @@ class AgentKernel:
                             tool_calls_acc[idx]["arguments"] += delta["arguments"]
         finally:
             if producing_reasoning:
-                run_on_segment_complete(
+                _sync_call_async(run_on_segment_complete(
                     spec.hooks,
                     "thought",
                     "".join(reasoning_parts),
                     stream_id,
-                )
+                ))
             if producing_content:
-                run_on_segment_complete(
+                _sync_call_async(run_on_segment_complete(
                     spec.hooks,
                     "response",
                     "".join(content_parts),
                     stream_id,
-                )
-            run_on_stream_chunk(
+                ))
+            _sync_call_async(run_on_stream_chunk(
                 spec.hooks,
                 StreamChunk(stream_state="end", stream_id=stream_id),
-            )
+            ))
 
         # Assemble tool_calls from accumulated deltas
         tool_calls: list[ToolCallData] | None = None
