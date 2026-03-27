@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: matmaster 协程改造
-status: completed
-stopped_at: Phase 15 context gathered
-last_updated: "2026-03-27T08:43:25.209Z"
+status: executing
+stopped_at: Completed 15-02-PLAN.md
+last_updated: "2026-03-27T15:25:44Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 8
-  completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
-  percent: 37
+  completed_phases: 4
+  total_plans: 8
+  completed_plans: 8
+  percent: 50
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 15 — Hook 系统异步化 (next)
+**Current focus:** Phase 15 — Hook 系统异步化 (complete)
 
 ## Current Position
 
-Phase: 15 (next)
-Plan: Not started
-Status: Phase 14 complete, ready for Phase 15
+Phase: 15 (complete)
+Plan: 2/2 complete
+Status: Phase 15 complete
 Last activity: 2026-03-27
 
-Progress: [████░░░░░░] 37% (3/8 phases, 6/6 plans)
+Progress: [█████░░░░░] 50% (4/8 phases, 8/8 plans)
 
 ## Performance Metrics
 
@@ -47,6 +47,7 @@ Progress: [████░░░░░░] 37% (3/8 phases, 6/6 plans)
 | 12 Protocol | 2/2 | ~26min | ~13min |
 | 13 LLM Provider | 2/2 | ~20min | ~10min |
 | 14 Tool | 2/2 | ~10min | ~5min |
+| 15 Hook | 2/2 | ~31min | ~15min |
 
 ## Accumulated Context
 
@@ -73,6 +74,12 @@ Recent decisions affecting current work:
 - [Phase 14-02]: LazyMCPTool uses granular to_thread (two calls: connect + execute)
 - [Phase 14-02]: SkillTool/EvoToolAdapter use _execute_sync() helper pattern
 - [Phase 14-02]: Kernel bridge uses dedicated daemon thread event loop + _sync_call_async
+- [Phase 15-01]: Hook Protocol + BaseHook all 7 methods async def, run_* helpers async with await
+- [Phase 15-01]: _sync_call_async bridge in Kernel for 13 run_* call sites
+- [Phase 15-02]: ConfirmationHook uses asyncio.Future + wait_for (non-blocking async wait)
+- [Phase 15-02]: resolve/cancel use atomic swap pattern to prevent race conditions
+- [Phase 15-02]: Kernel injects bridge loop via duck-typed hasattr(hook, "set_loop")
+- [Phase 15-02]: ConfirmationHookAdapter in stream_service.py bridges legacy ReplyQueueLike to hook API
 
 ### Pending Todos
 
@@ -82,10 +89,10 @@ None.
 
 - tests/test_streaming_thought_protocol.py collection error (1 test file broken, from v1)
 - skills/mcp build_runtime stubs still need service layer factory injection (from v1)
-- ConfirmationHook 跨线程 reply queue 机制需在 Phase 15 深入设计（research flag）
+- ConfirmationHook 跨线程 reply queue 机制已在 Phase 15-02 重构为 asyncio.Future + atomic swap (RESOLVED)
 
 ## Session Continuity
 
-Last session: 2026-03-27T08:43:25.206Z
-Stopped at: Phase 15 context gathered
-Resume file: .planning/phases/15-hook/15-CONTEXT.md
+Last session: 2026-03-27T15:25:44Z
+Stopped at: Completed 15-02-PLAN.md
+Resume file: None
