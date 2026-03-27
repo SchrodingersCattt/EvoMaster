@@ -35,6 +35,9 @@ VerifyLiteral = Literal[
     'artifact_exists',
     'token_budget',
     'llm_binary_judge',
+    'batch_single_variable_sweep',
+    'batch_tool_args_constant',
+    'batch_consistent_calls',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
@@ -190,6 +193,9 @@ class QuestionItem(BaseModel):
             'contains_all',
             'tool_called',
             'tool_args_match',
+            'batch_single_variable_sweep',
+            'batch_tool_args_constant',
+            'batch_consistent_calls',
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:
