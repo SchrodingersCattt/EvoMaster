@@ -58,7 +58,8 @@ repos:
             tests/modify_config.py|
             tests/add_font.py|
             tests/plot_center/dos_plot.py|
-            tests/utils.py
+            tests/utils.py|
+            tests/matmaster/core/agent_kernel_test_helpers.py
           )$
       - id: no-commit-to-branch
       - id: sort-simple-yaml

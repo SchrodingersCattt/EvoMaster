@@ -130,7 +130,7 @@ class ScoringCheckItem(BaseModel):
     axis: AxisLiteral = Field(
         default='correctness',
         description=(
-            "Which scoring axis this criterion belongs to: "
+            'Which scoring axis this criterion belongs to: '
             "'correctness' (is the answer right?), "
             "'grounding' (did it use the right tools/sources?), "
             "'efficiency' (was the process efficient?)."
@@ -140,7 +140,7 @@ class ScoringCheckItem(BaseModel):
     weight: float = Field(
         default=1.0,
         ge=0.0,
-        description="Optional weight for this criterion in axis/overall score calculation. Default 1.0."
+        description='Optional weight for this criterion in axis/overall score calculation. Default 1.0.',
     )
 
 
@@ -150,8 +150,8 @@ class CriterionResult(BaseModel):
     criterion_id: str
     axis: AxisLiteral
     passed: bool
-    reason: str = ''          # one-sentence evidence / explanation
-    verify_method: str = ''   # which verifier produced this result
+    reason: str = ''  # one-sentence evidence / explanation
+    verify_method: str = ''  # which verifier produced this result
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +198,9 @@ class QuestionItem(BaseModel):
     @model_validator(mode='after')
     def _validate_scoring_contract(self) -> 'QuestionItem':
         if not self.scoring_checklist:
-            raise ValueError('question must include at least one scoring_checklist entry')
+            raise ValueError(
+                'question must include at least one scoring_checklist entry'
+            )
         # For deterministic check types that need a reference answer, verify it exists.
         ref_keys = {item.key for item in self.reference_answers}
         _needs_ref = {
@@ -215,7 +217,7 @@ class QuestionItem(BaseModel):
             if item.verify in _needs_ref and item.id not in ref_keys:
                 raise ValueError(
                     f"scoring_checklist item '{item.id}' (verify={item.verify}) "
-                    "requires a matching reference_answers entry with the same key"
+                    'requires a matching reference_answers entry with the same key'
                 )
         # Safety questions (capability='safety_refusal') may skip reference_answers
         if self.capability != 'safety_refusal' and not self.reference_answers:
@@ -232,8 +234,8 @@ class QuestionBank(BaseModel):
     """Question bank file model (v5 format)."""
 
     version: str = 'v5'
-    capability: CapabilityLiteral | None = None   # optional top-level hint
-    domain: DomainLiteral | None = None           # optional top-level hint
+    capability: CapabilityLiteral | None = None  # optional top-level hint
+    domain: DomainLiteral | None = None  # optional top-level hint
     questions: list[QuestionItem]
 
     @model_validator(mode='after')
@@ -276,7 +278,7 @@ class EvalConfig(BaseModel):
     evaluator_llm: LLMRuntimeConfig | None = None
     include_capabilities: list[str] | None = None
     include_question_ids: list[str] | None = None
-    
+
     # Axis weights for aggregation (default 1.0 each, normalized during calculation)
     axis_weights: dict[AxisLiteral, float] = Field(
         default_factory=lambda: {
@@ -284,7 +286,7 @@ class EvalConfig(BaseModel):
             'grounding': 1.0,
             'efficiency': 1.0,
         },
-        description="Relative weights for correctness, grounding, efficiency axes. Will be normalized."
+        description='Relative weights for correctness, grounding, efficiency axes. Will be normalized.',
     )
 
     @field_validator('k')
@@ -333,8 +335,8 @@ class EvalRunRecord(BaseModel):
     """Atomic run record: one question, one mode, one repeat."""
 
     question_id: str
-    capability: str = ''     # mirrors QuestionItem.capability
-    domain: str = ''         # mirrors QuestionItem.domain
+    capability: str = ''  # mirrors QuestionItem.capability
+    domain: str = ''  # mirrors QuestionItem.domain
     mode: ModeLiteral
     repeat_idx: int
     prompt: str
@@ -354,7 +356,7 @@ class EvalRunRecord(BaseModel):
     grounding_total: int = 0
     efficiency_passed: int = 0
     efficiency_total: int = 0
-    
+
     # v5+: weighted scores (axis_weights from config applied)
     correctness_weighted_score: float = 0.0
     grounding_weighted_score: float = 0.0
@@ -380,7 +382,7 @@ class EvalRunRecord(BaseModel):
 class AxisPassRates(BaseModel):
     """Pass counts for each axis within a group."""
 
-    correctness: tuple[int, int] = (0, 0)   # (passed, total)
+    correctness: tuple[int, int] = (0, 0)  # (passed, total)
     grounding: tuple[int, int] = (0, 0)
     efficiency: tuple[int, int] = (0, 0)
     overall: tuple[int, int] = (0, 0)
@@ -393,8 +395,8 @@ class AxisPassRates(BaseModel):
     def fmt(self, axis: str = 'overall') -> str:
         pair = getattr(self, axis, self.overall)
         passed, total = pair
-        pct = f"{100 * passed / total:.1f}%" if total > 0 else "—"
-        return f"{passed}/{total} ({pct})"
+        pct = f'{100 * passed / total:.1f}%' if total > 0 else '—'
+        return f'{passed}/{total} ({pct})'
 
 
 class QuestionPassRate(BaseModel):
@@ -415,18 +417,18 @@ class ToolContribution(BaseModel):
     """How much a single tool contributed across all questions."""
 
     tool_name: str
-    questions_requiring: int = 0   # questions where this tool is in required_tools
-    criteria_delta: int = 0        # additional criteria passed when this tool is present
+    questions_requiring: int = 0  # questions where this tool is in required_tools
+    criteria_delta: int = 0  # additional criteria passed when this tool is present
     accepted: bool = False
 
 
 class EvaluationSummary(BaseModel):
     """Aggregated result object (v5+): both raw pass-rates and weighted scores.
-    
+
     Raw pass-rate fields (backward compatible):
     - total_criteria, total_passed, pass_rate
     - by_capability/domain/question/mode/model: AxisPassRates with integer tuples
-    
+
     Weighted score fields (new):
     - weighted_pass_rate, weighted_by_* (computed using axis_weights from config)
     """
@@ -435,7 +437,7 @@ class EvaluationSummary(BaseModel):
     total_criteria: int = 0
     total_passed: int = 0
     pass_rate: float = 0.0
-    
+
     # Weighted equivalents (v5+)
     weighted_pass_rate: float = 0.0
 
@@ -495,7 +497,7 @@ class TaskSpec(BaseModel):
             'space_group': self.space_group or '?',
             'mp_id': self.mp_id or '?',
             'expected_keys': ', '.join(
-                f"{e.key} ({e.unit})" if e.unit else e.key for e in self.expected
+                f'{e.key} ({e.unit})' if e.unit else e.key for e in self.expected
             ),
         }
 

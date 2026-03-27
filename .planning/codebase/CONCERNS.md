@@ -171,7 +171,7 @@
   1. Create explicit ManuscriptState enum (initialized, written_unvalidated, validated, failed) tracked in ToolGuard
   2. Track validation state on each section independently, not just globally
   3. Add method: can_finish_section(section_name) for fine-grained gating
-- Test coverage: Tool guard has test_agent_context.py but minimal manuscript validation testing
+- Test coverage: `tests/evomaster/agent/test_agent_context.py` covers agent context; tool guard / manuscript validation testing is minimal
 
 ## Scaling Limits
 

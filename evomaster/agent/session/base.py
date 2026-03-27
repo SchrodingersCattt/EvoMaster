@@ -52,6 +52,7 @@ class BaseSession(ABC):
         command: str,
         timeout: int | None = None,
         is_input: bool = False,
+        stop_event: Any | None = None,
     ) -> dict[str, Any]:
         """执行 Bash 命令
 
@@ -59,6 +60,7 @@ class BaseSession(ABC):
             command: 要执行的命令
             timeout: 超时时间（秒），None 使用默认值
             is_input: 是否是向正在运行的进程发送输入
+            stop_event: 可选取消事件，置位后应尽快中断执行
 
         Returns:
             执行结果字典，包含：
