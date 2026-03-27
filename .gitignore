@@ -171,6 +171,7 @@ local_model/
 
 .pids
 runs/
+logs/
 
 .env*
 

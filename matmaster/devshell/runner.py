@@ -1,4 +1,5 @@
 """DevRunner -- per-run assembly mirroring AgentRunService pattern."""
+
 from __future__ import annotations
 
 import logging
@@ -6,13 +7,13 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from matmaster.core.bus import MessageBus
 from matmaster.config.exp import ExpConfig, ExpToolsConfig
+from matmaster.core.bus import MessageBus
 from matmaster.core.exp import Exp
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.stream_hook import DevStreamHook
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.messages import Message, SystemMessage, UserMessage
+from matmaster.types.messages import Message, UserMessage
 from matmaster.types.runtime import KernelRunResult
 
 logger = logging.getLogger(__name__)
@@ -31,11 +32,15 @@ class DevRunner:
         config: DevConfig,
         workdir: Path,
         llm_provider: Any,
+        llm_config: Any = None,
+        resolved_route: Any = None,
         stream_hook: DevStreamHook | None = None,
     ) -> None:
         self._config = config
         self._workdir = workdir
         self._llm_provider = llm_provider
+        self._llm_config = llm_config
+        self._resolved_route = resolved_route
         self._stream_hook = stream_hook or DevStreamHook()
 
         # Build PlaygroundContext
@@ -49,6 +54,7 @@ class DevRunner:
             cache_area=cache_area,
             session=session,
             llm_provider=llm_provider,
+            llm_config=llm_config,
         )
 
         # Exp config dict
