@@ -341,7 +341,7 @@ python list_machines.py [--type cpu|gpu] [--keyword <name>] [--max-results 50]
 ## Rules
 
 1. **Prepare gate**: If the user has already provided a complete, ready-to-run input file, skip `input-manual-helper` and submit directly. Otherwise, always call `input-manual-helper` first for CP2K / QE / ABINIT / LAMMPS / ORCA — do not hand-write input files here.
-2. **Input files land in `oss_downloaded_files/`**, not in the `output_dir` you passed to `prepare_*`. Always `dir oss_downloaded_files` (Windows) or `ls oss_downloaded_files` to confirm the actual filename before constructing `--cmd`.
+2. **Input files land in `oss_downloaded_files/`**, not in the local staging path used during input generation. Always `dir oss_downloaded_files` (Windows) or `ls oss_downloaded_files` to confirm the actual filename before constructing `--cmd`.
 3. **Match MPI `-np` count** in `--cmd` to the machine's core count (e.g. 32 for `c32_m128_cpu`).
 4. **Check `"success": true`** in JSON output before proceeding to the next step.
 5. Run `submit_job.py` first, then pass the returned `job_id` into `poll_job.py`. **Never call the built-in `monitor_job` tool** — always use `use_skill bohrium-job run_script poll_job.py`.
