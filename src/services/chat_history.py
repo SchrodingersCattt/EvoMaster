@@ -251,6 +251,60 @@ class ChatHistoryConverter:
             result = {}
         return (call_id, name, result)
 
+    @staticmethod
+    def _repair_incomplete_tool_turns(messages: list[dict]) -> list[dict]:
+        """Inject synthetic ToolMessage dicts for tool_calls missing results.
+
+        When a worker/API is forcefully interrupted mid tool execution,
+        some tool_calls may lack corresponding ToolMessages. This method
+        scans the message list and inserts synthetic error ToolMessages
+        so the sequence is valid for LLM consumption.
+        """
+        out: list[dict] = []
+        i = 0
+        while i < len(messages):
+            m = messages[i]
+            role = _serialized_message_role(m)
+            if role != 'assistant' or not m.get('tool_calls'):
+                out.append(m)
+                i += 1
+                continue
+
+            # Collect declared tool_call IDs (preserving order, dedup)
+            tc_list = m['tool_calls']
+            seen_ids: set[str] = set()
+            ordered_tc: list[tuple[str, str]] = []  # (id, name)
+            for tc in tc_list:
+                tc_id = tc.get('id', '')
+                tc_name = (tc.get('function') or {}).get('name', '')
+                if tc_id and tc_id not in seen_ids:
+                    seen_ids.add(tc_id)
+                    ordered_tc.append((tc_id, tc_name))
+
+            # Collect consecutive tool messages after this assistant
+            out.append(m)
+            j = i + 1
+            found_ids: set[str] = set()
+            while j < len(messages) and _serialized_message_role(messages[j]) == 'tool':
+                out.append(messages[j])
+                found_ids.add(messages[j].get('tool_call_id', ''))
+                j += 1
+
+            # Synthesize missing tool messages
+            for tc_id, tc_name in ordered_tc:
+                if tc_id not in found_ids:
+                    out.append(
+                        ToolMessage(
+                            tool_call_id=tc_id,
+                            name=tc_name,
+                            content=f"Tool '{tc_name}' execution was interrupted. Result is unknown.",
+                        ).model_dump()
+                    )
+
+            i = j
+
+        return out
+
     @classmethod
     def events_to_dialog_messages(cls, events: list[dict]) -> list[dict]:
         """
