@@ -191,7 +191,7 @@ class SkipHook(BaseHook):
     def __init__(self, skip_name: str) -> None:
         self._skip_name = skip_name
 
-    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         if tool_call.name == self._skip_name:
             return HookAction.SKIP
         return HookAction.CONTINUE
@@ -200,7 +200,7 @@ class SkipHook(BaseHook):
 class StopHook(BaseHook):
     """Hook that returns False from should_continue."""
 
-    def should_continue(self, messages: list[Message], turn: int) -> bool:
+    async def should_continue(self, messages: list[Message], turn: int) -> bool:
         return False
 
 
@@ -210,21 +210,21 @@ class RecordingHook(BaseHook):
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         self.calls.append("pre_tool_call")
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
+    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         self.calls.append("post_tool_call")
 
-    def pre_llm_call(self, messages: list[Message], turn: int) -> None:
+    async def pre_llm_call(self, messages: list[Message], turn: int) -> None:
         self.calls.append("pre_llm_call")
 
-    def should_continue(self, messages: list[Message], turn: int) -> bool:
+    async def should_continue(self, messages: list[Message], turn: int) -> bool:
         self.calls.append("should_continue")
         return True
 
-    def on_stream_chunk(self, chunk: StreamChunk) -> None:
+    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
         self.calls.append("on_stream_chunk")
 
 
@@ -234,7 +234,7 @@ class ChunkRecordingHook(BaseHook):
     def __init__(self) -> None:
         self.chunks: list[StreamChunk] = []
 
-    def on_stream_chunk(self, chunk: StreamChunk) -> None:
+    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
         self.chunks.append(chunk)
 
 
@@ -244,7 +244,7 @@ class SegmentRecordingHook(BaseHook):
     def __init__(self) -> None:
         self.segments: list[tuple[str, str, str | None]] = []
 
-    def on_segment_complete(
+    async def on_segment_complete(
         self, segment_type: str, content: str, stream_id: str | None
     ) -> None:
         self.segments.append((segment_type, content, stream_id))
@@ -437,7 +437,7 @@ class TestGuardBlocks:
             def __init__(self) -> None:
                 self.blocked: list[tuple[str, str | None]] = []
 
-            def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
+            async def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
                 self.blocked.append((tool_call.name, result.reason))
 
         tc = ToolCallData(id="tc-1", name="bad_tool", arguments={})
