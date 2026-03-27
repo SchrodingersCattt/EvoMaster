@@ -4,7 +4,7 @@ domain: "kinetic"
 
 questions:
   # ============================================================
-  # WO_kinetic_001 ← L2_Q07 (石墨烯声子色散)
+  # WO_kinetic_001 (石墨烯声子色散)
   # ============================================================
   - id: "WO_kinetic_001"
     capability: "workflow_orchestration"

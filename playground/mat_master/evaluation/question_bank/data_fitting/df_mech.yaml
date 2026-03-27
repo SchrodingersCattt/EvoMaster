@@ -4,7 +4,7 @@ domain: "mech"
 
 questions:
   # ============================================================
-  # DF_mech_001 ← L1_Q08 (E-V数据BM状态方程拟合)
+  # DF_mech_001 (E-V数据BM状态方程拟合)
   # ============================================================
   - id: "DF_mech_001"
     capability: "property_prediction"
@@ -17,7 +17,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "ev_table"
-        path: "data/L1_Q05/ev_curve.json"
+        path: "data/DF_mech_001/ev_curve.json"
         oss_url: ""
         description: "Energy-volume data points for EOS fitting."
     reference_answers:
@@ -55,7 +55,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # DF_mech_002 ← L1_Q09 (MSST Hugoniot C-J点确定)
+  # DF_mech_002 (MSST Hugoniot C-J点确定)
   # ============================================================
   - id: "DF_mech_002"
     capability: "property_prediction"
@@ -71,7 +71,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "msst_data"
-        path: "data/L1_Q09/msst_hugoniot.json"
+        path: "data/DF_mech_002/msst_hugoniot.json"
         oss_url: ""
         description: "MSST simulation data at multiple shock velocities for RDX."
     reference_answers:
