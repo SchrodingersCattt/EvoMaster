@@ -59,7 +59,7 @@ class DevStreamHook(BaseHook):
         self._out.write(f"\n\U0001f6e1\ufe0f guard_blocked: {result.reason}\n\n")
         self._out.flush()
 
-    def on_segment_complete(
+    async def on_segment_complete(
         self, segment_type: str, content: str, stream_id: str | None
     ) -> None:
         if segment_type == "thought" and self._verbose:
