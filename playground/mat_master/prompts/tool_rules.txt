@@ -75,9 +75,13 @@
 
 ## input-manual-helper (input file writing & validation)
 
-- When writing input files for software that has a **prepare_* MCP tool** (CP2K, QE, ABINIT, LAMMPS, ORCA), use the input-manual-helper skill. **Do not** directly write or text-replace the contents of .inp, .in, .abi, or other input files; pass a template path, structure_file, and **overrides** to the prepare_* tool. IMPORTANT: When the user does not provide an input file, obtain the template via `get_reference` to get correct template—strictly avoid hand-writing input content and passing it to prepare_*. Structure insert/change only via prepare_*'s structure_file parameter. (Gaussian, PSI4 have no prepare_* yet — use reference templates as final input for now; do not apply this ban to them. **PySCF**: use `run_pyscf` directly — no prepare_* or validate_input step; pass `structure_file` (XYZ preferred) and parameters directly. For molecular DFT tasks, prefer PySCF over ABACUS.)
-- **GROMACS**: Use **bohrium-job** skill (`submit_job.py` + `poll_job.py`) — same as CP2K/QE/ABINIT/LAMMPS/ORCA. Image: `registry.dp.tech/dptech/gromacs:2022.2`, machine: `c32_m128_cpu`. Do NOT call `mat_binary_calc_submit_run_gromacs` or `monitor_job` for GROMACS.
-- **User-provided ready input file (skip prepare entirely)**: If the user has already uploaded or placed a complete, ready-to-run input file (e.g. a `.inp`, `.in`, `.abi`, `.lammps`, `.gro`, `.mdp` file they confirm needs no further modification), **do NOT call prepare_* or input-manual-helper**. For LAMMPS/CP2K/QE/ABINIT/ORCA/GROMACS-class jobs, use **bohrium-job** (`submit_job.py` with `--input-dir` and `--cmd`).
+- For **all DFT/MD codes** (CP2K, QE, ABINIT, LAMMPS, ORCA, ABACUS, GROMACS), use the **input-manual-helper** skill to run `render_input.py` + `diagnose_input.py` local scripts.
+  - **Do not** directly edit `.inp`, `.in`, `.abi`, `.lammps`, or other input files; use local script generation.
+  - When user provides no input file, use `render_input.py` to generate from templates—avoid hand-writing input content.
+  - Structure changes via script parameters, not by manual text editing.
+- For **PySCF**: Write Python script directly (no render_input step); pass structure_file (XYZ preferred) and parameters to script. For molecular DFT, prefer PySCF over ABACUS.
+- For **Gaussian / PSI4**: No local script support yet; use reference templates as final input (no input-manual-helper workflow).
+- **User-provided ready input file (skip entire skill)**: If the user has a complete, ready-to-run input file (`.inp`, `.in`, `.abi`, `.lammps`, `.gro`, `.mdp`, etc., with no modifications needed), **do NOT call input-manual-helper**. For all software (CP2K/QE/ABINIT/LAMMPS/ORCA/GROMACS/ABACUS/PyATB/PySCF), use **bohrium-job** skill (`submit_job.py --input-dir <dir> --cmd "<command>"`).
 
 ## Polymer and GROMACS local skills
 
@@ -85,11 +89,11 @@
 - After reading `poly-generator` info, use the script interfaces exactly: `build_polymer.py` uses `--monomers` + `--sequence`/`--mode`; `generate_2d.py` uses the original polymer specification plus `--output-dir`; `generate_3d.py` uses `--smiles` + `--output`. Do not invent `--input-json`, `--monomer`, or `--n`.
 - When the user asks for an initial topology or force-field style output for a supported simple polymer-like system, you MUST first call `use_skill` with `skill_name=poly-forcefield` and `action=get_info`.
 - When the user asks to prepare a local GROMACS system from existing workspace files, such as writing `.mdp` files, building a box, solvating, adding ions, or making index groups, you MUST first call `use_skill` with `skill_name=gromacs-system-prep` and `action=get_info`.
-- When the user wants to keep `grompp` local but submit only the generated `.tpr` for remote `mdrun`, you MUST first call `use_skill` with `skill_name=grompp-remote-mdrun` and `action=get_info`, then call `mat_binary_calc_submit_run_gromacs` with the returned `submit_args`.
+- When the user wants to keep `grompp` local but submit only the generated `.tpr` for remote `mdrun`, you MUST first call `use_skill` with `skill_name=grompp-remote-mdrun` and `action=get_info`, then submit the result via **`bohrium-job`** skill.
 - When the user asks to analyze MD outputs such as RMSD, RMSF, RDF, MSD, hydrogen bonds, gyration, or energy curves on local workspace files, you MUST first call `use_skill` with `skill_name=md-analysis` and `action=get_info`.
 
-- **structure_file**: Must be in a format pymatgen can read: e.g. CIF (.cif), VASP POSCAR/CONTCAR (no ext or .vasp), XYZ (.xyz), Materials Project JSON. LAMMPS .data is produced by prepare_lammps_job; do not pass .data as structure_file.
-- **Prepare tools**: Capabilities and parameters come from the mat_binary_calc tool schema; check schema when choosing and calling. Use workflow parameters (e.g. workflow_type) when the tool exposes them instead of hand-assembling inputs.
+- **structure_file**: Must be in a format pymatgen can read: e.g. CIF (.cif), VASP POSCAR/CONTCAR (no ext or .vasp), XYZ (.xyz), Materials Project JSON. For LAMMPS, the script will generate .data from the structure file; do not manually pass .data files as input.
+- **Prepare tools**: Local `render_input.py` + `diagnose_input.py` scripts handle all software-specific logic. Check the skill's Scripts section and official software documentation for parameters.
 - **Validation**: Run validate_input.py once after prepare (required for submit gate). It is **physical-sense review**, not syntax check: you review the prepared file for reasonable parameter ranges and consistency; if doubtful, use ask_human; on timeout, treat as pass and proceed.
 - **Parameter lookup**: When a parameter or keyword is uncertain, use **official docs** with site-restricted search. Official manual URLs: CP2K manual.cp2k.org, QE www.quantum-espresso.org/Doc/, ABINIT docs.abinit.org, LAMMPS docs.lammps.org, ORCA www.faccts.de/docs/orca/ or orca-manual.mpi-muelheim.mpg.de. Do not re-query the same path that already returned nothing useful.
 ## use_skill run_script
