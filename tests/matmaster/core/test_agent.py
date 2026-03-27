@@ -55,7 +55,7 @@ class _CatchAllTool:
     def json_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {}}
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         self.calls.append((self._name, arguments))
         return self._result
 

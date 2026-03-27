@@ -50,25 +50,21 @@ from matmaster.types.messages import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Async bridge -- used by the sync Kernel to call async ToolRegistry.execute()
-# A dedicated event loop runs in a daemon thread; _sync_call_async schedules
-# coroutines onto it and blocks until they complete.  This bridge is removed
-# in Phase 17 when the Kernel itself becomes async.
+# Async bridge -- used by the sync Kernel to call async providers / tools.
+# A dedicated event loop (NOT running run_forever) is used via
+# run_until_complete for sequential sync→async bridging.
+# Removed in Phase 17 when the Kernel itself becomes async.
 # ---------------------------------------------------------------------------
 _bridge_loop = asyncio.new_event_loop()
-_bridge_thread = threading.Thread(
-    target=_bridge_loop.run_forever, daemon=True, name="kernel-bridge-loop"
-)
-_bridge_thread.start()
 
 
 def _sync_call_async(coro, loop: asyncio.AbstractEventLoop = _bridge_loop):
-    """Bridge an async coroutine to a synchronous call via a shared event loop."""
-    return asyncio.run_coroutine_threadsafe(coro, loop).result()
+    """Bridge an async coroutine to a synchronous call."""
+    return loop.run_until_complete(coro)
 
 
 def _sync_iterate_async(async_iter, loop: asyncio.AbstractEventLoop):
-    """Bridge async iterator to sync iterator using a shared event loop.
+    """Bridge async iterator to sync iterator.
 
     Temporary bridge for Phase 13-16 transition period.
     Will be removed in Phase 17 when Kernel becomes fully async.
@@ -84,13 +80,6 @@ def _sync_iterate_async(async_iter, loop: asyncio.AbstractEventLoop):
         pass
 
 
-def _sync_call_async(coro, loop: asyncio.AbstractEventLoop):
-    """Bridge async coroutine to sync call using a shared event loop.
-
-    Temporary bridge for Phase 13-16 transition period.
-    Will be removed in Phase 17 when Kernel becomes fully async.
-    """
-    return loop.run_until_complete(coro)
 
 
 class AgentKernel:
