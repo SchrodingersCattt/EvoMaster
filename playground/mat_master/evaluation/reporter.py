@@ -9,7 +9,6 @@ from pathlib import Path
 
 from .schemas import AxisPassRates, EvalRunRecord, EvaluationSummary
 
-
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -24,11 +23,11 @@ def write_reports(
 ) -> dict[str, str]:
     """Write all report files and return a dict of {label: path}."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    raw_runs_path = output_dir / f"{prefix}raw_runs.jsonl"
-    by_question_path = output_dir / f"{prefix}scores_by_question.json"
-    by_capability_path = output_dir / f"{prefix}scores_by_capability.json"
-    by_model_path = output_dir / f"{prefix}scores_by_model.json"
-    final_report_path = output_dir / f"{prefix}final_report.md"
+    raw_runs_path = output_dir / f'{prefix}raw_runs.jsonl'
+    by_question_path = output_dir / f'{prefix}scores_by_question.json'
+    by_capability_path = output_dir / f'{prefix}scores_by_capability.json'
+    by_model_path = output_dir / f'{prefix}scores_by_model.json'
+    final_report_path = output_dir / f'{prefix}final_report.md'
 
     with raw_runs_path.open('w', encoding='utf-8') as handle:
         for record in records:
@@ -52,12 +51,8 @@ def write_reports(
                 'by_capability': {
                     k: v.model_dump() for k, v in summary.by_capability.items()
                 },
-                'by_domain': {
-                    k: v.model_dump() for k, v in summary.by_domain.items()
-                },
-                'by_mode': {
-                    k: v.model_dump() for k, v in summary.by_mode.items()
-                },
+                'by_domain': {k: v.model_dump() for k, v in summary.by_domain.items()},
+                'by_mode': {k: v.model_dump() for k, v in summary.by_mode.items()},
                 'overall': {
                     'total_runs': summary.total_runs,
                     'total_criteria': summary.total_criteria,
@@ -108,7 +103,7 @@ def load_records_from_jsonl(path: Path) -> list[EvalRunRecord]:
     """Load EvalRunRecords from a JSONL file, skipping malformed lines."""
     records: list[EvalRunRecord] = []
     if not path.exists():
-        raise FileNotFoundError(f"raw runs file not found: {path}")
+        raise FileNotFoundError(f'raw runs file not found: {path}')
     with path.open('r', encoding='utf-8') as handle:
         for line in handle:
             text = line.strip()
@@ -134,7 +129,7 @@ def generate_rating_from_raw_runs(
 
     records = load_records_from_jsonl(raw_runs_path)
     if not records:
-        raise ValueError(f"no valid records found in {raw_runs_path}")
+        raise ValueError(f'no valid records found in {raw_runs_path}')
     summary = build_summary(records)
     target_dir = output_dir or raw_runs_path.parent
     report_paths = write_reports(
@@ -158,16 +153,16 @@ def _fmt_pair(pair: tuple[int, int]) -> str:
     if total == 0:
         return '—'
     pct = 100.0 * passed / total
-    return f"{passed}/{total} ({pct:.1f}%)"
+    return f'{passed}/{total} ({pct:.1f}%)'
 
 
 def _axis_row(label: str, rates: AxisPassRates) -> str:
     return (
-        f"| `{label}` "
-        f"| {_fmt_pair(rates.correctness)} "
-        f"| {_fmt_pair(rates.grounding)} "
-        f"| {_fmt_pair(rates.efficiency)} "
-        f"| {_fmt_pair(rates.overall)} |"
+        f'| `{label}` '
+        f'| {_fmt_pair(rates.correctness)} '
+        f'| {_fmt_pair(rates.grounding)} '
+        f'| {_fmt_pair(rates.efficiency)} '
+        f'| {_fmt_pair(rates.overall)} |'
     )
 
 
@@ -179,19 +174,17 @@ _AXIS_TABLE_HEADER = (
 
 def _render_markdown(summary: EvaluationSummary) -> str:
     total_pct = (
-        f"{100 * summary.pass_rate:.1f}%"
-        if summary.total_criteria > 0
-        else 'N/A'
+        f'{100 * summary.pass_rate:.1f}%' if summary.total_criteria > 0 else 'N/A'
     )
     lines: list[str] = [
         '# MATTER v5 Evaluation Report',
         '',
-        f"## Overall: {summary.total_passed}/{summary.total_criteria} criteria passed ({total_pct})",
+        f'## Overall: {summary.total_passed}/{summary.total_criteria} criteria passed ({total_pct})',
         '',
-        f"- Total runs: {summary.total_runs}",
-        f"- Total criteria evaluated: {summary.total_criteria}",
-        f"- Criteria passed: {summary.total_passed}",
-        f"- Pass rate: {total_pct}",
+        f'- Total runs: {summary.total_runs}',
+        f'- Total criteria evaluated: {summary.total_criteria}',
+        f'- Criteria passed: {summary.total_passed}',
+        f'- Pass rate: {total_pct}',
         '',
     ]
 
@@ -262,10 +255,10 @@ def _render_markdown(summary: EvaluationSummary) -> str:
             tc = summary.tool_contribution[tool_name]
             accept = '✓ YES' if tc.accepted else 'NO'
             lines.append(
-                f"| `{tool_name}` "
-                f"| {tc.questions_requiring} "
-                f"| +{tc.criteria_delta} "
-                f"| {accept} |"
+                f'| `{tool_name}` '
+                f'| {tc.questions_requiring} '
+                f'| +{tc.criteria_delta} '
+                f'| {accept} |'
             )
         lines.append('')
 
@@ -278,14 +271,14 @@ def _render_markdown(summary: EvaluationSummary) -> str:
     for key in sorted(summary.by_question):
         row = summary.by_question[key]
         lines.append(
-            f"| `{key}` "
-            f"| {row.capability} "
-            f"| {row.domain} "
-            f"| {_fmt_pair(row.correctness)} "
-            f"| {_fmt_pair(row.grounding)} "
-            f"| {_fmt_pair(row.efficiency)} "
-            f"| {_fmt_pair(row.overall)} "
-            f"| {row.safety_veto_count} |"
+            f'| `{key}` '
+            f'| {row.capability} '
+            f'| {row.domain} '
+            f'| {_fmt_pair(row.correctness)} '
+            f'| {_fmt_pair(row.grounding)} '
+            f'| {_fmt_pair(row.efficiency)} '
+            f'| {_fmt_pair(row.overall)} '
+            f'| {row.safety_veto_count} |'
         )
     lines.append('')
 

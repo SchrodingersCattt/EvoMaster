@@ -18,8 +18,8 @@ from typing import Any
 import yaml
 
 from .aggregator import build_summary
-from .evidence import EvidenceExtractor
 from .evaluator import BinaryEvaluator
+from .evidence import EvidenceExtractor
 from .mat_runner import run_mat_task
 from .reporter import append_raw_run, write_reports
 from .schemas import (
@@ -50,7 +50,7 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
     output_dir = Path(_resolve_to_project_root(config.output_dir))
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-    run_dir = output_dir / f"{config.run_label}_{timestamp}"
+    run_dir = output_dir / f'{config.run_label}_{timestamp}'
     run_dir.mkdir(parents=True, exist_ok=True)
     mat_runs_dir = run_dir / 'mat_runs'
     mat_runs_dir.mkdir(parents=True, exist_ok=True)
@@ -61,7 +61,9 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
     evaluator = BinaryEvaluator(llm_cfg=config.evaluator_llm)
     # The core extractor is runtime-agnostic. EvoMaster-specific tool/event
     # compatibility is injected here by the current runner.
-    evidence_extractor = EvidenceExtractor(mapping_path=_EVOMASTER_EVIDENCE_MAPPING_PATH)
+    evidence_extractor = EvidenceExtractor(
+        mapping_path=_EVOMASTER_EVIDENCE_MAPPING_PATH
+    )
 
     records: list[EvalRunRecord] = []
     mat_config_path = Path(_resolve_to_project_root(config.mat_config_path))
@@ -74,7 +76,7 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
 
         task = simulator.formulate(question)
         prompt = task.prompt
-        task_id = f"{question.id}_{mode}_r{repeat_idx}"
+        task_id = f'{question.id}_{mode}_r{repeat_idx}'
         workspace_path = mat_runs_dir / 'workspaces' / task_id
         workspace_path.mkdir(parents=True, exist_ok=True)
         prompt = _stage_data_files(question, bank_dir, workspace_path, prompt)
@@ -101,7 +103,7 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
                 )
             except Exception as exc:  # noqa: BLE001
                 _runner_logger.warning(
-                    "EvidenceExtractor failed for %s: %s", task_id, exc
+                    'EvidenceExtractor failed for %s: %s', task_id, exc
                 )
 
         # Populate token usage from evidence if available
@@ -175,9 +177,7 @@ def expand_run_plan(
     """
     plan: list[dict[str, Any]] = []
     for question in questions:
-        active_modes = [
-            mode for mode in config.modes if mode in question.mode_scope
-        ]
+        active_modes = [mode for mode in config.modes if mode in question.mode_scope]
         for mode in active_modes:
             for repeat_idx in range(config.k):
                 plan.append(
@@ -205,7 +205,7 @@ def load_question_banks(bank_dir: Path) -> list[QuestionBank]:
     for path in yaml_paths:
         raw: dict[str, Any] = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
         if 'questions' not in raw:
-            _runner_logger.debug("Skipping non-bank YAML: %s", path.name)
+            _runner_logger.debug('Skipping non-bank YAML: %s', path.name)
             continue
         version = str(raw.get('version', ''))
         if version != 'v5':
@@ -215,7 +215,7 @@ def load_question_banks(bank_dir: Path) -> list[QuestionBank]:
         banks.append(QuestionBank.model_validate(raw))
 
     if not banks:
-        raise ValueError(f"No question bank files found under {bank_dir}")
+        raise ValueError(f'No question bank files found under {bank_dir}')
     return banks
 
 
@@ -244,14 +244,12 @@ def _stage_data_files(
         staged.append(src.name)
         if df.path in prompt:
             prompt = prompt.replace(df.path, src.name)
-        old_legacy = f"question_bank/{df.path}"
+        old_legacy = f'question_bank/{df.path}'
         if old_legacy in prompt:
             prompt = prompt.replace(old_legacy, src.name)
     if staged:
-        listing = ', '.join(f"`{name}`" for name in staged)
-        prompt += (
-            f"\n\n[The following data files are already in your working directory: {listing}]"
-        )
+        listing = ', '.join(f'`{name}`' for name in staged)
+        prompt += f'\n\n[The following data files are already in your working directory: {listing}]'
     return prompt
 
 

@@ -15,7 +15,7 @@ questions:
       构造 5 个 Si(100) 表面 slab，改变真空厚度：10, 15, 20, 25, 30 Å。
       其他参数严格保持固定：Miller 指标 [1,0,0], 4 层 Si, 3x3 超胞。
       输出 5 个 CIF 文件，每个文件名包含真空厚度。
-      
+
       关键考察点：
       1. 真空厚度参数按顺序变化
       2. 所有其他 mat_sg_build_surface_slab 参数保持恒定
@@ -97,12 +97,12 @@ questions:
     intent: "Generate VASP INCAR files for DOS calculation across 4 different structures. Enforce unified k-point density (~50 k-points/Ų despite different structure sizes) and identical electronic parameters across all structures."
     human_prompt_seed: >
       从 `dos_input_prep.json` 读取 4 种材料的 DOS 计算配置（Si, Cu, Al, Fe）。
-      
+
       对每种材料生成对应的 VASP INCAR 文件，要求：
       1. k-point 密度统一为 ~50 points/Ų（虽然不同结构尺度不同，k 点网格数目不同）
       2. ISMEAR=0, SIGMA=0.05, NEDOS=2000 在所有 4 个文件中完全相同
       3. 其他电子学参数（LORBIT, NSW 等）一致
-      
+
       关键考察点：
       1. 理解 k-point 密度概念（不是k点个数）
       2. 为不同大小的结构计算合适的 k 点网格
@@ -175,17 +175,17 @@ questions:
     human_prompt_seed: >
       从 `convergence_encut.json` 读取收敛测试配置。
       对铝（Al）结构执行 5 个单点能量计算，ENCUT 分别为：280, 300, 320, 340, 360 eV。
-      
+
       严格要求：
       1. k-point 网格在所有 5 个计算中固定为 8x8x8
       2. ISMEAR=1, SIGMA=0.1 在所有计算中相同
       3. NSW=0（不做离子弛豫）
       4. 其他 VASP 参数保持不变
-      
+
       输出：
       1. 5 个 OUTCAR 文件或能量日志
       2. 能量随 ENCUT 的收敛曲线（可绘图或表格）
-      
+
       关键考察点：
       1. ENCUT 按预定顺序系统变化
       2. 所有非扫描参数冻结
@@ -264,18 +264,18 @@ questions:
     intent: "Perform batch post-processing of band structures for 3 materials (Si, Ge, GaAs) with unified analysis parameters. Extract band gaps and band edge positions using identical k-paths, energy windows, and plot specifications across all materials."
     human_prompt_seed: >
       从 `postprocessing_bandstr.json` 读取 3 种材料（Si, Ge, GaAs）的带结构后处理配置。
-      
+
       对每种材料执行相同的分析流程：
       1. k-path 固定为 M-Gamma-K，每段 50 个 k 点
       2. 能量窗口统一为 [-5, 5] eV
       3. 费米面参考点：VBM（价带最大值）
       4. 所有绘图使用相同样式和范围
-      
+
       输出要求：
       1. 3 个带结构 PNG 图
       2. 3 个数据表（CSV 格式）
       3. 带隙值和边界位置汇总表
-      
+
       关键考察点：
       1. 分析参数（k-path, 能量窗口）在所有材料中完全一致
       2. 虽然材料的绝对带隙不同，但分析流程相同
@@ -357,7 +357,7 @@ questions:
     human_prompt_seed: >
       从 `failure_recovery.json` 读取 5 个结构（TiO2, ZnO, MgO, Al2O3, SiO2）的失败恢复场景。
       每个结构的初始计算因几何问题失败。
-      
+
       修复策略：
       1. 仅修复结构问题（原子位置、晶胞、对称性）
       2. 严格冻结所有计算参数：
@@ -366,12 +366,12 @@ questions:
          - ENCUT=520 eV（不变）
          - 其他求解器参数（ALGO, NSW）不变
       3. 对每个结构应用合适的几何修复步骤
-      
+
       输出要求：
       1. 5 个结构都收敛
       2. 所有使用相同的冻结参数集
       3. 明确标记出修复步骤
-      
+
       关键考察点：
       1. 只修改了几何/结构参数
       2. 没有不必要地重新调整电子学设置

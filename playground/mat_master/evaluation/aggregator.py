@@ -13,7 +13,6 @@ from typing import Any
 
 from .schemas import AxisPassRates, EvalRunRecord, EvaluationSummary, QuestionPassRate
 
-
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
@@ -50,20 +49,22 @@ def build_summary(records: list[EvalRunRecord]) -> EvaluationSummary:
 
     cap_acc: dict[_CapKey, list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
     cap_weighted: dict[_CapKey, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
-    
+
     dom_acc: dict[_DomKey, list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
     dom_weighted: dict[_DomKey, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
-    
+
     mode_acc: dict[_ModeKey, list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
     mode_weighted: dict[_ModeKey, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
-    
+
     model_acc: dict[_ModelKey, list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0])
     model_weighted: dict[_ModelKey, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
 
     # Per-question accumulator: keyed by (question_id, mode)
     q_acc: dict[tuple[str, str], list[int]] = defaultdict(lambda: [0, 0, 0, 0, 0, 0, 0])
     # 7 slots: [cp, ct, gp, gt, ep, et, safety_veto_count]
-    q_weighted: dict[tuple[str, str], list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
+    q_weighted: dict[tuple[str, str], list[float]] = defaultdict(
+        lambda: [0.0, 0.0, 0.0]
+    )
     q_meta: dict[tuple[str, str], dict[str, Any]] = {}
 
     for record in records:
@@ -85,12 +86,12 @@ def build_summary(records: list[EvalRunRecord]) -> EvaluationSummary:
         cap_weighted[record.capability][0] += record.correctness_weighted_score
         cap_weighted[record.capability][1] += record.grounding_weighted_score
         cap_weighted[record.capability][2] += record.efficiency_weighted_score
-        
+
         _add6(dom_acc[record.domain], cp, ct, gp, gt, ep, et)
         dom_weighted[record.domain][0] += record.correctness_weighted_score
         dom_weighted[record.domain][1] += record.grounding_weighted_score
         dom_weighted[record.domain][2] += record.efficiency_weighted_score
-        
+
         _add6(mode_acc[record.mode], cp, ct, gp, gt, ep, et)
         mode_weighted[record.mode][0] += record.correctness_weighted_score
         mode_weighted[record.mode][1] += record.grounding_weighted_score
@@ -103,12 +104,13 @@ def build_summary(records: list[EvalRunRecord]) -> EvaluationSummary:
         model_weighted[model_key][2] += record.efficiency_weighted_score
 
         qk = (record.question_id, record.mode)
-        _add7(q_acc[qk], cp, ct, gp, gt, ep, et,
-              1 if record.safety_veto.triggered else 0)
+        _add7(
+            q_acc[qk], cp, ct, gp, gt, ep, et, 1 if record.safety_veto.triggered else 0
+        )
         q_weighted[qk][0] += record.correctness_weighted_score
         q_weighted[qk][1] += record.grounding_weighted_score
         q_weighted[qk][2] += record.efficiency_weighted_score
-        
+
         if qk not in q_meta:
             q_meta[qk] = {
                 'capability': record.capability,
@@ -141,14 +143,13 @@ def build_summary(records: list[EvalRunRecord]) -> EvaluationSummary:
         meta = q_meta.get((question_id, mode), {})
         overall_p = cp + gp + ep
         overall_t = ct + gt + et
-        
+
         # Count how many records match this question+mode combo
         q_record_count = sum(
-            1 for r in records
-            if r.question_id == question_id and r.mode == mode
+            1 for r in records if r.question_id == question_id and r.mode == mode
         )
-        
-        key = f"{question_id}:{mode}"
+
+        key = f'{question_id}:{mode}'
         by_question[key] = QuestionPassRate(
             question_id=question_id,
             capability=meta.get('capability', ''),
@@ -190,9 +191,12 @@ def build_summary(records: list[EvalRunRecord]) -> EvaluationSummary:
 
 def _add6(
     slots: list[int],
-    cp: int, ct: int,
-    gp: int, gt: int,
-    ep: int, et: int,
+    cp: int,
+    ct: int,
+    gp: int,
+    gt: int,
+    ep: int,
+    et: int,
 ) -> None:
     """Add six pass/total integers into a 6-slot accumulator in place."""
     slots[0] += cp
@@ -205,9 +209,12 @@ def _add6(
 
 def _add7(
     slots: list[int],
-    cp: int, ct: int,
-    gp: int, gt: int,
-    ep: int, et: int,
+    cp: int,
+    ct: int,
+    gp: int,
+    gt: int,
+    ep: int,
+    et: int,
     sv: int,
 ) -> None:
     """Add seven values into a 7-slot accumulator in place."""
@@ -229,12 +236,12 @@ def _to_axis_pass_rates(
     cp, ct, gp, gt, ep, et = raw_slots[:6]
     overall_p = cp + gp + ep
     overall_t = ct + gt + et
-    
+
     # Calculate average weighted scores
-    c_weighted = weighted_sums[0] / total_records if total_records > 0 else 0.0
-    g_weighted = weighted_sums[1] / total_records if total_records > 0 else 0.0
-    e_weighted = weighted_sums[2] / total_records if total_records > 0 else 0.0
-    
+    weighted_sums[0] / total_records if total_records > 0 else 0.0
+    weighted_sums[1] / total_records if total_records > 0 else 0.0
+    weighted_sums[2] / total_records if total_records > 0 else 0.0
+
     # Store both raw pass-rate and weighted score in AxisPassRates
     # Raw tuples will still be used for backward compatibility
     return AxisPassRates(

@@ -124,7 +124,7 @@ def _run_agent_sync(
 
             config_path = PROJECT_ROOT / 'configs' / 'mat_master' / 'config.yaml'
             if not config_path.exists():
-                raise FileNotFoundError(f"Config not found: {config_path}")
+                raise FileNotFoundError(f'Config not found: {config_path}')
             pg = get_playground_class('mat_master', config_path=config_path)
             pg.set_run_dir(run_dir, task_id=task_id, session_id=session_id)
             pg.setup()
@@ -186,7 +186,7 @@ def _run_agent_sync(
                             _REMOTE_WORKSPACE_ROOT,
                         )
                         event_callback(
-                            'System', 'status', f"已连接到 Bohrium 节点 {ssh_host}"
+                            'System', 'status', f'已连接到 Bohrium 节点 {ssh_host}'
                         )
                         pg.session._bohrium_credentials = {
                             'access_key': access_key,
@@ -210,7 +210,7 @@ def _run_agent_sync(
                 event_callback(
                     'System',
                     'status',
-                    f"自动创建 Bohrium 节点失败: {e}，继续使用当前环境运行",
+                    f'自动创建 Bohrium 节点失败: {e}，继续使用当前环境运行',
                 )
 
         base = pg.agent
@@ -242,6 +242,10 @@ def _run_agent_sync(
         )
         agent.set_agent_name(getattr(base, '_agent_name', 'default'))
         agent._stop_event = stop_event
+        if base.session is not None:
+            base.session._stop_event = stop_event
+        for tool in getattr(base, 'tools', []) or []:
+            tool._stop_event = stop_event
         if ask_human_queue is not None:
             attach_ask_human_on_agent(
                 agent,
