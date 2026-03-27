@@ -52,15 +52,10 @@ class TaskStore:
             encoding="utf-8",
         )
 
-    def create(
-        self,
-        description: str,
-        subtasks: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Create a new task with open status. Returns the task dict.
+    def create(self, description: str, subtasks: list[str]) -> dict[str, Any]:
+        """Create a new task with subtasks. Returns the task dict.
 
-        If subtasks provided, each gets individual status tracking and the
-        parent task status is auto-derived from subtask statuses.
+        Parent task status is always auto-derived from subtask statuses.
         """
         with self._lock:
             data = self._read()
@@ -71,7 +66,7 @@ class TaskStore:
                 "description": description,
                 "status": "open",
                 "subtasks": [
-                    {"description": s, "status": "open"} for s in (subtasks or [])
+                    {"description": s, "status": "open"} for s in subtasks
                 ],
                 "created_at": now,
                 "updated_at": now,
@@ -91,20 +86,6 @@ class TaskStore:
         with self._lock:
             data = self._read()
             return list(data["tasks"].values())
-
-    def update(self, task_id: str, **fields: Any) -> dict[str, Any] | None:
-        """Update task fields (description, status). Returns None if not found."""
-        with self._lock:
-            data = self._read()
-            task = data["tasks"].get(task_id)
-            if task is None:
-                return None
-            for k, v in fields.items():
-                if k in ("description", "status"):
-                    task[k] = v
-            task["updated_at"] = datetime.now(timezone.utc).isoformat()
-            self._write(data)
-            return task
 
     def update_subtask(
         self,
@@ -126,20 +107,6 @@ class TaskStore:
                 return None
             subtasks[subtask_index]["status"] = status
             task["status"] = self._derive_status(subtasks)
-            task["updated_at"] = datetime.now(timezone.utc).isoformat()
-            self._write(data)
-            return task
-
-    def complete(self, task_id: str) -> dict[str, Any] | None:
-        """Mark a task (and all its subtasks) as completed."""
-        with self._lock:
-            data = self._read()
-            task = data["tasks"].get(task_id)
-            if task is None:
-                return None
-            for s in task.get("subtasks", []):
-                s["status"] = "completed"
-            task["status"] = "completed"
             task["updated_at"] = datetime.now(timezone.utc).isoformat()
             self._write(data)
             return task
