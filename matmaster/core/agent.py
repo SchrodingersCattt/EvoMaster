@@ -13,6 +13,7 @@ Termination conditions:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import threading
@@ -47,6 +48,23 @@ from matmaster.types.messages import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Async bridge -- used by the sync Kernel to call async ToolRegistry.execute()
+# A dedicated event loop runs in a daemon thread; _sync_call_async schedules
+# coroutines onto it and blocks until they complete.  This bridge is removed
+# in Phase 17 when the Kernel itself becomes async.
+# ---------------------------------------------------------------------------
+_bridge_loop = asyncio.new_event_loop()
+_bridge_thread = threading.Thread(
+    target=_bridge_loop.run_forever, daemon=True, name="kernel-bridge-loop"
+)
+_bridge_thread.start()
+
+
+def _sync_call_async(coro, loop: asyncio.AbstractEventLoop = _bridge_loop):
+    """Bridge an async coroutine to a synchronous call via a shared event loop."""
+    return asyncio.run_coroutine_threadsafe(coro, loop).result()
 
 
 class AgentKernel:
@@ -174,9 +192,11 @@ class AgentKernel:
                     )
                     continue
 
-                # Tool execution
+                # Tool execution (async registry bridged via _sync_call_async)
                 try:
-                    tool_result = spec.tool_registry.execute(tc.name, tc.arguments)
+                    tool_result = _sync_call_async(
+                        spec.tool_registry.execute(tc.name, tc.arguments),
+                    )
                 except Exception as e:
                     tool_result = ToolResult(
                         status="error",
