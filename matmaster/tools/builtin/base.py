@@ -11,10 +11,13 @@ Subclasses:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, ClassVar
+
+from matmaster.tools.tool_result import ToolResult
 
 
 class BuiltinTool(ABC):
@@ -42,10 +45,10 @@ class BuiltinTool(ABC):
         self._workdir = workdir
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def execute(self, arguments: dict[str, Any]) -> str:
-        """Tool Protocol entry point. Delegates to _execute."""
+    async def execute(self, arguments: dict[str, Any]) -> str | ToolResult:
+        """Tool Protocol entry point. Delegates to _execute via to_thread."""
         try:
-            return self._execute(arguments)
+            return await asyncio.to_thread(self._execute, arguments)
         except Exception as e:
             self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
             return f"Error: {e}"
