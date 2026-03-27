@@ -92,7 +92,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 14-01-PLAN.md -- BuiltinTool ABC async execute + sync _execute rollback + ToolRegistry async execute + 核心测试迁移
+- [x] 14-01-PLAN.md -- BuiltinTool ABC async execute + sync _execute rollback + ToolRegistry async execute + 核心测试迁移
 - [ ] 14-02-PLAN.md -- LazyMCPTool/SkillTool/EvoToolAdapter async + Kernel 桥接 + 全量 tool 测试 async 迁移
 
 ### Phase 15: Hook 系统异步化
@@ -174,7 +174,7 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete | 2026-03-25 |
 | 12. Protocol 层 + 测试基础设施 | v2.0 | 2/2 | Complete | 2026-03-26 |
 | 13. LLM Provider 异步实现 | v2.0 | 2/2 | Complete | 2026-03-27 |
-| 14. Tool 系统异步化 | v2.0 | 0/2 | Planned | - |
+| 14. Tool 系统异步化 | v2.0 | 1/2 | In Progress | - |
 | 15. Hook 系统异步化 | v2.0 | 0/0 | Not started | - |
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/0 | Not started | - |
 | 17. AgentKernel 异步化 | v2.0 | 0/0 | Not started | - |

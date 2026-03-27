@@ -23,10 +23,10 @@
 
 ### Tool 系统
 
-- [ ] **TOOL-01**: 12 个 BuiltinTool 的 execute() 全部改为 async def
+- [x] **TOOL-01**: 12 个 BuiltinTool 的 execute() 全部改为 async def
 - [ ] **TOOL-02**: BashTool 使用 asyncio.create_subprocess_exec 替代 subprocess.run
-- [ ] **TOOL-03**: 文件操作类 Tool（Read/Write/Edit/Glob/Grep）使用 asyncio.to_thread 包装同步文件 I/O
-- [ ] **TOOL-04**: session-dependent tool 的 evomaster session 调用使用 asyncio.to_thread 桥接
+- [x] **TOOL-03**: 文件操作类 Tool（Read/Write/Edit/Glob/Grep）使用 asyncio.to_thread 包装同步文件 I/O
+- [x] **TOOL-04**: session-dependent tool 的 evomaster session 调用使用 asyncio.to_thread 桥接
 - [ ] **TOOL-05**: SubAgentTool 的 spawn_fn 改为 async callable
 - [ ] **TOOL-06**: 并行 Tool Dispatch — 同一轮多个 tool_call 使用 asyncio.gather 并行执行
 
@@ -112,10 +112,10 @@
 | LLMP-01 | Phase 13 | Complete |
 | LLMP-02 | Phase 13 | Complete |
 | LLMP-03 | Phase 13 | Complete |
-| TOOL-01 | Phase 14 | Pending |
+| TOOL-01 | Phase 14 | Complete |
 | TOOL-02 | Phase 14 | Pending |
-| TOOL-03 | Phase 14 | Pending |
-| TOOL-04 | Phase 14 | Pending |
+| TOOL-03 | Phase 14 | Complete |
+| TOOL-04 | Phase 14 | Complete |
 | TOOL-05 | Phase 14 | Pending |
 | TOOL-06 | Phase 19 | Pending |
 | HOOK-01 | Phase 15 | Pending |
@@ -144,8 +144,8 @@
 - v2.0 requirements: 35 total
 - Mapped to phases: 35
 - Unmapped: 0
-- Complete: 10 (PROT-01~05, LLMP-01~03, KERN-04, TEST-01)
+- Complete: 13 (PROT-01~05, LLMP-01~03, KERN-04, TEST-01, TOOL-01, TOOL-03, TOOL-04)
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-27 after Phase 13 complete (restored from merge revert)*
+*Last updated: 2026-03-27 after Phase 14 Plan 01 complete*
