@@ -17,10 +17,8 @@ Custom rules:
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from validators.base import (
-    SEVERITY_ERROR,
     SEVERITY_INFO,
     SEVERITY_WARNING,
     BaseValidator,
@@ -29,36 +27,59 @@ from validators.base import (
 )
 
 _KNOWN_UNITS = {
-    "lj", "real", "metal", "si", "cgs", "electron", "micro", "nano",
+    "lj",
+    "real",
+    "metal",
+    "si",
+    "cgs",
+    "electron",
+    "micro",
+    "nano",
 }
 
 _KNOWN_ATOM_STYLES = {
-    "angle", "atomic", "body", "bond", "charge", "dipole", "dpd",
-    "edpd", "electron", "ellipsoid", "full", "line", "mdpd", "molecular",
-    "peri", "smd", "sphere", "spin", "template", "tri", "wavepacket",
+    "angle",
+    "atomic",
+    "body",
+    "bond",
+    "charge",
+    "dipole",
+    "dpd",
+    "edpd",
+    "electron",
+    "ellipsoid",
+    "full",
+    "line",
+    "mdpd",
+    "molecular",
+    "peri",
+    "smd",
+    "sphere",
+    "spin",
+    "template",
+    "tri",
+    "wavepacket",
     "hybrid",
 }
 
 # Typical timestep ranges (in native time units): (min_warn, max_warn)
 # metal: ps; real: fs; si/cgs/micro/nano: s; electron: fs; lj: dimensionless
 _TIMESTEP_RANGES: dict[str, tuple[float, float]] = {
-    "metal": (1e-4, 0.1),      # ps
-    "real": (0.1, 5.0),        # fs
-    "lj": (1e-4, 0.05),        # dimensionless
-    "si": (1e-16, 1e-11),      # s
-    "cgs": (1e-16, 1e-11),     # s
-    "electron": (0.001, 10.0), # fs
-    "micro": (1e-6, 1.0),      # μs
-    "nano": (1e-6, 1.0),       # ns
+    "metal": (1e-4, 0.1),  # ps
+    "real": (0.1, 5.0),  # fs
+    "lj": (1e-4, 0.05),  # dimensionless
+    "si": (1e-16, 1e-11),  # s
+    "cgs": (1e-16, 1e-11),  # s
+    "electron": (0.001, 10.0),  # fs
+    "micro": (1e-6, 1.0),  # μs
+    "nano": (1e-6, 1.0),  # ns
 }
 
 
 class LAMMPSValidator(BaseValidator):
     software_name = "lammps"
 
-    def validate_text(
-        self, text: str, source: str = "<string>"
-    ) -> list[Diagnostic]:
+    def validate_text(self, text: str, source: str = "<string>") -> list[Diagnostic]:
         diags: list[Diagnostic] = []
         commands = _parse_lammps_commands(text)
 
