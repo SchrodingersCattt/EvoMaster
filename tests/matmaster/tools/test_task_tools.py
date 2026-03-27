@@ -1,6 +1,6 @@
 """Tests for TaskStore and 5 TaskTools (TaskCreate/Get/List/Update/Complete).
 
-All operations are subtask-level. Parent task status is always auto-derived.
+TDD RED phase: tests written before implementation.
 """
 
 from __future__ import annotations
@@ -32,19 +32,17 @@ class TestTaskStore:
 
     def test_create_returns_task_with_required_fields(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        task = store.create("Build the widget", ["Step A", "Step B"])
+        task = store.create("Build the widget")
         assert "id" in task
         assert len(task["id"]) == 8
         assert task["description"] == "Build the widget"
         assert task["status"] == "open"
-        assert len(task["subtasks"]) == 2
-        assert task["subtasks"][0] == {"description": "Step A", "status": "open"}
         assert "created_at" in task
         assert "updated_at" in task
 
     def test_get_existing_task(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        created = store.create("Test task", ["Sub 1"])
+        created = store.create("Test task")
         fetched = store.get(created["id"])
         assert fetched is not None
         assert fetched["id"] == created["id"]
@@ -56,8 +54,8 @@ class TestTaskStore:
 
     def test_list_all_returns_all_tasks(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        store.create("Task A", ["Sub 1"])
-        store.create("Task B", ["Sub 1"])
+        store.create("Task A")
+        store.create("Task B")
         tasks = store.list_all()
         assert len(tasks) == 2
         descriptions = {t["description"] for t in tasks}
@@ -67,65 +65,39 @@ class TestTaskStore:
         store = TaskStore(tmp_path)
         assert store.list_all() == []
 
-    def test_update_subtask_status(self, tmp_path: Path) -> None:
+    def test_update_description(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        task = store.create("Parent", ["A", "B", "C"])
-        updated = store.update_subtask(task["id"], 1, "completed")
+        created = store.create("Old desc")
+        updated = store.update(created["id"], description="New desc")
         assert updated is not None
-        assert updated["subtasks"][1]["status"] == "completed"
-        assert updated["subtasks"][0]["status"] == "open"
+        assert updated["description"] == "New desc"
+        assert updated["updated_at"] >= created["updated_at"]
+
+    def test_update_status(self, tmp_path: Path) -> None:
+        store = TaskStore(tmp_path)
+        created = store.create("Task")
+        updated = store.update(created["id"], status="in_progress")
+        assert updated is not None
         assert updated["status"] == "in_progress"
 
-    def test_update_subtask_all_completed_derives_parent(self, tmp_path: Path) -> None:
+    def test_update_nonexistent_returns_none(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        task = store.create("Parent", ["A", "B"])
-        store.update_subtask(task["id"], 0, "completed")
-        updated = store.update_subtask(task["id"], 1, "completed")
-        assert updated is not None
-        assert updated["status"] == "completed"
+        assert store.update("nonexist", description="x") is None
 
-    def test_update_subtask_invalid_index_returns_none(self, tmp_path: Path) -> None:
+    def test_complete_sets_status_completed(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        task = store.create("Parent", ["A"])
-        assert store.update_subtask(task["id"], 5, "completed") is None
-        assert store.update_subtask(task["id"], -1, "completed") is None
+        created = store.create("Finish this")
+        completed = store.complete(created["id"])
+        assert completed is not None
+        assert completed["status"] == "completed"
 
-    def test_update_subtask_nonexistent_task_returns_none(self, tmp_path: Path) -> None:
+    def test_complete_nonexistent_returns_none(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        assert store.update_subtask("nope", 0, "completed") is None
-
-    def test_complete_subtask(self, tmp_path: Path) -> None:
-        store = TaskStore(tmp_path)
-        task = store.create("Parent", ["A", "B"])
-        result = store.complete_subtask(task["id"], 0)
-        assert result is not None
-        assert result["subtasks"][0]["status"] == "completed"
-        assert result["subtasks"][1]["status"] == "open"
-        assert result["status"] == "in_progress"
-
-    def test_complete_all_subtasks_completes_parent(self, tmp_path: Path) -> None:
-        store = TaskStore(tmp_path)
-        task = store.create("Parent", ["A", "B"])
-        store.complete_subtask(task["id"], 0)
-        result = store.complete_subtask(task["id"], 1)
-        assert result is not None
-        assert result["status"] == "completed"
-
-    def test_derive_status_all_open(self, tmp_path: Path) -> None:
-        subtasks = [{"status": "open"}, {"status": "open"}]
-        assert TaskStore._derive_status(subtasks) == "open"
-
-    def test_derive_status_mixed(self, tmp_path: Path) -> None:
-        subtasks = [{"status": "completed"}, {"status": "open"}]
-        assert TaskStore._derive_status(subtasks) == "in_progress"
-
-    def test_derive_status_all_completed(self, tmp_path: Path) -> None:
-        subtasks = [{"status": "completed"}, {"status": "completed"}]
-        assert TaskStore._derive_status(subtasks) == "completed"
+        assert store.complete("nonexist") is None
 
     def test_persistence_across_instances(self, tmp_path: Path) -> None:
         store1 = TaskStore(tmp_path)
-        task = store1.create("Persistent task", ["Sub 1"])
+        task = store1.create("Persistent task")
 
         store2 = TaskStore(tmp_path)
         fetched = store2.get(task["id"])
@@ -134,7 +106,7 @@ class TestTaskStore:
 
     def test_data_stored_in_tasks_json(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        store.create("Check file", ["Sub 1"])
+        store.create("Check file")
         tasks_file = tmp_path / ".tasks.json"
         assert tasks_file.exists()
         data = json.loads(tasks_file.read_text())
@@ -160,22 +132,17 @@ class TestTaskCreateTool:
         tool = TaskCreateTool(workdir=Path("/tmp"))
         assert isinstance(tool, Tool)
 
-    def test_task_create_with_subtasks(self, tmp_path: Path) -> None:
+    async def test_task_create(self, tmp_path: Path) -> None:
         tool = TaskCreateTool(workdir=tmp_path)
-        result = tool.execute({
-            "description": "Multi-step task",
-            "tasks": ["Step 1", "Step 2", "Step 3"],
-        })
+        result = await tool.execute({"description": "New task"})
         parsed = json.loads(result)
-        assert parsed["description"] == "Multi-step task"
-        assert len(parsed["subtasks"]) == 3
-        assert parsed["subtasks"][0]["description"] == "Step 1"
-        assert parsed["subtasks"][0]["status"] == "open"
+        assert parsed["description"] == "New task"
         assert parsed["status"] == "open"
+        assert "id" in parsed
 
-    def test_workdir_none(self) -> None:
+    async def test_workdir_none(self) -> None:
         tool = TaskCreateTool(workdir=None)
-        result = tool.execute({"description": "Fail", "tasks": ["A"]})
+        result = await tool.execute({"description": "Should fail"})
         assert "Error" in result
         assert "workdir" in result
 
@@ -194,28 +161,26 @@ class TestTaskGetTool:
         tool = TaskGetTool(workdir=Path("/tmp"))
         assert isinstance(tool, Tool)
 
-    def test_task_get_existing(self, tmp_path: Path) -> None:
+    async def test_task_get_existing(self, tmp_path: Path) -> None:
+        # Create a task first
         create_tool = TaskCreateTool(workdir=tmp_path)
-        create_result = json.loads(create_tool.execute({
-            "description": "Find me",
-            "tasks": ["Sub 1"],
-        }))
+        create_result = json.loads(await create_tool.execute({"description": "Find me"}))
         task_id = create_result["id"]
 
         tool = TaskGetTool(workdir=tmp_path)
-        result = tool.execute({"task_id": task_id})
+        result = await tool.execute({"task_id": task_id})
         parsed = json.loads(result)
         assert parsed["description"] == "Find me"
 
-    def test_task_get_nonexistent(self, tmp_path: Path) -> None:
+    async def test_task_get_nonexistent(self, tmp_path: Path) -> None:
         tool = TaskGetTool(workdir=tmp_path)
-        result = tool.execute({"task_id": "nope1234"})
+        result = await tool.execute({"task_id": "nope1234"})
         assert "Task not found" in result
         assert "nope1234" in result
 
-    def test_workdir_none(self) -> None:
+    async def test_workdir_none(self) -> None:
         tool = TaskGetTool(workdir=None)
-        result = tool.execute({"task_id": "abc"})
+        result = await tool.execute({"task_id": "abc"})
         assert "Error" in result
 
 
@@ -233,24 +198,24 @@ class TestTaskListTool:
         tool = TaskListTool(workdir=Path("/tmp"))
         assert isinstance(tool, Tool)
 
-    def test_task_list_with_tasks(self, tmp_path: Path) -> None:
+    async def test_task_list_with_tasks(self, tmp_path: Path) -> None:
         create_tool = TaskCreateTool(workdir=tmp_path)
-        create_tool.execute({"description": "Task 1", "tasks": ["A"]})
-        create_tool.execute({"description": "Task 2", "tasks": ["B"]})
+        await create_tool.execute({"description": "Task 1"})
+        await create_tool.execute({"description": "Task 2"})
 
         tool = TaskListTool(workdir=tmp_path)
-        result = tool.execute({})
+        result = await tool.execute({})
         parsed = json.loads(result)
         assert len(parsed) == 2
 
-    def test_task_list_empty(self, tmp_path: Path) -> None:
+    async def test_task_list_empty(self, tmp_path: Path) -> None:
         tool = TaskListTool(workdir=tmp_path)
-        result = tool.execute({})
+        result = await tool.execute({})
         assert result == "[]"
 
-    def test_workdir_none(self) -> None:
+    async def test_workdir_none(self) -> None:
         tool = TaskListTool(workdir=None)
-        result = tool.execute({})
+        result = await tool.execute({})
         assert "Error" in result
 
 
@@ -268,55 +233,28 @@ class TestTaskUpdateTool:
         tool = TaskUpdateTool(workdir=Path("/tmp"))
         assert isinstance(tool, Tool)
 
-    def test_task_update_subtask(self, tmp_path: Path) -> None:
+    async def test_task_update(self, tmp_path: Path) -> None:
         create_tool = TaskCreateTool(workdir=tmp_path)
-        created = json.loads(create_tool.execute({
-            "description": "Parent",
-            "tasks": ["A", "B", "C"],
-        }))
+        created = json.loads(await create_tool.execute({"description": "Original"}))
 
         tool = TaskUpdateTool(workdir=tmp_path)
-        result = tool.execute({
+        result = await tool.execute({
             "task_id": created["id"],
-            "subtask_index": 1,
-            "status": "completed",
+            "description": "Updated",
+            "status": "in_progress",
         })
         parsed = json.loads(result)
-        assert parsed["subtasks"][1]["status"] == "completed"
-        assert parsed["subtasks"][0]["status"] == "open"
+        assert parsed["description"] == "Updated"
         assert parsed["status"] == "in_progress"
 
-    def test_task_update_subtask_invalid_index(self, tmp_path: Path) -> None:
-        create_tool = TaskCreateTool(workdir=tmp_path)
-        created = json.loads(create_tool.execute({
-            "description": "Parent",
-            "tasks": ["A"],
-        }))
-
+    async def test_task_update_nonexistent(self, tmp_path: Path) -> None:
         tool = TaskUpdateTool(workdir=tmp_path)
-        result = tool.execute({
-            "task_id": created["id"],
-            "subtask_index": 5,
-            "status": "completed",
-        })
-        assert "not found" in result.lower()
+        result = await tool.execute({"task_id": "nope", "description": "x"})
+        assert "not found" in result.lower() or "Task not found" in result
 
-    def test_task_update_nonexistent(self, tmp_path: Path) -> None:
-        tool = TaskUpdateTool(workdir=tmp_path)
-        result = tool.execute({
-            "task_id": "nope",
-            "subtask_index": 0,
-            "status": "in_progress",
-        })
-        assert "not found" in result.lower()
-
-    def test_workdir_none(self) -> None:
+    async def test_workdir_none(self) -> None:
         tool = TaskUpdateTool(workdir=None)
-        result = tool.execute({
-            "task_id": "abc",
-            "subtask_index": 0,
-            "status": "in_progress",
-        })
+        result = await tool.execute({"task_id": "abc"})
         assert "Error" in result
 
 
@@ -334,40 +272,21 @@ class TestTaskCompleteTool:
         tool = TaskCompleteTool(workdir=Path("/tmp"))
         assert isinstance(tool, Tool)
 
-    def test_task_complete_single_subtask(self, tmp_path: Path) -> None:
+    async def test_task_complete(self, tmp_path: Path) -> None:
         create_tool = TaskCreateTool(workdir=tmp_path)
-        created = json.loads(create_tool.execute({
-            "description": "Parent",
-            "tasks": ["A", "B"],
-        }))
+        created = json.loads(await create_tool.execute({"description": "Complete me"}))
 
         tool = TaskCompleteTool(workdir=tmp_path)
-        result = tool.execute({"task_id": created["id"], "subtask_index": 0})
-        parsed = json.loads(result)
-        assert parsed["subtasks"][0]["status"] == "completed"
-        assert parsed["subtasks"][1]["status"] == "open"
-        assert parsed["status"] == "in_progress"
-
-    def test_task_complete_all_subtasks_completes_parent(self, tmp_path: Path) -> None:
-        create_tool = TaskCreateTool(workdir=tmp_path)
-        created = json.loads(create_tool.execute({
-            "description": "Parent",
-            "tasks": ["A", "B"],
-        }))
-
-        tool = TaskCompleteTool(workdir=tmp_path)
-        tool.execute({"task_id": created["id"], "subtask_index": 0})
-        result = tool.execute({"task_id": created["id"], "subtask_index": 1})
+        result = await tool.execute({"task_id": created["id"]})
         parsed = json.loads(result)
         assert parsed["status"] == "completed"
-        assert all(s["status"] == "completed" for s in parsed["subtasks"])
 
-    def test_task_complete_nonexistent(self, tmp_path: Path) -> None:
+    async def test_task_complete_nonexistent(self, tmp_path: Path) -> None:
         tool = TaskCompleteTool(workdir=tmp_path)
-        result = tool.execute({"task_id": "nope", "subtask_index": 0})
-        assert "not found" in result.lower()
+        result = await tool.execute({"task_id": "nope"})
+        assert "not found" in result.lower() or "Task not found" in result
 
-    def test_workdir_none(self) -> None:
+    async def test_workdir_none(self) -> None:
         tool = TaskCompleteTool(workdir=None)
-        result = tool.execute({"task_id": "abc", "subtask_index": 0})
+        result = await tool.execute({"task_id": "abc"})
         assert "Error" in result

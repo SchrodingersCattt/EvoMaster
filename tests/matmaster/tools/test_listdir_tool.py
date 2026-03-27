@@ -37,13 +37,13 @@ class TestListDirToolBasic:
 class TestListDirToolExecution:
     """ListDirTool execution."""
 
-    def test_normal_path_returns_listing(self, mock_session: MagicMock) -> None:
+    async def test_normal_path_returns_listing(self, mock_session: MagicMock) -> None:
         tool = ListDirTool(session=mock_session)
-        result = tool.execute({"path": "/some/dir"})
+        result = await tool.execute({"path": "/some/dir"})
         assert "file.txt" in result
         mock_session.exec_bash.assert_called_once()
 
-    def test_error_exit_code_returns_error_message(
+    async def test_error_exit_code_returns_error_message(
         self, mock_session: MagicMock
     ) -> None:
         mock_session.exec_bash.return_value = {
@@ -52,17 +52,17 @@ class TestListDirToolExecution:
             "working_dir": "/workspace",
         }
         tool = ListDirTool(session=mock_session)
-        result = tool.execute({"path": "/nonexistent"})
+        result = await tool.execute({"path": "/nonexistent"})
         assert "Error" in result
 
-    def test_default_path_is_dot(self, mock_session: MagicMock) -> None:
+    async def test_default_path_is_dot(self, mock_session: MagicMock) -> None:
         tool = ListDirTool(session=mock_session)
-        tool.execute({})
+        await tool.execute({})
         call_kwargs = mock_session.exec_bash.call_args
         command_sent = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert '"."' in command_sent or "'.'" in command_sent
 
-    def test_session_not_injected_returns_error(self) -> None:
+    async def test_session_not_injected_returns_error(self) -> None:
         tool = ListDirTool()
-        result = tool.execute({"path": "/some/dir"})
+        result = await tool.execute({"path": "/some/dir"})
         assert "Error:" in result
