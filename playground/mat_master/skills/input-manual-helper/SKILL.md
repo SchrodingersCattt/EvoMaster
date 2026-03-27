@@ -1,32 +1,35 @@
 ---
 name: input-manual-helper
-description: "Parameter-dispatch engine for CP2K, QE, ABINIT, LAMMPS, ORCA, PySCF. LLM outputs overrides and paths; prepare_* MCP tools generate inputs (PySCF uses run_pyscf direct run). Route by engine capability; validate by physical-sense review. Structure files must be pymatgen-instanceable."
+description: "Input preparation for DFT/MD codes: CP2K, QE, ABINIT, LAMMPS, ORCA (via prepare_* MCP tools); ABACUS (via render_input.py/diagnose_input.py scripts); PySCF (direct run). Dispatch parameters and paths; do not hand-write input contents. Validate by physical-sense review. Structure files must be pymatgen-instanceable or XYZ format."
 skill_type: operator
-mcp_server: mat_binary_calc
 ---
 
 # Input Manual Helper Skill
 
-> **Skip condition**: If the user has already provided a complete, ready-to-run input file for the target software (and it needs no further modification), **skip this skill entirely** and submit: for **GROMACS** use MCP **`mat_binary_calc_submit_run_gromacs`** then **`monitor_job`**; for CP2K/QE/ABINIT/LAMMPS/ORCA go to **`bohrium-job`**.
+> **Skip condition**: If the user has already provided a complete, ready-to-run input file for the target software (and it needs no further modification), **skip this skill entirely** and submit: for all supported software (CP2K/QE/ABINIT/LAMMPS/ORCA/GROMACS/ABACUS/PyATB), go to **`bohrium-job`** skill and submit via `submit_job.py --input-dir <dir> --cmd "<command>"`.
 
-Generate or adapt input files for computational software by **dispatching parameters and paths** to the appropriate prepare_* MCP tool. Do not hand-write or text-edit input file contents for software that has a prepare_* tool; use overrides and structure_file/template paths instead.
+Generate or adapt input files for computational software by **dispatching parameters and paths** to the appropriate tool pathway:
+- **prepare_* MCP tools** (CP2K, QE, ABINIT, LAMMPS, ORCA): Do not hand-write input contents; use overrides and structure_file/template paths.
+- **ABACUS**: Use `render_input.py` and `diagnose_input.py` scripts (within this skill) to generate INPUT / STRU / KPT files.
+- **PySCF**: Write Python script directly; no input file generation needed — see PySCF section below.
 
 ## Routing by engine
 
-| Engine | Route type | input_file | structure_file |
-|--------|------------|------------|----------------|
-| ABINIT (program=abinit) | Direct generation | Optional | Must be pymatgen-readable |
-| QE pw.x | Direct generation | Optional | Must be pymatgen-readable |
-| CP2K | Placeholder injection | Optional (use cp2k/minimal_periodic.inp if user provides none) | pymatgen-readable |
-| ORCA | Flexible | Optional (see ORCA modes below) | pymatgen-readable |
-| LAMMPS | Data decoupled | Optional | pymatgen-readable (prepare generates .data) |
-| PySCF | Direct run (no prepare) | N/A | XYZ recommended; pymatgen-readable fallback |
+| Engine | Route type | Pathway |
+|--------|------------|---------|
+| ABINIT | Direct generation | MCP `prepare_abinit_job` |
+| QE pw.x | Direct generation | MCP `prepare_qe_job` |
+| CP2K | Placeholder injection | MCP `prepare_cp2k_job` |
+| ORCA | Flexible | MCP `prepare_orca_job` |
+| LAMMPS | Data decoupled | MCP `prepare_lammps_job` |
+| **ABACUS** | **Local scripts** | **`render_input.py` + `diagnose_input.py`** |
+| PySCF | Direct run (no prepare) | Write Python script; submit via `bohrium-job` |
 
-Use the MCP tool schema as the source of truth for parameters; the table above is context only.
+Use the MCP tool schema (for prepare_* tools) or script help (for ABACUS) as the source of truth; the table above is context only.
 
 ### ORCA input modes
 
-ORCA's `prepare_orca_job` supports three input modes:
+ORCA's `prepare_orca_job` MCP tool supports three input modes:
 
 | Mode | input_file | structure_file | Behaviour |
 |------|------------|----------------|-----------|
@@ -34,61 +37,124 @@ ORCA's `prepare_orca_job` supports three input modes:
 | Template only | Provided (template with inline coordinates) | Optional / omitted | Parameters and inline coords are modified in place |
 | Structure only | Omitted | Provided | Tool builds a minimal input from scratch using the structure; falls back to `orca/minimal_molecule.inp` as the base |
 
-When `input_file` is omitted, use `orca/minimal_molecule.inp` as the fallback template or let the tool build from scratch if the schema supports it. When the user supplies an existing `.inp` with inline coordinates (no placeholder), pass it as `input_file` without a separate `structure_file`.
+When `input_file` is omitted, use `orca/minimal_molecule.inp` as the fallback template. When the user supplies an existing `.inp` with inline coordinates (no placeholder), pass it as `input_file` without a separate `structure_file`.
 
-### PySCF (run_pyscf)
+### ABACUS input generation (render_input.py + diagnose_input.py)
 
-PySCF is invoked via the **run_pyscf** MCP tool (direct run). There is no prepare_* step and no validate_input gate; call `run_pyscf` with `structure_file` and parameters.
+ABACUS uses **three input files**: `INPUT` (computation parameters), `STRU` (atomic structure), and `KPT` (k-point sampling).
 
-- **structure_file**: Path to molecular structure. XYZ is preferred; other formats readable by pymatgen (e.g. CIF, POSCAR-style) are supported.
-- **task**: `"single_point"` | `"optimize"` | `"tddft"` (frequency not implemented).
-- **charge** (int): Total charge. **spin** (int): 2S (unpaired electrons).
-- **method**: `"DFT"` | `"HF"` | `"MP2"` | `"TDHF"`. For DFT, set **functional** (e.g. `"B3LYP"`). **basis**: e.g. `"def2-SVP"`.
-- **properties** (optional list): Subset of `["energy","dipole","mo_energies","homo_energy","lumo_energy","gap","density_matrix","mulliken_population"]`; default `["energy"]`.
-- **scf** (optional dict): SCF overrides, e.g. `max_cycle`, `conv_tol`, `level_shift`, `diis_space`.
-- **response** (optional dict): For `task="tddft"`, e.g. `{"n_states": 10}`.
-- **work_dir** (optional): Output directory; defaults to `structure_file.parent`. **log_file** (optional): Log filename; default `"pyscf.log"` in work_dir.
+**Generate and diagnose inputs using local scripts:**
 
-Returns: `success`, `code`, `command`, `stdout`, `stderr`, `log_file` (Path), `properties` (dict of computed values), `result_files` (e.g. `optimized_structure`, `tddft_summary`, `density_matrix`, `mulliken`). For MP2 single_point, see `energy_mp2_corr_h` / `energy_mp2_total_h`; for TDDFT, see `tddft_summary` and `n_excitations`.
+```bash
+# Generate INPUT file from templates and user parameters
+uv run python scripts/render_input.py --software abacus --task scf --output INPUT
+
+# Validate physical-sense parameters
+uv run python scripts/diagnose_input.py --software abacus --input INPUT
+```
+
+**Required files to provide:**
+- `INPUT` — generated by `render_input.py`; contains computation parameters (scf/band/md, basis_type, functional, cutoffs, etc.).
+- `STRU` — atomic structure file; must be in a format readable by pymatgen (CIF, POSCAR) or in ABACUS native `.stru` format; script will embed structure into ABACUS template.
+- `KPT` — k-point sampling file (Monkhorst-Pack or high-symmetry path).
+- Pseudopotential files (`.upf`) — one per element; place in input directory.
+- Orbital files (`.orb`, for LCAO basis) — place in input directory; download from [ABACUS orbital repository](http://abacus.deepmodeling.com/orbitals/).
+
+**After generation and diagnosis:**
+- Place INPUT, STRU, KPT, pseudopotentials, and orbital files in one directory.
+- Submit via `bohrium-job` skill with `submit_job.py --input-dir <dir> --image registry.dp.tech/dptech/abacus:3.7.5 --cmd "OMP_NUM_THREADS=4 mpirun -np 8 abacus > log 2>&1"`.
+
+### PySCF (direct Python script)
+
+PySCF jobs are Python scripts; no input-file generation is needed. Write the calculation script directly and submit via `bohrium-job`.
+
+**Example PySCF workflow:**
+1. Write Python script (e.g. `run_pyscf.py`) that imports PySCF, loads structure, and runs the calculation.
+2. Example parameters (pass to PySCF API directly):
+   - `structure_file`: Path to molecular structure (XYZ is preferred; CIF/POSCAR also work).
+   - `task`: `"single_point"` | `"optimize"` | `"tddft"`.
+   - `charge` (int): Total charge. `spin` (int): 2S (unpaired electrons).
+   - `method`: `"DFT"` | `"HF"` | `"MP2"` | `"TDHF"`. For DFT, set `functional` (e.g. `"B3LYP"`), `basis` (e.g. `"def2-SVP"`).
+   - `properties` (optional): Subset of `["energy","dipole","mo_energies","homo_energy","lumo_energy","gap","density_matrix","mulliken_population"]`.
+3. Place script and structure file in one directory.
+4. Submit via `bohrium-job` skill with `submit_job.py --input-dir <dir> --image <pyscf_image> --cmd "python run_pyscf.py > log 2>&1"`.
 
 ## Structure file format
 
-`structure_file` must be in a format pymatgen can instantiate: e.g. CIF (`.cif`), VASP POSCAR/CONTCAR (no extension or `.vasp`), XYZ (`.xyz`), Materials Project JSON. LAMMPS `.data` is produced by prepare_lammps_job from the structure file; do not pass .data as structure_file. Do not use proprietary or single-software-only formats as the generic structure input.
+For **prepare_* MCP tools** and **ABACUS**: `structure_file` must be in a format pymatgen can instantiate, e.g. CIF (`.cif`), VASP POSCAR/CONTCAR (no extension or `.vasp`), or ABACUS native `.stru` format. For **PySCF**: XYZ (`.xyz`) is preferred; pymatgen-readable formats also work. Do not use proprietary or single-software-only formats as the generic structure input.
 
-## Workflow
+## Workflow for prepare_* codes (CP2K, QE, ABINIT, LAMMPS, ORCA)
 
-1. **Choose software and task type** — Determine which prepare_* tool (or run_pyscf for PySCF) applies from the routing table and MCP schema. For PySCF, skip steps 2–6 and call **run_pyscf** with structure_file and parameters only.
-0. **User-provided ready file check (exit early)** — Before doing anything else, check whether the user has already provided a complete, ready-to-run input file. If yes (file exists in the workspace, no structural changes or parameter overrides are required), **stop here**: do NOT call prepare_*, do NOT run validate_input.py. For **GROMACS**, use **`mat_binary_calc_submit_run_gromacs`** + **`monitor_job`**. For CP2K/QE/ABINIT/LAMMPS/ORCA, go to **`bohrium-job`** and pass the directory as `--input-dir`.
+1. **Choose software and task type** — Determine which prepare_* tool applies from the routing table.
+2. **User-provided ready file check (exit early)** — Before doing anything else, check whether the user has already provided a complete, ready-to-run input file. If yes (file exists in the workspace, no structural changes or parameter overrides are required), **stop here**: do NOT call prepare_*, do NOT run validate_input.py. For all software, go to **`bohrium-job`** skill and pass the directory as `--input-dir`.
+3. **Resolve template** — For CP2K, obtain an input template (user-provided or `get_reference`). For ORCA, determine the input mode: template+structure, template-only (inline coords), or structure-only (omit input_file). Use `get_reference` for a suitable ORCA template when needed.
+4. **Confirm structure_file** — Ensure the structure path exists and is pymatgen-instanceable; do not assume formats the engine cannot read.
+5. **Build overrides** — Set physical parameters (cutoff, functional, k-points, etc.) via the overrides dict exposed by the prepare_* schema; do not inject them by editing the template text.
+6. **Call prepare_*** — Invoke the prepare_* MCP tool with input_file (template path), structure_file (when applicable), and overrides.
+7. **Validate once** — Run `validate_input.py --input_file <path> --software <name>`. Validation is **physical-sense review**: check that key parameters are in a reasonable range, functional matches the system, and required sections are present. If something looks wrong, use ask_human; on timeout, treat as pass and proceed. The script exits 0 so submit is allowed.
 
-1. **Choose software and task type** — Determine which prepare_* tool applies from the routing table and MCP schema.
-2. **Resolve template** — For CP2K, obtain an input template (user-provided or get_reference). For ORCA, determine the input mode: template+structure, template-only (inline coords), or structure-only (omit input_file). Use get_reference for a suitable ORCA template when needed (e.g. `orca/minimal_molecule.inp`, `orca/std_dft.inp`).
-3. **Confirm structure_file** — Ensure the structure path exists and is pymatgen-instanceable; do not assume formats the engine cannot read.
-4. **Build overrides** — Set physical parameters (cutoff, functional, k-points, etc.) via the overrides dict exposed by the prepare_* schema; do not inject them by editing the template text.
-5. **Call prepare_*** — Invoke the prepare_* MCP tool with input_file (template path), structure_file (when applicable), and overrides.
-6. **Validate once** — Run `validate_input.py --input_file <path> --software <name>`. Validation is **physical-sense review**: check that key parameters are in a reasonable range, functional matches the system, and required sections are present. If something looks wrong, use ask_human; on timeout, treat as pass and proceed. The script exits 0 so submit is allowed.
+## Workflow for ABACUS
+
+1. **Collect parameters** — Determine task (scf/band/md), basis_type (lcao/pw), functional, k-points, cutoff, and other ABACUS-specific settings from user input.
+2. **Generate INPUT** — Run `render_input.py --software abacus --task <task> --output INPUT` to create the INPUT file with overrides.
+3. **Diagnose INPUT** — Run `diagnose_input.py --software abacus --input INPUT` to validate parameter ranges and consistency.
+4. **Prepare STRU/KPT** — Ensure STRU (atomic structure) and KPT (k-points) files exist; generate from user-provided structure if needed.
+5. **Gather auxiliary files** — Place pseudopotential (.upf) and orbital (.orb) files in the same directory.
+6. **Submit** — Use `bohrium-job` skill (`submit_job.py --input-dir <dir> --image registry.dp.tech/dptech/abacus:3.7.5 --cmd "..."`).
+
+## Workflow for PySCF
+
+1. **Write Python script** — Create `run_pyscf.py` (or similar) that imports PySCF, loads the structure, sets parameters (charge, spin, method, basis, etc.), and runs the calculation.
+2. **Prepare structure** — Place structure file (XYZ or other pymatgen-readable format) in the same directory.
+3. **Submit** — Use `bohrium-job` skill (`submit_job.py --input-dir <dir> --image <pyscf_image> --cmd "python run_pyscf.py > log 2>&1"`).
+4. **No validation step** — PySCF scripts are Python code, not static input files; validation is implicit in the script logic.
 
 ## Scripts
+
+### For prepare_* tools (CP2K, QE, ABINIT, LAMMPS, ORCA)
 
 - **list_references.py** — List available reference templates by software.
 - **get_reference** (via use_skill) — Fetch template content by name (e.g. `cp2k/minimal_periodic.inp`, `orca/minimal_molecule.inp`, `abinit/gs_scf.abi`, `lammps/gcmc_adsorption.lammps`).
 - **validate_input.py** — Run after prepare. Reads the prepared file and exits 0; you perform a physical-sense review. If doubtful, ask_human; on timeout, pass. Do not skip this step when submitting jobs for software covered by the validation gate.
 
+### For ABACUS (local scripts)
+
+- **render_input.py** — Generate INPUT file from template and parameters; usage: `python render_input.py --software abacus --task <scf|band|md> --output INPUT [--overrides <json>]`.
+- **diagnose_input.py** — Validate INPUT file; usage: `python diagnose_input.py --software abacus --input INPUT [--json_out diag.json]`.
+- **complete_param.py** — (Optional) Auto-complete ABACUS parameters based on context.
+
 ## Physical checks to consider (not a procedure)
 
+For **prepare_* codes**:
 - Cutoff energy and grid settings appropriate for the basis and system size.
 - Functional choice consistent with the system (e.g. hybrid for band gaps, meta-GGA when needed).
 - K-point sampling consistent with cell size and symmetry.
 - Required blocks or keywords present and not contradictory (e.g. SCF convergence, geometry/MD settings).
 
+For **ABACUS**:
+- Basis type (LCAO vs PW) and cutoff consistent with system and available orbitals.
+- Functional and k-point density appropriate.
+- Ensure pseudopotential and orbital files match the basis type and system.
+
 Use domain judgment; do not follow a fixed checklist.
 
 ## Knowledge source
 
-When a parameter or keyword is uncertain, use **official documentation** with a site-restricted search (e.g. site:manual.cp2k.org, site:docs.lammps.org). Do not re-query the same path that already returned no useful result.
+When a parameter or keyword is uncertain, use **official documentation** with a site-restricted search:
+- CP2K: site:manual.cp2k.org
+- QE: site:www.quantum-espresso.org/Doc/
+- ABINIT: site:docs.abinit.org
+- LAMMPS: site:docs.lammps.org
+- ORCA: site:www.faccts.de/docs/orca/ or site:orca-manual.mpi-muelheim.mpg.de
+- ABACUS: site:abacus.deepmodeling.com
+
+Do not re-query the same path that already returned no useful result.
 
 ## Principles
 
-- **Do not** directly edit .inp, .in, .abi, or other input file text for software that has a prepare_* MCP tool; use overrides and template/structure paths only.
+- **Do not** directly edit .inp, .in, .abi, .lammps, or other input file text for software that has a prepare_* MCP tool; use overrides and template/structure paths only.
 - **Do not** assume prepare tools have fixed capabilities; read the current MCP tool schema.
 - **Gaussian / PSI4**: No prepare_* tool yet; use reference templates as the final input and do not apply the prepare-only workflow or the validation gate to them.
-- **PySCF**: Use **run_pyscf** only; no prepare_* or validate_input. Structure_file (XYZ or pymatgen-readable) and parameters are passed directly to the tool.
+- **PySCF**: Write Python scripts directly; no prepare_* workflow or validate_input step. Pass structure_file (XYZ or pymatgen-readable) and parameters directly to the script.
+- **ABACUS**: Use `render_input.py` and `diagnose_input.py` local scripts; gather STRU, KPT, pseudopotential, and orbital files; submit via `bohrium-job`.
+- All software (prepare_* / ABACUS / PySCF / GROMACS / PyATB) submit via **`bohrium-job`** skill when ready; there are no MCP submit tools for this class of workload.
