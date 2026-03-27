@@ -30,7 +30,7 @@ class SkillHitHook(BaseHook):
         self._bus = bus
         self._source = source
 
-    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
+    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         """Emit SkillHitEvent if tool is use_skill with a valid skill_name."""
         if tool_call.name != _SKILL_TOOL_NAME:
             return

@@ -31,7 +31,7 @@ class AssistantStateHook(BaseHook):
         self._bus = bus
         self._source = source
 
-    def pre_llm_call(self, messages: list[Message], turn: int) -> None:
+    async def pre_llm_call(self, messages: list[Message], turn: int) -> None:
         """Emit AssistantStateEvent if last AssistantMessage has tool_calls."""
         last_assistant = self._find_last_assistant(messages)
         if last_assistant is None:
