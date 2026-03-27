@@ -60,6 +60,23 @@ uv run python scripts/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
 
 筛选与 **`playground/mat_master/evaluation/config.yaml`** 一致（`--eval-config`、`--capabilities`、`--questions` 等）；详见脚本 **`--help`**。
 
+**默认**在跑完后同目录生成 **`claude_review.md`**（单文件汇总，便于 **@** Claude）。不需要再跑第二个命令。
+
+```bash
+# 跳过自动生成 Markdown
+uv run python scripts/run_devshell_eval.py --limit 3 --no-export-review
+
+# 生成 claude_review.md 时附带题库 human_prompt_seed
+uv run python scripts/run_devshell_eval.py --limit 3 --export-review-with-questions
+```
+
+仅补生成或重跑打包时：
+
+```bash
+uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_YYYYMMDD_HHMMSS
+uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_* --with-questions
+```
+
 ## CLI 参数（`repl` 与 `run` 共用）
 
 | 参数 | 必选 | 说明 |
