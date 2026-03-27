@@ -123,7 +123,7 @@ class SkillTool:
 
         except Exception as e:
             logger.error('Skill tool execution failed: %s', e, exc_info=True)
-            return f"Error: {e}"
+            return f'Error: {e}'
 
     # -- get_info -----------------------------------------------------------
 
@@ -146,7 +146,7 @@ class SkillTool:
                     if dep_mcp:
                         self._on_skill_hit(dep_mcp)
 
-        return f"# Skill: {skill.meta_info.name}\n\n{full_info}"
+        return f'# Skill: {skill.meta_info.name}\n\n{full_info}'
 
     # -- get_reference ------------------------------------------------------
 
@@ -156,7 +156,7 @@ class SkillTool:
 
         try:
             content = skill.get_reference(reference_name)
-            observation = f"# Reference: {reference_name}\n\n{content}"
+            observation = f'# Reference: {reference_name}\n\n{content}'
 
             co_hint = self._get_co_template_hint(skill, reference_name)
             if co_hint:
@@ -167,9 +167,9 @@ class SkillTool:
         except FileNotFoundError as e:
             full_info = skill.get_full_info()
             return (
-                f"Error: {e}\n\n"
-                f"Fallback to skill info:\n\n"
-                f"# Skill: {skill.meta_info.name}\n\n{full_info}"
+                f'Error: {e}\n\n'
+                f'Fallback to skill info:\n\n'
+                f'# Skill: {skill.meta_info.name}\n\n{full_info}'
             )
 
     def _get_co_template_hint(
@@ -218,7 +218,7 @@ class SkillTool:
                 'Related templates you should ALSO fetch (use get_reference for each):'
             )
             for r in related:
-                lines.append(f"  - {r}")
+                lines.append(f'  - {r}')
         lines.append(
             'Do NOT skip fetching related templates. Do NOT try to manually '
             'construct these sections by querying the manual.'
@@ -280,11 +280,11 @@ class SkillTool:
         stderr = result.get('stderr', '')
         exit_code = result.get('exit_code', 0)
 
-        output = f"Script output:\n{stdout}"
+        output = f'Script output:\n{stdout}'
         if stderr:
-            output += f"\n\nStderr:\n{stderr}"
+            output += f'\n\nStderr:\n{stderr}'
         if exit_code != 0:
-            output += f"\n\nExit code: {exit_code}"
+            output += f'\n\nExit code: {exit_code}'
 
         # Auto-inject per-mode prompt
         prompts_dir = skill.skill_path / 'prompts'
@@ -294,15 +294,15 @@ class SkillTool:
             except ValueError:
                 tokens = script_args.strip().split()
             for token in tokens:
-                candidate = prompts_dir / f"{token}.md"
+                candidate = prompts_dir / f'{token}.md'
                 if candidate.exists():
                     try:
                         prompt_content = candidate.read_text(encoding='utf-8')
                         output += (
                             f"\n\n{'=' * 60}\n"
-                            f"MANDATORY WORKFLOW (auto-loaded: prompts/{token}.md):\n"
+                            f'MANDATORY WORKFLOW (auto-loaded: prompts/{token}.md):\n'
                             f"{'=' * 60}\n\n"
-                            f"{prompt_content}"
+                            f'{prompt_content}'
                         )
                     except Exception:
                         pass
@@ -349,13 +349,13 @@ class SkillTool:
             suffix = script_path.suffix
             if suffix == '.py':
                 cmd = (
-                    f"PYTHONPATH={shlex.quote(remote_root)} "
-                    f"python {shlex.quote(remote_script)}"
+                    f'PYTHONPATH={shlex.quote(remote_root)} '
+                    f'python {shlex.quote(remote_script)}'
                 )
             elif suffix == '.sh':
-                cmd = f"bash {shlex.quote(remote_script)}"
+                cmd = f'bash {shlex.quote(remote_script)}'
             elif suffix == '.js':
-                cmd = f"node {shlex.quote(remote_script)}"
+                cmd = f'node {shlex.quote(remote_script)}'
             else:
                 return f"echo 'Error: Unsupported script type: {suffix}'"
         else:
@@ -364,12 +364,12 @@ class SkillTool:
             if suffix == '.py':
                 py_prefix = ''
                 if project_root is not None:
-                    py_prefix = f"PYTHONPATH={shlex.quote(str(project_root))} "
-                cmd = f"{py_prefix}python {shlex.quote(str(script_path))}"
+                    py_prefix = f'PYTHONPATH={shlex.quote(str(project_root))} '
+                cmd = f'{py_prefix}python {shlex.quote(str(script_path))}'
             elif suffix == '.sh':
-                cmd = f"bash {shlex.quote(str(script_path))}"
+                cmd = f'bash {shlex.quote(str(script_path))}'
             elif suffix == '.js':
-                cmd = f"node {shlex.quote(str(script_path))}"
+                cmd = f'node {shlex.quote(str(script_path))}'
             else:
                 return f"echo 'Error: Unsupported script type: {suffix}'"
 
