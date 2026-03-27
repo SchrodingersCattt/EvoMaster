@@ -63,10 +63,10 @@ class ToolRegistry:
         self._tools[tool.name] = tool
         self._sources[tool.name] = source
 
-    def execute(self, name: str, arguments: dict[str, Any]) -> ToolResult:
+    async def execute(self, name: str, arguments: dict[str, Any]) -> ToolResult:
         """Dispatch execution to the named tool.
 
-        Returns error string if tool name not found, listing available tools.
+        Returns error ToolResult if tool name not found, listing available tools.
         """
         tool = self._tools.get(name)
         if tool is None:
@@ -75,7 +75,8 @@ class ToolRegistry:
                 status="error",
                 content=f"Error: Tool '{name}' not found. Available: {available}",
             )
-        return normalize_tool_result(tool.execute(arguments))
+        result = await tool.execute(arguments)
+        return normalize_tool_result(result)
 
     def get_tool_definitions(self) -> list[dict[str, Any]]:
         """Return tool definitions in OpenAI function calling format."""
