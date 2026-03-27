@@ -53,7 +53,7 @@ tools:
 banks:
   - path: "batch_processing/bp_struct.yaml"
     capability: "batch_processing"
-    questions: 2
+    questions: 5
 
   - path: "data_diagnosis/dd_general.yaml"
     capability: "data_diagnosis"
@@ -91,4 +91,4 @@ banks:
     capability: "safety_refusal"
     questions: 4
 
-# Total: 30 questions across 10 bank files
+# Total: 33 questions across 10 bank files
