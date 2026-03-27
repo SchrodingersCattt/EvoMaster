@@ -40,10 +40,7 @@ def _get_backend(software: str):
     if key not in backends:
         supported = ", ".join(sorted(set(backends.keys())))
         print(
-            (
-                f"Error: unsupported software '{software}'. "
-                f"Supported: {supported}"
-            ),
+            (f"Error: unsupported software '{software}'. " f"Supported: {supported}"),
             file=sys.stderr,
         )
         sys.exit(1)
@@ -56,10 +53,7 @@ def _parse_params(param_list: list[str]) -> dict:
     for item in param_list:
         if "=" not in item:
             print(
-                (
-                    f"Warning: ignoring malformed param '{item}' "
-                    "(expected KEY=VALUE)"
-                ),
+                (f"Warning: ignoring malformed param '{item}' " "(expected KEY=VALUE)"),
                 file=sys.stderr,
             )
             continue
@@ -95,8 +89,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(
         description=(
-            "Generate a calculation input file for the specified "
-            "software and task."
+            "Generate a calculation input file for the specified " "software and task."
         )
     )
     parser.add_argument(
@@ -108,8 +101,7 @@ def main() -> None:
         "--task",
         default="scf",
         help=(
-            "Task type (default: scf). Examples: scf, opt, md, sp, "
-            "relax, minimize"
+            "Task type (default: scf). Examples: scf, opt, md, sp, " "relax, minimize"
         ),
     )
     parser.add_argument(
