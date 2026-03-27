@@ -242,6 +242,10 @@ def _run_agent_sync(
         )
         agent.set_agent_name(getattr(base, '_agent_name', 'default'))
         agent._stop_event = stop_event
+        if base.session is not None:
+            base.session._stop_event = stop_event
+        for tool in getattr(base, 'tools', []) or []:
+            tool._stop_event = stop_event
         if ask_human_queue is not None:
             attach_ask_human_on_agent(
                 agent,

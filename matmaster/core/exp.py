@@ -282,14 +282,14 @@ class Exp:
     ) -> KernelResult:
         """build_runtime -> kernel.run -> cleanup."""
         runtime = self.build_runtime(ctx, bus=bus, skills=skills, mcp=mcp)
-        # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
+        if ctx.session is not None:
+            ctx.session._stop_event = stop_event
+
+        # Inject stop_event into tools for cancel propagation.
         tool_registry = getattr(runtime.spec, 'tool_registry', None)
         if stop_event is not None and tool_registry is not None:
-            from matmaster.tools.builtin.spawn_tool import SpawnTool
-
             for tool in tool_registry.all_tools:
-                if isinstance(tool, SpawnTool):
-                    tool._stop_event = stop_event
+                tool._stop_event = stop_event
         try:
             result = runtime.kernel.run(
                 runtime.spec, task, history=history, stop_event=stop_event

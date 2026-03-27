@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -215,6 +217,7 @@ class LocalEnv(BaseEnv):
         command: str,
         timeout: int | None = None,
         workdir: str | None = None,
+        stop_event: Any | None = None,
     ) -> dict[str, Any]:
         """在本地执行命令
 
@@ -276,30 +279,60 @@ class LocalEnv(BaseEnv):
         final_command = f"{cpu_prefix}{command}" if cpu_prefix else command
 
         try:
-            result = subprocess.run(
+            process = subprocess.Popen(
                 final_command,
                 shell=True,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding='utf-8',
                 errors='replace',
-                timeout=timeout,
                 cwd=cwd,
                 env=env,
+                start_new_session=(sys.platform != 'win32'),
             )
-            return {
-                'stdout': result.stdout or '',
-                'stderr': result.stderr or '',
-                'exit_code': result.returncode,
-                'output': (result.stdout or '') + (result.stderr or ''),
-            }
-        except subprocess.TimeoutExpired:
-            return {
-                'stdout': '',
-                'stderr': f"Command timed out after {timeout}s",
-                'exit_code': -1,
-                'output': f"Command timed out after {timeout}s",
-            }
+            deadline = time.time() + timeout
+            while True:
+                if stop_event is not None and getattr(stop_event, 'is_set', None):
+                    if stop_event.is_set():
+                        self._terminate_process(process)
+                        stdout, stderr = process.communicate(timeout=5)
+                        stderr = (stderr or '').strip()
+                        cancel_note = 'Command cancelled by stop request.'
+                        stderr = (
+                            f'{stderr}\n{cancel_note}'.strip()
+                            if stderr
+                            else cancel_note
+                        )
+                        return {
+                            'stdout': stdout or '',
+                            'stderr': stderr,
+                            'exit_code': 130,
+                            'output': (stdout or '') + stderr,
+                        }
+                if process.poll() is not None:
+                    stdout, stderr = process.communicate()
+                    return {
+                        'stdout': stdout or '',
+                        'stderr': stderr or '',
+                        'exit_code': process.returncode,
+                        'output': (stdout or '') + (stderr or ''),
+                    }
+                if time.time() >= deadline:
+                    self._terminate_process(process)
+                    stdout, stderr = process.communicate(timeout=5)
+                    timeout_msg = f'Command timed out after {timeout}s'
+                    stderr = (stderr or '').strip()
+                    stderr = (
+                        f'{stderr}\n{timeout_msg}'.strip() if stderr else timeout_msg
+                    )
+                    return {
+                        'stdout': stdout or '',
+                        'stderr': stderr,
+                        'exit_code': -1,
+                        'output': (stdout or '') + stderr,
+                    }
+                time.sleep(0.2)
         except Exception as e:
             return {
                 'stdout': '',
@@ -307,6 +340,26 @@ class LocalEnv(BaseEnv):
                 'exit_code': -1,
                 'output': str(e),
             }
+
+    def _terminate_process(self, process: subprocess.Popen[str]) -> None:
+        """Terminate a local command and its children best-effort."""
+        try:
+            if sys.platform != 'win32':
+                os.killpg(process.pid, signal.SIGTERM)
+            else:
+                process.terminate()
+            process.wait(timeout=3)
+            return
+        except Exception:
+            pass
+
+        try:
+            if sys.platform != 'win32':
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except Exception:
+            pass
 
     def upload_file(self, local_path: str, remote_path: str) -> None:
         """上传文件到本地环境

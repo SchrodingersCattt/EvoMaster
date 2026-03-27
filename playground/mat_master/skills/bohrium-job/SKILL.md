@@ -170,17 +170,19 @@ Use the `skuEnName` value as the `--machine` argument to `submit_job.py`.
 
 | Item | Value |
 |------|-------|
-| Image | `registry.dp.tech/dptech/abacus:3.7.5` |
+| Image | `registry.dp.tech/dptech/abacus:LTSv3.10.1` |
 | Machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
-| Command | `OMP_NUM_THREADS=4 mpirun -np 8 abacus > log 2>&1` |
+| Command | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |
 
+> Pure MPI: `OMP_NUM_THREADS=1`, and `-np` = **half the CPU core count** of the chosen machine (here 32 → 16). If you use another `--machine`, set `-np` to `floor(cores / 2)` accordingly.
+>
 > ABACUS input files are prepared via the **input-manual-helper** skill:
 > ```bash
 > uv run python scripts/render_input.py --software abacus --task scf --output INPUT
 > uv run python scripts/diagnose_input.py --software abacus --input INPUT
 > ```
 > Place `INPUT`, `STRU`, `KPT`, pseudopotential files (`.upf`), and orbital files (`.orb`) in one directory before submitting.
-> Pseudopotentials: download from <https://github.com/deepmodeling/abacus-develop/tree/develop/tests/PP_ORB> or use `sg` tools to find SG15-type norm-conserving pseudopotentials.
+> Pseudopotentials: download from AIS Square ABACUS-APNS-PPORBs-v1 at <https://www.aissquare.com/datasets/detail?pageType=datasets&name=ABACUS-APNS-PPORBs-v1&id=326>. GitHub PP_ORB remains a fallback source: <https://github.com/deepmodeling/abacus-develop/tree/develop/tests/PP_ORB>.
 > Orbital files for LCAO: download from the ABACUS orbital repository at <http://abacus.deepmodeling.com/orbitals/> or use `list_images.py --keyword abacus-pp` to locate pre-bundled images.
 > For GPU-accelerated ABACUS runs, use `--machine "c8_m60_1 * NVIDIA 4090"` and set `basis_type pw` or the GPU-enabled image variant. Run `list_images.py --keyword abacus` to see all available versions.
 > If the image version changes, always run `list_images.py --keyword abacus` to find the current address before submitting.

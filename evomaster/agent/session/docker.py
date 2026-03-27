@@ -97,6 +97,7 @@ class DockerSession(BaseSession):
         command: str,
         timeout: int | None = None,
         is_input: bool = False,
+        stop_event: Any | None = None,
     ) -> dict[str, Any]:
         """通过 tmux 执行 bash 命令
 
@@ -135,7 +136,7 @@ class DockerSession(BaseSession):
             # 正常命令执行
             if self._prev_command_status != 'completed' and command != '':
                 return {
-                    'stdout': f"[Previous command is still running. Use is_input=true to interact.]",
+                    'stdout': '[Previous command is still running. Use is_input=true to interact.]',
                     'stderr': '',
                     'exit_code': 1,
                 }
@@ -147,8 +148,21 @@ class DockerSession(BaseSession):
         start_time = time.time()
         poll_interval = 0.5
         self._prev_command_status = 'timeout'
+        interrupted = False
+        interrupt_wait_until = 0.0
 
         while time.time() - start_time < timeout:
+            if (
+                stop_event is not None
+                and getattr(stop_event, 'is_set', None)
+                and stop_event.is_set()
+                and self._prev_command_status != 'completed'
+                and not interrupted
+            ):
+                self._env.tmux_send_keys('C-c', enter=False)
+                interrupted = True
+                interrupt_wait_until = time.time() + 5.0
+
             logs = self._env.get_tmux_logs()
             matches = list(PS1_PATTERN.finditer(logs))
             ps1_count = len(matches)
@@ -156,6 +170,9 @@ class DockerSession(BaseSession):
             if ps1_count > self._last_ps1_count:
                 # 命令完成
                 self._prev_command_status = 'completed'
+                break
+
+            if interrupted and time.time() >= interrupt_wait_until:
                 break
 
             time.sleep(poll_interval)
@@ -211,6 +228,9 @@ class DockerSession(BaseSession):
         if self._prev_command_status == 'timeout':
             result['stdout'] += f"\n[Command timed out after {timeout}s]"
             result['exit_code'] = -1
+        elif interrupted and result.get('exit_code') == -1:
+            result['stderr'] = 'Command cancelled by stop request.'
+            result['exit_code'] = 130
 
         return result
 

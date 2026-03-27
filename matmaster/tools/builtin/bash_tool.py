@@ -86,6 +86,7 @@ class BashTool(BuiltinTool):
             command=command,
             timeout=timeout,
             is_input=is_input,
+            stop_event=self._stop_event_for_exec(),
         )
 
         output = result.get('output', '') or result.get('stdout', '')
