@@ -22,7 +22,7 @@ class _ErrorStrTool:
     description = "returns error string"
     json_schema = {"type": "object", "properties": {}}
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         return "Error: invalid input"
 
 
@@ -31,7 +31,7 @@ class _ExplicitToolResultTool:
     description = "returns explicit ToolResult"
     json_schema = {"type": "object", "properties": {}}
 
-    def execute(self, arguments: dict[str, Any]) -> ToolResult:
+    async def execute(self, arguments: dict[str, Any]) -> ToolResult:
         return ToolResult(status="success", content="Error: literal")
 
 
@@ -47,23 +47,23 @@ class TestToolProtocol:
 class TestToolRegistryBasic:
     """Register, execute, and definitions."""
 
-    def test_register_and_execute(self) -> None:
+    async def test_register_and_execute(self) -> None:
         """Register a tool, execute by name, returns tool's execute() result."""
         registry = ToolRegistry()
         tool = MockTool(name="greet", result="hello!")
         registry.register(tool, source="builtin")
 
-        result = registry.execute("greet", {})
+        result = await registry.execute("greet", {})
         assert isinstance(result, ToolResult)
         assert result.content == "hello!"
         assert result.status == "success"
 
-    def test_register_unknown_tool_execute(self) -> None:
+    async def test_register_unknown_tool_execute(self) -> None:
         """Execute non-existent tool returns error string with 'not found'."""
         registry = ToolRegistry()
         registry.register(MockTool(name="exists"), source="builtin")
 
-        result = registry.execute("missing_tool", {})
+        result = await registry.execute("missing_tool", {})
         assert result.status == "error"
         assert "not found" in result.content.lower()
         assert "exists" in result.content  # lists available tools
@@ -81,31 +81,31 @@ class TestToolRegistryBasic:
         assert defs[0]["function"]["description"] == "Calculator tool"
         assert "parameters" in defs[0]["function"]
 
-    def test_empty_registry(self) -> None:
+    async def test_empty_registry(self) -> None:
         """Empty registry: get_tool_definitions returns [], execute returns error."""
         registry = ToolRegistry()
 
         defs = registry.get_tool_definitions()
         assert defs == []
 
-        result = registry.execute("anything", {})
+        result = await registry.execute("anything", {})
         assert result.status == "error"
         assert "not found" in result.content.lower()
 
-    def test_error_prefixed_string_normalizes_to_error(self) -> None:
+    async def test_error_prefixed_string_normalizes_to_error(self) -> None:
         registry = ToolRegistry()
         registry.register(_ErrorStrTool(), source="test")
 
-        result = registry.execute("error_tool", {})
+        result = await registry.execute("error_tool", {})
         assert isinstance(result, ToolResult)
         assert result.status == "error"
         assert result.content == "Error: invalid input"
 
-    def test_explicit_tool_result_preserves_success_status(self) -> None:
+    async def test_explicit_tool_result_preserves_success_status(self) -> None:
         registry = ToolRegistry()
         registry.register(_ExplicitToolResultTool(), source="test")
 
-        result = registry.execute("explicit_tool_result", {})
+        result = await registry.execute("explicit_tool_result", {})
         assert isinstance(result, ToolResult)
         assert result.status == "success"
         assert result.content == "Error: literal"
@@ -114,7 +114,7 @@ class TestToolRegistryBasic:
 class TestToolRegistryOverride:
     """Override and source tracking behavior."""
 
-    def test_override_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+    async def test_override_warning(self, caplog: pytest.LogCaptureFixture) -> None:
         """Register two tools with same name, second overwrites, warning logged."""
         registry = ToolRegistry()
         tool_a = MockTool(name="shared", result="first")
@@ -125,7 +125,7 @@ class TestToolRegistryOverride:
             registry.register(tool_b, source="mcp")
 
         # Second tool overwrites first
-        result = registry.execute("shared", {})
+        result = await registry.execute("shared", {})
         assert result.content == "second"
 
         # Warning was logged mentioning the tool name
@@ -142,14 +142,14 @@ class TestToolRegistryOverride:
         assert len(builtin_tools) == 1
         assert builtin_tools[0].name == "builtin_tool"
 
-    def test_register_order_builtin_mcp_skill(self) -> None:
+    async def test_register_order_builtin_mcp_skill(self) -> None:
         """Register builtin then MCP then skill with same name, final is skill."""
         registry = ToolRegistry()
         registry.register(MockTool(name="overlap", result="builtin"), source="builtin")
         registry.register(MockTool(name="overlap", result="mcp"), source="mcp")
         registry.register(MockTool(name="overlap", result="skill"), source="skill")
 
-        result = registry.execute("overlap", {})
+        result = await registry.execute("overlap", {})
         assert result.content == "skill"
 
 
