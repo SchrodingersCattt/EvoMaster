@@ -432,10 +432,10 @@ class TestExpBuiltinTools:
         return exp, registry
 
     def test_native_tools_count(self, tmp_path: Path) -> None:
-        """12 native tools registered with source='builtin'."""
+        """14 native tools registered with source='builtin'."""
         _, registry = self._build_registry(tmp_path)
         native = registry.get_tools_by_source("builtin")
-        assert len(native) == 12
+        assert len(native) == 14
 
     def test_native_tool_names(self, tmp_path: Path) -> None:
         """All 12 expected native tool names are present in registry."""
@@ -476,9 +476,9 @@ class TestExpBuiltinTools:
         assert "monitor_job" in evo_names
 
     def test_total_count(self, tmp_path: Path) -> None:
-        """Total tools = 12 native + 1 evo adapter = 13."""
+        """Total tools = 14 native + 1 evo adapter = 15."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 13
+        assert len(registry) == 15
 
     def test_read_tracker_cleanup_registered(self, tmp_path: Path) -> None:
         """ReadTracker.clear is registered as a cleanup callback after _init_builtin_tools."""
@@ -521,7 +521,7 @@ class TestExpBuiltinTools:
 
         # If _init_builtin_tools ran, native tools should be in the registry
         native = runtime.spec.tool_registry.get_tools_by_source("builtin")
-        assert len(native) == 12  # All native tools registered regardless of config list
+        assert len(native) == 14  # All native tools registered regardless of config list
 
     def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
         """Empty builtin list skips _init_builtin_tools entirely."""
