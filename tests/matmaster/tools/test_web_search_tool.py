@@ -96,25 +96,25 @@ class TestNormalizeResults:
 class TestWebSearchToolExecution:
     """WebSearchTool._execute with mocked HTTP."""
 
-    def test_missing_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_missing_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("SEARCHAPI_API_KEY", raising=False)
         monkeypatch.delenv("SEARCHAPI_KEY", raising=False)
         tool = WebSearchTool()
-        result = tool.execute({"query": "test"})
+        result = await tool.execute({"query": "test"})
         assert isinstance(result, ToolResult)
         assert result.status == "error"
         assert "SearchApi key" in result.content
 
-    def test_empty_query(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_empty_query(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SEARCHAPI_API_KEY", "fake")
         tool = WebSearchTool()
-        result = tool.execute({"query": "  "})
+        result = await tool.execute({"query": "  "})
         assert isinstance(result, ToolResult)
         assert result.status == "error"
         assert "query" in result.content.lower()
 
     @patch("matmaster.tools.builtin.web_search_tool.httpx")
-    def test_successful_search(
+    async def test_successful_search(
         self, mock_httpx: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("SEARCHAPI_API_KEY", "fake")
@@ -133,7 +133,7 @@ class TestWebSearchToolExecution:
         mock_httpx.Client.return_value = mock_client
 
         tool = WebSearchTool()
-        result = tool.execute({"query": "hello"})
+        result = await tool.execute({"query": "hello"})
         assert isinstance(result, ToolResult)
         assert result.status == "success"
         data = json.loads(result.content)
@@ -141,7 +141,7 @@ class TestWebSearchToolExecution:
         assert data["results"][0]["link"] == "http://example.com"
 
     @patch("matmaster.tools.builtin.web_search_tool.httpx")
-    def test_http_error(
+    async def test_http_error(
         self, mock_httpx: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("SEARCHAPI_API_KEY", "fake")
@@ -154,12 +154,12 @@ class TestWebSearchToolExecution:
         mock_httpx.Client.return_value = mock_client
 
         tool = WebSearchTool()
-        result = tool.execute({"query": "hello"})
+        result = await tool.execute({"query": "hello"})
         assert isinstance(result, ToolResult)
         assert result.status == "error"
 
     @patch("matmaster.tools.builtin.web_search_tool.httpx")
-    def test_default_params(
+    async def test_default_params(
         self, mock_httpx: MagicMock, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("SEARCHAPI_API_KEY", "fake-key")
@@ -173,7 +173,7 @@ class TestWebSearchToolExecution:
         mock_httpx.Client.return_value = mock_client
 
         tool = WebSearchTool()
-        tool.execute({"query": "test"})
+        await tool.execute({"query": "test"})
 
         call_kwargs = mock_client.get.call_args
         params = call_kwargs.kwargs.get("params", call_kwargs[1].get("params", {}))
