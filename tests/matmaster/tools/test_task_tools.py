@@ -1,6 +1,6 @@
 """Tests for TaskStore and 5 TaskTools (TaskCreate/Get/List/Update/Complete).
 
-TDD RED phase: tests written before implementation.
+All operations are subtask-level. Parent task status is always auto-derived.
 """
 
 from __future__ import annotations
@@ -32,17 +32,19 @@ class TestTaskStore:
 
     def test_create_returns_task_with_required_fields(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        task = store.create("Build the widget")
+        task = store.create("Build the widget", ["Step A", "Step B"])
         assert "id" in task
         assert len(task["id"]) == 8
         assert task["description"] == "Build the widget"
         assert task["status"] == "open"
+        assert len(task["subtasks"]) == 2
+        assert task["subtasks"][0] == {"description": "Step A", "status": "open"}
         assert "created_at" in task
         assert "updated_at" in task
 
     def test_get_existing_task(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        created = store.create("Test task")
+        created = store.create("Test task", ["Sub 1"])
         fetched = store.get(created["id"])
         assert fetched is not None
         assert fetched["id"] == created["id"]
@@ -54,8 +56,8 @@ class TestTaskStore:
 
     def test_list_all_returns_all_tasks(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        store.create("Task A")
-        store.create("Task B")
+        store.create("Task A", ["Sub A"])
+        store.create("Task B", ["Sub B"])
         tasks = store.list_all()
         assert len(tasks) == 2
         descriptions = {t["description"] for t in tasks}
@@ -67,7 +69,7 @@ class TestTaskStore:
 
     def test_update_description(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        created = store.create("Old desc")
+        created = store.create("Old desc", ["Sub"])
         updated = store.update(created["id"], description="New desc")
         assert updated is not None
         assert updated["description"] == "New desc"
@@ -75,7 +77,7 @@ class TestTaskStore:
 
     def test_update_status(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        created = store.create("Task")
+        created = store.create("Task", ["Sub"])
         updated = store.update(created["id"], status="in_progress")
         assert updated is not None
         assert updated["status"] == "in_progress"
@@ -86,7 +88,7 @@ class TestTaskStore:
 
     def test_complete_sets_status_completed(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        created = store.create("Finish this")
+        created = store.create("Finish this", ["Sub"])
         completed = store.complete(created["id"])
         assert completed is not None
         assert completed["status"] == "completed"
@@ -97,7 +99,7 @@ class TestTaskStore:
 
     def test_persistence_across_instances(self, tmp_path: Path) -> None:
         store1 = TaskStore(tmp_path)
-        task = store1.create("Persistent task")
+        task = store1.create("Persistent task", ["Sub"])
 
         store2 = TaskStore(tmp_path)
         fetched = store2.get(task["id"])
@@ -106,7 +108,7 @@ class TestTaskStore:
 
     def test_data_stored_in_tasks_json(self, tmp_path: Path) -> None:
         store = TaskStore(tmp_path)
-        store.create("Check file")
+        store.create("Check file", ["Sub"])
         tasks_file = tmp_path / ".tasks.json"
         assert tasks_file.exists()
         data = json.loads(tasks_file.read_text())

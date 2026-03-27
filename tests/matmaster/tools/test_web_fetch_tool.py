@@ -174,18 +174,18 @@ class TestWebFetchToolExecution:
     """WebFetchTool._execute with mocked HTTP."""
 
     @patch("matmaster.tools.builtin.web_fetch_tool._fetch_single_url")
-    def test_single_url(
+    async def test_single_url(
         self, mock_fetch: MagicMock, tmp_path: Path
     ) -> None:
         mock_fetch.return_value = ("http://a.com", "Page content", None)
         tool = WebFetchTool(workdir=tmp_path)
-        result = tool.execute({"url": ["http://a.com"]})
+        result = await tool.execute({"url": ["http://a.com"]})
         assert isinstance(result, ToolResult)
         assert result.status == "success"
         assert "Page content" in result.content
 
     @patch("matmaster.tools.builtin.web_fetch_tool._fetch_single_url")
-    def test_multi_url(
+    async def test_multi_url(
         self, mock_fetch: MagicMock, tmp_path: Path
     ) -> None:
         mock_fetch.side_effect = [
@@ -193,7 +193,7 @@ class TestWebFetchToolExecution:
             ("http://b.com", "Content B", None),
         ]
         tool = WebFetchTool(workdir=tmp_path)
-        result = tool.execute({"url": ["http://a.com", "http://b.com"]})
+        result = await tool.execute({"url": ["http://a.com", "http://b.com"]})
         assert isinstance(result, ToolResult)
         assert result.status == "success"
         data = json.loads(result.content)
@@ -201,24 +201,24 @@ class TestWebFetchToolExecution:
         assert "http://b.com" in data
 
     @patch("matmaster.tools.builtin.web_fetch_tool._fetch_single_url")
-    def test_url_error_inlined(
+    async def test_url_error_inlined(
         self, mock_fetch: MagicMock, tmp_path: Path
     ) -> None:
         mock_fetch.return_value = ("http://a.com", None, "404 Not Found")
         tool = WebFetchTool(workdir=tmp_path)
-        result = tool.execute({"url": ["http://a.com"]})
+        result = await tool.execute({"url": ["http://a.com"]})
         assert isinstance(result, ToolResult)
         assert result.status == "error"
         assert "404" in result.content
 
-    def test_empty_url_list(self, tmp_path: Path) -> None:
+    async def test_empty_url_list(self, tmp_path: Path) -> None:
         tool = WebFetchTool(workdir=tmp_path)
-        result = tool.execute({"url": []})
+        result = await tool.execute({"url": []})
         assert isinstance(result, ToolResult)
         assert result.status == "error"
 
     @patch("matmaster.tools.builtin.web_fetch_tool._fetch_single_url")
-    def test_all_urls_fail_returns_error(
+    async def test_all_urls_fail_returns_error(
         self, mock_fetch: MagicMock, tmp_path: Path
     ) -> None:
         mock_fetch.side_effect = [
@@ -226,17 +226,17 @@ class TestWebFetchToolExecution:
             ("http://b.com", None, "404"),
         ]
         tool = WebFetchTool(workdir=tmp_path)
-        result = tool.execute({"url": ["http://a.com", "http://b.com"]})
+        result = await tool.execute({"url": ["http://a.com", "http://b.com"]})
         assert isinstance(result, ToolResult)
         assert result.status == "error"
 
-    def test_string_url_normalized(self, tmp_path: Path) -> None:
+    async def test_string_url_normalized(self, tmp_path: Path) -> None:
         """Bare string url is normalized to list."""
         with patch(
             "matmaster.tools.builtin.web_fetch_tool._fetch_single_url"
         ) as mock_fetch:
             mock_fetch.return_value = ("http://a.com", "content", None)
             tool = WebFetchTool(workdir=tmp_path)
-            result = tool.execute({"url": "http://a.com"})
+            result = await tool.execute({"url": "http://a.com"})
             assert isinstance(result, ToolResult)
             assert result.status == "success"
