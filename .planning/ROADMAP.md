@@ -40,7 +40,7 @@ Full details: milestones/v1-ROADMAP.md
 - [x] **Phase 12: Protocol 层 + 测试基础设施** - 将所有 Protocol 签名改为 async，建立 pytest-asyncio 基础设施和 async validation helper (completed 2026-03-26)
 - [x] **Phase 13: LLM Provider 异步实现** - OpenAIProvider 改用 AsyncOpenAI，chat/chat_stream 实现为 async (completed 2026-03-27)
 - [x] **Phase 14: Tool 系统异步化** - 12 个 BuiltinTool + ToolRegistry 全部 async，session 调用用 asyncio.to_thread 桥接 (completed 2026-03-27)
-- [ ] **Phase 15: Hook 系统异步化** - 5 个 Hook 实现和 run_* helper 全部 async，ConfirmationHook reply queue 适配
+- [x] **Phase 15: Hook 系统异步化** - 5 个 Hook 实现和 run_* helper 全部 async，ConfirmationHook reply queue 适配 (completed 2026-03-27)
 - [ ] **Phase 16: MessageBus + EventRouter 异步化** - MessageBus 改用 asyncio.Queue，EventRouter 改为 asyncio.Task
 - [ ] **Phase 17: AgentKernel 异步化** - Kernel.run() 改为 async，收敛所有异步依赖，ContextCompactor async 化
 - [ ] **Phase 18: Exp 生命周期异步化** - assemble/build_runtime/run 全部 async，SubAgent spawn 完整 async 链路
@@ -107,8 +107,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 15-01-PLAN.md -- run_* helpers async + 5 Hook async (EventEmitter/OutputProcessor/AssistantState/SkillHit/DevStreamHook) + Kernel 桥接 + test_agent.py sync Hook 修复 + 测试迁移
-- [ ] 15-02-PLAN.md -- ConfirmationHook Future 重构 + Kernel loop 注入 + src/ 层完整 confirmation 通路适配 (ConfirmationHookAdapter) + ReplyQueueLike deprecated
+- [x] 15-01-PLAN.md -- run_* helpers async + 5 Hook async (EventEmitter/OutputProcessor/AssistantState/SkillHit/DevStreamHook) + Kernel 桥接 + test_agent.py sync Hook 修复 + 测试迁移
+- [x] 15-02-PLAN.md -- ConfirmationHook Future 重构 + Kernel loop 注入 + src/ 层完整 confirmation 通路适配 (ConfirmationHookAdapter) + ReplyQueueLike deprecated
 
 ### Phase 16: MessageBus + EventRouter 异步化
 **Goal**: 事件传输链路全面 async：MessageBus 使用 asyncio.Queue，EventRouter 作为 asyncio.Task 消费事件
@@ -179,7 +179,7 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 12. Protocol 层 + 测试基础设施 | v2.0 | 2/2 | Complete | 2026-03-26 |
 | 13. LLM Provider 异步实现 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 14. Tool 系统异步化 | v2.0 | 2/2 | Complete | 2026-03-27 |
-| 15. Hook 系统异步化 | v2.0 | 0/2 | In progress | - |
+| 15. Hook 系统异步化 | v2.0 | 2/2 | Complete   | 2026-03-27 |
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/0 | Not started | - |
 | 17. AgentKernel 异步化 | v2.0 | 0/0 | Not started | - |
 | 18. Exp 生命周期异步化 | v2.0 | 0/0 | Not started | - |

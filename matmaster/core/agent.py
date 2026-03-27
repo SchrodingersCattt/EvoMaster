@@ -153,6 +153,12 @@ class AgentKernel:
             UserMessage(content=task),
         ]
         guard_pipeline = GuardPipeline(spec.guards)
+
+        # Inject bridge loop to hooks that need it (e.g. ConfirmationHook)
+        for hook in spec.hooks:
+            if hasattr(hook, "set_loop"):
+                hook.set_loop(_bridge_loop)
+
         turn = 0
         if spec.compactor:
             spec.compactor.update_message_count(len(messages))

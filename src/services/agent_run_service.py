@@ -145,7 +145,13 @@ def _derive_skill_sync_spec(
 
 @runtime_checkable
 class ReplyQueueLike(Protocol):
-    """Confirmation reply queue abstraction: put content/cancel, blocking get."""
+    """Confirmation reply queue abstraction: put content/cancel, blocking get.
+
+    .. deprecated::
+        Phase 15 introduced ConfirmationHook.resolve()/cancel() as the new API.
+        This Protocol is retained only for stream_service.py compatibility.
+        Will be removed when stream_service fully migrates to ConfirmationHook.
+    """
 
     def put_content(self, content: str) -> None: ...
 
@@ -416,8 +422,10 @@ class AgentRunService:
 
             # Add external hooks to spec
             external_hooks = [
-                # TODO: re-enable with confirm_tools=<async MCP tools> once MCP registration lands
-                # ConfirmationHook(reply_queue, bus),
+                # TODO: re-enable with confirm_tools once MCP registration lands
+                # confirmation_hook = ConfirmationHook(bus)
+                # stream_svc.set_reply_queue(session_id, ConfirmationHookAdapter(confirmation_hook))
+                # external_hooks.append(confirmation_hook)
                 OutputProcessorHook(bus),
                 SkillHitHook(bus),
                 AssistantStateHook(bus),
