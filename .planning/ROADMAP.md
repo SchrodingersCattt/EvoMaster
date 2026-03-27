@@ -4,6 +4,7 @@
 
 - ✅ **v1 MatMaster Framework Refactoring** -- Phases 1-7 (shipped 2026-03-22)
 - 🚧 **v1.1 Agent 外围能力构建** -- Phases 8-11 (in progress)
+- 🚧 **v2.0 matmaster 协程改造** -- Phases 12+ (in progress)
 
 ## Phases
 
@@ -97,10 +98,26 @@ Plans:
 - [x] 11-02-PLAN.md -- Exp 层 spawn_fn 闭包创建 + SubAgentTool 注册 + source_override + 集成测试
 - [x] 11-03-PLAN.md -- 事件路由 source 前缀兼容 + chat_history 改造 + service 层 stop_event 注入
 
+### 🚧 v2.0 matmaster 协程改造 (In Progress)
+
+**Milestone Goal:** 将 matmaster 框架从同步架构全链路改造为 async/await，为多 agent 编排做准备
+
+- [ ] **Phase 15: Hook async 化** - run_* helpers async + Hook 实现 async + Kernel 桥接 + ConfirmationHook async
+
+### Phase 15: Hook async 化
+**Goal**: Hook Protocol/BaseHook/run_* helpers 全部 async + 所有 Hook 实现 async + Kernel sync bridge
+**Depends on**: Phase 11
+**Requirements**: HOOK-01, HOOK-03
+**Plans:** 2 plans
+
+Plans:
+- [x] 15-01-PLAN.md -- run_* helpers async + 5 Hook 实现 async + DevStreamHook async + Kernel bridge 13 call sites + test migration (completed 2026-03-27)
+- [ ] 15-02-PLAN.md -- ConfirmationHook async + remaining integration
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 8 -> 9 -> 10 -> 11
+Phases execute in numeric order: 8 -> 9 -> 10 -> 11 -> 15
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -115,3 +132,4 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11
 | 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete    | 2026-03-25 |
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete    | 2026-03-25 |
+| 15. Hook async 化 | v2.0 | 1/2 | In Progress | - |
