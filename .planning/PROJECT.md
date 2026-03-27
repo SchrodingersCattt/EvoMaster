@@ -31,9 +31,11 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 - ✓ Tool Description/Schema 精细化 + developer_instructions system prompt — v1.1 (PRMT-01~02)
 - ✓ SubAgent Spawn 机制 (SubAgentTool + spawn_fn 闭包 + 事件路由 + stop_event 级联) — v1.1 (SUBA-01~06, PRMT-03)
 
+- ✓ Hook 系统异步化 (5 个 Hook async 化 + ConfirmationHook asyncio.Future 重构 + _bridge_loop 桥接) — v2.0 Phase 15 (HOOK-01~03)
+
 ### Active
 
-See REQUIREMENTS.md for full v2.0 requirement list (35 items, 6 complete after Phase 12).
+See REQUIREMENTS.md for full v2.0 requirement list (35 items, 15 complete after Phase 15).
 
 ## Current Milestone: v2.0 matmaster 协程改造
 
@@ -62,7 +64,7 @@ See REQUIREMENTS.md for full v2.0 requirement list (35 items, 6 complete after P
 
 ### Current State
 
-**Phase 12 complete** (2026-03-26): Protocol 定义 async 化完成。6 个 Protocol 签名改为 async def（LLMProvider、Tool、Hook、EventHandler、ReplyQueueLike），Guard.evaluate 保持 sync。chat_with_retry 从 Protocol 和 OpenAIProvider 中移除。validate_async_protocol() 运行时检测工具就绪。pytest-asyncio + async mock factories 建立。976 tests passed。
+**Phase 15 complete** (2026-03-27): Hook 系统异步化完成。5 个 Hook 实现（OutputProcessor/EventEmitter/AssistantState/SkillHit/DevStreamHook）async 化，ConfirmationHook 从 queue.Queue 阻塞重构为 asyncio.Future 异步等待，Kernel 中所有 _sync_call_async 桥接调用传递 per-run _bridge_loop 参数。88 hook/agent tests passed。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI (not refactored), OpenAI SDK, tiktoken.
 
