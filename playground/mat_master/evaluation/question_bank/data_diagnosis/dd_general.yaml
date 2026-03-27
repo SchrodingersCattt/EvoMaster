@@ -4,7 +4,7 @@ domain: "general"
 
 questions:
   # ============================================================
-  # DD_general_001 ← L1_Q04 (Fe₂O₃ SCF不收敛诊断)
+  # DD_general_001 (Fe₂O₃ SCF不收敛诊断)
   # ============================================================
   - id: "DD_general_001"
     capability: "data_diagnosis"
@@ -19,7 +19,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "case_bundle"
-        path: "data/L1_Q04/case_bundle.json"
+        path: "data/DD_general_001/case_bundle.json"
         oss_url: ""
         description: "VASP input/output bundle: Fe2O3 with ISPIN=1, SCF oscillates."
     reference_answers:
@@ -49,7 +49,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # DD_general_002 ← L1_Q05 (Si SMEARING诊断)
+  # DD_general_002 (Si SMEARING诊断)
   # ============================================================
   - id: "DD_general_002"
     capability: "data_diagnosis"
@@ -64,7 +64,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "case_bundle"
-        path: "data/L1_Q05/case_bundle.json"
+        path: "data/DD_general_002/case_bundle.json"
         oss_url: ""
         description: "VASP input/output bundle: Si with ISMEAR=1 SIGMA=0.4, SCF oscillates."
     reference_answers:
@@ -94,7 +94,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # DD_general_003 ← L1_Q06 (LiCoO₂ 弛豫不收敛诊断)
+  # DD_general_003 (LiCoO₂ 弛豫不收敛诊断)
   # ============================================================
   - id: "DD_general_003"
     capability: "data_diagnosis"
@@ -110,7 +110,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "case_bundle"
-        path: "data/L1_Q06/case_bundle.json"
+        path: "data/DD_general_003/case_bundle.json"
         oss_url: ""
         description: "VASP input/output bundle: LiCoO2 relax with EDIFF=1E-3, force oscillates."
     reference_answers:
@@ -140,7 +140,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # DD_general_004 ← L1_Q07 (CsPbI₃ 弛豫发散诊断)
+  # DD_general_004 (CsPbI₃ 弛豫发散诊断)
   # ============================================================
   - id: "DD_general_004"
     capability: "data_diagnosis"
@@ -156,7 +156,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "case_bundle"
-        path: "data/L1_Q07/case_bundle.json"
+        path: "data/DD_general_004/case_bundle.json"
         oss_url: ""
         description: "VASP input/output bundle: CsPbI3 cubic->orthorhombic relax with POTIM=1.0, diverges."
     reference_answers:
@@ -186,7 +186,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # DD_general_005 ← L2_Q08 (批量DFT失败模式分类)
+  # DD_general_005 (批量DFT失败模式分类)
   # ============================================================
   - id: "DD_general_005"
     capability: "data_diagnosis"

@@ -1,12 +1,10 @@
 """Binary evaluator for MATTER v5 runs.
 
-v5 changes (vs v4 RubricEvaluator):
-- Renamed RubricEvaluator → BinaryEvaluator
-- Removed weighted scoring logic (no Rubric, no weight field)
-- Replaced judge_grounding() / judge_efficiency() with single judge_binary()
-- LLM judge returns {"pass": true/false, "reason": "..."} only — no partial verdict
-- evaluate() now returns EvalRunRecord directly (not a raw dict)
-- Safety evaluation still uses LLM but maps to SafetyVetoRecord
+Current behavior:
+- Binary checklist scoring only
+- Single LLM judge interface: `llm_binary_judge`
+- `evaluate()` returns `EvalRunRecord` directly
+- Safety evaluation is handled through `SafetyVetoRecord`
 """
 
 import json
@@ -288,7 +286,6 @@ class BinaryEvaluator:
     ) -> tuple[bool, str]:
         ref = reference_map.get(item.id)
 
-        # --- legacy deterministic checks ---
         if item.verify == 'exact_match':
             if ref is None:
                 return False, 'missing reference answer'
@@ -305,12 +302,6 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return self._check_contains_all(answer=answer, expected=ref.value)
-        if item.verify == 'llm_judge':
-            # legacy: treat as llm_binary_judge
-            return self.judge_binary(
-                criterion=item.criterion,
-                context=self._build_context(question=question, answer=answer, evidence=evidence),
-            )
         if item.verify == 'tool_called':
             if ref is None:
                 return False, 'missing reference answer'
@@ -320,7 +311,6 @@ class BinaryEvaluator:
                 return False, 'missing reference answer'
             return self._check_tool_args_match(tool_calls=tool_calls, ref=ref)
 
-        # --- evidence-native deterministic checks ---
         if item.verify == 'event_type_called':
             if ref is None:
                 return False, 'missing reference answer'
@@ -344,15 +334,7 @@ class BinaryEvaluator:
                 return False, 'missing reference answer'
             return self._check_token_budget(evidence=evidence, expected=ref.value)
 
-        # --- v5 LLM binary judge ---
         if item.verify == 'llm_binary_judge':
-            return self.judge_binary(
-                criterion=item.criterion,
-                context=self._build_context(question=question, answer=answer, evidence=evidence),
-            )
-
-        # --- v4 legacy LLM judges: map to single binary judge ---
-        if item.verify in ('llm_judge_grounding', 'llm_judge_efficiency'):
             return self.judge_binary(
                 criterion=item.criterion,
                 context=self._build_context(question=question, answer=answer, evidence=evidence),

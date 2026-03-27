@@ -4,64 +4,7 @@ domain: "struct"
 
 questions:
   # ============================================================
-  # BP_struct_001 ← L1_Q01 (批量无序结构有序构型枚举)
-  # ============================================================
-  - id: "BP_struct_001"
-    capability: "batch_processing"
-    domain: "struct"
-    intent: "Resolve partial occupancy for 10 disordered crystal structures, enumerating symmetry-inequivalent ordered configurations for each."
-    human_prompt_seed: >
-      读取 `disorder_manifest.json`，其中列出了 10 个含无序占位的晶体结构参数。
-      对每个结构，使用工具生成有序构型（枚举对称不等价的占位排列），
-      输出每个结构的有序构型数量和对应的 CIF 文件。
-    tags: ["batch_operation", "disorder_resolution", "structure_enumeration"]
-    mode_scope: ["direct", "planner"]
-    required_tools: ["mat_sg_generate_ordered_replicas"]
-    optional_tools: []
-    data_files:
-      - key: "disorder_manifest"
-        path: "data/L1_Q01/disorder_manifest.json"
-        oss_url: ""
-        description: "JSON manifest listing 10 disordered crystal structures with partial occupancies."
-    reference_answers:
-      - key: "structures_processed"
-        value: 10
-        tolerance: 0.0
-      - key: "required_fields"
-        value: ["ordered_configurations_count", "output_files", "space_group_per_config"]
-      - key: "used_ordered_replica_tool"
-        value: "mat_sg_generate_ordered_replicas"
-    scoring_checklist:
-      # --- correctness ---
-      - id: "structures_processed"
-        criterion: "All 10 structures are processed."
-        axis: "correctness"
-        verify: "numerical_range"
-      - id: "required_fields"
-        criterion: "Each result includes ordered configuration count, output CIF files, and space group information."
-        axis: "correctness"
-        verify: "llm_binary_judge"
-      # --- grounding ---
-      - id: "used_ordered_replica_tool"
-        criterion: "Used the MCP ordered replica generation tool (mat_sg_generate_ordered_replicas)."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "grounding_source"
-        criterion: "Structure enumeration is performed using the registered MCP structure-generation tool rather than a self-written script."
-        axis: "grounding"
-        verify: "llm_binary_judge"
-      # --- efficiency ---
-      - id: "no_retries_batch"
-        criterion: "No repeated identical tool calls for the same structure (no retry loops)."
-        axis: "efficiency"
-        verify: "no_retries"
-      - id: "efficiency_judge"
-        criterion: "The agent completes 10-structure batch processing in a reasonable number of steps without unnecessary exploration."
-        axis: "efficiency"
-        verify: "llm_binary_judge"
-
-  # ============================================================
-  # BP_struct_002 ← L1_Q02 (批量Fe-Ni INVAR合金超胞构建)
+  # BP_struct_002 (批量Fe-Ni INVAR合金超胞构建)
   # ============================================================
   - id: "BP_struct_002"
     capability: "batch_processing"
@@ -77,7 +20,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "invar_compositions"
-        path: "data/L1_Q02/invar_compositions.json"
+        path: "data/BP_struct_002/invar_compositions.json"
         oss_url: ""
         description: "JSON manifest of 10 Fe-Ni INVAR alloy compositions for supercell construction."
     reference_answers:
@@ -125,7 +68,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # BP_struct_003 ← L1_Q03 (批量宿主-掺杂超胞构建)
+  # BP_struct_003 (批量宿主-掺杂超胞构建)
   # ============================================================
   - id: "BP_struct_003"
     capability: "batch_processing"
@@ -144,7 +87,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "batch_doping_manifest"
-        path: "data/L1_Q03/batch_doping_manifest.json"
+        path: "data/BP_struct_003/batch_doping_manifest.json"
         oss_url: ""
         description: "JSON manifest of 10 host-dopant pairs with target doping fractions."
     reference_answers:

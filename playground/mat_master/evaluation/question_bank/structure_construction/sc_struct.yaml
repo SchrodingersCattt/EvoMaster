@@ -4,7 +4,7 @@ domain: "struct"
 
 questions:
   # ============================================================
-  # SC_struct_001 ← L1_Q11 (graphene/h-BN异质结)
+  # SC_struct_001 (graphene/h-BN异质结)
   # ============================================================
   - id: "SC_struct_001"
     capability: "structure_construction"
@@ -20,7 +20,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "hetero_spec"
-        path: "data/L1_Q11/hetero_spec.json"
+        path: "data/SC_struct_001/hetero_spec.json"
         oss_url: ""
         description: "Specification for graphene/h-BN heterostructure construction."
     reference_answers:
@@ -61,7 +61,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # SC_struct_002 ← L1_Q13 (Cu(111)表面slab)
+  # SC_struct_002 (Cu(111)表面slab)
   # ============================================================
   - id: "SC_struct_002"
     capability: "structure_construction"
@@ -77,7 +77,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "surface_spec"
-        path: "data/L1_Q13/surface_spec.json"
+        path: "data/SC_struct_002/surface_spec.json"
         oss_url: ""
         description: "Specification for Cu(111) surface slab construction."
     reference_answers:
@@ -126,7 +126,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # SC_struct_003 ← L1_Q15 (Si(100)氢钝化)
+  # SC_struct_003 (Si(100)氢钝化)
   # ============================================================
   - id: "SC_struct_003"
     capability: "structure_construction"
@@ -142,7 +142,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "hydrogen_cap_spec"
-        path: "data/L1_Q15/hydrogen_cap_spec.json"
+        path: "data/SC_struct_003/hydrogen_cap_spec.json"
         oss_url: ""
         description: "Specification for Si(100) surface hydrogen passivation."
     reference_answers:
@@ -184,7 +184,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # SC_struct_004 ← L1_Q17 (MoS₂单层剥离)
+  # SC_struct_004 (MoS₂单层剥离)
   # ============================================================
   - id: "SC_struct_004"
     capability: "structure_construction"
@@ -200,7 +200,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "twod_spec"
-        path: "data/L1_Q17/twod_spec.json"
+        path: "data/SC_struct_004/twod_spec.json"
         oss_url: ""
         description: "Specification for MoS2 monolayer exfoliation."
     reference_answers:
@@ -239,5 +239,106 @@ questions:
         verify: "no_retries"
       - id: "efficiency_judge"
         criterion: "Monolayer exfoliation and stoichiometry verification complete in a direct workflow."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # SC_struct_005 (无序结构有序化与化学式识别)
+  # ============================================================
+  - id: "SC_struct_005"
+    capability: "structure_construction"
+    domain: "struct"
+    intent: "Infer SG-derived chemical formulas for 5 disordered crystal structures and construct ordered replicas to assess 3D structure perception."
+    human_prompt_seed: |
+      对以下 5 个含无序占位的晶体结构逐一处理，所有输入都通过 OSS URL 提供：
+      - `disorder_DAN-2.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_DAN-2.cif`
+      - `disorder_DAP-4.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_DAP-4.cif`
+      - `disorder_PAP-H4.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_PAP-H4.cif`
+      - `disorder_PAP-M5.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_PAP-M5.cif`
+      - `disorder_TILPEN.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_TILPEN.cif`
+
+      对每个结构，使用结构生成工具构造 ordered replica，并汇总：
+      (1) `chemical_formula`（尽量保持工具/结构解析返回的原始字符串）；
+      (2) `is_disordered`；
+      (3) `ordered_replica_count`；
+      (4) `ordered_output_archive`。
+
+      最终答案按文件名逐项列出上述信息。
+    tags: ["structure_construction", "disorder_resolution", "3d_structure_perception", "formula_identification"]
+    mode_scope: ["direct", "planner"]
+    required_tools: ["mat_sg_generate_ordered_replicas"]
+    optional_tools: []
+    reference_answers:
+      - key: "structures_processed"
+        value: 5
+        tolerance: 0.0
+      - key: "reference_formulas"
+        value:
+          - "K1H13.9872C5.9904N5.0064O9"
+          - "H144C48N24Cl24O96"
+          - "H288C80N48Cl48O192"
+          - "Ag8H112C40N16Cl24O96"
+          - "Fe2H40C24N16O2"
+      - key: "required_fields"
+        value: ["chemical_formula", "is_disordered", "ordered_replica_count", "ordered_output_archive"]
+      - key: "used_ordered_replica_tool"
+        value: "mat_sg_generate_ordered_replicas"
+      - key: "structure_construction_event"
+        value: "structure_construction"
+      - key: "scientific_library_source"
+        value: "scientific_library"
+      - key: "tool_call_budget"
+        value:
+          min: 5
+          max: 20
+      - key: "token_budget_total"
+        value:
+          max: 35000
+    scoring_checklist:
+      # --- correctness ---
+      - id: "structures_processed"
+        criterion: "All 5 disordered structures are processed."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "reference_formulas"
+        criterion: "The final answer includes the SG-derived chemical formula string for each of the 5 structures."
+        axis: "correctness"
+        verify: "contains_all"
+      - id: "required_fields"
+        criterion: "Each filename is paired with chemical_formula, is_disordered, ordered_replica_count, and ordered_output_archive."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "used_ordered_replica_tool"
+        criterion: "Used the MCP ordered replica generation tool (mat_sg_generate_ordered_replicas)."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "structure_construction_event"
+        criterion: "The workflow includes a successful structure_construction event."
+        axis: "grounding"
+        verify: "event_type_called"
+      - id: "scientific_library_source"
+        criterion: "At least one successful structure operation comes from source_type scientific_library."
+        axis: "grounding"
+        verify: "source_type_used"
+      - id: "grounding_source"
+        criterion: "Ordered structures are produced with the registered structure-generation tool rather than fabricated 3D coordinates."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "no_retries_disorder"
+        criterion: "No repeated identical tool calls are made for the same structure."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "tool_call_budget"
+        criterion: "The whole 5-structure workflow stays within a modest tool-call budget."
+        axis: "efficiency"
+        verify: "call_count_range"
+      - id: "token_budget_total"
+        criterion: "The run stays within a moderate total token budget."
+        axis: "efficiency"
+        verify: "token_budget"
+      - id: "efficiency_judge"
+        criterion: "The agent handles the 5 structures one by one with minimal detours and without exploratory over-processing."
         axis: "efficiency"
         verify: "llm_binary_judge"
