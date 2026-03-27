@@ -257,7 +257,7 @@ class SSHSession(BaseSession):
         }
 
         if self._prev_command_status == 'timeout':
-            result['stdout'] += f"\n[Command timed out after {timeout}s]"
+            result['stdout'] += f'\n[Command timed out after {timeout}s]'
             result['exit_code'] = -1
         elif interrupted and result.get('exit_code') == -1:
             result['stderr'] = 'Command cancelled by stop request.'

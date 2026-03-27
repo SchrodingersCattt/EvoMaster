@@ -110,7 +110,7 @@ class Exp:
 
             child_config = load_exp_config(exp_name)
             child_exp = Exp(child_config)
-            child_source = f"{source_prefix}:{exp_name}"
+            child_source = f'{source_prefix}:{exp_name}'
             child_spawn_id = uuid.uuid4().hex[:16]
             child_runtime = child_exp.build_runtime(
                 ctx,
@@ -125,7 +125,7 @@ class Exp:
                 result = run_result.result
                 if result.status == 'completed' and result.final_content:
                     return result.final_content
-                return f"SubAgent finished with status={result.status}, reason={result.reason}"
+                return f'SubAgent finished with status={result.status}, reason={result.reason}'
             finally:
                 child_runtime.cleanup()
 
@@ -419,8 +419,8 @@ class Exp:
             mcp_config = _load_raw(mcp_runtime_path)
         else:
             raise FileNotFoundError(
-                f"MCP runtime config not found: {mcp_runtime_path}. "
-                f"Required when skills.enabled=true."
+                f'MCP runtime config not found: {mcp_runtime_path}. '
+                f'Required when skills.enabled=true.'
             )
 
         mcp_config_file = mcp_config.get('config_file', skills_cfg.mcp_config_file)
@@ -462,7 +462,7 @@ class Exp:
                 return
             for tool_schema in schemas:
                 original_name = tool_schema['name']
-                prefixed_name = f"{mcp_server}_{original_name}"
+                prefixed_name = f'{mcp_server}_{original_name}'
                 if prefixed_name in registry:
                     continue
                 lazy_tool = LazyMCPTool(

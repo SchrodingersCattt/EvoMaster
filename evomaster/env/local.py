@@ -155,13 +155,13 @@ class LocalEnv(BaseEnv):
 
             if not source_path.exists():
                 self.logger.warning(
-                    f"源目录不存在，跳过软链接: {source_dir} (解析后: {source_path})"
+                    f'源目录不存在，跳过软链接: {source_dir} (解析后: {source_path})'
                 )
                 continue
 
             if not source_path.is_dir():
                 self.logger.warning(
-                    f"源路径不是目录，跳过软链接: {source_dir} (解析后: {source_path})"
+                    f'源路径不是目录，跳过软链接: {source_dir} (解析后: {source_path})'
                 )
                 continue
 
@@ -172,11 +172,11 @@ class LocalEnv(BaseEnv):
             if target_path.exists() or target_path.is_symlink():
                 if target_path.is_symlink():
                     target_path.unlink()
-                    self.logger.debug(f"删除已存在的软链接: {target_path}")
+                    self.logger.debug(f'删除已存在的软链接: {target_path}')
                 else:
                     # 如果是目录，需要递归删除
                     shutil.rmtree(target_path)
-                    self.logger.debug(f"删除已存在的目录: {target_path}")
+                    self.logger.debug(f'删除已存在的目录: {target_path}')
 
             # 确保目标路径的父目录存在
             target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -186,7 +186,7 @@ class LocalEnv(BaseEnv):
 
             # 将源目录下的所有内容链接到目标目录
             self._link_directory_contents(source_path, target_path)
-            self.logger.info(f"创建软链接: {source_dir} 下的内容 -> {target_path}")
+            self.logger.info(f'创建软链接: {source_dir} 下的内容 -> {target_path}')
 
     def _link_directory_contents(self, source_dir: Path, target_dir: Path) -> None:
         """将源目录下的所有内容链接到目标目录
@@ -201,15 +201,15 @@ class LocalEnv(BaseEnv):
 
             # 如果目标已存在，跳过
             if target_item.exists() or target_item.is_symlink():
-                self.logger.debug(f"目标已存在，跳过: {target_item}")
+                self.logger.debug(f'目标已存在，跳过: {target_item}')
                 continue
 
             try:
                 os.symlink(source_item, target_item)
-                self.logger.debug(f"创建软链接: {source_item} -> {target_item}")
+                self.logger.debug(f'创建软链接: {source_item} -> {target_item}')
             except OSError as e:
                 self.logger.warning(
-                    f"创建软链接失败: {source_item} -> {target_item}, 错误: {e}"
+                    f'创建软链接失败: {source_item} -> {target_item}, 错误: {e}'
                 )
 
     def local_exec(
@@ -268,15 +268,15 @@ class LocalEnv(BaseEnv):
         if cpu_devices is not None and sys.platform != 'win32':
             if isinstance(cpu_devices, str):
                 # CPU 范围字符串，如 "0-15"
-                cpu_prefix = f"taskset -c {cpu_devices} "
+                cpu_prefix = f'taskset -c {cpu_devices} '
             elif isinstance(cpu_devices, list):
                 # CPU 列表，如 [0, 1, 2, 3]
                 cpu_list_str = ','.join(str(cpu) for cpu in cpu_devices)
-                cpu_prefix = f"taskset -c {cpu_list_str} "
-            self.logger.debug(f"Using CPU prefix: {cpu_prefix}")
+                cpu_prefix = f'taskset -c {cpu_list_str} '
+            self.logger.debug(f'Using CPU prefix: {cpu_prefix}')
 
         # 组合命令
-        final_command = f"{cpu_prefix}{command}" if cpu_prefix else command
+        final_command = f'{cpu_prefix}{command}' if cpu_prefix else command
 
         try:
             process = subprocess.Popen(
@@ -375,17 +375,17 @@ class LocalEnv(BaseEnv):
         remote_file = Path(remote_path)
 
         if not local_file.exists():
-            raise FileNotFoundError(f"Local file not found: {local_path}")
+            raise FileNotFoundError(f'Local file not found: {local_path}')
 
         # 创建远程目录
         remote_file.parent.mkdir(parents=True, exist_ok=True)
 
         if local_file.is_file():
             shutil.copy2(local_file, remote_file)
-            self.logger.debug(f"Uploaded file {local_path} to {remote_path}")
+            self.logger.debug(f'Uploaded file {local_path} to {remote_path}')
         elif local_file.is_dir():
             shutil.copytree(local_file, remote_file, dirs_exist_ok=True)
-            self.logger.debug(f"Uploaded directory {local_path} to {remote_path}")
+            self.logger.debug(f'Uploaded directory {local_path} to {remote_path}')
 
     def download_file(self, remote_path: str, timeout: int | None = None) -> bytes:
         """从本地环境下载文件
@@ -403,10 +403,10 @@ class LocalEnv(BaseEnv):
         remote_file = Path(remote_path)
 
         if not remote_file.exists():
-            raise FileNotFoundError(f"Remote file not found: {remote_path}")
+            raise FileNotFoundError(f'Remote file not found: {remote_path}')
 
         if not remote_file.is_file():
-            raise IsADirectoryError(f"Remote path is not a file: {remote_path}")
+            raise IsADirectoryError(f'Remote path is not a file: {remote_path}')
 
         with open(remote_file, 'rb') as f:
             return f.read()
@@ -427,10 +427,10 @@ class LocalEnv(BaseEnv):
         remote_file = Path(remote_path)
 
         if not remote_file.exists():
-            raise FileNotFoundError(f"Remote file not found: {remote_path}")
+            raise FileNotFoundError(f'Remote file not found: {remote_path}')
 
         if not remote_file.is_file():
-            raise IsADirectoryError(f"Remote path is not a file: {remote_path}")
+            raise IsADirectoryError(f'Remote path is not a file: {remote_path}')
 
         with open(remote_file, encoding=encoding) as f:
             return f.read()

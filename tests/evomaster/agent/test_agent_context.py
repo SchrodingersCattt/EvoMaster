@@ -332,8 +332,8 @@ class TestAgentContextManagement(unittest.TestCase):
 
         # 添加大量消息（每条消息约20字符，加上开销，10条消息约500字符，约125 tokens）
         for i in range(15):
-            agent.add_user_message(f"用户消息 {i} " + 'x' * 50)  # 增加消息长度
-            agent.add_assistant_message(f"助手回复 {i} " + 'y' * 50)
+            agent.add_user_message(f'用户消息 {i} ' + 'x' * 50)  # 增加消息长度
+            agent.add_assistant_message(f'助手回复 {i} ' + 'y' * 50)
 
         dialog = agent.get_current_dialog()
         # 确保确实需要截断
@@ -356,7 +356,7 @@ class TestAgentContextManagement(unittest.TestCase):
 
         # 添加消息
         for i in range(5):
-            agent.add_user_message(f"消息 {i}")
+            agent.add_user_message(f'消息 {i}')
 
         dialog = agent.get_current_dialog()
         truncated = agent.context_manager.truncate(dialog)
@@ -374,8 +374,8 @@ class TestAgentContextManagement(unittest.TestCase):
 
         # 添加多条助手消息（从助手消息开始截断）
         for i in range(8):
-            agent.add_assistant_message(f"助手消息 {i}")
-            agent.add_user_message(f"用户消息 {i}")
+            agent.add_assistant_message(f'助手消息 {i}')
+            agent.add_user_message(f'用户消息 {i}')
 
         dialog = agent.get_current_dialog()
         original_count = len(dialog.messages)
@@ -403,8 +403,8 @@ class TestAgentContextManagement(unittest.TestCase):
 
         # 添加多条消息
         for i in range(10):
-            agent.add_user_message(f"用户消息 {i}")
-            agent.add_assistant_message(f"助手消息 {i}")
+            agent.add_user_message(f'用户消息 {i}')
+            agent.add_assistant_message(f'助手消息 {i}')
 
         dialog = agent.get_current_dialog()
         original_count = len(dialog.messages)
@@ -429,8 +429,8 @@ class TestAgentContextManagement(unittest.TestCase):
 
         # 添加消息
         for i in range(8):
-            agent.add_assistant_message(f"助手消息 {i}")
-            agent.add_user_message(f"用户消息 {i}")
+            agent.add_assistant_message(f'助手消息 {i}')
+            agent.add_user_message(f'用户消息 {i}')
 
         dialog = agent.get_current_dialog()
         truncated = agent.context_manager.truncate(dialog)
@@ -560,7 +560,7 @@ class TestAgentContextManagement(unittest.TestCase):
 
         # 只添加用户消息，没有助手消息
         for i in range(5):
-            agent.add_user_message(f"用户消息 {i}")
+            agent.add_user_message(f'用户消息 {i}')
 
         dialog = agent.get_current_dialog()
         original_count = len(dialog.messages)
@@ -619,8 +619,8 @@ class TestAgentContextManagement(unittest.TestCase):
 
         # 添加多条消息
         for i in range(10):
-            agent.add_user_message(f"用户消息 {i}")
-            agent.add_assistant_message(f"助手消息 {i}")
+            agent.add_user_message(f'用户消息 {i}')
+            agent.add_assistant_message(f'助手消息 {i}')
 
         dialog = agent.get_current_dialog()
         truncated = agent.context_manager.truncate(dialog)
@@ -645,8 +645,8 @@ class TestAgentContextManagement(unittest.TestCase):
 
         # 添加大量消息（确保会触发截断）
         for i in range(15):
-            agent.add_user_message(f"消息 {i} " + 'x' * 50)
-            agent.add_assistant_message(f"回复 {i} " + 'y' * 50)
+            agent.add_user_message(f'消息 {i} ' + 'x' * 50)
+            agent.add_assistant_message(f'回复 {i} ' + 'y' * 50)
 
         dialog = agent.get_current_dialog()
         # 确保确实需要截断

@@ -76,7 +76,7 @@ class BashTool(BuiltinTool):
         # Block dangerous commands
         is_dangerous, reason = is_dangerous_bash_command(command)
         if is_dangerous:
-            return f"Blocked: {reason}"
+            return f'Blocked: {reason}'
 
         # Inject proxy clear prefix for non-input commands on non-Windows
         if not is_input and command and sys.platform != 'win32':
@@ -95,8 +95,8 @@ class BashTool(BuiltinTool):
 
         obs = output
         if working_dir:
-            obs += f"\n[Current working directory: {working_dir}]"
+            obs += f'\n[Current working directory: {working_dir}]'
         if exit_code != -1:
-            obs += f"\n[Command finished with exit code {exit_code}]"
+            obs += f'\n[Command finished with exit code {exit_code}]'
 
         return obs

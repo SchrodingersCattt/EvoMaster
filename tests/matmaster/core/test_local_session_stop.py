@@ -17,7 +17,7 @@ def test_local_session_exec_bash_honors_stop_event(tmp_path) -> None:
     started_at = time.time()
 
     try:
-        cmd = f"{shlex.quote(sys.executable)} -c " f"\"import time; time.sleep(10)\""
+        cmd = f'{shlex.quote(sys.executable)} -c ' f"\"import time; time.sleep(10)\""
         result = session.exec_bash(
             cmd,
             timeout=15,
