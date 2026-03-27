@@ -10,6 +10,10 @@
 
 ## 快速开始
 
+### 交互式 REPL（默认）
+
+子命令 **`repl`** 可省略：若第一个参数不是 `run`，会自动当作 **`repl`**（兼容旧用法）。
+
 ```bash
 # .env 中提供 LiteLLM 代理所需变量（与 llm_config.yaml 中引用一致）
 # LITELLM_PROXY_API_KEY=...
@@ -17,6 +21,8 @@
 
 # --model 为 llm_config.yaml 里 routes 的 key（例如 claude-sonnet-4-6）
 mm-devshell --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-6
+# 等价于
+mm-devshell repl --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-6
 ```
 
 省略 **`--model`** 时，使用 `config.yaml` 的 `agents.general.llm` 指向的 profile，或 `llm_config.yaml` 顶层的 **`default`**。
@@ -27,18 +33,33 @@ mm-devshell --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-6
 uv run python -m matmaster.devshell --workdir ./workspace --log-dir ./logs --model gemini-3-flash-preview
 ```
 
+### 单轮非交互 `run`
+
+用于脚本 / CI：执行一条用户 prompt，向 **stdout** 打印 **一行 JSON**（含 `status`、`reason`、`final_content`、`model`、`profile_key` 等），进程退出码 **`0`** 表示 `reason == natural`，否则 **`1`**。
+
+```bash
+mm-devshell run --workdir ./ws --log-dir ./logs -p "用一句话介绍你自己"
+mm-devshell run --workdir ./ws --log-dir ./logs --prompt-file ./task.txt
+# 同时写入文件
+mm-devshell run --workdir ./ws --log-dir ./logs -p "hi" --json-out ./summary.json
+```
+
+`--prompt` / `-p` 与 **`--prompt-file`** 二选一。
+
 启动时会 **`load_dotenv()`**（当前工作目录下的 `.env`；不覆盖已在 shell 里 export 的变量）。
 
-## CLI 参数
+## CLI 参数（`repl` 与 `run` 共用）
 
 | 参数 | 必选 | 说明 |
 |------|------|------|
 | `--workdir` | 是 | 工作区目录（持久化） |
-| `--log-dir` | 是 | 事件日志目录（JSONL） |
+| `--log-dir` | 是 | 事件日志目录（REPL 下为 JSONL；`run` 仍需要有效路径） |
 | `--config` | 否 | 可选 devshell YAML（仅 agent/session/tools） |
 | `--model` | 否 | `llm_config.yaml` 中 **routes** 的路由 key；省略则用默认 profile |
 | `--session` | 否 | Session 类型：`local` / `docker` / `ssh` |
 | `--verbose` | 否 | 详细输出 |
+
+**仅 `run`：** `--prompt` / `-p` 或 `--prompt-file`（必选其一）；`--json-out` 可选，额外把 stdout 那行 JSON 写入文件。
 
 ## REPL 命令
 

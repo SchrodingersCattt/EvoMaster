@@ -80,19 +80,31 @@ class TestFormatBanner:
         assert "/my/logs" in banner
 
 
+def _repl_argv(*parts: str) -> list[str]:
+    return ["repl", *parts]
+
+
 class TestCliParsing:
     def test_parse_required_args(self) -> None:
         from matmaster.devshell.cli import parse_args
 
-        args = parse_args(["--workdir", "/tmp/ws", "--log-dir", "/tmp/logs"])
+        args = parse_args(_repl_argv("--workdir", "/tmp/ws", "--log-dir", "/tmp/logs"))
+        assert args.command == "repl"
         assert args.workdir == Path("/tmp/ws")
         assert args.log_dir == Path("/tmp/logs")
+
+    def test_legacy_omitted_repl(self) -> None:
+        from matmaster.devshell.cli import parse_args
+
+        args = parse_args(["--workdir", "/tmp/ws", "--log-dir", "/tmp/logs"])
+        assert args.command == "repl"
+        assert args.workdir == Path("/tmp/ws")
 
     def test_parse_optional_args(self) -> None:
         from matmaster.devshell.cli import parse_args
 
         args = parse_args(
-            [
+            _repl_argv(
                 "--workdir",
                 "/tmp/ws",
                 "--log-dir",
@@ -102,7 +114,7 @@ class TestCliParsing:
                 "--session",
                 "docker",
                 "--verbose",
-            ]
+            )
         )
         assert args.config == Path("custom.yaml")
         assert args.session == "docker"
@@ -111,7 +123,7 @@ class TestCliParsing:
     def test_defaults(self) -> None:
         from matmaster.devshell.cli import parse_args
 
-        args = parse_args(["--workdir", "/tmp/ws", "--log-dir", "/tmp/logs"])
+        args = parse_args(_repl_argv("--workdir", "/tmp/ws", "--log-dir", "/tmp/logs"))
         assert args.config is None
         assert args.session is None
         assert args.verbose is False
@@ -121,13 +133,51 @@ class TestCliParsing:
         from matmaster.devshell.cli import parse_args
 
         args = parse_args(
-            [
+            _repl_argv(
                 "--workdir",
                 "/tmp/ws",
                 "--log-dir",
                 "/tmp/logs",
                 "--model",
                 "gpt-4o-mini",
-            ]
+            )
         )
         assert args.model == "gpt-4o-mini"
+
+    def test_run_subcommand_prompt(self) -> None:
+        from matmaster.devshell.cli import parse_args
+
+        args = parse_args(
+            [
+                "run",
+                "--workdir",
+                "/tmp/ws",
+                "--log-dir",
+                "/tmp/logs",
+                "-p",
+                "hello",
+            ]
+        )
+        assert args.command == "run"
+        assert args.prompt == "hello"
+        assert args.json_out is None
+
+    def test_run_prompt_file(self) -> None:
+        from matmaster.devshell.cli import parse_args
+
+        args = parse_args(
+            [
+                "run",
+                "--workdir",
+                "/tmp/ws",
+                "--log-dir",
+                "/tmp/logs",
+                "--prompt-file",
+                "/tmp/p.txt",
+                "--json-out",
+                "/tmp/out.json",
+            ]
+        )
+        assert args.command == "run"
+        assert args.prompt_file == Path("/tmp/p.txt")
+        assert args.json_out == Path("/tmp/out.json")

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
@@ -28,31 +30,40 @@ def _load_agents_general_llm(main_config: Path) -> str | None:
     return None
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(
-        prog="mm-devshell",
-        description="MatMaster DevShell -- interactive agent testing CLI",
-    )
-    parser.add_argument(
+def _normalize_argv(argv: list[str] | None) -> list[str]:
+    """Prepend ``repl`` when omitted so ``mm-devshell --workdir ...`` keeps working."""
+    if argv is None:
+        argv = sys.argv[1:]
+    if not argv:
+        return ["repl"]
+    if argv[0] in ("repl", "run"):
+        return argv
+    if argv[0] in ("-h", "--help"):
+        return ["repl"] + argv
+    return ["repl"] + argv
+
+
+def build_parser() -> argparse.ArgumentParser:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
         "--workdir",
         type=Path,
         required=True,
         help="Workspace directory (persistent)",
     )
-    parser.add_argument(
+    common.add_argument(
         "--log-dir",
         type=Path,
         required=True,
         help="Event log directory",
     )
-    parser.add_argument(
+    common.add_argument(
         "--config",
         type=Path,
         default=None,
         help="Optional devshell YAML (agent/session/tools only; LLM 来自 matmaster_config/llm_config.yaml)",
     )
-    parser.add_argument(
+    common.add_argument(
         "--model",
         type=str,
         default=None,
@@ -61,26 +72,78 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "(例: claude-sonnet-4-6)；省略则使用 config.yaml 里 agents.general.llm 或 llm_config 的 default"
         ),
     )
-    parser.add_argument(
+    common.add_argument(
         "--session",
         type=str,
         default=None,
         help="Session type override: local/docker/ssh",
     )
-    parser.add_argument(
+    common.add_argument(
         "--verbose",
         action="store_true",
         default=False,
         help="Enable verbose output",
     )
-    return parser.parse_args(argv)
+
+    parser = argparse.ArgumentParser(
+        prog="mm-devshell",
+        description="MatMaster DevShell — matmaster agent (REPL or single run).",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  mm-devshell --workdir ./ws --log-dir ./logs\n"
+            "  mm-devshell repl --workdir ./ws --log-dir ./logs\n"
+            "  mm-devshell run --workdir ./ws --log-dir ./logs -p \"Hello\"\n"
+        ),
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    sub.add_parser(
+        "repl",
+        parents=[common],
+        help="Interactive REPL (default when the first argument is omitted)",
+        description="Start interactive REPL.",
+    )
+
+    run_p = sub.add_parser(
+        "run",
+        parents=[common],
+        help="Run one prompt and exit (scripts / CI)",
+        description="Run a single task non-interactively; prints one JSON line to stdout.",
+    )
+    run_g = run_p.add_mutually_exclusive_group(required=True)
+    run_g.add_argument(
+        "--prompt",
+        "-p",
+        type=str,
+        metavar="TEXT",
+        help="User prompt text",
+    )
+    run_g.add_argument(
+        "--prompt-file",
+        type=Path,
+        metavar="PATH",
+        help="Read prompt from file (UTF-8)",
+    )
+    run_p.add_argument(
+        "--json-out",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Also write the same JSON line to this file",
+    )
+
+    return parser
 
 
-def main(argv: list[str] | None = None) -> None:
-    """Entry point for mm-devshell."""
-    load_dotenv()
-    args = parse_args(argv)
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse command-line arguments (after ``repl`` default injection)."""
+    argv = _normalize_argv(argv)
+    return build_parser().parse_args(argv)
 
+
+def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
+    """Load LLM config, build provider, return DevRunner and related objects."""
     root = _project_root()
     llm_yaml = root / "matmaster_config" / "llm_config.yaml"
     main_yaml = root / "matmaster_config" / "config.yaml"
@@ -136,7 +199,6 @@ def main(argv: list[str] | None = None) -> None:
     args.workdir.mkdir(parents=True, exist_ok=True)
     args.log_dir.mkdir(parents=True, exist_ok=True)
 
-    from matmaster.devshell.repl import run_repl
     from matmaster.devshell.runner import DevRunner
     from matmaster.devshell.stream_hook import DevStreamHook
 
@@ -149,6 +211,67 @@ def main(argv: list[str] | None = None) -> None:
         resolved_route=resolved,
         stream_hook=stream_hook,
     )
+    return runner, config, llm_config, resolved
+
+
+def _run_single(
+    args: argparse.Namespace,
+    runner: Any,
+    resolved: Any,
+) -> int:
+    """Execute one prompt; print JSON line to stdout; optional --json-out."""
+    if getattr(args, "prompt", None) is not None:
+        prompt = args.prompt
+    else:
+        pf = args.prompt_file
+        if not pf.is_file():
+            print(f"Error: prompt file not found: {pf}", file=sys.stderr)
+            return 1
+        prompt = pf.read_text(encoding="utf-8")
+
+    prompt = prompt.strip()
+    if not prompt:
+        print("Error: empty prompt", file=sys.stderr)
+        return 1
+
+    try:
+        result = runner.run(prompt)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    kr = result.result
+    summary: dict[str, Any] = {
+        "model": getattr(resolved, "model", None),
+        "profile_key": getattr(resolved, "profile_key", None),
+        "route_key": getattr(resolved, "route_key", None),
+        "status": kr.status,
+        "reason": kr.reason,
+        "final_content": kr.final_content,
+        "num_turns": kr.num_turns,
+        "usage": dict(kr.usage) if kr.usage else {},
+    }
+    line = json.dumps(summary, ensure_ascii=False)
+    print(line)
+    if args.json_out is not None:
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
+        args.json_out.write_text(line + "\n", encoding="utf-8")
+
+    return 0 if kr.reason == "natural" else 1
+
+
+def main(argv: list[str] | None = None) -> None:
+    """Entry point for mm-devshell."""
+    load_dotenv()
+    args = parse_args(argv)
+
+    runner, config, _llm_config, resolved = _bootstrap_runner(args)
+
+    if args.command == "run":
+        rc = _run_single(args, runner, resolved)
+        raise SystemExit(rc)
+
+    from matmaster.devshell.repl import run_repl
 
     run_repl(runner, config, log_dir=args.log_dir, verbose=args.verbose)
 
