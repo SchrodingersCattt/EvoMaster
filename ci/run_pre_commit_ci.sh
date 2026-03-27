@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# GitLab CI：仅对本次 push/MR 相对基线的变更文件运行 pre-commit（非 --all-files）
+# GitLab CI：仅对本次 diff 内变更文件跑 pre-commit。
+# 依赖 CI 里单独 pip install 的 pre-commit；各 hook 由 pre-commit 按 .pre-commit-config.yaml 自建环境，无需 uv sync 项目依赖。
 set -euo pipefail
 
 collect_changed() {
@@ -38,4 +39,4 @@ if [ "${#FILES[@]}" -eq 0 ]; then
 fi
 
 echo "pre-commit: 检查 ${#FILES[@]} 个变更文件"
-exec uv run pre-commit run --files "${FILES[@]}"
+exec pre-commit run --files "${FILES[@]}"
