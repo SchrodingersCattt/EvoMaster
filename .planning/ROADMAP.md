@@ -89,7 +89,11 @@ Plans:
   3. 文件操作类 Tool (Read/Write/Edit/Glob/Grep) 的 session 调用通过 asyncio.to_thread 包装，不阻塞 event loop
   4. SubAgentTool 的 spawn_fn 参数类型为 async callable，_execute 通过 await spawn_fn(...) 调用
   5. 所有 tool 测试通过 pytest-asyncio 运行
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 14-01-PLAN.md -- BuiltinTool ABC async execute + sync _execute rollback + ToolRegistry async execute + 核心测试迁移
+- [ ] 14-02-PLAN.md -- LazyMCPTool/SkillTool/EvoToolAdapter async + Kernel 桥接 + 全量 tool 测试 async 迁移
 
 ### Phase 15: Hook 系统异步化
 **Goal**: 所有 Hook 实现的 7 个方法为 async，EventEmitterHook 可 await 异步 bus.emit()，ConfirmationHook 的 reply queue 支持 async 等待
@@ -170,7 +174,7 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete | 2026-03-25 |
 | 12. Protocol 层 + 测试基础设施 | v2.0 | 2/2 | Complete | 2026-03-26 |
 | 13. LLM Provider 异步实现 | v2.0 | 2/2 | Complete | 2026-03-27 |
-| 14. Tool 系统异步化 | v2.0 | 0/0 | Not started | - |
+| 14. Tool 系统异步化 | v2.0 | 0/2 | Planned | - |
 | 15. Hook 系统异步化 | v2.0 | 0/0 | Not started | - |
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/0 | Not started | - |
 | 17. AgentKernel 异步化 | v2.0 | 0/0 | Not started | - |
