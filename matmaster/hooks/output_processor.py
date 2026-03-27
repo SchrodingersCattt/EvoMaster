@@ -38,7 +38,7 @@ class OutputProcessorHook(BaseHook):
         self._summarize_patterns = summarize_patterns or []
         self._source = source
 
-    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
+    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         """Check tool_call.name against patterns and emit events if matched."""
         tool_name = tool_call.name
         base_info = dict(result.info)

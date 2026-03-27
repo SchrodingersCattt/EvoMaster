@@ -1911,6 +1911,11 @@ dev = [
     { name = "pytest-asyncio" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest-asyncio" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aiohttp" },
@@ -1948,6 +1953,9 @@ requires-dist = [
     { name = "websockets", specifier = ">=11.0" },
 ]
 provides-extras = ["bohrium-open", "dev", "calculation"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest-asyncio", specifier = ">=0.24.0" }]
 
 [[package]]
 name = "matplotlib"
