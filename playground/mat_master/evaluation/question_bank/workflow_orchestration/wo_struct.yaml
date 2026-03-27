@@ -4,7 +4,7 @@ domain: "struct"
 
 questions:
   # ============================================================
-  # WO_struct_001 ← L2_Q02 (MgO(100)表面能)
+  # WO_struct_001 (MgO(100)表面能)
   # ============================================================
   - id: "WO_struct_001"
     capability: "workflow_orchestration"
@@ -69,7 +69,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # WO_struct_002 ← L2_Q04 (MgO O空位形成能)
+  # WO_struct_002 (MgO O空位形成能)
   # ============================================================
   - id: "WO_struct_002"
     capability: "workflow_orchestration"

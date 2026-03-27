@@ -1,0 +1,37 @@
+{
+  "task": "batch_convergence_test_ENCUT_sweep",
+  "description": "For a fixed structure (Al face-centered cubic), run 5 single-point energy calculations with varying ENCUT (280, 300, 320, 340, 360 eV). All other parameters must be strictly constant: k-point mesh, ISMEAR, SIGMA, POTCAR path, etc. This verifies systematic parameter scanning ability.",
+  "structure": {
+    "formula": "Al",
+    "crystal_system": "cubic",
+    "space_group": "Fm-3m",
+    "lattice_constant_A": 4.05
+  },
+  "convergence_variable": {
+    "parameter": "ENCUT",
+    "values": [280, 300, 320, 340, 360],
+    "unit": "eV",
+    "description": "Plane wave energy cutoff"
+  },
+  "locked_parameters": {
+    "k_point_mesh": "8 8 8",
+    "ISMEAR": 1,
+    "SIGMA": 0.1,
+    "NSW": 0,
+    "IBRION": -1,
+    "POTCAR": "PAW_PBE/Al/POTCAR",
+    "ALGO": "Fast"
+  },
+  "expected_output": {
+    "format": "5 OUTCAR files or energy log",
+    "naming": "Al_ENCUT_{energy_ev}_eV_energy.txt or similar",
+    "analysis": "plot energy vs ENCUT to show convergence curve"
+  },
+  "verification_checklist": [
+    "Parameter ENCUT varies from 280→360 eV",
+    "All 5 calculations use identical k-point mesh 8x8x8",
+    "ISMEAR, SIGMA unchanged across runs",
+    "Output file sequence shows clear parameter progression",
+    "Can extract energies and produce convergence plot"
+  ]
+}
