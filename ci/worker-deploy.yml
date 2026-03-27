@@ -61,6 +61,8 @@ pre-commit:
   image: $REGISTRY/public/ubuntu:gitlab-0.0.2
   before_script:
     - mkdir -p .ci-bin && ln -sf "$(command -v python3)" .ci-bin/python && export PATH="$CI_PROJECT_DIR/.ci-bin:$PATH"
+    - export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple PIP_TRUSTED_HOST=mirrors.tuna.tsinghua.edu.cn PIP_CACHE_DIR="${CI_PROJECT_DIR}/.cache/pip"
+    - mkdir -p "${PIP_CACHE_DIR}"
     - python3 -m pip install --user pre-commit
     - export PATH="$HOME/.local/bin:$PATH"
   script:
@@ -73,6 +75,7 @@ pre-commit:
         - .pre-commit-config.yaml
     paths:
       - .cache/pre-commit
+      - .cache/pip
   rules:
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_TAG'
       when: on_success
