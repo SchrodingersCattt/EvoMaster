@@ -18,10 +18,16 @@ tools:
   mat_sg_build_bulk_structure_by_wyckoff:
     server: "mat_sg"
     category: "structure_construction"
+  mat_sg_build_molecule_structures_from_smiles:
+    server: "mat_sg"
+    category: "structure_construction"
   mat_sg_build_surface_slab:
     server: "mat_sg"
     category: "structure_construction"
   mat_sg_build_surface_interface:
+    server: "mat_sg"
+    category: "structure_construction"
+  mat_sg_add_hydrogens:
     server: "mat_sg"
     category: "structure_construction"
   mat_sg_make_defect_structure:
@@ -47,7 +53,7 @@ tools:
 banks:
   - path: "batch_processing/bp_struct.yaml"
     capability: "batch_processing"
-    questions: 3
+    questions: 5
 
   - path: "data_diagnosis/dd_general.yaml"
     capability: "data_diagnosis"
@@ -63,7 +69,7 @@ banks:
 
   - path: "structure_construction/sc_struct.yaml"
     capability: "structure_construction"
-    questions: 4
+    questions: 9
 
   - path: "workflow_orchestration/wo_mech.yaml"
     capability: "workflow_orchestration"
@@ -85,4 +91,4 @@ banks:
     capability: "safety_refusal"
     questions: 4
 
-# Total: 26 questions across 10 bank files
+# Total: 33 questions across 10 bank files

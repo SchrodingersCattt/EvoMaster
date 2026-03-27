@@ -1,5 +1,10 @@
 # evidence_mapping.yaml — Tool name → EventType + SourceType mapping
 #
+# EvoMaster compatibility mapping. This file is NOT a core evaluator dependency:
+# runtime-specific callers such as `runner.py` may choose to inject it into
+# `EvidenceExtractor(mapping_path=...)`. If omitted, the core evaluator still
+# works, only event/source-type classification becomes unavailable.
+#
 # Format per rule:
 #   pattern: str          — tool name pattern (exact / prefix* / *substring*)
 #   when_args_contains:   — optional; all conditions must match to apply this rule

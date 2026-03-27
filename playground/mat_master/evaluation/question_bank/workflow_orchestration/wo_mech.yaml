@@ -4,7 +4,7 @@ domain: "mech"
 
 questions:
   # ============================================================
-  # WO_mech_001 ← L2_Q01 (Al FCC EOS)
+  # WO_mech_001 (Al FCC EOS)
   # ============================================================
   - id: "WO_mech_001"
     capability: "workflow_orchestration"
@@ -83,7 +83,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # WO_mech_002 ← L2_Q05 (RDX爆速爆压)
+  # WO_mech_002 (RDX爆速爆压)
   # ============================================================
   - id: "WO_mech_002"
     capability: "workflow_orchestration"

@@ -1,0 +1,52 @@
+{
+  "task": "batch_dos_calculation_input_prep",
+  "description": "For 4 different structures (Si, Cu, Al, Fe), generate VASP INCAR files for DOS calculation. The key control is that k-point density must be constant (~50 k-points per Å⁻¹), even though raw structure sizes differ. Other parameters (ISMEAR=0, SIGMA=0.05, NEDOS=2000) must also be uniform across all structures.",
+  "structures": [
+    {
+      "id": "dos_si",
+      "structure": "Si (cubic, a=5.43 Å)",
+      "formula": "Si",
+      "kpoint_density": 50,
+      "expected_kpts_approx": "8x8x8",
+      "volume_A3": 160
+    },
+    {
+      "id": "dos_cu",
+      "structure": "Cu (cubic, a=3.61 Å)",
+      "formula": "Cu",
+      "kpoint_density": 50,
+      "expected_kpts_approx": "12x12x12",
+      "volume_A3": 47
+    },
+    {
+      "id": "dos_al",
+      "structure": "Al (cubic, a=4.05 Å)",
+      "formula": "Al",
+      "kpoint_density": 50,
+      "expected_kpts_approx": "11x11x11",
+      "volume_A3": 66
+    },
+    {
+      "id": "dos_fe",
+      "structure": "Fe (bcc, a=2.87 Å)",
+      "formula": "Fe",
+      "kpoint_density": 50,
+      "expected_kpts_approx": "15x15x15",
+      "volume_A3": 24
+    }
+  ],
+  "constant_parameters": {
+    "ISMEAR": 0,
+    "SIGMA": 0.05,
+    "NEDOS": 2000,
+    "LORBIT": 11,
+    "NSW": 0
+  },
+  "verification": {
+    "kpoint_density_consistency": {
+      "description": "All 4 files must have k-point density ≈ 50 points/Å⁻¹ (not just constant k-point counts)",
+      "tolerance": 2.0
+    },
+    "other_parameters_identical": "ISMEAR, SIGMA, NEDOS must be exactly the same across all 4 INCAR files"
+  }
+}

@@ -4,7 +4,7 @@ domain: "elec"
 
 questions:
   # ============================================================
-  # WO_elec_001 ← L2_Q03 (Si能带结构)
+  # WO_elec_001 (Si能带结构)
   # ============================================================
   - id: "WO_elec_001"
     capability: "workflow_orchestration"
@@ -65,7 +65,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # WO_elec_002 ← L2_Q06 (液态水HOMO-LUMO gap)
+  # WO_elec_002 (液态水HOMO-LUMO gap)
   # ============================================================
   - id: "WO_elec_002"
     capability: "workflow_orchestration"
