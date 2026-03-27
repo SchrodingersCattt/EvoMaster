@@ -4,6 +4,7 @@ validate_input.py — 调用 Validator 对输入文件做静态校验，并输�
 用法
 ----
   python validate_input.py --input_file /path/to/cp2k.inp --software CP2K
+  python validate_input.py --input_file /path/to/abacus/INPUT --software ABACUS
   python validate_input.py --input_file /path/to/cp2k.inp --software CP2K --json_out diag.json
 
 本脚本永远 exit 0，校验结果（包括 error 级别的诊断）写入 --json_out 文件
@@ -50,7 +51,7 @@ def main() -> None:
     parser.add_argument(
         '--software',
         required=True,
-        help='Software name (e.g. CP2K, ORCA, QE, LAMMPS, ABINIT).',
+        help='Software name (e.g. CP2K, ORCA, QE, LAMMPS, ABINIT, ABACUS).',
     )
     parser.add_argument(
         '--json_out',
