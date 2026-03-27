@@ -77,6 +77,8 @@ uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshel
 uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_* --with-questions
 ```
 
+**Claude Code（Cursor Agent）自跑自评：** 判分由对话里的 Agent 执行命令并阅读产物完成，而不是仓库内另一条自动判分流水线。工作流说明见 **`.cursor/rules/devshell-claude-code-eval.mdc`**（可在对话中 @ 该文件）。
+
 ## CLI 参数（`repl` 与 `run` 共用）
 
 | 参数 | 必选 | 说明 |
