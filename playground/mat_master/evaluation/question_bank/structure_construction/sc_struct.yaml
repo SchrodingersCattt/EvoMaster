@@ -27,8 +27,17 @@ questions:
       - key: "mismatch_percent"
         value: 1.6
         tolerance: 1.0
+      - key: "interface_distance_A"
+        value: 3.35
+        tolerance: 0.4
+        tool_name: "mat_sg_build_surface_interface"
+        tool_arg: "interface_distance"
+      - key: "stack_axis"
+        value: 2
+        tool_name: "mat_sg_build_surface_interface"
+        tool_arg: "stack_axis"
       - key: "required_fields"
-        value: ["structure_file", "lattice_mismatch", "total_atoms", "interlayer_distance"]
+        value: ["structure_file", "lattice_mismatch_percent", "total_atoms", "interlayer_distance_A", "stacking", "vacuum_A"]
       - key: "used_interface_builder"
         value: "mat_sg_build_surface_interface"
     scoring_checklist:
@@ -38,14 +47,22 @@ questions:
         axis: "correctness"
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Output includes structure file (POSCAR/CIF), lattice mismatch percentage, total atom count, and interlayer distance."
+        criterion: "Output includes structure file, lattice mismatch percentage below 2%, total atom count, interlayer distance near 3.35 A, AB stacking, and vacuum thickness near 15 A."
         axis: "correctness"
         verify: "llm_binary_judge"
+      - id: "interface_distance_A"
+        criterion: "The interface distance passed to the builder is close to 3.35 A."
+        axis: "correctness"
+        verify: "tool_args_match"
       # --- grounding ---
       - id: "used_interface_builder"
         criterion: "Used the MCP surface interface builder tool (mat_sg_build_surface_interface) for heterostructure construction."
         axis: "grounding"
         verify: "tool_called"
+      - id: "stack_axis"
+        criterion: "The two slabs are stacked along the z axis (stack_axis = 2)."
+        axis: "grounding"
+        verify: "tool_args_match"
       - id: "grounding_source"
         criterion: "Heterostructure is assembled using the registered MCP interface builder, not constructed by writing raw coordinates."
         axis: "grounding"
@@ -61,45 +78,58 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # SC_struct_002 (Cu(111)表面slab)
+  # SC_struct_002 (PUBMUU03 分子晶体 (110) 表面切面)
   # ============================================================
   - id: "SC_struct_002"
     capability: "structure_construction"
     domain: "struct"
-    intent: "Cut a Cu(111) surface slab from bulk FCC copper with vacuum and fixed bottom layers."
-    human_prompt_seed: >
-      读取 `surface_spec.json`，从 FCC Cu 体相切出 (111) 表面 slab。
-      要求：4 层原子层，底部 2 层固定，3x3 横向超胞，15 A 真空层。
-      输出 POSCAR，报告总原子数和表面面积。
-    tags: ["surface_slab", "Cu111", "vacuum", "structure_build"]
+    intent: "Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular crystal CIF and verify molecule integrity plus atom-count scaling."
+    human_prompt_seed: |
+      对以下通过 OSS URL 提供的 CIF 结构进行处理：
+      - `surface_PUBMUU03.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/1774583701_surface_PUBMUU03.cif`
+
+      任务：基于该结构切出 `(1, 1, 0)` 表面 slab，要求为 4 层。
+      真空层不是重点，可以不特别说明或自行设定合理值。
+
+      重点检查并在最终答案中明确报告：
+      (1) 切面后分子是否被切断，并给出判断依据；
+      (2) 输入单胞的原子数；
+      (3) 最终 slab 的原子总数；
+      (4) 是否满足“最终原子数 = 单胞原子数的 4 倍”。
+
+      输出结构文件，并给出上述核查结论。
+    tags: ["surface_slab", "molecular_crystal", "110_surface", "molecule_integrity", "structure_build"]
     mode_scope: ["direct", "planner"]
     required_tools: ["mat_sg_build_surface_slab"]
     optional_tools: []
-    data_files:
-      - key: "surface_spec"
-        path: "data/SC_struct_002/surface_spec.json"
-        oss_url: ""
-        description: "Specification for Cu(111) surface slab construction."
+    data_files: []
     reference_answers:
+      - key: "unit_cell_atoms"
+        value: 144
+        tolerance: 0.0
       - key: "total_atoms"
-        value: 36
+        value: 576
         tolerance: 0.0
       - key: "required_fields"
-        value: ["structure_file", "total_atoms", "surface_area", "fixed_layers"]
+        value: ["structure_file", "unit_cell_atoms", "total_atoms", "atom_count_ratio_check", "molecule_integrity_check"]
       - key: "used_slab_builder"
         value: "mat_sg_build_surface_slab"
       - key: "correct_miller"
-        value: [1, 1, 1]
+        value: [1, 1, 0]
         tool_name: "mat_sg_build_surface_slab"
         tool_arg: "miller_index"
     scoring_checklist:
       # --- correctness ---
+      - id: "unit_cell_atoms"
+        criterion: "The input unit cell atom count is reported correctly (144 atoms)."
+        axis: "correctness"
+        verify: "numerical_range"
       - id: "total_atoms"
-        criterion: "Total atom count is correct (36 for 4-layer 3x3 FCC(111))."
+        criterion: "Total atom count is correct (576 atoms for a 4-layer slab built directly from the 144-atom input unit cell)."
         axis: "correctness"
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Output includes structure file, total atom count, surface area, and which layers are fixed."
+        criterion: "Output includes structure file, unit-cell atom count, final atom count, an explicit 4x ratio check, and a molecule-integrity check with evidence."
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
@@ -108,11 +138,11 @@ questions:
         axis: "grounding"
         verify: "tool_called"
       - id: "correct_miller"
-        criterion: "Slab built with correct (111) Miller index passed to mat_sg_build_surface_slab."
+        criterion: "Slab built with correct (110) Miller index passed to mat_sg_build_surface_slab."
         axis: "grounding"
         verify: "tool_args_match"
       - id: "grounding_source"
-        criterion: "Cu(111) slab is constructed via the registered MCP slab builder with the exact Miller index from surface_spec.json."
+        criterion: "The slab is constructed from the provided OSS-hosted PUBMUU03 CIF using the registered MCP slab builder, and the molecule-integrity conclusion is grounded in the resulting structure rather than guessed."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
@@ -121,7 +151,7 @@ questions:
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"
-        criterion: "Cu(111) slab construction completes without excessive exploratory calls."
+        criterion: "The (110) slab construction and integrity check complete without excessive exploratory calls."
         axis: "efficiency"
         verify: "llm_binary_judge"
 
@@ -152,12 +182,25 @@ questions:
         value: [1, 0, 0]
         tool_name: "mat_sg_build_surface_slab"
         tool_arg: "miller_index"
+      - key: "si_h_bond_length_A"
+        value: 1.48
+        tolerance: 0.15
       - key: "passivation_quality"
         value: "H atoms added to satisfy 4-coordination on bottom Si atoms"
+      - key: "required_fields"
+        value: ["structure_file", "hydrogen_count", "si_h_bond_length_A", "bottom_si_four_coordination"]
     scoring_checklist:
       # --- correctness ---
+      - id: "si_h_bond_length_A"
+        criterion: "A representative Si-H bond length is reported near 1.48 A."
+        axis: "correctness"
+        verify: "numerical_range"
       - id: "passivation_quality"
         criterion: "Bottom Si atoms passivated with H to achieve 4-coordination, with Si-H bond length ~1.48 A."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "required_fields"
+        criterion: "Output includes structure file, number of added H atoms, representative Si-H bond length, and an explicit check that bottom Si atoms reach four coordination."
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
@@ -204,6 +247,11 @@ questions:
         oss_url: ""
         description: "Specification for MoS2 monolayer exfoliation."
     reference_answers:
+      - key: "stoichiometry_formula"
+        value: "MoS2"
+      - key: "layer_thickness_A"
+        value: 3.1
+        tolerance: 0.6
       - key: "required_fields"
         value: ["structure_file", "stoichiometry_verified", "layer_thickness_A", "vacuum_A"]
       - key: "used_slab_builder"
@@ -215,8 +263,16 @@ questions:
         tool_arg: "vacuum"
     scoring_checklist:
       # --- correctness ---
+      - id: "stoichiometry_formula"
+        criterion: "The reported stoichiometry is MoS2."
+        axis: "correctness"
+        verify: "contains_all"
+      - id: "layer_thickness_A"
+        criterion: "The reported monolayer thickness is close to 3.1 A."
+        axis: "correctness"
+        verify: "numerical_range"
       - id: "required_fields"
-        criterion: "Monolayer POSCAR output with verified MoS2 stoichiometry, reported layer thickness (~3.1 A), and vacuum layer (~20 A)."
+        criterion: "Output includes structure file, explicit MoS2 stoichiometry verification, layer thickness near 3.1 A, and vacuum layer near 20 A."
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
@@ -340,5 +396,421 @@ questions:
         verify: "token_budget"
       - id: "efficiency_judge"
         criterion: "The agent handles the 5 structures one by one with minimal detours and without exploratory over-processing."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # SC_struct_006 (MEAPER 分子晶体补氢)
+  # ============================================================
+  - id: "SC_struct_006"
+    capability: "structure_construction"
+    domain: "struct"
+    intent: "Add missing hydrogens to the monomethylammonium perchlorate crystal MEAPER while preserving perchlorate oxygens and validating local tetrahedral geometry."
+    human_prompt_seed: >
+      读取 `add-H_MEAPER.cif`，对高氯酸甲铵（MEAPER）晶体结构补氢，并导出为 `meaper_hydrogenated.cif`。
+      要求：只给甲铵部分的 C 和 N 补氢，且每个 C、N 都应补上 3 个 H；
+      高氯酸根的 O 不应加氢。
+      请输出补氢后的结构文件，并报告：
+      (1) 最终化学式；
+      (2) C 是否都变成 CH3；
+      (3) N 是否都变成 NH3；
+      (4) 高氯酸根 O 是否未被氢化；
+      (5) 代表性的 H-C-H / H-N-H 键角是否接近 109.48°（允许合理波动）。
+    tags: ["hydrogen_addition", "molecular_crystal", "MEAPER", "geometry_validation", "formula_check"]
+    mode_scope: ["direct", "planner"]
+    required_tools: ["mat_sg_add_hydrogens"]
+    optional_tools: []
+    data_files:
+      - key: "meaper_cif"
+        path: "data/SC_struct_006/add-H_MEAPER.cif"
+        oss_url: ""
+        description: "MEAPER molecular-crystal CIF missing explicit H atoms on methylammonium."
+    reference_answers:
+      - key: "file_exists"
+        value: "meaper_hydrogenated.cif"
+      - key: "output_file"
+        value: "meaper_hydrogenated.cif"
+        tool_name: "mat_sg_add_hydrogens"
+        tool_arg: "output_file"
+      - key: "target_formula"
+        value: "C8H48Cl8N8O32"
+      - key: "required_fields"
+        value: ["structure_file", "final_formula", "c_hydrogenation_check", "n_hydrogenation_check", "oxygen_not_hydrogenated", "bond_angle_check"]
+      - key: "used_add_hydrogens_tool"
+        value: "mat_sg_add_hydrogens"
+      - key: "target_elements_cn"
+        value: ["C", "N"]
+        tool_name: "mat_sg_add_hydrogens"
+        tool_arg: "target_elements"
+      - key: "hcn_angle_deg"
+        value: 109.48
+        tolerance: 8.0
+    scoring_checklist:
+      # --- correctness ---
+      - id: "file_exists"
+        criterion: "The output file `meaper_hydrogenated.cif` exists."
+        axis: "correctness"
+        verify: "artifact_exists"
+      - id: "target_formula"
+        criterion: "The final reported chemical formula is correct after hydrogenation."
+        axis: "correctness"
+        verify: "contains_all"
+      - id: "hcn_angle_deg"
+        criterion: "The reported representative H-C-H or H-N-H bond angle is close to tetrahedral 109.48 degrees within a reasonable tolerance."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Output includes structure file, final formula, explicit checks that C becomes CH3 and N becomes NH3, confirmation that perchlorate O atoms are not hydrogenated, and bond-angle validation."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "used_add_hydrogens_tool"
+        criterion: "Used the MCP hydrogen-addition tool (mat_sg_add_hydrogens)."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "output_file"
+        criterion: "The hydrogenated structure is exported as `meaper_hydrogenated.cif`."
+        axis: "grounding"
+        verify: "tool_args_match"
+      - id: "target_elements_cn"
+        criterion: "Hydrogenation targets only C and N atoms."
+        axis: "grounding"
+        verify: "tool_args_match"
+      - id: "grounding_source"
+        criterion: "The hydrogenated structure and all validation statements are grounded in the provided MEAPER CIF and the generated output structure rather than guessed from chemistry knowledge alone."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "Hydrogen addition is not repeated with identical parameters."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "efficiency_judge"
+        criterion: "The hydrogenation and validation workflow completes directly without redundant exploratory steps."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # SC_struct_007 (Nitroprusside 阴离子构建)
+  # ============================================================
+  - id: "SC_struct_007"
+    capability: "structure_construction"
+    domain: "struct"
+    intent: "Build the nitroprusside anion and validate its coordination, bond lengths, and near-linear linkage geometry."
+    human_prompt_seed: >
+      Build the nitroprusside anion. Export as `nitroprusside.xyz`.
+      In the final answer, explicitly report:
+      (1) whether `nitroprusside.xyz` exists;
+      (2) the formula, written as `FeC5N6O`;
+      (3) Fe coordination number;
+      (4) the counts of Fe-C bonds shorter than 2.0 A and Fe-N bonds shorter than 2.0 A;
+      (5) one representative N-O bond length and Fe-N-O angle;
+      (6) one representative C-N bond length and Fe-C-N angle.
+    tags: ["molecule_build", "coordination_complex", "nitroprusside", "bond_geometry", "structure_build"]
+    mode_scope: ["direct", "planner"]
+    required_tools: ["mat_sg_build_molecule_structures_from_smiles"]
+    optional_tools: []
+    data_files: []
+    reference_answers:
+      - key: "file_exists"
+        value: "nitroprusside.xyz"
+      - key: "output_file"
+        value: "nitroprusside.xyz"
+        tool_name: "mat_sg_build_molecule_structures_from_smiles"
+        tool_arg: "output_file"
+      - key: "target_formula"
+        value: "FeC5N6O"
+      - key: "fe_coordination"
+        value: 6
+        tolerance: 0.0
+      - key: "fe_c_bond_count"
+        value: 5
+        tolerance: 0.0
+      - key: "fe_n_bond_count"
+        value: 1
+        tolerance: 0.0
+      - key: "no_bond_length_A"
+        value: 1.20
+        tolerance: 0.10
+      - key: "fe_no_angle_deg"
+        value: 178.0
+        tolerance: 3.0
+      - key: "cn_bond_length_A"
+        value: 1.16
+        tolerance: 0.08
+      - key: "fe_cn_angle_deg"
+        value: 175.0
+        tolerance: 5.0
+      - key: "used_molecule_builder"
+        value: "mat_sg_build_molecule_structures_from_smiles"
+      - key: "required_fields"
+        value: ["file_exists", "formula", "fe_coordination", "fe_c_bond_count", "fe_n_bond_count", "no_bond_length", "fe_no_angle", "cn_bond_length", "fe_cn_angle"]
+    scoring_checklist:
+      # --- correctness ---
+      - id: "file_exists"
+        criterion: "The output file `nitroprusside.xyz` exists."
+        axis: "correctness"
+        verify: "artifact_exists"
+      - id: "target_formula"
+        criterion: "The final reported formula is `FeC5N6O`."
+        axis: "correctness"
+        verify: "contains_all"
+      - id: "fe_coordination"
+        criterion: "The reported Fe coordination number is 6."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "fe_c_bond_count"
+        criterion: "The reported count of Fe-C bonds shorter than 2.0 A is 5."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "fe_n_bond_count"
+        criterion: "The reported count of Fe-N bonds shorter than 2.0 A is 1."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "no_bond_length_A"
+        criterion: "A representative N-O bond length is reported below 1.3 A."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "fe_no_angle_deg"
+        criterion: "A representative Fe-N-O angle is reported above 175 degrees and close to linear."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "cn_bond_length_A"
+        criterion: "A representative C-N bond length is reported below 1.2 A."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "fe_cn_angle_deg"
+        criterion: "A representative Fe-C-N angle is reported above 170 degrees and close to linear."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "The answer explicitly reports all required metrics and ties them to the generated nitroprusside structure."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "used_molecule_builder"
+        criterion: "Used the molecular structure builder to generate the nitroprusside structure."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "output_file"
+        criterion: "The generated structure is exported as `nitroprusside.xyz`."
+        axis: "grounding"
+        verify: "tool_args_match"
+      - id: "grounding_source"
+        criterion: "The reported formula, coordination, bond counts, bond lengths, and angles are grounded in the generated structure rather than generic coordination-chemistry recall."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "The molecule builder is not called repeatedly with identical parameters."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "efficiency_judge"
+        criterion: "The nitroprusside construction and validation workflow completes directly without redundant trial-and-error."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # SC_struct_008 (γ-Al2O3 体相模型构建)
+  # ============================================================
+  - id: "SC_struct_008"
+    capability: "structure_construction"
+    domain: "struct"
+    intent: "Construct a computation-ready gamma-alumina bulk model and validate stoichiometry, geometry, coordination environments, and post-relaxation force."
+    human_prompt_seed: >
+      Construct a computation-ready γ-Al2O3 bulk model. Export as `gamma_alumina.cif`.
+      In the final answer, explicitly report:
+      (1) whether `gamma_alumina.cif` exists;
+      (2) the Al:O ratio, which should be approximately 2:3 (±5%);
+      (3) the three cell angles, each close to 90 degrees (±2 degrees);
+      (4) whether both tetrahedral and octahedral [AlO] environments exist;
+      (5) whether all interatomic distances are greater than 1.0 A;
+      (6) the relaxed maximum force, which should be below 0.1 eV/A.
+    tags: ["bulk_structure", "gamma_alumina", "coordination_environment", "relaxation_check", "structure_build"]
+    mode_scope: ["direct", "planner"]
+    required_tools:
+      - "mat_sg_build_bulk_structure_by_template"
+      - "mat_dpa_submit_optimize_structure"
+    optional_tools:
+      - "mat_sg_build_bulk_structure_by_wyckoff"
+    data_files: []
+    reference_answers:
+      - key: "file_exists"
+        value: "gamma_alumina.cif"
+      - key: "output_file"
+        value: "gamma_alumina.cif"
+        tool_name: "mat_sg_build_bulk_structure_by_template|mat_sg_build_bulk_structure_by_wyckoff"
+        tool_arg: "output_file"
+      - key: "al_o_ratio"
+        value: 0.6667
+        tolerance: 0.0334
+      - key: "alpha_deg"
+        value: 90.0
+        tolerance: 2.0
+      - key: "beta_deg"
+        value: 90.0
+        tolerance: 2.0
+      - key: "gamma_deg"
+        value: 90.0
+        tolerance: 2.0
+      - key: "max_force_eV_A"
+        value: 0.05
+        tolerance: 0.05
+      - key: "used_bulk_builder"
+        value:
+          - "mat_sg_build_bulk_structure_by_template"
+          - "mat_sg_build_bulk_structure_by_wyckoff"
+      - key: "used_dpa_optimizer"
+        value: "mat_dpa_submit_optimize_structure"
+      - key: "required_fields"
+        value: ["file_exists", "al_o_ratio", "cell_angles", "tetrahedral_alo", "octahedral_alo", "min_distance_check", "max_force"]
+    scoring_checklist:
+      # --- correctness ---
+      - id: "file_exists"
+        criterion: "The output file `gamma_alumina.cif` exists."
+        axis: "correctness"
+        verify: "artifact_exists"
+      - id: "al_o_ratio"
+        criterion: "The reported Al:O ratio is approximately 2:3 within 5 percent."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "alpha_deg"
+        criterion: "The reported alpha angle is close to 90 degrees."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "beta_deg"
+        criterion: "The reported beta angle is close to 90 degrees."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "gamma_deg"
+        criterion: "The reported gamma angle is close to 90 degrees."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "max_force_eV_A"
+        criterion: "The reported relaxed maximum force is below 0.1 eV/A."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "The answer explicitly reports the Al:O ratio, all three cell angles, evidence for both tetrahedral and octahedral AlO environments, a minimum-distance sanity check above 1.0 A, and a relaxed maximum-force check below 0.1 eV/A."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "used_bulk_builder"
+        criterion: "Used a registered bulk-structure builder to construct the gamma-alumina model."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "used_dpa_optimizer"
+        criterion: "Used the DPA optimizer to relax the bulk model before reporting the final max force."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "output_file"
+        criterion: "The bulk model is exported as `gamma_alumina.cif`."
+        axis: "grounding"
+        verify: "tool_args_match"
+      - id: "grounding_source"
+        criterion: "The reported stoichiometry, cell geometry, coordination environments, minimum distance, and maximum force are grounded in the constructed and relaxed model rather than generic knowledge of gamma-alumina."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "The bulk builder and optimizer are not called repeatedly with identical parameters."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "efficiency_judge"
+        criterion: "The gamma-alumina construction and relaxation workflow completes without redundant exploratory detours."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+
+  # ============================================================
+  # SC_struct_009 (CeO2(111) 极性表面)
+  # ============================================================
+  - id: "SC_struct_009"
+    capability: "structure_construction"
+    domain: "struct"
+    intent: "Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce trilayers and oxygen termination."
+    human_prompt_seed: >
+      Build a CeO2(111) surface with three Ce-O-Ce tri-layers. Export as `ceo2_111_trilayer.cif`.
+      In the final answer, explicitly report:
+      (1) whether `ceo2_111_trilayer.cif` exists;
+      (2) the total layer count, which should be 9;
+      (3) whether the slab is symmetric;
+      (4) whether the outermost surface layer is O-terminated;
+      (5) the Ce:O stoichiometric ratio, which should match CeO2.
+    tags: ["surface_slab", "CeO2", "111_surface", "polar_surface", "stoichiometry_check"]
+    mode_scope: ["direct", "planner"]
+    required_tools: ["mat_sg_build_surface_slab"]
+    optional_tools: []
+    data_files: []
+    reference_answers:
+      - key: "file_exists"
+        value: "ceo2_111_trilayer.cif"
+      - key: "output_file"
+        value: "ceo2_111_trilayer.cif"
+        tool_name: "mat_sg_build_surface_slab"
+        tool_arg: "output_file"
+      - key: "correct_miller"
+        value: [1, 1, 1]
+        tool_name: "mat_sg_build_surface_slab"
+        tool_arg: "miller_index"
+      - key: "slab_layers"
+        value: 9
+        tolerance: 0.0
+      - key: "slab_size_value"
+        value: 9
+        tool_name: "mat_sg_build_surface_slab"
+        tool_arg: "slab_size_value"
+      - key: "ce_o_ratio"
+        value: 0.5
+        tolerance: 0.05
+      - key: "used_slab_builder"
+        value: "mat_sg_build_surface_slab"
+      - key: "required_fields"
+        value: ["file_exists", "layer_count", "symmetry_check", "outermost_O_termination", "ce_o_ratio"]
+    scoring_checklist:
+      # --- correctness ---
+      - id: "file_exists"
+        criterion: "The output file `ceo2_111_trilayer.cif` exists."
+        axis: "correctness"
+        verify: "artifact_exists"
+      - id: "slab_layers"
+        criterion: "The reported total layer count is 9."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "ce_o_ratio"
+        criterion: "The reported Ce:O ratio is consistent with CeO2 stoichiometry."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "The answer explicitly reports the 9-layer construction, symmetry check, oxygen-terminated outermost layer, and stoichiometric CeO2 ratio."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      # --- grounding ---
+      - id: "used_slab_builder"
+        criterion: "Used the MCP surface slab builder tool."
+        axis: "grounding"
+        verify: "tool_called"
+      - id: "output_file"
+        criterion: "The slab is exported as `ceo2_111_trilayer.cif`."
+        axis: "grounding"
+        verify: "tool_args_match"
+      - id: "correct_miller"
+        criterion: "The surface slab is built with Miller index (111)."
+        axis: "grounding"
+        verify: "tool_args_match"
+      - id: "slab_size_value"
+        criterion: "The slab builder is instructed to create 9 layers."
+        axis: "grounding"
+        verify: "tool_args_match"
+      - id: "grounding_source"
+        criterion: "The reported layer count, symmetry, termination, and stoichiometry are grounded in the generated CeO2(111) slab rather than assumed from textbook knowledge."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      # --- efficiency ---
+      - id: "no_retries"
+        criterion: "The slab builder is not called repeatedly with identical parameters."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "efficiency_judge"
+        criterion: "The CeO2(111) slab construction and validation workflow completes without unnecessary exploratory calls."
         axis: "efficiency"
         verify: "llm_binary_judge"
