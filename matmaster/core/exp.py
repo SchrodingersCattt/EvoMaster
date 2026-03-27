@@ -302,8 +302,9 @@ class Exp:
     ) -> None:
         """Register builtin tools: native (source='builtin') + evo adapter (source='builtin_evo').
 
-        Native tools (12): BashTool, ListDirTool, ReadTool, WriteTool, EditTool,
-        GlobTool, GrepTool, TaskCreate/Get/List/Update/Complete.
+        Native tools (14): BashTool, ListDirTool, ReadTool, WriteTool, EditTool,
+        GlobTool, GrepTool, TaskCreate/Get/List/Update/Complete,
+        WebSearchTool, WebFetchTool.
         Evo adapter (1): MonitorJobTool (science-specific, retained).
         """
         if ctx.session is None:
@@ -326,6 +327,8 @@ class Exp:
             TaskGetTool,
             TaskListTool,
             TaskUpdateTool,
+            WebFetchTool,
+            WebSearchTool,
             WriteTool,
         )
 
@@ -349,6 +352,9 @@ class Exp:
             TaskListTool(workdir=ctx.workdir),
             TaskUpdateTool(workdir=ctx.workdir),
             TaskCompleteTool(workdir=ctx.workdir),
+            # Web tools: control-plane HTTP, no session dependency
+            WebSearchTool(),
+            WebFetchTool(workdir=ctx.workdir),
         ]
         for tool in native_tools:
             registry.register(tool, source="builtin")
