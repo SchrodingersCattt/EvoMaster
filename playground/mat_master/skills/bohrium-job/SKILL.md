@@ -14,9 +14,9 @@ Submit an input directory to Bohrium HPC. There are two entry paths:
 
 Submission and polling use the **same** process environment variable (not a script argument the Agent passes):
 
-- **`BOHRIUM_USE_SANDBOX`**: `1` = use sandbox OpenAPI paths (`/openapi/v1/sandbox/job/...`); **`0`** = use standard paths (`/openapi/v1/job/create`, `/openapi/v2/job/add`, `GET /openapi/v1/job/{id}`).
+- **`BOHRIUM_USE_SANDBOX`**: `1` = use sandbox OpenAPI paths (`/openapi/v1/sandbox/job/...`); **`0`** or unset = use standard HPC paths (`/openapi/v1/job/create`, `/openapi/v2/job/add`, `GET /openapi/v1/job/{id}`).
 
-**Default is `1` (sandbox)** when the variable is unset. Set `BOHRIUM_USE_SANDBOX=0` in the deployment/runtime environment when you need the non-sandbox HPC API.
+**Default is standard HPC** when the variable is unset. Set `BOHRIUM_USE_SANDBOX=1` only when you need the sandbox API.
 
 The submit JSON includes **`use_sandbox`** (boolean) so logs can confirm which mode ran. Submit and poll must share the same setting or the job will not be visible on the wrong API.
 
@@ -35,7 +35,7 @@ The submit JSON includes **`use_sandbox`** (boolean) so logs can confirm which m
      [--software <software>]
    ```
    The script: packages and uploads input dir → three-step job create/upload/add.
-   stdout JSON: `{"success": true, "job_id": ..., "bohr_job_id": ..., "status": "Submitted", "use_sandbox": true}` by default (`use_sandbox` reflects env `BOHRIUM_USE_SANDBOX`: default on; `0` → `false`).
+   stdout JSON: `{"success": true, "job_id": ..., "bohr_job_id": ..., "status": "Submitted", "use_sandbox": false}` by default (`use_sandbox` reflects env `BOHRIUM_USE_SANDBOX`: default off; `1` → `true`).
 
   **Log filename convention (MUST):** the run command in `--cmd` must redirect stdout/stderr to a file named exactly `log` (for example: `> log 2>&1`). Do not rename it to custom names like `caffeine.out`.
 
