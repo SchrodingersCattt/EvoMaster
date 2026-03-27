@@ -33,7 +33,7 @@
 ### Hook 系统
 
 - [ ] **HOOK-01**: 5 个具体 Hook 实现（OutputProcessorHook, EventEmitterHook, ConfirmationHook, HistoryHook, DirectHook）全部改为 async
-- [ ] **HOOK-02**: ConfirmationHook 的 reply queue 机制适配 async（queue.Queue → asyncio 兼容方案）
+- [x] **HOOK-02**: ConfirmationHook 的 reply queue 机制适配 async（queue.Queue → asyncio 兼容方案）
 - [ ] **HOOK-03**: EventEmitterHook 适配 async MessageBus
 
 ### 核心引擎
@@ -119,7 +119,7 @@
 | TOOL-05 | Phase 14 | Pending |
 | TOOL-06 | Phase 19 | Pending |
 | HOOK-01 | Phase 15 | Pending |
-| HOOK-02 | Phase 15 | Pending |
+| HOOK-02 | Phase 15 | Complete |
 | HOOK-03 | Phase 15 | Pending |
 | KERN-01 | Phase 17 | Pending |
 | KERN-02 | Phase 17 | Pending |
