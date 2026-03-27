@@ -281,18 +281,20 @@ class ChatHistoryConverter:
                     seen_ids.add(tc_id)
                     ordered_tc.append((tc_id, tc_name))
 
-            # Collect consecutive tool messages after this assistant
+            # Collect existing tool messages into a map
             out.append(m)
             j = i + 1
-            found_ids: set[str] = set()
+            result_map: dict[str, dict] = {}
             while j < len(messages) and _serialized_message_role(messages[j]) == 'tool':
-                out.append(messages[j])
-                found_ids.add(messages[j].get('tool_call_id', ''))
+                existing = messages[j]
+                result_map[existing.get('tool_call_id', '')] = existing
                 j += 1
 
-            # Synthesize missing tool messages
+            # Emit tool messages in tool_calls declaration order
             for tc_id, tc_name in ordered_tc:
-                if tc_id not in found_ids:
+                if tc_id in result_map:
+                    out.append(result_map[tc_id])
+                else:
                     out.append(
                         ToolMessage(
                             tool_call_id=tc_id,
