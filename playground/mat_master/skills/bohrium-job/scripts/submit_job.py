@@ -6,7 +6,7 @@ This script performs only the 3 submission steps:
 3) /openapi/v2/job/add (or /openapi/v1/sandbox/job/add when sandbox mode)
 
 Sandbox vs standard HPC OpenAPI paths are selected only via env ``BOHRIUM_USE_SANDBOX``
-(``1`` = sandbox, default; ``0`` = standard). Not a CLI flag. poll_job.py uses the same rule.
+(``1`` = sandbox; unset or ``0`` = standard HPC, **default**). Not a CLI flag. poll_job.py uses the same rule.
 """
 
 import argparse
@@ -41,8 +41,8 @@ _AUTH_HEADER = {'accessKey': ACCESS_KEY, 'Content-Type': 'application/json'}
 
 
 def _use_sandbox() -> bool:
-    """True unless BOHRIUM_USE_SANDBOX is explicitly ``0`` (default: ``1`` → sandbox)."""
-    return os.environ.get('BOHRIUM_USE_SANDBOX', '1').strip() != '0'
+    """True only when BOHRIUM_USE_SANDBOX is ``1`` (default when unset: standard HPC)."""
+    return os.environ.get('BOHRIUM_USE_SANDBOX', '0').strip() == '1'
 
 
 def _post(path: str, payload: dict, timeout: int = 30) -> dict:
