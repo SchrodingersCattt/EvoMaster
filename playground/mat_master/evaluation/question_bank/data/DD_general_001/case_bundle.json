@@ -1,28 +1,20 @@
 {
-  "task": "scf_divergence_diagnosis",
   "description": "Diagnose why SCF did not converge given INCAR, POSCAR summary, and OUTCAR excerpt.",
-  "root_cause": "spin_not_enabled",
+  "diagnosis_hint": "Energy oscillates with ~0.25 eV amplitude. Fe2O3 is a strongly correlated AFM insulator; without spin polarization, the non-magnetic metallic state is an incorrect saddle point. Fix: ISPIN=2 with proper MAGMOM for AFM ordering.",
+  "energy_oscillation_amplitude_eV": 0.25,
   "incar": {
-    "SYSTEM": "Fe2O3_hematite",
-    "ENCUT": 520,
-    "EDIFF": 1e-6,
-    "ISMEAR": 0,
-    "SIGMA": 0.05,
-    "ISPIN": 1,
-    "NELM": 60,
-    "LREAL": "Auto",
     "ALGO": "Normal",
-    "PREC": "Accurate"
+    "EDIFF": 1e-06,
+    "ENCUT": 520,
+    "ISMEAR": 0,
+    "ISPIN": 1,
+    "LREAL": "Auto",
+    "NELM": 60,
+    "PREC": "Accurate",
+    "SIGMA": 0.05,
+    "SYSTEM": "Fe2O3_hematite"
   },
   "incar_bug": "Fe2O3 is antiferromagnetic. ISPIN=1 ignores spin polarization entirely, causing SCF to oscillate because the non-magnetic solution is far from the true ground state.",
-  "poscar_summary": {
-    "system": "Fe2O3 hematite R-3c",
-    "lattice_a": 5.038,
-    "lattice_c": 13.772,
-    "species": ["Fe", "O"],
-    "counts": [12, 18],
-    "total_atoms": 30
-  },
   "outcar_excerpt": [
     "DAV:   1    -0.12365832E+03   -0.12366E+03   -0.43522E+03   960   0.491E+02",
     "DAV:   2    -0.85920341E+02    0.37738E+02   -0.17833E+02  1080   0.115E+02",
@@ -34,6 +26,20 @@
     "DAV:  60    -0.87856791E+02    0.13335E+00   -0.00671E+00  1080   0.140E+01",
     "WARNING: ZBRENT: fatal error in bracketing"
   ],
-  "energy_oscillation_amplitude_eV": 0.25,
-  "diagnosis_hint": "Energy oscillates with ~0.25 eV amplitude. Fe2O3 is a strongly correlated AFM insulator; without spin polarization, the non-magnetic metallic state is an incorrect saddle point. Fix: ISPIN=2 with proper MAGMOM for AFM ordering."
+  "poscar_summary": {
+    "counts": [
+      12,
+      18
+    ],
+    "lattice_a": 5.038,
+    "lattice_c": 13.772,
+    "species": [
+      "Fe",
+      "O"
+    ],
+    "system": "Fe2O3 hematite R-3c",
+    "total_atoms": 30
+  },
+  "root_cause": "spin_not_enabled",
+  "task": "scf_divergence_diagnosis"
 }

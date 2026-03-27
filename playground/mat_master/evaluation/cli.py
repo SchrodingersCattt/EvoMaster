@@ -151,7 +151,7 @@ def _resolve_raw_runs_path(*, run_dir: str | None, raw_runs: str | None) -> Path
     else:
         raise ValueError('rate-only mode requires --run-dir or --raw-runs')
     if not path.exists():
-        raise FileNotFoundError(f"raw runs file not found: {path}")
+        raise FileNotFoundError(f'raw runs file not found: {path}')
     return path
 
 
@@ -171,7 +171,7 @@ def _substitute_env(value: Any) -> Any:
 
 def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
-        raise FileNotFoundError(f"Config not found: {path}")
+        raise FileNotFoundError(f'Config not found: {path}')
     try:
         from dotenv import load_dotenv
 
