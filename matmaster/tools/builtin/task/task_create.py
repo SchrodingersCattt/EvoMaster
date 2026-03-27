@@ -14,9 +14,10 @@ class TaskCreateTool(BuiltinTool):
 
     name: ClassVar[str] = "task_create"
     description: ClassVar[str] = (
-        "Create a task for tracking work progress.\n\n"
+        "Create a task with sub-tasks for tracking work progress.\n\n"
         "When to use: Multi-step tasks, complex requests needing planning.\n"
-        "When NOT to use: Simple single-step tasks completable immediately."
+        "When NOT to use: Simple single-step tasks completable immediately.\n"
+        "Parent task status is always auto-derived from sub-task statuses."
     )
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
@@ -30,20 +31,16 @@ class TaskCreateTool(BuiltinTool):
                 "items": {"type": "string"},
                 "description": (
                     "List of sub-task descriptions. Each sub-task gets "
-                    "individual status tracking (open/in_progress/completed). "
-                    "Parent task status is auto-derived from sub-tasks."
+                    "individual status tracking (open/in_progress/completed)."
                 ),
             },
         },
-        "required": ["description"],
+        "required": ["description", "tasks"],
     }
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         if self._workdir is None:
             return "Error: workdir not available for task tracking"
         store = TaskStore(self._workdir)
-        task = store.create(
-            arguments["description"],
-            subtasks=arguments.get("tasks"),
-        )
+        task = store.create(arguments["description"], subtasks=arguments["tasks"])
         return json.dumps(task, ensure_ascii=False)
