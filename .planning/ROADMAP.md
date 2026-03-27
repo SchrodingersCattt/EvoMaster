@@ -180,7 +180,7 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 12. Protocol 层 + 测试基础设施 | v2.0 | 2/2 | Complete | 2026-03-26 |
 | 13. LLM Provider 异步实现 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 14. Tool 系统异步化 | v2.0 | 2/2 | Complete | 2026-03-27 |
-| 15. Hook 系统异步化 | v2.0 | 3/3 | Complete | 2026-03-27 |
+| 15. Hook 系统异步化 | v2.0 | 3/3 | Complete    | 2026-03-27 |
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/0 | Not started | - |
 | 17. AgentKernel 异步化 | v2.0 | 0/0 | Not started | - |
 | 18. Exp 生命周期异步化 | v2.0 | 0/0 | Not started | - |
