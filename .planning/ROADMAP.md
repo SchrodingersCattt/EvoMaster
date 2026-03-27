@@ -107,8 +107,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 15-01-PLAN.md -- run_* helpers async + EventEmitterHook/OutputProcessor/AssistantState/SkillHit async + Kernel 桥接 + 测试迁移
-- [ ] 15-02-PLAN.md -- ConfirmationHook Future 重构 + Kernel loop 注入 + ReplyQueueLike 废弃 + src/ 层最小适配
+- [ ] 15-01-PLAN.md -- run_* helpers async + 5 Hook async (EventEmitter/OutputProcessor/AssistantState/SkillHit/DevStreamHook) + Kernel 桥接 + test_agent.py sync Hook 修复 + 测试迁移
+- [ ] 15-02-PLAN.md -- ConfirmationHook Future 重构 + Kernel loop 注入 + src/ 层完整 confirmation 通路适配 (ConfirmationHookAdapter) + ReplyQueueLike deprecated
 
 ### Phase 16: MessageBus + EventRouter 异步化
 **Goal**: 事件传输链路全面 async：MessageBus 使用 asyncio.Queue，EventRouter 作为 asyncio.Task 消费事件
