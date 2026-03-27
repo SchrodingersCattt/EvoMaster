@@ -1,5 +1,6 @@
 import json
 
+import matmaster.tools.schema_cache as schema_cache_module
 from matmaster.tools.schema_cache import ToolSchemaCache
 
 
@@ -30,7 +31,9 @@ class TestToolSchemaCache:
         result = cache.load('any_server')
         assert result is None
 
-    def test_load_applies_tool_exclude_filter(self, tmp_path):
+    def test_load_applies_tool_exclude_filter_when_configured(
+        self, tmp_path, monkeypatch
+    ):
         schemas = [
             {'name': 'build_bulk', 'description': 'Build bulk', 'input_schema': {}},
             {
@@ -40,6 +43,11 @@ class TestToolSchemaCache:
             },
         ]
         (tmp_path / 'mat_sg.json').write_text(json.dumps(schemas))
+        monkeypatch.setattr(
+            schema_cache_module,
+            '_SCHEMA_CACHE_TOOL_EXCLUDE',
+            {'mat_sg': {'get_structure_info'}},
+        )
         cache = ToolSchemaCache(tmp_path)
         result = cache.load('mat_sg')
         assert result is not None

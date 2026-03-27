@@ -13,9 +13,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_SCHEMA_CACHE_TOOL_EXCLUDE: dict[str, set[str]] = {
-    'mat_sg': {'get_structure_info'},
-}
+_SCHEMA_CACHE_TOOL_EXCLUDE: dict[str, set[str]] = {}
 
 
 class ToolSchemaCache:
