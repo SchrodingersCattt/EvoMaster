@@ -32,9 +32,9 @@
 
 ### Hook 系统
 
-- [ ] **HOOK-01**: 5 个具体 Hook 实现（OutputProcessorHook, EventEmitterHook, ConfirmationHook, HistoryHook, DirectHook）全部改为 async
+- [x] **HOOK-01**: 5 个具体 Hook 实现（OutputProcessorHook, EventEmitterHook, ConfirmationHook, HistoryHook, DirectHook）全部改为 async
 - [x] **HOOK-02**: ConfirmationHook 的 reply queue 机制适配 async（queue.Queue → asyncio 兼容方案）
-- [ ] **HOOK-03**: EventEmitterHook 适配 async MessageBus
+- [x] **HOOK-03**: EventEmitterHook 适配 async MessageBus
 
 ### 核心引擎
 
@@ -118,9 +118,9 @@
 | TOOL-04 | Phase 14 | Complete |
 | TOOL-05 | Phase 14 | Pending |
 | TOOL-06 | Phase 19 | Pending |
-| HOOK-01 | Phase 15 | Pending |
+| HOOK-01 | Phase 15 | Complete |
 | HOOK-02 | Phase 15 | Complete |
-| HOOK-03 | Phase 15 | Pending |
+| HOOK-03 | Phase 15 | Complete |
 | KERN-01 | Phase 17 | Pending |
 | KERN-02 | Phase 17 | Pending |
 | KERN-03 | Phase 17 | Pending |
@@ -144,8 +144,8 @@
 - v2.0 requirements: 35 total
 - Mapped to phases: 35
 - Unmapped: 0
-- Complete: 13 (PROT-01~05, LLMP-01~03, KERN-04, TEST-01, TOOL-01, TOOL-03, TOOL-04)
+- Complete: 15 (PROT-01~05, LLMP-01~03, KERN-04, TEST-01, TOOL-01, TOOL-03, TOOL-04, HOOK-01, HOOK-02, HOOK-03)
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-27 after Phase 14 Plan 01 complete*
+*Last updated: 2026-03-27 after Phase 15 Plan 03 complete (HOOK-01, HOOK-03 marked Complete)*
