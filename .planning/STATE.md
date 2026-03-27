@@ -1,15 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: matmaster 协程改造
-status: Executing
-stopped_at: "Completed 14-02-PLAN.md"
-last_updated: "2026-03-27T06:50:16.000Z"
+milestone: v1.1
+milestone_name: Agent 外围能力构建
+status: executing
+stopped_at: Completed 14-02-PLAN.md
+last_updated: "2026-03-27T07:39:40.951Z"
+last_activity: 2026-03-27
 progress:
-  total_phases: 1
-  completed_phases: 0
-  total_plans: 2
-  completed_plans: 2
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 13
+  completed_plans: 13
 ---
 
 # Project State
@@ -23,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 ## Current Position
 
-Phase: 14-tool (Tool 系统异步化)
-Plan: 02 of 02 (completed)
+Phase: 14
+Plan: Not started
 Status: Executing
-Last activity: 2026-03-27 — Completed 14-02-PLAN.md
+Last activity: 2026-03-27
 
 ## Accumulated Context
 
