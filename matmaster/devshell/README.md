@@ -48,6 +48,18 @@ mm-devshell run --workdir ./ws --log-dir ./logs -p "hi" --json-out ./summary.jso
 
 启动时会 **`load_dotenv()`**（当前工作目录下的 `.env`；不覆盖已在 shell 里 export 的变量）。
 
+### 批量跑 MATTER 题库（`scripts/run_devshell_eval.py`）
+
+从仓库根目录读取 **`playground/mat_master/evaluation/question_bank`**（与 MATTER 评估模块相同布局），对每题调用 **`python -u -m matmaster.devshell run`**，**子进程直接继承当前终端的 stdout/stderr**（不经管道转发，避免 `uv run` / IDE 终端里「跑时无输出、结束才刷」）；脚本用 **`--json-out`** 把工作区内的 **`_devshell_summary.json`** 写入 **`raw_runs.jsonl`**；每题的 **`--log-dir`**（即 **`results/.../logs/<task_id>/`**）下会有 **`events_*.jsonl`**（总线事件，与单独 `mm-devshell run` 一致）。不跑 BinaryEvaluator / `run_mat_task`，仅收集 devshell 摘要供人工或后续判分。
+
+```bash
+# 仓库根目录；建议与 uv 环境一致
+uv run python scripts/run_devshell_eval.py --dry-run --limit 5
+uv run python scripts/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
+```
+
+筛选与 **`playground/mat_master/evaluation/config.yaml`** 一致（`--eval-config`、`--capabilities`、`--questions` 等）；详见脚本 **`--help`**。
+
 ## CLI 参数（`repl` 与 `run` 共用）
 
 | 参数 | 必选 | 说明 |
@@ -94,7 +106,12 @@ mm-devshell CLI
 
 ## 事件日志
 
-每个会话生成 `events_YYYYMMDD_HHMMSS.jsonl`，一行一条 JSON 事件。
+在 **`--log-dir`** 下写入 **`events_YYYYMMDD_HHMMSS.jsonl`**（一行一条 JSON 事件，与 REPL 相同格式）：
+
+- **`repl`**：整个会话一个文件，多轮对话追加事件。
+- **`run`**：单次非交互运行也会写**一个**该文件（此前未接 EventLogger，现已与 REPL 对齐）。
+
+加 **`--verbose`** 时，`run` 会在 stderr 打印本次事件文件路径（`Event log: ...`）。
 
 ## 模块说明
 
