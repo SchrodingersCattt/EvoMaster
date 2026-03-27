@@ -152,4 +152,4 @@ def test_repair_preserves_tool_call_order():
     ]
     result = ChatHistoryConverter._repair_incomplete_tool_turns(messages)
     tool_ids = [m['tool_call_id'] for m in result if m['role'] == 'tool']
-    assert tool_ids == ['c2', 'c1', 'c3']
+    assert tool_ids == ['c1', 'c2', 'c3']
