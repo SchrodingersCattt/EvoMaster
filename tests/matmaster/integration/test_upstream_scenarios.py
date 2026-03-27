@@ -6,7 +6,7 @@ All external dependencies mocked per D-10.
 
 from __future__ import annotations
 
-import queue
+import asyncio
 import threading
 import time
 from pathlib import Path
@@ -368,96 +368,59 @@ class TestEventRouterPersistence:
 # ── QUAL-04: Cross-pod reply queue ───────────────────
 
 
-class _MockReplyQueue:
-    """Simulates RedisReplyQueue behavior for cross-pod confirmation.
-
-    Uses a stdlib queue internally to simulate Redis list RPUSH/BLPOP.
-    """
-
-    def __init__(self) -> None:
-        self._q: queue.Queue[str | None] = queue.Queue()
-
-    def put_content(self, content: str) -> None:
-        self._q.put(content)
-
-    def put_cancel(self) -> None:
-        self._q.put(None)
-
-    def get(self, timeout: float | None = None) -> str | None:
-        try:
-            return self._q.get(timeout=timeout)
-        except queue.Empty:
-            raise queue.Empty("timeout")
-
-
 class TestCrossPodReplyQueue:
-    """QUAL-04: Verify cross-pod subscription recovery via RedisReplyQueue."""
+    """QUAL-04: Verify cross-pod confirmation via ConfirmationHook (asyncio.Future)."""
 
-    def test_cross_pod_reply_queue(self) -> None:
-        """Verify ConfirmationHook correctly interacts with ReplyQueueLike
-        for cross-worker confirmation flow.
-        """
-        reply_queue = _MockReplyQueue()
-        bus = MessageBus()
+    async def test_cross_pod_reply_queue(self) -> None:
+        """Verify ConfirmationHook returns CONTINUE when external thread resolves."""
+        from unittest.mock import MagicMock as _Mock
 
-        hook = ConfirmationHook(
-            reply_queue=reply_queue,
-            bus=bus,
-            timeout_sec=5,
-        )
+        bus = _Mock()
+        hook = ConfirmationHook(bus=bus, timeout_sec=5)
+        loop = asyncio.get_event_loop()
+        hook.set_loop(loop)
 
         tool_call = ToolCallData(id="tc-1", name="dangerous_tool", arguments={})
 
-        # Simulate cross-pod flow: another worker puts approval
+        # Simulate cross-pod flow: another thread resolves
         def approve_after_delay():
             time.sleep(0.05)
-            reply_queue.put_content("approved")
+            hook.resolve("approved")
 
         t = threading.Thread(target=approve_after_delay, daemon=True)
         t.start()
 
-        # Main thread calls pre_tool_call (blocks on reply_queue.get())
-        action = hook.pre_tool_call(tool_call)
+        action = await hook.pre_tool_call(tool_call)
         t.join(timeout=2)
 
         assert action == HookAction.CONTINUE
 
-        # Verify ConfirmationRequestEvent was emitted to bus
-        events = []
-        try:
-            while True:
-                events.append(bus.get(timeout=0.1))
-        except queue.Empty:
-            pass
+        # Verify ConfirmationRequestEvent was emitted
+        bus.emit.assert_called_once()
+        emitted = bus.emit.call_args[0][0]
+        assert isinstance(emitted, ConfirmationRequestEvent)
+        assert emitted.question == "Confirm tool call: dangerous_tool?"
 
-        confirmation_events = [
-            e for e in events if isinstance(e, ConfirmationRequestEvent)
-        ]
-        assert len(confirmation_events) == 1
-        assert confirmation_events[0].question == "Confirm tool call: dangerous_tool?"
+    async def test_cross_pod_reply_queue_cancel(self) -> None:
+        """Verify ConfirmationHook returns SKIP when external thread cancels."""
+        from unittest.mock import MagicMock as _Mock
 
-    def test_cross_pod_reply_queue_cancel(self) -> None:
-        """Verify ConfirmationHook returns SKIP when user cancels via cross-pod queue."""
-        reply_queue = _MockReplyQueue()
-        bus = MessageBus()
-
-        hook = ConfirmationHook(
-            reply_queue=reply_queue,
-            bus=bus,
-            timeout_sec=5,
-        )
+        bus = _Mock()
+        hook = ConfirmationHook(bus=bus, timeout_sec=5)
+        loop = asyncio.get_event_loop()
+        hook.set_loop(loop)
 
         tool_call = ToolCallData(id="tc-2", name="dangerous_tool", arguments={})
 
         # Simulate cross-pod cancel
         def cancel_after_delay():
             time.sleep(0.05)
-            reply_queue.put_cancel()
+            hook.cancel()
 
         t = threading.Thread(target=cancel_after_delay, daemon=True)
         t.start()
 
-        action = hook.pre_tool_call(tool_call)
+        action = await hook.pre_tool_call(tool_call)
         t.join(timeout=2)
 
         assert action == HookAction.SKIP
