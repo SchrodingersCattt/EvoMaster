@@ -74,13 +74,15 @@ def main() -> None:
         result = _build_result(
             software=args.software,
             input_file=str(input_path),
-            diags_dicts=[{
-                "severity": "error",
-                "message": f"Input file not found: {input_path}",
-                "param": "",
-                "suggestion": None,
-                "line": None,
-            }],
+            diags_dicts=[
+                {
+                    "severity": "error",
+                    "message": f"Input file not found: {input_path}",
+                    "param": "",
+                    "suggestion": None,
+                    "line": None,
+                }
+            ],
         )
         _output(result, args.json_out)
         sys.exit(0)
@@ -103,31 +105,39 @@ def main() -> None:
         validator = registry.get_validator(args.software)
 
         if validator is None:
-            diags_dicts.append({
-                "severity": "info",
-                "message": f"No validator registered for software '{args.software}'. Skipping static analysis.",
-                "param": "",
-                "suggestion": None,
-                "line": None,
-            })
+            diags_dicts.append(
+                {
+                    "severity": "info",
+                    "message": f"No validator registered for software '{args.software}'. Skipping static analysis.",
+                    "param": "",
+                    "suggestion": None,
+                    "line": None,
+                }
+            )
         else:
             raw_diags = validator.validate_text(text, source=str(input_path))
             for d in raw_diags:
-                diags_dicts.append({
-                    "severity": d.severity,
-                    "message": d.message,
-                    "param": d.param if d.param else "",
-                    "suggestion": d.suggestion if hasattr(d, 'suggestion') else None,
-                    "line": d.line if hasattr(d, 'line') else None,
-                })
+                diags_dicts.append(
+                    {
+                        "severity": d.severity,
+                        "message": d.message,
+                        "param": d.param if d.param else "",
+                        "suggestion": (
+                            d.suggestion if hasattr(d, 'suggestion') else None
+                        ),
+                        "line": d.line if hasattr(d, 'line') else None,
+                    }
+                )
     except Exception as exc:  # noqa: BLE001
-        diags_dicts.append({
-            "severity": "warning",
-            "message": f"Validator raised unexpected error: {exc}",
-            "param": "",
-            "suggestion": None,
-            "line": None,
-        })
+        diags_dicts.append(
+            {
+                "severity": "warning",
+                "message": f"Validator raised unexpected error: {exc}",
+                "param": "",
+                "suggestion": None,
+                "line": None,
+            }
+        )
 
     # ------------------------------------------------------------------ #
     # 3. 输出结果
@@ -175,7 +185,9 @@ def _output(result: dict, json_out: str | None) -> None:
     if json_out:
         Path(json_out).write_text(text, encoding='utf-8')
         # 同时打印摘要到 stdout 便于日志查看
-        print(f"[validate_input] {result['software']} — {result['status']}: {result['summary']}")
+        print(
+            f"[validate_input] {result['software']} — {result['status']}: {result['summary']}"
+        )
         print(f"[validate_input] JSON report written to: {json_out}")
     else:
         print(text)
