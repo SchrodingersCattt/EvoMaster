@@ -142,7 +142,7 @@ def submit_job(
     machine: str,
     job_name: str,
     disk_size: int,
-) -> tuple[int, int]:
+) -> tuple[int | str, int | str]:
     with tempfile.TemporaryDirectory(prefix='bsm_submit_') as tmp_dir:
         zip_path = Path(tmp_dir) / 'input.zip'
         _zip_directory(input_dir, zip_path)
@@ -151,8 +151,17 @@ def submit_job(
         oss_key = _step2_upload(create_data, zip_path)
         add_data = _step3_add(oss_key, job_name, image, cmd, machine, disk_size)
 
-    job_id = int(add_data['jobId'])
-    bohr_job_id = int(add_data.get('bohrJobId') or add_data['jobId'])
+    # Sandbox job/add returns UUID strings; standard HPC returns numeric ids.
+    if _use_sandbox():
+        raw_jid = add_data.get('jobId')
+        if raw_jid is None:
+            raise ValueError('missing jobId')
+        job_id = str(raw_jid).strip()
+        bohr_raw = add_data.get('bohrJobId')
+        bohr_job_id = str(bohr_raw).strip() if bohr_raw not in (None, '', 0) else job_id
+    else:
+        job_id = int(add_data['jobId'])
+        bohr_job_id = int(add_data.get('bohrJobId') or add_data['jobId'])
     return job_id, bohr_job_id
 
 
