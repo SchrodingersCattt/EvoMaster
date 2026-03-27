@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: matmaster 协程改造
-status: completed
-stopped_at: Phase 14 context gathered
-last_updated: "2026-03-27T05:03:06.183Z"
+status: executing
+stopped_at: Completed 14-01-PLAN.md
+last_updated: "2026-03-27T06:30:17.000Z"
 last_activity: 2026-03-27
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
-  percent: 25
+  total_plans: 6
+  completed_plans: 5
+  percent: 28
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 14 — Tool 系统异步化 (next)
+**Current focus:** Phase 14 — Tool 系统异步化 (executing)
 
 ## Current Position
 
-Phase: 14 (next)
-Plan: Not started
-Status: Phase 13 complete, ready for Phase 14
+Phase: 14-tool
+Plan: 1/2 complete
+Status: Executing Phase 14
 Last activity: 2026-03-27
 
-Progress: [██░░░░░░░░] 25% (2/8 phases)
+Progress: [███░░░░░░░] 28% (2/8 phases, 5/6 plans)
 
 ## Performance Metrics
 
@@ -46,6 +46,7 @@ Progress: [██░░░░░░░░] 25% (2/8 phases)
 |-------|-------|-------|----------|
 | 12 Protocol | 2/2 | ~26min | ~13min |
 | 13 LLM Provider | 2/2 | ~20min | ~10min |
+| 14 Tool (in progress) | 1/2 | ~4min | ~4min |
 
 ## Accumulated Context
 
@@ -67,6 +68,8 @@ Recent decisions affecting current work:
 - [Phase 13]: AgentKernel.run() creates ONE shared asyncio.new_event_loop() for all async bridging
 - [Phase 13]: ContextCompactor._summarize and compact_if_needed are async (KERN-04 pulled into Phase 13)
 - [Phase 13]: _sync_iterate_async/_sync_call_async bridge functions marked Phase 13-16, removable in Phase 17
+- [Phase 14-01]: BuiltinTool.execute() async via asyncio.to_thread wrapping sync _execute() -- subclasses unchanged
+- [Phase 14-01]: ToolRegistry.execute() async with await-then-normalize pattern (avoid coroutine passing to normalize)
 
 ### Pending Todos
 
@@ -80,6 +83,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-27T05:03:06.175Z
-Stopped at: Phase 14 context gathered
-Resume file: .planning/phases/14-tool/14-CONTEXT.md
+Last session: 2026-03-27T06:30:17Z
+Stopped at: Completed 14-01-PLAN.md
+Resume file: .planning/phases/14-tool/14-01-SUMMARY.md
