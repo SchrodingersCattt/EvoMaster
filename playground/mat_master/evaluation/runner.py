@@ -32,6 +32,7 @@ from .schemas import (
 from .simulator import HumanSimulator
 
 _runner_logger = logging.getLogger(__name__)
+_EVOMASTER_EVIDENCE_MAPPING_PATH = Path(__file__).parent / 'evidence_mapping.yaml'
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +59,9 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
         llm_cfg=config.simulator_llm, use_seed_prompt=config.use_seed_prompt
     )
     evaluator = BinaryEvaluator(llm_cfg=config.evaluator_llm)
-    evidence_extractor = EvidenceExtractor()
+    # The core extractor is runtime-agnostic. EvoMaster-specific tool/event
+    # compatibility is injected here by the current runner.
+    evidence_extractor = EvidenceExtractor(mapping_path=_EVOMASTER_EVIDENCE_MAPPING_PATH)
 
     records: list[EvalRunRecord] = []
     mat_config_path = Path(_resolve_to_project_root(config.mat_config_path))
