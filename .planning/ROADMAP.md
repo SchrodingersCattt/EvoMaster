@@ -97,6 +97,16 @@ Plans:
 - [x] 11-02-PLAN.md -- Exp 层 spawn_fn 闭包创建 + SubAgentTool 注册 + source_override + 集成测试
 - [x] 11-03-PLAN.md -- 事件路由 source 前缀兼容 + chat_history 改造 + service 层 stop_event 注入
 
+### Phase 14: Tool 系统异步化
+**Goal**: 将所有 Tool 的 execute() 改为 async def，Kernel 通过桥接调用 async ToolRegistry
+**Depends on**: Phase 12 (Protocol async), Phase 13 (LLM Provider async)
+**Requirements**: TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 14-01-PLAN.md -- BuiltinTool ABC async execute + ToolRegistry async execute
+- [x] 14-02-PLAN.md -- Non-BuiltinTool async + Kernel bridge + full test migration
+
 ## Progress
 
 **Execution Order:**
@@ -115,3 +125,4 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11
 | 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete    | 2026-03-25 |
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete    | 2026-03-25 |
+| 14. Tool 系统异步化 | v2.0 | 2/2 | Complete    | 2026-03-27 |
