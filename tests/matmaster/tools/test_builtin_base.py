@@ -1,9 +1,7 @@
 """Tests for BuiltinTool ABC base class.
 
-Post Plan-01: BuiltinTool._execute() is async def abstractmethod.
-Concrete subclasses implement async def _execute().
-BuiltinTool.execute() is still sync def (calls _execute without await).
-Phase 14 will unify execute() to async def + await _execute().
+BuiltinTool.execute() is async def + asyncio.to_thread.
+_execute() is sync def -- subclasses implement sync _execute() only.
 """
 
 from __future__ import annotations
@@ -17,7 +15,7 @@ from matmaster.tools.tool_registry import Tool
 
 
 class ConcreteBuiltinTool(BuiltinTool):
-    """Concrete subclass with async _execute for testing the ABC."""
+    """Concrete subclass with sync _execute for testing the ABC."""
 
     name: ClassVar[str] = "test_concrete"
     description: ClassVar[str] = "A concrete test tool"
@@ -26,18 +24,18 @@ class ConcreteBuiltinTool(BuiltinTool):
         "properties": {"arg1": {"type": "string"}},
     }
 
-    async def _execute(self, arguments: dict[str, Any]) -> str:
+    def _execute(self, arguments: dict[str, Any]) -> str:
         return f"executed with {arguments}"
 
 
 class FailingBuiltinTool(BuiltinTool):
-    """Concrete subclass that raises in async _execute."""
+    """Concrete subclass that raises in sync _execute."""
 
     name: ClassVar[str] = "test_failing"
     description: ClassVar[str] = "A failing test tool"
     json_schema: ClassVar[dict[str, Any]] = {"type": "object", "properties": {}}
 
-    async def _execute(self, arguments: dict[str, Any]) -> str:
+    def _execute(self, arguments: dict[str, Any]) -> str:
         raise ValueError("something went wrong")
 
 
@@ -67,40 +65,32 @@ class TestRequireSession:
         assert tool._require_session() is sentinel
 
 
-class TestAsyncExecute:
-    """Test _execute directly with await (Phase 12 async ABC)."""
+class TestDirectExecute:
+    """Test _execute() directly (sync def)."""
 
-    async def test_execute_returns_result_on_success(self) -> None:
+    def test_execute_returns_result_on_success(self) -> None:
         tool = ConcreteBuiltinTool()
-        result = await tool._execute({"arg1": "hello"})
+        result = tool._execute({"arg1": "hello"})
         assert result == "executed with {'arg1': 'hello'}"
 
-    async def test_execute_raises_on_failure(self) -> None:
+    def test_execute_raises_on_failure(self) -> None:
         tool = FailingBuiltinTool()
         with pytest.raises(ValueError, match="something went wrong"):
-            await tool._execute({})
+            tool._execute({})
 
 
 class TestExecuteTemplateMethod:
-    """execute() template method -- still sync in Phase 12.
+    """execute() template method -- async def with asyncio.to_thread."""
 
-    Since _execute is now async def but execute() calls it without await,
-    execute() returns a coroutine object (not the string result).
-    This is a known temporary inconsistency; Phase 14 will make
-    execute() async and add await _execute().
-    """
-
-    def test_execute_sync_returns_coroutine_not_string(self) -> None:
-        """Sync execute() calling async _execute() without await returns coroutine.
-
-        This documents the transitional behavior in Phase 12.
-        Phase 14 will fix this by making execute() async.
-        """
-        import asyncio
-
+    async def test_execute_async_returns_string_result(self) -> None:
+        """Async execute() delegates to sync _execute() via to_thread."""
         tool = ConcreteBuiltinTool()
-        result = tool.execute({"arg1": "hello"})
-        # Since _execute is async, calling it without await returns a coroutine
-        assert asyncio.iscoroutine(result)
-        # Clean up the unawaited coroutine
-        result.close()
+        result = await tool.execute({"arg1": "hello"})
+        assert result == "executed with {'arg1': 'hello'}"
+
+    async def test_execute_async_catches_exception(self) -> None:
+        """execute() catches _execute() exceptions and returns error string."""
+        tool = FailingBuiltinTool()
+        result = await tool.execute({})
+        assert isinstance(result, str)
+        assert "something went wrong" in result
