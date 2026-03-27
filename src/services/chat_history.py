@@ -468,6 +468,8 @@ class ChatHistoryConverter:
                 ).model_dump()
             )
 
+        out = cls._repair_incomplete_tool_turns(out)
+
         sid: str | None = None
         tid: str | None = None
         for ev in events:

@@ -153,3 +153,43 @@ def test_repair_preserves_tool_call_order():
     result = ChatHistoryConverter._repair_incomplete_tool_turns(messages)
     tool_ids = [m['tool_call_id'] for m in result if m['role'] == 'tool']
     assert tool_ids == ['c1', 'c2', 'c3']
+
+
+def test_events_to_dialog_messages_repairs_incomplete_turn():
+    """End-to-end: events with missing tool_result produce valid message list."""
+    events = [
+        {'source': 'User', 'type': 'query', 'content': 'do stuff'},
+        {
+            'source': 'MatMaster',
+            'type': 'tool_call',
+            'content': {'id': 'c1', 'call_id': 'c1', 'name': 'bash', 'args': {}},
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'tool_call',
+            'content': {'id': 'c2', 'call_id': 'c2', 'name': 'read', 'args': {}},
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'tool_result',
+            'content': {
+                'id': 'c1',
+                'call_id': 'c1',
+                'name': 'bash',
+                'result': 'done',
+                'status': 'success',
+            },
+        },
+        # c2 tool_result missing (interrupted)
+    ]
+
+    msgs = ChatHistoryConverter.events_to_dialog_messages(events)
+
+    # user + assistant(tool_calls) + tool(c1) + synthetic_tool(c2)
+    assert len(msgs) == 4
+    assert msgs[0]['role'] == 'user'
+    assert msgs[1]['role'] == 'assistant'
+    assert len(msgs[1].get('tool_calls', [])) == 2
+    assert msgs[2]['tool_call_id'] == 'c1'
+    assert msgs[3]['tool_call_id'] == 'c2'
+    assert 'interrupted' in str(msgs[3]['content']).lower()
