@@ -80,7 +80,7 @@ def test_is_matmaster_source_other():
 # ── EventEmitterHook with prefixed source ─────────────
 
 
-def test_event_emitter_hook_with_prefixed_source():
+async def test_event_emitter_hook_with_prefixed_source():
     """EventEmitterHook(bus, source='MatMaster:explore') should emit events
     with source='MatMaster:explore', not collapsed to 'MatMaster'."""
     bus = MessageBus()
@@ -91,7 +91,7 @@ def test_event_emitter_hook_with_prefixed_source():
         name="read_file",
         arguments={"path": "/tmp/test.txt"},
     )
-    hook.pre_tool_call(tool_call)
+    await hook.pre_tool_call(tool_call)
 
     event = bus.get(timeout=1.0)
     assert event.source == "MatMaster:explore"
