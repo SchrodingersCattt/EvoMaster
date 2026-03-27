@@ -290,8 +290,9 @@ class AsyncToolRegistry:
                 f"   - **MCP submit path** ({mcp_sm}): Call the native MCP submit tool "
                 f"and note the returned job_id. Then go to step 4.\n"
                 f"   - **bohrium-job skill path** ({bj_sw}): For LAMMPS/CP2K/QE/ABINIT/ORCA/GROMACS-class jobs, "
-                f"these entries use **prepare_* MCP tools** (no submit_* MCP). "
-                f"After prepare_*, submit via `use_skill skill_name=bohrium-job`. "
+                f"these entries use **input-manual-helper local scripts** (`render_input.py` / `diagnose_input.py`) "
+                f"and no submit_* MCP tools. After local input generation, submit via "
+                f"`use_skill skill_name=bohrium-job`. "
                 f"**NEVER invent or call any _submit_* tool for these** — they are not registered "
                 f"and will always return Unknown tool. Use bohrium-job `submit_job.py` to get job_id, "
                 f"then `poll_job.py` for monitoring/download.\n"
@@ -303,7 +304,7 @@ class AsyncToolRegistry:
             )
         else:
             submit_step = (
-                f"3. **Submit**: After prepare_* MCP tools, submit via "
+                f"3. **Submit**: After `input-manual-helper` local input generation, submit via "
                 f"`use_skill skill_name=bohrium-job` ({bj_sw}).\n"
             )
         return (
@@ -345,13 +346,13 @@ class AsyncToolRegistry:
             constraint_2 = (
                 f"Heavy calculations must NOT run locally. "
                 f"Submit path: {mcp_sm} → native MCP submit tools; "
-                f"{bj_sw} → prepare_* MCP tools then **bohrium-job** skill "
+                f"{bj_sw} → `input-manual-helper` local scripts then **bohrium-job** skill "
                 f"(no _submit_* MCP). Never run any of these via execute_bash."
             )
         elif mcp_sm:
             constraint_2 = f"Heavy calculations MUST be submitted via MCP tools ({mcp_sm}). Never run these codes via execute_bash."
         else:
-            constraint_2 = f"Heavy calculations: use prepare_* MCP tools then submit via bohrium-job skill ({bj_sw}). Never run via execute_bash."
+            constraint_2 = f"Heavy calculations: use `input-manual-helper` local scripts then submit via bohrium-job skill ({bj_sw}). Never run via execute_bash."
         return (
             f"# Execution Environment Constraints\n"
             f"1. The local environment supports Python data processing (ASE, Pymatgen, etc.). "
@@ -370,7 +371,7 @@ class AsyncToolRegistry:
             f"   - **Mandatory Mapping** when the user asks for blocked software but licenses are missing:\n"
             f"     - DFT tasks (periodic/bulk/crystal) -> plan goals that can be fulfilled by **{ts.get('preferred_dft', 'ABACUS')}** "
             f"(open source), **CP2K**, **Quantum Espresso**, or **ABINIT**.\n"
-            f"     - DFT tasks (molecular) -> prefer **PySCF** (`run_pyscf`, direct run, no prepare_* needed) or **ORCA**.\n"
+            f"     - DFT tasks (molecular) -> prefer **PySCF** (direct Python script + bohrium-job) or **ORCA**.\n"
             f"     - MD / Potential / screening -> goals achievable with "
             f"**{ts.get('preferred_mlp', 'DPA')}**, **{ts.get('preferred_md', 'LAMMPS')}**, **GROMACS** "
             f"(via **bohrium-job** skill), or **CP2K**.\n"
