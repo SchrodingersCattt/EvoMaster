@@ -1,7 +1,7 @@
 """poll_job.py - monitor a Bohrium job by job_id and download results.
 
-Uses GET /openapi/v1/sandbox/job/{id} when BOHRIUM_USE_SANDBOX is not ``0`` (default
-sandbox), else GET /openapi/v1/job/{id}. Same env rule as submit_job.py.
+Uses GET /openapi/v1/sandbox/job/{id} when ``BOHRIUM_USE_SANDBOX=1``, else
+``GET /openapi/v1/job/{id}`` (default when unset). Same env rule as submit_job.py.
 """
 
 import argparse
@@ -35,8 +35,8 @@ _HEADER = {'accessKey': ACCESS_KEY}
 
 
 def _use_sandbox() -> bool:
-    """True unless BOHRIUM_USE_SANDBOX is explicitly ``0`` (default: ``1`` → sandbox)."""
-    return os.environ.get('BOHRIUM_USE_SANDBOX', '1').strip() != '0'
+    """True only when BOHRIUM_USE_SANDBOX is ``1`` (default when unset: standard HPC)."""
+    return os.environ.get('BOHRIUM_USE_SANDBOX', '0').strip() == '1'
 
 
 def _job_detail_path(job_id: int | str) -> str:
@@ -193,7 +193,7 @@ def main() -> None:
     parser.add_argument(
         '--job-id',
         required=True,
-        help='Job id: UUID string when BOHRIUM_USE_SANDBOX≠0, else integer',
+        help='Job id: integer (default HPC); UUID string when BOHRIUM_USE_SANDBOX=1',
     )
     parser.add_argument(
         '--max-polls',
