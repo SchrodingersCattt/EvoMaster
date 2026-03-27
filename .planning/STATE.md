@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Agent 外围能力构建
+milestone: v2.0
+milestone_name: matmaster 协程改造
 status: executing
-stopped_at: Phase 13 context gathered
-last_updated: "2026-03-26T19:34:33.912Z"
-last_activity: 2026-03-26
+stopped_at: Phase 13 complete, ready for Phase 14
+last_updated: "2026-03-27T03:34:39.000Z"
+last_activity: 2026-03-27
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 11
-  completed_plans: 11
-  percent: 12
+  total_phases: 8
+  completed_phases: 2
+  total_plans: 4
+  completed_plans: 4
+  percent: 25
 ---
 
 # Project State
@@ -21,30 +21,31 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 13 — llm-provider
+**Current focus:** Phase 14 — Tool 系统异步化 (next)
 
 ## Current Position
 
-Phase: 13
+Phase: 14 (next)
 Plan: Not started
-Status: Executing Phase 13
-Last activity: 2026-03-26
+Status: Phase 13 complete, ready for Phase 14
+Last activity: 2026-03-27
 
-Progress: [█░░░░░░░░░] 12% (1/8 phases)
+Progress: [██░░░░░░░░] 25% (2/8 phases)
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 2
+- Total plans completed: 4
 - Average duration: ~13min/plan
-- Total execution time: ~26 min
+- Total execution time: ~46 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 12 Protocol | 2/2 | ~26min | ~13min |
+| 13 LLM Provider | 2/2 | ~20min | ~10min |
 
 ## Accumulated Context
 
@@ -61,6 +62,11 @@ Recent decisions affecting current work:
 - [Phase 12]: validate_async_protocol uses _is_async_callable checking both iscoroutinefunction and isasyncgenfunction for async generator support
 - [Phase 12]: chat_with_retry fully eliminated from codebase (Protocol, OpenAIProvider, all 15 test files)
 - [Phase 12]: pytest-asyncio installed with auto mode for async test infrastructure
+- [Phase 13]: LLMProvider Protocol declares __aenter__/__aexit__ as formal contract for lifecycle management
+- [Phase 13]: OpenAIProvider __init__ stores params only, __aenter__ creates AsyncOpenAI + httpx.AsyncClient
+- [Phase 13]: AgentKernel.run() creates ONE shared asyncio.new_event_loop() for all async bridging
+- [Phase 13]: ContextCompactor._summarize and compact_if_needed are async (KERN-04 pulled into Phase 13)
+- [Phase 13]: _sync_iterate_async/_sync_call_async bridge functions marked Phase 13-16, removable in Phase 17
 
 ### Pending Todos
 
@@ -74,6 +80,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-26T16:17:15.047Z
-Stopped at: Phase 13 context gathered
-Resume file: .planning/phases/13-llm-provider/13-CONTEXT.md
+Last session: 2026-03-27T03:34:39.000Z
+Stopped at: Phase 13 complete, ready for Phase 14
+Resume file: .planning/phases/13-llm-provider/13-VERIFICATION.md
