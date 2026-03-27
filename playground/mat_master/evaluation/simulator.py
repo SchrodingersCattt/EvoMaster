@@ -4,12 +4,6 @@
 paper ``Path``, or free-text ``str``) and returns a unified
 ``SimulatedTask`` containing the prompt, expected values, and data-file
 references the runner needs.
-
-v5 changes (vs v4):
-- spec_to_question() uses capability/domain instead of level/rubric_id
-- ScoringCheckItem no longer has weight field; uses axis instead of dimension
-- TouchpointBands and rubric_id references removed from spec_to_question()
-- Prompt verbosity controlled by difficulty setting (unchanged)
 """
 
 import json
@@ -388,18 +382,11 @@ class HumanSimulator:
             return question.human_prompt_seed
 
     # ------------------------------------------------------------------
-    # TaskSpec → QuestionItem (v5 format)
+    # TaskSpec → QuestionItem
     # ------------------------------------------------------------------
 
     def spec_to_question(self, spec: TaskSpec) -> QuestionItem:
-        """Build a v5 ``QuestionItem`` from a ``TaskSpec``.
-
-        v5 changes vs v4:
-        - Uses capability='workflow_orchestration', domain='general'
-          instead of level='L3', rubric_id
-        - ScoringCheckItem uses axis='correctness' (no weight field)
-        - No TouchpointBands
-        """
+        """Build a ``QuestionItem`` from a ``TaskSpec``."""
         prompt = self._generate_prompt(spec)
         data_files = self._discover_data_files(spec)
 

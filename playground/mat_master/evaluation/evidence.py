@@ -2,8 +2,8 @@
 
 This module defines the standardised evidence format (EvidenceBundle) and the
 EvidenceExtractor that converts a raw trajectory JSON file into an
-EvidenceBundle.  The evaluator only depends on EvidenceBundle – it has no
-knowledge of runtime internals, tool names, or trajectory schema details.
+EvidenceBundle. The evaluator only depends on EvidenceBundle and does not
+require any runtime-specific mapping file by default.
 
 Design principles
 -----------------
@@ -14,9 +14,10 @@ Design principles
 * ``EvidenceBundle`` – single input to the evaluator
 * ``EvidenceExtractor`` – converts trajectory JSON → EvidenceBundle
 
-Path convention
----------------
-``evidence_mapping.yaml`` lives next to this file (``evaluation/``).
+Runtime decoupling
+------------------
+`EvidenceExtractor` does not assume any default tool-name mapping. Runtime-
+specific compatibility mappings can be injected by callers via `mapping_path`.
 """
 
 from __future__ import annotations
@@ -202,18 +203,21 @@ class EvidenceBundle(BaseModel):
 # Evidence Extractor
 # ---------------------------------------------------------------------------
 
-_DEFAULT_MAPPING_PATH = Path(__file__).parent / "evidence_mapping.yaml"
 _OBSERVATION_EXCERPT_LEN = 500
 
 
 class EvidenceExtractor:
     """Convert a trajectory JSON file into an :class:`EvidenceBundle`.
 
+    This class accepts an optional ``mapping_path`` that determines how tool
+    calls are classified into EventTypes. When ``mapping_path`` is omitted, the
+    extractor stays runtime-agnostic and simply skips tool-name classification.
+
     Parameters
     ----------
     mapping_path:
-        Path to ``evidence_mapping.yaml``.  Defaults to the file next to this
-        module.
+        Optional path to an evidence mapping YAML file (tool → event type
+        mappings). When omitted, no runtime-specific event mapping is loaded.
     agent_name_filter:
         If set, only process trajectory entries whose ``agent_name`` matches.
         Useful in multi-agent runs (planner + solver).
@@ -224,10 +228,11 @@ class EvidenceExtractor:
         mapping_path: Path | str | None = None,
         agent_name_filter: str | None = None,
     ) -> None:
-        self._mapping_path = Path(mapping_path) if mapping_path else _DEFAULT_MAPPING_PATH
+        self._mapping_path = Path(mapping_path) if mapping_path else None
         self._agent_name_filter = agent_name_filter
         self._mapping: list[dict[str, Any]] = []
-        self._load_mapping()
+        if self._mapping_path is not None:
+            self._load_mapping()
 
     # ------------------------------------------------------------------
     # Public API
@@ -268,6 +273,9 @@ class EvidenceExtractor:
     # ------------------------------------------------------------------
 
     def _load_mapping(self) -> None:
+        if self._mapping_path is None:
+            self._mapping = []
+            return
         if not self._mapping_path.exists():
             logger.warning(
                 "evidence_mapping.yaml not found at %s; event classification will be empty",

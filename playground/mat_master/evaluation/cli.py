@@ -61,16 +61,16 @@ def main() -> int:
         help='Force using seed prompts (disable rewriting)',
     )
     parser.add_argument(
-        '--levels',
+        '--capabilities',
         nargs='+',
         default=None,
-        help='Only run questions from these levels (e.g. --levels L1 L2)',
+        help='Only run questions from these capabilities (e.g. --capabilities batch_processing workflow_orchestration)',
     )
     parser.add_argument(
         '--questions',
         nargs='+',
         default=None,
-        help='Only run these question IDs (e.g. --questions L1_Q08 L2_Q01)',
+        help='Only run these question IDs (e.g. --questions DF_mech_001 WO_mech_001)',
     )
     parser.add_argument(
         '--rate-only',
@@ -126,8 +126,8 @@ def main() -> int:
         eval_cfg['question_bank_dir'] = args.question_bank_dir
     if args.use_seed_prompt:
         eval_cfg['use_seed_prompt'] = True
-    if args.levels is not None:
-        eval_cfg['include_levels'] = args.levels
+    if args.capabilities is not None:
+        eval_cfg['include_capabilities'] = args.capabilities
     if args.questions is not None:
         eval_cfg['include_question_ids'] = args.questions
 
