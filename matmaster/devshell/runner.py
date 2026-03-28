@@ -1,6 +1,7 @@
 """DevRunner -- per-run assembly mirroring AgentRunService pattern."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 from pathlib import Path
@@ -107,9 +108,12 @@ class DevRunner:
             update={"hooks": [*runtime.spec.hooks, self._stream_hook]}
         )
 
+        _loop = asyncio.new_event_loop()
         try:
-            result = runtime.kernel.run(
-                spec, task, history=self.history, stop_event=stop_event
+            result = _loop.run_until_complete(
+                runtime.kernel.run(
+                    spec, task, history=self.history, stop_event=stop_event
+                )
             )
             # Accumulate history for non-cancelled runs.
             # Message layout: [System, *history, User(task), ...new_messages]
@@ -121,4 +125,5 @@ class DevRunner:
                 self.history.extend(new_messages)
             return result
         finally:
+            _loop.close()
             runtime.cleanup()
