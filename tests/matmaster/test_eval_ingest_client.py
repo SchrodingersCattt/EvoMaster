@@ -55,8 +55,28 @@ def test_build_ingest_item_minimal() -> None:
     assert item["question_sha256"] == prompt_sha256("p")
     assert item["duration_ms"] == 5000
     assert item["tokens"] == 100
+    assert item["num_turns"] == 3
     assert item["extra"]["task_id"] == "Q1_direct_r0"
     assert item["extra"]["reason"] == "natural"
+    assert "model" not in item["extra"]
+    assert "num_turns" not in item["extra"]
+
+
+def test_build_ingest_item_model_top_level() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        prompt="p",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={"model": "claude-sonnet-4", "num_turns": 1},
+        duration_ms=None,
+    )
+    assert item["model"] == "claude-sonnet-4"
+    assert item["num_turns"] == 1
+    assert "model" not in item["extra"]
+    assert "num_turns" not in item["extra"]
 
 
 def test_build_ingest_item_parse_error_summary() -> None:
