@@ -2,8 +2,9 @@
 
 See ``docs/apifox-evaluation-openapi.json`` in matmaster-tools-server for the contract:
 ``EvalIngestRequest`` with ``run_id``, optional ``git_commit``, ``items`` (≥1).
-Each ``EvalItemIn`` requires ``question_id``; ``model`` / ``num_turns`` / ``score`` /
-``result_oss_url`` belong on the item top level. For **immediate** ingest,
+Each ``EvalItemIn`` requires ``question_id``; optional ``question_text`` (stem / prompt
+for DB); ``model`` / ``num_turns`` / ``score`` (optional) / ``result_oss_url`` on the item
+top level. For **immediate** ingest,
 :func:`build_ingest_item` sets ``score`` from the devshell summary when present, else a
 100/0 pass-fail proxy. Human ``score`` / ``score_reason`` / ``suggestion`` for **pending**
 ingest are passed by CLI and validated by
@@ -16,7 +17,9 @@ For deferred ingest, ``run_devshell_eval.py --eval-ingest-pending-only`` writes
 ``result_oss_url`` is set after zipping **only the current task** under that run:
 ``workspaces/<task_id>`` and ``logs/<task_id>`` (see :func:`upload_eval_task_artifacts_to_oss`).
 The parent ``devshell_eval_*`` folder is shared by all tasks in the batch; it is not uploaded whole.
-``extra`` is stored as opaque JSON.
+``extra`` is stored as opaque JSON. Optional ``eval_tooling`` (from
+:func:`matmaster.eval_tooling_snapshot.snapshot_devshell_eval_tooling`) records builtin /
+skill / MCP server config for batch analysis.
 
 Ingest POST URL is ``MATMASTER_TOOLS_SERVER`` + ``EVAL_INGEST_API_PATH``（在 **首次 import**
 本模块时按 ``utils.env`` 解析；与配额等共用同一 host）。见 ``EVAL_INGEST_URL``。
@@ -39,8 +42,9 @@ import utils.env
 
 logger = logging.getLogger(__name__)
 
-# Align with matmaster-tools-server ``EvalItemIn`` ``score_reason`` / ``suggestion`` max_length.
+# Align with matmaster-tools-server ``EvalItemIn`` field limits.
 EVAL_ITEM_TEXT_FIELD_MAX_LEN = 16384
+EVAL_ITEM_QUESTION_TEXT_MAX_LEN = 4_194_304
 
 # Direct tools-server path (not the gateway ``/bohrapi/v1/matmaster-tools-server/...`` prefix).
 EVAL_INGEST_API_PATH = "/api/v1/evaluation/ingest"
@@ -204,8 +208,9 @@ def normalize_pending_item_for_submission(
     """Validate and normalize ``item`` from a pending-ingest JSON before POST.
 
     Requires ``score`` (coerced to ``float``). Optional ``score_reason`` / ``suggestion``
-    must be strings if present; empty after strip are dropped. Returns ``(item, None)``
-    or ``(None, error_message)``.
+    must be strings if present; empty after strip are dropped. Optional ``question_text``
+    is clipped to ``EVAL_ITEM_QUESTION_TEXT_MAX_LEN``.
+    Returns ``(item, None)`` or ``(None, error_message)``.
     """
     out = dict(item)
     raw_score = out.get("score")
@@ -215,6 +220,21 @@ def normalize_pending_item_for_submission(
         out["score"] = float(raw_score)
     except (TypeError, ValueError):
         return None, f'invalid item["score"]: {raw_score!r}'
+
+    if "question_text" in out:
+        qt = out["question_text"]
+        if qt is None:
+            out.pop("question_text", None)
+        elif not isinstance(qt, str):
+            return None, 'item["question_text"] must be a string if present'
+        else:
+            clipped_q = clip_ingest_text_field(
+                qt, max_len=EVAL_ITEM_QUESTION_TEXT_MAX_LEN
+            )
+            if clipped_q is None:
+                out.pop("question_text", None)
+            else:
+                out["question_text"] = clipped_q
 
     for key in ("score_reason", "suggestion"):
         if key not in out:
@@ -230,6 +250,7 @@ def normalize_pending_item_for_submission(
             out.pop(key, None)
         else:
             out[key] = clipped
+
     return out, None
 
 
@@ -264,6 +285,7 @@ def build_ingest_item(
     summary: dict[str, Any] | None,
     duration_ms: int | None,
     result_oss_url: str | None = None,
+    eval_tooling: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     usage = summary.get("usage") if isinstance(summary, dict) else None
     tokens = extract_total_tokens(usage)
@@ -295,11 +317,16 @@ def build_ingest_item(
     if preview is not None:
         extra["final_content_preview"] = preview
 
+    if eval_tooling is not None:
+        extra["eval_tooling"] = eval_tooling
+
+    qtext = clip_ingest_text_field(prompt, max_len=EVAL_ITEM_QUESTION_TEXT_MAX_LEN)
     item: dict[str, Any] = {
         "question_id": question_id,
-        "question_sha256": prompt_sha256(prompt),
         "extra": extra,
     }
+    if qtext is not None:
+        item["question_text"] = qtext
     if isinstance(summary, dict):
         nt = summary.get("num_turns")
         if nt is not None:

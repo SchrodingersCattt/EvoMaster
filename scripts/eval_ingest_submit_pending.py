@@ -13,8 +13,9 @@
 
 This POSTs ``{ run_id, git_commit?, items: [item] }`` to ``ingest_url``.
 CLI score fields are the only source of ``score`` / ``score_reason`` / ``suggestion``.
-Field names match ``matmaster-tools-server`` ``EvalItemIn`` (``score_reason`` / ``suggestion``
-``maxLength`` 16384; longer text is truncated client-side).
+Field names match ``matmaster-tools-server`` ``EvalItemIn``: optional ``question_text``
+(stem; long text truncated client-side to server max), ``score_reason`` / ``suggestion``
+``maxLength`` 16384.
 """
 
 from __future__ import annotations

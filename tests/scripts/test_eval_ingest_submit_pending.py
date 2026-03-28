@@ -32,7 +32,6 @@ def test_submit_pending_main_posts_score_from_cli_when_missing_in_file(
         "git_commit": "deadbeef",
         "item": {
             "question_id": "Q1",
-            "question_sha256": "ab" * 32,
             "extra": {},
         },
     }
@@ -65,6 +64,7 @@ def test_submit_pending_main_posts_score_from_cli_when_missing_in_file(
     assert len(body["items"]) == 1
     assert body["items"][0]["question_id"] == "Q1"
     assert body["items"][0]["score"] == 71.5
+    assert body["items"][0]["extra"] == {}
 
 
 def test_submit_pending_cli_reason_and_suggestion_used_for_post(tmp_path: Path) -> None:
@@ -74,7 +74,6 @@ def test_submit_pending_cli_reason_and_suggestion_used_for_post(tmp_path: Path) 
         "run_id": "run-uuid",
         "item": {
             "question_id": "Q1",
-            "question_sha256": "ab" * 32,
             "extra": {},
             "score_reason": "旧原因",
             "suggestion": "旧建议",
@@ -118,7 +117,6 @@ def test_submit_pending_ignores_score_fields_already_in_file(tmp_path: Path) -> 
         "run_id": "run-uuid",
         "item": {
             "question_id": "Q1",
-            "question_sha256": "ab" * 32,
             "extra": {},
             "score": 11,
             "score_reason": "旧原因",
@@ -156,7 +154,7 @@ def test_submit_pending_requires_score_cli_arg(tmp_path: Path) -> None:
     envelope = {
         "ingest_url": "http://example/api/v1/evaluation/ingest",
         "run_id": "r",
-        "item": {"question_id": "Q1", "question_sha256": "ab" * 32, "extra": {}},
+        "item": {"question_id": "Q1", "extra": {}},
     }
     p = tmp_path / "task.json"
     p.write_text(json.dumps(envelope), encoding="utf-8")
