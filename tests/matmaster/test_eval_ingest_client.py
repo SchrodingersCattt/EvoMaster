@@ -78,7 +78,8 @@ def test_build_ingest_item_minimal() -> None:
         duration_ms=5000,
     )
     assert item["question_id"] == "Q1"
-    assert item["question_sha256"] == prompt_sha256("p")
+    assert item["question_text"] == "p"
+    assert "question_sha256" not in item["extra"]
     assert item["duration_ms"] == 5000
     assert item["tokens"] == 100
     assert item["score"] == 100.0
@@ -134,6 +135,22 @@ def test_build_ingest_item_result_oss_url() -> None:
         result_oss_url="https://bucket.oss.example.com/prefix/u/f.zip",
     )
     assert item["result_oss_url"].startswith("https://")
+
+
+def test_build_ingest_item_eval_tooling_in_extra() -> None:
+    tooling = {"schema": "matmaster_eval_tooling_v1", "skill_names": ["x"]}
+    item = build_ingest_item(
+        question_id="Q1",
+        prompt="p",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={"status": "done"},
+        duration_ms=1,
+        eval_tooling=tooling,
+    )
+    assert item["extra"]["eval_tooling"] == tooling
 
 
 def test_clip_ingest_text_field() -> None:
