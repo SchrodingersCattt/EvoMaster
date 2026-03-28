@@ -1911,11 +1911,6 @@ dev = [
     { name = "pytest-asyncio" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "pytest-asyncio" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "aiohttp" },
@@ -1942,7 +1937,7 @@ requires-dist = [
     { name = "pymupdf" },
     { name = "pymysql", specifier = ">=1.1.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24.0" },
     { name = "python-docx", specifier = ">=1.2.0" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
@@ -1953,9 +1948,6 @@ requires-dist = [
     { name = "websockets", specifier = ">=11.0" },
 ]
 provides-extras = ["bohrium-open", "dev", "calculation"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest-asyncio", specifier = ">=0.24" }]
 
 [[package]]
 name = "matplotlib"

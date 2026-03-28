@@ -181,6 +181,9 @@ class EventEmitterHook(BaseHook):
     - post_tool_call -> ToolResultEvent
     - on_stream_chunk -> ThoughtEvent / ResponseEvent
     - on_segment_complete -> persisted ThoughtEvent / ResponseEvent snapshot
+
+    Uses bus.emit_nowait() for thread-safe emit from sync kernel context.
+    Will switch to await bus.emit() when kernel becomes async.
     """
 
     def __init__(
@@ -196,7 +199,7 @@ class EventEmitterHook(BaseHook):
 
     async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         """Emit ToolCallEvent and continue execution."""
-        self._bus.emit(
+        self._bus.emit_nowait(
             ToolCallEvent(
                 source=self._source,
                 spawn_id=self._spawn_id,
@@ -209,7 +212,7 @@ class EventEmitterHook(BaseHook):
 
     async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         """Emit ToolResultEvent after tool execution."""
-        self._bus.emit(
+        self._bus.emit_nowait(
             ToolResultEvent(
                 source=self._source,
                 spawn_id=self._spawn_id,
@@ -224,7 +227,7 @@ class EventEmitterHook(BaseHook):
     async def on_stream_chunk(self, chunk: StreamChunk) -> None:
         """Emit ThoughtEvent for reasoning and ResponseEvent for visible content."""
         if chunk.reasoning_content:
-            self._bus.emit(
+            self._bus.emit_nowait(
                 ThoughtEvent(
                     source=self._source,
                     spawn_id=self._spawn_id,
@@ -235,7 +238,7 @@ class EventEmitterHook(BaseHook):
                 )
             )
         if chunk.content:
-            self._bus.emit(
+            self._bus.emit_nowait(
                 ResponseEvent(
                     source=self._source,
                     spawn_id=self._spawn_id,
@@ -250,7 +253,7 @@ class EventEmitterHook(BaseHook):
     ) -> None:
         """Emit a persisted snapshot when a logical segment is complete."""
         if segment_type == "thought":
-            self._bus.emit(
+            self._bus.emit_nowait(
                 ThoughtEvent(
                     source=self._source,
                     spawn_id=self._spawn_id,
@@ -263,7 +266,7 @@ class EventEmitterHook(BaseHook):
             return
 
         if segment_type == "response":
-            self._bus.emit(
+            self._bus.emit_nowait(
                 ResponseEvent(
                     source=self._source,
                     spawn_id=self._spawn_id,

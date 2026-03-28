@@ -1,176 +1,84 @@
-"""Tests for ConfirmationHook -- asyncio.Future based confirmation."""
+"""Tests for ConfirmationHook."""
 
 from __future__ import annotations
 
-import asyncio
-import threading
-import time
+import queue
 from unittest.mock import MagicMock
 
 import pytest
 
 from matmaster.core.hooks import HookAction
-from matmaster.hooks.confirmation import ConfirmationHook
-from matmaster.types.events import ConfirmationRequestEvent
 from matmaster.types.messages import ToolCallData
 
 
-@pytest.fixture
-def bus() -> MagicMock:
-    return MagicMock()
+class TestConfirmationHook:
+    """ConfirmationHook pre_tool_call behavior."""
 
+    def test_returns_continue_when_reply_queue_is_none(self) -> None:
+        """No reply_queue means no confirmation possible -- always CONTINUE."""
+        from matmaster.hooks.confirmation import ConfirmationHook
 
-@pytest.fixture
-def tc() -> ToolCallData:
-    return ToolCallData(id="tc-1", name="bash", arguments={"cmd": "ls"})
+        bus = MagicMock()
+        hook = ConfirmationHook(reply_queue=None, bus=bus)
+        tc = ToolCallData(id="tc-1", name="bash", arguments={})
+        assert hook.pre_tool_call(tc) == HookAction.CONTINUE
+        bus.emit_nowait.assert_not_called()
 
+    def test_returns_continue_when_tool_not_in_confirm_tools(self) -> None:
+        """Tool not in confirm_tools set -- skip confirmation."""
+        from matmaster.hooks.confirmation import ConfirmationHook
 
-class TestConfirmationHookNoLoop:
-    """Without loop injection, ConfirmationHook always returns CONTINUE."""
+        bus = MagicMock()
+        reply_queue = MagicMock()
+        hook = ConfirmationHook(
+            reply_queue=reply_queue,
+            bus=bus,
+            confirm_tools={"dangerous_tool"},
+        )
+        tc = ToolCallData(id="tc-1", name="safe_tool", arguments={})
+        assert hook.pre_tool_call(tc) == HookAction.CONTINUE
+        bus.emit_nowait.assert_not_called()
 
-    async def test_returns_continue_when_no_loop(self, bus, tc) -> None:
-        hook = ConfirmationHook(bus=bus)
-        result = await hook.pre_tool_call(tc)
-        assert result == HookAction.CONTINUE
-        bus.emit.assert_not_called()
+    def test_emits_confirmation_request_and_blocks(self) -> None:
+        """Emits ConfirmationRequestEvent and blocks on reply_queue.get()."""
+        from matmaster.hooks.confirmation import ConfirmationHook
+        from matmaster.types.events import ConfirmationRequestEvent
 
-
-class TestConfirmationHookWithLoop:
-    """With loop injection, ConfirmationHook uses asyncio.Future."""
-
-    async def test_returns_continue_when_tool_not_in_confirm_tools(self, bus, tc) -> None:
-        hook = ConfirmationHook(bus=bus, confirm_tools={"dangerous_tool"})
-        hook.set_loop(asyncio.get_event_loop())
-        result = await hook.pre_tool_call(tc)
-        assert result == HookAction.CONTINUE
-        bus.emit.assert_not_called()
-
-    async def test_emits_event_and_returns_continue_on_resolve(self, bus, tc) -> None:
-        loop = asyncio.get_event_loop()
-        hook = ConfirmationHook(bus=bus, timeout_sec=5)
-        hook.set_loop(loop)
-
-        async def resolve_soon():
-            await asyncio.sleep(0.01)
-            hook.resolve("yes")
-
-        asyncio.ensure_future(resolve_soon())
-        result = await hook.pre_tool_call(tc)
+        bus = MagicMock()
+        reply_queue = MagicMock()
+        reply_queue.get.return_value = "yes"  # user approved
+        hook = ConfirmationHook(reply_queue=reply_queue, bus=bus, timeout_sec=10)
+        tc = ToolCallData(id="tc-1", name="bash", arguments={"cmd": "rm -rf /"})
+        result = hook.pre_tool_call(tc)
 
         assert result == HookAction.CONTINUE
-        bus.emit.assert_called_once()
-        emitted = bus.emit.call_args[0][0]
+        bus.emit_nowait.assert_called_once()
+        emitted = bus.emit_nowait.call_args[0][0]
         assert isinstance(emitted, ConfirmationRequestEvent)
-        assert emitted.timeout_seconds == 5
+        reply_queue.get.assert_called_once_with(timeout=10)
 
-    async def test_returns_skip_on_cancel(self, bus, tc) -> None:
-        loop = asyncio.get_event_loop()
-        hook = ConfirmationHook(bus=bus, timeout_sec=5)
-        hook.set_loop(loop)
+    def test_returns_skip_when_user_cancels(self) -> None:
+        """reply_queue.get() returns None -> user cancelled -> SKIP."""
+        from matmaster.hooks.confirmation import ConfirmationHook
 
-        async def cancel_soon():
-            await asyncio.sleep(0.01)
-            hook.cancel()
-
-        asyncio.ensure_future(cancel_soon())
-        result = await hook.pre_tool_call(tc)
+        bus = MagicMock()
+        reply_queue = MagicMock()
+        reply_queue.get.return_value = None  # user cancelled
+        hook = ConfirmationHook(reply_queue=reply_queue, bus=bus)
+        tc = ToolCallData(id="tc-1", name="bash", arguments={})
+        result = hook.pre_tool_call(tc)
 
         assert result == HookAction.SKIP
 
-    async def test_returns_skip_on_timeout(self, bus, tc) -> None:
-        loop = asyncio.get_event_loop()
-        hook = ConfirmationHook(bus=bus, timeout_sec=0.05)
-        hook.set_loop(loop)
-        result = await hook.pre_tool_call(tc)
+    def test_returns_skip_on_queue_empty_timeout(self) -> None:
+        """reply_queue.get() raises queue.Empty -> timeout -> SKIP."""
+        from matmaster.hooks.confirmation import ConfirmationHook
+
+        bus = MagicMock()
+        reply_queue = MagicMock()
+        reply_queue.get.side_effect = queue.Empty()
+        hook = ConfirmationHook(reply_queue=reply_queue, bus=bus)
+        tc = ToolCallData(id="tc-1", name="bash", arguments={})
+        result = hook.pre_tool_call(tc)
+
         assert result == HookAction.SKIP
-
-    async def test_pending_future_cleared_after_resolve(self, bus, tc) -> None:
-        loop = asyncio.get_event_loop()
-        hook = ConfirmationHook(bus=bus, timeout_sec=5)
-        hook.set_loop(loop)
-
-        async def resolve_soon():
-            await asyncio.sleep(0.01)
-            hook.resolve("ok")
-
-        asyncio.ensure_future(resolve_soon())
-        await hook.pre_tool_call(tc)
-        assert hook._pending_future is None
-
-    async def test_resolve_noop_when_no_pending(self, bus) -> None:
-        hook = ConfirmationHook(bus=bus)
-        hook.set_loop(asyncio.get_event_loop())
-        hook.resolve("test")  # Should not raise
-
-    async def test_cancel_noop_when_no_pending(self, bus) -> None:
-        hook = ConfirmationHook(bus=bus)
-        hook.set_loop(asyncio.get_event_loop())
-        hook.cancel()  # Should not raise
-
-
-class TestConfirmationHookCrossThread:
-    """Cross-thread resolve/cancel via loop.call_soon_threadsafe."""
-
-    async def test_resolve_from_thread(self, bus, tc) -> None:
-        loop = asyncio.get_event_loop()
-        hook = ConfirmationHook(bus=bus, timeout_sec=5)
-        hook.set_loop(loop)
-
-        def thread_resolve():
-            time.sleep(0.02)
-            hook.resolve("approved")
-
-        t = threading.Thread(target=thread_resolve)
-        t.start()
-        result = await hook.pre_tool_call(tc)
-        t.join()
-        assert result == HookAction.CONTINUE
-
-    async def test_cancel_from_thread(self, bus, tc) -> None:
-        loop = asyncio.get_event_loop()
-        hook = ConfirmationHook(bus=bus, timeout_sec=5)
-        hook.set_loop(loop)
-
-        def thread_cancel():
-            time.sleep(0.02)
-            hook.cancel()
-
-        t = threading.Thread(target=thread_cancel)
-        t.start()
-        result = await hook.pre_tool_call(tc)
-        t.join()
-        assert result == HookAction.SKIP
-
-
-class TestConfirmationHookAdapter:
-    """Test ConfirmationHookAdapter bridges ReplyQueueLike to hook."""
-
-    async def test_put_content_calls_resolve(self, bus) -> None:
-        from src.services.stream_service import ConfirmationHookAdapter
-
-        hook = ConfirmationHook(bus=bus)
-        adapter = ConfirmationHookAdapter(hook)
-
-        # Mock resolve to verify call
-        hook.resolve = MagicMock()
-        adapter.put_content("approved")
-        hook.resolve.assert_called_once_with("approved")
-
-    async def test_put_cancel_calls_cancel(self, bus) -> None:
-        from src.services.stream_service import ConfirmationHookAdapter
-
-        hook = ConfirmationHook(bus=bus)
-        adapter = ConfirmationHookAdapter(hook)
-
-        hook.cancel = MagicMock()
-        adapter.put_cancel()
-        hook.cancel.assert_called_once()
-
-    async def test_get_raises_not_implemented(self, bus) -> None:
-        from src.services.stream_service import ConfirmationHookAdapter
-
-        hook = ConfirmationHook(bus=bus)
-        adapter = ConfirmationHookAdapter(hook)
-
-        with pytest.raises(NotImplementedError):
-            adapter.get()
