@@ -38,16 +38,10 @@ created: 2026-03-28
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 16-01-01 | 01 | 0 | INFR-01 | unit | `uv run pytest tests/matmaster/core/test_bus.py -x` | Exists (migrate sync->async) | ⬜ pending |
-| 16-01-02 | 01 | 0 | INFR-01 | unit | `uv run pytest tests/matmaster/core/test_bus.py::test_emit_nowait -x` | ❌ W0: add test | ⬜ pending |
-| 16-01-03 | 01 | 0 | INFR-02 | integration | `uv run pytest tests/matmaster/integration/test_event_router.py::TestEventRouter -x` | Exists (migrate threading->asyncio) | ⬜ pending |
-| 16-01-04 | 01 | 0 | INFR-03 | unit | `uv run pytest tests/matmaster/integration/test_event_router.py::TestPersistenceHandler -x` | Exists (migrate sync->async) | ⬜ pending |
-| 16-01-05 | 01 | 0 | INFR-03 | unit | `uv run pytest tests/matmaster/integration/test_event_router.py::TestSSEHandler -x` | Exists (migrate + delete 2 obsolete) | ⬜ pending |
-| 16-02-01 | 02 | 1 | INFR-01 | unit | `uv run pytest tests/matmaster/core/test_bus.py -x` | ✅ | ⬜ pending |
-| 16-02-02 | 02 | 1 | INFR-02 | integration | `uv run pytest tests/matmaster/integration/test_event_router.py::TestEventRouter -x` | ✅ | ⬜ pending |
-| 16-03-01 | 03 | 1 | INFR-03 | unit | `uv run pytest tests/matmaster/integration/test_event_router.py::TestSSEHandler -x` | ✅ | ⬜ pending |
-| 16-03-02 | 03 | 1 | INFR-03 | unit | `uv run pytest tests/matmaster/integration/test_event_router.py::TestPersistenceHandler -x` | ✅ | ⬜ pending |
-| 16-04-01 | 04 | 2 | INFR-01,INFR-02,INFR-03 | integration | `uv run pytest tests/matmaster/ -x -q` | ✅ | ⬜ pending |
+| 16-01-T1 | 01 | 1 | INFR-01,INFR-02,INFR-03 | unit+integration | `uv run pytest tests/matmaster/core/test_bus.py tests/matmaster/integration/test_event_router.py -x -q` | Exists (migrate sync->async + add emit_nowait) | ⬜ pending |
+| 16-01-T2 | 01 | 1 | INFR-02,INFR-03 | integration | `uv run pytest tests/matmaster/integration/test_event_router.py -x -q` | Exists (migrate threading->asyncio, handlers async) | ⬜ pending |
+| 16-02-T1 | 02 | 2 | INFR-01 | integration | `uv run pytest tests/matmaster/ -x -q` | ✅ (emit callers use await) | ⬜ pending |
+| 16-02-T2 | 02 | 2 | INFR-02,INFR-03 | integration | `uv run pytest tests/matmaster/ -x -q` | ✅ (service bridge for router) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
