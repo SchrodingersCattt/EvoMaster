@@ -120,7 +120,11 @@ Plans:
   2. EventRouter 使用 asyncio.create_task 启动消费循环（替代 threading.Thread），支持 graceful stop + drain
   3. SSEHandler 和 PersistenceHandler 的 handle() 方法为 async def，可在 EventRouter 的 async 消费循环中 await
   4. Bus + Router 在同一个 event loop 中协作，事件从 emit 到 handler.handle 全链路无阻塞
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 16-01-PLAN.md -- MessageBus async (asyncio.Queue) + EventRouter async (asyncio.Task) + SSEHandler/PersistenceHandler/WorkspaceHandler async handle() + 测试迁移
+- [ ] 16-02-PLAN.md -- 13 个 emit 调用点 await 迁移 + service 层 emit_nowait/router 桥接/SSEHandler 构造函数适配
 
 ### Phase 17: AgentKernel 异步化
 **Goal**: Kernel 执行循环全面 async，收敛所有叶节点异步依赖，LLM/Tool/Hook 调用全部 await，ContextCompactor 内部 LLM 调用 async
@@ -181,7 +185,7 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 13. LLM Provider 异步实现 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 14. Tool 系统异步化 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 15. Hook 系统异步化 | v2.0 | 3/3 | Complete    | 2026-03-27 |
-| 16. MessageBus + EventRouter 异步化 | v2.0 | 0/0 | Not started | - |
+| 16. MessageBus + EventRouter 异步化 | v2.0 | 0/2 | Planned | - |
 | 17. AgentKernel 异步化 | v2.0 | 0/0 | Not started | - |
 | 18. Exp 生命周期异步化 | v2.0 | 0/0 | Not started | - |
 | 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 0/0 | Not started | - |
