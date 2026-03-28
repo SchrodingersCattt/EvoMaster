@@ -60,7 +60,7 @@ Developer reference for the prompt files in this directory. **This file is not i
 | lit-data-organizer: when to use; evidence persistence; PDF-first; resume | tool affordance | Keep (trim workflow detail to "use get_info") |
 | Multi-batch: auto-saved outputs; final CSV from files; merge examples | tool affordance | Keep |
 | composition-optimization: get_info first; branches; no local surrogate probe | tool affordance | Keep |
-| input-manual-helper: prepare_* not hand-write; structure_file; validate_input; official docs | tool affordance | Keep |
+| input-manual-helper: local script generation, no hand-write; structure_file; validate_input; official docs | tool affordance | Keep |
 | use_skill run_script: manuscript-scribe/deep-survey CLI details | tool affordance | Slim: minimal "use get_info; required args" in prompt; rest in skill |
 | get_reference: reference_name = filename | tool affordance | Keep |
 | edit/view path: absolute path | tool affordance | Keep |
