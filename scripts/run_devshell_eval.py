@@ -7,6 +7,8 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
     python -u -m matmaster.devshell run ... --prompt-file ... --json-out .../_devshell_summary.json
 
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
+``manifest.json`` carries ``eval_tooling`` (registered builtins, skill names, MCP server keys from config);
+the same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
 
 Optional **per-task ingest** to matmaster-tools-server (after each devshell run).
 POST URL is fixed: ``MATMASTER_TOOLS_SERVER`` + ``/api/v1/evaluation/ingest`` (see ``matmaster.eval_ingest_client``).
@@ -268,7 +270,6 @@ def main() -> int:
     if args.jobs < 1:
         print("error: --jobs must be >= 1", file=sys.stderr)
         return 2
-
     py = args.python or Path(sys.executable)
 
     cfg_dict = _merge_eval_config(
@@ -347,6 +348,7 @@ def main() -> int:
         post_eval_ingest,
         upload_eval_task_artifacts_to_oss,
     )
+    from matmaster.eval_tooling_snapshot import snapshot_devshell_eval_tooling
 
     pending_only = args.eval_ingest_pending_only
     ingest_url = None if args.no_eval_ingest else EVAL_INGEST_URL
@@ -364,6 +366,8 @@ def main() -> int:
 
     git_commit = git_head_commit(REPO_ROOT)
 
+    eval_tooling_snapshot = snapshot_devshell_eval_tooling(repo_root=REPO_ROOT)
+
     manifest: dict[str, Any] = {
         "run_label": args.run_label,
         "started_at_utc": ts,
@@ -373,6 +377,7 @@ def main() -> int:
         "plan_count": len(run_plan),
         "jobs": args.jobs,
         "dry_run": False,
+        "eval_tooling": eval_tooling_snapshot,
     }
     if ingest_url:
         manifest["eval_ingest_url"] = ingest_url
@@ -500,6 +505,7 @@ def main() -> int:
                 summary=summary if isinstance(summary, dict) else {},
                 duration_ms=duration_ms,
                 result_oss_url=result_oss_url,
+                eval_tooling=eval_tooling_snapshot,
             )
             if pending_only:
                 pending_dir = run_dir / "pending_ingest"
