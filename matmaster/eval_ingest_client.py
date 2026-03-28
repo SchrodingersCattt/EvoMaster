@@ -1,7 +1,10 @@
 """Client for matmaster-tools-server evaluation ingest API.
 
-See ``docs/apifox-evaluation-openapi.json`` in matmaster-tools-server (or repo docs)
-for the contract: POST with ``run_id``, optional ``git_commit``, ``items`` (≥1).
+See ``docs/apifox-evaluation-openapi.json`` in matmaster-tools-server for the contract:
+``EvalIngestRequest`` with ``run_id``, optional ``git_commit``, ``items`` (≥1).
+Each ``EvalItemIn`` requires ``question_id``; ``model`` / ``num_turns`` belong on the
+item top level (not only inside ``extra``) so the server can persist columns; ``extra``
+is stored as opaque JSON.
 
 Ingest POST URL is ``MATMASTER_TOOLS_SERVER`` + ``EVAL_INGEST_API_PATH``（在 **首次 import**
 本模块时按 ``utils.env`` 解析；与配额等共用同一 host）。见 ``EVAL_INGEST_URL``。
@@ -98,8 +101,6 @@ def build_ingest_item(
             {
                 "status": summary.get("status"),
                 "reason": summary.get("reason"),
-                "num_turns": summary.get("num_turns"),
-                "model": summary.get("model"),
                 "profile_key": summary.get("profile_key"),
             }
         )
@@ -116,6 +117,19 @@ def build_ingest_item(
         "question_sha256": prompt_sha256(prompt),
         "extra": extra,
     }
+    if isinstance(summary, dict):
+        nt = summary.get("num_turns")
+        if nt is not None:
+            try:
+                nti = int(nt)
+                if nti >= 0:
+                    item["num_turns"] = nti
+            except (TypeError, ValueError):
+                pass
+        mod = summary.get("model")
+        if isinstance(mod, str) and mod.strip():
+            item["model"] = mod.strip()[:256]
+
     if duration_ms is not None and duration_ms >= 0:
         item["duration_ms"] = int(duration_ms)
     if tokens is not None:

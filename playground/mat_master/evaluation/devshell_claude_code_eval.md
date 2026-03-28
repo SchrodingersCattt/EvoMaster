@@ -13,6 +13,8 @@ cd <repo-root>
 uv run python scripts/run_devshell_eval.py --questions <QUESTION_ID> --limit 1
 ```
 
+单题**较快**示例：`--questions SC_struct_007 --limit 1`（`structure_construction`，比批量结构题等更省时间）。其他题号按需替换。
+
 可选：`--model <route>`；需要题库原文进 md 时加 `--export-review-with-questions`。
 
 跑完后记下终端里打印的 **`Run directory:`**（即 `results/devshell_eval_*`）。
@@ -64,28 +66,28 @@ uv run python scripts/run_devshell_eval.py --questions <QUESTION_ID> --limit 1
 
 ## 6. 可复制话术（在 Claude Code 里驱动本流程）
 
-以下可直接粘贴；将 `BP_struct_001`、`<route>`、题号列表等换成实际需要。文档路径（便于 @）：`playground/mat_master/evaluation/devshell_claude_code_eval.md`。
+以下可直接粘贴；默认快例题为 **`SC_struct_007`**；将 `<route>`、题号列表等按需替换。文档路径（便于 @）：`playground/mat_master/evaluation/devshell_claude_code_eval.md`。
 
 **最短（单题 + 判分 + 改进）**
 
-> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md` 执行：在仓库根用 `uv run python scripts/run_devshell_eval.py --questions BP_struct_001 --limit 1` 跑一轮，记下 `Run directory`，再按该文档第 2、3 节对照题库 YAML、`raw_runs.jsonl` 和 workspace 判是否完成；**逐条 checklist 给证据**，**最后一行输出 `百分制得分：XX/100`**；未完全通过时给**可操作的改进建议**（区分环境/路径 vs 实现）。
+> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md` 执行：在仓库根用 `uv run python scripts/run_devshell_eval.py --questions SC_struct_007 --limit 1` 跑一轮，记下 `Run directory`，再按该文档第 2、3 节对照题库 YAML、`raw_runs.jsonl` 和 workspace 判是否完成；**逐条 checklist 给证据**，**最后一行输出 `百分制得分：XX/100`**；未完全通过时给**可操作的改进建议**（区分环境/路径 vs 实现）。
 
 **带模型路由**
 
-> 按 `devshell-claude-code-eval`（见 `playground/mat_master/evaluation/devshell_claude_code_eval.md`）：先 `uv run python scripts/run_devshell_eval.py --questions BP_struct_001 --limit 1 --model <route>`，再完整判分（含百分制与改进建议）。
+> 按 `devshell-claude-code-eval`（见 `playground/mat_master/evaluation/devshell_claude_code_eval.md`）：先 `uv run python scripts/run_devshell_eval.py --questions SC_struct_007 --limit 1 --model <route>`，再完整判分（含百分制与改进建议）。
 
 **需要 `claude_review.md` 里带上题库原文**
 
-> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md`：跑 `uv run python scripts/run_devshell_eval.py --questions BP_struct_001 --limit 1 --export-review-with-questions`，然后按文档判分、给 **`百分制得分：XX/100`** 和改进建议。
+> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md`：跑 `uv run python scripts/run_devshell_eval.py --questions SC_struct_007 --limit 1 --export-review-with-questions`，然后按文档判分、给 **`百分制得分：XX/100`** 和改进建议。
 
 **多题 + 宏平均**
 
-> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md`：依次跑 `--questions BP_struct_001 WO_struct_001 --limit 2`（题号按需改），对每个 task 单独判 checklist 并给 **每题百分制**；最后给 **`宏平均：XX/100`**，并汇总共性改进点。
+> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md`：依次跑 `--questions SC_struct_007 SC_struct_008 --limit 2`（题号按需改），对每个 task 单独判 checklist 并给 **每题百分制**；最后给 **`宏平均：XX/100`**，并汇总共性改进点。
 
 **按 capability 冒烟一条**
 
-> 按 `devshell-claude-code-eval` 规则：用 `uv run python scripts/run_devshell_eval.py --capabilities batch_processing --limit 1` 跑一条，再按该 run 目录和对应 YAML 判分、输出 **百分制** 与建议。
+> 按 `devshell-claude-code-eval` 规则：用 `uv run python scripts/run_devshell_eval.py --capabilities structure_construction --questions SC_struct_007 --limit 1` 跑一条（固定快例题号），再按该 run 目录和对应 YAML 判分、输出 **百分制** 与建议。
 
 **与 checklist / 百分制对齐的完整版**
 
-> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md`：**先**在仓库根跑 `BP_struct_001` 单题（`--limit 1`），**再**根据题库 `scoring_checklist` 对照产物判断是否完成；输出 **通过/部分通过/未通过** 的定性结论、**逐条证据**、**`百分制得分：XX/100`**（按文档里的 weight 公式）；若未达标，给**环境类 vs 实现类**的改进建议。
+> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md`：**先**在仓库根跑 `SC_struct_007` 单题（`--limit 1`），**再**根据题库 `scoring_checklist` 对照产物判断是否完成；输出 **通过/部分通过/未通过** 的定性结论、**逐条证据**、**`百分制得分：XX/100`**（按文档里的 weight 公式）；若未达标，给**环境类 vs 实现类**的改进建议。
