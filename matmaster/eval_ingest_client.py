@@ -3,10 +3,16 @@
 See ``docs/apifox-evaluation-openapi.json`` in matmaster-tools-server for the contract:
 ``EvalIngestRequest`` with ``run_id``, optional ``git_commit``, ``items`` (≥1).
 Each ``EvalItemIn`` requires ``question_id``; ``model`` / ``num_turns`` / ``score`` /
-``result_oss_url`` belong on the item top level. ``score`` is taken from the devshell
-summary when present, else a 100/0 pass-fail proxy.
+``result_oss_url`` belong on the item top level. For **immediate** ingest,
+:func:`build_ingest_item` sets ``score`` from the devshell summary when present, else a
+100/0 pass-fail proxy. Human ``score`` / ``score_reason`` / ``suggestion`` for **pending**
+ingest are passed by CLI and validated by
+:func:`normalize_pending_item_for_submission`（``score_reason`` / ``suggestion`` 最长 16384）.
 For deferred ingest, ``run_devshell_eval.py --eval-ingest-pending-only`` writes
-``pending_ingest/*.json`` without ``score``; then ``scripts/eval_ingest_submit_pending.py`` POSTs.
+``pending_ingest/*.json`` with ``item`` **without** ``score`` (and without human
+``score_reason`` / ``suggestion``). After judging, Claude Code passes
+``--score`` / ``--score-reason`` / ``--suggestion`` to
+``scripts/eval_ingest_submit_pending.py --pending <path>`` before POST.
 ``result_oss_url`` is set after zipping **only the current task** under that run:
 ``workspaces/<task_id>`` and ``logs/<task_id>`` (see :func:`upload_eval_task_artifacts_to_oss`).
 The parent ``devshell_eval_*`` folder is shared by all tasks in the batch; it is not uploaded whole.
@@ -32,6 +38,9 @@ import httpx
 import utils.env
 
 logger = logging.getLogger(__name__)
+
+# Align with matmaster-tools-server ``EvalItemIn`` ``score_reason`` / ``suggestion`` max_length.
+EVAL_ITEM_TEXT_FIELD_MAX_LEN = 16384
 
 # Direct tools-server path (not the gateway ``/bohrapi/v1/matmaster-tools-server/...`` prefix).
 EVAL_INGEST_API_PATH = "/api/v1/evaluation/ingest"
@@ -175,6 +184,53 @@ def upload_eval_task_artifacts_to_oss(
             tmp_path.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def clip_ingest_text_field(
+    value: str | None, *, max_len: int = EVAL_ITEM_TEXT_FIELD_MAX_LEN
+) -> str | None:
+    """Return stripped non-empty string, truncated to ``max_len``, or ``None``."""
+    if value is None:
+        return None
+    t = str(value).strip()
+    if not t:
+        return None
+    return t[:max_len] if len(t) > max_len else t
+
+
+def normalize_pending_item_for_submission(
+    item: dict[str, Any],
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Validate and normalize ``item`` from a pending-ingest JSON before POST.
+
+    Requires ``score`` (coerced to ``float``). Optional ``score_reason`` / ``suggestion``
+    must be strings if present; empty after strip are dropped. Returns ``(item, None)``
+    or ``(None, error_message)``.
+    """
+    out = dict(item)
+    raw_score = out.get("score")
+    if raw_score is None:
+        return None, 'missing item["score"] — pass --score (e.g. 0–100)'
+    try:
+        out["score"] = float(raw_score)
+    except (TypeError, ValueError):
+        return None, f'invalid item["score"]: {raw_score!r}'
+
+    for key in ("score_reason", "suggestion"):
+        if key not in out:
+            continue
+        val = out[key]
+        if val is None:
+            out.pop(key, None)
+            continue
+        if not isinstance(val, str):
+            return None, f'item["{key}"] must be a string if present'
+        clipped = clip_ingest_text_field(val)
+        if clipped is None:
+            out.pop(key, None)
+        else:
+            out[key] = clipped
+    return out, None
 
 
 def git_head_commit(repo_root: Path, *, max_len: int = 64) -> str | None:

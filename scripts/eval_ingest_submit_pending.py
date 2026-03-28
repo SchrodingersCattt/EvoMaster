@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""Submit a pending eval ingest file after the score is known.
+"""Submit a pending eval ingest file after Claude Code has judged the task.
 
 ``run_devshell_eval.py --eval-ingest-pending-only`` writes one JSON per task under
 ``pending_ingest/`` with ``ingest_url``, ``run_id``, ``git_commit``, and ``item`` **without**
-``score``. After judging, run::
+``score``. After judging, pass score fields by CLI::
 
-    uv run python scripts/eval_ingest_submit_pending.py \\
-        --pending results/devshell_eval_xxx/pending_ingest/SC_struct_007_direct_r0.json \\
-        --score 73
+    uv run python scripts/eval_ingest_submit_pending.py \
+        --pending results/devshell_eval_xxx/pending_ingest/SC_struct_007_direct_r0.json \
+        --score 73 \
+        --score-reason "按 checklist，结构构建基本正确但缺少最终校验" \
+        --suggestion "补充坐标一致性检查"
 
-This POSTs ``{ run_id, git_commit?, items: [item with score] }`` to ``ingest_url``.
+This POSTs ``{ run_id, git_commit?, items: [item] }`` to ``ingest_url``.
+CLI score fields are the only source of ``score`` / ``score_reason`` / ``suggestion``.
+Field names match ``matmaster-tools-server`` ``EvalItemIn`` (``score_reason`` / ``suggestion``
+``maxLength`` 16384; longer text is truncated client-side).
 """
 
 from __future__ import annotations
@@ -25,7 +30,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="POST eval ingest from a pending_ingest/*.json (add score).",
+        description=(
+            "POST eval ingest from pending_ingest/*.json "
+            "(score fields come from CLI only)."
+        ),
     )
     parser.add_argument(
         "--pending",
@@ -38,6 +46,18 @@ def main() -> int:
         type=float,
         required=True,
         help="Numeric score to set on the item (e.g. 0–100).",
+    )
+    parser.add_argument(
+        "--score-reason",
+        type=str,
+        default=None,
+        help="Optional score explanation.",
+    )
+    parser.add_argument(
+        "--suggestion",
+        type=str,
+        default=None,
+        help="Optional improvement suggestion.",
     )
     parser.add_argument(
         "--eval-ingest-timeout",
@@ -76,16 +96,33 @@ def main() -> int:
         print("item.question_id missing or invalid", file=sys.stderr)
         return 1
 
-    item = dict(item)
-    item["score"] = float(args.score)
+    sys.path.insert(0, str(REPO_ROOT))
+    from matmaster.eval_ingest_client import (
+        normalize_pending_item_for_submission,
+        post_eval_ingest,
+    )
 
-    body: dict[str, Any] = {"run_id": run_id, "items": [item]}
+    item = {
+        k: v
+        for k, v in dict(item).items()
+        if k not in {"score", "score_reason", "suggestion"}
+    }
+    item["score"] = float(args.score)
+    if args.score_reason is not None:
+        item["score_reason"] = args.score_reason
+    if args.suggestion is not None:
+        item["suggestion"] = args.suggestion
+
+    normalized, err = normalize_pending_item_for_submission(item)
+    if err:
+        print(f"{path}: {err}", file=sys.stderr)
+        return 1
+    assert normalized is not None
+
+    body: dict[str, Any] = {"run_id": run_id, "items": [normalized]}
     gc = envelope.get("git_commit")
     if isinstance(gc, str) and gc.strip():
         body["git_commit"] = gc.strip()
-
-    sys.path.insert(0, str(REPO_ROOT))
-    from matmaster.eval_ingest_client import post_eval_ingest
 
     ok, msg = post_eval_ingest(
         ingest_url,

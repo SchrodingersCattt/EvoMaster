@@ -8,8 +8,10 @@ from matmaster.eval_ingest_client import (
     EVAL_INGEST_API_PATH,
     EVAL_INGEST_URL,
     build_ingest_item,
+    clip_ingest_text_field,
     eval_run_zip_should_skip_arcname,
     extract_total_tokens,
+    normalize_pending_item_for_submission,
     post_eval_ingest,
     prompt_sha256,
     score_for_eval_ingest,
@@ -132,6 +134,44 @@ def test_build_ingest_item_result_oss_url() -> None:
         result_oss_url="https://bucket.oss.example.com/prefix/u/f.zip",
     )
     assert item["result_oss_url"].startswith("https://")
+
+
+def test_clip_ingest_text_field() -> None:
+    assert clip_ingest_text_field(None) is None
+    assert clip_ingest_text_field("  \n") is None
+    assert clip_ingest_text_field(" ok ") == "ok"
+    assert clip_ingest_text_field("x" * 5, max_len=3) == "xxx"
+
+
+def test_normalize_pending_item_for_submission() -> None:
+    out, err = normalize_pending_item_for_submission(
+        {
+            "question_id": "Q1",
+            "score": 80,
+            "score_reason": "  依据 checklist ",
+            "suggestion": "",
+        }
+    )
+    assert err is None
+    assert out is not None
+    assert out["score"] == 80.0
+    assert out["score_reason"] == "依据 checklist"
+    assert "suggestion" not in out
+
+
+def test_normalize_pending_item_requires_score() -> None:
+    out, err = normalize_pending_item_for_submission({"question_id": "Q1"})
+    assert out is None
+    assert err is not None
+    assert "score" in err
+
+
+def test_normalize_pending_item_rejects_bad_score_reason_type() -> None:
+    out, err = normalize_pending_item_for_submission(
+        {"question_id": "Q1", "score": 1, "score_reason": 123}
+    )
+    assert out is None
+    assert err is not None
 
 
 def test_build_ingest_item_parse_error_summary() -> None:
