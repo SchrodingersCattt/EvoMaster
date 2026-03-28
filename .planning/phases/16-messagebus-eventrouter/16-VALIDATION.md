@@ -38,10 +38,10 @@ created: 2026-03-28
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 16-01-T1 | 01 | 1 | INFR-01,INFR-02,INFR-03 | unit+integration | `uv run pytest tests/matmaster/core/test_bus.py tests/matmaster/integration/test_event_router.py -x -q` | Exists (migrate sync->async + add emit_nowait) | ⬜ pending |
-| 16-01-T2 | 01 | 1 | INFR-02,INFR-03 | integration | `uv run pytest tests/matmaster/integration/test_event_router.py -x -q` | Exists (migrate threading->asyncio, handlers async) | ⬜ pending |
-| 16-02-T1 | 02 | 2 | INFR-01 | integration | `uv run pytest tests/matmaster/ -x -q` | ✅ (emit callers use await) | ⬜ pending |
-| 16-02-T2 | 02 | 2 | INFR-02,INFR-03 | integration | `uv run pytest tests/matmaster/ -x -q` | ✅ (service bridge for router) | ⬜ pending |
+| 16-01-T1 | 01 | 1 | INFR-01 | unit | `uv run pytest tests/matmaster/core/test_bus.py -x -q` | Exists (migrate sync->async + add emit_nowait + call_soon_threadsafe) | ⬜ pending |
+| 16-01-T2 | 01 | 1 | INFR-02,INFR-03 | integration | `uv run pytest tests/matmaster/integration/test_event_router.py tests/matmaster/integration/test_workspace_handler.py tests/matmaster/integration/test_sse_skill_hit.py tests/matmaster/integration/test_upstream_scenarios.py tests/test_chat_stream_direct.py -x -q` | Exists (migrate threading->asyncio, handlers async, expanded test scope) | ⬜ pending |
+| 16-02-T1 | 02 | 2 | INFR-01 | integration | `uv run pytest tests/matmaster/core/test_hooks.py tests/matmaster/hooks/ tests/matmaster/core/test_context_compactor.py -x -q` | ✅ (emit callers use await) | ⬜ pending |
+| 16-02-T2 | 02 | 2 | INFR-01,INFR-02,INFR-03 | integration | `uv run pytest tests/matmaster/ -x -q` | ✅ (service bridge: run_coroutine_threadsafe + emit_nowait) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
