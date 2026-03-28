@@ -16,6 +16,7 @@ kernel raises.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 import uuid
@@ -114,15 +115,19 @@ class Exp:
                 source_override=child_source,
                 spawn_id=child_spawn_id,
             )
+            _loop = asyncio.new_event_loop()
             try:
-                run_result = child_runtime.kernel.run(
-                    child_runtime.spec, task, stop_event=stop_event
+                run_result = _loop.run_until_complete(
+                    child_runtime.kernel.run(
+                        child_runtime.spec, task, stop_event=stop_event
+                    )
                 )
                 result = run_result.result
                 if result.status == "completed" and result.final_content:
                     return result.final_content
                 return f"SubAgent finished with status={result.status}, reason={result.reason}"
             finally:
+                _loop.close()
                 child_runtime.cleanup()
 
         return spawn_fn
@@ -287,12 +292,16 @@ class Exp:
             for tool in tool_registry.all_tools:
                 if isinstance(tool, SpawnTool):
                     tool._stop_event = stop_event
+        _loop = asyncio.new_event_loop()
         try:
-            result = runtime.kernel.run(
-                runtime.spec, task, history=history, stop_event=stop_event
+            result = _loop.run_until_complete(
+                runtime.kernel.run(
+                    runtime.spec, task, history=history, stop_event=stop_event
+                )
             )
             return result.result
         finally:
+            _loop.close()
             runtime.cleanup()
 
     # ── Capability initialization helpers ────────────────

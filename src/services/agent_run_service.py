@@ -467,12 +467,18 @@ class AgentRunService:
             )
 
             # -- Stage 6: Kernel execution --
-            kernel_result = runtime.kernel.run(
-                spec=spec,
-                task=user_prompt,
-                history=history,
-                stop_event=stop_event,
-            )
+            _loop = asyncio.new_event_loop()
+            try:
+                kernel_result = _loop.run_until_complete(
+                    runtime.kernel.run(
+                        spec=spec,
+                        task=user_prompt,
+                        history=history,
+                        stop_event=stop_event,
+                    )
+                )
+            finally:
+                _loop.close()
             run_result_event = kernel_result.result.to_run_result_event()
 
             # -- Post-processing --
