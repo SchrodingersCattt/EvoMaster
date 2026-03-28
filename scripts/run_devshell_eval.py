@@ -31,6 +31,7 @@ See matmaster-tools-server ``docs/apifox-evaluation-openapi.json`` for the schem
 Usage (from repository root)::
 
     uv run python scripts/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
+    uv run python scripts/run_devshell_eval.py --modes direct --limit 3
     uv run python scripts/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
     uv run python scripts/run_devshell_eval.py --no-export-review --limit 3   # skip Markdown bundle
     uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_*  # manual only
@@ -129,6 +130,13 @@ def main() -> int:
         help="Only run questions in these capabilities (e.g. batch_processing)",
     )
     parser.add_argument(
+        "--modes",
+        nargs="+",
+        choices=["direct", "planner"],
+        default=None,
+        help="Modes to run (default from eval config)",
+    )
+    parser.add_argument(
         "--questions",
         nargs="+",
         default=None,
@@ -217,6 +225,7 @@ def main() -> int:
                 str(args.question_bank_dir) if args.question_bank_dir else None
             ),
             "include_capabilities": args.capabilities,
+            "modes": args.modes,
             "include_question_ids": args.questions,
         },
     )
