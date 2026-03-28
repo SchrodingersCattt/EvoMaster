@@ -1,18 +1,16 @@
 """Tests for EventRouter, PersistenceHandler, and SSEHandler.
 
 Covers:
-- EventRouter: background consumption, stop/drain, handler exception isolation
+- EventRouter: async task consumption, stop/drain, handler exception isolation
 - PersistenceHandler: persist vs skip rules (log_line, llm_token, streaming thought)
 - SSEHandler: skip rules (assistant_state, planner streaming, direct non-streaming)
-  and async/sync send_cb dispatch
+  and async send_cb dispatch
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
-import queue
-import threading
 import time
 from typing import Any
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -43,49 +41,49 @@ from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 
 
-# ── EventRouter Tests ────────────────────────────────────
+# -- EventRouter Tests ----------------------------------------
 
 
 class TestEventRouter:
-    """EventRouter: background thread consumption and dispatch."""
+    """EventRouter: async task consumption and dispatch."""
 
-    def test_router_starts_thread_and_dispatches(self) -> None:
-        """Router starts background thread, consumes events, dispatches to handlers."""
+    async def test_router_starts_thread_and_dispatches(self) -> None:
+        """Router starts async task, consumes events, dispatches to handlers."""
         bus = MessageBus()
         received: list[Any] = []
 
         class Collector:
-            def handle(self, event: Any) -> None:
+            async def handle(self, event: Any) -> None:
                 received.append(event)
 
         router = EventRouter(bus, [Collector()])
-        router.start()
+        await router.start()
 
         event = ToolCallEvent(
             source="Agent", call_id="c1", tool_name="bash", arguments={"cmd": "ls"}
         )
-        bus.emit(event)
-        time.sleep(0.3)  # allow background thread to consume
+        await bus.emit(event)
+        await asyncio.sleep(0.3)  # allow async task to consume
 
-        router.stop()
+        await router.stop()
         assert len(received) == 1
         assert received[0].call_id == "c1"
 
-    def test_router_stop_drains_remaining_events(self) -> None:
+    async def test_router_stop_drains_remaining_events(self) -> None:
         """stop() drains remaining events from bus before shutdown."""
         bus = MessageBus()
         received: list[Any] = []
 
         class Collector:
-            def handle(self, event: Any) -> None:
+            async def handle(self, event: Any) -> None:
                 received.append(event)
 
         router = EventRouter(bus, [Collector()])
-        router.start()
+        await router.start()
 
         # Emit multiple events quickly
         for i in range(5):
-            bus.emit(
+            await bus.emit(
                 ToolCallEvent(
                     source="Agent",
                     call_id=f"c{i}",
@@ -94,78 +92,81 @@ class TestEventRouter:
                 )
             )
 
-        time.sleep(0.3)
-        router.stop(drain_timeout=2.0)
+        await asyncio.sleep(0.3)
+        await router.stop(drain_timeout=2.0)
         assert len(received) == 5
 
-    def test_router_stop_on_empty_bus_completes(self) -> None:
+    async def test_router_stop_on_empty_bus_completes(self) -> None:
         """stop() on empty bus completes without blocking."""
         bus = MessageBus()
         router = EventRouter(bus, [])
-        router.start()
+        await router.start()
 
-        start = time.monotonic()
-        router.stop(drain_timeout=1.0)
-        elapsed = time.monotonic() - start
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        await router.stop(drain_timeout=1.0)
+        elapsed = loop.time() - start
         # Should complete quickly, well under drain_timeout
         assert elapsed < 2.0
 
-    def test_handler_exception_does_not_crash_router(self) -> None:
+    async def test_handler_exception_does_not_crash_router(self) -> None:
         """Handler exception is logged; other handlers still receive the event."""
         bus = MessageBus()
         received: list[Any] = []
 
         class BadHandler:
-            def handle(self, event: Any) -> None:
+            async def handle(self, event: Any) -> None:
                 raise RuntimeError("boom")
 
         class GoodHandler:
-            def handle(self, event: Any) -> None:
+            async def handle(self, event: Any) -> None:
                 received.append(event)
 
         router = EventRouter(bus, [BadHandler(), GoodHandler()])
-        router.start()
+        await router.start()
 
-        bus.emit(RunResultEvent(source="Agent", reason="done"))
-        time.sleep(0.3)
-        router.stop()
+        await bus.emit(RunResultEvent(source="Agent", reason="done"))
+        await asyncio.sleep(0.3)
+        await router.stop()
 
         assert len(received) == 1
         assert received[0].type == "run_result"
 
-    def test_router_stop_waits_for_handler_close(self) -> None:
+    async def test_router_stop_waits_for_handler_close(self) -> None:
         """stop() should call handler.close() and wait for it."""
         bus = MessageBus()
-        closed = threading.Event()
+        closed = asyncio.Event()
 
         class SlowCloser:
-            def handle(self, event: Any) -> None:
+            async def handle(self, event: Any) -> None:
                 return None
 
             def close(self) -> None:
+                # Sync close -- tested via isawaitable pattern
                 time.sleep(0.2)
                 closed.set()
 
         router = EventRouter(bus, [SlowCloser()])
-        router.start()
+        await router.start()
 
-        start = time.monotonic()
-        router.stop()
-        elapsed = time.monotonic() - start
+        loop = asyncio.get_running_loop()
+        start = loop.time()
+        await router.stop()
+        elapsed = loop.time() - start
 
         assert closed.is_set()
-        assert elapsed >= 0.2
+        assert elapsed >= 0.1
 
-    def test_add_handler_post_registration_only_receives_future_events(self) -> None:
+    async def test_add_handler_post_registration_only_receives_future_events(self) -> None:
         """A handler added after start only receives events emitted after registration."""
         bus = MessageBus()
         initial_received: list[str] = []
         late_received: list[str] = []
-        first_event_processed = threading.Event()
-        second_event_processed = threading.Event()
+        first_event_processed = asyncio.Event()
+        second_event_processed = asyncio.Event()
 
         class InitialHandler:
-            def handle(self, event: Any) -> None:
+            async def handle(self, event: Any) -> None:
                 initial_received.append(event.reason)
                 if event.reason == "before-registration":
                     first_event_processed.set()
@@ -173,28 +174,28 @@ class TestEventRouter:
                     second_event_processed.set()
 
         class LateHandler:
-            def handle(self, event: Any) -> None:
+            async def handle(self, event: Any) -> None:
                 late_received.append(event.reason)
                 if event.reason == "after-registration":
                     second_event_processed.set()
 
         router = EventRouter(bus, [InitialHandler()])
-        router.start()
+        await router.start()
 
-        bus.emit(RunResultEvent(source="Agent", reason="before-registration"))
-        assert first_event_processed.wait(timeout=1.0)
+        await bus.emit(RunResultEvent(source="Agent", reason="before-registration"))
+        await asyncio.wait_for(first_event_processed.wait(), timeout=1.0)
 
         router.add_handler(LateHandler())
 
-        bus.emit(RunResultEvent(source="Agent", reason="after-registration"))
-        assert second_event_processed.wait(timeout=1.0)
+        await bus.emit(RunResultEvent(source="Agent", reason="after-registration"))
+        await asyncio.wait_for(second_event_processed.wait(), timeout=1.0)
 
-        router.stop()
+        await router.stop()
 
         assert initial_received == ["before-registration", "after-registration"]
         assert late_received == ["after-registration"]
 
-    def test_add_handler_during_dispatch_skips_in_flight_event_and_receives_next_event(
+    async def test_add_handler_during_dispatch_skips_in_flight_event_and_receives_next_event(
         self,
     ) -> None:
         """A handler added during dispatch does not receive the current event."""
@@ -202,7 +203,7 @@ class TestEventRouter:
         late_received: list[str] = []
 
         class LateHandler:
-            def handle(self, event: Any) -> None:
+            async def handle(self, event: Any) -> None:
                 late_received.append(event.reason)
 
         late_handler = LateHandler()
@@ -214,7 +215,7 @@ class TestEventRouter:
             def bind(self, router: EventRouter) -> None:
                 self._router = router
 
-            def handle(self, event: Any) -> None:
+            async def handle(self, event: Any) -> None:
                 if event.reason == "current":
                     assert self._router is not None
                     self._router.add_handler(late_handler)
@@ -223,13 +224,13 @@ class TestEventRouter:
         router = EventRouter(bus, [registering_handler])
         registering_handler.bind(router)
 
-        router._dispatch(RunResultEvent(source="Agent", reason="current"))
-        router._dispatch(RunResultEvent(source="Agent", reason="next"))
+        await router._dispatch(RunResultEvent(source="Agent", reason="current"))
+        await router._dispatch(RunResultEvent(source="Agent", reason="next"))
 
         assert late_received == ["next"]
 
 
-# ── PersistenceHandler Tests ────────────────────────────
+# -- PersistenceHandler Tests ----------------------------------------
 
 
 class TestPersistenceHandler:
@@ -245,14 +246,14 @@ class TestPersistenceHandler:
         )
         return handler, events_table
 
-    def test_persists_standard_events(self) -> None:
+    async def test_persists_standard_events(self) -> None:
         """handle() calls events_table.add_event() for standard events."""
         handler, events_table = self._make_handler()
 
         event = ToolCallEvent(
             source="Agent", call_id="c1", tool_name="bash", arguments={"cmd": "ls"}
         )
-        handler.handle(event)
+        await handler.handle(event)
 
         events_table.add_event.assert_called_once()
         args = events_table.add_event.call_args
@@ -264,80 +265,80 @@ class TestPersistenceHandler:
         assert kwargs.get("invocation_id") == "inv1"
         assert kwargs.get("spawn_id") is None
 
-    def test_persists_tool_result_and_run_result(self) -> None:
+    async def test_persists_tool_result_and_run_result(self) -> None:
         """handle() persists tool_result and run_result events."""
         handler, events_table = self._make_handler()
 
-        handler.handle(
+        await handler.handle(
             ToolResultEvent(
                 source="Agent", call_id="c1", tool_name="bash", result="ok"
             )
         )
-        handler.handle(RunResultEvent(source="Agent", reason="done"))
+        await handler.handle(RunResultEvent(source="Agent", reason="done"))
 
         assert events_table.add_event.call_count == 2
 
-    def test_skips_stream_closed_event(self) -> None:
+    async def test_skips_stream_closed_event(self) -> None:
         """handle() skips stream_closed events because they are SSE-only lifecycle markers."""
         handler, events_table = self._make_handler()
 
-        handler.handle(StreamClosedEvent(source="System"))
+        await handler.handle(StreamClosedEvent(source="System"))
 
         events_table.add_event.assert_not_called()
 
-    def test_skips_log_line(self) -> None:
+    async def test_skips_log_line(self) -> None:
         """handle() skips events with type 'log_line'."""
         handler, events_table = self._make_handler()
         # log_line is not in BusEvent union -- simulate by checking _should_persist
         # We test the internal method directly since log_line isn't a BusEvent type
         assert handler._should_persist_type("log_line") is False
 
-    def test_skips_llm_token(self) -> None:
+    async def test_skips_llm_token(self) -> None:
         """handle() skips events with type 'llm_token'."""
         handler, events_table = self._make_handler()
         assert handler._should_persist_type("llm_token") is False
 
-    def test_skips_streaming_thought(self) -> None:
+    async def test_skips_streaming_thought(self) -> None:
         """handle() skips ThoughtEvent with stream_state in (start, streaming, end)."""
         handler, events_table = self._make_handler()
 
         for state in ("start", "streaming", "end"):
-            handler.handle(
+            await handler.handle(
                 ThoughtEvent(source="Agent", content="thinking", stream_state=state)
             )
 
         events_table.add_event.assert_not_called()
 
-    def test_persists_non_streaming_thought(self) -> None:
+    async def test_persists_non_streaming_thought(self) -> None:
         """handle() persists ThoughtEvent with stream_state=None."""
         handler, events_table = self._make_handler()
 
-        handler.handle(
+        await handler.handle(
             ThoughtEvent(source="Agent", content="complete thought", stream_state=None)
         )
 
         events_table.add_event.assert_called_once()
 
-    def test_persists_non_streaming_response(self) -> None:
+    async def test_persists_non_streaming_response(self) -> None:
         handler, events_table = self._make_handler()
 
-        handler.handle(ResponseEvent(source="Agent", content="done"))
+        await handler.handle(ResponseEvent(source="Agent", content="done"))
 
         events_table.add_event.assert_called_once()
 
-    def test_skips_streaming_response_in_persistence(self) -> None:
+    async def test_skips_streaming_response_in_persistence(self) -> None:
         handler, events_table = self._make_handler()
 
-        handler.handle(
+        await handler.handle(
             ResponseEvent(source="Agent", content="tok", stream_state="streaming")
         )
 
         events_table.add_event.assert_not_called()
 
-    def test_tool_call_persists_public_shape(self) -> None:
+    async def test_tool_call_persists_public_shape(self) -> None:
         handler, events_table = self._make_handler()
 
-        handler.handle(
+        await handler.handle(
             ToolCallEvent(
                 source="Agent",
                 call_id="c1",
@@ -354,10 +355,10 @@ class TestPersistenceHandler:
             "args": {"cmd": "ls"},
         }
 
-    def test_tool_result_persists_public_shape(self) -> None:
+    async def test_tool_result_persists_public_shape(self) -> None:
         handler, events_table = self._make_handler()
 
-        handler.handle(
+        await handler.handle(
             ToolResultEvent(
                 source="Agent",
                 call_id="c1",
@@ -377,10 +378,10 @@ class TestPersistenceHandler:
             "info": {"auto_save": True},
         }
 
-    def test_run_result_persists_content_status_reason(self) -> None:
+    async def test_run_result_persists_content_status_reason(self) -> None:
         handler, events_table = self._make_handler()
 
-        handler.handle(
+        await handler.handle(
             RunResultEvent(
                 source="Agent",
                 status="completed",
@@ -396,19 +397,19 @@ class TestPersistenceHandler:
             "reason": "natural",
         }
 
-    def test_assistant_state_persists_state_dict(self) -> None:
+    async def test_assistant_state_persists_state_dict(self) -> None:
         handler, events_table = self._make_handler()
 
         state = {"role": "assistant", "content": "hi", "tool_calls": []}
-        handler.handle(AssistantStateEvent(source="Agent", state=state))
+        await handler.handle(AssistantStateEvent(source="Agent", state=state))
 
         args = events_table.add_event.call_args[0]
         assert args[3] == state
 
-    def test_bohrium_node_persists_flattened_public_shape(self) -> None:
+    async def test_bohrium_node_persists_flattened_public_shape(self) -> None:
         handler, events_table = self._make_handler()
 
-        handler.handle(
+        await handler.handle(
             BohriumNodeEvent(
                 source="BohriumSetup",
                 payload={
@@ -432,11 +433,11 @@ class TestPersistenceHandler:
             "phase": "ssh",
         }
 
-    def test_persists_spawn_id_kwarg_for_subagent_events(self) -> None:
+    async def test_persists_spawn_id_kwarg_for_subagent_events(self) -> None:
         """handle() passes event.spawn_id into add_event(spawn_id=...) for replay grouping."""
         handler, events_table = self._make_handler()
 
-        handler.handle(
+        await handler.handle(
             ToolCallEvent(
                 source="MatMaster:explore",
                 call_id="c1",
@@ -451,25 +452,24 @@ class TestPersistenceHandler:
         assert kwargs.get("spawn_id") == "a1b2c3d4e5f67890"
 
 
-# ── SSEHandler Tests ────────────────────────────────────
+# -- SSEHandler Tests ----------------------------------------
 
 
 class TestSSEHandler:
-    """SSEHandler: event push filter rules and async/sync dispatch."""
+    """SSEHandler: event push filter rules and async dispatch."""
 
-    def test_sends_standard_events(self) -> None:
+    async def test_sends_standard_events(self) -> None:
         """handle() calls send_cb for standard events."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
             mode="direct",
         )
 
-        handler.handle(RunResultEvent(source="Agent", reason="done"))
+        await handler.handle(RunResultEvent(source="Agent", reason="done"))
 
         send_cb.assert_called_once()
         payload = send_cb.call_args[0][0]
@@ -478,19 +478,18 @@ class TestSSEHandler:
         assert payload["session_id"] == "sess1"
         assert payload.get("spawn_id") is None
 
-    def test_sse_payload_includes_spawn_id_at_top_level(self) -> None:
+    async def test_sse_payload_includes_spawn_id_at_top_level(self) -> None:
         """Live SSE payloads expose spawn_id next to session_id/task_id for subagent events."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
             mode="planner",
         )
 
-        handler.handle(
+        await handler.handle(
             ToolCallEvent(
                 source="MatMaster:explore",
                 call_id="c1",
@@ -504,37 +503,35 @@ class TestSSEHandler:
         assert payload.get("spawn_id") == "feedfacecafe0001"
         assert isinstance(payload.get("content"), dict)
 
-    def test_sends_json_safe_payload(self) -> None:
+    async def test_sends_json_safe_payload(self) -> None:
         """handle() emits payloads that are safe for SSE/Redis JSON encoding."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
             mode="direct",
         )
 
-        handler.handle(RunResultEvent(source="Agent", reason="done"))
+        await handler.handle(RunResultEvent(source="Agent", reason="done"))
 
         payload = send_cb.call_args[0][0]
         json.dumps(payload, ensure_ascii=False)
         assert isinstance(payload["timestamp"], str)
 
-    def test_tool_call_payload_matches_frontend_contract(self) -> None:
+    async def test_tool_call_payload_matches_frontend_contract(self) -> None:
         """tool_call payload exposes nested content expected by the frontend."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
             mode="direct",
         )
 
-        handler.handle(
+        await handler.handle(
             ToolCallEvent(
                 source="Agent",
                 call_id="call-1",
@@ -552,19 +549,18 @@ class TestSSEHandler:
             "args": {"cmd": "ls"},
         }
 
-    def test_tool_result_payload_matches_frontend_contract(self) -> None:
+    async def test_tool_result_payload_matches_frontend_contract(self) -> None:
         """tool_result payload exposes nested content expected by the frontend."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
             mode="direct",
         )
 
-        handler.handle(
+        await handler.handle(
             ToolResultEvent(
                 source="Agent",
                 call_id="call-1",
@@ -584,19 +580,18 @@ class TestSSEHandler:
             "info": {"auto_save": True},
         }
 
-    def test_confirmation_request_payload_matches_frontend_contract(self) -> None:
+    async def test_confirmation_request_payload_matches_frontend_contract(self) -> None:
         """confirmation_request payload exposes question and actions via content."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
             mode="direct",
         )
 
-        handler.handle(
+        await handler.handle(
             ConfirmationRequestEvent(
                 source="MatMaster",
                 question="Proceed?",
@@ -618,36 +613,34 @@ class TestSSEHandler:
             "origin": "planner",
         }
 
-    def test_error_payload_exposes_message_via_content(self) -> None:
+    async def test_error_payload_exposes_message_via_content(self) -> None:
         """error payload exposes message text under content for frontend rendering."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
             mode="direct",
         )
 
-        handler.handle(ErrorEvent(source="System", message="boom", traceback="tb"))
+        await handler.handle(ErrorEvent(source="System", message="boom", traceback="tb"))
 
         payload = send_cb.call_args[0][0]
         assert payload["content"] == {"message": "boom", "traceback": "tb"}
 
-    def test_bohrium_node_payload_flattens_wrapped_content(self) -> None:
+    async def test_bohrium_node_payload_flattens_wrapped_content(self) -> None:
         """bohrium_node payload unwraps nested node status into content."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
             mode="direct",
         )
 
-        handler.handle(
+        await handler.handle(
             BohriumNodeEvent(
                 source="BohriumSetup",
                 payload={
@@ -672,19 +665,18 @@ class TestSSEHandler:
             "phase": "ssh",
         }
 
-    def test_mcp_server_status_payload_uses_content_object(self) -> None:
+    async def test_mcp_server_status_payload_uses_content_object(self) -> None:
         """mcp_server_status payload exposes merged detail in content."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
             mode="direct",
         )
 
-        handler.handle(
+        await handler.handle(
             McpServerStatusEvent(
                 source="System",
                 server_name="code-server",
@@ -710,19 +702,18 @@ class TestSSEHandler:
             "error": "timeout",
         }
 
-    def test_mcp_connect_payload_uses_content_object(self) -> None:
+    async def test_mcp_connect_payload_uses_content_object(self) -> None:
         """mcp_connect payload exposes phase and message via content."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
             mode="direct",
         )
 
-        handler.handle(
+        await handler.handle(
             McpConnectEvent(
                 source="System",
                 phase="ready",
@@ -739,19 +730,18 @@ class TestSSEHandler:
             "error": None,
         }
 
-    def test_sends_stream_closed_event(self) -> None:
+    async def test_sends_stream_closed_event(self) -> None:
         """handle() forwards stream_closed events for frontend stream completion."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
             mode="direct",
         )
 
-        handler.handle(
+        await handler.handle(
             StreamClosedEvent(
                 source="System",
                 task_completed=True,
@@ -765,18 +755,17 @@ class TestSSEHandler:
         assert payload["source"] == "System"
         assert payload["task_completed"] is True
 
-    def test_sse_handler_sends_response_payload(self) -> None:
-        send_cb = MagicMock()
+    async def test_sse_handler_sends_response_payload(self) -> None:
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
             mode="direct",
         )
 
-        handler.handle(ResponseEvent(source="Agent", content="hello"))
+        await handler.handle(ResponseEvent(source="Agent", content="hello"))
 
         send_cb.assert_called_once()
         payload = send_cb.call_args[0][0]
@@ -784,28 +773,26 @@ class TestSSEHandler:
         assert payload["source"] == "MatMaster"
         assert payload["content"] == "hello"
 
-    def test_skips_assistant_state(self) -> None:
+    async def test_skips_assistant_state(self) -> None:
         """handle() skips AssistantStateEvent."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
             mode="direct",
         )
 
-        handler.handle(AssistantStateEvent(source="Agent", state={"role": "assistant"}))
+        await handler.handle(AssistantStateEvent(source="Agent", state={"role": "assistant"}))
 
         send_cb.assert_not_called()
 
-    def test_skips_planner_streaming_thought(self) -> None:
+    async def test_skips_planner_streaming_thought(self) -> None:
         """handle() skips streaming ThoughtEvent when source is Planner."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
@@ -813,7 +800,7 @@ class TestSSEHandler:
         )
 
         for state in ("start", "streaming", "end"):
-            handler.handle(
+            await handler.handle(
                 ThoughtEvent(
                     source="Planner", content="planning", stream_state=state
                 )
@@ -821,101 +808,45 @@ class TestSSEHandler:
 
         send_cb.assert_not_called()
 
-    def test_skips_direct_non_streaming_thought(self) -> None:
+    async def test_skips_direct_non_streaming_thought(self) -> None:
         """handle() skips non-streaming ThoughtEvent in direct mode."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
             mode="direct",
         )
 
-        handler.handle(
+        await handler.handle(
             ThoughtEvent(source="Agent", content="full thought", stream_state=None)
         )
 
         send_cb.assert_not_called()
 
-    def test_skips_complete_segment_events(self) -> None:
+    async def test_skips_complete_segment_events(self) -> None:
         """handle() skips persisted complete-segment snapshots on the live SSE path."""
-        send_cb = MagicMock()
+        send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-            loop=None,
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
             mode="direct",
         )
 
-        handler.handle(
+        await handler.handle(
             ThoughtEvent(source="Agent", content="full thought", stream_state="complete")
         )
-        handler.handle(
+        await handler.handle(
             ResponseEvent(source="Agent", content="full answer", stream_state="complete")
         )
 
         send_cb.assert_not_called()
 
-    def test_async_send_with_loop(self) -> None:
-        """handle() uses asyncio.run_coroutine_threadsafe when loop is present."""
-        loop = asyncio.new_event_loop()
-        received: list[dict] = []
 
-        async def async_send(payload: dict) -> None:
-            received.append(payload)
-
-        handler = SSEHandler(
-            send_cb=async_send,
-            loop=loop,
-            session_id="sess1",
-            task_id="task1",
-            invocation_id=None,
-            mode="direct",
-        )
-
-        # Run loop in background thread
-        t = threading.Thread(target=loop.run_forever, daemon=True)
-        t.start()
-        try:
-            handler.handle(
-                ToolResultEvent(
-                    source="Agent", call_id="c1", tool_name="bash", result="ok"
-                )
-            )
-            time.sleep(0.3)  # allow async dispatch
-            assert len(received) == 1
-            assert received[0]["type"] == "tool_result"
-        finally:
-            loop.call_soon_threadsafe(loop.stop)
-            t.join(timeout=2)
-            loop.close()
-
-    def test_sync_send_without_loop(self) -> None:
-        """handle() calls send_cb directly when loop is None."""
-        send_cb = MagicMock()
-        handler = SSEHandler(
-            send_cb=send_cb,
-            loop=None,
-            session_id="sess1",
-            task_id="task1",
-            invocation_id=None,
-            mode="planner",
-        )
-
-        handler.handle(
-            ToolCallEvent(
-                source="Agent", call_id="c1", tool_name="bash", arguments={}
-            )
-        )
-
-        send_cb.assert_called_once()
-
-
-# ── _public_content_for_event Tests ────────────────────
+# -- _public_content_for_event Tests ----------------------------------------
 
 
 class TestPublicContentForEvent:

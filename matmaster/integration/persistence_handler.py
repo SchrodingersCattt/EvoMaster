@@ -8,6 +8,7 @@ Filter rules migrated from _should_persist_event in agent_run_service.py:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -41,7 +42,7 @@ class PersistenceHandler:
         self._task_id = task_id
         self._invocation_id = invocation_id
 
-    def handle(self, event: BusEvent) -> None:  # type: ignore[arg-type]
+    async def handle(self, event: BusEvent) -> None:
         """Persist event to DB if it passes filter rules."""
         event_type = getattr(event, "type", "")
 
@@ -58,7 +59,8 @@ class PersistenceHandler:
         content = _public_content_for_event(event_type, payload)
 
         try:
-            self._events_table.add_event(
+            await asyncio.to_thread(
+                self._events_table.add_event,
                 self._session_id,
                 event.source,
                 event_type,

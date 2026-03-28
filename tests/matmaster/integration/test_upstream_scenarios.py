@@ -7,11 +7,12 @@ All external dependencies mocked per D-10.
 from __future__ import annotations
 
 import asyncio
+import queue
 import threading
 import time
 from pathlib import Path
-from typing import Any, AsyncIterator, Iterator
-from unittest.mock import MagicMock, patch
+from typing import Any, Iterator
+from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
@@ -45,7 +46,7 @@ from matmaster.types.events import (
 )
 
 
-# ── Mock helpers ──────────────────────────────────────
+# -- Mock helpers ------------------------------------------------
 
 
 class _SlowMockLLM:
@@ -55,16 +56,13 @@ class _SlowMockLLM:
         self._turns = turns
         self._call_count = 0
 
-    async def __aenter__(self) -> _SlowMockLLM:
-        return self
-
-    async def __aexit__(self, *exc: Any) -> None:
-        pass
-
-    async def chat(self, messages, tools=None) -> LLMResponse:
+    def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="done", finish_reason="stop")
 
-    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
+    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
+        return self.chat(messages, tools)
+
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self._call_count += 1
         # Add a small delay to give stop_event time to be set
         time.sleep(0.05)
@@ -77,16 +75,13 @@ class _NeverFinishLLM:
     def __init__(self) -> None:
         self._call_count = 0
 
-    async def __aenter__(self) -> _NeverFinishLLM:
-        return self
-
-    async def __aexit__(self, *exc: Any) -> None:
-        pass
-
-    async def chat(self, messages, tools=None) -> LLMResponse:
+    def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="loop", finish_reason="stop")
 
-    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
+    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
+        return self.chat(messages, tools)
+
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         self._call_count += 1
         # Always yield a natural finish to avoid infinite loop
         yield StreamChunk(content=f"Turn {self._call_count}", finish_reason="stop")
@@ -95,16 +90,13 @@ class _NeverFinishLLM:
 class _QuickMockLLM:
     """Simplest mock LLM: single turn, immediate finish."""
 
-    async def __aenter__(self) -> _QuickMockLLM:
-        return self
-
-    async def __aexit__(self, *exc: Any) -> None:
-        pass
-
-    async def chat(self, messages, tools=None) -> LLMResponse:
+    def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="quick", finish_reason="stop")
 
-    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
+    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
+        return self.chat(messages, tools)
+
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
         yield StreamChunk(content="quick", finish_reason="stop")
 
 
@@ -118,7 +110,7 @@ def _make_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
     )
 
 
-# ── QUAL-04: Run interrupted detection ───────────────
+# -- QUAL-04: Run interrupted detection -------------------------
 
 
 class TestRunInterruptedDetection:
@@ -167,13 +159,13 @@ class TestRunInterruptedDetection:
         assert finish.result.reason == "cancelled"
 
 
-# ── QUAL-04: Workspace upload scenarios ──────────────
+# -- QUAL-04: Workspace upload scenarios -------------------------
 
 
 class TestWorkspaceUpload:
     """Verify WorkspaceHandler upload behavior."""
 
-    def test_workspace_upload_triggered_on_tool_result(self, tmp_path: Path) -> None:
+    async def test_workspace_upload_triggered_on_tool_result(self, tmp_path: Path) -> None:
         """Verify WorkspaceHandler triggers upload when workspace files change."""
         workspace_path = tmp_path / "workspace"
         workspace_path.mkdir()
@@ -199,17 +191,17 @@ class TestWorkspaceUpload:
         )
 
         # First event: sets initial snapshot
-        handler.handle(ToolResultEvent(
+        await handler.handle(ToolResultEvent(
             source="agent", call_id="c1", tool_name="bash", result="ok"
         ))
         # Second event: snapshot changed -> upload triggered
-        handler.handle(ToolResultEvent(
+        await handler.handle(ToolResultEvent(
             source="agent", call_id="c2", tool_name="bash", result="ok"
         ))
 
         assert upload_fn.called
 
-    def test_workspace_upload_skipped_when_ssh_attached(self, tmp_path: Path) -> None:
+    async def test_workspace_upload_skipped_when_ssh_attached(self, tmp_path: Path) -> None:
         """Verify WorkspaceHandler skips upload in SSH mode."""
         workspace_path = tmp_path / "workspace"
         workspace_path.mkdir()
@@ -226,14 +218,14 @@ class TestWorkspaceUpload:
             debounce_seconds=0,
         )
 
-        handler.handle(ToolResultEvent(
+        await handler.handle(ToolResultEvent(
             source="agent", call_id="c1", tool_name="bash", result="ok"
         ))
 
         assert not upload_fn.called
 
 
-# ── QUAL-04: Bohrium lifecycle ───────────────────────
+# -- QUAL-04: Bohrium lifecycle ----------------------------------
 
 
 class TestBohriumSetupLifecycle:
@@ -296,13 +288,13 @@ class TestBohriumSetupLifecycle:
             assert mock_cleanup.called
 
 
-# ── QUAL-04: Event router persistence ────────────────
+# -- QUAL-04: Event router persistence ---------------------------
 
 
 class TestEventRouterPersistence:
     """Verify PersistenceHandler filtering and persistence behavior."""
 
-    def test_event_router_persistence_on_standard_events(self) -> None:
+    async def test_event_router_persistence_on_standard_events(self) -> None:
         """Verify PersistenceHandler persists tool_call, tool_result, finish events."""
         mock_events_table = MagicMock()
 
@@ -313,26 +305,25 @@ class TestEventRouterPersistence:
         )
 
         # These should be persisted (non-streaming)
-        handler.handle(ToolCallEvent(
+        await handler.handle(ToolCallEvent(
             source="agent", call_id="c1", tool_name="bash", arguments={"cmd": "ls"}
         ))
-        handler.handle(ToolResultEvent(
+        await handler.handle(ToolResultEvent(
             source="agent", call_id="c1", tool_name="bash", result="output"
         ))
-        handler.handle(FinishEvent(source="agent", reason="natural"))
+        await handler.handle(FinishEvent(source="agent", reason="natural"))
 
         assert mock_events_table.add_event.call_count == 3
 
-    def test_event_router_sse_push_filtering(self) -> None:
+    async def test_event_router_sse_push_filtering(self) -> None:
         """Verify SSEHandler pushes events except assistant_state and mode-filtered thoughts."""
         payloads = []
 
-        def mock_send_cb(payload):
+        async def mock_send_cb(payload):
             payloads.append(payload)
 
         handler = SSEHandler(
             send_cb=mock_send_cb,
-            loop=None,
             session_id="sess-1",
             task_id="task-1",
             invocation_id=None,
@@ -340,19 +331,19 @@ class TestEventRouterPersistence:
         )
 
         # assistant_state: NEVER pushed
-        handler.handle(AssistantStateEvent(
+        await handler.handle(AssistantStateEvent(
             source="agent", state={"content": "hi"}
         ))
         # streaming thought: pushed in direct mode
-        handler.handle(ThoughtEvent(
+        await handler.handle(ThoughtEvent(
             source="agent", content="hello", stream_state="start"
         ))
         # non-streaming thought: NOT pushed in direct mode
-        handler.handle(ThoughtEvent(
+        await handler.handle(ThoughtEvent(
             source="agent", content="complete thought", stream_state=None
         ))
         # tool_call: pushed
-        handler.handle(ToolCallEvent(
+        await handler.handle(ToolCallEvent(
             source="agent", call_id="c1", tool_name="bash", arguments={}
         ))
 
@@ -365,68 +356,114 @@ class TestEventRouterPersistence:
         assert len(thought_payloads) == 1  # only streaming one
 
 
-# ── QUAL-04: Cross-pod reply queue ───────────────────
+# -- QUAL-04: Cross-pod reply queue ------------------------------
+
+
+class _MockReplyQueue:
+    """Simulates RedisReplyQueue behavior for cross-pod confirmation.
+
+    Uses a stdlib queue internally to simulate Redis list RPUSH/BLPOP.
+    """
+
+    def __init__(self) -> None:
+        self._q: queue.Queue[str | None] = queue.Queue()
+
+    def put_content(self, content: str) -> None:
+        self._q.put(content)
+
+    def put_cancel(self) -> None:
+        self._q.put(None)
+
+    def get(self, timeout: float | None = None) -> str | None:
+        try:
+            return self._q.get(timeout=timeout)
+        except queue.Empty:
+            raise queue.Empty("timeout")
 
 
 class TestCrossPodReplyQueue:
-    """QUAL-04: Verify cross-pod confirmation via ConfirmationHook (asyncio.Future)."""
+    """QUAL-04: Verify cross-pod subscription recovery via RedisReplyQueue.
 
-    async def test_cross_pod_reply_queue(self) -> None:
-        """Verify ConfirmationHook returns CONTINUE when external thread resolves."""
-        from unittest.mock import MagicMock as _Mock
+    NOTE: ConfirmationHook is still sync and calls bus.emit() which is now async.
+    These tests patch bus.emit to use emit_nowait (the sync bridge) until
+    hooks are async-migrated in a later phase.
+    """
 
-        bus = _Mock()
-        hook = ConfirmationHook(bus=bus, timeout_sec=5)
-        loop = asyncio.get_event_loop()
-        hook.set_loop(loop)
+    def test_cross_pod_reply_queue(self) -> None:
+        """Verify ConfirmationHook correctly interacts with ReplyQueueLike
+        for cross-worker confirmation flow.
+        """
+        reply_queue = _MockReplyQueue()
+        bus = MessageBus()
+
+        # Patch bus.emit to use sync emit_nowait since ConfirmationHook is still sync
+        original_emit = bus.emit
+        bus.emit = lambda event: bus.emit_nowait(event)  # type: ignore[assignment]
+
+        hook = ConfirmationHook(
+            reply_queue=reply_queue,
+            bus=bus,
+            timeout_sec=5,
+        )
 
         tool_call = ToolCallData(id="tc-1", name="dangerous_tool", arguments={})
 
-        # Simulate cross-pod flow: another thread resolves
+        # Simulate cross-pod flow: another worker puts approval
         def approve_after_delay():
             time.sleep(0.05)
-            hook.resolve("approved")
+            reply_queue.put_content("approved")
 
         t = threading.Thread(target=approve_after_delay, daemon=True)
         t.start()
 
-        action = await hook.pre_tool_call(tool_call)
+        # Main thread calls pre_tool_call (blocks on reply_queue.get())
+        action = hook.pre_tool_call(tool_call)
         t.join(timeout=2)
 
         assert action == HookAction.CONTINUE
 
-        # Verify ConfirmationRequestEvent was emitted
-        bus.emit.assert_called_once()
-        emitted = bus.emit.call_args[0][0]
-        assert isinstance(emitted, ConfirmationRequestEvent)
-        assert emitted.question == "Confirm tool call: dangerous_tool?"
+        # Verify ConfirmationRequestEvent was emitted to bus
+        events = []
+        while not bus.empty:
+            events.append(bus.get_nowait())
 
-    async def test_cross_pod_reply_queue_cancel(self) -> None:
-        """Verify ConfirmationHook returns SKIP when external thread cancels."""
-        from unittest.mock import MagicMock as _Mock
+        confirmation_events = [
+            e for e in events if isinstance(e, ConfirmationRequestEvent)
+        ]
+        assert len(confirmation_events) == 1
+        assert confirmation_events[0].question == "Confirm tool call: dangerous_tool?"
 
-        bus = _Mock()
-        hook = ConfirmationHook(bus=bus, timeout_sec=5)
-        loop = asyncio.get_event_loop()
-        hook.set_loop(loop)
+    def test_cross_pod_reply_queue_cancel(self) -> None:
+        """Verify ConfirmationHook returns SKIP when user cancels via cross-pod queue."""
+        reply_queue = _MockReplyQueue()
+        bus = MessageBus()
+
+        # Patch bus.emit to use sync emit_nowait since ConfirmationHook is still sync
+        bus.emit = lambda event: bus.emit_nowait(event)  # type: ignore[assignment]
+
+        hook = ConfirmationHook(
+            reply_queue=reply_queue,
+            bus=bus,
+            timeout_sec=5,
+        )
 
         tool_call = ToolCallData(id="tc-2", name="dangerous_tool", arguments={})
 
         # Simulate cross-pod cancel
         def cancel_after_delay():
             time.sleep(0.05)
-            hook.cancel()
+            reply_queue.put_cancel()
 
         t = threading.Thread(target=cancel_after_delay, daemon=True)
         t.start()
 
-        action = await hook.pre_tool_call(tool_call)
+        action = hook.pre_tool_call(tool_call)
         t.join(timeout=2)
 
         assert action == HookAction.SKIP
 
 
-# ── D-03: x_master raises ValueError ────────────────
+# -- D-03: x_master raises ValueError ---------------------------
 
 
 class TestXMasterRaisesValueError:

@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch
 
 # 测试中屏蔽 DB：任何真实 BaseTable 触发的连接直接报错（应通过 get_*_table mock 避免走到这里）
 _DB_DISABLED_ERROR = RuntimeError('DB disabled in test (use mock tables only)')
@@ -198,7 +198,7 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
 
-def test_sse_frames_match_frontend_contract_without_mysql():
+async def test_sse_frames_match_frontend_contract_without_mysql():
     """无需 MySQL，直接验证最终 SSE frame 的 payload shape 可被前端消费。"""
     from matmaster.integration.sse_handler import SSEHandler
     from matmaster.types.events import (
@@ -216,9 +216,12 @@ def test_sse_frames_match_frontend_contract_without_mysql():
     from src.services.stream_service import ChatStreamService
 
     payloads = []
+
+    async def collect_cb(payload):
+        payloads.append(payload)
+
     handler = SSEHandler(
-        send_cb=payloads.append,
-        loop=None,
+        send_cb=collect_cb,
         session_id='sess-verify',
         task_id='task-verify',
         invocation_id='inv-verify',
@@ -285,7 +288,7 @@ def test_sse_frames_match_frontend_contract_without_mysql():
     ]
 
     for event in events:
-        handler.handle(event)
+        await handler.handle(event)
 
     frames = []
     for payload in payloads:
