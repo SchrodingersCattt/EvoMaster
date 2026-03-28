@@ -64,7 +64,7 @@ class TestEventRouter:
         event = ToolCallEvent(
             source="Agent", call_id="c1", tool_name="bash", arguments={"cmd": "ls"}
         )
-        bus.emit(event)
+        bus.emit_nowait(event)
         time.sleep(0.3)  # allow background thread to consume
 
         router.stop()
@@ -85,7 +85,7 @@ class TestEventRouter:
 
         # Emit multiple events quickly
         for i in range(5):
-            bus.emit(
+            bus.emit_nowait(
                 ToolCallEvent(
                     source="Agent",
                     call_id=f"c{i}",
@@ -126,7 +126,7 @@ class TestEventRouter:
         router = EventRouter(bus, [BadHandler(), GoodHandler()])
         router.start()
 
-        bus.emit(RunResultEvent(source="Agent", reason="done"))
+        bus.emit_nowait(RunResultEvent(source="Agent", reason="done"))
         time.sleep(0.3)
         router.stop()
 
@@ -181,12 +181,12 @@ class TestEventRouter:
         router = EventRouter(bus, [InitialHandler()])
         router.start()
 
-        bus.emit(RunResultEvent(source="Agent", reason="before-registration"))
+        bus.emit_nowait(RunResultEvent(source="Agent", reason="before-registration"))
         assert first_event_processed.wait(timeout=1.0)
 
         router.add_handler(LateHandler())
 
-        bus.emit(RunResultEvent(source="Agent", reason="after-registration"))
+        bus.emit_nowait(RunResultEvent(source="Agent", reason="after-registration"))
         assert second_event_processed.wait(timeout=1.0)
 
         router.stop()

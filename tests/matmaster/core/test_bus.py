@@ -17,25 +17,25 @@ class TestMessageBusBasic:
     def test_emit_and_get(self) -> None:
         bus = MessageBus()
         event = _make_thought("hello")
-        bus.emit(event)
+        bus.emit_nowait(event)
         got = bus.get()
         assert got.content == "hello"
         assert got.source == "agent"
 
     def test_fifo_order(self) -> None:
         bus = MessageBus()
-        bus.emit(_make_thought("A"))
-        bus.emit(_make_thought("B"))
-        bus.emit(_make_thought("C"))
+        bus.emit_nowait(_make_thought("A"))
+        bus.emit_nowait(_make_thought("B"))
+        bus.emit_nowait(_make_thought("C"))
         assert bus.get().content == "A"
         assert bus.get().content == "B"
         assert bus.get().content == "C"
 
     def test_pending_count(self) -> None:
         bus = MessageBus()
-        bus.emit(_make_thought("1"))
-        bus.emit(_make_thought("2"))
-        bus.emit(_make_thought("3"))
+        bus.emit_nowait(_make_thought("1"))
+        bus.emit_nowait(_make_thought("2"))
+        bus.emit_nowait(_make_thought("3"))
         assert bus.pending == 3
         bus.get()
         assert bus.pending == 2
@@ -43,7 +43,7 @@ class TestMessageBusBasic:
     def test_empty_property(self) -> None:
         bus = MessageBus()
         assert bus.empty is True
-        bus.emit(_make_thought("x"))
+        bus.emit_nowait(_make_thought("x"))
         assert bus.empty is False
         bus.get()
         assert bus.empty is True
@@ -79,7 +79,7 @@ class TestMessageBusThreading:
 
         def emitter(thread_id: int) -> None:
             for i in range(events_per_thread):
-                bus.emit(_make_thought(f"t{thread_id}-{i}", source=f"thread-{thread_id}"))
+                bus.emit_nowait(_make_thought(f"t{thread_id}-{i}", source=f"thread-{thread_id}"))
 
         threads = [threading.Thread(target=emitter, args=(t,)) for t in range(num_threads)]
         for t in threads:
@@ -98,5 +98,5 @@ class TestMessageBusMaxsize:
 
     def test_maxsize(self) -> None:
         bus = MessageBus(maxsize=1)
-        bus.emit(_make_thought("only"))
+        bus.emit_nowait(_make_thought("only"))
         assert bus.pending == 1
