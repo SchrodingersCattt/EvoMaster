@@ -10,9 +10,15 @@ Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_r
 
 Optional **per-task ingest** to matmaster-tools-server (after each devshell run).
 POST URL is fixed: ``MATMASTER_TOOLS_SERVER`` + ``/api/v1/evaluation/ingest`` (see ``matmaster.eval_ingest_client``).
-Each item includes ``score`` (explicit from summary or 100/0 pass-fail proxy) and, when OSS is configured,
+Each item includes ``score`` (explicit from summary or 100/0 pass-fail proxy) and, when OSS env is set,
 ``result_oss_url`` for a zip of **that task only**: ``workspaces/<task_id>/`` and ``logs/<task_id>/`` under
-the shared ``devshell_eval_*`` run folder (not the whole batch directory). Use ``--no-eval-ingest-oss`` to skip upload.
+the shared ``devshell_eval_*`` run folder. Upload is always attempted when ingest is enabled (no skip flag).
+
+``raw_runs.jsonl`` rows record ``duration_ms`` and, when ingest is on, ``eval_ingest_*`` fields
+(including ``eval_ingest_result_oss_url`` after a successful OSS upload).
+
+With ``--eval-ingest-pending-only``, no POST is sent; each task writes ``pending_ingest/<task_id>.json``
+(ingest payload without ``score``). After judging, run ``scripts/eval_ingest_submit_pending.py``.
 
 Override host with ``MATMASTER_TOOLS_SERVER`` / ``SERVICE_ENV`` as needed. Use ``--no-eval-ingest`` to skip POSTs.
 
@@ -149,10 +155,12 @@ def main() -> int:
         help="Disable evaluation ingest (no POST to tools-server ingest API).",
     )
     parser.add_argument(
-        "--eval-ingest-run-id",
-        type=str,
-        default=None,
-        help="Batch run_id for ingest (UUID recommended). Default: random UUID for this process.",
+        "--eval-ingest-pending-only",
+        action="store_true",
+        help=(
+            "Do not POST ingest; write pending_ingest/<task_id>.json with full item except "
+            "score (for Claude to submit after judging via eval_ingest_submit_pending.py)."
+        ),
     )
     parser.add_argument(
         "--eval-ingest-timeout",
@@ -165,12 +173,14 @@ def main() -> int:
         action="store_true",
         help="Exit non-zero if ingest fails (default: log warning and continue).",
     )
-    parser.add_argument(
-        "--no-eval-ingest-oss",
-        action="store_true",
-        help="Do not zip/upload this task's workspaces/logs to OSS (skips result_oss_url on ingest).",
-    )
     args = parser.parse_args()
+
+    if args.no_eval_ingest and args.eval_ingest_pending_only:
+        print(
+            "error: --no-eval-ingest and --eval-ingest-pending-only cannot be used together",
+            file=sys.stderr,
+        )
+        return 2
 
     py = args.python or Path(sys.executable)
 
@@ -245,9 +255,19 @@ def main() -> int:
         upload_eval_task_artifacts_to_oss,
     )
 
+    pending_only = args.eval_ingest_pending_only
     ingest_url = None if args.no_eval_ingest else EVAL_INGEST_URL
+    if pending_only:
+        ingest_url = EVAL_INGEST_URL
+        if not (ingest_url or "").strip():
+            print(
+                "error: --eval-ingest-pending-only requires MATMASTER_TOOLS_SERVER "
+                "(or ingest URL) to be set so pending JSON contains ingest_url",
+                file=sys.stderr,
+            )
+            return 2
 
-    eval_ingest_run_id = (args.eval_ingest_run_id or "").strip() or str(uuid.uuid4())
+    eval_ingest_run_id = str(uuid.uuid4())
 
     git_commit = git_head_commit(REPO_ROOT)
 
@@ -263,6 +283,9 @@ def main() -> int:
     if ingest_url:
         manifest["eval_ingest_url"] = ingest_url
         manifest["eval_ingest_run_id"] = eval_ingest_run_id
+        if pending_only:
+            manifest["eval_ingest_pending_only"] = True
+            manifest["eval_ingest_pending_dir"] = str(run_dir / "pending_ingest")
         if git_commit:
             manifest["git_commit"] = git_commit
     (run_dir / "manifest.json").write_text(
@@ -360,14 +383,10 @@ def main() -> int:
         else:
             summary = {"parse_error": True, "missing_file": str(summary_file)}
         row["devshell_summary"] = summary
-
-        with raw_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        row["duration_ms"] = duration_ms
 
         if ingest_url:
-            result_oss_url: str | None = None
-            if not args.no_eval_ingest_oss:
-                result_oss_url = upload_eval_task_artifacts_to_oss(run_dir, task_id)
+            result_oss_url = upload_eval_task_artifacts_to_oss(run_dir, task_id)
             item = build_ingest_item(
                 question_id=question.id,
                 prompt=prompt,
@@ -379,26 +398,64 @@ def main() -> int:
                 duration_ms=duration_ms,
                 result_oss_url=result_oss_url,
             )
-            body: dict[str, Any] = {
-                "run_id": eval_ingest_run_id,
-                "items": [item],
-            }
-            if git_commit:
-                body["git_commit"] = git_commit
-            ok, msg = post_eval_ingest(
-                ingest_url,
-                body,
-                timeout=float(args.eval_ingest_timeout),
-            )
-            if ok:
-                print(f"  [ingest] {task_id} ok ({msg})", file=sys.stderr, flush=True)
-            else:
-                ingest_failed = True
-                print(
-                    f"  [ingest] {task_id} failed: {msg}",
-                    file=sys.stderr,
-                    flush=True,
+            if pending_only:
+                pending_dir = run_dir / "pending_ingest"
+                pending_dir.mkdir(parents=True, exist_ok=True)
+                pend_path = pending_dir / f"{task_id}.json"
+                item_body = {k: v for k, v in item.items() if k != "score"}
+                envelope: dict[str, Any] = {
+                    "schema": "matmaster_eval_pending_ingest_v1",
+                    "ingest_url": ingest_url,
+                    "run_id": eval_ingest_run_id,
+                    "git_commit": git_commit,
+                    "task_id": task_id,
+                    "instructions_zh": (
+                        "判分后在仓库根目录执行: uv run python scripts/eval_ingest_submit_pending.py "
+                        f"--pending {pend_path} --score <0-100>"
+                    ),
+                    "item": item_body,
+                }
+                pend_path.write_text(
+                    json.dumps(envelope, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8",
                 )
+                row["eval_ingest_pending_path"] = str(pend_path)
+                row["eval_ingest_ok"] = None
+                row["eval_ingest_message"] = "pending_score"
+                if result_oss_url:
+                    row["eval_ingest_result_oss_url"] = result_oss_url
+                rel = pend_path.relative_to(run_dir)
+                print(f"  [ingest-pending] wrote {rel}", file=sys.stderr, flush=True)
+            else:
+                body: dict[str, Any] = {
+                    "run_id": eval_ingest_run_id,
+                    "items": [item],
+                }
+                if git_commit:
+                    body["git_commit"] = git_commit
+                ok, msg = post_eval_ingest(
+                    ingest_url,
+                    body,
+                    timeout=float(args.eval_ingest_timeout),
+                )
+                if ok:
+                    print(
+                        f"  [ingest] {task_id} ok ({msg})", file=sys.stderr, flush=True
+                    )
+                else:
+                    ingest_failed = True
+                    print(
+                        f"  [ingest] {task_id} failed: {msg}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                row["eval_ingest_ok"] = ok
+                row["eval_ingest_message"] = msg
+                if result_oss_url:
+                    row["eval_ingest_result_oss_url"] = result_oss_url
+
+        with raw_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
         if rc != 0:
             any_failed = True

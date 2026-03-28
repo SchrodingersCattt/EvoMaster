@@ -4,7 +4,10 @@ See ``docs/apifox-evaluation-openapi.json`` in matmaster-tools-server for the co
 ``EvalIngestRequest`` with ``run_id``, optional ``git_commit``, ``items`` (≥1).
 Each ``EvalItemIn`` requires ``question_id``; ``model`` / ``num_turns`` / ``score`` /
 ``result_oss_url`` belong on the item top level. ``score`` is taken from the devshell
-summary when present, else a 100/0 pass-fail proxy. ``result_oss_url`` is set after zipping **only the current task** under that run:
+summary when present, else a 100/0 pass-fail proxy.
+For deferred ingest, ``run_devshell_eval.py --eval-ingest-pending-only`` writes
+``pending_ingest/*.json`` without ``score``; then ``scripts/eval_ingest_submit_pending.py`` POSTs.
+``result_oss_url`` is set after zipping **only the current task** under that run:
 ``workspaces/<task_id>`` and ``logs/<task_id>`` (see :func:`upload_eval_task_artifacts_to_oss`).
 The parent ``devshell_eval_*`` folder is shared by all tasks in the batch; it is not uploaded whole.
 ``extra`` is stored as opaque JSON.
