@@ -24,8 +24,12 @@ class MessageBus:
     def __init__(self, maxsize: int = 0) -> None:
         self._queue: queue.Queue[BusEvent] = queue.Queue(maxsize=maxsize)
 
-    def emit(self, event: BusEvent) -> None:
-        """发射事件（线程安全）。"""
+    async def emit(self, event: BusEvent) -> None:
+        """发射事件（异步接口，内部 put 线程安全）。"""
+        self._queue.put(event)
+
+    def emit_nowait(self, event: BusEvent) -> None:
+        """线程安全同步发射（供 service 层从非 async 上下文调用）。"""
         self._queue.put(event)
 
     def get(self, timeout: float | None = None) -> BusEvent:

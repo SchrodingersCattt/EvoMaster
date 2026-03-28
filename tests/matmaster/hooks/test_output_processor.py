@@ -31,8 +31,8 @@ class TestOutputProcessorHook:
             ),
         )
 
-        bus.emit.assert_called()
-        emitted = bus.emit.call_args[0][0]
+        bus.emit_nowait.assert_called()
+        emitted = bus.emit_nowait.call_args[0][0]
         assert isinstance(emitted, ToolResultEvent)
         assert emitted.status == "error"
         assert emitted.info == {"error": "boom", "auto_save": True}
@@ -56,8 +56,8 @@ class TestOutputProcessorHook:
             ),
         )
 
-        bus.emit.assert_called()
-        emitted = bus.emit.call_args[0][0]
+        bus.emit_nowait.assert_called()
+        emitted = bus.emit_nowait.call_args[0][0]
         assert isinstance(emitted, ToolResultEvent)
         assert emitted.status == "success"
         assert emitted.info == {
@@ -78,7 +78,7 @@ class TestOutputProcessorHook:
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
         hook.post_tool_call(tc, ToolResult(content="result"))
 
-        bus.emit.assert_not_called()
+        bus.emit_nowait.assert_not_called()
 
     def test_does_nothing_when_no_patterns_configured(self) -> None:
         """post_tool_call does nothing when no patterns configured."""
@@ -89,4 +89,4 @@ class TestOutputProcessorHook:
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
         hook.post_tool_call(tc, ToolResult(content="result"))
 
-        bus.emit.assert_not_called()
+        bus.emit_nowait.assert_not_called()

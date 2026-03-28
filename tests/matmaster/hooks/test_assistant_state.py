@@ -31,8 +31,8 @@ class TestAssistantStateHook:
         ]
         hook.pre_llm_call(messages, turn=2)
 
-        bus.emit.assert_called_once()
-        emitted = bus.emit.call_args[0][0]
+        bus.emit_nowait.assert_called_once()
+        emitted = bus.emit_nowait.call_args[0][0]
         assert isinstance(emitted, AssistantStateEvent)
         assert emitted.source == "MatMaster"
         # state should contain the assistant message dict
@@ -59,8 +59,8 @@ class TestAssistantStateHook:
 
         hook.pre_llm_call(messages, turn=2)
 
-        bus.emit.assert_called_once()
-        emitted = bus.emit.call_args[0][0]
+        bus.emit_nowait.assert_called_once()
+        emitted = bus.emit_nowait.call_args[0][0]
         assert isinstance(emitted, AssistantStateEvent)
         assert emitted.state["reasoning_content"] == "Need to inspect the workspace first."
 
@@ -76,7 +76,7 @@ class TestAssistantStateHook:
         ]
         hook.pre_llm_call(messages, turn=1)
 
-        bus.emit.assert_not_called()
+        bus.emit_nowait.assert_not_called()
 
     def test_does_nothing_when_last_assistant_has_no_tool_calls(self) -> None:
         """pre_llm_call does nothing when last AssistantMessage has no tool_calls."""
@@ -91,4 +91,4 @@ class TestAssistantStateHook:
         ]
         hook.pre_llm_call(messages, turn=2)
 
-        bus.emit.assert_not_called()
+        bus.emit_nowait.assert_not_called()

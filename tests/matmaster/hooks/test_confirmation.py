@@ -22,7 +22,7 @@ class TestConfirmationHook:
         hook = ConfirmationHook(reply_queue=None, bus=bus)
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
         assert hook.pre_tool_call(tc) == HookAction.CONTINUE
-        bus.emit.assert_not_called()
+        bus.emit_nowait.assert_not_called()
 
     def test_returns_continue_when_tool_not_in_confirm_tools(self) -> None:
         """Tool not in confirm_tools set -- skip confirmation."""
@@ -37,7 +37,7 @@ class TestConfirmationHook:
         )
         tc = ToolCallData(id="tc-1", name="safe_tool", arguments={})
         assert hook.pre_tool_call(tc) == HookAction.CONTINUE
-        bus.emit.assert_not_called()
+        bus.emit_nowait.assert_not_called()
 
     def test_emits_confirmation_request_and_blocks(self) -> None:
         """Emits ConfirmationRequestEvent and blocks on reply_queue.get()."""
@@ -52,8 +52,8 @@ class TestConfirmationHook:
         result = hook.pre_tool_call(tc)
 
         assert result == HookAction.CONTINUE
-        bus.emit.assert_called_once()
-        emitted = bus.emit.call_args[0][0]
+        bus.emit_nowait.assert_called_once()
+        emitted = bus.emit_nowait.call_args[0][0]
         assert isinstance(emitted, ConfirmationRequestEvent)
         reply_queue.get.assert_called_once_with(timeout=10)
 
