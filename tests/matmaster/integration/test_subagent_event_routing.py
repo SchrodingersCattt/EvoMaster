@@ -7,8 +7,6 @@ Verifies that:
 4. EventEmitterHook with prefixed source emits events with correct source
 """
 
-import queue
-
 import pytest
 
 from matmaster.core.bus import MessageBus
@@ -93,7 +91,7 @@ async def test_event_emitter_hook_with_prefixed_source():
     )
     await hook.pre_tool_call(tool_call)
 
-    event = bus.get(timeout=1.0)
+    event = await bus.get(timeout=1.0)
     assert event.source == "MatMaster:explore"
     assert event.type == "tool_call"
     assert event.call_id == "call_001"

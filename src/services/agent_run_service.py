@@ -12,6 +12,7 @@ import asyncio
 import gc
 import logging
 import os
+import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -286,7 +287,6 @@ class AgentRunService:
                 handlers=[
                     SSEHandler(
                         send_cb,
-                        loop,
                         session_id,
                         task_id,
                         invocation_id,
@@ -300,7 +300,16 @@ class AgentRunService:
                     ),
                 ],
             )
-            router.start()
+            # Dedicated event loop for router's async consume task.
+            # Service layer is sync, so we bridge via run_coroutine_threadsafe.
+            _router_loop = asyncio.new_event_loop()
+            _router_loop_thread = threading.Thread(
+                target=_router_loop.run_forever,
+                daemon=True,
+                name="router-loop",
+            )
+            _router_loop_thread.start()
+            asyncio.run_coroutine_threadsafe(router.start(), _router_loop).result()
 
             exp_name = mode or 'direct'
             from matmaster.config.loader import load_exp_config
@@ -564,9 +573,15 @@ class AgentRunService:
             # 3. Router LAST -- drains any final events from bohrium/exp cleanup
             if router:
                 try:
-                    router.stop()
+                    asyncio.run_coroutine_threadsafe(
+                        router.stop(), _router_loop
+                    ).result(timeout=10)
                 except Exception:
                     logger.warning('router.stop() failed during cleanup', exc_info=True)
+            # 4. Shut down the dedicated router loop
+            if '_router_loop' in dir():
+                _router_loop.call_soon_threadsafe(_router_loop.stop)
+                _router_loop_thread.join(timeout=5)
             get_redis_dao().delete_stop_requested(session_id, task_id)
             self._pg_manager.release(session_id)
             gc.collect()

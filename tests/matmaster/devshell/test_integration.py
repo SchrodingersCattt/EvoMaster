@@ -6,8 +6,8 @@ DevStreamHook captures terminal output, EventLogger captures bus events.
 """
 from __future__ import annotations
 
+import asyncio
 import io
-import queue
 from pathlib import Path
 from typing import Any, AsyncIterator, Iterator
 from unittest.mock import MagicMock, patch
@@ -133,7 +133,7 @@ class TestDevShellIntegration:
             try:
                 event = bus.get_nowait()
                 event_logger.log_event(event)
-            except queue.Empty:
+            except asyncio.QueueEmpty:
                 break
         event_logger.close()
 
@@ -193,7 +193,7 @@ class TestDevShellIntegration:
         while True:
             try:
                 events.append(bus.get_nowait())
-            except queue.Empty:
+            except asyncio.QueueEmpty:
                 break
 
         event_types = [getattr(e, "type", None) for e in events]

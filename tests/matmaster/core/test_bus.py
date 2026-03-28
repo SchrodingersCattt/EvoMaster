@@ -1,7 +1,9 @@
-"""Tests for MessageBus synchronous event queue."""
+"""Tests for MessageBus async event queue."""
 
-import queue
+import asyncio
 import threading
+
+import pytest
 
 from matmaster.core.bus import MessageBus
 from matmaster.types.events import ThoughtEvent
@@ -14,89 +16,119 @@ def _make_thought(content: str = "hello", source: str = "agent") -> ThoughtEvent
 class TestMessageBusBasic:
     """Basic emit/get operations."""
 
-    def test_emit_and_get(self) -> None:
+    async def test_emit_and_get(self) -> None:
         bus = MessageBus()
         event = _make_thought("hello")
-        bus.emit_nowait(event)
-        got = bus.get()
+        await bus.emit(event)
+        got = await bus.get()
         assert got.content == "hello"
         assert got.source == "agent"
 
-    def test_fifo_order(self) -> None:
+    async def test_fifo_order(self) -> None:
         bus = MessageBus()
-        bus.emit_nowait(_make_thought("A"))
-        bus.emit_nowait(_make_thought("B"))
-        bus.emit_nowait(_make_thought("C"))
-        assert bus.get().content == "A"
-        assert bus.get().content == "B"
-        assert bus.get().content == "C"
+        await bus.emit(_make_thought("A"))
+        await bus.emit(_make_thought("B"))
+        await bus.emit(_make_thought("C"))
+        assert (await bus.get()).content == "A"
+        assert (await bus.get()).content == "B"
+        assert (await bus.get()).content == "C"
 
-    def test_pending_count(self) -> None:
+    async def test_pending_count(self) -> None:
         bus = MessageBus()
-        bus.emit_nowait(_make_thought("1"))
-        bus.emit_nowait(_make_thought("2"))
-        bus.emit_nowait(_make_thought("3"))
+        await bus.emit(_make_thought("1"))
+        await bus.emit(_make_thought("2"))
+        await bus.emit(_make_thought("3"))
         assert bus.pending == 3
-        bus.get()
+        await bus.get()
         assert bus.pending == 2
 
-    def test_empty_property(self) -> None:
+    async def test_empty_property(self) -> None:
         bus = MessageBus()
         assert bus.empty is True
-        bus.emit_nowait(_make_thought("x"))
+        await bus.emit(_make_thought("x"))
         assert bus.empty is False
-        bus.get()
+        await bus.get()
         assert bus.empty is True
 
 
 class TestMessageBusTimeout:
     """Timeout and non-blocking operations."""
 
-    def test_get_timeout_on_empty(self) -> None:
+    async def test_get_timeout_on_empty(self) -> None:
         bus = MessageBus()
-        try:
-            bus.get(timeout=0.05)
-            assert False, "Expected queue.Empty"
-        except queue.Empty:
-            pass
+        with pytest.raises(asyncio.TimeoutError):
+            await bus.get(timeout=0.05)
 
-    def test_get_nowait_on_empty(self) -> None:
+    async def test_get_nowait_on_empty(self) -> None:
         bus = MessageBus()
-        try:
+        with pytest.raises(asyncio.QueueEmpty):
             bus.get_nowait()
-            assert False, "Expected queue.Empty"
-        except queue.Empty:
-            pass
 
 
-class TestMessageBusThreading:
-    """Thread safety tests."""
+class TestMessageBusConcurrency:
+    """Async concurrency tests."""
 
-    def test_thread_safety(self) -> None:
+    async def test_concurrent_emit_get(self) -> None:
         bus = MessageBus()
-        num_threads = 10
-        events_per_thread = 100
+        count = 100
 
-        def emitter(thread_id: int) -> None:
-            for i in range(events_per_thread):
-                bus.emit_nowait(_make_thought(f"t{thread_id}-{i}", source=f"thread-{thread_id}"))
+        async def emitter() -> None:
+            for i in range(count):
+                await bus.emit(_make_thought(f"e-{i}"))
 
-        threads = [threading.Thread(target=emitter, args=(t,)) for t in range(num_threads)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+        async def consumer() -> list[str]:
+            results = []
+            for _ in range(count):
+                ev = await bus.get(timeout=2.0)
+                results.append(ev.content)
+            return results
 
-        collected = []
-        while not bus.empty:
-            collected.append(bus.get_nowait())
-        assert len(collected) == num_threads * events_per_thread
+        _, results = await asyncio.gather(emitter(), consumer())
+        assert len(results) == count
+
+
+class TestMessageBusEmitNowait:
+    """Thread-safe emit_nowait tests."""
+
+    async def test_emit_nowait_sync(self) -> None:
+        """emit_nowait without loop set (fallback path)."""
+        bus = MessageBus()
+        bus.emit_nowait(_make_thought("sync"))
+        got = await bus.get()
+        assert got.content == "sync"
+
+    async def test_emit_nowait_cross_thread(self) -> None:
+        """emit_nowait from another thread via call_soon_threadsafe."""
+        bus = MessageBus()
+        loop = asyncio.get_running_loop()
+        bus.set_loop(loop)
+
+        done = asyncio.Event()
+
+        def bg_emit() -> None:
+            bus.emit_nowait(_make_thought("cross-thread"))
+            loop.call_soon_threadsafe(done.set)
+
+        t = threading.Thread(target=bg_emit)
+        t.start()
+        await asyncio.wait_for(done.wait(), timeout=2.0)
+        t.join()
+
+        got = await bus.get()
+        assert got.content == "cross-thread"
+
+    async def test_set_loop(self) -> None:
+        bus = MessageBus()
+        assert bus._loop is None
+        loop = asyncio.get_running_loop()
+        bus.set_loop(loop)
+        assert bus._loop is loop
 
 
 class TestMessageBusMaxsize:
     """Maxsize configuration."""
 
-    def test_maxsize(self) -> None:
+    async def test_maxsize(self) -> None:
         bus = MessageBus(maxsize=1)
-        bus.emit_nowait(_make_thought("only"))
+        await bus.emit(_make_thought("only"))
         assert bus.pending == 1

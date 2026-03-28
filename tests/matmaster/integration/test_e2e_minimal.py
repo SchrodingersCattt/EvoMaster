@@ -6,7 +6,7 @@ All external dependencies mocked per D-10.
 
 from __future__ import annotations
 
-import queue
+import asyncio
 from pathlib import Path
 from typing import Any, AsyncIterator, Iterator
 
@@ -75,8 +75,8 @@ class TestMinimalE2EPipeline:
         events = []
         try:
             while True:
-                events.append(bus.get(timeout=0.1))
-        except queue.Empty:
+                events.append(bus.get_nowait())
+        except asyncio.QueueEmpty:
             pass
         response_events = [e for e in events if isinstance(e, ResponseEvent)]
         assert len(response_events) >= 1

@@ -6,8 +6,8 @@ and correct event flow without requiring real LLM/Redis/Bohrium.
 
 from __future__ import annotations
 
+import asyncio
 import json
-import queue
 import threading
 from pathlib import Path
 from typing import Any, AsyncIterator, Iterator
@@ -166,12 +166,12 @@ def _make_pg_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
 
 
 def _collect_bus_events(bus: MessageBus, timeout: float = 0.5) -> list:
-    """Drain all events from bus within timeout."""
+    """Drain all events from bus."""
     events = []
     try:
         while True:
-            events.append(bus.get(timeout=timeout))
-    except queue.Empty:
+            events.append(bus.get_nowait())
+    except asyncio.QueueEmpty:
         pass
     return events
 

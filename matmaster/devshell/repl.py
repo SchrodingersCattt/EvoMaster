@@ -1,11 +1,12 @@
 """REPL loop for mm-devshell."""
 from __future__ import annotations
 
+import asyncio
 import os
-import queue
 import signal
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -139,9 +140,10 @@ def run_repl(
 
             while worker.is_alive():
                 try:
-                    event = bus.get(timeout=0.1)
+                    event = bus.get_nowait()
                     event_logger.log_event(event)
-                except queue.Empty:
+                except asyncio.QueueEmpty:
+                    time.sleep(0.1)
                     continue
 
             # Drain remaining events
@@ -149,7 +151,7 @@ def run_repl(
                 try:
                     event = bus.get_nowait()
                     event_logger.log_event(event)
-                except queue.Empty:
+                except asyncio.QueueEmpty:
                     break
 
             worker.join()
