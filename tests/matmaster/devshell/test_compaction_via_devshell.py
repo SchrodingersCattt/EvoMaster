@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-import queue
+import asyncio
 
 import pytest
 
@@ -439,7 +439,7 @@ class TestMultipleCompactions:
         while True:
             try:
                 events.append(bus.get_nowait())
-            except queue.Empty:
+            except asyncio.QueueEmpty:
                 break
         assert len(events) == 2
         assert events[0].payload["compaction_count"] == 1
@@ -692,7 +692,7 @@ class TestKernelIntegration:
         while True:
             try:
                 events.append(bus.get_nowait())
-            except queue.Empty:
+            except asyncio.QueueEmpty:
                 break
         compaction_events = [e for e in events if isinstance(e, ContextCompactionEvent)]
         assert len(compaction_events) > 0, "bus 应收到压缩事件"

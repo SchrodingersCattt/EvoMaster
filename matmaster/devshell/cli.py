@@ -228,13 +228,13 @@ def _run_headless(
         sys.exit(1)
     finally:
         # Drain bus events
-        import queue
+        import asyncio
 
         while True:
             try:
                 event = bus.get_nowait()
                 event_logger.log_event(event)
-            except queue.Empty:
+            except asyncio.QueueEmpty:
                 break
         event_logger.close()
 

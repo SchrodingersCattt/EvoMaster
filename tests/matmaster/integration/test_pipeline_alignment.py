@@ -6,8 +6,8 @@ expected pattern: thought -> [tool_call -> tool_result]* -> finish.
 
 from __future__ import annotations
 
+import asyncio
 import json
-import queue
 from pathlib import Path
 from typing import Any, AsyncIterator, Iterator
 
@@ -123,8 +123,8 @@ class TestEventSequenceAlignment:
         events = []
         try:
             while True:
-                events.append(bus.get(timeout=0.1))
-        except queue.Empty:
+                events.append(bus.get_nowait())
+        except asyncio.QueueEmpty:
             pass
 
         # Extract event type sequence

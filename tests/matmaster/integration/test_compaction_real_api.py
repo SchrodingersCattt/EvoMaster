@@ -21,8 +21,8 @@ context_window_tokens 设为极小值以快速触发。
 
 from __future__ import annotations
 
+import asyncio
 import os
-import queue
 import time
 from pathlib import Path
 
@@ -168,7 +168,7 @@ def _drain_bus(bus):
     while True:
         try:
             events.append(bus.get_nowait())
-        except queue.Empty:
+        except asyncio.QueueEmpty:
             break
     return events
 
