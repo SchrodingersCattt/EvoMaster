@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 
@@ -53,7 +53,7 @@ class TestSpawnFnLifecycle:
         mock_run_result = KernelRunResult(result=mock_kr, messages=[])
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = mock_run_result
+        mock_kernel.run = AsyncMock(return_value=mock_run_result)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(
             kernel=mock_kernel,
@@ -80,7 +80,7 @@ class TestSpawnFnLifecycle:
         mock_run_result = KernelRunResult(result=mock_kr, messages=[])
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = mock_run_result
+        mock_kernel.run = AsyncMock(return_value=mock_run_result)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(
             kernel=mock_kernel,
@@ -102,7 +102,7 @@ class TestSpawnFnLifecycle:
         """Child cleanup is called even when kernel.run raises."""
         ctx = _make_ctx()
         mock_kernel = MagicMock()
-        mock_kernel.run.side_effect = RuntimeError("kernel crashed")
+        mock_kernel.run = AsyncMock(side_effect=RuntimeError("kernel crashed"))
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(
             kernel=mock_kernel,
@@ -129,7 +129,7 @@ class TestSpawnFnLifecycle:
         )
         mock_run_result = KernelRunResult(result=mock_kr, messages=[])
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = mock_run_result
+        mock_kernel.run = AsyncMock(return_value=mock_run_result)
         mock_runtime = AgentRuntime(
             kernel=mock_kernel, spec=MagicMock(), cleanup=MagicMock()
         )
@@ -154,7 +154,7 @@ class TestSpawnFnLifecycle:
         )
         mock_run_result = KernelRunResult(result=mock_kr, messages=[])
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = mock_run_result
+        mock_kernel.run = AsyncMock(return_value=mock_run_result)
         mock_runtime = AgentRuntime(
             kernel=mock_kernel, spec=MagicMock(), cleanup=MagicMock()
         )
@@ -179,7 +179,7 @@ class TestSpawnFnLifecycle:
         )
         mock_run_result = KernelRunResult(result=mock_kr, messages=[])
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = mock_run_result
+        mock_kernel.run = AsyncMock(return_value=mock_run_result)
         mock_runtime = AgentRuntime(
             kernel=mock_kernel, spec=MagicMock(), cleanup=MagicMock()
         )
@@ -225,7 +225,7 @@ class TestStopEventPropagation:
         )
         mock_run_result = KernelRunResult(result=mock_kr, messages=[])
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = mock_run_result
+        mock_kernel.run = AsyncMock(return_value=mock_run_result)
         mock_runtime = AgentRuntime(
             kernel=mock_kernel, spec=MagicMock(), cleanup=MagicMock()
         )
@@ -243,14 +243,14 @@ class TestStopEventPropagation:
         call_kwargs = mock_kernel.run.call_args[1]
         assert call_kwargs["stop_event"] is stop_event
 
-    def test_sub_agent_tool_stop_event_injection(self) -> None:
+    async def test_sub_agent_tool_stop_event_injection(self) -> None:
         """SpawnTool._execute passes _stop_event as 3rd arg to spawn_fn."""
         stop_event = threading.Event()
         mock_spawn = Mock(return_value="result")
         tool = SpawnTool(spawn_fn=mock_spawn)
         tool._stop_event = stop_event
 
-        result = tool.execute({"exp_name": "explore", "task": "find files"})
+        result = await tool.execute({"exp_name": "explore", "task": "find files"})
 
         assert result == "result"
         mock_spawn.assert_called_once_with("explore", "find files", stop_event)
@@ -270,7 +270,7 @@ class TestRecursionGuard:
 class TestPlan01Compat:
     """Verify Plan 01 test suite still passes after spawn_tool.py changes."""
 
-    def test_plan01_tests_still_pass(self) -> None:
+    async def test_plan01_tests_still_pass(self) -> None:
         """Run Plan 01 tests inline to confirm backward compat.
 
         Plan 01 tests use Mock(return_value=...) which accepts any args,
@@ -279,7 +279,7 @@ class TestPlan01Compat:
         mock_spawn = Mock(return_value="exploration result: found 3 files")
         tool = SpawnTool(spawn_fn=mock_spawn)
 
-        result = tool.execute({"exp_name": "explore", "task": "find files"})
+        result = await tool.execute({"exp_name": "explore", "task": "find files"})
 
         assert result == "exploration result: found 3 files"
         # Mock accepts any args -- 3rd arg (_stop_event) is None by default

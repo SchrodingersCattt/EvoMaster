@@ -447,7 +447,7 @@ class TestToolTruncationFallback:
 class TestEndToEndCompaction:
     """Full kernel loop with compaction enabled."""
 
-    def test_compaction_triggers_on_large_context(self) -> None:
+    async def test_compaction_triggers_on_large_context(self) -> None:
         from matmaster.core.agent import AgentKernel
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.tools.tool_registry import ToolRegistry
@@ -463,7 +463,13 @@ class TestEndToEndCompaction:
         summary_calls = 0
 
         class CompactionTestProvider:
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                pass
+
+            async def chat(self, messages, tools=None):
                 nonlocal summary_calls
                 summary_calls += 1
                 return LLMResponse(
@@ -471,7 +477,7 @@ class TestEndToEndCompaction:
                     finish_reason="stop",
                 )
 
-            def chat_stream(self, messages, tools=None, *, timeout=None):
+            async def chat_stream(self, messages, tools=None, *, timeout=None):
                 nonlocal call_count
                 call_count += 1
                 if call_count <= 5:
@@ -520,7 +526,7 @@ class TestEndToEndCompaction:
             def json_schema(self):
                 return {"type": "object", "properties": {}}
 
-            def execute(self, arguments):
+            async def execute(self, arguments):
                 return "result " + "x" * 100
 
         registry.register(SimpleTool(), source="test")
@@ -540,7 +546,7 @@ class TestEndToEndCompaction:
         )
 
         kernel = AgentKernel()
-        result = kernel.run(spec, "do things")
+        result = await kernel.run(spec, "do things")
 
         assert result.result.reason == "natural"
         assert result.result.final_content == "all done"

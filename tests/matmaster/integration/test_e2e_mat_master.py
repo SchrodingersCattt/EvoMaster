@@ -147,7 +147,7 @@ class EchoTool:
             'required': ['text'],
         }
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         return f"ECHO: {arguments.get('text', '')}"
 
 
@@ -184,7 +184,7 @@ class TestMatMasterE2EPipeline:
 
     _EXP_CONFIG: ExpConfig = ExpConfig(name='direct')
 
-    def test_mat_master_e2e_pipeline(self, tmp_path: Path) -> None:
+    async def test_mat_master_e2e_pipeline(self, tmp_path: Path) -> None:
         """E2E: Playground.prepare() -> Exp.build_runtime() -> Kernel.run() with mock LLM."""
         mock_llm = MockLLMProvider()
         pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
@@ -194,7 +194,7 @@ class TestMatMasterE2EPipeline:
         runtime = exp.build_runtime(pg_ctx, bus=bus)
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, 'test task')
+        finish = await kernel.run(runtime.spec, 'test task')
 
         assert isinstance(finish.result, KernelResult)
         assert finish.result.reason == "natural"
@@ -205,7 +205,7 @@ class TestMatMasterE2EPipeline:
         response_events = [e for e in events if isinstance(e, ResponseEvent)]
         assert len(response_events) >= 1
 
-    def test_mat_master_e2e_with_tool_call(self, tmp_path: Path) -> None:
+    async def test_mat_master_e2e_with_tool_call(self, tmp_path: Path) -> None:
         """E2E: Pipeline with a tool call and tool result."""
         mock_llm = MockLLMProviderWithToolCall()
         pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
@@ -218,7 +218,7 @@ class TestMatMasterE2EPipeline:
         runtime.spec.tool_registry.register(echo_tool, source='test')
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, 'call echo tool')
+        finish = await kernel.run(runtime.spec, 'call echo tool')
 
         assert isinstance(finish.result, KernelResult)
         assert finish.result.reason == "natural"
@@ -231,7 +231,7 @@ class TestMatMasterE2EPipeline:
         assert len(tool_result_events) >= 1
         assert tool_call_events[0].tool_name == 'echo'
 
-    def test_mat_master_e2e_with_history(self, tmp_path: Path) -> None:
+    async def test_mat_master_e2e_with_history(self, tmp_path: Path) -> None:
         """E2E: Pipeline with multi-turn history injection."""
         mock_llm = MockLLMProviderCapturingMessages()
         pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
@@ -246,7 +246,7 @@ class TestMatMasterE2EPipeline:
         runtime = exp.build_runtime(pg_ctx, bus=bus)
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, 'new task', history=history)
+        finish = await kernel.run(runtime.spec, 'new task', history=history)
 
         assert finish.result.reason == "natural"
         # Verify messages passed to LLM include history

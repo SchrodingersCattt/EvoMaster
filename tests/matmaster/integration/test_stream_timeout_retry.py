@@ -43,7 +43,7 @@ class RetryTestProvider:
 
 
 class TestStreamTimeoutRetryIntegration:
-    def test_provider_retries_through_kernel(self) -> None:
+    async def test_provider_retries_through_kernel(self) -> None:
         """Timeout in chat_stream -> LLMError -> kernel retries -> success."""
         provider = RetryTestProvider()
 
@@ -53,7 +53,7 @@ class TestStreamTimeoutRetryIntegration:
             retry_delay=0.0,
         )
         kernel = AgentKernel()
-        result = kernel.run(spec, "hi")
+        result = await kernel.run(spec, "hi")
 
         assert result.result.reason == "natural"
         assert provider._call_count == 2

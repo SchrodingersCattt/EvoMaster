@@ -11,7 +11,7 @@ import queue
 import threading
 import time
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
@@ -56,16 +56,19 @@ class _SlowMockLLM:
         self._turns = turns
         self._call_count = 0
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="done", finish_reason="stop")
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         self._call_count += 1
         # Add a small delay to give stop_event time to be set
-        time.sleep(0.05)
+        await asyncio.sleep(0.05)
         yield StreamChunk(content=f"Turn {self._call_count}", finish_reason="stop")
 
 
@@ -75,13 +78,16 @@ class _NeverFinishLLM:
     def __init__(self) -> None:
         self._call_count = 0
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="loop", finish_reason="stop")
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         self._call_count += 1
         # Always yield a natural finish to avoid infinite loop
         yield StreamChunk(content=f"Turn {self._call_count}", finish_reason="stop")
@@ -90,13 +96,16 @@ class _NeverFinishLLM:
 class _QuickMockLLM:
     """Simplest mock LLM: single turn, immediate finish."""
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="quick", finish_reason="stop")
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(content="quick", finish_reason="stop")
 
 
@@ -118,7 +127,7 @@ class TestRunInterruptedDetection:
 
     _EXP_CONFIG: ExpConfig = ExpConfig(name="direct")
 
-    def test_run_interrupted_detection_deploy(self, tmp_path: Path) -> None:
+    async def test_run_interrupted_detection_deploy(self, tmp_path: Path) -> None:
         """Verify stop_event.is_set() detected before kernel turn.
         Uses pre-set stop_event to guarantee detection on first check.
         """
@@ -134,13 +143,13 @@ class TestRunInterruptedDetection:
         stop_event.set()
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, "long task", stop_event=stop_event)
+        finish = await kernel.run(runtime.spec, "long task", stop_event=stop_event)
 
         assert isinstance(finish.result, KernelResult)
         assert finish.result.reason == "cancelled"
         assert finish.result.status == "cancelled"
 
-    def test_run_interrupted_detection_restart(self, tmp_path: Path) -> None:
+    async def test_run_interrupted_detection_restart(self, tmp_path: Path) -> None:
         """Verify stop_event from Redis stop key detected (same mechanism)."""
         mock_llm = _QuickMockLLM()
         pg_ctx = _make_ctx(tmp_path, llm_provider=mock_llm)
@@ -154,7 +163,7 @@ class TestRunInterruptedDetection:
         stop_event.set()
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, "restart task", stop_event=stop_event)
+        finish = await kernel.run(runtime.spec, "restart task", stop_event=stop_event)
 
         assert finish.result.reason == "cancelled"
 

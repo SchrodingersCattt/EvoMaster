@@ -584,7 +584,7 @@ class TestToolTruncationFallback:
 class TestKernelIntegration:
     """完整 kernel loop 中压缩触发且结果正确。"""
 
-    def test_kernel_triggers_compaction(self) -> None:
+    async def test_kernel_triggers_compaction(self) -> None:
         from matmaster.core.agent import AgentKernel
         from matmaster.tools.tool_registry import ToolRegistry
 
@@ -598,7 +598,13 @@ class TestKernelIntegration:
         summary_calls = 0
 
         class KernelTestProvider:
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                pass
+
+            async def chat(self, messages, tools=None):
                 nonlocal summary_calls
                 summary_calls += 1
                 return LLMResponse(
@@ -606,7 +612,7 @@ class TestKernelIntegration:
                     finish_reason="stop",
                 )
 
-            def chat_stream(self, messages, tools=None, *, timeout=None):
+            async def chat_stream(self, messages, tools=None, *, timeout=None):
                 nonlocal call_count
                 call_count += 1
                 if call_count <= 5:
@@ -655,7 +661,7 @@ class TestKernelIntegration:
             def json_schema(self):
                 return {"type": "object", "properties": {}}
 
-            def execute(self, arguments):
+            async def execute(self, arguments):
                 return "result " + "x" * 200
 
         registry.register(DummyTool(), source="test")
@@ -679,7 +685,7 @@ class TestKernelIntegration:
         )
 
         kernel = AgentKernel()
-        result = kernel.run(spec, "do something complex")
+        result = await kernel.run(spec, "do something complex")
 
         assert result.result.status == "completed"
         assert result.result.reason == "natural"
@@ -697,7 +703,7 @@ class TestKernelIntegration:
         compaction_events = [e for e in events if isinstance(e, ContextCompactionEvent)]
         assert len(compaction_events) > 0, "bus 应收到压缩事件"
 
-    def test_kernel_without_compaction(self) -> None:
+    async def test_kernel_without_compaction(self) -> None:
         """compactor=None 时 kernel 正常运行。"""
         from matmaster.core.agent import AgentKernel
         from matmaster.tools.tool_registry import ToolRegistry
@@ -706,10 +712,16 @@ class TestKernelIntegration:
         call_count = 0
 
         class SimpleProvider:
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                pass
+
+            async def chat(self, messages, tools=None):
                 return LLMResponse(content="done", finish_reason="stop")
 
-            def chat_stream(self, messages, tools=None, *, timeout=None):
+            async def chat_stream(self, messages, tools=None, *, timeout=None):
                 nonlocal call_count
                 call_count += 1
                 yield StreamChunk(
@@ -725,7 +737,7 @@ class TestKernelIntegration:
             system_prompt="test",
         )
         kernel = AgentKernel()
-        result = kernel.run(spec, "hello")
+        result = await kernel.run(spec, "hello")
 
         assert result.result.status == "completed"
         assert result.result.reason == "natural"

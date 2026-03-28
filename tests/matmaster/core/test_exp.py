@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -228,7 +228,7 @@ class TestExpRun:
         mock_kernel_result = KernelRunResult(result=mock_kr, messages=[])
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = mock_kernel_result
+        mock_kernel.run = AsyncMock(return_value=mock_kernel_result)
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
@@ -252,7 +252,7 @@ class TestExpRun:
         mock_kr = KernelResult(status="completed", reason="natural")
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = KernelRunResult(result=mock_kr, messages=[])
+        mock_kernel.run = AsyncMock(return_value=KernelRunResult(result=mock_kr, messages=[]))
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
@@ -273,7 +273,7 @@ class TestExpRun:
         history = [MagicMock()]
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = KernelRunResult(result=mock_kr, messages=[])
+        mock_kernel.run = AsyncMock(return_value=KernelRunResult(result=mock_kr, messages=[]))
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
@@ -299,7 +299,7 @@ class TestExpCleanup:
         mock_kr = KernelResult(status="completed", reason="natural")
 
         mock_kernel = MagicMock()
-        mock_kernel.run.return_value = KernelRunResult(result=mock_kr, messages=[])
+        mock_kernel.run = AsyncMock(return_value=KernelRunResult(result=mock_kr, messages=[]))
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
@@ -315,7 +315,7 @@ class TestExpCleanup:
         ctx = _make_ctx(with_llm=True)
 
         mock_kernel = MagicMock()
-        mock_kernel.run.side_effect = RuntimeError("kernel exploded")
+        mock_kernel.run = AsyncMock(side_effect=RuntimeError("kernel exploded"))
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)

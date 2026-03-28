@@ -50,7 +50,7 @@ def _make_minimal_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundCon
 class TestMinimalE2EPipeline:
     """QUAL-02: Minimal E2E pipeline test -- simplest possible config."""
 
-    def test_minimal_e2e_pipeline(self, tmp_path: Path) -> None:
+    async def test_minimal_e2e_pipeline(self, tmp_path: Path) -> None:
         """E2E: Minimal playground with simplest possible config.
         No builtin_tools, no mcp_config, no skill_config.
         Verify pipeline completes with natural finish.
@@ -64,7 +64,7 @@ class TestMinimalE2EPipeline:
         runtime = exp.build_runtime(pg_ctx, bus=bus)
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, "minimal test task")
+        finish = await kernel.run(runtime.spec, "minimal test task")
 
         assert isinstance(finish.result, KernelResult)
         assert finish.result.reason == "natural"
