@@ -14,6 +14,7 @@ Key behavior:
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import logging
 import time
@@ -70,7 +71,7 @@ class WorkspaceHandler:
             else None
         )
 
-    def handle(self, event: BusEvent) -> None:  # type: ignore[arg-type]
+    async def handle(self, event: BusEvent) -> None:
         """Process event -- only acts on ToolResultEvent.
 
         Mirrors the tool_result branch of event_callback in
@@ -96,7 +97,7 @@ class WorkspaceHandler:
 
         self._last_check_time = now
 
-        snapshot = self._get_snapshot()
+        snapshot = await asyncio.to_thread(self._get_snapshot)
         if snapshot == self._last_snapshot:
             logger.debug(
                 "WorkspaceHandler: skip (snapshot unchanged) session_id=%s",
