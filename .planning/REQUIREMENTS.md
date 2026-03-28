@@ -67,7 +67,7 @@
 
 - [x] **TEST-01**: 配置 pytest-asyncio（asyncio_mode="auto"），建立 async 测试基础设施
 - [x] **TEST-02**: 现有测试随实现阶段同步迁移为 async（不设独立测试迁移阶段）
-- [ ] **TEST-03**: 迁移后全部测试通过，无回归
+- [x] **TEST-03**: 迁移后全部测试通过，无回归
 
 ## v2.1 Requirements
 
@@ -138,7 +138,7 @@
 | BRDG-02 | Phase 19 | Pending |
 | TEST-01 | Phase 12 | Complete |
 | TEST-02 | Phase 17 | Complete |
-| TEST-03 | Phase 17 | Pending |
+| TEST-03 | Phase 17 | Complete |
 
 **Coverage:**
 - v2.0 requirements: 35 total
