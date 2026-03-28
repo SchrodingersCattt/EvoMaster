@@ -141,7 +141,7 @@ Plans:
 
 Plans:
 - [ ] 17-01-PLAN.md -- AgentKernel async 化 (run/run_loop/call_llm/do_stream_llm) + bridge 删除 + test_agent.py 35 测试 async 迁移
-- [ ] 17-02-PLAN.md -- Exp.run()/spawn_fn/DevRunner bridge 适配 + 外部测试 async 迁移 + test_exp.py AsyncMock + 全量回归
+- [ ] 17-02-PLAN.md -- 全部 sync 入口 bridge 适配 (Exp.run + spawn_fn + DevRunner + agent_run_service) + test_subagent_spawn AsyncMock + 外部测试 async 迁移 + 全量回归
 
 ### Phase 18: Exp 生命周期异步化
 **Goal**: Exp 三阶段生命周期 (assemble/build_runtime/run) 全部 async，SubAgent spawn 完整 async 链路打通
