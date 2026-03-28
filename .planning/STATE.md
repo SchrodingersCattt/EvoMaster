@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: matmaster 协程改造
-status: executing
-stopped_at: Completed 17-01-PLAN.md
-last_updated: "2026-03-28T17:55:41.460Z"
+status: verifying
+stopped_at: Completed 17-02-PLAN.md
+last_updated: "2026-03-28T18:22:41.100Z"
 last_activity: 2026-03-28
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 13
-  completed_plans: 12
+  completed_plans: 13
   percent: 50
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 
 Phase: 17 (agentkernel) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-03-28
 
 Progress: [█████░░░░░] 50% (4/8 phases, 9/9 plans)
@@ -49,6 +49,7 @@ Progress: [█████░░░░░] 50% (4/8 phases, 9/9 plans)
 | 14 Tool | 2/2 | ~10min | ~5min |
 | 15 Hook | 3/3 | ~36min | ~12min |
 | Phase 17-agentkernel P01 | 9min | 2 tasks | 2 files |
+| Phase 17-agentkernel P02 | 23min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -85,6 +86,8 @@ Recent decisions affecting current work:
 - [Phase 15-03]: tool_registry.execute call also updated for consistency
 - [Phase 17-agentkernel]: Provider lifecycle uses async with (not manual __aenter__/__aexit__)
 - [Phase 17-agentkernel]: ExplodingTool test changed sync to async execute() for async Tool Protocol compatibility
+- [Phase 17-agentkernel]: Bridge loops inline per D-05, each sync entry creates/destroys own event loop
+- [Phase 17-agentkernel]: Test tool fixtures converted to async execute() for ToolRegistry async compatibility
 
 ### Pending Todos
 
@@ -98,6 +101,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-28T17:55:41.457Z
-Stopped at: Completed 17-01-PLAN.md
+Last session: 2026-03-28T18:22:41.098Z
+Stopped at: Completed 17-02-PLAN.md
 Resume file: None
