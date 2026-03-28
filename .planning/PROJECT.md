@@ -64,7 +64,7 @@ See REQUIREMENTS.md for full v2.0 requirement list (35 items, 15 complete after 
 
 ### Current State
 
-**Phase 15 complete** (2026-03-27): Hook 系统异步化完成。5 个 Hook 实现（OutputProcessor/EventEmitter/AssistantState/SkillHit/DevStreamHook）async 化，ConfirmationHook 从 queue.Queue 阻塞重构为 asyncio.Future 异步等待，Kernel 中所有 _sync_call_async 桥接调用传递 per-run _bridge_loop 参数。88 hook/agent tests passed。
+**Phase 16 complete** (2026-03-28): 事件传输链路全面 async。MessageBus 改为 asyncio.Queue + thread-safe emit_nowait（call_soon_threadsafe），EventRouter 改为 asyncio.Task consume loop，SSEHandler/PersistenceHandler/WorkspaceHandler 全部 async handle（to_thread 处理阻塞 I/O）。service 层通过 dedicated router loop + run_coroutine_threadsafe 桥接。1048 tests passed。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI (not refactored), OpenAI SDK, tiktoken.
 
@@ -150,4 +150,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 after Phase 12 complete (Protocol async signatures + test infrastructure)*
+*Last updated: 2026-03-28 after Phase 16 complete (MessageBus + EventRouter async transformation)*
