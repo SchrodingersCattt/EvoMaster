@@ -87,14 +87,14 @@ class _SimpleTool:
             "properties": {"input": {"type": "string"}},
         }
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         return f"result: {arguments.get('input', '')}"
 
 
 class TestEventSequenceAlignment:
     """Verify new pipeline emits events in expected order."""
 
-    def test_event_sequence_alignment(self, tmp_path: Path) -> None:
+    async def test_event_sequence_alignment(self, tmp_path: Path) -> None:
         """Verify new pipeline emits events in expected order.
         Expected: thought -> tool_call -> tool_result -> thought -> (finish via return)
         """
@@ -115,7 +115,7 @@ class TestEventSequenceAlignment:
         runtime.spec.tool_registry.register(tool, source="test")
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, "alignment test")
+        finish = await kernel.run(runtime.spec, "alignment test")
 
         assert finish.result.reason == "natural"
 

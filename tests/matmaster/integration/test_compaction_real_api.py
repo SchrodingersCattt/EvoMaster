@@ -101,7 +101,7 @@ class VerboseTool:
             "required": ["dataset"],
         }
 
-    def execute(self, arguments):
+    async def execute(self, arguments):
         VerboseTool._call_count += 1
         dataset = arguments.get("dataset", "unknown")
         n = VerboseTool._call_count
@@ -253,7 +253,7 @@ class TestRealAPICompaction:
         kernel = AgentKernel()
         return kernel, spec, bus, compactor
 
-    def test_compaction_triggers_with_real_api(
+    async def test_compaction_triggers_with_real_api(
         self, main_provider, compaction_provider
     ) -> None:
         """多轮工具调用后触发真实 LLM 摘要压缩。
@@ -284,7 +284,7 @@ class TestRealAPICompaction:
         )
 
         t0 = time.time()
-        result = kernel.run(
+        result = await kernel.run(
             spec,
             "Analyze these 5 datasets one at a time: weather_2024, climate_history, "
             "ocean_temps, solar_radiation, wind_patterns. "
@@ -335,7 +335,7 @@ class TestRealAPICompaction:
             print(f"  Summary preview ({len(summary)} chars): {summary[:200]}...")
             assert len(summary) > 50, "摘要内容过短"
 
-    def test_no_compaction_large_window(
+    async def test_no_compaction_large_window(
         self, main_provider, compaction_provider
     ) -> None:
         """大 context_window 下单轮问答不触发压缩。"""
@@ -347,14 +347,14 @@ class TestRealAPICompaction:
             max_turns=3,
         )
 
-        result = kernel.run(spec, "What is 2 + 2? Answer in one word.")
+        result = await kernel.run(spec, "What is 2 + 2? Answer in one word.")
         kr = result.result
         _print_result("No Compaction (Large Window)", kr, compactor)
 
         assert kr.status == "completed"
         assert compactor._compaction_count == 0
 
-    def test_kernel_continues_after_compaction(
+    async def test_kernel_continues_after_compaction(
         self, main_provider, compaction_provider
     ) -> None:
         """压缩后 kernel 仍能正常完成并产出有效回答。"""
@@ -373,7 +373,7 @@ class TestRealAPICompaction:
             ),
         )
 
-        result = kernel.run(
+        result = await kernel.run(
             spec,
             "Analyze these 5 datasets one at a time: solar_radiation, wind_patterns, "
             "soil_moisture, air_quality, water_level. "
