@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: matmaster 协程改造
-status: completed
-stopped_at: Phase 17 context gathered
-last_updated: "2026-03-28T16:32:41.772Z"
+status: executing
+stopped_at: Completed 17-01-PLAN.md
+last_updated: "2026-03-28T17:55:41.460Z"
 last_activity: 2026-03-28
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 13
+  completed_plans: 12
   percent: 50
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 15 — Hook 系统异步化 (all gaps closed, fully complete)
+**Current focus:** Phase 17 — agentkernel
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
-Status: Phase 15 fully complete
+Phase: 17 (agentkernel) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-28
 
 Progress: [█████░░░░░] 50% (4/8 phases, 9/9 plans)
@@ -48,6 +48,7 @@ Progress: [█████░░░░░] 50% (4/8 phases, 9/9 plans)
 | 13 LLM Provider | 2/2 | ~20min | ~10min |
 | 14 Tool | 2/2 | ~10min | ~5min |
 | 15 Hook | 3/3 | ~36min | ~12min |
+| Phase 17-agentkernel P01 | 9min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,8 @@ Recent decisions affecting current work:
 - [Phase 15-02]: ConfirmationHookAdapter in stream_service.py bridges legacy ReplyQueueLike to hook API
 - [Phase 15-03]: All _sync_call_async calls in agent.py now pass per-run _bridge_loop (no module-level fallback)
 - [Phase 15-03]: tool_registry.execute call also updated for consistency
+- [Phase 17-agentkernel]: Provider lifecycle uses async with (not manual __aenter__/__aexit__)
+- [Phase 17-agentkernel]: ExplodingTool test changed sync to async execute() for async Tool Protocol compatibility
 
 ### Pending Todos
 
@@ -95,6 +98,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-28T16:32:41.764Z
-Stopped at: Phase 17 context gathered
-Resume file: .planning/phases/17-agentkernel/17-CONTEXT.md
+Last session: 2026-03-28T17:55:41.457Z
+Stopped at: Completed 17-01-PLAN.md
+Resume file: None

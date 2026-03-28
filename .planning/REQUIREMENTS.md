@@ -38,12 +38,12 @@
 
 ### 核心引擎
 
-- [ ] **KERN-01**: AgentKernel.run() 改为 async generator（async def run() -> AsyncGenerator[AgentEvent, None]）
-- [ ] **KERN-02**: Kernel 内部 LLM 调用改为 await（_call_llm, _call_llm_stream）
-- [ ] **KERN-03**: Kernel 内部 tool dispatch 改为 await，支持并行执行
+- [x] **KERN-01**: AgentKernel.run() 改为 async generator（async def run() -> AsyncGenerator[AgentEvent, None]）
+- [x] **KERN-02**: Kernel 内部 LLM 调用改为 await（_call_llm, _call_llm_stream）
+- [x] **KERN-03**: Kernel 内部 tool dispatch 改为 await，支持并行执行
 - [x] **KERN-04**: ContextCompactor 内部 LLM 调用改为 async
-- [ ] **KERN-05**: stop_event 保留 threading.Event（跨线程安全，is_set() 同步检查不变）
-- [ ] **KERN-06**: time.sleep 替换为 asyncio.sleep（retry backoff 等场景）
+- [x] **KERN-05**: stop_event 保留 threading.Event（跨线程安全，is_set() 同步检查不变）
+- [x] **KERN-06**: time.sleep 替换为 asyncio.sleep（retry backoff 等场景）
 
 ### 基础设施
 
@@ -66,7 +66,7 @@
 ### 测试基础设施
 
 - [x] **TEST-01**: 配置 pytest-asyncio（asyncio_mode="auto"），建立 async 测试基础设施
-- [ ] **TEST-02**: 现有测试随实现阶段同步迁移为 async（不设独立测试迁移阶段）
+- [x] **TEST-02**: 现有测试随实现阶段同步迁移为 async（不设独立测试迁移阶段）
 - [ ] **TEST-03**: 迁移后全部测试通过，无回归
 
 ## v2.1 Requirements
@@ -121,12 +121,12 @@
 | HOOK-01 | Phase 15 | Complete |
 | HOOK-02 | Phase 15 | Complete |
 | HOOK-03 | Phase 15 | Complete |
-| KERN-01 | Phase 17 | Pending |
-| KERN-02 | Phase 17 | Pending |
-| KERN-03 | Phase 17 | Pending |
+| KERN-01 | Phase 17 | Complete |
+| KERN-02 | Phase 17 | Complete |
+| KERN-03 | Phase 17 | Complete |
 | KERN-04 | Phase 13 | Complete |
-| KERN-05 | Phase 17 | Pending |
-| KERN-06 | Phase 17 | Pending |
+| KERN-05 | Phase 17 | Complete |
+| KERN-06 | Phase 17 | Complete |
 | INFR-01 | Phase 16 | Pending |
 | INFR-02 | Phase 16 | Pending |
 | INFR-03 | Phase 16 | Pending |
@@ -137,7 +137,7 @@
 | BRDG-01 | Phase 19 | Pending |
 | BRDG-02 | Phase 19 | Pending |
 | TEST-01 | Phase 12 | Complete |
-| TEST-02 | Phase 17 | Pending |
+| TEST-02 | Phase 17 | Complete |
 | TEST-03 | Phase 17 | Pending |
 
 **Coverage:**

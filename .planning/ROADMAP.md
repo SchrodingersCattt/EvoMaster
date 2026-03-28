@@ -140,7 +140,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 17-01-PLAN.md -- AgentKernel async 化 (run/run_loop/call_llm/do_stream_llm) + bridge 删除 + test_agent.py 35 测试 async 迁移
+- [x] 17-01-PLAN.md -- AgentKernel async 化 (run/run_loop/call_llm/do_stream_llm) + bridge 删除 + test_agent.py 35 测试 async 迁移
 - [ ] 17-02-PLAN.md -- 全部 sync 入口 bridge 适配 (Exp.run + spawn_fn + DevRunner + agent_run_service) + test_subagent_spawn AsyncMock + 外部测试 async 迁移 + 全量回归
 
 ### Phase 18: Exp 生命周期异步化
@@ -190,6 +190,6 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 14. Tool 系统异步化 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 15. Hook 系统异步化 | v2.0 | 3/3 | Complete    | 2026-03-27 |
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/2 | Complete    | 2026-03-28 |
-| 17. AgentKernel 异步化 | v2.0 | 0/2 | Planned | - |
+| 17. AgentKernel 异步化 | v2.0 | 1/2 | In Progress|  |
 | 18. Exp 生命周期异步化 | v2.0 | 0/0 | Not started | - |
 | 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 0/0 | Not started | - |
