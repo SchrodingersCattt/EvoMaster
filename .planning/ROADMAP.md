@@ -41,7 +41,7 @@ Full details: milestones/v1-ROADMAP.md
 - [x] **Phase 13: LLM Provider 异步实现** - OpenAIProvider 改用 AsyncOpenAI，chat/chat_stream 实现为 async (completed 2026-03-27)
 - [x] **Phase 14: Tool 系统异步化** - 12 个 BuiltinTool + ToolRegistry 全部 async，session 调用用 asyncio.to_thread 桥接 (completed 2026-03-27)
 - [x] **Phase 15: Hook 系统异步化** - 5 个 Hook 实现和 run_* helper 全部 async，ConfirmationHook reply queue 适配 (completed 2026-03-27)
-- [ ] **Phase 16: MessageBus + EventRouter 异步化** - MessageBus 改用 asyncio.Queue，EventRouter 改为 asyncio.Task
+- [x] **Phase 16: MessageBus + EventRouter 异步化** - MessageBus 改用 asyncio.Queue，EventRouter 改为 asyncio.Task (completed 2026-03-28)
 - [ ] **Phase 17: AgentKernel 异步化** - Kernel.run() 改为 async，收敛所有异步依赖，ContextCompactor async 化
 - [ ] **Phase 18: Exp 生命周期异步化** - assemble/build_runtime/run 全部 async，SubAgent spawn 完整 async 链路
 - [ ] **Phase 19: 服务层桥接 + 并行 Tool Dispatch** - src/ 层 asyncio.run() 桥接 + 多 tool_call 并行执行优化
@@ -185,7 +185,7 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 13. LLM Provider 异步实现 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 14. Tool 系统异步化 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 15. Hook 系统异步化 | v2.0 | 3/3 | Complete    | 2026-03-27 |
-| 16. MessageBus + EventRouter 异步化 | v2.0 | 0/2 | Planned | - |
+| 16. MessageBus + EventRouter 异步化 | v2.0 | 0/2 | Complete    | 2026-03-28 |
 | 17. AgentKernel 异步化 | v2.0 | 0/0 | Not started | - |
 | 18. Exp 生命周期异步化 | v2.0 | 0/0 | Not started | - |
 | 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 0/0 | Not started | - |
