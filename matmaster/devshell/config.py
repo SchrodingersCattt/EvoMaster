@@ -1,22 +1,16 @@
-"""DevConfig model and YAML loading for mm-devshell."""
+"""DevConfig model and YAML loading for mm-devshell.
+
+LLM 连接由 ``matmaster_config/llm_config.yaml`` + ``build_provider`` 解析（与线上一致），
+不在此文件中配置 api_key / base_url / model。
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from matmaster.config.loader import _expand_env_vars
-
-
-class LLMConfig(BaseModel):
-    """LLM connection settings."""
-
-    api_key: str = ""
-    base_url: str = "https://api.openai.com/v1"
-    model: str = "gpt-4o"
-    temperature: float = 0.7
-    max_tokens: int | None = None
 
 
 class AgentConfig(BaseModel):
@@ -41,9 +35,10 @@ class ToolsConfig(BaseModel):
 
 
 class DevConfig(BaseModel):
-    """Top-level devshell configuration."""
+    """Top-level devshell configuration (agent / session / tools only)."""
 
-    llm: LLMConfig = Field(default_factory=LLMConfig)
+    model_config = ConfigDict(extra="ignore")
+
     agent: AgentConfig = Field(default_factory=AgentConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)

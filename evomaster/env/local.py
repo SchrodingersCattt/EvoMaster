@@ -67,6 +67,19 @@ class LocalEnv(BaseEnv):
         self._is_ready = True
         self.logger.info('Local environment setup complete')
 
+    def _remote_path(self, remote_path: str) -> Path:
+        """Resolve ``remote_path`` under workspace when it is relative.
+
+        Relative paths are joined with ``session_config.workspace_path`` so
+        read/write/list behave like the shell cwd (``local_exec``), not the
+        Python process cwd (often the repo root when using ``uv run``).
+        """
+        p = Path(remote_path)
+        if p.is_absolute():
+            return p
+        ws = Path(self.config.session_config.workspace_path)
+        return (ws / p).resolve()
+
     def teardown(self) -> None:
         """清理本地环境资源"""
         if not self._is_ready:
@@ -372,7 +385,7 @@ class LocalEnv(BaseEnv):
             raise RuntimeError('Environment not ready')
 
         local_file = Path(local_path)
-        remote_file = Path(remote_path)
+        remote_file = self._remote_path(remote_path)
 
         if not local_file.exists():
             raise FileNotFoundError(f'Local file not found: {local_path}')
@@ -400,7 +413,7 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        remote_file = Path(remote_path)
+        remote_file = self._remote_path(remote_path)
 
         if not remote_file.exists():
             raise FileNotFoundError(f'Remote file not found: {remote_path}')
@@ -424,7 +437,7 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        remote_file = Path(remote_path)
+        remote_file = self._remote_path(remote_path)
 
         if not remote_file.exists():
             raise FileNotFoundError(f'Remote file not found: {remote_path}')
@@ -448,7 +461,7 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        remote_file = Path(remote_path)
+        remote_file = self._remote_path(remote_path)
 
         # 确保目录存在
         remote_file.parent.mkdir(parents=True, exist_ok=True)
@@ -469,7 +482,7 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        return os.path.exists(remote_path)
+        return self._remote_path(remote_path).exists()
 
     def is_file(self, remote_path: str) -> bool:
         """检查远程路径是否是文件
@@ -483,7 +496,8 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        return os.path.isfile(remote_path)
+        p = self._remote_path(remote_path)
+        return p.is_file()
 
     def is_directory(self, remote_path: str) -> bool:
         """检查远程路径是否是目录
@@ -497,4 +511,5 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        return os.path.isdir(remote_path)
+        p = self._remote_path(remote_path)
+        return p.is_dir()
