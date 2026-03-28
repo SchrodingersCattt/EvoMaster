@@ -25,8 +25,8 @@ class TestSkillHitHook:
         )
         await hook.post_tool_call(tc, ToolResult(content="result"))
 
-        bus.emit.assert_called_once()
-        emitted = bus.emit.call_args[0][0]
+        bus.emit_nowait.assert_called_once()
+        emitted = bus.emit_nowait.call_args[0][0]
         assert isinstance(emitted, SkillHitEvent)
         assert emitted.skill_name == "bohrium-job"
         assert emitted.source == "MatMaster"
@@ -40,7 +40,7 @@ class TestSkillHitHook:
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
         await hook.post_tool_call(tc, ToolResult(content="result"))
 
-        bus.emit.assert_not_called()
+        bus.emit_nowait.assert_not_called()
 
     async def test_does_nothing_for_use_skill_without_skill_name(self) -> None:
         """post_tool_call does nothing when use_skill arguments lack skill_name."""
@@ -51,7 +51,7 @@ class TestSkillHitHook:
         tc = ToolCallData(id="tc-1", name="use_skill", arguments={"action": "get_info"})
         await hook.post_tool_call(tc, ToolResult(content="result"))
 
-        bus.emit.assert_not_called()
+        bus.emit_nowait.assert_not_called()
 
     async def test_does_nothing_for_non_string_skill_name(self) -> None:
         """post_tool_call does nothing when skill_name is not a string."""
@@ -62,4 +62,4 @@ class TestSkillHitHook:
         tc = ToolCallData(id="tc-1", name="use_skill", arguments={"skill_name": 123})
         await hook.post_tool_call(tc, ToolResult(content="result"))
 
-        bus.emit.assert_not_called()
+        bus.emit_nowait.assert_not_called()
