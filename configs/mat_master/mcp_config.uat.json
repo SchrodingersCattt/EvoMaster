@@ -44,11 +44,6 @@
       "transport": "sse",
       "url": "http://root@pkfz1410356.bohrium.tech:50002/sse",
       "headers": {}
-    },
-    "mat_binary_calc": {
-      "transport": "http",
-      "url": "http://gjao1318755.bohrium.tech:50005/mcp",
-      "headers": {}
     }
   }
 }
