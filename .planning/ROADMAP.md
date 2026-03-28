@@ -136,8 +136,12 @@ Plans:
   3. ContextCompactor.compact_if_needed() 为 async，内部 LLM 摘要调用通过 await 执行
   4. stop_event 保持 threading.Event 类型，is_set() 同步检查不变（跨线程安全）
   5. retry backoff 使用 asyncio.sleep 替代 time.sleep，不阻塞 event loop
-  6. 现有测试全部迁移为 async 并通过，无回归（976+ tests pass）
-**Plans**: TBD
+  6. 现有测试全部迁移为 async 并通过，无回归（1187+ tests pass）
+**Plans**: 2 plans
+
+Plans:
+- [ ] 17-01-PLAN.md -- AgentKernel async 化 (run/run_loop/call_llm/do_stream_llm) + bridge 删除 + test_agent.py 35 测试 async 迁移
+- [ ] 17-02-PLAN.md -- Exp.run()/spawn_fn/DevRunner bridge 适配 + 外部测试 async 迁移 + test_exp.py AsyncMock + 全量回归
 
 ### Phase 18: Exp 生命周期异步化
 **Goal**: Exp 三阶段生命周期 (assemble/build_runtime/run) 全部 async，SubAgent spawn 完整 async 链路打通
@@ -186,6 +190,6 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 14. Tool 系统异步化 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 15. Hook 系统异步化 | v2.0 | 3/3 | Complete    | 2026-03-27 |
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/2 | Complete    | 2026-03-28 |
-| 17. AgentKernel 异步化 | v2.0 | 0/0 | Not started | - |
+| 17. AgentKernel 异步化 | v2.0 | 0/2 | Planned | - |
 | 18. Exp 生命周期异步化 | v2.0 | 0/0 | Not started | - |
 | 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 0/0 | Not started | - |
