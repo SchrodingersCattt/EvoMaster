@@ -273,15 +273,11 @@ class AgentRunService:
                 return None
 
             # -- Stage 2: EventRouter bootstrap --
+            # Handler order: SSEHandler first for lower frontend latency
+            # (serial dispatch means SSE send runs before slower DB persistence)
             router = EventRouter(
                 bus=bus,
                 handlers=[
-                    PersistenceHandler(
-                        events_table,
-                        session_id,
-                        task_id,
-                        invocation_id,
-                    ),
                     SSEHandler(
                         send_cb,
                         loop,
@@ -289,6 +285,12 @@ class AgentRunService:
                         task_id,
                         invocation_id,
                         mode,
+                    ),
+                    PersistenceHandler(
+                        events_table,
+                        session_id,
+                        task_id,
+                        invocation_id,
                     ),
                 ],
             )
@@ -314,11 +316,11 @@ class AgentRunService:
                 try:
                     if event_type == 'error':
                         msg = content if isinstance(content, str) else str(content)
-                        bus.emit(ErrorEvent(source=str(source), message=msg))
+                        bus.emit_nowait(ErrorEvent(source=str(source), message=msg))
                         return
                     if event_type == 'stream_closed':
                         body = '' if content is None else str(content)
-                        bus.emit(
+                        bus.emit_nowait(
                             StreamClosedEvent(
                                 source=str(source),
                                 content=body,
@@ -328,7 +330,7 @@ class AgentRunService:
                             )
                         )
                         return
-                    bus.emit(
+                    bus.emit_nowait(
                         BohriumNodeEvent(
                             source=str(source),
                             payload={
@@ -458,10 +460,10 @@ class AgentRunService:
 
             # -- Post-processing --
             if run_result_event.reason == 'cancelled':
-                bus.emit(
+                bus.emit_nowait(
                     CancelledEvent(source='System', reason='Task cancelled by user.')
                 )
-                bus.emit(
+                bus.emit_nowait(
                     StreamClosedEvent(
                         source='System',
                         end_reason='cancelled',
@@ -474,14 +476,14 @@ class AgentRunService:
                     run_result_event.reason == 'natural'
                     and run_result_event.final_content
                 ):
-                    bus.emit(
+                    bus.emit_nowait(
                         ResponseEvent(
                             source=run_result_event.source,
                             content=run_result_event.final_content,
                         )
                     )
-                bus.emit(run_result_event)
-                bus.emit(
+                bus.emit_nowait(run_result_event)
+                bus.emit_nowait(
                     StreamClosedEvent(
                         source='System',
                         task_completed=run_result_event.reason == 'natural',
@@ -514,8 +516,8 @@ class AgentRunService:
         except Exception as exc:
             logger.exception('run_agent_sync error: session_id=%s', session_id)
             try:
-                bus.emit(ErrorEvent(source='System', message=str(exc)))
-                bus.emit(
+                bus.emit_nowait(ErrorEvent(source='System', message=str(exc)))
+                bus.emit_nowait(
                     StreamClosedEvent(
                         source='System',
                         end_reason='error',
@@ -533,13 +535,8 @@ class AgentRunService:
                 session_id,
                 elapsed,
             )
-            if router:
-                router.stop()
-            if exp:
-                try:
-                    exp._run_cleanup_callbacks()
-                except Exception:
-                    logger.warning('Exp cleanup error', exc_info=True)
+            # Cleanup order matters:
+            # 1. Bohrium FIRST -- cleanup can still emit events via _bohrium_event_cb
             if bohrium_svc:
                 try:
                     bohrium_svc.cleanup(
@@ -550,6 +547,18 @@ class AgentRunService:
                     )
                 except Exception:
                     logger.warning('Bohrium cleanup error', exc_info=True)
+            # 2. Exp cleanup
+            if exp:
+                try:
+                    exp._run_cleanup_callbacks()
+                except Exception:
+                    logger.warning('Exp cleanup error', exc_info=True)
+            # 3. Router LAST -- drains any final events from bohrium/exp cleanup
+            if router:
+                try:
+                    router.stop()
+                except Exception:
+                    logger.warning('router.stop() failed during cleanup', exc_info=True)
             get_redis_dao().delete_stop_requested(session_id, task_id)
             self._pg_manager.release(session_id)
             gc.collect()
