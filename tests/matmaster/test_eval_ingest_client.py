@@ -78,7 +78,8 @@ def test_build_ingest_item_minimal() -> None:
         duration_ms=5000,
     )
     assert item["question_id"] == "Q1"
-    assert item["question_sha256"] == prompt_sha256("p")
+    assert item["question_text"] == "p"
+    assert "question_sha256" not in item["extra"]
     assert item["duration_ms"] == 5000
     assert item["tokens"] == 100
     assert item["score"] == 100.0

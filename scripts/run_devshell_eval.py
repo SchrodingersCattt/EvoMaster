@@ -32,6 +32,7 @@ Usage (from repository root)::
 
     uv run python scripts/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
     uv run python scripts/run_devshell_eval.py --modes direct --limit 3
+    uv run python scripts/run_devshell_eval.py --modes direct --capabilities structure_construction --limit 3
     uv run python scripts/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
     uv run python scripts/run_devshell_eval.py --no-export-review --limit 3   # skip Markdown bundle
     uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_*  # manual only
@@ -167,7 +168,10 @@ def main() -> int:
         "--capabilities",
         nargs="+",
         default=None,
-        help="Only run questions in these capabilities (e.g. batch_processing)",
+        help=(
+            "Only run questions with these capability values "
+            "(e.g. structure_construction, batch_processing)"
+        ),
     )
     parser.add_argument(
         "--modes",

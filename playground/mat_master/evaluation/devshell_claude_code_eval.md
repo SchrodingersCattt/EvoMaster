@@ -18,6 +18,20 @@ uv run python scripts/run_devshell_eval.py --modes direct --jobs 2 --questions <
 
 单题**较快**示例：`--modes direct --jobs 2 --questions SC_struct_007 --limit 1`（`structure_construction`，比批量结构题等更省时间）。其他题号按需替换。
 
+**按能力筛「结构生成 / 结构构建」整类题：** 题库 YAML 里 `capability: structure_construction` 的题目会全部进入计划；用 `--capabilities structure_construction` 过滤，**不必**再手写题号列表。可与 `--limit` 联用做冒烟（只跑展开后的前 N 条 **direct** 任务）。
+
+```bash
+# 结构生成类：先跑前 3 条 direct（示例）
+uv run python scripts/run_devshell_eval.py --modes direct --jobs 2 \
+  --capabilities structure_construction --limit 3 --eval-ingest-pending-only
+
+# 该类全部 direct（不传 --limit）
+uv run python scripts/run_devshell_eval.py --modes direct --jobs 2 \
+  --capabilities structure_construction --eval-ingest-pending-only
+```
+
+说明：`--capabilities` 按题目字段筛选；与 `--questions` 可同时使用（交集）。其它能力名与 `playground/mat_master/evaluation/schemas.py` 中 `CapabilityLiteral` 一致（如 `batch_processing`、`workflow_orchestration` 等）。
+
 可选：`--model <route>`；需要题库原文进 md 时加 `--export-review-with-questions`。
 
 **跑前清空 `results/`（默认）：** 不加额外参数时，脚本在创建本次 run 目录之前会删除仓库根下 **`results/` 目录内的全部文件与子目录**（不删 `results` 文件夹本身）。若要**保留**历史产物、与旧 run 并列存放，请加 **`--no-clean-results`**。
@@ -157,9 +171,19 @@ uv run python scripts/eval_ingest_submit_pending.py \
 
 > 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md`：依次跑 `... --modes direct --jobs 2 --questions SC_struct_007 SC_struct_008 --limit 2 --eval-ingest-pending-only`（题号按需改），对每个 task 单独判 checklist 并给 **每题百分制**；**每题按第 4 节** `eval_ingest_submit_pending.py` 上报对应分数；最后给 **`宏平均：XX/100`**，并汇总共性改进点。
 
-**按 capability 冒烟一条**
+**结构生成类（`structure_construction`）：批量前 N 题 + 判分 + 延迟入库**
 
-> 按 `devshell-claude-code-eval` 规则：用 `uv run python scripts/run_devshell_eval.py --modes direct --jobs 2 --capabilities structure_construction --questions SC_struct_007 --limit 1 --eval-ingest-pending-only` 跑一条（固定快例题号），再按该 run 目录和对应 YAML 判分、输出 **百分制** 与建议，并按**第 4 节**上报。
+> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md`：在仓库根执行
+> `uv run python scripts/run_devshell_eval.py --modes direct --jobs 2 --capabilities structure_construction --limit 5 --eval-ingest-pending-only`
+> （把 `5` 改成需要的条数；不传 `--limit` 则跑**全部**结构生成类 direct 任务。）记下 `Run directory`，按第 2、3 节**逐题**判分、`百分制得分` 与第 4 节上报，最后可给 **宏平均** 与共性改进点。
+
+**结构生成类：仅本地不落库（前 N 题）**
+
+> 同上，将 `--eval-ingest-pending-only` 换成 `--no-eval-ingest`；`--limit` 按需调整。
+
+**按 capability 冒烟一条（固定题号，与「整类筛选」二选一即可）**
+
+> 按 `devshell-claude-code-eval` 规则：用 `uv run python scripts/run_devshell_eval.py --modes direct --jobs 2 --capabilities structure_construction --questions SC_struct_007 --limit 1 --eval-ingest-pending-only` 跑一条（`--capabilities` 在此可省略，因题号已唯一确定），再按该 run 目录和对应 YAML 判分、输出 **百分制** 与建议，并按**第 4 节**上报。
 
 **与 checklist / 百分制对齐的完整版**
 
