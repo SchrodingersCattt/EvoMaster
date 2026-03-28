@@ -8,6 +8,13 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
 
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
 
+Optional **per-task ingest** to matmaster-tools-server (after each devshell run).
+POST URL is fixed: ``MATMASTER_TOOLS_SERVER`` + ``/api/v1/evaluation/ingest`` (see ``matmaster.eval_ingest_client``).
+
+Override host with ``MATMASTER_TOOLS_SERVER`` / ``SERVICE_ENV`` as needed. Use ``--no-eval-ingest`` to skip POSTs.
+
+See matmaster-tools-server ``docs/apifox-evaluation-openapi.json`` for the schema.
+
 Usage (from repository root)::
 
     uv run python scripts/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
@@ -26,6 +33,8 @@ import json
 import os
 import subprocess
 import sys
+import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -131,6 +140,28 @@ def main() -> int:
         action="store_true",
         help="When writing claude_review.md, include human_prompt_seed from the question bank.",
     )
+    parser.add_argument(
+        "--no-eval-ingest",
+        action="store_true",
+        help="Disable evaluation ingest (no POST to tools-server ingest API).",
+    )
+    parser.add_argument(
+        "--eval-ingest-run-id",
+        type=str,
+        default=None,
+        help="Batch run_id for ingest (UUID recommended). Default: random UUID for this process.",
+    )
+    parser.add_argument(
+        "--eval-ingest-timeout",
+        type=float,
+        default=30.0,
+        help="HTTP timeout seconds for each ingest POST (default: 30).",
+    )
+    parser.add_argument(
+        "--eval-ingest-strict",
+        action="store_true",
+        help="Exit non-zero if ingest fails (default: log warning and continue).",
+    )
     args = parser.parse_args()
 
     py = args.python or Path(sys.executable)
@@ -198,7 +229,20 @@ def main() -> int:
     run_dir.mkdir(parents=True, exist_ok=True)
     raw_path = run_dir / "raw_runs.jsonl"
 
-    manifest = {
+    from matmaster.eval_ingest_client import (
+        EVAL_INGEST_URL,
+        build_ingest_item,
+        git_head_commit,
+        post_eval_ingest,
+    )
+
+    ingest_url = None if args.no_eval_ingest else EVAL_INGEST_URL
+
+    eval_ingest_run_id = (args.eval_ingest_run_id or "").strip() or str(uuid.uuid4())
+
+    git_commit = git_head_commit(REPO_ROOT)
+
+    manifest: dict[str, Any] = {
         "run_label": args.run_label,
         "started_at_utc": ts,
         "question_bank_dir": str(bank_dir),
@@ -207,6 +251,11 @@ def main() -> int:
         "plan_count": len(run_plan),
         "dry_run": False,
     }
+    if ingest_url:
+        manifest["eval_ingest_url"] = ingest_url
+        manifest["eval_ingest_run_id"] = eval_ingest_run_id
+        if git_commit:
+            manifest["git_commit"] = git_commit
     (run_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -221,6 +270,7 @@ def main() -> int:
     print(f"Planned tasks: {len(run_plan)}", file=sys.stderr)
 
     any_failed = False
+    ingest_failed = False
     env = os.environ.copy()
     # Child stdout is a pipe (not a TTY) → CPython uses block buffering; streaming
     # from DevStreamHook would not appear until buffer fills unless unbuffered.
@@ -272,8 +322,10 @@ def main() -> int:
             flush=True,
         )
         # Inherit stdout/stderr so output is not piped (piping + uv/Cursor often buffers).
+        t0 = time.monotonic()
         proc = subprocess.run(cmd, cwd=cwd, env=env)
         rc = proc.returncode
+        duration_ms = int((time.monotonic() - t0) * 1000)
 
         row: dict[str, Any] = {
             "task_id": task_id,
@@ -302,6 +354,38 @@ def main() -> int:
 
         with raw_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+        if ingest_url:
+            item = build_ingest_item(
+                question_id=question.id,
+                prompt=prompt,
+                task_id=task_id,
+                mode=mode,
+                repeat_idx=repeat_idx,
+                devshell_exit_code=rc,
+                summary=summary if isinstance(summary, dict) else {},
+                duration_ms=duration_ms,
+            )
+            body: dict[str, Any] = {
+                "run_id": eval_ingest_run_id,
+                "items": [item],
+            }
+            if git_commit:
+                body["git_commit"] = git_commit
+            ok, msg = post_eval_ingest(
+                ingest_url,
+                body,
+                timeout=float(args.eval_ingest_timeout),
+            )
+            if ok:
+                print(f"  [ingest] {task_id} ok ({msg})", file=sys.stderr, flush=True)
+            else:
+                ingest_failed = True
+                print(
+                    f"  [ingest] {task_id} failed: {msg}",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
         if rc != 0:
             any_failed = True
@@ -340,7 +424,11 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    return 1 if any_failed else 0
+    if any_failed:
+        return 1
+    if args.eval_ingest_strict and ingest_failed:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
