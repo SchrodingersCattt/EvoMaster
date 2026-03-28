@@ -149,5 +149,6 @@ uv run python -m playground.mat_master.evaluation.cli \
 
 ## 更多文档
 
+- [devshell_claude_code_eval.md](./devshell_claude_code_eval.md) - DevShell 批量跑题 + Claude Code 人工判分（`run_devshell_eval.py`、产物路径、百分制话术）
 - [WEIGHTED_PORTABLE_EVAL_MIGRATION.md](../../docs/mat_master/WEIGHTED_PORTABLE_EVAL_MIGRATION.md) - 迁移指南与 FAQ
 - [WEIGHTED_EVAL_IMPLEMENTATION.md](../../docs/mat_master/WEIGHTED_EVAL_IMPLEMENTATION.md) - 实现细节
