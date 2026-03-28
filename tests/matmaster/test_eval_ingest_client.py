@@ -8,9 +8,11 @@ from matmaster.eval_ingest_client import (
     EVAL_INGEST_API_PATH,
     EVAL_INGEST_URL,
     build_ingest_item,
+    eval_run_zip_should_skip_arcname,
     extract_total_tokens,
     post_eval_ingest,
     prompt_sha256,
+    score_for_eval_ingest,
 )
 
 
@@ -26,6 +28,28 @@ def test_extract_total_tokens() -> None:
     assert extract_total_tokens({}) is None
     assert extract_total_tokens({"total_tokens": 42}) == 42
     assert extract_total_tokens({"prompt_tokens": 10, "completion_tokens": 5}) == 15
+
+
+def test_score_for_eval_ingest_explicit() -> None:
+    assert score_for_eval_ingest({"score": 0.73}, 1) == 0.73
+    assert score_for_eval_ingest({"eval_score": 88}, 0) == 88.0
+
+
+def test_score_for_eval_ingest_proxy() -> None:
+    assert score_for_eval_ingest({"status": "done"}, 0) == 100.0
+    assert score_for_eval_ingest({"status": "done"}, 1) == 0.0
+
+
+def test_score_for_eval_ingest_parse_error() -> None:
+    assert score_for_eval_ingest({"parse_error": True}, 0) == 0.0
+
+
+def test_eval_run_zip_should_skip_arcname() -> None:
+    assert eval_run_zip_should_skip_arcname("workspaces/t/__pycache__/x.pyc")
+    assert eval_run_zip_should_skip_arcname("foo.pyc")
+    assert eval_run_zip_should_skip_arcname(".DS_Store")
+    assert not eval_run_zip_should_skip_arcname("workspaces/t/_devshell_summary.json")
+    assert not eval_run_zip_should_skip_arcname("logs/t/events_1.jsonl")
 
 
 def test_eval_ingest_url_matches_tools_server() -> None:
@@ -55,6 +79,7 @@ def test_build_ingest_item_minimal() -> None:
     assert item["question_sha256"] == prompt_sha256("p")
     assert item["duration_ms"] == 5000
     assert item["tokens"] == 100
+    assert item["score"] == 100.0
     assert item["num_turns"] == 3
     assert item["extra"]["task_id"] == "Q1_direct_r0"
     assert item["extra"]["reason"] == "natural"
@@ -75,8 +100,38 @@ def test_build_ingest_item_model_top_level() -> None:
     )
     assert item["model"] == "claude-sonnet-4"
     assert item["num_turns"] == 1
+    assert item["score"] == 100.0
     assert "model" not in item["extra"]
     assert "num_turns" not in item["extra"]
+
+
+def test_build_ingest_item_explicit_score_overrides_exit() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        prompt="p",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=1,
+        summary={"score": 65.0},
+        duration_ms=None,
+    )
+    assert item["score"] == 65.0
+
+
+def test_build_ingest_item_result_oss_url() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        prompt="p",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={},
+        duration_ms=None,
+        result_oss_url="https://bucket.oss.example.com/prefix/u/f.zip",
+    )
+    assert item["result_oss_url"].startswith("https://")
 
 
 def test_build_ingest_item_parse_error_summary() -> None:
@@ -92,6 +147,7 @@ def test_build_ingest_item_parse_error_summary() -> None:
     )
     assert item["extra"]["parse_error"] is True
     assert item["extra"]["error"] == "bad json"
+    assert item["score"] == 0.0
     assert "duration_ms" not in item
 
 

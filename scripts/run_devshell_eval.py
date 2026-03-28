@@ -10,6 +10,9 @@ Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_r
 
 Optional **per-task ingest** to matmaster-tools-server (after each devshell run).
 POST URL is fixed: ``MATMASTER_TOOLS_SERVER`` + ``/api/v1/evaluation/ingest`` (see ``matmaster.eval_ingest_client``).
+Each item includes ``score`` (explicit from summary or 100/0 pass-fail proxy) and, when OSS is configured,
+``result_oss_url`` for a zip of **that task only**: ``workspaces/<task_id>/`` and ``logs/<task_id>/`` under
+the shared ``devshell_eval_*`` run folder (not the whole batch directory). Use ``--no-eval-ingest-oss`` to skip upload.
 
 Override host with ``MATMASTER_TOOLS_SERVER`` / ``SERVICE_ENV`` as needed. Use ``--no-eval-ingest`` to skip POSTs.
 
@@ -162,6 +165,11 @@ def main() -> int:
         action="store_true",
         help="Exit non-zero if ingest fails (default: log warning and continue).",
     )
+    parser.add_argument(
+        "--no-eval-ingest-oss",
+        action="store_true",
+        help="Do not zip/upload this task's workspaces/logs to OSS (skips result_oss_url on ingest).",
+    )
     args = parser.parse_args()
 
     py = args.python or Path(sys.executable)
@@ -234,6 +242,7 @@ def main() -> int:
         build_ingest_item,
         git_head_commit,
         post_eval_ingest,
+        upload_eval_task_artifacts_to_oss,
     )
 
     ingest_url = None if args.no_eval_ingest else EVAL_INGEST_URL
@@ -356,6 +365,9 @@ def main() -> int:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
         if ingest_url:
+            result_oss_url: str | None = None
+            if not args.no_eval_ingest_oss:
+                result_oss_url = upload_eval_task_artifacts_to_oss(run_dir, task_id)
             item = build_ingest_item(
                 question_id=question.id,
                 prompt=prompt,
@@ -365,6 +377,7 @@ def main() -> int:
                 devshell_exit_code=rc,
                 summary=summary if isinstance(summary, dict) else {},
                 duration_ms=duration_ms,
+                result_oss_url=result_oss_url,
             )
             body: dict[str, Any] = {
                 "run_id": eval_ingest_run_id,
