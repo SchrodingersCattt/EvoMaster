@@ -2,9 +2,12 @@
 
 See ``docs/apifox-evaluation-openapi.json`` in matmaster-tools-server for the contract:
 ``EvalIngestRequest`` with ``run_id``, optional ``git_commit``, ``items`` (≥1).
-Each ``EvalItemIn`` requires ``question_id``; ``model`` / ``num_turns`` belong on the
-item top level (not only inside ``extra``) so the server can persist columns; ``extra``
-is stored as opaque JSON.
+Each ``EvalItemIn`` requires ``question_id``; ``model`` / ``num_turns`` / ``score`` /
+``result_oss_url`` belong on the item top level. ``score`` is taken from the devshell
+summary when present, else a 100/0 pass-fail proxy. ``result_oss_url`` is set after zipping **only the current task** under that run:
+``workspaces/<task_id>`` and ``logs/<task_id>`` (see :func:`upload_eval_task_artifacts_to_oss`).
+The parent ``devshell_eval_*`` folder is shared by all tasks in the batch; it is not uploaded whole.
+``extra`` is stored as opaque JSON.
 
 Ingest POST URL is ``MATMASTER_TOOLS_SERVER`` + ``EVAL_INGEST_API_PATH``（在 **首次 import**
 本模块时按 ``utils.env`` 解析；与配额等共用同一 host）。见 ``EVAL_INGEST_URL``。
@@ -13,13 +16,19 @@ Ingest POST URL is ``MATMASTER_TOOLS_SERVER`` + ``EVAL_INGEST_API_PATH``（在 *
 from __future__ import annotations
 
 import hashlib
+import logging
+import os
 import subprocess
+import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 
 import httpx
 
 import utils.env
+
+logger = logging.getLogger(__name__)
 
 # Direct tools-server path (not the gateway ``/bohrapi/v1/matmaster-tools-server/...`` prefix).
 EVAL_INGEST_API_PATH = "/api/v1/evaluation/ingest"
@@ -49,6 +58,120 @@ def extract_total_tokens(usage: Any) -> int | None:
         except (TypeError, ValueError):
             pass
     return None
+
+
+def score_for_eval_ingest(
+    summary: dict[str, Any] | None,
+    devshell_exit_code: int,
+) -> float:
+    """Numeric score for tools-server ``EvalItemIn.score``.
+
+    Prefer an explicit value from the devshell summary (``score``, ``eval_score``,
+    ``weighted_score``). Otherwise use a simple proxy: **100** when the run exited 0
+    and the summary is not a parse error; **0** otherwise. (DevShell does not run
+    MATTER BinaryEvaluator, so there is no automatic checklist score unless the
+    kernel adds one of the keys above.)
+    """
+    if isinstance(summary, dict):
+        for key in ("score", "eval_score", "weighted_score"):
+            raw = summary.get(key)
+            if raw is None:
+                continue
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                continue
+        if summary.get("parse_error"):
+            return 0.0
+    if devshell_exit_code == 0:
+        return 100.0
+    return 0.0
+
+
+def eval_run_zip_should_skip_arcname(arcname: str) -> bool:
+    """True if a path under the run directory should not be packed (noise / bytecode)."""
+    parts = arcname.replace("\\", "/").split("/")
+    if "__pycache__" in parts:
+        return True
+    lower = arcname.lower()
+    if lower.endswith(".pyc") or lower.endswith(".pyo"):
+        return True
+    if arcname.endswith(".DS_Store"):
+        return True
+    return False
+
+
+def upload_eval_task_artifacts_to_oss(
+    run_dir: Path,
+    task_id: str,
+    *,
+    oss_prefix: str = "matmaster/evaluation",
+) -> str | None:
+    """Zip **only one task** under a devshell batch run dir, upload to OSS.
+
+    A run root like ``results/devshell_eval_*`` holds **all** questions; each task has
+    ``workspaces/<task_id>/`` and ``logs/<task_id>/``. This packs just those two
+    subtrees (paths inside the zip look like ``workspaces/<task_id>/...`` and
+    ``logs/<task_id>/...``). Skips ``__pycache__``, ``*.pyc`` / ``*.pyo``,
+    ``.DS_Store``.
+
+    Returns public HTTPS URL, or ``None`` if nothing to pack, OSS env is missing,
+    or upload fails. Configure ``OSS_*`` like calculation MCP.
+    """
+    root = Path(run_dir).resolve()
+    if not root.is_dir():
+        return None
+
+    safe_tid = task_id.replace("/", "_").replace("\\", "_")[:200] or "task"
+    subroots = [
+        root / "workspaces" / task_id,
+        root / "logs" / task_id,
+    ]
+
+    files: list[tuple[Path, str]] = []
+    for base in subroots:
+        if not base.is_dir():
+            continue
+        for p in base.rglob("*"):
+            if not p.is_file():
+                continue
+            try:
+                rel = p.relative_to(root).as_posix()
+            except ValueError:
+                continue
+            if eval_run_zip_should_skip_arcname(rel):
+                continue
+            files.append((p, rel))
+
+    if not files:
+        return None
+
+    run_name = root.name.replace("/", "_").replace("\\", "_")[:120] or "eval_run"
+    zip_name = f"{run_name}_{safe_tid}_task.zip"
+    fd, tmp = tempfile.mkstemp(suffix=".zip", prefix="eval_ingest_")
+    os.close(fd)
+    tmp_path = Path(tmp)
+    try:
+        with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for fs_path, arcname in sorted(files, key=lambda t: t[1]):
+                zf.write(fs_path, arcname=arcname)
+        from evomaster.adaptors.calculation.oss_io import upload_file_to_oss
+
+        url = upload_file_to_oss(
+            tmp_path,
+            tmp_path.parent,
+            oss_prefix=oss_prefix,
+            object_basename=zip_name,
+        )
+        return url[:2048] if url else None
+    except (OSError, RuntimeError, ValueError, ImportError) as e:
+        logger.warning("eval ingest OSS task artifacts upload failed: %s", e)
+        return None
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def git_head_commit(repo_root: Path, *, max_len: int = 64) -> str | None:
@@ -81,6 +204,7 @@ def build_ingest_item(
     devshell_exit_code: int,
     summary: dict[str, Any] | None,
     duration_ms: int | None,
+    result_oss_url: str | None = None,
 ) -> dict[str, Any]:
     usage = summary.get("usage") if isinstance(summary, dict) else None
     tokens = extract_total_tokens(usage)
@@ -134,6 +258,13 @@ def build_ingest_item(
         item["duration_ms"] = int(duration_ms)
     if tokens is not None:
         item["tokens"] = tokens
+
+    item["score"] = score_for_eval_ingest(
+        summary if isinstance(summary, dict) else None,
+        devshell_exit_code,
+    )
+    if result_oss_url and str(result_oss_url).strip():
+        item["result_oss_url"] = str(result_oss_url).strip()[:2048]
     return item
 
 
