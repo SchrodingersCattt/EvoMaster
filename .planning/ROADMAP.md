@@ -190,6 +190,6 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 14. Tool 系统异步化 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 15. Hook 系统异步化 | v2.0 | 3/3 | Complete    | 2026-03-27 |
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/2 | Complete    | 2026-03-28 |
-| 17. AgentKernel 异步化 | v2.0 | 2/2 | Complete   | 2026-03-28 |
+| 17. AgentKernel 异步化 | v2.0 | 2/2 | Complete    | 2026-03-28 |
 | 18. Exp 生命周期异步化 | v2.0 | 0/0 | Not started | - |
 | 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 0/0 | Not started | - |
