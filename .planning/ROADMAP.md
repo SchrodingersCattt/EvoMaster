@@ -97,10 +97,24 @@ Plans:
 - [x] 11-02-PLAN.md -- Exp 层 spawn_fn 闭包创建 + SubAgentTool 注册 + source_override + 集成测试
 - [x] 11-03-PLAN.md -- 事件路由 source 前缀兼容 + chat_history 改造 + service 层 stop_event 注入
 
+### Phase 16: MessageBus + EventRouter Async
+**Goal**: 将事件传输层从同步 threading+queue.Queue 迁移��� asyncio.Queue+asyncio.Task，实现全非阻塞事件派发
+**Depends on**: Phase 11
+**Requirements**: INFR-01, INFR-02, INFR-03
+**Success Criteria** (what must be TRUE):
+  1. MessageBus 使用 asyncio.Queue，emit/get 为 async，emit_nowait 通过 call_soon_threadsafe 实现线程安全
+  2. EventRouter 使用 asyncio.Task 而非 threading.Thread
+  3. SSEHandler/PersistenceHandler/WorkspaceHandler 全�� async，阻塞 I/O 使用 asyncio.to_thread
+**Plans:** 2 plans
+
+Plans:
+- [x] 16-01-PLAN.md -- MessageBus async + EventRouter + 3 Handlers async + test migration
+- [ ] 16-02-PLAN.md -- Service layer wiring for async EventRouter
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 8 -> 9 -> 10 -> 11
+Phases execute in numeric order: 8 -> 9 -> 10 -> 11 -> 16
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -115,3 +129,4 @@ Phases execute in numeric order: 8 -> 9 -> 10 -> 11
 | 9. 文件操作 Tools | v1.1 | 1/3 | In Progress | - |
 | 10. Tool Description 与 System Prompt 设计 | v1.1 | 2/2 | Complete    | 2026-03-25 |
 | 11. SubAgent Spawn 机制 | v1.1 | 3/3 | Complete    | 2026-03-25 |
+| 16. MessageBus + EventRouter Async | v2.0 | 1/2 | In Progress | - |
