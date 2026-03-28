@@ -67,36 +67,6 @@ class TestTaskStore:
         store = TaskStore(tmp_path)
         assert store.list_all() == []
 
-    def test_update_description(self, tmp_path: Path) -> None:
-        store = TaskStore(tmp_path)
-        created = store.create("Old desc", ["Sub"])
-        updated = store.update(created["id"], description="New desc")
-        assert updated is not None
-        assert updated["description"] == "New desc"
-        assert updated["updated_at"] >= created["updated_at"]
-
-    def test_update_status(self, tmp_path: Path) -> None:
-        store = TaskStore(tmp_path)
-        created = store.create("Task", ["Sub"])
-        updated = store.update(created["id"], status="in_progress")
-        assert updated is not None
-        assert updated["status"] == "in_progress"
-
-    def test_update_nonexistent_returns_none(self, tmp_path: Path) -> None:
-        store = TaskStore(tmp_path)
-        assert store.update("nonexist", description="x") is None
-
-    def test_complete_sets_status_completed(self, tmp_path: Path) -> None:
-        store = TaskStore(tmp_path)
-        created = store.create("Finish this", ["Sub"])
-        completed = store.complete(created["id"])
-        assert completed is not None
-        assert completed["status"] == "completed"
-
-    def test_complete_nonexistent_returns_none(self, tmp_path: Path) -> None:
-        store = TaskStore(tmp_path)
-        assert store.complete("nonexist") is None
-
     def test_persistence_across_instances(self, tmp_path: Path) -> None:
         store1 = TaskStore(tmp_path)
         task = store1.create("Persistent task", ["Sub"])
@@ -136,15 +106,16 @@ class TestTaskCreateTool:
 
     async def test_task_create(self, tmp_path: Path) -> None:
         tool = TaskCreateTool(workdir=tmp_path)
-        result = await tool.execute({"description": "New task"})
+        result = await tool.execute({"description": "New task", "tasks": ["Sub A", "Sub B"]})
         parsed = json.loads(result)
         assert parsed["description"] == "New task"
         assert parsed["status"] == "open"
         assert "id" in parsed
+        assert len(parsed["subtasks"]) == 2
 
     async def test_workdir_none(self) -> None:
         tool = TaskCreateTool(workdir=None)
-        result = await tool.execute({"description": "Should fail"})
+        result = await tool.execute({"description": "Should fail", "tasks": ["Sub"]})
         assert "Error" in result
         assert "workdir" in result
 
@@ -166,7 +137,7 @@ class TestTaskGetTool:
     async def test_task_get_existing(self, tmp_path: Path) -> None:
         # Create a task first
         create_tool = TaskCreateTool(workdir=tmp_path)
-        create_result = json.loads(await create_tool.execute({"description": "Find me"}))
+        create_result = json.loads(await create_tool.execute({"description": "Find me", "tasks": ["Sub"]}))
         task_id = create_result["id"]
 
         tool = TaskGetTool(workdir=tmp_path)
@@ -202,8 +173,8 @@ class TestTaskListTool:
 
     async def test_task_list_with_tasks(self, tmp_path: Path) -> None:
         create_tool = TaskCreateTool(workdir=tmp_path)
-        await create_tool.execute({"description": "Task 1"})
-        await create_tool.execute({"description": "Task 2"})
+        await create_tool.execute({"description": "Task 1", "tasks": ["Sub 1"]})
+        await create_tool.execute({"description": "Task 2", "tasks": ["Sub 2"]})
 
         tool = TaskListTool(workdir=tmp_path)
         result = await tool.execute({})
@@ -235,28 +206,28 @@ class TestTaskUpdateTool:
         tool = TaskUpdateTool(workdir=Path("/tmp"))
         assert isinstance(tool, Tool)
 
-    async def test_task_update(self, tmp_path: Path) -> None:
+    async def test_task_update_subtask_status(self, tmp_path: Path) -> None:
         create_tool = TaskCreateTool(workdir=tmp_path)
-        created = json.loads(await create_tool.execute({"description": "Original"}))
+        created = json.loads(await create_tool.execute({"description": "Original", "tasks": ["Step 1", "Step 2"]}))
 
         tool = TaskUpdateTool(workdir=tmp_path)
         result = await tool.execute({
             "task_id": created["id"],
-            "description": "Updated",
+            "subtask_index": 0,
             "status": "in_progress",
         })
         parsed = json.loads(result)
-        assert parsed["description"] == "Updated"
+        assert parsed["subtasks"][0]["status"] == "in_progress"
         assert parsed["status"] == "in_progress"
 
     async def test_task_update_nonexistent(self, tmp_path: Path) -> None:
         tool = TaskUpdateTool(workdir=tmp_path)
-        result = await tool.execute({"task_id": "nope", "description": "x"})
-        assert "not found" in result.lower() or "Task not found" in result
+        result = await tool.execute({"task_id": "nope", "subtask_index": 0, "status": "in_progress"})
+        assert "not found" in result.lower()
 
     async def test_workdir_none(self) -> None:
         tool = TaskUpdateTool(workdir=None)
-        result = await tool.execute({"task_id": "abc"})
+        result = await tool.execute({"task_id": "abc", "subtask_index": 0, "status": "open"})
         assert "Error" in result
 
 
@@ -274,21 +245,22 @@ class TestTaskCompleteTool:
         tool = TaskCompleteTool(workdir=Path("/tmp"))
         assert isinstance(tool, Tool)
 
-    async def test_task_complete(self, tmp_path: Path) -> None:
+    async def test_task_complete_subtask(self, tmp_path: Path) -> None:
         create_tool = TaskCreateTool(workdir=tmp_path)
-        created = json.loads(await create_tool.execute({"description": "Complete me"}))
+        created = json.loads(await create_tool.execute({"description": "Complete me", "tasks": ["Only step"]}))
 
         tool = TaskCompleteTool(workdir=tmp_path)
-        result = await tool.execute({"task_id": created["id"]})
+        result = await tool.execute({"task_id": created["id"], "subtask_index": 0})
         parsed = json.loads(result)
+        assert parsed["subtasks"][0]["status"] == "completed"
         assert parsed["status"] == "completed"
 
     async def test_task_complete_nonexistent(self, tmp_path: Path) -> None:
         tool = TaskCompleteTool(workdir=tmp_path)
-        result = await tool.execute({"task_id": "nope"})
-        assert "not found" in result.lower() or "Task not found" in result
+        result = await tool.execute({"task_id": "nope", "subtask_index": 0})
+        assert "not found" in result.lower()
 
     async def test_workdir_none(self) -> None:
         tool = TaskCompleteTool(workdir=None)
-        result = await tool.execute({"task_id": "abc"})
+        result = await tool.execute({"task_id": "abc", "subtask_index": 0})
         assert "Error" in result
