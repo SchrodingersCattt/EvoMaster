@@ -190,7 +190,7 @@ class ToolGuard:
         self._survey_writes: int = 0
         # Structure-retrieval gate
         self._struct_retrieval: StructRetrievalState = StructRetrievalState()
-        # Input-file origin tracking (prepare_* gate)
+        # Input-file origin tracking (local input-generation gate)
         self._str_replace_created_paths: set[str] = set()
         # Auth-failure stop gate
         self._auth_failure_count: int = 0
@@ -889,7 +889,7 @@ class ToolGuard:
                 ):
                     self._survey_writes += 1
 
-        # ── prepare_* gate: track str_replace_editor-created paths ──
+        # ── local input-generation gate: track str_replace_editor-created paths ──
         if tool_name == 'str_replace_editor':
             cmd = str(args.get('command', '')).strip().lower()
             if cmd in {'create', 'write'}:
