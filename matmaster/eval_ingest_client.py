@@ -17,7 +17,9 @@ For deferred ingest, ``run_devshell_eval.py --eval-ingest-pending-only`` writes
 ``result_oss_url`` is set after zipping **only the current task** under that run:
 ``workspaces/<task_id>`` and ``logs/<task_id>`` (see :func:`upload_eval_task_artifacts_to_oss`).
 The parent ``devshell_eval_*`` folder is shared by all tasks in the batch; it is not uploaded whole.
-``extra`` is stored as opaque JSON.
+``extra`` is stored as opaque JSON. Optional ``eval_tooling`` (from
+:func:`matmaster.eval_tooling_snapshot.snapshot_devshell_eval_tooling`) records builtin /
+skill / MCP server config for batch analysis.
 
 Ingest POST URL is ``MATMASTER_TOOLS_SERVER`` + ``EVAL_INGEST_API_PATH``（在 **首次 import**
 本模块时按 ``utils.env`` 解析；与配额等共用同一 host）。见 ``EVAL_INGEST_URL``。
@@ -283,6 +285,7 @@ def build_ingest_item(
     summary: dict[str, Any] | None,
     duration_ms: int | None,
     result_oss_url: str | None = None,
+    eval_tooling: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     usage = summary.get("usage") if isinstance(summary, dict) else None
     tokens = extract_total_tokens(usage)
@@ -313,6 +316,9 @@ def build_ingest_item(
                     extra[k] = summary[k]
     if preview is not None:
         extra["final_content_preview"] = preview
+
+    if eval_tooling is not None:
+        extra["eval_tooling"] = eval_tooling
 
     qtext = clip_ingest_text_field(prompt, max_len=EVAL_ITEM_QUESTION_TEXT_MAX_LEN)
     item: dict[str, Any] = {
