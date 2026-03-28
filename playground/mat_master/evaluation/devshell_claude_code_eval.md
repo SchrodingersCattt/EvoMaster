@@ -18,7 +18,9 @@ uv run python scripts/run_devshell_eval.py --questions <QUESTION_ID> --limit 1 -
 
 可选：`--model <route>`；需要题库原文进 md 时加 `--export-review-with-questions`。
 
-**与 tools-server 入库：** 使用 `--eval-ingest-pending-only` 时，跑题阶段**不会** POST；会在 `pending_ingest/<task_id>.json` 里写好除 `score` 外的字段。你在对话里按第 3 节打出百分制后，**必须**再执行第 4 节的 `eval_ingest_submit_pending.py` 才能把分数写入服务端。若不加该 flag 且配置了 `MATMASTER_TOOLS_SERVER`，脚本会在每题结束时即时入库（此时 `score` 仍是代理分，不是 checklist 百分制）。
+**跑前清空 `results/`（默认）：** 不加额外参数时，脚本在创建本次 run 目录之前会删除仓库根下 **`results/` 目录内的全部文件与子目录**（不删 `results` 文件夹本身）。若要**保留**历史产物、与旧 run 并列存放，请加 **`--no-clean-results`**。
+
+**与 tools-server 入库：** 使用 `--eval-ingest-pending-only` 时，跑题阶段**不会** POST；会在 `pending_ingest/<task_id>.json` 里写好除 `score`（及人工判词字段）外的字段。你在对话里按第 3 节判分后，直接用命令行把 `score`、`score_reason`、`suggestion` 传给第 4 节的 `eval_ingest_submit_pending.py` 即可。若不加该 flag 且配置了 `MATMASTER_TOOLS_SERVER`，脚本会在每题结束时即时入库（此时 `score` 仍是代理分，不是 checklist 百分制）。
 
 跑完后记下终端里打印的 **`Run directory:`**（即 `results/devshell_eval_*`）。
 
@@ -49,7 +51,7 @@ uv run python scripts/run_devshell_eval.py --questions <QUESTION_ID> --limit 1 -
    - 对单题：读取该题 `scoring_checklist` 中每条目的 `weight`（未写则按 **1.0**）。对每条判定 **通过 / 部分通过 / 未通过**（部分通过计 **0.5 × 该条 weight 的满分贡献**；仅当证据显示「明显朝目标推进但未完全满足」时使用，并一句话说明理由）。
    - 公式：**得分 = 100 × (Σ 本条贡献) / (Σ weight)**，其中「通过」的贡献 = `weight`，「部分通过」= `0.5 × weight`，「未通过」= `0`。
    - 得分按上式算出后**四舍五入为 0–100 的整数**；输出格式示例（放在判读最后一行，便于复制）：`**百分制得分：73/100**`；若用户一次跑多题，可写每题分数并给 **宏平均**：`**宏平均：68/100**`。
-   - 若本次跑题使用了 `--eval-ingest-pending-only`：在给出百分制整数后，**紧接着执行第 4 节的上报命令**（每个 `task_id` 一次），不要把「判分完成」当成流程结束。
+   - 若本次跑题使用了 `--eval-ingest-pending-only`：在给出百分制整数后，**紧接着按第 4 节执行上报命令**（每个 `task_id` 一次），不要把「判分完成」当成流程结束。
 6. 若未通过：区分
    - **环境/路径类**（如误用 `/share`、工作区理解错误）
    - **实现类**（脚本逻辑、参数、依赖）
@@ -61,16 +63,21 @@ uv run python scripts/run_devshell_eval.py --questions <QUESTION_ID> --limit 1 -
 
 1. 确认 `Run directory`（即 `results/devshell_eval_*`）。每个任务的 pending 文件路径为：
    `pending_ingest/<task_id>.json`（`task_id` 与 `raw_runs.jsonl` 中该行的 `task_id` 相同，例如 `SC_struct_007_direct_r0`）。也可从 `raw_runs.jsonl` 里读 `eval_ingest_pending_path`（若存在）。
-2. 将第 3 节算出的**百分制整数**（0–100）作为 `--score`。
-3. 在**仓库根目录**执行（每题一条；把路径与分数换成实际值）：
+2. 准备以下评分字段（与 `matmaster-tools-server` 的 `EvalItemIn` 一致）：
+   - **`score`**（必填）：第 3 节的百分制分数，数字类型（如 `73`）。
+   - **`score_reason`**（建议填写）：打分原因 / 评分说明（对照 checklist 的简要依据与结论）。
+   - **`suggestion`**（可选）：改进建议；无则省略该键或写空字符串。
+3. 在**仓库根目录**执行（每题一条）：
 
 ```bash
 uv run python scripts/eval_ingest_submit_pending.py \
   --pending <Run directory>/pending_ingest/<task_id>.json \
-  --score <整数>
+  --score <0-100> \
+  --score-reason "<对照 checklist 的判分依据>" \
+  --suggestion "<改进建议，可省略整个参数>"
 ```
 
-多题则对每个 `pending_ingest/*.json` 各执行一次，分数对应该题的判分结果。成功时终端会打印 `ingest ok`。
+多题则对每个 `pending_ingest/*.json` 各提交一次。成功时终端会打印 `ingest ok`。单字段长度超过 16384 时客户端会截断后再 POST。
 
 **注意：** 未使用 `--eval-ingest-pending-only` 时，一般无需执行本节（除非你要手动补 POST）；若希望完全不上报，跑题时使用 `--no-eval-ingest`。
 
@@ -84,6 +91,8 @@ uv run python scripts/eval_ingest_submit_pending.py \
 用户可说：「按 `devshell-claude-code-eval` 工作流，对 question `<ID>` 跑一轮并判分。」
 你应先**执行第 1 节命令**（若需 tools-server 真实分数，使用 `--eval-ingest-pending-only`），再按第 3 节输出结构化结论；若使用了 pending-only，**必须再执行第 4 节上报**。
 
+用户可说：「按该文档跑 5 / 10 / 20 题或全部。」→ 话术与命令见**第 7 节**「批量：5 / 10 / 20 / 全部」。
+
 若未自动带入上下文，用户可在句首加：**请先阅读本文件并按其中步骤执行。**
 
 在 Cursor / Claude Code 里可直接 **@** 本文件路径：`playground/mat_master/evaluation/devshell_claude_code_eval.md`。
@@ -92,9 +101,41 @@ uv run python scripts/eval_ingest_submit_pending.py \
 
 以下可直接粘贴；默认快例题为 **`SC_struct_007`**；将 `<route>`、题号列表等按需替换。文档路径（便于 @）：`playground/mat_master/evaluation/devshell_claude_code_eval.md`。
 
+**`--limit` 与「全部」：** `run_devshell_eval.py` 在按 `config.yaml` 等筛出 run plan 后，`--limit N` 只跑其中**前 N 条**；**不传 `--limit`** 则跑当前配置下的**全部**题目。可与 `--questions`、`--capabilities` 等组合：`--limit` 作用于筛选后的列表。批量命令同样可加 `--model <route>`、`--export-review-with-questions` 等，与下文单题话术一致。
+
+**`--no-clean-results`：** 见第 1 节；需要与历史 `devshell_eval_*` 并存时再追加。
+
+**批量：5 题（判分 + 延迟入库 + 宏平均）**
+
+> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md`：在仓库根执行
+> `uv run python scripts/run_devshell_eval.py --limit 5 --eval-ingest-pending-only`
+> 记下 `Run directory`，按第 2、3 节**逐题**判分并输出每题 **`百分制得分：XX/100`**，**每题按第 4 节** `eval_ingest_submit_pending.py` 上报；最后给 **`宏平均：XX/100`** 与共性改进点。
+
+**批量：10 题（同上）**
+
+> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md`：在仓库根执行
+> `uv run python scripts/run_devshell_eval.py --limit 10 --eval-ingest-pending-only`
+> 记下 `Run directory`，按第 2、3 节**逐题**判分并输出每题 **`百分制得分：XX/100`**，**每题按第 4 节** `eval_ingest_submit_pending.py` 上报；最后给 **`宏平均：XX/100`** 与共性改进点。
+
+**批量：20 题（同上）**
+
+> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md`：在仓库根执行
+> `uv run python scripts/run_devshell_eval.py --limit 20 --eval-ingest-pending-only`
+> 记下 `Run directory`，按第 2、3 节**逐题**判分并输出每题 **`百分制得分：XX/100`**，**每题按第 4 节** `eval_ingest_submit_pending.py` 上报；最后给 **`宏平均：XX/100`** 与共性改进点。
+
+**批量：全部题目（同上，不加 `--limit`）**
+
+> 同上，命令改为：
+> `uv run python scripts/run_devshell_eval.py --eval-ingest-pending-only`
+> （不传 `--limit` 即跑 eval 配置下的整包；判分与上报仍按第 2–4 节。）
+
+**批量：仅本地、不落库（5 / 10 / 20 / 全部）**
+
+> 与上文批量命令相同，把 `--eval-ingest-pending-only` 换成 `--no-eval-ingest`（或不配置 tools-server）（示例：`--limit 5 --no-eval-ingest`）；无需第 4 节。
+
 **最短（单题 + 判分 + 改进 + 延迟入库上报）**
 
-> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md` 执行：在仓库根用 `uv run python scripts/run_devshell_eval.py --questions SC_struct_007 --limit 1 --eval-ingest-pending-only` 跑一轮，记下 `Run directory`，再按第 2、3 节判分，**最后一行输出 `百分制得分：XX/100`**；然后按**第 4 节**用 `eval_ingest_submit_pending.py` 把该分数上报；未完全通过时给**可操作的改进建议**。
+> 按 `playground/mat_master/evaluation/devshell_claude_code_eval.md` 执行：在仓库根用 `uv run python scripts/run_devshell_eval.py --questions SC_struct_007 --limit 1 --eval-ingest-pending-only` 跑一轮，记下 `Run directory`，再按第 2、3 节判分，**最后一行输出 `百分制得分：XX/100`**；然后按**第 4 节**用 `eval_ingest_submit_pending.py --pending ... --score ...` 上报，并把判分依据放进 **`--score-reason`**、可操作改进放进 **`--suggestion`**。
 
 **最短（单题 + 判分 + 改进，仅本地不落库）**
 

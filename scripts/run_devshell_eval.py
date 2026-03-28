@@ -18,15 +18,20 @@ the shared ``devshell_eval_*`` run folder. Upload is always attempted when inges
 (including ``eval_ingest_result_oss_url`` after a successful OSS upload).
 
 With ``--eval-ingest-pending-only``, no POST is sent; each task writes ``pending_ingest/<task_id>.json``
-(ingest payload without ``score``). After judging, run ``scripts/eval_ingest_submit_pending.py``.
+(ingest payload without ``score``). After judging, pass
+``--score`` / ``--score-reason`` / ``--suggestion`` to
+``scripts/eval_ingest_submit_pending.py --pending <path>``.
 
 Override host with ``MATMASTER_TOOLS_SERVER`` / ``SERVICE_ENV`` as needed. Use ``--no-eval-ingest`` to skip POSTs.
+
+By default, the repository ``results/`` directory is emptied before the run; use ``--no-clean-results`` to keep prior outputs.
 
 See matmaster-tools-server ``docs/apifox-evaluation-openapi.json`` for the schema.
 
 Usage (from repository root)::
 
     uv run python scripts/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
+    uv run python scripts/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
     uv run python scripts/run_devshell_eval.py --no-export-review --limit 3   # skip Markdown bundle
     uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_*  # manual only
     uv run python scripts/run_devshell_eval.py --help
@@ -40,6 +45,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -58,6 +64,17 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+def _clean_results_directory(results_root: Path) -> None:
+    """Remove all children of ``results_root`` (the repo ``results/`` folder)."""
+    if not results_root.is_dir():
+        return
+    for child in results_root.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
 
 
 def _merge_eval_config(path: Path | None, overrides: dict[str, Any]) -> dict[str, Any]:
@@ -129,6 +146,14 @@ def main() -> int:
         help="Print plan only, do not invoke devshell",
     )
     parser.add_argument(
+        "--no-clean-results",
+        action="store_true",
+        help=(
+            "Do not delete contents of the repository ``results/`` folder before this run "
+            "(default: empty ``results/`` so each run starts from a clean tree)."
+        ),
+    )
+    parser.add_argument(
         "--fail-fast",
         action="store_true",
         help="Stop after the first non-zero devshell exit code",
@@ -159,7 +184,8 @@ def main() -> int:
         action="store_true",
         help=(
             "Do not POST ingest; write pending_ingest/<task_id>.json with full item except "
-            "score (for Claude to submit after judging via eval_ingest_submit_pending.py)."
+            "score. After judging, Claude submits with "
+            "--score/--score-reason/--suggestion via eval_ingest_submit_pending.py."
         ),
     )
     parser.add_argument(
@@ -235,6 +261,11 @@ def main() -> int:
             tid = f"{q.id}_{mode}_r{ridx}"
             print(f"  [dry-run] {tid} capability={q.capability}", file=sys.stderr)
         return 0
+
+    results_root = REPO_ROOT / "results"
+    if not args.no_clean_results:
+        _clean_results_directory(results_root)
+        print(f"Cleaned directory: {results_root}", file=sys.stderr)
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     out = args.output_dir
@@ -410,8 +441,9 @@ def main() -> int:
                     "git_commit": git_commit,
                     "task_id": task_id,
                     "instructions_zh": (
-                        "判分后在仓库根目录执行: uv run python scripts/eval_ingest_submit_pending.py "
-                        f"--pending {pend_path} --score <0-100>"
+                        "判分后在仓库根执行: uv run python "
+                        f"scripts/eval_ingest_submit_pending.py --pending {pend_path} "
+                        "--score <0-100> [--score-reason \"...\"] [--suggestion \"...\"]"
                     ),
                     "item": item_body,
                 }
