@@ -40,6 +40,11 @@ Usage (from repository root)::
     uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_*  # manual only
     uv run python scripts/run_devshell_eval.py --help
 
+**Claude Code baseline（不跑 devshell）**：``--prepare-cc-baseline`` 只搭 ``workspaces/`` 与
+``_eval_task_meta.json``；在 IDE 里跑完题并写好 ``_devshell_summary.json`` 后执行
+``scripts/finalize_cc_baseline_ingest.py``。说明见
+``playground/mat_master/evaluation/baseline_cc_eval.md``.
+
 This does **not** run MATTER's BinaryEvaluator or Playground ``run_mat_task``; it only
 collects devshell JSON summaries for downstream review or custom scoring.
 """
@@ -61,6 +66,27 @@ from typing import Any
 
 # Repo root = scripts/..
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _cc_baseline_readme_markdown(*, run_dir: Path, doc_rel: str) -> str:
+    return (
+        "# Claude Code Baseline 测评（本 run）\n\n"
+        "本目录由 `uv run python scripts/run_devshell_eval.py --prepare-cc-baseline` 生成，"
+        "**未**运行 mm-devshell。\n\n"
+        "若 prepare 时**未**使用 `--no-clean-results`，脚本已在创建本 run **之前**清空仓库根 "
+        "`results/` 下全部内容（默认行为，避免旧测评与本次 baseline 混在一起）。\n\n"
+        "## 步骤\n\n"
+        f"1. 阅读仓库内 **`{doc_rel}`**（Claude Code 提示词与 `_devshell_summary.json` 约定）。\n"
+        "2. 对每个 `workspaces/<task_id>/`：以该目录为工作目录，读取 `_devshell_prompt.txt` 完成任务，"
+        "并按文档写入 `_devshell_summary.json`。\n"
+        "3. 可选：将对话/终端记录保存到 `logs/<task_id>/devshell_console.log`，便于与 DevShell 产物对齐。\n"
+        "4. 全部完成后在仓库根执行：\n\n"
+        "```bash\n"
+        f"uv run python scripts/finalize_cc_baseline_ingest.py --run-dir {run_dir.resolve()}\n"
+        "```\n\n"
+        "需要「先判分再入库」时，在 finalize 时加 `--eval-ingest-pending-only`，再对生成的 "
+        "`pending_ingest/*.json` 使用 `scripts/eval_ingest_submit_pending.py`（与 DevShell 流程相同）。\n"
+    )
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -259,11 +285,26 @@ def main() -> int:
         action="store_true",
         help="Exit non-zero if ingest fails (default: log warning and continue).",
     )
+    parser.add_argument(
+        "--prepare-cc-baseline",
+        action="store_true",
+        help=(
+            "Only stage workspaces (prompt + data + _eval_task_meta.json); do not run "
+            "mm-devshell. After Claude Code completes each task, run "
+            "scripts/finalize_cc_baseline_ingest.py on the same run directory."
+        ),
+    )
     args = parser.parse_args()
 
     if args.no_eval_ingest and args.eval_ingest_pending_only:
         print(
             "error: --no-eval-ingest and --eval-ingest-pending-only cannot be used together",
+            file=sys.stderr,
+        )
+        return 2
+    if args.prepare_cc_baseline and args.dry_run:
+        print(
+            "error: --prepare-cc-baseline and --dry-run cannot be used together",
             file=sys.stderr,
         )
         return 2
@@ -387,6 +428,9 @@ def main() -> int:
             manifest["eval_ingest_pending_dir"] = str(run_dir / "pending_ingest")
         if git_commit:
             manifest["git_commit"] = git_commit
+    if args.prepare_cc_baseline:
+        manifest["prepare_cc_baseline"] = True
+        manifest["eval_runner"] = "claude_code_baseline"
     (run_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -462,6 +506,37 @@ def main() -> int:
                 "cmd": cmd,
             }
         )
+
+    if args.prepare_cc_baseline:
+        doc_rel = "playground/mat_master/evaluation/baseline_cc_eval.md"
+        for prepared in prepared_tasks:
+            q = prepared["question"]
+            tid = str(prepared["task_id"])
+            meta = {
+                "schema": "matmaster_eval_task_meta_v1",
+                "task_id": tid,
+                "question_id": q.id,
+                "capability": q.capability,
+                "domain": q.domain,
+                "mode": prepared["mode"],
+                "repeat_idx": prepared["repeat_idx"],
+                "prompt": prepared["prompt"],
+            }
+            meta_path = Path(prepared["workspace_path"]) / "_eval_task_meta.json"
+            meta_path.write_text(
+                json.dumps(meta, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+        readme = run_dir / "CC_BASELINE.md"
+        readme.write_text(
+            _cc_baseline_readme_markdown(run_dir=run_dir, doc_rel=doc_rel),
+            encoding="utf-8",
+        )
+        print(
+            f"Prepared {len(prepared_tasks)} workspace(s) for Claude Code baseline; see {readme}",
+            file=sys.stderr,
+        )
+        return 0
 
     def _finalize_task(prepared: dict[str, Any]) -> dict[str, Any]:
         question = prepared["question"]
