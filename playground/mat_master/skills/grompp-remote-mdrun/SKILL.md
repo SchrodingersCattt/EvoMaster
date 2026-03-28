@@ -19,7 +19,7 @@ Use the local script under `playground/mat_master/skills/grompp-remote-mdrun/scr
 1. Confirm the required local files already exist in the current workspace.
 2. Run `prepare_remote_mdrun.py` to execute local `grompp` and generate the `.tpr`.
 3. Read the returned `submit_tool` and `submit_args`.
-4. Call the MCP submit tool named in `submit_tool` with the returned `submit_args`.
+4. Use the returned information to submit via **`bohrium-job`** skill: `submit_job.py --input-dir <dir> --image registry.dp.tech/dptech/gromacs:2022.2 --cmd "gmx mdrun -deffnm md"`.
 
 ## Script
 
@@ -27,7 +27,6 @@ Use the local script under `playground/mat_master/skills/grompp-remote-mdrun/scr
 
 ## Rules
 
-- Do not call blocked async tool `mat_binary_calc_run_gromacs` for this workflow.
-- Use `mat_binary_calc_submit_run_gromacs` with the returned `submit_args`.
 - Keep all local input and output files inside the active workspace when possible.
 - If local `gmx` is missing or `grompp` fails, stop and report the exact failure instead of pretending the remote submit is ready.
+- After `.tpr` is generated, submit via **`bohrium-job`** (not deprecated MCP tools).
