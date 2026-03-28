@@ -44,6 +44,7 @@ collects devshell JSON summaries for downstream review or custom scoring.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import os
 import shutil
@@ -86,6 +87,45 @@ def _merge_eval_config(path: Path | None, overrides: dict[str, Any]) -> dict[str
         if v is not None:
             base[k] = v
     return base
+
+
+def _load_summary_file(summary_file: Path) -> dict[str, Any]:
+    if summary_file.is_file():
+        try:
+            text = summary_file.read_text(encoding="utf-8").strip()
+            if not text:
+                return {"parse_error": True, "empty_file": True}
+            last_line = text.splitlines()[-1].strip()
+            return json.loads(last_line)
+        except (json.JSONDecodeError, OSError) as exc:
+            return {"parse_error": True, "error": str(exc)}
+    return {"parse_error": True, "missing_file": str(summary_file)}
+
+
+def _run_devshell_task(
+    *,
+    cmd: list[str | Path],
+    cwd: str,
+    env: dict[str, str],
+    summary_file: Path,
+    console_log_file: Path | None,
+) -> tuple[int, int, dict[str, Any]]:
+    t0 = time.monotonic()
+    if console_log_file is None:
+        proc = subprocess.run(cmd, cwd=cwd, env=env)
+    else:
+        with console_log_file.open("w", encoding="utf-8") as f:
+            proc = subprocess.run(
+                cmd,
+                cwd=cwd,
+                env=env,
+                stdout=f,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+    duration_ms = int((time.monotonic() - t0) * 1000)
+    summary = _load_summary_file(summary_file)
+    return proc.returncode, duration_ms, summary
 
 
 def main() -> int:
@@ -167,6 +207,12 @@ def main() -> int:
         help="Stop after the first non-zero devshell exit code",
     )
     parser.add_argument(
+        "--jobs",
+        type=int,
+        default=1,
+        help="How many tasks to run in parallel (default: 1)",
+    )
+    parser.add_argument(
         "--python",
         type=Path,
         default=None,
@@ -214,6 +260,9 @@ def main() -> int:
             "error: --no-eval-ingest and --eval-ingest-pending-only cannot be used together",
             file=sys.stderr,
         )
+        return 2
+    if args.jobs < 1:
+        print("error: --jobs must be >= 1", file=sys.stderr)
         return 2
 
     py = args.python or Path(sys.executable)
@@ -318,6 +367,7 @@ def main() -> int:
         "eval_config": str(args.eval_config),
         "model": args.model,
         "plan_count": len(run_plan),
+        "jobs": args.jobs,
         "dry_run": False,
     }
     if ingest_url:
@@ -340,6 +390,7 @@ def main() -> int:
 
     print(f"Run directory: {run_dir}", file=sys.stderr)
     print(f"Planned tasks: {len(run_plan)}", file=sys.stderr)
+    print(f"Parallel jobs: {args.jobs}", file=sys.stderr)
 
     any_failed = False
     ingest_failed = False
@@ -349,7 +400,7 @@ def main() -> int:
     env.setdefault("PYTHONUNBUFFERED", "1")
     # Ensure subprocess finds matmaster_config / .env relative to cwd
     cwd = str(REPO_ROOT)
-
+    prepared_tasks: list[dict[str, Any]] = []
     for item in run_plan:
         question = item["question"]
         mode: str = item["mode"]
@@ -367,8 +418,8 @@ def main() -> int:
 
         prompt_file = workspace_path / "_devshell_prompt.txt"
         prompt_file.write_text(prompt, encoding="utf-8")
-        # Same JSON line as stdout; read after run (child stdout inherits the terminal — no PIPE).
         summary_file = workspace_path / "_devshell_summary.json"
+        console_log_file = log_dir / "devshell_console.log" if args.jobs > 1 else None
 
         cmd: list[str | Path] = [
             py,
@@ -388,51 +439,59 @@ def main() -> int:
         if args.model:
             cmd.extend(["--model", args.model])
 
-        print(
-            f"  [running] {task_id} (devshell prints to this terminal; summary → {summary_file.name})…",
-            file=sys.stderr,
-            flush=True,
+        prepared_tasks.append(
+            {
+                "question": question,
+                "mode": mode,
+                "repeat_idx": repeat_idx,
+                "task_id": task_id,
+                "prompt": prompt,
+                "workspace_path": workspace_path,
+                "log_dir": log_dir,
+                "summary_file": summary_file,
+                "console_log_file": console_log_file,
+                "cmd": cmd,
+            }
         )
-        # Inherit stdout/stderr so output is not piped (piping + uv/Cursor often buffers).
-        t0 = time.monotonic()
-        proc = subprocess.run(cmd, cwd=cwd, env=env)
-        rc = proc.returncode
-        duration_ms = int((time.monotonic() - t0) * 1000)
+
+    def _finalize_task(prepared: dict[str, Any]) -> dict[str, Any]:
+        question = prepared["question"]
+        task_id = str(prepared["task_id"])
+        summary_file = Path(prepared["summary_file"])
+        console_log_file = prepared["console_log_file"]
+        rc, duration_ms, summary = _run_devshell_task(
+            cmd=prepared["cmd"],
+            cwd=cwd,
+            env=env,
+            summary_file=summary_file,
+            console_log_file=console_log_file,
+        )
 
         row: dict[str, Any] = {
             "task_id": task_id,
             "question_id": question.id,
             "capability": question.capability,
             "domain": question.domain,
-            "mode": mode,
-            "repeat_idx": repeat_idx,
+            "mode": prepared["mode"],
+            "repeat_idx": prepared["repeat_idx"],
             "devshell_exit_code": rc,
             "devshell_summary_path": str(summary_file),
+            "devshell_summary": summary,
+            "duration_ms": duration_ms,
         }
-        summary: dict[str, Any] | None = None
-        if summary_file.is_file():
-            try:
-                text = summary_file.read_text(encoding="utf-8").strip()
-                if not text:
-                    summary = {"parse_error": True, "empty_file": True}
-                else:
-                    last_line = text.splitlines()[-1].strip()
-                    summary = json.loads(last_line)
-            except (json.JSONDecodeError, OSError) as e:
-                summary = {"parse_error": True, "error": str(e)}
-        else:
-            summary = {"parse_error": True, "missing_file": str(summary_file)}
-        row["devshell_summary"] = summary
-        row["duration_ms"] = duration_ms
+        if console_log_file is not None:
+            row["devshell_console_log_path"] = str(console_log_file)
 
+        ingest_status: dict[str, Any] | None = None
+        ingest_failed_local = False
         if ingest_url:
             result_oss_url = upload_eval_task_artifacts_to_oss(run_dir, task_id)
-            item = build_ingest_item(
+            ingest_item = build_ingest_item(
                 question_id=question.id,
-                prompt=prompt,
+                prompt=str(prepared["prompt"]),
                 task_id=task_id,
-                mode=mode,
-                repeat_idx=repeat_idx,
+                mode=str(prepared["mode"]),
+                repeat_idx=int(prepared["repeat_idx"]),
                 devshell_exit_code=rc,
                 summary=summary if isinstance(summary, dict) else {},
                 duration_ms=duration_ms,
@@ -442,7 +501,7 @@ def main() -> int:
                 pending_dir = run_dir / "pending_ingest"
                 pending_dir.mkdir(parents=True, exist_ok=True)
                 pend_path = pending_dir / f"{task_id}.json"
-                item_body = {k: v for k, v in item.items() if k != "score"}
+                item_body = {k: v for k, v in ingest_item.items() if k != "score"}
                 envelope: dict[str, Any] = {
                     "schema": "matmaster_eval_pending_ingest_v1",
                     "ingest_url": ingest_url,
@@ -465,12 +524,14 @@ def main() -> int:
                 row["eval_ingest_message"] = "pending_score"
                 if result_oss_url:
                     row["eval_ingest_result_oss_url"] = result_oss_url
-                rel = pend_path.relative_to(run_dir)
-                print(f"  [ingest-pending] wrote {rel}", file=sys.stderr, flush=True)
+                ingest_status = {
+                    "kind": "pending",
+                    "path": str(pend_path),
+                }
             else:
                 body: dict[str, Any] = {
                     "run_id": eval_ingest_run_id,
-                    "items": [item],
+                    "items": [ingest_item],
                 }
                 if git_commit:
                     body["git_commit"] = git_commit
@@ -479,31 +540,156 @@ def main() -> int:
                     body,
                     timeout=float(args.eval_ingest_timeout),
                 )
-                if ok:
-                    print(
-                        f"  [ingest] {task_id} ok ({msg})", file=sys.stderr, flush=True
-                    )
-                else:
-                    ingest_failed = True
-                    print(
-                        f"  [ingest] {task_id} failed: {msg}",
-                        file=sys.stderr,
-                        flush=True,
-                    )
                 row["eval_ingest_ok"] = ok
                 row["eval_ingest_message"] = msg
                 if result_oss_url:
                     row["eval_ingest_result_oss_url"] = result_oss_url
+                ingest_status = {
+                    "kind": "posted",
+                    "ok": ok,
+                    "message": msg,
+                }
+                ingest_failed_local = not ok
 
-        with raw_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        return {
+            "task_id": task_id,
+            "rc": rc,
+            "row": row,
+            "ingest_status": ingest_status,
+            "ingest_failed": ingest_failed_local,
+        }
 
-        if rc != 0:
-            any_failed = True
-            if args.fail_fast:
-                break
-        status = "ok" if rc == 0 else "fail"
-        print(f"  [{status}] {task_id} exit={rc}", file=sys.stderr, flush=True)
+    def _emit_completion(result: dict[str, Any]) -> None:
+        task_id = str(result["task_id"])
+        ingest_status = result.get("ingest_status")
+        if isinstance(ingest_status, dict):
+            if ingest_status.get("kind") == "pending":
+                pend_path = Path(str(ingest_status["path"]))
+                rel = pend_path.relative_to(run_dir)
+                print(
+                    f"  [ingest-pending] {task_id} wrote {rel}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            elif ingest_status.get("kind") == "posted":
+                if bool(ingest_status.get("ok")):
+                    print(
+                        f"  [ingest] {task_id} ok ({ingest_status.get('message')})",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                else:
+                    print(
+                        f"  [ingest] {task_id} failed: {ingest_status.get('message')}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+        status = "ok" if int(result["rc"]) == 0 else "fail"
+        print(
+            f"  [{status}] {task_id} exit={result['rc']}", file=sys.stderr, flush=True
+        )
+
+    if args.jobs == 1:
+        for prepared in prepared_tasks:
+            print(
+                f"  [running] {prepared['task_id']} (devshell prints to this terminal; summary -> {Path(prepared['summary_file']).name})...",
+                file=sys.stderr,
+                flush=True,
+            )
+            result = _finalize_task(prepared)
+            with raw_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(result["row"], ensure_ascii=False) + "\n")
+            if bool(result["ingest_failed"]):
+                ingest_failed = True
+            if int(result["rc"]) != 0:
+                any_failed = True
+                _emit_completion(result)
+                if args.fail_fast:
+                    break
+            else:
+                _emit_completion(result)
+    else:
+        if args.fail_fast:
+            print(
+                "Fail-fast in parallel mode stops scheduling new tasks after the first failure; already running tasks will finish.",
+                file=sys.stderr,
+                flush=True,
+            )
+        task_iter = iter(prepared_tasks)
+        stop_scheduling = False
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            inflight: dict[
+                concurrent.futures.Future[dict[str, Any]], dict[str, Any]
+            ] = {}
+
+            def _submit_next() -> bool:
+                if stop_scheduling:
+                    return False
+                try:
+                    prepared = next(task_iter)
+                except StopIteration:
+                    return False
+                console_log = prepared["console_log_file"]
+                if console_log is None:
+                    detail = f"summary -> {Path(prepared['summary_file']).name}"
+                else:
+                    detail = f"console -> {Path(console_log).name}, summary -> {Path(prepared['summary_file']).name}"
+                print(
+                    f"  [queued] {prepared['task_id']} ({detail})...",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                future = pool.submit(_finalize_task, prepared)
+                inflight[future] = prepared
+                return True
+
+            for _ in range(args.jobs):
+                if not _submit_next():
+                    break
+
+            while inflight:
+                done, _ = concurrent.futures.wait(
+                    inflight,
+                    return_when=concurrent.futures.FIRST_COMPLETED,
+                )
+                for future in done:
+                    prepared = inflight.pop(future)
+                    try:
+                        result = future.result()
+                    except Exception as exc:  # noqa: BLE001
+                        result = {
+                            "task_id": str(prepared["task_id"]),
+                            "rc": 1,
+                            "row": {
+                                "task_id": str(prepared["task_id"]),
+                                "question_id": prepared["question"].id,
+                                "capability": prepared["question"].capability,
+                                "domain": prepared["question"].domain,
+                                "mode": prepared["mode"],
+                                "repeat_idx": prepared["repeat_idx"],
+                                "devshell_exit_code": 1,
+                                "devshell_summary_path": str(prepared["summary_file"]),
+                                "devshell_summary": {
+                                    "parse_error": True,
+                                    "error": f"task runner exception: {exc}",
+                                },
+                                "duration_ms": 0,
+                            },
+                            "ingest_status": None,
+                            "ingest_failed": False,
+                        }
+                    with raw_path.open("a", encoding="utf-8") as f:
+                        f.write(json.dumps(result["row"], ensure_ascii=False) + "\n")
+                    if bool(result["ingest_failed"]):
+                        ingest_failed = True
+                    if int(result["rc"]) != 0:
+                        any_failed = True
+                        if args.fail_fast:
+                            stop_scheduling = True
+                    _emit_completion(result)
+                while len(inflight) < args.jobs and not stop_scheduling:
+                    if not _submit_next():
+                        break
 
     print(f"Wrote {raw_path}", file=sys.stderr)
 
