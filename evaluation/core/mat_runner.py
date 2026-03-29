@@ -2,6 +2,7 @@
 
 import importlib
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -53,10 +54,12 @@ def run_mat_task(
             planner_cfg = mat_master_cfg.setdefault('planner', {})
             if isinstance(planner_cfg, dict):
                 planner_cfg['human_check_step'] = False
+    t0 = time.monotonic()
     try:
         result = playground.run(task_description=prompt)
     finally:
         _cleanup_playground_logging(playground)
+    duration_ms = int((time.monotonic() - t0) * 1000)
 
     answer = ''
     if isinstance(result, dict):
@@ -82,6 +85,7 @@ def run_mat_task(
         'result': result,
         'trajectory_path': str(trajectory_path) if trajectory_path else '',
         'status': _extract_run_status(result),
+        'duration_ms': duration_ms,
     }
 
 
