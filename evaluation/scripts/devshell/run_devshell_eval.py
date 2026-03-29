@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Batch-run MATTER v5 question bank through ``mm-devshell run`` (matmaster kernel).
 
-Reads the same ``question_bank/`` layout as ``playground/mat_master/evaluation``,
+Reads the same ``question_bank/`` layout as ``evaluation``,
 stages data files per task workspace, then invokes (inherit terminal; ``--json-out`` for aggregation)::
 
     python -u -m matmaster.devshell run ... --prompt-file ... --json-out .../_devshell_summary.json
@@ -22,7 +22,7 @@ the shared ``devshell_eval_*`` run folder. Upload is always attempted when inges
 With ``--eval-ingest-pending-only``, no POST is sent; each task writes ``pending_ingest/<task_id>.json``
 (ingest payload without ``score``). After judging, pass
 ``--score`` / ``--score-reason`` / ``--suggestion`` to
-``scripts/eval_ingest_submit_pending.py --pending <path>``.
+``evaluation/scripts/eval_ingest_submit_pending.py --pending <path>``.
 
 Override host with ``MATMASTER_TOOLS_SERVER`` / ``SERVICE_ENV`` as needed. Use ``--no-eval-ingest`` to skip POSTs.
 
@@ -32,18 +32,18 @@ See matmaster-tools-server ``docs/apifox-evaluation-openapi.json`` for the schem
 
 Usage (from repository root)::
 
-    uv run python scripts/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
-    uv run python scripts/run_devshell_eval.py --modes direct --limit 3
-    uv run python scripts/run_devshell_eval.py --modes direct --capabilities structure_construction --limit 3
-    uv run python scripts/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
-    uv run python scripts/run_devshell_eval.py --no-export-review --limit 3   # skip Markdown bundle
-    uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_*  # manual only
-    uv run python scripts/run_devshell_eval.py --help
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --limit 3
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --capabilities structure_construction --limit 3
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-export-review --limit 3   # skip Markdown bundle
+    uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run-dir results/devshell_eval_*  # manual only
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --help
 
 **Claude Code baseline（不跑 devshell）**：``--prepare-cc-baseline`` 只搭 ``workspaces/`` 与
 ``_eval_task_meta.json``；在 IDE 里跑完题并写好 ``_devshell_summary.json`` 后执行
-``scripts/finalize_cc_baseline_ingest.py``。说明见
-``playground/mat_master/evaluation/baseline_cc_eval.md``.
+``evaluation/scripts/baseline/finalize_cc_baseline_ingest.py``。说明见
+``evaluation/docs/baseline/baseline_cc_eval.md``.
 
 This does **not** run MATTER's BinaryEvaluator or Playground ``run_mat_task``; it only
 collects devshell JSON summaries for downstream review or custom scoring.
@@ -64,28 +64,30 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# Repo root = scripts/..
-REPO_ROOT = Path(__file__).resolve().parent.parent
+# Repo root = evaluation/scripts/devshell/../../..
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
 def _cc_baseline_readme_markdown(*, run_dir: Path, doc_rel: str) -> str:
     return (
         "# Claude Code Baseline 测评（本 run）\n\n"
-        "本目录由 `uv run python scripts/run_devshell_eval.py --prepare-cc-baseline` 生成，"
+        "本目录由 `uv run python evaluation/scripts/devshell/run_devshell_eval.py --prepare-cc-baseline` 生成，"
         "**未**运行 mm-devshell。\n\n"
         "若 prepare 时**未**使用 `--no-clean-results`，脚本已在创建本 run **之前**清空仓库根 "
         "`results/` 下全部内容（默认行为，避免旧测评与本次 baseline 混在一起）。\n\n"
         "## 步骤\n\n"
         f"1. 阅读仓库内 **`{doc_rel}`**（Claude Code 提示词与 `_devshell_summary.json` 约定）。\n"
-        "2. 对每个 `workspaces/<task_id>/`：以该目录为工作目录，读取 `_devshell_prompt.txt` 完成任务，"
-        "并按文档写入 `_devshell_summary.json`。\n"
+        "2. 对每个 `workspaces/<task_id>/`：**开工前须**执行 "
+        "`uv run python evaluation/scripts/baseline/cc_baseline_mark_task_start.py --workspace <该目录>`，"
+        "否则 finalize 不会写入 `duration_ms`（见 `baseline_cc_eval.md`）。"
+        "以该目录为工作目录，读取 `_devshell_prompt.txt` 完成任务，并按文档写入 `_devshell_summary.json`。\n"
         "3. 可选：将对话/终端记录保存到 `logs/<task_id>/devshell_console.log`，便于与 DevShell 产物对齐。\n"
         "4. 全部完成后在仓库根执行：\n\n"
         "```bash\n"
-        f"uv run python scripts/finalize_cc_baseline_ingest.py --run-dir {run_dir.resolve()}\n"
+        f"uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-dir {run_dir.resolve()}\n"
         "```\n\n"
         "需要「先判分再入库」时，在 finalize 时加 `--eval-ingest-pending-only`，再对生成的 "
-        "`pending_ingest/*.json` 使用 `scripts/eval_ingest_submit_pending.py`（与 DevShell 流程相同）。\n"
+        "`pending_ingest/*.json` 使用 `evaluation/scripts/eval_ingest_submit_pending.py`（与 DevShell 流程相同）。\n"
     )
 
 
@@ -165,7 +167,7 @@ def main() -> int:
     parser.add_argument(
         "--eval-config",
         type=Path,
-        default=REPO_ROOT / "playground/mat_master/evaluation/config.yaml",
+        default=REPO_ROOT / "evaluation/config.yaml",
         help="MATTER eval YAML (filters: capabilities, question ids, use_seed_prompt, …)",
     )
     parser.add_argument(
@@ -291,7 +293,7 @@ def main() -> int:
         help=(
             "Only stage workspaces (prompt + data + _eval_task_meta.json); do not run "
             "mm-devshell. After Claude Code completes each task, run "
-            "scripts/finalize_cc_baseline_ingest.py on the same run directory."
+            "evaluation/scripts/baseline/finalize_cc_baseline_ingest.py on the same run directory."
         ),
     )
     args = parser.parse_args()
@@ -327,7 +329,7 @@ def main() -> int:
 
     # Lazy imports after potential chdir
     sys.path.insert(0, str(REPO_ROOT))
-    from playground.mat_master.evaluation.runner import (
+    from evaluation.core.runner import (
         _apply_filters,
         _flatten_banks,
         _resolve_to_project_root,
@@ -335,8 +337,8 @@ def main() -> int:
         expand_run_plan,
         load_question_banks,
     )
-    from playground.mat_master.evaluation.schemas import EvalConfig
-    from playground.mat_master.evaluation.simulator import HumanSimulator
+    from evaluation.core.schemas import EvalConfig
+    from evaluation.core.simulator import HumanSimulator
 
     cfg = EvalConfig.model_validate(cfg_dict)
     bank_dir = Path(_resolve_to_project_root(cfg.question_bank_dir))
@@ -508,7 +510,7 @@ def main() -> int:
         )
 
     if args.prepare_cc_baseline:
-        doc_rel = "playground/mat_master/evaluation/baseline_cc_eval.md"
+        doc_rel = "evaluation/docs/baseline/baseline_cc_eval.md"
         for prepared in prepared_tasks:
             q = prepared["question"]
             tid = str(prepared["task_id"])
@@ -595,7 +597,7 @@ def main() -> int:
                     "task_id": task_id,
                     "instructions_zh": (
                         "判分后在仓库根执行: uv run python "
-                        f"scripts/eval_ingest_submit_pending.py --pending {pend_path} "
+                        f"evaluation/scripts/eval_ingest_submit_pending.py --pending {pend_path} "
                         "--score <0-100> [--score-reason \"...\"] [--suggestion \"...\"]"
                     ),
                     "item": item_body,
@@ -797,12 +799,12 @@ def main() -> int:
         else:
             print(
                 "Warning: claude_review.md export failed; run manually:\n"
-                f"  uv run python scripts/export_devshell_review_bundle.py --run-dir {run_dir}",
+                f"  uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run-dir {run_dir}",
                 file=sys.stderr,
             )
     else:
         print(
-            f"Pack for Claude (skipped): uv run python scripts/export_devshell_review_bundle.py --run-dir {run_dir}",
+            f"Pack for Claude (skipped): uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run-dir {run_dir}",
             file=sys.stderr,
         )
 

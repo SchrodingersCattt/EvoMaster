@@ -267,7 +267,7 @@ class EvalConfig(BaseModel):
 
     modes: list[ModeLiteral] = Field(default_factory=lambda: ['direct', 'planner'])
     k: int = 1
-    question_bank_dir: str = 'playground/mat_master/evaluation/question_bank'
+    question_bank_dir: str = 'evaluation/question_bank'
     output_dir: str = 'runs/mat_master_eval'
     run_label: str = 'matter_eval'
     random_seed: int = 7

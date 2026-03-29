@@ -1,6 +1,6 @@
-"""MATTER v5 evaluation module for Mat Master."""
+"""MATTER v5 evaluation package. Public models re-exported from ``evaluation.core``."""
 
-from .schemas import (
+from .core.schemas import (
     AxisLiteral,
     AxisPassRates,
     CapabilityLiteral,

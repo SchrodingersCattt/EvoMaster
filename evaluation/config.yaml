@@ -2,7 +2,7 @@
 
 modes: ["direct", "planner"]
 k: 1
-question_bank_dir: "playground/mat_master/evaluation/question_bank"
+question_bank_dir: "evaluation/question_bank"
 output_dir: "runs/mat_master_eval"
 run_label: "matter_eval"
 use_seed_prompt: true
