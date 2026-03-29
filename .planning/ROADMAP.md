@@ -216,7 +216,10 @@ Plans:
   1. audit 标记缺失的 SUMMARY.md 均补齐 requirements-completed frontmatter
   2. v2.0 planning artifacts 的元数据与当前 ROADMAP/REQUIREMENTS 状态保持一致
   3. 重新运行 milestone audit 时，不再因 planning metadata 缺口报 documentation gap
-**Plans**: 0 plans created
+**Plans**: 1 plan
+
+Plans:
+- [ ] 22-01-PLAN.md -- Fix 3 SUMMARY.md frontmatter + PROJECT.md stale content + audit file commit with resolution addendum
 
 ## Progress
 
@@ -248,4 +251,4 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 2/2 | Complete    | 2026-03-29 |
 | 20. Confirmation Flow Recovery | v2.0 | 0/0 | Pending | - |
 | 21. Async Leaf I/O Cleanup | v2.0 | 0/1 | Pending | - |
-| 22. Audit Metadata Backfill | v2.0 | 0/0 | Pending | - |
+| 22. Audit Metadata Backfill | v2.0 | 0/1 | Pending | - |
