@@ -47,7 +47,7 @@ Full details: milestones/v1-ROADMAP.md
 - [x] **Phase 19: 服务层桥接 + 并行 Tool Dispatch** - src/ 层 asyncio.run() 桥接 + 多 tool_call 并行执行优化 (completed 2026-03-29)
 - [ ] **Phase 20: Confirmation Flow Recovery** - 恢复 Future-based confirmation hook 全链路，修复 adapter/interface regression，重新打通 confirmation flow
 - [ ] **Phase 21: Async Leaf I/O Cleanup** - 完成 BashTool 原生 async subprocess 路径，并移除 provider 遗留孤儿接口
-- [ ] **Phase 22: Audit Metadata Backfill** - 回填 audit 所需 planning 元数据，确保 v2.0 re-audit 可追踪
+- [x] **Phase 22: Audit Metadata Backfill** - 回填 audit 所需 planning 元数据，确保 v2.0 re-audit 可追踪 (completed 2026-03-29)
 
 ## Phase Details
 
@@ -219,7 +219,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 22-01-PLAN.md -- Fix 3 SUMMARY.md frontmatter + PROJECT.md stale content + audit file commit with resolution addendum
+- [x] 22-01-PLAN.md -- Fix 3 SUMMARY.md frontmatter + PROJECT.md stale content + audit file commit with resolution addendum
 
 ## Progress
 
@@ -251,4 +251,4 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 2/2 | Complete    | 2026-03-29 |
 | 20. Confirmation Flow Recovery | v2.0 | 0/0 | Pending | - |
 | 21. Async Leaf I/O Cleanup | v2.0 | 0/1 | Pending | - |
-| 22. Audit Metadata Backfill | v2.0 | 0/1 | Pending | - |
+| 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete   | 2026-03-29 |

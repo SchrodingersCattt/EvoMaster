@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: matmaster 协程改造
 status: executing
-stopped_at: Completed 19-01-PLAN.md
-last_updated: "2026-03-29T15:10:32.074Z"
+stopped_at: Completed 22-01-PLAN.md
+last_updated: "2026-03-29T16:51:05.486Z"
 last_activity: 2026-03-29
 progress:
-  total_phases: 8
-  completed_phases: 8
-  total_plans: 17
-  completed_plans: 17
+  total_phases: 11
+  completed_phases: 9
+  total_plans: 21
+  completed_plans: 18
   percent: 100
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 19 — Service layer bridge + parallel tool dispatch
+**Current focus:** Phase 20 — confirmation-flow-recovery
 
 ## Current Position
 
-Phase: 19
-Plan: Not started
-Status: Phase 19 in progress
+Phase: 20 (confirmation-flow-recovery) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
 Last activity: 2026-03-29
 
 Progress: [██████████] 100% (7/8 phases, 16/16 plans)
@@ -53,6 +53,7 @@ Progress: [██████████] 100% (7/8 phases, 16/16 plans)
 | Phase 18-exp P01 | 12min | 2 tasks | 12 files |
 | Phase 18-exp P02 | 10min | 2 tasks | 7 files |
 | Phase 19-tool-dispatch P01 | 7min | 2 tasks | 2 files |
+| Phase 22-audit-metadata-backfill P01 | 2min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -100,6 +101,7 @@ Recent decisions affecting current work:
 - [Phase 18-exp P02]: Exp.run() gains source_override/spawn_id optional params forwarded to build_runtime
 - [Phase 19-01]: Single daemon thread event loop replaces dual-loop architecture in agent_run_service (D-01)
 - [Phase 19-01]: DevShell uses asyncio.run() for single-shot bridge (D-07)
+- [Phase 22-audit-metadata-backfill]: SUMMARY body content preserved as historical record -- only frontmatter requirements-completed line edited
 
 ### Pending Todos
 
@@ -113,6 +115,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-29T14:52:49Z
-Stopped at: Completed 19-01-PLAN.md
-Resume file: .planning/phases/19-tool-dispatch/19-01-SUMMARY.md
+Last session: 2026-03-29T16:51:05.482Z
+Stopped at: Completed 22-01-PLAN.md
+Resume file: None
