@@ -167,10 +167,10 @@ Plans:
   2. 外部取消信号（stop API / Redis 轮询）能跨线程传播到 async kernel 的 stop_event，agent 正确终止
   3. 同一轮 LLM 返回多个 tool_call 时，tool 通过 asyncio.gather 并行执行，总耗时接近最慢单 tool 耗时（而非串行累加）
   4. DevShell 可通过 asyncio.run() 临时包装调用 async matmaster 进行开发验证
-**Plans**: 2 plans
+**Plans**: 1/2 plans complete
 
 Plans:
-- [ ] 19-01-PLAN.md -- agent_run_service.py 双 loop 统一为单 daemon thread + run_coroutine_threadsafe + DevShell asyncio.run()
+- [x] 19-01-PLAN.md -- agent_run_service.py 双 loop 统一为单 daemon thread + run_coroutine_threadsafe + DevShell asyncio.run()
 - [ ] 19-02-PLAN.md -- AgentKernel 串行 tool dispatch 改为 asyncio.gather 并行 + TestParallelToolDispatch 测试
 
 ## Progress
@@ -200,4 +200,4 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/2 | Complete    | 2026-03-28 |
 | 17. AgentKernel 异步化 | v2.0 | 2/2 | Complete    | 2026-03-28 |
 | 18. Exp 生命周期异步化 | v2.0 | 2/2 | Complete    | 2026-03-29 |
-| 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 0/2 | Not started | - |
+| 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 1/2 | In Progress | - |

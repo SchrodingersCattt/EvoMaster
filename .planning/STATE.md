@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: matmaster 协程改造
-status: completed
-stopped_at: Phase 19 context gathered
-last_updated: "2026-03-29T13:24:42.078Z"
+status: In Progress
+stopped_at: "Completed 19-01-PLAN.md"
+last_updated: "2026-03-29T14:52:49Z"
 last_activity: 2026-03-29
 progress:
   total_phases: 8
   completed_phases: 7
-  total_plans: 15
-  completed_plans: 15
+  total_plans: 16
+  completed_plans: 16
   percent: 100
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 18 — Exp lifecycle async
+**Current focus:** Phase 19 — Service layer bridge + parallel tool dispatch
 
 ## Current Position
 
 Phase: 19
-Plan: Not started
-Status: Phase 18 complete
+Plan: 01 complete, 02 pending
+Status: Phase 19 in progress
 Last activity: 2026-03-29
 
-Progress: [██████████] 100% (7/8 phases, 15/15 plans)
+Progress: [██████████] 100% (7/8 phases, 16/16 plans)
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [██████████] 100% (7/8 phases, 15/15 plans)
 | Phase 17-agentkernel P02 | 23min | 2 tasks | 13 files |
 | Phase 18-exp P01 | 12min | 2 tasks | 12 files |
 | Phase 18-exp P02 | 10min | 2 tasks | 7 files |
+| Phase 19-tool-dispatch P01 | 7min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,8 @@ Recent decisions affecting current work:
 - [Phase 18-exp P02]: spawn_fn calls child_exp.run() for full lifecycle reuse (not manual build_runtime + kernel.run)
 - [Phase 18-exp P02]: SpawnTool overrides execute() directly for native async (bypasses to_thread pattern)
 - [Phase 18-exp P02]: Exp.run() gains source_override/spawn_id optional params forwarded to build_runtime
+- [Phase 19-01]: Single daemon thread event loop replaces dual-loop architecture in agent_run_service (D-01)
+- [Phase 19-01]: DevShell uses asyncio.run() for single-shot bridge (D-07)
 
 ### Pending Todos
 
@@ -110,6 +113,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-29T13:24:42.066Z
-Stopped at: Phase 19 context gathered
-Resume file: .planning/phases/19-tool-dispatch/19-CONTEXT.md
+Last session: 2026-03-29T14:52:49Z
+Stopped at: Completed 19-01-PLAN.md
+Resume file: .planning/phases/19-tool-dispatch/19-01-SUMMARY.md

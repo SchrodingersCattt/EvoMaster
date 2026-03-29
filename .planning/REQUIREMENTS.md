@@ -60,8 +60,8 @@
 
 ### 服务层桥接
 
-- [ ] **BRDG-01**: src/ 服务层（agent_run_service）通过 asyncio.run() 或 new_event_loop 桥接 async matmaster
-- [ ] **BRDG-02**: stop_event 跨线程传播机制适配（service 线程 → matmaster event loop）
+- [x] **BRDG-01**: src/ 服务层（agent_run_service）通过 asyncio.run() 或 new_event_loop 桥接 async matmaster
+- [x] **BRDG-02**: stop_event 跨线程传播机制适配（service 线程 → matmaster event loop）
 
 ### 测试基础设施
 
@@ -134,8 +134,8 @@
 | EXPL-02 | Phase 18 | Pending |
 | EXPL-03 | Phase 18 | Pending |
 | EXPL-04 | Phase 18 | Complete |
-| BRDG-01 | Phase 19 | Pending |
-| BRDG-02 | Phase 19 | Pending |
+| BRDG-01 | Phase 19 | Complete |
+| BRDG-02 | Phase 19 | Complete |
 | TEST-01 | Phase 12 | Complete |
 | TEST-02 | Phase 17 | Complete |
 | TEST-03 | Phase 17 | Complete |
