@@ -1,10 +1,11 @@
 ---
 phase: 21
 slug: async-leaf-io-cleanup
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-03-30
+validated: 2026-03-30
 ---
 
 # Phase 21 — Validation Strategy
@@ -38,13 +39,13 @@ created: 2026-03-30
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 21-01-01 | 01 | 1 | TOOL-02a | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolAsyncSubprocess::test_normal_command -x` | ❌ W0 | ⬜ pending |
-| 21-01-02 | 01 | 1 | TOOL-02b | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolAsyncSubprocess::test_timeout -x` | ❌ W0 | ⬜ pending |
-| 21-01-03 | 01 | 1 | TOOL-02c | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolAsyncSubprocess::test_dangerous_blocked -x` | ❌ W0 | ⬜ pending |
-| 21-01-04 | 01 | 1 | TOOL-02d | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolAsyncSubprocess::test_is_input -x` | ❌ W0 | ⬜ pending |
-| 21-01-05 | 01 | 1 | TOOL-02e | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolExecution -x` | ✅ | ⬜ pending |
-| 21-01-06 | 01 | 1 | TOOL-02f | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolExecution::test_session_not_injected_returns_error -x` | ✅ | ⬜ pending |
-| 21-02-01 | 02 | 1 | PROV-cleanup | unit | `uv run pytest tests/matmaster/providers/test_openai_provider.py::TestProtocolConformance -x` | ✅ (needs update) | ⬜ pending |
+| 21-01-01 | 01 | 1 | TOOL-02a | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolAsyncSubprocess::test_normal_command -x` | exists | green |
+| 21-01-02 | 01 | 1 | TOOL-02b | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolAsyncSubprocess::test_timeout -x` | exists | green |
+| 21-01-03 | 01 | 1 | TOOL-02c | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolAsyncSubprocess::test_dangerous_blocked -x` | exists | green |
+| 21-01-04 | 01 | 1 | TOOL-02d | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolAsyncSubprocess::test_is_input -x` | exists | green |
+| 21-01-05 | 01 | 1 | TOOL-02e | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolExecution -x` | exists | green |
+| 21-01-06 | 01 | 1 | TOOL-02f | unit | `uv run pytest tests/matmaster/tools/test_bash_tool.py::TestBashToolExecution::test_session_not_injected_returns_error -x` | exists | green |
+| 21-02-01 | 02 | 1 | PROV-cleanup | unit | `uv run pytest tests/matmaster/providers/test_openai_provider.py::TestProtocolConformance -x` | exists | green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -52,8 +53,8 @@ created: 2026-03-30
 
 ## Wave 0 Requirements
 
-- [ ] `tests/matmaster/tools/test_bash_tool.py::TestBashToolAsyncSubprocess` — new test class for native async subprocess path (4+ tests)
-- [ ] `tests/matmaster/providers/test_openai_provider.py` — remove `TestChatWithRetry` class + update `test_has_chat_with_retry_method`
+- [x] `tests/matmaster/tools/test_bash_tool.py::TestBashToolAsyncSubprocess` — new test class for native async subprocess path (4+ tests)
+- [x] `tests/matmaster/providers/test_openai_provider.py` — remove `TestChatWithRetry` class + update `test_has_chat_with_retry_method`
 
 *Existing infrastructure covers framework and fixture requirements.*
 
@@ -65,13 +66,25 @@ created: 2026-03-30
 
 ---
 
+## Validation Audit 2026-03-30
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Full suite: 1074 passed
+
+---
+
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-03-30
