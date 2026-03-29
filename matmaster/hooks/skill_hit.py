@@ -25,7 +25,6 @@ class SkillHitHook(BaseHook):
     Extracts skill_name from tool_call.arguments. Silently skips
     if skill_name is missing or not a string.
 
-    Uses bus.emit_nowait() for thread-safe emit from sync kernel context.
     """
 
     def __init__(self, bus: MessageBus, *, source: str = "MatMaster") -> None:
@@ -41,7 +40,7 @@ class SkillHitHook(BaseHook):
         if not isinstance(raw, str) or not raw:
             return
 
-        self._bus.emit_nowait(
+        await self._bus.emit(
             SkillHitEvent(
                 source=self._source,
                 skill_name=raw,

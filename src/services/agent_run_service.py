@@ -254,7 +254,7 @@ class AgentRunService:
         user_prompt: str,
         send_cb: Callable[[dict], Any],
         loop: Optional[asyncio.AbstractEventLoop],
-        stop_event: Any,
+        stop_event: threading.Event,
         mode: str,
         reply_queue: ReplyQueueLike | None,
         task_id: str,

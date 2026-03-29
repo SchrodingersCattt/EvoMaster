@@ -26,7 +26,6 @@ class AssistantStateHook(BaseHook):
     the previous turn). This allows downstream handlers to persist
     the full assistant state including tool call details.
 
-    Uses bus.emit_nowait() for thread-safe emit from sync kernel context.
     """
 
     def __init__(self, bus: MessageBus, *, source: str = "MatMaster") -> None:
@@ -42,7 +41,7 @@ class AssistantStateHook(BaseHook):
         if not last_assistant.tool_calls:
             return
 
-        self._bus.emit_nowait(
+        await self._bus.emit(
             AssistantStateEvent(
                 source=self._source,
                 # Persist the full assistant state so history replay can retain

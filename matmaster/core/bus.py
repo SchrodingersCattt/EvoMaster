@@ -15,13 +15,15 @@ from matmaster.types.events import BusEvent
 class MessageBus:
     """Async event bus.
 
-    Agent kernel calls emit/emit_nowait to publish BusEvent.
-    EventRouter consumes via await get() in an async task.
-    Based on asyncio.Queue, safe within a single event loop.
+    Agent kernel and hooks call ``await emit()`` to publish BusEvent
+    from within the event loop.  EventRouter consumes via ``await get()``
+    in an async task.
 
-    For cross-thread callers (service layer), emit_nowait() uses
-    loop.call_soon_threadsafe to schedule put_nowait on the correct
-    event loop, avoiding the asyncio.Queue thread-safety issue.
+    For cross-thread callers (src/ service layer running in separate threads),
+    ``emit_nowait()`` uses ``loop.call_soon_threadsafe`` to schedule
+    ``put_nowait`` on the correct event loop.
+
+    Based on asyncio.Queue, safe within a single event loop.
     """
 
     def __init__(self, maxsize: int = 0) -> None:
