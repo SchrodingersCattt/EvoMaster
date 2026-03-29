@@ -11,7 +11,7 @@
 
 | 阶段 | 会话 | 职责 |
 |------|------|------|
-| **阶段一** | 会话 A | **只做任务**：按 `_devshell_prompt.txt` 完成交付物 + 写 `_devshell_summary.json`。**禁止**判分、禁止上报、禁止讨论 checklist。 |
+| **阶段一** | 会话 A | **只做任务**：每题开工前 `cc_baseline_mark_task_start.py`；按 `_devshell_prompt.txt` 完成交付物 + 写 `_devshell_summary.json`。**禁止**判分、禁止上报、禁止讨论 checklist。 |
 | **之间** | 终端 | 阶段一全部 workspace 完成后，在仓库根执行 `finalize_cc_baseline_ingest.py --eval-ingest-pending-only`，生成 `pending_ingest/*.json` 与 `raw_runs.jsonl`。 |
 | **阶段二** | 会话 B（新开） | **只做阅卷与上报**：按题库 `scoring_checklist` 逐条打分，算百分制，对 **pending_ingest 目录下每一个 `.json` 文件各执行一次** `eval_ingest_submit_pending.py`，**每次调用都必须**包含 `--score`、`--score-reason`、`--suggestion`。 |
 
@@ -64,18 +64,20 @@ uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-d
 
 每个任务的根目录路径为：**RUN_DIR/workspaces/任务目录名/**。任务目录名与 `pending_ingest` 里 JSON 文件名（不含 `.json`）一致，例如 `SC_struct_007_direct_r0`。
 
+- **客观耗时（必填才有 `duration_ms`）**：在本题**开始动手前**于仓库根执行一次
+  `uv run python evaluation/scripts/baseline/cc_baseline_mark_task_start.py --workspace "$RUN_DIR/workspaces/<task_id>"`
+  会在该目录写入 `_cc_baseline_task_start.json`。执行 `finalize_cc_baseline_ingest.py` 时，**入库的 `duration_ms` 仅**来自「该文件中的 Unix 毫秒时间戳 → `_devshell_summary.json` 文件 mtime」的墙钟差（与 DevShell 父进程包子进程语义接近）。**未**写该文件则上报项中**无** `duration_ms`（不再读取 summary 自报）。
 - 读取该目录下的 `_devshell_prompt.txt`，完成全部交付要求。
-- 在同一目录写入 **`_devshell_summary.json`**：**整文件仅一行** JSON，UTF-8，字段与 mm-devshell `--json-out` 一致：
+- 在同一目录写入 **`_devshell_summary.json`**：**整文件仅一行** JSON，UTF-8，字段与 mm-devshell `--json-out` 一致（**不必**含 `duration_ms`，finalize 不使用）：
   - `model`、`profile_key`、`route_key`、`status`、`reason`（任务已尽力完成时填 `"natural"`）、`final_content`、`num_turns`
   - `usage`：填对象，键为 `prompt_tokens`、`completion_tokens`、`total_tokens`（整数）；无法统计时填 `{}` 并在 `final_content` 首行写「tokens 未统计」
-  - `duration_ms`：整数，从开始处理本题到写完 `_devshell_summary.json` 的 wall-clock 毫秒数
 - 禁止修改、禁止删除 `_eval_task_meta.json`。
 - 可选：将过程记录写入 **RUN_DIR/logs/任务目录名/devshell_console.log**。
 
 最小示例（写入文件时压缩为**一行**）：
 
 ```json
-{"model":"claude-sonnet-4-20250514","profile_key":"claude_code","route_key":null,"status":"completed","reason":"natural","final_content":"（摘要）","num_turns":12,"usage":{"prompt_tokens":8000,"completion_tokens":4000,"total_tokens":12000},"duration_ms":180000}
+{"model":"claude-sonnet-4-20250514","profile_key":"claude_code","route_key":null,"status":"completed","reason":"natural","final_content":"（摘要）","num_turns":12,"usage":{"prompt_tokens":8000,"completion_tokens":4000,"total_tokens":12000}}
 ```
 
 字段含义与 devshell 一致，见 `matmaster/devshell/cli.py` 中构造 `summary` 的代码。
@@ -131,9 +133,10 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 > 仅跑部分题时：在上述第二行 `uv run` 命令中、在 `--eval-ingest-pending-only` **之前**插入 `--limit` 和正整数。
 > **任务列表**：列出目录 `RUN_DIR/workspaces/` 下的**每一个一级子目录**名称；对每个名称 `TASK_DIR`（即 task_id），按顺序完成：
 > 1. 将当前工作目录设为 `RUN_DIR/workspaces/TASK_DIR/`。
-> 2. 阅读 `_devshell_prompt.txt`，完成其中全部交付物。
-> 3. 在同一目录创建或覆盖 `_devshell_summary.json`：**文件内容为单行合法 JSON**，字段要求见仓库文件 `evaluation/docs/baseline/baseline_cc_eval.md` 中「阶段一：做题」小节（必须含 `duration_ms`；`usage` 尽量填 token 数字）。
-> 4. 不得修改 `_eval_task_meta.json`。
+> 2. **开工前**在仓库根执行一次：`uv run python evaluation/scripts/baseline/cc_baseline_mark_task_start.py --workspace "$RUN_DIR/workspaces/TASK_DIR"`（否则 finalize 无客观 `duration_ms`）。
+> 3. 阅读 `_devshell_prompt.txt`，完成其中全部交付物。
+> 4. 在同一目录创建或覆盖 `_devshell_summary.json`：**文件内容为单行合法 JSON**，字段要求见仓库文件 `evaluation/docs/baseline/baseline_cc_eval.md` 中「阶段一：做题」小节（**不必**含 `duration_ms`；`usage` 尽量填 token 数字）。
+> 5. 不得修改 `_eval_task_meta.json`。
 > **收尾**：所有 `TASK_DIR` 处理完后，在仓库根执行（使用你已解析的 **RUN_DIR**，勿让用户粘贴）：
 > `cd "$(git rev-parse --show-toplevel)"`
 > `uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-dir "$RUN_DIR" --eval-ingest-pending-only`
