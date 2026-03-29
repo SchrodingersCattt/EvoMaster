@@ -43,7 +43,7 @@ Full details: milestones/v1-ROADMAP.md
 - [x] **Phase 15: Hook 系统异步化** - 5 个 Hook 实现和 run_* helper 全部 async，ConfirmationHook reply queue 适配 (completed 2026-03-27)
 - [x] **Phase 16: MessageBus + EventRouter 异步化** - MessageBus 改用 asyncio.Queue，EventRouter 改为 asyncio.Task (completed 2026-03-28)
 - [x] **Phase 17: AgentKernel 异步化** - Kernel.run() 改为 async，收敛所有异步依赖，ContextCompactor async 化 (completed 2026-03-28)
-- [ ] **Phase 18: Exp 生命周期异步化** - assemble/build_runtime/run 全部 async，SubAgent spawn 完整 async 链路
+- [x] **Phase 18: Exp 生命周期异步化** - assemble/build_runtime/run 全部 async，SubAgent spawn 完整 async 链路 (completed 2026-03-29)
 - [ ] **Phase 19: 服务层桥接 + 并行 Tool Dispatch** - src/ 层 asyncio.run() 桥接 + 多 tool_call 并行执行优化
 
 ## Phase Details
