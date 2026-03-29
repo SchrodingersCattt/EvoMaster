@@ -49,7 +49,7 @@ Full details: milestones/v1-ROADMAP.md
 - [x] **Phase 21: Async Leaf I/O Cleanup** - 完成 BashTool 原生 async subprocess 路径，并移除 provider 遗留孤儿接口 (completed 2026-03-29)
 - [x] **Phase 22: Audit Metadata Backfill** - 回填 audit 所需 planning 元数据，确保 v2.0 re-audit 可追踪 (completed 2026-03-29)
 - [x] **Phase 23: Verification + Nyquist Closure** - 创建 Phase 20 VERIFICATION.md 关闭 HOOK-02 验证缺口，修复 Phase 20/21/22 Nyquist 合规 (completed 2026-03-30)
-- [ ] **Phase 24: emit_nowait Tech Debt Cleanup** - EventEmitterHook emit_nowait() 升级为 await bus.emit()，修复过期注释和类型标注
+- [x] **Phase 24: emit_nowait Tech Debt Cleanup** - EventEmitterHook emit_nowait() 升级为 await bus.emit()，修复过期注释和类型标注 (completed 2026-03-29)
 
 ## Phase Details
 
@@ -253,7 +253,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 24-01-PLAN.md -- Migrate 12 emit_nowait to await bus.emit() + stale comment cleanup + bus docstring + stop_event type + test assertion updates
+- [x] 24-01-PLAN.md -- Migrate 12 emit_nowait to await bus.emit() + stale comment cleanup + bus docstring + stop_event type + test assertion updates
 
 ## Progress
 
@@ -287,4 +287,4 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 21. Async Leaf I/O Cleanup | v2.0 | 1/1 | Complete    | 2026-03-29 |
 | 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete    | 2026-03-29 |
 | 23. Verification + Nyquist Closure | v2.0 | 1/1 | Complete    | 2026-03-29 |
-| 24. emit_nowait Tech Debt Cleanup | v2.0 | 0/1 | Planned | -- |
+| 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete   | 2026-03-29 |
