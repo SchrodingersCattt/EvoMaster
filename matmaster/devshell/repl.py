@@ -182,11 +182,14 @@ def _show_config(config: DevConfig) -> None:
 
 def _show_tools(runner: DevRunner) -> None:
     """List registered tools."""
+    import asyncio
+
     from matmaster.core.exp import Exp
 
     exp = Exp(runner._exp_config)
-    runtime = exp.build_runtime(runner._pg_ctx)
+    _loop = asyncio.new_event_loop()
     try:
+        runtime = _loop.run_until_complete(exp.build_runtime(runner._pg_ctx))
         registry = runtime.spec.tool_registry
         if registry and registry.all_tools:
             for tool in registry.all_tools:
@@ -196,7 +199,8 @@ def _show_tools(runner: DevRunner) -> None:
         else:
             print("  No tools registered.")
     finally:
-        runtime.cleanup()
+        _loop.run_until_complete(exp._run_cleanup_callbacks())
+        _loop.close()
 
 
 def _show_history(runner: DevRunner) -> None:

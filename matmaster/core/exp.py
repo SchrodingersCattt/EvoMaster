@@ -17,6 +17,7 @@ kernel raises.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import threading
 import uuid
@@ -51,7 +52,7 @@ class Exp:
 
     def __init__(self, config: ExpConfig) -> None:
         self._config = config
-        self._cleanup_callbacks: list[Callable[[], None]] = []
+        self._cleanup_callbacks: list[Callable[[], Any]] = []
         self.logger = logging.getLogger(self.__class__.__name__)
 
     # ── Properties ───────────────────────────────────────
@@ -63,19 +64,26 @@ class Exp:
 
     # ── Cleanup infrastructure ───────────────────────────
 
-    def _register_cleanup(self, callback: Callable[[], None]) -> None:
+    def _register_cleanup(self, callback: Callable[[], Any]) -> None:
         """Register a cleanup callback to run after kernel execution."""
         self._cleanup_callbacks.append(callback)
 
-    def _run_cleanup_callbacks(self) -> None:
+    async def _run_cleanup_callbacks(self) -> None:
         """Execute all registered cleanup callbacks then clear the list.
 
         Each callback runs independently; exceptions are logged but do not
-        prevent subsequent callbacks from executing.
+        prevent subsequent callbacks from executing.  Supports both sync and
+        async callbacks: uses ``iscoroutinefunction`` first, falls back to
+        ``isawaitable`` on the result for wrapped/partial callables.
         """
         for cb in self._cleanup_callbacks:
             try:
-                cb()
+                if inspect.iscoroutinefunction(cb):
+                    await cb()
+                else:
+                    result = cb()
+                    if inspect.isawaitable(result):
+                        await result
             except Exception:
                 self.logger.warning(
                     "Cleanup callback %s raised, continuing with remaining callbacks",
@@ -134,7 +142,7 @@ class Exp:
 
     # ── Phase 1: assemble ────────────────────────────────
 
-    def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
+    async def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
         """Data transform: config + ctx -> AgentRuntimeSpec."""
         return AgentRuntimeSpec(
             llm_provider=ctx.llm_provider,
@@ -146,7 +154,7 @@ class Exp:
 
     # ── Phase 2: build_runtime ───────────────────────────
 
-    def build_runtime(
+    async def build_runtime(
         self,
         ctx: PlaygroundContext,
         *,
@@ -157,7 +165,7 @@ class Exp:
         spawn_id: str | None = None,
     ) -> AgentRuntime:
         """Resource creation: assemble -> tools -> prompt -> kernel."""
-        spec = self.assemble(ctx)
+        spec = await self.assemble(ctx)
 
         # 1. Register ALL tools before building system prompt
         registry = ToolRegistry()
@@ -271,7 +279,7 @@ class Exp:
 
     # ── Phase 3: run ─────────────────────────────────────
 
-    def run(
+    async def run(
         self,
         ctx: PlaygroundContext,
         task: str,
@@ -282,27 +290,27 @@ class Exp:
         skills: dict[str, Any] | None = None,
         mcp: dict[str, Any] | None = None,
     ) -> KernelResult:
-        """build_runtime -> kernel.run -> cleanup."""
-        runtime = self.build_runtime(ctx, bus=bus, skills=skills, mcp=mcp)
-        # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
-        tool_registry = getattr(runtime.spec, "tool_registry", None)
-        if stop_event is not None and tool_registry is not None:
-            from matmaster.tools.builtin.spawn_tool import SpawnTool
+        """build_runtime -> kernel.run -> cleanup.
 
-            for tool in tool_registry.all_tools:
-                if isinstance(tool, SpawnTool):
-                    tool._stop_event = stop_event
-        _loop = asyncio.new_event_loop()
+        try/finally starts before build_runtime so that partial build
+        failures (callbacks already registered) still trigger cleanup.
+        """
         try:
-            result = _loop.run_until_complete(
-                runtime.kernel.run(
-                    runtime.spec, task, history=history, stop_event=stop_event
-                )
+            runtime = await self.build_runtime(ctx, bus=bus, skills=skills, mcp=mcp)
+            # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
+            tool_registry = getattr(runtime.spec, "tool_registry", None)
+            if stop_event is not None and tool_registry is not None:
+                from matmaster.tools.builtin.spawn_tool import SpawnTool
+
+                for tool in tool_registry.all_tools:
+                    if isinstance(tool, SpawnTool):
+                        tool._stop_event = stop_event
+            result = await runtime.kernel.run(
+                runtime.spec, task, history=history, stop_event=stop_event
             )
             return result.result
         finally:
-            _loop.close()
-            runtime.cleanup()
+            await self._run_cleanup_callbacks()
 
     # ── Capability initialization helpers ────────────────
 

@@ -424,51 +424,56 @@ class AgentRunService:
             )
 
             exp = Exp(exp_config)
-            runtime = exp.build_runtime(
-                pg_ctx,
-                bus=bus,
-                skills=pg_ctx.run_meta.get('skill_config'),
-                mcp=pg_ctx.run_meta.get('mcp_config'),
-            )
 
-            # Add external hooks to spec
-            external_hooks = [
-                # TODO: re-enable with confirm_tools once MCP registration lands
-                # confirmation_hook = ConfirmationHook(bus)
-                # stream_svc.set_reply_queue(session_id, ConfirmationHookAdapter(confirmation_hook))
-                # external_hooks.append(confirmation_hook)
-                OutputProcessorHook(bus),
-                SkillHitHook(bus),
-                AssistantStateHook(bus),
-            ]
-            spec = runtime.spec.model_copy(
-                update={'hooks': [*runtime.spec.hooks, *external_hooks]}
-            )
-
-            # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
-            if stop_event is not None and spec.tool_registry is not None:
-                from matmaster.tools.builtin.spawn_tool import SpawnTool
-
-                for tool in spec.tool_registry.all_tools:
-                    if isinstance(tool, SpawnTool):
-                        tool._stop_event = stop_event
-
-            # -- Stage 5: History --
-            raw_events = (
-                events_table.get_session_events(
-                    session_id, limit=_DIALOG_HISTORY_MAX_EVENTS
-                )
-                if events_table
-                else []
-            )
-            parent_events = ChatHistoryConverter.exclude_spawn_events(raw_events)
-            history = ChatHistoryConverter.events_to_messages(
-                ChatHistoryConverter.exclude_task_events(parent_events, task_id)
-            )
-
-            # -- Stage 6: Kernel execution --
+            # -- Stage 4b: Bridge loop for async Exp + Kernel --
+            # Single event loop covers build_runtime, kernel.run, and cleanup.
             _loop = asyncio.new_event_loop()
             try:
+                runtime = _loop.run_until_complete(
+                    exp.build_runtime(
+                        pg_ctx,
+                        bus=bus,
+                        skills=pg_ctx.run_meta.get('skill_config'),
+                        mcp=pg_ctx.run_meta.get('mcp_config'),
+                    )
+                )
+
+                # Add external hooks to spec
+                external_hooks = [
+                    # TODO: re-enable with confirm_tools once MCP registration lands
+                    # confirmation_hook = ConfirmationHook(bus)
+                    # stream_svc.set_reply_queue(session_id, ConfirmationHookAdapter(confirmation_hook))
+                    # external_hooks.append(confirmation_hook)
+                    OutputProcessorHook(bus),
+                    SkillHitHook(bus),
+                    AssistantStateHook(bus),
+                ]
+                spec = runtime.spec.model_copy(
+                    update={'hooks': [*runtime.spec.hooks, *external_hooks]}
+                )
+
+                # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
+                if stop_event is not None and spec.tool_registry is not None:
+                    from matmaster.tools.builtin.spawn_tool import SpawnTool
+
+                    for tool in spec.tool_registry.all_tools:
+                        if isinstance(tool, SpawnTool):
+                            tool._stop_event = stop_event
+
+                # -- Stage 5: History --
+                raw_events = (
+                    events_table.get_session_events(
+                        session_id, limit=_DIALOG_HISTORY_MAX_EVENTS
+                    )
+                    if events_table
+                    else []
+                )
+                parent_events = ChatHistoryConverter.exclude_spawn_events(raw_events)
+                history = ChatHistoryConverter.events_to_messages(
+                    ChatHistoryConverter.exclude_task_events(parent_events, task_id)
+                )
+
+                # -- Stage 6: Kernel execution --
                 kernel_result = _loop.run_until_complete(
                     runtime.kernel.run(
                         spec=spec,
@@ -478,6 +483,7 @@ class AgentRunService:
                     )
                 )
             finally:
+                _loop.run_until_complete(exp._run_cleanup_callbacks())
                 _loop.close()
             run_result_event = kernel_result.result.to_run_result_event()
 
@@ -570,12 +576,7 @@ class AgentRunService:
                     )
                 except Exception:
                     logger.warning('Bohrium cleanup error', exc_info=True)
-            # 2. Exp cleanup
-            if exp:
-                try:
-                    exp._run_cleanup_callbacks()
-                except Exception:
-                    logger.warning('Exp cleanup error', exc_info=True)
+            # 2. Exp cleanup -- handled inside bridge loop (before _loop.close())
             # 3. Router LAST -- drains any final events from bohrium/exp cleanup
             if router:
                 try:
