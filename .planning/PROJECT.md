@@ -37,7 +37,7 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 
 ### Active
 
-See REQUIREMENTS.md for full v2.0 requirement list (35 items, 15 complete after Phase 15).
+See REQUIREMENTS.md for full v2.0 requirement list (35 items, 33 complete after Phase 19. Remaining: TOOL-02, HOOK-02).
 
 ## Current Milestone: v2.0 matmaster 协程改造
 
@@ -152,4 +152,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-28 after Phase 16 complete (MessageBus + EventRouter async transformation)*
+*Last updated: 2026-03-30 after Phase 22 audit metadata backfill (v2.0 milestone audit gap closure)*
