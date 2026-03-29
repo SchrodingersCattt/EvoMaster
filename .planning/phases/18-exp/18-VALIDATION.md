@@ -1,9 +1,9 @@
 ---
 phase: 18
 slug: exp
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: final
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-03-29
 ---
 
@@ -38,12 +38,12 @@ created: 2026-03-29
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 18-01-01 | 01 | 1 | EXPL-01 | unit | `uv run pytest tests/matmaster/core/test_exp.py -x -q -k "assemble"` | ✅ | ⬜ pending |
-| 18-01-02 | 01 | 1 | EXPL-02 | unit | `uv run pytest tests/matmaster/core/test_exp.py -x -q -k "build_runtime"` | ✅ | ⬜ pending |
-| 18-01-03 | 01 | 1 | EXPL-03 | unit | `uv run pytest tests/matmaster/core/test_exp.py -x -q -k "run"` | ✅ | ⬜ pending |
-| 18-02-01 | 02 | 1 | EXPL-04 | unit | `uv run pytest tests/matmaster/core/test_exp.py -x -q -k "spawn"` | ✅ | ⬜ pending |
-| 18-02-02 | 02 | 1 | EXPL-04 | unit | `uv run pytest tests/matmaster/tools/builtin/test_spawn_tool.py -x -q` | ✅ | ⬜ pending |
-| 18-03-01 | 03 | 2 | EXPL-03 | integration | `uv run pytest tests/matmaster/integration/ -x -q` | ✅ | ⬜ pending |
+| 18-01-01 | 01 | 1 | EXPL-01 | unit | `uv run pytest tests/matmaster/core/test_exp.py -x -q -k "assemble"` | ✅ | ✅ green (8 passed) |
+| 18-01-02 | 01 | 1 | EXPL-02 | unit | `uv run pytest tests/matmaster/core/test_exp.py -x -q -k "build_runtime"` | ✅ | ✅ green (3 passed) |
+| 18-01-03 | 01 | 1 | EXPL-03 | unit | `uv run pytest tests/matmaster/core/test_exp.py -x -q -k "run"` | ✅ | ✅ green (14 passed) |
+| 18-02-01 | 02 | 1 | EXPL-04 | unit | `uv run pytest tests/matmaster/core/test_exp.py -x -q -k "spawn"` | ✅ | ✅ green (3 passed) |
+| 18-02-02 | 02 | 1 | EXPL-04 | unit | `uv run pytest tests/matmaster/tools/test_spawn_tool.py -x -q` | ✅ | ✅ green (13 passed) |
+| 18-02-03 | 02 | 2 | EXPL-03,04 | integration | `uv run pytest tests/matmaster/integration/test_subagent_spawn.py -x -q` | ✅ | ✅ green (10 passed) |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -67,11 +67,23 @@ created: 2026-03-29
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** PASSED
+
+---
+
+## Validation Audit 2026-03-29
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+All 4 requirements (EXPL-01 through EXPL-04) have automated verification across 6 test entries totaling 51 test cases. Zero gaps detected.
