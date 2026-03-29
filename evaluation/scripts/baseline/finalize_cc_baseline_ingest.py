@@ -159,9 +159,10 @@ def main() -> int:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     sys.path.insert(0, str(REPO_ROOT))
-    from matmaster.eval_ingest_client import (
+    from evaluation.eval_ingest_client import (
         EVAL_INGEST_URL,
         build_ingest_item,
+        git_head_commit,
         post_eval_ingest,
         upload_eval_task_artifacts_to_oss,
     )
@@ -195,8 +196,6 @@ def main() -> int:
 
     git_commit = manifest.get("git_commit")
     if not isinstance(git_commit, str) or not git_commit.strip():
-        from matmaster.eval_ingest_client import git_head_commit
-
         git_commit = git_head_commit(REPO_ROOT)
 
     eval_tooling = manifest.get("eval_tooling")

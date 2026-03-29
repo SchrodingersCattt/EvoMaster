@@ -1,0 +1,88 @@
+# 分支 sync-question-catalog：build → sync（与 ci/api-deploy.yml 同源 docker-build / test 用法）。
+# docker-build 不写 DevOps *curl。需 REGISTRY_USERNAME、REGISTRY_PASSWORD、MATMASTER_TOOLS_SERVER。
+
+docker-build:
+  stage: build
+  image: $REGISTRY/public/ubuntu:gitlab-docker
+  variables:
+    DOCKER_HOST: tcp://docker-build-service:32375
+    PROJECT_NAME: matmaster-evo_test
+  before_script:
+    - |
+      COMMIT_TAG=`echo $CI_COMMIT_TAG | awk -F '_' '{print $3}'`
+      DOCKER_TAG=$CI_PIPELINE_ID$COMMIT_TAG
+      [ -z "$CI_COMMIT_TAG" ] && SERVER_NAME=$PROJECT_NAME || SERVER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
+      [ -z "$CI_COMMIT_TAG" ] && DOCKER_NAME=$(echo $PROJECT_NAME | awk -F '_' '{print $1}' ) || DOCKER_NAME=$(echo $CI_COMMIT_TAG | awk -F '_' '{print $2}')
+      DOCKER_IMAGE=$REGISTRY/flow/${DOCKER_NAME}:${DOCKER_TAG}
+      AUTHOR_NAME=$(git log -1 --pretty=format:"%an" --no-merges)
+      export DOCKER_TAG SERVER_NAME DOCKER_NAME DOCKER_IMAGE AUTHOR_NAME
+  script:
+    - git pull origin "${CI_COMMIT_BRANCH}" || true
+    - echo $SERVER_NAME && echo $DOCKER_IMAGE
+    - git rev-parse HEAD > ${CI_PROJECT_DIR}/.build-version
+    - |
+      cat > /root/.docker/config.json <<EOF
+      {
+      "auths": {
+        "registry.dp.tech": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        },
+        "dp-harbor-registry.cn-zhangjiakou.cr.aliyuncs.com": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        }
+      }
+      }
+      EOF
+    - >-
+      docker buildx build --progress=plain -f ${CI_PROJECT_DIR}/Dockerfile -t ${DOCKER_IMAGE} --cache-to type=inline,mode=max . --push
+    - docker run --rm ${DOCKER_IMAGE} ls -la /app
+    - echo "DYNAMIC_IMAGE=${DOCKER_IMAGE}" >> ${CI_PROJECT_DIR}/build.env
+  retry: 2
+  tags:
+    - k8s-runner-ack
+  cache:
+    paths:
+      - /cache
+  artifacts:
+    reports:
+      dotenv: ${CI_PROJECT_DIR}/build.env
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "sync-question-catalog"
+
+sync-question-catalog:
+  stage: sync-question-catalog
+  image: $REGISTRY/public/ubuntu:gitlab-docker
+  variables:
+    DOCKER_HOST: tcp://docker-build-service:32375
+  needs:
+    - job: docker-build
+      artifacts: true
+  before_script:
+    - |
+      cat > /root/.docker/config.json <<EOF
+      {
+      "auths": {
+        "registry.dp.tech": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        },
+        "dp-harbor-registry.cn-zhangjiakou.cr.aliyuncs.com": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        }
+      }
+      }
+      EOF
+    - docker pull ${DYNAMIC_IMAGE}
+  script:
+    - docker rm -f qcat-sync || true
+    - |
+      docker create --name qcat-sync \
+        -e MATMASTER_TOOLS_SERVER \
+        -e SERVICE_ENV \
+        ${DYNAMIC_IMAGE} \
+        sh -c "cd /app && . .venv/bin/activate && python evaluation/scripts/sync_question_catalog_to_tools_server.py"
+    - docker start -a qcat-sync
+    - docker rm qcat-sync
+  tags:
+    - k8s-runner-ack
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "sync-question-catalog"

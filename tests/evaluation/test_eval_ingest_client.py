@@ -1,10 +1,10 @@
-"""Unit tests for ``matmaster.eval_ingest_client``."""
+"""Unit tests for ``evaluation.eval_ingest_client``."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from matmaster.eval_ingest_client import (
+from evaluation.eval_ingest_client import (
     EVAL_INGEST_API_PATH,
     EVAL_INGEST_URL,
     build_ingest_item,
@@ -13,6 +13,7 @@ from matmaster.eval_ingest_client import (
     extract_total_tokens,
     normalize_pending_item_for_submission,
     post_eval_ingest,
+    post_question_catalog_sync,
     prompt_sha256,
     score_for_eval_ingest,
 )
@@ -208,7 +209,7 @@ def test_build_ingest_item_parse_error_summary() -> None:
     assert "duration_ms" not in item
 
 
-@patch("matmaster.eval_ingest_client.httpx.Client")
+@patch("evaluation.eval_ingest_client.httpx.Client")
 def test_post_eval_ingest_success(mock_client_cls: MagicMock) -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -230,7 +231,50 @@ def test_post_eval_ingest_success(mock_client_cls: MagicMock) -> None:
     assert call_kw[1]["headers"] == {"Content-Type": "application/json"}
 
 
-@patch("matmaster.eval_ingest_client.httpx.Client")
+@patch("evaluation.eval_ingest_client.httpx.Client")
+def test_post_question_catalog_sync_success(mock_client_cls: MagicMock) -> None:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "code": 0,
+        "msg": "success",
+        "data": {"active_count": 2, "inactive_count": 0},
+    }
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.__exit__.return_value = None
+    mock_client.post.return_value = mock_resp
+    mock_client_cls.return_value = mock_client
+
+    ok, msg = post_question_catalog_sync(
+        "http://example/qcat/sync",
+        [
+            {"question_id": "Q1", "question_text": "题干一"},
+            {"question_id": "Q2", "question_text": "题干二"},
+        ],
+    )
+    assert ok
+    assert "active_count=2" in msg
+    call_kw = mock_client.post.call_args
+    assert call_kw[0][0] == "http://example/qcat/sync"
+    sent = call_kw[1]["json"]
+    assert sent["items"][0] == {"question_id": "Q1", "question_text": "题干一"}
+
+
+@patch("evaluation.eval_ingest_client.httpx.Client")
+def test_post_question_catalog_sync_rejects_missing_text(
+    mock_client_cls: MagicMock,
+) -> None:
+    ok, err = post_question_catalog_sync(
+        "http://x",
+        [{"question_id": "Q1"}],
+    )
+    assert not ok
+    assert "question_text" in err
+    mock_client_cls.assert_not_called()
+
+
+@patch("evaluation.eval_ingest_client.httpx.Client")
 def test_post_eval_ingest_business_error(mock_client_cls: MagicMock) -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 200

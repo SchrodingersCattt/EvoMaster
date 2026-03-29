@@ -39,7 +39,7 @@ def test_submit_pending_main_posts_score_from_cli_when_missing_in_file(
     p.write_text(json.dumps(envelope), encoding="utf-8")
 
     mod = _load_submit_module()
-    with patch("matmaster.eval_ingest_client.post_eval_ingest") as post:
+    with patch("evaluation.eval_ingest_client.post_eval_ingest") as post:
         post.return_value = (True, "ok")
         old_argv = sys.argv
         try:
@@ -83,7 +83,7 @@ def test_submit_pending_cli_reason_and_suggestion_used_for_post(tmp_path: Path) 
     p.write_text(json.dumps(envelope), encoding="utf-8")
 
     mod = _load_submit_module()
-    with patch("matmaster.eval_ingest_client.post_eval_ingest") as post:
+    with patch("evaluation.eval_ingest_client.post_eval_ingest") as post:
         post.return_value = (True, "ok")
         old_argv = sys.argv
         try:
@@ -127,7 +127,7 @@ def test_submit_pending_ignores_score_fields_already_in_file(tmp_path: Path) -> 
     p.write_text(json.dumps(envelope), encoding="utf-8")
 
     mod = _load_submit_module()
-    with patch("matmaster.eval_ingest_client.post_eval_ingest") as post:
+    with patch("evaluation.eval_ingest_client.post_eval_ingest") as post:
         post.return_value = (True, "ok")
         old_argv = sys.argv
         try:
