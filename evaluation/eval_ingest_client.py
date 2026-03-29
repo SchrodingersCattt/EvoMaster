@@ -48,9 +48,13 @@ EVAL_ITEM_QUESTION_TEXT_MAX_LEN = 4_194_304
 
 # Direct tools-server path (not the gateway ``/bohrapi/v1/matmaster-tools-server/...`` prefix).
 EVAL_INGEST_API_PATH = "/api/v1/evaluation/ingest"
+QUESTION_CATALOG_SYNC_API_PATH = "/api/v1/evaluation/question-catalog/sync"
 
 _base = (utils.env.MATMASTER_TOOLS_SERVER or "").strip().rstrip("/")
 EVAL_INGEST_URL: str | None = f"{_base}{EVAL_INGEST_API_PATH}" if _base else None
+QUESTION_CATALOG_SYNC_URL: str | None = (
+    f"{_base}{QUESTION_CATALOG_SYNC_API_PATH}" if _base else None
+)
 
 
 def prompt_sha256(prompt: str) -> str:
@@ -378,4 +382,65 @@ def post_eval_ingest(
 
     if data.get("code") != 0:
         return False, str(data.get("msg", data))
+    return True, str(data.get("msg", "success"))
+
+
+def post_question_catalog_sync(
+    url: str,
+    items: list[dict[str, str]],
+    *,
+    timeout: float = 120.0,
+) -> tuple[bool, str]:
+    """POST catalog sync payload to matmaster-tools-server.
+
+    Each element must include ``question_id`` and ``question_text`` (trimmed non-empty
+    after clip), matching tools-server ``EvalQuestionCatalogItemIn``. Server marks all
+    catalog rows inactive, then upserts these rows as active. ``question_id`` length
+    1–512; ``question_text`` clipped to ``EVAL_ITEM_QUESTION_TEXT_MAX_LEN``.
+    """
+    if not items:
+        return False, "no items to sync (server requires at least one item)"
+
+    body_items: list[dict[str, str]] = []
+    for raw in items:
+        qid = str(raw.get("question_id", "")).strip()
+        if not qid:
+            return False, "missing or empty question_id in item"
+        if len(qid) > 512:
+            return False, f"question_id too long (>512): {qid[:80]!r}..."
+        if "question_text" not in raw:
+            return False, f'missing question_text for question_id={qid!r}'
+        qt_raw = raw["question_text"]
+        if not isinstance(qt_raw, str):
+            return False, f'question_text must be a string for question_id={qid!r}'
+        qtext = clip_ingest_text_field(qt_raw, max_len=EVAL_ITEM_QUESTION_TEXT_MAX_LEN)
+        if not qtext:
+            return False, f"empty question_text after trim for question_id={qid!r}"
+        body_items.append({"question_id": qid, "question_text": qtext})
+
+    body = {"items": body_items}
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(url, json=body, headers=headers)
+    except httpx.HTTPError as exc:
+        return False, str(exc)
+
+    if resp.status_code != 200:
+        return False, f"HTTP {resp.status_code}: {resp.text[:500]}"
+
+    try:
+        data = resp.json()
+    except Exception:
+        return False, f"non-JSON response: {resp.text[:200]}"
+
+    if data.get("code") != 0:
+        return False, str(data.get("msg", data))
+
+    inner = data.get("data") or {}
+    ac = inner.get("active_count")
+    ic = inner.get("inactive_count")
+    if ac is not None and ic is not None:
+        return True, f"success active_count={ac} inactive_count={ic}"
     return True, str(data.get("msg", "success"))

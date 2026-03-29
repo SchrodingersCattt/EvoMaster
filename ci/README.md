@@ -18,3 +18,9 @@
   - `BOHRIUM_ACCESS_KEY_UAT`、`BOHRIUM_PROJECT_ID_UAT`
   - `BOHRIUM_ACCESS_KEY_PROD`、`BOHRIUM_PROJECT_ID_PROD`
 若希望用**特殊 tag** 触发（例如在任意分支打 tag `remote-image/all` 再 push 触发），可在 `.gitlab-ci.yml` 的 `build-remote-image:all` 的 `rules` 里增加一条：`if: $CI_COMMIT_TAG == "remote-image/all"`，并注意 tag 触发的 pipeline 中 `CI_COMMIT_BRANCH` 可能为空，脚本里 push 目标需改为固定分支（如 `main`）或从 tag 解析。
+
+## 题库目录同步（matmaster-tools-server）
+
+- **触发方式**：推 **`sync-question-catalog`** → **`docker-build`**（`build` 阶段）→ **`sync-question-catalog`**（`ci/sync_question_catalog_jobs.yml`）。
+- **做法**：与 **`ci/api-deploy.yml`** 同源——`docker-build` 算 `DOCKER_IMAGE`（`PROJECT_NAME: matmaster-evo_test` → `registry.dp.tech/flow/matmaster:$CI_PIPELINE_ID`）、`buildx push`、`build.env` 写 **`DYNAMIC_IMAGE`**；**不**打 post-build DevOps `curl`。`sync` 与 **`test`** 一样 `docker pull ${DYNAMIC_IMAGE}`，再 **`docker create` / `start -a` / `rm`** 在容器内跑同步脚本。
+- **Runner**：`k8s-runner-ack` + `docker-build-service`。**CI 变量**：`REGISTRY_USERNAME`、`REGISTRY_PASSWORD`、`MATMASTER_TOOLS_SERVER`（可选 `SERVICE_ENV`）。

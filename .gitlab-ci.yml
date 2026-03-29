@@ -9,6 +9,8 @@ variables:
 
 stages:
   - lint
+  - build
+  - sync-question-catalog
   - build-remote-image
   - trigger
 
@@ -21,6 +23,7 @@ workflow:
 include:
   - local: ".deploy-ci.yml"
   - local: "ci/pre-commit-job.yml"
+  - local: "ci/sync_question_catalog_jobs.yml"
 
 # 合并到 main：MR 目标分支为 main，或 push 到 main（实现见 ci/pre-commit-job.yml）
 pre-commit:
@@ -28,6 +31,8 @@ pre-commit:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+
+# 题库同步：ci/sync_question_catalog_jobs.yml（docker-build → sync，与 api-deploy 同源）
 
 # 一次构建三环境（test/uat/prod）并更新 constant.py，推送到分支 remote-image 时触发
 build-remote-image:all:
