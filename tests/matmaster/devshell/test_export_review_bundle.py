@@ -1,4 +1,4 @@
-"""Tests for evaluation/scripts/export_devshell_review_bundle.py."""
+"""Tests for evaluation/scripts/devshell/export_devshell_review_bundle.py."""
 
 from __future__ import annotations
 
@@ -44,7 +44,13 @@ def test_export_review_bundle_smoke(tmp_path: Path) -> None:
     (ws / "out.txt").write_text("x", encoding="utf-8")
 
     repo = Path(__file__).resolve().parents[3]
-    script = repo / "evaluation" / "scripts" / "export_devshell_review_bundle.py"
+    script = (
+        repo
+        / "evaluation"
+        / "scripts"
+        / "devshell"
+        / "export_devshell_review_bundle.py"
+    )
     proc = subprocess.run(
         [
             sys.executable,

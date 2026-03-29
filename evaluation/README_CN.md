@@ -7,11 +7,15 @@ MATTER 是 `evaluation/` 下的独立评测模块，当前仅维护 **v5+** 题�
 | 路径 | 内容 |
 |------|------|
 | `core/` | Python 实现：题库模型、runner、判分、报告等 |
-| `scripts/` | 命令行工具：DevShell 批量跑题、导出审阅包、ingest 等 |
-| `docs/` | 流程说明（Claude Code baseline、DevShell 判分话术等） |
+| `scripts/devshell/` | DevShell / mm-devshell 批量跑题、`export_devshell_review_bundle` |
+| `scripts/baseline/` | Claude Code baseline 收尾（`finalize_cc_baseline_ingest`） |
+| `scripts/matter_cli/` | **Core 评测**（`evaluation.core` + Playground `run_mat_task`）：后台跑 `python -m evaluation`、Windows 启动脚本、run 目录监控 |
+| `scripts/eval_ingest_submit_pending.py` | 共用：pending 入库（baseline / devshell 判分后上报） |
+| `docs/baseline/` | CC baseline 流程说明 |
+| `docs/devshell/` | DevShell 批量 + 人工判分话术 |
 | `question_bank/` | v5+ 题库与 `data/` 输入文件 |
 | `config.yaml` | 默认评测配置 |
-| `cli.py` / `__main__.py` | 兼容入口，转发到 `core.cli` |
+| `cli.py` / `__main__.py` | 同上：命令行入口，转发到 `core.cli`（与 `matter_cli` 里后台命令是同一套评测） |
 
 v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵活、更可移植。
 
@@ -126,6 +130,14 @@ uv run python -m evaluation.cli \
 - `--modes`: 选择 `direct` / `planner`。
 - `--k`: 每题重复次数。
 
+与 DevShell / baseline **不同**：该路径会跑 **BinaryEvaluator** 与 Playground **`run_mat_task`**（见 `core/runner.py` + `core/mat_runner.py`）。长时间或无人值守时可选用：
+
+```bash
+evaluation/scripts/matter_cli/run_mat_master_eval_bg.sh start
+# Windows：evaluation/scripts/matter_cli/run_matmaster_evaluation_bg.ps1
+# 看产物：evaluation/scripts/matter_cli/monitor_matmaster_evaluation.ps1 -RunDir <run_dir>
+```
+
 ## 约定
 
 - 仅支持 `version: "v5"` 的题库 YAML。
@@ -160,7 +172,7 @@ uv run python -m evaluation.cli \
 
 ## 更多文档
 
-- [baseline_cc_eval.md](./docs/baseline_cc_eval.md) - Claude Code baseline（与 DevShell 产物对齐）
-- [devshell_claude_code_eval.md](./docs/devshell_claude_code_eval.md) - DevShell 批量跑题 + Claude Code 人工判分（`evaluation/scripts/run_devshell_eval.py`、产物路径、百分制话术）
+- [baseline_cc_eval.md](./docs/baseline/baseline_cc_eval.md) - Claude Code baseline（与 DevShell 产物对齐）
+- [devshell_claude_code_eval.md](./docs/devshell/devshell_claude_code_eval.md) - DevShell 批量跑题 + Claude Code 人工判分（`evaluation/scripts/devshell/run_devshell_eval.py`、产物路径、百分制话术）
 - [WEIGHTED_PORTABLE_EVAL_MIGRATION.md](../../docs/mat_master/WEIGHTED_PORTABLE_EVAL_MIGRATION.md) - 迁移指南与 FAQ
 - [WEIGHTED_EVAL_IMPLEMENTATION.md](../../docs/mat_master/WEIGHTED_EVAL_IMPLEMENTATION.md) - 实现细节
