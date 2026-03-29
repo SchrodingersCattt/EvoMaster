@@ -5,7 +5,7 @@
 **术语（全文统一）**
 
 - **仓库根**：本 Git 仓库根目录，该目录下同时存在 `scripts/run_devshell_eval.py` 与 `playground/mat_master/evaluation/`。在终端可用 `cd "$(git rev-parse --show-toplevel)"` 进入。
-- **RUN_DIR**：执行 `prepare` 命令结束后，标准错误里出现的 **`Run directory: ` 同一行中、冒号后面的完整绝对路径**（从 `/` 或盘符起至行尾，无首尾空格）。后续所有路径均基于该目录。
+- **RUN_DIR**：本次测评产物根目录（其下有 `workspaces/` 等）。**推荐不手工填写**：默认 `prepare` 会清空 `results/`，可在仓库根用下面「RUN_DIR 自动解析」中的一行命令得到绝对路径；若曾用 `--no-clean-results` 导致同前缀目录多个并存，再以 stderr 里 **`Run directory: `** 冒号后的路径为准。
 
 推荐把对话 **人为拆成两阶段**（两个独立的 Claude Code 会话）：
 
@@ -30,21 +30,33 @@ uv run python scripts/run_devshell_eval.py --prepare-cc-baseline --run-label bas
 ```
 
 - 仅跑前 N 条任务时：在上面的 `uv run` 命令中、`--eval-ingest-pending-only` **之前**插入 `--limit N`（N 为正整数）。
-- 命令结束后，在 **stderr** 中找到 **`Run directory: `** 所在行，将冒号后的路径完整复制保存，即为 **RUN_DIR**。
+- 命令结束后，**RUN_DIR** 可取 stderr 里 **`Run directory: `** 冒号后的路径；若未保留输出，在仓库根执行下面「RUN_DIR 自动解析」命令即可（默认仅一个 `baseline_cc_struct_*` 目录时与 stderr 一致）。
 - 默认行为会删除仓库根下 **`results/` 内全部文件与子目录**（保留 `results` 空壳）。只有需要与历史 run 并存时，再在命令末尾追加 `--no-clean-results`。
+
+**RUN_DIR 自动解析（不必从 stderr 复制）**
+
+在仓库根执行；`--run-label` 与 prepare 一致时（默认 `baseline_cc_struct`），取 `results/` 下该前缀目录按名字排序的**最后一个**（时间戳后缀即最新一次 prepare）：
+
+```bash
+ROOT="$(git rev-parse --show-toplevel)"
+export RUN_DIR="$(find "$ROOT/results" -maxdepth 1 -type d -name 'baseline_cc_struct_*' | sort | tail -1)"
+echo "$RUN_DIR"
+```
+
+若改了 `--run-label`，把上面 `name` 里的 `baseline_cc_struct_*` 换成你的前缀加 `_*`。若 `echo` 为空或存在多个候选且无法确定，请用 stderr 的 **`Run directory: `** 行。
 
 **2）阶段一全部 workspace 完成后（仍在仓库根）**
 
-将下面引号内的路径换成你的 **RUN_DIR**（必须与实际目录一致，建议整段路径用双引号包裹）：
+无需手写路径时，可与上一步同一 shell 先 `export RUN_DIR=...`（见下「RUN_DIR 自动解析」），再：
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-uv run python scripts/finalize_cc_baseline_ingest.py --run-dir "RUN_DIR" --eval-ingest-pending-only
+uv run python scripts/finalize_cc_baseline_ingest.py --run-dir "$RUN_DIR" --eval-ingest-pending-only
 ```
 
 成功时 **RUN_DIR** 下应出现目录 `pending_ingest/`（内含若干 `*.json`）和文件 `raw_runs.jsonl`。
 
-**3）阶段二**：新开 Claude Code 会话，粘贴下文「一键话术 · 阶段二」，并把其中的 **RUN_DIR** 换成与上相同的绝对路径。
+**3）阶段二**：新开 Claude Code 会话，粘贴下文「一键话术 · 阶段二」；**RUN_DIR** 由执行者在仓库根用上文「RUN_DIR 自动解析」得到，无需你在对话里事先提供路径。
 
 ---
 
@@ -87,7 +99,7 @@ uv run python scripts/eval_ingest_submit_pending.py \
   --suggestion "至少一条可执行改进；确实没有则写：无——并一句话说明理由"
 ```
 
-- **PENDING_FILE** 示例：`/Users/you/matmaster-evo/results/baseline_cc_struct_20260328_150000/pending_ingest/SC_struct_007_direct_r0.json`（你必须使用自己的 RUN_DIR 与真实文件名）。
+- **PENDING_FILE** 示例：`$RUN_DIR/pending_ingest/SC_struct_007_direct_r0.json`（先按上文解析 `RUN_DIR`，再拼真实文件名）。
 - 成功时终端最后一行附近出现 **`ingest ok`**。
 - **`--suggestion` 禁止省略**：无改进内容时字面写 `无——` 加简短理由即可。
 
@@ -105,43 +117,43 @@ uv run python scripts/eval_ingest_submit_pending.py \
 
 ---
 
-## 一键话术 · 阶段一（只做任务；粘贴前不要填 RUN_DIR，由执行 prepare 后填入）
+## 一键话术 · 阶段一（只做任务；**无需**向对话粘贴 RUN_DIR）
 
-将下面整段复制到 **Claude Code 会话 A**。把文中三处 **`把你的RUN_DIR粘贴在这里`** 替换为：你在仓库根执行 prepare 后，stderr 里 **`Run directory: `** 后面的**完整绝对路径**（三处填同一路径）。
+将下面整段复制到 **Claude Code 会话 A**。执行者自行在终端解析 **RUN_DIR**（见上文「RUN_DIR 自动解析」或 prepare 的 stderr），**不要求用户在对话里提供路径**。
 
 > **【CC Baseline · 阶段一 · 执行者】**
 > 你的职责只有：**做题**，不写 checklist 判分、不执行 `eval_ingest_submit_pending.py`、不讨论百分制。
-> **RUN_DIR（本对话内统一使用下面路径）：** `把你的RUN_DIR粘贴在这里`
-> **若 RUN_DIR 尚不存在**：在终端进入仓库根（含 `scripts/` 的 Git 根），执行：
+> **RUN_DIR**：**不要**要求用户在对话中粘贴路径。在仓库根执行 prepare 后，用仓库文档 `playground/mat_master/evaluation/baseline_cc_eval.md` 中「RUN_DIR 自动解析」的 `ROOT` + `find` + `export RUN_DIR=...` 得到绝对路径；若 `prepare` 使用了与用户默认不同的 `--run-label`，把 `find` 的 `-name` 改成对应前缀。若 `RUN_DIR` 仍为空或存在多个候选，再读 stderr 的 **`Run directory: `** 行。
+> **若尚未 prepare**：在终端进入仓库根（含 `scripts/` 的 Git 根），执行：
 > `cd "$(git rev-parse --show-toplevel)"`
 > `uv run python scripts/run_devshell_eval.py --prepare-cc-baseline --run-label baseline_cc_struct --modes direct --capabilities structure_construction --eval-ingest-pending-only`
-> 命令**不得**包含 `--no-clean-results`（除非用户明确要求保留历史 `results/`）。执行完成后从 stderr 复制 **`Run directory: `** 后的路径，替换本段三处 **`把你的RUN_DIR粘贴在这里`**。
+> 命令**不得**包含 `--no-clean-results`（除非用户明确要求保留历史 `results/`）。完成后按上一段解析 **RUN_DIR**。
 > 仅跑部分题时：在上述第二行 `uv run` 命令中、在 `--eval-ingest-pending-only` **之前**插入 `--limit` 和正整数。
 > **任务列表**：列出目录 `RUN_DIR/workspaces/` 下的**每一个一级子目录**名称；对每个名称 `TASK_DIR`（即 task_id），按顺序完成：
 > 1. 将当前工作目录设为 `RUN_DIR/workspaces/TASK_DIR/`。
 > 2. 阅读 `_devshell_prompt.txt`，完成其中全部交付物。
 > 3. 在同一目录创建或覆盖 `_devshell_summary.json`：**文件内容为单行合法 JSON**，字段要求见仓库文件 `playground/mat_master/evaluation/baseline_cc_eval.md` 中「阶段一：做题」小节（必须含 `duration_ms`；`usage` 尽量填 token 数字）。
 > 4. 不得修改 `_eval_task_meta.json`。
-> **收尾**：所有 `TASK_DIR` 处理完后，在仓库根执行（将引号内换成**同一个** RUN_DIR）：
+> **收尾**：所有 `TASK_DIR` 处理完后，在仓库根执行（使用你已解析的 **RUN_DIR**，勿让用户粘贴）：
 > `cd "$(git rev-parse --show-toplevel)"`
-> `uv run python scripts/finalize_cc_baseline_ingest.py --run-dir "把你的RUN_DIR粘贴在这里" --eval-ingest-pending-only`
+> `uv run python scripts/finalize_cc_baseline_ingest.py --run-dir "$RUN_DIR" --eval-ingest-pending-only`
 > 确认 **RUN_DIR** 下存在 `pending_ingest` 目录（内有 `.json`）和文件 `raw_runs.jsonl`。然后停止本会话中的测评工作；**阅卷与上报在另一个新开的 Claude Code 会话中完成**，使用同文档「一键话术 · 阶段二」。
 
 ---
 
-## 一键话术 · 阶段二（只阅卷上报；新开会话；粘贴前填入 RUN_DIR）
+## 一键话术 · 阶段二（只阅卷上报；新开会话；**无需**粘贴 RUN_DIR）
 
-将下面整段复制到 **新开的 Claude Code 会话 B**。把文中所有 **`把你的RUN_DIR粘贴在这里`** 替换为阶段一记录的 **RUN_DIR**（与 `finalize` 使用过的路径完全相同）。
+将下面整段复制到 **新开的 Claude Code 会话 B**。执行者在仓库根用 `baseline_cc_eval.md` 中「RUN_DIR 自动解析」得到 **RUN_DIR**（与阶段一 `finalize` 所用目录一致；若 `results` 下仅有一个匹配目录，即为该次测评）。
 
 > **【CC Baseline · 阶段二 · 阅卷者】**
 > 你的职责只有：**阅卷**与**调用上报命令**，不修改 **RUN_DIR/workspaces/** 下已有交付物（除非用户明确要求修复明显损坏并说明）。
-> **RUN_DIR：** `把你的RUN_DIR粘贴在这里`
+> **RUN_DIR**：**不要**要求用户粘贴路径；在仓库根按 `playground/mat_master/evaluation/baseline_cc_eval.md`「RUN_DIR 自动解析」导出 `RUN_DIR`。若存在多个 `*_` 目录无法唯一确定，请用户确认本次应对应哪一次 run（或提供 stderr / `manifest.json` 所在路径）。
 > 前置检查：**RUN_DIR/pending_ingest/** 下至少有一个 `.json` 文件；**RUN_DIR/raw_runs.jsonl** 存在。若不满足，先让用户在仓库根补跑 finalize，不要编造路径。
 > 先阅读文件 `playground/mat_master/evaluation/devshell_claude_code_eval.md` 的**第 3 节**，严格用其中 **weight 与 0.5×weight** 规则计算每题 **0–100 整数**。
 > 对 **RUN_DIR/pending_ingest/** 下**每一个**扩展名为 `.json` 的文件 `F`（含完整文件名，例如 `SC_struct_007_direct_r0.json`）：
 > 1. 打开 `F`，读取 `item.question_id`，在 `playground/mat_master/evaluation/question_bank/` 中找到对应 YAML，读取 `scoring_checklist`。
 > 2. 结合 **RUN_DIR/raw_runs.jsonl** 中 `task_id` 与 `F` 的 basename（不含 `.json`）一致的那一行，以及 **RUN_DIR/workspaces/（同上 task_id）/** 下文件；若 `F` 内 `item` 含 `result_oss_url`，可按需使用该链接辅助取证。
-> 3. 构造本条任务的 **PENDING_ABS** 绝对路径：`把你的RUN_DIR粘贴在这里` + `/pending_ingest/` + `F` 的文件名（含 `.json`），三段直接拼接，**RUN_DIR 末尾不要重复斜杠**。数值示例：RUN_DIR=`/a/b/results/baseline_cc_struct_20260328_120000`，F=`SC_struct_007_direct_r0.json` → PENDING_ABS=`/a/b/results/baseline_cc_struct_20260328_120000/pending_ingest/SC_struct_007_direct_r0.json`。
+> 3. 构造本条任务的 **PENDING_ABS**：`"$RUN_DIR/pending_ingest/$F文件名"`（`RUN_DIR` 无尾斜杠；`F` 含 `.json`）。示例：RUN_DIR=`/a/b/results/baseline_cc_struct_20260328_120000`，F=`SC_struct_007_direct_r0.json` → PENDING_ABS=`/a/b/results/baseline_cc_struct_20260328_120000/pending_ingest/SC_struct_007_direct_r0.json`。
 > 4. 在仓库根执行**一次**上报。`--pending` 的引号内填**第 3 步整条 PENDING_ABS**；`--score` 后填本题算出的 **0–100 整数**（下面用 `73` 仅作格式示例，每题替换为真实分数）；`--score-reason` 与 `--suggestion` 各用一对双引号包住判词全文（判词内尽量避免未转义的双引号）。
 > `cd "$(git rev-parse --show-toplevel)"`
 > `uv run python scripts/eval_ingest_submit_pending.py --pending "第3步得到的完整绝对路径" --score 73 --score-reason "逐条 checklist：条目、weight、判定、证据路径或摘录" --suggestion "可执行建议；若无写：无——加一句理由"`
