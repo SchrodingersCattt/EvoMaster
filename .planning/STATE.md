@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 18 — Exp lifecycle async
+**Current focus:** Phase 19 — Tool Dispatch + Service Bridge
 
 ## Current Position
 
 Phase: 19
-Plan: Not started
-Status: Phase 18 complete
+Plan: 02 of 2 complete
+Status: Executing phase 19
 Last activity: 2026-03-29
 
-Progress: [██████████] 100% (7/8 phases, 15/15 plans)
+Progress: [██████████] 100% (7/8 phases, 16/17 plans)
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Progress: [██████████] 100% (7/8 phases, 15/15 plans)
 | Phase 17-agentkernel P02 | 23min | 2 tasks | 13 files |
 | Phase 18-exp P01 | 12min | 2 tasks | 12 files |
 | Phase 18-exp P02 | 10min | 2 tasks | 7 files |
+| Phase 19-tool-dispatch P02 | 8min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,9 @@ Recent decisions affecting current work:
 - [Phase 18-exp P02]: spawn_fn calls child_exp.run() for full lifecycle reuse (not manual build_runtime + kernel.run)
 - [Phase 18-exp P02]: SpawnTool overrides execute() directly for native async (bypasses to_thread pattern)
 - [Phase 18-exp P02]: Exp.run() gains source_override/spawn_id optional params forwarded to build_runtime
+- [Phase 19-02]: Parallel tool dispatch via asyncio.gather with outcome-list ordering pattern
+- [Phase 19-02]: Closure catches exceptions as primary strategy; gather return_exceptions as defense-in-depth
+- [Phase 19-02]: post_tool_call hooks fire in batch after gather, in original tool_call order
 
 ### Pending Todos
 
@@ -110,6 +114,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-29T13:24:42.066Z
-Stopped at: Phase 19 context gathered
-Resume file: .planning/phases/19-tool-dispatch/19-CONTEXT.md
+Last session: 2026-03-29T14:54:18Z
+Stopped at: Completed 19-02-PLAN.md (parallel tool dispatch)
+Resume file: .planning/phases/19-tool-dispatch/19-02-SUMMARY.md
