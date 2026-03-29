@@ -136,7 +136,7 @@ class TestRunInterruptedDetection:
         bus = MessageBus()
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
 
         # Pre-set stop_event: kernel checks before first LLM call
         stop_event = threading.Event()
@@ -156,7 +156,7 @@ class TestRunInterruptedDetection:
         bus = MessageBus()
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
 
         # Simulate Redis-backed stop event: already set before run starts
         stop_event = threading.Event()

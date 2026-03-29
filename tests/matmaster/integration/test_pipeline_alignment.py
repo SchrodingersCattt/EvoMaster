@@ -110,7 +110,7 @@ class TestEventSequenceAlignment:
 
         config = ExpConfig(name="direct")
         exp = Exp(config)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
         # Register test tool directly on the runtime's registry
         runtime.spec.tool_registry.register(tool, source="test")
 

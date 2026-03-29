@@ -61,7 +61,7 @@ class TestMinimalE2EPipeline:
 
         config = ExpConfig(name="direct")
         exp = Exp(config)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
 
         kernel = AgentKernel()
         finish = await kernel.run(runtime.spec, "minimal test task")
