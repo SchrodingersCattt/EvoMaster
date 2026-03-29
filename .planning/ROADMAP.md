@@ -240,16 +240,20 @@ Plans:
 - [x] 23-01-PLAN.md -- Create/update VERIFICATION.md + VALIDATION.md for Phases 20/21/22, update milestone audit
 
 ### Phase 24: emit_nowait Tech Debt Cleanup
-**Goal**: 将 EventEmitterHook 的 7 处 emit_nowait() 升级为 await bus.emit()，清理 hooks.py 过期注释和 agent_run_service.py 类型标注
+**Goal**: 将 matmaster/ 包内全部 12 处 emit_nowait() 升级为 await bus.emit()，清理过期注释、更新 bus docstring 和 stop_event 类型标注
 **Depends on**: Phase 23
 **Requirements**: HOOK-03 (integration tech debt closure)
 **Gap Closure**: Closes emit_nowait integration gap and minor tech debt items
 **Success Criteria** (what must be TRUE):
-  1. hooks.py 中 EventEmitterHook 的全部 emit_nowait() 调用替换为 await bus.emit()
-  2. hooks.py 中引用 "sync kernel context" 的过期注释已删除或更新
-  3. agent_run_service.py 中 stop_event 类型标注从 Any 改为 threading.Event
-  4. 全量测试通过，无回归
-**Plans**: 0 plans
+  1. matmaster/ 内全部 emit_nowait() 调用替换为 await bus.emit()
+  2. 4 处引用 "sync kernel context" 的过期注释已删除
+  3. bus.py docstring 更新为 emit() 是主路径
+  4. agent_run_service.py 中 stop_event 类型标注从 Any 改为 threading.Event
+  5. 全量测试通过，无回归
+**Plans**: 1 plan
+
+Plans:
+- [ ] 24-01-PLAN.md -- Migrate 12 emit_nowait to await bus.emit() + stale comment cleanup + bus docstring + stop_event type + test assertion updates
 
 ## Progress
 
@@ -283,4 +287,4 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 21. Async Leaf I/O Cleanup | v2.0 | 1/1 | Complete    | 2026-03-29 |
 | 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete    | 2026-03-29 |
 | 23. Verification + Nyquist Closure | v2.0 | 1/1 | Complete    | 2026-03-29 |
-| 24. emit_nowait Tech Debt Cleanup | v2.0 | 0/0 | Pending | — |
+| 24. emit_nowait Tech Debt Cleanup | v2.0 | 0/1 | Planned | -- |
