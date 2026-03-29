@@ -1285,6 +1285,42 @@ class TestCallLlmRetry:
         assert basic.error_category is None
         assert basic.attempts is None
 
+    async def test_incomplete_response_marked_degraded(self) -> None:
+        """When all attempts return incomplete response, last one is returned with degraded=True."""
+        call_count = 0
+
+        class AlwaysIncompleteProvider:
+            stream_timeout = 10.0
+            max_retries = 2
+            retry_delay = 0.0
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages, tools=None):
+                return LLMResponse(content="not used", finish_reason="stop")
+
+            async def chat_stream(self, messages, tools=None, *, timeout=None):
+                nonlocal call_count
+                call_count += 1
+                # reasoning only, no content, no tool_calls
+                yield StreamChunk(reasoning_content="thinking...", finish_reason="stop")
+
+        spec = AgentRuntimeSpec(
+            llm_provider=AlwaysIncompleteProvider(),
+            system_prompt="test",
+        )
+        from matmaster.core.agent import AgentKernel
+        kernel = AgentKernel()
+        response = await kernel._call_llm(spec, [UserMessage(content="hi")])
+        assert response.degraded is True
+        assert response.reasoning_content is not None
+        assert response.content is None
+        assert call_count == 2  # tried max_retries times
+
 
 class TestParallelToolDispatch:
     """Tests for parallel tool dispatch via asyncio.gather."""
