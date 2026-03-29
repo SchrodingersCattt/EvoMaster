@@ -103,4 +103,6 @@
 - **仅 Worker 队列模式**：run 只在 Worker 上执行，不再支持「在 API 进程内执行 run」。请求中的 `mode: 'direct' | 'planner'` 仅表示任务类型，与执行位置无关。发送消息（POST /stream）必须配置 `REDIS_URL`，否则返回 503。
 - **Bohrium 远端共享目录**：Bohrium SSH / skill / bash 的远端工作目录默认直接使用项目级共享目录 `/share`；同一 Bohrium `project_id` 下的不同 session 共用该目录，不再默认创建 `/share/workspace/{session_id}`。修改远端 cwd、prompt 提示、文件浏览或下载落盘逻辑时，应遵守这一 project-scoped 语义。
 - **单文件行数**：若某源文件行数超过 1000 行，应进行重构（拆分为多个模块/子模块、抽取类或函数等），以利于维护与协作。
+- **评测题库 YAML 变更**：修改 `evaluation/question_bank/**/*.yaml` 中任一题目的题干、期望答案、`reference_answers`、`scoring_checklist` 或其他会影响评测语义的内容时，必须同时更新该题的顶层 `id`。新 `id` 可用时间戳或其他唯一后缀；若只是纯格式化、注释、空白或不影响语义的整理，可不改 `id`。
+- **尽量保持 YAML 原结构**：编辑题库 YAML 时，尽量不要无关地改动 `key/value` 组织、字段层级、字段命名、字段顺序、锚点引用关系或列表结构；除非该结构调整本身就是本次修改所必需。纯空白、缩进、换行、引号风格等表面格式也应尽量少动，但优先级低于保持语义结构稳定。
 - （可在此补充项目的其他通用约定，如测试、提交信息、目录结构等。）
