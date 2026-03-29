@@ -11,23 +11,23 @@ set -euo pipefail
 #
 # Defaults:
 # - name: mat_master_eval
-# - cmd:  python -m playground.mat_master.evaluation
+# - cmd:  python -m evaluation
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNS_DIR="$ROOT_DIR/runs/mat_master_eval"
 
 NAME="mat_master_eval"
-CMD_DEFAULT="python -m playground.mat_master.evaluation"
+CMD_DEFAULT="python -m evaluation"
 CMD="$CMD_DEFAULT"
 
 # Prefer uv-managed environment if uv is available.
 # Repo convention: `uv sync` then `uv run ...`
 if command -v uv >/dev/null 2>&1; then
-  CMD_DEFAULT="uv run python -m playground.mat_master.evaluation"
+  CMD_DEFAULT="uv run python -m evaluation"
   CMD="$CMD_DEFAULT"
 elif [[ -x "$ROOT_DIR/.venv/bin/python" ]]; then
   # Fallback to venv python if present.
-  CMD_DEFAULT="$ROOT_DIR/.venv/bin/python -m playground.mat_master.evaluation"
+  CMD_DEFAULT="$ROOT_DIR/.venv/bin/python -m evaluation"
   CMD="$CMD_DEFAULT"
 fi
 
@@ -43,7 +43,7 @@ Usage:
 
 Examples:
   scripts/run_mat_master_eval_bg.sh start
-  scripts/run_mat_master_eval_bg.sh start --cmd "python -m playground.mat_master.evaluation --help"
+  scripts/run_mat_master_eval_bg.sh start --cmd "python -m evaluation --help"
   scripts/run_mat_master_eval_bg.sh log -f
 EOF
 }

@@ -1,6 +1,6 @@
 # MATTER Evaluation v5+ (Weighted)
 
-MATTER 是 `playground/mat_master/evaluation/` 下的独立评测模块，当前仅维护 **v5+** 题库与运行链路。
+MATTER 是 `evaluation/` 下的独立评测模块，当前仅维护 **v5+** 题库与运行链路。
 
 v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵活、更可移植。
 
@@ -89,7 +89,7 @@ evaluation/
 
 如需使用不同的 evidence 映射（如自定义运行时）：
 ```python
-from playground.mat_master.evaluation.evidence import EvidenceExtractor
+from evaluation.evidence import EvidenceExtractor
 
 extractor = EvidenceExtractor(
     mapping_path="/path/to/custom/evidence_mapping.yaml"
@@ -102,8 +102,8 @@ bundle = extractor.extract(trajectory_json_path)
 CLI:
 
 ```bash
-uv run python -m playground.mat_master.evaluation.cli \
-  --eval-config playground/mat_master/evaluation/config.yaml \
+uv run python -m evaluation.cli \
+  --eval-config evaluation/config.yaml \
   --capabilities batch_processing workflow_orchestration \
   --questions DF_mech_001 WO_mech_001
 ```

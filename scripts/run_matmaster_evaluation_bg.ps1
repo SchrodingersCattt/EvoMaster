@@ -1,5 +1,5 @@
 param(
-  [string]$EvalConfig = "playground/mat_master/evaluation/config.yaml",
+  [string]$EvalConfig = "evaluation/config.yaml",
   [string]$MatConfig = "configs/mat_master/config.yaml",
   [string]$OutputDir = "runs/mat_master_eval",
   [string]$RunLabel = "mat_master_eval",
@@ -23,7 +23,7 @@ $logPath = Join-Path $logDir ("eval_{0}_{1}.log" -f $RunLabel, $ts)
 $errPath = Join-Path $logDir ("eval_{0}_{1}.err.log" -f $RunLabel, $ts)
 
 $pyArgs = @(
-  "-m", "playground.mat_master.evaluation.cli",
+  "-m", "evaluation.cli",
   "--eval-config", $EvalConfig,
   "--mat-config", $MatConfig,
   "--output-dir", $OutputDir,
