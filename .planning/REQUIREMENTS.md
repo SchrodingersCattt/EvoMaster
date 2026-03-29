@@ -27,13 +27,13 @@
 - [ ] **TOOL-02**: BashTool 使用 asyncio.create_subprocess_exec 替代 subprocess.run
 - [x] **TOOL-03**: 文件操作类 Tool（Read/Write/Edit/Glob/Grep）使用 asyncio.to_thread 包装同步文件 I/O
 - [x] **TOOL-04**: session-dependent tool 的 evomaster session 调用使用 asyncio.to_thread 桥接
-- [ ] **TOOL-05**: SubAgentTool 的 spawn_fn 改为 async callable
+- [x] **TOOL-05**: SubAgentTool 的 spawn_fn 改为 async callable
 - [x] **TOOL-06**: 并行 Tool Dispatch — 同一轮多个 tool_call 使用 asyncio.gather 并行执行
 
 ### Hook 系统
 
 - [x] **HOOK-01**: 5 个具体 Hook 实现（OutputProcessorHook, EventEmitterHook, ConfirmationHook, HistoryHook, DirectHook）全部改为 async
-- [x] **HOOK-02**: ConfirmationHook 的 reply queue 机制适配 async（queue.Queue → asyncio 兼容方案）
+- [ ] **HOOK-02**: ConfirmationHook 的 reply queue 机制适配 async（queue.Queue → asyncio 兼容方案）
 - [x] **HOOK-03**: EventEmitterHook 适配 async MessageBus
 
 ### 核心引擎
@@ -47,9 +47,9 @@
 
 ### 基础设施
 
-- [ ] **INFR-01**: MessageBus 内部队列从 queue.Queue 改为 asyncio.Queue
-- [ ] **INFR-02**: EventRouter 适配 async MessageBus（drain 逻辑改为 async）
-- [ ] **INFR-03**: SSEHandler 和 PersistenceHandler 适配 async 事件消费
+- [x] **INFR-01**: MessageBus 内部队列从 queue.Queue 改为 asyncio.Queue
+- [x] **INFR-02**: EventRouter 适配 async MessageBus（drain 逻辑改为 async）
+- [x] **INFR-03**: SSEHandler 和 PersistenceHandler 适配 async 事件消费
 
 ### Exp 生命周期
 
@@ -113,13 +113,13 @@
 | LLMP-02 | Phase 13 | Complete |
 | LLMP-03 | Phase 13 | Complete |
 | TOOL-01 | Phase 14 | Complete |
-| TOOL-02 | Phase 14 | Pending |
+| TOOL-02 | Phase 21 | Pending |
 | TOOL-03 | Phase 14 | Complete |
 | TOOL-04 | Phase 14 | Complete |
-| TOOL-05 | Phase 14 | Pending |
+| TOOL-05 | Phase 18 | Complete |
 | TOOL-06 | Phase 19 | Complete |
 | HOOK-01 | Phase 15 | Complete |
-| HOOK-02 | Phase 15 | Complete |
+| HOOK-02 | Phase 20 | Pending |
 | HOOK-03 | Phase 15 | Complete |
 | KERN-01 | Phase 17 | Complete |
 | KERN-02 | Phase 17 | Complete |
@@ -127,12 +127,12 @@
 | KERN-04 | Phase 13 | Complete |
 | KERN-05 | Phase 17 | Complete |
 | KERN-06 | Phase 17 | Complete |
-| INFR-01 | Phase 16 | Pending |
-| INFR-02 | Phase 16 | Pending |
-| INFR-03 | Phase 16 | Pending |
-| EXPL-01 | Phase 18 | Pending |
-| EXPL-02 | Phase 18 | Pending |
-| EXPL-03 | Phase 18 | Pending |
+| INFR-01 | Phase 16 | Complete |
+| INFR-02 | Phase 16 | Complete |
+| INFR-03 | Phase 16 | Complete |
+| EXPL-01 | Phase 18 | Complete |
+| EXPL-02 | Phase 18 | Complete |
+| EXPL-03 | Phase 18 | Complete |
 | EXPL-04 | Phase 18 | Complete |
 | BRDG-01 | Phase 19 | Complete |
 | BRDG-02 | Phase 19 | Complete |
@@ -144,8 +144,8 @@
 - v2.0 requirements: 35 total
 - Mapped to phases: 35
 - Unmapped: 0
-- Complete: 15 (PROT-01~05, LLMP-01~03, KERN-04, TEST-01, TOOL-01, TOOL-03, TOOL-04, HOOK-01, HOOK-02, HOOK-03)
+- Complete: 33 (all except TOOL-02, HOOK-02)
 
 ---
 *Requirements defined: 2026-03-26*
-*Last updated: 2026-03-27 after Phase 15 Plan 03 complete (HOOK-01, HOOK-03 marked Complete)*
+*Last updated: 2026-03-29 after milestone audit gap planning and traceability sync*
