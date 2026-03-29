@@ -111,7 +111,7 @@ class AgentRuntime:
 
     kernel: Any  # AgentKernel (avoid circular import)
     spec: AgentRuntimeSpec
-    cleanup: Callable[[], None]
+    cleanup: Callable[[], Any]
 
 
 @dataclass(frozen=True)

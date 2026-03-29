@@ -101,15 +101,17 @@ class DevRunner:
         Appends run messages to history for multi-turn accumulation.
         """
         exp = Exp(self._exp_config)
-        runtime = exp.build_runtime(self._pg_ctx, bus=bus)
-
-        # Inject DevStreamHook (same pattern as AgentRunService)
-        spec = runtime.spec.model_copy(
-            update={"hooks": [*runtime.spec.hooks, self._stream_hook]}
-        )
-
         _loop = asyncio.new_event_loop()
         try:
+            runtime = _loop.run_until_complete(
+                exp.build_runtime(self._pg_ctx, bus=bus)
+            )
+
+            # Inject DevStreamHook (same pattern as AgentRunService)
+            spec = runtime.spec.model_copy(
+                update={"hooks": [*runtime.spec.hooks, self._stream_hook]}
+            )
+
             result = _loop.run_until_complete(
                 runtime.kernel.run(
                     spec, task, history=self.history, stop_event=stop_event
@@ -125,5 +127,5 @@ class DevRunner:
                 self.history.extend(new_messages)
             return result
         finally:
+            _loop.run_until_complete(exp._run_cleanup_callbacks())
             _loop.close()
-            runtime.cleanup()
