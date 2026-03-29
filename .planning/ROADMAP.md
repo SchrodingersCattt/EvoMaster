@@ -4,7 +4,7 @@
 
 - ✅ **v1 MatMaster Framework Refactoring** -- Phases 1-7 (shipped 2026-03-22)
 - ✅ **v1.1 Agent 外围能力构建** -- Phases 8-11 (shipped 2026-03-25)
-- 🚧 **v2.0 matmaster 协程改造** -- Phases 12-22 (in progress)
+- 🚧 **v2.0 matmaster 协程改造** -- Phases 12-24 (in progress)
 
 ## Phases
 
@@ -33,7 +33,7 @@ Full details: milestones/v1-ROADMAP.md
 
 </details>
 
-### 🚧 v2.0 matmaster 协程改造 (In Progress)
+### 🚧 v2.0 matmaster 协程改造 (In Progress — Phases 12-24)
 
 **Milestone Goal:** 将 matmaster 框架从同步架构全链路改造为 async/await，为多 agent 编排做准备。自底向上分层迁移：叶节点 I/O (Provider/Tool) -> 中间层 (Hook/Bus/Router) -> 核心引擎 (Kernel/Exp) -> 服务层桥接。
 
@@ -48,6 +48,8 @@ Full details: milestones/v1-ROADMAP.md
 - [x] **Phase 20: Confirmation Flow Recovery** - 恢复 Future-based confirmation hook 全链路，修复 adapter/interface regression，重新打通 confirmation flow (completed 2026-03-30)
 - [x] **Phase 21: Async Leaf I/O Cleanup** - 完成 BashTool 原生 async subprocess 路径，并移除 provider 遗留孤儿接口 (completed 2026-03-29)
 - [x] **Phase 22: Audit Metadata Backfill** - 回填 audit 所需 planning 元数据，确保 v2.0 re-audit 可追踪 (completed 2026-03-29)
+- [ ] **Phase 23: Verification + Nyquist Closure** - 创建 Phase 20 VERIFICATION.md 关闭 HOOK-02 验证缺口，修复 Phase 20/21/22 Nyquist 合规
+- [ ] **Phase 24: emit_nowait Tech Debt Cleanup** - EventEmitterHook emit_nowait() 升级为 await bus.emit()，修复过期注释和类型标注
 
 ## Phase Details
 
@@ -221,12 +223,37 @@ Plans:
 Plans:
 - [x] 22-01-PLAN.md -- Fix 3 SUMMARY.md frontmatter + PROJECT.md stale content + audit file commit with resolution addendum
 
+### Phase 23: Verification + Nyquist Closure
+**Goal**: 关闭 Phase 20 VERIFICATION.md 缺失导致的 HOOK-02 验证缺口，修复 Phase 20/21/22 的 Nyquist 合规状态
+**Depends on**: Phase 22
+**Requirements**: HOOK-02 (verification gap closure)
+**Gap Closure**: Closes HOOK-02 verification gap and Nyquist compliance for Phases 20, 21, 22
+**Success Criteria** (what must be TRUE):
+  1. Phase 20 VERIFICATION.md 存在且验证 HOOK-02 为 SATISFIED
+  2. Phase 20 VALIDATION.md 存在且 nyquist_compliant=true
+  3. Phase 21 VALIDATION.md nyquist_compliant=true, wave_0_complete=true
+  4. Phase 22 VALIDATION.md 存在且 nyquist_compliant=true
+  5. Re-audit 时 HOOK-02 状态从 partial 变为 satisfied
+**Plans**: 0 plans
+
+### Phase 24: emit_nowait Tech Debt Cleanup
+**Goal**: 将 EventEmitterHook 的 7 处 emit_nowait() 升级为 await bus.emit()，清理 hooks.py 过期注释和 agent_run_service.py 类型标注
+**Depends on**: Phase 23
+**Requirements**: HOOK-03 (integration tech debt closure)
+**Gap Closure**: Closes emit_nowait integration gap and minor tech debt items
+**Success Criteria** (what must be TRUE):
+  1. hooks.py 中 EventEmitterHook 的全部 emit_nowait() 调用替换为 await bus.emit()
+  2. hooks.py 中引用 "sync kernel context" 的过期注释已删除或更新
+  3. agent_run_service.py 中 stop_event 类型标注从 Any 改为 threading.Event
+  4. 全量测试通过，无回归
+**Plans**: 0 plans
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21 -> 22
+Phases execute in numeric order: 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21 -> 22 -> 23 -> 24
 
-Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12），但建议按顺序执行以控制变更范围。Phase 15 同理。Phase 17 是收敛点，必须等 13-16 全部完成。Gap closure 阶段中，Phase 20 和 Phase 21 可分别收敛代码 gap，Phase 22 最后统一回填 audit 元数据。
+Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12），但建议按顺序执行以控制变更范围。Phase 15 同理。Phase 17 是收敛点，必须等 13-16 全部完成。Gap closure 阶段中，Phase 20 和 Phase 21 可分别收敛代码 gap，Phase 22 最后统一回填 audit 元数据。Phase 23 关闭验证/Nyquist 缺口，Phase 24 清理最后的 tech debt。
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -252,3 +279,5 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 20. Confirmation Flow Recovery | v2.0 | 2/2 | Complete | 2026-03-30 |
 | 21. Async Leaf I/O Cleanup | v2.0 | 1/1 | Complete    | 2026-03-29 |
 | 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete    | 2026-03-29 |
+| 23. Verification + Nyquist Closure | v2.0 | 0/0 | Pending | — |
+| 24. emit_nowait Tech Debt Cleanup | v2.0 | 0/0 | Pending | — |
