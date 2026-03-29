@@ -15,6 +15,7 @@ from collections.abc import Callable
 from typing import Any, ClassVar
 
 from matmaster.tools.builtin.base import BuiltinTool
+from matmaster.tools.tool_result import ToolResult
 
 
 class SpawnTool(BuiltinTool):
@@ -119,11 +120,12 @@ class SpawnTool(BuiltinTool):
             "required": ["exp_name", "task"],
         }
 
-    def _execute(self, arguments: dict[str, Any]) -> str:
-        """Execute sub-agent spawn.
+    async def execute(self, arguments: dict[str, Any]) -> str | ToolResult:
+        """Override BuiltinTool.execute() for native async spawn.
 
-        Returns spawn_fn result on success, error string on guard/validation failure.
-        Exceptions from spawn_fn propagate to BuiltinTool.execute() wrapper.
+        SpawnTool is the only BuiltinTool that needs native async execution
+        (spawn_fn is async). Bypasses the base class to_thread(_execute) pattern.
+        Preserves the full error contract: recursion guard, validation, exception catch.
         """
         if self._spawn_fn is None:
             return (
@@ -137,4 +139,17 @@ class SpawnTool(BuiltinTool):
         if not exp_name or not task:
             return "Error: Both exp_name and task are required"
 
-        return self._spawn_fn(exp_name, task, self._stop_event)
+        try:
+            return await self._spawn_fn(exp_name, task, self._stop_event)
+        except Exception as e:
+            self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
+            return f"Error: {e}"
+
+    def _execute(self, arguments: dict[str, Any]) -> str:
+        """Not used -- SpawnTool overrides execute() directly for native async.
+
+        Retained as stub to satisfy BuiltinTool ABC @abstractmethod constraint.
+        """
+        raise NotImplementedError(
+            "SpawnTool uses async execute() directly, not _execute()"
+        )

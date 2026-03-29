@@ -16,7 +16,6 @@ kernel raises.
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 import logging
 import threading
@@ -99,14 +98,15 @@ class Exp:
         ctx: PlaygroundContext,
         bus: MessageBus | None,
         source_prefix: str,
-    ) -> Callable[[str, str, threading.Event | None], str]:
-        """Create spawn_fn closure capturing parent runtime context.
+    ) -> Any:
+        """Create async spawn_fn closure capturing parent runtime context.
 
-        The returned callable creates a child Exp from exp_name, runs it with
-        the parent's PlaygroundContext and MessageBus, and returns the result.
+        The returned async callable creates a child Exp from exp_name,
+        runs it via child_exp.run() with the parent's PlaygroundContext
+        and MessageBus, and returns the result.
         """
 
-        def spawn_fn(
+        async def spawn_fn(
             exp_name: str,
             task: str,
             stop_event: threading.Event | None = None,
@@ -117,26 +117,17 @@ class Exp:
             child_exp = Exp(child_config)
             child_source = f"{source_prefix}:{exp_name}"
             child_spawn_id = uuid.uuid4().hex[:16]
-            child_runtime = child_exp.build_runtime(
+            result = await child_exp.run(
                 ctx,
+                task,
                 bus=bus,
+                stop_event=stop_event,
                 source_override=child_source,
                 spawn_id=child_spawn_id,
             )
-            _loop = asyncio.new_event_loop()
-            try:
-                run_result = _loop.run_until_complete(
-                    child_runtime.kernel.run(
-                        child_runtime.spec, task, stop_event=stop_event
-                    )
-                )
-                result = run_result.result
-                if result.status == "completed" and result.final_content:
-                    return result.final_content
-                return f"SubAgent finished with status={result.status}, reason={result.reason}"
-            finally:
-                _loop.close()
-                child_runtime.cleanup()
+            if result.status == "completed" and result.final_content:
+                return result.final_content
+            return f"SubAgent finished with status={result.status}, reason={result.reason}"
 
         return spawn_fn
 
@@ -289,6 +280,8 @@ class Exp:
         stop_event: threading.Event | None = None,
         skills: dict[str, Any] | None = None,
         mcp: dict[str, Any] | None = None,
+        source_override: str | None = None,
+        spawn_id: str | None = None,
     ) -> KernelResult:
         """build_runtime -> kernel.run -> cleanup.
 
@@ -296,7 +289,10 @@ class Exp:
         failures (callbacks already registered) still trigger cleanup.
         """
         try:
-            runtime = await self.build_runtime(ctx, bus=bus, skills=skills, mcp=mcp)
+            runtime = await self.build_runtime(
+                ctx, bus=bus, skills=skills, mcp=mcp,
+                source_override=source_override, spawn_id=spawn_id,
+            )
             # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
             tool_registry = getattr(runtime.spec, "tool_registry", None)
             if stop_event is not None and tool_registry is not None:
