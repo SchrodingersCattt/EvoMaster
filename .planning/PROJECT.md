@@ -66,7 +66,7 @@ See REQUIREMENTS.md for full v2.0 requirement list (35 items, 33 complete after 
 
 ### Current State
 
-**Phase 23 complete** (2026-03-30): Verification + Nyquist Closure。Phase 20 VERIFICATION.md 创建（10/10 must-haves, HOOK-02 SATISFIED），Phase 20/22 VALIDATION.md 创建，Phase 21 VALIDATION.md 修复为 compliant。Milestone audit 更新为 all_clear（35/35 requirements, 11/11 phases Nyquist COMPLIANT）。Confirmation flow 全链路已恢复。1074 tests passed。
+**Phase 24 complete** (2026-03-30): emit_nowait Tech Debt Cleanup。matmaster/ 内全部 12 处 emit_nowait() 迁移为 await bus.emit()，4 处 stale "sync kernel context" 注释清理，bus.py docstring 更新，stop_event 类型标注修复。v2.0 milestone 全部 13 个 phase 完成（35/35 requirements）。1195 tests passed。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI (not refactored), OpenAI SDK, tiktoken.
 
@@ -152,4 +152,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-30 after Phase 22 audit metadata backfill (v2.0 milestone audit gap closure)*
+*Last updated: 2026-03-30 after Phase 24 emit_nowait tech debt cleanup (v2.0 milestone final phase)*
