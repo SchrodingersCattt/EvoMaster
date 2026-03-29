@@ -84,7 +84,7 @@ class TestBashToolAsyncSubprocess:
         session = LocalSession()
         return BashTool(session=session, workdir=Path("/tmp"))
 
-    def test_normal_command(self) -> None:
+    async def test_normal_command(self) -> None:
         """Async path: create_subprocess_exec called, output contains result."""
         tool = self._make_tool_with_local_session()
 
@@ -97,13 +97,13 @@ class TestBashToolAsyncSubprocess:
             new_callable=AsyncMock,
             return_value=mock_proc,
         ) as mock_create:
-            result = tool.execute({"command": "echo hello"})
+            result = await tool.execute({"command": "echo hello"})
 
         assert "hello world" in result
         assert "exit code 0" in result
         mock_create.assert_called_once()
 
-    def test_timeout(self) -> None:
+    async def test_timeout(self) -> None:
         """Async path: timeout kills process and returns exit code 124."""
         tool = self._make_tool_with_local_session()
 
@@ -117,14 +117,14 @@ class TestBashToolAsyncSubprocess:
             new_callable=AsyncMock,
             return_value=mock_proc,
         ):
-            result = tool.execute({"command": "sleep 999", "timeout": 1})
+            result = await tool.execute({"command": "sleep 999", "timeout": 1})
 
         assert "timeout" in result.lower()
         assert "exit code 124" in result
         mock_proc.kill.assert_called_once()
         mock_proc.wait.assert_awaited_once()
 
-    def test_dangerous_blocked(self) -> None:
+    async def test_dangerous_blocked(self) -> None:
         """Async path: dangerous commands blocked before subprocess creation."""
         tool = self._make_tool_with_local_session()
 
@@ -132,12 +132,12 @@ class TestBashToolAsyncSubprocess:
             "matmaster.tools.builtin.bash_tool.asyncio.create_subprocess_exec",
             new_callable=AsyncMock,
         ) as mock_create:
-            result = tool.execute({"command": "env"})
+            result = await tool.execute({"command": "env"})
 
         assert "Blocked:" in result
         mock_create.assert_not_called()
 
-    def test_is_input(self) -> None:
+    async def test_is_input(self) -> None:
         """Async path: is_input returns not-supported message."""
         tool = self._make_tool_with_local_session()
 
@@ -145,13 +145,13 @@ class TestBashToolAsyncSubprocess:
             "matmaster.tools.builtin.bash_tool.asyncio.create_subprocess_exec",
             new_callable=AsyncMock,
         ) as mock_create:
-            result = tool.execute({"command": "x", "is_input": "true"})
+            result = await tool.execute({"command": "x", "is_input": "true"})
 
         assert "Interactive input is not supported" in result
         mock_create.assert_not_called()
 
-    def test_session_dependent_fallback(self) -> None:
-        """Non-LocalSession: falls back to session.exec_bash via sync path."""
+    async def test_session_dependent_fallback(self) -> None:
+        """Non-LocalSession: falls back to session.exec_bash via base class to_thread."""
         mock_session = MagicMock()
         mock_session.exec_bash.return_value = {
             "output": "fallback result",
@@ -160,7 +160,7 @@ class TestBashToolAsyncSubprocess:
         }
         tool = BashTool(session=mock_session, workdir=Path("/tmp"))
 
-        result = tool.execute({"command": "echo test"})
+        result = await tool.execute({"command": "echo test"})
 
         assert "fallback result" in result
         mock_session.exec_bash.assert_called_once()
