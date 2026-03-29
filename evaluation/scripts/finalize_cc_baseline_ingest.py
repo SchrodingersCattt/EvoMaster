@@ -3,7 +3,7 @@
 
 Expects a run directory created with::
 
-    uv run python scripts/run_devshell_eval.py --prepare-cc-baseline ...
+    uv run python evaluation/scripts/run_devshell_eval.py --prepare-cc-baseline ...
 
 Each task workspace must contain:
 
@@ -14,8 +14,8 @@ See ``evaluation/baseline_cc_eval.md``.
 
 Examples::
 
-    uv run python scripts/finalize_cc_baseline_ingest.py --run-dir results/baseline_cc_20260328_120000
-    uv run python scripts/finalize_cc_baseline_ingest.py --run-dir results/... --eval-ingest-pending-only
+    uv run python evaluation/scripts/finalize_cc_baseline_ingest.py --run-dir results/baseline_cc_20260328_120000
+    uv run python evaluation/scripts/finalize_cc_baseline_ingest.py --run-dir results/... --eval-ingest-pending-only
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _load_summary_file(summary_file: Path) -> dict[str, Any]:
@@ -316,7 +316,7 @@ def main() -> int:
                         "说明证据（可引用 raw_runs / OSS zip 内路径）；--suggestion 写可执行改进；"
                         "耗时与 tokens 以本条 item 的 duration_ms / tokens（来自 _devshell_summary.json）为准，"
                         "若缺失须在 score_reason 中说明。上报命令: uv run python "
-                        f"scripts/eval_ingest_submit_pending.py --pending {pend_path} "
+                        f"evaluation/scripts/eval_ingest_submit_pending.py --pending {pend_path} "
                         "--score <0-100> --score-reason \"...\" [--suggestion \"...\"]"
                     ),
                     "item": item_body,

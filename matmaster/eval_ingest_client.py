@@ -13,7 +13,7 @@ For deferred ingest, ``run_devshell_eval.py --eval-ingest-pending-only`` writes
 ``pending_ingest/*.json`` with ``item`` **without** ``score`` (and without human
 ``score_reason`` / ``suggestion``). After judging, Claude Code passes
 ``--score`` / ``--score-reason`` / ``--suggestion`` to
-``scripts/eval_ingest_submit_pending.py --pending <path>`` before POST.
+``evaluation/scripts/eval_ingest_submit_pending.py --pending <path>`` before POST.
 ``result_oss_url`` is set after zipping **only the current task** under that run:
 ``workspaces/<task_id>`` and ``logs/<task_id>`` (see :func:`upload_eval_task_artifacts_to_oss`).
 The parent ``devshell_eval_*`` folder is shared by all tasks in the batch; it is not uploaded whole.

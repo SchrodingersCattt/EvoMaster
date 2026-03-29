@@ -1,4 +1,4 @@
-"""Smoke tests for ``scripts/run_devshell_eval.py`` (dry-run only; no LLM)."""
+"""Smoke tests for ``evaluation/scripts/run_devshell_eval.py`` (dry-run only; no LLM)."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-SCRIPT = REPO_ROOT / "scripts" / "run_devshell_eval.py"
+SCRIPT = REPO_ROOT / "evaluation" / "scripts" / "run_devshell_eval.py"
 
 
 def test_devshell_eval_dry_run_limit_one() -> None:

@@ -4,16 +4,16 @@ set -euo pipefail
 # Run MatMaster evaluation in background, with log file you can tail.
 #
 # Usage:
-#   scripts/run_mat_master_eval_bg.sh start [--name NAME] [--cmd "..."]
-#   scripts/run_mat_master_eval_bg.sh status [--name NAME]
-#   scripts/run_mat_master_eval_bg.sh log [--name NAME] [-f]
-#   scripts/run_mat_master_eval_bg.sh stop [--name NAME]
+#   evaluation/scripts/run_mat_master_eval_bg.sh start [--name NAME] [--cmd "..."]
+#   evaluation/scripts/run_mat_master_eval_bg.sh status [--name NAME]
+#   evaluation/scripts/run_mat_master_eval_bg.sh log [--name NAME] [-f]
+#   evaluation/scripts/run_mat_master_eval_bg.sh stop [--name NAME]
 #
 # Defaults:
 # - name: mat_master_eval
 # - cmd:  python -m evaluation
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUNS_DIR="$ROOT_DIR/runs/mat_master_eval"
 
 NAME="mat_master_eval"
@@ -36,15 +36,15 @@ FOLLOW=false
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/run_mat_master_eval_bg.sh start [--name NAME] [--cmd "..."]
-  scripts/run_mat_master_eval_bg.sh status [--name NAME]
-  scripts/run_mat_master_eval_bg.sh log [--name NAME] [-f]
-  scripts/run_mat_master_eval_bg.sh stop [--name NAME]
+  evaluation/scripts/run_mat_master_eval_bg.sh start [--name NAME] [--cmd "..."]
+  evaluation/scripts/run_mat_master_eval_bg.sh status [--name NAME]
+  evaluation/scripts/run_mat_master_eval_bg.sh log [--name NAME] [-f]
+  evaluation/scripts/run_mat_master_eval_bg.sh stop [--name NAME]
 
 Examples:
-  scripts/run_mat_master_eval_bg.sh start
-  scripts/run_mat_master_eval_bg.sh start --cmd "python -m evaluation --help"
-  scripts/run_mat_master_eval_bg.sh log -f
+  evaluation/scripts/run_mat_master_eval_bg.sh start
+  evaluation/scripts/run_mat_master_eval_bg.sh start --cmd "python -m evaluation --help"
+  evaluation/scripts/run_mat_master_eval_bg.sh log -f
 EOF
 }
 
