@@ -125,6 +125,7 @@ class LLMResponse(BaseModel):
     tool_calls: list[ToolCallData] | None = None
     finish_reason: str | None = None
     usage: dict[str, int] = Field(default_factory=dict)
+    degraded: bool = False
 
 
 class StreamChunk(BaseModel):
