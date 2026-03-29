@@ -42,6 +42,9 @@ VerifyLiteral = Literal[
     'no_retries',
     'artifact_exists',
     'token_budget',
+    'duration_budget',
+    'molcrys_slab_molecular_integrity',
+    'sc005_disorder_formulas',
     'llm_binary_judge',
     'batch_single_variable_sweep',
     'batch_tool_args_constant',
@@ -212,6 +215,9 @@ class QuestionItem(BaseModel):
             'batch_single_variable_sweep',
             'batch_tool_args_constant',
             'batch_consistent_calls',
+            'duration_budget',
+            'molcrys_slab_molecular_integrity',
+            'sc005_disorder_formulas',
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:
@@ -365,6 +371,10 @@ class EvalRunRecord(BaseModel):
 
     # Meta
     model_name: str | None = None
+    duration_ms: int = Field(
+        default=0,
+        description='Wall-clock milliseconds for the agent run (mat task).',
+    )
     token_usage: TokenUsageRecord = Field(default_factory=TokenUsageRecord)
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     safety_veto: SafetyVetoRecord = Field(default_factory=SafetyVetoRecord)
