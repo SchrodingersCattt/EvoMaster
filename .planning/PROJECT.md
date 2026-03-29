@@ -66,7 +66,7 @@ See REQUIREMENTS.md for full v2.0 requirement list (35 items, 15 complete after 
 
 ### Current State
 
-**Phase 18 complete** (2026-03-29): Exp 生命周期全面 async。assemble/build_runtime/run/_run_cleanup_callbacks 四个方法改为 async def，run() 中的 bridge loop 移除直接 await kernel.run()，cleanup 支持 async callback（isawaitable dispatch）。SubAgent spawn_fn 改为 async 闭包复用 Exp.run() 完整生命周期，SpawnTool.execute() native async override。service 层和 DevShell bridge loop 扩展覆盖 build_runtime + cleanup。1057 tests passed。
+**Phase 19 complete** (2026-03-29): 服务层桥接 + 并行 Tool Dispatch。agent_run_service.py 双事件循环统一为单一 daemon thread + run_forever，所有 async 调用通过 run_coroutine_threadsafe 分发。DevShell 简化为 asyncio.run()。AgentKernel._run_loop() 串行工具执行改为三阶段并行 dispatch（serial guard gate → asyncio.gather → serial post-processing），outcome-list 4-tuple 保证混合场景下 ToolMessage 原序。1063 tests passed。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI (not refactored), OpenAI SDK, tiktoken.
 
