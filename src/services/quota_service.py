@@ -11,7 +11,7 @@ from typing import Any
 
 import aiohttp
 
-from src.utils.constant import MATMASTER_TOOLS_SERVER
+from utils.env import MATMASTER_TOOLS_SERVER
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
