@@ -48,8 +48,6 @@ questions:
       - key: "output_files_generated"
         value: 5
         tolerance: 0.0
-      - key: "used_surface_slab_tool"
-        value: "mat_sg_build_surface_slab"
       - key: "no_redundant_calls"
         value: 5
         tolerance: 0.0
@@ -74,10 +72,10 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
-      - id: "used_surface_slab_tool"
-        criterion: "Used mat_sg_build_surface_slab (and no other structure builder) for all 5 slabs."
+      - id: "grounding_batch_consistency"
+        criterion: "The five outputs collectively reflect a single-parameter vacuum sweep with Miller index, layer count, and supercell held fixed as specified."
         axis: "grounding"
-        verify: "tool_called"
+        verify: "llm_binary_judge"
       # --- efficiency ---
       - id: "no_redundant_calls"
         criterion: "No identical consecutive calls (tool_name + all args). Each call is parameterically different."
