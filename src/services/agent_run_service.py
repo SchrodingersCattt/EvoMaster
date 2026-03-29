@@ -300,16 +300,17 @@ class AgentRunService:
                     ),
                 ],
             )
-            # Dedicated event loop for router's async consume task.
-            # Service layer is sync, so we bridge via run_coroutine_threadsafe.
-            _router_loop = asyncio.new_event_loop()
-            _router_loop_thread = threading.Thread(
-                target=_router_loop.run_forever,
+            # -- Unified event loop for router + exp + kernel --
+            # Single daemon thread runs all async operations. Service layer
+            # bridges via run_coroutine_threadsafe (D-01).
+            _loop = asyncio.new_event_loop()
+            _loop_thread = threading.Thread(
+                target=_loop.run_forever,
                 daemon=True,
-                name="router-loop",
+                name="agent-loop",
             )
-            _router_loop_thread.start()
-            asyncio.run_coroutine_threadsafe(router.start(), _router_loop).result()
+            _loop_thread.start()
+            asyncio.run_coroutine_threadsafe(router.start(), _loop).result()
 
             exp_name = mode or 'direct'
             from matmaster.config.loader import load_exp_config
@@ -395,7 +396,7 @@ class AgentRunService:
                 )
             )
 
-            # -- Stage 4: Exp assembly --
+            # -- Stage 4: Exp assembly (via unified loop) --
             from matmaster.config.loader import load_llm_config
             from matmaster.core.exp import Exp
             from matmaster.providers.llm_factory import build_provider
@@ -424,67 +425,61 @@ class AgentRunService:
             )
 
             exp = Exp(exp_config)
+            runtime = asyncio.run_coroutine_threadsafe(
+                exp.build_runtime(
+                    pg_ctx,
+                    bus=bus,
+                    skills=pg_ctx.run_meta.get('skill_config'),
+                    mcp=pg_ctx.run_meta.get('mcp_config'),
+                ),
+                _loop,
+            ).result()
 
-            # -- Stage 4b: Bridge loop for async Exp + Kernel --
-            # Single event loop covers build_runtime, kernel.run, and cleanup.
-            _loop = asyncio.new_event_loop()
-            try:
-                runtime = _loop.run_until_complete(
-                    exp.build_runtime(
-                        pg_ctx,
-                        bus=bus,
-                        skills=pg_ctx.run_meta.get('skill_config'),
-                        mcp=pg_ctx.run_meta.get('mcp_config'),
-                    )
+            # Add external hooks to spec
+            external_hooks = [
+                # TODO: re-enable with confirm_tools once MCP registration lands
+                # confirmation_hook = ConfirmationHook(bus)
+                # stream_svc.set_reply_queue(session_id, ConfirmationHookAdapter(confirmation_hook))
+                # external_hooks.append(confirmation_hook)
+                OutputProcessorHook(bus),
+                SkillHitHook(bus),
+                AssistantStateHook(bus),
+            ]
+            spec = runtime.spec.model_copy(
+                update={'hooks': [*runtime.spec.hooks, *external_hooks]}
+            )
+
+            # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
+            if stop_event is not None and spec.tool_registry is not None:
+                from matmaster.tools.builtin.spawn_tool import SpawnTool
+
+                for tool in spec.tool_registry.all_tools:
+                    if isinstance(tool, SpawnTool):
+                        tool._stop_event = stop_event
+
+            # -- Stage 5: History --
+            raw_events = (
+                events_table.get_session_events(
+                    session_id, limit=_DIALOG_HISTORY_MAX_EVENTS
                 )
+                if events_table
+                else []
+            )
+            parent_events = ChatHistoryConverter.exclude_spawn_events(raw_events)
+            history = ChatHistoryConverter.events_to_messages(
+                ChatHistoryConverter.exclude_task_events(parent_events, task_id)
+            )
 
-                # Add external hooks to spec
-                external_hooks = [
-                    # TODO: re-enable with confirm_tools once MCP registration lands
-                    # confirmation_hook = ConfirmationHook(bus)
-                    # stream_svc.set_reply_queue(session_id, ConfirmationHookAdapter(confirmation_hook))
-                    # external_hooks.append(confirmation_hook)
-                    OutputProcessorHook(bus),
-                    SkillHitHook(bus),
-                    AssistantStateHook(bus),
-                ]
-                spec = runtime.spec.model_copy(
-                    update={'hooks': [*runtime.spec.hooks, *external_hooks]}
-                )
-
-                # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
-                if stop_event is not None and spec.tool_registry is not None:
-                    from matmaster.tools.builtin.spawn_tool import SpawnTool
-
-                    for tool in spec.tool_registry.all_tools:
-                        if isinstance(tool, SpawnTool):
-                            tool._stop_event = stop_event
-
-                # -- Stage 5: History --
-                raw_events = (
-                    events_table.get_session_events(
-                        session_id, limit=_DIALOG_HISTORY_MAX_EVENTS
-                    )
-                    if events_table
-                    else []
-                )
-                parent_events = ChatHistoryConverter.exclude_spawn_events(raw_events)
-                history = ChatHistoryConverter.events_to_messages(
-                    ChatHistoryConverter.exclude_task_events(parent_events, task_id)
-                )
-
-                # -- Stage 6: Kernel execution --
-                kernel_result = _loop.run_until_complete(
-                    runtime.kernel.run(
-                        spec=spec,
-                        task=user_prompt,
-                        history=history,
-                        stop_event=stop_event,
-                    )
-                )
-            finally:
-                _loop.run_until_complete(exp._run_cleanup_callbacks())
-                _loop.close()
+            # -- Stage 6: Kernel execution (via unified loop) --
+            kernel_result = asyncio.run_coroutine_threadsafe(
+                runtime.kernel.run(
+                    spec=spec,
+                    task=user_prompt,
+                    history=history,
+                    stop_event=stop_event,
+                ),
+                _loop,
+            ).result()
             run_result_event = kernel_result.result.to_run_result_event()
 
             # -- Post-processing --
@@ -576,19 +571,27 @@ class AgentRunService:
                     )
                 except Exception:
                     logger.warning('Bohrium cleanup error', exc_info=True)
-            # 2. Exp cleanup -- handled inside bridge loop (before _loop.close())
-            # 3. Router LAST -- drains any final events from bohrium/exp cleanup
-            if router:
+            # 2. Exp cleanup -- run on unified loop (safe even if exp partially built)
+            if 'exp' in dir() and exp and '_loop' in dir():
                 try:
                     asyncio.run_coroutine_threadsafe(
-                        router.stop(), _router_loop
+                        exp._run_cleanup_callbacks(), _loop
+                    ).result(timeout=30)
+                except Exception:
+                    logger.warning('Exp cleanup failed', exc_info=True)
+            # 3. Router LAST -- drains any final events from bohrium/exp cleanup
+            if router and '_loop' in dir():
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        router.stop(), _loop
                     ).result(timeout=10)
                 except Exception:
                     logger.warning('router.stop() failed during cleanup', exc_info=True)
-            # 4. Shut down the dedicated router loop
-            if '_router_loop' in dir():
-                _router_loop.call_soon_threadsafe(_router_loop.stop)
-                _router_loop_thread.join(timeout=5)
+            # 4. Shut down the unified event loop
+            if '_loop' in dir():
+                _loop.call_soon_threadsafe(_loop.stop)
+                _loop_thread.join(timeout=5)
+                _loop.close()
             get_redis_dao().delete_stop_requested(session_id, task_id)
             self._pg_manager.release(session_id)
             gc.collect()
