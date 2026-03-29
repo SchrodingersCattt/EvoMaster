@@ -40,7 +40,7 @@ patterns-established:
   - "BuiltinTool async bridge: async execute() -> await asyncio.to_thread(self._execute, arguments)"
   - "ToolRegistry await-then-normalize: result = await tool.execute(args); return normalize_tool_result(result)"
 
-requirements-completed: [TOOL-01, TOOL-02, TOOL-03, TOOL-04]
+requirements-completed: [TOOL-01, TOOL-03, TOOL-04]
 
 # Metrics
 duration: 4min

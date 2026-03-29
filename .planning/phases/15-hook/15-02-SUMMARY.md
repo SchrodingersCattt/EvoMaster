@@ -44,12 +44,13 @@ patterns-established:
   - "ConfirmationHookAdapter: bridge legacy ReplyQueueLike callers to new async hook API"
   - "Duck-typed loop injection: Kernel checks hasattr(hook, set_loop) to avoid coupling to specific hook types"
 
-requirements-completed: [HOOK-02]
+requirements-completed: []
 
 # Metrics
 duration: 12min
 completed: 2026-03-27
 ---
+<!-- Metadata correction (Phase 22): HOOK-02 removed from requirements-completed. asyncio.Future implementation reverted during merge c60329b. Re-assigned to Phase 20. -->
 
 # Phase 15 Plan 02: ConfirmationHook Async Summary
 
