@@ -3,19 +3,19 @@
 
 Expects a run directory created with::
 
-    uv run python evaluation/scripts/run_devshell_eval.py --prepare-cc-baseline ...
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --prepare-cc-baseline ...
 
 Each task workspace must contain:
 
 - ``_eval_task_meta.json`` (written by --prepare-cc-baseline)
 - ``_devshell_summary.json`` (one JSON object, same schema as mm-devshell ``--json-out``)
 
-See ``evaluation/docs/baseline_cc_eval.md``.
+See ``evaluation/docs/baseline/baseline_cc_eval.md``.
 
 Examples::
 
-    uv run python evaluation/scripts/finalize_cc_baseline_ingest.py --run-dir results/baseline_cc_20260328_120000
-    uv run python evaluation/scripts/finalize_cc_baseline_ingest.py --run-dir results/... --eval-ingest-pending-only
+    uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-dir results/baseline_cc_20260328_120000
+    uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-dir results/... --eval-ingest-pending-only
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
 def _load_summary_file(summary_file: Path) -> dict[str, Any]:

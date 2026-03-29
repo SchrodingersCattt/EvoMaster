@@ -1,4 +1,4 @@
-"""Smoke tests for ``evaluation/scripts/finalize_cc_baseline_ingest.py`` (no HTTP / OSS)."""
+"""Smoke tests for ``evaluation/scripts/baseline/finalize_cc_baseline_ingest.py`` (no HTTP / OSS)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,9 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-FINALIZE = REPO_ROOT / "evaluation" / "scripts" / "finalize_cc_baseline_ingest.py"
+FINALIZE = (
+    REPO_ROOT / "evaluation" / "scripts" / "baseline" / "finalize_cc_baseline_ingest.py"
+)
 
 
 def test_finalize_cc_baseline_no_ingest(tmp_path) -> None:
