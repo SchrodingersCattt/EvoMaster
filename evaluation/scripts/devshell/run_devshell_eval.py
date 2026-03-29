@@ -574,7 +574,6 @@ def main() -> int:
             result_oss_url = upload_eval_task_artifacts_to_oss(run_dir, task_id)
             ingest_item = build_ingest_item(
                 question_id=question.id,
-                prompt=str(prepared["prompt"]),
                 task_id=task_id,
                 mode=str(prepared["mode"]),
                 repeat_idx=int(prepared["repeat_idx"]),
@@ -593,7 +592,7 @@ def main() -> int:
                     "schema": "matmaster_eval_pending_ingest_v1",
                     "ingest_url": ingest_url,
                     "run_id": eval_ingest_run_id,
-                    "git_commit": git_commit,
+                    "run_kind": "iteration",
                     "task_id": task_id,
                     "instructions_zh": (
                         "判分后在仓库根执行: uv run python "
@@ -618,10 +617,9 @@ def main() -> int:
             else:
                 body: dict[str, Any] = {
                     "run_id": eval_ingest_run_id,
+                    "run_kind": "iteration",
                     "items": [ingest_item],
                 }
-                if git_commit:
-                    body["git_commit"] = git_commit
                 ok, msg = post_eval_ingest(
                     ingest_url,
                     body,

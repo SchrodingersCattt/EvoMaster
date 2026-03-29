@@ -120,10 +120,12 @@ def main() -> int:
         return 1
     assert normalized is not None
 
-    body: dict[str, Any] = {"run_id": run_id, "items": [normalized]}
-    gc = envelope.get("git_commit")
-    if isinstance(gc, str) and gc.strip():
-        body["git_commit"] = gc.strip()
+    run_kind = (envelope.get("run_kind") or "iteration").strip()
+    body: dict[str, Any] = {
+        "run_id": run_id,
+        "run_kind": run_kind,
+        "items": [normalized],
+    }
 
     ok, msg = post_eval_ingest(
         ingest_url,
