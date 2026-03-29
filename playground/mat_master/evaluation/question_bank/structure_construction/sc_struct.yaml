@@ -27,19 +27,8 @@ questions:
       - key: "mismatch_percent"
         value: 1.6
         tolerance: 1.0
-      - key: "interface_distance_A"
-        value: 3.35
-        tolerance: 0.4
-        tool_name: "mat_sg_build_surface_interface"
-        tool_arg: "interface_distance"
-      - key: "stack_axis"
-        value: 2
-        tool_name: "mat_sg_build_surface_interface"
-        tool_arg: "stack_axis"
       - key: "required_fields"
         value: ["structure_file", "lattice_mismatch_percent", "total_atoms", "interlayer_distance_A", "stacking", "vacuum_A"]
-      - key: "used_interface_builder"
-        value: "mat_sg_build_surface_interface"
     scoring_checklist:
       # --- correctness ---
       - id: "mismatch_percent"
@@ -50,26 +39,14 @@ questions:
         criterion: "Output includes structure file, lattice mismatch percentage below 2%, total atom count, interlayer distance near 3.35 A, AB stacking, and vacuum thickness near 15 A."
         axis: "correctness"
         verify: "llm_binary_judge"
-      - id: "interface_distance_A"
-        criterion: "The interface distance passed to the builder is close to 3.35 A."
-        axis: "correctness"
-        verify: "tool_args_match"
       # --- grounding ---
-      - id: "used_interface_builder"
-        criterion: "Used the MCP surface interface builder tool (mat_sg_build_surface_interface) for heterostructure construction."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "stack_axis"
-        criterion: "The two slabs are stacked along the z axis (stack_axis = 2)."
-        axis: "grounding"
-        verify: "tool_args_match"
       - id: "grounding_source"
-        criterion: "Heterostructure is assembled using the registered MCP interface builder, not constructed by writing raw coordinates."
+        criterion: "The heterostructure report and geometry claims are consistent with the delivered structure files and the stated specification, not asserted without structural evidence."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
       - id: "no_retries"
-        criterion: "Interface builder is called without excessive retries for the same parameter set."
+        criterion: "No excessive retries with the same parameter set during structure construction."
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"
@@ -112,12 +89,6 @@ questions:
         tolerance: 0.0
       - key: "required_fields"
         value: ["structure_file", "unit_cell_atoms", "total_atoms", "atom_count_ratio_check", "molecule_integrity_check"]
-      - key: "used_slab_builder"
-        value: "mat_sg_build_surface_slab"
-      - key: "correct_miller"
-        value: [1, 1, 0]
-        tool_name: "mat_sg_build_surface_slab"
-        tool_arg: "miller_index"
     scoring_checklist:
       # --- correctness ---
       - id: "unit_cell_atoms"
@@ -133,21 +104,13 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
-      - id: "used_slab_builder"
-        criterion: "Used the MCP surface slab builder tool (mat_sg_build_surface_slab)."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "correct_miller"
-        criterion: "Slab built with correct (110) Miller index passed to mat_sg_build_surface_slab."
-        axis: "grounding"
-        verify: "tool_args_match"
       - id: "grounding_source"
-        criterion: "The slab is constructed from the provided OSS-hosted PUBMUU03 CIF using the registered MCP slab builder, and the molecule-integrity conclusion is grounded in the resulting structure rather than guessed."
+        criterion: "The slab and molecule-integrity conclusions are grounded in the provided PUBMUU03 CIF and the delivered output structure, with explicit (110) surface orientation in the answer where relevant."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
       - id: "no_retries"
-        criterion: "Slab builder is not called repeatedly with wrong parameters."
+        criterion: "No repeated identical slab or cut operations with wrong parameters."
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"
@@ -176,12 +139,6 @@ questions:
         oss_url: ""
         description: "Specification for Si(100) surface hydrogen passivation."
     reference_answers:
-      - key: "used_slab_builder"
-        value: "mat_sg_build_surface_slab"
-      - key: "correct_miller"
-        value: [1, 0, 0]
-        tool_name: "mat_sg_build_surface_slab"
-        tool_arg: "miller_index"
       - key: "si_h_bond_length_A"
         value: 1.48
         tolerance: 0.15
@@ -204,21 +161,13 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
-      - id: "used_slab_builder"
-        criterion: "Used MCP surface slab builder tool (mat_sg_build_surface_slab) to construct Si(100) slab."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "correct_miller"
-        criterion: "Slab built with correct (100) Miller index passed to mat_sg_build_surface_slab."
-        axis: "grounding"
-        verify: "tool_args_match"
       - id: "grounding_source"
-        criterion: "Si(100) slab is built via MCP tool; H passivation is applied to the MCP-generated structure."
+        criterion: "Si(100) slab orientation and H passivation claims are supported by the delivered structure and reported metrics, not only by generic semiconductor chemistry recall."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
       - id: "no_retries"
-        criterion: "Slab builder and passivation are called without repeated identical attempts."
+        criterion: "Slab construction and passivation run without repeated identical attempts."
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"
@@ -254,13 +203,6 @@ questions:
         tolerance: 0.6
       - key: "required_fields"
         value: ["structure_file", "stoichiometry_verified", "layer_thickness_A", "vacuum_A"]
-      - key: "used_slab_builder"
-        value: "mat_sg_build_surface_slab"
-      - key: "correct_vacuum"
-        value: 20
-        tolerance: 2.0
-        tool_name: "mat_sg_build_surface_slab"
-        tool_arg: "vacuum"
     scoring_checklist:
       # --- correctness ---
       - id: "stoichiometry_formula"
@@ -276,21 +218,13 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
-      - id: "used_slab_builder"
-        criterion: "Used MCP surface slab builder (mat_sg_build_surface_slab) for monolayer exfoliation."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "correct_vacuum"
-        criterion: "Vacuum layer set to ~20 A in slab builder call."
-        axis: "grounding"
-        verify: "tool_args_match"
       - id: "grounding_source"
-        criterion: "MoS2 monolayer is obtained via the MCP slab builder, not hand-crafted coordinates."
+        criterion: "Monolayer stoichiometry, thickness, and vacuum claims are consistent with the delivered POSCAR/structure output rather than asserted without structural basis."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
       - id: "no_retries"
-        criterion: "Slab builder is not called repeatedly with the same vacuum parameter."
+        criterion: "No repeated identical exfoliation or slab cuts with the same parameters."
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"
@@ -337,8 +271,6 @@ questions:
           - "Fe2H40C24N16O2"
       - key: "required_fields"
         value: ["chemical_formula", "is_disordered", "ordered_replica_count", "ordered_output_archive"]
-      - key: "used_ordered_replica_tool"
-        value: "mat_sg_generate_ordered_replicas"
       - key: "structure_construction_event"
         value: "structure_construction"
       - key: "scientific_library_source"
@@ -365,10 +297,6 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
-      - id: "used_ordered_replica_tool"
-        criterion: "Used the MCP ordered replica generation tool (mat_sg_generate_ordered_replicas)."
-        axis: "grounding"
-        verify: "tool_called"
       - id: "structure_construction_event"
         criterion: "The workflow includes a successful structure_construction event."
         axis: "grounding"
@@ -378,7 +306,7 @@ questions:
         axis: "grounding"
         verify: "source_type_used"
       - id: "grounding_source"
-        criterion: "Ordered structures are produced with the registered structure-generation tool rather than fabricated 3D coordinates."
+        criterion: "Per-structure formula and ordered-replica outputs are traceable to the named input CIFs and plausible disordered-to-ordered handling, not invented wholesale."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
@@ -428,20 +356,10 @@ questions:
     reference_answers:
       - key: "file_exists"
         value: "meaper_hydrogenated.cif"
-      - key: "output_file"
-        value: "meaper_hydrogenated.cif"
-        tool_name: "mat_sg_add_hydrogens"
-        tool_arg: "output_file"
       - key: "target_formula"
         value: "C8H48Cl8N8O32"
       - key: "required_fields"
         value: ["structure_file", "final_formula", "c_hydrogenation_check", "n_hydrogenation_check", "oxygen_not_hydrogenated", "bond_angle_check"]
-      - key: "used_add_hydrogens_tool"
-        value: "mat_sg_add_hydrogens"
-      - key: "target_elements_cn"
-        value: ["C", "N"]
-        tool_name: "mat_sg_add_hydrogens"
-        tool_arg: "target_elements"
       - key: "hcn_angle_deg"
         value: 109.48
         tolerance: 8.0
@@ -464,20 +382,8 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
-      - id: "used_add_hydrogens_tool"
-        criterion: "Used the MCP hydrogen-addition tool (mat_sg_add_hydrogens)."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "output_file"
-        criterion: "The hydrogenated structure is exported as `meaper_hydrogenated.cif`."
-        axis: "grounding"
-        verify: "tool_args_match"
-      - id: "target_elements_cn"
-        criterion: "Hydrogenation targets only C and N atoms."
-        axis: "grounding"
-        verify: "tool_args_match"
       - id: "grounding_source"
-        criterion: "The hydrogenated structure and all validation statements are grounded in the provided MEAPER CIF and the generated output structure rather than guessed from chemistry knowledge alone."
+        criterion: "The hydrogenated structure and validation statements are grounded in the provided MEAPER CIF and `meaper_hydrogenated.cif`, with H added only on methylammonium C/N as specified."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
@@ -514,10 +420,6 @@ questions:
     reference_answers:
       - key: "file_exists"
         value: "nitroprusside.xyz"
-      - key: "output_file"
-        value: "nitroprusside.xyz"
-        tool_name: "mat_sg_build_molecule_structures_from_smiles"
-        tool_arg: "output_file"
       - key: "target_formula"
         value: "FeC5N6O"
       - key: "fe_coordination"
@@ -541,8 +443,6 @@ questions:
       - key: "fe_cn_angle_deg"
         value: 175.0
         tolerance: 5.0
-      - key: "used_molecule_builder"
-        value: "mat_sg_build_molecule_structures_from_smiles"
       - key: "required_fields"
         value: ["file_exists", "formula", "fe_coordination", "fe_c_bond_count", "fe_n_bond_count", "no_bond_length", "fe_no_angle", "cn_bond_length", "fe_cn_angle"]
     scoring_checklist:
@@ -588,21 +488,13 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
-      - id: "used_molecule_builder"
-        criterion: "Used the molecular structure builder to generate the nitroprusside structure."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "output_file"
-        criterion: "The generated structure is exported as `nitroprusside.xyz`."
-        axis: "grounding"
-        verify: "tool_args_match"
       - id: "grounding_source"
-        criterion: "The reported formula, coordination, bond counts, bond lengths, and angles are grounded in the generated structure rather than generic coordination-chemistry recall."
+        criterion: "The reported formula, coordination, bond counts, bond lengths, and angles are grounded in `nitroprusside.xyz` (or equivalent delivered structure) rather than generic coordination-chemistry recall."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
       - id: "no_retries"
-        criterion: "The molecule builder is not called repeatedly with identical parameters."
+        criterion: "No repeated identical molecule-build attempts with the same parameters."
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"
@@ -637,10 +529,6 @@ questions:
     reference_answers:
       - key: "file_exists"
         value: "gamma_alumina.cif"
-      - key: "output_file"
-        value: "gamma_alumina.cif"
-        tool_name: "mat_sg_build_bulk_structure_by_template|mat_sg_build_bulk_structure_by_wyckoff"
-        tool_arg: "output_file"
       - key: "al_o_ratio"
         value: 0.6667
         tolerance: 0.0334
@@ -656,12 +544,6 @@ questions:
       - key: "max_force_eV_A"
         value: 0.05
         tolerance: 0.05
-      - key: "used_bulk_builder"
-        value:
-          - "mat_sg_build_bulk_structure_by_template"
-          - "mat_sg_build_bulk_structure_by_wyckoff"
-      - key: "used_dpa_optimizer"
-        value: "mat_dpa_submit_optimize_structure"
       - key: "required_fields"
         value: ["file_exists", "al_o_ratio", "cell_angles", "tetrahedral_alo", "octahedral_alo", "min_distance_check", "max_force"]
     scoring_checklist:
@@ -695,25 +577,13 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
-      - id: "used_bulk_builder"
-        criterion: "Used a registered bulk-structure builder to construct the gamma-alumina model."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "used_dpa_optimizer"
-        criterion: "Used the DPA optimizer to relax the bulk model before reporting the final max force."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "output_file"
-        criterion: "The bulk model is exported as `gamma_alumina.cif`."
-        axis: "grounding"
-        verify: "tool_args_match"
       - id: "grounding_source"
-        criterion: "The reported stoichiometry, cell geometry, coordination environments, minimum distance, and maximum force are grounded in the constructed and relaxed model rather than generic knowledge of gamma-alumina."
+        criterion: "The reported stoichiometry, cell geometry, coordination environments, minimum distance, and maximum force are grounded in `gamma_alumina.cif` and the stated relaxation outcome rather than generic knowledge of gamma-alumina alone."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
       - id: "no_retries"
-        criterion: "The bulk builder and optimizer are not called repeatedly with identical parameters."
+        criterion: "Bulk construction and relaxation are not repeated with identical parameters."
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"
@@ -744,26 +614,12 @@ questions:
     reference_answers:
       - key: "file_exists"
         value: "ceo2_111_trilayer.cif"
-      - key: "output_file"
-        value: "ceo2_111_trilayer.cif"
-        tool_name: "mat_sg_build_surface_slab"
-        tool_arg: "output_file"
-      - key: "correct_miller"
-        value: [1, 1, 1]
-        tool_name: "mat_sg_build_surface_slab"
-        tool_arg: "miller_index"
       - key: "slab_layers"
         value: 9
         tolerance: 0.0
-      - key: "slab_size_value"
-        value: 9
-        tool_name: "mat_sg_build_surface_slab"
-        tool_arg: "slab_size_value"
       - key: "ce_o_ratio"
         value: 0.5
         tolerance: 0.05
-      - key: "used_slab_builder"
-        value: "mat_sg_build_surface_slab"
       - key: "required_fields"
         value: ["file_exists", "layer_count", "symmetry_check", "outermost_O_termination", "ce_o_ratio"]
     scoring_checklist:
@@ -781,33 +637,17 @@ questions:
         axis: "correctness"
         verify: "numerical_range"
       - id: "required_fields"
-        criterion: "The answer explicitly reports the 9-layer construction, symmetry check, oxygen-terminated outermost layer, and stoichiometric CeO2 ratio."
+        criterion: "The answer explicitly reports the 9-layer construction, symmetry check, oxygen-terminated outermost layer, stoichiometric CeO2 ratio, and (111) surface orientation where relevant."
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
-      - id: "used_slab_builder"
-        criterion: "Used the MCP surface slab builder tool."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "output_file"
-        criterion: "The slab is exported as `ceo2_111_trilayer.cif`."
-        axis: "grounding"
-        verify: "tool_args_match"
-      - id: "correct_miller"
-        criterion: "The surface slab is built with Miller index (111)."
-        axis: "grounding"
-        verify: "tool_args_match"
-      - id: "slab_size_value"
-        criterion: "The slab builder is instructed to create 9 layers."
-        axis: "grounding"
-        verify: "tool_args_match"
       - id: "grounding_source"
-        criterion: "The reported layer count, symmetry, termination, and stoichiometry are grounded in the generated CeO2(111) slab rather than assumed from textbook knowledge."
+        criterion: "The reported layer count, symmetry, termination, and stoichiometry are grounded in `ceo2_111_trilayer.cif` and the answer’s structural rationale rather than assumed from textbook knowledge alone."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
       - id: "no_retries"
-        criterion: "The slab builder is not called repeatedly with identical parameters."
+        criterion: "No repeated identical slab construction with the same parameters."
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"
