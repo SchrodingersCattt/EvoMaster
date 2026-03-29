@@ -30,17 +30,10 @@ class BashTool(BuiltinTool):
     name: ClassVar[str] = 'execute_bash'
     description: ClassVar[str] = (
         'Execute a bash command in the session shell.\n\n'
-        'IMPORTANT: Avoid using this tool to run cat, head, tail, sed, awk, find, ls, grep, rg, echo. '
-        'Use dedicated tools instead:\n'
-        '- read_file (NOT cat/head/tail)\n'
-        '- edit_file (NOT sed/awk)\n'
-        '- write_file (NOT echo/heredoc)\n'
-        '- glob (NOT find/ls)\n'
-        '- grep (NOT grep/rg)\n\n'
-        'Workspace paths (depends on session):\n'
-        '- Local / devshell: the shell cwd is the task workspace; prefer relative paths or paths under it. '
-        'Do not assume `/share` exists on this machine.\n'
-        '- Bohrium SSH remote: shared project storage is typically `/share` (not `/workspace`).'
+        'Do not use bash for: cat/head/tail/sed/awk/find/ls/grep/rg/echo. '
+        'Use read_file, edit_file, write_file, glob, grep instead.\n\n'
+        'Paths: local/devshell cwd is the task workspace; do not assume /share exists. '
+        'Bohrium SSH: shared storage is usually /share, not /workspace.'
     )
     json_schema: ClassVar[dict[str, Any]] = {
         'type': 'object',

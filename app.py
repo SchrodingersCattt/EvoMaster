@@ -20,7 +20,7 @@ from src.services.sessions_service import get_sessions_service
 from src.services.user_service import get_user_service
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.build_info import get_build_version
-from src.utils.constant import CURRENT_ENV, DB_CONFIG
+from src.utils.constant import DB_CONFIG, SERVICE_ENV
 from src.utils.exceptions import BaseErrorResponse
 from src.utils.logger import LogContext, LoggingConfig, setup_logging
 from src.utils.worker_id import get_worker_id
@@ -28,7 +28,7 @@ from src.utils.worker_id import get_worker_id
 log_config = LoggingConfig.get_main_app_config()
 setup_logging(**log_config)
 logger = logging.getLogger(__name__)
-logger.info('SERVICE_ENV=%s', CURRENT_ENV)
+logger.info('SERVICE_ENV=%s', SERVICE_ENV)
 
 
 @asynccontextmanager
