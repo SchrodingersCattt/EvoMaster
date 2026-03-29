@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.messages import ToolCallData
@@ -16,7 +16,7 @@ class TestSkillHitHook:
         from matmaster.hooks.skill_hit import SkillHitHook
         from matmaster.types.events import SkillHitEvent
 
-        bus = MagicMock()
+        bus = MagicMock(emit=AsyncMock())
         hook = SkillHitHook(bus=bus, source="MatMaster")
         tc = ToolCallData(
             id="tc-1",
@@ -25,8 +25,8 @@ class TestSkillHitHook:
         )
         await hook.post_tool_call(tc, ToolResult(content="result"))
 
-        bus.emit_nowait.assert_called_once()
-        emitted = bus.emit_nowait.call_args[0][0]
+        bus.emit.assert_called_once()
+        emitted = bus.emit.call_args[0][0]
         assert isinstance(emitted, SkillHitEvent)
         assert emitted.skill_name == "bohrium-job"
         assert emitted.source == "MatMaster"
@@ -35,31 +35,31 @@ class TestSkillHitHook:
         """post_tool_call does nothing for non use_skill tools."""
         from matmaster.hooks.skill_hit import SkillHitHook
 
-        bus = MagicMock()
+        bus = MagicMock(emit=AsyncMock())
         hook = SkillHitHook(bus=bus)
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
         await hook.post_tool_call(tc, ToolResult(content="result"))
 
-        bus.emit_nowait.assert_not_called()
+        bus.emit.assert_not_called()
 
     async def test_does_nothing_for_use_skill_without_skill_name(self) -> None:
         """post_tool_call does nothing when use_skill arguments lack skill_name."""
         from matmaster.hooks.skill_hit import SkillHitHook
 
-        bus = MagicMock()
+        bus = MagicMock(emit=AsyncMock())
         hook = SkillHitHook(bus=bus)
         tc = ToolCallData(id="tc-1", name="use_skill", arguments={"action": "get_info"})
         await hook.post_tool_call(tc, ToolResult(content="result"))
 
-        bus.emit_nowait.assert_not_called()
+        bus.emit.assert_not_called()
 
     async def test_does_nothing_for_non_string_skill_name(self) -> None:
         """post_tool_call does nothing when skill_name is not a string."""
         from matmaster.hooks.skill_hit import SkillHitHook
 
-        bus = MagicMock()
+        bus = MagicMock(emit=AsyncMock())
         hook = SkillHitHook(bus=bus)
         tc = ToolCallData(id="tc-1", name="use_skill", arguments={"skill_name": 123})
         await hook.post_tool_call(tc, ToolResult(content="result"))
 
-        bus.emit_nowait.assert_not_called()
+        bus.emit.assert_not_called()
