@@ -251,4 +251,4 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 2/2 | Complete    | 2026-03-29 |
 | 20. Confirmation Flow Recovery | v2.0 | 0/0 | Pending | - |
 | 21. Async Leaf I/O Cleanup | v2.0 | 0/1 | Pending | - |
-| 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete   | 2026-03-29 |
+| 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete    | 2026-03-29 |
