@@ -65,7 +65,7 @@ patterns-established:
   - "_sync_call_async kernel bridge: module-level daemon loop + helper function, to be removed in Phase 17"
   - "Mechanical async test migration: only methods calling execute() become async def + await"
 
-requirements-completed: [TOOL-01, TOOL-05]
+requirements-completed: [TOOL-01]
 
 # Metrics
 duration: 14min
