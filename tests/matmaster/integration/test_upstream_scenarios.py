@@ -11,7 +11,8 @@ import queue
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, AsyncIterator
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
@@ -21,13 +22,13 @@ from matmaster.core.exp import Exp
 from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
 from matmaster.core.hooks import BaseHook, HookAction
+from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.messages import (
     LLMResponse,
     Message,
     StreamChunk,
     ToolCallData,
 )
-from matmaster.hooks.confirmation import ConfirmationHook
 from matmaster.integration.bohrium_setup import BohriumSetupService, SkillSyncSpec
 from src.services.agent_run_bohrium import BohriumSetupResult
 from matmaster.integration.event_router import EventRouter
@@ -35,7 +36,7 @@ from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
-from matmaster.types.runtime import KernelResult
+from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
 from matmaster.types.events import (
     AssistantStateEvent,
     ConfirmationRequestEvent,
@@ -368,14 +369,12 @@ class TestEventRouterPersistence:
 # -- QUAL-04: Cross-pod reply queue ------------------------------
 
 
-class _MockReplyQueue:
-    """Simulates RedisReplyQueue behavior for cross-pod confirmation.
-
-    Uses a stdlib queue internally to simulate Redis list RPUSH/BLPOP.
-    """
+class _RedisCompatibleReplyQueue:
+    """Reply queue fake that enforces current Redis integer-timeout semantics."""
 
     def __init__(self) -> None:
         self._q: queue.Queue[str | None] = queue.Queue()
+        self.requested_timeouts: list[int] = []
 
     def put_content(self, content: str) -> None:
         self._q.put(content)
@@ -384,92 +383,281 @@ class _MockReplyQueue:
         self._q.put(None)
 
     def get(self, timeout: float | None = None) -> str | None:
+        if timeout is None or timeout < 1 or int(timeout) != timeout:
+            raise AssertionError(
+                "Redis-compatible bridge must poll with integer-second timeout"
+            )
+        sec = int(timeout)
+        self.requested_timeouts.append(sec)
         try:
-            return self._q.get(timeout=timeout)
-        except queue.Empty:
-            raise queue.Empty("timeout")
+            return self._q.get(timeout=sec)
+        except queue.Empty as exc:
+            raise queue.Empty("timeout") from exc
 
 
-class TestCrossPodReplyQueue:
-    """QUAL-04: Verify cross-pod subscription recovery via RedisReplyQueue.
+class _SingleToolTurnProvider:
+    """Emit one execute_bash tool turn, then finish naturally."""
 
-    NOTE: ConfirmationHook is still sync and calls bus.emit() which is now async.
-    These tests patch bus.emit to use emit_nowait (the sync bridge) until
-    hooks are async-migrated in a later phase.
-    """
+    def __init__(self) -> None:
+        self._call_count = 0
 
-    def test_cross_pod_reply_queue(self) -> None:
-        """Verify ConfirmationHook correctly interacts with ReplyQueueLike
-        for cross-worker confirmation flow.
-        """
-        reply_queue = _MockReplyQueue()
-        bus = MessageBus()
+    async def __aenter__(self):
+        return self
 
-        # Patch bus.emit to use sync emit_nowait since ConfirmationHook is still sync
-        original_emit = bus.emit
-        bus.emit = lambda event: bus.emit_nowait(event)  # type: ignore[assignment]
+    async def __aexit__(self, *exc):
+        pass
 
-        hook = ConfirmationHook(
-            reply_queue=reply_queue,
-            bus=bus,
-            timeout_sec=5,
+    async def chat(self, messages, tools=None) -> LLMResponse:
+        return LLMResponse(content="unused", finish_reason="stop")
+
+    async def chat_stream(
+        self,
+        messages,
+        tools=None,
+        *,
+        timeout: float | None = None,
+    ) -> AsyncIterator[StreamChunk]:
+        self._call_count += 1
+        if self._call_count == 1:
+            yield StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "tc-bash-1",
+                        "name": "execute_bash",
+                        "arguments": '{"command":"echo ok"}',
+                    }
+                ]
+            )
+            yield StreamChunk(finish_reason="stop")
+        else:
+            yield StreamChunk(content="done", finish_reason="stop")
+
+
+class _RecordingAsyncTool:
+    """Async spy tool for service-layer confirmation recovery tests."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    @property
+    def name(self) -> str:
+        return "execute_bash"
+
+    @property
+    def description(self) -> str:
+        return "test execute_bash tool"
+
+    @property
+    def json_schema(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {"command": {"type": "string"}},
+            "required": ["command"],
+        }
+
+    async def execute(self, arguments: dict[str, Any]) -> str:
+        self.calls.append(arguments)
+        return "approved execution"
+
+
+class _RecordingRuntimeHook(BaseHook):
+    """Records whether runtime.spec hooks run before confirmation gate."""
+
+    def __init__(self) -> None:
+        self.pre_tool_call_count = 0
+
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+        self.pre_tool_call_count += 1
+        return HookAction.CONTINUE
+
+
+def _make_confirmation_runtime(
+    provider: _SingleToolTurnProvider,
+    tool: _RecordingAsyncTool,
+    runtime_hook: _RecordingRuntimeHook,
+) -> AgentRuntime:
+    registry = ToolRegistry()
+    registry.register(tool, source="test")
+    spec = AgentRuntimeSpec(
+        llm_provider=provider,
+        tool_registry=registry,
+        hooks=[runtime_hook],
+        max_turns=5,
+        system_prompt="You are a confirmation recovery test agent",
+    )
+    return AgentRuntime(kernel=AgentKernel(), spec=spec, cleanup=lambda: None)
+
+
+class TestAgentRunServiceConfirmationRecovery:
+    """QUAL-04: service-layer confirmation recovery under Worker + Redis semantics."""
+
+    def _make_playground(
+        self, tmp_path: Path
+    ) -> tuple[MagicMock, PlaygroundContext]:
+        mock_pg = MagicMock()
+        mock_pg_ctx = _make_ctx(tmp_path)
+        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_pg.config_path = Path("configs/mat_master/config.yaml")
+        mock_pg.config = SimpleNamespace()
+        mock_pg.session = None
+        return mock_pg, mock_pg_ctx
+
+    def _run_with_runtime(
+        self,
+        tmp_path: Path,
+        *,
+        reply_queue: _RedisCompatibleReplyQueue,
+        reply_fn,
+    ) -> tuple[tuple[bool | tuple[bool, str], int], list[dict[str, Any]], _RecordingAsyncTool, _RecordingRuntimeHook]:
+        from src.services.agent_run_service import AgentRunService
+
+        svc = AgentRunService(sessions_service=MagicMock())
+        svc._sessions_service.get_session_user_id.return_value = None
+
+        provider = _SingleToolTurnProvider()
+        tool = _RecordingAsyncTool()
+        runtime_hook = _RecordingRuntimeHook()
+        runtime = _make_confirmation_runtime(provider, tool, runtime_hook)
+        mock_pg, _ = self._make_playground(tmp_path)
+        payloads: list[dict[str, Any]] = []
+
+        def send_cb(payload: dict[str, Any]) -> None:
+            payloads.append(payload)
+
+        async def _fake_build_runtime(self, pg_ctx, bus=None, skills=None, mcp=None):
+            return runtime
+
+        mock_bohrium_result = MagicMock()
+        mock_bohrium_result.ssh_attached = False
+        mock_bohrium_result.abort_result = None
+        mock_bohrium_result.execution_session = None
+        mock_bohrium_result.execution_workdir = None
+        mock_bohrium_result.session_type = None
+        mock_bohrium_result._asdict.return_value = {
+            "ssh_attached": False,
+            "abort_result": None,
+            "execution_session": None,
+            "execution_workdir": None,
+            "session_type": None,
+        }
+
+        mock_events_table = MagicMock()
+        mock_events_table.get_session_events.return_value = []
+
+        with (
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
+            patch(
+                "src.services.agent_run_service.BohriumSetupService"
+            ) as mock_bohrium_cls,
+            patch(
+                "src.services.agent_run_service.get_chat_events_table",
+                return_value=mock_events_table,
+            ),
+            patch(
+                "src.services.agent_run_service.get_redis_dao",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "matmaster.config.loader.load_llm_config",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "matmaster.providers.llm_factory.build_provider",
+                return_value=provider,
+            ),
+            patch.object(Exp, "build_runtime", _fake_build_runtime),
+        ):
+            mock_bohrium_svc = mock_bohrium_cls.return_value
+            mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
+            mock_bohrium_svc.setup.return_value = mock_bohrium_result
+
+            responder = threading.Thread(target=reply_fn, daemon=True)
+            responder.start()
+            result = svc.run_agent_sync(
+                session_id="sess-confirmation",
+                user_prompt="run command",
+                send_cb=send_cb,
+                loop=None,
+                stop_event=threading.Event(),
+                mode="direct",
+                reply_queue=reply_queue,
+                task_id="task-confirmation",
+            )
+            responder.join(timeout=2.0)
+
+        return result, payloads, tool, runtime_hook
+
+    def test_confirmation_reply_bridge_thread_exits_with_redis_compatible_timeout(
+        self,
+    ) -> None:
+        from src.services.agent_run_service import _start_confirmation_reply_bridge
+
+        hook = MagicMock()
+        reply_queue = _RedisCompatibleReplyQueue()
+
+        stop_event, bridge_thread = _start_confirmation_reply_bridge(
+            reply_queue,
+            hook,
         )
+        time.sleep(0.05)
+        stop_event.set()
+        bridge_thread.join(timeout=2.0)
 
-        tool_call = ToolCallData(id="tc-1", name="dangerous_tool", arguments={})
+        assert not bridge_thread.is_alive()
+        assert 1 in reply_queue.requested_timeouts
 
-        # Simulate cross-pod flow: another worker puts approval
-        def approve_after_delay():
+    def test_run_agent_sync_approval_executes_gated_tool(self, tmp_path: Path) -> None:
+        reply_queue = _RedisCompatibleReplyQueue()
+
+        def approve() -> None:
             time.sleep(0.05)
             reply_queue.put_content("approved")
 
-        t = threading.Thread(target=approve_after_delay, daemon=True)
-        t.start()
-
-        # Main thread calls pre_tool_call (blocks on reply_queue.get())
-        action = hook.pre_tool_call(tool_call)
-        t.join(timeout=2)
-
-        assert action == HookAction.CONTINUE
-
-        # Verify ConfirmationRequestEvent was emitted to bus
-        events = []
-        while not bus.empty:
-            events.append(bus.get_nowait())
-
-        confirmation_events = [
-            e for e in events if isinstance(e, ConfirmationRequestEvent)
-        ]
-        assert len(confirmation_events) == 1
-        assert confirmation_events[0].question == "Confirm tool call: dangerous_tool?"
-
-    def test_cross_pod_reply_queue_cancel(self) -> None:
-        """Verify ConfirmationHook returns SKIP when user cancels via cross-pod queue."""
-        reply_queue = _MockReplyQueue()
-        bus = MessageBus()
-
-        # Patch bus.emit to use sync emit_nowait since ConfirmationHook is still sync
-        bus.emit = lambda event: bus.emit_nowait(event)  # type: ignore[assignment]
-
-        hook = ConfirmationHook(
+        result, payloads, tool, runtime_hook = self._run_with_runtime(
+            tmp_path,
             reply_queue=reply_queue,
-            bus=bus,
-            timeout_sec=5,
+            reply_fn=approve,
         )
 
-        tool_call = ToolCallData(id="tc-2", name="dangerous_tool", arguments={})
+        assert result[0] is True
+        assert len(tool.calls) == 1
+        assert runtime_hook.pre_tool_call_count == 1
+        confirmation_events = [
+            payload for payload in payloads if payload.get("type") == "confirmation_request"
+        ]
+        assert len(confirmation_events) == 1
+        assert not any(
+            payload.get("type") == "error"
+            and "AttributeError" in str(payload.get("message"))
+            for payload in payloads
+        )
 
-        # Simulate cross-pod cancel
-        def cancel_after_delay():
+    def test_run_agent_sync_cancel_skips_gated_tool(self, tmp_path: Path) -> None:
+        reply_queue = _RedisCompatibleReplyQueue()
+
+        def cancel() -> None:
             time.sleep(0.05)
             reply_queue.put_cancel()
 
-        t = threading.Thread(target=cancel_after_delay, daemon=True)
-        t.start()
+        result, payloads, tool, runtime_hook = self._run_with_runtime(
+            tmp_path,
+            reply_queue=reply_queue,
+            reply_fn=cancel,
+        )
 
-        action = hook.pre_tool_call(tool_call)
-        t.join(timeout=2)
-
-        assert action == HookAction.SKIP
+        assert result[0] is True
+        assert len(tool.calls) == 0
+        assert runtime_hook.pre_tool_call_count == 0
+        confirmation_events = [
+            payload for payload in payloads if payload.get("type") == "confirmation_request"
+        ]
+        assert len(confirmation_events) == 1
+        assert not any(
+            payload.get("type") == "error"
+            and "AttributeError" in str(payload.get("message"))
+            for payload in payloads
+        )
 
 
 # -- D-03: x_master raises ValueError ---------------------------
