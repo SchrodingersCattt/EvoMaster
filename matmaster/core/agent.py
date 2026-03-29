@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 from matmaster.core.guard_pipeline import GuardPipeline
@@ -265,44 +266,101 @@ class AgentKernel:
         max_retries = getattr(provider, "max_retries", 3)
         retry_delay = getattr(provider, "retry_delay", 1.0)
 
+        attempt_records: list[dict[str, Any]] = []
         last_error: LLMError | None = None
         for attempt in range(max_retries):
+            t0 = time.monotonic()
             try:
                 response = await self._do_stream_llm(spec, messages, timeout=current_timeout)
+                elapsed = time.monotonic() - t0
+
                 if (
                     self._is_incomplete_response(response)
                     and attempt < max_retries - 1
                 ):
+                    backoff = retry_delay * (2**attempt)
+                    attempt_records.append({
+                        "attempt": attempt + 1,
+                        "error_type": "IncompleteResponse",
+                        "error_category": "incomplete_response",
+                        "error_message": "reasoning-only response without content",
+                        "timeout_used": current_timeout,
+                        "elapsed_seconds": round(elapsed, 2),
+                        "retryable": True,
+                        "backoff_seconds": backoff,
+                    })
                     logger.warning(
                         "LLM returned reasoning without content "
-                        "(attempt %d/%d), retrying.",
+                        "(attempt %d/%d, elapsed=%.1fs), retrying.",
                         attempt + 1,
                         max_retries,
+                        elapsed,
                     )
-                    backoff = retry_delay * (2**attempt)
                     await asyncio.sleep(backoff)
                     continue
+
+                # Last attempt still incomplete — return degraded
+                if self._is_incomplete_response(response):
+                    logger.warning(
+                        "LLM returned incomplete response after %d attempts, "
+                        "returning degraded result.",
+                        max_retries,
+                    )
+                    response.degraded = True
                 return response
             except LLMError as e:
+                elapsed = time.monotonic() - t0
                 if not e.retryable:
                     raise
                 last_error = e
                 next_timeout = current_timeout * 2
+                backoff = retry_delay * (2**attempt) if attempt < max_retries - 1 else 0.0
+                attempt_records.append({
+                    "attempt": attempt + 1,
+                    "error_type": type(e.__cause__).__name__ if e.__cause__ else type(e).__name__,
+                    "error_category": getattr(e, "error_category", None),
+                    "error_message": str(e),
+                    "timeout_used": current_timeout,
+                    "elapsed_seconds": round(elapsed, 2),
+                    "retryable": e.retryable,
+                    "next_timeout": next_timeout,
+                    "backoff_seconds": backoff,
+                })
                 logger.warning(
-                    "LLM stream timed out after %.0fs (attempt %d/%d). "
-                    "Retrying with timeout=%.0fs.",
-                    current_timeout,
+                    "LLM call failed (attempt %d/%d) [%s]: %s "
+                    "(timeout=%.0fs, elapsed=%.1fs, backoff=%.1fs, next_timeout=%.0fs)",
                     attempt + 1,
                     max_retries,
+                    getattr(e, "error_category", None) or "unknown",
+                    e,
+                    current_timeout,
+                    elapsed,
+                    backoff,
                     next_timeout,
                 )
                 current_timeout = next_timeout
                 if attempt < max_retries - 1:
-                    backoff = retry_delay * (2**attempt)
                     await asyncio.sleep(backoff)
 
-        raise RuntimeError(
-            f"LLM stream failed after {max_retries} attempts"
+        # Retries exhausted
+        if last_error is not None:
+            msg = (
+                f"LLM stream failed after {max_retries} attempts: "
+                f"last error [{last_error.error_category or 'unknown'}] {last_error}"
+            )
+            category = last_error.error_category
+        else:
+            msg = (
+                f"LLM stream failed after {max_retries} attempts: "
+                f"all attempts returned incomplete responses"
+            )
+            category = "incomplete_response"
+
+        raise LLMError(
+            msg,
+            retryable=False,
+            error_category=category,
+            attempts=attempt_records,
         ) from last_error
 
     async def _do_stream_llm(
