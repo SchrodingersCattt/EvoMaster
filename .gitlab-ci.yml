@@ -8,6 +8,7 @@ variables:
   CHECK: main
 
 stages:
+  - lint
   - build-remote-image
   - trigger
 
@@ -19,6 +20,14 @@ workflow:
 
 include:
   - local: ".deploy-ci.yml"
+  - local: "ci/pre-commit-job.yml"
+
+# 合并到 main：MR 目标分支为 main，或 push 到 main（实现见 ci/pre-commit-job.yml）
+pre-commit:
+  extends: .pre-commit-base
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
 
 # 一次构建三环境（test/uat/prod）并更新 constant.py，推送到分支 remote-image 时触发
 build-remote-image:all:
