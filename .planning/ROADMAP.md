@@ -287,4 +287,4 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 21. Async Leaf I/O Cleanup | v2.0 | 1/1 | Complete    | 2026-03-29 |
 | 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete    | 2026-03-29 |
 | 23. Verification + Nyquist Closure | v2.0 | 1/1 | Complete    | 2026-03-29 |
-| 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete   | 2026-03-29 |
+| 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete    | 2026-03-29 |
