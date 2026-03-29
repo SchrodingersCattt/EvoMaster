@@ -1,0 +1,22 @@
+# pre-commit（lint）共用模板：父 .gitlab-ci.yml 与子 ci/api-deploy.yml、ci/worker-deploy.yml 各自定义同名 job，
+# extends 本模板并只写 needs（子流水线在 docker-build 后）与 rules。
+.pre-commit-base:
+  stage: lint
+  image: $REGISTRY/public/ubuntu:gitlab-0.0.2
+  before_script:
+    - mkdir -p .ci-bin && ln -sf "$(command -v python3)" .ci-bin/python && export PATH="$CI_PROJECT_DIR/.ci-bin:$PATH"
+    - export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple PIP_TRUSTED_HOST=mirrors.tuna.tsinghua.edu.cn PIP_CACHE_DIR="${CI_PROJECT_DIR}/.cache/pip"
+    - mkdir -p "${PIP_CACHE_DIR}"
+    - python3 -m pip install --user pre-commit
+    - export PATH="$HOME/.local/bin:$PATH"
+  script:
+    - bash "${CI_PROJECT_DIR}/ci/run_pre_commit_ci.sh"
+  tags:
+    - k8s-runner-ack
+  cache:
+    key:
+      files:
+        - .pre-commit-config.yaml
+    paths:
+      - .cache/pre-commit
+      - .cache/pip
