@@ -60,46 +60,46 @@ class TestExpConstruction:
 class TestExpAssemble:
     """assemble() transforms config + ctx into AgentRuntimeSpec."""
 
-    def test_returns_agent_runtime_spec(self) -> None:
+    async def test_returns_agent_runtime_spec(self) -> None:
         """assemble() returns an AgentRuntimeSpec instance."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx()
-        spec = exp.assemble(ctx)
+        spec = await exp.assemble(ctx)
         assert isinstance(spec, AgentRuntimeSpec)
 
-    def test_max_turns_from_config(self) -> None:
+    async def test_max_turns_from_config(self) -> None:
         """max_turns in config propagates to spec."""
         exp = Exp(ExpConfig(name="test", max_turns=50))
         ctx = _make_ctx()
-        spec = exp.assemble(ctx)
+        spec = await exp.assemble(ctx)
         assert spec.max_turns == 50
 
-    def test_max_turns_default(self) -> None:
+    async def test_max_turns_default(self) -> None:
         """Default max_turns is 100 when not in config."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx()
-        spec = exp.assemble(ctx)
+        spec = await exp.assemble(ctx)
         assert spec.max_turns == 100
 
-    def test_guards_deferred(self) -> None:
+    async def test_guards_deferred(self) -> None:
         """guards are deferred to build_runtime; assemble returns empty list."""
         exp = Exp(ExpConfig(name="test", guards=["mock_guard"]))
         ctx = _make_ctx()
-        spec = exp.assemble(ctx)
+        spec = await exp.assemble(ctx)
         assert spec.guards == []
 
-    def test_meta_is_empty(self) -> None:
+    async def test_meta_is_empty(self) -> None:
         """Meta bag is empty with new ExpConfig design."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx()
-        spec = exp.assemble(ctx)
+        spec = await exp.assemble(ctx)
         assert spec.meta == {}
 
-    def test_llm_provider_from_ctx(self) -> None:
+    async def test_llm_provider_from_ctx(self) -> None:
         """llm_provider comes from ctx, not config."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
-        spec = exp.assemble(ctx)
+        spec = await exp.assemble(ctx)
         assert spec.llm_provider is ctx.llm_provider
 
 
@@ -109,27 +109,27 @@ class TestExpAssemble:
 class TestExpBuildRuntime:
     """build_runtime() creates resources and returns AgentRuntime."""
 
-    def test_returns_agent_runtime(self) -> None:
+    async def test_returns_agent_runtime(self) -> None:
         """build_runtime() returns an AgentRuntime dataclass."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
-            runtime = exp.build_runtime(ctx)
+            runtime = await exp.build_runtime(ctx)
 
         assert isinstance(runtime, AgentRuntime)
 
-    def test_uses_ctx_llm_provider(self) -> None:
+    async def test_uses_ctx_llm_provider(self) -> None:
         """Runtime spec uses LLM provider from ctx."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
-            runtime = exp.build_runtime(ctx)
+            runtime = await exp.build_runtime(ctx)
 
         assert runtime.spec.llm_provider is ctx.llm_provider
 
-    def test_bus_adds_event_emitter_hook(self) -> None:
+    async def test_bus_adds_event_emitter_hook(self) -> None:
         """When bus is provided, EventEmitterHook is added to spec.hooks."""
         from matmaster.core.bus import MessageBus
         from matmaster.core.hooks import EventEmitterHook
@@ -139,7 +139,7 @@ class TestExpBuildRuntime:
         bus = MessageBus()
 
         with patch("matmaster.core.agent.AgentKernel"):
-            runtime = exp.build_runtime(ctx, bus=bus)
+            runtime = await exp.build_runtime(ctx, bus=bus)
 
         emitter_hooks = [h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)]
         assert len(emitter_hooks) == 1
@@ -156,7 +156,7 @@ class TestExpBuildRuntime:
         tool_call = ToolCallData(id="tc-1", name="spawn", arguments={"task": "demo"})
 
         with patch("matmaster.core.agent.AgentKernel"):
-            runtime = exp.build_runtime(ctx, bus=bus, spawn_id="childdeadbeef123")
+            runtime = await exp.build_runtime(ctx, bus=bus, spawn_id="childdeadbeef123")
 
         emitter_hook = next(
             h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
@@ -179,7 +179,7 @@ class TestExpBuildRuntime:
         tool_call = ToolCallData(id="tc-1", name="spawn", arguments={"task": "demo"})
 
         with patch("matmaster.core.agent.AgentKernel"):
-            runtime = exp.build_runtime(ctx, bus=bus)
+            runtime = await exp.build_runtime(ctx, bus=bus)
 
         emitter_hook = next(
             h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)
@@ -190,7 +190,7 @@ class TestExpBuildRuntime:
         assert isinstance(event, ToolCallEvent)
         assert event.spawn_id is None
 
-    def test_no_bus_no_emitter(self) -> None:
+    async def test_no_bus_no_emitter(self) -> None:
         """Without bus, no EventEmitterHook in spec.hooks."""
         from matmaster.core.hooks import EventEmitterHook
 
@@ -198,18 +198,18 @@ class TestExpBuildRuntime:
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
-            runtime = exp.build_runtime(ctx)
+            runtime = await exp.build_runtime(ctx)
 
         emitter_hooks = [h for h in runtime.spec.hooks if isinstance(h, EventEmitterHook)]
         assert len(emitter_hooks) == 0
 
-    def test_runtime_has_cleanup_callable(self) -> None:
+    async def test_runtime_has_cleanup_callable(self) -> None:
         """AgentRuntime.cleanup is a callable."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
-            runtime = exp.build_runtime(ctx)
+            runtime = await exp.build_runtime(ctx)
 
         assert callable(runtime.cleanup)
 
@@ -220,7 +220,7 @@ class TestExpBuildRuntime:
 class TestExpRun:
     """run() calls build_runtime then kernel.run with proper args."""
 
-    def test_run_calls_build_runtime_then_kernel(self) -> None:
+    async def test_run_calls_build_runtime_then_kernel(self) -> None:
         """run() delegates to build_runtime then kernel.run."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
@@ -233,8 +233,8 @@ class TestExpRun:
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
 
-        with patch.object(exp, "build_runtime", return_value=mock_runtime) as mock_br:
-            result = exp.run(ctx, "do something")
+        with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime) as mock_br:
+            result = await exp.run(ctx, "do something")
 
         mock_br.assert_called_once_with(ctx, bus=None, skills=None, mcp=None)
         mock_kernel.run.assert_called_once_with(
@@ -242,7 +242,7 @@ class TestExpRun:
         )
         assert result is mock_kr
 
-    def test_run_forwards_bus(self) -> None:
+    async def test_run_forwards_bus(self) -> None:
         """run() passes bus to build_runtime."""
         from matmaster.core.bus import MessageBus
 
@@ -257,12 +257,12 @@ class TestExpRun:
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
 
-        with patch.object(exp, "build_runtime", return_value=mock_runtime) as mock_br:
-            exp.run(ctx, "task", bus=bus)
+        with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime) as mock_br:
+            await exp.run(ctx, "task", bus=bus)
 
         mock_br.assert_called_once_with(ctx, bus=bus, skills=None, mcp=None)
 
-    def test_run_forwards_history_and_stop_event(self) -> None:
+    async def test_run_forwards_history_and_stop_event(self) -> None:
         """run() passes history and stop_event to kernel.run."""
         import threading
 
@@ -278,8 +278,8 @@ class TestExpRun:
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
 
-        with patch.object(exp, "build_runtime", return_value=mock_runtime):
-            exp.run(ctx, "task", history=history, stop_event=stop)
+        with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime):
+            await exp.run(ctx, "task", history=history, stop_event=stop)
 
         mock_kernel.run.assert_called_once_with(
             mock_spec, "task", history=history, stop_event=stop
@@ -290,9 +290,9 @@ class TestExpRun:
 
 
 class TestExpCleanup:
-    """Cleanup callbacks are guaranteed to execute via runtime.cleanup()."""
+    """Cleanup callbacks are guaranteed to execute via _run_cleanup_callbacks()."""
 
-    def test_cleanup_runs_on_success(self) -> None:
+    async def test_cleanup_runs_on_success(self) -> None:
         """Cleanup is called after successful kernel.run via run()."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
@@ -304,12 +304,17 @@ class TestExpCleanup:
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
 
-        with patch.object(exp, "build_runtime", return_value=mock_runtime):
-            exp.run(ctx, "task")
+        # Register a cleanup callback before run() so we can verify it gets called
+        cleanup_cb = MagicMock()
+        exp._register_cleanup(cleanup_cb)
 
-        mock_cleanup.assert_called_once()
+        with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime):
+            await exp.run(ctx, "task")
 
-    def test_cleanup_runs_on_error(self) -> None:
+        cleanup_cb.assert_called_once()
+        assert exp._cleanup_callbacks == []  # cleared after execution
+
+    async def test_cleanup_runs_on_error(self) -> None:
         """Cleanup is called even when kernel.run() raises."""
         exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
@@ -320,13 +325,17 @@ class TestExpCleanup:
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup)
 
-        with patch.object(exp, "build_runtime", return_value=mock_runtime):
+        cleanup_cb = MagicMock()
+        exp._register_cleanup(cleanup_cb)
+
+        with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime):
             with pytest.raises(RuntimeError, match="kernel exploded"):
-                exp.run(ctx, "task")
+                await exp.run(ctx, "task")
 
-        mock_cleanup.assert_called_once()
+        cleanup_cb.assert_called_once()
+        assert exp._cleanup_callbacks == []
 
-    def test_multiple_cleanups_all_execute(self) -> None:
+    async def test_multiple_cleanups_all_execute(self) -> None:
         """All registered cleanup callbacks run even if one raises."""
         exp = Exp(ExpConfig(name="test"))
         cb1 = MagicMock(side_effect=ValueError("cb1 broken"))
@@ -334,18 +343,18 @@ class TestExpCleanup:
         exp._register_cleanup(cb1)
         exp._register_cleanup(cb2)
 
-        exp._run_cleanup_callbacks()
+        await exp._run_cleanup_callbacks()
 
         cb1.assert_called_once()
         cb2.assert_called_once()
 
-    def test_cleanup_clears_list(self) -> None:
+    async def test_cleanup_clears_list(self) -> None:
         """_run_cleanup_callbacks clears the list after execution."""
         exp = Exp(ExpConfig(name="test"))
         cb = MagicMock()
         exp._register_cleanup(cb)
 
-        exp._run_cleanup_callbacks()
+        await exp._run_cleanup_callbacks()
 
         assert exp._cleanup_callbacks == []
 
@@ -356,25 +365,25 @@ class TestExpCleanup:
 class TestIdentityOverride:
     """Identity from config is forwarded to ContextBuilder.build()."""
 
-    def test_identity_from_config(self) -> None:
+    async def test_identity_from_config(self) -> None:
         exp = Exp(ExpConfig(
             name="test",
             developer_instructions="I am a materials scientist.",
             tools=ExpToolsConfig(builtin=[]),
         ))
         ctx = _make_ctx(with_llm=True)
-        runtime = exp.build_runtime(ctx)
+        runtime = await exp.build_runtime(ctx)
 
         assert "I am a materials scientist." in runtime.spec.system_prompt
 
-    def test_default_identity_when_not_set(self) -> None:
+    async def test_default_identity_when_not_set(self) -> None:
         """Empty developer_instructions means no identity section in prompt."""
         exp = Exp(ExpConfig(
             name="test",
             tools=ExpToolsConfig(builtin=[]),
         ))
         ctx = _make_ctx(with_llm=True)
-        runtime = exp.build_runtime(ctx)
+        runtime = await exp.build_runtime(ctx)
 
         assert "# Identity" not in runtime.spec.system_prompt
 
@@ -382,25 +391,25 @@ class TestIdentityOverride:
 class TestSystemPromptOverride:
     """system_prompt from config is forwarded to ContextBuilder.build()."""
 
-    def test_system_prompt_from_config(self) -> None:
+    async def test_system_prompt_from_config(self) -> None:
         exp = Exp(ExpConfig(
             name="test",
             system_prompt="Base persona text.",
             tools=ExpToolsConfig(builtin=[]),
         ))
         ctx = _make_ctx(with_llm=True)
-        runtime = exp.build_runtime(ctx)
+        runtime = await exp.build_runtime(ctx)
 
         assert "Base persona text." in runtime.spec.system_prompt
 
-    def test_empty_system_prompt_skips_section(self) -> None:
+    async def test_empty_system_prompt_skips_section(self) -> None:
         exp = Exp(ExpConfig(
             name="test",
             system_prompt="",
             tools=ExpToolsConfig(builtin=[]),
         ))
         ctx = _make_ctx(with_llm=True)
-        runtime = exp.build_runtime(ctx)
+        runtime = await exp.build_runtime(ctx)
 
         assert "# System" not in runtime.spec.system_prompt
 
@@ -508,7 +517,7 @@ class TestExpBuiltinTools:
         exp._init_builtin_tools(ctx, registry)
         assert len(registry) == 0
 
-    def test_explicit_builtin_config_triggers_init(self, tmp_path: Path) -> None:
+    async def test_explicit_builtin_config_triggers_init(self, tmp_path: Path) -> None:
         """Non-empty explicit tool list (not wildcard) still triggers _init_builtin_tools."""
         exp = Exp(ExpConfig(
             name="test",
@@ -517,13 +526,13 @@ class TestExpBuiltinTools:
         ctx = self._make_ctx_with_session(tmp_path)
 
         with patch("matmaster.core.agent.AgentKernel"):
-            runtime = exp.build_runtime(ctx)
+            runtime = await exp.build_runtime(ctx)
 
         # If _init_builtin_tools ran, native tools should be in the registry
         native = runtime.spec.tool_registry.get_tools_by_source("builtin")
         assert len(native) == 14  # All native tools registered regardless of config list
 
-    def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
+    async def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
         """Empty builtin list skips _init_builtin_tools entirely."""
         exp = Exp(ExpConfig(
             name="test",
@@ -532,7 +541,7 @@ class TestExpBuiltinTools:
         ctx = self._make_ctx_with_session(tmp_path)
 
         with patch("matmaster.core.agent.AgentKernel"):
-            runtime = exp.build_runtime(ctx)
+            runtime = await exp.build_runtime(ctx)
 
         native = runtime.spec.tool_registry.get_tools_by_source("builtin")
         assert len(native) == 0
@@ -604,7 +613,7 @@ class TestExecutionWorkdirBinding:
         ):
             assert by_name[name]._workdir == control, name
 
-    def test_spawn_tool_uses_execution_workdir(self, tmp_path: Path) -> None:
+    async def test_spawn_tool_uses_execution_workdir(self, tmp_path: Path) -> None:
         from matmaster.tools.builtin.spawn_tool import SpawnTool
 
         control = tmp_path / "control"
@@ -614,7 +623,7 @@ class TestExecutionWorkdirBinding:
         ctx = self._ctx(tmp_path, control=control, execution=execution)
         exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=["*"])))
         with patch("matmaster.core.agent.AgentKernel"):
-            runtime = exp.build_runtime(ctx)
+            runtime = await exp.build_runtime(ctx)
         subs = [
             t
             for t in runtime.spec.tool_registry.all_tools
@@ -625,30 +634,30 @@ class TestExecutionWorkdirBinding:
 
 
 class TestExpCompaction:
-    def test_assemble_compaction_defaults_disabled(self) -> None:
+    async def test_assemble_compaction_defaults_disabled(self) -> None:
         from matmaster.types.runtime import CompactionConfig
 
         exp = Exp(ExpConfig(name="test"))
         ctx = MagicMock()
         ctx.llm_provider = None
 
-        spec = exp.assemble(ctx)
+        spec = await exp.assemble(ctx)
         assert isinstance(spec.compaction, CompactionConfig)
         assert spec.compaction.enabled is False
 
-    def test_assemble_default_compaction(self) -> None:
+    async def test_assemble_default_compaction(self) -> None:
         exp = Exp(ExpConfig(name="test"))
         ctx = MagicMock()
         ctx.llm_provider = None
 
-        spec = exp.assemble(ctx)
+        spec = await exp.assemble(ctx)
         assert spec.compaction.enabled is False
 
-    def test_build_runtime_compactor_none_when_disabled(self) -> None:
+    async def test_build_runtime_compactor_none_when_disabled(self) -> None:
         exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=[])))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
-            runtime = exp.build_runtime(ctx)
+            runtime = await exp.build_runtime(ctx)
 
         assert runtime.spec.compactor is None

@@ -94,7 +94,7 @@ class TestCliParsing:
 class TestShowTools:
     def test_show_tools_uses_all_tools(self) -> None:
         """Verify _show_tools accesses registry.all_tools, not registry.tools."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import AsyncMock, MagicMock, patch
         from matmaster.devshell.repl import _show_tools
 
         mock_runner = MagicMock()
@@ -111,10 +111,11 @@ class TestShowTools:
         mock_runtime.spec.tool_registry = mock_registry
 
         with patch("matmaster.core.exp.Exp") as MockExp:
-            MockExp.return_value.build_runtime.return_value = mock_runtime
+            MockExp.return_value.build_runtime = AsyncMock(return_value=mock_runtime)
+            MockExp.return_value._run_cleanup_callbacks = AsyncMock()
             _show_tools(mock_runner)  # Should not raise
 
-        mock_runtime.cleanup.assert_called_once()
+        MockExp.return_value._run_cleanup_callbacks.assert_called_once()
 
 
 class TestDevStreamHookSegment:

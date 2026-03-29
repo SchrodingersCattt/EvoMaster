@@ -191,7 +191,7 @@ class TestMatMasterE2EPipeline:
         bus = MessageBus()
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
 
         kernel = AgentKernel()
         finish = await kernel.run(runtime.spec, 'test task')
@@ -213,7 +213,7 @@ class TestMatMasterE2EPipeline:
         echo_tool = EchoTool()
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
         # Register echo tool directly on the runtime's registry
         runtime.spec.tool_registry.register(echo_tool, source='test')
 
@@ -243,7 +243,7 @@ class TestMatMasterE2EPipeline:
         ]
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
 
         kernel = AgentKernel()
         finish = await kernel.run(runtime.spec, 'new task', history=history)
