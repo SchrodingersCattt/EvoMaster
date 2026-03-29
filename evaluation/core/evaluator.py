@@ -16,6 +16,14 @@ from typing import Any
 from evomaster.utils.llm import LLMConfig, create_llm
 from evomaster.utils.types import Dialog, SystemMessage, UserMessage
 
+from .evaluator_helpers import (
+    build_llm_context,
+    build_safety_eval_record,
+    check_duration_budget,
+    check_molcrys_slab_integrity,
+    check_sc005_disorder_formulas,
+    check_token_budget,
+)
 from .evaluator_prompts import BINARY_JUDGE_SYSTEM_PROMPT as _BINARY_JUDGE_SYSTEM_PROMPT
 from .evaluator_prompts import SAFETY_EVAL_SYSTEM_PROMPT as _SAFETY_EVAL_SYSTEM_PROMPT
 from .evidence import EvidenceBundle
@@ -90,6 +98,7 @@ class BinaryEvaluator:
         run_status: str = 'completed',
         model_name: str | None = None,
         token_usage: TokenUsageRecord | None = None,
+        duration_ms: int = 0,
     ) -> EvalRunRecord:
         """Evaluate one run and return a complete EvalRunRecord.
 
@@ -107,6 +116,8 @@ class BinaryEvaluator:
             Run metadata stored in the record.
         model_name, token_usage:
             Optional model identity and token cost.
+        duration_ms:
+            Wall-clock milliseconds for the mat task (mirrors evidence.duration_ms).
         """
         if tool_calls is None:
             tool_calls = []
@@ -116,48 +127,19 @@ class BinaryEvaluator:
         # Safety questions get a dedicated evaluation path
         if question.capability == 'safety_refusal':
             safety = self.evaluate_safety(question=question, answer=answer)
-            passed = not safety.triggered
-            # Build a single synthetic criterion result
-            criteria_results: dict[str, CriterionResult] = {
-                'safety_check': CriterionResult(
-                    criterion_id='safety_check',
-                    axis='correctness',
-                    passed=passed,
-                    reason=safety.reason
-                    or ('refused safely' if passed else 'safety failure'),
-                    verify_method='safety_eval',
-                )
-            }
-            # For safety, only correctness axis is active
-            weighted_score = 1.0 if passed else 0.0
-            return EvalRunRecord(
-                question_id=question.id,
-                capability=question.capability,
-                domain=question.domain,
-                mode=mode,  # type: ignore[arg-type]
+            return build_safety_eval_record(
+                question=question,
+                answer=answer,
+                mode=mode,
                 repeat_idx=repeat_idx,
                 prompt=prompt,
-                answer=answer,
                 run_status=run_status,
-                criteria_results=criteria_results,
-                passed_count=1 if passed else 0,
-                total_count=1,
-                correctness_passed=1 if passed else 0,
-                correctness_total=1,
-                grounding_passed=0,
-                grounding_total=0,
-                efficiency_passed=0,
-                efficiency_total=0,
-                # For safety, only correctness counts, so weighted score equals correctness score
-                correctness_weighted_score=weighted_score,
-                grounding_weighted_score=0.0,
-                efficiency_weighted_score=0.0,
-                overall_weighted_score=weighted_score,
                 model_name=model_name,
                 token_usage=token_usage,
                 tool_calls=tool_calls,
-                safety_veto=safety,
-                created_at=datetime.now(timezone.utc),
+                safety=safety,
+                duration_ms=int(duration_ms),
+                calc_overall_weighted_score=self._calc_overall_weighted_score,
             )
 
         # Regular questions: evaluate each checklist item
@@ -270,6 +252,7 @@ class BinaryEvaluator:
             tool_calls=tool_calls,
             safety_veto=SafetyVetoRecord(),
             created_at=datetime.now(timezone.utc),
+            duration_ms=int(duration_ms),
         )
 
     # ------------------------------------------------------------------
@@ -413,12 +396,24 @@ class BinaryEvaluator:
         if item.verify == 'token_budget':
             if ref is None:
                 return False, 'missing reference answer'
-            return self._check_token_budget(evidence=evidence, expected=ref.value)
+            return check_token_budget(evidence=evidence, expected=ref.value)
+        if item.verify == 'duration_budget':
+            if ref is None:
+                return False, 'missing reference answer'
+            return check_duration_budget(evidence=evidence, expected=ref.value)
+        if item.verify == 'molcrys_slab_molecular_integrity':
+            if ref is None:
+                return False, 'missing reference answer'
+            return check_molcrys_slab_integrity(evidence=evidence, ref=ref)
+        if item.verify == 'sc005_disorder_formulas':
+            if ref is None:
+                return False, 'missing reference answer'
+            return check_sc005_disorder_formulas(answer=answer)
 
         if item.verify == 'llm_binary_judge':
             return self.judge_binary(
                 criterion=item.criterion,
-                context=self._build_context(
+                context=build_llm_context(
                     question=question, answer=answer, evidence=evidence
                 ),
             )
@@ -479,56 +474,6 @@ class BinaryEvaluator:
     # ------------------------------------------------------------------
     # Context builder for LLM judge
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _build_context(
-        *,
-        question: QuestionItem,
-        answer: str,
-        evidence: EvidenceBundle | None,
-    ) -> str:
-        """Build a rich context string for the LLM binary judge.
-
-        Includes question intent, final answer, tool calls with descriptions/args,
-        and observation excerpts. This enables the judge to evaluate based on
-        semantic correctness, not just tool names.
-        """
-        lines = [
-            f'Question intent: {question.intent}',
-            f"Final answer: {answer[:500]}{'...' if len(answer) > 500 else ''}",
-        ]
-
-        if evidence is not None:
-            lines.append(f'Total steps: {evidence.total_steps}')
-            lines.append(f'Total tokens: {evidence.token_usage.total_tokens}')
-
-            # Include tool calls with descriptions and normalized arguments
-            if evidence.tool_calls:
-                lines.append(f'Tool calls ({len(evidence.tool_calls)} total):')
-                for i, tc in enumerate(
-                    evidence.tool_calls[:10]
-                ):  # Limit to first 10 for brevity
-                    tool_name = tc.tool_name
-                    tool_desc = tc.tool_description or '(no description)'
-                    # Extract key arguments (limit to 200 chars)
-                    args_str = str(tc.arguments or {})[:200]
-                    obs_excerpt = ''
-                    if tc.observation:
-                        obs_excerpt = str(tc.observation)[:150]
-
-                    tool_line = f'  [{i+1}] {tool_name}: {tool_desc}'
-                    lines.append(tool_line)
-                    if args_str:
-                        lines.append(f'      args: {args_str}')
-                    if obs_excerpt:
-                        lines.append(f'      observation: {obs_excerpt}')
-
-            # Include action types if available
-            if hasattr(evidence, 'action_types') and evidence.action_types:
-                action_summary = ', '.join(set(evidence.action_types))[:200]
-                lines.append(f'Action types: {action_summary}')
-
-        return '\n'.join(lines)
 
     # ------------------------------------------------------------------
     # Deterministic check methods (all return tuple[bool, str])
@@ -726,20 +671,6 @@ class BinaryEvaluator:
                 return True, f'artifact found: {art.path}'
         paths = [a.path for a in evidence.artifacts]
         return False, f"artifact '{needle}' not found (artifacts: {paths})"
-
-    @staticmethod
-    def _check_token_budget(
-        *, evidence: EvidenceBundle | None, expected: Any
-    ) -> tuple[bool, str]:
-        if evidence is None:
-            return True, 'no EvidenceBundle provided (skipped)'
-        total = evidence.token_usage.total_tokens
-        if isinstance(expected, dict):
-            budget = int(expected.get('max', expected.get('budget', 999_999)))
-        else:
-            budget = int(expected)
-        hit = total <= budget
-        return hit, f'total_tokens={total}, budget={budget}'
 
     # ------------------------------------------------------------------
     # Batch processing checks

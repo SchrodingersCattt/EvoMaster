@@ -19,7 +19,7 @@ import yaml
 
 from .aggregator import build_summary
 from .evaluator import BinaryEvaluator
-from .evidence import EvidenceExtractor
+from .evidence import EvidenceBundle, EvidenceExtractor
 from .mat_runner import run_mat_task
 from .reporter import append_raw_run, write_reports
 from .schemas import (
@@ -58,7 +58,10 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
     simulator = HumanSimulator(
         llm_cfg=config.simulator_llm, use_seed_prompt=config.use_seed_prompt
     )
-    evaluator = BinaryEvaluator(llm_cfg=config.evaluator_llm)
+    evaluator = BinaryEvaluator(
+        llm_cfg=config.evaluator_llm,
+        axis_weights=dict(config.axis_weights),
+    )
     # The core extractor is runtime-agnostic. EvoMaster-specific tool/event
     # compatibility is injected here by the current runner.
     evidence_extractor = EvidenceExtractor(
@@ -90,6 +93,8 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
         )
         answer = str(mat_result.get('answer', '') or '')
         tool_calls: list[dict[str, Any]] = mat_result.get('tool_calls', [])
+        duration_ms = int(mat_result.get('duration_ms') or 0)
+        workspace_abs = str(workspace_path.resolve())
 
         # Extract evidence bundle from trajectory
         trajectory_path = mat_result.get('trajectory_path')
@@ -106,14 +111,25 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
                     'EvidenceExtractor failed for %s: %s', task_id, exc
                 )
 
+        if evidence is not None:
+            evidence = evidence.model_copy(
+                update={'duration_ms': duration_ms, 'workspace_dir': workspace_abs}
+            )
+        else:
+            evidence = EvidenceBundle(
+                task_id=task_id,
+                final_answer=answer,
+                duration_ms=duration_ms,
+                workspace_dir=workspace_abs,
+            )
+
         # Populate token usage from evidence if available
         token_usage = TokenUsageRecord()
-        if evidence is not None:
-            token_usage = TokenUsageRecord(
-                prompt_tokens=evidence.token_usage.prompt_tokens,
-                completion_tokens=evidence.token_usage.completion_tokens,
-                total_tokens=evidence.token_usage.total_tokens,
-            )
+        token_usage = TokenUsageRecord(
+            prompt_tokens=evidence.token_usage.prompt_tokens,
+            completion_tokens=evidence.token_usage.completion_tokens,
+            total_tokens=evidence.token_usage.total_tokens,
+        )
 
         # BinaryEvaluator.evaluate() returns EvalRunRecord directly
         record = evaluator.evaluate(
@@ -125,8 +141,9 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
             repeat_idx=repeat_idx,
             prompt=prompt,
             run_status=str(mat_result.get('status', 'unknown')),
-            model_name=evidence.model_name if evidence is not None else None,
+            model_name=evidence.model_name,
             token_usage=token_usage,
+            duration_ms=duration_ms,
         )
         # Attach raw result for debugging
         record.raw_result = mat_result

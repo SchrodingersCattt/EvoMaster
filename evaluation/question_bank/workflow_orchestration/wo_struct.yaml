@@ -1,110 +1,147 @@
-version: "v5"
-capability: "workflow_orchestration"
-domain: "struct"
-
+version: v5
+capability: workflow_orchestration
+domain: struct
 questions:
-  # ============================================================
-  # WO_struct_001 (MgO(100)表面能)
-  # ============================================================
-  - id: "WO_struct_001"
-    capability: "workflow_orchestration"
-    domain: "struct"
-    intent: "Calculate surface energy of MgO(100) by constructing slab models and comparing with bulk."
-    human_prompt_seed: >
-      计算 MgO(100) 的表面能：从数据库获取 MgO 岩盐结构，
-      先优化体相并获取单原子能量，然后切出 (100) 表面 slab（至少 5 层），
-      加 15 A 真空，优化 slab，按公式 gamma = (E_slab - N * E_bulk) / (2 * A) 计算表面能。
-      输出表面能 (J/m2) 和计算过程中的关键能量值。
-    tags: ["surface_energy", "MgO", "slab_calculation", "workflow"]
-    mode_scope: ["direct", "planner"]
-    required_tools:
-      - "mat_sg_build_surface_slab"
-      - "mat_dpa_submit_optimize_structure"
-    optional_tools:
-      - "mat_struct_db_fetch_structures_from_db"
-      - "mat_sg_build_bulk_structure_by_template"
-      - "mat_sg_build_bulk_structure_by_wyckoff"
-    data_files: []
-    reference_answers:
-      - key: "surface_energy_J_m2"
-        value: 1.25
-        tolerance: 0.35
-      - key: "required_fields"
-        value: ["E_bulk_per_atom", "E_slab", "surface_area", "surface_energy", "convergence_check"]
-    scoring_checklist:
-      # --- correctness ---
-      - id: "surface_energy_J_m2"
-        criterion: "Surface energy is in expected range."
-        axis: "correctness"
-        verify: "numerical_range"
-      - id: "required_fields"
-        criterion: "Report includes bulk energy per atom, slab total energy, surface area, computed surface energy, and convergence check."
-        axis: "correctness"
-        verify: "llm_binary_judge"
-      # --- grounding ---
-      - id: "grounding_source"
-        criterion: "Surface energy is computed from stated bulk and slab total energies and area; formula inputs are traceable in the report rather than asserted without energy provenance."
-        axis: "grounding"
-        verify: "llm_binary_judge"
-      # --- efficiency ---
-      - id: "no_retries"
-        criterion: "Slab construction and relaxation are not repeated with identical parameters."
-        axis: "efficiency"
-        verify: "no_retries"
-      - id: "efficiency_judge"
-        criterion: "Surface energy workflow (bulk opt → slab build → slab opt → formula) is executed in a linear pipeline."
-        axis: "efficiency"
-        verify: "llm_binary_judge"
+- id: WO_struct_001
+  capability: workflow_orchestration
+  domain: struct
+  intent: Calculate surface energy of MgO(100) by constructing slab models and comparing with bulk.
+  human_prompt_seed: '计算 MgO(100) 的表面能：从数据库获取 MgO 岩盐结构， 先优化体相并获取单原子能量，然后切出 (100) 表面 slab（至少 5 层）， 加 15 A 真空，优化 slab，按公式 gamma
+    = (E_slab - N * E_bulk) / (2 * A) 计算表面能。 输出表面能 (J/m2) 和计算过程中的关键能量值。
 
-  # ============================================================
-  # WO_struct_002 (MgO O空位形成能)
-  # ============================================================
-  - id: "WO_struct_002"
-    capability: "workflow_orchestration"
-    domain: "struct"
-    intent: "Calculate vacancy formation energy: build perfect and defective supercells, compute energies, derive formation energy."
-    human_prompt_seed: >
-      计算 MgO 中 O 空位的形成能：从数据库获取 MgO 岩盐结构，
-      构建 2x2x2 超胞作为 perfect cell，再在超胞中移除一个 O 原子构建 defective cell，
-      分别优化两个结构，按 E_f = E_defective - E_perfect + mu_O 计算空位形成能。
-      输出形成能 (eV) 和计算表达式。
-    tags: ["defect", "formation_energy", "supercell", "MgO"]
-    mode_scope: ["direct", "planner"]
-    required_tools:
-      - "mat_sg_make_defect_structure"
-      - "mat_dpa_submit_optimize_structure"
-    optional_tools:
-      - "mat_struct_db_fetch_structures_from_db"
-      - "mat_sg_build_bulk_structure_by_template"
-      - "mat_sg_build_bulk_structure_by_wyckoff"
-    data_files: []
-    reference_answers:
-      - key: "formation_energy_eV"
-        value: 7.5
-        tolerance: 1.5
-      - key: "required_fields"
-        value: ["E_defective", "E_perfect", "chemical_potential", "formation_energy"]
-    scoring_checklist:
-      # --- correctness ---
-      - id: "formation_energy_eV"
-        criterion: "Vacancy formation energy is in tolerance."
-        axis: "correctness"
-        verify: "numerical_range"
-      - id: "required_fields"
-        criterion: "Report includes defective/perfect cell energies, chemical potential definition, and formation energy formula."
-        axis: "correctness"
-        verify: "llm_binary_judge"
-      # --- grounding ---
-      - id: "grounding_source"
-        criterion: "Formation energy is computed from stated perfect and defective total energies with an explicit chemical potential; numbers are tied to the reported structures rather than invented."
-        axis: "grounding"
-        verify: "llm_binary_judge"
-      # --- efficiency ---
-      - id: "no_retries"
-        criterion: "Defect construction and relaxation are not repeated with identical parameters."
-        axis: "efficiency"
-        verify: "no_retries"
-      - id: "efficiency_judge"
-        criterion: "Vacancy formation energy workflow (build → optimize × 2 → formula) is executed without redundant steps."
-        axis: "efficiency"
-        verify: "llm_binary_judge"
+    '
+  tags:
+  - surface_energy
+  - MgO
+  - slab_calculation
+  - workflow
+  mode_scope:
+  - direct
+  - planner
+  required_tools:
+  - mat_sg_build_surface_slab
+  - mat_dpa_submit_optimize_structure
+  optional_tools:
+  - mat_struct_db_fetch_structures_from_db
+  - mat_sg_build_bulk_structure_by_template
+  - mat_sg_build_bulk_structure_by_wyckoff
+  data_files: []
+  reference_answers:
+  - key: surface_energy_J_m2
+    value: 1.25
+    tolerance: 0.35
+  - key: required_fields
+    value:
+    - E_bulk_per_atom
+    - E_slab
+    - surface_area
+    - surface_energy
+    - convergence_check
+  - key: duration_budget
+    value: &id001
+      max: 7200000
+  - key: token_budget_total
+    value: &id002
+      max: 50000
+  scoring_checklist:
+  - id: surface_energy_J_m2
+    criterion: Surface energy is in expected range.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report includes bulk energy per atom, slab total energy, surface area, computed surface energy, and convergence
+      check.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Surface energy is computed from stated bulk and slab total energies and area; formula inputs are traceable
+      in the report rather than asserted without energy provenance.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: Slab construction and relaxation are not repeated with identical parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: Surface energy workflow (bulk opt → slab build → slab opt → formula) is executed in a linear pipeline.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
+      per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: WO_struct_002
+  capability: workflow_orchestration
+  domain: struct
+  intent: 'Calculate vacancy formation energy: build perfect and defective supercells, compute energies, derive formation
+    energy.'
+  human_prompt_seed: '计算 MgO 中 O 空位的形成能：从数据库获取 MgO 岩盐结构， 构建 2x2x2 超胞作为 perfect cell，再在超胞中移除一个 O 原子构建 defective cell， 分别优化两个结构，按
+    E_f = E_defective - E_perfect + mu_O 计算空位形成能。 输出形成能 (eV) 和计算表达式。
+
+    '
+  tags:
+  - defect
+  - formation_energy
+  - supercell
+  - MgO
+  mode_scope:
+  - direct
+  - planner
+  required_tools:
+  - mat_sg_make_defect_structure
+  - mat_dpa_submit_optimize_structure
+  optional_tools:
+  - mat_struct_db_fetch_structures_from_db
+  - mat_sg_build_bulk_structure_by_template
+  - mat_sg_build_bulk_structure_by_wyckoff
+  data_files: []
+  reference_answers:
+  - key: formation_energy_eV
+    value: 7.5
+    tolerance: 1.5
+  - key: required_fields
+    value:
+    - E_defective
+    - E_perfect
+    - chemical_potential
+    - formation_energy
+  - key: duration_budget
+    value: *id001
+  - key: token_budget_total
+    value: *id002
+  scoring_checklist:
+  - id: formation_energy_eV
+    criterion: Vacancy formation energy is in tolerance.
+    axis: correctness
+    verify: numerical_range
+  - id: required_fields
+    criterion: Report includes defective/perfect cell energies, chemical potential definition, and formation energy formula.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Formation energy is computed from stated perfect and defective total energies with an explicit chemical potential;
+      numbers are tied to the reported structures rather than invented.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: Defect construction and relaxation are not repeated with identical parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: efficiency_judge
+    criterion: Vacancy formation energy workflow (build → optimize × 2 → formula) is executed without redundant steps.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
+      per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget

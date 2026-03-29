@@ -193,6 +193,14 @@ class EvidenceBundle(BaseModel):
         default='unknown',
         description="Terminal run status ('completed', 'failed', etc.)",
     )
+    duration_ms: int = Field(
+        default=0,
+        description='Wall-clock time for the mat task run (set by runner, not trajectory).',
+    )
+    workspace_dir: str = Field(
+        default='',
+        description='Absolute path to the task workspace for artifact-based checks.',
+    )
     meta: dict[str, Any] = Field(
         default_factory=dict,
         description='Arbitrary extra metadata from the trajectory',
@@ -258,7 +266,12 @@ class EvidenceExtractor:
         traj_path = Path(trajectory_path)
         if not traj_path.exists():
             logger.warning('Trajectory file not found: %s', traj_path)
-            return EvidenceBundle(task_id=task_id, final_answer=final_answer)
+            return EvidenceBundle(
+                task_id=task_id,
+                final_answer=final_answer,
+                duration_ms=0,
+                workspace_dir='',
+            )
 
         try:
             raw: list[dict[str, Any]] = json.loads(
@@ -266,7 +279,12 @@ class EvidenceExtractor:
             )
         except (json.JSONDecodeError, OSError) as exc:
             logger.warning('Failed to read trajectory %s: %s', traj_path, exc)
-            return EvidenceBundle(task_id=task_id, final_answer=final_answer)
+            return EvidenceBundle(
+                task_id=task_id,
+                final_answer=final_answer,
+                duration_ms=0,
+                workspace_dir='',
+            )
 
         return self._build_bundle(raw, task_id=task_id, final_answer=final_answer)
 
