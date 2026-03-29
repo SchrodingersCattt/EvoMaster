@@ -152,11 +152,11 @@ Plans:
   2. Exp.build_runtime() 为 async def，内部组装的 provider/tool/hook 均为 async 组件
   3. Exp.run() 为 async def，内部 await kernel.run() 并处理 async cleanup callback
   4. SubAgent spawn 完整 async 链路：async spawn_fn -> await child Exp.run() -> await child kernel.run()，父 agent 在 spawn 期间不阻塞 event loop
-**Plans**: 1/2 plans complete
+**Plans**: 2/2 plans complete
 
 Plans:
 - [x] 18-01-PLAN.md -- Exp 核心 4 方法 async 化 (assemble/build_runtime/run/cleanup) + AgentRuntime 类型更新 + service/DevShell 桥接 + test_exp.py 迁移
-- [ ] 18-02-PLAN.md -- SubAgent spawn async 链路 (_make_spawn_fn async 闭包 + SpawnTool execute() override) + spawn 测试 AsyncMock 迁移
+- [x] 18-02-PLAN.md -- SubAgent spawn async 链路 (_make_spawn_fn async 闭包 + SpawnTool execute() override) + spawn 测试 AsyncMock 迁移
 
 ### Phase 19: 服务层桥接 + 并行 Tool Dispatch
 **Goal**: src/ 服务层通过 asyncio.run() 桥接 async matmaster，多 tool_call 场景支持并行执行
@@ -195,5 +195,5 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 15. Hook 系统异步化 | v2.0 | 3/3 | Complete    | 2026-03-27 |
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/2 | Complete    | 2026-03-28 |
 | 17. AgentKernel 异步化 | v2.0 | 2/2 | Complete    | 2026-03-28 |
-| 18. Exp 生命周期异步化 | v2.0 | 0/2 | In progress | - |
+| 18. Exp 生命周期异步化 | v2.0 | 2/2 | Complete    | 2026-03-29 |
 | 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 0/0 | Not started | - |

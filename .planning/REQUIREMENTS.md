@@ -56,7 +56,7 @@
 - [x] **EXPL-01**: Exp.assemble() 改为 async def（MCP 初始化未来可能涉及网络 I/O）
 - [x] **EXPL-02**: Exp.build_runtime() 改为 async def
 - [x] **EXPL-03**: Exp.run() 改为 async def，内部 await kernel.run() 的 async generator
-- [ ] **EXPL-04**: SubAgent spawn 完整 async 链路（async spawn_fn → async Exp.run() → async kernel）
+- [x] **EXPL-04**: SubAgent spawn 完整 async 链路（async spawn_fn → async Exp.run() → async kernel）
 
 ### 服务层桥接
 
@@ -133,7 +133,7 @@
 | EXPL-01 | Phase 18 | Pending |
 | EXPL-02 | Phase 18 | Pending |
 | EXPL-03 | Phase 18 | Pending |
-| EXPL-04 | Phase 18 | Pending |
+| EXPL-04 | Phase 18 | Complete |
 | BRDG-01 | Phase 19 | Pending |
 | BRDG-02 | Phase 19 | Pending |
 | TEST-01 | Phase 12 | Complete |
