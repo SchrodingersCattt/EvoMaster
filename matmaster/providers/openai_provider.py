@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
 from typing import Any, AsyncIterator
 
 import openai
@@ -171,80 +170,6 @@ class OpenAIProvider:
             finish_reason=choice.finish_reason,
             usage=usage,
         )
-
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int | None = None,
-        retry_delay: float | None = None,
-    ) -> LLMResponse:
-        """Chat with explicit retry and exponential backoff.
-
-        NOTE: This is a legacy sync method retained for backward compatibility
-        during the async migration. It will be removed when Kernel is fully async.
-        Retries on transient errors (connection, timeout, rate limit, server error).
-        Raises immediately on non-retryable errors (auth, context length exceeded).
-        """
-        import asyncio
-
-        retries = max_retries if max_retries is not None else self._max_retries
-        delay = retry_delay if retry_delay is not None else self._retry_delay
-
-        last_error: Exception | None = None
-        for attempt in range(retries):
-            try:
-                loop = asyncio.new_event_loop()
-                try:
-                    return loop.run_until_complete(
-                        self.chat(messages, tools)
-                    )
-                finally:
-                    loop.close()
-            except (
-                openai.APIConnectionError,
-                openai.APITimeoutError,
-                openai.RateLimitError,
-                openai.InternalServerError,
-            ) as e:
-                last_error = e
-                logger.warning(
-                    "LLM call failed (attempt %d/%d): %s",
-                    attempt + 1,
-                    retries,
-                    e,
-                )
-                if attempt < retries - 1:
-                    backoff = delay * (2**attempt)
-                    time.sleep(backoff)
-            except (
-                openai.AuthenticationError,
-                openai.PermissionDeniedError,
-            ) as e:
-                logger.error("Non-retryable auth error: %s", e)
-                raise
-            except openai.BadRequestError as e:
-                err_str = str(e).lower()
-                if "context" in err_str and (
-                    "length" in err_str or "token" in err_str
-                ):
-                    logger.error("Non-retryable context length error: %s", e)
-                    raise
-                last_error = e
-                logger.warning(
-                    "LLM call failed (attempt %d/%d): %s",
-                    attempt + 1,
-                    retries,
-                    e,
-                )
-                if attempt < retries - 1:
-                    backoff = delay * (2**attempt)
-                    time.sleep(backoff)
-
-        raise RuntimeError(
-            f"LLM call failed after {retries} attempts"
-        ) from last_error
 
     async def chat_stream(
         self,

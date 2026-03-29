@@ -69,23 +69,23 @@ class BashTool(BuiltinTool):
         'required': ['command'],
     }
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         """Dual-path execute: native async for LocalSession, sync fallback otherwise.
 
         Overrides BuiltinTool.execute() to use asyncio.create_subprocess_exec
         when session is evomaster LocalSession, avoiding thread-pool overhead.
-        For all other sessions, delegates to the base class sync path.
+        For all other sessions, delegates to the base class async path (to_thread).
         """
         from evomaster.agent.session.local import LocalSession as _MatmasterLocal
 
         if isinstance(self._session, _MatmasterLocal):
             try:
-                return asyncio.run(self._execute_async(arguments))
+                return await self._execute_async(arguments)
             except Exception as e:
                 self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
                 return f"Error: {e}"
 
-        return super().execute(arguments)
+        return await super().execute(arguments)
 
     async def _execute_async(self, arguments: dict[str, Any]) -> str:
         """Native async subprocess execution for matmaster LocalSession.
