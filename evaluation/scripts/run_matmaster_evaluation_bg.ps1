@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Run from repo root
-$repoRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $repoRoot
 
 $ts = Get-Date -Format "yyyyMMdd_HHmmss"

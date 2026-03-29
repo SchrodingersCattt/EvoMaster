@@ -1,10 +1,10 @@
 # Claude Code Baseline 测评（与 DevShell 对照）
 
-目标：用 **Claude Code** 直接完成题库任务（不跑 `mm-devshell`），产物与 `scripts/run_devshell_eval.py` / `finalize_cc_baseline_ingest.py` 对齐，便于和 MatMaster kernel 对比。
+目标：用 **Claude Code** 直接完成题库任务（不跑 `mm-devshell`），产物与 `evaluation/scripts/run_devshell_eval.py` / `evaluation/scripts/finalize_cc_baseline_ingest.py` 对齐，便于和 MatMaster kernel 对比。
 
 **术语（全文统一）**
 
-- **仓库根**：本 Git 仓库根目录，该目录下同时存在 `scripts/run_devshell_eval.py` 与 `evaluation/`。在终端可用 `cd "$(git rev-parse --show-toplevel)"` 进入。
+- **仓库根**：本 Git 仓库根目录；MATTER 评测代码与题库在 `evaluation/`（跑题脚本在 `evaluation/scripts/`）。在终端可用 `cd "$(git rev-parse --show-toplevel)"` 进入。
 - **RUN_DIR**：本次测评产物根目录（其下有 `workspaces/` 等）。**推荐不手工填写**：默认 `prepare` 会清空 `results/`，可在仓库根用下面「RUN_DIR 自动解析」中的一行命令得到绝对路径；若曾用 `--no-clean-results` 导致同前缀目录多个并存，再以 stderr 里 **`Run directory: `** 冒号后的路径为准。
 
 推荐把对话 **人为拆成两阶段**（两个独立的 Claude Code 会话）：
@@ -25,7 +25,7 @@
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-uv run python scripts/run_devshell_eval.py --prepare-cc-baseline --run-label baseline_cc_struct \
+uv run python evaluation/scripts/run_devshell_eval.py --prepare-cc-baseline --run-label baseline_cc_struct \
   --modes direct --capabilities structure_construction --eval-ingest-pending-only
 ```
 
@@ -51,7 +51,7 @@ echo "$RUN_DIR"
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-uv run python scripts/finalize_cc_baseline_ingest.py --run-dir "$RUN_DIR" --eval-ingest-pending-only
+uv run python evaluation/scripts/finalize_cc_baseline_ingest.py --run-dir "$RUN_DIR" --eval-ingest-pending-only
 ```
 
 成功时 **RUN_DIR** 下应出现目录 `pending_ingest/`（内含若干 `*.json`）和文件 `raw_runs.jsonl`。
@@ -92,7 +92,7 @@ uv run python scripts/finalize_cc_baseline_ingest.py --run-dir "$RUN_DIR" --eval
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
-uv run python scripts/eval_ingest_submit_pending.py \
+uv run python evaluation/scripts/eval_ingest_submit_pending.py \
   --pending "PENDING_FILE" \
   --score SCORE_INT \
   --score-reason "逐条写出 checklist 条目、weight、通过或部分通过或未通过、证据（仓库内相对路径或摘录）" \
@@ -126,7 +126,7 @@ uv run python scripts/eval_ingest_submit_pending.py \
 > **RUN_DIR**：**不要**要求用户在对话中粘贴路径。在仓库根执行 prepare 后，用仓库文档 `evaluation/baseline_cc_eval.md` 中「RUN_DIR 自动解析」的 `ROOT` + `find` + `export RUN_DIR=...` 得到绝对路径；若 `prepare` 使用了与用户默认不同的 `--run-label`，把 `find` 的 `-name` 改成对应前缀。若 `RUN_DIR` 仍为空或存在多个候选，再读 stderr 的 **`Run directory: `** 行。
 > **若尚未 prepare**：在终端进入仓库根（含 `scripts/` 的 Git 根），执行：
 > `cd "$(git rev-parse --show-toplevel)"`
-> `uv run python scripts/run_devshell_eval.py --prepare-cc-baseline --run-label baseline_cc_struct --modes direct --capabilities structure_construction --eval-ingest-pending-only`
+> `uv run python evaluation/scripts/run_devshell_eval.py --prepare-cc-baseline --run-label baseline_cc_struct --modes direct --capabilities structure_construction --eval-ingest-pending-only`
 > 命令**不得**包含 `--no-clean-results`（除非用户明确要求保留历史 `results/`）。完成后按上一段解析 **RUN_DIR**。
 > 仅跑部分题时：在上述第二行 `uv run` 命令中、在 `--eval-ingest-pending-only` **之前**插入 `--limit` 和正整数。
 > **任务列表**：列出目录 `RUN_DIR/workspaces/` 下的**每一个一级子目录**名称；对每个名称 `TASK_DIR`（即 task_id），按顺序完成：
@@ -136,7 +136,7 @@ uv run python scripts/eval_ingest_submit_pending.py \
 > 4. 不得修改 `_eval_task_meta.json`。
 > **收尾**：所有 `TASK_DIR` 处理完后，在仓库根执行（使用你已解析的 **RUN_DIR**，勿让用户粘贴）：
 > `cd "$(git rev-parse --show-toplevel)"`
-> `uv run python scripts/finalize_cc_baseline_ingest.py --run-dir "$RUN_DIR" --eval-ingest-pending-only`
+> `uv run python evaluation/scripts/finalize_cc_baseline_ingest.py --run-dir "$RUN_DIR" --eval-ingest-pending-only`
 > 确认 **RUN_DIR** 下存在 `pending_ingest` 目录（内有 `.json`）和文件 `raw_runs.jsonl`。然后停止本会话中的测评工作；**阅卷与上报在另一个新开的 Claude Code 会话中完成**，使用同文档「一键话术 · 阶段二」。
 
 ---
@@ -157,7 +157,7 @@ uv run python scripts/eval_ingest_submit_pending.py \
 > 3. 构造本条任务的 **PENDING_ABS**：`"$RUN_DIR/pending_ingest/$F文件名"`（`RUN_DIR` 无尾斜杠；`F` 含 `.json`）。示例：RUN_DIR=`/a/b/results/baseline_cc_struct_20260328_120000`，F=`SC_struct_007_direct_r0.json` → PENDING_ABS=`/a/b/results/baseline_cc_struct_20260328_120000/pending_ingest/SC_struct_007_direct_r0.json`。
 > 4. 在仓库根执行**一次**上报。`--pending` 的引号内填**第 3 步整条 PENDING_ABS**；`--score` 后填本题算出的 **0–100 整数**（下面用 `73` 仅作格式示例，每题替换为真实分数）；`--score-reason` 与 `--suggestion` 各用一对双引号包住判词全文（判词内尽量避免未转义的双引号）。
 > `cd "$(git rev-parse --show-toplevel)"`
-> `uv run python scripts/eval_ingest_submit_pending.py --pending "第3步得到的完整绝对路径" --score 73 --score-reason "逐条 checklist：条目、weight、判定、证据路径或摘录" --suggestion "可执行建议；若无写：无——加一句理由"`
+> `uv run python evaluation/scripts/eval_ingest_submit_pending.py --pending "第3步得到的完整绝对路径" --score 73 --score-reason "逐条 checklist：条目、weight、判定、证据路径或摘录" --suggestion "可执行建议；若无写：无——加一句理由"`
 > 5. 本条命令终端输出须含 **`ingest ok`**；然后再对下一个 `F` 重复步骤 1–5。
 > 全部文件处理完后，在回复中输出表格：列包括 **question_id**、**task_id（文件名）**、**score**、**一句话结论**；若有多题，最后一行给出 **宏平均（整数，四舍五入）**。
 

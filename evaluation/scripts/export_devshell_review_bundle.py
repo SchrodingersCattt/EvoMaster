@@ -7,8 +7,8 @@ optionally inlines MATTER question text from the question bank, and writes
 
 Usage::
 
-    uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_20260327_170233
-    uv run python scripts/export_devshell_review_bundle.py --raw-runs results/.../raw_runs.jsonl --out /tmp/review.md
+    uv run python evaluation/scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_20260327_170233
+    uv run python evaluation/scripts/export_devshell_review_bundle.py --raw-runs results/.../raw_runs.jsonl --out /tmp/review.md
 
 Then in Cursor: @ ``claude_review.md`` (and @ workspace folders if needed) for grading or analysis.
 """
@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 _SKIP_DIR_NAMES = {".cache", ".git", "__pycache__", ".venv", "node_modules"}
 
