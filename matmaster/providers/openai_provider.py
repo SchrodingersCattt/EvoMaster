@@ -330,22 +330,23 @@ class OpenAIProvider:
             if last_chunk_usage is not None:
                 yield StreamChunk(usage=last_chunk_usage)
 
-        except (
-            openai.APITimeoutError,
-            openai.APIConnectionError,
-            openai.RateLimitError,
-            openai.InternalServerError,
-        ) as exc:
-            raise LLMError(str(exc), retryable=True) from exc
+        except openai.APITimeoutError as exc:
+            raise LLMError(str(exc), retryable=True, error_category="timeout") from exc
+        except openai.APIConnectionError as exc:
+            raise LLMError(str(exc), retryable=True, error_category="connection") from exc
+        except openai.RateLimitError as exc:
+            raise LLMError(str(exc), retryable=True, error_category="rate_limit") from exc
+        except openai.InternalServerError as exc:
+            raise LLMError(str(exc), retryable=True, error_category="server") from exc
         except _httpx.ReadTimeout as exc:
-            raise LLMError(str(exc), retryable=True) from exc
+            raise LLMError(str(exc), retryable=True, error_category="timeout") from exc
         except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
-            raise LLMError(str(exc), retryable=False) from exc
+            raise LLMError(str(exc), retryable=False, error_category="auth") from exc
         except openai.BadRequestError as exc:
             err_str = str(exc).lower()
             if "context" in err_str and ("length" in err_str or "token" in err_str):
-                raise LLMError(str(exc), retryable=False) from exc
-            raise LLMError(str(exc), retryable=True) from exc
+                raise LLMError(str(exc), retryable=False, error_category="context_overflow") from exc
+            raise LLMError(str(exc), retryable=True, error_category="bad_request") from exc
 
     @staticmethod
     def _parse_arguments(raw: str | None) -> dict[str, Any]:

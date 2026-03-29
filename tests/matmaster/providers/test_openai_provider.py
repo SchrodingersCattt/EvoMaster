@@ -852,3 +852,114 @@ class TestAsyncContextManager:
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         errors = validate_async_protocol(provider, LLMProvider)
         assert errors == [], f"Protocol validation errors: {errors}"
+
+
+# -- chat_stream() error_category ------------------------------------------
+
+
+class TestChatStreamErrorCategory:
+    """Verify chat_stream raises LLMError with correct error_category."""
+
+    def _make_provider(self) -> tuple[OpenAIProvider, AsyncMock]:
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        mock_client = AsyncMock()
+        provider._client = mock_client
+        return provider, mock_client
+
+    async def test_timeout_category(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.APITimeoutError(request=MagicMock())
+        )
+        with pytest.raises(LLMError) as exc_info:
+            _ = [c async for c in provider.chat_stream(
+                [{"role": "user", "content": "hi"}]
+            )]
+        assert exc_info.value.error_category == "timeout"
+        assert exc_info.value.retryable is True
+
+    async def test_connection_category(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.APIConnectionError(request=MagicMock())
+        )
+        with pytest.raises(LLMError) as exc_info:
+            _ = [c async for c in provider.chat_stream(
+                [{"role": "user", "content": "hi"}]
+            )]
+        assert exc_info.value.error_category == "connection"
+
+    async def test_rate_limit_category(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.RateLimitError(
+                response=MagicMock(status_code=429, headers={}),
+                body=None, message="rate limited",
+            )
+        )
+        with pytest.raises(LLMError) as exc_info:
+            _ = [c async for c in provider.chat_stream(
+                [{"role": "user", "content": "hi"}]
+            )]
+        assert exc_info.value.error_category == "rate_limit"
+
+    async def test_server_category(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.InternalServerError(
+                response=MagicMock(status_code=500, headers={}),
+                body=None, message="server error",
+            )
+        )
+        with pytest.raises(LLMError) as exc_info:
+            _ = [c async for c in provider.chat_stream(
+                [{"role": "user", "content": "hi"}]
+            )]
+        assert exc_info.value.error_category == "server"
+
+    async def test_auth_category(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.AuthenticationError(
+                response=MagicMock(status_code=401, headers={}),
+                body=None, message="invalid key",
+            )
+        )
+        with pytest.raises(LLMError) as exc_info:
+            _ = [c async for c in provider.chat_stream(
+                [{"role": "user", "content": "hi"}]
+            )]
+        assert exc_info.value.error_category == "auth"
+        assert exc_info.value.retryable is False
+
+    async def test_context_overflow_category(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.BadRequestError(
+                response=MagicMock(status_code=400, headers={}),
+                body=None,
+                message="This model's maximum context length is 8192 tokens",
+            )
+        )
+        with pytest.raises(LLMError) as exc_info:
+            _ = [c async for c in provider.chat_stream(
+                [{"role": "user", "content": "hi"}]
+            )]
+        assert exc_info.value.error_category == "context_overflow"
+        assert exc_info.value.retryable is False
+
+    async def test_bad_request_category(self) -> None:
+        provider, mock_client = self._make_provider()
+        mock_client.chat.completions.create.side_effect = (
+            openai.BadRequestError(
+                response=MagicMock(status_code=400, headers={}),
+                body=None,
+                message="invalid parameter",
+            )
+        )
+        with pytest.raises(LLMError) as exc_info:
+            _ = [c async for c in provider.chat_stream(
+                [{"role": "user", "content": "hi"}]
+            )]
+        assert exc_info.value.error_category == "bad_request"
+        assert exc_info.value.retryable is True
