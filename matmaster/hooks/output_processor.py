@@ -24,7 +24,6 @@ class OutputProcessorHook(BaseHook):
     whether to emit events. Patterns are checked via 'in' operator
     (same logic as current auto_save_tool_output_patterns).
 
-    Uses bus.emit_nowait() for thread-safe emit from sync kernel context.
     """
 
     def __init__(
@@ -46,7 +45,7 @@ class OutputProcessorHook(BaseHook):
         base_info = dict(result.info)
 
         if self._matches(tool_name, self._auto_save_patterns):
-            self._bus.emit_nowait(
+            await self._bus.emit(
                 ToolResultEvent(
                     source=self._source,
                     call_id=tool_call.id,
@@ -59,7 +58,7 @@ class OutputProcessorHook(BaseHook):
             return
 
         if self._matches(tool_name, self._summarize_patterns):
-            self._bus.emit_nowait(
+            await self._bus.emit(
                 ToolResultEvent(
                     source=self._source,
                     call_id=tool_call.id,

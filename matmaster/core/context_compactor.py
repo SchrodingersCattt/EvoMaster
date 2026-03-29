@@ -202,7 +202,7 @@ class ContextCompactor:
                     truncated,
                 )
                 if self._bus is not None:
-                    self._bus.emit_nowait(
+                    await self._bus.emit(
                         ContextCompactionEvent(
                             source="context_compactor",
                             payload={
@@ -248,7 +248,7 @@ class ContextCompactor:
         )
 
         if self._bus is not None:
-            self._bus.emit_nowait(
+            await self._bus.emit(
                 ContextCompactionEvent(
                     source="context_compactor",
                     payload={
