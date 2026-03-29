@@ -33,11 +33,11 @@ key-files:
     - tests/matmaster/core/test_context_compactor.py
 
 key-decisions:
-  - "BashTool.execute() override is sync (not async) using asyncio.run() internally, preserving backward compatibility with the current sync execution model"
-  - "LLMProvider Protocol updated to remove chat_with_retry (Rule 3 deviation: Protocol still had it, blocking provider cleanup)"
+  - "BashTool.execute() override is async, matching base class signature — uses await for both async subprocess and super().execute() fallback"
+  - "chat_with_retry removed from OpenAIProvider and test suite on current branch (Protocol already cleaned in prior phases)"
 
 patterns-established:
-  - "Dual-path tool execution: isinstance check on session type to choose native async vs sync fallback"
+  - "Dual-path async tool execution: isinstance check on session type to choose native async subprocess vs to_thread fallback"
 
 requirements-completed: [TOOL-02]
 
