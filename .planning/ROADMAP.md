@@ -234,7 +234,10 @@ Plans:
   3. Phase 21 VALIDATION.md nyquist_compliant=true, wave_0_complete=true
   4. Phase 22 VALIDATION.md 存在且 nyquist_compliant=true
   5. Re-audit 时 HOOK-02 状态从 partial 变为 satisfied
-**Plans**: 0 plans
+**Plans**: 1 plan
+
+Plans:
+- [ ] 23-01-PLAN.md -- Create/update VERIFICATION.md + VALIDATION.md for Phases 20/21/22, update milestone audit
 
 ### Phase 24: emit_nowait Tech Debt Cleanup
 **Goal**: 将 EventEmitterHook 的 7 处 emit_nowait() 升级为 await bus.emit()，清理 hooks.py 过期注释和 agent_run_service.py 类型标注
@@ -279,5 +282,5 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 20. Confirmation Flow Recovery | v2.0 | 2/2 | Complete | 2026-03-30 |
 | 21. Async Leaf I/O Cleanup | v2.0 | 1/1 | Complete    | 2026-03-29 |
 | 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete    | 2026-03-29 |
-| 23. Verification + Nyquist Closure | v2.0 | 0/0 | Pending | — |
+| 23. Verification + Nyquist Closure | v2.0 | 0/1 | Pending | — |
 | 24. emit_nowait Tech Debt Cleanup | v2.0 | 0/0 | Pending | — |
