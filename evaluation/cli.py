@@ -1,8 +1,8 @@
 """CLI entrypoint for MATTER evaluation.
 
 Can be invoked as either:
-  python -m playground.mat_master.evaluation.cli   (module mode)
-  python playground/mat_master/evaluation/cli.py   (script mode)
+  python -m evaluation.cli   (module mode)
+  python evaluation/cli.py   (script mode)
 """
 
 import argparse
@@ -20,19 +20,19 @@ try:
     from .runner import run_evaluation
     from .schemas import EvalConfig
 except ImportError:
-    _project_root = str(Path(__file__).resolve().parents[3])
+    _project_root = str(Path(__file__).resolve().parents[1])
     if _project_root not in sys.path:
         sys.path.insert(0, _project_root)
-    from playground.mat_master.evaluation.reporter import generate_rating_from_raw_runs
-    from playground.mat_master.evaluation.runner import run_evaluation
-    from playground.mat_master.evaluation.schemas import EvalConfig
+    from evaluation.reporter import generate_rating_from_raw_runs
+    from evaluation.runner import run_evaluation
+    from evaluation.schemas import EvalConfig
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description='Run MATTER evaluation for Mat Master')
     parser.add_argument(
         '--eval-config',
-        default='playground/mat_master/evaluation/config.yaml',
+        default='evaluation/config.yaml',
         help='Path to MATTER evaluation config.yaml',
     )
     parser.add_argument(

@@ -57,7 +57,7 @@ def _load_question_seed(bank_dir: Path, question_id: str) -> str | None:
     """Return ``human_prompt_seed`` for ``question_id`` if found in v5 banks."""
     sys.path.insert(0, str(REPO_ROOT))
     try:
-        from playground.mat_master.evaluation.runner import _flatten_banks, load_question_banks
+        from evaluation.runner import _flatten_banks, load_question_banks
     except ImportError:
         return None
     try:
@@ -134,8 +134,12 @@ def build_markdown(
         qid = row.get("question_id", "?")
         lines.append(f"### {i}. `{task_id}`\n")
         lines.append(f"- **question_id**：`{qid}`\n")
-        lines.append(f"- **mode / repeat**：`{row.get('mode')}` / `{row.get('repeat_idx')}`\n")
-        lines.append(f"- **capability / domain**：`{row.get('capability')}` / `{row.get('domain')}`\n")
+        lines.append(
+            f"- **mode / repeat**：`{row.get('mode')}` / `{row.get('repeat_idx')}`\n"
+        )
+        lines.append(
+            f"- **capability / domain**：`{row.get('capability')}` / `{row.get('domain')}`\n"
+        )
         lines.append(f"- **devshell_exit_code**：`{row.get('devshell_exit_code')}`\n")
 
         summary_path = row.get("devshell_summary_path")

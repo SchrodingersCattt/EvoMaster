@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Batch-run MATTER v5 question bank through ``mm-devshell run`` (matmaster kernel).
 
-Reads the same ``question_bank/`` layout as ``playground/mat_master/evaluation``,
+Reads the same ``question_bank/`` layout as ``evaluation``,
 stages data files per task workspace, then invokes (inherit terminal; ``--json-out`` for aggregation)::
 
     python -u -m matmaster.devshell run ... --prompt-file ... --json-out .../_devshell_summary.json
@@ -43,7 +43,7 @@ Usage (from repository root)::
 **Claude Code baseline（不跑 devshell）**：``--prepare-cc-baseline`` 只搭 ``workspaces/`` 与
 ``_eval_task_meta.json``；在 IDE 里跑完题并写好 ``_devshell_summary.json`` 后执行
 ``scripts/finalize_cc_baseline_ingest.py``。说明见
-``playground/mat_master/evaluation/baseline_cc_eval.md``.
+``evaluation/baseline_cc_eval.md``.
 
 This does **not** run MATTER's BinaryEvaluator or Playground ``run_mat_task``; it only
 collects devshell JSON summaries for downstream review or custom scoring.
@@ -165,7 +165,7 @@ def main() -> int:
     parser.add_argument(
         "--eval-config",
         type=Path,
-        default=REPO_ROOT / "playground/mat_master/evaluation/config.yaml",
+        default=REPO_ROOT / "evaluation/config.yaml",
         help="MATTER eval YAML (filters: capabilities, question ids, use_seed_prompt, …)",
     )
     parser.add_argument(
@@ -327,7 +327,7 @@ def main() -> int:
 
     # Lazy imports after potential chdir
     sys.path.insert(0, str(REPO_ROOT))
-    from playground.mat_master.evaluation.runner import (
+    from evaluation.runner import (
         _apply_filters,
         _flatten_banks,
         _resolve_to_project_root,
@@ -335,8 +335,8 @@ def main() -> int:
         expand_run_plan,
         load_question_banks,
     )
-    from playground.mat_master.evaluation.schemas import EvalConfig
-    from playground.mat_master.evaluation.simulator import HumanSimulator
+    from evaluation.schemas import EvalConfig
+    from evaluation.simulator import HumanSimulator
 
     cfg = EvalConfig.model_validate(cfg_dict)
     bank_dir = Path(_resolve_to_project_root(cfg.question_bank_dir))
@@ -508,7 +508,7 @@ def main() -> int:
         )
 
     if args.prepare_cc_baseline:
-        doc_rel = "playground/mat_master/evaluation/baseline_cc_eval.md"
+        doc_rel = "evaluation/baseline_cc_eval.md"
         for prepared in prepared_tasks:
             q = prepared["question"]
             tid = str(prepared["task_id"])
