@@ -48,7 +48,7 @@ Full details: milestones/v1-ROADMAP.md
 - [x] **Phase 20: Confirmation Flow Recovery** - 恢复 Future-based confirmation hook 全链路，修复 adapter/interface regression，重新打通 confirmation flow (completed 2026-03-30)
 - [x] **Phase 21: Async Leaf I/O Cleanup** - 完成 BashTool 原生 async subprocess 路径，并移除 provider 遗留孤儿接口 (completed 2026-03-29)
 - [x] **Phase 22: Audit Metadata Backfill** - 回填 audit 所需 planning 元数据，确保 v2.0 re-audit 可追踪 (completed 2026-03-29)
-- [ ] **Phase 23: Verification + Nyquist Closure** - 创建 Phase 20 VERIFICATION.md 关闭 HOOK-02 验证缺口，修复 Phase 20/21/22 Nyquist 合规
+- [x] **Phase 23: Verification + Nyquist Closure** - 创建 Phase 20 VERIFICATION.md 关闭 HOOK-02 验证缺口，修复 Phase 20/21/22 Nyquist 合规 (completed 2026-03-30)
 - [ ] **Phase 24: emit_nowait Tech Debt Cleanup** - EventEmitterHook emit_nowait() 升级为 await bus.emit()，修复过期注释和类型标注
 
 ## Phase Details
@@ -237,7 +237,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 23-01-PLAN.md -- Create/update VERIFICATION.md + VALIDATION.md for Phases 20/21/22, update milestone audit
+- [x] 23-01-PLAN.md -- Create/update VERIFICATION.md + VALIDATION.md for Phases 20/21/22, update milestone audit
 
 ### Phase 24: emit_nowait Tech Debt Cleanup
 **Goal**: 将 EventEmitterHook 的 7 处 emit_nowait() 升级为 await bus.emit()，清理 hooks.py 过期注释和 agent_run_service.py 类型标注
@@ -282,5 +282,5 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 20. Confirmation Flow Recovery | v2.0 | 2/2 | Complete | 2026-03-30 |
 | 21. Async Leaf I/O Cleanup | v2.0 | 1/1 | Complete    | 2026-03-29 |
 | 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete    | 2026-03-29 |
-| 23. Verification + Nyquist Closure | v2.0 | 0/1 | Pending | — |
+| 23. Verification + Nyquist Closure | v2.0 | 1/1 | Complete | 2026-03-30 |
 | 24. emit_nowait Tech Debt Cleanup | v2.0 | 0/0 | Pending | — |
