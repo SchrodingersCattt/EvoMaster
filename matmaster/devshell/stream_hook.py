@@ -27,7 +27,7 @@ class DevStreamHook(BaseHook):
         self._out = output or sys.stdout
         self._verbose = verbose
 
-    def on_stream_chunk(self, chunk: StreamChunk) -> None:
+    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
         if chunk.stream_state == "start":
             return
         if chunk.stream_state == "end":
@@ -38,7 +38,7 @@ class DevStreamHook(BaseHook):
             self._out.write(chunk.content)
             self._out.flush()
 
-    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         args_str = json.dumps(tool_call.arguments, ensure_ascii=False, indent=2)
         self._out.write(f"\n\U0001f4ce tool_call: {tool_call.name}\n")
         for line in args_str.split("\n"):
@@ -46,7 +46,7 @@ class DevStreamHook(BaseHook):
         self._out.flush()
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
+    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         is_error = result.status == "error"
         prefix = "\u274c tool_error:" if is_error else "\u2705 tool_result:"
         display = result.content
@@ -55,6 +55,13 @@ class DevStreamHook(BaseHook):
         self._out.write(f"\n{prefix} {display}\n\n")
         self._out.flush()
 
-    def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
+    async def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
         self._out.write(f"\n\U0001f6e1\ufe0f guard_blocked: {result.reason}\n\n")
         self._out.flush()
+
+    async def on_segment_complete(
+        self, segment_type: str, content: str, stream_id: str | None
+    ) -> None:
+        if segment_type == "thought" and self._verbose:
+            self._out.write("── thought complete ──\n")
+            self._out.flush()

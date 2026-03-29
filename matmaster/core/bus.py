@@ -1,47 +1,75 @@
-"""Synchronous event bus backed by stdlib queue.Queue.
+"""Async event bus backed by asyncio.Queue.
 
 MessageBus is the core transport for BusEvent objects between
 the agent kernel (producer) and EventRouter handlers (consumer).
 """
 
-import queue
+from __future__ import annotations
+
+import asyncio
+from typing import Optional
 
 from matmaster.types.events import BusEvent
 
 
 class MessageBus:
-    """同步事件总线。
+    """Async event bus.
 
-    Agent kernel 调用 emit() 发射 BusEvent，
-    EventRouter handlers 调用 get() 消费事件。
-    基于 queue.Queue，线程安全。
-    单 producer（agent thread）模式。
+    Agent kernel calls emit/emit_nowait to publish BusEvent.
+    EventRouter consumes via await get() in an async task.
+    Based on asyncio.Queue, safe within a single event loop.
 
-    设计选择：同步 queue.Queue 而非 asyncio.Queue
-    （agent 在 ThreadPoolExecutor 中同步运行）。
+    For cross-thread callers (service layer), emit_nowait() uses
+    loop.call_soon_threadsafe to schedule put_nowait on the correct
+    event loop, avoiding the asyncio.Queue thread-safety issue.
     """
 
     def __init__(self, maxsize: int = 0) -> None:
-        self._queue: queue.Queue[BusEvent] = queue.Queue(maxsize=maxsize)
+        self._queue: asyncio.Queue[BusEvent] = asyncio.Queue(maxsize=maxsize)
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
-    def emit(self, event: BusEvent) -> None:
-        """发射事件（线程安全）。"""
-        self._queue.put(event)
+    def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """Capture event loop reference for thread-safe emit_nowait.
 
-    def get(self, timeout: float | None = None) -> BusEvent:
-        """消费下一个事件（阻塞直到有事件或超时）。
-
-        超时抛出 queue.Empty。
+        Called by EventRouter.start() after the router loop is running.
         """
-        return self._queue.get(timeout=timeout)
+        self._loop = loop
+
+    async def emit(self, event: BusEvent) -> None:
+        """Emit event (non-blocking for unbounded queue).
+
+        Must be called from within the event loop.
+        """
+        self._queue.put_nowait(event)
+
+    def emit_nowait(self, event: BusEvent) -> None:
+        """Thread-safe sync emit for cross-thread callers (service layer).
+
+        Uses call_soon_threadsafe to schedule put_nowait on the bus's
+        event loop. Falls back to direct put_nowait if no loop is set
+        (e.g. during testing or before router starts).
+        """
+        if self._loop is not None and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, event)
+        else:
+            self._queue.put_nowait(event)
+
+    async def get(self, timeout: float | None = None) -> BusEvent:
+        """Consume next event with optional timeout.
+
+        Raises asyncio.TimeoutError if timeout expires.
+        """
+        if timeout is None:
+            return await self._queue.get()
+        return await asyncio.wait_for(self._queue.get(), timeout)
 
     def get_nowait(self) -> BusEvent:
-        """非阻塞消费。队列为空时抛出 queue.Empty。"""
+        """Non-blocking consume. Raises asyncio.QueueEmpty when empty."""
         return self._queue.get_nowait()
 
     @property
     def pending(self) -> int:
-        """待消费事件数量（近似值）。"""
+        """Pending event count (approximate)."""
         return self._queue.qsize()
 
     @property

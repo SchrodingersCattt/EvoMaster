@@ -1,4 +1,4 @@
-"""AgentKernel -- pure execution loop for the agent kernel.
+"""AgentKernel -- pure async execution loop for the agent kernel.
 
 Consumes an AgentRuntimeSpec and executes the LLM -> guard -> hook -> tool
 -> message accumulate -> loop cycle. All termination paths go through
@@ -13,10 +13,10 @@ Termination conditions:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import threading
-import time
 from typing import TYPE_CHECKING, Any
 
 from matmaster.core.guard_pipeline import GuardPipeline
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 class AgentKernel:
     """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""
 
-    def run(
+    async def run(
         self,
         spec: AgentRuntimeSpec,
         task: str,
@@ -76,12 +76,41 @@ class AgentKernel:
 
         Returns KernelRunResult with event and message transcript.
         """
+        async with spec.llm_provider:
+            # Enter summary_provider if it's a separate instance
+            _summary_provider = None
+            if spec.compactor and hasattr(spec.compactor, '_summary_provider'):
+                sp = spec.compactor._summary_provider
+                if sp is not spec.llm_provider:
+                    _summary_provider = sp
+
+            if _summary_provider is not None:
+                async with _summary_provider:
+                    return await self._run_loop(spec, task, history, stop_event)
+            else:
+                return await self._run_loop(spec, task, history, stop_event)
+
+    async def _run_loop(
+        self,
+        spec: AgentRuntimeSpec,
+        task: str,
+        history: list[Message] | None,
+        stop_event: threading.Event | None,
+    ) -> KernelRunResult:
+        """Internal async execution loop."""
         messages: list[Message] = [
             SystemMessage(content=spec.system_prompt),
             *(history or []),
             UserMessage(content=task),
         ]
         guard_pipeline = GuardPipeline(spec.guards)
+
+        # Inject running loop to hooks that need it (e.g. ConfirmationHook)
+        loop = asyncio.get_running_loop()
+        for hook in spec.hooks:
+            if hasattr(hook, "set_loop"):
+                hook.set_loop(loop)
+
         turn = 0
         if spec.compactor:
             spec.compactor.update_message_count(len(messages))
@@ -97,18 +126,18 @@ class AgentKernel:
             turn += 1
 
             # pre_llm_call hook (observation, all hooks called)
-            run_pre_llm_call(spec.hooks, messages, turn)
+            await run_pre_llm_call(spec.hooks, messages, turn)
 
             # should_continue hook (intercepting, short-circuit)
-            if not run_should_continue(spec.hooks, messages, turn):
+            if not await run_should_continue(spec.hooks, messages, turn):
                 return self._finish(spec, messages, "hook_stopped", num_turns=turn - 1, stop_reason=last_stop_reason, usage=total_usage)
 
             # Context compaction check
             if spec.compactor:
-                spec.compactor.compact_if_needed(messages, last_usage, turn)
+                await spec.compactor.compact_if_needed(messages, last_usage, turn)
 
             # LLM call (streaming by default)
-            response = self._call_llm(spec, messages)
+            response = await self._call_llm(spec, messages)
             last_usage = response.usage
             self._accumulate_usage(total_usage, response.usage)
             last_stop_reason = response.finish_reason
@@ -149,7 +178,7 @@ class AgentKernel:
                 guard_result = guard_pipeline.evaluate(tc, turn, spec.max_turns)
                 if not guard_result.allowed:
                     # Blocked: notify hooks, then append ToolMessage error
-                    run_guard_blocked(spec.hooks, tc, guard_result)
+                    await run_guard_blocked(spec.hooks, tc, guard_result)
                     blocked_content = f"BLOCKED: {guard_result.reason}"
                     if guard_result.guidance:
                         blocked_content += f"\n{guard_result.guidance}"
@@ -163,7 +192,7 @@ class AgentKernel:
                     continue
 
                 # pre_tool_call hook (intercepting, short-circuit)
-                action = run_pre_tool_call(spec.hooks, tc)
+                action = await run_pre_tool_call(spec.hooks, tc)
                 if action == HookAction.SKIP:
                     messages.append(
                         ToolMessage(
@@ -174,9 +203,9 @@ class AgentKernel:
                     )
                     continue
 
-                # Tool execution
+                # Tool execution (async registry)
                 try:
-                    tool_result = spec.tool_registry.execute(tc.name, tc.arguments)
+                    tool_result = await spec.tool_registry.execute(tc.name, tc.arguments)
                 except Exception as e:
                     tool_result = ToolResult(
                         status="error",
@@ -195,13 +224,15 @@ class AgentKernel:
                 )
 
                 # post_tool_call hook (observation, all hooks called)
-                run_post_tool_call(spec.hooks, tc, tool_result)
+                await run_post_tool_call(spec.hooks, tc, tool_result)
 
         # max_turns exhausted
         return self._finish(spec, messages, "max_turns", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)
 
-    def _call_llm(
-        self, spec: AgentRuntimeSpec, messages: list[Message]
+    async def _call_llm(
+        self,
+        spec: AgentRuntimeSpec,
+        messages: list[Message],
     ) -> LLMResponse:
         """Call LLM with timeout-doubling retry on transient errors."""
         provider = spec.llm_provider
@@ -214,7 +245,21 @@ class AgentKernel:
         last_error: LLMError | None = None
         for attempt in range(max_retries):
             try:
-                return self._do_stream_llm(spec, messages, timeout=current_timeout)
+                response = await self._do_stream_llm(spec, messages, timeout=current_timeout)
+                if (
+                    self._is_incomplete_response(response)
+                    and attempt < max_retries - 1
+                ):
+                    logger.warning(
+                        "LLM returned reasoning without content "
+                        "(attempt %d/%d), retrying.",
+                        attempt + 1,
+                        max_retries,
+                    )
+                    backoff = retry_delay * (2**attempt)
+                    await asyncio.sleep(backoff)
+                    continue
+                return response
             except LLMError as e:
                 if not e.retryable:
                     raise
@@ -231,14 +276,18 @@ class AgentKernel:
                 current_timeout = next_timeout
                 if attempt < max_retries - 1:
                     backoff = retry_delay * (2**attempt)
-                    time.sleep(backoff)
+                    await asyncio.sleep(backoff)
 
         raise RuntimeError(
             f"LLM stream failed after {max_retries} attempts"
         ) from last_error
 
-    def _do_stream_llm(
-        self, spec: AgentRuntimeSpec, messages: list[Message], *, timeout: float | None = None
+    async def _do_stream_llm(
+        self,
+        spec: AgentRuntimeSpec,
+        messages: list[Message],
+        *,
+        timeout: float | None = None,
     ) -> LLMResponse:
         """Call LLM via streaming, accumulate chunks into LLMResponse."""
         api_messages = [m.to_api_dict() for m in messages]
@@ -258,14 +307,14 @@ class AgentKernel:
         producing_reasoning = False
         producing_content = False
 
-        run_on_stream_chunk(
+        await run_on_stream_chunk(
             spec.hooks,
             StreamChunk(stream_state="start", stream_id=stream_id),
         )
         try:
-            for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs, timeout=timeout):
+            async for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs, timeout=timeout):
                 if chunk.content or chunk.reasoning_content:
-                    run_on_stream_chunk(
+                    await run_on_stream_chunk(
                         spec.hooks,
                         chunk.model_copy(
                             update={
@@ -281,7 +330,7 @@ class AgentKernel:
 
                 if chunk.content:
                     if producing_reasoning:
-                        run_on_segment_complete(
+                        await run_on_segment_complete(
                             spec.hooks,
                             "thought",
                             "".join(reasoning_parts),
@@ -297,7 +346,7 @@ class AgentKernel:
                     usage = chunk.usage
                 if chunk.tool_call_deltas:
                     if producing_reasoning:
-                        run_on_segment_complete(
+                        await run_on_segment_complete(
                             spec.hooks,
                             "thought",
                             "".join(reasoning_parts),
@@ -305,7 +354,7 @@ class AgentKernel:
                         )
                         producing_reasoning = False
                     if producing_content:
-                        run_on_segment_complete(
+                        await run_on_segment_complete(
                             spec.hooks,
                             "response",
                             "".join(content_parts),
@@ -328,20 +377,20 @@ class AgentKernel:
                             tool_calls_acc[idx]["arguments"] += delta["arguments"]
         finally:
             if producing_reasoning:
-                run_on_segment_complete(
+                await run_on_segment_complete(
                     spec.hooks,
                     "thought",
                     "".join(reasoning_parts),
                     stream_id,
                 )
             if producing_content:
-                run_on_segment_complete(
+                await run_on_segment_complete(
                     spec.hooks,
                     "response",
                     "".join(content_parts),
                     stream_id,
                 )
-            run_on_stream_chunk(
+            await run_on_stream_chunk(
                 spec.hooks,
                 StreamChunk(stream_state="end", stream_id=stream_id),
             )
@@ -379,6 +428,19 @@ class AgentKernel:
     def _is_valid_natural_finish(response: LLMResponse) -> bool:
         """Only commit a natural finish when the stream terminates cleanly."""
         return not response.tool_calls and response.finish_reason == "stop"
+
+    @staticmethod
+    def _is_incomplete_response(response: LLMResponse) -> bool:
+        """Detect reasoning-only response with no visible content.
+
+        This can happen when an LLM proxy (e.g. LiteLLM) intermittently
+        drops the content block after streaming the thinking block.
+        """
+        return (
+            response.content is None
+            and response.reasoning_content is not None
+            and not response.tool_calls
+        )
 
     @staticmethod
     def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:

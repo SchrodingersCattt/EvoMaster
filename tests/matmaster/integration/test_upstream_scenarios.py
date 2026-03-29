@@ -6,12 +6,13 @@ All external dependencies mocked per D-10.
 
 from __future__ import annotations
 
+import asyncio
 import queue
 import threading
 import time
 from pathlib import Path
-from typing import Any, Iterator
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
@@ -45,7 +46,7 @@ from matmaster.types.events import (
 )
 
 
-# ── Mock helpers ──────────────────────────────────────
+# -- Mock helpers ------------------------------------------------
 
 
 class _SlowMockLLM:
@@ -55,16 +56,19 @@ class _SlowMockLLM:
         self._turns = turns
         self._call_count = 0
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="done", finish_reason="stop")
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         self._call_count += 1
         # Add a small delay to give stop_event time to be set
-        time.sleep(0.05)
+        await asyncio.sleep(0.05)
         yield StreamChunk(content=f"Turn {self._call_count}", finish_reason="stop")
 
 
@@ -74,13 +78,16 @@ class _NeverFinishLLM:
     def __init__(self) -> None:
         self._call_count = 0
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="loop", finish_reason="stop")
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         self._call_count += 1
         # Always yield a natural finish to avoid infinite loop
         yield StreamChunk(content=f"Turn {self._call_count}", finish_reason="stop")
@@ -89,13 +96,16 @@ class _NeverFinishLLM:
 class _QuickMockLLM:
     """Simplest mock LLM: single turn, immediate finish."""
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="quick", finish_reason="stop")
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(content="quick", finish_reason="stop")
 
 
@@ -109,7 +119,7 @@ def _make_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
     )
 
 
-# ── QUAL-04: Run interrupted detection ───────────────
+# -- QUAL-04: Run interrupted detection -------------------------
 
 
 class TestRunInterruptedDetection:
@@ -117,7 +127,7 @@ class TestRunInterruptedDetection:
 
     _EXP_CONFIG: ExpConfig = ExpConfig(name="direct")
 
-    def test_run_interrupted_detection_deploy(self, tmp_path: Path) -> None:
+    async def test_run_interrupted_detection_deploy(self, tmp_path: Path) -> None:
         """Verify stop_event.is_set() detected before kernel turn.
         Uses pre-set stop_event to guarantee detection on first check.
         """
@@ -126,45 +136,45 @@ class TestRunInterruptedDetection:
         bus = MessageBus()
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
 
         # Pre-set stop_event: kernel checks before first LLM call
         stop_event = threading.Event()
         stop_event.set()
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, "long task", stop_event=stop_event)
+        finish = await kernel.run(runtime.spec, "long task", stop_event=stop_event)
 
         assert isinstance(finish.result, KernelResult)
         assert finish.result.reason == "cancelled"
         assert finish.result.status == "cancelled"
 
-    def test_run_interrupted_detection_restart(self, tmp_path: Path) -> None:
+    async def test_run_interrupted_detection_restart(self, tmp_path: Path) -> None:
         """Verify stop_event from Redis stop key detected (same mechanism)."""
         mock_llm = _QuickMockLLM()
         pg_ctx = _make_ctx(tmp_path, llm_provider=mock_llm)
         bus = MessageBus()
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
 
         # Simulate Redis-backed stop event: already set before run starts
         stop_event = threading.Event()
         stop_event.set()
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, "restart task", stop_event=stop_event)
+        finish = await kernel.run(runtime.spec, "restart task", stop_event=stop_event)
 
         assert finish.result.reason == "cancelled"
 
 
-# ── QUAL-04: Workspace upload scenarios ──────────────
+# -- QUAL-04: Workspace upload scenarios -------------------------
 
 
 class TestWorkspaceUpload:
     """Verify WorkspaceHandler upload behavior."""
 
-    def test_workspace_upload_triggered_on_tool_result(self, tmp_path: Path) -> None:
+    async def test_workspace_upload_triggered_on_tool_result(self, tmp_path: Path) -> None:
         """Verify WorkspaceHandler triggers upload when workspace files change."""
         workspace_path = tmp_path / "workspace"
         workspace_path.mkdir()
@@ -190,17 +200,17 @@ class TestWorkspaceUpload:
         )
 
         # First event: sets initial snapshot
-        handler.handle(ToolResultEvent(
+        await handler.handle(ToolResultEvent(
             source="agent", call_id="c1", tool_name="bash", result="ok"
         ))
         # Second event: snapshot changed -> upload triggered
-        handler.handle(ToolResultEvent(
+        await handler.handle(ToolResultEvent(
             source="agent", call_id="c2", tool_name="bash", result="ok"
         ))
 
         assert upload_fn.called
 
-    def test_workspace_upload_skipped_when_ssh_attached(self, tmp_path: Path) -> None:
+    async def test_workspace_upload_skipped_when_ssh_attached(self, tmp_path: Path) -> None:
         """Verify WorkspaceHandler skips upload in SSH mode."""
         workspace_path = tmp_path / "workspace"
         workspace_path.mkdir()
@@ -217,14 +227,14 @@ class TestWorkspaceUpload:
             debounce_seconds=0,
         )
 
-        handler.handle(ToolResultEvent(
+        await handler.handle(ToolResultEvent(
             source="agent", call_id="c1", tool_name="bash", result="ok"
         ))
 
         assert not upload_fn.called
 
 
-# ── QUAL-04: Bohrium lifecycle ───────────────────────
+# -- QUAL-04: Bohrium lifecycle ----------------------------------
 
 
 class TestBohriumSetupLifecycle:
@@ -287,13 +297,13 @@ class TestBohriumSetupLifecycle:
             assert mock_cleanup.called
 
 
-# ── QUAL-04: Event router persistence ────────────────
+# -- QUAL-04: Event router persistence ---------------------------
 
 
 class TestEventRouterPersistence:
     """Verify PersistenceHandler filtering and persistence behavior."""
 
-    def test_event_router_persistence_on_standard_events(self) -> None:
+    async def test_event_router_persistence_on_standard_events(self) -> None:
         """Verify PersistenceHandler persists tool_call, tool_result, finish events."""
         mock_events_table = MagicMock()
 
@@ -304,26 +314,25 @@ class TestEventRouterPersistence:
         )
 
         # These should be persisted (non-streaming)
-        handler.handle(ToolCallEvent(
+        await handler.handle(ToolCallEvent(
             source="agent", call_id="c1", tool_name="bash", arguments={"cmd": "ls"}
         ))
-        handler.handle(ToolResultEvent(
+        await handler.handle(ToolResultEvent(
             source="agent", call_id="c1", tool_name="bash", result="output"
         ))
-        handler.handle(FinishEvent(source="agent", reason="natural"))
+        await handler.handle(FinishEvent(source="agent", reason="natural"))
 
         assert mock_events_table.add_event.call_count == 3
 
-    def test_event_router_sse_push_filtering(self) -> None:
+    async def test_event_router_sse_push_filtering(self) -> None:
         """Verify SSEHandler pushes events except assistant_state and mode-filtered thoughts."""
         payloads = []
 
-        def mock_send_cb(payload):
+        async def mock_send_cb(payload):
             payloads.append(payload)
 
         handler = SSEHandler(
             send_cb=mock_send_cb,
-            loop=None,
             session_id="sess-1",
             task_id="task-1",
             invocation_id=None,
@@ -331,19 +340,19 @@ class TestEventRouterPersistence:
         )
 
         # assistant_state: NEVER pushed
-        handler.handle(AssistantStateEvent(
+        await handler.handle(AssistantStateEvent(
             source="agent", state={"content": "hi"}
         ))
         # streaming thought: pushed in direct mode
-        handler.handle(ThoughtEvent(
+        await handler.handle(ThoughtEvent(
             source="agent", content="hello", stream_state="start"
         ))
         # non-streaming thought: NOT pushed in direct mode
-        handler.handle(ThoughtEvent(
+        await handler.handle(ThoughtEvent(
             source="agent", content="complete thought", stream_state=None
         ))
         # tool_call: pushed
-        handler.handle(ToolCallEvent(
+        await handler.handle(ToolCallEvent(
             source="agent", call_id="c1", tool_name="bash", arguments={}
         ))
 
@@ -356,7 +365,7 @@ class TestEventRouterPersistence:
         assert len(thought_payloads) == 1  # only streaming one
 
 
-# ── QUAL-04: Cross-pod reply queue ───────────────────
+# -- QUAL-04: Cross-pod reply queue ------------------------------
 
 
 class _MockReplyQueue:
@@ -382,7 +391,12 @@ class _MockReplyQueue:
 
 
 class TestCrossPodReplyQueue:
-    """QUAL-04: Verify cross-pod subscription recovery via RedisReplyQueue."""
+    """QUAL-04: Verify cross-pod subscription recovery via RedisReplyQueue.
+
+    NOTE: ConfirmationHook is still sync and calls bus.emit() which is now async.
+    These tests patch bus.emit to use emit_nowait (the sync bridge) until
+    hooks are async-migrated in a later phase.
+    """
 
     def test_cross_pod_reply_queue(self) -> None:
         """Verify ConfirmationHook correctly interacts with ReplyQueueLike
@@ -390,6 +404,10 @@ class TestCrossPodReplyQueue:
         """
         reply_queue = _MockReplyQueue()
         bus = MessageBus()
+
+        # Patch bus.emit to use sync emit_nowait since ConfirmationHook is still sync
+        original_emit = bus.emit
+        bus.emit = lambda event: bus.emit_nowait(event)  # type: ignore[assignment]
 
         hook = ConfirmationHook(
             reply_queue=reply_queue,
@@ -415,11 +433,8 @@ class TestCrossPodReplyQueue:
 
         # Verify ConfirmationRequestEvent was emitted to bus
         events = []
-        try:
-            while True:
-                events.append(bus.get(timeout=0.1))
-        except queue.Empty:
-            pass
+        while not bus.empty:
+            events.append(bus.get_nowait())
 
         confirmation_events = [
             e for e in events if isinstance(e, ConfirmationRequestEvent)
@@ -431,6 +446,9 @@ class TestCrossPodReplyQueue:
         """Verify ConfirmationHook returns SKIP when user cancels via cross-pod queue."""
         reply_queue = _MockReplyQueue()
         bus = MessageBus()
+
+        # Patch bus.emit to use sync emit_nowait since ConfirmationHook is still sync
+        bus.emit = lambda event: bus.emit_nowait(event)  # type: ignore[assignment]
 
         hook = ConfirmationHook(
             reply_queue=reply_queue,
@@ -454,7 +472,7 @@ class TestCrossPodReplyQueue:
         assert action == HookAction.SKIP
 
 
-# ── D-03: x_master raises ValueError ────────────────
+# -- D-03: x_master raises ValueError ---------------------------
 
 
 class TestXMasterRaisesValueError:

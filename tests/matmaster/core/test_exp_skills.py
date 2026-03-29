@@ -78,7 +78,7 @@ class TestExpInitSkillTools:
 
         assert "use_skill" not in registry
 
-    def test_skill_trigger_injects_lazy_tools(self, tmp_path):
+    async def test_skill_trigger_injects_lazy_tools(self, tmp_path):
         """Simulating skill hit triggers lazy MCP tool injection."""
         skills_root = _make_skill_dir(tmp_path)
         cache_dir = _make_cache(tmp_path)
@@ -107,7 +107,7 @@ class TestExpInitSkillTools:
         assert "mat_sg_build_bulk" not in registry
 
         # Trigger via use_skill
-        result = registry.execute(
+        result = await registry.execute(
             "use_skill", {"skill_name": "test-skill", "action": "get_info"}
         )
         assert result.status == "success", f"use_skill failed: {result.content}"

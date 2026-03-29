@@ -6,11 +6,11 @@ and correct event flow without requiring real LLM/Redis/Bohrium.
 
 from __future__ import annotations
 
+import asyncio
 import json
-import queue
 import threading
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 from unittest.mock import MagicMock, patch
 
 from matmaster.config.exp import ExpConfig
@@ -44,24 +44,20 @@ class MockLLMProvider:
     def __init__(self, content: str = 'Hello from mock LLM') -> None:
         self._content = content
 
-    def chat(
+    async def __aenter__(self) -> MockLLMProvider:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
     ) -> LLMResponse:
         return LLMResponse(content=self._content, finish_reason='stop')
 
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-    ) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(
+    async def chat_stream(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, timeout: float | None = None
-    ) -> Iterator[StreamChunk]:
+    ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(
             content=self._content,
             stream_state='start',
@@ -80,13 +76,16 @@ class MockLLMProviderWithToolCall:
     def __init__(self) -> None:
         self._call_count = 0
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> MockLLMProviderWithToolCall:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='done', finish_reason='stop')
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
             # First turn: tool call
@@ -112,13 +111,16 @@ class MockLLMProviderCapturingMessages:
     def __init__(self) -> None:
         self.captured_messages: list[list[dict]] = []
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> MockLLMProviderCapturingMessages:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='ok', finish_reason='stop')
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
         self.captured_messages.append(list(messages))
         yield StreamChunk(content='Acknowledged history.', finish_reason='stop')
 
@@ -145,7 +147,7 @@ class EchoTool:
             'required': ['text'],
         }
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         return f"ECHO: {arguments.get('text', '')}"
 
 
@@ -164,12 +166,12 @@ def _make_pg_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
 
 
 def _collect_bus_events(bus: MessageBus, timeout: float = 0.5) -> list:
-    """Drain all events from bus within timeout."""
+    """Drain all events from bus."""
     events = []
     try:
         while True:
-            events.append(bus.get(timeout=timeout))
-    except queue.Empty:
+            events.append(bus.get_nowait())
+    except asyncio.QueueEmpty:
         pass
     return events
 
@@ -182,17 +184,17 @@ class TestMatMasterE2EPipeline:
 
     _EXP_CONFIG: ExpConfig = ExpConfig(name='direct')
 
-    def test_mat_master_e2e_pipeline(self, tmp_path: Path) -> None:
+    async def test_mat_master_e2e_pipeline(self, tmp_path: Path) -> None:
         """E2E: Playground.prepare() -> Exp.build_runtime() -> Kernel.run() with mock LLM."""
         mock_llm = MockLLMProvider()
         pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
         bus = MessageBus()
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, 'test task')
+        finish = await kernel.run(runtime.spec, 'test task')
 
         assert isinstance(finish.result, KernelResult)
         assert finish.result.reason == "natural"
@@ -203,7 +205,7 @@ class TestMatMasterE2EPipeline:
         response_events = [e for e in events if isinstance(e, ResponseEvent)]
         assert len(response_events) >= 1
 
-    def test_mat_master_e2e_with_tool_call(self, tmp_path: Path) -> None:
+    async def test_mat_master_e2e_with_tool_call(self, tmp_path: Path) -> None:
         """E2E: Pipeline with a tool call and tool result."""
         mock_llm = MockLLMProviderWithToolCall()
         pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
@@ -211,12 +213,12 @@ class TestMatMasterE2EPipeline:
         echo_tool = EchoTool()
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
         # Register echo tool directly on the runtime's registry
         runtime.spec.tool_registry.register(echo_tool, source='test')
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, 'call echo tool')
+        finish = await kernel.run(runtime.spec, 'call echo tool')
 
         assert isinstance(finish.result, KernelResult)
         assert finish.result.reason == "natural"
@@ -229,7 +231,7 @@ class TestMatMasterE2EPipeline:
         assert len(tool_result_events) >= 1
         assert tool_call_events[0].tool_name == 'echo'
 
-    def test_mat_master_e2e_with_history(self, tmp_path: Path) -> None:
+    async def test_mat_master_e2e_with_history(self, tmp_path: Path) -> None:
         """E2E: Pipeline with multi-turn history injection."""
         mock_llm = MockLLMProviderCapturingMessages()
         pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
@@ -241,10 +243,10 @@ class TestMatMasterE2EPipeline:
         ]
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = exp.build_runtime(pg_ctx, bus=bus)
+        runtime = await exp.build_runtime(pg_ctx, bus=bus)
 
         kernel = AgentKernel()
-        finish = kernel.run(runtime.spec, 'new task', history=history)
+        finish = await kernel.run(runtime.spec, 'new task', history=history)
 
         assert finish.result.reason == "natural"
         # Verify messages passed to LLM include history

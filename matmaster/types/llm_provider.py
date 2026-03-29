@@ -6,7 +6,7 @@ by AgentKernel. Uses @runtime_checkable to support isinstance() checks.
 
 from __future__ import annotations
 
-from typing import Any, Iterator, Protocol, runtime_checkable
+from typing import Any, AsyncIterator, Protocol, runtime_checkable
 
 from matmaster.types.messages import LLMResponse, StreamChunk
 
@@ -16,33 +16,31 @@ class LLMProvider(Protocol):
     """LLM backend interface for the agent kernel.
 
     Implementations wrap a specific LLM API (OpenAI, Anthropic, etc.)
-    and provide blocking (chat), retry-aware (chat_with_retry), and
-    streaming (chat_stream) methods.
-
-    Implementations of chat_with_retry must handle retry with exponential
-    backoff. Non-retryable errors (context length exceeded, malformed input)
-    must be raised immediately without retry.
+    and provide non-streaming (chat) and streaming (chat_stream) methods.
+    Both are async. Provider lifecycle is managed via async context manager:
+    __aenter__ initializes the client, __aexit__ closes connections.
+    Retry logic lives in Kernel._call_llm(), not in the provider.
     """
 
-    def chat(
+    async def __aenter__(self) -> LLMProvider: ...
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object | None,
+    ) -> None: ...
+
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse: ...
 
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-    ) -> LLMResponse: ...
-
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]: ...
+    ) -> AsyncIterator[StreamChunk]: ...

@@ -40,6 +40,8 @@ class ConfirmationHook(BaseHook):
     If reply_queue is None, confirmation is not available and all tools
     proceed. If confirm_tools is set, only those tools require confirmation.
     Otherwise all tools require confirmation.
+
+    Uses bus.emit_nowait() for thread-safe emit from sync kernel context.
     """
 
     def __init__(
@@ -76,7 +78,7 @@ class ConfirmationHook(BaseHook):
             return HookAction.CONTINUE
 
         # Emit confirmation request to bus
-        self._bus.emit(
+        self._bus.emit_nowait(
             ConfirmationRequestEvent(
                 source=self._source,
                 question=f"Confirm tool call: {tool_call.name}?",

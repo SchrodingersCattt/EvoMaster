@@ -6,14 +6,13 @@ Filter rules migrated from _should_skip_push in agent_run_service.py:
 - Skip: direct mode non-streaming complete thought (persist-only)
 - Push: everything else
 
-Supports both async (loop present) and sync (worker mode) send_cb.
+Pure async handler -- send_cb is always awaited.
 """
 
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Any, Callable
+from typing import Any, Callable, Coroutine
 
 from matmaster.integration.event_payloads import build_public_sse_payload_from_bus_dump
 from matmaster.types.events import BusEvent, ResponseEvent, ThoughtEvent
@@ -30,27 +29,24 @@ class SSEHandler:
     - Skip: direct mode non-streaming complete thought (persist-only)
     - Push: everything else
 
-    Supports both async (loop present) and sync (worker mode) send_cb.
+    Pure async handler -- send_cb is always awaited.
     """
 
     def __init__(
         self,
-        send_cb: Callable,
-        loop: asyncio.AbstractEventLoop | None,
+        send_cb: Callable[..., Coroutine[Any, Any, Any] | Any],
         session_id: str,
         task_id: str,
         invocation_id: str | None,
         mode: str,
     ) -> None:
         self._send_cb = send_cb
-        self._loop = loop
         self._session_id = session_id
         self._task_id = task_id
         self._invocation_id = invocation_id
         self._mode = mode
-        self._is_async = asyncio.iscoroutinefunction(send_cb)
 
-    def handle(self, event: BusEvent) -> None:  # type: ignore[arg-type]
+    async def handle(self, event: BusEvent) -> None:
         """Push event to SSE if it passes filter rules."""
         if self._should_skip(event):
             return
@@ -63,9 +59,9 @@ class SSEHandler:
             invocation_id=self._invocation_id,
             spawn_id=getattr(event, 'spawn_id', None),
         )
-        self._send(payload)
+        await self._send_cb(payload)
 
-    def _should_skip(self, event: BusEvent) -> bool:  # type: ignore[arg-type]
+    def _should_skip(self, event: BusEvent) -> bool:
         """Check if event should be skipped for SSE push.
 
         Migrated from _should_skip_push in agent_run_service.py.
@@ -98,21 +94,3 @@ class SSEHandler:
                 return True
 
         return False
-
-    def _send(self, payload: dict[str, Any]) -> None:
-        """Send payload via sync or async path."""
-        if self._loop is not None and self._is_async:
-            future = asyncio.run_coroutine_threadsafe(
-                self._send_cb(payload), self._loop
-            )
-            try:
-                future.result(timeout=5)
-            except Exception:
-                logger.warning(
-                    'SSE send_cb timeout or error session_id=%s type=%s',
-                    self._session_id,
-                    payload.get('type'),
-                    exc_info=True,
-                )
-        else:
-            self._send_cb(payload)

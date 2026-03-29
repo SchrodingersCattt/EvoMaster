@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -461,10 +461,11 @@ def test_execution_binding_before_build_runtime(
     mock_run_evt.final_content = None
     mock_run_evt.source = 'MatMaster'
     mock_kernel_result.result.to_run_result_event.return_value = mock_run_evt
-    mock_runtime.kernel.run.return_value = mock_kernel_result
+    mock_runtime.kernel.run = AsyncMock(return_value=mock_kernel_result)
 
     mock_exp_inst = MagicMock()
-    mock_exp_inst.build_runtime.return_value = mock_runtime
+    mock_exp_inst.build_runtime = AsyncMock(return_value=mock_runtime)
+    mock_exp_inst._run_cleanup_callbacks = AsyncMock()
 
     with (
         patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
