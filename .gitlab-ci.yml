@@ -30,17 +30,28 @@ pre-commit:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
 
-# 将 evaluation/question_bank 中的 question_id 全量同步到 matmaster-tools-server 题库目录表
-# 触发：推送到分支 sync-question-catalog（需配置 CI 变量 MATMASTER_TOOLS_SERVER）
+# 题库同步：uv sync + 脚本（Runner zjk；慢主要来自冷启动与全量依赖下载，见 ci/README.md）
 sync-question-catalog:
   stage: sync-question-catalog
   image: $REGISTRY/public/ubuntu:gitlab-0.0.2
+  variables:
+    UV_CACHE_DIR: ${CI_PROJECT_DIR}/.cache/uv
+    # 与 Dockerfile 一致；不设则走官方 PyPI，在国内 Runner 上常明显更慢
+    UV_INDEX_URL: https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple/
+    UV_TRUSTED_HOST: mirrors.tuna.tsinghua.edu.cn
+  cache:
+    key:
+      files:
+        - uv.lock
+    paths:
+      - .cache/uv
   before_script:
+    - mkdir -p .cache/uv
     - curl -LsSf https://astral.sh/uv/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
     - cd "$CI_PROJECT_DIR"
-    - uv sync --frozen
   script:
+    - uv sync --frozen
     - uv run python evaluation/scripts/sync_question_catalog_to_tools_server.py
   rules:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "sync-question-catalog"

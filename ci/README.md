@@ -21,7 +21,10 @@
 
 ## 题库目录同步（matmaster-tools-server）
 
-- **触发方式**：推送到分支 **`sync-question-catalog`** 即自动执行 **`sync-question-catalog`** job（见 `.gitlab-ci.yml`）。
-- **效果**：在 Runner 上 `uv sync` 后执行 `evaluation/scripts/sync_question_catalog_to_tools_server.py`，将本仓库 v5 `evaluation/question_bank` 中的全部 `question_id` POST 到 tools-server 的 `POST /api/v1/evaluation/question-catalog/sync`（与 `remote-image` 类似：**专用分支 + push**，不向本仓库回写提交）。
-- **CI 变量**（GitLab CI/CD Variables，建议按目标环境设置）：
-  - **`MATMASTER_TOOLS_SERVER`**：tools-server 根 URL，例如 `https://matmaster-tools-server.test.bohrium.com`（未设置时脚本侧会按 `SERVICE_ENV` 推导默认域名，CI 中建议显式配置以免误连环境）。
+- **触发方式**：推 **`sync-question-catalog`** → `.gitlab-ci.yml` 里 **`sync-question-catalog`** job：`uv` 安装 → **`uv sync --frozen`** → **`uv run`** 执行 `evaluation/scripts/sync_question_catalog_to_tools_server.py`。
+- **Runner**：`k8s-runner-zjk-svc`（`RUNNER_ZJK_TAG`）。**CI 变量**：`MATMASTER_TOOLS_SERVER`（可选 `SERVICE_ENV`）。为减轻重复跑时的下载量，job 对 **`UV_CACHE_DIR`（`.cache/uv`）** 做了按 `uv.lock` 分 key 的 **cache**（首次仍慢）。
+- **为何首跑/清 cache 后慢**（与日志对应）：
+  1. **K8s**：Pod `Pending`、`ContainersNotReady`（build/helper 未就绪）——调度与辅助容器镜像拉取，常数秒～十余秒。
+  2. **裸 `ubuntu:gitlab-0.0.2` job**：每次装 **`uv`**（走 astral.sh）、**无预装项目 venv**。
+  3. **`uv sync --frozen`**：拉 **独立 CPython 3.13**（约 30MB+）、建 `.venv`、**editable 安装整仓**，并下载 **全部依赖 wheel**（日志里 `pymupdf`、`cryptography`、`lxml` 等体积大、数量多）。未命中 cache 时网络下载占大头。
+  4. **PyPI 源**：job 已设 **`UV_INDEX_URL` / `UV_TRUSTED_HOST`**（与 Dockerfile 相同清华镜像）；若走默认 `pypi.org`，在国内 Runner 上往往更慢。安装 **`uv` 本体**仍从 `astral.sh` 拉取，与 PyPI 镜像无关。
