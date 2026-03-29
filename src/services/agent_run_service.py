@@ -12,6 +12,7 @@ import asyncio
 import gc
 import logging
 import os
+import queue
 import threading
 import time
 import uuid
@@ -25,6 +26,7 @@ from matmaster.core.bus import MessageBus
 from matmaster.core.playground import PlaygroundManager
 from matmaster.hooks import (
     AssistantStateHook,
+    ConfirmationHook,
     OutputProcessorHook,
     SkillHitHook,
 )
@@ -64,6 +66,7 @@ _DIALOG_HISTORY_MAX_EVENTS = int(
 
 _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
+_CONFIRM_TOOLS: frozenset[str] = frozenset({'execute_bash'})
 
 
 def _build_workspace_upload_fn(
@@ -163,6 +166,42 @@ class ReplyQueueLike(Protocol):
         ...
 
 
+def _start_confirmation_reply_bridge(
+    reply_queue: ReplyQueueLike,
+    hook: ConfirmationHook,
+    *,
+    poll_timeout_sec: int = 1,
+) -> tuple[threading.Event, threading.Thread]:
+    """Bridge blocking reply_queue.get() into ConfirmationHook callbacks.
+
+    Poll with whole seconds only. RedisReplyQueue coerces float timeouts via
+    int(timeout), so 0.5 becomes 0 and triggers BLPOP timeout=0, which blocks
+    forever and prevents the bridge thread from shutting down cleanly.
+    """
+
+    stop_event = threading.Event()
+
+    def _bridge_loop() -> None:
+        while not stop_event.is_set():
+            try:
+                reply = reply_queue.get(timeout=poll_timeout_sec)
+            except queue.Empty:
+                continue
+
+            if reply is None:
+                hook.cancel()
+            else:
+                hook.resolve(reply)
+
+    bridge_thread = threading.Thread(
+        target=_bridge_loop,
+        daemon=True,
+        name='confirmation-reply-bridge',
+    )
+    bridge_thread.start()
+    return stop_event, bridge_thread
+
+
 class AgentRunService:
     """Agent execution service: pipeline orchestration via matmaster components."""
 
@@ -255,6 +294,8 @@ class AgentRunService:
         exp = None
         bohrium_svc = None
         ssh_attached = False
+        confirmation_reply_stop: threading.Event | None = None
+        confirmation_reply_thread: threading.Thread | None = None
 
         try:
             # -- Stage 1: Playground --
@@ -435,19 +476,27 @@ class AgentRunService:
                 _loop,
             ).result()
 
-            # Add external hooks to spec
-            external_hooks = [
-                # TODO: re-enable with confirm_tools once MCP registration lands
-                # confirmation_hook = ConfirmationHook(bus)
-                # stream_svc.set_reply_queue(session_id, ConfirmationHookAdapter(confirmation_hook))
-                # external_hooks.append(confirmation_hook)
+            observer_hooks = [
                 OutputProcessorHook(bus),
                 SkillHitHook(bus),
                 AssistantStateHook(bus),
             ]
-            spec = runtime.spec.model_copy(
-                update={'hooks': [*runtime.spec.hooks, *external_hooks]}
-            )
+            merged_hooks = [*runtime.spec.hooks, *observer_hooks]
+            if mode == 'direct' and reply_queue is not None and _CONFIRM_TOOLS:
+                confirmation_hook = ConfirmationHook(
+                    bus=bus,
+                    confirm_tools=set(_CONFIRM_TOOLS),
+                )
+                confirmation_hook.set_loop(_loop)
+                confirmation_reply_stop, confirmation_reply_thread = (
+                    _start_confirmation_reply_bridge(
+                        reply_queue,
+                        confirmation_hook,
+                    )
+                )
+                merged_hooks = [confirmation_hook, *runtime.spec.hooks, *observer_hooks]
+
+            spec = runtime.spec.model_copy(update={'hooks': merged_hooks})
 
             # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
             if stop_event is not None and spec.tool_registry is not None:
@@ -587,6 +636,17 @@ class AgentRunService:
                     ).result(timeout=10)
                 except Exception:
                     logger.warning('router.stop() failed during cleanup', exc_info=True)
+            if confirmation_reply_stop is not None:
+                confirmation_reply_stop.set()
+            if confirmation_reply_thread is not None:
+                confirmation_reply_thread.join(timeout=2.0)
+                if confirmation_reply_thread.is_alive():
+                    logger.warning(
+                        'confirmation-reply-bridge did not exit cleanly: '
+                        'session_id=%s task_id=%s',
+                        session_id,
+                        task_id,
+                    )
             # 4. Shut down the unified event loop
             if '_loop' in dir():
                 _loop.call_soon_threadsafe(_loop.stop)
