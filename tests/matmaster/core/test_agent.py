@@ -1504,3 +1504,15 @@ class TestParallelToolDispatch:
         assert len(tool_msgs) == 1
         assert "ValueError" in tool_msgs[0].content
         assert "test error" in tool_msgs[0].content
+
+
+class TestLLMResponseDegraded:
+    def test_degraded_defaults_false(self) -> None:
+        """LLMResponse.degraded defaults to False."""
+        resp = LLMResponse(content="hello", finish_reason="stop")
+        assert resp.degraded is False
+
+    def test_degraded_can_be_set(self) -> None:
+        """LLMResponse.degraded can be explicitly set."""
+        resp = LLMResponse(content="hello", finish_reason="stop", degraded=True)
+        assert resp.degraded is True
