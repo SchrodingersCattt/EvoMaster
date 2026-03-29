@@ -11,7 +11,7 @@ Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_r
 the same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
 
 Optional **per-task ingest** to matmaster-tools-server (after each devshell run).
-POST URL is fixed: ``MATMASTER_TOOLS_SERVER`` + ``/api/v1/evaluation/ingest`` (see ``matmaster.eval_ingest_client``).
+POST URL is fixed: ``MATMASTER_TOOLS_SERVER`` + ``/api/v1/evaluation/ingest`` (see ``evaluation.eval_ingest_client``).
 Each item includes ``score`` (explicit from summary or 100/0 pass-fail proxy) and, when OSS env is set,
 ``result_oss_url`` for a zip of **that task only**: ``workspaces/<task_id>/`` and ``logs/<task_id>/`` under
 the shared ``devshell_eval_*`` run folder. Upload is always attempted when ingest is enabled (no skip flag).
@@ -384,7 +384,7 @@ def main() -> int:
     run_dir.mkdir(parents=True, exist_ok=True)
     raw_path = run_dir / "raw_runs.jsonl"
 
-    from matmaster.eval_ingest_client import (
+    from evaluation.eval_ingest_client import (
         EVAL_INGEST_URL,
         build_ingest_item,
         git_head_commit,

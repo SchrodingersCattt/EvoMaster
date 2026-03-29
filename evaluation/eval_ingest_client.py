@@ -387,28 +387,38 @@ def post_eval_ingest(
 
 def post_question_catalog_sync(
     url: str,
-    question_ids: list[str],
+    items: list[dict[str, str]],
     *,
     timeout: float = 120.0,
 ) -> tuple[bool, str]:
-    """POST ``{ items: [{ question_id }, ...] }`` to matmaster-tools-server catalog sync.
+    """POST catalog sync payload to matmaster-tools-server.
 
-    Server marks all catalog rows inactive, then upserts the given ids as active.
-    Aligns with ``EvalQuestionCatalogSyncRequest`` (each ``question_id`` length 1–512).
+    Each element must include ``question_id`` and ``question_text`` (trimmed non-empty
+    after clip), matching tools-server ``EvalQuestionCatalogItemIn``. Server marks all
+    catalog rows inactive, then upserts these rows as active. ``question_id`` length
+    1–512; ``question_text`` clipped to ``EVAL_ITEM_QUESTION_TEXT_MAX_LEN``.
     """
-    if not question_ids:
-        return False, "no question_ids to sync (server requires at least one item)"
+    if not items:
+        return False, "no items to sync (server requires at least one item)"
 
-    items: list[dict[str, str]] = []
-    for raw in question_ids:
-        qid = str(raw).strip()
+    body_items: list[dict[str, str]] = []
+    for raw in items:
+        qid = str(raw.get("question_id", "")).strip()
         if not qid:
-            return False, "empty question_id in list"
+            return False, "missing or empty question_id in item"
         if len(qid) > 512:
             return False, f"question_id too long (>512): {qid[:80]!r}..."
-        items.append({"question_id": qid})
+        if "question_text" not in raw:
+            return False, f'missing question_text for question_id={qid!r}'
+        qt_raw = raw["question_text"]
+        if not isinstance(qt_raw, str):
+            return False, f'question_text must be a string for question_id={qid!r}'
+        qtext = clip_ingest_text_field(qt_raw, max_len=EVAL_ITEM_QUESTION_TEXT_MAX_LEN)
+        if not qtext:
+            return False, f"empty question_text after trim for question_id={qid!r}"
+        body_items.append({"question_id": qid, "question_text": qtext})
 
-    body = {"items": items}
+    body = {"items": body_items}
     headers: dict[str, str] = {"Content-Type": "application/json"}
 
     try:

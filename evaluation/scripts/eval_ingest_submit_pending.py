@@ -98,7 +98,7 @@ def main() -> int:
         return 1
 
     sys.path.insert(0, str(REPO_ROOT))
-    from matmaster.eval_ingest_client import (
+    from evaluation.eval_ingest_client import (
         normalize_pending_item_for_submission,
         post_eval_ingest,
     )
