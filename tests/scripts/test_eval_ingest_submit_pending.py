@@ -1,4 +1,4 @@
-"""Tests for ``scripts/eval_ingest_submit_pending.py``."""
+"""Tests for ``evaluation/scripts/eval_ingest_submit_pending.py``."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_submit_module():
-    script = REPO_ROOT / "scripts" / "eval_ingest_submit_pending.py"
+    script = REPO_ROOT / "evaluation" / "scripts" / "eval_ingest_submit_pending.py"
     spec = importlib.util.spec_from_file_location("_eval_ingest_submit_pending", script)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)

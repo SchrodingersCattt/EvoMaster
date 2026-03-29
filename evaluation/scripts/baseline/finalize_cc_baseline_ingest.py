@@ -3,19 +3,20 @@
 
 Expects a run directory created with::
 
-    uv run python scripts/run_devshell_eval.py --prepare-cc-baseline ...
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py --prepare-cc-baseline ...
 
 Each task workspace must contain:
 
 - ``_eval_task_meta.json`` (written by --prepare-cc-baseline)
-- ``_devshell_summary.json`` (one JSON object, same schema as mm-devshell ``--json-out``)
+- ``_devshell_summary.json`` (one JSON object, same schema as mm-devshell ``--json-out``; ``duration_ms`` in it is ignored)
+- ``_cc_baseline_task_start.json`` (from ``cc_baseline_mark_task_start.py``) if you need ingest ``duration_ms``
 
-See ``playground/mat_master/evaluation/baseline_cc_eval.md``.
+See ``evaluation/docs/baseline/baseline_cc_eval.md``.
 
 Examples::
 
-    uv run python scripts/finalize_cc_baseline_ingest.py --run-dir results/baseline_cc_20260328_120000
-    uv run python scripts/finalize_cc_baseline_ingest.py --run-dir results/... --eval-ingest-pending-only
+    uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-dir results/baseline_cc_20260328_120000
+    uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-dir results/... --eval-ingest-pending-only
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 
 def _load_summary_file(summary_file: Path) -> dict[str, Any]:
@@ -49,6 +50,42 @@ def _exit_code_from_summary(summary: dict[str, Any]) -> int:
     if summary.get("reason") == "natural":
         return 0
     return 1
+
+
+CC_BASELINE_TASK_START_NAME = "_cc_baseline_task_start.json"
+
+
+def _duration_ms_from_cc_baseline_clock(
+    workspace: Path, summary_path: Path
+) -> tuple[int | None, str | None]:
+    """Duration from ``started_at_unix_ms`` in ``_cc_baseline_task_start.json`` to summary mtime.
+
+    Returns ``(duration_ms, "cc_baseline_clock")`` or ``(None, None)`` if the marker is
+    missing, invalid, or end < start.
+    """
+    start_path = workspace / CC_BASELINE_TASK_START_NAME
+    if not start_path.is_file() or not summary_path.is_file():
+        return None, None
+    try:
+        raw = json.loads(start_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, None
+    if not isinstance(raw, dict):
+        return None, None
+    started = raw.get("started_at_unix_ms")
+    if started is None:
+        return None, None
+    try:
+        start_ms = int(started)
+    except (TypeError, ValueError):
+        return None, None
+    if start_ms < 0:
+        return None, None
+    end_ms = int(summary_path.stat().st_mtime * 1000)
+    delta = end_ms - start_ms
+    if delta < 0:
+        return None, None
+    return delta, "cc_baseline_clock"
 
 
 def _model_tag_cc_baseline(model_from_item: str | None) -> str:
@@ -233,16 +270,19 @@ def main() -> int:
 
             summary = _load_summary_file(summary_path)
             rc = _exit_code_from_summary(summary)
-            duration_ms = (
-                summary.get("duration_ms") if isinstance(summary, dict) else None
+            duration_ms, clock_tag = _duration_ms_from_cc_baseline_clock(
+                ws, summary_path
             )
-            if duration_ms is not None:
-                try:
-                    duration_ms = int(duration_ms)
-                    if duration_ms < 0:
-                        duration_ms = None
-                except (TypeError, ValueError):
-                    duration_ms = None
+            duration_source = (
+                clock_tag if duration_ms is not None else "no_cc_baseline_clock"
+            )
+            if duration_ms is None:
+                print(
+                    f"[cc_baseline] {task_id}: duration_ms omitted — run "
+                    f"evaluation/scripts/baseline/cc_baseline_mark_task_start.py "
+                    f"--workspace <this task dir> before work, then finalize again.",
+                    file=sys.stderr,
+                )
 
             prompt = meta.get("prompt")
             if not isinstance(prompt, str):
@@ -269,6 +309,7 @@ def main() -> int:
             if isinstance(extra, dict):
                 extra["eval_runner"] = "claude_code_baseline"
                 extra["matter_eval_source"] = "claude_code_baseline"
+                extra["baseline_duration_source"] = duration_source
                 extra["baseline_task_id"] = task_id
                 extra["baseline_question_id"] = qid
                 rl = manifest.get("run_label")
@@ -292,6 +333,7 @@ def main() -> int:
                 "devshell_summary_path": str(summary_path),
                 "devshell_summary": summary,
                 "duration_ms": duration_ms,
+                "baseline_duration_source": duration_source,
             }
             log_dir = run_dir / "logs" / task_id
             console_log = log_dir / "devshell_console.log"
@@ -314,9 +356,12 @@ def main() -> int:
                         "【CC Baseline】勿随手给 100 分。请读题库 YAML 的 scoring_checklist，按 "
                         "devshell_claude_code_eval.md 第 3 节算百分制；--score-reason 须逐条对照 checklist "
                         "说明证据（可引用 raw_runs / OSS zip 内路径）；--suggestion 写可执行改进；"
-                        "耗时与 tokens 以本条 item 的 duration_ms / tokens（来自 _devshell_summary.json）为准，"
-                        "若缺失须在 score_reason 中说明。上报命令: uv run python "
-                        f"scripts/eval_ingest_submit_pending.py --pending {pend_path} "
+                        "耗时：CC baseline 仅认客观墙钟 — workspace 须有 _cc_baseline_task_start.json（见 "
+                        "cc_baseline_mark_task_start.py），duration_ms = 该文件时间戳至 _devshell_summary.json "
+                        "mtime；缺则 item 无 duration_ms。"
+                        " tokens 以 summary.usage 为准；若缺失须在 score_reason 中说明。"
+                        "上报命令: uv run python "
+                        f"evaluation/scripts/eval_ingest_submit_pending.py --pending {pend_path} "
                         "--score <0-100> --score-reason \"...\" [--suggestion \"...\"]"
                     ),
                     "item": item_body,

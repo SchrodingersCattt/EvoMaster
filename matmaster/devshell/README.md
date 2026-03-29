@@ -48,36 +48,36 @@ mm-devshell run --workdir ./ws --log-dir ./logs -p "hi" --json-out ./summary.jso
 
 启动时会 **`load_dotenv()`**（当前工作目录下的 `.env`；不覆盖已在 shell 里 export 的变量）。
 
-### 批量跑 MATTER 题库（`scripts/run_devshell_eval.py`）
+### 批量跑 MATTER 题库（`evaluation/scripts/devshell/run_devshell_eval.py`）
 
-从仓库根目录读取 **`playground/mat_master/evaluation/question_bank`**（与 MATTER 评估模块相同布局），对每题调用 **`python -u -m matmaster.devshell run`**，**子进程直接继承当前终端的 stdout/stderr**（不经管道转发，避免 `uv run` / IDE 终端里「跑时无输出、结束才刷」）；脚本用 **`--json-out`** 把工作区内的 **`_devshell_summary.json`** 写入 **`raw_runs.jsonl`**；每题的 **`--log-dir`**（即 **`results/.../logs/<task_id>/`**）下会有 **`events_*.jsonl`**（总线事件，与单独 `mm-devshell run` 一致）。不跑 BinaryEvaluator / `run_mat_task`，仅收集 devshell 摘要供人工或后续判分。
+从仓库根目录读取 **`evaluation/question_bank`**（与 MATTER 评估模块相同布局），对每题调用 **`python -u -m matmaster.devshell run`**，**子进程直接继承当前终端的 stdout/stderr**（不经管道转发，避免 `uv run` / IDE 终端里「跑时无输出、结束才刷」）；脚本用 **`--json-out`** 把工作区内的 **`_devshell_summary.json`** 写入 **`raw_runs.jsonl`**；每题的 **`--log-dir`**（即 **`results/.../logs/<task_id>/`**）下会有 **`events_*.jsonl`**（总线事件，与单独 `mm-devshell run` 一致）。不跑 BinaryEvaluator / `run_mat_task`，仅收集 devshell 摘要供人工或后续判分。
 
 ```bash
 # 仓库根目录；建议与 uv 环境一致
-uv run python scripts/run_devshell_eval.py --dry-run --limit 5
-uv run python scripts/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
+uv run python evaluation/scripts/devshell/run_devshell_eval.py --dry-run --limit 5
+uv run python evaluation/scripts/devshell/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
 ```
 
-筛选与 **`playground/mat_master/evaluation/config.yaml`** 一致（`--eval-config`、`--capabilities`、`--questions` 等）；详见脚本 **`--help`**。
+筛选与 **`evaluation/config.yaml`** 一致（`--eval-config`、`--capabilities`、`--questions` 等）；详见脚本 **`--help`**。
 
 **默认**在跑完后同目录生成 **`claude_review.md`**（单文件汇总，便于 **@** Claude）。不需要再跑第二个命令。
 
 ```bash
 # 跳过自动生成 Markdown
-uv run python scripts/run_devshell_eval.py --limit 3 --no-export-review
+uv run python evaluation/scripts/devshell/run_devshell_eval.py --limit 3 --no-export-review
 
 # 生成 claude_review.md 时附带题库 human_prompt_seed
-uv run python scripts/run_devshell_eval.py --limit 3 --export-review-with-questions
+uv run python evaluation/scripts/devshell/run_devshell_eval.py --limit 3 --export-review-with-questions
 ```
 
 仅补生成或重跑打包时：
 
 ```bash
-uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_YYYYMMDD_HHMMSS
-uv run python scripts/export_devshell_review_bundle.py --run-dir results/devshell_eval_* --with-questions
+uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run-dir results/devshell_eval_YYYYMMDD_HHMMSS
+uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run-dir results/devshell_eval_* --with-questions
 ```
 
-**Claude Code（Cursor Agent）自跑自评：** 判分由对话里的 Agent 执行命令并阅读产物完成，而不是仓库内另一条自动判分流水线。完整说明见 **`playground/mat_master/evaluation/devshell_claude_code_eval.md`**（与 MATTER 评测同目录）。
+**Claude Code（Cursor Agent）自跑自评：** 判分由对话里的 Agent 执行命令并阅读产物完成，而不是仓库内另一条自动判分流水线。完整说明见 **`evaluation/docs/devshell/devshell_claude_code_eval.md`**。
 
 ## CLI 参数（`repl` 与 `run` 共用）
 

@@ -5,7 +5,7 @@
 ``pending_ingest/`` with ``ingest_url``, ``run_id``, ``git_commit``, and ``item`` **without**
 ``score``. After judging, pass score fields by CLI::
 
-    uv run python scripts/eval_ingest_submit_pending.py \
+    uv run python evaluation/scripts/eval_ingest_submit_pending.py \
         --pending results/devshell_eval_xxx/pending_ingest/SC_struct_007_direct_r0.json \
         --score 73 \
         --score-reason "按 checklist，结构构建基本正确但缺少最终校验" \
@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def main() -> int:
