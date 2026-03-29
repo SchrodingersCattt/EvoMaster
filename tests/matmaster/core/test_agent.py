@@ -7,7 +7,9 @@ reassembly, full cycle, and execution order verification.
 
 from __future__ import annotations
 
+import asyncio
 import threading
+import time
 from typing import Any, AsyncIterator
 from unittest.mock import MagicMock  # noqa: F401 -- kept for potential test use
 
@@ -145,16 +147,54 @@ class ToolCallingProvider:
     ) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count <= self._max_tool_turns:
-            for tc in self._tool_calls:
+            for i, tc in enumerate(self._tool_calls):
                 yield StreamChunk(
                     tool_call_deltas=[
                         {
-                            "index": 0,
+                            "index": i,
                             "id": tc.id,
                             "name": tc.name,
                             "arguments": str(tc.arguments).replace("'", '"'),
                         }
                     ],
+                )
+            yield StreamChunk(finish_reason="stop")
+        else:
+            yield StreamChunk(content=self._final_content, finish_reason="stop")
+
+
+class MultiToolProvider:
+    """Provider that returns multiple tool_calls on first turn, then finishes.
+
+    Unlike ToolCallingProvider, this always does exactly 1 tool turn then natural finish.
+    Designed for parallel dispatch testing where precise tool_call control matters.
+    """
+
+    def __init__(self, tool_calls: list[ToolCallData], final_content: str = "done") -> None:
+        self._tool_calls = tool_calls
+        self._final_content = final_content
+        self._call_count = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
+        self._call_count += 1
+        if self._call_count == 1:
+            for i, tc in enumerate(self._tool_calls):
+                yield StreamChunk(
+                    tool_call_deltas=[{
+                        "index": i,
+                        "id": tc.id,
+                        "name": tc.name,
+                        "arguments": str(tc.arguments).replace("'", '"'),
+                    }],
                 )
             yield StreamChunk(finish_reason="stop")
         else:
@@ -1193,3 +1233,256 @@ class TestCallLlmRetry:
         kernel = AgentKernel()
         await kernel._call_llm(spec, [UserMessage(content="hi")])
         assert timeouts_seen == [10.0, 20.0, 40.0]
+
+
+class TestParallelToolDispatch:
+    """Tests for parallel tool dispatch via asyncio.gather."""
+
+    async def test_parallel_execution_faster_than_serial(self):
+        """Three tools each sleeping 0.2s should complete in ~0.2s, not ~0.6s."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class SlowTool:
+            def __init__(self, name):
+                self._name = name
+            @property
+            def name(self): return self._name
+            @property
+            def description(self): return "slow"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                await asyncio.sleep(0.2)
+                return ToolResult(status="success", content=f"{self._name} done")
+
+        for n in ["tool_a", "tool_b", "tool_c"]:
+            registry.register(SlowTool(n), source="test")
+
+        tcs = [
+            ToolCallData(id="tc-1", name="tool_a", arguments={}),
+            ToolCallData(id="tc-2", name="tool_b", arguments={}),
+            ToolCallData(id="tc-3", name="tool_c", arguments={}),
+        ]
+        provider = MultiToolProvider(tool_calls=tcs)
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+
+        start = time.monotonic()
+        result = await kernel.run(spec, "test")
+        elapsed = time.monotonic() - start
+
+        # Parallel: ~0.2s + overhead. Serial: >= 0.6s.
+        # Threshold 0.35s clearly separates them.
+        assert elapsed < 0.35, f"Expected parallel execution < 0.35s, got {elapsed:.3f}s"
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 3
+
+    async def test_gather_return_exceptions(self):
+        """Failed tool returns error ToolResult, other tools unaffected per D-05."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class GoodTool:
+            def __init__(self, name):
+                self._name = name
+            @property
+            def name(self): return self._name
+            @property
+            def description(self): return "good"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                return ToolResult(status="success", content="ok")
+
+        class BadTool:
+            @property
+            def name(self): return "bad_tool"
+            @property
+            def description(self): return "bad"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                raise RuntimeError("boom")
+
+        registry.register(GoodTool("tool_a"), source="test")
+        registry.register(BadTool(), source="test")
+        registry.register(GoodTool("tool_c"), source="test")
+
+        tcs = [
+            ToolCallData(id="tc-1", name="tool_a", arguments={}),
+            ToolCallData(id="tc-2", name="bad_tool", arguments={}),
+            ToolCallData(id="tc-3", name="tool_c", arguments={}),
+        ]
+        provider = MultiToolProvider(tool_calls=tcs)
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+        result = await kernel.run(spec, "test")
+
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 3
+        assert tool_msgs[0].content == "ok"  # tool_a success
+        assert "RuntimeError" in tool_msgs[1].content  # bad_tool error
+        assert "boom" in tool_msgs[1].content
+        assert tool_msgs[2].content == "ok"  # tool_c success
+
+    async def test_preserves_tool_call_order(self):
+        """ToolMessages must follow original tool_calls order, not completion order."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class DelayTool:
+            def __init__(self, name, delay):
+                self._name = name
+                self._delay = delay
+            @property
+            def name(self): return self._name
+            @property
+            def description(self): return "delay"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                await asyncio.sleep(self._delay)
+                return ToolResult(status="success", content=self._name)
+
+        # tool_a finishes last (0.15s), tool_b first (0.05s), tool_c middle (0.1s)
+        registry.register(DelayTool("tool_a", 0.15), source="test")
+        registry.register(DelayTool("tool_b", 0.05), source="test")
+        registry.register(DelayTool("tool_c", 0.10), source="test")
+
+        tcs = [
+            ToolCallData(id="tc-1", name="tool_a", arguments={}),
+            ToolCallData(id="tc-2", name="tool_b", arguments={}),
+            ToolCallData(id="tc-3", name="tool_c", arguments={}),
+        ]
+        provider = MultiToolProvider(tool_calls=tcs)
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+        result = await kernel.run(spec, "test")
+
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 3
+        # Order must match tool_calls order, not completion order
+        assert tool_msgs[0].content == "tool_a"
+        assert tool_msgs[1].content == "tool_b"
+        assert tool_msgs[2].content == "tool_c"
+
+    async def test_mixed_blocked_skipped_executed_order(self):
+        """Mixed blocked/skipped/executed tools maintain original tool_call order."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class SimpleTool:
+            def __init__(self, name):
+                self._name = name
+            @property
+            def name(self): return self._name
+            @property
+            def description(self): return "simple"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                return ToolResult(status="success", content=f"{self._name} result")
+
+        for n in ["tool_0", "tool_1", "tool_2", "tool_3", "tool_4"]:
+            registry.register(SimpleTool(n), source="test")
+
+        tcs = [
+            ToolCallData(id="tc-0", name="tool_0", arguments={}),  # allowed
+            ToolCallData(id="tc-1", name="tool_1", arguments={}),  # blocked by guard
+            ToolCallData(id="tc-2", name="tool_2", arguments={}),  # skipped by hook
+            ToolCallData(id="tc-3", name="tool_3", arguments={}),  # allowed
+            ToolCallData(id="tc-4", name="tool_4", arguments={}),  # allowed
+        ]
+
+        provider = MultiToolProvider(tool_calls=tcs)
+        deny_guard = DenyGuard("tool_1", reason="forbidden")
+        skip_hook = SkipHook("tool_2")
+        spec = _make_spec(
+            provider=provider,
+            tool_registry=registry,
+            guards=[deny_guard],
+            hooks=[skip_hook],
+        )
+        kernel = AgentKernel()
+        result = await kernel.run(spec, "test")
+
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 5, f"Expected 5 ToolMessages, got {len(tool_msgs)}"
+
+        # Order MUST match original tool_calls order
+        assert tool_msgs[0].tool_call_id == "tc-0"
+        assert tool_msgs[0].content == "tool_0 result"  # executed
+
+        assert tool_msgs[1].tool_call_id == "tc-1"
+        assert "BLOCKED" in tool_msgs[1].content  # blocked
+
+        assert tool_msgs[2].tool_call_id == "tc-2"
+        assert "skipped" in tool_msgs[2].content.lower()  # skipped
+
+        assert tool_msgs[3].tool_call_id == "tc-3"
+        assert tool_msgs[3].content == "tool_3 result"  # executed
+
+        assert tool_msgs[4].tool_call_id == "tc-4"
+        assert tool_msgs[4].content == "tool_4 result"  # executed
+
+    async def test_single_tool_call_unchanged(self):
+        """Single tool_call still works correctly (regression test)."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class SimpleTool:
+            @property
+            def name(self): return "my_tool"
+            @property
+            def description(self): return "simple"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                return ToolResult(status="success", content="single result")
+
+        registry.register(SimpleTool(), source="test")
+
+        tcs = [ToolCallData(id="tc-1", name="my_tool", arguments={})]
+        provider = MultiToolProvider(tool_calls=tcs)
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+        result = await kernel.run(spec, "test")
+
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 1
+        assert tool_msgs[0].content == "single result"
+
+    async def test_exception_in_closure_not_gather(self):
+        """Closure catches exception and returns ToolResult, not BaseException."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class ErrorTool:
+            @property
+            def name(self): return "error_tool"
+            @property
+            def description(self): return "error"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                raise ValueError("test error")
+
+        registry.register(ErrorTool(), source="test")
+
+        tcs = [ToolCallData(id="tc-1", name="error_tool", arguments={})]
+        provider = MultiToolProvider(tool_calls=tcs)
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+        result = await kernel.run(spec, "test")
+
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 1
+        assert "ValueError" in tool_msgs[0].content
+        assert "test error" in tool_msgs[0].content

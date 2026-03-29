@@ -173,58 +173,81 @@ class AgentKernel:
                 )
             )
 
-            for tc in response.tool_calls:
-                # Guard evaluation (before hooks)
+            # -- Phase 1: Serial guard + pre_hook gate (D-06) --
+            # Outcome list: (tc, tool_msg | None, tool_result | None, needs_post_hook)
+            # Indexed by original tool_call position to preserve ordering.
+            outcomes: list[tuple[ToolCallData, ToolMessage | None, ToolResult | None, bool]] = []
+            approved_indices: list[int] = []
+
+            for i, tc in enumerate(response.tool_calls):
                 guard_result = guard_pipeline.evaluate(tc, turn, spec.max_turns)
                 if not guard_result.allowed:
-                    # Blocked: notify hooks, then append ToolMessage error
                     await run_guard_blocked(spec.hooks, tc, guard_result)
                     blocked_content = f"BLOCKED: {guard_result.reason}"
                     if guard_result.guidance:
                         blocked_content += f"\n{guard_result.guidance}"
-                    messages.append(
-                        ToolMessage(
-                            tool_call_id=tc.id,
-                            tool_name=tc.name,
-                            content=blocked_content,
-                        )
-                    )
+                    outcomes.append((
+                        tc,
+                        ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content=blocked_content),
+                        None,
+                        False,
+                    ))
                     continue
 
-                # pre_tool_call hook (intercepting, short-circuit)
                 action = await run_pre_tool_call(spec.hooks, tc)
                 if action == HookAction.SKIP:
-                    messages.append(
-                        ToolMessage(
-                            tool_call_id=tc.id,
-                            tool_name=tc.name,
-                            content="Tool call skipped by hook.",
-                        )
-                    )
+                    outcomes.append((
+                        tc,
+                        ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content="Tool call skipped by hook."),
+                        None,
+                        False,
+                    ))
                     continue
 
-                # Tool execution (async registry)
-                try:
-                    tool_result = await spec.tool_registry.execute(tc.name, tc.arguments)
-                except Exception as e:
-                    tool_result = ToolResult(
-                        status="error",
-                        content=(
-                            f"Error executing tool '{tc.name}': "
-                            f"{type(e).__name__}: {e}"
-                        ),
-                    )
-                    logger.exception("Tool execution failed: %s", tc.name)
-                messages.append(
-                    ToolMessage(
-                        tool_call_id=tc.id,
-                        tool_name=tc.name,
-                        content=tool_result.content,
-                    )
+                approved_indices.append(len(outcomes))
+                outcomes.append((tc, None, None, True))  # placeholder
+
+            # -- Phase 2: Parallel execution (D-04, D-05) --
+            if approved_indices:
+                approved_tcs = [outcomes[idx][0] for idx in approved_indices]
+
+                async def _execute_tool(tc: ToolCallData) -> ToolResult:
+                    try:
+                        return await spec.tool_registry.execute(tc.name, tc.arguments)
+                    except Exception as e:
+                        logger.exception("Tool execution failed: %s", tc.name)
+                        return ToolResult(
+                            status="error",
+                            content=f"Error executing tool '{tc.name}': {type(e).__name__}: {e}",
+                        )
+
+                results = await asyncio.gather(
+                    *[_execute_tool(tc) for tc in approved_tcs],
+                    return_exceptions=True,
                 )
 
-                # post_tool_call hook (observation, all hooks called)
-                await run_post_tool_call(spec.hooks, tc, tool_result)
+                for result_idx, outcome_idx in enumerate(approved_indices):
+                    tc = outcomes[outcome_idx][0]
+                    raw = results[result_idx]
+                    if isinstance(raw, BaseException):
+                        tool_result = ToolResult(
+                            status="error",
+                            content=f"Error executing tool '{tc.name}': {type(raw).__name__}: {raw}",
+                        )
+                    else:
+                        tool_result = raw
+                    outcomes[outcome_idx] = (
+                        tc,
+                        ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content=tool_result.content),
+                        tool_result,
+                        True,
+                    )
+
+            # -- Phase 3: Append messages + post hooks in original order --
+            for tc, tool_msg, tool_result, needs_post_hook in outcomes:
+                messages.append(tool_msg)
+                if needs_post_hook and tool_result is not None:
+                    await run_post_tool_call(spec.hooks, tc, tool_result)
 
         # max_turns exhausted
         return self._finish(spec, messages, "max_turns", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)
