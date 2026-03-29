@@ -32,6 +32,8 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 - ✓ SubAgent Spawn 机制 (SubAgentTool + spawn_fn 闭包 + 事件路由 + stop_event 级联) — v1.1 (SUBA-01~06, PRMT-03)
 
 - ✓ Hook 系统异步化 (5 个 Hook async 化 + ConfirmationHook asyncio.Future 重构 + _bridge_loop 桥接) — v2.0 Phase 15 (HOOK-01~03)
+- ✓ Exp 生命周期 async 化 (assemble/build_runtime/run/cleanup 全 async + async cleanup callback dispatch) — v2.0 Phase 18 (EXPL-01~03)
+- ✓ SubAgent spawn async 链路 (async spawn_fn 复用 Exp.run() + SpawnTool native async execute()) — v2.0 Phase 18 (EXPL-04)
 
 ### Active
 
@@ -64,7 +66,7 @@ See REQUIREMENTS.md for full v2.0 requirement list (35 items, 15 complete after 
 
 ### Current State
 
-**Phase 16 complete** (2026-03-28): 事件传输链路全面 async。MessageBus 改为 asyncio.Queue + thread-safe emit_nowait（call_soon_threadsafe），EventRouter 改为 asyncio.Task consume loop，SSEHandler/PersistenceHandler/WorkspaceHandler 全部 async handle（to_thread 处理阻塞 I/O）。service 层通过 dedicated router loop + run_coroutine_threadsafe 桥接。1048 tests passed。
+**Phase 18 complete** (2026-03-29): Exp 生命周期全面 async。assemble/build_runtime/run/_run_cleanup_callbacks 四个方法改为 async def，run() 中的 bridge loop 移除直接 await kernel.run()，cleanup 支持 async callback（isawaitable dispatch）。SubAgent spawn_fn 改为 async 闭包复用 Exp.run() 完整生命周期，SpawnTool.execute() native async override。service 层和 DevShell bridge loop 扩展覆盖 build_runtime + cleanup。1057 tests passed。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI (not refactored), OpenAI SDK, tiktoken.
 
