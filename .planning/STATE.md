@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: matmaster 协程改造
 status: executing
-stopped_at: Completed 18-01-PLAN.md
-last_updated: "2026-03-29T12:28:27Z"
+stopped_at: Completed 18-02-PLAN.md
+last_updated: "2026-03-29T12:45:21Z"
 last_activity: 2026-03-29
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 15
-  completed_plans: 14
-  percent: 56
+  completed_plans: 15
+  percent: 100
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-26)
 ## Current Position
 
 Phase: 18
-Plan: 01 complete, 02 pending
-Status: Executing phase 18
+Plan: 02 complete (phase 18 done)
+Status: Phase 18 complete
 Last activity: 2026-03-29
 
-Progress: [██████░░░░] 56% (6/8 phases, 14/15 plans)
+Progress: [██████████] 100% (7/8 phases, 15/15 plans)
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Progress: [██████░░░░] 56% (6/8 phases, 14/15 plans)
 | Phase 17-agentkernel P01 | 9min | 2 tasks | 2 files |
 | Phase 17-agentkernel P02 | 23min | 2 tasks | 13 files |
 | Phase 18-exp P01 | 12min | 2 tasks | 12 files |
+| Phase 18-exp P02 | 10min | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,9 @@ Recent decisions affecting current work:
 - [Phase 18-exp P01]: Cleanup callbacks use iscoroutinefunction + isawaitable dual detection
 - [Phase 18-exp P01]: AgentRuntime.cleanup typed as Callable[[], Any] for sync/async compatibility
 - [Phase 18-exp P01]: Service layer Exp cleanup moved into bridge loop's finally (before _loop.close())
+- [Phase 18-exp P02]: spawn_fn calls child_exp.run() for full lifecycle reuse (not manual build_runtime + kernel.run)
+- [Phase 18-exp P02]: SpawnTool overrides execute() directly for native async (bypasses to_thread pattern)
+- [Phase 18-exp P02]: Exp.run() gains source_override/spawn_id optional params forwarded to build_runtime
 
 ### Pending Todos
 
@@ -106,6 +110,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-29T12:28:27Z
-Stopped at: Completed 18-01-PLAN.md
-Resume file: .planning/phases/18-exp/18-02-PLAN.md
+Last session: 2026-03-29T12:45:21Z
+Stopped at: Completed 18-02-PLAN.md (Phase 18 done)
+Resume file: None
