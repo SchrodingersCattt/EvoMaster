@@ -9,6 +9,7 @@ variables:
 
 stages:
   - lint
+  - sync-question-catalog
   - build-remote-image
   - trigger
 
@@ -28,6 +29,23 @@ pre-commit:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+
+# 将 evaluation/question_bank 中的 question_id 全量同步到 matmaster-tools-server 题库目录表
+# 触发：推送到分支 sync-question-catalog（需配置 CI 变量 MATMASTER_TOOLS_SERVER）
+sync-question-catalog:
+  stage: sync-question-catalog
+  image: $REGISTRY/public/ubuntu:gitlab-0.0.2
+  before_script:
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - cd "$CI_PROJECT_DIR"
+    - uv sync --frozen
+  script:
+    - uv run python evaluation/scripts/sync_question_catalog_to_tools_server.py
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "sync-question-catalog"
+  tags:
+    - $RUNNER_ZJK_TAG
 
 # 一次构建三环境（test/uat/prod）并更新 constant.py，推送到分支 remote-image 时触发
 build-remote-image:all:

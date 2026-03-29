@@ -1,5 +1,6 @@
 workflow:
   rules:
+    - if: $CI_COMMIT_BRANCH == "sync-question-catalog"
     - if: $CI_COMMIT_BRANCH == "remote-image"
     - if: $CI_COMMIT_BRANCH == "test"
       variables:

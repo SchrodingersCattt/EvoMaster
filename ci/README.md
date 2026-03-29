@@ -18,3 +18,10 @@
   - `BOHRIUM_ACCESS_KEY_UAT`、`BOHRIUM_PROJECT_ID_UAT`
   - `BOHRIUM_ACCESS_KEY_PROD`、`BOHRIUM_PROJECT_ID_PROD`
 若希望用**特殊 tag** 触发（例如在任意分支打 tag `remote-image/all` 再 push 触发），可在 `.gitlab-ci.yml` 的 `build-remote-image:all` 的 `rules` 里增加一条：`if: $CI_COMMIT_TAG == "remote-image/all"`，并注意 tag 触发的 pipeline 中 `CI_COMMIT_BRANCH` 可能为空，脚本里 push 目标需改为固定分支（如 `main`）或从 tag 解析。
+
+## 题库目录同步（matmaster-tools-server）
+
+- **触发方式**：推送到分支 **`sync-question-catalog`** 即自动执行 **`sync-question-catalog`** job（见 `.gitlab-ci.yml`）。
+- **效果**：在 Runner 上 `uv sync` 后执行 `evaluation/scripts/sync_question_catalog_to_tools_server.py`，将本仓库 v5 `evaluation/question_bank` 中的全部 `question_id` POST 到 tools-server 的 `POST /api/v1/evaluation/question-catalog/sync`（与 `remote-image` 类似：**专用分支 + push**，不向本仓库回写提交）。
+- **CI 变量**（GitLab CI/CD Variables，建议按目标环境设置）：
+  - **`MATMASTER_TOOLS_SERVER`**：tools-server 根 URL，例如 `https://matmaster-tools-server.test.bohrium.com`（未设置时脚本侧会按 `SERVICE_ENV` 推导默认域名，CI 中建议显式配置以免误连环境）。
