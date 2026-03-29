@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: matmaster 协程改造
-status: verifying
-stopped_at: Phase 18 context gathered
-last_updated: "2026-03-29T08:52:58.007Z"
-last_activity: 2026-03-28
+status: executing
+stopped_at: Completed 18-01-PLAN.md
+last_updated: "2026-03-29T12:28:27Z"
+last_activity: 2026-03-29
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 13
-  completed_plans: 13
-  percent: 50
+  total_plans: 15
+  completed_plans: 14
+  percent: 56
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-26)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 17 — agentkernel
+**Current focus:** Phase 18 — Exp lifecycle async
 
 ## Current Position
 
 Phase: 18
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-03-28
+Plan: 01 complete, 02 pending
+Status: Executing phase 18
+Last activity: 2026-03-29
 
-Progress: [█████░░░░░] 50% (4/8 phases, 9/9 plans)
+Progress: [██████░░░░] 56% (6/8 phases, 14/15 plans)
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Progress: [█████░░░░░] 50% (4/8 phases, 9/9 plans)
 | 15 Hook | 3/3 | ~36min | ~12min |
 | Phase 17-agentkernel P01 | 9min | 2 tasks | 2 files |
 | Phase 17-agentkernel P02 | 23min | 2 tasks | 13 files |
+| Phase 18-exp P01 | 12min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,10 @@ Recent decisions affecting current work:
 - [Phase 17-agentkernel]: ExplodingTool test changed sync to async execute() for async Tool Protocol compatibility
 - [Phase 17-agentkernel]: Bridge loops inline per D-05, each sync entry creates/destroys own event loop
 - [Phase 17-agentkernel]: Test tool fixtures converted to async execute() for ToolRegistry async compatibility
+- [Phase 18-exp P01]: run() try/finally starts before build_runtime for partial build failure cleanup coverage
+- [Phase 18-exp P01]: Cleanup callbacks use iscoroutinefunction + isawaitable dual detection
+- [Phase 18-exp P01]: AgentRuntime.cleanup typed as Callable[[], Any] for sync/async compatibility
+- [Phase 18-exp P01]: Service layer Exp cleanup moved into bridge loop's finally (before _loop.close())
 
 ### Pending Todos
 
@@ -101,6 +106,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-29T08:52:58.002Z
-Stopped at: Phase 18 context gathered
-Resume file: .planning/phases/18-exp/18-CONTEXT.md
+Last session: 2026-03-29T12:28:27Z
+Stopped at: Completed 18-01-PLAN.md
+Resume file: .planning/phases/18-exp/18-02-PLAN.md

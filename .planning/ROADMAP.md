@@ -152,10 +152,10 @@ Plans:
   2. Exp.build_runtime() 为 async def，内部组装的 provider/tool/hook 均为 async 组件
   3. Exp.run() 为 async def，内部 await kernel.run() 并处理 async cleanup callback
   4. SubAgent spawn 完整 async 链路：async spawn_fn -> await child Exp.run() -> await child kernel.run()，父 agent 在 spawn 期间不阻塞 event loop
-**Plans**: 2 plans
+**Plans**: 1/2 plans complete
 
 Plans:
-- [ ] 18-01-PLAN.md -- Exp 核心 4 方法 async 化 (assemble/build_runtime/run/cleanup) + AgentRuntime 类型更新 + service/DevShell 桥接 + test_exp.py 迁移
+- [x] 18-01-PLAN.md -- Exp 核心 4 方法 async 化 (assemble/build_runtime/run/cleanup) + AgentRuntime 类型更新 + service/DevShell 桥接 + test_exp.py 迁移
 - [ ] 18-02-PLAN.md -- SubAgent spawn async 链路 (_make_spawn_fn async 闭包 + SpawnTool execute() override) + spawn 测试 AsyncMock 迁移
 
 ### Phase 19: 服务层桥接 + 并行 Tool Dispatch
