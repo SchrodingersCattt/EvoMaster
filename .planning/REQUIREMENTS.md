@@ -1,93 +1,151 @@
-# Requirements: MatMaster v1.1
+# Requirements: MatMaster v2.0 协程改造
 
-**Defined:** 2026-03-24
+**Defined:** 2026-03-26
 **Core Value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
 
-## v1.1 Requirements
+## v2.0 Requirements
 
-Requirements for Agent 外围能力构建。Each maps to roadmap phases.
+将 matmaster 框架从同步架构全链路改造为 async/await，为多 agent 编排做准备。
 
-### Builtin Tools
+### Protocol 层
 
-- [x] **TOOL-01**: Agent 可以通过 Read tool 读取远程文件内容（支持行范围指定）
-- [x] **TOOL-02**: Agent 可以通过 Write tool 创建或覆盖远程文件
-- [x] **TOOL-03**: Agent 可以通过 Edit tool 对远程文件进行精确字符串替换
-- [x] **TOOL-04**: Agent 可以通过 Bash tool 在远程环境执行 shell 命令
-- [x] **TOOL-05**: Agent 可以通过 Glob tool 按模式搜索远程文件路径
-- [x] **TOOL-06**: Agent 可以通过 Grep tool 按正则搜索远程文件内容
-- [x] **TOOL-07**: Agent 可以通过 ListDir tool 列出远程目录结构
-- [x] **TOOL-08**: Write/Edit tool 执行前强制要求先 Read 目标文件（Read-Before-Modify 协议）
-- [x] **TOOL-09**: Agent 可以通过 Task 套件创建、更新、查询任务状态用于工作追踪
+- [x] **PROT-01**: LLMProvider Protocol 的 chat() 和 chat_stream() 方法改为 async def，移除 chat_with_retry()（重试逻辑已在 Kernel._call_llm() 中）
+- [x] **PROT-02**: Tool Protocol 的 run() 方法改为 async def，BuiltinTool ABC 的 execute() 改为 async def
+- [x] **PROT-03**: Hook Protocol 全部 7 个方法改为 async def（on_agent_start, on_turn_start, on_tool_start, on_tool_end, on_turn_end, on_agent_end, on_guard_blocked）
+- [x] **PROT-04**: Guard Protocol 的 evaluate() 保持同步（明确决策：纯计算无 I/O，async 增加开销无收益）
+- [x] **PROT-05**: 为 async Protocol 添加 runtime validation helper，解决 runtime_checkable 不区分 sync/async 签名的问题
 
-### SubAgent
+### LLM Provider
 
-- [x] **SUBA-01**: Agent 可以通过 SubAgent tool 调用 spawn 子 agent 执行特定任务，结果作为 tool_call result 返回
-- [x] **SUBA-02**: 子 agent 通过 ExpConfig 配置独立的 tool 集和 system prompt
-- [x] **SUBA-03**: 子 agent 共享父 agent 的 PlaygroundContext（workspace/session）
-- [x] **SUBA-04**: 子 agent 禁止再次 spawn 子 agent（递归深度保护）
-- [x] **SUBA-05**: 父 agent 取消时 stop_event 级联传播到子 agent
-- [x] **SUBA-06**: 子 agent 的事件通过父 agent 的 MessageBus 路由到前端
+- [x] **LLMP-01**: OpenAIProvider 使用 AsyncOpenAI client，chat() 和 chat_stream() 实现为 async
+- [x] **LLMP-02**: chat_stream() 使用 AsyncStream 作为 async iterator，正确处理 async context manager 生命周期
+- [x] **LLMP-03**: provider 实例的创建和清理支持 async（__aenter__/__aexit__ 或显式 close）
 
-### Prompt/Description
+### Tool 系统
 
-- [x] **PRMT-01**: 每个 builtin tool 具有精细化的 description 和 json_schema，优化 LLM 调用准确率
-- [x] **PRMT-02**: Exp system prompt（developer_instructions）针对 direct 模式设计完整的 agent 行为指导
-- [x] **PRMT-03**: SubAgent 的 exp 定义包含针对子任务场景的专用 system prompt
+- [x] **TOOL-01**: 12 个 BuiltinTool 的 execute() 全部改为 async def
+- [ ] **TOOL-02**: BashTool 使用 asyncio.create_subprocess_exec 替代 subprocess.run
+- [x] **TOOL-03**: 文件操作类 Tool（Read/Write/Edit/Glob/Grep）使用 asyncio.to_thread 包装同步文件 I/O
+- [x] **TOOL-04**: session-dependent tool 的 evomaster session 调用使用 asyncio.to_thread 桥接
+- [ ] **TOOL-05**: SubAgentTool 的 spawn_fn 改为 async callable
+- [ ] **TOOL-06**: 并行 Tool Dispatch — 同一轮多个 tool_call 使用 asyncio.gather 并行执行
 
-## Future Requirements
+### Hook 系统
 
-### Deferred Tools
+- [x] **HOOK-01**: 5 个具体 Hook 实现（OutputProcessorHook, EventEmitterHook, ConfirmationHook, HistoryHook, DirectHook）全部改为 async
+- [x] **HOOK-02**: ConfirmationHook 的 reply queue 机制适配 async（queue.Queue → asyncio 兼容方案）
+- [x] **HOOK-03**: EventEmitterHook 适配 async MessageBus
 
-- **TOOL-D01**: Think tool（agent 内部推理，不执行动作）
-- **TOOL-D02**: WebFetch/WebSearch（远程环境可能无外网）
-- **TOOL-D03**: NotebookRead/NotebookEdit（当前场景非核心）
-- **TOOL-D04**: MultiEdit（批量编辑，LLM 调用出错率高）
+### 核心引擎
 
-### Deferred Infrastructure
+- [x] **KERN-01**: AgentKernel.run() 改为 async generator（async def run() -> AsyncGenerator[AgentEvent, None]）
+- [x] **KERN-02**: Kernel 内部 LLM 调用改为 await（_call_llm, _call_llm_stream）
+- [x] **KERN-03**: Kernel 内部 tool dispatch 改为 await，支持并行执行
+- [x] **KERN-04**: ContextCompactor 内部 LLM 调用改为 async
+- [x] **KERN-05**: stop_event 保留 threading.Event（跨线程安全，is_set() 同步检查不变）
+- [x] **KERN-06**: time.sleep 替换为 asyncio.sleep（retry backoff 等场景）
 
-- **INFR-D01**: Prompt 模板加载器基础设施（当前直接在 TOML/代码中管理）
-- **INFR-D02**: 消除 evomaster session 依赖（v1.1 维持现状）
+### 基础设施
+
+- [ ] **INFR-01**: MessageBus 内部队列从 queue.Queue 改为 asyncio.Queue
+- [ ] **INFR-02**: EventRouter 适配 async MessageBus（drain 逻辑改为 async）
+- [ ] **INFR-03**: SSEHandler 和 PersistenceHandler 适配 async 事件消费
+
+### Exp 生命周期
+
+- [x] **EXPL-01**: Exp.assemble() 改为 async def（MCP 初始化未来可能涉及网络 I/O）
+- [x] **EXPL-02**: Exp.build_runtime() 改为 async def
+- [x] **EXPL-03**: Exp.run() 改为 async def，内部 await kernel.run() 的 async generator
+- [x] **EXPL-04**: SubAgent spawn 完整 async 链路（async spawn_fn → async Exp.run() → async kernel）
+
+### 服务层桥接
+
+- [ ] **BRDG-01**: src/ 服务层（agent_run_service）通过 asyncio.run() 或 new_event_loop 桥接 async matmaster
+- [ ] **BRDG-02**: stop_event 跨线程传播机制适配（service 线程 → matmaster event loop）
+
+### 测试基础设施
+
+- [x] **TEST-01**: 配置 pytest-asyncio（asyncio_mode="auto"），建立 async 测试基础设施
+- [x] **TEST-02**: 现有测试随实现阶段同步迁移为 async（不设独立测试迁移阶段）
+- [x] **TEST-03**: 迁移后全部测试通过，无回归
+
+## v2.1 Requirements
+
+延后到下一个里程碑。已记录但不在当前路线图中。
+
+### 多 Agent 编排
+
+- **ORCH-01**: 编排器层设计（多 agent 并发调度）
+- **ORCH-02**: Agent 间通信机制（async 消息传递）
+- **ORCH-03**: janus 双面队列替代 asyncio.Queue（跨线程 async/sync 桥接）
+
+### DevShell
+
+- **DSHL-01**: DevShell 改为 async REPL
+- **DSHL-02**: DevShell async 入口与 matmaster async 核心直接集成
+
+### evomaster Session
+
+- **EVOS-01**: evomaster session 创建 async wrapper 消除 asyncio.to_thread 调用
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| evomaster session 依赖消除 | v1.1 维持现状，session-dependent tool 仍通过 BaseSession |
-| 多 agent 编排（非 spawn） | 先完成 spawn 机制，编排后续设计 |
-| src/ Web Service 层重构 | 保持现状，不在本次范围 |
+| 多 agent 编排层 | v2.0 只做 async 基础设施，编排层 v2.1 设计 |
+| src/ Web Service 层重构 | 保持现状，仅做最小桥接 |
+| DevShell async 化 | 延后，asyncio.run() 包装即可 |
 | 前端 UI 改动 | 本次只涉及后端框架层 |
-| SubAgent 递归 spawn | 明确禁止，防止无限嵌套 |
+| evomaster session async 化 | 上游依赖，用 to_thread 桥接 |
+| Trio/anyio 引入 | 坚持 asyncio 标准库 |
+| 双 Protocol（sync+async 并存） | 研究结论：anti-pattern，维护成本高 |
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TOOL-01 | Phase 9 | Complete |
-| TOOL-02 | Phase 9 | Complete |
-| TOOL-03 | Phase 9 | Complete |
-| TOOL-04 | Phase 8 | Complete |
-| TOOL-05 | Phase 9 | Complete |
-| TOOL-06 | Phase 9 | Complete |
-| TOOL-07 | Phase 8 | Complete |
-| TOOL-08 | Phase 9 | Complete |
-| TOOL-09 | Phase 8 | Complete |
-| SUBA-01 | Phase 11 | Complete |
-| SUBA-02 | Phase 11 | Complete |
-| SUBA-03 | Phase 11 | Complete |
-| SUBA-04 | Phase 11 | Complete |
-| SUBA-05 | Phase 11 | Complete |
-| SUBA-06 | Phase 11 | Complete |
-| PRMT-01 | Phase 10 | Complete |
-| PRMT-02 | Phase 10 | Complete |
-| PRMT-03 | Phase 11 | Complete |
+| PROT-01 | Phase 12 | Complete |
+| PROT-02 | Phase 12 | Complete |
+| PROT-03 | Phase 12 | Complete |
+| PROT-04 | Phase 12 | Complete |
+| PROT-05 | Phase 12 | Complete |
+| LLMP-01 | Phase 13 | Complete |
+| LLMP-02 | Phase 13 | Complete |
+| LLMP-03 | Phase 13 | Complete |
+| TOOL-01 | Phase 14 | Complete |
+| TOOL-02 | Phase 14 | Pending |
+| TOOL-03 | Phase 14 | Complete |
+| TOOL-04 | Phase 14 | Complete |
+| TOOL-05 | Phase 14 | Pending |
+| TOOL-06 | Phase 19 | Pending |
+| HOOK-01 | Phase 15 | Complete |
+| HOOK-02 | Phase 15 | Complete |
+| HOOK-03 | Phase 15 | Complete |
+| KERN-01 | Phase 17 | Complete |
+| KERN-02 | Phase 17 | Complete |
+| KERN-03 | Phase 17 | Complete |
+| KERN-04 | Phase 13 | Complete |
+| KERN-05 | Phase 17 | Complete |
+| KERN-06 | Phase 17 | Complete |
+| INFR-01 | Phase 16 | Pending |
+| INFR-02 | Phase 16 | Pending |
+| INFR-03 | Phase 16 | Pending |
+| EXPL-01 | Phase 18 | Pending |
+| EXPL-02 | Phase 18 | Pending |
+| EXPL-03 | Phase 18 | Pending |
+| EXPL-04 | Phase 18 | Complete |
+| BRDG-01 | Phase 19 | Pending |
+| BRDG-02 | Phase 19 | Pending |
+| TEST-01 | Phase 12 | Complete |
+| TEST-02 | Phase 17 | Complete |
+| TEST-03 | Phase 17 | Complete |
 
 **Coverage:**
-- v1.1 requirements: 18 total
-- Mapped to phases: 18
+- v2.0 requirements: 35 total
+- Mapped to phases: 35
 - Unmapped: 0
+- Complete: 15 (PROT-01~05, LLMP-01~03, KERN-04, TEST-01, TOOL-01, TOOL-03, TOOL-04, HOOK-01, HOOK-02, HOOK-03)
 
 ---
-*Requirements defined: 2026-03-24*
-*Last updated: 2026-03-24 after roadmap creation*
+*Requirements defined: 2026-03-26*
+*Last updated: 2026-03-27 after Phase 15 Plan 03 complete (HOOK-01, HOOK-03 marked Complete)*

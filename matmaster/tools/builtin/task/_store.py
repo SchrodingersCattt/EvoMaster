@@ -7,6 +7,10 @@ Thread-safe via internal lock. File format:
       "id": "<uuid>",
       "description": "...",
       "status": "open|in_progress|completed",
+      "subtasks": [
+        {"description": "...", "status": "open|in_progress|completed"},
+        ...
+      ],
       "created_at": "ISO8601",
       "updated_at": "ISO8601"
     }
@@ -48,16 +52,22 @@ class TaskStore:
             encoding="utf-8",
         )
 
-    def create(self, description: str) -> dict[str, Any]:
-        """Create a new task with open status. Returns the task dict."""
+    def create(self, description: str, subtasks: list[str]) -> dict[str, Any]:
+        """Create a new task with subtasks. Returns the task dict.
+
+        Parent task status is always auto-derived from subtask statuses.
+        """
         with self._lock:
             data = self._read()
             task_id = str(uuid.uuid4())[:8]
             now = datetime.now(timezone.utc).isoformat()
-            task = {
+            task: dict[str, Any] = {
                 "id": task_id,
                 "description": description,
                 "status": "open",
+                "subtasks": [
+                    {"description": s, "status": "open"} for s in subtasks
+                ],
                 "created_at": now,
                 "updated_at": now,
             }
@@ -77,20 +87,46 @@ class TaskStore:
             data = self._read()
             return list(data["tasks"].values())
 
-    def update(self, task_id: str, **fields: Any) -> dict[str, Any] | None:
-        """Update task fields (description, status). Returns None if not found."""
+    def update_subtask(
+        self,
+        task_id: str,
+        subtask_index: int,
+        status: str,
+    ) -> dict[str, Any] | None:
+        """Update a specific subtask's status. Auto-derives parent status.
+
+        Returns None if task not found or subtask_index out of range.
+        """
         with self._lock:
             data = self._read()
             task = data["tasks"].get(task_id)
             if task is None:
                 return None
-            for k, v in fields.items():
-                if k in ("description", "status"):
-                    task[k] = v
+            subtasks = task.get("subtasks", [])
+            if subtask_index < 0 or subtask_index >= len(subtasks):
+                return None
+            subtasks[subtask_index]["status"] = status
+            task["status"] = self._derive_status(subtasks)
             task["updated_at"] = datetime.now(timezone.utc).isoformat()
             self._write(data)
             return task
 
-    def complete(self, task_id: str) -> dict[str, Any] | None:
-        """Mark a task as completed. Returns None if not found."""
-        return self.update(task_id, status="completed")
+    def complete_subtask(
+        self,
+        task_id: str,
+        subtask_index: int,
+    ) -> dict[str, Any] | None:
+        """Mark a single subtask as completed. Auto-derives parent status."""
+        return self.update_subtask(task_id, subtask_index, "completed")
+
+    @staticmethod
+    def _derive_status(subtasks: list[dict[str, Any]]) -> str:
+        """Derive parent task status from subtask statuses."""
+        if not subtasks:
+            return "open"
+        statuses = {s["status"] for s in subtasks}
+        if statuses == {"completed"}:
+            return "completed"
+        if "in_progress" in statuses or "completed" in statuses:
+            return "in_progress"
+        return "open"

@@ -75,46 +75,46 @@ class TestEvoToolAdapter:
         assert "properties" in schema
         assert "query" in schema["properties"]
 
-    def test_adapter_returns_raw_string_observation(self) -> None:
+    async def test_adapter_returns_raw_string_observation(self) -> None:
         """When wrapped tool returns str observation, adapter returns it unchanged."""
         from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool(observation="hello world")
         adapter = EvoToolAdapter(tool, MagicMock())
-        result = adapter.execute({"query": "test"})
+        result = await adapter.execute({"query": "test"})
         assert isinstance(result, ToolResult)
         assert result.content == "hello world"
         assert result.status == "success"
         assert result.info == {"info": "test"}
 
-    def test_adapter_json_serializes_structured_observation(self) -> None:
+    async def test_adapter_json_serializes_structured_observation(self) -> None:
         """When wrapped tool returns dict observation, adapter JSON-serializes it."""
         from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool(observation={"key": "value", "num": 42})
         adapter = EvoToolAdapter(tool, MagicMock())
-        result = adapter.execute({"query": "test"})
+        result = await adapter.execute({"query": "test"})
         parsed = json.loads(result.content)
         assert parsed == {"key": "value", "num": 42}
 
-    def test_adapter_json_serializes_list_observation(self) -> None:
+    async def test_adapter_json_serializes_list_observation(self) -> None:
         """When wrapped tool returns list observation, adapter JSON-serializes it."""
         from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool(observation=[1, 2, 3])
         adapter = EvoToolAdapter(tool, MagicMock())
-        result = adapter.execute({"query": "test"})
+        result = await adapter.execute({"query": "test"})
         parsed = json.loads(result.content)
         assert parsed == [1, 2, 3]
 
-    def test_adapter_passes_json_args_exactly_once(self) -> None:
+    async def test_adapter_passes_json_args_exactly_once(self) -> None:
         """Adapter serializes arguments to JSON and passes to wrapped tool exactly once."""
         from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool()
         session = MagicMock()
         adapter = EvoToolAdapter(tool, session)
-        adapter.execute({"query": "hello"})
+        await adapter.execute({"query": "hello"})
 
         assert tool.last_session is session
         assert tool.last_args_json is not None
@@ -130,20 +130,20 @@ class TestEvoToolAdapter:
         adapter = EvoToolAdapter(tool, MagicMock())
         assert isinstance(adapter, Tool)
 
-    def test_adapter_sets_error_status_from_info(self) -> None:
+    async def test_adapter_sets_error_status_from_info(self) -> None:
         from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool(observation="err msg")
         tool.execute = lambda session, args_json: ("err msg", {"error": "bad input"})
         adapter = EvoToolAdapter(tool, MagicMock())
 
-        result = adapter.execute({"query": "test"})
+        result = await adapter.execute({"query": "test"})
         assert isinstance(result, ToolResult)
         assert result.status == "error"
         assert result.content == "err msg"
         assert result.info == {"error": "bad input"}
 
-    def test_adapter_preserves_non_error_info(self) -> None:
+    async def test_adapter_preserves_non_error_info(self) -> None:
         from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool(observation="ok")
@@ -153,17 +153,17 @@ class TestEvoToolAdapter:
         )
         adapter = EvoToolAdapter(tool, MagicMock())
 
-        result = adapter.execute({"query": "test"})
+        result = await adapter.execute({"query": "test"})
         assert result.status == "success"
         assert result.info == {"saved_path": "/tmp/out.txt"}
 
-    def test_adapter_error_prefixed_observation_is_error_without_info_key(self) -> None:
+    async def test_adapter_error_prefixed_observation_is_error_without_info_key(self) -> None:
         from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool(observation="Error: remote failure")
         tool.execute = lambda session, args_json: ("Error: remote failure", {})
         adapter = EvoToolAdapter(tool, MagicMock())
 
-        result = adapter.execute({"query": "test"})
+        result = await adapter.execute({"query": "test"})
         assert result.status == "error"
         assert result.content == "Error: remote failure"

@@ -5,7 +5,7 @@ Provides mock objects and builders for kernel test suites.
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from typing import Any, AsyncIterator
 
 import pytest
 
@@ -35,34 +35,29 @@ class MockLLMProvider:
     """Mock LLM provider satisfying the LLMProvider Protocol.
 
     chat() returns LLMResponse with no tool_calls.
-    chat_with_retry() delegates to chat() (no real retry in mocks).
     chat_stream() yields a single StreamChunk with content="hello".
     """
 
-    def chat(
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         return LLMResponse(content="mock response", finish_reason="stop")
 
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-    ) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
+    ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(content="hello", finish_reason="stop")
 
 

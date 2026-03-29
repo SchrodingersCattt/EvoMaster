@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, AsyncIterator, Iterator
 from unittest.mock import MagicMock, patch
 
 from matmaster.types.context import PlaygroundContext
@@ -23,30 +23,36 @@ from matmaster.types.messages import LLMResponse, StreamChunk
 class _SuccessLLM:
     """Mock LLM: natural finish."""
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> _SuccessLLM:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='success', finish_reason='stop')
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(
+    async def chat_stream(
         self, messages, tools=None, *, timeout=None
-    ) -> Iterator[StreamChunk]:
+    ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(content='success', finish_reason='stop')
 
 
 class _InvalidFinishLLM:
     """Mock LLM: streams content but ends with a non-committable finish reason."""
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> _InvalidFinishLLM:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='partial', finish_reason='length')
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(
+    async def chat_stream(
         self, messages, tools=None, *, timeout=None
-    ) -> Iterator[StreamChunk]:
+    ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(content='partial')
         yield StreamChunk(finish_reason='length')
 
@@ -54,16 +60,20 @@ class _InvalidFinishLLM:
 class _ErrorLLM:
     """Mock LLM: raises exception."""
 
-    def chat(self, messages, tools=None) -> LLMResponse:
+    async def __aenter__(self) -> _ErrorLLM:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
         raise RuntimeError('LLM error')
 
-    def chat_with_retry(self, messages, tools=None, **kw) -> LLMResponse:
-        raise RuntimeError('LLM error')
-
-    def chat_stream(
+    async def chat_stream(
         self, messages, tools=None, *, timeout=None
-    ) -> Iterator[StreamChunk]:
+    ) -> AsyncIterator[StreamChunk]:
         raise RuntimeError('LLM error during streaming')
+        yield  # make it an async generator
 
 
 def _make_ctx(tmp_path: Path) -> PlaygroundContext:

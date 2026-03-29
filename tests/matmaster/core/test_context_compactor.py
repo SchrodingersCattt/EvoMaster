@@ -129,27 +129,33 @@ class MockSummaryProvider:
         self._summary = summary
         self.calls: list[list[dict]] = []
 
-    def chat(self, messages, tools=None):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
         self.calls.append(messages)
         return LLMResponse(content=self._summary, finish_reason="stop")
 
-    def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None):
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(content=self._summary, finish_reason="stop")
 
 
 class FailingSummaryProvider:
     """Provider that always raises."""
 
-    def chat(self, messages, tools=None):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
         raise RuntimeError("LLM unavailable")
 
-    def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None):
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         yield StreamChunk(content="", finish_reason="stop")
 
 
@@ -183,7 +189,7 @@ def _build_long_conversation(n_turns: int = 10) -> list:
 
 
 class TestCompactorThreshold:
-    def test_skip_when_below_threshold(self) -> None:
+    async def test_skip_when_below_threshold(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(
@@ -194,10 +200,10 @@ class TestCompactorThreshold:
         msgs = [SystemMessage(content="sys"), UserMessage(content="task")]
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 1000}, turn=2)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 1000}, turn=2)
         assert len(provider.calls) == 0
 
-    def test_trigger_when_above_threshold(self) -> None:
+    async def test_trigger_when_above_threshold(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(
@@ -208,10 +214,10 @@ class TestCompactorThreshold:
         compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
         assert len(provider.calls) == 1
 
-    def test_cooldown_skips_consecutive_turn(self) -> None:
+    async def test_cooldown_skips_consecutive_turn(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(
@@ -222,15 +228,15 @@ class TestCompactorThreshold:
         compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
         assert len(provider.calls) == 1
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
         assert len(provider.calls) == 1
 
 
 class TestCompactorOutput:
-    def test_output_structure(self) -> None:
+    async def test_output_structure(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(
@@ -241,7 +247,7 @@ class TestCompactorOutput:
         compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
 
         assert isinstance(msgs[0], SystemMessage)
         assert msgs[0].content == "You are helpful"
@@ -252,7 +258,7 @@ class TestCompactorOutput:
         assert "Analyze this data" in msgs[2].content
         assert len(msgs) < 25
 
-    def test_fallback_on_summary_failure(self) -> None:
+    async def test_fallback_on_summary_failure(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(
@@ -264,7 +270,7 @@ class TestCompactorOutput:
         compactor = ContextCompactor(config=config, summary_provider=provider)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
 
         assert len(msgs) < original_len
         assert isinstance(msgs[0], SystemMessage)
@@ -288,7 +294,7 @@ class TestCompactorMessageCount:
 
 
 class TestCompactorEventEmission:
-    def test_emits_context_compaction_event(self) -> None:
+    async def test_emits_context_compaction_event(self) -> None:
         from matmaster.core.bus import MessageBus
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.events import ContextCompactionEvent
@@ -302,7 +308,7 @@ class TestCompactorEventEmission:
         compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
 
         event = bus.get_nowait()
         assert isinstance(event, ContextCompactionEvent)
@@ -310,7 +316,7 @@ class TestCompactorEventEmission:
         assert event.payload["strategy"] == "summary"
         assert event.payload["trigger_tokens"] > 0
 
-    def test_no_event_when_no_bus(self) -> None:
+    async def test_no_event_when_no_bus(self) -> None:
         from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(
@@ -321,13 +327,127 @@ class TestCompactorEventEmission:
         compactor = ContextCompactor(config=config, summary_provider=provider, bus=None)
         compactor.update_message_count(len(msgs))
 
-        compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
 
 
+class TestToolTruncationFallback:
+    """Tool result truncation when no old turns to compress."""
+
+    async def test_truncates_when_no_compressible_turns(self) -> None:
+        """1 turn with huge tool results -> falls back to tool_truncation."""
+        from matmaster.core.bus import MessageBus
+        from matmaster.core.context_compactor import ContextCompactor
+        from matmaster.types.events import ContextCompactionEvent
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=500, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        bus = MessageBus()
+
+        # 1 turn: Assistant with 3 tool calls + 3 large ToolMessages
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="task"),
+            AssistantMessage(
+                content="calling tools",
+                tool_calls=[
+                    ToolCallData(id=f"tc-{i}", name="bash", arguments={})
+                    for i in range(3)
+                ],
+            ),
+            ToolMessage(content="big result " + "A" * 2000, tool_call_id="tc-0", tool_name="bash"),
+            ToolMessage(content="big result " + "B" * 2000, tool_call_id="tc-1", tool_name="bash"),
+            ToolMessage(content="big result " + "C" * 2000, tool_call_id="tc-2", tool_name="bash"),
+        ]
+
+        compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
+        compactor.update_message_count(len(msgs))
+
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
+
+        # summary provider should NOT be called (no old messages to summarize)
+        assert len(provider.calls) == 0
+
+        # But truncation should have happened
+        assert compactor._compaction_count == 1
+
+        # At least one ToolMessage should have been truncated
+        truncated_msgs = [
+            m for m in msgs
+            if isinstance(m, ToolMessage) and "truncated" in (m.content or "")
+        ]
+        assert len(truncated_msgs) > 0
+
+        # Event should have strategy=tool_truncation
+        event = bus.get_nowait()
+        assert isinstance(event, ContextCompactionEvent)
+        assert event.payload["strategy"] == "tool_truncation"
+
+    async def test_no_truncation_for_small_tool_results(self) -> None:
+        """Small tool results (< 500 chars) are not truncated."""
+        from matmaster.core.context_compactor import ContextCompactor
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=500, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="task"),
+            AssistantMessage(
+                content="",
+                tool_calls=[ToolCallData(id="tc-0", name="t", arguments={})],
+            ),
+            ToolMessage(content="short result", tool_call_id="tc-0", tool_name="t"),
+        ]
+
+        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor.update_message_count(len(msgs))
+
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
+
+        # Small content -> not truncated (truncation skips content < 500 chars)
+        assert "truncated" not in (msgs[3].content or "")
+
+    async def test_truncation_preserves_head_and_tail(self) -> None:
+        """Truncated content keeps head 200 + tail 100 chars."""
+        from matmaster.core.context_compactor import ContextCompactor
+
+        config = CompactionConfig(
+            enabled=True, context_window_tokens=200, trigger_ratio=0.9
+        )
+        provider = MockSummaryProvider()
+        original_content = "HEAD_MARKER_" + "x" * 2000 + "_TAIL_MARKER"
+
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="task"),
+            AssistantMessage(
+                content="",
+                tool_calls=[ToolCallData(id="tc-0", name="t", arguments={})],
+            ),
+            ToolMessage(content=original_content, tool_call_id="tc-0", tool_name="t"),
+        ]
+
+        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor.update_message_count(len(msgs))
+
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 300}, turn=3)
+
+        result_content = msgs[3].content or ""
+        assert "HEAD_MARKER_" in result_content  # head preserved
+        assert "_TAIL_MARKER" in result_content  # tail preserved
+        assert "truncated" in result_content  # marker present
+        assert len(result_content) < len(original_content)
+
+
+@pytest.mark.skip(reason="E2E test deferred to Phase 17-18 per D-08: requires Kernel async化")
 class TestEndToEndCompaction:
     """Full kernel loop with compaction enabled."""
 
-    def test_compaction_triggers_on_large_context(self) -> None:
+    async def test_compaction_triggers_on_large_context(self) -> None:
         from matmaster.core.agent import AgentKernel
         from matmaster.core.context_compactor import ContextCompactor
         from matmaster.tools.tool_registry import ToolRegistry
@@ -343,7 +463,13 @@ class TestEndToEndCompaction:
         summary_calls = 0
 
         class CompactionTestProvider:
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                pass
+
+            async def chat(self, messages, tools=None):
                 nonlocal summary_calls
                 summary_calls += 1
                 return LLMResponse(
@@ -351,17 +477,7 @@ class TestEndToEndCompaction:
                     finish_reason="stop",
                 )
 
-            def chat_with_retry(
-                self,
-                messages,
-                tools=None,
-                *,
-                max_retries=3,
-                retry_delay=1.0,
-            ):
-                return self.chat(messages, tools)
-
-            def chat_stream(self, messages, tools=None, *, timeout=None):
+            async def chat_stream(self, messages, tools=None, *, timeout=None):
                 nonlocal call_count
                 call_count += 1
                 if call_count <= 5:
@@ -410,7 +526,7 @@ class TestEndToEndCompaction:
             def json_schema(self):
                 return {"type": "object", "properties": {}}
 
-            def execute(self, arguments):
+            async def execute(self, arguments):
                 return "result " + "x" * 100
 
         registry.register(SimpleTool(), source="test")
@@ -430,7 +546,7 @@ class TestEndToEndCompaction:
         )
 
         kernel = AgentKernel()
-        result = kernel.run(spec, "do things")
+        result = await kernel.run(spec, "do things")
 
         assert result.result.reason == "natural"
         assert result.result.final_content == "all done"

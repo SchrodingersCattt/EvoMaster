@@ -7,9 +7,11 @@ reassembly, full cycle, and execution order verification.
 
 from __future__ import annotations
 
+import asyncio
 import threading
-from typing import Any, Iterator
-from unittest.mock import MagicMock
+import time
+from typing import Any, AsyncIterator
+from unittest.mock import MagicMock  # noqa: F401 -- kept for potential test use
 
 import pytest
 
@@ -55,7 +57,7 @@ class _CatchAllTool:
     def json_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {}}
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         self.calls.append((self._name, arguments))
         return self._result
 
@@ -85,31 +87,28 @@ class StreamingProvider:
     def __init__(self, chunks: list[StreamChunk]) -> None:
         self._chunks = chunks
 
-    def chat(
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         return LLMResponse(content="not used", finish_reason="stop")
 
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-    ) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
-        yield from self._chunks
+    ) -> AsyncIterator[StreamChunk]:
+        for chunk in self._chunks:
+            yield chunk
 
 
 class ToolCallingProvider:
@@ -126,42 +125,76 @@ class ToolCallingProvider:
         self._final_content = final_content
         self._call_count = 0
 
-    def chat(
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         return LLMResponse(content="not used", finish_reason="stop")
 
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-    ) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
+    ) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count <= self._max_tool_turns:
-            for tc in self._tool_calls:
+            for i, tc in enumerate(self._tool_calls):
                 yield StreamChunk(
                     tool_call_deltas=[
                         {
-                            "index": 0,
+                            "index": i,
                             "id": tc.id,
                             "name": tc.name,
                             "arguments": str(tc.arguments).replace("'", '"'),
                         }
                     ],
+                )
+            yield StreamChunk(finish_reason="stop")
+        else:
+            yield StreamChunk(content=self._final_content, finish_reason="stop")
+
+
+class MultiToolProvider:
+    """Provider that returns multiple tool_calls on first turn, then finishes.
+
+    Unlike ToolCallingProvider, this always does exactly 1 tool turn then natural finish.
+    Designed for parallel dispatch testing where precise tool_call control matters.
+    """
+
+    def __init__(self, tool_calls: list[ToolCallData], final_content: str = "done") -> None:
+        self._tool_calls = tool_calls
+        self._final_content = final_content
+        self._call_count = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None) -> LLMResponse:
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
+        self._call_count += 1
+        if self._call_count == 1:
+            for i, tc in enumerate(self._tool_calls):
+                yield StreamChunk(
+                    tool_call_deltas=[{
+                        "index": i,
+                        "id": tc.id,
+                        "name": tc.name,
+                        "arguments": str(tc.arguments).replace("'", '"'),
+                    }],
                 )
             yield StreamChunk(finish_reason="stop")
         else:
@@ -191,7 +224,7 @@ class SkipHook(BaseHook):
     def __init__(self, skip_name: str) -> None:
         self._skip_name = skip_name
 
-    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         if tool_call.name == self._skip_name:
             return HookAction.SKIP
         return HookAction.CONTINUE
@@ -200,7 +233,7 @@ class SkipHook(BaseHook):
 class StopHook(BaseHook):
     """Hook that returns False from should_continue."""
 
-    def should_continue(self, messages: list[Message], turn: int) -> bool:
+    async def should_continue(self, messages: list[Message], turn: int) -> bool:
         return False
 
 
@@ -210,21 +243,21 @@ class RecordingHook(BaseHook):
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         self.calls.append("pre_tool_call")
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
+    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         self.calls.append("post_tool_call")
 
-    def pre_llm_call(self, messages: list[Message], turn: int) -> None:
+    async def pre_llm_call(self, messages: list[Message], turn: int) -> None:
         self.calls.append("pre_llm_call")
 
-    def should_continue(self, messages: list[Message], turn: int) -> bool:
+    async def should_continue(self, messages: list[Message], turn: int) -> bool:
         self.calls.append("should_continue")
         return True
 
-    def on_stream_chunk(self, chunk: StreamChunk) -> None:
+    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
         self.calls.append("on_stream_chunk")
 
 
@@ -234,7 +267,7 @@ class ChunkRecordingHook(BaseHook):
     def __init__(self) -> None:
         self.chunks: list[StreamChunk] = []
 
-    def on_stream_chunk(self, chunk: StreamChunk) -> None:
+    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
         self.chunks.append(chunk)
 
 
@@ -244,7 +277,7 @@ class SegmentRecordingHook(BaseHook):
     def __init__(self) -> None:
         self.segments: list[tuple[str, str, str | None]] = []
 
-    def on_segment_complete(
+    async def on_segment_complete(
         self, segment_type: str, content: str, stream_id: str | None
     ) -> None:
         self.segments.append((segment_type, content, stream_id))
@@ -277,7 +310,7 @@ def _make_spec(
 class TestNaturalFinish:
     """LLM returns no tool_calls -> FinishEvent(reason='natural')."""
 
-    def test_natural_finish(self) -> None:
+    async def test_natural_finish(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         provider = StreamingProvider([
@@ -286,13 +319,13 @@ class TestNaturalFinish:
         ])
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
-        result = kernel.run(spec, "test task")
+        result = await kernel.run(spec, "test task")
 
         assert isinstance(result.result, KernelResult)
         assert result.result.reason == "natural"
         assert result.result.final_content == "Hello"
 
-    def test_natural_finish_messages(self) -> None:
+    async def test_natural_finish_messages(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         provider = StreamingProvider([
@@ -301,7 +334,7 @@ class TestNaturalFinish:
         ])
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
-        result = kernel.run(spec, "test task")
+        result = await kernel.run(spec, "test task")
 
         assert result.result.reason == "natural"
 
@@ -309,14 +342,14 @@ class TestNaturalFinish:
 class TestMaxTurns:
     """LLM always returns tool_calls, max_turns reached."""
 
-    def test_max_turns(self) -> None:
+    async def test_max_turns(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="some_tool", arguments={"x": 1})
         provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=999)
         spec = _make_spec(provider=provider, max_turns=2)
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert isinstance(result.result, KernelResult)
         assert result.result.reason == "max_turns"
@@ -325,19 +358,19 @@ class TestMaxTurns:
 class TestExternalCancel:
     """stop_event.set() -> FinishEvent(reason='cancelled')."""
 
-    def test_cancel_before_run(self) -> None:
+    async def test_cancel_before_run(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         stop_event = threading.Event()
         stop_event.set()
         spec = _make_spec()
         kernel = AgentKernel()
-        result = kernel.run(spec, "test", stop_event=stop_event)
+        result = await kernel.run(spec, "test", stop_event=stop_event)
 
         assert isinstance(result.result, KernelResult)
         assert result.result.reason == "cancelled"
 
-    def test_cancel_during_run(self) -> None:
+    async def test_cancel_during_run(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         stop_event = threading.Event()
@@ -346,29 +379,24 @@ class TestExternalCancel:
             def __init__(self) -> None:
                 self._call_count = 0
 
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_with_retry(
-                self,
-                messages: list,
-                tools: list | None = None,
-                *,
-                max_retries: int = 3,
-                retry_delay: float = 1.0,
-            ) -> LLMResponse:
-                return self.chat(messages, tools)
-
-            def chat_stream(
+            async def chat_stream(
                 self,
                 messages: list,
                 tools: list | None = None,
                 *,
                 timeout: float | None = None,
-            ) -> Iterator[StreamChunk]:
+            ) -> AsyncIterator[StreamChunk]:
                 self._call_count += 1
                 if self._call_count == 1:
-                    tc = ToolCallData(id="tc-1", name="tool", arguments={})
                     yield StreamChunk(
                         tool_call_deltas=[
                             {"index": 0, "id": "tc-1", "name": "tool", "arguments": "{}"}
@@ -381,7 +409,7 @@ class TestExternalCancel:
 
         spec = _make_spec(provider=CancelAfterFirstTurnProvider())
         kernel = AgentKernel()
-        result = kernel.run(spec, "test", stop_event=stop_event)
+        result = await kernel.run(spec, "test", stop_event=stop_event)
 
         assert isinstance(result.result, KernelResult)
         assert result.result.reason == "cancelled"
@@ -390,12 +418,12 @@ class TestExternalCancel:
 class TestHookStopped:
     """should_continue returns False -> FinishEvent(reason='hook_stopped')."""
 
-    def test_hook_stopped(self) -> None:
+    async def test_hook_stopped(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         spec = _make_spec(hooks=[StopHook()])
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert isinstance(result.result, KernelResult)
         assert result.result.reason == "hook_stopped"
@@ -404,7 +432,7 @@ class TestHookStopped:
 class TestGuardBlocks:
     """Guard blocks tool call -> BLOCKED message, hooks NOT triggered."""
 
-    def test_guard_blocks(self) -> None:
+    async def test_guard_blocks(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="bad_tool", arguments={})
@@ -419,7 +447,7 @@ class TestGuardBlocks:
             max_turns=5,
         )
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         # Tool should NOT have been executed
         bad_tool = tools[0]
@@ -428,7 +456,7 @@ class TestGuardBlocks:
         assert "pre_tool_call" not in recording.calls
         assert "post_tool_call" not in recording.calls
 
-    def test_guard_block_triggers_hook(self) -> None:
+    async def test_guard_block_triggers_hook(self) -> None:
         from matmaster.core.agent import AgentKernel
         from matmaster.core.hooks import BaseHook
         from matmaster.types.guards import GuardResult
@@ -437,7 +465,7 @@ class TestGuardBlocks:
             def __init__(self) -> None:
                 self.blocked: list[tuple[str, str | None]] = []
 
-            def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
+            async def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
                 self.blocked.append((tool_call.name, result.reason))
 
         tc = ToolCallData(id="tc-1", name="bad_tool", arguments={})
@@ -452,7 +480,7 @@ class TestGuardBlocks:
             max_turns=5,
         )
         kernel = AgentKernel()
-        kernel.run(spec, "test")
+        await kernel.run(spec, "test")
 
         assert len(recorder.blocked) == 1
         assert recorder.blocked[0] == ("bad_tool", "no access")
@@ -461,7 +489,7 @@ class TestGuardBlocks:
 class TestHookSkip:
     """Hook SKIP -> tool NOT executed, ToolMessage with 'skipped by hook'."""
 
-    def test_hook_skip(self) -> None:
+    async def test_hook_skip(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="skip_me", arguments={})
@@ -474,7 +502,7 @@ class TestHookSkip:
             max_turns=5,
         )
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         # Tool should NOT have been executed
         skip_tool = tools[0]
@@ -484,7 +512,7 @@ class TestHookSkip:
 class TestStreamingAccumulation:
     """Provider yields chunks, kernel accumulates to LLMResponse."""
 
-    def test_streaming_accumulation(self) -> None:
+    async def test_streaming_accumulation(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         chunk_hook = ChunkRecordingHook()
@@ -495,7 +523,7 @@ class TestStreamingAccumulation:
         ])
         spec = _make_spec(provider=provider, hooks=[chunk_hook])
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert result.result.reason == "natural"
         assert result.result.final_content == "Hello"
@@ -513,7 +541,7 @@ class TestStreamingAccumulation:
 class TestFinishValidation:
     """Natural finish must validate terminal finish_reason before commit."""
 
-    def test_non_stop_finish_reason_does_not_commit_natural_finish(self) -> None:
+    async def test_non_stop_finish_reason_does_not_commit_natural_finish(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         chunk_hook = ChunkRecordingHook()
@@ -523,7 +551,7 @@ class TestFinishValidation:
         ])
         spec = _make_spec(provider=provider, hooks=[chunk_hook])
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert result.result.reason == "invalid_finish"
         assert result.result.status == "failed"
@@ -538,7 +566,7 @@ class TestFinishValidation:
 class TestToolCallDelta:
     """Provider yields tool_call_deltas, kernel accumulates to ToolCallData."""
 
-    def test_tool_call_delta(self) -> None:
+    async def test_tool_call_delta(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         # Simulate streaming tool call deltas
@@ -555,36 +583,33 @@ class TestToolCallDelta:
             def __init__(self) -> None:
                 self._call_count = 0
 
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_with_retry(
-                self,
-                messages: list,
-                tools: list | None = None,
-                *,
-                max_retries: int = 3,
-                retry_delay: float = 1.0,
-            ) -> LLMResponse:
-                return self.chat(messages, tools)
-
-            def chat_stream(
+            async def chat_stream(
                 self,
                 messages: list,
                 tools: list | None = None,
                 *,
                 timeout: float | None = None,
-            ) -> Iterator[StreamChunk]:
+            ) -> AsyncIterator[StreamChunk]:
                 self._call_count += 1
                 if self._call_count == 1:
-                    yield from chunks
+                    for chunk in chunks:
+                        yield chunk
                 else:
                     yield StreamChunk(content="done", finish_reason="stop")
 
         tool_reg, tools = _make_tool_registry(["fn"])
         spec = _make_spec(provider=TwoPhaseProvider(), tool_registry=tool_reg)
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         # Tool should have been called with parsed arguments
         fn_tool = tools[0]
@@ -596,7 +621,7 @@ class TestToolCallDelta:
 class TestFullCycle:
     """Turn 1: tool_call -> execute. Turn 2: natural finish."""
 
-    def test_full_cycle(self) -> None:
+    async def test_full_cycle(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="my_tool", arguments={"key": "val"})
@@ -612,7 +637,7 @@ class TestFullCycle:
             max_turns=10,
         )
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert result.result.reason == "natural"
         assert result.result.final_content == "final answer"
@@ -624,20 +649,23 @@ class TestFullCycle:
 class TestHistoryParameter:
     """AgentKernel.run() with history parameter."""
 
-    def test_history_inserts_between_system_and_user(self) -> None:
+    async def test_history_inserts_between_system_and_user(self) -> None:
         """history messages are placed between SystemMessage and UserMessage(task)."""
         from matmaster.core.agent import AgentKernel
 
         captured_messages: list[list[dict[str, Any]]] = []
 
         class CapturingProvider:
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
-                return self.chat(messages, tools)
-
-            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
+            async def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> AsyncIterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
@@ -647,7 +675,7 @@ class TestHistoryParameter:
         ]
         spec = _make_spec(provider=CapturingProvider())
         kernel = AgentKernel()
-        result = kernel.run(spec, "new question", history=history)
+        result = await kernel.run(spec, "new question", history=history)
 
         assert result.result.reason == "natural"
         # Check captured API messages structure
@@ -660,26 +688,29 @@ class TestHistoryParameter:
         assert msgs[3]["role"] == "user"
         assert msgs[3]["content"] == "new question"
 
-    def test_history_none_is_backward_compatible(self) -> None:
+    async def test_history_none_is_backward_compatible(self) -> None:
         """history=None produces [SystemMessage, UserMessage(task)]."""
         from matmaster.core.agent import AgentKernel
 
         captured_messages: list[list[dict[str, Any]]] = []
 
         class CapturingProvider:
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
-                return self.chat(messages, tools)
-
-            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
+            async def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> AsyncIterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
         spec = _make_spec(provider=CapturingProvider())
         kernel = AgentKernel()
-        result = kernel.run(spec, "test task", history=None)
+        result = await kernel.run(spec, "test task", history=None)
 
         assert result.result.reason == "natural"
         msgs = captured_messages[0]
@@ -688,26 +719,29 @@ class TestHistoryParameter:
         assert msgs[1]["role"] == "user"
         assert msgs[1]["content"] == "test task"
 
-    def test_empty_history_is_backward_compatible(self) -> None:
+    async def test_empty_history_is_backward_compatible(self) -> None:
         """history=[] produces [SystemMessage, UserMessage(task)]."""
         from matmaster.core.agent import AgentKernel
 
         captured_messages: list[list[dict[str, Any]]] = []
 
         class CapturingProvider:
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_with_retry(self, messages: list, tools: list | None = None, *, max_retries: int = 3, retry_delay: float = 1.0) -> LLMResponse:
-                return self.chat(messages, tools)
-
-            def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> Iterator[StreamChunk]:
+            async def chat_stream(self, messages: list, tools: list | None = None, *, timeout: float | None = None) -> AsyncIterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content="ok", finish_reason="stop")
 
         spec = _make_spec(provider=CapturingProvider())
         kernel = AgentKernel()
-        result = kernel.run(spec, "test task", history=[])
+        result = await kernel.run(spec, "test task", history=[])
 
         assert result.result.reason == "natural"
         msgs = captured_messages[0]
@@ -720,7 +754,7 @@ class TestHistoryParameter:
 class TestExecutionOrder:
     """Recording hook tracks correct call order."""
 
-    def test_execution_order(self) -> None:
+    async def test_execution_order(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="tool", arguments={})
@@ -736,7 +770,7 @@ class TestExecutionOrder:
             max_turns=10,
         )
         kernel = AgentKernel()
-        kernel.run(spec, "test")
+        await kernel.run(spec, "test")
 
         # Turn 1: pre_llm_call -> should_continue -> on_stream_chunk(s) -> pre_tool_call -> post_tool_call
         # Turn 2: pre_llm_call -> should_continue -> on_stream_chunk(s) -> natural finish
@@ -755,7 +789,7 @@ class TestExecutionOrder:
 class TestKernelRunResultMessages:
     """kernel.run() returns KernelRunResult with message transcript."""
 
-    def test_natural_finish_returns_messages(self) -> None:
+    async def test_natural_finish_returns_messages(self) -> None:
         from matmaster.core.agent import AgentKernel
         from matmaster.types.runtime import KernelRunResult
 
@@ -765,7 +799,7 @@ class TestKernelRunResultMessages:
         ])
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
-        result = kernel.run(spec, "test task")
+        result = await kernel.run(spec, "test task")
 
         assert isinstance(result, KernelRunResult)
         assert result.result.reason == "natural"
@@ -776,7 +810,7 @@ class TestKernelRunResultMessages:
         assert isinstance(result.messages[2], AssistantMessage)
         assert result.messages[2].content == "Hello"
 
-    def test_tool_cycle_returns_all_messages(self) -> None:
+    async def test_tool_cycle_returns_all_messages(self) -> None:
         from matmaster.core.agent import AgentKernel
         from matmaster.types.runtime import KernelRunResult
 
@@ -787,7 +821,7 @@ class TestKernelRunResultMessages:
         tool_reg, _ = _make_tool_registry(["my_tool"], result="tool output")
         spec = _make_spec(provider=provider, tool_registry=tool_reg, max_turns=10)
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert isinstance(result, KernelRunResult)
         assert result.result.reason == "natural"
@@ -803,7 +837,7 @@ class TestKernelRunResultMessages:
 class TestToolExecutionException:
     """Tool that raises exception -> error ToolMessage, run continues."""
 
-    def test_tool_exception_becomes_error_message(self) -> None:
+    async def test_tool_exception_becomes_error_message(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         class ExplodingTool:
@@ -819,7 +853,7 @@ class TestToolExecutionException:
             def json_schema(self) -> dict[str, Any]:
                 return {"type": "object", "properties": {}}
 
-            def execute(self, arguments: dict[str, Any]) -> str:
+            async def execute(self, arguments: dict[str, Any]) -> str:
                 raise RuntimeError("kaboom!")
 
         registry = ToolRegistry()
@@ -831,7 +865,7 @@ class TestToolExecutionException:
         )
         spec = _make_spec(provider=provider, tool_registry=registry, max_turns=5)
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert result.result.reason == "natural"
         assert result.result.final_content == "recovered"
@@ -840,7 +874,7 @@ class TestToolExecutionException:
 class TestCallLlmUsageCapture:
     """_call_llm captures usage from StreamChunk into LLMResponse."""
 
-    def test_usage_captured_from_stream(self) -> None:
+    async def test_usage_captured_from_stream(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         usage_data = {
@@ -850,32 +884,28 @@ class TestCallLlmUsageCapture:
         }
 
         class UsageProvider:
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages, tools=None):
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_with_retry(
-                self,
-                messages,
-                tools=None,
-                *,
-                max_retries=3,
-                retry_delay=1.0,
-            ):
-                return self.chat(messages, tools)
-
-            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
+            async def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 yield StreamChunk(content="hello")
                 yield StreamChunk(finish_reason="stop", usage=usage_data)
 
         spec = _make_spec(provider=UsageProvider())
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert result.result.reason == "natural"
-        response = kernel._call_llm(spec, [UserMessage(content="test")])
+        response = await kernel._call_llm(spec, [UserMessage(content="test")])
         assert response.usage == usage_data
 
-    def test_segment_complete_hooks_run_for_reasoning_and_response(self) -> None:
+    async def test_segment_complete_hooks_run_for_reasoning_and_response(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         provider = StreamingProvider(
@@ -889,7 +919,7 @@ class TestCallLlmUsageCapture:
         spec = _make_spec(provider=provider, hooks=[segment_hook])
         kernel = AgentKernel()
 
-        response = kernel._call_llm(spec, [UserMessage(content="test")])
+        response = await kernel._call_llm(spec, [UserMessage(content="test")])
 
         assert response.reasoning_content == "think "
         assert response.content == "answer"
@@ -902,7 +932,7 @@ class TestCallLlmUsageCapture:
 class TestCompactorIntegration:
     """Kernel calls compactor.compact_if_needed and update_message_count."""
 
-    def test_compactor_called_each_turn(self) -> None:
+    async def test_compactor_called_each_turn(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         call_log: list[tuple[int, int]] = []
@@ -910,7 +940,7 @@ class TestCompactorIntegration:
         class SpyCompactor:
             _last_llm_message_count = 0
 
-            def compact_if_needed(self, messages, last_usage, turn):
+            async def compact_if_needed(self, messages, last_usage, turn):
                 call_log.append((len(messages), turn))
 
             def update_message_count(self, count):
@@ -925,13 +955,13 @@ class TestCompactorIntegration:
         spec = spec.model_copy(update={"compactor": SpyCompactor()})
 
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert result.result.reason == "natural"
         assert len(call_log) == 3
         assert [turn for _, turn in call_log] == [1, 2, 3]
 
-    def test_last_usage_passed_to_compactor(self) -> None:
+    async def test_last_usage_passed_to_compactor(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         usage_log: list[dict] = []
@@ -939,7 +969,7 @@ class TestCompactorIntegration:
         class UsageSpyCompactor:
             _last_llm_message_count = 0
 
-            def compact_if_needed(self, messages, last_usage, turn):
+            async def compact_if_needed(self, messages, last_usage, turn):
                 usage_log.append(dict(last_usage))
 
             def update_message_count(self, count):
@@ -952,20 +982,16 @@ class TestCompactorIntegration:
         }
 
         class UsageTrackingProvider:
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages, tools=None):
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_with_retry(
-                self,
-                messages,
-                tools=None,
-                *,
-                max_retries=3,
-                retry_delay=1.0,
-            ):
-                return self.chat(messages, tools)
-
-            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
+            async def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 yield StreamChunk(
                     content="done", finish_reason="stop", usage=usage_data
                 )
@@ -974,24 +1000,24 @@ class TestCompactorIntegration:
         spec = spec.model_copy(update={"compactor": UsageSpyCompactor()})
 
         kernel = AgentKernel()
-        kernel.run(spec, "test")
+        await kernel.run(spec, "test")
 
         assert usage_log[0] == {}
 
-    def test_no_compactor_no_error(self) -> None:
+    async def test_no_compactor_no_error(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         spec = _make_spec()
         assert spec.compactor is None
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
         assert result.result.reason == "natural"
 
 
 class TestKernelResultFields:
     """KernelResult carries num_turns, stop_reason, and accumulated usage."""
 
-    def test_natural_finish_has_num_turns(self) -> None:
+    async def test_natural_finish_has_num_turns(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         provider = StreamingProvider([
@@ -999,25 +1025,28 @@ class TestKernelResultFields:
         ])
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert result.result.num_turns == 1
         assert result.result.stop_reason == "stop"
 
-    def test_multi_turn_accumulates_usage(self) -> None:
+    async def test_multi_turn_accumulates_usage(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         class UsageTrackingToolProvider:
             def __init__(self) -> None:
                 self._call_count = 0
 
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages, tools=None):
                 return LLMResponse(content="unused", finish_reason="stop")
 
-            def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
-                return self.chat(messages, tools)
-
-            def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
+            async def chat_stream(self, messages, tools=None, *, timeout: float | None = None):
                 self._call_count += 1
                 if self._call_count == 1:
                     yield StreamChunk(
@@ -1039,48 +1068,48 @@ class TestKernelResultFields:
         tool_reg, _ = _make_tool_registry(["tool"])
         spec = _make_spec(provider=UsageTrackingToolProvider(), tool_registry=tool_reg)
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert result.result.num_turns == 2
         assert result.result.usage["prompt_tokens"] == 300
         assert result.result.usage["completion_tokens"] == 80
 
-    def test_max_turns_has_correct_num_turns(self) -> None:
+    async def test_max_turns_has_correct_num_turns(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id="tc-1", name="some_tool", arguments={"x": 1})
         provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=999)
         spec = _make_spec(provider=provider, max_turns=3)
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert result.result.reason == "max_turns"
         assert result.result.num_turns == 3
 
-    def test_cancelled_has_zero_turns_when_immediate(self) -> None:
+    async def test_cancelled_has_zero_turns_when_immediate(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         stop_event = threading.Event()
         stop_event.set()
         spec = _make_spec()
         kernel = AgentKernel()
-        result = kernel.run(spec, "test", stop_event=stop_event)
+        result = await kernel.run(spec, "test", stop_event=stop_event)
 
         assert result.result.reason == "cancelled"
         assert result.result.num_turns == 0
 
-    def test_hook_stopped_has_correct_num_turns(self) -> None:
+    async def test_hook_stopped_has_correct_num_turns(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         spec = _make_spec(hooks=[StopHook()])
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert result.result.reason == "hook_stopped"
         # hook_stopped fires after turn += 1 but before LLM call
         assert result.result.num_turns == 0
 
-    def test_invalid_finish_has_correct_fields(self) -> None:
+    async def test_invalid_finish_has_correct_fields(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         provider = StreamingProvider([
@@ -1089,7 +1118,7 @@ class TestKernelResultFields:
         ])
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
-        result = kernel.run(spec, "test")
+        result = await kernel.run(spec, "test")
 
         assert result.result.reason == "invalid_finish"
         assert result.result.num_turns == 1
@@ -1107,13 +1136,16 @@ class ErrorThenSuccessProvider:
         self.max_retries = 3
         self.retry_delay = 0.0  # no sleep in tests
 
-    def chat(self, messages, tools=None):
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
         return LLMResponse(content="not used", finish_reason="stop")
 
-    def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None):
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
         self._call_count += 1
         if self._call_count <= self._fail_count:
             raise self._error
@@ -1121,7 +1153,7 @@ class ErrorThenSuccessProvider:
 
 
 class TestCallLlmRetry:
-    def test_retry_on_retryable_error(self) -> None:
+    async def test_retry_on_retryable_error(self) -> None:
         """_call_llm retries on retryable LLMError and succeeds."""
         provider = ErrorThenSuccessProvider(
             fail_count=1,
@@ -1133,11 +1165,11 @@ class TestCallLlmRetry:
         )
         from matmaster.core.agent import AgentKernel
         kernel = AgentKernel()
-        response = kernel._call_llm(spec, [UserMessage(content="hi")])
+        response = await kernel._call_llm(spec, [UserMessage(content="hi")])
         assert response.content == "recovered"
         assert provider._call_count == 2
 
-    def test_no_retry_on_non_retryable_error(self) -> None:
+    async def test_no_retry_on_non_retryable_error(self) -> None:
         """_call_llm raises immediately on non-retryable LLMError."""
         provider = ErrorThenSuccessProvider(
             fail_count=1,
@@ -1150,10 +1182,10 @@ class TestCallLlmRetry:
         from matmaster.core.agent import AgentKernel
         kernel = AgentKernel()
         with pytest.raises(LLMError, match="auth failed"):
-            kernel._call_llm(spec, [UserMessage(content="hi")])
+            await kernel._call_llm(spec, [UserMessage(content="hi")])
         assert provider._call_count == 1
 
-    def test_all_retries_exhausted(self) -> None:
+    async def test_all_retries_exhausted(self) -> None:
         """_call_llm raises RuntimeError after all retries exhausted."""
         provider = ErrorThenSuccessProvider(
             fail_count=99,
@@ -1166,10 +1198,10 @@ class TestCallLlmRetry:
         from matmaster.core.agent import AgentKernel
         kernel = AgentKernel()
         with pytest.raises(RuntimeError, match="LLM stream failed"):
-            kernel._call_llm(spec, [UserMessage(content="hi")])
+            await kernel._call_llm(spec, [UserMessage(content="hi")])
         assert provider._call_count == 3  # max_retries default
 
-    def test_timeout_doubles_on_retry(self) -> None:
+    async def test_timeout_doubles_on_retry(self) -> None:
         """Each retry doubles the timeout passed to chat_stream."""
         timeouts_seen: list[float | None] = []
 
@@ -1178,11 +1210,16 @@ class TestCallLlmRetry:
             max_retries = 3
             retry_delay = 0.0
 
-            def chat(self, messages, tools=None):
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                pass
+
+            async def chat(self, messages, tools=None):
                 return LLMResponse(content="", finish_reason="stop")
-            def chat_with_retry(self, messages, tools=None, **kw):
-                return self.chat(messages, tools)
-            def chat_stream(self, messages, tools=None, *, timeout=None):
+
+            async def chat_stream(self, messages, tools=None, *, timeout=None):
                 timeouts_seen.append(timeout)
                 if len(timeouts_seen) < 3:
                     raise LLMError("timeout", retryable=True)
@@ -1194,5 +1231,258 @@ class TestCallLlmRetry:
         )
         from matmaster.core.agent import AgentKernel
         kernel = AgentKernel()
-        kernel._call_llm(spec, [UserMessage(content="hi")])
+        await kernel._call_llm(spec, [UserMessage(content="hi")])
         assert timeouts_seen == [10.0, 20.0, 40.0]
+
+
+class TestParallelToolDispatch:
+    """Tests for parallel tool dispatch via asyncio.gather."""
+
+    async def test_parallel_execution_faster_than_serial(self):
+        """Three tools each sleeping 0.2s should complete in ~0.2s, not ~0.6s."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class SlowTool:
+            def __init__(self, name):
+                self._name = name
+            @property
+            def name(self): return self._name
+            @property
+            def description(self): return "slow"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                await asyncio.sleep(0.2)
+                return ToolResult(status="success", content=f"{self._name} done")
+
+        for n in ["tool_a", "tool_b", "tool_c"]:
+            registry.register(SlowTool(n), source="test")
+
+        tcs = [
+            ToolCallData(id="tc-1", name="tool_a", arguments={}),
+            ToolCallData(id="tc-2", name="tool_b", arguments={}),
+            ToolCallData(id="tc-3", name="tool_c", arguments={}),
+        ]
+        provider = MultiToolProvider(tool_calls=tcs)
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+
+        start = time.monotonic()
+        result = await kernel.run(spec, "test")
+        elapsed = time.monotonic() - start
+
+        # Parallel: ~0.2s + overhead. Serial: >= 0.6s.
+        # Threshold 0.35s clearly separates them.
+        assert elapsed < 0.35, f"Expected parallel execution < 0.35s, got {elapsed:.3f}s"
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 3
+
+    async def test_gather_return_exceptions(self):
+        """Failed tool returns error ToolResult, other tools unaffected per D-05."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class GoodTool:
+            def __init__(self, name):
+                self._name = name
+            @property
+            def name(self): return self._name
+            @property
+            def description(self): return "good"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                return ToolResult(status="success", content="ok")
+
+        class BadTool:
+            @property
+            def name(self): return "bad_tool"
+            @property
+            def description(self): return "bad"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                raise RuntimeError("boom")
+
+        registry.register(GoodTool("tool_a"), source="test")
+        registry.register(BadTool(), source="test")
+        registry.register(GoodTool("tool_c"), source="test")
+
+        tcs = [
+            ToolCallData(id="tc-1", name="tool_a", arguments={}),
+            ToolCallData(id="tc-2", name="bad_tool", arguments={}),
+            ToolCallData(id="tc-3", name="tool_c", arguments={}),
+        ]
+        provider = MultiToolProvider(tool_calls=tcs)
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+        result = await kernel.run(spec, "test")
+
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 3
+        assert tool_msgs[0].content == "ok"  # tool_a success
+        assert "RuntimeError" in tool_msgs[1].content  # bad_tool error
+        assert "boom" in tool_msgs[1].content
+        assert tool_msgs[2].content == "ok"  # tool_c success
+
+    async def test_preserves_tool_call_order(self):
+        """ToolMessages must follow original tool_calls order, not completion order."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class DelayTool:
+            def __init__(self, name, delay):
+                self._name = name
+                self._delay = delay
+            @property
+            def name(self): return self._name
+            @property
+            def description(self): return "delay"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                await asyncio.sleep(self._delay)
+                return ToolResult(status="success", content=self._name)
+
+        # tool_a finishes last (0.15s), tool_b first (0.05s), tool_c middle (0.1s)
+        registry.register(DelayTool("tool_a", 0.15), source="test")
+        registry.register(DelayTool("tool_b", 0.05), source="test")
+        registry.register(DelayTool("tool_c", 0.10), source="test")
+
+        tcs = [
+            ToolCallData(id="tc-1", name="tool_a", arguments={}),
+            ToolCallData(id="tc-2", name="tool_b", arguments={}),
+            ToolCallData(id="tc-3", name="tool_c", arguments={}),
+        ]
+        provider = MultiToolProvider(tool_calls=tcs)
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+        result = await kernel.run(spec, "test")
+
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 3
+        # Order must match tool_calls order, not completion order
+        assert tool_msgs[0].content == "tool_a"
+        assert tool_msgs[1].content == "tool_b"
+        assert tool_msgs[2].content == "tool_c"
+
+    async def test_mixed_blocked_skipped_executed_order(self):
+        """Mixed blocked/skipped/executed tools maintain original tool_call order."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class SimpleTool:
+            def __init__(self, name):
+                self._name = name
+            @property
+            def name(self): return self._name
+            @property
+            def description(self): return "simple"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                return ToolResult(status="success", content=f"{self._name} result")
+
+        for n in ["tool_0", "tool_1", "tool_2", "tool_3", "tool_4"]:
+            registry.register(SimpleTool(n), source="test")
+
+        tcs = [
+            ToolCallData(id="tc-0", name="tool_0", arguments={}),  # allowed
+            ToolCallData(id="tc-1", name="tool_1", arguments={}),  # blocked by guard
+            ToolCallData(id="tc-2", name="tool_2", arguments={}),  # skipped by hook
+            ToolCallData(id="tc-3", name="tool_3", arguments={}),  # allowed
+            ToolCallData(id="tc-4", name="tool_4", arguments={}),  # allowed
+        ]
+
+        provider = MultiToolProvider(tool_calls=tcs)
+        deny_guard = DenyGuard("tool_1", reason="forbidden")
+        skip_hook = SkipHook("tool_2")
+        spec = _make_spec(
+            provider=provider,
+            tool_registry=registry,
+            guards=[deny_guard],
+            hooks=[skip_hook],
+        )
+        kernel = AgentKernel()
+        result = await kernel.run(spec, "test")
+
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 5, f"Expected 5 ToolMessages, got {len(tool_msgs)}"
+
+        # Order MUST match original tool_calls order
+        assert tool_msgs[0].tool_call_id == "tc-0"
+        assert tool_msgs[0].content == "tool_0 result"  # executed
+
+        assert tool_msgs[1].tool_call_id == "tc-1"
+        assert "BLOCKED" in tool_msgs[1].content  # blocked
+
+        assert tool_msgs[2].tool_call_id == "tc-2"
+        assert "skipped" in tool_msgs[2].content.lower()  # skipped
+
+        assert tool_msgs[3].tool_call_id == "tc-3"
+        assert tool_msgs[3].content == "tool_3 result"  # executed
+
+        assert tool_msgs[4].tool_call_id == "tc-4"
+        assert tool_msgs[4].content == "tool_4 result"  # executed
+
+    async def test_single_tool_call_unchanged(self):
+        """Single tool_call still works correctly (regression test)."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class SimpleTool:
+            @property
+            def name(self): return "my_tool"
+            @property
+            def description(self): return "simple"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                return ToolResult(status="success", content="single result")
+
+        registry.register(SimpleTool(), source="test")
+
+        tcs = [ToolCallData(id="tc-1", name="my_tool", arguments={})]
+        provider = MultiToolProvider(tool_calls=tcs)
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+        result = await kernel.run(spec, "test")
+
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 1
+        assert tool_msgs[0].content == "single result"
+
+    async def test_exception_in_closure_not_gather(self):
+        """Closure catches exception and returns ToolResult, not BaseException."""
+        from matmaster.core.agent import AgentKernel
+
+        registry = ToolRegistry()
+
+        class ErrorTool:
+            @property
+            def name(self): return "error_tool"
+            @property
+            def description(self): return "error"
+            @property
+            def json_schema(self): return {"type": "object", "properties": {}}
+            async def execute(self, arguments):
+                raise ValueError("test error")
+
+        registry.register(ErrorTool(), source="test")
+
+        tcs = [ToolCallData(id="tc-1", name="error_tool", arguments={})]
+        provider = MultiToolProvider(tool_calls=tcs)
+        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel = AgentKernel()
+        result = await kernel.run(spec, "test")
+
+        tool_msgs = [m for m in result.messages if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 1
+        assert "ValueError" in tool_msgs[0].content
+        assert "test error" in tool_msgs[0].content

@@ -89,3 +89,59 @@ class TestCliParsing:
         assert args.config is None
         assert args.session is None
         assert args.verbose is False
+
+
+class TestShowTools:
+    def test_show_tools_uses_all_tools(self) -> None:
+        """Verify _show_tools accesses registry.all_tools, not registry.tools."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from matmaster.devshell.repl import _show_tools
+
+        mock_runner = MagicMock()
+        mock_tool = MagicMock()
+        mock_tool.name = "test_tool"
+        mock_tool.description = "A test tool"
+
+        mock_registry = MagicMock()
+        mock_registry.all_tools = [mock_tool]
+        # Ensure .tools raises AttributeError (like real ToolRegistry)
+        del mock_registry.tools
+
+        mock_runtime = MagicMock()
+        mock_runtime.spec.tool_registry = mock_registry
+
+        with patch("matmaster.core.exp.Exp") as MockExp:
+            MockExp.return_value.build_runtime = AsyncMock(return_value=mock_runtime)
+            MockExp.return_value._run_cleanup_callbacks = AsyncMock()
+            _show_tools(mock_runner)  # Should not raise
+
+        MockExp.return_value._run_cleanup_callbacks.assert_called_once()
+
+
+class TestDevStreamHookSegment:
+    async def test_on_segment_complete_thought_verbose(self) -> None:
+        import io
+        from matmaster.devshell.stream_hook import DevStreamHook
+
+        out = io.StringIO()
+        hook = DevStreamHook(output=out, verbose=True)
+        await hook.on_segment_complete("thought", "some thought", "s1")
+        assert "thought complete" in out.getvalue()
+
+    async def test_on_segment_complete_thought_non_verbose(self) -> None:
+        import io
+        from matmaster.devshell.stream_hook import DevStreamHook
+
+        out = io.StringIO()
+        hook = DevStreamHook(output=out, verbose=False)
+        await hook.on_segment_complete("thought", "some thought", "s1")
+        assert out.getvalue() == ""
+
+    async def test_on_segment_complete_response_silent(self) -> None:
+        import io
+        from matmaster.devshell.stream_hook import DevStreamHook
+
+        out = io.StringIO()
+        hook = DevStreamHook(output=out, verbose=True)
+        await hook.on_segment_complete("response", "content", "s1")
+        assert out.getvalue() == ""
