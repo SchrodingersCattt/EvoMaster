@@ -186,7 +186,11 @@ Plans:
   2. ConfirmationHook 对外暴露 stream_service 所需的 resolve()/cancel() 接口，adapter 不再触发 AttributeError
   3. agent_run_service 能在受控范围内重新启用 confirmation hook，confirmation reply 可真正影响 tool execution
   4. confirmation path 的 hook/service/integration 回归测试全部通过
-**Plans**: 0 plans created
+**Plans**: 2 plans
+
+Plans:
+- [ ] 20-01-PLAN.md -- 恢复 Future-based ConfirmationHook 与 hook/adapter 回归测试
+- [ ] 20-02-PLAN.md -- 受控重新启用 service/worker confirmation bridge，并关闭 HOOK-02 traceability gap
 
 ### Phase 21: Async Leaf I/O Cleanup
 **Goal**: 完成叶子 I/O 层遗留 async 清理，落地 BashTool 原生 async subprocess 路径，并移除 provider 孤儿接口
@@ -198,7 +202,10 @@ Plans:
   2. session-dependent 执行路径的行为边界被明确保留或拆分，不再与 TOOL-02 的实现目标混淆
   3. OpenAIProvider 删除孤立的 chat_with_retry 接口，对外 API 与 LLMProvider Protocol 保持一致
   4. tool/provider 相关测试更新并通过
-**Plans**: 0 plans created
+**Plans**: 1 plan
+
+Plans:
+- [ ] 21-01-PLAN.md -- BashTool native async subprocess 双路径 + OpenAIProvider chat_with_retry 孤儿删除
 
 ### Phase 22: Audit Metadata Backfill
 **Goal**: 回填 v2.0 planning artifacts 的 audit 元数据缺口，保证 re-audit 时 requirements 与 summary 可追踪
@@ -240,5 +247,5 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 18. Exp 生命周期异步化 | v2.0 | 2/2 | Complete    | 2026-03-29 |
 | 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 2/2 | Complete    | 2026-03-29 |
 | 20. Confirmation Flow Recovery | v2.0 | 0/0 | Pending | - |
-| 21. Async Leaf I/O Cleanup | v2.0 | 0/0 | Pending | - |
+| 21. Async Leaf I/O Cleanup | v2.0 | 0/1 | Pending | - |
 | 22. Audit Metadata Backfill | v2.0 | 0/0 | Pending | - |
