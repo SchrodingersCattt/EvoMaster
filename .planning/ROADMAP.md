@@ -4,7 +4,7 @@
 
 - ✅ **v1 MatMaster Framework Refactoring** -- Phases 1-7 (shipped 2026-03-22)
 - ✅ **v1.1 Agent 外围能力构建** -- Phases 8-11 (shipped 2026-03-25)
-- 🚧 **v2.0 matmaster 协程改造** -- Phases 12-19 (in progress)
+- 🚧 **v2.0 matmaster 协程改造** -- Phases 12-22 (in progress)
 
 ## Phases
 
@@ -45,6 +45,9 @@ Full details: milestones/v1-ROADMAP.md
 - [x] **Phase 17: AgentKernel 异步化** - Kernel.run() 改为 async，收敛所有异步依赖，ContextCompactor async 化 (completed 2026-03-28)
 - [x] **Phase 18: Exp 生命周期异步化** - assemble/build_runtime/run 全部 async，SubAgent spawn 完整 async 链路 (completed 2026-03-29)
 - [x] **Phase 19: 服务层桥接 + 并行 Tool Dispatch** - src/ 层 asyncio.run() 桥接 + 多 tool_call 并行执行优化 (completed 2026-03-29)
+- [ ] **Phase 20: Confirmation Flow Recovery** - 恢复 Future-based confirmation hook 全链路，修复 adapter/interface regression，重新打通 confirmation flow
+- [ ] **Phase 21: Async Leaf I/O Cleanup** - 完成 BashTool 原生 async subprocess 路径，并移除 provider 遗留孤儿接口
+- [ ] **Phase 22: Audit Metadata Backfill** - 回填 audit 所需 planning 元数据，确保 v2.0 re-audit 可追踪
 
 ## Phase Details
 
@@ -120,11 +123,11 @@ Plans:
   2. EventRouter 使用 asyncio.create_task 启动消费循环（替代 threading.Thread），支持 graceful stop + drain
   3. SSEHandler 和 PersistenceHandler 的 handle() 方法为 async def，可在 EventRouter 的 async 消费循环中 await
   4. Bus + Router 在同一个 event loop 中协作，事件从 emit 到 handler.handle 全链路无阻塞
-**Plans**: 2 plans
+**Plans**: 2/2 plans complete
 
 Plans:
-- [ ] 16-01-PLAN.md -- MessageBus async (asyncio.Queue) + EventRouter async (asyncio.Task) + SSEHandler/PersistenceHandler/WorkspaceHandler async handle() + 测试迁移
-- [ ] 16-02-PLAN.md -- 13 个 emit 调用点 await 迁移 + service 层 emit_nowait/router 桥接/SSEHandler 构造函数适配
+- [x] 16-01-PLAN.md -- MessageBus async (asyncio.Queue) + EventRouter async (asyncio.Task) + SSEHandler/PersistenceHandler/WorkspaceHandler async handle() + 测试迁移
+- [x] 16-02-PLAN.md -- 13 个 emit 调用点 await 迁移 + service 层 emit_nowait/router 桥接/SSEHandler 构造函数适配
 
 ### Phase 17: AgentKernel 异步化
 **Goal**: Kernel 执行循环全面 async，收敛所有叶节点异步依赖，LLM/Tool/Hook 调用全部 await，ContextCompactor 内部 LLM 调用 async
@@ -167,18 +170,53 @@ Plans:
   2. 外部取消信号（stop API / Redis 轮询）能跨线程传播到 async kernel 的 stop_event，agent 正确终止
   3. 同一轮 LLM 返回多个 tool_call 时，tool 通过 asyncio.gather 并行执行，总耗时接近最慢单 tool 耗时（而非串行累加）
   4. DevShell 可通过 asyncio.run() 临时包装调用 async matmaster 进行开发验证
-**Plans**: 1/2 plans complete
+**Plans**: 2/2 plans complete
 
 Plans:
 - [x] 19-01-PLAN.md -- agent_run_service.py 双 loop 统一为单 daemon thread + run_coroutine_threadsafe + DevShell asyncio.run()
-- [ ] 19-02-PLAN.md -- AgentKernel 串行 tool dispatch 改为 asyncio.gather 并行 + TestParallelToolDispatch 测试
+- [x] 19-02-PLAN.md -- AgentKernel 串行 tool dispatch 改为 asyncio.gather 并行 + TestParallelToolDispatch 测试
+
+### Phase 20: Confirmation Flow Recovery
+**Goal**: 恢复 ConfirmationHook 的 async 等待模型，修复 stream/service adapter 接口错配，并重新打通 confirmation flow
+**Depends on**: Phase 19
+**Requirements**: HOOK-02
+**Gap Closure**: Closes audit requirement gap HOOK-02, ConfirmationHookAdapter interface mismatch, and broken Confirmation Flow
+**Success Criteria** (what must be TRUE):
+  1. ConfirmationHook 不再依赖 queue.Queue.get() 阻塞等待，而是恢复 asyncio 兼容的等待机制
+  2. ConfirmationHook 对外暴露 stream_service 所需的 resolve()/cancel() 接口，adapter 不再触发 AttributeError
+  3. agent_run_service 能在受控范围内重新启用 confirmation hook，confirmation reply 可真正影响 tool execution
+  4. confirmation path 的 hook/service/integration 回归测试全部通过
+**Plans**: 0 plans created
+
+### Phase 21: Async Leaf I/O Cleanup
+**Goal**: 完成叶子 I/O 层遗留 async 清理，落地 BashTool 原生 async subprocess 路径，并移除 provider 孤儿接口
+**Depends on**: Phase 19
+**Requirements**: TOOL-02
+**Gap Closure**: Closes audit requirement gap TOOL-02 and OpenAIProvider orphaned integration gap
+**Success Criteria** (what must be TRUE):
+  1. BashTool 在 session-free 执行路径使用 asyncio.create_subprocess_exec，而不是同步 subprocess bridge
+  2. session-dependent 执行路径的行为边界被明确保留或拆分，不再与 TOOL-02 的实现目标混淆
+  3. OpenAIProvider 删除孤立的 chat_with_retry 接口，对外 API 与 LLMProvider Protocol 保持一致
+  4. tool/provider 相关测试更新并通过
+**Plans**: 0 plans created
+
+### Phase 22: Audit Metadata Backfill
+**Goal**: 回填 v2.0 planning artifacts 的 audit 元数据缺口，保证 re-audit 时 requirements 与 summary 可追踪
+**Depends on**: Phase 20, Phase 21
+**Requirements**: None (audit metadata closure)
+**Gap Closure**: Closes remaining audit metadata/documentation gaps, especially missing requirements-completed frontmatter in historical summaries
+**Success Criteria** (what must be TRUE):
+  1. audit 标记缺失的 SUMMARY.md 均补齐 requirements-completed frontmatter
+  2. v2.0 planning artifacts 的元数据与当前 ROADMAP/REQUIREMENTS 状态保持一致
+  3. 重新运行 milestone audit 时，不再因 planning metadata 缺口报 documentation gap
+**Plans**: 0 plans created
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19
+Phases execute in numeric order: 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21 -> 22
 
-Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12），但建议按顺序执行以控制变更范围。Phase 15 同理。Phase 17 是收敛点，必须等 13-16 全部完成。
+Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12），但建议按顺序执行以控制变更范围。Phase 15 同理。Phase 17 是收敛点，必须等 13-16 全部完成。Gap closure 阶段中，Phase 20 和 Phase 21 可分别收敛代码 gap，Phase 22 最后统一回填 audit 元数据。
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -197,7 +235,10 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 13. LLM Provider 异步实现 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 14. Tool 系统异步化 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 15. Hook 系统异步化 | v2.0 | 3/3 | Complete    | 2026-03-27 |
-| 16. MessageBus + EventRouter 异步化 | v2.0 | 0/2 | Complete    | 2026-03-28 |
+| 16. MessageBus + EventRouter 异步化 | v2.0 | 2/2 | Complete    | 2026-03-28 |
 | 17. AgentKernel 异步化 | v2.0 | 2/2 | Complete    | 2026-03-28 |
 | 18. Exp 生命周期异步化 | v2.0 | 2/2 | Complete    | 2026-03-29 |
-| 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 1/2 | Complete    | 2026-03-29 |
+| 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 2/2 | Complete    | 2026-03-29 |
+| 20. Confirmation Flow Recovery | v2.0 | 0/0 | Pending | - |
+| 21. Async Leaf I/O Cleanup | v2.0 | 0/0 | Pending | - |
+| 22. Audit Metadata Backfill | v2.0 | 0/0 | Pending | - |
