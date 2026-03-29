@@ -84,7 +84,7 @@ uv run python evaluation/scripts/finalize_cc_baseline_ingest.py --run-dir "$RUN_
 
 ## 阶段二：阅卷与上报（百分制 + 原因 + 建议）
 
-- 先阅读 `evaluation/devshell_claude_code_eval.md` **第 3 节**，按其中公式用 `scoring_checklist` 的 `weight` 计算 **0–100 的整数**。
+- 先阅读 `evaluation/docs/devshell_claude_code_eval.md` **第 3 节**，按其中公式用 `scoring_checklist` 的 `weight` 计算 **0–100 的整数**。
 - 题目定义在 `evaluation/question_bank/` 下，按 `item.question_id`（与 YAML 中 `id` 一致）找到对应 YAML，读取 `scoring_checklist`。
 - 证据来源：**RUN_DIR/raw_runs.jsonl** 中对应 `task_id` 的行、**RUN_DIR/workspaces/任务目录名/** 内文件；若 pending JSON 的 `item` 中含 `result_oss_url`，可下载该 zip 辅助核对。
 
@@ -123,7 +123,7 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 
 > **【CC Baseline · 阶段一 · 执行者】**
 > 你的职责只有：**做题**，不写 checklist 判分、不执行 `eval_ingest_submit_pending.py`、不讨论百分制。
-> **RUN_DIR**：**不要**要求用户在对话中粘贴路径。在仓库根执行 prepare 后，用仓库文档 `evaluation/baseline_cc_eval.md` 中「RUN_DIR 自动解析」的 `ROOT` + `find` + `export RUN_DIR=...` 得到绝对路径；若 `prepare` 使用了与用户默认不同的 `--run-label`，把 `find` 的 `-name` 改成对应前缀。若 `RUN_DIR` 仍为空或存在多个候选，再读 stderr 的 **`Run directory: `** 行。
+> **RUN_DIR**：**不要**要求用户在对话中粘贴路径。在仓库根执行 prepare 后，用仓库文档 `evaluation/docs/baseline_cc_eval.md` 中「RUN_DIR 自动解析」的 `ROOT` + `find` + `export RUN_DIR=...` 得到绝对路径；若 `prepare` 使用了与用户默认不同的 `--run-label`，把 `find` 的 `-name` 改成对应前缀。若 `RUN_DIR` 仍为空或存在多个候选，再读 stderr 的 **`Run directory: `** 行。
 > **若尚未 prepare**：在终端进入仓库根（含 `scripts/` 的 Git 根），执行：
 > `cd "$(git rev-parse --show-toplevel)"`
 > `uv run python evaluation/scripts/run_devshell_eval.py --prepare-cc-baseline --run-label baseline_cc_struct --modes direct --capabilities structure_construction --eval-ingest-pending-only`
@@ -132,7 +132,7 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 > **任务列表**：列出目录 `RUN_DIR/workspaces/` 下的**每一个一级子目录**名称；对每个名称 `TASK_DIR`（即 task_id），按顺序完成：
 > 1. 将当前工作目录设为 `RUN_DIR/workspaces/TASK_DIR/`。
 > 2. 阅读 `_devshell_prompt.txt`，完成其中全部交付物。
-> 3. 在同一目录创建或覆盖 `_devshell_summary.json`：**文件内容为单行合法 JSON**，字段要求见仓库文件 `evaluation/baseline_cc_eval.md` 中「阶段一：做题」小节（必须含 `duration_ms`；`usage` 尽量填 token 数字）。
+> 3. 在同一目录创建或覆盖 `_devshell_summary.json`：**文件内容为单行合法 JSON**，字段要求见仓库文件 `evaluation/docs/baseline_cc_eval.md` 中「阶段一：做题」小节（必须含 `duration_ms`；`usage` 尽量填 token 数字）。
 > 4. 不得修改 `_eval_task_meta.json`。
 > **收尾**：所有 `TASK_DIR` 处理完后，在仓库根执行（使用你已解析的 **RUN_DIR**，勿让用户粘贴）：
 > `cd "$(git rev-parse --show-toplevel)"`
@@ -147,9 +147,9 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 
 > **【CC Baseline · 阶段二 · 阅卷者】**
 > 你的职责只有：**阅卷**与**调用上报命令**，不修改 **RUN_DIR/workspaces/** 下已有交付物（除非用户明确要求修复明显损坏并说明）。
-> **RUN_DIR**：**不要**要求用户粘贴路径；在仓库根按 `evaluation/baseline_cc_eval.md`「RUN_DIR 自动解析」导出 `RUN_DIR`。若存在多个 `*_` 目录无法唯一确定，请用户确认本次应对应哪一次 run（或提供 stderr / `manifest.json` 所在路径）。
+> **RUN_DIR**：**不要**要求用户粘贴路径；在仓库根按 `evaluation/docs/baseline_cc_eval.md`「RUN_DIR 自动解析」导出 `RUN_DIR`。若存在多个 `*_` 目录无法唯一确定，请用户确认本次应对应哪一次 run（或提供 stderr / `manifest.json` 所在路径）。
 > 前置检查：**RUN_DIR/pending_ingest/** 下至少有一个 `.json` 文件；**RUN_DIR/raw_runs.jsonl** 存在。若不满足，先让用户在仓库根补跑 finalize，不要编造路径。
-> 先阅读文件 `evaluation/devshell_claude_code_eval.md` 的**第 3 节**，严格用其中 **weight 与 0.5×weight** 规则计算每题 **0–100 整数**。
+> 先阅读文件 `evaluation/docs/devshell_claude_code_eval.md` 的**第 3 节**，严格用其中 **weight 与 0.5×weight** 规则计算每题 **0–100 整数**。
 > **客观性（必读）**：每条 checklist 的通过/部分通过/未通过，**主证据**须来自 **题目 YAML、该任务 `workspaces/<task_id>/_devshell_prompt.txt` 要求的交付物、以及 workspace 内真实文件内容**（结构类须实际打开 POSCAR/CIF 等核对格式与题设，不能只看存在性）。**`raw_runs.jsonl` 中该行 JSON 里的 `devshell_summary` / `final_content`、以及 `_devshell_summary.json`，仅作过程与状态参考**；**禁止**仅凭执行者自述或摘要文字给 checklist 判「通过」。若自述与文件或题设矛盾，**以文件与题设为准**，并在 `score-reason` 中写明矛盾点。
 > 对 **RUN_DIR/pending_ingest/** 下**每一个**扩展名为 `.json` 的文件 `F`（含完整文件名，例如 `SC_struct_007_direct_r0.json`）：
 > 1. 打开 `F`，读取 `item.question_id`，在 `evaluation/question_bank/` 中找到对应 YAML，读取 `scoring_checklist`；并阅读 **RUN_DIR/workspaces/（task_id）/_devshell_prompt.txt**，列出须交付的文件与约束。
@@ -165,6 +165,6 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 
 ## 附录：不限结构生成类时
 
-将 prepare 命令中的 `--capabilities structure_construction` 删除，或改为 `schemas.py` 中 `CapabilityLiteral` 允许的其他能力名；阶段一、二话术里凡写「结构生成」处按你的筛选条件改写即可。
+将 prepare 命令中的 `--capabilities structure_construction` 删除，或改为 `evaluation/core/schemas.py` 中 `CapabilityLiteral` 允许的其他能力名；阶段一、二话术里凡写「结构生成」处按你的筛选条件改写即可。
 
-Cursor / Claude Code 可 **@** 本文件与 `devshell_claude_code_eval.md`。
+Cursor / Claude Code 可 **@** 本文件与 `evaluation/docs/devshell_claude_code_eval.md`。

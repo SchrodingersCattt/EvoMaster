@@ -57,7 +57,7 @@ def _load_question_seed(bank_dir: Path, question_id: str) -> str | None:
     """Return ``human_prompt_seed`` for ``question_id`` if found in v5 banks."""
     sys.path.insert(0, str(REPO_ROOT))
     try:
-        from evaluation.runner import _flatten_banks, load_question_banks
+        from evaluation.core.runner import _flatten_banks, load_question_banks
     except ImportError:
         return None
     try:

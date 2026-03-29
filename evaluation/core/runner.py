@@ -261,4 +261,4 @@ def _resolve_to_project_root(path_str: str) -> str:
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
