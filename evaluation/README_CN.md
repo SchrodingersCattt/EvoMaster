@@ -2,6 +2,17 @@
 
 MATTER 是 `evaluation/` 下的独立评测模块，当前仅维护 **v5+** 题库与运行链路。
 
+**目录约定（仓库根下 `evaluation/`）**
+
+| 路径 | 内容 |
+|------|------|
+| `core/` | Python 实现：题库模型、runner、判分、报告等 |
+| `scripts/` | 命令行工具：DevShell 批量跑题、导出审阅包、ingest 等 |
+| `docs/` | 流程说明（Claude Code baseline、DevShell 判分话术等） |
+| `question_bank/` | v5+ 题库与 `data/` 输入文件 |
+| `config.yaml` | 默认评测配置 |
+| `cli.py` / `__main__.py` | 兼容入口，转发到 `core.cli` |
+
 v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵活、更可移植。
 
 ## 当前题库结构
@@ -71,25 +82,25 @@ scoring_checklist:
 ### 运行时兼容注入
 
 ```
-evaluation/
-├── evidence.py         （通用 EvidenceBundle 定义，默认不依赖任何 runtime mapping）
+evaluation/core/
+├── evidence.py            （通用 EvidenceBundle 定义，默认不依赖任何 runtime mapping）
 ├── evidence_mapping.yaml  （当前 EvoMaster 兼容映射，由 runner 显式注入）
-├── evaluator.py        （二元评分核心，不依赖工具名）
-├── aggregator.py       （加权聚合）
+├── evaluator.py           （二元评分核心，不依赖工具名）
+├── aggregator.py          （加权聚合）
 └── ...
 ```
 
 **特点**：
 - 核心评测逻辑（evaluator/aggregator）不再硬编码工具名
 - `EvidenceExtractor` 默认不加载任何 tool-name mapping
-- 当前 EvoMaster 兼容映射由 `runner.py` 显式注入 `evidence_mapping.yaml`
+- 当前 EvoMaster 兼容映射由 `core/runner.py` 显式注入 `evidence_mapping.yaml`
 - LLM judge context 包含工具描述、参数、观察，而非仅工具名
 
 ### 配置自定义映射
 
 如需使用不同的 evidence 映射（如自定义运行时）：
 ```python
-from evaluation.evidence import EvidenceExtractor
+from evaluation.core.evidence import EvidenceExtractor
 
 extractor = EvidenceExtractor(
     mapping_path="/path/to/custom/evidence_mapping.yaml"
@@ -137,7 +148,7 @@ uv run python -m evaluation.cli \
 - 新增 verifier 类型：`batch_single_variable_sweep`、`batch_tool_args_constant`、`batch_consistent_calls`，支持精细的参数一致性检查。
 - 每题都包含「控制变量合同」（sweep_variable vs locked_variables），agent 输出应明确表达这些信息。
 
-## 主要模块
+## 主要模块（均在 `core/`）
 
 - `runner.py`: 加载题库、下发任务、汇总结果。
 - `simulator.py`: 从题目生成模拟用户任务。
@@ -145,10 +156,11 @@ uv run python -m evaluation.cli \
 - `aggregator.py`: 聚合 pass/fail 统计 + 加权统计。
 - `reporter.py`: 生成 `raw_runs.jsonl`、汇总 JSON 和 Markdown 报告。
 - `evidence.py`: 通用 EvidenceBundle 定义，适配器无关。
-- `evidence_mapping.yaml`: 当前 EvoMaster 兼容映射文件，仅由 runner 注入，不是 core 默认依赖。
+- `evidence_mapping.yaml`: 当前 EvoMaster 兼容映射文件，仅由 runner 注入。
 
 ## 更多文档
 
-- [devshell_claude_code_eval.md](./devshell_claude_code_eval.md) - DevShell 批量跑题 + Claude Code 人工判分（`evaluation/scripts/run_devshell_eval.py`、产物路径、百分制话术）
+- [baseline_cc_eval.md](./docs/baseline_cc_eval.md) - Claude Code baseline（与 DevShell 产物对齐）
+- [devshell_claude_code_eval.md](./docs/devshell_claude_code_eval.md) - DevShell 批量跑题 + Claude Code 人工判分（`evaluation/scripts/run_devshell_eval.py`、产物路径、百分制话术）
 - [WEIGHTED_PORTABLE_EVAL_MIGRATION.md](../../docs/mat_master/WEIGHTED_PORTABLE_EVAL_MIGRATION.md) - 迁移指南与 FAQ
 - [WEIGHTED_EVAL_IMPLEMENTATION.md](../../docs/mat_master/WEIGHTED_EVAL_IMPLEMENTATION.md) - 实现细节

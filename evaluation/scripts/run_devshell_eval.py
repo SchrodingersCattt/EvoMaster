@@ -43,7 +43,7 @@ Usage (from repository root)::
 **Claude Code baseline（不跑 devshell）**：``--prepare-cc-baseline`` 只搭 ``workspaces/`` 与
 ``_eval_task_meta.json``；在 IDE 里跑完题并写好 ``_devshell_summary.json`` 后执行
 ``evaluation/scripts/finalize_cc_baseline_ingest.py``。说明见
-``evaluation/baseline_cc_eval.md``.
+``evaluation/docs/baseline_cc_eval.md``.
 
 This does **not** run MATTER's BinaryEvaluator or Playground ``run_mat_task``; it only
 collects devshell JSON summaries for downstream review or custom scoring.
@@ -327,7 +327,7 @@ def main() -> int:
 
     # Lazy imports after potential chdir
     sys.path.insert(0, str(REPO_ROOT))
-    from evaluation.runner import (
+    from evaluation.core.runner import (
         _apply_filters,
         _flatten_banks,
         _resolve_to_project_root,
@@ -335,8 +335,8 @@ def main() -> int:
         expand_run_plan,
         load_question_banks,
     )
-    from evaluation.schemas import EvalConfig
-    from evaluation.simulator import HumanSimulator
+    from evaluation.core.schemas import EvalConfig
+    from evaluation.core.simulator import HumanSimulator
 
     cfg = EvalConfig.model_validate(cfg_dict)
     bank_dir = Path(_resolve_to_project_root(cfg.question_bank_dir))
@@ -508,7 +508,7 @@ def main() -> int:
         )
 
     if args.prepare_cc_baseline:
-        doc_rel = "evaluation/baseline_cc_eval.md"
+        doc_rel = "evaluation/docs/baseline_cc_eval.md"
         for prepared in prepared_tasks:
             q = prepared["question"]
             tid = str(prepared["task_id"])

@@ -10,7 +10,7 @@ Each task workspace must contain:
 - ``_eval_task_meta.json`` (written by --prepare-cc-baseline)
 - ``_devshell_summary.json`` (one JSON object, same schema as mm-devshell ``--json-out``)
 
-See ``evaluation/baseline_cc_eval.md``.
+See ``evaluation/docs/baseline_cc_eval.md``.
 
 Examples::
 
