@@ -1186,7 +1186,7 @@ class TestCallLlmRetry:
         assert provider._call_count == 1
 
     async def test_all_retries_exhausted(self) -> None:
-        """_call_llm raises RuntimeError after all retries exhausted."""
+        """_call_llm raises LLMError (not RuntimeError) after all retries exhausted."""
         provider = ErrorThenSuccessProvider(
             fail_count=99,
             error=LLMError("timeout", retryable=True),
@@ -1197,9 +1197,42 @@ class TestCallLlmRetry:
         )
         from matmaster.core.agent import AgentKernel
         kernel = AgentKernel()
-        with pytest.raises(RuntimeError, match="LLM stream failed"):
+        with pytest.raises(LLMError, match="LLM stream failed") as exc_info:
             await kernel._call_llm(spec, [UserMessage(content="hi")])
         assert provider._call_count == 3  # max_retries default
+        assert exc_info.value.retryable is False
+        assert exc_info.value.attempts is not None
+        assert len(exc_info.value.attempts) == 3
+
+    async def test_retry_exhausted_carries_attempt_records(self) -> None:
+        """Each attempt record has the required structured fields."""
+        provider = ErrorThenSuccessProvider(
+            fail_count=99,
+            error=LLMError("conn refused", retryable=True, error_category="connection"),
+        )
+        provider.stream_timeout = 10.0
+        provider.max_retries = 2
+        provider.retry_delay = 0.0  # no wait in tests
+        spec = AgentRuntimeSpec(
+            llm_provider=provider,
+            system_prompt="test",
+        )
+        from matmaster.core.agent import AgentKernel
+        kernel = AgentKernel()
+        with pytest.raises(LLMError) as exc_info:
+            await kernel._call_llm(spec, [UserMessage(content="hi")])
+
+        err = exc_info.value
+        assert err.error_category == "connection"
+        assert len(err.attempts) == 2
+        for i, rec in enumerate(err.attempts):
+            assert rec["attempt"] == i + 1
+            assert rec["error_category"] == "connection"
+            assert rec["error_type"] == "LLMError"
+            assert "conn refused" in rec["error_message"]
+            assert "timeout_used" in rec
+            assert "elapsed_seconds" in rec
+            assert rec["retryable"] is True
 
     async def test_timeout_doubles_on_retry(self) -> None:
         """Each retry doubles the timeout passed to chat_stream."""
