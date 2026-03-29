@@ -236,7 +236,10 @@ class TestExpRun:
         with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime) as mock_br:
             result = await exp.run(ctx, "do something")
 
-        mock_br.assert_called_once_with(ctx, bus=None, skills=None, mcp=None)
+        mock_br.assert_called_once_with(
+            ctx, bus=None, skills=None, mcp=None,
+            source_override=None, spawn_id=None,
+        )
         mock_kernel.run.assert_called_once_with(
             mock_spec, "do something", history=None, stop_event=None
         )
@@ -260,7 +263,10 @@ class TestExpRun:
         with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime) as mock_br:
             await exp.run(ctx, "task", bus=bus)
 
-        mock_br.assert_called_once_with(ctx, bus=bus, skills=None, mcp=None)
+        mock_br.assert_called_once_with(
+            ctx, bus=bus, skills=None, mcp=None,
+            source_override=None, spawn_id=None,
+        )
 
     async def test_run_forwards_history_and_stop_event(self) -> None:
         """run() passes history and stop_event to kernel.run."""

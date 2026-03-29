@@ -107,7 +107,7 @@ def _build_conversation(n_turns: int, content_size: int = 500) -> list:
 class TestDefaultDevshellPath:
     """验证 devshell 默认路径下 compaction 为 disabled。"""
 
-    def test_exp_assemble_compaction_disabled(self) -> None:
+    async def test_exp_assemble_compaction_disabled(self) -> None:
         """Exp.assemble() 产出的 CompactionConfig.enabled 默认为 False。"""
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
@@ -132,7 +132,7 @@ class TestDefaultDevshellPath:
                 llm_config=None,
                 run_meta={},
             )
-            spec = exp.assemble(ctx)
+            spec = await exp.assemble(ctx)
 
         assert spec.compaction.enabled is False, (
             "默认 CompactionConfig 应为 disabled"

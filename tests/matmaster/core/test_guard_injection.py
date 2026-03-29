@@ -47,7 +47,7 @@ class TestGuardProtocol:
 
 
 class TestGuardInjection:
-    def test_guards_injected_via_assemble(self) -> None:
+    async def test_guards_injected_via_assemble(self) -> None:
         """Exp.assemble() returns spec with empty guards (guard factory deferred)."""
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
@@ -59,7 +59,7 @@ class TestGuardInjection:
         )
         config = ExpConfig(name="direct", guards=["stub_guard"])
         exp = Exp(config)
-        spec = exp.assemble(ctx)
+        spec = await exp.assemble(ctx)
         # Guards are currently passed as strings; guard factory is deferred.
         assert spec.guards == []
 

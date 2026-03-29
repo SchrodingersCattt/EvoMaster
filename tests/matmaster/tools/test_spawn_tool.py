@@ -11,7 +11,7 @@ Tests cover:
 
 from __future__ import annotations
 
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -23,7 +23,7 @@ class TestSpawnToolExecute:
         """SpawnTool with mock spawn_fn calls it with (exp_name, task, stop_event)."""
         from matmaster.tools.builtin.spawn_tool import SpawnTool
 
-        mock_spawn = Mock(return_value="exploration result: found 3 files")
+        mock_spawn = AsyncMock(return_value="exploration result: found 3 files")
         tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = await tool.execute({"exp_name": "explore", "task": "find files"})
@@ -46,7 +46,7 @@ class TestSpawnToolExecute:
         """execute({"task": "y"}) returns error containing 'required'."""
         from matmaster.tools.builtin.spawn_tool import SpawnTool
 
-        mock_spawn = Mock(return_value="ok")
+        mock_spawn = AsyncMock(return_value="ok")
         tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = await tool.execute({"task": "y"})
@@ -58,7 +58,7 @@ class TestSpawnToolExecute:
         """execute({"exp_name": "x"}) returns error containing 'required'."""
         from matmaster.tools.builtin.spawn_tool import SpawnTool
 
-        mock_spawn = Mock(return_value="ok")
+        mock_spawn = AsyncMock(return_value="ok")
         tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = await tool.execute({"exp_name": "x"})
@@ -70,7 +70,7 @@ class TestSpawnToolExecute:
         """execute({"exp_name": "", "task": "y"}) returns error containing 'required'."""
         from matmaster.tools.builtin.spawn_tool import SpawnTool
 
-        mock_spawn = Mock(return_value="ok")
+        mock_spawn = AsyncMock(return_value="ok")
         tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = await tool.execute({"exp_name": "", "task": "y"})
@@ -82,7 +82,7 @@ class TestSpawnToolExecute:
         """execute({"exp_name": "x", "task": ""}) returns error containing 'required'."""
         from matmaster.tools.builtin.spawn_tool import SpawnTool
 
-        mock_spawn = Mock(return_value="ok")
+        mock_spawn = AsyncMock(return_value="ok")
         tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = await tool.execute({"exp_name": "x", "task": ""})
@@ -91,10 +91,10 @@ class TestSpawnToolExecute:
         mock_spawn.assert_not_called()
 
     async def test_spawn_fn_exception_handled(self) -> None:
-        """spawn_fn raises ValueError, execute returns 'Error: ...' via BuiltinTool wrapper."""
+        """spawn_fn raises ValueError, execute returns 'Error: ...' via SpawnTool.execute()."""
         from matmaster.tools.builtin.spawn_tool import SpawnTool
 
-        mock_spawn = Mock(side_effect=ValueError("unknown exp: bad_name"))
+        mock_spawn = AsyncMock(side_effect=ValueError("unknown exp: bad_name"))
         tool = SpawnTool(spawn_fn=mock_spawn)
 
         result = await tool.execute({"exp_name": "bad_name", "task": "do stuff"})
