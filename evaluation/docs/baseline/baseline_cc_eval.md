@@ -109,7 +109,7 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 
 ## 为何不要在一个会话里又做题又打分？
 
-即时 POST 或未走 pending 时，入库 `score` 可能是 **100/0 代理分**（见 `matmaster.eval_ingest_client.score_for_eval_ingest`）。两阶段 + pending + `eval_ingest_submit_pending.py` 才能把 **真实百分制 + 原因 + 建议** 写入库。
+即时 POST 或未走 pending 时，入库 `score` 可能是 **100/0 代理分**（见 `evaluation.eval_ingest_client.score_for_eval_ingest`）。两阶段 + pending + `eval_ingest_submit_pending.py` 才能把 **真实百分制 + 原因 + 建议** 写入库。
 
 ---
 

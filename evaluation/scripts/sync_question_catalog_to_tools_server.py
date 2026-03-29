@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""将本仓库 v5 ``question_bank`` 中的题目 ID 同步到 matmaster-tools-server 题库目录表。
+"""将本仓库 v5 ``question_bank`` 中的题目同步到 matmaster-tools-server 题库目录表。
 
 对应 tools-server 接口（见 sibling 仓库 ``eval_question_catalog_api``）::
 
     POST {MATMASTER_TOOLS_SERVER}/api/v1/evaluation/question-catalog/sync
-    Body: { \"items\": [ {\"question_id\": \"...\"}, ... ] }
+    Body: { \"items\": [ {\"question_id\": \"...\", \"question_text\": \"...\"}, ... ] }
 
-同步语义：服务端先将目录表内全部题目标为非活跃，再将 payload 中的 ``question_id`` upsert 为活跃；
+``question_text`` 取自题库条目的 ``human_prompt_seed``（与 ingest 的题干字段一致）。
+
+同步语义：服务端先将目录表内全部题目标为非活跃，再将 payload 中的题目 upsert 为活跃；
 与 ``eval_results`` 仅通过 ``question_id`` 对齐。
 
 环境：与 ingest / 配额相同，使用 ``MATMASTER_TOOLS_SERVER``（见 ``utils.env``），未设置时按
@@ -25,25 +27,42 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
+if TYPE_CHECKING:
+    from evaluation.core.schemas import QuestionItem
 
-def _stable_unique_ids(ids: list[str]) -> list[str]:
+
+def _stable_unique_catalog_items(
+    flat: list[QuestionItem],
+) -> tuple[list[dict[str, str]], str | None]:
+    """Dedupe by ``question_id`` (first wins); build sync items with trimmed prompt text."""
+    from evaluation.eval_ingest_client import (
+        EVAL_ITEM_QUESTION_TEXT_MAX_LEN,
+        clip_ingest_text_field,
+    )
+
     seen: set[str] = set()
-    out: list[str] = []
-    for x in ids:
-        s = str(x).strip()
-        if not s or s in seen:
+    out: list[dict[str, str]] = []
+    for q in flat:
+        qid = str(q.id).strip()
+        if not qid or qid in seen:
             continue
-        seen.add(s)
-        out.append(s)
-    return out
+        seen.add(qid)
+        qtext = clip_ingest_text_field(
+            q.human_prompt_seed, max_len=EVAL_ITEM_QUESTION_TEXT_MAX_LEN
+        )
+        if not qtext:
+            return [], f"empty human_prompt_seed after trim for question_id={qid!r}"
+        out.append({"question_id": qid, "question_text": qtext})
+    return out, None
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Sync local evaluation question_bank question ids to tools-server catalog.",
+        description="Sync local evaluation question_bank (id + human_prompt_seed) to tools-server catalog.",
     )
     parser.add_argument(
         "--question-bank-dir",
@@ -77,7 +96,7 @@ def main() -> int:
         _resolve_to_project_root,
         load_question_banks,
     )
-    from matmaster.eval_ingest_client import (
+    from evaluation.eval_ingest_client import (
         QUESTION_CATALOG_SYNC_URL,
         post_question_catalog_sync,
     )
@@ -94,19 +113,22 @@ def main() -> int:
         return 1
 
     flat = _flatten_banks(banks)
-    ids = _stable_unique_ids([q.id for q in flat])
+    catalog_items, build_err = _stable_unique_catalog_items(flat)
+    if build_err:
+        print(build_err, file=sys.stderr)
+        return 1
 
     print(
         f"loaded {len(flat)} question row(s) from {len(banks)} bank file(s)",
         file=sys.stderr,
     )
-    print(f"unique question_id count: {len(ids)}", file=sys.stderr)
+    print(f"unique catalog item count: {len(catalog_items)}", file=sys.stderr)
 
     if args.dry_run:
-        for qid in ids[:20]:
-            print(qid)
-        if len(ids) > 20:
-            print(f"... and {len(ids) - 20} more", file=sys.stderr)
+        for row in catalog_items[:20]:
+            print(row["question_id"])
+        if len(catalog_items) > 20:
+            print(f"... and {len(catalog_items) - 20} more", file=sys.stderr)
         return 0
 
     url = (args.sync_url or "").strip() or (QUESTION_CATALOG_SYNC_URL or "")
@@ -117,7 +139,9 @@ def main() -> int:
         )
         return 1
 
-    ok, msg = post_question_catalog_sync(url, ids, timeout=float(args.timeout))
+    ok, msg = post_question_catalog_sync(
+        url, catalog_items, timeout=float(args.timeout)
+    )
     if ok:
         print(msg, file=sys.stderr)
         return 0
