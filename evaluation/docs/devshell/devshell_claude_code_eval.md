@@ -63,9 +63,9 @@ uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --
 
 **证据优先级**：百分制 checklist 的通过/部分通过/未通过，**主证据**须来自题目 YAML 与 **`workspaces/<task_id>/` 内实际文件**（须按需打开关键交付物核对内容与格式；结构题应读 POSCAR/CIF 等）。**`devshell_summary` / `final_content` 不得单独作为某条 checklist「已通过」的依据**，仅作过程与状态参考；若自述与文件或题设矛盾，**以文件与题设为准**。
 
-1. 用 `read_file` 打开该题的 YAML，列出 checklist 条目与参考意图。
+1. 用 `read_file` 打开该题的 YAML，**从该题 `- id:` 一直读到下一题 `- id:`（或文件末尾）**，确保 `scoring_checklist` 与 `reference_answers` 全部载入；列出 **所有** checklist 条目并输出 **「checklist 共 N 条」** 作为自检（典型题包含 correctness → grounding → efficiency 三类 axis；`duration_budget` 与 `token_budget_total` 通常位于 checklist **末尾**，切勿因读取截断而遗漏）。
 2. 打开对应 **`workspaces/<task_id>/`**，对照题目输出要求**逐项核对**实际产物（文件名、格式、**内容**）。
-3. 再对照 `raw_runs.jsonl` 中该条的 `devshell_exit_code` 与 `devshell_summary`（辅助；不可替代第 2 步对文件的核对）。
+3. 再对照 `raw_runs.jsonl` 中该条的 `devshell_exit_code` 与 `devshell_summary`（辅助；不可替代第 2 步对文件的核对）。**效率类 checklist**（`duration_budget`、`token_budget_total`）的实测值也在此文件：`duration_ms` 对应耗时，`devshell_summary.usage.total_tokens` 对应 token 用量；预算上限见题目 YAML `reference_answers` 中同名 key 的 `max` 字段（可能通过 YAML 锚点 `*idXXX` 引用首题定义）。
 4. 给出结论：**通过 / 部分通过 / 未通过**，逐条 checklist 说明证据（引用路径或摘录）。
 5. **百分制得分（必答）**：在结论末尾给出**一个具体分数**，与 MATTER 题库口径对齐，便于对比与记录。
    - 对单题：读取该题 `scoring_checklist` 中每条目的 `weight`（未写则按 **1.0**）。对每条判定 **通过 / 部分通过 / 未通过**（部分通过计 **0.5 × 该条 weight 的满分贡献**；仅当证据显示「明显朝目标推进但未完全满足」时使用，并一句话说明理由）。
