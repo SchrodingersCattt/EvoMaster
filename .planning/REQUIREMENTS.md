@@ -53,9 +53,9 @@
 
 ### Exp 生命周期
 
-- [ ] **EXPL-01**: Exp.assemble() 改为 async def（MCP 初始化未来可能涉及网络 I/O）
-- [ ] **EXPL-02**: Exp.build_runtime() 改为 async def
-- [ ] **EXPL-03**: Exp.run() 改为 async def，内部 await kernel.run() 的 async generator
+- [x] **EXPL-01**: Exp.assemble() 改为 async def（MCP 初始化未来可能涉及网络 I/O）
+- [x] **EXPL-02**: Exp.build_runtime() 改为 async def
+- [x] **EXPL-03**: Exp.run() 改为 async def，内部 await kernel.run() 的 async generator
 - [ ] **EXPL-04**: SubAgent spawn 完整 async 链路（async spawn_fn → async Exp.run() → async kernel）
 
 ### 服务层桥接
