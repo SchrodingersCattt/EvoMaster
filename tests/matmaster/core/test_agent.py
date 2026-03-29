@@ -1234,6 +1234,24 @@ class TestCallLlmRetry:
         await kernel._call_llm(spec, [UserMessage(content="hi")])
         assert timeouts_seen == [10.0, 20.0, 40.0]
 
+    async def test_llm_error_carries_category_and_attempts(self) -> None:
+        """LLMError can carry error_category and attempts fields."""
+        attempts = [{"attempt": 1, "error_type": "APITimeoutError"}]
+        err = LLMError(
+            "test",
+            retryable=False,
+            error_category="timeout",
+            attempts=attempts,
+        )
+        assert err.error_category == "timeout"
+        assert err.attempts == attempts
+        assert not err.retryable
+
+        # Backward compat: omitting new fields still works
+        basic = LLMError("basic", retryable=True)
+        assert basic.error_category is None
+        assert basic.attempts is None
+
 
 class TestParallelToolDispatch:
     """Tests for parallel tool dispatch via asyncio.gather."""
