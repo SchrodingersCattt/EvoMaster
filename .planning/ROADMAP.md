@@ -44,7 +44,7 @@ Full details: milestones/v1-ROADMAP.md
 - [x] **Phase 16: MessageBus + EventRouter 异步化** - MessageBus 改用 asyncio.Queue，EventRouter 改为 asyncio.Task (completed 2026-03-28)
 - [x] **Phase 17: AgentKernel 异步化** - Kernel.run() 改为 async，收敛所有异步依赖，ContextCompactor async 化 (completed 2026-03-28)
 - [x] **Phase 18: Exp 生命周期异步化** - assemble/build_runtime/run 全部 async，SubAgent spawn 完整 async 链路 (completed 2026-03-29)
-- [ ] **Phase 19: 服务层桥接 + 并行 Tool Dispatch** - src/ 层 asyncio.run() 桥接 + 多 tool_call 并行执行优化
+- [x] **Phase 19: 服务层桥接 + 并行 Tool Dispatch** - src/ 层 asyncio.run() 桥接 + 多 tool_call 并行执行优化 (completed 2026-03-29)
 
 ## Phase Details
 
@@ -200,4 +200,4 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 16. MessageBus + EventRouter 异步化 | v2.0 | 0/2 | Complete    | 2026-03-28 |
 | 17. AgentKernel 异步化 | v2.0 | 2/2 | Complete    | 2026-03-28 |
 | 18. Exp 生命周期异步化 | v2.0 | 2/2 | Complete    | 2026-03-29 |
-| 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 1/2 | In Progress | - |
+| 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 1/2 | Complete    | 2026-03-29 |

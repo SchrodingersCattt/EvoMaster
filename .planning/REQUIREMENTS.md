@@ -28,7 +28,7 @@
 - [x] **TOOL-03**: 文件操作类 Tool（Read/Write/Edit/Glob/Grep）使用 asyncio.to_thread 包装同步文件 I/O
 - [x] **TOOL-04**: session-dependent tool 的 evomaster session 调用使用 asyncio.to_thread 桥接
 - [ ] **TOOL-05**: SubAgentTool 的 spawn_fn 改为 async callable
-- [ ] **TOOL-06**: 并行 Tool Dispatch — 同一轮多个 tool_call 使用 asyncio.gather 并行执行
+- [x] **TOOL-06**: 并行 Tool Dispatch — 同一轮多个 tool_call 使用 asyncio.gather 并行执行
 
 ### Hook 系统
 
@@ -117,7 +117,7 @@
 | TOOL-03 | Phase 14 | Complete |
 | TOOL-04 | Phase 14 | Complete |
 | TOOL-05 | Phase 14 | Pending |
-| TOOL-06 | Phase 19 | Pending |
+| TOOL-06 | Phase 19 | Complete |
 | HOOK-01 | Phase 15 | Complete |
 | HOOK-02 | Phase 15 | Complete |
 | HOOK-03 | Phase 15 | Complete |
