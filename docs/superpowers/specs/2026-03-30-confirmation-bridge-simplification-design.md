@@ -122,7 +122,7 @@ confirmation_hook = ConfirmationHook(
 
 ### 3. Delete `ConfirmationHookAdapter` (`src/services/stream_service.py`)
 
-`ConfirmationHookAdapter`（约 30 行）直接调用 `hook.resolve()` 和 `hook.cancel()`。删除 `resolve()`/`cancel()` 后此类不再可用，且本次重构后也不再需要——确认回复直接通过 `ReplyQueueLike.put_content()`/`put_cancel()` 写入队列，`_poll_reply_queue` 消费。
+`ConfirmationHookAdapter`（约 30 行）是 Phase 15 引入的桥接器，设计用于将 `hook.resolve()`/`cancel()` 暴露给外部调用。但搜索 `src/` 全目录后确认此类从未被实际实例化——runtime 路径通过 `ReplyQueueLike.put_content()`/`put_cancel()` 直接写入队列。属于遗留的未使用代码，本次一并清理。
 
 ### 4. Protocol Docstring Update (`src/services/agent_run_service.py`)
 
@@ -136,7 +136,7 @@ for hook in spec.hooks:
     if hasattr(hook, "set_loop"):
         hook.set_loop(loop)
 ```
-删除 `set_loop()` 后此代码不会报错（`hasattr` 检查会跳过），但如果没有其他 hook 使用 `set_loop`，应一并清理这段代码。
+删除 `set_loop()` 后此代码不会报错（`hasattr` 检查会跳过）。经验证，当前唯一使用 `set_loop` 的 hook 就是 ConfirmationHook（`MessageBus` 也有 `set_loop` 但不是 hook），删除后此注入逻辑变为死代码，应直接删除。
 
 ### 6. Tests
 
