@@ -1,6 +1,6 @@
 # Claude Code Baseline 测评（与 DevShell 对照）
 
-目标：用 **Claude Code**（或同布局的 **Cursor** 等）直接完成题库任务（不跑 `mm-devshell`），产物与 `evaluation/scripts/devshell/run_devshell_eval.py` / `evaluation/scripts/baseline/finalize_external_baseline_ingest.py` 对齐，便于和 MatMaster kernel 对比。入库时由 `manifest` / `--baseline-channel` 区分 `claude_code` 与 `cursor`。
+目标：用 **Claude Code**（或同布局的 **Cursor** 等）直接完成题库任务（不跑 `mm-devshell`），产物与 `evaluation/scripts/devshell/run_devshell_eval.py` / `evaluation/scripts/baseline/finalize_external_baseline_ingest.py` 对齐，便于和 MatMaster kernel 对比。入库时由 `manifest` / `--baseline-channel` 区分 `claude_code` 与 `cursor`。**不安装 Anthropic claude CLI、只在 Cursor 里做题**时：直接复制文末 **「一键话术 · 纯 Cursor 阶段一」**；分步说明见 **「纯 Cursor baseline（无 Anthropic claude CLI）」**。
 
 **术语（全文统一）**
 
@@ -11,8 +11,71 @@
 
 | 阶段 | 执行方式 | 职责 |
 |------|----------|------|
-| **阶段一** | 本机终端直接跑脚本，或 **将「一键话术 · 阶段一」粘贴到 Claude Code / Cursor，由其代你在终端执行**（底层仍是 `run_claude_cli_baseline_tasks.py` → 非交互 `claude -p`） | **做题**：脚本自动执行每题并记录 token；若不用 CLI 脚本，也可手工在同 workspace 产出等价 `_devshell_summary.json`。token 用量从 `claude -p --output-format json` 直接提取，无需 `/cost` 差值。 |
-| **阶段二** | Claude Code 会话（新开） | **阅卷与上报**：按题库 `scoring_checklist` 逐条打分，算百分制，对 `pending_ingest/` 下每个 `.json` 执行 `eval_ingest_submit_pending.py`。 |
+| **阶段一** | **有 claude CLI**：终端跑脚本，或将「一键话术 · 阶段一」交给 IDE 代跑（`run_claude_cli_baseline_tasks.py` → `claude -p`）。**纯 Cursor**：复制文末「**一键话术 · 纯 Cursor 阶段一**」，不跑 `run_claude_cli_baseline_tasks.py`。 | **做题**并留下与 DevShell 对齐的 summary；CLI 路径下 token 来自 `claude -p --output-format json`。 |
+| **阶段二** | 新开会话（Claude Code、Cursor 或其它均可） | **阅卷与上报**：按题库 `scoring_checklist` 逐条打分，算百分制，对 `pending_ingest/` 下每个 `.json` 执行 `eval_ingest_submit_pending.py`。 |
+
+---
+
+## 纯 Cursor baseline（无 Anthropic claude CLI）
+
+本机**没有**、也**不打算安装**可执行文件 `claude`（无法使用 `run_claude_cli_baseline_tasks.py`）时，阶段一改为：**prepare 与 finalize 仍用 `uv run python`**，题目在 Cursor 对话里按 `_devshell_prompt.txt` 完成，**自行写入** `_devshell_summary.json`。
+
+**与 CLI 自动化路径的差异**
+
+| 步骤 | 纯 Cursor |
+|------|-----------|
+| Prepare | 在下列命令中增加 **`--baseline-channel cursor`**，使 `manifest.json` 记录 `baseline_channel: "cursor"`，与入库一致。 |
+| 做题 | 在 Cursor 中针对 **`RUN_DIR/workspaces/<task_id>/`** 工作（可 `@` 该目录），勿修改或删除 `_eval_task_meta.json`。 |
+| Token / 耗时 | 无 `claude -p` JSON；`usage` 可填 Cursor 用量（若可抄）、或合理占位并在阶段二 `score_reason` 中说明「token 未精确记录」。客观耗时仍依赖 **`mark_external_baseline_task_start.py`**（见下）。 |
+| Finalize | 只跑 `finalize_external_baseline_ingest.py`，**不要**跑 `run_claude_cli_baseline_tasks.py`。 |
+
+**1）Prepare（结构生成类示例）**
+
+在本文「阶段之间：终端命令（结构生成类）」一节的 prepare 命令上，于 `--eval-ingest-pending-only` **之前**加入 `--baseline-channel cursor`，例如：
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+uv run python evaluation/scripts/devshell/run_devshell_eval.py --prepare-cc-baseline --run-label baseline_cc_struct \
+  --modes direct --capabilities structure_construction --baseline-channel cursor --eval-ingest-pending-only
+```
+
+仅部分题目时仍可用 `--limit N` 或 `--questions <question_id> ...`（与现有文档一致）。
+
+**2）每题开始前：打墙钟起点（与 finalize 中 `duration_ms` 对齐）**
+
+```bash
+uv run python evaluation/scripts/baseline/mark_external_baseline_task_start.py \
+  --workspace "$RUN_DIR/workspaces/<task_id>"
+```
+
+将 `<task_id>` 换成实际目录名（如 `SC_struct_007_direct_r0`）。`RUN_DIR` 用「RUN_DIR 自动解析」导出。
+
+**3）在 Cursor 中做题**
+
+- 阅读该目录下的 `_devshell_prompt.txt`，在同一目录内生成题目要求的文件。
+- 完成后写入 **`_devshell_summary.json`**（单行 JSON，UTF-8），字段与下文「阶段一：做题（`_devshell_summary.json` 字段）」一节一致，建议：
+  - `profile_key`: `"cursor"`
+  - `model`: 本次实际使用的模型名（与 Cursor 设置一致即可）
+  - `status` / `reason`: 正常完成用 `"completed"` / `"natural"`
+  - `final_content`: 简短摘要（勿替代对交付物文件的阅卷）
+  - `num_turns`: 对话轮数或合理估计
+  - `usage`: 尽量填写 `prompt_tokens` / `completion_tokens` / `total_tokens`；若无可靠数据可省略或填 `0`，并在后续 `eval_ingest_submit_pending.py` 的 `--score-reason` 中说明
+  - **不要**伪造 `claude_cli_meta`；纯 Cursor 可不写该字段
+
+**4）Finalize**
+
+全部题目的 `_devshell_summary.json` 就绪后，在仓库根执行：
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py --run-dir "$RUN_DIR" --eval-ingest-pending-only
+```
+
+`baseline_channel` 默认从 `manifest.json` 读取；若曾手工改动 manifest，可显式追加 `--baseline-channel cursor`。
+
+**5）阶段二**
+
+与本文「阶段二：阅卷与上报」及文末「一键话术 · 阶段二」相同；阅卷会话可开在 **Cursor**。**可一键复制的话术**见文末 **「一键话术 · 纯 Cursor 阶段一」**。
 
 ---
 
@@ -162,7 +225,9 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 
 ## 一键话术 · 阶段一（粘贴到 Claude Code / Cursor，由其代跑终端与非交互 `claude`）
 
-**意图**：你只复制下面整段到 **Claude Code（或 Cursor）会话**，由 IDE 里的助手**在仓库根依次执行终端命令**；做题本身由脚本调用 **`claude -p` 非交互模式**完成，**不需要**你再开交互式 Claude Code 逐题手搓。
+**前提**：本机可执行 **`claude` CLI**。若**纯 Cursor、不装 claude CLI**，不要用本段；改用下文 **「一键话术 · 纯 Cursor 阶段一」** 整段。
+
+**意图**：你只复制下面整段到 **Claude Code（或装了 claude CLI 的 Cursor）会话**，由 IDE 里的助手**在仓库根依次执行终端命令**；做题本身由脚本调用 **`claude -p` 非交互模式**完成，**不需要**你再开交互式 Claude Code 逐题手搓。
 
 将下面整段复制到 **Claude Code / Cursor 会话 A**（与阶段二阅卷会话分开即可）。
 
@@ -182,6 +247,30 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 脚本自动为每个任务：(1) 写 `_cc_baseline_task_start.json`；(2) `claude -p --output-format json --dangerously-skip-permissions --bare` 执行题目；(3) 从 JSON 输出提取全部 token 字段写 `_devshell_summary.json`；(4) `--finalize` 自动跑 `finalize_external_baseline_ingest.py`。
 
 完成后 **RUN_DIR** 下应有 `pending_ingest/`（内含 `.json`）和 `raw_runs.jsonl`。**阅卷与上报在新开的 Claude Code 会话中完成**，使用下文「一键话术 · 阶段二」。
+
+---
+
+## 一键话术 · 纯 Cursor 阶段一（无 `claude` CLI；粘贴到 Cursor）
+
+**前提**：本机**没有** Anthropic **`claude` CLI**。**不要**使用上一节「一键话术 · 阶段一」（该节依赖 `claude -p`）。
+
+**意图**：将下面**整段**复制到 **Cursor 会话**（与阶段二阅卷分开）。由助手在仓库根执行终端命令，并在各 `workspaces/<task_id>/` 内完成题目与 `_devshell_summary.json`；**不要**使用 `claude` CLI 或 `run_claude_cli_baseline_tasks.py`。分步说明见上文 **「纯 Cursor baseline（无 Anthropic claude CLI）」**。
+
+> **【外部 Baseline · 纯 Cursor · 阶段一 · 执行者】**
+> 你的职责：用户环境**没有** Anthropic **`claude` CLI**。**禁止**调用 `run_claude_cli_baseline_tasks.py`、`claude -p` 或假装已跑通上述命令。在**本仓库根**通过终端完成 **prepare → 逐题在 workspace 内做题并写 `_devshell_summary.json` → finalize**。不要要求用户自己去系统终端里手动复制多段命令；由你执行并汇报 stdout/stderr 与是否成功。
+> **前置**：`uv run python` 可用。若不可用，先说明并停止，不要编造结果。
+> 1. 进入仓库根：`cd "$(git rev-parse --show-toplevel)"`
+> 2. **Prepare**（默认会清空 `results/`；勿擅自加 `--no-clean-results` 除非用户明确要求与历史并存）：
+> `uv run python evaluation/scripts/devshell/run_devshell_eval.py --prepare-cc-baseline --run-label baseline_cc_struct --modes direct --capabilities structure_construction --baseline-channel cursor --eval-ingest-pending-only`
+> 若用户要求只跑前 N 题：在 `--eval-ingest-pending-only` **之前**插入 `--limit N`。若只跑指定题目：插入 `--questions <question_id> ...`（与文档一致）。
+> 3. 用 stderr 的 **`Run directory:`** 或 `baseline_cc_eval.md` 中「RUN_DIR 自动解析」得到 **RUN_DIR** 绝对路径，在回复中写出。
+> 4. **对 `RUN_DIR/workspaces/` 下每个任务目录**（目录名为 `task_id`），**按顺序**：
+>    - 先执行：`uv run python evaluation/scripts/baseline/mark_external_baseline_task_start.py --workspace "$RUN_DIR/workspaces/<task_id>"`（把 `<task_id>` 换成真实目录名）。
+>    - 在本会话中 **@** 该目录，阅读 `_devshell_prompt.txt`，在**该目录内**完成题目要求的交付物；**禁止**修改或删除 `_eval_task_meta.json`。
+>    - 完成后在该目录写入**单行** `_devshell_summary.json`（UTF-8）：`profile_key` 为 `"cursor"`，`model` 为本次实际模型名，`status`/`reason` 成功时为 `completed`/`natural`，`final_content` 为简短摘要，`num_turns` 可填估计值；`usage` 尽量填写（若无法获取则在后续阅卷 `--score-reason` 中说明）；**不要**伪造 `claude_cli_meta`，可不写该字段。
+> 5. 全部任务的 `_devshell_summary.json` 就绪后 **Finalize**：
+> `uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py --run-dir "$RUN_DIR" --eval-ingest-pending-only`
+> 6. 确认 **RUN_DIR** 下存在 **`pending_ingest/`**（含 `.json`）与 **`raw_runs.jsonl`**；在回复中写明 **RUN_DIR 绝对路径**、各任务完成/失败摘要，并提示下一步：**新开会话**，使用下文「**一键话术 · 阶段二**」做阅卷与上报。
 
 ---
 
@@ -211,4 +300,4 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 
 将 prepare 命令中的 `--capabilities structure_construction` 删除，或改为 `evaluation/core/schemas.py` 中 `CapabilityLiteral` 允许的其他能力名；阶段一、二话术里凡写「结构生成」处按你的筛选条件改写即可。
 
-Cursor / Claude Code 可 **@** 本文件与 `evaluation/docs/devshell/devshell_claude_code_eval.md`。
+纯 Cursor（无 claude CLI）时 prepare 须带 **`--baseline-channel cursor`**；一键整段见 **「一键话术 · 纯 Cursor 阶段一」**。Cursor / Claude Code 可 **@** 本文件与 `evaluation/docs/devshell/devshell_claude_code_eval.md`。
