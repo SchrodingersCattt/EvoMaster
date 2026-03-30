@@ -7,7 +7,6 @@ the agent kernel (producer) and EventRouter handlers (consumer).
 from __future__ import annotations
 
 import asyncio
-from typing import Optional
 
 from matmaster.types.events import BusEvent
 
@@ -19,23 +18,12 @@ class MessageBus:
     from within the event loop.  EventRouter consumes via ``await get()``
     in an async task.
 
-    For cross-thread callers (src/ service layer running in separate threads),
-    ``emit_nowait()`` uses ``loop.call_soon_threadsafe`` to schedule
-    ``put_nowait`` on the correct event loop.
-
-    Based on asyncio.Queue, safe within a single event loop.
+    ``emit_nowait()`` provides a synchronous interface for callers within
+    the same event loop thread (e.g. sync callbacks).
     """
 
     def __init__(self, maxsize: int = 0) -> None:
         self._queue: asyncio.Queue[BusEvent] = asyncio.Queue(maxsize=maxsize)
-        self._loop: Optional[asyncio.AbstractEventLoop] = None
-
-    def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
-        """Capture event loop reference for thread-safe emit_nowait.
-
-        Called by EventRouter.start() after the router loop is running.
-        """
-        self._loop = loop
 
     async def emit(self, event: BusEvent) -> None:
         """Emit event (non-blocking for unbounded queue).
@@ -45,16 +33,12 @@ class MessageBus:
         self._queue.put_nowait(event)
 
     def emit_nowait(self, event: BusEvent) -> None:
-        """Thread-safe sync emit for cross-thread callers (service layer).
+        """Synchronous emit for callers within the event loop thread.
 
-        Uses call_soon_threadsafe to schedule put_nowait on the bus's
-        event loop. Falls back to direct put_nowait if no loop is set
-        (e.g. during testing or before router starts).
+        Safe to call from sync code running on the same thread as the
+        event loop (e.g. sync callbacks invoked during await chains).
         """
-        if self._loop is not None and self._loop.is_running():
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, event)
-        else:
-            self._queue.put_nowait(event)
+        self._queue.put_nowait(event)
 
     async def get(self, timeout: float | None = None) -> BusEvent:
         """Consume next event with optional timeout.
