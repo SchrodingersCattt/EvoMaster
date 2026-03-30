@@ -7,13 +7,12 @@
 - **仓库根**：本 Git 仓库根目录；MATTER 评测代码与题库在 `evaluation/`（跑题脚本在 `evaluation/scripts/`）。在终端可用 `cd "$(git rev-parse --show-toplevel)"` 进入。
 - **RUN_DIR**：本次测评产物根目录（其下有 `workspaces/` 等）。**推荐不手工填写**：默认 `prepare` 会清空 `results/`，可在仓库根用下面「RUN_DIR 自动解析」中的一行命令得到绝对路径；若曾用 `--no-clean-results` 导致同前缀目录多个并存，再以 stderr 里 **`Run directory: `** 冒号后的路径为准。
 
-推荐把对话 **人为拆成两阶段**（两个独立的 Claude Code 会话）：
+流程分两阶段：
 
-| 阶段 | 会话 | 职责 |
-|------|------|------|
-| **阶段一** | 会话 A | **只做任务**：每题开工前 `cc_baseline_mark_task_start.py`；按 `_devshell_prompt.txt` 完成交付物 + 写 `_devshell_summary.json`。**禁止**判分、禁止上报、禁止讨论 checklist。 |
-| **之间** | 终端 | 阶段一全部 workspace 完成后，在仓库根执行 `finalize_cc_baseline_ingest.py --eval-ingest-pending-only`，生成 `pending_ingest/*.json` 与 `raw_runs.jsonl`。 |
-| **阶段二** | 会话 B（新开） | **只做阅卷与上报**：按题库 `scoring_checklist` 逐条打分，算百分制，对 **pending_ingest 目录下每一个 `.json` 文件各执行一次** `eval_ingest_submit_pending.py`，**每次调用都必须**包含 `--score`、`--score-reason`、`--suggestion`。 |
+| 阶段 | 执行方式 | 职责 |
+|------|----------|------|
+| **阶段一** | 终端脚本（推荐）或 Claude Code 会话 | **做题**：`run_cc_baseline_tasks.py` 自动执行每题并记录 token。token 用量从 `claude -p --output-format json` 直接提取，无需 `/cost` 差值。 |
+| **阶段二** | Claude Code 会话（新开） | **阅卷与上报**：按题库 `scoring_checklist` 逐条打分，算百分制，对 `pending_ingest/` 下每个 `.json` 执行 `eval_ingest_submit_pending.py`。 |
 
 ---
 
@@ -45,9 +44,52 @@ echo "$RUN_DIR"
 
 若改了 `--run-label`，把上面 `name` 里的 `baseline_cc_struct_*` 换成你的前缀加 `_*`。若 `echo` 为空或存在多个候选且无法确定，请用 stderr 的 **`Run directory: `** 行。
 
+**1.5）自动执行阶段一（推荐，替代手动 Claude Code 会话）**
+
+使用 `run_cc_baseline_tasks.py` 自动调用 `claude -p` 非交互模式执行每道题，token 用量从 CLI JSON 输出中自动提取（无需 `/cost` 差值）：
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+# 自动检测 RUN_DIR，执行全部任务，完成后自动 finalize
+uv run python evaluation/scripts/baseline/run_cc_baseline_tasks.py \
+  --run-label baseline_cc_struct --finalize --eval-ingest-pending-only
+```
+
+常用选项：
+
+| 选项 | 说明 |
+|------|------|
+| `--run-dir "$RUN_DIR"` | 显式指定 RUN_DIR（与 `--run-label` 二选一） |
+| `--run-label baseline_cc_struct` | 从 `results/` 自动检测最新匹配目录 |
+| `--tasks SC_struct_007_direct_r0` | 只跑指定 task（可多个，空格分隔） |
+| `--model opus` | 指定模型（默认跟随 claude CLI 默认） |
+| `--max-turns 50` | 每题最大对话轮数（默认 50） |
+| `--timeout 600` | 每题超时秒数（默认 600） |
+| `--skip-completed` | 跳过已有 `_devshell_summary.json` 的任务 |
+| `--finalize` | 任务完成后自动跑 `finalize_cc_baseline_ingest.py` |
+| `--eval-ingest-pending-only` | finalize 时写 pending（需配合 `--finalize`） |
+
+脚本自动为每个任务：(1) 写 `_cc_baseline_task_start.json`；(2) 执行 `claude -p --output-format json --dangerously-skip-permissions --bare`；(3) 从 JSON 输出提取全部 token 字段写入 `_devshell_summary.json`。
+
+`_devshell_summary.json` 中 `usage` 字段包含完整明细：
+
+```json
+{
+  "prompt_tokens": 52622,
+  "completion_tokens": 3254,
+  "total_tokens": 55876,
+  "input_tokens": 5,
+  "cache_creation_input_tokens": 3244,
+  "cache_read_input_tokens": 49373,
+  "output_tokens": 3254,
+  "total_cost_usd": 0.126,
+  "model_usage": {"<model_id>": {"inputTokens": ..., "outputTokens": ..., "costUSD": ..., ...}}
+}
+```
+
 **2）阶段一全部 workspace 完成后（仍在仓库根）**
 
-无需手写路径时，可与上一步同一 shell 先 `export RUN_DIR=...`（见下「RUN_DIR 自动解析」），再：
+若使用了 `--finalize`，此步自动完成。否则手动执行：
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
@@ -64,23 +106,22 @@ uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-d
 
 每个任务的根目录路径为：**RUN_DIR/workspaces/任务目录名/**。任务目录名与 `pending_ingest` 里 JSON 文件名（不含 `.json`）一致，例如 `SC_struct_007_direct_r0`。
 
-- **客观耗时（必填才有 `duration_ms`）**：在本题**开始动手前**于仓库根执行一次
-  `uv run python evaluation/scripts/baseline/cc_baseline_mark_task_start.py --workspace "$RUN_DIR/workspaces/<task_id>"`
-  会在该目录写入 `_cc_baseline_task_start.json`。执行 `finalize_cc_baseline_ingest.py` 时，**入库的 `duration_ms` 仅**来自「该文件中的 Unix 毫秒时间戳 → `_devshell_summary.json` 文件 mtime」的墙钟差（与 DevShell 父进程包子进程语义接近）。**未**写该文件则上报项中**无** `duration_ms`（不再读取 summary 自报）。
-- 读取该目录下的 `_devshell_prompt.txt`，完成全部交付要求。
-- 在同一目录写入 **`_devshell_summary.json`**：**整文件仅一行** JSON，UTF-8，字段与 mm-devshell `--json-out` 一致（**不必**含 `duration_ms`，finalize 不使用）：
-  - `model`、`profile_key`、`route_key`、`status`、`reason`（任务已尽力完成时填 `"natural"`）、`final_content`、`num_turns`
-  - `usage`：填对象，键为 `prompt_tokens`、`completion_tokens`、`total_tokens`（整数）；无法统计时填 `{}` 并在 `final_content` 首行写「tokens 未统计」
-- 禁止修改、禁止删除 `_eval_task_meta.json`。
-- 可选：将过程记录写入 **RUN_DIR/logs/任务目录名/devshell_console.log**。
+使用 `run_cc_baseline_tasks.py`（推荐）时，以下步骤**全部自动完成**，无需手动操作。
 
-最小示例（写入文件时压缩为**一行**）：
+- **客观耗时**：脚本自动写入 `_cc_baseline_task_start.json`（Unix 毫秒时间戳）。`finalize` 时 `duration_ms` = summary mtime − 该时间戳。
+- **做题**：`claude -p` 读取 `_devshell_prompt.txt`，在 workspace 目录内完成交付物。
+- **Token 用量**：从 `claude -p --output-format json` 返回的 JSON 中直接提取，包含完整明细。
+- **写入 `_devshell_summary.json`**：单行 JSON，UTF-8，字段：
+  - `model`、`profile_key`、`route_key`、`status`、`reason`（正常完成填 `"natural"`）、`final_content`、`num_turns`
+  - `usage`：包含兼容字段（`prompt_tokens`、`completion_tokens`、`total_tokens`）和详细字段（`input_tokens`、`cache_creation_input_tokens`、`cache_read_input_tokens`、`output_tokens`、`total_cost_usd`、`model_usage`）
+  - `claude_cli_meta`：`duration_ms`（API 耗时）、`duration_api_ms`、`session_id`、`stop_reason`、`total_cost_usd`
+- 禁止修改、禁止删除 `_eval_task_meta.json`。
+
+最小示例（自动生成，写入文件时压缩为**一行**）：
 
 ```json
-{"model":"claude-sonnet-4-20250514","profile_key":"claude_code","route_key":null,"status":"completed","reason":"natural","final_content":"（摘要）","num_turns":12,"usage":{"prompt_tokens":8000,"completion_tokens":4000,"total_tokens":12000}}
+{"model":"claude-opus-4-6","profile_key":"claude_code","route_key":null,"status":"completed","reason":"natural","final_content":"（摘要）","num_turns":4,"usage":{"prompt_tokens":52622,"completion_tokens":3254,"total_tokens":55876,"input_tokens":5,"cache_creation_input_tokens":3244,"cache_read_input_tokens":49373,"output_tokens":3254,"total_cost_usd":0.126,"model_usage":{"us.anthropic.claude-opus-4-6-v1[1m]":{"inputTokens":5,"outputTokens":3254,"cacheReadInputTokens":49373,"cacheCreationInputTokens":3244,"costUSD":0.126}}},"claude_cli_meta":{"duration_ms":60479,"session_id":"..."}}
 ```
-
-字段含义与 devshell 一致，见 `matmaster/devshell/cli.py` 中构造 `summary` 的代码。
 
 ---
 
@@ -119,28 +160,28 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 
 ---
 
-## 一键话术 · 阶段一（只做任务；**无需**向对话粘贴 RUN_DIR）
+## 一键话术 · 阶段一（自动化，终端执行）
 
-将下面整段复制到 **Claude Code 会话 A**。执行者自行在终端解析 **RUN_DIR**（见上文「RUN_DIR 自动解析」或 prepare 的 stderr），**不要求用户在对话里提供路径**。
+**推荐方式**：在终端直接执行，无需 Claude Code 交互会话。整个阶段一（prepare → 做题 → finalize）两条命令完成：
 
-> **【CC Baseline · 阶段一 · 执行者】**
-> 你的职责只有：**做题**，不写 checklist 判分、不执行 `eval_ingest_submit_pending.py`、不讨论百分制。
-> **RUN_DIR**：**不要**要求用户在对话中粘贴路径。在仓库根执行 prepare 后，用仓库文档 `evaluation/docs/baseline/baseline_cc_eval.md` 中「RUN_DIR 自动解析」的 `ROOT` + `find` + `export RUN_DIR=...` 得到绝对路径；若 `prepare` 使用了与用户默认不同的 `--run-label`，把 `find` 的 `-name` 改成对应前缀。若 `RUN_DIR` 仍为空或存在多个候选，再读 stderr 的 **`Run directory: `** 行。
-> **若尚未 prepare**：在终端进入仓库根（含 `scripts/` 的 Git 根），执行：
-> `cd "$(git rev-parse --show-toplevel)"`
-> `uv run python evaluation/scripts/devshell/run_devshell_eval.py --prepare-cc-baseline --run-label baseline_cc_struct --modes direct --capabilities structure_construction --eval-ingest-pending-only`
-> 命令**不得**包含 `--no-clean-results`（除非用户明确要求保留历史 `results/`）。完成后按上一段解析 **RUN_DIR**。
-> 仅跑部分题时：在上述第二行 `uv run` 命令中、在 `--eval-ingest-pending-only` **之前**插入 `--limit` 和正整数。
-> **任务列表**：列出目录 `RUN_DIR/workspaces/` 下的**每一个一级子目录**名称；对每个名称 `TASK_DIR`（即 task_id），按顺序完成：
-> 1. 将当前工作目录设为 `RUN_DIR/workspaces/TASK_DIR/`。
-> 2. **开工前**在仓库根执行一次：`uv run python evaluation/scripts/baseline/cc_baseline_mark_task_start.py --workspace "$RUN_DIR/workspaces/TASK_DIR"`（否则 finalize 无客观 `duration_ms`）。
-> 3. 阅读 `_devshell_prompt.txt`，完成其中全部交付物。
-> 4. 在同一目录创建或覆盖 `_devshell_summary.json`：**文件内容为单行合法 JSON**，字段要求见仓库文件 `evaluation/docs/baseline/baseline_cc_eval.md` 中「阶段一：做题」小节（**不必**含 `duration_ms`；`usage` 尽量填 token 数字）。
-> 5. 不得修改 `_eval_task_meta.json`。
-> **收尾**：所有 `TASK_DIR` 处理完后，在仓库根执行（使用你已解析的 **RUN_DIR**，勿让用户粘贴）：
-> `cd "$(git rev-parse --show-toplevel)"`
-> `uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-dir "$RUN_DIR" --eval-ingest-pending-only`
-> 确认 **RUN_DIR** 下存在 `pending_ingest` 目录（内有 `.json`）和文件 `raw_runs.jsonl`。然后停止本会话中的测评工作；**阅卷与上报在另一个新开的 Claude Code 会话中完成**，使用同文档「一键话术 · 阶段二」。
+```bash
+cd "$(git rev-parse --show-toplevel)"
+
+# 1. prepare（搭工作区）
+uv run python evaluation/scripts/devshell/run_devshell_eval.py --prepare-cc-baseline --run-label baseline_cc_struct \
+  --modes direct --capabilities structure_construction --eval-ingest-pending-only
+
+# 2. 自动做题 + finalize（一条命令）
+uv run python evaluation/scripts/baseline/run_cc_baseline_tasks.py \
+  --run-label baseline_cc_struct --finalize --eval-ingest-pending-only
+```
+
+仅跑部分题时，在 prepare 中加 `--limit N`，或在 run 中加 `--tasks SC_struct_007_direct_r0`。
+指定模型：`--model opus`（或 `sonnet` 等）。
+
+脚本自动为每个任务：(1) 写 `_cc_baseline_task_start.json`；(2) `claude -p --output-format json --dangerously-skip-permissions --bare` 执行题目；(3) 从 JSON 输出提取全部 token 字段写 `_devshell_summary.json`；(4) `--finalize` 自动跑 `finalize_cc_baseline_ingest.py`。
+
+完成后 **RUN_DIR** 下应有 `pending_ingest/`（内含 `.json`）和 `raw_runs.jsonl`。**阅卷与上报在新开的 Claude Code 会话中完成**，使用下文「一键话术 · 阶段二」。
 
 ---
 

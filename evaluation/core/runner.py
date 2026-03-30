@@ -124,11 +124,12 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
             )
 
         # Populate token usage from evidence if available
-        token_usage = TokenUsageRecord()
         token_usage = TokenUsageRecord(
             prompt_tokens=evidence.token_usage.prompt_tokens,
             completion_tokens=evidence.token_usage.completion_tokens,
             total_tokens=evidence.token_usage.total_tokens,
+            cache_read_tokens=evidence.token_usage.cache_read_tokens,
+            total_tokens_effective=evidence.token_usage.total_tokens_effective,
         )
 
         # BinaryEvaluator.evaluate() returns EvalRunRecord directly

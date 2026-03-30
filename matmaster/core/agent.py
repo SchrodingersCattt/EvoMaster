@@ -487,9 +487,21 @@ class AgentKernel:
 
     @staticmethod
     def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
-        """Accumulate per-turn usage into running total."""
+        """Accumulate per-turn usage into running total.
+
+        After summing raw counters, derives cache-adjusted keys so that
+        downstream budget checks can compare apples-to-apples with
+        Claude Code (which excludes cache-hit tokens from its totals).
+        """
         for k, v in delta.items():
             total[k] = total.get(k, 0) + v
+        # Derive cache-adjusted totals when cache info is available
+        cache_read = total.get("cache_read_tokens", 0)
+        if cache_read:
+            total["prompt_tokens_uncached"] = total.get("prompt_tokens", 0) - cache_read
+            total["total_tokens_uncached"] = total[
+                "prompt_tokens_uncached"
+            ] + total.get("completion_tokens", 0)
 
     @staticmethod
     def _finish(
