@@ -370,7 +370,6 @@ class AgentRunService:
                 pg_ctx,
                 bus=bus,
                 skills=pg_ctx.run_meta.get('skill_config'),
-                mcp=pg_ctx.run_meta.get('mcp_config'),
             )
 
             observer_hooks = [
