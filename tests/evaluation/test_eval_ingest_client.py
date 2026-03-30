@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from evaluation.eval_ingest_client import (
@@ -11,6 +12,7 @@ from evaluation.eval_ingest_client import (
     clip_ingest_text_field,
     eval_run_zip_should_skip_arcname,
     extract_total_tokens,
+    load_devshell_events_timeline,
     normalize_baseline_channel,
     normalize_pending_item_for_submission,
     post_eval_ingest,
@@ -153,6 +155,70 @@ def test_build_ingest_item_eval_tooling_in_extra() -> None:
         eval_tooling=tooling,
     )
     assert item["extra"]["eval_tooling"] == tooling
+
+
+def test_build_ingest_item_events_timeline_in_extra() -> None:
+    tl = ["read_file", "execute_bash", "run_result"]
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={"status": "done"},
+        duration_ms=1,
+        events_timeline=tl,
+    )
+    assert item["extra"]["events_timeline"] == tl
+
+
+def test_load_devshell_events_timeline_skips_tool_result(tmp_path: Path) -> None:
+    log_d = tmp_path / "logs" / "SC_struct_006_direct_r0"
+    log_d.mkdir(parents=True)
+    lines = [
+        '{"type": "tool_call", "tool": "read_file", "call_id": "a", "args": {}}',
+        '{"type": "tool_result", "tool": "read_file", "call_id": "a", "content": "x"}',
+        '{"type": "tool_call", "tool": "execute_bash", "call_id": "b", "args": {}}',
+        '{"type": "tool_result", "tool": "execute_bash", "call_id": "b", "content": "y"}',
+        '{"type": "tool_call", "tool": "write_file", "call_id": "c", "args": {}}',
+        '{"type": "tool_result", "tool": "write_file", "call_id": "c", "content": "z"}',
+        '{"type": "tool_call", "tool": "execute_bash", "call_id": "d", "args": {}}',
+        '{"type": "tool_result", "tool": "execute_bash", "call_id": "d", "content": "w"}',
+        '{"type": "run_result", "status": "completed", "reason": "natural"}',
+    ]
+    (log_d / "events_20260330_203343.jsonl").write_text(
+        "\n".join(lines) + "\n", encoding="utf-8"
+    )
+    assert load_devshell_events_timeline(log_d) == [
+        "read_file",
+        "execute_bash",
+        "write_file",
+        "execute_bash",
+        "run_result",
+    ]
+
+
+def test_load_devshell_events_timeline_with_response(tmp_path: Path) -> None:
+    log_d = tmp_path / "logs" / "t1"
+    log_d.mkdir(parents=True)
+    (log_d / "events_1.jsonl").write_text(
+        '{"type": "response", "content": "hi"}\n'
+        '{"type": "tool_call", "tool": "read_file", "call_id": "a", "args": {}}\n'
+        '{"type": "run_result", "status": "completed", "reason": "natural"}\n',
+        encoding="utf-8",
+    )
+    assert load_devshell_events_timeline(log_d) == [
+        "response",
+        "read_file",
+        "run_result",
+    ]
+
+
+def test_load_devshell_events_timeline_missing_returns_none(tmp_path: Path) -> None:
+    assert load_devshell_events_timeline(tmp_path / "nope") is None
+    empty = tmp_path / "e"
+    empty.mkdir()
+    assert load_devshell_events_timeline(empty) is None
 
 
 def test_clip_ingest_text_field() -> None:

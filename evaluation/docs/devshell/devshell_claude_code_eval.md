@@ -66,7 +66,7 @@ uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --
 1. 用 `read_file` 打开该题的 YAML，**从该题 `- id:` 一直读到下一题 `- id:`（或文件末尾）**，确保 `scoring_checklist` 与 `reference_answers` 全部载入；列出 **所有** checklist 条目并输出 **「checklist 共 N 条」** 作为自检（典型题包含 correctness → grounding → efficiency 三类 axis；`duration_budget` 与 `token_budget_total` 通常位于 checklist **末尾**，切勿因读取截断而遗漏）。
 2. 打开对应 **`workspaces/<task_id>/`**，对照题目输出要求**逐项核对**实际产物（文件名、格式、**内容**）。
 3. 再对照 `raw_runs.jsonl` 中该条的 `devshell_exit_code` 与 `devshell_summary`（辅助；不可替代第 2 步对文件的核对）。**效率类 checklist**（`duration_budget`、`token_budget_total`）的实测值也在此文件：`duration_ms` 对应耗时，`devshell_summary.usage.total_tokens` 对应 token 用量；预算上限见题目 YAML `reference_answers` 中同名 key 的 `max` 字段（可能通过 YAML 锚点 `*idXXX` 引用首题定义）。
-4. 给出结论：**通过 / 部分通过 / 未通过**，逐条 checklist 说明证据（引用路径或摘录）。
+4. 给出结论：**通过 / 部分通过 / 未通过**，逐条 checklist 说明证据（引用路径或摘录）。**写入 `score_reason`（第 4 节上报）时**，请使用 **Markdown**，每条 checklist 对应 **一条无序列表项**（见第 4 节「`score_reason` 格式」），**不要**写成一行里用分号串起来的长句（难读、难在工具里对比）。
 5. **百分制得分（必答）**：在结论末尾给出**一个具体分数**，与 MATTER 题库口径对齐，便于对比与记录。
    - 对单题：读取该题 `scoring_checklist` 中每条目的 `weight`（未写则按 **1.0**）。对每条判定 **通过 / 部分通过 / 未通过**（部分通过计 **0.5 × 该条 weight 的满分贡献**；仅当证据显示「明显朝目标推进但未完全满足」时使用，并一句话说明理由）。
    - 公式：**得分 = 100 × (Σ 本条贡献) / (Σ weight)**，其中「通过」的贡献 = `weight`，「部分通过」= `0.5 × weight`，「未通过」= `0`。
@@ -85,15 +85,41 @@ uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --
    `pending_ingest/<task_id>.json`（`task_id` 与 `raw_runs.jsonl` 中该行的 `task_id` 相同，例如 `SC_struct_007_direct_r0`）。也可从 `raw_runs.jsonl` 里读 `eval_ingest_pending_path`（若存在）。
 2. 准备以下评分字段（与 `matmaster-tools-server` 的 `EvalItemIn` 一致）：
    - **`score`**（必填）：第 3 节的百分制分数，数字类型（如 `73`）。
-   - **`score_reason`**（建议填写）：打分原因 / 评分说明（对照 checklist 的简要依据与结论）。
+   - **`score_reason`**（建议填写）：打分原因 / 评分说明。推荐 **Markdown**，格式见下节。
    - **`suggestion`**（可选）：改进建议；无则省略该键或写空字符串。
+
+**`score_reason` 格式（推荐）**
+
+- 首行可写一行摘要，例如：**checklist 共 N 条（weight 均 1.0）** 或 **百分制依据：…**。
+- **每一条 checklist**（按 YAML 里的 `id`）占 **一条无序列表**，建议写成「**id**：判定 — 证据要点」，便于在平台上扫读。
+
+示例（内容随题变化，仅示意结构）：
+
+```markdown
+**checklist 共 9 条（weight 均 1.0）**
+
+- **file_exists**：通过 — `workspaces/<task_id>/meaper_hydrogenated.cif` 存在
+- **target_formula**：通过 — 与 CIF `_chemical_formula_sum`（如 H48 C8 …）及 reference 化学式一致
+- **hcn_angle_deg**：通过 — 报告 109.47°，在 109.48±8 内
+- **required_fields**：通过 — 终答含化学式、CH3、NH3、未氢化说明、键角
+- **grounding**：通过 — 说明四面体与高氯酸根不加氢的 rationale
+- **no_retries**：通过 — 日志无重复相同补氢
+- **efficiency_judge**：通过 — 流程直接
+- **duration_budget**：通过 — `duration_ms=116567` < 7200000
+- **token_budget_total**：通过 — `total_tokens=17989` < 50000
+```
+
+**不推荐**：把上述信息压成一句「`checklist 共9条…；file_exists…；target_formula…；…`」——在报表里可读性差。
+
+**如何传入多行 Markdown**：`--score-reason` 的字符串可含换行；在 shell 里可用 heredoc（`--score-reason "$(cat <<'EOF' … EOF)"`）或先把正文写入临时文件再 `$(cat ...)` 展开，避免一行里硬塞整条判词。
+
 3. 在**仓库根目录**执行（每题一条）：
 
 ```bash
 uv run python evaluation/scripts/eval_ingest_submit_pending.py \
   --pending <Run directory>/pending_ingest/<task_id>.json \
   --score <0-100> \
-  --score-reason "<对照 checklist 的判分依据>" \
+  --score-reason "<对照 checklist 的判分依据（推荐 Markdown 列表，见上）>" \
   --suggestion "<改进建议，可省略整个参数>"
 ```
 
