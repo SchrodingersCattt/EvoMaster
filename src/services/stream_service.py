@@ -758,7 +758,7 @@ class ChatStreamService:
         request_event_queue: asyncio.Queue,
         payload: dict,
     ) -> None:
-        """供 run_agent_sync 的 send_cb 使用：写入本连接队列并广播到订阅队列；有 Redis 时同时发布到 stream channel 供其它 pod 的 subscribe 流消费。"""
+        """供 run_agent 的 send_cb 使用：写入本连接队列并广播到订阅队列；有 Redis 时同时发布到 stream channel 供其它 pod 的 subscribe 流消费。"""
         request_event_queue.put_nowait(payload)
         self._queues.broadcast(session_id, payload)
         if REDIS_URL:
