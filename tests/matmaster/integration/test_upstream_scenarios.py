@@ -572,16 +572,15 @@ class TestAgentRunServiceConfirmationRecovery:
 
             responder = threading.Thread(target=reply_fn, daemon=True)
             responder.start()
-            result = svc.run_agent_sync(
+            result = asyncio.run(svc.run_agent(
                 session_id="sess-confirmation",
                 user_prompt="run command",
                 send_cb=send_cb,
-                loop=None,
                 stop_event=threading.Event(),
                 mode="direct",
                 reply_queue=reply_queue,
                 task_id="task-confirmation",
-            )
+            ))
             responder.join(timeout=2.0)
 
         return result, payloads, tool, runtime_hook
@@ -630,7 +629,7 @@ class TestAgentRunServiceConfirmationRecovery:
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(_poll_reply_queue(reply_queue), timeout=0.1)
 
-    def test_run_agent_sync_approval_executes_gated_tool(self, tmp_path: Path) -> None:
+    def test_run_agent_approval_executes_gated_tool(self, tmp_path: Path) -> None:
         reply_queue = _RedisCompatibleReplyQueue()
 
         def approve() -> None:
@@ -656,7 +655,7 @@ class TestAgentRunServiceConfirmationRecovery:
             for payload in payloads
         )
 
-    def test_run_agent_sync_cancel_skips_gated_tool(self, tmp_path: Path) -> None:
+    def test_run_agent_cancel_skips_gated_tool(self, tmp_path: Path) -> None:
         reply_queue = _RedisCompatibleReplyQueue()
 
         def cancel() -> None:
