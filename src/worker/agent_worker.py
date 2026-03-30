@@ -1,8 +1,9 @@
-"""Agent Worker 入口：从 Redis 队列 BLPOP 任务，执行 run_agent_sync；事件由 run_agent_sync 内 event_callback 写 DB，本处仅 publish 到 Redis。
+"""Agent Worker 入口：从 Redis 队列 BLPOP 任务，执行 run_agent；事件由 run_agent 内 event_callback 写 DB，本处仅 publish 到 Redis。
 供独立 Worker Deployment 使用，与 API 共用同一代码库与镜像（Dockerfile --target worker）。
 Worker 需周期刷新 worker_alive，否则 API 在用户刷新页面时会误判 run 为 stale 并推送 run_interrupted。
 """
 
+import asyncio
 import logging
 import os
 import signal
@@ -190,7 +191,7 @@ def _run_worker_loop() -> None:
         redis_dao.set_confirmation_run_context(session_id, task_id, invocation_id or '')
 
         def send_cb(p: dict, _sid: str = session_id) -> None:
-            # 不在此处写 DB：run_agent_sync 内 event_callback 已写，此处再写会导致同一条事件落库两次
+            # 不在此处写 DB：run_agent 内 event_callback 已写，此处再写会导致同一条事件落库两次
             redis_dao.publish_stream_event(_sid, p)
 
         reply_queue: RedisReplyQueue = RedisReplyQueue(session_id)
@@ -249,20 +250,21 @@ def _run_worker_loop() -> None:
             fail_reason: str | None = None
             elapsed_ms: int | None = None
             try:
-                result = agent_run_service.run_agent_sync(
-                    session_id=session_id,
-                    user_prompt=user_prompt,
-                    send_cb=send_cb,
-                    loop=None,
-                    stop_event=stop_ev,
-                    mode=mode,
-                    reply_queue=reply_queue,
-                    task_id=task_id,
-                    invocation_id=invocation_id,
-                    llm_override=llm_override,
-                    model_override=model_override,
+                result = asyncio.run(
+                    agent_run_service.run_agent(
+                        session_id=session_id,
+                        user_prompt=user_prompt,
+                        send_cb=send_cb,
+                        stop_event=stop_ev,
+                        mode=mode,
+                        reply_queue=reply_queue,
+                        task_id=task_id,
+                        invocation_id=invocation_id,
+                        llm_override=llm_override,
+                        model_override=model_override,
+                    )
                 )
-                # run_agent_sync 统一返回 (run_result, elapsed_ms)。run_result 可为 True、False 或 (False, reason)
+                # run_agent 统一返回 (run_result, elapsed_ms)。run_result 可为 True、False 或 (False, reason)
                 run_result = (
                     result[0]
                     if isinstance(result, tuple) and len(result) >= 2
@@ -288,7 +290,7 @@ def _run_worker_loop() -> None:
                 run_success = False
                 fail_reason = str(e)
                 logger.exception(
-                    'Agent worker: run_agent_sync failed session_id=%s task_id=%s: %s',
+                    'Agent worker: run_agent failed session_id=%s task_id=%s: %s',
                     session_id,
                     task_id,
                     e,
@@ -333,7 +335,7 @@ def _run_worker_loop() -> None:
                     user_question = (user_prompt or '').strip()
                     if len(user_question) > 500:
                         user_question = user_question[:500] + '…'
-                    # 优先使用 run_agent_sync 返回的 elapsed_ms（与 end 事件、前端展示一致），异常路径无返回值时用 Worker 侧计时
+                    # 优先使用 run_agent 返回的 elapsed_ms（与 end 事件、前端展示一致），异常路径无返回值时用 Worker 侧计时
                     if elapsed_ms is not None:
                         duration_sec = elapsed_ms / 1000.0
                     else:
