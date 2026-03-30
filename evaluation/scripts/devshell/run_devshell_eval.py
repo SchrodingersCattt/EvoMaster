@@ -247,6 +247,16 @@ def main() -> int:
         help="How many tasks to run in parallel (default: 1)",
     )
     parser.add_argument(
+        "--verbose",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Whether to pass --verbose to inner ``matmaster.devshell run`` so "
+            "INFO-level logs are emitted to terminal / devshell_console.log "
+            "(default: on; use --no-verbose to disable)."
+        ),
+    )
+    parser.add_argument(
         "--python",
         type=Path,
         default=None,
@@ -503,6 +513,8 @@ def main() -> int:
         ]
         if args.model:
             cmd.extend(["--model", args.model])
+        if args.verbose:
+            cmd.append("--verbose")
 
         prepared_tasks.append(
             {

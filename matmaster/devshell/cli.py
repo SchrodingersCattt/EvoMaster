@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import queue
 import sys
 import threading
@@ -323,6 +324,13 @@ def main(argv: list[str] | None = None) -> None:
     """Entry point for mm-devshell."""
     load_dotenv()
     args = parse_args(argv)
+
+    if args.verbose:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(levelname)s %(name)s: %(message)s",
+            force=True,
+        )
 
     runner, config, _llm_config, resolved = _bootstrap_runner(args)
 
