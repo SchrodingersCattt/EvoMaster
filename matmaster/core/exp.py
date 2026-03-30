@@ -52,6 +52,7 @@ class Exp:
     def __init__(self, config: ExpConfig) -> None:
         self._config = config
         self._cleanup_callbacks: list[Callable[[], Any]] = []
+        self._skill_registry: Any = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
     # ── Properties ───────────────────────────────────────
@@ -176,7 +177,7 @@ class Exp:
             ctx, registry,
             system_prompt=self._config.system_prompt,
             identity=self._config.developer_instructions,
-            skill_registry=getattr(self, "_skill_registry", None),
+            skill_registry=self._skill_registry,
         )
 
         # 4. Hooks

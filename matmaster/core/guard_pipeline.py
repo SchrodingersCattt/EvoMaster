@@ -53,7 +53,7 @@ class LoopDetectionGuard:
         count = sum(
             1
             for rc in window_calls
-            if self._fingerprint(rc.tool_name, rc.tool_args) == current_fp
+            if (rc.fingerprint or self._fingerprint(rc.tool_name, rc.tool_args)) == current_fp
         )
         if count >= self._threshold:
             return GuardResult(
@@ -113,5 +113,8 @@ class GuardPipeline:
                 tool_args=tool_call.arguments,
                 call_id=tool_call.id,
                 timestamp=time.monotonic(),
+                fingerprint=self._loop_guard._fingerprint(
+                    tool_call.name, tool_call.arguments
+                ),
             )
         )

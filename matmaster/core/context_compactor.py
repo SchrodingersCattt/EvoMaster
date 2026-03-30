@@ -168,12 +168,14 @@ class ContextCompactor:
 
         if not messages:
             return
-        assert isinstance(messages[0], SystemMessage), (
-            f"messages[0] must be SystemMessage, got {type(messages[0])}"
-        )
+        if not isinstance(messages[0], SystemMessage):
+            raise TypeError(
+                f"messages[0] must be SystemMessage, got {type(messages[0])}"
+            )
         system_msg = messages[0]
         task_idx = _find_initial_task_index(messages)
-        assert task_idx > 0, "Initial UserMessage(task) not found"
+        if task_idx <= 0:
+            raise ValueError("Initial UserMessage(task) not found")
         initial_task_msg = messages[task_idx]
 
         turns = parse_turns(messages)
