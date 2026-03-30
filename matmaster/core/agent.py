@@ -18,7 +18,7 @@ import json
 import logging
 import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.tools.tool_result import ToolResult
@@ -48,6 +48,15 @@ from matmaster.types.messages import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class _ToolOutcome(NamedTuple):
+    """Result of guard + pre-hook gating for a single tool call."""
+
+    tc: ToolCallData
+    tool_msg: ToolMessage | None
+    tool_result: ToolResult | None
+    needs_post_hook: bool
 
 
 class AgentKernel:
@@ -175,9 +184,7 @@ class AgentKernel:
             )
 
             # -- Phase 1: Serial guard + pre_hook gate (D-06) --
-            # Outcome list: (tc, tool_msg | None, tool_result | None, needs_post_hook)
-            # Indexed by original tool_call position to preserve ordering.
-            outcomes: list[tuple[ToolCallData, ToolMessage | None, ToolResult | None, bool]] = []
+            outcomes: list[_ToolOutcome] = []
             approved_indices: list[int] = []
 
             for i, tc in enumerate(response.tool_calls):
@@ -187,26 +194,26 @@ class AgentKernel:
                     blocked_content = f"BLOCKED: {guard_result.reason}"
                     if guard_result.guidance:
                         blocked_content += f"\n{guard_result.guidance}"
-                    outcomes.append((
-                        tc,
-                        ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content=blocked_content),
-                        None,
-                        False,
+                    outcomes.append(_ToolOutcome(
+                        tc=tc,
+                        tool_msg=ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content=blocked_content),
+                        tool_result=None,
+                        needs_post_hook=False,
                     ))
                     continue
 
                 action = await run_pre_tool_call(spec.hooks, tc)
                 if action == HookAction.SKIP:
-                    outcomes.append((
-                        tc,
-                        ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content="Tool call skipped by hook."),
-                        None,
-                        False,
+                    outcomes.append(_ToolOutcome(
+                        tc=tc,
+                        tool_msg=ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content="Tool call skipped by hook."),
+                        tool_result=None,
+                        needs_post_hook=False,
                     ))
                     continue
 
                 approved_indices.append(len(outcomes))
-                outcomes.append((tc, None, None, True))  # placeholder
+                outcomes.append(_ToolOutcome(tc=tc, tool_msg=None, tool_result=None, needs_post_hook=True))
 
             # -- Phase 2: Parallel execution (D-04, D-05) --
             if approved_indices:
@@ -228,7 +235,7 @@ class AgentKernel:
                 )
 
                 for result_idx, outcome_idx in enumerate(approved_indices):
-                    tc = outcomes[outcome_idx][0]
+                    tc = outcomes[outcome_idx].tc
                     raw = results[result_idx]
                     if isinstance(raw, BaseException):
                         tool_result = ToolResult(
@@ -237,11 +244,11 @@ class AgentKernel:
                         )
                     else:
                         tool_result = raw
-                    outcomes[outcome_idx] = (
-                        tc,
-                        ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content=tool_result.content),
-                        tool_result,
-                        True,
+                    outcomes[outcome_idx] = _ToolOutcome(
+                        tc=tc,
+                        tool_msg=ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content=tool_result.content),
+                        tool_result=tool_result,
+                        needs_post_hook=True,
                     )
 
             # -- Phase 3: Append messages + post hooks in original order --
