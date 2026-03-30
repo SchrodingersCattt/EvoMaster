@@ -1,7 +1,6 @@
 """Tests for MessageBus async event queue."""
 
 import asyncio
-import threading
 
 import pytest
 
@@ -88,41 +87,14 @@ class TestMessageBusConcurrency:
 
 
 class TestMessageBusEmitNowait:
-    """Thread-safe emit_nowait tests."""
+    """emit_nowait tests."""
 
     async def test_emit_nowait_sync(self) -> None:
-        """emit_nowait without loop set (fallback path)."""
+        """emit_nowait puts event directly into queue."""
         bus = MessageBus()
         bus.emit_nowait(_make_thought("sync"))
         got = await bus.get()
         assert got.content == "sync"
-
-    async def test_emit_nowait_cross_thread(self) -> None:
-        """emit_nowait from another thread via call_soon_threadsafe."""
-        bus = MessageBus()
-        loop = asyncio.get_running_loop()
-        bus.set_loop(loop)
-
-        done = asyncio.Event()
-
-        def bg_emit() -> None:
-            bus.emit_nowait(_make_thought("cross-thread"))
-            loop.call_soon_threadsafe(done.set)
-
-        t = threading.Thread(target=bg_emit)
-        t.start()
-        await asyncio.wait_for(done.wait(), timeout=2.0)
-        t.join()
-
-        got = await bus.get()
-        assert got.content == "cross-thread"
-
-    async def test_set_loop(self) -> None:
-        bus = MessageBus()
-        assert bus._loop is None
-        loop = asyncio.get_running_loop()
-        bus.set_loop(loop)
-        assert bus._loop is loop
 
 
 class TestMessageBusMaxsize:
