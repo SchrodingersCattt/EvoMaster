@@ -315,6 +315,27 @@ def main() -> int:
                 dom = meta.get("domain")
                 if isinstance(dom, str) and dom.strip():
                     extra["question_domain"] = dom.strip()
+                # Propagate detailed token usage from claude -p runs
+                usage = summary.get("usage") if isinstance(summary, dict) else None
+                if isinstance(usage, dict):
+                    detail_keys = (
+                        "input_tokens",
+                        "output_tokens",
+                        "cache_creation_input_tokens",
+                        "cache_read_input_tokens",
+                        "total_cost_usd",
+                        "model_usage",
+                    )
+                    usage_detail = {k: usage[k] for k in detail_keys if k in usage}
+                    if usage_detail:
+                        extra["usage_detail"] = usage_detail
+                cli_meta = (
+                    summary.get("claude_cli_meta")
+                    if isinstance(summary, dict)
+                    else None
+                )
+                if isinstance(cli_meta, dict) and cli_meta:
+                    extra["claude_cli_meta"] = cli_meta
 
             row: dict[str, Any] = {
                 "task_id": task_id,

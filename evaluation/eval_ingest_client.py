@@ -64,10 +64,25 @@ def prompt_sha256(prompt: str) -> str:
 def extract_total_tokens(usage: Any) -> int | None:
     if not usage or not isinstance(usage, dict):
         return None
+    # Prefer cache-adjusted total (aligned with Claude Code accounting)
+    uncached = usage.get("total_tokens_uncached")
+    if uncached is not None:
+        try:
+            return int(uncached)
+        except (TypeError, ValueError):
+            pass
     raw = usage.get("total_tokens")
     if raw is not None:
         try:
-            return int(raw)
+            val = int(raw)
+            # Subtract cache_read_tokens if available
+            cache_read = usage.get("cache_read_tokens")
+            if cache_read is not None:
+                try:
+                    val -= int(cache_read)
+                except (TypeError, ValueError):
+                    pass
+            return val
         except (TypeError, ValueError):
             pass
     pt = usage.get("prompt_tokens")

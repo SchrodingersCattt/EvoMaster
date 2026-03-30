@@ -148,12 +148,21 @@ class TokenUsage(BaseModel):
     prompt_tokens: int = Field(default=0)
     completion_tokens: int = Field(default=0)
     total_tokens: int = Field(default=0)
+    cache_read_tokens: int = Field(default=0)
 
     def add(self, other: dict[str, int]) -> None:
         """Accumulate a per-step usage dict in-place."""
         self.prompt_tokens += other.get('prompt_tokens', 0)
         self.completion_tokens += other.get('completion_tokens', 0)
         self.total_tokens += other.get('total_tokens', 0)
+        self.cache_read_tokens += other.get('cache_read_tokens', 0)
+
+    @property
+    def total_tokens_effective(self) -> int:
+        """Cache-adjusted total: aligns with Claude Code's token accounting."""
+        if self.cache_read_tokens > 0:
+            return self.total_tokens - self.cache_read_tokens
+        return self.total_tokens
 
 
 class EvidenceBundle(BaseModel):
