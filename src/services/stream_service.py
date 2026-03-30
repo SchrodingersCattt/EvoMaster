@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from typing import AsyncGenerator, Callable
 
-from matmaster.hooks.confirmation import ConfirmationHook
 from src.dao.redis_dao import (
     CONFIRMATION_CANCEL_VALUE,
     STREAM_CHANNEL_PREFIX,
@@ -199,35 +198,6 @@ class ReplyQueueNotifyOnGet:
             self._on_reply(result)
         return result
 
-
-class ConfirmationHookAdapter:
-    """Adapter bridging ReplyQueueLike interface to ConfirmationHook.resolve/cancel.
-
-    Allows existing code paths (chat_api.put_content/put_cancel) to work
-    with the new asyncio.Future-based ConfirmationHook without changing
-    the caller's interface.
-
-    Phase 15 transition: this adapter will be removed when the full
-    confirmation path migrates away from ReplyQueueLike.
-    """
-
-    def __init__(self, hook: ConfirmationHook) -> None:
-        self._hook = hook
-
-    def put_content(self, content: str) -> None:
-        """Forward to hook.resolve()."""
-        self._hook.resolve(content)
-
-    def put_cancel(self) -> None:
-        """Forward to hook.cancel()."""
-        self._hook.cancel()
-
-    def get(self, timeout: float | None = None) -> str | None:
-        """Not used -- ConfirmationHook awaits internally. Raises if called."""
-        raise NotImplementedError(
-            "ConfirmationHookAdapter.get() should not be called. "
-            "ConfirmationHook uses asyncio.Future internally."
-        )
 
 
 class StreamQueueManager:
