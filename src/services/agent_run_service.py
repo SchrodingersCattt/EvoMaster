@@ -10,6 +10,7 @@ import gc
 import logging
 import os
 import queue
+from queue import Empty
 import threading
 import time
 import uuid
@@ -23,7 +24,6 @@ from matmaster.core.bus import MessageBus
 from matmaster.core.playground import PlaygroundManager
 from matmaster.hooks import (
     AssistantStateHook,
-    ConfirmationHook,
     OutputProcessorHook,
     SkillHitHook,
 )
@@ -33,7 +33,7 @@ from matmaster.integration import (
     SSEHandler,
     WorkspaceHandler,
 )
-from matmaster.integration.bohrium_setup import BohriumSetupService, SkillSyncSpec
+from matmaster.integration.bohrium_setup import BohriumSetupService, derive_skill_sync_spec
 from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.events import (
     BohriumNodeEvent,
@@ -87,71 +87,12 @@ def _build_workspace_upload_fn(
     return _do_upload
 
 
-def _derive_skill_sync_spec(
-    exp_config: ExpConfig,
-    playground: Any,
-    *,
-    project_root: Path,
-) -> SkillSyncSpec | None:
-    """Build SkillSyncSpec from Exp skills config and optional mat_master.skill_evolution.
-
-    ``remote_project_root`` is fixed to ``/personal/workspace/.evomaster``.
-    When ``exp_config.skills`` is disabled or has no ``skills_root``, returns
-    ``None`` (no fallback to unrelated default evomaster paths).
-    """
-    skills = exp_config.skills
-    if not skills.enabled:
-        return None
-    # skills_root can be str | list[str]
-    roots_raw = skills.skills_root
-    if isinstance(roots_raw, list):
-        rel_list = [r.strip() for r in roots_raw if r and r.strip()]
-    else:
-        s = (roots_raw or '').strip()
-        rel_list = [s] if s else []
-    if not rel_list:
-        return None
-    resolved_roots: list[str] = []
-    for root_rel in rel_list:
-        p = Path(root_rel)
-        p = p.resolve() if p.is_absolute() else (project_root / root_rel).resolve()
-        if p.is_dir():
-            resolved_roots.append(str(p))
-    if not resolved_roots:
-        return None
-
-    local_user: str | None = None
-    remote_user: str | None = None
-    if hasattr(playground, 'config'):
-        try:
-            cfg = playground.config.model_dump()
-        except Exception:
-            cfg = {}
-    else:
-        cfg = {}
-    evo = (cfg.get('mat_master') or {}).get('skill_evolution') or {}
-    loc_raw = evo.get('local_user_skills_root')
-    rem_raw = evo.get('remote_user_skills_root')
-    if loc_raw and rem_raw:
-        local_user = str(Path(str(loc_raw)).expanduser().resolve())
-        remote_user = str(rem_raw).strip()
-
-    return SkillSyncSpec(
-        project_skill_roots=resolved_roots,
-        local_user_skills_root=local_user,
-        remote_user_skills_root=remote_user,
-        remote_project_root='/personal/workspace/.evomaster',
-    )
-
-
 @runtime_checkable
 class ReplyQueueLike(Protocol):
     """Confirmation reply queue abstraction: put content/cancel, blocking get.
 
-    .. deprecated::
-        Phase 15 introduced ConfirmationHook.resolve()/cancel() as the new API.
-        This Protocol is retained only for stream_service.py compatibility.
-        Will be removed when stream_service fully migrates to ConfirmationHook.
+    Used by _poll_reply_queue to bridge blocking queue reads into async context
+    via loop.run_in_executor.
     """
 
     def put_content(self, content: str) -> None: ...
@@ -163,40 +104,20 @@ class ReplyQueueLike(Protocol):
         ...
 
 
-def _start_confirmation_reply_bridge(
-    reply_queue: ReplyQueueLike,
-    hook: ConfirmationHook,
-    *,
-    poll_timeout_sec: int = 1,
-) -> tuple[threading.Event, threading.Thread]:
-    """Bridge blocking reply_queue.get() into ConfirmationHook callbacks.
+async def _poll_reply_queue(
+    reply_queue: ReplyQueueLike, poll_sec: int = 1
+) -> str | None:
+    """Await a blocking reply queue in executor. Returns content or None for cancel.
 
-    Poll with whole seconds only. RedisReplyQueue coerces float timeouts via
-    int(timeout), so 0.5 becomes 0 and triggers BLPOP timeout=0, which blocks
-    forever and prevents the bridge thread from shutting down cleanly.
+    Uses int poll_sec (not float) because RedisReplyQueue.get() coerces via
+    int(timeout) -- 0.5 becomes 0, triggering BLPOP timeout=0 (block forever).
     """
-
-    stop_event = threading.Event()
-
-    def _bridge_loop() -> None:
-        while not stop_event.is_set():
-            try:
-                reply = reply_queue.get(timeout=poll_timeout_sec)
-            except queue.Empty:
-                continue
-
-            if reply is None:
-                hook.cancel()
-            else:
-                hook.resolve(reply)
-
-    bridge_thread = threading.Thread(
-        target=_bridge_loop,
-        daemon=True,
-        name='confirmation-reply-bridge',
-    )
-    bridge_thread.start()
-    return stop_event, bridge_thread
+    loop = asyncio.get_running_loop()
+    while True:
+        try:
+            return await loop.run_in_executor(None, reply_queue.get, poll_sec)
+        except Empty:
+            continue
 
 
 def _emit_error_and_close(
@@ -307,9 +228,6 @@ class AgentRunService:
         playground = None
         _loop = None
         _loop_thread = None
-        confirmation_reply_stop: threading.Event | None = None
-        confirmation_reply_thread: threading.Thread | None = None
-
         try:
             # -- Stage 1: Playground --
             self.init_playground_sync()
@@ -370,9 +288,7 @@ class AgentRunService:
             from matmaster.config.loader import load_exp_config
 
             exp_config = load_exp_config(exp_name)
-            skill_sync_spec = _derive_skill_sync_spec(
-                exp_config, playground, project_root=_project_root
-            )
+            skill_sync_spec = derive_skill_sync_spec(exp_config, project_root=_project_root)
 
             # -- Stage 3: Bohrium credentials + SSH --
             bohrium_svc = BohriumSetupService(self._sessions_service, bus)
@@ -496,16 +412,12 @@ class AgentRunService:
             ]
             merged_hooks = [*runtime.spec.hooks, *observer_hooks]
             if mode == 'direct' and reply_queue is not None and _CONFIRM_TOOLS:
+                from matmaster.hooks.confirmation import ConfirmationHook
+
                 confirmation_hook = ConfirmationHook(
                     bus=bus,
                     confirm_tools=set(_CONFIRM_TOOLS),
-                )
-                confirmation_hook.set_loop(_loop)
-                confirmation_reply_stop, confirmation_reply_thread = (
-                    _start_confirmation_reply_bridge(
-                        reply_queue,
-                        confirmation_hook,
-                    )
+                    get_reply=lambda: _poll_reply_queue(reply_queue),
                 )
                 merged_hooks = [confirmation_hook, *runtime.spec.hooks, *observer_hooks]
 
@@ -636,17 +548,6 @@ class AgentRunService:
                     ).result(timeout=10)
                 except Exception:
                     logger.warning('router.stop() failed during cleanup', exc_info=True)
-            if confirmation_reply_stop is not None:
-                confirmation_reply_stop.set()
-            if confirmation_reply_thread is not None:
-                confirmation_reply_thread.join(timeout=2.0)
-                if confirmation_reply_thread.is_alive():
-                    logger.warning(
-                        'confirmation-reply-bridge did not exit cleanly: '
-                        'session_id=%s task_id=%s',
-                        session_id,
-                        task_id,
-                    )
             # 4. Shut down the unified event loop
             if _loop is not None:
                 _loop.call_soon_threadsafe(_loop.stop)
