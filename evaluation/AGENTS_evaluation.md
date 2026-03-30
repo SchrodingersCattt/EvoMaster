@@ -1,6 +1,6 @@
 # AGENTS_evaluation.md — 评测模块约定
 
-本文件是 `evaluation/` 目录的 AI 助手约定文档，补充 [根目录 AGENTS.md](../AGENTS.md) 中的通用约定。  
+本文件是 `evaluation/` 目录的 AI 助手约定文档，补充 [根目录 AGENTS.md](../AGENTS.md) 中的通用约定。
 **若本文件规则有变更，必须同步修改本文件；若通用约定有变更，必须同步修改 `AGENTS.md`。**
 
 ---
