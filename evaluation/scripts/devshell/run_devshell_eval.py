@@ -42,7 +42,7 @@ Usage (from repository root)::
 
 **Claude Code baseline（不跑 devshell）**：``--prepare-cc-baseline`` 只搭 ``workspaces/`` 与
 ``_eval_task_meta.json``；在 IDE 里跑完题并写好 ``_devshell_summary.json`` 后执行
-``evaluation/scripts/baseline/finalize_cc_baseline_ingest.py``。说明见
+``evaluation/scripts/baseline/finalize_external_baseline_ingest.py``。说明见
 ``evaluation/docs/baseline/baseline_cc_eval.md``.
 
 This does **not** run MATTER's BinaryEvaluator or Playground ``run_mat_task``; it only
@@ -70,21 +70,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 def _cc_baseline_readme_markdown(*, run_dir: Path, doc_rel: str) -> str:
     return (
-        "# Claude Code Baseline 测评（本 run）\n\n"
+        "# 外部 Baseline 测评（本 run）\n\n"
         "本目录由 `uv run python evaluation/scripts/devshell/run_devshell_eval.py --prepare-cc-baseline` 生成，"
-        "**未**运行 mm-devshell。\n\n"
+        "**未**运行 mm-devshell（Claude Code / Cursor 等同布局均可）。\n\n"
         "若 prepare 时**未**使用 `--no-clean-results`，脚本已在创建本 run **之前**清空仓库根 "
         "`results/` 下全部内容（默认行为，避免旧测评与本次 baseline 混在一起）。\n\n"
         "## 步骤\n\n"
-        f"1. 阅读仓库内 **`{doc_rel}`**（Claude Code 提示词与 `_devshell_summary.json` 约定）。\n"
+        f"1. 阅读仓库内 **`{doc_rel}`**（外部 baseline 提示词与 `_devshell_summary.json` 约定）。\n"
         "2. 对每个 `workspaces/<task_id>/`：**开工前须**执行 "
-        "`uv run python evaluation/scripts/baseline/cc_baseline_mark_task_start.py --workspace <该目录>`，"
+        "`uv run python evaluation/scripts/baseline/mark_external_baseline_task_start.py --workspace <该目录>`，"
         "否则 finalize 不会写入 `duration_ms`（见 `baseline_cc_eval.md`）。"
         "以该目录为工作目录，读取 `_devshell_prompt.txt` 完成任务，并按文档写入 `_devshell_summary.json`。\n"
         "3. 可选：将对话/终端记录保存到 `logs/<task_id>/devshell_console.log`，便于与 DevShell 产物对齐。\n"
         "4. 全部完成后在仓库根执行：\n\n"
         "```bash\n"
-        f"uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-dir {run_dir.resolve()}\n"
+        f"uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py --run-dir {run_dir.resolve()}\n"
         "```\n\n"
         "需要「先判分再入库」时，在 finalize 时加 `--eval-ingest-pending-only`，再对生成的 "
         "`pending_ingest/*.json` 使用 `evaluation/scripts/eval_ingest_submit_pending.py`（与 DevShell 流程相同）。\n"
@@ -293,7 +293,16 @@ def main() -> int:
         help=(
             "Only stage workspaces (prompt + data + _eval_task_meta.json); do not run "
             "mm-devshell. After Claude Code completes each task, run "
-            "evaluation/scripts/baseline/finalize_cc_baseline_ingest.py on the same run directory."
+            "evaluation/scripts/baseline/finalize_external_baseline_ingest.py on the same run directory."
+        ),
+    )
+    parser.add_argument(
+        "--baseline-channel",
+        choices=("claude_code", "cursor"),
+        default="claude_code",
+        help=(
+            "With --prepare-cc-baseline: stored in manifest for ingest "
+            "(EvalIngestRequest.baseline_channel; default: claude_code)."
         ),
     )
     args = parser.parse_args()
@@ -433,6 +442,7 @@ def main() -> int:
     if args.prepare_cc_baseline:
         manifest["prepare_cc_baseline"] = True
         manifest["eval_runner"] = "claude_code_baseline"
+        manifest["baseline_channel"] = args.baseline_channel
     (run_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
@@ -574,7 +584,6 @@ def main() -> int:
             result_oss_url = upload_eval_task_artifacts_to_oss(run_dir, task_id)
             ingest_item = build_ingest_item(
                 question_id=question.id,
-                prompt=str(prepared["prompt"]),
                 task_id=task_id,
                 mode=str(prepared["mode"]),
                 repeat_idx=int(prepared["repeat_idx"]),
@@ -593,7 +602,7 @@ def main() -> int:
                     "schema": "matmaster_eval_pending_ingest_v1",
                     "ingest_url": ingest_url,
                     "run_id": eval_ingest_run_id,
-                    "git_commit": git_commit,
+                    "run_kind": "iteration",
                     "task_id": task_id,
                     "instructions_zh": (
                         "判分后在仓库根执行: uv run python "
@@ -618,10 +627,9 @@ def main() -> int:
             else:
                 body: dict[str, Any] = {
                     "run_id": eval_ingest_run_id,
+                    "run_kind": "iteration",
                     "items": [ingest_item],
                 }
-                if git_commit:
-                    body["git_commit"] = git_commit
                 ok, msg = post_eval_ingest(
                     ingest_url,
                     body,

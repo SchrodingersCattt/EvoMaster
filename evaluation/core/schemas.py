@@ -335,6 +335,8 @@ class TokenUsageRecord(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    cache_read_tokens: int = 0
+    total_tokens_effective: int = 0
 
 
 class EvalRunRecord(BaseModel):

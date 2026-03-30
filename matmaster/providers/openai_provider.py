@@ -21,6 +21,27 @@ from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
 logger = logging.getLogger(__name__)
 
 
+def _extract_cached_tokens(usage: Any) -> int:
+    """Best-effort extraction of prompt cache-read tokens from an API usage object.
+
+    Supports two conventions:
+    - OpenAI: ``usage.prompt_tokens_details.cached_tokens``
+    - Anthropic-compatible: ``usage.cache_read_input_tokens``
+    Returns 0 when neither field is present.
+    """
+    # OpenAI SDK: prompt_tokens_details.cached_tokens
+    details = getattr(usage, "prompt_tokens_details", None)
+    if details is not None:
+        val = getattr(details, "cached_tokens", None)
+        if isinstance(val, int) and val > 0:
+            return val
+    # Anthropic-compatible proxy
+    val = getattr(usage, "cache_read_input_tokens", None)
+    if isinstance(val, int) and val > 0:
+        return val
+    return 0
+
+
 class OpenAIProvider:
     """LLMProvider implementation backed by the OpenAI Python SDK.
 
@@ -136,6 +157,9 @@ class OpenAIProvider:
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens,
             }
+            cache_read = _extract_cached_tokens(response.usage)
+            if cache_read:
+                usage["cache_read_tokens"] = cache_read
 
         return LLMResponse(
             content=message.content,
@@ -188,9 +212,7 @@ class OpenAIProvider:
                 raise
             except openai.BadRequestError as e:
                 err_str = str(e).lower()
-                if "context" in err_str and (
-                    "length" in err_str or "token" in err_str
-                ):
+                if "context" in err_str and ("length" in err_str or "token" in err_str):
                     logger.error("Non-retryable context length error: %s", e)
                     raise
                 last_error = e
@@ -204,9 +226,7 @@ class OpenAIProvider:
                     backoff = delay * (2**attempt)
                     time.sleep(backoff)
 
-        raise RuntimeError(
-            f"LLM call failed after {retries} attempts"
-        ) from last_error
+        raise RuntimeError(f"LLM call failed after {retries} attempts") from last_error
 
     def chat_stream(
         self,
@@ -222,8 +242,9 @@ class OpenAIProvider:
         connection, rate-limit, server); retryable=False for permanent errors
         (auth, context-length exceeded).
         """
-        from matmaster.types.errors import LLMError
         import httpx as _httpx
+
+        from matmaster.types.errors import LLMError
 
         kwargs: dict[str, Any] = {
             "model": self._model,
@@ -260,6 +281,9 @@ class OpenAIProvider:
                         "completion_tokens": usage.completion_tokens,
                         "total_tokens": usage.total_tokens,
                     }
+                    cache_read = _extract_cached_tokens(usage)
+                    if cache_read:
+                        last_chunk_usage["cache_read_tokens"] = cache_read
                 if not chunk.choices:
                     continue
                 delta = chunk.choices[0].delta
