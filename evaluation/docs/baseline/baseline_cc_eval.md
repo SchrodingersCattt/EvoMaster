@@ -164,8 +164,6 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 
 **意图**：你只复制下面整段到 **Claude Code（或 Cursor）会话**，由 IDE 里的助手**在仓库根依次执行终端命令**；做题本身由脚本调用 **`claude -p` 非交互模式**完成，**不需要**你再开交互式 Claude Code 逐题手搓。
 
-**若你更习惯自己敲终端**：可直接复制「参考命令」小节里的两条 `bash` 块，效果等价。
-
 将下面整段复制到 **Claude Code / Cursor 会话 A**（与阶段二阅卷会话分开即可）。
 
 > **【外部 Baseline · 阶段一 · 执行者】**
@@ -180,22 +178,6 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 > 若用户指定部分任务：在本命令中加 `--tasks <task_id> ...`；指定模型：加 `--model opus`（或 `sonnet` 等）。
 > 4. 从命令输出或按 `baseline_cc_eval.md`「RUN_DIR 自动解析」确认 **RUN_DIR**；检查 **RUN_DIR** 下存在 **`pending_ingest/`**（含 `.json`）与 **`raw_runs.jsonl`**。
 > 5. 在回复中写明：**RUN_DIR 绝对路径**、完成/失败任务摘要、以及下一步「新开会话 + 一键话术 · 阶段二」阅卷上报。
-
-**参考命令（人工终端等价）**
-
-```bash
-cd "$(git rev-parse --show-toplevel)"
-
-# 1. prepare（搭工作区）
-uv run python evaluation/scripts/devshell/run_devshell_eval.py --prepare-cc-baseline --run-label baseline_cc_struct \
-  --modes direct --capabilities structure_construction --eval-ingest-pending-only
-
-# 2. 自动做题 + finalize（一条命令；内部非交互 claude -p）
-uv run python evaluation/scripts/baseline/run_claude_cli_baseline_tasks.py \
-  --run-label baseline_cc_struct --finalize --eval-ingest-pending-only
-```
-
-仅跑部分题时，在 prepare 中加 `--limit N`，或在第 2 条命令中加 `--tasks SC_struct_007_direct_r0`。指定模型：`--model opus`（或 `sonnet` 等）。
 
 脚本自动为每个任务：(1) 写 `_cc_baseline_task_start.json`；(2) `claude -p --output-format json --dangerously-skip-permissions --bare` 执行题目；(3) 从 JSON 输出提取全部 token 字段写 `_devshell_summary.json`；(4) `--finalize` 自动跑 `finalize_external_baseline_ingest.py`。
 
