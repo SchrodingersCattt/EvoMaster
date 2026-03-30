@@ -1,11 +1,8 @@
-"""Agent execution service: new matmaster pipeline orchestration.
+"""Agent execution service: matmaster pipeline orchestration.
 
-Rewritten per D-12: run_agent_sync() is a thin orchestration layer using:
-  Playground.prepare() -> get_chat_events_table() -> EventRouter bootstrap ->
-  Bohrium -> WorkspaceHandler attachment -> Exp.assemble() -> ChatHistory ->
-  Kernel.run() -> post-processing
-
-Method signature (12 parameters) unchanged -- zero caller modifications.
+Pipeline: Playground.prepare() -> get_chat_events_table() -> EventRouter ->
+Bohrium -> WorkspaceHandler -> Exp.assemble() -> ChatHistory ->
+Kernel.run() -> post-processing.
 """
 
 import asyncio
@@ -202,6 +199,21 @@ def _start_confirmation_reply_bridge(
     return stop_event, bridge_thread
 
 
+def _emit_error_and_close(
+    bus: MessageBus, message: str, source: str = 'System'
+) -> None:
+    """Emit ErrorEvent + StreamClosedEvent(treat_as_failure) pair."""
+    bus.emit_nowait(ErrorEvent(source=source, message=message))
+    bus.emit_nowait(
+        StreamClosedEvent(
+            source=source,
+            end_reason='error',
+            task_completed=False,
+            treat_as_failure=True,
+        )
+    )
+
+
 class AgentRunService:
     """Agent execution service: pipeline orchestration via matmaster components."""
 
@@ -209,6 +221,7 @@ class AgentRunService:
         self._sessions_service = sessions_service or get_sessions_service()
         self._executor = ThreadPoolExecutor(max_workers=_AGENT_MAX_WORKERS)
         self._pg_manager = PlaygroundManager(_project_root)
+        self._llm_validated = False
 
     def init_playground_sync(self) -> None:
         """Validate configs at startup -- delegates to PlaygroundManager + LLM check."""
@@ -217,6 +230,9 @@ class AgentRunService:
 
     def _validate_llm_configs(self) -> None:
         """启动时校验 agents.general.llm 与 llm_config.yaml profiles 的一致性。"""
+        if self._llm_validated:
+            return
+        self._llm_validated = True
         import yaml
 
         from matmaster.config.loader import load_llm_config
@@ -262,16 +278,10 @@ class AgentRunService:
         llm_override: str | None = None,
         model_override: str | None = None,
     ) -> tuple[bool | tuple[bool, str], int]:
-        """Execute agent in background thread using new matmaster pipeline.
+        """Execute agent in background thread using matmaster pipeline.
 
-        Pipeline: Playground.prepare() -> get_chat_events_table() ->
-        EventRouter bootstrap -> Bohrium -> WorkspaceHandler attachment ->
-        Exp.assemble() -> ChatHistory -> Kernel.run() -> post-processing.
-
-        Method signature unchanged per D-12: all 12 parameters preserved.
         Returns ``(run_result, elapsed_ms)`` where ``run_result`` is ``True``
-        on success or ``(False, reason)`` on failure/cancel, so Worker can
-        derive session status and notifications consistently.
+        on success or ``(False, reason)`` on failure/cancel.
         """
 
         def _elapsed_ms() -> int:
@@ -294,6 +304,9 @@ class AgentRunService:
         exp = None
         bohrium_svc = None
         ssh_attached = False
+        playground = None
+        _loop = None
+        _loop_thread = None
         confirmation_reply_stop: threading.Event | None = None
         confirmation_reply_thread: threading.Thread | None = None
 
@@ -373,7 +386,7 @@ class AgentRunService:
                 try:
                     if event_type == 'error':
                         msg = content if isinstance(content, str) else str(content)
-                        bus.emit_nowait(ErrorEvent(source=str(source), message=msg))
+                        _emit_error_and_close(bus, msg, source=str(source))
                         return
                     if event_type == 'stream_closed':
                         body = '' if content is None else str(content)
@@ -579,25 +592,12 @@ class AgentRunService:
                 fail_reason = (
                     run_result_event.reason or run_result_event.status or 'failed'
                 )
-                if (
-                    run_result_event.status == 'cancelled'
-                    or run_result_event.reason == 'cancelled'
-                ):
-                    fail_reason = 'cancelled'
                 return ((False, fail_reason), _elapsed_ms())
 
         except Exception as exc:
             logger.exception('run_agent_sync error: session_id=%s', session_id)
             try:
-                bus.emit_nowait(ErrorEvent(source='System', message=str(exc)))
-                bus.emit_nowait(
-                    StreamClosedEvent(
-                        source='System',
-                        end_reason='error',
-                        task_completed=False,
-                        treat_as_failure=True,
-                    )
-                )
+                _emit_error_and_close(bus, str(exc))
             except Exception:
                 pass
             return ((False, str(exc)), _elapsed_ms())
@@ -615,13 +615,13 @@ class AgentRunService:
                     bohrium_svc.cleanup(
                         session_id=session_id,
                         event_callback=_bohrium_event_cb,
-                        pg_for_run=playground if 'playground' in dir() else None,
+                        pg_for_run=playground,
                         ssh_attached=ssh_attached,
                     )
                 except Exception:
                     logger.warning('Bohrium cleanup error', exc_info=True)
             # 2. Exp cleanup -- run on unified loop (safe even if exp partially built)
-            if 'exp' in dir() and exp and '_loop' in dir():
+            if exp is not None and _loop is not None:
                 try:
                     asyncio.run_coroutine_threadsafe(
                         exp._run_cleanup_callbacks(), _loop
@@ -629,7 +629,7 @@ class AgentRunService:
                 except Exception:
                     logger.warning('Exp cleanup failed', exc_info=True)
             # 3. Router LAST -- drains any final events from bohrium/exp cleanup
-            if router and '_loop' in dir():
+            if router is not None and _loop is not None:
                 try:
                     asyncio.run_coroutine_threadsafe(
                         router.stop(), _loop
@@ -648,13 +648,13 @@ class AgentRunService:
                         task_id,
                     )
             # 4. Shut down the unified event loop
-            if '_loop' in dir():
+            if _loop is not None:
                 _loop.call_soon_threadsafe(_loop.stop)
                 _loop_thread.join(timeout=5)
                 _loop.close()
             get_redis_dao().delete_stop_requested(session_id, task_id)
             self._pg_manager.release(session_id)
-            gc.collect()
+            gc.collect(0)
 
 
 @lru_cache
