@@ -5,7 +5,7 @@ Components:
 - EventRouter: asyncio.Task consumer + multi-handler dispatch
 
 Lifecycle: EventRouter is bound to a single run (per D-15).
-Created in run_agent_sync(), stopped in finally block.
+Created in run_agent(), stopped in finally block.
 """
 
 from __future__ import annotations
@@ -56,7 +56,6 @@ class EventRouter:
     async def start(self) -> None:
         """Spawn asyncio.Task running the consume loop."""
         self._stop_event.clear()
-        self._bus.set_loop(asyncio.get_running_loop())
         self._task = asyncio.create_task(self._consume_loop(), name="event-router")
 
     def add_handler(self, handler: EventHandler) -> None:
