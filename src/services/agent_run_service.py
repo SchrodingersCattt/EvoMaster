@@ -142,44 +142,10 @@ class AgentRunService:
         self._sessions_service = sessions_service or get_sessions_service()
         self._executor = ThreadPoolExecutor(max_workers=_AGENT_MAX_WORKERS)
         self._pg_manager = PlaygroundManager(_project_root)
-        self._llm_validated = False
 
     def init_playground_sync(self) -> None:
-        """Validate configs at startup -- delegates to PlaygroundManager + LLM check."""
+        """Validate configs at startup -- delegates to PlaygroundManager."""
         self._pg_manager.validate_startup()
-        self._validate_llm_configs()
-
-    def _validate_llm_configs(self) -> None:
-        """启动时校验 agents.general.llm 与 llm_config.yaml profiles 的一致性。"""
-        if self._llm_validated:
-            return
-        self._llm_validated = True
-        import yaml
-
-        from matmaster.config.loader import load_llm_config
-
-        cfg_dir = _project_root / 'matmaster_config'
-        llm_config_path = cfg_dir / 'llm_config.yaml'
-        if not llm_config_path.exists():
-            logger.warning('LLM config not found: %s', llm_config_path)
-            return
-        try:
-            llm_cfg = load_llm_config(llm_config_path)
-        except Exception:
-            logger.exception('Failed to load LLM config: %s', llm_config_path)
-            return
-        config_path = cfg_dir / 'config.yaml'
-        if not config_path.exists():
-            return
-        with open(config_path) as f:
-            main_cfg = yaml.safe_load(f)
-        general_llm = (main_cfg or {}).get('agents', {}).get('general', {}).get('llm')
-        if general_llm and general_llm not in llm_cfg.profiles:
-            logger.error(
-                "agents.general.llm='%s' not found in llm_config profiles: %s",
-                general_llm,
-                list(llm_cfg.profiles),
-            )
 
     def get_executor(self) -> ThreadPoolExecutor:
         """Return the thread pool for agent execution."""
