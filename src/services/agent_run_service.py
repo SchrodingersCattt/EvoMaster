@@ -11,13 +11,11 @@ import logging
 import os
 import queue
 from queue import Empty
-import threading
 import time
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Optional, Protocol, runtime_checkable
+from typing import Any, Callable, Protocol, runtime_checkable
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.bus import MessageBus
@@ -50,11 +48,6 @@ from src.services.sessions_service import get_sessions_service
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-# Thread pool concurrency: default 2 workers, override with CHAT_AGENT_MAX_WORKERS
-_AGENT_MAX_WORKERS = int(os.environ.get('CHAT_AGENT_MAX_WORKERS', '2'))
-if _AGENT_MAX_WORKERS < 1:
-    _AGENT_MAX_WORKERS = 1
 
 # Multi-turn dialog: max events from DB to avoid context overflow
 _DIALOG_HISTORY_MAX_EVENTS = int(
@@ -104,6 +97,16 @@ class ReplyQueueLike(Protocol):
         ...
 
 
+@runtime_checkable
+class StopEventLike(Protocol):
+    """Stop signal abstraction: only requires is_set() -> bool.
+
+    Satisfied by threading.Event, RedisBackedStopEvent, etc.
+    """
+
+    def is_set(self) -> bool: ...
+
+
 async def _poll_reply_queue(
     reply_queue: ReplyQueueLike, poll_sec: int = 1
 ) -> str | None:
@@ -120,12 +123,12 @@ async def _poll_reply_queue(
             continue
 
 
-def _emit_error_and_close(
+async def _emit_error_and_close(
     bus: MessageBus, message: str, source: str = 'System'
 ) -> None:
     """Emit ErrorEvent + StreamClosedEvent(treat_as_failure) pair."""
-    bus.emit_nowait(ErrorEvent(source=source, message=message))
-    bus.emit_nowait(
+    await bus.emit(ErrorEvent(source=source, message=message))
+    await bus.emit(
         StreamClosedEvent(
             source=source,
             end_reason='error',
@@ -140,24 +143,18 @@ class AgentRunService:
 
     def __init__(self, sessions_service=None):
         self._sessions_service = sessions_service or get_sessions_service()
-        self._executor = ThreadPoolExecutor(max_workers=_AGENT_MAX_WORKERS)
         self._pg_manager = PlaygroundManager(_project_root)
 
     def init_playground_sync(self) -> None:
         """Validate configs at startup -- delegates to PlaygroundManager."""
         self._pg_manager.validate_startup()
 
-    def get_executor(self) -> ThreadPoolExecutor:
-        """Return the thread pool for agent execution."""
-        return self._executor
-
-    def run_agent_sync(
+    async def run_agent(
         self,
         session_id: str,
         user_prompt: str,
         send_cb: Callable[[dict], Any],
-        loop: Optional[asyncio.AbstractEventLoop],
-        stop_event: threading.Event,
+        stop_event: StopEventLike,
         mode: str,
         reply_queue: ReplyQueueLike | None,
         task_id: str,
@@ -165,7 +162,7 @@ class AgentRunService:
         llm_override: str | None = None,
         model_override: str | None = None,
     ) -> tuple[bool | tuple[bool, str], int]:
-        """Execute agent in background thread using matmaster pipeline.
+        """Execute agent pipeline.
 
         Returns ``(run_result, elapsed_ms)`` where ``run_result`` is ``True``
         on success or ``(False, reason)`` on failure/cancel.
@@ -178,7 +175,7 @@ class AgentRunService:
             (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
         )
         logger.info(
-            'run_agent_sync start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s',
+            'run_agent start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s',
             session_id,
             task_id,
             mode,
@@ -192,8 +189,7 @@ class AgentRunService:
         bohrium_svc = None
         ssh_attached = False
         playground = None
-        _loop = None
-        _loop_thread = None
+        _ev_loop = None
         try:
             # -- Stage 1: Playground --
             self.init_playground_sync()
@@ -212,10 +208,10 @@ class AgentRunService:
                 # EventRouter is not started yet. Keep this failure silent for
                 # callers so we do not emit partial SSE/error lifecycle events.
                 logger.exception(
-                    'run_agent_sync pre-router setup failed: session_id=%s',
+                    'run_agent pre-router setup failed: session_id=%s',
                     session_id,
                 )
-                return None
+                return ((False, 'pre_router_setup_failed'), 0)
 
             # -- Stage 2: EventRouter bootstrap --
             # Handler order: SSEHandler first for lower frontend latency
@@ -238,17 +234,7 @@ class AgentRunService:
                     ),
                 ],
             )
-            # -- Unified event loop for router + exp + kernel --
-            # Single daemon thread runs all async operations. Service layer
-            # bridges via run_coroutine_threadsafe (D-01).
-            _loop = asyncio.new_event_loop()
-            _loop_thread = threading.Thread(
-                target=_loop.run_forever,
-                daemon=True,
-                name="agent-loop",
-            )
-            _loop_thread.start()
-            asyncio.run_coroutine_threadsafe(router.start(), _loop).result()
+            await router.start()
 
             exp_name = mode or 'direct'
             from matmaster.config.loader import load_exp_config
@@ -263,47 +249,66 @@ class AgentRunService:
             # Build a lightweight event_callback bridge for bohrium (legacy API).
             # error / stream_closed must be top-level bus events so SSE/Redis see
             # type=error|stream_closed (not nested under bohrium_node).
+            _ev_loop = asyncio.get_running_loop()
+
             def _bohrium_event_cb(source, event_type, content, **extra):
-                """Bridge bohrium events into the MessageBus."""
-                try:
-                    if event_type == 'error':
-                        msg = content if isinstance(content, str) else str(content)
-                        _emit_error_and_close(bus, msg, source=str(source))
-                        return
-                    if event_type == 'stream_closed':
-                        body = '' if content is None else str(content)
+                """Bridge bohrium events into the MessageBus.
+
+                Runs from executor thread (via run_in_executor), so must use
+                call_soon_threadsafe to safely emit into asyncio.Queue.
+                """
+                def _do_emit():
+                    try:
+                        if event_type == 'error':
+                            msg = content if isinstance(content, str) else str(content)
+                            bus.emit_nowait(ErrorEvent(source=str(source), message=msg))
+                            bus.emit_nowait(
+                                StreamClosedEvent(
+                                    source=str(source),
+                                    end_reason='error',
+                                    task_completed=False,
+                                    treat_as_failure=True,
+                                )
+                            )
+                            return
+                        if event_type == 'stream_closed':
+                            body = '' if content is None else str(content)
+                            bus.emit_nowait(
+                                StreamClosedEvent(
+                                    source=str(source),
+                                    content=body,
+                                    task_completed=False,
+                                    end_reason='error',
+                                    treat_as_failure=True,
+                                )
+                            )
+                            return
                         bus.emit_nowait(
-                            StreamClosedEvent(
+                            BohriumNodeEvent(
                                 source=str(source),
-                                content=body,
-                                task_completed=False,
-                                end_reason='error',
-                                treat_as_failure=True,
+                                payload={
+                                    'type': event_type,
+                                    'content': content,
+                                    **extra,
+                                },
                             )
                         )
-                        return
-                    bus.emit_nowait(
-                        BohriumNodeEvent(
-                            source=str(source),
-                            payload={
-                                'type': event_type,
-                                'content': content,
-                                **extra,
-                            },
-                        )
-                    )
-                except Exception:
-                    logger.debug('bohrium event bridge error type=%s', event_type)
+                    except Exception:
+                        logger.debug('bohrium event bridge error type=%s', event_type)
+                _ev_loop.call_soon_threadsafe(_do_emit)
 
-            bohrium_result = bohrium_svc.setup(
-                session_id=session_id,
-                pg=playground,
-                skill_sync_spec=skill_sync_spec,
-                run_creds=run_creds,
-                user_id_for_ak=user_id_for_ak,
-                org_id=org_id,
-                event_callback=_bohrium_event_cb,
-                run_started_at=run_started_at,
+            bohrium_result = await _ev_loop.run_in_executor(
+                None,
+                lambda: bohrium_svc.setup(
+                    session_id=session_id,
+                    pg=playground,
+                    skill_sync_spec=skill_sync_spec,
+                    run_creds=run_creds,
+                    user_id_for_ak=user_id_for_ak,
+                    org_id=org_id,
+                    event_callback=_bohrium_event_cb,
+                    run_started_at=run_started_at,
+                ),
             )
             ssh_attached = bohrium_result.ssh_attached
             if bohrium_result.abort_result is not None:
@@ -361,15 +366,12 @@ class AgentRunService:
             )
 
             exp = Exp(exp_config)
-            runtime = asyncio.run_coroutine_threadsafe(
-                exp.build_runtime(
-                    pg_ctx,
-                    bus=bus,
-                    skills=pg_ctx.run_meta.get('skill_config'),
-                    mcp=pg_ctx.run_meta.get('mcp_config'),
-                ),
-                _loop,
-            ).result()
+            runtime = await exp.build_runtime(
+                pg_ctx,
+                bus=bus,
+                skills=pg_ctx.run_meta.get('skill_config'),
+                mcp=pg_ctx.run_meta.get('mcp_config'),
+            )
 
             observer_hooks = [
                 OutputProcessorHook(bus),
@@ -410,16 +412,13 @@ class AgentRunService:
                 ChatHistoryConverter.exclude_task_events(parent_events, task_id)
             )
 
-            # -- Stage 6: Kernel execution (via unified loop) --
-            kernel_result = asyncio.run_coroutine_threadsafe(
-                runtime.kernel.run(
-                    spec=spec,
-                    task=user_prompt,
-                    history=history,
-                    stop_event=stop_event,
-                ),
-                _loop,
-            ).result()
+            # -- Stage 6: Kernel execution --
+            kernel_result = await runtime.kernel.run(
+                spec=spec,
+                task=user_prompt,
+                history=history,
+                stop_event=stop_event,
+            )
             run_result_event = kernel_result.result.to_run_result_event()
 
             # -- Post-processing --
@@ -459,13 +458,7 @@ class AgentRunService:
                 if run_result_event.status == 'completed':
                     user_id = self._sessions_service.get_session_user_id(session_id)
                     if user_id:
-                        if loop is not None:
-                            future = asyncio.run_coroutine_threadsafe(
-                                use_quota(user_id), loop
-                            )
-                            future.result(timeout=10)
-                        else:
-                            asyncio.run(use_quota(user_id))
+                        await use_quota(user_id)
                     return (True, _elapsed_ms())
                 fail_reason = (
                     run_result_event.reason or run_result_event.status or 'failed'
@@ -473,52 +466,48 @@ class AgentRunService:
                 return ((False, fail_reason), _elapsed_ms())
 
         except Exception as exc:
-            logger.exception('run_agent_sync error: session_id=%s', session_id)
+            logger.exception('run_agent error: session_id=%s', session_id)
             try:
-                _emit_error_and_close(bus, str(exc))
+                await _emit_error_and_close(bus, str(exc))
             except Exception:
                 pass
             return ((False, str(exc)), _elapsed_ms())
         finally:
             elapsed = time.monotonic() - run_started_at
             logger.info(
-                'run_agent_sync done: session_id=%s elapsed=%.1fs',
+                'run_agent done: session_id=%s elapsed=%.1fs',
                 session_id,
                 elapsed,
             )
             # Cleanup order matters:
             # 1. Bohrium FIRST -- cleanup can still emit events via _bohrium_event_cb
-            if bohrium_svc:
+            if bohrium_svc and _ev_loop:
                 try:
-                    bohrium_svc.cleanup(
-                        session_id=session_id,
-                        event_callback=_bohrium_event_cb,
-                        pg_for_run=playground,
-                        ssh_attached=ssh_attached,
+                    await _ev_loop.run_in_executor(
+                        None,
+                        lambda: bohrium_svc.cleanup(
+                            session_id=session_id,
+                            event_callback=_bohrium_event_cb,
+                            pg_for_run=playground,
+                            ssh_attached=ssh_attached,
+                        ),
                     )
                 except Exception:
                     logger.warning('Bohrium cleanup error', exc_info=True)
-            # 2. Exp cleanup -- run on unified loop (safe even if exp partially built)
-            if exp is not None and _loop is not None:
+            # 2. Exp cleanup (with timeout to prevent worker hangs)
+            if exp is not None:
                 try:
-                    asyncio.run_coroutine_threadsafe(
-                        exp._run_cleanup_callbacks(), _loop
-                    ).result(timeout=30)
+                    await asyncio.wait_for(
+                        exp._run_cleanup_callbacks(), timeout=30
+                    )
                 except Exception:
                     logger.warning('Exp cleanup failed', exc_info=True)
             # 3. Router LAST -- drains any final events from bohrium/exp cleanup
-            if router is not None and _loop is not None:
+            if router is not None:
                 try:
-                    asyncio.run_coroutine_threadsafe(
-                        router.stop(), _loop
-                    ).result(timeout=10)
+                    await asyncio.wait_for(router.stop(), timeout=10)
                 except Exception:
                     logger.warning('router.stop() failed during cleanup', exc_info=True)
-            # 4. Shut down the unified event loop
-            if _loop is not None:
-                _loop.call_soon_threadsafe(_loop.stop)
-                _loop_thread.join(timeout=5)
-                _loop.close()
             get_redis_dao().delete_stop_requested(session_id, task_id)
             self._pg_manager.release(session_id)
             gc.collect(0)
