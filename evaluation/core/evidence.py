@@ -10,7 +10,8 @@ Design principles
 * ``EventRecord``   – abstract, agent-action-level events (used by rule-based checks)
 * ``ToolCallRecord`` – raw tool call log with name + description (used by LLM judge)
 * ``ArtifactRecord`` – output files / data produced during the run
-* ``TokenUsage``     – per-step LLM cost aggregated over the whole run
+* ``TokenUsage``     – from trajectory: **last model turn** only (max ``step_id``;
+  tie-break by later record). ``prompt_tokens`` = input to that call.
 * ``EvidenceBundle`` – single input to the evaluator
 * ``EvidenceExtractor`` – converts trajectory JSON → EvidenceBundle
 
@@ -143,7 +144,12 @@ class ArtifactRecord(BaseModel):
 
 
 class TokenUsage(BaseModel):
-    """Aggregated LLM token cost for the whole run."""
+    """LLM token usage for the **last assistant / model turn** in the trajectory.
+
+    ``EvidenceExtractor`` picks the step with the greatest ``step_id`` that carries
+    non-empty ``assistant_message.meta.usage`` (tie: later occurrence wins).
+    ``prompt_tokens`` is the input size for that call (OpenAI/Anthropic style).
+    """
 
     prompt_tokens: int = Field(default=0)
     completion_tokens: int = Field(default=0)
@@ -156,6 +162,46 @@ class TokenUsage(BaseModel):
         self.completion_tokens += other.get('completion_tokens', 0)
         self.total_tokens += other.get('total_tokens', 0)
         self.cache_read_tokens += other.get('cache_read_tokens', 0)
+
+    @classmethod
+    def from_usage_dict(cls, raw: dict[str, Any]) -> TokenUsage:
+        """Normalise a single-turn ``usage`` dict from trajectory meta."""
+        pt = int(raw.get('prompt_tokens') or 0)
+        ct = int(raw.get('completion_tokens') or 0)
+        tt = int(raw.get('total_tokens') or 0)
+        cr = int(raw.get('cache_read_tokens') or 0)
+        if not cr and raw.get('cache_read_input_tokens') is not None:
+            try:
+                cr = int(raw['cache_read_input_tokens'])
+            except (TypeError, ValueError):
+                cr = 0
+        # Claude-style breakdown (if trajectory ever embeds CLI-shaped usage)
+        if pt == 0 and (
+            raw.get('input_tokens') is not None
+            or raw.get('cache_creation_input_tokens') is not None
+            or raw.get('cache_read_input_tokens') is not None
+        ):
+            try:
+                inp = int(raw.get('input_tokens') or 0)
+                ccreate = int(raw.get('cache_creation_input_tokens') or 0)
+                cr2 = int(raw.get('cache_read_input_tokens') or 0)
+            except (TypeError, ValueError):
+                inp, ccreate, cr2 = 0, 0, 0
+            pt = inp + ccreate + cr2
+            cr = cr2 or cr
+            if ct == 0 and raw.get('output_tokens') is not None:
+                try:
+                    ct = int(raw['output_tokens'])
+                except (TypeError, ValueError):
+                    pass
+        if tt == 0 and (pt or ct):
+            tt = pt + ct
+        return cls(
+            prompt_tokens=pt,
+            completion_tokens=ct,
+            total_tokens=tt,
+            cache_read_tokens=cr,
+        )
 
     @property
     def total_tokens_effective(self) -> int:
@@ -195,7 +241,7 @@ class EvidenceBundle(BaseModel):
     )
     token_usage: TokenUsage = Field(
         default_factory=TokenUsage,
-        description='Aggregated token usage for the whole run',
+        description='Token usage for the last model turn (see TokenUsage docstring)',
     )
     total_steps: int = Field(default=0, description='Total number of agent steps')
     run_status: str = Field(
@@ -336,8 +382,10 @@ class EvidenceExtractor:
         # Determine model_name from first step's assistant_message meta
         model_name = self._extract_model_name(raw)
 
-        # Accumulate token usage over all steps
-        token_usage = TokenUsage()
+        # Last model turn only: max step_id with usage (tie: later in file wins)
+        best_usage_key: tuple[int, int] = (-1, -1)
+        best_usage: dict[str, Any] | None = None
+        step_serial = 0
 
         events: list[EventRecord] = []
         tool_calls: list[ToolCallRecord] = []
@@ -356,13 +404,17 @@ class EvidenceExtractor:
             for step_dict in traj.get('steps', []):
                 step_id = step_dict.get('step_id', 0)
                 total_steps = max(total_steps, step_id)
+                step_serial += 1
 
-                # Accumulate token usage
+                # Keep usage from the latest step_id; same id → last occurrence
                 asst_msg = step_dict.get('assistant_message', {})
                 meta = asst_msg.get('meta', {}) if isinstance(asst_msg, dict) else {}
                 usage = meta.get('usage', {})
                 if isinstance(usage, dict) and usage:
-                    token_usage.add(usage)
+                    key = (step_id, step_serial)
+                    if best_usage is None or key > best_usage_key:
+                        best_usage_key = key
+                        best_usage = usage
 
                 # Collect tool responses indexed by call_id
                 tool_responses = step_dict.get('tool_responses', [])
@@ -421,6 +473,12 @@ class EvidenceExtractor:
                     )
                     if event:
                         events.append(event)
+
+        token_usage = (
+            TokenUsage.from_usage_dict(best_usage)
+            if best_usage is not None
+            else TokenUsage()
+        )
 
         return EvidenceBundle(
             task_id=task_id,

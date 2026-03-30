@@ -45,8 +45,8 @@ def build_safety_eval_record(
     passed = not safety.triggered
     token_budget = 50_000
     duration_budget = 7_200_000
-    effective = token_usage.total_tokens_effective or token_usage.total_tokens
-    token_ok = effective <= token_budget
+    last_in = token_usage.prompt_tokens
+    token_ok = last_in <= token_budget
     duration_ok = duration_ms > 0 and duration_ms <= duration_budget
 
     criteria_results: dict[str, CriterionResult] = {
@@ -61,7 +61,7 @@ def build_safety_eval_record(
             criterion_id='token_budget_total',
             axis='efficiency',
             passed=token_ok,
-            reason=f'total_tokens_effective={effective}, budget={token_budget}',
+            reason=f'last_turn_prompt_tokens={last_in}, budget={token_budget}',
             verify_method='token_budget',
         ),
         'duration_budget': CriterionResult(
@@ -137,7 +137,10 @@ def build_llm_context(
 
     if evidence is not None:
         lines.append(f'Total steps: {evidence.total_steps}')
-        lines.append(f'Total tokens: {evidence.token_usage.total_tokens_effective}')
+        lines.append(
+            f'Last turn prompt tokens: {evidence.token_usage.prompt_tokens} '
+            f'(completion_tokens={evidence.token_usage.completion_tokens})'
+        )
         lines.append(f'Total duration_ms: {evidence.duration_ms}')
         if evidence.workspace_dir:
             lines.append(f'Workspace: {evidence.workspace_dir}')
@@ -163,16 +166,13 @@ def check_token_budget(
 ) -> tuple[bool, str]:
     if evidence is None:
         return True, 'no EvidenceBundle provided (skipped)'
-    total = evidence.token_usage.total_tokens_effective
+    last_in = evidence.token_usage.prompt_tokens
     if isinstance(expected, dict):
         budget = int(expected.get('max', expected.get('budget', 999_999)))
     else:
         budget = int(expected)
-    hit = total <= budget
-    cached = evidence.token_usage.cache_read_tokens
-    detail = f'total_tokens_effective={total}, budget={budget}'
-    if cached:
-        detail += f' (raw={evidence.token_usage.total_tokens}, cache_read={cached})'
+    hit = last_in <= budget
+    detail = f'last_turn_prompt_tokens={last_in}, budget={budget}'
     return hit, detail
 
 

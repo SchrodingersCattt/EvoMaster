@@ -10,7 +10,7 @@ For each workspace under ``RUN_DIR/workspaces/``:
 
 1. Mark task start (``_cc_baseline_task_start.json``)
 2. Run ``claude -p`` with the task prompt, capturing JSON output
-3. Parse token usage from CLI JSON output
+3. Parse token usage from CLI JSON (last embedded ``usage`` on ``messages`` / similar when present; else top-level ``usage``)
 4. Write ``_devshell_summary.json``
 
 Requires ``claude`` CLI in ``PATH`` and ``--dangerously-skip-permissions``.
@@ -164,9 +164,30 @@ def _extract_model_name(cli_output: dict[str, Any], model_arg: str | None) -> st
     return "claude_code"
 
 
+def _extract_last_turn_usage_raw(cli_output: dict[str, Any]) -> dict[str, Any] | None:
+    """If CLI embeds per-message / per-turn usage, return the last non-empty ``usage`` dict."""
+    for key in ("messages", "conversation", "turns", "history"):
+        arr = cli_output.get(key)
+        if not isinstance(arr, list):
+            continue
+        for msg in reversed(arr):
+            if not isinstance(msg, dict):
+                continue
+            u = msg.get("usage")
+            if isinstance(u, dict) and u:
+                return u
+    return None
+
+
 def _build_usage(cli_output: dict[str, Any]) -> dict[str, Any]:
-    """Build comprehensive usage dict from claude -p JSON output."""
-    raw_usage = cli_output.get("usage") or {}
+    """Build usage dict from claude -p JSON (last agent turn when available).
+
+    Prefer the last embedded ``usage`` on ``messages`` / similar; otherwise use
+    top-level ``usage`` (Claude Code: typically the last model request in the run).
+    """
+    raw_usage = (
+        _extract_last_turn_usage_raw(cli_output) or cli_output.get("usage") or {}
+    )
     model_usage = cli_output.get("modelUsage") or {}
 
     input_tokens = int(raw_usage.get("input_tokens") or 0)
