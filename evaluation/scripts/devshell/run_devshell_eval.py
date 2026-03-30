@@ -9,6 +9,8 @@ stages data files per task workspace, then invokes (inherit terminal; ``--json-o
 Aggregate output: ``raw_runs.jsonl`` + ``manifest.json`` + by default ``claude_review.md`` (for Cursor @-review).
 ``manifest.json`` carries ``eval_tooling`` (registered builtins, skill names, MCP server keys from config);
 the same snapshot is attached to each ingest item as ``extra.eval_tooling`` for downstream analysis.
+When ``logs/<task_id>/events_*.jsonl`` exists, ingest ``extra`` also includes ``events_timeline`` (ordered
+labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_result`` lines are omitted).
 
 Optional **per-task ingest** to matmaster-tools-server (after each devshell run).
 POST URL is fixed: ``MATMASTER_TOOLS_SERVER`` + ``/api/v1/evaluation/ingest`` (see ``evaluation.eval_ingest_client``).
@@ -247,6 +249,16 @@ def main() -> int:
         help="How many tasks to run in parallel (default: 1)",
     )
     parser.add_argument(
+        "--verbose",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Whether to pass --verbose to inner ``matmaster.devshell run`` so "
+            "INFO-level logs are emitted to terminal / devshell_console.log "
+            "(default: on; use --no-verbose to disable)."
+        ),
+    )
+    parser.add_argument(
         "--python",
         type=Path,
         default=None,
@@ -397,6 +409,7 @@ def main() -> int:
         EVAL_INGEST_URL,
         build_ingest_item,
         git_head_commit,
+        load_devshell_events_timeline,
         post_eval_ingest,
         upload_eval_task_artifacts_to_oss,
     )
@@ -503,6 +516,8 @@ def main() -> int:
         ]
         if args.model:
             cmd.extend(["--model", args.model])
+        if args.verbose:
+            cmd.append("--verbose")
 
         prepared_tasks.append(
             {
@@ -582,6 +597,7 @@ def main() -> int:
         ingest_failed_local = False
         if ingest_url:
             result_oss_url = upload_eval_task_artifacts_to_oss(run_dir, task_id)
+            events_tl = load_devshell_events_timeline(run_dir / "logs" / task_id)
             ingest_item = build_ingest_item(
                 question_id=question.id,
                 task_id=task_id,
@@ -592,6 +608,7 @@ def main() -> int:
                 duration_ms=duration_ms,
                 result_oss_url=result_oss_url,
                 eval_tooling=eval_tooling_snapshot,
+                events_timeline=events_tl,
             )
             if pending_only:
                 pending_dir = run_dir / "pending_ingest"
