@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import subprocess
 import sys
 from pathlib import Path
@@ -80,3 +81,102 @@ def test_prepare_cc_baseline_writes_task_meta(tmp_path) -> None:
     assert (ws_dirs[0] / "_eval_task_meta.json").is_file()
     assert (ws_dirs[0] / "_devshell_prompt.txt").is_file()
     assert (out / "CC_BASELINE.md").is_file()
+
+
+def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
+    mod = importlib.import_module("evaluation.scripts.devshell.run_devshell_eval")
+    out = (tmp_path / "verbose_default").resolve()
+    captured: list[list[str | Path]] = []
+
+    def fake_run_devshell_task(*, cmd, cwd, env, summary_file, console_log_file):
+        captured.append(list(cmd))
+        summary_file.write_text(
+            '{"status":"completed","reason":"natural","final_content":"ok","num_turns":1,"usage":{"total_tokens":1}}\n',
+            encoding="utf-8",
+        )
+        return (
+            0,
+            123,
+            {
+                "status": "completed",
+                "reason": "natural",
+                "final_content": "ok",
+                "num_turns": 1,
+                "usage": {"total_tokens": 1},
+            },
+        )
+
+    monkeypatch.setattr(mod, "_run_devshell_task", fake_run_devshell_task)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(SCRIPT),
+            "--modes",
+            "direct",
+            "--limit",
+            "1",
+            "--output-dir",
+            str(out),
+            "--no-clean-results",
+            "--no-eval-ingest",
+            "--no-export-review",
+        ],
+    )
+
+    rc = mod.main()
+
+    assert rc == 0
+    assert captured
+    assert "--verbose" in [str(x) for x in captured[0]]
+
+
+def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> None:
+    mod = importlib.import_module("evaluation.scripts.devshell.run_devshell_eval")
+    out = (tmp_path / "verbose_disabled").resolve()
+    captured: list[list[str | Path]] = []
+
+    def fake_run_devshell_task(*, cmd, cwd, env, summary_file, console_log_file):
+        captured.append(list(cmd))
+        summary_file.write_text(
+            '{"status":"completed","reason":"natural","final_content":"ok","num_turns":1,"usage":{"total_tokens":1}}\n',
+            encoding="utf-8",
+        )
+        return (
+            0,
+            123,
+            {
+                "status": "completed",
+                "reason": "natural",
+                "final_content": "ok",
+                "num_turns": 1,
+                "usage": {"total_tokens": 1},
+            },
+        )
+
+    monkeypatch.setattr(mod, "_run_devshell_task", fake_run_devshell_task)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            str(SCRIPT),
+            "--modes",
+            "direct",
+            "--limit",
+            "1",
+            "--output-dir",
+            str(out),
+            "--no-clean-results",
+            "--no-eval-ingest",
+            "--no-export-review",
+            "--no-verbose",
+        ],
+    )
+
+    rc = mod.main()
+
+    assert rc == 0
+    assert captured
+    assert "--verbose" not in [str(x) for x in captured[0]]
