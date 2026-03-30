@@ -258,8 +258,6 @@ class TestBohriumSetupLifecycle:
         ):
             skill_sync_spec = SkillSyncSpec(
                 project_skill_roots=["/proj/skills"],
-                local_user_skills_root="/local/user/skills",
-                remote_user_skills_root="/remote/user/skills",
                 remote_project_root="/remote/project",
             )
             mock_setup.return_value = BohriumSetupResult(
@@ -588,24 +586,49 @@ class TestAgentRunServiceConfirmationRecovery:
 
         return result, payloads, tool, runtime_hook
 
-    def test_confirmation_reply_bridge_thread_exits_with_redis_compatible_timeout(
-        self,
-    ) -> None:
-        from src.services.agent_run_service import _start_confirmation_reply_bridge
+    @pytest.mark.asyncio
+    async def test_poll_reply_queue_uses_integer_second_timeout(self) -> None:
+        from src.services.agent_run_service import _poll_reply_queue
 
-        hook = MagicMock()
+        reply_queue = _RedisCompatibleReplyQueue()
+        reply_queue.put_content("approved")
+
+        result = await _poll_reply_queue(reply_queue)
+
+        assert result == "approved"
+        assert 1 in reply_queue.requested_timeouts
+
+    @pytest.mark.asyncio
+    async def test_poll_reply_queue_cancel_returns_none(self) -> None:
+        from src.services.agent_run_service import _poll_reply_queue
+
+        reply_queue = _RedisCompatibleReplyQueue()
+        reply_queue.put_cancel()
+
+        result = await _poll_reply_queue(reply_queue)
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_poll_reply_queue_retries_on_empty(self) -> None:
+        from src.services.agent_run_service import _poll_reply_queue
+
+        reply_queue = _RedisCompatibleReplyQueue()
+        threading.Timer(0.05, reply_queue.put_content, args=("delayed",)).start()
+
+        result = await asyncio.wait_for(_poll_reply_queue(reply_queue), timeout=3.0)
+
+        assert result == "delayed"
+        assert len(reply_queue.requested_timeouts) >= 1
+
+    @pytest.mark.asyncio
+    async def test_poll_reply_queue_timeout_via_wait_for(self) -> None:
+        from src.services.agent_run_service import _poll_reply_queue
+
         reply_queue = _RedisCompatibleReplyQueue()
 
-        stop_event, bridge_thread = _start_confirmation_reply_bridge(
-            reply_queue,
-            hook,
-        )
-        time.sleep(0.05)
-        stop_event.set()
-        bridge_thread.join(timeout=2.0)
-
-        assert not bridge_thread.is_alive()
-        assert 1 in reply_queue.requested_timeouts
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(_poll_reply_queue(reply_queue), timeout=0.1)
 
     def test_run_agent_sync_approval_executes_gated_tool(self, tmp_path: Path) -> None:
         reply_queue = _RedisCompatibleReplyQueue()

@@ -75,8 +75,6 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
             pg=pg,
             skill_sync_spec=SkillSyncSpec(
                 project_skill_roots=['/tmp/proj_skills'],
-                local_user_skills_root=None,
-                remote_user_skills_root=None,
                 remote_project_root='/remote/proj',
             ),
             run_creds={
@@ -340,15 +338,6 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
     mock_pg.prepare.return_value = mock_pg_ctx
     mock_pg.config_path = Path('matmaster_config/config.yaml')
     mock_pg.session = None
-    mock_pg.config.model_dump.return_value = {
-        'mat_master': {
-            'skill_evolution': {
-                'local_user_skills_root': '~/.evomaster-skills',
-                'remote_user_skills_root': '/personal/.evomaster-skills',
-            }
-        }
-    }
-
     captured_spec: dict[str, Any] = {}
     mock_bohrium_result = _make_no_attach_bohrium_result()
 
@@ -402,13 +391,11 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
     spec = captured_spec.get('skill_sync_spec')
     assert spec is not None
     assert isinstance(spec, SkillSyncSpec)
-    assert spec.remote_project_root == '/personal/workspace/.evomaster'
+    assert spec.remote_project_root == '/share/.matmaster'
     assert spec.project_skill_roots
     assert spec.project_skill_roots[0].endswith(
         str(Path('playground/mat_master/skills'))
     )
-    assert spec.local_user_skills_root is not None
-    assert spec.remote_user_skills_root == '/personal/.evomaster-skills'
 
 
 @patch('matmaster.providers.llm_factory.build_provider')
@@ -525,8 +512,6 @@ def test_skill_sync_upload_exclude_set_does_not_exclude_skill_md(
     root.mkdir()
     spec = SkillSyncSpec(
         project_skill_roots=[str(root)],
-        local_user_skills_root=None,
-        remote_user_skills_root=None,
         remote_project_root='/remote/proj',
     )
     ssh = SSHSession()
