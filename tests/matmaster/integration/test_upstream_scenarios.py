@@ -523,7 +523,7 @@ class TestAgentRunServiceConfirmationRecovery:
         def send_cb(payload: dict[str, Any]) -> None:
             payloads.append(payload)
 
-        async def _fake_build_runtime(self, pg_ctx, bus=None, skills=None, mcp=None):
+        async def _fake_build_runtime(self, pg_ctx, bus=None, skills=None):
             return runtime
 
         mock_bohrium_result = MagicMock()

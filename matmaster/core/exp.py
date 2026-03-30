@@ -152,7 +152,6 @@ class Exp:
         *,
         bus: MessageBus | None = None,
         skills: dict[str, Any] | None = None,
-        mcp: dict[str, Any] | None = None,
         source_override: str | None = None,
         spawn_id: str | None = None,
     ) -> AgentRuntime:
@@ -168,9 +167,6 @@ class Exp:
         # 2. Skills/MCP: runtime-injected (must be before system prompt)
         if skills or self._config.skills.enabled:
             self._init_skill_tools(ctx, registry, skills_config=skills)
-        if mcp:
-            self._init_mcp_tools(ctx, registry, mcp)
-
         # 3. System prompt via ContextBuilder
         builder = ContextBuilder()
         system_prompt = builder.build(
@@ -492,11 +488,4 @@ class Exp:
 
         self._skill_registry = skill_registry
 
-    def _init_mcp_tools(
-        self,
-        ctx: PlaygroundContext,
-        registry: ToolRegistry,
-        config: dict[str, Any] | None = None,
-    ) -> None:
-        """Initialize MCP tools (stub -- factory mechanism refined later)."""
 
