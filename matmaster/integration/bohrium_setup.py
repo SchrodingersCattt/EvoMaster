@@ -14,11 +14,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from typing import Callable
 
+    from matmaster.config.exp import ExpConfig
     from matmaster.core.bus import MessageBus
     from src.services.agent_run_bohrium import BohriumSetupResult
 
@@ -27,12 +29,44 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class SkillSyncSpec:
-    """Explicit paths for project vs user skill sync (execution binding metadata)."""
+    """Resolved paths for project skill sync to remote Bohrium node."""
 
     project_skill_roots: list[str]
-    local_user_skills_root: str | None
-    remote_user_skills_root: str | None
     remote_project_root: str
+
+
+def derive_skill_sync_spec(
+    exp_config: ExpConfig,
+    *,
+    project_root: Path,
+) -> SkillSyncSpec | None:
+    """Resolve ExpConfig.skills into a SkillSyncSpec for Bohrium upload."""
+    skills = exp_config.skills
+    if not skills.enabled:
+        return None
+
+    raw_value = skills.skills_root
+    if isinstance(raw_value, list):
+        relative_paths = [entry.strip() for entry in raw_value if entry and entry.strip()]
+    else:
+        stripped = (raw_value or "").strip()
+        relative_paths = [stripped] if stripped else []
+    if not relative_paths:
+        return None
+
+    resolved_roots: list[str] = []
+    for rel_path in relative_paths:
+        path = Path(rel_path)
+        resolved = path.resolve() if path.is_absolute() else (project_root / rel_path).resolve()
+        if resolved.is_dir():
+            resolved_roots.append(str(resolved))
+    if not resolved_roots:
+        return None
+
+    return SkillSyncSpec(
+        project_skill_roots=resolved_roots,
+        remote_project_root="/share/.matmaster",
+    )
 
 
 class BohriumSetupService:

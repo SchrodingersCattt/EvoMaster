@@ -133,7 +133,7 @@ def _sync_skills_to_ssh_session(
     skill_sync_spec: SkillSyncSpec | None,
     pg: Any,
 ) -> bool:
-    """Upload skill trees and set remote_project_root / user skill path fields on SSHSession.
+    """Upload project skill trees and set remote_project_root on SSHSession.
 
     Returns True if at least one directory was uploaded without error; False if
     skipped, nothing uploaded, or sync failed.
@@ -163,19 +163,7 @@ def _sync_skills_to_ssh_session(
                 remote_dest = f"{spec.remote_project_root.rstrip('/')}/{lp.name}"
             _upload_directory(env, str(lp), remote_dest, exclude)
             synced_any = True
-        if spec.local_user_skills_root and spec.remote_user_skills_root:
-            lu = Path(spec.local_user_skills_root)
-            if lu.is_dir():
-                _upload_directory(
-                    env,
-                    str(lu),
-                    spec.remote_user_skills_root.rstrip('/'),
-                    exclude,
-                )
-                synced_any = True
         ssh_session.remote_project_root = spec.remote_project_root
-        ssh_session.remote_user_skills_root = spec.remote_user_skills_root
-        ssh_session.local_user_skills_root = spec.local_user_skills_root
         if synced_any:
             logger.info(
                 'run_agent_sync: skills synced to SSH, remote_project_root=%s',
@@ -338,11 +326,8 @@ def setup_bohrium_for_run(
     """Prepare Bohrium node and SSH session for the run when credentials exist."""
     if skill_sync_spec is not None:
         logger.debug(
-            'run_agent_sync: skill_sync_spec: project_skill_roots=%s local_user=%s '
-            'remote_user=%s remote_project_root=%s',
+            'run_agent_sync: skill_sync_spec: project_skill_roots=%s remote_project_root=%s',
             len(skill_sync_spec.project_skill_roots),
-            bool(skill_sync_spec.local_user_skills_root),
-            bool(skill_sync_spec.remote_user_skills_root),
             skill_sync_spec.remote_project_root,
         )
 
