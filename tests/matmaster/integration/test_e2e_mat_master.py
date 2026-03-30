@@ -260,15 +260,15 @@ class TestMatMasterE2EPipeline:
         assert llm_messages[3]['content'] == 'new task'
 
 
-class TestMatMasterRunAgentSyncE2E:
-    """QUAL-02: run_agent_sync() with mock LLM provider injected."""
+class TestMatMasterRunAgentE2E:
+    """QUAL-02: run_agent() with mock LLM provider injected."""
 
     @patch('matmaster.config.loader.load_llm_config')
     @patch('matmaster.providers.llm_factory.build_provider')
-    def test_mat_master_run_agent_sync_e2e(
+    def test_mat_master_run_agent_e2e(
         self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
-        """E2E: run_agent_sync() with mock LLM provider injected."""
+        """E2E: run_agent() with mock LLM provider injected."""
         from src.services.agent_run_service import AgentRunService
 
         mock_sessions_svc = MagicMock()
@@ -339,16 +339,15 @@ class TestMatMasterRunAgentSyncE2E:
                 sse_payloads.append(payload)
 
             # Execute
-            svc.run_agent_sync(
+            asyncio.run(svc.run_agent(
                 session_id='sess-1',
                 user_prompt='test prompt',
                 send_cb=mock_send_cb,
-                loop=None,
                 stop_event=threading.Event(),
                 mode='direct',
                 reply_queue=None,
                 task_id='task-1',
-            )
+            ))
 
             # Verify: pipeline completed successfully -- use_quota called (success path)
             # use_quota is the strongest signal that kernel.run() returned a
@@ -364,7 +363,7 @@ class TestMatMasterRunAgentSyncE2E:
 
     @patch('matmaster.config.loader.load_llm_config')
     @patch('matmaster.providers.llm_factory.build_provider')
-    def test_run_agent_sync_excludes_current_task_query_from_history(
+    def test_run_agent_excludes_current_task_query_from_history(
         self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
         """Current task query should not be replayed into history for the LLM."""
@@ -447,16 +446,15 @@ class TestMatMasterRunAgentSyncE2E:
 
             mock_use_quota.side_effect = _mock_use_quota
 
-            svc.run_agent_sync(
+            asyncio.run(svc.run_agent(
                 session_id='sess-1',
                 user_prompt='new question',
                 send_cb=MagicMock(),
-                loop=None,
                 stop_event=threading.Event(),
                 mode='direct',
                 reply_queue=None,
                 task_id=current_task_id,
-            )
+            ))
 
         assert len(mock_llm.captured_messages) == 1
         llm_messages = mock_llm.captured_messages[0]
@@ -513,18 +511,17 @@ class TestMatMasterRunAgentSyncE2E:
             def mock_send_cb(payload: dict[str, Any]) -> None:
                 sse_payloads.append(payload)
 
-            result = svc.run_agent_sync(
+            result = asyncio.run(svc.run_agent(
                 session_id='sess-events-table-error',
                 user_prompt='test prompt',
                 send_cb=mock_send_cb,
-                loop=None,
                 stop_event=threading.Event(),
                 mode='direct',
                 reply_queue=None,
                 task_id='task-events-table-error',
-            )
+            ))
 
-        assert result is None
+        assert result == ((False, 'pre_router_setup_failed'), 0)
         mock_router_cls.assert_not_called()
         mock_router_cls.return_value.start.assert_not_called()
         mock_router_cls.return_value.stop.assert_not_called()
@@ -623,16 +620,15 @@ class TestMatMasterRunAgentSyncE2E:
 
             mock_bohrium_svc.setup.side_effect = _mock_setup
 
-            svc.run_agent_sync(
+            asyncio.run(svc.run_agent(
                 session_id='sess-bohrium-event',
                 user_prompt='test prompt',
                 send_cb=mock_send_cb,
-                loop=None,
                 stop_event=threading.Event(),
                 mode='direct',
                 reply_queue=None,
                 task_id='task-bohrium-event',
-            )
+            ))
 
         assert setup_state['saw_bohrium_event_before_return'] is True
         bohrium_payload = next(
@@ -715,16 +711,15 @@ class TestMatMasterRunAgentSyncE2E:
             def mock_send_cb(payload: dict[str, Any]) -> None:
                 sse_payloads.append(payload)
 
-            svc.run_agent_sync(
+            asyncio.run(svc.run_agent(
                 session_id='sess-bohrium-abort',
                 user_prompt='test prompt',
                 send_cb=mock_send_cb,
-                loop=None,
                 stop_event=threading.Event(),
                 mode='direct',
                 reply_queue=None,
                 task_id='task-bohrium-abort',
-            )
+            ))
 
         err = next((p for p in sse_payloads if p.get('type') == 'error'), None)
         closed = next(
@@ -801,16 +796,15 @@ class TestMatMasterRunAgentSyncE2E:
             def mock_send_cb(payload: dict[str, Any]) -> None:
                 sse_payloads.append(payload)
 
-            svc.run_agent_sync(
+            asyncio.run(svc.run_agent(
                 session_id='sess-bohrium-error',
                 user_prompt='test prompt',
                 send_cb=mock_send_cb,
-                loop=None,
                 stop_event=threading.Event(),
                 mode='direct',
                 reply_queue=None,
                 task_id='task-bohrium-error',
-            )
+            ))
 
         error_payload = next(
             (payload for payload in sse_payloads if payload.get('type') == 'error'),
