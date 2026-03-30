@@ -2,8 +2,8 @@
 """Submit a pending eval ingest file after Claude Code has judged the task.
 
 ``run_devshell_eval.py --eval-ingest-pending-only`` writes one JSON per task under
-``pending_ingest/`` with ``ingest_url``, ``run_id``, ``git_commit``, and ``item`` **without**
-``score``. After judging, pass score fields by CLI::
+``pending_ingest/`` with ``ingest_url``, ``run_id``, ``run_kind``, and ``item`` **without**
+``score``. External-baseline finalize adds ``baseline_channel``. After judging, pass score fields by CLI::
 
     uv run python evaluation/scripts/eval_ingest_submit_pending.py \
         --pending results/devshell_eval_xxx/pending_ingest/SC_struct_007_direct_r0.json \
@@ -11,7 +11,9 @@
         --score-reason "按 checklist，结构构建基本正确但缺少最终校验" \
         --suggestion "补充坐标一致性检查"
 
-This POSTs ``{ run_id, git_commit?, items: [item] }`` to ``ingest_url``.
+This POSTs ``{ run_id, run_kind, baseline_channel?, items: [item] }`` to ``ingest_url``.
+For ``run_kind`` ``baseline``, the server requires ``baseline_channel`` (``claude_code`` or
+``cursor``); pending JSON from external-baseline finalize includes it.
 CLI score fields are the only source of ``score`` / ``score_reason`` / ``suggestion``.
 Field names match ``matmaster-tools-server`` ``EvalItemIn``: optional ``question_text``
 (stem; long text truncated client-side to server max), ``score_reason`` / ``suggestion``
@@ -99,6 +101,7 @@ def main() -> int:
 
     sys.path.insert(0, str(REPO_ROOT))
     from evaluation.eval_ingest_client import (
+        normalize_baseline_channel,
         normalize_pending_item_for_submission,
         post_eval_ingest,
     )
@@ -126,6 +129,11 @@ def main() -> int:
         "run_kind": run_kind,
         "items": [normalized],
     }
+    if run_kind == "baseline":
+        body["baseline_channel"] = normalize_baseline_channel(
+            envelope.get("baseline_channel"),
+            default="claude_code",
+        )
 
     ok, msg = post_eval_ingest(
         ingest_url,

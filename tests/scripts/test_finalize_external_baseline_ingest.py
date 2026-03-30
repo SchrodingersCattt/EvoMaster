@@ -1,4 +1,4 @@
-"""Smoke tests for ``evaluation/scripts/baseline/finalize_cc_baseline_ingest.py`` (no HTTP / OSS)."""
+"""Smoke tests for ``evaluation/scripts/baseline/finalize_external_baseline_ingest.py`` (no HTTP / OSS)."""
 
 from __future__ import annotations
 
@@ -10,11 +10,15 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FINALIZE = (
-    REPO_ROOT / "evaluation" / "scripts" / "baseline" / "finalize_cc_baseline_ingest.py"
+    REPO_ROOT
+    / "evaluation"
+    / "scripts"
+    / "baseline"
+    / "finalize_external_baseline_ingest.py"
 )
 
 
-def test_finalize_cc_baseline_no_ingest(tmp_path) -> None:
+def test_finalize_external_baseline_no_ingest(tmp_path) -> None:
     run_dir = (tmp_path / "run").resolve()
     tid = "Q_test_direct_r0"
     ws = run_dir / "workspaces" / tid
@@ -79,7 +83,7 @@ def test_finalize_cc_baseline_no_ingest(tmp_path) -> None:
     assert row["duration_ms"] is None
 
 
-def test_finalize_cc_baseline_uses_clock_file(tmp_path) -> None:
+def test_finalize_external_baseline_uses_clock_file(tmp_path) -> None:
     run_dir = (tmp_path / "run").resolve()
     tid = "Q_clock_direct_r0"
     ws = run_dir / "workspaces" / tid

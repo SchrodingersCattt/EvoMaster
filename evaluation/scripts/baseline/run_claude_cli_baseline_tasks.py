@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Run CC baseline tasks automatically via ``claude -p`` (non-interactive mode).
+"""Run **external** baseline tasks via the Anthropic ``claude`` CLI (``claude -p``, non-interactive).
+
+This automates only the **Claude Code CLI** path. The same run directory and
+``finalize_external_baseline_ingest.py`` apply to Cursor (or other) baselines if you
+produce ``_devshell_summary.json`` yourself and set ``manifest`` / ``baseline_channel``
+accordingly.
 
 For each workspace under ``RUN_DIR/workspaces/``:
 
@@ -13,19 +18,19 @@ Requires ``claude`` CLI in ``PATH`` and ``--dangerously-skip-permissions``.
 Examples::
 
     # After prepare, run all tasks
-    uv run python evaluation/scripts/baseline/run_cc_baseline_tasks.py \\
+    uv run python evaluation/scripts/baseline/run_claude_cli_baseline_tasks.py \\
       --run-dir "$RUN_DIR"
 
     # Run specific tasks only
-    uv run python evaluation/scripts/baseline/run_cc_baseline_tasks.py \\
+    uv run python evaluation/scripts/baseline/run_claude_cli_baseline_tasks.py \\
       --run-dir "$RUN_DIR" --tasks SC_struct_007_direct_r0
 
     # Use a specific model
-    uv run python evaluation/scripts/baseline/run_cc_baseline_tasks.py \\
+    uv run python evaluation/scripts/baseline/run_claude_cli_baseline_tasks.py \\
       --run-dir "$RUN_DIR" --model opus
 
     # Auto-detect RUN_DIR from results/ and also finalize
-    uv run python evaluation/scripts/baseline/run_cc_baseline_tasks.py \\
+    uv run python evaluation/scripts/baseline/run_claude_cli_baseline_tasks.py \\
       --run-label baseline_cc_struct --finalize --eval-ingest-pending-only
 """
 
@@ -282,7 +287,9 @@ def _run_single_task(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Run CC baseline tasks via claude -p (non-interactive).",
+        description=(
+            "Run external baseline tasks via claude -p (Claude CLI automation only)."
+        ),
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
@@ -326,12 +333,21 @@ def main() -> int:
     parser.add_argument(
         "--finalize",
         action="store_true",
-        help="Run finalize_cc_baseline_ingest.py after all tasks complete.",
+        help="Run finalize_external_baseline_ingest.py after all tasks complete.",
     )
     parser.add_argument(
         "--eval-ingest-pending-only",
         action="store_true",
         help="Pass --eval-ingest-pending-only to finalize (requires --finalize).",
+    )
+    parser.add_argument(
+        "--baseline-channel",
+        choices=("claude_code", "cursor"),
+        default=None,
+        help=(
+            "If set with --finalize, pass to finalize as EvalIngestRequest.baseline_channel "
+            "(overrides manifest; default from manifest or claude_code)."
+        ),
     )
     parser.add_argument(
         "--claude-extra-args",
@@ -473,13 +489,15 @@ def main() -> int:
                 / "evaluation"
                 / "scripts"
                 / "baseline"
-                / "finalize_cc_baseline_ingest.py"
+                / "finalize_external_baseline_ingest.py"
             ),
             "--run-dir",
             str(run_dir),
         ]
         if args.eval_ingest_pending_only:
             finalize_cmd.append("--eval-ingest-pending-only")
+        if args.baseline_channel:
+            finalize_cmd.extend(["--baseline-channel", str(args.baseline_channel)])
         rc = subprocess.run(finalize_cmd, cwd=str(REPO_ROOT)).returncode
         if rc != 0:
             print(f"finalize exited with code {rc}", file=sys.stderr)
