@@ -13,8 +13,10 @@
 
 - **方案选择**：将 ConfirmationHook 改为依赖注入 async callable（方案 A 改进版），不引入 async ReplyQueue
 - **职责划分**：ConfirmationHook 只负责 gate 决策（emit event → await reply → return action）；队列轮询逻辑留在 `agent_run_service.py` 作为 async callable 构造
-- **轮询策略**：保持 1 秒间隔短轮询，通过 `loop.run_in_executor` 包装阻塞调用，`asyncio.wait_for` 控制整体超时
-- **线程回收**：`wait_for` 超时或 task 取消后，executor 线程正在执行的 `queue.get(timeout=1)` 最多再等 1 秒后自然退出，线程池回收。无需手动管理
+- **轮询策略**：保持 1 秒间隔短轮询，通过 `loop.run_in_executor` 包装阻塞调用，`asyncio.wait_for` 控制整体超时。`poll_sec` 使用 `int` 而非 `float`，因为 `RedisReplyQueue.get()` 内部 `int(timeout)` 会将 0.5 截断为 0，导致 BLPOP 永久阻塞
+- **线程回收**：`wait_for` 超时或 task 取消后，`CancelledError` 在 `await run_in_executor(...)` 处抛出，while 循环不会继续。executor 线程正在执行的 `queue.get(timeout=1)` 最多再等 1 秒后自然返回，返回值被丢弃（Future 已取消），线程池回收。超时后到达的回复会被丢弃，这是 by design 的行为（超时意味着用户未在规定时间内回复）
+- **顺序确认安全性**：kernel 的 hook 执行是串行的（`run_pre_tool_call` 中 `for hook in hooks: await hook.pre_tool_call()`），同一时刻最多只有一个 `_poll_reply_queue` 在运行，不存在队列消费竞争
+- **HTTP 端点兼容**：`chat_api.py` 通过 `ReplyQueueLike.put_content()`/`put_cancel()` 写入队列，`_poll_reply_queue` 通过 `ReplyQueueLike.get()` 读取队列，两侧接口不变，HTTP 端点不受影响
 - **Scope**：不改动 ReplyQueue 实现、Redis DAO 层、HTTP 端点、Worker 路径
 
 ## Changes
@@ -78,16 +80,22 @@ class ConfirmationHook(BaseHook):
 
 ```python
 async def _poll_reply_queue(
-    queue: ReplyQueueLike, poll_sec: int = 1
+    reply_queue: ReplyQueueLike, poll_sec: int = 1
 ) -> str | None:
-    """Await a blocking reply queue in executor. Returns content or None for cancel."""
+    """Await a blocking reply queue in executor. Returns content or None for cancel.
+
+    Uses int poll_sec (not float) because RedisReplyQueue.get() coerces via
+    int(timeout) -- 0.5 becomes 0, triggering BLPOP timeout=0 (block forever).
+    """
     loop = asyncio.get_running_loop()
     while True:
         try:
-            return await loop.run_in_executor(None, queue.get, poll_sec)
-        except queue.Empty:
+            return await loop.run_in_executor(None, reply_queue.get, poll_sec)
+        except Empty:
             continue
 ```
+
+注意：参数名用 `reply_queue` 而非 `queue`，避免遮蔽 `import queue` 模块。`Empty` 从 `queue` 模块顶层导入（`from queue import Empty`）。
 
 构造 hook 时注入：
 
@@ -112,14 +120,46 @@ confirmation_hook = ConfirmationHook(
 - `confirmation_reply_stop` / `confirmation_reply_thread` 变量声明
 - finally 块中的 bridge 清理逻辑（6 行）
 
-### 3. Protocol Cleanup (`src/services/agent_run_service.py`)
+### 3. Delete `ConfirmationHookAdapter` (`src/services/stream_service.py`)
 
-`ReplyQueueLike` Protocol 保持不变——它仍是 sync 协议，`_poll_reply_queue` 在 executor 中调用其 `.get()` 方法。
+`ConfirmationHookAdapter`（约 30 行）直接调用 `hook.resolve()` 和 `hook.cancel()`。删除 `resolve()`/`cancel()` 后此类不再可用，且本次重构后也不再需要——确认回复直接通过 `ReplyQueueLike.put_content()`/`put_cancel()` 写入队列，`_poll_reply_queue` 消费。
 
-### 4. Tests
+### 4. Protocol Docstring Update (`src/services/agent_run_service.py`)
 
-- `tests/matmaster/integration/test_upstream_scenarios.py`：更新直接导入 `_start_confirmation_reply_bridge` 的测试，改为测试 `_poll_reply_queue` 或通过 ConfirmationHook 的新构造方式集成测试
-- `matmaster/hooks/confirmation.py` 的单元测试：验证 `get_reply` callable 的超时、取消、正常回复三种路径
+`ReplyQueueLike` Protocol 的 deprecated docstring 引用 Phase 15 的 `resolve()`/`cancel()` API，而这正是本次删除的东西。本次重构后 `ReplyQueueLike` 反而是核心接口（`_poll_reply_queue` 直接消费其 `.get()`），需要更新 docstring 移除 deprecated 标记。
+
+### 5. Clean Up `set_loop` Injection (`matmaster/core/agent.py`)
+
+`AgentKernel.run()` 中有通用的 `set_loop` 注入逻辑：
+```python
+for hook in spec.hooks:
+    if hasattr(hook, "set_loop"):
+        hook.set_loop(loop)
+```
+删除 `set_loop()` 后此代码不会报错（`hasattr` 检查会跳过），但如果没有其他 hook 使用 `set_loop`，应一并清理这段代码。
+
+### 6. Tests
+
+**重写 `tests/matmaster/hooks/test_confirmation.py`**（当前 7 个测试用例全部依赖 `set_loop()`、`resolve()`、`cancel()`）：
+
+- `get_reply` 返回字符串 -> `HookAction.CONTINUE`
+- `get_reply` 返回 `None` -> `HookAction.SKIP`
+- `get_reply` 超时 -> `HookAction.SKIP`
+- `confirm_tools` 过滤：不在集合中的 tool 直接 CONTINUE，不调用 `get_reply`
+- 验证 `ConfirmationRequestEvent` 被 emit
+
+**新增 `_poll_reply_queue` 单元测试**：
+
+- 正常回复返回内容
+- `Empty` 超时后重试直到收到回复
+- 配合 `asyncio.wait_for` 超时时抛出 `TimeoutError`
+
+**更新 `tests/matmaster/integration/test_upstream_scenarios.py`**：
+
+- 替换 `test_confirmation_reply_bridge_thread_exits_with_redis_compatible_timeout`（直接导入 `_start_confirmation_reply_bridge`）为 `_poll_reply_queue` 集成测试
+- 验证两个端到端测试（`test_run_agent_sync_approval_executes_gated_tool`、`test_run_agent_sync_cancel_skips_gated_tool`）在新构造方式下仍通过
+
+**删除 `TestConfirmationHookAdapter`** 相关测试（随 `ConfirmationHookAdapter` 一起移除）
 
 ## Summary
 
@@ -130,5 +170,5 @@ confirmation_hook = ConfirmationHook(
 | 线程管理 | bridge thread + stop_event + join | 无（executor 自动回收） |
 | 竞态处理 | `_buffered_reply` + `_state_lock` | 无（单条代码路径） |
 | agent_run_service 涉及变量 | 4 个 + finally 清理 | 0 个 |
-| 改动文件 | 2 源码 + 1 测试 | — |
-| 净行数变化 | 约 -80 行 | — |
+| 改动文件 | 2 源码 + 1 测试 | 4 源码 + 2 测试 |
+| 净行数变化 | — | 约 -100 行 |
