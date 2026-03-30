@@ -22,7 +22,10 @@ For deferred ingest, ``run_devshell_eval.py --eval-ingest-pending-only`` writes
 The parent ``devshell_eval_*`` folder is shared by all tasks in the batch; it is not uploaded whole.
 ``extra`` is stored as opaque JSON. Optional ``eval_tooling`` (from
 :func:`matmaster.eval_tooling_snapshot.snapshot_devshell_eval_tooling`) records builtin /
-skill / MCP server config for batch analysis.
+skill / MCP server config for batch analysis. Optional ``events_timeline`` (from
+:func:`load_devshell_events_timeline`) is a short list of step labels in order, e.g.
+``["response", "read_file", "execute_bash", "run_result"]``, derived from
+``logs/<task_id>/events_*.jsonl``.
 
 Ingest POST URL is ``MATMASTER_TOOLS_SERVER`` + ``EVAL_INGEST_API_PATH``（在 **首次 import**
 本模块时按 ``utils.env`` 解析；与配额等共用同一 host）。见 ``EVAL_INGEST_URL``。
@@ -31,6 +34,7 @@ Ingest POST URL is ``MATMASTER_TOOLS_SERVER`` + ``EVAL_INGEST_API_PATH``（在 *
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import subprocess
@@ -87,6 +91,60 @@ def normalize_baseline_channel(
 
 def prompt_sha256(prompt: str) -> str:
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+
+
+def load_devshell_events_timeline(log_dir: Path) -> list[str] | None:
+    """Build a compact ordered timeline from ``events_*.jsonl`` under *log_dir*.
+
+    Uses the lexicographically last ``events_*.jsonl`` if several exist (filename
+    timestamp). For each line in file order:
+
+    - ``tool_call`` → append the tool name (``tool`` field).
+    - ``tool_result`` → skip (avoids duplicating the name next to ``tool_call``).
+    - ``response`` → append ``\"response\"``.
+    - ``run_result`` → append ``\"run_result\"``.
+    - ``thought`` and other types → skip.
+
+    Returns ``None`` if no matching file or no recognized steps.
+    """
+    root = Path(log_dir)
+    if not root.is_dir():
+        return None
+    matches = sorted(root.glob("events_*.jsonl"))
+    if not matches:
+        return None
+    path = matches[-1]
+    out: list[str] = []
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(rec, dict):
+            continue
+        typ = rec.get("type")
+        if typ == "tool_call":
+            name = rec.get("tool")
+            if isinstance(name, str) and name.strip():
+                out.append(name.strip())
+            else:
+                out.append("?")
+        elif typ == "tool_result":
+            continue
+        elif typ == "response":
+            out.append("response")
+        elif typ == "run_result":
+            out.append("run_result")
+        else:
+            continue
+    return out if out else None
 
 
 def extract_total_tokens(usage: Any) -> int | None:
@@ -317,6 +375,7 @@ def build_ingest_item(
     duration_ms: int | None,
     result_oss_url: str | None = None,
     eval_tooling: dict[str, Any] | None = None,
+    events_timeline: list[str] | None = None,
 ) -> dict[str, Any]:
     usage = summary.get("usage") if isinstance(summary, dict) else None
     tokens = extract_total_tokens(usage)
@@ -350,6 +409,8 @@ def build_ingest_item(
 
     if eval_tooling is not None:
         extra["eval_tooling"] = eval_tooling
+    if events_timeline:
+        extra["events_timeline"] = list(events_timeline)
 
     item: dict[str, Any] = {
         "question_id": question_id,
