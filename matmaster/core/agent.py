@@ -115,12 +115,6 @@ class AgentKernel:
         ]
         guard_pipeline = GuardPipeline(spec.guards)
 
-        # Inject running loop to hooks that need it (e.g. ConfirmationHook)
-        loop = asyncio.get_running_loop()
-        for hook in spec.hooks:
-            if hasattr(hook, "set_loop"):
-                hook.set_loop(loop)
-
         turn = 0
         if spec.compactor:
             spec.compactor.update_message_count(len(messages))
