@@ -11,12 +11,19 @@ from evaluation.eval_ingest_client import (
     clip_ingest_text_field,
     eval_run_zip_should_skip_arcname,
     extract_total_tokens,
+    normalize_baseline_channel,
     normalize_pending_item_for_submission,
     post_eval_ingest,
     post_question_catalog_sync,
     prompt_sha256,
     score_for_eval_ingest,
 )
+
+
+def test_normalize_baseline_channel() -> None:
+    assert normalize_baseline_channel(None) == "claude_code"
+    assert normalize_baseline_channel("cursor") == "cursor"
+    assert normalize_baseline_channel("  claude_code  ") == "claude_code"
 
 
 def test_prompt_sha256_stable() -> None:
@@ -65,7 +72,6 @@ def test_eval_ingest_url_matches_tools_server() -> None:
 def test_build_ingest_item_minimal() -> None:
     item = build_ingest_item(
         question_id="Q1",
-        prompt="p",
         task_id="Q1_direct_r0",
         mode="direct",
         repeat_idx=0,
@@ -79,8 +85,7 @@ def test_build_ingest_item_minimal() -> None:
         duration_ms=5000,
     )
     assert item["question_id"] == "Q1"
-    assert item["question_text"] == "p"
-    assert "question_sha256" not in item["extra"]
+    assert "question_text" not in item
     assert item["duration_ms"] == 5000
     assert item["tokens"] == 100
     assert item["score"] == 100.0
@@ -94,7 +99,6 @@ def test_build_ingest_item_minimal() -> None:
 def test_build_ingest_item_model_top_level() -> None:
     item = build_ingest_item(
         question_id="Q1",
-        prompt="p",
         task_id="Q1_direct_r0",
         mode="direct",
         repeat_idx=0,
@@ -112,7 +116,6 @@ def test_build_ingest_item_model_top_level() -> None:
 def test_build_ingest_item_explicit_score_overrides_exit() -> None:
     item = build_ingest_item(
         question_id="Q1",
-        prompt="p",
         task_id="Q1_direct_r0",
         mode="direct",
         repeat_idx=0,
@@ -126,7 +129,6 @@ def test_build_ingest_item_explicit_score_overrides_exit() -> None:
 def test_build_ingest_item_result_oss_url() -> None:
     item = build_ingest_item(
         question_id="Q1",
-        prompt="p",
         task_id="Q1_direct_r0",
         mode="direct",
         repeat_idx=0,
@@ -142,7 +144,6 @@ def test_build_ingest_item_eval_tooling_in_extra() -> None:
     tooling = {"schema": "matmaster_eval_tooling_v1", "skill_names": ["x"]}
     item = build_ingest_item(
         question_id="Q1",
-        prompt="p",
         task_id="Q1_direct_r0",
         mode="direct",
         repeat_idx=0,
@@ -195,7 +196,6 @@ def test_normalize_pending_item_rejects_bad_score_reason_type() -> None:
 def test_build_ingest_item_parse_error_summary() -> None:
     item = build_ingest_item(
         question_id="Q1",
-        prompt="x",
         task_id="Q1_direct_r0",
         mode="direct",
         repeat_idx=0,

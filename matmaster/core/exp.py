@@ -162,7 +162,7 @@ class Exp:
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
         if builtin_cfg and ctx.session is not None:
-            self._init_builtin_tools(ctx, registry)
+            self._init_builtin_tools(ctx, registry, builtin_cfg)
 
         # 2. Skills/MCP: runtime-injected (must be before system prompt)
         if skills or self._config.skills.enabled:
@@ -301,9 +301,16 @@ class Exp:
     # ── Capability initialization helpers ────────────────
 
     def _init_builtin_tools(
-        self, ctx: PlaygroundContext, registry: ToolRegistry
+        self,
+        ctx: PlaygroundContext,
+        registry: ToolRegistry,
+        builtin_cfg: list[str],
     ) -> None:
-        """Register builtin tools: native (source='builtin') + evo adapter (source='builtin_evo').
+        """Register builtin tools filtered by *builtin_cfg*.
+
+        When ``builtin_cfg`` contains ``"*"`` every builtin is registered
+        (original behaviour).  Otherwise only tools whose ``name`` appears
+        in the list are registered, cutting prompt-token overhead.
 
         Native tools (12): BashTool, ListDirTool, ReadTool, WriteTool, EditTool,
         GlobTool, GrepTool, TaskCreate/Get/List/Update/Complete.
@@ -315,6 +322,12 @@ class Exp:
                 'No session in PlaygroundContext, skipping builtin tools'
             )
             return
+
+        allow_all = '*' in builtin_cfg
+        allowed: set[str] | None = None if allow_all else set(builtin_cfg)
+
+        def _want(name: str) -> bool:
+            return allowed is None or name in allowed
 
         # 1. Native builtin tools (source="builtin")
         from matmaster.tools.builtin import (
@@ -335,7 +348,6 @@ class Exp:
 
         # Create ReadTracker shared instance for Read-Before-Modify protocol
         tracker = ReadTracker()
-        self._register_cleanup(tracker.clear)
 
         exec_wd = Path(ctx.execution_workdir)
         native_tools = [
@@ -354,8 +366,16 @@ class Exp:
             TaskUpdateTool(workdir=ctx.workdir),
             TaskCompleteTool(workdir=ctx.workdir),
         ]
+        registered_native: list[Any] = []
         for tool in native_tools:
-            registry.register(tool, source='builtin')
+            if _want(tool.name):
+                registry.register(tool, source='builtin')
+                registered_native.append(tool)
+
+        # Register tracker cleanup only when tracker-dependent tools are active
+        _TRACKER_NAMES = {'read_file', 'write_file', 'edit_file'}
+        if any(t.name in _TRACKER_NAMES for t in registered_native):
+            self._register_cleanup(tracker.clear)
 
         # 2. Evo adapter tools (source="builtin_evo")
         #    Retain legacy science-specific tools that have not been ported natively.
@@ -366,13 +386,18 @@ class Exp:
             MonitorJobTool(),
             get_web_search_tool(),
         ]
+        registered_evo: list[Any] = []
         for tool in evo_tools:
-            registry.register(EvoToolAdapter(tool, ctx.session), source='builtin_evo')
+            adapted = EvoToolAdapter(tool, ctx.session)
+            if _want(adapted.name):
+                registry.register(adapted, source='builtin_evo')
+                registered_evo.append(adapted)
 
         self.logger.debug(
-            'Registered %d native + %d evo-adapted builtin tools',
-            len(native_tools),
-            len(evo_tools),
+            'Registered %d native + %d evo-adapted builtin tools (cfg=%s)',
+            len(registered_native),
+            len(registered_evo),
+            builtin_cfg,
         )
 
     def _init_skill_tools(

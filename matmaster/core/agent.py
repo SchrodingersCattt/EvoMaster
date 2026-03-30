@@ -97,7 +97,6 @@ class AgentKernel:
         if spec.compactor:
             spec.compactor.update_message_count(len(messages))
         last_usage: dict[str, int] = {}
-        total_usage: dict[str, int] = {}
         last_stop_reason: str | None = None
 
         while turn < spec.max_turns:
@@ -109,7 +108,7 @@ class AgentKernel:
                     'cancelled',
                     num_turns=turn,
                     stop_reason=last_stop_reason,
-                    usage=total_usage,
+                    usage=last_usage,
                 )
 
             turn += 1
@@ -125,7 +124,7 @@ class AgentKernel:
                     'hook_stopped',
                     num_turns=turn - 1,
                     stop_reason=last_stop_reason,
-                    usage=total_usage,
+                    usage=last_usage,
                 )
 
             # Context compaction check
@@ -142,10 +141,9 @@ class AgentKernel:
                     'cancelled',
                     num_turns=turn,
                     stop_reason=last_stop_reason,
-                    usage=total_usage,
+                    usage=last_usage,
                 )
-            last_usage = response.usage
-            self._accumulate_usage(total_usage, response.usage)
+            last_usage = response.usage or {}
             last_stop_reason = response.finish_reason
             if spec.compactor:
                 spec.compactor.update_message_count(len(messages))
@@ -159,7 +157,7 @@ class AgentKernel:
                         'invalid_finish',
                         num_turns=turn,
                         stop_reason=last_stop_reason,
-                        usage=total_usage,
+                        usage=last_usage,
                     )
                 messages.append(
                     AssistantMessage(
@@ -174,7 +172,7 @@ class AgentKernel:
                     final_content=response.content,
                     num_turns=turn,
                     stop_reason=response.finish_reason,
-                    usage=total_usage,
+                    usage=last_usage,
                 )
 
             # Has tool_calls: append assistant message then process each serially
@@ -194,7 +192,7 @@ class AgentKernel:
                         'cancelled',
                         num_turns=turn,
                         stop_reason=last_stop_reason,
-                        usage=total_usage,
+                        usage=last_usage,
                     )
                 # Guard evaluation (before hooks)
                 guard_result = guard_pipeline.evaluate(tc, turn, spec.max_turns)
@@ -255,7 +253,7 @@ class AgentKernel:
             'max_turns',
             num_turns=turn,
             stop_reason=last_stop_reason,
-            usage=total_usage,
+            usage=last_usage,
         )
 
     def _call_llm(
@@ -484,12 +482,6 @@ class AgentKernel:
     def _is_valid_natural_finish(response: LLMResponse) -> bool:
         """Only commit a natural finish when the stream terminates cleanly."""
         return not response.tool_calls and response.finish_reason == 'stop'
-
-    @staticmethod
-    def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
-        """Accumulate per-turn usage into running total."""
-        for k, v in delta.items():
-            total[k] = total.get(k, 0) + v
 
     @staticmethod
     def _finish(

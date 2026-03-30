@@ -221,7 +221,7 @@ class TestCompactorIntegration:
 
 
 class TestKernelResultFields:
-    """KernelResult carries num_turns, stop_reason, and accumulated usage."""
+    """KernelResult carries num_turns, stop_reason, and last LLM-call usage."""
 
     def test_natural_finish_has_num_turns(self) -> None:
         from matmaster.core.agent import AgentKernel
@@ -238,7 +238,7 @@ class TestKernelResultFields:
         assert result.result.num_turns == 1
         assert result.result.stop_reason == 'stop'
 
-    def test_multi_turn_accumulates_usage(self) -> None:
+    def test_multi_turn_reports_last_usage_only(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         class UsageTrackingToolProvider:
@@ -285,8 +285,8 @@ class TestKernelResultFields:
         result = kernel.run(spec, 'test')
 
         assert result.result.num_turns == 2
-        assert result.result.usage['prompt_tokens'] == 300
-        assert result.result.usage['completion_tokens'] == 80
+        assert result.result.usage['prompt_tokens'] == 200
+        assert result.result.usage['completion_tokens'] == 30
 
     def test_max_turns_has_correct_num_turns(self) -> None:
         from matmaster.core.agent import AgentKernel

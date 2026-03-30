@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Mark wall-clock start for a Claude Code baseline task workspace.
+"""Mark wall-clock start for an **external** baseline task workspace (not mm-devshell).
 
-Run once when you **begin** working on the task (e.g. right after opening the folder
-in Claude Code). Later, ``finalize_cc_baseline_ingest.py`` prefers::
+Use for any baseline channel (e.g. Claude Code, Cursor) that follows the same run layout:
+``--prepare-cc-baseline`` workspaces + ``finalize_external_baseline_ingest.py``.
+
+Run once when you **begin** working on the task (e.g. right after opening the folder in the IDE).
+Later, ``finalize_external_baseline_ingest.py`` prefers::
 
     duration_ms ≈ mtime(_devshell_summary.json) - started_at_unix_ms
 
 so ingest ``duration_ms`` matches DevShell-style objective timing (no self-report).
 
-Without this file, ``finalize_cc_baseline_ingest.py`` leaves ``duration_ms`` unset.
+Without this file, ``finalize_external_baseline_ingest.py`` leaves ``duration_ms`` unset.
 
 Example::
 
-    uv run python evaluation/scripts/baseline/cc_baseline_mark_task_start.py \\
+    uv run python evaluation/scripts/baseline/mark_external_baseline_task_start.py \\
       --workspace \"$RUN_DIR/workspaces/SC_struct_007_direct_r0\"
 """
 

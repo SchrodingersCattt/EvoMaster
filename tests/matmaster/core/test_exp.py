@@ -454,7 +454,7 @@ class TestExpBuiltinTools:
         exp = Exp(ExpConfig(name='test'))
         ctx = self._make_ctx_with_session(tmp_path)
         registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry)
+        exp._init_builtin_tools(ctx, registry, ['*'])
         return exp, registry
 
     def test_native_tools_count(self, tmp_path: Path) -> None:
@@ -539,11 +539,11 @@ class TestExpBuiltinTools:
             llm_provider=MockLLMProvider(),
         )
         registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry)
+        exp._init_builtin_tools(ctx, registry, ['*'])
         assert len(registry) == 0
 
-    def test_explicit_builtin_config_triggers_init(self, tmp_path: Path) -> None:
-        """Non-empty explicit tool list (not wildcard) still triggers _init_builtin_tools."""
+    def test_explicit_builtin_config_filters_tools(self, tmp_path: Path) -> None:
+        """Non-empty explicit tool list registers only the requested tools."""
         exp = Exp(
             ExpConfig(
                 name='test',
@@ -555,11 +555,9 @@ class TestExpBuiltinTools:
         with patch('matmaster.core.agent.AgentKernel'):
             runtime = exp.build_runtime(ctx)
 
-        # If _init_builtin_tools ran, native tools should be in the registry
         native = runtime.spec.tool_registry.get_tools_by_source('builtin')
-        assert (
-            len(native) == 12
-        )  # All native tools registered regardless of config list
+        registered_names = {t.name for t in native}
+        assert registered_names == {'execute_bash', 'read_file'}
 
     def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
         """Empty builtin list skips _init_builtin_tools entirely."""
@@ -610,7 +608,7 @@ class TestExecutionWorkdirBinding:
         ctx = self._ctx(tmp_path, control=control, execution=execution)
         exp = Exp(ExpConfig(name='test'))
         registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry)
+        exp._init_builtin_tools(ctx, registry, ['*'])
         by_name = {t.name: t for t in registry.all_tools}
         for name in (
             'execute_bash',
@@ -633,7 +631,7 @@ class TestExecutionWorkdirBinding:
         ctx = self._ctx(tmp_path, control=control, execution=execution)
         exp = Exp(ExpConfig(name='test'))
         registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry)
+        exp._init_builtin_tools(ctx, registry, ['*'])
         by_name = {t.name: t for t in registry.all_tools}
         for name in (
             'task_create',

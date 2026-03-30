@@ -8,10 +8,10 @@ MATTER 是 `evaluation/` 下的独立评测模块，当前仅维护 **v5+** 题�
 |------|------|
 | `core/` | Python 实现：题库模型、runner、判分、报告等 |
 | `scripts/devshell/` | DevShell / mm-devshell 批量跑题、`export_devshell_review_bundle` |
-| `scripts/baseline/` | Claude Code baseline 收尾（`finalize_cc_baseline_ingest`） |
+| `scripts/baseline/` | 外部 baseline（CC/Cursor 等）：`finalize_external_baseline_ingest`、`run_claude_cli_baseline_tasks`（仅 `claude` CLI） |
 | `scripts/matter_cli/` | **Core 评测**（`evaluation.core` + Playground `run_mat_task`）：后台跑 `python -m evaluation`、Windows 启动脚本、run 目录监控 |
 | `scripts/eval_ingest_submit_pending.py` | 共用：pending 入库（baseline / devshell 判分后上报） |
-| `docs/baseline/` | CC baseline 流程说明 |
+| `docs/baseline/` | 外部 baseline 流程说明（主文档仍以 Claude Code 为例） |
 | `docs/devshell/` | DevShell 批量 + 人工判分话术 |
 | `question_bank/` | v5+ 题库与 `data/` 输入文件 |
 | `config.yaml` | 默认评测配置 |

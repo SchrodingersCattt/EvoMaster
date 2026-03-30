@@ -1,10 +1,13 @@
 """Client for matmaster-tools-server evaluation ingest API.
 
 See ``docs/apifox-evaluation-openapi.json`` in matmaster-tools-server for the contract:
-``EvalIngestRequest`` with ``run_id``, optional ``git_commit``, ``items`` (≥1).
-Each ``EvalItemIn`` requires ``question_id``; optional ``question_text`` (stem / prompt
-for DB); ``model`` / ``num_turns`` / ``score`` (optional) / ``result_oss_url`` on the item
-top level. For **immediate** ingest,
+``EvalIngestRequest`` with ``run_id``, ``run_kind`` (baseline | iteration), ``items`` (≥1).
+When ``run_kind`` is ``baseline``, matmaster-tools-server **requires** ``baseline_channel`` on the
+request body: ``claude_code`` or ``cursor`` (see ``EvalIngestRequest`` in
+``matmaster-tools-server/src/models/evaluation.py``). For ``iteration``, omit it (null).
+Each ``EvalItemIn`` requires ``question_id``; ``model`` / ``num_turns`` / ``score``
+(optional) / ``result_oss_url`` on the item top level. 题干（question_text）由独立的
+题库同步接口维护，ingest 不再写入。For **immediate** ingest,
 :func:`build_ingest_item` sets ``score`` from the devshell summary when present, else a
 100/0 pass-fail proxy. Human ``score`` / ``score_reason`` / ``suggestion`` for **pending**
 ingest are passed by CLI and validated by
@@ -34,7 +37,7 @@ import subprocess
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -45,6 +48,9 @@ logger = logging.getLogger(__name__)
 # Align with matmaster-tools-server ``EvalItemIn`` field limits.
 EVAL_ITEM_TEXT_FIELD_MAX_LEN = 16384
 EVAL_ITEM_QUESTION_TEXT_MAX_LEN = 4_194_304
+# Align with matmaster-tools-server ``EvalIngestRequest.baseline_channel`` Literal.
+EvalBaselineChannel = Literal["claude_code", "cursor"]
+_EVAL_BASELINE_CHANNELS: frozenset[str] = frozenset({"claude_code", "cursor"})
 
 # Direct tools-server path (not the gateway ``/bohrapi/v1/matmaster-tools-server/...`` prefix).
 EVAL_INGEST_API_PATH = "/api/v1/evaluation/ingest"
@@ -57,6 +63,28 @@ QUESTION_CATALOG_SYNC_URL: str | None = (
 )
 
 
+def normalize_baseline_channel(
+    value: Any, *, default: EvalBaselineChannel = "claude_code"
+) -> EvalBaselineChannel:
+    """Coerce to ``claude_code`` | ``cursor``; unknown values log a warning and use *default*."""
+    if default not in _EVAL_BASELINE_CHANNELS:
+        default = "claude_code"
+    if value is None:
+        return default
+    s = str(value).strip()
+    if not s:
+        return default
+    if s in _EVAL_BASELINE_CHANNELS:
+        return s  # type: ignore[return-value]
+    logger.warning(
+        "invalid baseline_channel %r (allowed: %s); using %r",
+        s,
+        ", ".join(sorted(_EVAL_BASELINE_CHANNELS)),
+        default,
+    )
+    return default
+
+
 def prompt_sha256(prompt: str) -> str:
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
@@ -64,10 +92,25 @@ def prompt_sha256(prompt: str) -> str:
 def extract_total_tokens(usage: Any) -> int | None:
     if not usage or not isinstance(usage, dict):
         return None
+    # Prefer cache-adjusted total (aligned with Claude Code accounting)
+    uncached = usage.get("total_tokens_uncached")
+    if uncached is not None:
+        try:
+            return int(uncached)
+        except (TypeError, ValueError):
+            pass
     raw = usage.get("total_tokens")
     if raw is not None:
         try:
-            return int(raw)
+            val = int(raw)
+            # Subtract cache_read_tokens if available
+            cache_read = usage.get("cache_read_tokens")
+            if cache_read is not None:
+                try:
+                    val -= int(cache_read)
+                except (TypeError, ValueError):
+                    pass
+            return val
         except (TypeError, ValueError):
             pass
     pt = usage.get("prompt_tokens")
@@ -212,11 +255,11 @@ def normalize_pending_item_for_submission(
     """Validate and normalize ``item`` from a pending-ingest JSON before POST.
 
     Requires ``score`` (coerced to ``float``). Optional ``score_reason`` / ``suggestion``
-    must be strings if present; empty after strip are dropped. Optional ``question_text``
-    is clipped to ``EVAL_ITEM_QUESTION_TEXT_MAX_LEN``.
+    must be strings if present; empty after strip are dropped.
     Returns ``(item, None)`` or ``(None, error_message)``.
     """
     out = dict(item)
+    out.pop("question_text", None)
     raw_score = out.get("score")
     if raw_score is None:
         return None, 'missing item["score"] — pass --score (e.g. 0–100)'
@@ -224,21 +267,6 @@ def normalize_pending_item_for_submission(
         out["score"] = float(raw_score)
     except (TypeError, ValueError):
         return None, f'invalid item["score"]: {raw_score!r}'
-
-    if "question_text" in out:
-        qt = out["question_text"]
-        if qt is None:
-            out.pop("question_text", None)
-        elif not isinstance(qt, str):
-            return None, 'item["question_text"] must be a string if present'
-        else:
-            clipped_q = clip_ingest_text_field(
-                qt, max_len=EVAL_ITEM_QUESTION_TEXT_MAX_LEN
-            )
-            if clipped_q is None:
-                out.pop("question_text", None)
-            else:
-                out["question_text"] = clipped_q
 
     for key in ("score_reason", "suggestion"):
         if key not in out:
@@ -281,7 +309,6 @@ def git_head_commit(repo_root: Path, *, max_len: int = 64) -> str | None:
 def build_ingest_item(
     *,
     question_id: str,
-    prompt: str,
     task_id: str,
     mode: str,
     repeat_idx: int,
@@ -324,13 +351,10 @@ def build_ingest_item(
     if eval_tooling is not None:
         extra["eval_tooling"] = eval_tooling
 
-    qtext = clip_ingest_text_field(prompt, max_len=EVAL_ITEM_QUESTION_TEXT_MAX_LEN)
     item: dict[str, Any] = {
         "question_id": question_id,
         "extra": extra,
     }
-    if qtext is not None:
-        item["question_text"] = qtext
     if isinstance(summary, dict):
         nt = summary.get("num_turns")
         if nt is not None:
