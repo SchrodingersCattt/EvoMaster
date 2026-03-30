@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TextIO
@@ -33,6 +34,8 @@ class EventLogger:
         self._run_id = run_id
         self._fh: TextIO | None = None
         self._thought_buffer: dict[str, list[str]] = {}  # stream_id -> content parts
+        self._thought_start_mono: dict[str, float] = {}  # stream_id -> perf_counter at thought start
+        self._thought_start_ts: dict[str, str] = {}  # stream_id -> ISO ts at thought start
 
     # ── public API ────────────────────────────────────────
 
@@ -79,16 +82,28 @@ class EventLogger:
 
         if event.stream_state == "start":
             self._thought_buffer[sid] = []
+            self._thought_start_mono[sid] = time.perf_counter()
+            self._thought_start_ts[sid] = datetime.now(timezone.utc).isoformat()
         elif event.stream_state == "streaming":
             self._thought_buffer.setdefault(sid, []).append(event.content)
         elif event.stream_state == "end":
             parts = self._thought_buffer.pop(sid, [])
             content = "".join(parts)
+            start_mono = self._thought_start_mono.pop(sid, None)
+            start_ts = self._thought_start_ts.pop(sid, None)
+            duration_ms: float | None = None
+            if start_mono is not None:
+                duration_ms = (time.perf_counter() - start_mono) * 1000.0
             if content:
-                self._write_record({
+                rec: dict[str, Any] = {
                     "type": "thought",
                     "content": content,
-                })
+                }
+                if start_ts is not None:
+                    rec["ts_start"] = start_ts
+                if duration_ms is not None:
+                    rec["duration_ms"] = round(duration_ms, 3)
+                self._write_record(rec)
         else:
             # Non-streaming thought (stream_state is None)
             if event.content:

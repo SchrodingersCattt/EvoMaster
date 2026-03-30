@@ -59,6 +59,10 @@ class TestEventLogger:
         rec = json.loads(lines[0])
         assert rec["type"] == "thought"
         assert rec["content"] == "Hello"
+        assert "duration_ms" in rec
+        assert isinstance(rec["duration_ms"], (int, float))
+        assert rec["duration_ms"] >= 0
+        assert "ts_start" in rec
 
     def test_skips_assistant_state(self, tmp_path: Path) -> None:
         from matmaster.devshell.event_logger import EventLogger
