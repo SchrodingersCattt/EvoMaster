@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import threading
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,47 +10,29 @@ from matmaster.core.bus import MessageBus
 from matmaster.core.hooks import HookAction
 from matmaster.types.events import ConfirmationRequestEvent
 from matmaster.types.messages import ToolCallData
-from src.services.stream_service import ConfirmationHookAdapter
 
 
 def _tool_call(name: str = "execute_bash") -> ToolCallData:
     return ToolCallData(id=f"{name}-1", name=name, arguments={"command": "echo ok"})
 
 
-class _ReplyingBus(MessageBus):
-    """Emit the confirmation request, then immediately inject a reply."""
-
-    def __init__(self, on_emit) -> None:
-        super().__init__()
-        self._on_emit = on_emit
-
-    async def emit(self, event) -> None:
-        await super().emit(event)
-        self._on_emit()
+async def _immediate_reply(reply: str | None = "approved") -> str | None:
+    return reply
 
 
 class TestConfirmationHook:
-    """ConfirmationHook async wait / resolve / cancel behavior."""
-
-    @pytest.mark.asyncio
-    async def test_without_loop_continues_without_emitting(self) -> None:
-        from matmaster.hooks.confirmation import ConfirmationHook
-
-        bus = MessageBus()
-        hook = ConfirmationHook(bus=bus)
-
-        result = await hook.pre_tool_call(_tool_call())
-
-        assert result == HookAction.CONTINUE
-        assert bus.pending == 0
+    """ConfirmationHook async get_reply behavior."""
 
     @pytest.mark.asyncio
     async def test_non_gated_tool_continues_without_emitting(self) -> None:
         from matmaster.hooks.confirmation import ConfirmationHook
 
         bus = MessageBus()
-        hook = ConfirmationHook(bus=bus, confirm_tools={"execute_bash"})
-        hook.set_loop(asyncio.get_running_loop())
+        hook = ConfirmationHook(
+            bus=bus,
+            confirm_tools={"execute_bash"},
+            get_reply=_immediate_reply,
+        )
 
         result = await hook.pre_tool_call(_tool_call("read_file"))
 
@@ -60,115 +40,87 @@ class TestConfirmationHook:
         assert bus.pending == 0
 
     @pytest.mark.asyncio
-    async def test_resolve_approved_reply_continues(self) -> None:
+    async def test_approved_reply_continues(self) -> None:
         from matmaster.hooks.confirmation import ConfirmationHook
 
         bus = MessageBus()
-        hook = ConfirmationHook(bus=bus, timeout_sec=1.0)
-        hook.set_loop(asyncio.get_running_loop())
-
-        pending = asyncio.create_task(hook.pre_tool_call(_tool_call()))
-
-        event = await bus.get(timeout=0.2)
-        assert isinstance(event, ConfirmationRequestEvent)
-        assert event.question == "Confirm tool call: execute_bash?"
-
-        await asyncio.to_thread(hook.resolve, "approved")
-
-        result = await pending
-        assert result == HookAction.CONTINUE
-
-    @pytest.mark.asyncio
-    async def test_reply_during_emit_does_not_get_dropped(self) -> None:
-        from matmaster.hooks.confirmation import ConfirmationHook
-
-        hook: ConfirmationHook | None = None
-
-        def _reply_during_emit() -> None:
-            assert hook is not None
-            hook.resolve("approved")
-
-        bus = _ReplyingBus(_reply_during_emit)
-        hook = ConfirmationHook(bus=bus, timeout_sec=0.2)
-        hook.set_loop(asyncio.get_running_loop())
+        hook = ConfirmationHook(
+            bus=bus,
+            get_reply=lambda: _immediate_reply("approved"),
+        )
 
         result = await hook.pre_tool_call(_tool_call())
 
         assert result == HookAction.CONTINUE
 
     @pytest.mark.asyncio
-    async def test_reply_before_request_is_buffered(self) -> None:
+    async def test_none_reply_skips(self) -> None:
         from matmaster.hooks.confirmation import ConfirmationHook
 
         bus = MessageBus()
-        hook = ConfirmationHook(bus=bus, timeout_sec=0.2)
-        hook.set_loop(asyncio.get_running_loop())
-
-        hook.resolve("approved")
+        hook = ConfirmationHook(
+            bus=bus,
+            get_reply=lambda: _immediate_reply(None),
+        )
 
         result = await hook.pre_tool_call(_tool_call())
 
-        assert result == HookAction.CONTINUE
-
-    @pytest.mark.asyncio
-    async def test_cancel_reply_returns_skip(self) -> None:
-        from matmaster.hooks.confirmation import ConfirmationHook
-
-        bus = MessageBus()
-        hook = ConfirmationHook(bus=bus, timeout_sec=1.0)
-        hook.set_loop(asyncio.get_running_loop())
-
-        pending = asyncio.create_task(hook.pre_tool_call(_tool_call()))
-
-        event = await bus.get(timeout=0.2)
-        assert isinstance(event, ConfirmationRequestEvent)
-
-        thread = threading.Thread(target=hook.cancel)
-        thread.start()
-        thread.join()
-
-        result = await pending
         assert result == HookAction.SKIP
 
     @pytest.mark.asyncio
     async def test_timeout_returns_skip(self) -> None:
         from matmaster.hooks.confirmation import ConfirmationHook
 
+        async def _hang_forever() -> str | None:
+            await asyncio.sleep(999)
+            return "never"
+
         bus = MessageBus()
-        hook = ConfirmationHook(bus=bus, timeout_sec=0.05)
-        hook.set_loop(asyncio.get_running_loop())
+        hook = ConfirmationHook(
+            bus=bus,
+            timeout_sec=0.05,
+            get_reply=_hang_forever,
+        )
 
-        pending = asyncio.create_task(hook.pre_tool_call(_tool_call()))
+        result = await hook.pre_tool_call(_tool_call())
 
-        event = await bus.get(timeout=0.2)
-        assert isinstance(event, ConfirmationRequestEvent)
-
-        result = await pending
         assert result == HookAction.SKIP
 
+    @pytest.mark.asyncio
+    async def test_confirm_tools_filter_skips_get_reply(self) -> None:
+        from matmaster.hooks.confirmation import ConfirmationHook
 
-class TestConfirmationHookAdapter:
-    """Legacy adapter contract for stream_service callers."""
+        called = False
 
-    def test_put_content_forwards_to_resolve(self) -> None:
-        hook = MagicMock()
-        adapter = ConfirmationHookAdapter(hook)
+        async def _should_not_be_called() -> str | None:
+            nonlocal called
+            called = True
+            return "approved"
 
-        adapter.put_content("approved")
+        bus = MessageBus()
+        hook = ConfirmationHook(
+            bus=bus,
+            confirm_tools={"execute_bash"},
+            get_reply=_should_not_be_called,
+        )
 
-        hook.resolve.assert_called_once_with("approved")
+        result = await hook.pre_tool_call(_tool_call("read_file"))
 
-    def test_put_cancel_forwards_to_cancel(self) -> None:
-        hook = MagicMock()
-        adapter = ConfirmationHookAdapter(hook)
+        assert result == HookAction.CONTINUE
+        assert not called
 
-        adapter.put_cancel()
+    @pytest.mark.asyncio
+    async def test_emits_confirmation_request_event(self) -> None:
+        from matmaster.hooks.confirmation import ConfirmationHook
 
-        hook.cancel.assert_called_once_with()
+        bus = MessageBus()
+        hook = ConfirmationHook(
+            bus=bus,
+            get_reply=lambda: _immediate_reply("approved"),
+        )
 
-    def test_get_raises_not_implemented(self) -> None:
-        hook = MagicMock()
-        adapter = ConfirmationHookAdapter(hook)
+        await hook.pre_tool_call(_tool_call())
 
-        with pytest.raises(NotImplementedError):
-            adapter.get(timeout=1.0)
+        event = await bus.get(timeout=0.1)
+        assert isinstance(event, ConfirmationRequestEvent)
+        assert event.question == "Confirm tool call: execute_bash?"
