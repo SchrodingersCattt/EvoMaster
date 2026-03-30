@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""After Claude Code baseline runs: build raw_runs.jsonl + eval ingest (or pending_ingest).
+"""After **external** baseline runs (Claude Code, Cursor, …): build ``raw_runs.jsonl`` + eval ingest (or ``pending_ingest``).
 
 Expects a run directory created with::
 
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --prepare-cc-baseline ...
 
+``baseline_channel`` on ingest (``claude_code`` | ``cursor``) comes from ``manifest.json`` or
+``--baseline-channel``.
+
 Each task workspace must contain:
 
 - ``_eval_task_meta.json`` (written by --prepare-cc-baseline)
 - ``_devshell_summary.json`` (one JSON object, same schema as mm-devshell ``--json-out``; ``duration_ms`` in it is ignored)
-- ``_cc_baseline_task_start.json`` (from ``cc_baseline_mark_task_start.py``) if you need ingest ``duration_ms``
+- ``_cc_baseline_task_start.json`` (from ``mark_external_baseline_task_start.py``) if you need ingest ``duration_ms``
 
 See ``evaluation/docs/baseline/baseline_cc_eval.md``.
 
 Examples::
 
-    uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-dir results/baseline_cc_20260328_120000
-    uv run python evaluation/scripts/baseline/finalize_cc_baseline_ingest.py --run-dir results/... --eval-ingest-pending-only
+    uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py --run-dir results/baseline_cc_20260328_120000
+    uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py --run-dir results/... --eval-ingest-pending-only
 """
 
 from __future__ import annotations
@@ -105,7 +108,7 @@ def _model_tag_cc_baseline(model_from_item: str | None) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Finalize Claude Code baseline eval run: OSS zip per task, "
+            "Finalize external baseline eval run: OSS zip per task, "
             "raw_runs.jsonl, ingest POST or pending_ingest/*.json."
         )
     )
@@ -139,6 +142,15 @@ def main() -> int:
         action="store_true",
         help="Exit non-zero if any ingest POST fails.",
     )
+    parser.add_argument(
+        "--baseline-channel",
+        choices=("claude_code", "cursor"),
+        default=None,
+        help=(
+            "EvalIngestRequest.baseline_channel (tools-server; required for run_kind=baseline). "
+            "Default: manifest baseline_channel or claude_code."
+        ),
+    )
     args = parser.parse_args()
 
     if args.no_eval_ingest and args.eval_ingest_pending_only:
@@ -163,6 +175,7 @@ def main() -> int:
         EVAL_INGEST_URL,
         build_ingest_item,
         git_head_commit,
+        normalize_baseline_channel,
         post_eval_ingest,
         upload_eval_task_artifacts_to_oss,
     )
@@ -212,10 +225,19 @@ def main() -> int:
         and (ingest_url or "").strip()
     ):
         print(
-            "warning: CC baseline + immediate POST → item.score is automated (often 100 if exit 0), "
+            "warning: external baseline + immediate POST → item.score is automated (often 100 if exit 0), "
             "not checklist-based. Prefer: finalize with --eval-ingest-pending-only, then "
             "eval_ingest_submit_pending.py with rubric-aligned --score / --score-reason.",
             file=sys.stderr,
+        )
+
+    if args.baseline_channel is not None:
+        baseline_channel = normalize_baseline_channel(
+            args.baseline_channel, default="claude_code"
+        )
+    else:
+        baseline_channel = normalize_baseline_channel(
+            manifest.get("baseline_channel"), default="claude_code"
         )
 
     workspaces_root = run_dir / "workspaces"
@@ -277,8 +299,8 @@ def main() -> int:
             )
             if duration_ms is None:
                 print(
-                    f"[cc_baseline] {task_id}: duration_ms omitted — run "
-                    f"evaluation/scripts/baseline/cc_baseline_mark_task_start.py "
+                    f"[external_baseline] {task_id}: duration_ms omitted — run "
+                    f"evaluation/scripts/baseline/mark_external_baseline_task_start.py "
                     f"--workspace <this task dir> before work, then finalize again.",
                     file=sys.stderr,
                 )
@@ -366,13 +388,14 @@ def main() -> int:
                     "ingest_url": ingest_url,
                     "run_id": run_id,
                     "run_kind": "baseline",
+                    "baseline_channel": baseline_channel,
                     "task_id": task_id,
                     "instructions_zh": (
-                        "【CC Baseline】勿随手给 100 分。请读题库 YAML 的 scoring_checklist，按 "
+                        "【外部 Baseline】勿随手给 100 分。请读题库 YAML 的 scoring_checklist，按 "
                         "devshell_claude_code_eval.md 第 3 节算百分制；--score-reason 须逐条对照 checklist "
                         "说明证据（可引用 raw_runs / OSS zip 内路径）；--suggestion 写可执行改进；"
-                        "耗时：CC baseline 仅认客观墙钟 — workspace 须有 _cc_baseline_task_start.json（见 "
-                        "cc_baseline_mark_task_start.py），duration_ms = 该文件时间戳至 _devshell_summary.json "
+                        "耗时：仅认客观墙钟 — workspace 须有 _cc_baseline_task_start.json（见 "
+                        "mark_external_baseline_task_start.py），duration_ms = 该文件时间戳至 _devshell_summary.json "
                         "mtime；缺则 item 无 duration_ms。"
                         " tokens 以 summary.usage 为准；若缺失须在 score_reason 中说明。"
                         "上报命令: uv run python "
@@ -397,6 +420,7 @@ def main() -> int:
                 body: dict[str, Any] = {
                     "run_id": run_id,
                     "run_kind": "baseline",
+                    "baseline_channel": baseline_channel,
                     "items": [ingest_item],
                 }
                 ok, msg = post_eval_ingest(

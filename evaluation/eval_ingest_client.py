@@ -2,6 +2,9 @@
 
 See ``docs/apifox-evaluation-openapi.json`` in matmaster-tools-server for the contract:
 ``EvalIngestRequest`` with ``run_id``, ``run_kind`` (baseline | iteration), ``items`` (≥1).
+When ``run_kind`` is ``baseline``, matmaster-tools-server **requires** ``baseline_channel`` on the
+request body: ``claude_code`` or ``cursor`` (see ``EvalIngestRequest`` in
+``matmaster-tools-server/src/models/evaluation.py``). For ``iteration``, omit it (null).
 Each ``EvalItemIn`` requires ``question_id``; ``model`` / ``num_turns`` / ``score``
 (optional) / ``result_oss_url`` on the item top level. 题干（question_text）由独立的
 题库同步接口维护，ingest 不再写入。For **immediate** ingest,
@@ -34,7 +37,7 @@ import subprocess
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -45,6 +48,9 @@ logger = logging.getLogger(__name__)
 # Align with matmaster-tools-server ``EvalItemIn`` field limits.
 EVAL_ITEM_TEXT_FIELD_MAX_LEN = 16384
 EVAL_ITEM_QUESTION_TEXT_MAX_LEN = 4_194_304
+# Align with matmaster-tools-server ``EvalIngestRequest.baseline_channel`` Literal.
+EvalBaselineChannel = Literal["claude_code", "cursor"]
+_EVAL_BASELINE_CHANNELS: frozenset[str] = frozenset({"claude_code", "cursor"})
 
 # Direct tools-server path (not the gateway ``/bohrapi/v1/matmaster-tools-server/...`` prefix).
 EVAL_INGEST_API_PATH = "/api/v1/evaluation/ingest"
@@ -55,6 +61,28 @@ EVAL_INGEST_URL: str | None = f"{_base}{EVAL_INGEST_API_PATH}" if _base else Non
 QUESTION_CATALOG_SYNC_URL: str | None = (
     f"{_base}{QUESTION_CATALOG_SYNC_API_PATH}" if _base else None
 )
+
+
+def normalize_baseline_channel(
+    value: Any, *, default: EvalBaselineChannel = "claude_code"
+) -> EvalBaselineChannel:
+    """Coerce to ``claude_code`` | ``cursor``; unknown values log a warning and use *default*."""
+    if default not in _EVAL_BASELINE_CHANNELS:
+        default = "claude_code"
+    if value is None:
+        return default
+    s = str(value).strip()
+    if not s:
+        return default
+    if s in _EVAL_BASELINE_CHANNELS:
+        return s  # type: ignore[return-value]
+    logger.warning(
+        "invalid baseline_channel %r (allowed: %s); using %r",
+        s,
+        ", ".join(sorted(_EVAL_BASELINE_CHANNELS)),
+        default,
+    )
+    return default
 
 
 def prompt_sha256(prompt: str) -> str:
