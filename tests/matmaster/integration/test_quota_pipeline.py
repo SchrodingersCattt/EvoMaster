@@ -1,7 +1,7 @@
 """Quota pipeline tests: verify use_quota deduction logic for all paths.
 
 QUAL-05: use_quota on success, skip on failure, skip on cancel,
-async vs sync mode handling.
+run_agent mode handling.
 
 All external dependencies mocked per D-10.
 """
@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from pathlib import Path
-from typing import Any, AsyncIterator, Iterator
+from typing import Any, AsyncIterator
 from unittest.mock import MagicMock, patch
 
 from matmaster.types.context import PlaygroundContext
@@ -144,16 +144,15 @@ def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None, send_cb=
         mock_redis = MagicMock()
         mock_redis_fn.return_value = mock_redis
 
-        svc.run_agent_sync(
+        asyncio.run(svc.run_agent(
             session_id='sess-q',
             user_prompt='quota test',
             send_cb=send_cb or MagicMock(),
-            loop=None,
             stop_event=stop_event or threading.Event(),
             mode='direct',
             reply_queue=None,
             task_id='task-q',
-        )
+        ))
 
     return use_quota_mock.called
 
@@ -178,7 +177,7 @@ class TestQuotaDeductedOnSuccess:
         assert called, 'use_quota should be called on success'
 
     def test_run_result_event_is_sent_on_success(self, tmp_path: Path) -> None:
-        """Verify run_agent_sync emits run_result and stream_closed on success."""
+        """Verify run_agent emits run_result and stream_closed on success."""
         pg_ctx = _make_ctx(tmp_path)
         mock_llm = _SuccessLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
@@ -410,102 +409,11 @@ class TestQuotaNotDeductedOnError:
         assert payload_types.index('run_result') < payload_types.index('stream_closed')
 
 
-class TestQuotaAsyncMode:
-    """Verify use_quota called via run_coroutine_threadsafe when loop present."""
+class TestQuotaDeduction:
+    """Verify use_quota called via native await."""
 
-    @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider')
-    def test_quota_async_mode(
-        self, mock_build_provider, mock_load_config, tmp_path: Path
-    ) -> None:
-        """Verify use_quota called via asyncio.run_coroutine_threadsafe when loop present."""
-        from src.services.agent_run_service import AgentRunService
-
-        pg_ctx = _make_ctx(tmp_path)
-        mock_llm = _SuccessLLM()
-        mock_sessions_svc = MagicMock()
-        mock_sessions_svc.get_session_user_id.return_value = 'user-123'
-
-        svc = AgentRunService(sessions_service=mock_sessions_svc)
-        mock_build_provider.return_value = mock_llm
-        mock_load_config.return_value = MagicMock()
-
-        mock_pg = MagicMock()
-        mock_pg.prepare.return_value = pg_ctx
-        mock_pg.config_path = Path('configs/mat_master/config.yaml')
-        mock_pg.session = None
-
-        # Create a running event loop in another thread
-        loop = asyncio.new_event_loop()
-        loop_thread = threading.Thread(target=loop.run_forever, daemon=True)
-        loop_thread.start()
-
-        try:
-            use_quota_calls = []
-
-            async def mock_use_quota(uid):
-                use_quota_calls.append(uid)
-
-            with (
-                patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
-                patch(
-                    'src.services.agent_run_service.BohriumSetupService'
-                ) as mock_bohrium_cls,
-                patch(
-                    'src.services.agent_run_service.get_chat_events_table'
-                ) as mock_events_fn,
-                patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-                patch(
-                    'src.services.agent_run_service.use_quota',
-                    side_effect=mock_use_quota,
-                ),
-            ):
-                mock_bohrium_result = MagicMock()
-                mock_bohrium_result.ssh_attached = False
-                mock_bohrium_result.abort_result = None
-                mock_bohrium_result.execution_session = None
-                mock_bohrium_result.execution_workdir = None
-                mock_bohrium_result.session_type = None
-                mock_bohrium_result._asdict.return_value = {
-                    'ssh_attached': False,
-                    'abort_result': None,
-                    'execution_session': None,
-                    'execution_workdir': None,
-                    'session_type': None,
-                }
-                mock_bohrium_svc = mock_bohrium_cls.return_value
-                mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
-                mock_bohrium_svc.setup.return_value = mock_bohrium_result
-
-                mock_events_table = MagicMock()
-                mock_events_table.get_session_events.return_value = []
-                mock_events_fn.return_value = mock_events_table
-                mock_redis_fn.return_value = MagicMock()
-
-                svc.run_agent_sync(
-                    session_id='sess-async',
-                    user_prompt='async quota test',
-                    send_cb=MagicMock(),
-                    loop=loop,  # Provide event loop
-                    stop_event=threading.Event(),
-                    mode='direct',
-                    reply_queue=None,
-                    task_id='task-async',
-                )
-
-            assert len(use_quota_calls) == 1
-            assert use_quota_calls[0] == 'user-123'
-        finally:
-            loop.call_soon_threadsafe(loop.stop)
-            loop_thread.join(timeout=2)
-            loop.close()
-
-
-class TestQuotaSyncMode:
-    """Verify use_quota called via asyncio.run when loop is None (Worker mode)."""
-
-    def test_quota_sync_mode(self, tmp_path: Path) -> None:
-        """Verify use_quota called via asyncio.run when loop is None."""
+    def test_quota_deduction(self, tmp_path: Path) -> None:
+        """Verify use_quota called via native await."""
         pg_ctx = _make_ctx(tmp_path)
         mock_llm = _SuccessLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
