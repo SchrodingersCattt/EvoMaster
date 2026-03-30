@@ -15,7 +15,7 @@ from src.apis.api_router import api_router
 from src.base.base_res import BaseResponse
 from src.models.health import HealthResponse
 from src.models.root import RootResponse
-from src.services.agent_run_service import get_agent_run_service, init_playground
+from src.services.agent_run_service import init_playground
 from src.services.sessions_service import get_sessions_service
 from src.services.user_service import get_user_service
 from src.services.worker_registry_service import get_worker_registry_service
@@ -87,37 +87,13 @@ async def lifespan(app: FastAPI):
             await worker_heartbeat_task
         except asyncio.CancelledError:
             pass
-    # 优雅退出：最多等待 30s 让当前 agent 任务结束，再关闭线程池
+    # 优雅退出
     worker_id = get_worker_id()
     logger.info(
         'Lifespan shutdown started worker_id=%s version=%s',
         worker_id,
         get_build_version(),
     )
-    try:
-        svc = get_agent_run_service()
-        executor = svc.get_executor()
-        poller_executor = svc.get_poller_executor()
-        logger.info('Shutting down: waiting for agent executor (max 30s)...')
-        loop = asyncio.get_event_loop()
-        try:
-            poller_executor.shutdown(wait=True)
-            logger.info('Poller executor shut down. worker_id=%s', worker_id)
-        except Exception as e:
-            logger.warning('Poller executor shutdown skip: %s', e)
-        try:
-            await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: executor.shutdown(wait=True)),
-                timeout=30.0,
-            )
-            logger.info('Agent executor shut down. worker_id=%s', worker_id)
-        except asyncio.TimeoutError:
-            logger.warning(
-                'Agent executor shutdown timed out after 30s, proceeding with exit. worker_id=%s',
-                worker_id,
-            )
-    except Exception as e:
-        logger.warning('Graceful shutdown skip worker_id=%s: %s', worker_id, e)
     logger.info('Lifespan shutdown finished worker_id=%s', worker_id)
 
 
