@@ -1,4 +1,5 @@
 """Tests for EventLogger JSONL persistence."""
+
 from __future__ import annotations
 
 import json
@@ -6,10 +7,11 @@ from pathlib import Path
 
 from matmaster.types.events import (
     AssistantStateEvent,
+    ResponseEvent,
+    RunResultEvent,
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
-    RunResultEvent,
 )
 
 
@@ -20,14 +22,22 @@ class TestEventLogger:
         log_file = tmp_path / "events.jsonl"
         logger = EventLogger(log_file, run_id="run-001")
 
-        logger.log_event(ToolCallEvent(
-            source="test", call_id="tc-1", tool_name="bash",
-            arguments={"command": "ls"},
-        ))
-        logger.log_event(ToolResultEvent(
-            source="test", call_id="tc-1", tool_name="bash",
-            result="file1.py",
-        ))
+        logger.log_event(
+            ToolCallEvent(
+                source="test",
+                call_id="tc-1",
+                tool_name="bash",
+                arguments={"command": "ls"},
+            )
+        )
+        logger.log_event(
+            ToolResultEvent(
+                source="test",
+                call_id="tc-1",
+                tool_name="bash",
+                result="file1.py",
+            )
+        )
         logger.close()
 
         lines = log_file.read_text().strip().split("\n")
@@ -48,10 +58,24 @@ class TestEventLogger:
         log_file = tmp_path / "events.jsonl"
         logger = EventLogger(log_file, run_id="run-001")
 
-        logger.log_event(ThoughtEvent(source="test", content="", stream_state="start", stream_id="s1"))
-        logger.log_event(ThoughtEvent(source="test", content="Hel", stream_state="streaming", stream_id="s1"))
-        logger.log_event(ThoughtEvent(source="test", content="lo", stream_state="streaming", stream_id="s1"))
-        logger.log_event(ThoughtEvent(source="test", content="", stream_state="end", stream_id="s1"))
+        logger.log_event(
+            ThoughtEvent(
+                source="test", content="", stream_state="start", stream_id="s1"
+            )
+        )
+        logger.log_event(
+            ThoughtEvent(
+                source="test", content="Hel", stream_state="streaming", stream_id="s1"
+            )
+        )
+        logger.log_event(
+            ThoughtEvent(
+                source="test", content="lo", stream_state="streaming", stream_id="s1"
+            )
+        )
+        logger.log_event(
+            ThoughtEvent(source="test", content="", stream_state="end", stream_id="s1")
+        )
         logger.close()
 
         lines = log_file.read_text().strip().split("\n")
@@ -81,9 +105,13 @@ class TestEventLogger:
         log_file = tmp_path / "events.jsonl"
         logger = EventLogger(log_file, run_id="run-002")
 
-        logger.log_event(RunResultEvent(
-            source="test", status="completed", reason="done",
-        ))
+        logger.log_event(
+            RunResultEvent(
+                source="test",
+                status="completed",
+                reason="done",
+            )
+        )
         logger.close()
 
         lines = log_file.read_text().strip().split("\n")
@@ -108,21 +136,80 @@ class TestEventLogger:
         assert rec["type"] == "thought"
         assert rec["content"] == "direct thought"
 
+    def test_response_streaming_merged(self, tmp_path: Path) -> None:
+        from matmaster.devshell.event_logger import EventLogger
+
+        log_file = tmp_path / "events.jsonl"
+        logger = EventLogger(log_file, run_id="run-001")
+
+        logger.log_event(
+            ResponseEvent(
+                source="test", content="", stream_state="start", stream_id="s1"
+            )
+        )
+        logger.log_event(
+            ResponseEvent(
+                source="test", content="Hel", stream_state="streaming", stream_id="s1"
+            )
+        )
+        logger.log_event(
+            ResponseEvent(
+                source="test", content="lo", stream_state="streaming", stream_id="s1"
+            )
+        )
+        logger.log_event(
+            ResponseEvent(source="test", content="", stream_state="end", stream_id="s1")
+        )
+        logger.close()
+
+        lines = log_file.read_text().strip().split("\n")
+        assert len(lines) == 1
+        rec = json.loads(lines[0])
+        assert rec["type"] == "response"
+        assert rec["content"] == "Hello"
+        assert "duration_ms" in rec
+        assert isinstance(rec["duration_ms"], (int, float))
+        assert rec["duration_ms"] >= 0
+        assert "ts_start" in rec
+
+    def test_non_streaming_response(self, tmp_path: Path) -> None:
+        from matmaster.devshell.event_logger import EventLogger
+
+        log_file = tmp_path / "events.jsonl"
+        logger = EventLogger(log_file, run_id="run-001")
+
+        logger.log_event(ResponseEvent(source="test", content="visible reply"))
+        logger.close()
+
+        lines = log_file.read_text().strip().split("\n")
+        assert len(lines) == 1
+        rec = json.loads(lines[0])
+        assert rec["type"] == "response"
+        assert rec["content"] == "visible reply"
+
     def test_set_run_id(self, tmp_path: Path) -> None:
         from matmaster.devshell.event_logger import EventLogger
 
         log_file = tmp_path / "events.jsonl"
         logger = EventLogger(log_file, run_id="run-001")
 
-        logger.log_event(ToolCallEvent(
-            source="test", call_id="tc-1", tool_name="bash",
-            arguments={"command": "ls"},
-        ))
+        logger.log_event(
+            ToolCallEvent(
+                source="test",
+                call_id="tc-1",
+                tool_name="bash",
+                arguments={"command": "ls"},
+            )
+        )
         logger.set_run_id("run-002")
-        logger.log_event(ToolCallEvent(
-            source="test", call_id="tc-2", tool_name="bash",
-            arguments={"command": "pwd"},
-        ))
+        logger.log_event(
+            ToolCallEvent(
+                source="test",
+                call_id="tc-2",
+                tool_name="bash",
+                arguments={"command": "pwd"},
+            )
+        )
         logger.close()
 
         lines = log_file.read_text().strip().split("\n")
