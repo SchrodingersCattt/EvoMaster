@@ -1,0 +1,16 @@
+# Protect top-level planning state files from worktree merge overwrites.
+#
+# Root cause: worktree branches fork from older commits with stale .planning/
+# content. The GSD executor updates STATE/ROADMAP/REQUIREMENTS based on that
+# stale baseline. When merged back, Git conflict resolution can replace the
+# main branch's current v2.0 content with the worktree's outdated version.
+#
+# The "ours" merge driver keeps the current branch's version unconditionally.
+# Phase-specific files (.planning/phases/**) are NOT protected — those are
+# new files created by the executor and merge cleanly.
+#
+# Setup (once per clone):  git config merge.ours.driver true
+.planning/ROADMAP.md merge=ours
+.planning/STATE.md merge=ours
+.planning/REQUIREMENTS.md merge=ours
+.planning/PROJECT.md merge=ours

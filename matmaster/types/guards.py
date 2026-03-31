@@ -24,6 +24,7 @@ class RecentCall:
     tool_args: dict[str, Any]
     call_id: str
     timestamp: float  # time.monotonic()
+    fingerprint: str = ""
 
 
 @dataclass

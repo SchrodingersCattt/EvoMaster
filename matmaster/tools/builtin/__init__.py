@@ -12,7 +12,6 @@ from matmaster.tools.builtin.listdir_tool import ListDirTool
 from matmaster.tools.builtin.read_tool import ReadTool
 from matmaster.tools.builtin.read_tracker import ReadTracker
 from matmaster.tools.builtin.spawn_tool import SpawnTool
-from matmaster.tools.builtin.write_tool import WriteTool
 from matmaster.tools.builtin.task import (
     TaskCompleteTool,
     TaskCreateTool,
@@ -20,6 +19,9 @@ from matmaster.tools.builtin.task import (
     TaskListTool,
     TaskUpdateTool,
 )
+from matmaster.tools.builtin.web_fetch_tool import WebFetchTool
+from matmaster.tools.builtin.web_search_tool import WebSearchTool
+from matmaster.tools.builtin.write_tool import WriteTool
 
 __all__ = [
     "BuiltinTool",
@@ -37,4 +39,6 @@ __all__ = [
     "TaskGetTool",
     "TaskListTool",
     "TaskUpdateTool",
+    "WebFetchTool",
+    "WebSearchTool",
 ]

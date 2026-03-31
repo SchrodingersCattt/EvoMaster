@@ -1,4 +1,5 @@
 """Tests for matmaster.config.loader typed accessors."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +8,11 @@ import pytest
 
 from matmaster.config.exp import ExpConfig
 from matmaster.config.llm import LLMConfig
-from matmaster.config.loader import load_base_system_prompt, load_exp_config, load_llm_config
+from matmaster.config.loader import (
+    load_base_system_prompt,
+    load_exp_config,
+    load_llm_config,
+)
 
 # Minimal YAML content for tests
 _YAML_CONTENT = """\
@@ -66,7 +71,9 @@ class TestLoadLlmConfig:
         with pytest.raises(FileNotFoundError):
             load_llm_config("/nonexistent/config.yaml")
 
-    def test_env_var_expansion(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_env_var_expansion(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("TEST_API_KEY", "sk-secret")
         yaml = 'llm:\n  p1:\n    model: "m1"\n    api_key: "${TEST_API_KEY}"\n  default: "p1"\n'
         f = tmp_path / "config.yaml"
@@ -152,8 +159,7 @@ class TestLoadExpConfig:
         exps_dir = tmp_path / "exps"
         exps_dir.mkdir()
         (exps_dir / "test.toml").write_text(
-            'name = "test"\n'
-            "developer_instructions = 'Use ${FOO} as template var'\n"
+            'name = "test"\n' "developer_instructions = 'Use ${FOO} as template var'\n"
         )
         cfg = load_exp_config("test", exps_dir=exps_dir)
         assert "${FOO}" in cfg.developer_instructions
@@ -171,9 +177,7 @@ class TestBaseTomlMerge:
         """_base.toml system_prompt used when exp toml has none."""
         exps_dir = tmp_path / "exps"
         exps_dir.mkdir()
-        (exps_dir / "_base.toml").write_text(
-            "system_prompt = 'Base system prompt'\n"
-        )
+        (exps_dir / "_base.toml").write_text("system_prompt = 'Base system prompt'\n")
         (exps_dir / "test.toml").write_text(
             'name = "test"\ndeveloper_instructions = "DI"\n'
         )
@@ -184,9 +188,7 @@ class TestBaseTomlMerge:
         """Exp toml system_prompt overrides _base.toml."""
         exps_dir = tmp_path / "exps"
         exps_dir.mkdir()
-        (exps_dir / "_base.toml").write_text(
-            "system_prompt = 'Base prompt'\n"
-        )
+        (exps_dir / "_base.toml").write_text("system_prompt = 'Base prompt'\n")
         (exps_dir / "test.toml").write_text(
             'name = "test"\nsystem_prompt = "Exp override"\n'
         )
@@ -222,9 +224,7 @@ class TestBaseTomlMerge:
         monkeypatch.setenv("FOO", "bar")
         exps_dir = tmp_path / "exps"
         exps_dir.mkdir()
-        (exps_dir / "_base.toml").write_text(
-            "system_prompt = 'Use ${FOO} literally'\n"
-        )
+        (exps_dir / "_base.toml").write_text("system_prompt = 'Use ${FOO} literally'\n")
         (exps_dir / "test.toml").write_text('name = "test"\n')
         cfg = load_exp_config("test", exps_dir=exps_dir)
         assert "${FOO}" in cfg.system_prompt
@@ -255,9 +255,7 @@ class TestLoadBaseSystemPrompt:
     def test_returns_system_prompt(self, tmp_path):
         exps_dir = tmp_path / "exps"
         exps_dir.mkdir()
-        (exps_dir / "_base.toml").write_text(
-            "system_prompt = 'Hello from base'\n"
-        )
+        (exps_dir / "_base.toml").write_text("system_prompt = 'Hello from base'\n")
         result = load_base_system_prompt(exps_dir=exps_dir)
         assert result == "Hello from base"
 

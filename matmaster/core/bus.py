@@ -1,47 +1,61 @@
-"""Synchronous event bus backed by stdlib queue.Queue.
+"""Async event bus backed by asyncio.Queue.
 
 MessageBus is the core transport for BusEvent objects between
 the agent kernel (producer) and EventRouter handlers (consumer).
 """
 
-import queue
+from __future__ import annotations
+
+import asyncio
 
 from matmaster.types.events import BusEvent
 
 
 class MessageBus:
-    """同步事件总线。
+    """Async event bus.
 
-    Agent kernel 调用 emit() 发射 BusEvent，
-    EventRouter handlers 调用 get() 消费事件。
-    基于 queue.Queue，线程安全。
-    单 producer（agent thread）模式。
+    Agent kernel and hooks call ``await emit()`` to publish BusEvent
+    from within the event loop.  EventRouter consumes via ``await get()``
+    in an async task.
 
-    设计选择：同步 queue.Queue 而非 asyncio.Queue
-    （agent 在 ThreadPoolExecutor 中同步运行）。
+    ``emit_nowait()`` provides a synchronous interface for callers within
+    the same event loop thread (e.g. sync callbacks).
     """
 
     def __init__(self, maxsize: int = 0) -> None:
-        self._queue: queue.Queue[BusEvent] = queue.Queue(maxsize=maxsize)
+        self._queue: asyncio.Queue[BusEvent] = asyncio.Queue(maxsize=maxsize)
 
-    def emit(self, event: BusEvent) -> None:
-        """发射事件（线程安全）。"""
-        self._queue.put(event)
+    async def emit(self, event: BusEvent) -> None:
+        """Emit event (non-blocking for unbounded queue).
 
-    def get(self, timeout: float | None = None) -> BusEvent:
-        """消费下一个事件（阻塞直到有事件或超时）。
-
-        超时抛出 queue.Empty。
+        Must be called from within the event loop.
         """
-        return self._queue.get(timeout=timeout)
+        self._queue.put_nowait(event)
+
+    def emit_nowait(self, event: BusEvent) -> None:
+        """Synchronous emit for callers within the event loop thread.
+
+        Safe to call from sync code running on the same thread as the
+        event loop (e.g. sync callbacks invoked during await chains).
+        """
+        self._queue.put_nowait(event)
+
+    async def get(self, timeout: float | None = None) -> BusEvent:
+        """Consume next event with optional timeout.
+
+        Raises asyncio.TimeoutError if timeout expires.
+        """
+        if timeout is None:
+            return await self._queue.get()
+        return await asyncio.wait_for(self._queue.get(), timeout)
 
     def get_nowait(self) -> BusEvent:
-        """非阻塞消费。队列为空时抛出 queue.Empty。"""
+        """Non-blocking consume. Raises asyncio.QueueEmpty when empty."""
         return self._queue.get_nowait()
 
     @property
     def pending(self) -> int:
-        """待消费事件数量（近似值）。"""
+        """Pending event count (approximate)."""
         return self._queue.qsize()
 
     @property

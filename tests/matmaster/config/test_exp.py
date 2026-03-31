@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-from pydantic import ValidationError
-
 from matmaster.config.exp import ExpConfig, ExpSkillsConfig, ExpToolsConfig
 
 
@@ -45,21 +42,23 @@ class TestExpConfig:
         assert cfg.name == "test"
         assert not hasattr(cfg, "unknown_field")
 
-    def test_skills_mcp_compaction_not_accepted(self):
-        """mcp and compaction fields are silently ignored; skills is now a real field."""
+    def test_skills_and_compaction_accepted_mcp_ignored(self):
+        """skills and compaction are real fields; mcp is silently ignored."""
         data = {
             "name": "test",
             "skills": {"enabled": True},
             "mcp": {"servers": []},
-            "compaction": {"enabled": True},
+            "compaction": {"enabled": True, "context_window_tokens": 64000},
         }
         cfg = ExpConfig.model_validate(data)
         assert cfg.name == "test"
-        # skills is now a real field
         assert cfg.skills.enabled is True
-        # mcp and compaction are still ignored
-        assert not hasattr(cfg, "mcp") or not isinstance(getattr(cfg, "mcp", None), dict)
-        assert not hasattr(cfg, "compaction")
+        assert cfg.compaction.enabled is True
+        assert cfg.compaction.context_window_tokens == 64000
+        # mcp is still ignored
+        assert not hasattr(cfg, "mcp") or not isinstance(
+            getattr(cfg, "mcp", None), dict
+        )
 
     def test_system_prompt_default(self):
         cfg = ExpConfig()

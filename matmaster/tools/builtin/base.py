@@ -4,17 +4,19 @@ Satisfies the Tool Protocol (name/description/json_schema/execute).
 Construction injection: session/workdir passed at Exp assemble time.
 Kernel sees only Tool Protocol interface.
 
-Subclasses:
-- Define name, description, json_schema as ClassVar
-- Implement _execute(arguments) -> str
+execute() is async def, delegates to sync _execute() via asyncio.to_thread.
+Subclasses implement sync _execute() only -- no async needed in subclass code.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, ClassVar
+
+from matmaster.tools.tool_result import ToolResult
 
 
 class BuiltinTool(ABC):
@@ -23,9 +25,12 @@ class BuiltinTool(ABC):
     Construction injection: session/workdir passed at Exp assemble time.
     Kernel sees only Tool Protocol (name/description/json_schema/execute).
 
+    execute() is async def and delegates to sync _execute() via asyncio.to_thread,
+    ensuring blocking tool operations do not stall the event loop.
+
     Subclasses:
     - Define name, description, json_schema as class-level attributes
-    - Implement _execute(arguments) -> str
+    - Implement _execute(arguments) -> str | ToolResult (sync def)
     """
 
     name: ClassVar[str]
@@ -42,17 +47,17 @@ class BuiltinTool(ABC):
         self._workdir = workdir
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def execute(self, arguments: dict[str, Any]) -> str:
-        """Tool Protocol entry point. Delegates to _execute."""
+    async def execute(self, arguments: dict[str, Any]) -> str | ToolResult:
+        """Tool Protocol entry point. Delegates to _execute via to_thread."""
         try:
-            return self._execute(arguments)
+            return await asyncio.to_thread(self._execute, arguments)
         except Exception as e:
             self.logger.error('Tool %s failed: %s', self.name, e, exc_info=True)
             return f'Error: {e}'
 
     @abstractmethod
-    def _execute(self, arguments: dict[str, Any]) -> str:
-        """Subclass implementation. Raise on error, return string on success."""
+    def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
+        """Subclass implementation. Raise on error, return string or ToolResult on success."""
         ...
 
     def _require_session(self) -> Any:

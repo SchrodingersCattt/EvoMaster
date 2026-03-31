@@ -1,12 +1,12 @@
 """Tests for DevStreamHook terminal output formatting."""
+
 from __future__ import annotations
 
 import io
-from typing import Any
 
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.messages import StreamChunk, ToolCallData
 from matmaster.types.guards import GuardResult
+from matmaster.types.messages import StreamChunk, ToolCallData
 
 
 class TestDevStreamHook:
@@ -17,53 +17,53 @@ class TestDevStreamHook:
         hook = DevStreamHook(output=buf, verbose=verbose)
         return hook, buf
 
-    def test_stream_chunk_content(self) -> None:
+    async def test_stream_chunk_content(self) -> None:
         hook, buf = self._make_hook()
         chunk = StreamChunk(content="Hello", stream_state="streaming", stream_id="s1")
-        hook.on_stream_chunk(chunk)
+        await hook.on_stream_chunk(chunk)
         assert buf.getvalue() == "Hello"
 
-    def test_stream_chunk_start_end_no_content(self) -> None:
+    async def test_stream_chunk_start_end_no_content(self) -> None:
         hook, buf = self._make_hook()
-        hook.on_stream_chunk(StreamChunk(stream_state="start", stream_id="s1"))
-        hook.on_stream_chunk(StreamChunk(stream_state="end", stream_id="s1"))
+        await hook.on_stream_chunk(StreamChunk(stream_state="start", stream_id="s1"))
+        await hook.on_stream_chunk(StreamChunk(stream_state="end", stream_id="s1"))
         # end should add newline
         assert buf.getvalue() == "\n"
 
-    def test_pre_tool_call_display(self) -> None:
+    async def test_pre_tool_call_display(self) -> None:
         from matmaster.core.hooks import HookAction
 
         hook, buf = self._make_hook()
         tc = ToolCallData(id="tc-1", name="bash", arguments={"command": "ls"})
-        action = hook.pre_tool_call(tc)
+        action = await hook.pre_tool_call(tc)
 
         assert action == HookAction.CONTINUE
         output = buf.getvalue()
         assert "tool_call: bash" in output
         assert "command" in output
 
-    def test_post_tool_call_success(self) -> None:
+    async def test_post_tool_call_success(self) -> None:
         hook, buf = self._make_hook()
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        hook.post_tool_call(tc, ToolResult(content="file1.py\nfile2.py"))
+        await hook.post_tool_call(tc, ToolResult(content="file1.py\nfile2.py"))
 
         output = buf.getvalue()
         assert "tool_result:" in output
         assert "file1.py" in output
 
-    def test_post_tool_call_truncation(self) -> None:
+    async def test_post_tool_call_truncation(self) -> None:
         hook, buf = self._make_hook()
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
         long_result = "x" * 2000
-        hook.post_tool_call(tc, ToolResult(content=long_result))
+        await hook.post_tool_call(tc, ToolResult(content=long_result))
 
         output = buf.getvalue()
         assert "..." in output or len(output) < 2000
 
-    def test_post_tool_call_error_status(self) -> None:
+    async def test_post_tool_call_error_status(self) -> None:
         hook, buf = self._make_hook()
         tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        hook.post_tool_call(
+        await hook.post_tool_call(
             tc,
             ToolResult(status="error", content="Error: boom"),
         )
@@ -72,11 +72,11 @@ class TestDevStreamHook:
         assert "tool_error:" in output
         assert "Error: boom" in output
 
-    def test_guard_blocked(self) -> None:
+    async def test_guard_blocked(self) -> None:
         hook, buf = self._make_hook()
         tc = ToolCallData(id="tc-1", name="rm_rf", arguments={})
         gr = GuardResult(allowed=False, reason="dangerous operation")
-        hook.on_guard_blocked(tc, gr)
+        await hook.on_guard_blocked(tc, gr)
 
         output = buf.getvalue()
         assert "guard_blocked:" in output

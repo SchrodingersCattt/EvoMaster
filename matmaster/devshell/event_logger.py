@@ -115,6 +115,16 @@ class EventLogger:
                 if duration_ms is not None:
                     rec["duration_ms"] = round(duration_ms, 3)
                 self._write_record(rec)
+        elif event.stream_state == "complete":
+            # Segment snapshot from on_segment_complete
+            if event.content:
+                self._write_record(
+                    {
+                        "type": "thought",
+                        "content": event.content,
+                        "complete": True,
+                    }
+                )
         else:
             # Non-streaming thought (stream_state is None)
             if event.content:

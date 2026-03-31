@@ -1,7 +1,7 @@
 import logging
 from abc import ABC
 from contextlib import contextmanager
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import pymysql
 from pymysql import Error
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-class BaseTable(ABC):
+class BaseTable(ABC):  # noqa: B024
     """
     数据库表的基类
 
@@ -81,9 +81,9 @@ class BaseTable(ABC):
 
     def find_one(
         self,
-        where: Dict[str, Any],
-        columns: Optional[List[str]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        where: dict[str, Any],
+        columns: list[str] | None = None,
+    ) -> dict[str, Any] | None:
         """
         查询单条记录
 
@@ -110,11 +110,11 @@ class BaseTable(ABC):
 
     def find_many(
         self,
-        where: Optional[Dict[str, Any]] = None,
-        columns: Optional[List[str]] = None,
-        order_by: Optional[str] = None,
-        limit: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        where: dict[str, Any] | None = None,
+        columns: list[str] | None = None,
+        order_by: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
         """
         查询多条记录
 
@@ -153,9 +153,9 @@ class BaseTable(ABC):
 
     def insert(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         ignore_duplicate: bool = False,
-    ) -> Tuple[bool, Optional[int]]:
+    ) -> tuple[bool, int | None]:
         """
         插入单条记录
 
@@ -184,8 +184,8 @@ class BaseTable(ABC):
 
     def update(
         self,
-        where: Dict[str, Any],
-        data: Dict[str, Any],
+        where: dict[str, Any],
+        data: dict[str, Any],
     ) -> bool:
         """
         更新记录
@@ -215,7 +215,7 @@ class BaseTable(ABC):
 
     def delete(
         self,
-        where: Dict[str, Any],
+        where: dict[str, Any],
     ) -> bool:
         """
         删除记录

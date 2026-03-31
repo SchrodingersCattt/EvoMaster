@@ -175,7 +175,9 @@ class TestPlaygroundContext:
 class TestWithExecution:
     """PlaygroundContext.with_execution() returns new frozen instance."""
 
-    def test_with_execution_returns_new_instance_and_does_not_mutate_original(self) -> None:
+    def test_with_execution_returns_new_instance_and_does_not_mutate_original(
+        self,
+    ) -> None:
         ctx = PlaygroundContext(
             workdir=Path("/tmp/work"),
             session_type="local",

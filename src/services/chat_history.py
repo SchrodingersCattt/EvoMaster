@@ -4,8 +4,6 @@ import json
 import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from evomaster.utils.types import (
     AssistantMessage,
     ToolCall,
@@ -13,6 +11,8 @@ from evomaster.utils.types import (
     UserMessage,
 )
 from src.utils.chat_event_source import normalize_event_source
+
+logger = logging.getLogger(__name__)
 
 
 def _is_matmaster_source(source: str) -> bool:
@@ -251,6 +251,62 @@ class ChatHistoryConverter:
             result = {}
         return (call_id, name, result)
 
+    @staticmethod
+    def _repair_incomplete_tool_turns(messages: list[dict]) -> list[dict]:
+        """Inject synthetic ToolMessage dicts for tool_calls missing results.
+
+        When a worker/API is forcefully interrupted mid tool execution,
+        some tool_calls may lack corresponding ToolMessages. This method
+        scans the message list and inserts synthetic error ToolMessages
+        so the sequence is valid for LLM consumption.
+        """
+        out: list[dict] = []
+        i = 0
+        while i < len(messages):
+            m = messages[i]
+            role = _serialized_message_role(m)
+            if role != 'assistant' or not m.get('tool_calls'):
+                out.append(m)
+                i += 1
+                continue
+
+            # Collect declared tool_call IDs (preserving order, dedup)
+            tc_list = m['tool_calls']
+            seen_ids: set[str] = set()
+            ordered_tc: list[tuple[str, str]] = []  # (id, name)
+            for tc in tc_list:
+                tc_id = tc.get('id', '')
+                tc_name = (tc.get('function') or {}).get('name', '')
+                if tc_id and tc_id not in seen_ids:
+                    seen_ids.add(tc_id)
+                    ordered_tc.append((tc_id, tc_name))
+
+            # Collect existing tool messages into a map
+            out.append(m)
+            j = i + 1
+            result_map: dict[str, dict] = {}
+            while j < len(messages) and _serialized_message_role(messages[j]) == 'tool':
+                existing = messages[j]
+                result_map[existing.get('tool_call_id', '')] = existing
+                j += 1
+
+            # Emit tool messages in tool_calls declaration order
+            for tc_id, tc_name in ordered_tc:
+                if tc_id in result_map:
+                    out.append(result_map[tc_id])
+                else:
+                    out.append(
+                        ToolMessage(
+                            tool_call_id=tc_id,
+                            name=tc_name,
+                            content=f"Tool '{tc_name}' execution was interrupted. Result is unknown.",
+                        ).model_dump()
+                    )
+
+            i = j
+
+        return out
+
     @classmethod
     def events_to_dialog_messages(cls, events: list[dict]) -> list[dict]:
         """
@@ -347,7 +403,9 @@ class ChatHistoryConverter:
                     continue
                 assistant_reasoning = cls._assistant_reasoning_content(raw_content)
                 if pending_reasoning and not assistant_reasoning:
-                    msg = msg.model_copy(update={'reasoning_content': pending_reasoning})
+                    msg = msg.model_copy(
+                        update={'reasoning_content': pending_reasoning}
+                    )
                 if (
                     last_assistant_text_idx is not None
                     and last_assistant_text_idx == len(out) - 1
@@ -412,6 +470,8 @@ class ChatHistoryConverter:
                 ).model_dump()
             )
 
+        out = cls._repair_incomplete_tool_turns(out)
+
         sid: str | None = None
         tid: str | None = None
         for ev in events:
@@ -439,12 +499,10 @@ class ChatHistoryConverter:
         Reuses events_to_dialog_messages() logic, then converts each dict
         to the corresponding matmaster.types.messages Message subclass.
         """
-        from matmaster.types.messages import (
-            AssistantMessage as MMAssistantMessage,
-            ToolCallData as MMToolCallData,
-            ToolMessage as MMToolMessage,
-            UserMessage as MMUserMessage,
-        )
+        from matmaster.types.messages import AssistantMessage as MMAssistantMessage
+        from matmaster.types.messages import ToolCallData as MMToolCallData
+        from matmaster.types.messages import ToolMessage as MMToolMessage
+        from matmaster.types.messages import UserMessage as MMUserMessage
 
         dialog_dicts = cls.events_to_dialog_messages(events)
         messages = []
