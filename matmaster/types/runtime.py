@@ -82,6 +82,8 @@ class KernelResult:
 
     num_turns 语义：已完成 LLM 调用的轮数。cancelled 路径在 turn 递增前退出，
     所以 num_turns 反映的是已完成的轮数，不含被中断的当前轮。
+
+    usage：最后一轮 LLM 调用的 token 统计（非多轮累加），与 MATTER Evidence / baseline 口径对齐。
     """
 
     status: str

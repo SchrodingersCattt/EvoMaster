@@ -512,6 +512,8 @@ class AgentKernel:
         )
         stream_cancelled = False
         chunk_idx = 0
+        t_stream0 = time.perf_counter()
+        ttft_ms: float | None = None
         try:
             async for chunk in spec.llm_provider.chat_stream(
                 api_messages, tool_defs, timeout=timeout
@@ -524,6 +526,10 @@ class AgentKernel:
                     stream_cancelled = True
                     break
                 chunk_idx += 1
+                if ttft_ms is None and (
+                    chunk.content or chunk.reasoning_content or chunk.tool_call_deltas
+                ):
+                    ttft_ms = (time.perf_counter() - t_stream0) * 1000.0
                 if chunk.content or chunk.reasoning_content:
                     await run_on_stream_chunk(
                         spec.hooks,
@@ -609,6 +615,22 @@ class AgentKernel:
         if stream_cancelled:
             raise _KernelStopRequested()
 
+        total_stream_ms = (time.perf_counter() - t_stream0) * 1000.0
+        joined_content = ''.join(content_parts)
+        joined_reasoning = ''.join(reasoning_parts)
+        logger.info(
+            'LLM stream timing: stream_id=%s api_messages=%d chunks=%d '
+            'ttft_ms=%s total_ms=%.1f content_chars=%d reasoning_chars=%d has_tool_calls=%s',
+            stream_id,
+            len(api_messages),
+            chunk_idx,
+            f'{ttft_ms:.1f}' if ttft_ms is not None else 'n/a',
+            total_stream_ms,
+            len(joined_content),
+            len(joined_reasoning),
+            bool(tool_calls_acc),
+        )
+
         # Assemble tool_calls from accumulated deltas
         tool_calls: list[ToolCallData] | None = None
         if tool_calls_acc:
@@ -620,8 +642,8 @@ class AgentKernel:
                 )
 
         return LLMResponse(
-            content=''.join(content_parts) or None,
-            reasoning_content=''.join(reasoning_parts) or None,
+            content=joined_content or None,
+            reasoning_content=joined_reasoning or None,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
             usage=usage,

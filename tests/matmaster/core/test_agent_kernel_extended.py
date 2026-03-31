@@ -240,7 +240,7 @@ class TestCompactorIntegration:
 
 
 class TestKernelResultFields:
-    """KernelResult carries num_turns, stop_reason, and accumulated usage."""
+    """KernelResult carries num_turns, stop_reason, and last LLM-call usage."""
 
     @pytest.mark.asyncio
     async def test_natural_finish_has_num_turns(self) -> None:

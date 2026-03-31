@@ -103,4 +103,5 @@
 - **仅 Worker 队列模式**：run 只在 Worker 上执行，不再支持「在 API 进程内执行 run」。请求中的 `mode: 'direct' | 'planner'` 仅表示任务类型，与执行位置无关。发送消息（POST /stream）必须配置 `REDIS_URL`，否则返回 503。
 - **Bohrium 远端共享目录**：Bohrium SSH / skill / bash 的远端工作目录默认直接使用项目级共享目录 `/share`；同一 Bohrium `project_id` 下的不同 session 共用该目录，不再默认创建 `/share/workspace/{session_id}`。修改远端 cwd、prompt 提示、文件浏览或下载落盘逻辑时，应遵守这一 project-scoped 语义。
 - **单文件行数**：若某源文件行数超过 1000 行，应进行重构（拆分为多个模块/子模块、抽取类或函数等），以利于维护与协作。
+- **评测模块约定**：`evaluation/` 目录的详细约定（题库格式、字段规则、verify 类型、数据流、编写指南等）统一维护在 [`evaluation/AGENTS_evaluation.md`](evaluation/AGENTS_evaluation.md)。修改评测相关规则时，**必须同步更新该文件**；若通用约定有变更，**必须同步更新本文件**。
 - （可在此补充项目的其他通用约定，如测试、提交信息、目录结构等。）

@@ -1,4 +1,4 @@
-"""Tests for ``scripts/eval_ingest_submit_pending.py``."""
+"""Tests for ``evaluation/scripts/eval_ingest_submit_pending.py``."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _load_submit_module():
-    script = REPO_ROOT / "scripts" / "eval_ingest_submit_pending.py"
+    script = REPO_ROOT / "evaluation" / "scripts" / "eval_ingest_submit_pending.py"
     spec = importlib.util.spec_from_file_location("_eval_ingest_submit_pending", script)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
@@ -39,7 +39,7 @@ def test_submit_pending_main_posts_score_from_cli_when_missing_in_file(
     p.write_text(json.dumps(envelope), encoding="utf-8")
 
     mod = _load_submit_module()
-    with patch("matmaster.eval_ingest_client.post_eval_ingest") as post:
+    with patch("evaluation.eval_ingest_client.post_eval_ingest") as post:
         post.return_value = (True, "ok")
         old_argv = sys.argv
         try:
@@ -60,11 +60,47 @@ def test_submit_pending_main_posts_score_from_cli_when_missing_in_file(
     url, body = post.call_args[0][0], post.call_args[0][1]
     assert url == envelope["ingest_url"]
     assert body["run_id"] == "run-uuid"
-    assert body["git_commit"] == "deadbeef"
+    assert body["run_kind"] == "iteration"
     assert len(body["items"]) == 1
     assert body["items"][0]["question_id"] == "Q1"
     assert body["items"][0]["score"] == 71.5
     assert body["items"][0]["extra"] == {}
+    assert "baseline_channel" not in body
+
+
+def test_submit_pending_baseline_includes_baseline_channel(tmp_path: Path) -> None:
+    envelope = {
+        "schema": "matmaster_eval_pending_ingest_v1",
+        "ingest_url": "http://example/api/v1/evaluation/ingest",
+        "run_id": "run-uuid",
+        "run_kind": "baseline",
+        "baseline_channel": "claude_code",
+        "item": {"question_id": "Q1", "extra": {}},
+    }
+    p = tmp_path / "task.json"
+    p.write_text(json.dumps(envelope), encoding="utf-8")
+
+    mod = _load_submit_module()
+    with patch("evaluation.eval_ingest_client.post_eval_ingest") as post:
+        post.return_value = (True, "ok")
+        old_argv = sys.argv
+        try:
+            sys.argv = [
+                "eval_ingest_submit_pending.py",
+                "--pending",
+                str(p),
+                "--score",
+                "80",
+            ]
+            with redirect_stderr(StringIO()):
+                rc = mod.main()
+        finally:
+            sys.argv = old_argv
+
+    assert rc == 0
+    body = post.call_args[0][1]
+    assert body["run_kind"] == "baseline"
+    assert body["baseline_channel"] == "claude_code"
 
 
 def test_submit_pending_cli_reason_and_suggestion_used_for_post(tmp_path: Path) -> None:
@@ -83,7 +119,7 @@ def test_submit_pending_cli_reason_and_suggestion_used_for_post(tmp_path: Path) 
     p.write_text(json.dumps(envelope), encoding="utf-8")
 
     mod = _load_submit_module()
-    with patch("matmaster.eval_ingest_client.post_eval_ingest") as post:
+    with patch("evaluation.eval_ingest_client.post_eval_ingest") as post:
         post.return_value = (True, "ok")
         old_argv = sys.argv
         try:
@@ -127,7 +163,7 @@ def test_submit_pending_ignores_score_fields_already_in_file(tmp_path: Path) -> 
     p.write_text(json.dumps(envelope), encoding="utf-8")
 
     mod = _load_submit_module()
-    with patch("matmaster.eval_ingest_client.post_eval_ingest") as post:
+    with patch("evaluation.eval_ingest_client.post_eval_ingest") as post:
         post.return_value = (True, "ok")
         old_argv = sys.argv
         try:
