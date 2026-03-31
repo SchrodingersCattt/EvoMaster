@@ -310,7 +310,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--baseline-channel",
-        choices=("claude_code", "cursor"),
+        choices=("claude_code", "cursor", "codex"),
         default="claude_code",
         help=(
             "With --prepare-cc-baseline: stored in manifest for ingest "
