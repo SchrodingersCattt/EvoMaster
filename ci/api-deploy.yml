@@ -2,6 +2,7 @@
 
 include:
   - local: ".deploy-ci.yml"
+  - local: "ci/pre-commit-job.yml"
 
 variables:
   REGISTRY: registry.dp.tech
@@ -49,29 +50,11 @@ stages:
   \"gitlab_url\":\"$CI_PIPELINE_URL\",
   \"deploy_name\":\"${DEVOPS_DEPLOY_NAME:-$CI_JOB_NAME}\"}""" ${devops} > result.json
 
-# lint 独立阶段：在 docker-build 之后；仅 pip 安装 pre-commit（见 ci/run_pre_commit_ci.sh）
+# lint 独立阶段：在 docker-build 之后（实现见 ci/pre-commit-job.yml）
 pre-commit:
-  stage: lint
+  extends: .pre-commit-base
   needs:
     - docker-build
-  image: $REGISTRY/public/ubuntu:gitlab-0.0.2
-  before_script:
-    - mkdir -p .ci-bin && ln -sf "$(command -v python3)" .ci-bin/python && export PATH="$CI_PROJECT_DIR/.ci-bin:$PATH"
-    - export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple PIP_TRUSTED_HOST=mirrors.tuna.tsinghua.edu.cn PIP_CACHE_DIR="${CI_PROJECT_DIR}/.cache/pip"
-    - mkdir -p "${PIP_CACHE_DIR}"
-    - python3 -m pip install --user pre-commit
-    - export PATH="$HOME/.local/bin:$PATH"
-  script:
-    - bash "${CI_PROJECT_DIR}/ci/run_pre_commit_ci.sh"
-  tags:
-    - k8s-runner-ack
-  cache:
-    key:
-      files:
-        - .pre-commit-config.yaml
-    paths:
-      - .cache/pre-commit
-      - .cache/pip
   rules:
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_TAG'
       when: on_success

@@ -491,7 +491,7 @@ class TestExpBuiltinTools:
         exp = Exp(ExpConfig(name='test'))
         ctx = self._make_ctx_with_session(tmp_path)
         registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry)
+        exp._init_builtin_tools(ctx, registry, ['*'])
         return exp, registry
 
     def test_native_tools_count(self, tmp_path: Path) -> None:
@@ -576,7 +576,7 @@ class TestExpBuiltinTools:
             llm_provider=MockLLMProvider(),
         )
         registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry)
+        exp._init_builtin_tools(ctx, registry, ['*'])
         assert len(registry) == 0
 
     async def test_explicit_builtin_config_triggers_init(self, tmp_path: Path) -> None:
@@ -647,7 +647,7 @@ class TestExecutionWorkdirBinding:
         ctx = self._ctx(tmp_path, control=control, execution=execution)
         exp = Exp(ExpConfig(name='test'))
         registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry)
+        exp._init_builtin_tools(ctx, registry, ['*'])
         by_name = {t.name: t for t in registry.all_tools}
         for name in (
             'execute_bash',
@@ -670,7 +670,7 @@ class TestExecutionWorkdirBinding:
         ctx = self._ctx(tmp_path, control=control, execution=execution)
         exp = Exp(ExpConfig(name='test'))
         registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry)
+        exp._init_builtin_tools(ctx, registry, ['*'])
         by_name = {t.name: t for t in registry.all_tools}
         for name in (
             'task_create',
