@@ -9,8 +9,9 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from matmaster.config.exp import ExpConfig

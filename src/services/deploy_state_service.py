@@ -2,7 +2,6 @@
 
 import logging
 from functools import lru_cache
-from typing import Optional, Tuple
 
 from src.dao.redis_dao import RedisDao, get_redis_dao
 from src.utils.build_info import get_build_version
@@ -15,7 +14,7 @@ class DeployStateService:
 
     _SESSION_VERSION_HASH = 'matmaster_chat:session_versions'
 
-    def __init__(self, redis_dao: Optional[RedisDao] = None) -> None:
+    def __init__(self, redis_dao: RedisDao | None = None) -> None:
         self._redis_dao = redis_dao or get_redis_dao()
         self._current_version = get_build_version()
 
@@ -47,7 +46,7 @@ class DeployStateService:
                 exc,
             )
 
-    def get_last_session_version(self, session_id: str) -> Optional[str]:
+    def get_last_session_version(self, session_id: str) -> str | None:
         client = self._get_client()
         if client is None:
             return None
@@ -68,7 +67,7 @@ class DeployStateService:
         value = str(value).strip()
         return value or None
 
-    def classify_restart_reason(self, session_id: str) -> Tuple[str, dict]:
+    def classify_restart_reason(self, session_id: str) -> tuple[str, dict]:
         """
         根据上一轮版本与当前版本判断 run_interrupted 原因：
         - 上一次版本缺失或不同 => deploy（升级导致）

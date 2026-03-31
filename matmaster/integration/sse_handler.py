@@ -12,7 +12,8 @@ Pure async handler -- send_cb is always awaited.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from matmaster.integration.event_payloads import build_public_sse_payload_from_bus_dump
 from matmaster.types.events import BusEvent, ResponseEvent, ThoughtEvent

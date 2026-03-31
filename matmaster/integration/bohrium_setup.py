@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from typing import Callable
+    from collections.abc import Callable
 
     from matmaster.config.exp import ExpConfig
     from matmaster.core.bus import MessageBus

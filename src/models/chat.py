@@ -16,7 +16,6 @@ ag-ui 协议（前后端约定）：
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
-from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -28,7 +27,7 @@ class SessionListQuery(BaseModel):
 
     limit: int = Field(default=20, ge=1, le=100, description='每页条数')
     offset: int = Field(default=0, ge=0, description='偏移量')
-    project_id: Optional[int] = Field(
+    project_id: int | None = Field(
         default=None,
         description='项目 ID；传入后只返回该项目下的会话，不传则返回当前用户全部会话。',
         examples=[42],
@@ -39,20 +38,20 @@ class SessionItem(BaseModel):
     """会话列表项"""
 
     id: str
-    project_id: Optional[int] = None  # 归属项目 ID；历史数据或未归属项目时可为 None
+    project_id: int | None = None  # 归属项目 ID；历史数据或未归属项目时可为 None
     status: str = (
         'idle'  # idle=空闲/已结束，active=运行中，waiting=已入队等待 worker（用于限流与前端展示）
     )
     history_length: int
-    first_user_message: Optional[str] = None  # 第一条用户消息
+    first_user_message: str | None = None  # 第一条用户消息
 
 
 class SessionListResponse(BaseModel):
     """GET /chat/sessions/list 列表数据（放在 data 字段内）；分页时含 total、has_more。"""
 
-    sessions: List[SessionItem]
-    total: Optional[int] = None  # 总分页条数，仅分页时返回
-    has_more: Optional[bool] = None  # 是否有更多，仅分页时返回
+    sessions: list[SessionItem]
+    total: int | None = None  # 总分页条数，仅分页时返回
+    has_more: bool | None = None  # 是否有更多，仅分页时返回
 
 
 class SessionListApiResponse(BaseResponse[SessionListResponse]):
@@ -149,17 +148,17 @@ class ChatSendRequest(BaseModel):
     """POST /chat/sessions/{session_id}/stream 请求体：不传或 content 为空则仅拉历史+ping；有 content 则发送消息并返回本次运行的 SSE 流"""
 
     content: str = ''  # 为空或不传 body 时为「仅订阅」模式
-    files: List[str] | None = (
+    files: list[str] | None = (
         None  # 可选，OSS 链接列表，前端展示与 content 分开，传给 agent 时拼成 content + URLs
     )
-    workspace_paths: List[str] | None = (
+    workspace_paths: list[str] | None = (
         None  # 可选，工作区/个人路径列表，如 /personal/1.cif，与 files(OSS) 区分
     )
     mode: str = 'direct'  # "direct" | "planner"
-    llm: Optional[str] = (
+    llm: str | None = (
         None  # 可选，本轮使用的 LLM 配置块（如 opus/sonnet/haiku），不传则用 agent 默认
     )
-    model: Optional[str] = (
+    model: str | None = (
         None  # 可选，本轮使用的模型名（如 gemini-3-flash-preview、claude-sonnet-4-6），覆盖所选 LLM 配置里的 model
     )
     bohrium_project_id: int | str | None = None  # 可选的 Bohrium project id

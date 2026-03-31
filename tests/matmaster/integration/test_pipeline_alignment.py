@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel

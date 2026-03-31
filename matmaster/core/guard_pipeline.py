@@ -17,11 +17,9 @@ from collections import deque
 from matmaster.types.guards import Guard, GuardContext, GuardResult, RecentCall
 from matmaster.types.messages import ToolCallData
 
-LOOP_WINDOW: int = 5
-"""Default sliding window size for loop detection."""
+LOOP_WINDOW: int = 5  # Default sliding window size for loop detection.
 
-LOOP_THRESHOLD: int = 2
-"""Default repeat count threshold to trigger loop detection."""
+LOOP_THRESHOLD: int = 2  # Default repeat count threshold to trigger loop detection.
 
 
 class LoopDetectionGuard:

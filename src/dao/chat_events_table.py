@@ -1,7 +1,6 @@
 import json
 import logging
 from functools import lru_cache
-from typing import Dict, List, Optional
 
 from src.base.base_table import BaseTable
 
@@ -17,9 +16,9 @@ class ChatEventsTable(BaseTable):
     def get_session_events(
         self,
         session_id: str,
-        limit: Optional[int] = None,
+        limit: int | None = None,
         include_spawn: bool = False,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         获取会话历史事件列表。按 run（task_id）分组后再按时间排，避免两 pod 并发写时
         （旧 pod 优雅退出期间仍写第一轮、新 pod 写 run_interrupted/重跑）导致两轮事件按 created_at 交错。
@@ -43,7 +42,7 @@ class ChatEventsTable(BaseTable):
                 if not rows:
                     return []
                 # 每个 task_id（同一次 run）的首次出现时间，按 run 分组再按时间排，避免两 pod 并发写导致两轮交错
-                run_start: Dict[Optional[str], float] = {}
+                run_start: dict[str | None, float] = {}
                 for row in rows:
                     tid = row.get('task_id')
                     ts = row['created_at'].timestamp() if row.get('created_at') else 0.0
@@ -89,7 +88,7 @@ class ChatEventsTable(BaseTable):
                     events.append(ev)
                 return events
 
-    def get_last_user_query(self, session_id: str) -> Optional[Dict]:
+    def get_last_user_query(self, session_id: str) -> dict | None:
         """
         获取该会话最后一次用户输入（source=User, type=query），用于部署中断后重跑。
         返回 dict：content(str), files(list 可选), workspace_paths(list 可选), mode(str 可选), task_id 可选。
@@ -140,9 +139,9 @@ class ChatEventsTable(BaseTable):
         event_type: str,
         content: any,
         *,
-        task_id: Optional[str] = None,
-        invocation_id: Optional[str] = None,
-        spawn_id: Optional[str] = None,
+        task_id: str | None = None,
+        invocation_id: str | None = None,
+        spawn_id: str | None = None,
     ) -> bool:
         """添加事件到数据库。invocation_id 为本轮调用标识；spawn_id 标记子 agent 事件（NULL=父级）。"""
         with self.get_connection() as conn:

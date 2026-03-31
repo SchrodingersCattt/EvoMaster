@@ -6,7 +6,8 @@ the async Protocol definitions. Used across all test suites for Phase 12+.
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 

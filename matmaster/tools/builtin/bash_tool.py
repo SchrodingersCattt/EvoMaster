@@ -124,7 +124,7 @@ class BashTool(BuiltinTool):
             stdout_bytes, stderr_bytes = await asyncio.wait_for(
                 proc.communicate(), timeout=timeout
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             obs = f"Command timeout after {timeout}s"

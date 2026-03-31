@@ -10,7 +10,8 @@ Retry strategy is handled by Kernel._call_llm(), not by the provider.
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import openai
 

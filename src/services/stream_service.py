@@ -8,10 +8,10 @@ import queue
 import threading
 import time
 import uuid
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import AsyncGenerator, Callable
 
 from src.dao.redis_dao import (
     CONFIRMATION_CANCEL_VALUE,
@@ -581,7 +581,7 @@ class ChatStreamService:
                                     payload = await asyncio.wait_for(
                                         redis_queue.get(), timeout=30.0
                                     )
-                                except asyncio.TimeoutError:
+                                except TimeoutError:
                                     yield self.sse_format(
                                         {
                                             'source': 'System',
@@ -940,7 +940,7 @@ class ChatStreamService:
                         payload = await asyncio.wait_for(
                             redis_queue.get(), timeout=30.0
                         )
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         yield self.sse_format(
                             {
                                 'source': 'System',
