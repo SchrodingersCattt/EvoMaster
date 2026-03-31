@@ -48,6 +48,45 @@ def _summarize_assistant_state_content_for_log(raw: Any) -> str:
     return f'type={type(raw).__name__} repr={repr(raw)[:300]}'
 
 
+def _adapt_tool_calls_format(raw: dict) -> dict:
+    """Adapt matmaster flat ToolCallData format to evomaster nested ToolCall format.
+
+    matmaster serializes tool_calls as: {"id", "name", "arguments": dict}
+    evomaster expects:               {"id", "type", "function": {"name", "arguments": str}}
+
+    If a tool_call already has a 'function' key, it is left as-is (already evomaster format).
+    """
+    tcs = raw.get('tool_calls')
+    if not tcs or not isinstance(tcs, list):
+        return raw
+    adapted = []
+    for tc in tcs:
+        if not isinstance(tc, dict):
+            adapted.append(tc)
+            continue
+        if 'function' in tc:
+            adapted.append(tc)
+        elif 'name' in tc and 'arguments' in tc:
+            args = tc['arguments']
+            if isinstance(args, dict):
+                args_str = json.dumps(args, ensure_ascii=False)
+            elif isinstance(args, str):
+                args_str = args
+            else:
+                args_str = '{}'
+            adapted.append({
+                'id': tc.get('id', ''),
+                'type': 'function',
+                'function': {
+                    'name': tc['name'],
+                    'arguments': args_str,
+                },
+            })
+        else:
+            adapted.append(tc)
+    return {**raw, 'tool_calls': adapted}
+
+
 def _serialized_message_role(m: dict) -> str:
     """Normalize role from model_dump() (str or MessageRole) for comparisons."""
     r = m.get('role')
@@ -388,7 +427,11 @@ class ChatHistoryConverter:
                 flush_tool_calls()
                 raw_content = ev.get('content')
                 try:
-                    msg = AssistantMessage.model_validate(raw_content or {})
+                    msg = AssistantMessage.model_validate(
+                        _adapt_tool_calls_format(raw_content)
+                        if raw_content
+                        else {}
+                    )
                 except Exception as e:
                     logger.warning(
                         'chat_history: assistant_state model_validate failed, event skipped '
