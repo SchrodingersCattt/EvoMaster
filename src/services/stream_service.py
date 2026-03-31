@@ -865,7 +865,9 @@ class ChatStreamService:
                     pass
 
         sub_thread = threading.Thread(
-            target=_redis_subscribe_loop, name=f'send-stream-queue-{sid[:8]}', daemon=True
+            target=_redis_subscribe_loop,
+            name=f'send-stream-queue-{sid[:8]}',
+            daemon=True,
         )
         sub_thread.start()
 

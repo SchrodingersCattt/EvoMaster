@@ -665,4 +665,3 @@ class TestAgentRunServiceConfirmationRecovery:
             and "AttributeError" in str(payload.get("message"))
             for payload in payloads
         )
-
