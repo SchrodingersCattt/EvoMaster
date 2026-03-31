@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import queue
 import threading
-import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from types import SimpleNamespace
