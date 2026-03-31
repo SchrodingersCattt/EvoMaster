@@ -532,6 +532,141 @@ class TestToolCallDelta:
         assert fn_tool.calls[0][1] == {'a': 1}
 
 
+class TestToolCallDeltaDuplicateName:
+    """Regression: proxy sends full name in multiple chunks must not concatenate."""
+
+    @pytest.mark.asyncio
+    async def test_duplicate_full_name_not_concatenated(self) -> None:
+        """LiteLLM proxy may repeat full tool name across chunks.
+
+        Before fix: 'use_skill' + 'use_skill' → 'use_skilluse_skill'
+        After fix:  second chunk overwrites, name stays 'use_skill'
+        """
+        from matmaster.core.agent import AgentKernel
+
+        chunks = [
+            StreamChunk(
+                tool_call_deltas=[
+                    {'index': 0, 'id': 'tc1', 'name': 'fn', 'arguments': '{"a":'}
+                ]
+            ),
+            # Proxy resends full name in a later chunk
+            StreamChunk(
+                tool_call_deltas=[{'index': 0, 'name': 'fn', 'arguments': '1}'}]
+            ),
+            StreamChunk(finish_reason='stop'),
+        ]
+
+        class TwoPhaseProvider:
+            def __init__(self) -> None:
+                self._call_count = 0
+
+            async def __aenter__(self) -> TwoPhaseProvider:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                pass
+
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+            ) -> LLMResponse:
+                return LLMResponse(content='unused', finish_reason='stop')
+
+            async def chat_stream(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+                *,
+                timeout: float | None = None,
+            ) -> AsyncIterator[StreamChunk]:
+                self._call_count += 1
+                if self._call_count == 1:
+                    for chunk in chunks:
+                        yield chunk
+                else:
+                    yield StreamChunk(content='done', finish_reason='stop')
+
+        tool_reg, tools = _make_tool_registry(['fn'])
+        spec = _make_spec(provider=TwoPhaseProvider(), tool_registry=tool_reg)
+        kernel = AgentKernel()
+        await kernel.run(spec, 'test')
+
+        fn_tool = tools[0]
+        assert len(fn_tool.calls) == 1
+        assert fn_tool.calls[0][0] == 'fn'  # NOT 'fnfn'
+        assert fn_tool.calls[0][1] == {'a': 1}
+
+    @pytest.mark.asyncio
+    async def test_different_name_on_same_index_uses_last(self) -> None:
+        """If proxy sends conflicting names on same index, keep last (not concat).
+
+        Before fix: 'list_dir' + 'read_file' → 'list_dirread_file'
+        After fix:  name = 'read_file' (last wins, at least a valid tool name)
+        """
+        from matmaster.core.agent import AgentKernel
+
+        chunks = [
+            StreamChunk(
+                tool_call_deltas=[
+                    {'index': 0, 'id': 'tc1', 'name': 'list_dir', 'arguments': '{}'}
+                ]
+            ),
+            # Bug in proxy: second tool call reuses index 0
+            StreamChunk(
+                tool_call_deltas=[
+                    {'index': 0, 'name': 'read_file', 'arguments': ''}
+                ]
+            ),
+            StreamChunk(finish_reason='stop'),
+        ]
+
+        class TwoPhaseProvider:
+            def __init__(self) -> None:
+                self._call_count = 0
+
+            async def __aenter__(self) -> TwoPhaseProvider:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                pass
+
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+            ) -> LLMResponse:
+                return LLMResponse(content='unused', finish_reason='stop')
+
+            async def chat_stream(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+                *,
+                timeout: float | None = None,
+            ) -> AsyncIterator[StreamChunk]:
+                self._call_count += 1
+                if self._call_count == 1:
+                    for chunk in chunks:
+                        yield chunk
+                else:
+                    yield StreamChunk(content='done', finish_reason='stop')
+
+        tool_reg, tools = _make_tool_registry(['list_dir', 'read_file'])
+        spec = _make_spec(provider=TwoPhaseProvider(), tool_registry=tool_reg)
+        kernel = AgentKernel()
+        await kernel.run(spec, 'test')
+
+        # Should execute with a valid tool name, not 'list_dirread_file'
+        all_calls = []
+        for t in tools:
+            all_calls.extend(t.calls)
+        assert len(all_calls) == 1
+        assert all_calls[0][0] in ('list_dir', 'read_file')
+        assert all_calls[0][0] != 'list_dirread_file'
+
+
 class TestFullCycle:
     """Turn 1: tool_call -> execute. Turn 2: natural finish."""
 

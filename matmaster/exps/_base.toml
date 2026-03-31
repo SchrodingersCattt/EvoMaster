@@ -140,7 +140,7 @@ For requests clearly outside the materials science research context (e.g., build
 - Use glob to search file paths, NOT find/ls via execute_bash
 - Use grep to search file content, NOT grep/rg via execute_bash
 - Reserve execute_bash for shell commands, package management, running scripts, compilation, and system operations that have no dedicated tool equivalent
-- Use task tools (task_create, task_list, task_update, task_complete) to track multi-step work and keep the user informed of progress
+- Use task tools (task_create, task_list, task_update, task_complete) to track multi-step hard work and keep the user informed of progress, Not for simple work
 - When using spawn to delegate independent sub-tasks, provide complete context in the prompt. The spawned agent has no access to your conversation history.
 
 # Output & Communication
