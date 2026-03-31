@@ -38,7 +38,6 @@ from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.events import (
     CancelledEvent,
     ErrorEvent,
-    ResponseEvent,
     StreamClosedEvent,
 )
 from src.dao.chat_events_table import get_chat_events_table
@@ -395,16 +394,6 @@ class AgentRunService:
                 )
                 return ((False, 'cancelled'), _elapsed_ms())
             else:
-                if (
-                    run_result_event.reason == 'natural'
-                    and run_result_event.final_content
-                ):
-                    bus.emit_nowait(
-                        ResponseEvent(
-                            source=run_result_event.source,
-                            content=run_result_event.final_content,
-                        )
-                    )
                 bus.emit_nowait(run_result_event)
                 bus.emit_nowait(
                     StreamClosedEvent(
