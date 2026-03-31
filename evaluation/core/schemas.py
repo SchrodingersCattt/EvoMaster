@@ -36,6 +36,7 @@ VerifyLiteral = Literal[
     'contains_all',
     'tool_called',
     'tool_args_match',
+    'tool_observation_field',
     'event_type_called',
     'source_type_used',
     'call_count_range',
@@ -175,14 +176,6 @@ class QuestionItem(BaseModel):
     human_prompt_seed: str
     tags: list[str] = Field(default_factory=list)
     mode_scope: list[ModeLiteral] = Field(default_factory=lambda: ['direct', 'planner'])
-    required_tools: list[str] = Field(
-        default_factory=list,
-        description='MCP tools that must be in the whitelist for this question to run.',
-    )
-    optional_tools: list[str] = Field(
-        default_factory=list,
-        description='Nice-to-have tools; question is runnable without them.',
-    )
     data_files: list[DataFileRef] = Field(default_factory=list)
     reference_answers: list[ReferenceAnswer] = Field(default_factory=list)
     scoring_checklist: list[ScoringCheckItem] = Field(default_factory=list)
@@ -212,6 +205,10 @@ class QuestionItem(BaseModel):
             'contains_all',
             'tool_called',
             'tool_args_match',
+            'tool_observation_field',
+            'event_type_called',
+            'source_type_used',
+            'call_count_range',
             'batch_single_variable_sweep',
             'batch_tool_args_constant',
             'batch_consistent_calls',
@@ -425,15 +422,6 @@ class QuestionPassRate(BaseModel):
     safety_veto_count: int = 0
 
 
-class ToolContribution(BaseModel):
-    """How much a single tool contributed across all questions."""
-
-    tool_name: str
-    questions_requiring: int = 0  # questions where this tool is in required_tools
-    criteria_delta: int = 0  # additional criteria passed when this tool is present
-    accepted: bool = False
-
-
 class EvaluationSummary(BaseModel):
     """Aggregated result object (v5+): both raw pass-rates and weighted scores.
 
@@ -459,7 +447,6 @@ class EvaluationSummary(BaseModel):
     by_mode: dict[str, AxisPassRates] = Field(default_factory=dict)
     by_model: dict[str, AxisPassRates] = Field(default_factory=dict)
     safety: dict[str, Any] = Field(default_factory=dict)
-    tool_contribution: dict[str, ToolContribution] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

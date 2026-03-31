@@ -126,15 +126,57 @@ _OTHER_FORMULAS_SC005 = (
 )
 
 
+_FORMULA_TOKEN_RE = re.compile(r'([A-Z][a-z]?)(\d+(?:\.\d+)?)?')
+
+
+def _parse_formula_counts(formula: str) -> dict[str, float] | None:
+    text = formula.strip()
+    if not text or not re.fullmatch(r'(?:[A-Z][a-z]?\d*(?:\.\d+)?)+', text):
+        return None
+
+    counts: dict[str, float] = {}
+    consumed = ''
+    for element, raw_count in _FORMULA_TOKEN_RE.findall(text):
+        consumed += f'{element}{raw_count}'
+        count = float(raw_count) if raw_count else 1.0
+        counts[element] = counts.get(element, 0.0) + count
+    if consumed != text:
+        return None
+    return counts
+
+
+def _same_formula(lhs: str, rhs: str) -> bool:
+    left = _parse_formula_counts(lhs)
+    right = _parse_formula_counts(rhs)
+    if left is None or right is None:
+        return False
+    if set(left) != set(right):
+        return False
+    for key in left:
+        if abs(left[key] - right[key]) > 1e-8:
+            return False
+    return True
+
+
+def _extract_formula_like_tokens(answer: str) -> list[str]:
+    return list(
+        {
+            token
+            for token in re.findall(r'\b(?:[A-Z][a-z]?\d+(?:\.\d+)?)+\b', answer)
+            if _parse_formula_counts(token) is not None
+        }
+    )
+
+
 def check_sc005_other_formulas_in_answer(answer: str) -> tuple[bool, str]:
-    """Four non-DAN-2 reference formula strings must appear in the answer."""
-    norm = ' '.join(answer.lower().split())
+    """Four non-DAN-2 reference formula strings must appear in the answer modulo formula normalization."""
+    found_tokens = _extract_formula_like_tokens(answer)
     missing = []
-    for f in _OTHER_FORMULAS_SC005:
-        if f.lower() not in norm:
-            missing.append(f)
+    for expected in _OTHER_FORMULAS_SC005:
+        if not any(_same_formula(expected, actual) for actual in found_tokens):
+            missing.append(expected)
     if missing:
-        return False, f'missing expected formula substrings: {missing}'
+        return False, f'missing expected formulas (normalized match): {missing}'
     return True, 'all four non-DAN-2 reference formulas found in answer'
 
 
