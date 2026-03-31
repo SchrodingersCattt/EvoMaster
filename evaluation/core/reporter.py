@@ -241,27 +241,6 @@ def _render_markdown(summary: EvaluationSummary) -> str:
             lines.append(_axis_row(model_key, summary.by_model[model_key]))
         lines.append('')
 
-    # Tool contribution delta
-    if summary.tool_contribution:
-        lines += [
-            '## Tool Contribution Delta',
-            '| Tool | Questions Requiring | Criteria Delta | Accept? |',
-            '|------|--------------------|--------------------|---------|',
-        ]
-        for tool_name in sorted(
-            summary.tool_contribution,
-            key=lambda t: -summary.tool_contribution[t].criteria_delta,
-        ):
-            tc = summary.tool_contribution[tool_name]
-            accept = '✓ YES' if tc.accepted else 'NO'
-            lines.append(
-                f'| `{tool_name}` '
-                f'| {tc.questions_requiring} '
-                f'| +{tc.criteria_delta} '
-                f'| {accept} |'
-            )
-        lines.append('')
-
     # Per question
     lines += [
         '## Per Question (mode split)',

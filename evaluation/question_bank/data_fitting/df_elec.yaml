@@ -14,8 +14,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools: []
   data_files:
   - key: band_data
     path: data/DF_elec_001/band_edges.json

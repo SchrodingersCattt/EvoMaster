@@ -22,7 +22,6 @@ from .core.schemas import (
     SimulatedTask,
     TaskSpec,
     TokenUsageRecord,
-    ToolContribution,
 )
 
 __all__ = [
@@ -47,5 +46,4 @@ __all__ = [
     "SimulatedTask",
     "TaskSpec",
     "TokenUsageRecord",
-    "ToolContribution",
 ]
