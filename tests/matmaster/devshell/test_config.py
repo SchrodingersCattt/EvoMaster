@@ -84,3 +84,35 @@ agent:
 
         cfg = DevConfig()
         assert cfg.agent.name == "general"
+
+
+class TestLLMConfigExtended:
+    def test_timeout_defaults(self) -> None:
+        from matmaster.devshell.config import DevConfig
+
+        cfg = DevConfig()
+        assert cfg.llm.timeout == 300.0
+        assert cfg.llm.stream_timeout is None
+        assert cfg.llm.stream_idle_timeout is None
+        assert cfg.llm.max_retries == 3
+        assert cfg.llm.retry_delay == 1.0
+
+    def test_custom_timeout_from_dict(self) -> None:
+        from matmaster.devshell.config import DevConfig
+
+        cfg = DevConfig.model_validate(
+            {
+                "llm": {
+                    "timeout": 60.0,
+                    "stream_timeout": 30.0,
+                    "stream_idle_timeout": 10.0,
+                    "max_retries": 5,
+                    "retry_delay": 2.0,
+                }
+            }
+        )
+        assert cfg.llm.timeout == 60.0
+        assert cfg.llm.stream_timeout == 30.0
+        assert cfg.llm.stream_idle_timeout == 10.0
+        assert cfg.llm.max_retries == 5
+        assert cfg.llm.retry_delay == 2.0

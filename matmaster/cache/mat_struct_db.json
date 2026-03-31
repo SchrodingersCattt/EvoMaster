@@ -1,23 +1,8 @@
 [
   {
-    "name": "fetch_structures_from_db",
     "description": "\n    Unified search entry with complete preprocessing, parallel search, and postprocessing.\n    \n    Flow:\n    1. Preprocessing: intent recognition -> parameter construction\n    2. Parallel search: search multiple databases in parallel\n    3. Postprocessing: ranking and response building\n    ",
     "input_schema": {
       "properties": {
-        "query": {
-          "title": "Query",
-          "type": "string"
-        },
-        "n_results": {
-          "default": 5,
-          "title": "N Results",
-          "type": "integer"
-        },
-        "output_format": {
-          "default": "cif",
-          "title": "Output Format",
-          "type": "string"
-        },
         "executor": {
           "anyOf": [
             {
@@ -30,6 +15,20 @@
           ],
           "default": null,
           "title": "Executor"
+        },
+        "n_results": {
+          "default": 5,
+          "title": "N Results",
+          "type": "integer"
+        },
+        "output_format": {
+          "default": "cif",
+          "title": "Output Format",
+          "type": "string"
+        },
+        "query": {
+          "title": "Query",
+          "type": "string"
         },
         "storage": {
           "anyOf": [
@@ -50,17 +49,13 @@
       ],
       "title": "fetch_structures_from_dbArguments",
       "type": "object"
-    }
+    },
+    "name": "fetch_structures_from_db"
   },
   {
-    "name": "query_job_status",
     "description": "\n    Query status of a calculation job\n    Args:\n        job_id (str): The ID of the calculation job\n    Returns:\n        status (str): One of \"Running\", \"Succeeded\" or \"Failed\"\n    ",
     "input_schema": {
       "properties": {
-        "job_id": {
-          "title": "Job Id",
-          "type": "string"
-        },
         "executor": {
           "anyOf": [
             {
@@ -73,6 +68,10 @@
           ],
           "default": null,
           "title": "Executor"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
         }
       },
       "required": [
@@ -80,17 +79,13 @@
       ],
       "title": "query_job_statusArguments",
       "type": "object"
-    }
+    },
+    "name": "query_job_status"
   },
   {
-    "name": "terminate_job",
     "description": "\n    Terminate a calculation job\n    Args:\n        job_id (str): The ID of the calculation job\n    ",
     "input_schema": {
       "properties": {
-        "job_id": {
-          "title": "Job Id",
-          "type": "string"
-        },
         "executor": {
           "anyOf": [
             {
@@ -103,6 +98,10 @@
           ],
           "default": null,
           "title": "Executor"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
         }
       },
       "required": [
@@ -110,17 +109,13 @@
       ],
       "title": "terminate_jobArguments",
       "type": "object"
-    }
+    },
+    "name": "terminate_job"
   },
   {
-    "name": "get_job_results",
     "description": "\n    Get results of a calculation job\n    Args:\n        job_id (str): The ID of the calculation job\n    Returns:\n        results (Any): results of the calculation job\n    ",
     "input_schema": {
       "properties": {
-        "job_id": {
-          "title": "Job Id",
-          "type": "string"
-        },
         "executor": {
           "anyOf": [
             {
@@ -133,6 +128,10 @@
           ],
           "default": null,
           "title": "Executor"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
         },
         "storage": {
           "anyOf": [
@@ -153,6 +152,7 @@
       ],
       "title": "get_job_resultsArguments",
       "type": "object"
-    }
+    },
+    "name": "get_job_results"
   }
 ]

@@ -12,6 +12,7 @@ Usage::
     # From ConfigManager dict (dual entry)
     llm = LLMConfig.model_validate(playground.config.llm)
 """
+
 from __future__ import annotations
 
 import logging
@@ -79,7 +80,9 @@ def _load_base_system_prompt(exps_dir: Path) -> str:
 
     base_path = exps_dir / "_base.toml"
     if not base_path.exists():
-        _logger.warning("_base.toml not found at %s, system_prompt will be empty", base_path)
+        _logger.warning(
+            "_base.toml not found at %s, system_prompt will be empty", base_path
+        )
         return ""
     with open(base_path, "rb") as f:
         base_raw = tomllib.load(f)
@@ -154,12 +157,10 @@ def load_exp_config(
     toml_path = exps_dir / f"{name}.toml"
     if not toml_path.exists():
         available = sorted(
-            p.stem for p in exps_dir.glob("*.toml")
-            if not p.stem.startswith("_")
+            p.stem for p in exps_dir.glob("*.toml") if not p.stem.startswith("_")
         )
         raise FileNotFoundError(
-            f"Exp definition not found: {toml_path}, "
-            f"available: {available}"
+            f"Exp definition not found: {toml_path}, " f"available: {available}"
         )
 
     with open(toml_path, "rb") as f:

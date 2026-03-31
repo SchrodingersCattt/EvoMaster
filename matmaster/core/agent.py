@@ -1,4 +1,4 @@
-"""AgentKernel -- pure execution loop for the agent kernel.
+"""AgentKernel -- pure async execution loop for the agent kernel.
 
 Consumes an AgentRuntimeSpec and executes the LLM -> guard -> hook -> tool
 -> message accumulate -> loop cycle. All termination paths go through
@@ -14,11 +14,11 @@ Termination conditions:
 
 from __future__ import annotations
 
-import json
+import asyncio
 import logging
 import threading
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from matmaster.core.guard_pipeline import GuardPipeline
 from matmaster.tools.tool_result import ToolResult
@@ -46,6 +46,7 @@ from matmaster.types.messages import (
     ToolCallData,
     ToolMessage,
     UserMessage,
+    parse_tool_arguments,
 )
 
 logger = logging.getLogger(__name__)
@@ -60,10 +61,19 @@ class _KernelStopRequested(Exception):
     """Internal: stop_event became set during LLM stream or retry backoff."""
 
 
+class _ToolOutcome(NamedTuple):
+    """Result of guard + pre-hook gating for a single tool call."""
+
+    tc: ToolCallData
+    tool_msg: ToolMessage | None
+    tool_result: ToolResult | None
+    needs_post_hook: bool
+
+
 class AgentKernel:
     """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""
 
-    def run(
+    async def run(
         self,
         spec: AgentRuntimeSpec,
         task: str,
@@ -87,63 +97,85 @@ class AgentKernel:
 
         Returns KernelRunResult with event and message transcript.
         """
+        async with spec.llm_provider:
+            # Enter summary_provider if it's a separate instance
+            _summary_provider = None
+            if spec.compactor and hasattr(spec.compactor, '_summary_provider'):
+                sp = spec.compactor._summary_provider
+                if sp is not spec.llm_provider:
+                    _summary_provider = sp
+
+            if _summary_provider is not None:
+                async with _summary_provider:
+                    return await self._run_loop(spec, task, history, stop_event)
+            else:
+                return await self._run_loop(spec, task, history, stop_event)
+
+    async def _run_loop(
+        self,
+        spec: AgentRuntimeSpec,
+        task: str,
+        history: list[Message] | None,
+        stop_event: threading.Event | None,
+    ) -> KernelRunResult:
+        """Internal async execution loop."""
         messages: list[Message] = [
             SystemMessage(content=spec.system_prompt),
             *(history or []),
             UserMessage(content=task),
         ]
         guard_pipeline = GuardPipeline(spec.guards)
+
         turn = 0
         if spec.compactor:
             spec.compactor.update_message_count(len(messages))
-        last_usage: dict[str, int] = {}
+        turn_usage: dict[str, int] = {}
+        total_usage: dict[str, int] = {}
         last_stop_reason: str | None = None
 
         while turn < spec.max_turns:
             # External cancel check (before each turn)
             if stop_event and stop_event.is_set():
                 return self._finish(
-                    spec,
                     messages,
                     'cancelled',
                     num_turns=turn,
                     stop_reason=last_stop_reason,
-                    usage=last_usage,
+                    usage=total_usage,
                 )
 
             turn += 1
 
             # pre_llm_call hook (observation, all hooks called)
-            run_pre_llm_call(spec.hooks, messages, turn)
+            await run_pre_llm_call(spec.hooks, messages, turn)
 
             # should_continue hook (intercepting, short-circuit)
-            if not run_should_continue(spec.hooks, messages, turn):
+            if not await run_should_continue(spec.hooks, messages, turn):
                 return self._finish(
-                    spec,
                     messages,
                     'hook_stopped',
                     num_turns=turn - 1,
                     stop_reason=last_stop_reason,
-                    usage=last_usage,
+                    usage=total_usage,
                 )
 
             # Context compaction check
             if spec.compactor:
-                spec.compactor.compact_if_needed(messages, last_usage, turn)
+                await spec.compactor.compact_if_needed(messages, turn_usage, turn)
 
             # LLM call (streaming by default)
             try:
-                response = self._call_llm(spec, messages, stop_event=stop_event)
+                response = await self._call_llm(spec, messages, stop_event=stop_event)
             except _KernelStopRequested:
                 return self._finish(
-                    spec,
                     messages,
                     'cancelled',
                     num_turns=turn,
                     stop_reason=last_stop_reason,
-                    usage=last_usage,
+                    usage=total_usage,
                 )
-            last_usage = response.usage or {}
+            turn_usage = response.usage
+            self._accumulate_usage(total_usage, response.usage)
             last_stop_reason = response.finish_reason
             if spec.compactor:
                 spec.compactor.update_message_count(len(messages))
@@ -152,12 +184,11 @@ class AgentKernel:
             if not response.tool_calls:
                 if not self._is_valid_natural_finish(response):
                     return self._finish(
-                        spec,
                         messages,
                         'invalid_finish',
                         num_turns=turn,
                         stop_reason=last_stop_reason,
-                        usage=last_usage,
+                        usage=total_usage,
                     )
                 messages.append(
                     AssistantMessage(
@@ -166,13 +197,12 @@ class AgentKernel:
                     )
                 )
                 return self._finish(
-                    spec,
                     messages,
                     'natural',
                     final_content=response.content,
                     num_turns=turn,
                     stop_reason=response.finish_reason,
-                    usage=last_usage,
+                    usage=total_usage,
                 )
 
             # Has tool_calls: append assistant message then process each serially
@@ -184,79 +214,112 @@ class AgentKernel:
                 )
             )
 
-            for tc in response.tool_calls:
+            # Phase 1: Serial — guard denials and hook skips must resolve before execution to avoid wasted work
+            outcomes: list[_ToolOutcome] = []
+            approved_indices: list[int] = []
+
+            for _i, tc in enumerate(response.tool_calls):
                 if stop_event and stop_event.is_set():
                     return self._finish(
-                        spec,
                         messages,
                         'cancelled',
                         num_turns=turn,
                         stop_reason=last_stop_reason,
-                        usage=last_usage,
+                        usage=total_usage,
                     )
-                # Guard evaluation (before hooks)
                 guard_result = guard_pipeline.evaluate(tc, turn, spec.max_turns)
                 if not guard_result.allowed:
-                    # Blocked: notify hooks, then append ToolMessage error
-                    run_guard_blocked(spec.hooks, tc, guard_result)
+                    await run_guard_blocked(spec.hooks, tc, guard_result)
                     blocked_content = f'BLOCKED: {guard_result.reason}'
                     if guard_result.guidance:
                         blocked_content += f'\n{guard_result.guidance}'
-                    messages.append(
-                        ToolMessage(
-                            tool_call_id=tc.id,
-                            tool_name=tc.name,
-                            content=blocked_content,
+                    outcomes.append(
+                        _ToolOutcome(
+                            tc=tc,
+                            tool_msg=ToolMessage(
+                                tool_call_id=tc.id,
+                                tool_name=tc.name,
+                                content=blocked_content,
+                            ),
+                            tool_result=None,
+                            needs_post_hook=False,
                         )
                     )
                     continue
 
-                # pre_tool_call hook (intercepting, short-circuit)
-                action = run_pre_tool_call(spec.hooks, tc)
+                action = await run_pre_tool_call(spec.hooks, tc)
                 if action == HookAction.SKIP:
-                    messages.append(
-                        ToolMessage(
-                            tool_call_id=tc.id,
-                            tool_name=tc.name,
-                            content='Tool call skipped by hook.',
+                    outcomes.append(
+                        _ToolOutcome(
+                            tc=tc,
+                            tool_msg=ToolMessage(
+                                tool_call_id=tc.id,
+                                tool_name=tc.name,
+                                content='Tool call skipped by hook.',
+                            ),
+                            tool_result=None,
+                            needs_post_hook=False,
                         )
                     )
                     continue
 
-                # Tool execution
-                try:
-                    tool_result = spec.tool_registry.execute(tc.name, tc.arguments)
-                except Exception as e:
-                    tool_result = ToolResult(
-                        status='error',
-                        content=(
-                            f"Error executing tool '{tc.name}': "
-                            f'{type(e).__name__}: {e}'
-                        ),
-                    )
-                    logger.exception('Tool execution failed: %s', tc.name)
-                messages.append(
-                    ToolMessage(
-                        tool_call_id=tc.id,
-                        tool_name=tc.name,
-                        content=tool_result.content,
+                approved_indices.append(len(outcomes))
+                outcomes.append(
+                    _ToolOutcome(
+                        tc=tc, tool_msg=None, tool_result=None, needs_post_hook=True
                     )
                 )
 
-                # post_tool_call hook (observation, all hooks called)
-                run_post_tool_call(spec.hooks, tc, tool_result)
+            # Phase 2: Parallel — approved tools are independent, concurrent execution reduces latency
+            if approved_indices:
+                approved_tcs = [outcomes[idx][0] for idx in approved_indices]
+
+                async def _execute_tool(tc: ToolCallData) -> ToolResult:
+                    try:
+                        return await spec.tool_registry.execute(tc.name, tc.arguments)
+                    except Exception as e:
+                        logger.exception('Tool execution failed: %s', tc.name)
+                        return ToolResult.from_error(tc.name, e)
+
+                results = await asyncio.gather(
+                    *[_execute_tool(tc) for tc in approved_tcs],
+                    return_exceptions=True,
+                )
+
+                for result_idx, outcome_idx in enumerate(approved_indices):
+                    tc = outcomes[outcome_idx].tc
+                    raw = results[result_idx]
+                    if isinstance(raw, BaseException):
+                        tool_result = ToolResult.from_error(tc.name, raw)
+                    else:
+                        tool_result = raw
+                    outcomes[outcome_idx] = _ToolOutcome(
+                        tc=tc,
+                        tool_msg=ToolMessage(
+                            tool_call_id=tc.id,
+                            tool_name=tc.name,
+                            content=tool_result.content,
+                        ),
+                        tool_result=tool_result,
+                        needs_post_hook=True,
+                    )
+
+            # Phase 3: Append in original order — LLM expects tool results to match request order
+            for tc, tool_msg, tool_result, needs_post_hook in outcomes:
+                messages.append(tool_msg)
+                if needs_post_hook and tool_result is not None:
+                    await run_post_tool_call(spec.hooks, tc, tool_result)
 
         # max_turns exhausted
         return self._finish(
-            spec,
             messages,
             'max_turns',
             num_turns=turn,
             stop_reason=last_stop_reason,
-            usage=last_usage,
+            usage=total_usage,
         )
 
-    def _call_llm(
+    async def _call_llm(
         self,
         spec: AgentRuntimeSpec,
         messages: list[Message],
@@ -271,64 +334,7 @@ class AgentKernel:
         max_retries = getattr(provider, 'max_retries', 3)
         retry_delay = getattr(provider, 'retry_delay', 1.0)
 
-        last_error: LLMError | None = None
-        for attempt in range(max_retries):
-            if stop_event and stop_event.is_set():
-                raise _KernelStopRequested()
-            try:
-                return self._do_stream_llm(
-                    spec, messages, timeout=current_timeout, stop_event=stop_event
-                )
-            except LLMError as e:
-                if not e.retryable:
-                    raise
-                last_error = e
-                next_timeout = current_timeout * 2
-                logger.warning(
-                    'LLM stream timed out after %.0fs (attempt %d/%d). '
-                    'Retrying with timeout=%.0fs.',
-                    current_timeout,
-                    attempt + 1,
-                    max_retries,
-                    next_timeout,
-                )
-                current_timeout = next_timeout
-                if attempt < max_retries - 1:
-                    backoff = retry_delay * (2**attempt)
-                    self._sleep_backoff_with_stop(backoff, stop_event)
-
-        raise RuntimeError(
-            f'LLM stream failed after {max_retries} attempts'
-        ) from last_error
-
-    @staticmethod
-    def _sleep_backoff_with_stop(
-        seconds: float, stop_event: threading.Event | None
-    ) -> None:
-        """Sleep for `seconds`, but wake early if stop_event is set."""
-        if seconds <= 0:
-            return
-        if not stop_event:
-            time.sleep(seconds)
-            return
-        deadline = time.monotonic() + seconds
-        while time.monotonic() < deadline:
-            if stop_event.is_set():
-                raise _KernelStopRequested()
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            time.sleep(min(_STOP_RETRY_SLEEP_SLICE_SEC, remaining))
-
-    def _do_stream_llm(
-        self,
-        spec: AgentRuntimeSpec,
-        messages: list[Message],
-        *,
-        timeout: float | None = None,
-        stop_event: threading.Event | None = None,
-    ) -> LLMResponse:
-        """Call LLM via streaming, accumulate chunks into LLMResponse."""
+        # Serialize once — messages don't change between retries
         api_messages = [m.to_api_dict() for m in messages]
         tool_defs = (
             spec.tool_registry.get_tool_definitions()
@@ -337,16 +343,163 @@ class AgentKernel:
             else None
         )
 
+        attempt_records: list[dict[str, Any]] | None = None
+        last_error: LLMError | None = None
+        for attempt in range(max_retries):
+            if stop_event and stop_event.is_set():
+                raise _KernelStopRequested()
+            t0 = time.monotonic()
+            try:
+                response = await self._do_stream_llm(
+                    spec,
+                    api_messages,
+                    tool_defs,
+                    timeout=current_timeout,
+                    stop_event=stop_event,
+                )
+                elapsed = time.monotonic() - t0
+
+                if self._is_incomplete_response(response) and attempt < max_retries - 1:
+                    backoff = retry_delay * (2**attempt)
+                    if attempt_records is None:
+                        attempt_records = []
+                    attempt_records.append(
+                        {
+                            "attempt": attempt + 1,
+                            "error_type": "IncompleteResponse",
+                            "error_category": "incomplete_response",
+                            "error_message": "reasoning-only response without content",
+                            "timeout_used": current_timeout,
+                            "elapsed_seconds": round(elapsed, 2),
+                            "retryable": True,
+                            "backoff_seconds": backoff,
+                        }
+                    )
+                    logger.warning(
+                        "LLM returned reasoning without content "
+                        "(attempt %d/%d, elapsed=%.1fs), retrying.",
+                        attempt + 1,
+                        max_retries,
+                        elapsed,
+                    )
+                    await self._sleep_backoff_with_stop_async(backoff, stop_event)
+                    continue
+
+                # Last attempt still incomplete — return degraded
+                if self._is_incomplete_response(response):
+                    logger.warning(
+                        "LLM returned incomplete response after %d attempts, "
+                        "returning degraded result.",
+                        max_retries,
+                    )
+                    response.degraded = True
+                return response
+            except LLMError as e:
+                elapsed = time.monotonic() - t0
+                if not e.retryable:
+                    raise
+                last_error = e
+                next_timeout = current_timeout * 2
+                backoff = (
+                    retry_delay * (2**attempt) if attempt < max_retries - 1 else 0.0
+                )
+                if attempt_records is None:
+                    attempt_records = []
+                attempt_records.append(
+                    {
+                        "attempt": attempt + 1,
+                        "error_type": (
+                            type(e.__cause__).__name__
+                            if e.__cause__
+                            else type(e).__name__
+                        ),
+                        "error_category": getattr(e, "error_category", None),
+                        "error_message": str(e),
+                        "timeout_used": current_timeout,
+                        "elapsed_seconds": round(elapsed, 2),
+                        "retryable": e.retryable,
+                        "next_timeout": next_timeout,
+                        "backoff_seconds": backoff,
+                    }
+                )
+                logger.warning(
+                    "LLM call failed (attempt %d/%d) [%s]: %s "
+                    "(timeout=%.0fs, elapsed=%.1fs, backoff=%.1fs, next_timeout=%.0fs)",
+                    attempt + 1,
+                    max_retries,
+                    getattr(e, "error_category", None) or "unknown",
+                    e,
+                    current_timeout,
+                    elapsed,
+                    backoff,
+                    next_timeout,
+                )
+                current_timeout = next_timeout
+                if attempt < max_retries - 1:
+                    await self._sleep_backoff_with_stop_async(backoff, stop_event)
+
+        # Retries exhausted
+        if last_error is not None:
+            msg = (
+                f"LLM stream failed after {max_retries} attempts: "
+                f"last error [{last_error.error_category or 'unknown'}] {last_error}"
+            )
+            category = last_error.error_category
+        else:
+            msg = (
+                f"LLM stream failed after {max_retries} attempts: "
+                f"all attempts returned incomplete responses"
+            )
+            category = "incomplete_response"
+
+        raise LLMError(
+            msg,
+            retryable=False,
+            error_category=category,
+            attempts=attempt_records or [],
+        ) from last_error
+
+    @staticmethod
+    async def _sleep_backoff_with_stop_async(
+        seconds: float,
+        stop_event: threading.Event | None,
+    ) -> None:
+        """Async sleep for *seconds*, but wake early if stop_event is set."""
+        if seconds <= 0:
+            return
+        if not stop_event:
+            await asyncio.sleep(seconds)
+            return
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if stop_event.is_set():
+                raise _KernelStopRequested()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(_STOP_RETRY_SLEEP_SLICE_SEC, remaining))
+
+    async def _do_stream_llm(
+        self,
+        spec: AgentRuntimeSpec,
+        api_messages: list[dict[str, Any]],
+        tool_defs: list[dict[str, Any]] | None,
+        *,
+        timeout: float | None = None,
+        stop_event: threading.Event | None = None,
+    ) -> LLMResponse:
+        """Call LLM via streaming, accumulate chunks into LLMResponse."""
+
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
-        stream_id = f'turn-{len(messages)}'
+        stream_id = f'turn-{len(api_messages)}'
         usage: dict[str, int] = {}
         producing_reasoning = False
         producing_content = False
 
-        run_on_stream_chunk(
+        await run_on_stream_chunk(
             spec.hooks,
             StreamChunk(stream_state='start', stream_id=stream_id),
         )
@@ -355,7 +508,7 @@ class AgentKernel:
         t_stream0 = time.perf_counter()
         ttft_ms: float | None = None
         try:
-            for chunk in spec.llm_provider.chat_stream(
+            async for chunk in spec.llm_provider.chat_stream(
                 api_messages, tool_defs, timeout=timeout
             ):
                 if (
@@ -371,7 +524,7 @@ class AgentKernel:
                 ):
                     ttft_ms = (time.perf_counter() - t_stream0) * 1000.0
                 if chunk.content or chunk.reasoning_content:
-                    run_on_stream_chunk(
+                    await run_on_stream_chunk(
                         spec.hooks,
                         chunk.model_copy(
                             update={
@@ -387,7 +540,7 @@ class AgentKernel:
 
                 if chunk.content:
                     if producing_reasoning:
-                        run_on_segment_complete(
+                        await run_on_segment_complete(
                             spec.hooks,
                             'thought',
                             ''.join(reasoning_parts),
@@ -403,7 +556,7 @@ class AgentKernel:
                     usage = chunk.usage
                 if chunk.tool_call_deltas:
                     if producing_reasoning:
-                        run_on_segment_complete(
+                        await run_on_segment_complete(
                             spec.hooks,
                             'thought',
                             ''.join(reasoning_parts),
@@ -411,7 +564,7 @@ class AgentKernel:
                         )
                         producing_reasoning = False
                     if producing_content:
-                        run_on_segment_complete(
+                        await run_on_segment_complete(
                             spec.hooks,
                             'response',
                             ''.join(content_parts),
@@ -429,25 +582,25 @@ class AgentKernel:
                         if delta.get('id'):
                             tool_calls_acc[idx]['id'] = delta['id']
                         if delta.get('name'):
-                            tool_calls_acc[idx]['name'] += delta['name']
+                            tool_calls_acc[idx]['name'] = delta['name']
                         if delta.get('arguments'):
                             tool_calls_acc[idx]['arguments'] += delta['arguments']
         finally:
             if producing_reasoning:
-                run_on_segment_complete(
+                await run_on_segment_complete(
                     spec.hooks,
                     'thought',
                     ''.join(reasoning_parts),
                     stream_id,
                 )
             if producing_content:
-                run_on_segment_complete(
+                await run_on_segment_complete(
                     spec.hooks,
                     'response',
                     ''.join(content_parts),
                     stream_id,
                 )
-            run_on_stream_chunk(
+            await run_on_stream_chunk(
                 spec.hooks,
                 StreamChunk(stream_state='end', stream_id=stream_id),
             )
@@ -476,7 +629,7 @@ class AgentKernel:
         if tool_calls_acc:
             tool_calls = []
             for _, v in sorted(tool_calls_acc.items()):
-                args = self._parse_arguments(v['arguments'])
+                args = parse_tool_arguments(v['arguments'])
                 tool_calls.append(
                     ToolCallData(id=v['id'], name=v['name'], arguments=args)
                 )
@@ -490,24 +643,31 @@ class AgentKernel:
         )
 
     @staticmethod
-    def _parse_arguments(raw: str) -> dict[str, Any]:
-        """Parse JSON arguments string from streaming accumulation."""
-        if not raw:
-            return {}
-        try:
-            return json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
-            logger.warning('Failed to parse tool call arguments: %s', raw[:200])
-            return {'_raw': raw}
-
-    @staticmethod
     def _is_valid_natural_finish(response: LLMResponse) -> bool:
         """Only commit a natural finish when the stream terminates cleanly."""
         return not response.tool_calls and response.finish_reason == 'stop'
 
     @staticmethod
+    def _is_incomplete_response(response: LLMResponse) -> bool:
+        """Detect reasoning-only response with no visible content.
+
+        This can happen when an LLM proxy (e.g. LiteLLM) intermittently
+        drops the content block after streaming the thinking block.
+        """
+        return (
+            response.content is None
+            and response.reasoning_content is not None
+            and not response.tool_calls
+        )
+
+    @staticmethod
+    def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
+        """Accumulate per-turn usage into running total."""
+        for k, v in delta.items():
+            total[k] = total.get(k, 0) + v
+
+    @staticmethod
     def _finish(
-        spec: AgentRuntimeSpec,
         messages: list[Message],
         reason: str,
         final_content: str | None = None,

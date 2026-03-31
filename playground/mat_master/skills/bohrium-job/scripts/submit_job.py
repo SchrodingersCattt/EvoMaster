@@ -6,7 +6,7 @@ This script performs only the 3 submission steps:
 3) /openapi/v2/job/add (or /openapi/v1/sandbox/job/add when sandbox mode)
 
 Sandbox vs standard HPC OpenAPI paths are selected only via env ``BOHRIUM_USE_SANDBOX``
-(``1`` = sandbox; unset or ``0`` = standard HPC, **default**). Not a CLI flag. poll_job.py uses the same rule.
+(``1`` = sandbox, **default when unset**; ``0`` = standard HPC). Not a CLI flag. poll_job.py uses the same rule.
 """
 
 import argparse
@@ -16,6 +16,7 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
+from urllib.parse import quote
 
 import requests
 
@@ -41,8 +42,8 @@ _AUTH_HEADER = {'accessKey': ACCESS_KEY, 'Content-Type': 'application/json'}
 
 
 def _use_sandbox() -> bool:
-    """True only when BOHRIUM_USE_SANDBOX is ``1`` (default when unset: standard HPC)."""
-    return os.environ.get('BOHRIUM_USE_SANDBOX', '0').strip() == '1'
+    """True when BOHRIUM_USE_SANDBOX is ``1`` (default when unset: sandbox)."""
+    return os.environ.get('BOHRIUM_USE_SANDBOX', '1').strip() == '1'
 
 
 def _post(path: str, payload: dict, timeout: int = 30) -> dict:
@@ -58,7 +59,6 @@ def _post(path: str, payload: dict, timeout: int = 30) -> dict:
 
 def _step1_create(job_name: str) -> dict:
     if _use_sandbox():
-        # Align with bohrium-openapi-python-sdk Job.create_job (sandbox create body).
         path = '/openapi/v1/sandbox/job/create'
         payload = {'projectId': PROJECT_ID, 'name': job_name}
     else:
@@ -70,7 +70,15 @@ def _step1_create(job_name: str) -> dict:
     return response['data']
 
 
-def _step2_upload(create_data: dict, zip_path: Path) -> str:
+def _sandbox_download_url(store_host: str, oss_key: str, token: str) -> str:
+    encoded_key = quote(oss_key, safe='/')
+    return (
+        f"{store_host}/api/download/{encoded_key}?token={token}"
+        '&Response-Content-Type=application/octet-stream'
+    )
+
+
+def _step2_upload(create_data: dict, zip_path: Path) -> dict:
     try:
         from bohrium_open_sdk.opensdk._tiefblue_client import (
             Tiefblue as _TiefblueClient,
@@ -85,7 +93,7 @@ def _step2_upload(create_data: dict, zip_path: Path) -> str:
     token = create_data['token']
     oss_key = store_path + 'input.zip'
 
-    # Tiefblue 网关要求 Authorization: Bearer <token>，否则 401 ErrGatewayTokenInvalid
+    # Tiefblue requires Authorization: Bearer <token>, otherwise 401.
     tf_client = _TiefblueClient(base_url=store_host)
     resp = tf_client.upload_from_file_multi_part(
         object_key=oss_key,
@@ -95,33 +103,50 @@ def _step2_upload(create_data: dict, zip_path: Path) -> str:
     )
     if isinstance(resp, dict) and resp.get('code') not in (0, None):
         raise RuntimeError(f"tiefblue upload failed: {resp}")
-    return oss_key
+    return {
+        'oss_key': oss_key,
+        'download_url': _sandbox_download_url(store_host, oss_key, token),
+    }
 
 
 def _step3_add(
-    oss_key: str,
+    create_data: dict,
+    upload_data: dict,
     job_name: str,
     image: str,
     cmd: str,
     machine: str,
     disk_size: int,
 ) -> dict:
-    payload = {
-        'projectId': PROJECT_ID,
-        'jobName': job_name,
-        'jobType': 'indicate',
-        'scassType': machine,
-        'cmd': cmd,
-        'imageName': image,
-        'ossPath': [oss_key],
-        'inputFileMethod': 1,
-        'inputFileType': 3,
-        'diskSize': disk_size,
-        'logFiles': ['log'],
-    }
-    add_path = (
-        '/openapi/v1/sandbox/job/add' if _use_sandbox() else '/openapi/v2/job/add'
-    )
+    oss_key = upload_data['oss_key']
+    if _use_sandbox():
+        create_job_id = str(create_data.get('jobId') or '').strip()
+        if not create_job_id:
+            raise ValueError('sandbox job/create response missing jobId')
+        payload = {
+            'imageName': image,
+            'scassType': machine,
+            'jobName': job_name,
+            'cmd': cmd,
+            'jobId': create_job_id,
+            'ossPath': [upload_data['download_url']],
+        }
+        add_path = '/openapi/v1/sandbox/job/add'
+    else:
+        payload = {
+            'projectId': PROJECT_ID,
+            'jobName': job_name,
+            'jobType': 'indicate',
+            'scassType': machine,
+            'cmd': cmd,
+            'imageName': image,
+            'ossPath': [oss_key],
+            'inputFileMethod': 1,
+            'inputFileType': 3,
+            'diskSize': disk_size,
+            'logFiles': ['log'],
+        }
+        add_path = '/openapi/v2/job/add'
     response = _post(add_path, payload)
     if response.get('code') != 0:
         raise RuntimeError(f"job/add failed: {response}")
@@ -148,10 +173,11 @@ def submit_job(
         _zip_directory(input_dir, zip_path)
 
         create_data = _step1_create(job_name)
-        oss_key = _step2_upload(create_data, zip_path)
-        add_data = _step3_add(oss_key, job_name, image, cmd, machine, disk_size)
+        upload_data = _step2_upload(create_data, zip_path)
+        add_data = _step3_add(
+            create_data, upload_data, job_name, image, cmd, machine, disk_size
+        )
 
-    # Sandbox job/add returns UUID strings; standard HPC returns numeric ids.
     if _use_sandbox():
         raw_jid = add_data.get('jobId')
         if raw_jid is None:

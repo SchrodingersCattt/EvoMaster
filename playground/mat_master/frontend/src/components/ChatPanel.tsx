@@ -105,10 +105,10 @@ const PairedToolCard = React.memo(function PairedToolCard({
   isLatest?: boolean;
 }) {
   const [open, setOpen] = useState(isLatest);
-  
+
   // Latest: full box style (border + bg); older: left-strip style
   const isBoxStyle = isLatest;
-  
+
   return (
     <div className={cn(
       "my-1",
@@ -1092,18 +1092,18 @@ export default function ChatPanel({
             !isEnvRelatedEntry(e) &&
             !isEmptyThought(e)
         );
-      
+
       // Deduplicate consecutive planner_reply entries
       // Skip plain-text versions that follow structured versions (same semantic content)
       const deduped: typeof mapped = [];
       let lastPlannerReplyContent: unknown = null;
       let lastPlannerReplyHasData = false;
-      
+
       for (const item of mapped) {
         if (item.entry.type === "planner_reply") {
           const content = item.entry.content;
           const contentStr = JSON.stringify(content);
-          
+
           // Check if this is a plain text version following a structured version
           if (
             lastPlannerReplyHasData &&
@@ -1121,12 +1121,12 @@ export default function ChatPanel({
               continue;
             }
           }
-          
+
           // Check for exact duplicates
           if (contentStr === JSON.stringify(lastPlannerReplyContent)) {
             continue;
           }
-          
+
           lastPlannerReplyContent = content;
           lastPlannerReplyHasData = typeof content === "object" && content !== null;
         } else {
@@ -1233,12 +1233,12 @@ export default function ChatPanel({
     if (target) {
       target.scrollIntoView({ behavior: "smooth", block: "center" });
       setHighlightIndex(jumpToLogIndex);
-      
+
       // Clear any existing timeout before setting a new one
       if (highlightTimeoutRef.current) {
         clearTimeout(highlightTimeoutRef.current);
       }
-      
+
       // Set new timeout to clear highlight after 1800ms
       highlightTimeoutRef.current = setTimeout(() => {
         setHighlightIndex(null);
@@ -1246,7 +1246,7 @@ export default function ChatPanel({
       }, 1800);
     }
     onJumpHandled?.();
-    
+
     // Cleanup: clear timeout if component unmounts or effect re-runs
     return () => {
       if (highlightTimeoutRef.current) {

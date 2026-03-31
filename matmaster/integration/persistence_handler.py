@@ -8,7 +8,9 @@ Filter rules migrated from _should_persist_event in agent_run_service.py:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 from typing import Any
 
 from matmaster.integration.event_payloads import _public_content_for_event
@@ -28,6 +30,7 @@ class PersistenceHandler:
 
     _SKIP_TYPES = frozenset({'log_line', 'llm_token'})
     _STREAMING_STATES = frozenset({'start', 'streaming', 'end'})
+    _TRIVIAL_RESPONSE_RE = re.compile(r'^[\s.。…·\-—_*]+$')
 
     def __init__(
         self,
@@ -41,7 +44,7 @@ class PersistenceHandler:
         self._task_id = task_id
         self._invocation_id = invocation_id
 
-    def handle(self, event: BusEvent) -> None:  # type: ignore[arg-type]
+    async def handle(self, event: BusEvent) -> None:
         """Persist event to DB if it passes filter rules."""
         event_type = getattr(event, 'type', '')
 
@@ -55,13 +58,22 @@ class PersistenceHandler:
         ):
             return
 
+        # Skip trivial response segments (e.g. LLM emits "..." before tool calls)
+        if (
+            isinstance(event, ResponseEvent)
+            and event.stream_state == 'complete'
+            and self._TRIVIAL_RESPONSE_RE.match(event.content)
+        ):
+            return
+
         # Use the same JSON-safe payload mode as SSEHandler so persistence
         # and live SSE derive content from the same normalized field values.
         payload = event.model_dump(mode='json')
         content = _public_content_for_event(event_type, payload)
 
         try:
-            self._events_table.add_event(
+            await asyncio.to_thread(
+                self._events_table.add_event,
                 self._session_id,
                 event.source,
                 event_type,

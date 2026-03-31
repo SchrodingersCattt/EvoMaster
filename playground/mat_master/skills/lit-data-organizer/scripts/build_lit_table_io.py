@@ -8,8 +8,8 @@ from typing import Any
 
 # Allow standalone import (e.g. tests); same path as build_lit_table.py so longtask_runtime is found
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / '_common'))
-from longtask_runtime import read_json as _read_json
-from longtask_runtime import write_json as _write_json
+from longtask_runtime import read_json as _read_json  # noqa: E402
+from longtask_runtime import write_json as _write_json  # noqa: E402
 
 
 def load_json(path: Path) -> Any:

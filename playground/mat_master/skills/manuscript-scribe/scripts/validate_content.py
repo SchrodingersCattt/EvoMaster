@@ -22,10 +22,10 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from format_profiles import get_profile, resolve_section
+from format_profiles import get_profile, resolve_section  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / '_common'))
-from longtask_runtime import (
+from longtask_runtime import (  # noqa: E402
     STATUS_COMPLETED,
     STATUS_FATAL_ERROR,
     STATUS_RETRYABLE_ERROR,
@@ -583,7 +583,7 @@ def print_report(report: dict[str, Any]) -> None:
     unexpected = report['unexpected_sections']
     if unexpected['unexpected']:
         severity = 'ERROR' if unexpected.get('strict') else 'WARN'
-        print(f"\n=== Unexpected Sections (not in profile) ===")
+        print("\n=== Unexpected Sections (not in profile) ===")
         for s in unexpected['unexpected']:
             print(f"  [{severity}] {s}")
 

@@ -16,20 +16,18 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
-
 _SKILL_DIR = Path(__file__).resolve().parent.parent
 if str(_SKILL_DIR) not in sys.path:
     sys.path.insert(0, str(_SKILL_DIR))
 
-from engine.schema import SchemaRegistry
-from engine.software.cp2k import CP2KBackend
-from engine.renderer import RenderIntent
-
+from engine.renderer import RenderIntent  # noqa: E402
+from engine.schema import SchemaRegistry  # noqa: E402
+from engine.software.cp2k import CP2KBackend  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _backend() -> CP2KBackend:
     return CP2KBackend()
@@ -207,9 +205,10 @@ class TestPhysicsCompatibilityEngine:
 
     def test_ot_kpoints_produces_error(self):
         diags = _get_diags(self._OT_WITH_KPOINTS)
-        assert _has_rule(diags, "ot-incompatible-with-kpoints"), (
-            "Expected rule 'ot-incompatible-with-kpoints', got rule_ids: "
-            + str(_rule_ids(diags))
+        assert _has_rule(
+            diags, "ot-incompatible-with-kpoints"
+        ), "Expected rule 'ot-incompatible-with-kpoints', got rule_ids: " + str(
+            _rule_ids(diags)
         )
         # Must be error severity
         errors = [d for d in diags if d.rule_id == "ot-incompatible-with-kpoints"]
@@ -217,9 +216,9 @@ class TestPhysicsCompatibilityEngine:
 
     def test_ot_without_kpoints_no_error(self):
         diags = _get_diags(self._OT_WITHOUT_KPOINTS)
-        assert not _has_rule(diags, "ot-incompatible-with-kpoints"), (
-            "Should NOT flag OT error when KPOINTS is absent"
-        )
+        assert not _has_rule(
+            diags, "ot-incompatible-with-kpoints"
+        ), "Should NOT flag OT error when KPOINTS is absent"
 
     # ── Rule 2: HFX + KPOINTS without RI ───────────────────────────────────
 
@@ -314,17 +313,17 @@ class TestPhysicsCompatibilityEngine:
 
     def test_hfx_kpoints_no_ri_is_error(self):
         diags = _get_diags(self._HFX_KPOINTS_NO_RI)
-        assert _has_rule(diags, "hfx-kpoints-requires-ri"), (
-            "Expected rule 'hfx-kpoints-requires-ri', got: " + str(_rule_ids(diags))
-        )
+        assert _has_rule(
+            diags, "hfx-kpoints-requires-ri"
+        ), "Expected rule 'hfx-kpoints-requires-ri', got: " + str(_rule_ids(diags))
         errors = [d for d in diags if d.rule_id == "hfx-kpoints-requires-ri"]
         assert all(d.severity == "error" for d in errors)
 
     def test_hfx_kpoints_with_ri_no_error(self):
         diags = _get_diags(self._HFX_KPOINTS_WITH_RI)
-        assert not _has_rule(diags, "hfx-kpoints-requires-ri"), (
-            "Should NOT flag HFX error when &RI is present"
-        )
+        assert not _has_rule(
+            diags, "hfx-kpoints-requires-ri"
+        ), "Should NOT flag HFX error when &RI is present"
 
     # ── Rule 3: CELL_OPT without STRESS_TENSOR ─────────────────────────────
 
@@ -395,17 +394,19 @@ class TestPhysicsCompatibilityEngine:
 
     def test_cell_opt_without_stress_tensor_warning(self):
         diags = _get_diags(self._CELL_OPT_NO_STRESS)
-        assert _has_rule(diags, "cell-opt-missing-stress-tensor"), (
-            "Expected rule 'cell-opt-missing-stress-tensor', got: " + str(_rule_ids(diags))
+        assert _has_rule(
+            diags, "cell-opt-missing-stress-tensor"
+        ), "Expected rule 'cell-opt-missing-stress-tensor', got: " + str(
+            _rule_ids(diags)
         )
         warnings = [d for d in diags if d.rule_id == "cell-opt-missing-stress-tensor"]
         assert all(d.severity == "warning" for d in warnings)
 
     def test_cell_opt_with_stress_tensor_no_warning(self):
         diags = _get_diags(self._CELL_OPT_WITH_STRESS)
-        assert not _has_rule(diags, "cell-opt-missing-stress-tensor"), (
-            "Should NOT flag STRESS_TENSOR warning when it is set"
-        )
+        assert not _has_rule(
+            diags, "cell-opt-missing-stress-tensor"
+        ), "Should NOT flag STRESS_TENSOR warning when it is set"
 
     # ── Rule 4: RUN_TYPE BAND without &BAND_STRUCTURE ──────────────────────
 
@@ -492,18 +493,21 @@ class TestPhysicsCompatibilityEngine:
 
     def test_band_without_band_structure_warning(self):
         diags = _get_diags(self._BAND_NO_BAND_STRUCTURE)
-        assert _has_rule(diags, "band-missing-band-structure-section"), (
-            "Expected rule 'band-missing-band-structure-section', got: "
-            + str(_rule_ids(diags))
+        assert _has_rule(
+            diags, "band-missing-band-structure-section"
+        ), "Expected rule 'band-missing-band-structure-section', got: " + str(
+            _rule_ids(diags)
         )
-        warnings = [d for d in diags if d.rule_id == "band-missing-band-structure-section"]
+        warnings = [
+            d for d in diags if d.rule_id == "band-missing-band-structure-section"
+        ]
         assert all(d.severity == "warning" for d in warnings)
 
     def test_band_with_band_structure_no_warning(self):
         diags = _get_diags(self._BAND_WITH_BAND_STRUCTURE)
-        assert not _has_rule(diags, "band-missing-band-structure-section"), (
-            "Should NOT flag BAND_STRUCTURE warning when section is present"
-        )
+        assert not _has_rule(
+            diags, "band-missing-band-structure-section"
+        ), "Should NOT flag BAND_STRUCTURE warning when section is present"
 
     # ── Regression: normal OPT input should have no physics errors ──────────
 
@@ -561,6 +565,6 @@ class TestPhysicsCompatibilityEngine:
             "band-missing-band-structure-section",
         }
         triggered = [r for r in _rule_ids(diags) if r in physics_rules]
-        assert not triggered, (
-            f"Unexpected physics compatibility errors on normal OPT input: {triggered}"
-        )
+        assert (
+            not triggered
+        ), f"Unexpected physics compatibility errors on normal OPT input: {triggered}"

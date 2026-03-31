@@ -4,18 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-import pytest
-
-from matmaster.types.guards import Guard, GuardContext, GuardResult, RecentCall
 from matmaster.core.guard_pipeline import (
-    LOOP_THRESHOLD,
-    LOOP_WINDOW,
     GuardPipeline,
     LoopDetectionGuard,
 )
-from matmaster.types.messages import ToolCallData
+from matmaster.types.guards import GuardContext, GuardResult, RecentCall
 from tests.matmaster.core.conftest import make_tool_call
-
 
 # ── Helper: build a GuardContext with recent_calls ────
 

@@ -93,6 +93,18 @@
 
 ---
 
+## 代码风格（pre-commit 强制）
+
+以下规则由 `.pre-commit-config.yaml` 定义，本地 commit 与 CI 合入 main 时均强制执行。
+
+1. **格式化（Black）**：行宽 88 字符，保留原始引号风格（`--skip-string-normalization`）；其余缩进、空行、尾逗号等遵循 black 默认规则。
+2. **Import 排序（isort `--profile black`）**：分组顺序为 标准库 → 第三方 → 本地，组间空一行；使用 black 兼容模式，二者不冲突。
+3. **死代码清理（autoflake + pyupgrade）**：自动删除未使用的 import 和变量；自动将旧式语法升级为现代写法（如 `format()` → f-string）。
+4. **静态检查（flake8 + flake8-bugbear）**：`max-line-length=88`，忽略 E501（行长由 black 管控）、E203（black 切片格式）、B008（FastAPI `Depends()` 等依赖注入）、B036；其余规则全部生效。
+5. **文件卫生**：单文件不超过 1000 行；自动修正行尾空白、文件末尾换行、混合换行符和 BOM；JSON 自动格式化并保留非 ASCII 原文。
+
+---
+
 ## 其他约定
 
 - **配置目录**：产品主配置与 MCP JSON 位于 `configs/mat_master/`（仓库根目录不再保留泛用 `configs/config.yaml`）。`ConfigManager` / `get_config_manager()` 未指定 `config_dir` 时默认加载该目录下的 `config.yaml`。

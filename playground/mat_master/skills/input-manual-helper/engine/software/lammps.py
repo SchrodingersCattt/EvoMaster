@@ -35,7 +35,6 @@ LAMMPS 输入格式概述
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from engine.completion import CompletionItem
@@ -48,66 +47,146 @@ from engine.software.base import SoftwareBackend
 # ---------------------------------------------------------------------------
 # 常量：已知 LAMMPS 命令集合（用于 unknown_command 检查豁免）
 # ---------------------------------------------------------------------------
-_KNOWN_COMMANDS: frozenset[str] = frozenset({
-    "units", "dimension", "boundary", "atom_style", "atom_modify",
-    "lattice", "region", "create_box", "create_atoms", "read_data",
-    "read_restart", "replicate",
-    "pair_style", "pair_coeff", "pair_modify", "pair_write",
-    "bond_style", "bond_coeff", "angle_style", "angle_coeff",
-    "dihedral_style", "dihedral_coeff", "improper_style", "improper_coeff",
-    "kspace_style", "kspace_modify",
-    "mass", "velocity", "set", "group", "group2ndx", "ndx2group",
-    "neighbor", "neigh_modify",
-    "timestep", "thermo", "thermo_style", "thermo_modify",
-    "fix", "fix_modify", "unfix",
-    "compute", "compute_modify", "uncompute",
-    "dump", "dump_modify", "undump",
-    "run", "run_style",
-    "minimize", "min_style", "min_modify",
-    "reset_timestep", "reset_atoms",
-    "variable", "next",
-    "print", "log", "echo", "info",
-    "write_data", "write_restart", "restart",
-    "change_box", "displace_atoms", "delete_atoms",
-    "shell", "include", "jump", "label", "if", "then", "else",
-    "quit", "clear",
-    "processors", "partition", "suffix",
-    "package", "accelerate",
-    "kim_init", "kim_interactions", "kim_query", "kim_param",
-})
+_KNOWN_COMMANDS: frozenset[str] = frozenset(
+    {
+        "units",
+        "dimension",
+        "boundary",
+        "atom_style",
+        "atom_modify",
+        "lattice",
+        "region",
+        "create_box",
+        "create_atoms",
+        "read_data",
+        "read_restart",
+        "replicate",
+        "pair_style",
+        "pair_coeff",
+        "pair_modify",
+        "pair_write",
+        "bond_style",
+        "bond_coeff",
+        "angle_style",
+        "angle_coeff",
+        "dihedral_style",
+        "dihedral_coeff",
+        "improper_style",
+        "improper_coeff",
+        "kspace_style",
+        "kspace_modify",
+        "mass",
+        "velocity",
+        "set",
+        "group",
+        "group2ndx",
+        "ndx2group",
+        "neighbor",
+        "neigh_modify",
+        "timestep",
+        "thermo",
+        "thermo_style",
+        "thermo_modify",
+        "fix",
+        "fix_modify",
+        "unfix",
+        "compute",
+        "compute_modify",
+        "uncompute",
+        "dump",
+        "dump_modify",
+        "undump",
+        "run",
+        "run_style",
+        "minimize",
+        "min_style",
+        "min_modify",
+        "reset_timestep",
+        "reset_atoms",
+        "variable",
+        "next",
+        "print",
+        "log",
+        "echo",
+        "info",
+        "write_data",
+        "write_restart",
+        "restart",
+        "change_box",
+        "displace_atoms",
+        "delete_atoms",
+        "shell",
+        "include",
+        "jump",
+        "label",
+        "if",
+        "then",
+        "else",
+        "quit",
+        "clear",
+        "processors",
+        "partition",
+        "suffix",
+        "package",
+        "accelerate",
+        "kim_init",
+        "kim_interactions",
+        "kim_query",
+        "kim_param",
+    }
+)
 
 # pair_style 名称（用于补全）
 _PAIR_STYLE_NAMES: list[str] = [
-    "lj/cut", "lj/cut/coul/cut", "lj/cut/coul/long",
-    "eam", "eam/alloy", "eam/fs",
-    "morse", "tersoff", "sw",
-    "buck", "buck/coul/cut", "buck/coul/long",
-    "coul/cut", "coul/long",
-    "hybrid", "hybrid/overlay",
-    "zero", "none",
+    "lj/cut",
+    "lj/cut/coul/cut",
+    "lj/cut/coul/long",
+    "eam",
+    "eam/alloy",
+    "eam/fs",
+    "morse",
+    "tersoff",
+    "sw",
+    "buck",
+    "buck/coul/cut",
+    "buck/coul/long",
+    "coul/cut",
+    "coul/long",
+    "hybrid",
+    "hybrid/overlay",
+    "zero",
+    "none",
 ]
 
 # units 选项
 _UNITS_OPTIONS: list[str] = [
-    "lj", "real", "metal", "si", "cgs", "electron", "micro", "nano",
+    "lj",
+    "real",
+    "metal",
+    "si",
+    "cgs",
+    "electron",
+    "micro",
+    "nano",
 ]
 
 # timestep 合理范围（基于 units）：(min, max) in native time units
 _TIMESTEP_RANGES: dict[str, tuple[float, float]] = {
-    "real":     (0.0001, 10.0),      # fs
-    "metal":    (0.00001, 0.01),     # ps
-    "lj":       (0.0001, 0.01),      # tau
-    "si":       (1e-16, 1e-12),      # s
-    "cgs":      (1e-16, 1e-12),      # s
-    "electron": (0.0001, 1.0),       # fs
-    "micro":    (1e-6, 1.0),         # us
-    "nano":     (1e-6, 1.0),         # ns
+    "real": (0.0001, 10.0),  # fs
+    "metal": (0.00001, 0.01),  # ps
+    "lj": (0.0001, 0.01),  # tau
+    "si": (1e-16, 1e-12),  # s
+    "cgs": (1e-16, 1e-12),  # s
+    "electron": (0.0001, 1.0),  # fs
+    "micro": (1e-6, 1.0),  # us
+    "nano": (1e-6, 1.0),  # ns
 }
 
 
 # ---------------------------------------------------------------------------
 # 辅助函数
 # ---------------------------------------------------------------------------
+
 
 def _make_range(line: int, col_start: int, col_end: int) -> SourceRange:
     """构造单行 SourceRange。"""
@@ -169,6 +248,7 @@ def _join_continuation_lines(lines: list[str]) -> list[tuple[int, str]]:
 # SchemaRegistry 软件绑定代理（让 list_tags() 无需传 software 参数）
 # ---------------------------------------------------------------------------
 
+
 class _BoundRegistry:
     """将 SchemaRegistry 绑定到特定软件的代理对象。
 
@@ -200,6 +280,7 @@ class _BoundRegistry:
 # ---------------------------------------------------------------------------
 # LAMMPS 后端
 # ---------------------------------------------------------------------------
+
 
 class LAMMPSBackend(SoftwareBackend):
     """LAMMPS 输入脚本后端。
@@ -305,29 +386,26 @@ class LAMMPSBackend(SoftwareBackend):
         is_npt = task == "npt"
 
         # ---- 默认参数 ----
-        units_val     = p.get("units", "lj")
+        units_val = p.get("units", "lj")
         dimension_val = p.get("dimension", 3)
-        boundary_val  = p.get("boundary", "p p p")
+        boundary_val = p.get("boundary", "p p p")
         atom_style_val = p.get("atom_style", "atomic")
 
         # LJ 方案：lattice fcc 0.8442（约等于液氩近熔点密度）
         lattice_style = p.get("lattice_style", "fcc")
         lattice_scale = p.get("lattice_scale", "0.8442")
-        box_lo        = p.get("box_lo", 0)
-        box_hi        = p.get("box_hi", 4)
-        mass_val      = p.get("mass", "1 1.0")
+        box_lo = p.get("box_lo", 0)
+        box_hi = p.get("box_hi", 4)
+        mass_val = p.get("mass", "1 1.0")
 
         pair_style_val = p.get("pair_style", "lj/cut 2.5")
         pair_coeff_val = p.get("pair_coeff", "1 1 1.0 1.0 2.5")
 
-        neighbor_val     = p.get("neighbor", "0.3 bin")
+        neighbor_val = p.get("neighbor", "0.3 bin")
         neigh_modify_val = p.get("neigh_modify", "delay 5")
 
-        thermo_val       = p.get("thermo", 100)
-        thermo_style_val = p.get(
-            "thermo_style",
-            "custom step pe ke etotal press vol"
-        )
+        thermo_val = p.get("thermo", 100)
+        thermo_style_val = p.get("thermo_style", "custom step pe ke etotal press vol")
 
         lines: list[str] = []
 
@@ -373,7 +451,7 @@ class LAMMPSBackend(SoftwareBackend):
 
         if is_md:
             # ---- MD 任务 ----
-            temp      = p.get("temp", 1.0)
+            temp = p.get("temp", 1.0)
             run_steps = p.get("run", 10000)
 
             # 初始化速度
@@ -391,9 +469,7 @@ class LAMMPSBackend(SoftwareBackend):
                 )
             elif is_nvt:
                 tdamp = p.get("tdamp", 0.1)
-                lines.append(
-                    f"fix             1 all nvt temp {temp} {temp} {tdamp}"
-                )
+                lines.append(f"fix             1 all nvt temp {temp} {temp} {tdamp}")
             else:
                 # NVE
                 lines.append("fix             1 all nve")
@@ -404,15 +480,13 @@ class LAMMPSBackend(SoftwareBackend):
         else:
             # ---- 能量最小化任务（默认）----
             min_style_val = p.get("min_style", "cg")
-            etol     = p.get("etol", "1.0e-6")
-            ftol     = p.get("ftol", "1.0e-8")
-            maxiter  = p.get("maxiter", 1000)
-            maxeval  = p.get("maxeval", 10000)
+            etol = p.get("etol", "1.0e-6")
+            ftol = p.get("ftol", "1.0e-8")
+            maxiter = p.get("maxiter", 1000)
+            maxeval = p.get("maxeval", 10000)
 
             lines.append(f"min_style       {min_style_val}")
-            lines.append(
-                f"minimize        {etol} {ftol} {maxiter} {maxeval}"
-            )
+            lines.append(f"minimize        {etol} {ftol} {maxiter} {maxeval}")
 
         lines.append("")
         lines.append('print           "Simulation complete"')
@@ -443,7 +517,7 @@ class LAMMPSBackend(SoftwareBackend):
         9. 追加 parse_errors
         """
         # 始终使用内部绑定的原始 registry（避免 _BoundRegistry 接口不兼容）
-        _reg = self._schema
+        self._schema
 
         diags: list[Diagnostic] = []
 
@@ -467,14 +541,16 @@ class LAMMPSBackend(SoftwareBackend):
         for param in doc.params:
             name_lc = param.name.lower()
             if name_lc not in _KNOWN_COMMANDS:
-                diags.append(Diagnostic(
-                    severity="warning",
-                    message=f"未识别的 LAMMPS 命令 '{param.name}'",
-                    range=param.range,
-                    param=param.name,
-                    suggestion="检查命令名拼写，或查阅 LAMMPS 官方文档",
-                    rule_id="unknown_command",
-                ))
+                diags.append(
+                    Diagnostic(
+                        severity="warning",
+                        message=f"未识别的 LAMMPS 命令 '{param.name}'",
+                        range=param.range,
+                        param=param.name,
+                        suggestion="检查命令名拼写，或查阅 LAMMPS 官方文档",
+                        rule_id="unknown_command",
+                    )
+                )
 
         # ---- 2. units_consistency ----
         units_val = _get_value("units")
@@ -483,50 +559,58 @@ class LAMMPSBackend(SoftwareBackend):
             ps_lower = pair_style_val.lower()
             # EAM 势要求 metal units
             if ps_lower.startswith("eam") and units_val != "metal":
-                diags.append(Diagnostic(
-                    severity="info",
-                    message=(
-                        f"pair_style eam 通常与 units metal 配合使用，"
-                        f"当前 units = {units_val}"
-                    ),
-                    range=present.get("pair_style", present.get("units")).range,
-                    param="pair_style",
-                    suggestion="建议将 units 改为 metal，或改用 lj/cut 势",
-                    rule_id="units_consistency",
-                ))
+                diags.append(
+                    Diagnostic(
+                        severity="info",
+                        message=(
+                            f"pair_style eam 通常与 units metal 配合使用，"
+                            f"当前 units = {units_val}"
+                        ),
+                        range=present.get("pair_style", present.get("units")).range,
+                        param="pair_style",
+                        suggestion="建议将 units 改为 metal，或改用 lj/cut 势",
+                        rule_id="units_consistency",
+                    )
+                )
 
         # ---- 3. missing_mass ----
         if _has("create_atoms") and not _has("mass"):
-            diags.append(Diagnostic(
-                severity="error",
-                message="使用了 create_atoms 但未定义 mass",
-                range=present["create_atoms"].range,
-                param="mass",
-                suggestion="在 create_atoms 之后添加：mass 1 <原子质量>",
-                rule_id="missing_mass",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    message="使用了 create_atoms 但未定义 mass",
+                    range=present["create_atoms"].range,
+                    param="mass",
+                    suggestion="在 create_atoms 之后添加：mass 1 <原子质量>",
+                    rule_id="missing_mass",
+                )
+            )
 
         # ---- 4. missing_pair_coeff ----
         if _has("pair_style") and not _has("pair_coeff"):
-            diags.append(Diagnostic(
-                severity="error",
-                message="定义了 pair_style 但没有对应的 pair_coeff",
-                range=present["pair_style"].range,
-                param="pair_coeff",
-                suggestion="在 pair_style 后添加 pair_coeff 命令设置势函数参数",
-                rule_id="missing_pair_coeff",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    message="定义了 pair_style 但没有对应的 pair_coeff",
+                    range=present["pair_style"].range,
+                    param="pair_coeff",
+                    suggestion="在 pair_style 后添加 pair_coeff 命令设置势函数参数",
+                    rule_id="missing_pair_coeff",
+                )
+            )
 
         # ---- 5. missing_pair_style ----
         if _has("pair_coeff") and not _has("pair_style"):
-            diags.append(Diagnostic(
-                severity="error",
-                message="有 pair_coeff 但未定义 pair_style",
-                range=present["pair_coeff"].range,
-                param="pair_style",
-                suggestion="在 pair_coeff 之前添加 pair_style 命令",
-                rule_id="missing_pair_style",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    message="有 pair_coeff 但未定义 pair_style",
+                    range=present["pair_coeff"].range,
+                    param="pair_style",
+                    suggestion="在 pair_coeff 之前添加 pair_style 命令",
+                    rule_id="missing_pair_style",
+                )
+            )
 
         # ---- 6. timestep_range ----
         if _has("timestep"):
@@ -537,20 +621,22 @@ class LAMMPSBackend(SoftwareBackend):
                 units_key = units_val if units_val in _TIMESTEP_RANGES else "lj"
                 ts_min, ts_max = _TIMESTEP_RANGES[units_key]
                 if ts_val < ts_min or ts_val > ts_max:
-                    diags.append(Diagnostic(
-                        severity="warning",
-                        message=(
-                            f"timestep = {ts_val} 超出 units={units_key} 的合理范围 "
-                            f"[{ts_min}, {ts_max}]"
-                        ),
-                        range=ts_param.range,
-                        param="timestep",
-                        suggestion=(
-                            f"对于 units {units_key}，推荐 timestep 在 "
-                            f"{ts_min} ~ {ts_max} 之间"
-                        ),
-                        rule_id="timestep_range",
-                    ))
+                    diags.append(
+                        Diagnostic(
+                            severity="warning",
+                            message=(
+                                f"timestep = {ts_val} 超出 units={units_key} 的合理范围 "
+                                f"[{ts_min}, {ts_max}]"
+                            ),
+                            range=ts_param.range,
+                            param="timestep",
+                            suggestion=(
+                                f"对于 units {units_key}，推荐 timestep 在 "
+                                f"{ts_min} ~ {ts_max} 之间"
+                            ),
+                            rule_id="timestep_range",
+                        )
+                    )
             except (ValueError, IndexError):
                 pass
 
@@ -560,32 +646,34 @@ class LAMMPSBackend(SoftwareBackend):
         if dim_str == "2" and boundary_str:
             parts = boundary_str.split()
             if len(parts) >= 3 and parts[2] not in ("f", "fs", "fm"):
-                diags.append(Diagnostic(
-                    severity="warning",
-                    message=(
-                        f"dimension = 2 时 boundary 第三分量应为 'f'（固定边界），"
-                        f"当前为 '{parts[2]}'"
-                    ),
-                    range=present["boundary"].range,
-                    param="boundary",
-                    suggestion="将 boundary 第三分量改为 'f'，如：boundary p p f",
-                    rule_id="boundary_dimension",
-                ))
+                diags.append(
+                    Diagnostic(
+                        severity="warning",
+                        message=(
+                            f"dimension = 2 时 boundary 第三分量应为 'f'（固定边界），"
+                            f"当前为 '{parts[2]}'"
+                        ),
+                        range=present["boundary"].range,
+                        param="boundary",
+                        suggestion="将 boundary 第三分量改为 'f'，如：boundary p p f",
+                        rule_id="boundary_dimension",
+                    )
+                )
 
         # ---- 8. fix_before_run ----
         if _has("run") and not _has("fix"):
-            diags.append(Diagnostic(
-                severity="warning",
-                message="有 run 命令但没有定义任何 fix（MD 积分器通常需要 fix nve/nvt/npt）",
-                range=present["run"].range,
-                param="fix",
-                suggestion=(
-                    "添加积分器 fix，例如：\n"
-                    "fix  1 all nve\n"
-                    "run  10000"
-                ),
-                rule_id="fix_before_run",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="warning",
+                    message="有 run 命令但没有定义任何 fix（MD 积分器通常需要 fix nve/nvt/npt）",
+                    range=present["run"].range,
+                    param="fix",
+                    suggestion=(
+                        "添加积分器 fix，例如：\n" "fix  1 all nve\n" "run  10000"
+                    ),
+                    rule_id="fix_before_run",
+                )
+            )
 
         # ---- 9. 追加 parse_errors ----
         diags.extend(doc.parse_errors)
@@ -630,56 +718,64 @@ class LAMMPSBackend(SoftwareBackend):
             if cmd == "pair_style" and len(tokens) <= 1:
                 # 提供 pair_style 类型补全
                 for ps in _PAIR_STYLE_NAMES:
-                    items.append(CompletionItem(
-                        label=ps,
-                        detail="[pair_style]",
-                        documentation=f"## `pair_style {ps}`\n\npair_style 类型: {ps}",
-                        insert_text=ps,
-                        category="potential",
-                        sort_priority=0,
-                    ))
+                    items.append(
+                        CompletionItem(
+                            label=ps,
+                            detail="[pair_style]",
+                            documentation=f"## `pair_style {ps}`\n\npair_style 类型: {ps}",
+                            insert_text=ps,
+                            category="potential",
+                            sort_priority=0,
+                        )
+                    )
                 return items
 
             if cmd == "units" and len(tokens) <= 1:
                 # 提供 units 选项补全
                 for u in _UNITS_OPTIONS:
-                    items.append(CompletionItem(
-                        label=u,
-                        detail="[units]",
-                        documentation=f"## `units {u}`\n\nLAMMPS 单位制: {u}",
-                        insert_text=u,
-                        category="initialization",
-                        sort_priority=0,
-                    ))
+                    items.append(
+                        CompletionItem(
+                            label=u,
+                            detail="[units]",
+                            documentation=f"## `units {u}`\n\nLAMMPS 单位制: {u}",
+                            insert_text=u,
+                            category="initialization",
+                            sort_priority=0,
+                        )
+                    )
                 return items
 
             if cmd == "min_style" and len(tokens) <= 1:
                 # 提供 min_style 选项
                 tag = _reg.get_tag("lammps", "min_style")
                 enum_vals = tag.enum_values if tag else []
-                for v in (enum_vals or []):
-                    items.append(CompletionItem(
-                        label=v,
-                        detail="[min_style]",
-                        documentation=f"## `min_style {v}`\n\n最小化算法: {v}",
-                        insert_text=v,
-                        category="run",
-                        sort_priority=0,
-                    ))
+                for v in enum_vals or []:
+                    items.append(
+                        CompletionItem(
+                            label=v,
+                            detail="[min_style]",
+                            documentation=f"## `min_style {v}`\n\n最小化算法: {v}",
+                            insert_text=v,
+                            category="run",
+                            sort_priority=0,
+                        )
+                    )
                 return items
 
             if cmd == "atom_style" and len(tokens) <= 1:
                 tag = _reg.get_tag("lammps", "atom_style")
                 enum_vals = tag.enum_values if tag else []
-                for v in (enum_vals or []):
-                    items.append(CompletionItem(
-                        label=v,
-                        detail="[atom_style]",
-                        documentation=f"## `atom_style {v}`\n\n原子样式: {v}",
-                        insert_text=v,
-                        category="initialization",
-                        sort_priority=0,
-                    ))
+                for v in enum_vals or []:
+                    items.append(
+                        CompletionItem(
+                            label=v,
+                            detail="[atom_style]",
+                            documentation=f"## `atom_style {v}`\n\n原子样式: {v}",
+                            insert_text=v,
+                            category="initialization",
+                            sort_priority=0,
+                        )
+                    )
                 return items
 
         # 行首或通用情况：返回所有命令补全
@@ -708,14 +804,16 @@ class LAMMPSBackend(SoftwareBackend):
             else:
                 insert_text = f"{tag.name} "
 
-            items.append(CompletionItem(
-                label=tag.name,
-                detail=tag.to_completion_detail(),
-                documentation=tag.to_markdown(),
-                insert_text=insert_text,
-                category=tag.category,
-                sort_priority=priority,
-            ))
+            items.append(
+                CompletionItem(
+                    label=tag.name,
+                    detail=tag.to_completion_detail(),
+                    documentation=tag.to_markdown(),
+                    insert_text=insert_text,
+                    category=tag.category,
+                    sort_priority=priority,
+                )
+            )
 
         # 补充已知但不在 schema 中的常见命令
         schema_names = {t.name.lower() for t in all_tags}
@@ -725,14 +823,16 @@ class LAMMPSBackend(SoftwareBackend):
                     priority = 8
                 else:
                     priority = 12
-                items.append(CompletionItem(
-                    label=cmd_name,
-                    detail="[lammps command]",
-                    documentation=f"## `{cmd_name}`\n\nLAMMPS 命令",
-                    insert_text=f"{cmd_name} ",
-                    category="general",
-                    sort_priority=priority,
-                ))
+                items.append(
+                    CompletionItem(
+                        label=cmd_name,
+                        detail="[lammps command]",
+                        documentation=f"## `{cmd_name}`\n\nLAMMPS 命令",
+                        insert_text=f"{cmd_name} ",
+                        category="general",
+                        sort_priority=priority,
+                    )
+                )
 
         items.sort(key=lambda x: (x.sort_priority, x.label.lower()))
         return items

@@ -103,9 +103,7 @@ class ReadTool(BuiltinTool):
     # Full-read mode
     # ------------------------------------------------------------------
 
-    def _full_read(
-        self, file_path: str, lines: list[str], total: int
-    ) -> str:
+    def _full_read(self, file_path: str, lines: list[str], total: int) -> str:
         if total <= MAX_READ_LINES:
             output = self._format_lines(lines, file_path, init_line=1)
             truncated, result = self._apply_char_limit(output)
@@ -141,9 +139,7 @@ class ReadTool(BuiltinTool):
         start = offset if offset is not None else 1
 
         if start < 1 or start > total:
-            return (
-                f"Error: offset {start} is out of range [1, {total}]."
-            )
+            return f"Error: offset {start} is out of range [1, {total}]."
 
         remaining = total - start + 1
         requested = limit if limit is not None else remaining
@@ -174,18 +170,12 @@ class ReadTool(BuiltinTool):
             self._tracker.mark_read(posixpath.normpath(file_path))
 
     @staticmethod
-    def _format_lines(
-        lines: list[str], descriptor: str, init_line: int = 1
-    ) -> str:
+    def _format_lines(lines: list[str], descriptor: str, init_line: int = 1) -> str:
         """Format lines with line numbers in cat -n style."""
         numbered = "\n".join(
-            f"{i + init_line:6}\t{line}"
-            for i, line in enumerate(lines)
+            f"{i + init_line:6}\t{line}" for i, line in enumerate(lines)
         )
-        return (
-            f"Here's the result of running `cat -n` on {descriptor}:\n"
-            f"{numbered}"
-        )
+        return f"Here's the result of running `cat -n` on {descriptor}:\n" f"{numbered}"
 
     @staticmethod
     def _apply_char_limit(output: str) -> tuple[bool, str]:

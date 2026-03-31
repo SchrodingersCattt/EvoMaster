@@ -436,8 +436,7 @@ class ResearchPlannerPhaseMixin:
 
                         # 1. Check explicit tool_name field
                         tool_mentioned = bool(
-                            future_tool
-                            and future_tool.lower() in summary_lower
+                            future_tool and future_tool.lower() in summary_lower
                         )
 
                         # 2. Extract MCP tool names mentioned anywhere in the
@@ -453,19 +452,17 @@ class ResearchPlannerPhaseMixin:
                         # 3. Keyword match: words with len>4 from the full
                         #    intent (not just first 6 words).
                         intent_words = [
-                            w.lower() for w in future_intent.split()
+                            w.lower()
+                            for w in future_intent.split()
                             if len(w) > 4
                             and not w.startswith('mat_')  # skip tool names
                         ]
                         # Require at least 2 distinct content words to match
                         # (avoids false positives on common words like "step").
-                        matched_words = [
-                            w for w in intent_words if w in summary_lower
-                        ]
-                        keyword_match = (
-                            len(intent_words) >= 2
-                            and len(matched_words) >= min(2, len(intent_words))
-                        )
+                        matched_words = [w for w in intent_words if w in summary_lower]
+                        keyword_match = len(intent_words) >= 2 and len(
+                            matched_words
+                        ) >= min(2, len(intent_words))
 
                         if tool_mentioned or intent_tool_mentioned or keyword_match:
                             self.logger.info(
@@ -478,15 +475,17 @@ class ResearchPlannerPhaseMixin:
                                 matched_words[:5],
                             )
                             future_step['status'] = 'done'
-                            state['history'].append({
-                                'step': future_id,
-                                'tool_name': future_tool,
-                                'intent': future_intent[:200],
-                                'result_summary': (
-                                    f"Achieved during step {step_result.get('step_id')}: "
-                                    f"{result_summary[:300]}"
-                                ),
-                            })
+                            state['history'].append(
+                                {
+                                    'step': future_id,
+                                    'tool_name': future_tool,
+                                    'intent': future_intent[:200],
+                                    'result_summary': (
+                                        f"Achieved during step {step_result.get('step_id')}: "
+                                        f"{result_summary[:300]}"
+                                    ),
+                                }
+                            )
 
             history_entry: dict[str, Any] = {
                 'step': step_result['step_id'],
@@ -660,8 +659,8 @@ class ResearchPlannerPhaseMixin:
         state['plan'] = revised_plan
         # Increment the type-specific counter and keep the legacy total in sync.
         state[counter_key] = state.get(counter_key, 0) + 1
-        state['replan_count'] = (
-            state.get('failure_replan_count', 0) + state.get('adaptive_replan_count', 0)
+        state['replan_count'] = state.get('failure_replan_count', 0) + state.get(
+            'adaptive_replan_count', 0
         )
         state['phase'] = 'executing'
 
@@ -905,12 +904,15 @@ class ResearchPlannerPhaseMixin:
                     elif ans_lower == 'retry':
                         self.logger.info('[Planner] Human granted one extra replan')
                         # Reset the relevant counter to allow one more attempt.
-                        counter_key = 'adaptive_replan_count' if is_adaptive else 'failure_replan_count'
-                        state[counter_key] = max(0, limit - 1)
-                        state['replan_count'] = (
-                            state.get('failure_replan_count', 0)
-                            + state.get('adaptive_replan_count', 0)
+                        counter_key = (
+                            'adaptive_replan_count'
+                            if is_adaptive
+                            else 'failure_replan_count'
                         )
+                        state[counter_key] = max(0, limit - 1)
+                        state['replan_count'] = state.get(
+                            'failure_replan_count', 0
+                        ) + state.get('adaptive_replan_count', 0)
                         state = self._phase_replanning(state, task_description, task_id)
                     else:
                         self.logger.info(
@@ -918,12 +920,15 @@ class ResearchPlannerPhaseMixin:
                             ans[:100],
                         )
                         state['replan_reason'] = f"[failure] Human feedback: {ans}"
-                        counter_key = 'adaptive_replan_count' if is_adaptive else 'failure_replan_count'
-                        state[counter_key] = max(0, limit - 1)
-                        state['replan_count'] = (
-                            state.get('failure_replan_count', 0)
-                            + state.get('adaptive_replan_count', 0)
+                        counter_key = (
+                            'adaptive_replan_count'
+                            if is_adaptive
+                            else 'failure_replan_count'
                         )
+                        state[counter_key] = max(0, limit - 1)
+                        state['replan_count'] = state.get(
+                            'failure_replan_count', 0
+                        ) + state.get('adaptive_replan_count', 0)
                         state = self._phase_replanning(state, task_description, task_id)
                 else:
                     state = self._phase_replanning(state, task_description, task_id)

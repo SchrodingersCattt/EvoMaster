@@ -31,7 +31,6 @@ from matmaster.types.events import (
     WorkspaceUploadErrorEvent,
 )
 
-
 # ── Individual AgentEvent types ─────────────────────────
 
 
@@ -53,9 +52,7 @@ class TestThoughtEvent:
         assert evt.reasoning_content is None
 
     def test_streaming(self) -> None:
-        evt = ThoughtEvent(
-            source="agent", stream_state="start", stream_id="s1"
-        )
+        evt = ThoughtEvent(source="agent", stream_state="start", stream_id="s1")
         assert evt.stream_state == "start"
         assert evt.stream_id == "s1"
 
@@ -161,16 +158,12 @@ class TestSystemEvents:
         assert evt.origin is None
 
     def test_confirmation_timeout(self) -> None:
-        evt = ConfirmationTimeoutEvent(
-            source="system", question="proceed?"
-        )
+        evt = ConfirmationTimeoutEvent(source="system", question="proceed?")
         assert evt.type == "confirmation_timeout"
         assert evt.default_reply is None
 
     def test_context_compaction(self) -> None:
-        evt = ContextCompactionEvent(
-            source="system", payload={"tokens_before": 100000}
-        )
+        evt = ContextCompactionEvent(source="system", payload={"tokens_before": 100000})
         assert evt.type == "context_compaction"
 
     def test_exp_run(self) -> None:
@@ -235,20 +228,40 @@ class TestAgentEventDiscriminator:
         payloads = [
             {"type": "thought", "source": "a"},
             {"type": "response", "source": "a", "content": "hello"},
-            {"type": "tool_call", "source": "a", "call_id": "c", "tool_name": "t", "arguments": {}},
-            {"type": "tool_result", "source": "a", "call_id": "c", "tool_name": "t", "result": "r"},
+            {
+                "type": "tool_call",
+                "source": "a",
+                "call_id": "c",
+                "tool_name": "t",
+                "arguments": {},
+            },
+            {
+                "type": "tool_result",
+                "source": "a",
+                "call_id": "c",
+                "tool_name": "t",
+                "result": "r",
+            },
             {"type": "run_result", "source": "a"},
             {"type": "error", "source": "a", "message": "m"},
             {"type": "assistant_state", "source": "a", "state": {}},
             {"type": "skill_hit", "source": "a", "skill_name": "s"},
         ]
         expected_types = [
-            ThoughtEvent, ResponseEvent, ToolCallEvent, ToolResultEvent, RunResultEvent,
-            ErrorEvent, AssistantStateEvent, SkillHitEvent,
+            ThoughtEvent,
+            ResponseEvent,
+            ToolCallEvent,
+            ToolResultEvent,
+            RunResultEvent,
+            ErrorEvent,
+            AssistantStateEvent,
+            SkillHitEvent,
         ]
         for payload, expected in zip(payloads, expected_types):
             result = _agent_event_adapter.validate_python(payload)
-            assert isinstance(result, expected), f"Expected {expected.__name__}, got {type(result).__name__}"
+            assert isinstance(
+                result, expected
+            ), f"Expected {expected.__name__}, got {type(result).__name__}"
 
 
 class TestSharedSpawnIdField:
@@ -271,13 +284,23 @@ class TestSharedSpawnIdField:
 class TestSystemEventDiscriminator:
     def test_confirmation_request(self) -> None:
         result = _system_event_adapter.validate_python(
-            {"type": "confirmation_request", "source": "s", "question": "q", "mode": "m"}
+            {
+                "type": "confirmation_request",
+                "source": "s",
+                "question": "q",
+                "mode": "m",
+            }
         )
         assert isinstance(result, ConfirmationRequestEvent)
 
     def test_all_system_types(self) -> None:
         payloads = [
-            {"type": "confirmation_request", "source": "s", "question": "q", "mode": "m"},
+            {
+                "type": "confirmation_request",
+                "source": "s",
+                "question": "q",
+                "mode": "m",
+            },
             {"type": "confirmation_timeout", "source": "s", "question": "q"},
             {"type": "context_compaction", "source": "s", "payload": {}},
             {"type": "exp_run", "source": "s", "exp_name": "e"},
@@ -289,14 +312,22 @@ class TestSystemEventDiscriminator:
             {"type": "mcp_connect", "source": "s"},
         ]
         expected_types = [
-            ConfirmationRequestEvent, ConfirmationTimeoutEvent,
-            ContextCompactionEvent, ExpRunEvent, CancelledEvent, StreamClosedEvent,
-            WorkspaceUploadErrorEvent, BohriumNodeEvent,
-            McpServerStatusEvent, McpConnectEvent,
+            ConfirmationRequestEvent,
+            ConfirmationTimeoutEvent,
+            ContextCompactionEvent,
+            ExpRunEvent,
+            CancelledEvent,
+            StreamClosedEvent,
+            WorkspaceUploadErrorEvent,
+            BohriumNodeEvent,
+            McpServerStatusEvent,
+            McpConnectEvent,
         ]
         for payload, expected in zip(payloads, expected_types):
             result = _system_event_adapter.validate_python(payload)
-            assert isinstance(result, expected), f"Expected {expected.__name__}, got {type(result).__name__}"
+            assert isinstance(
+                result, expected
+            ), f"Expected {expected.__name__}, got {type(result).__name__}"
 
 
 class TestBusEventUnion:
@@ -306,14 +337,31 @@ class TestBusEventUnion:
             # 8 AgentEvent types
             {"type": "thought", "source": "a"},
             {"type": "response", "source": "a", "content": "hello"},
-            {"type": "tool_call", "source": "a", "call_id": "c", "tool_name": "t", "arguments": {}},
-            {"type": "tool_result", "source": "a", "call_id": "c", "tool_name": "t", "result": "r"},
+            {
+                "type": "tool_call",
+                "source": "a",
+                "call_id": "c",
+                "tool_name": "t",
+                "arguments": {},
+            },
+            {
+                "type": "tool_result",
+                "source": "a",
+                "call_id": "c",
+                "tool_name": "t",
+                "result": "r",
+            },
             {"type": "run_result", "source": "a"},
             {"type": "error", "source": "a", "message": "m"},
             {"type": "assistant_state", "source": "a", "state": {}},
             {"type": "skill_hit", "source": "a", "skill_name": "s"},
             # 9 SystemEvent types
-            {"type": "confirmation_request", "source": "s", "question": "q", "mode": "m"},
+            {
+                "type": "confirmation_request",
+                "source": "s",
+                "question": "q",
+                "mode": "m",
+            },
             {"type": "confirmation_timeout", "source": "s", "question": "q"},
             {"type": "context_compaction", "source": "s", "payload": {}},
             {"type": "exp_run", "source": "s", "exp_name": "e"},
@@ -335,9 +383,7 @@ class TestBusEventUnion:
 
     def test_invalid_type_raises(self) -> None:
         with pytest.raises(ValidationError):
-            _bus_event_adapter.validate_python(
-                {"type": "nonexistent", "source": "x"}
-            )
+            _bus_event_adapter.validate_python({"type": "nonexistent", "source": "x"})
 
 
 class TestEventSerializationRoundtrip:
@@ -366,21 +412,33 @@ class TestEventSerializationRoundtrip:
         for event in events:
             data = event.model_dump()
             restored = _bus_event_adapter.validate_python(data)
-            assert type(restored) is type(event), (
-                f"Roundtrip failed: {type(event).__name__} -> {type(restored).__name__}"
-            )
+            assert type(restored) is type(
+                event
+            ), f"Roundtrip failed: {type(event).__name__} -> {type(restored).__name__}"
 
 
 class TestNoTypeCollision:
     def test_all_18_type_literals_are_unique(self) -> None:
         """All 18 type literals must be globally unique strings."""
         type_values = [
-            "thought", "response", "tool_call", "tool_result", "run_result", "error",
-            "assistant_state", "skill_hit",
-            "confirmation_request", "confirmation_timeout",
-            "context_compaction", "exp_run", "cancelled", "stream_closed",
-            "workspace_upload_error", "bohrium_node",
-            "mcp_server_status", "mcp_connect",
+            "thought",
+            "response",
+            "tool_call",
+            "tool_result",
+            "run_result",
+            "error",
+            "assistant_state",
+            "skill_hit",
+            "confirmation_request",
+            "confirmation_timeout",
+            "context_compaction",
+            "exp_run",
+            "cancelled",
+            "stream_closed",
+            "workspace_upload_error",
+            "bohrium_node",
+            "mcp_server_status",
+            "mcp_connect",
         ]
         assert len(type_values) == 18
         assert len(set(type_values)) == 18
@@ -462,9 +520,9 @@ class TestEventTimestampAutoPopulated:
     def test_event_timestamp_auto_populated(self) -> None:
         for cls in _ALL_EVENT_CLASSES:
             event = _make_event_instance(cls)
-            assert isinstance(event.timestamp, datetime), (
-                f"{cls.__name__}.timestamp not auto-populated"
-            )
+            assert isinstance(
+                event.timestamp, datetime
+            ), f"{cls.__name__}.timestamp not auto-populated"
 
 
 class TestBusEventInvalidTypeRejected:

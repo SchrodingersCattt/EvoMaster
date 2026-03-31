@@ -1,353 +1,375 @@
 [
   {
-    "name": "B3LYP",
-    "param_type": "string",
+    "category": "electronic",
     "default": null,
     "description": "B3LYP hybrid density functional (Becke 3-parameter, Lee-Yang-Parr). One of the most widely used hybrid functionals. Requires a basis set.",
-    "category": "electronic",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "B3LYP",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "PBE",
-    "param_type": "string",
+    "category": "electronic",
     "default": null,
     "description": "PBE GGA density functional (Perdew-Burke-Ernzerhof). Pure DFT, faster than hybrids.",
-    "category": "electronic",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "PBE",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "PBE0",
-    "param_type": "string",
+    "category": "electronic",
     "default": null,
     "description": "PBE0 hybrid density functional (25% exact exchange). Good balance of accuracy and cost.",
-    "category": "electronic",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "PBE0",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "r2SCAN",
-    "param_type": "string",
+    "category": "electronic",
     "default": null,
     "description": "r2SCAN meta-GGA functional. Improved regularized SCAN with better numerical stability.",
-    "category": "electronic",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "r2SCAN",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "wB97X-D3",
-    "param_type": "string",
+    "category": "electronic",
     "default": null,
     "description": "Range-separated hybrid functional with D3 dispersion correction. Excellent for thermochemistry and non-covalent interactions.",
-    "category": "electronic",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "wB97X-D3",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "HF",
-    "param_type": "string",
+    "category": "electronic",
     "default": null,
     "description": "Hartree-Fock method. No correlation energy. Basis for post-HF methods.",
-    "category": "electronic",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "HF",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "DLPNO-CCSD(T)",
-    "param_type": "string",
+    "category": "electronic",
     "default": null,
     "description": "Domain-based local pair natural orbital CCSD(T). Near-linear scaling coupled-cluster method for large systems. Recommended with tightSCF and appropriate auxiliary basis.",
-    "category": "electronic",
-    "section": "keyword_line",
-    "requires": ["tightSCF"],
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "DLPNO-CCSD(T)",
+    "param_type": "string",
+    "requires": [
+      "tightSCF"
+    ],
+    "section": "keyword_line"
   },
   {
-    "name": "DLPNO-CCSD(T1)",
-    "param_type": "string",
+    "category": "electronic",
     "default": null,
     "description": "DLPNO-CCSD(T) with iterative triples correction (T1). More accurate than (T) approximation for non-covalent and open-shell systems.",
-    "category": "electronic",
-    "section": "keyword_line",
-    "requires": ["tightSCF"],
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "DLPNO-CCSD(T1)",
+    "param_type": "string",
+    "requires": [
+      "tightSCF"
+    ],
+    "section": "keyword_line"
   },
   {
-    "name": "def2-SVP",
-    "param_type": "string",
+    "category": "basis",
     "default": null,
     "description": "Karlsruhe def2 split-valence polarization basis set. Suitable for geometry optimizations and screening calculations.",
-    "category": "basis",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "def2-SVP",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "def2-TZVP",
-    "param_type": "string",
+    "category": "basis",
     "default": null,
     "description": "Karlsruhe def2 triple-zeta valence polarization basis set. Good balance of accuracy and computational cost for single-point energies.",
-    "category": "basis",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "def2-TZVP",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "def2-TZVPP",
-    "param_type": "string",
+    "category": "basis",
     "default": null,
     "description": "Karlsruhe def2 triple-zeta valence double-polarization basis set. More polarization functions than def2-TZVP.",
-    "category": "basis",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "def2-TZVPP",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "def2-QZVPP",
-    "param_type": "string",
+    "category": "basis",
     "default": null,
     "description": "Karlsruhe def2 quadruple-zeta valence double-polarization basis set. High accuracy for benchmark calculations.",
-    "category": "basis",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "def2-QZVPP",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "cc-pVDZ",
-    "param_type": "string",
+    "category": "basis",
     "default": null,
     "description": "Dunning correlation-consistent polarized valence double-zeta basis set. Designed for systematic convergence to CBS limit.",
-    "category": "basis",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "cc-pVDZ",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "cc-pVTZ",
-    "param_type": "string",
+    "category": "basis",
     "default": null,
     "description": "Dunning correlation-consistent polarized valence triple-zeta basis set.",
-    "category": "basis",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "cc-pVTZ",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "aug-cc-pVDZ",
-    "param_type": "string",
+    "category": "basis",
     "default": null,
     "description": "Augmented Dunning cc-pVDZ basis set with diffuse functions. Important for anions and excited states.",
-    "category": "basis",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "aug-cc-pVDZ",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "aug-cc-pVTZ",
-    "param_type": "string",
+    "category": "basis",
     "default": null,
     "description": "Augmented Dunning cc-pVTZ basis set with diffuse functions. Good for accurate energetics with anions and Rydberg states.",
-    "category": "basis",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "aug-cc-pVTZ",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "RIJCOSX",
-    "param_type": "string",
+    "category": "approximation",
     "default": null,
     "description": "RI approximation for Coulomb integrals (J) combined with seminumerical exchange (COSX). Greatly accelerates hybrid DFT. Requires AutoAux or explicit auxiliary basis.",
-    "category": "approximation",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "RIJCOSX",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "RI-JK",
-    "param_type": "string",
+    "category": "approximation",
     "default": null,
     "description": "RI approximation for both Coulomb (J) and exchange (K) integrals. Suitable for HF and post-HF calculations.",
-    "category": "approximation",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "RI-JK",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "RI",
-    "param_type": "string",
+    "category": "approximation",
     "default": null,
     "description": "Resolution-of-identity (density fitting) approximation. Accelerates pure DFT calculations significantly.",
-    "category": "approximation",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "RI",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "NORI",
-    "param_type": "string",
+    "category": "approximation",
     "default": null,
     "description": "Disable RI approximation. Forces exact four-center integrals.",
-    "category": "approximation",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "NORI",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "AutoAux",
-    "param_type": "string",
+    "category": "approximation",
     "default": null,
     "description": "Automatically generate auxiliary basis sets for RI/RIJCOSX. Convenient when no pre-defined auxiliary basis is available.",
-    "category": "approximation",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "AutoAux",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "tightSCF",
-    "param_type": "string",
+    "category": "convergence",
     "default": null,
     "description": "Tight SCF convergence criteria (energy threshold 1e-8 Eh). Recommended for geometry optimizations and high-accuracy calculations including DLPNO-CCSD(T).",
-    "category": "convergence",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "tightSCF",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "verytightSCF",
-    "param_type": "string",
+    "category": "convergence",
     "default": null,
     "description": "Very tight SCF convergence criteria (energy threshold 1e-9 Eh). Use for benchmark calculations requiring highest precision.",
-    "category": "convergence",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "verytightSCF",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "normalSCF",
-    "param_type": "string",
+    "category": "convergence",
     "default": null,
     "description": "Normal SCF convergence criteria (energy threshold 1e-6 Eh). Default convergence setting.",
-    "category": "convergence",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "normalSCF",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "looseSCF",
-    "param_type": "string",
+    "category": "convergence",
     "default": null,
     "description": "Loose SCF convergence criteria (energy threshold 1e-5 Eh). Suitable for pre-optimizations or non-critical calculations.",
-    "category": "convergence",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "looseSCF",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "Opt",
-    "param_type": "string",
+    "category": "task",
     "default": null,
     "description": "Geometry optimization task. Optimizes molecular geometry to find energy minimum.",
-    "category": "task",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "Opt",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "Freq",
-    "param_type": "string",
+    "category": "task",
     "default": null,
     "description": "Frequency calculation task. Computes analytical or numerical second derivatives for vibrational frequencies and thermochemistry.",
-    "category": "task",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "Freq",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "OptFreq",
-    "param_type": "string",
+    "category": "task",
     "default": null,
     "description": "Combined geometry optimization followed by frequency calculation at the optimized geometry.",
-    "category": "task",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "OptFreq",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "NEB",
-    "param_type": "string",
+    "category": "task",
     "default": null,
     "description": "Nudged elastic band calculation for finding minimum energy pathways and transition states.",
-    "category": "task",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "NEB",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "IRC",
-    "param_type": "string",
+    "category": "task",
     "default": null,
     "description": "Intrinsic reaction coordinate calculation to follow reaction path from transition state.",
-    "category": "task",
-    "section": "keyword_line",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "IRC",
+    "param_type": "string",
+    "section": "keyword_line"
   },
   {
-    "name": "maxcore",
-    "param_type": "integer",
+    "category": "parallel",
     "default": 4000,
     "description": "Maximum memory per MPI process in MB (set via %maxcore). Each parallel process will use at most this amount of memory.",
-    "category": "parallel",
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "maxcore",
+    "param_type": "integer",
     "section": "%maxcore",
-    "valid_range": [100, 64000],
     "unit": "MB",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "valid_range": [
+      100,
+      64000
+    ]
   },
   {
-    "name": "nprocs",
-    "param_type": "integer",
+    "category": "parallel",
     "default": 4,
     "description": "Number of parallel MPI processes (set via %pal nprocs N end). Must match the number of CPU cores allocated.",
-    "category": "parallel",
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "nprocs",
+    "param_type": "integer",
     "section": "%pal",
-    "valid_range": [1, 512],
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "valid_range": [
+      1,
+      512
+    ]
   },
   {
-    "name": "MaxIter",
-    "param_type": "integer",
+    "category": "convergence",
     "default": 125,
     "description": "Maximum number of SCF iterations (set in %scf block). Increase for difficult convergence cases.",
-    "category": "convergence",
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "MaxIter",
+    "param_type": "integer",
     "section": "%scf",
-    "valid_range": [1, 9999],
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "valid_range": [
+      1,
+      9999
+    ]
   },
   {
-    "name": "ConvForced",
-    "param_type": "boolean",
+    "category": "convergence",
     "default": false,
     "description": "Force SCF to converge even if not fully converged (set in %scf block). Use with caution as results may be unreliable.",
-    "category": "convergence",
-    "section": "%scf",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "ConvForced",
+    "param_type": "boolean",
+    "section": "%scf"
   },
   {
-    "name": "NRoots",
-    "param_type": "integer",
+    "category": "electronic",
     "default": 5,
     "description": "Number of excited states to compute in TDDFT/EOM calculation (set in %tddft block).",
-    "category": "electronic",
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "NRoots",
+    "param_type": "integer",
     "section": "%tddft",
-    "valid_range": [1, 999],
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "valid_range": [
+      1,
+      999
+    ]
   },
   {
-    "name": "TDA",
-    "param_type": "boolean",
+    "category": "electronic",
     "default": false,
     "description": "Enable Tamm-Dancoff approximation (TDA) in TDDFT. Faster but less rigorous than full TDDFT.",
-    "category": "electronic",
-    "section": "%tddft",
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "TDA",
+    "param_type": "boolean",
+    "section": "%tddft"
   },
   {
-    "name": "charge",
-    "param_type": "integer",
+    "category": "system",
     "default": 0,
     "description": "Total charge of the molecule (in coordinate block header * xyz charge mult). Positive for cations, negative for anions.",
-    "category": "system",
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "charge",
+    "param_type": "integer",
     "section": "coord_block",
-    "valid_range": [-10, 10],
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "valid_range": [
+      -10,
+      10
+    ]
   },
   {
-    "name": "multiplicity",
-    "param_type": "integer",
+    "category": "system",
     "default": 1,
     "description": "Spin multiplicity of the molecule (in coordinate block header * xyz charge mult). 1=singlet, 2=doublet, 3=triplet, etc.",
-    "category": "system",
+    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html",
+    "name": "multiplicity",
+    "param_type": "integer",
     "section": "coord_block",
-    "valid_range": [1, 10],
-    "doc_url": "https://www.faccts.de/docs/orca/6.0/manual/contents/typical.html"
+    "valid_range": [
+      1,
+      10
+    ]
   }
 ]

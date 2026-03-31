@@ -64,18 +64,18 @@ class TestRequireSession:
 class TestExecuteTemplateMethod:
     """execute() template method delegates to _execute() and handles errors."""
 
-    def test_execute_returns_result_on_success(self) -> None:
+    async def test_execute_returns_result_on_success(self) -> None:
         tool = ConcreteBuiltinTool()
-        result = tool.execute({"arg1": "hello"})
+        result = await tool.execute({"arg1": "hello"})
         assert result == "executed with {'arg1': 'hello'}"
 
-    def test_execute_catches_exception_returns_error_string(self) -> None:
+    async def test_execute_catches_exception_returns_error_string(self) -> None:
         tool = FailingBuiltinTool()
-        result = tool.execute({})
+        result = await tool.execute({})
         assert result.startswith("Error:")
         assert "something went wrong" in result
 
-    def test_execute_error_string_contains_exception_message(self) -> None:
+    async def test_execute_error_string_contains_exception_message(self) -> None:
         tool = FailingBuiltinTool()
-        result = tool.execute({})
+        result = await tool.execute({})
         assert "something went wrong" in result

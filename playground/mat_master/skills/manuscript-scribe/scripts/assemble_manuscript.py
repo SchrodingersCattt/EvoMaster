@@ -18,7 +18,6 @@ import json
 import re
 import sys
 from pathlib import Path
-from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -33,7 +32,7 @@ except ImportError:
     get_profile = None  # type: ignore[assignment]
     resolve_section = None  # type: ignore[assignment]
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
-from longtask_runtime import (
+from longtask_runtime import (  # noqa: E402
     STATUS_COMPLETED,
     STATUS_FATAL_ERROR,
     STATUS_RETRYABLE_ERROR,
@@ -90,7 +89,9 @@ def load_sections_from_dir(sections_dir: Path) -> dict[str, str]:
     return sections
 
 
-def assemble(sections: dict[str, str], order: list[str] | None = None, title: str | None = None) -> str:
+def assemble(
+    sections: dict[str, str], order: list[str] | None = None, title: str | None = None
+) -> str:
     """Merge sections in order. Prepend title once if given. Keys not in order are appended at end."""
     order = order or DEFAULT_SECTION_ORDER
     seen = set()
@@ -139,11 +140,18 @@ def check_terms(body_text: str, terms_file: Path | None) -> dict:
                 result["undefined"].append(t)
                 result["passed"] = False
         if result["undefined"]:
-            result["message"] = "Technical terms missing definition or usage: " + ", ".join(result["undefined"])
+            result["message"] = (
+                "Technical terms missing definition or usage: "
+                + ", ".join(result["undefined"])
+            )
         else:
-            result["message"] = "All listed technical terms appear with definitions or in context."
+            result["message"] = (
+                "All listed technical terms appear with definitions or in context."
+            )
     else:
-        result["message"] = "No terms file provided; skipped term check (define terms in reference/ or pass --terms)."
+        result["message"] = (
+            "No terms file provided; skipped term check (define terms in reference/ or pass --terms)."
+        )
     return result
 
 
@@ -152,7 +160,9 @@ def extract_abbrev_definitions(text: str) -> dict[str, str]:
     """Return dict: ABBR -> "Full Name" from "Full Name (ABBR)" or "ABBR (Full Name)"."""
     abbrevs = {}
     # Full Name (ABBR)
-    for m in re.finditer(r"([A-Za-z][A-Za-z0-9\s\-/]+?)\s*\(\s*([A-Z][A-Z0-9]{1,})\s*\)", text):
+    for m in re.finditer(
+        r"([A-Za-z][A-Za-z0-9\s\-/]+?)\s*\(\s*([A-Z][A-Z0-9]{1,})\s*\)", text
+    ):
         full, abbr = m.group(1).strip(), m.group(2).strip()
         if abbr not in abbrevs:
             abbrevs[abbr] = full
@@ -166,13 +176,20 @@ def extract_abbrev_definitions(text: str) -> dict[str, str]:
 
 def check_abbreviations(full_text: str) -> dict:
     """Ensure each abbreviation has exactly one definition and no re-definition."""
-    result = {"passed": True, "duplicate_definitions": [], "undefined_abbrevs": [], "message": ""}
+    result = {
+        "passed": True,
+        "duplicate_definitions": [],
+        "undefined_abbrevs": [],
+        "message": "",
+    }
     # Split by sections to find "first use" (first section where ABBR appears)
-    sections = re.split(r"\n##\s+", full_text)
-    all_defs = extract_abbrev_definitions(full_text)
+    _sections = re.split(r"\n##\s+", full_text)  # noqa: F841
+    extract_abbrev_definitions(full_text)
     # Count definitions per ABBR (by occurrence)
     defs_count: dict[str, list[int]] = {}
-    for m in re.finditer(r"([A-Za-z][A-Za-z0-9\s\-/]+?)\s*\(\s*([A-Z][A-Z0-9]{1,})\s*\)", full_text):
+    for m in re.finditer(
+        r"([A-Za-z][A-Za-z0-9\s\-/]+?)\s*\(\s*([A-Z][A-Z0-9]{1,})\s*\)", full_text
+    ):
         abbr = m.group(2).strip()
         defs_count.setdefault(abbr, []).append(m.start())
     for m in re.finditer(r"\b([A-Z][A-Z0-9]{1,})\s*\(\s*([^)]+)\)", full_text):
@@ -184,7 +201,10 @@ def check_abbreviations(full_text: str) -> dict:
     # Optional: find standalone ALL-CAPS that might be undefined (heuristic: 2–5 chars, not in defs)
     # Skip for now to avoid false positives; we only report duplicate defs and missing defs if we have a list
     if result["duplicate_definitions"]:
-        result["message"] = "Note (non-blocking): Duplicate abbreviation definitions: " + ", ".join(result["duplicate_definitions"])
+        result["message"] = (
+            "Note (non-blocking): Duplicate abbreviation definitions: "
+            + ", ".join(result["duplicate_definitions"])
+        )
     else:
         result["message"] = "No duplicate abbreviation definitions found."
     return result
@@ -218,7 +238,9 @@ def extract_references_section(text: str) -> str:
 def parse_references_entries(ref_section: str) -> dict[int, str]:
     """Parse [n] ... url from References. Returns { n: line_text }."""
     entries = {}
-    for m in re.finditer(r"\[(\d+)\]\s*(.+?)(?=\n\s*\[\d+\]|\Z)", ref_section, re.DOTALL):
+    for m in re.finditer(
+        r"\[(\d+)\]\s*(.+?)(?=\n\s*\[\d+\]|\Z)", ref_section, re.DOTALL
+    ):
         n = int(m.group(1))
         line = m.group(2).strip()
         entries[n] = line
@@ -237,9 +259,17 @@ def check_references(
     require_references: bool = True,
 ) -> dict:
     """Ensure in-text citations and References section match; optionally validate URLs."""
-    result = {"passed": True, "missing_in_refs": [], "missing_in_text": [], "invalid_urls": [], "message": ""}
+    result = {
+        "passed": True,
+        "missing_in_refs": [],
+        "missing_in_text": [],
+        "invalid_urls": [],
+        "message": "",
+    }
     if not require_references:
-        result["message"] = "References check skipped for profile without a References section."
+        result["message"] = (
+            "References check skipped for profile without a References section."
+        )
         return result
     body_nums = extract_citation_numbers_from_body(full_text)
     ref_section = extract_references_section(full_text)
@@ -271,13 +301,21 @@ def check_references(
                 result["passed"] = False
 
     if result["missing_in_refs"]:
-        result["message"] = "Citations in text missing from References: " + str(sorted(result["missing_in_refs"]))
+        result["message"] = "Citations in text missing from References: " + str(
+            sorted(result["missing_in_refs"])
+        )
     elif result["missing_in_text"]:
-        result["message"] = "References section has entries not cited in text: " + str(sorted(result["missing_in_text"]))
+        result["message"] = "References section has entries not cited in text: " + str(
+            sorted(result["missing_in_text"])
+        )
     elif result["invalid_urls"]:
-        result["message"] = "Invalid or unreachable reference URLs: " + str(result["invalid_urls"])
+        result["message"] = "Invalid or unreachable reference URLs: " + str(
+            result["invalid_urls"]
+        )
     else:
-        result["message"] = "References consistent with text." + (" URLs validated." if validate_urls else "")
+        result["message"] = "References consistent with text." + (
+            " URLs validated." if validate_urls else ""
+        )
     return result
 
 
@@ -315,7 +353,11 @@ def _prefer_section_text(existing: str, incoming: str) -> str:
         return incoming
     if incoming_placeholder and not existing_placeholder:
         return existing
-    return incoming if _word_count(_section_body(incoming)) > _word_count(_section_body(existing)) else existing
+    return (
+        incoming
+        if _word_count(_section_body(incoming)) > _word_count(_section_body(existing))
+        else existing
+    )
 
 
 def _rename_section_header(text: str, canonical_name: str) -> str:
@@ -342,7 +384,11 @@ def _canonicalize_sections_for_profile(
             canonical = resolve_section(profile_name, raw_name)
         except Exception:
             canonical = raw_name
-        text = raw_text if canonical == raw_name else _rename_section_header(raw_text, canonical)
+        text = (
+            raw_text
+            if canonical == raw_name
+            else _rename_section_header(raw_text, canonical)
+        )
         if canonical in normalized:
             normalized[canonical] = _prefer_section_text(normalized[canonical], text)
         else:
@@ -364,18 +410,32 @@ def _print_word_summary(combined: str) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Assemble manuscript and run consistency checks.")
-    ap.add_argument("--sections_dir", default=None, help="Directory of section .md files to merge")
-    ap.add_argument("--draft", default=None, help="Single draft file (sections as ## Headers)")
+    ap = argparse.ArgumentParser(
+        description="Assemble manuscript and run consistency checks."
+    )
+    ap.add_argument(
+        "--sections_dir", default=None, help="Directory of section .md files to merge"
+    )
+    ap.add_argument(
+        "--draft", default=None, help="Single draft file (sections as ## Headers)"
+    )
     ap.add_argument("--output", required=True, help="Output assembled Markdown path")
-    ap.add_argument("--validate", action="store_true", help="Validate reference URLs (HTTP HEAD)")
-    ap.add_argument("--terms", default=None, help="Optional file listing required technical terms (one per line)")
-    ap.add_argument("--report", default=None, help="Write validation report to this JSON file")
+    ap.add_argument(
+        "--validate", action="store_true", help="Validate reference URLs (HTTP HEAD)"
+    )
+    ap.add_argument(
+        "--terms",
+        default=None,
+        help="Optional file listing required technical terms (one per line)",
+    )
+    ap.add_argument(
+        "--report", default=None, help="Write validation report to this JSON file"
+    )
     ap.add_argument(
         "--profile",
         default=None,
         help="Format profile name (e.g. research_paper, computational_report). "
-             "When set, uses the profile's section order instead of the default.",
+        "When set, uses the profile's section order instead of the default.",
     )
     ap.add_argument(
         "--check_length",
@@ -387,7 +447,7 @@ def main() -> int:
         default="all",
         choices=["all", "md", "docx", "latex"],
         help="Export format(s) after assembly. 'all' (default) = .md + .tex + .docx "
-             "(docx skipped if python-docx not installed). 'md' = Markdown only.",
+        "(docx skipped if python-docx not installed). 'md' = Markdown only.",
     )
     ap.add_argument(
         "--state",
@@ -405,7 +465,10 @@ def main() -> int:
         print("Use either --sections_dir or --draft, not both.", file=sys.stderr)
         sys.exit(1)
     if not args.sections_dir and not args.draft:
-        print("Provide --sections_dir or --draft. Example: --draft draft_manuscript.md --output final.md", file=sys.stderr)
+        print(
+            "Provide --sections_dir or --draft. Example: --draft draft_manuscript.md --output final.md",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # ── 4: Auto-detect profile from state.json in --draft mode ────────
@@ -416,6 +479,7 @@ def main() -> int:
         try:
             sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
             from longtask_runtime import read_json as _read_state_json
+
             _st = _read_state_json(Path("_tmp/manuscript/state.json"), default={})
             _stored = _st.get("profile") or None
             if _stored:
@@ -432,7 +496,10 @@ def main() -> int:
     section_order = DEFAULT_SECTION_ORDER
     if args.profile:
         if get_profile is None:
-            print("Warning: format_profiles not available; using default section order.", file=sys.stderr)
+            print(
+                "Warning: format_profiles not available; using default section order.",
+                file=sys.stderr,
+            )
         else:
             profile = get_profile(args.profile)
             section_order = profile["sections"]
@@ -457,7 +524,8 @@ def main() -> int:
                             file=sys.stderr,
                         )
                         print(
-                            "Detected non-profile markdown stems: " + ", ".join(ignored),
+                            "Detected non-profile markdown stems: "
+                            + ", ".join(ignored),
                             file=sys.stderr,
                         )
                         sys.exit(2)
@@ -466,7 +534,9 @@ def main() -> int:
                         + ", ".join(ignored),
                         file=sys.stderr,
                     )
-                sections = {name: text for name, text in sections.items() if name in allowed}
+                sections = {
+                    name: text for name, text in sections.items() if name in allowed
+                }
 
         # Try to load profile from _profile.json if --profile not given
         if profile is None:
@@ -507,7 +577,9 @@ def main() -> int:
     check2 = check_abbreviations(combined)
     references_required = True
     if profile is not None:
-        references_required = any(s.lower() == "references" for s in profile.get("sections", []))
+        references_required = any(
+            s.lower() == "references" for s in profile.get("sections", [])
+        )
     check3 = check_references(
         combined,
         validate_urls=args.validate,
@@ -536,7 +608,10 @@ def main() -> int:
         "references": check3,
         "placeholder_sections": check4,
         "overall_passed": (
-            check1["passed"] and check2["passed"] and check3["passed"] and check4["passed"]
+            check1["passed"]
+            and check2["passed"]
+            and check3["passed"]
+            and check4["passed"]
         ),
     }
     print("\n--- Consistency Checks ---")
@@ -548,7 +623,9 @@ def main() -> int:
     # ── Optional: content validation via validate_content ──────────────
     if args.check_length and profile is not None:
         try:
-            from validate_content import run_validation, print_report as vc_print
+            from validate_content import print_report as vc_print
+            from validate_content import run_validation
+
             # Re-parse sections for validation (body-only, no headers/comments)
             vc_sections: dict[str, str] = {}
             parsed = extract_sections_from_draft(combined)
@@ -561,7 +638,10 @@ def main() -> int:
             if not vc_report["overall_passed"]:
                 report["overall_passed"] = False
         except ImportError:
-            print("Warning: validate_content.py not available; skipped content validation.", file=sys.stderr)
+            print(
+                "Warning: validate_content.py not available; skipped content validation.",
+                file=sys.stderr,
+            )
 
     print("\nOverall:", "PASSED" if report["overall_passed"] else "FAILED")
 
@@ -569,6 +649,7 @@ def main() -> int:
     if args.export in ("all", "latex"):
         try:
             from export_latex import export_markdown_to_latex
+
             tex_path = out_path.with_suffix(".tex")
             bib_name = out_path.stem + ".bib"
             export_markdown_to_latex(combined, tex_path, bibfile=bib_name)
@@ -578,10 +659,14 @@ def main() -> int:
     if args.export in ("all", "docx"):
         try:
             from export_docx import export_markdown_to_docx
+
             docx_path = out_path.with_suffix(".docx")
             export_markdown_to_docx(combined, docx_path)
         except ImportError:
-            print("Word export skipped: python-docx not installed (pip install python-docx).", file=sys.stderr)
+            print(
+                "Word export skipped: python-docx not installed (pip install python-docx).",
+                file=sys.stderr,
+            )
         except Exception as e:
             print(f"Word export skipped: {e}", file=sys.stderr)
 
@@ -595,8 +680,14 @@ def main() -> int:
     state_path = Path(args.state) if args.state else Path("_tmp/manuscript/state.json")
     result_path = state_path.parent / "result.json"
     events_path = state_path.parent / "events.jsonl"
-    status = STATUS_COMPLETED if report.get("overall_passed") else STATUS_RETRYABLE_ERROR
-    message = "Assembly and checks passed." if status == STATUS_COMPLETED else "Assembly completed with validation issues."
+    status = (
+        STATUS_COMPLETED if report.get("overall_passed") else STATUS_RETRYABLE_ERROR
+    )
+    message = (
+        "Assembly and checks passed."
+        if status == STATUS_COMPLETED
+        else "Assembly completed with validation issues."
+    )
     init_or_load_state(
         state_path=state_path,
         task_type="manuscript",

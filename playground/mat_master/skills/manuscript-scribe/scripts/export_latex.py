@@ -320,7 +320,7 @@ def _parse_references_to_bib(ref_text: str) -> str:
         year = year_match.group(0) if year_match else ''
 
         # Clean line for title (remove URL, very rough)
-        title = re.sub(r'https?://[^\s]+', '', line).strip().rstrip('.')
+        _title = re.sub(r'https?://[^\s]+', '', line).strip().rstrip('.')  # noqa: F841
 
         entry = f"""@misc{{ref{n},
   note = {{{line}}},

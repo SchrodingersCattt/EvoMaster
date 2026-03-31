@@ -525,7 +525,8 @@ class MatMasterPlayground(BasePlayground):
             )
         if manager.sync_tools_by_server:
             self.logger.info(
-                'MCP sync_tools_by_server set: %s', list(manager.sync_tools_by_server.keys())
+                'MCP sync_tools_by_server set: %s',
+                list(manager.sync_tools_by_server.keys()),
             )
 
         async def init_mcp_servers():

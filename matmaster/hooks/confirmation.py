@@ -1,94 +1,63 @@
-"""ConfirmationHook -- blocks tool execution pending user confirmation.
+"""ConfirmationHook -- async confirmation gate for tool execution.
 
-Wraps a ReplyQueueLike to intercept tool calls that require human approval.
-Emits ConfirmationRequestEvent to the bus and blocks on reply_queue.get().
-Returns SKIP if the user cancels or the queue times out, CONTINUE if approved.
+Accepts an async callable (get_reply) that produces user replies.
+The service layer is responsible for constructing this callable,
+e.g. by wrapping a blocking ReplyQueue in loop.run_in_executor.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import queue
-from typing import Protocol, runtime_checkable
+from collections.abc import Awaitable, Callable
 
 from matmaster.core.bus import MessageBus
 from matmaster.core.hooks import BaseHook, HookAction
-from matmaster.types.messages import ToolCallData
 from matmaster.types.events import ConfirmationRequestEvent
+from matmaster.types.messages import ToolCallData
 
 logger = logging.getLogger(__name__)
 
 
-@runtime_checkable
-class ReplyQueueLike(Protocol):
-    """Confirmation reply queue abstraction.
-
-    Same contract as src/services/agent_run_service.ReplyQueueLike.
-    get() returns None to indicate cancellation; raises queue.Empty on timeout.
-    """
-
-    def put_content(self, content: str) -> None: ...
-
-    def put_cancel(self) -> None: ...
-
-    def get(self, timeout: float | None = None) -> str | None: ...
-
-
 class ConfirmationHook(BaseHook):
-    """Hook that blocks tool execution pending user confirmation.
-
-    If reply_queue is None, confirmation is not available and all tools
-    proceed. If confirm_tools is set, only those tools require confirmation.
-    Otherwise all tools require confirmation.
-    """
+    """Gate selected tool calls until the user explicitly confirms them."""
 
     def __init__(
         self,
-        reply_queue: ReplyQueueLike | None,
         bus: MessageBus,
         *,
-        timeout_sec: int = 20,
+        timeout_sec: float = 20,
         confirm_tools: set[str] | None = None,
+        get_reply: Callable[[], Awaitable[str | None]],
         source: str = "MatMaster",
     ) -> None:
-        self._reply_queue = reply_queue
         self._bus = bus
         self._timeout_sec = timeout_sec
         self._confirm_tools = confirm_tools
+        self._get_reply = get_reply
         self._source = source
 
-    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
-        """Intercept tool call for confirmation.
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+        """Wait asynchronously for user confirmation before running a tool."""
 
-        Returns CONTINUE if:
-        - No reply_queue (confirmation not available)
-        - Tool not in confirm_tools set (when confirm_tools is specified)
-        - User approves (reply_queue.get() returns non-None string)
-
-        Returns SKIP if:
-        - User cancels (reply_queue.get() returns None)
-        - Timeout (reply_queue.get() raises queue.Empty)
-        """
-        if self._reply_queue is None:
+        if (
+            self._confirm_tools is not None
+            and tool_call.name not in self._confirm_tools
+        ):
             return HookAction.CONTINUE
 
-        if self._confirm_tools is not None and tool_call.name not in self._confirm_tools:
-            return HookAction.CONTINUE
-
-        # Emit confirmation request to bus
-        self._bus.emit(
+        await self._bus.emit(
             ConfirmationRequestEvent(
                 source=self._source,
                 question=f"Confirm tool call: {tool_call.name}?",
                 mode="timeout",
-                timeout_seconds=self._timeout_sec,
+                timeout_seconds=int(self._timeout_sec),
             )
         )
 
-        # Block on reply
         try:
-            reply = self._reply_queue.get(timeout=self._timeout_sec)
-        except queue.Empty:
+            reply = await asyncio.wait_for(self._get_reply(), timeout=self._timeout_sec)
+        except TimeoutError:
             logger.info("Confirmation timed out for tool %s", tool_call.name)
             return HookAction.SKIP
 

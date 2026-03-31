@@ -19,14 +19,18 @@ def main() -> None:
         description="Summarize specific sections of a paper (methodology, results, etc.)."
     )
     ap.add_argument("--pdf", default=None, help="Path to PDF file")
-    ap.add_argument("--text", default=None, help="Path to plain text file (e.g. abstract)")
+    ap.add_argument(
+        "--text", default=None, help="Path to plain text file (e.g. abstract)"
+    )
     ap.add_argument(
         "--focus",
         default="methodology",
         choices=["methodology", "results", "abstract", "conclusion", "full"],
         help="Section focus for extraction",
     )
-    ap.add_argument("--output", choices=["json", "text"], default="json", help="Output format")
+    ap.add_argument(
+        "--output", choices=["json", "text"], default="json", help="Output format"
+    )
     args = ap.parse_args()
 
     if not args.pdf and not args.text:

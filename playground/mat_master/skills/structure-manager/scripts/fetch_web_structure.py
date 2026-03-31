@@ -39,7 +39,16 @@ except ImportError:
         "Accept-Encoding": "gzip, deflate, br",
     }
 
-STRUCTURE_EXTENSIONS = {".cif", ".poscar", ".vasp", ".xyz", ".res", ".pdb", ".mol2", ".sdf"}
+STRUCTURE_EXTENSIONS = {
+    ".cif",
+    ".poscar",
+    ".vasp",
+    ".xyz",
+    ".res",
+    ".pdb",
+    ".mol2",
+    ".sdf",
+}
 
 
 def _project_tmp() -> Path:
@@ -127,6 +136,7 @@ def extract_page_links(page_url: str, out_dir: Path) -> dict:
 
     # Resolve relative URLs
     from urllib.parse import urljoin, urlparse
+
     base = page_url
 
     candidates = []
@@ -158,9 +168,13 @@ def extract_page_links(page_url: str, out_dir: Path) -> dict:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Fetch structure from direct URL or HTML page.")
+    ap = argparse.ArgumentParser(
+        description="Fetch structure from direct URL or HTML page."
+    )
     ap.add_argument("--url", help="Direct URL to a CIF/POSCAR/XYZ/etc. file")
-    ap.add_argument("--page", help="URL of an HTML page to scan for structure file links")
+    ap.add_argument(
+        "--page", help="URL of an HTML page to scan for structure file links"
+    )
     args = ap.parse_args()
 
     out_dir = _project_tmp()
@@ -170,7 +184,11 @@ def main() -> None:
     elif args.page:
         result = extract_page_links(args.page, out_dir)
     else:
-        result = {"success": False, "reason": "error", "message": "Provide --url or --page"}
+        result = {
+            "success": False,
+            "reason": "error",
+            "message": "Provide --url or --page",
+        }
         print(json.dumps(result))
         sys.exit(1)
 

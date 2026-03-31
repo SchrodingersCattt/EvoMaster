@@ -69,7 +69,9 @@ def main() -> None:
         description="Create survey outline / evidence skeleton; LLM fills content via retrieval."
     )
     ap.add_argument("--topic", default=None, help="Survey topic")
-    ap.add_argument("--title", dest="topic_alias", default=None, help="Alias for --topic")
+    ap.add_argument(
+        "--title", dest="topic_alias", default=None, help="Alias for --topic"
+    )
     ap.add_argument(
         "--depth",
         default="deep",
@@ -124,7 +126,9 @@ def main() -> None:
 
     # ------------------------------------------------------------------ brief
     if args.depth == "brief":
-        out_path = _resolve_output(args.output, f"collected_{sanitize_topic(topic)}.json")
+        out_path = _resolve_output(
+            args.output, f"collected_{sanitize_topic(topic)}.json"
+        )
         skeleton = {
             "schema_version": "2",
             "source_kind": "survey",
@@ -138,7 +142,9 @@ def main() -> None:
                 "Each card: {source_title, source_url, year, first_author, facet, claim, data_points}."
             ),
         }
-        out_path.write_text(json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8")
+        out_path.write_text(
+            json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         print(
             f"Evidence skeleton: {out_path}. "
             "Run 3-5 mat_sn_* retrieval calls, then run: "
@@ -174,7 +180,9 @@ def main() -> None:
                 "Each card: {source_title, source_url, year, first_author, facet, claim, data_points}."
             ),
         }
-        collected_path.write_text(json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8")
+        collected_path.write_text(
+            json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
         print(
             f"Survey outline (standard): {out_path}. "
@@ -237,7 +245,9 @@ def main() -> None:
             "Each card: {source_title, source_url, year, first_author, facet, claim, data_points}."
         ),
     }
-    collected_path.write_text(json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8")
+    collected_path.write_text(
+        json.dumps(skeleton, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     print(
         f"Survey outline: {out_path}. "

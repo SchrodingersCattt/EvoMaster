@@ -4,6 +4,7 @@ Verifies PRMT-02: developer_instructions loaded from direct.toml contains
 all required behavioral guidance dimensions (identity, tool usage, behavior
 constraints, output style, remote environment rules).
 """
+
 from matmaster.config.loader import load_exp_config
 
 

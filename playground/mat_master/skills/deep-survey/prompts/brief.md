@@ -41,7 +41,7 @@ Write each retrieved evidence item as a card in `collected.json`. Schema:
 
 Full schema reference: `use_skill action=get_reference skill_name="deep-survey" reference_name="collected_json_schema.md"`
 
-**Required fields**: `source_title`, `source_url`, `year`, `first_author`, `facet`, `claim`.  
+**Required fields**: `source_title`, `source_url`, `year`, `first_author`, `facet`, `claim`.
 `data_points` is optional but strongly preferred — list any specific numbers, conditions, or measurements.
 
 ### Step 4 — Done
