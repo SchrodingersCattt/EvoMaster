@@ -6,21 +6,25 @@
 
 ## Problem
 
-`AssistantStateHook` (matmaster) serializes assistant messages with flat `ToolCallData` format:
-```json
-{"id": "...", "name": "...", "arguments": {...}}
-```
+存在两条 `assistant_state` 持久化路径，各自使用不同的序列化格式：
 
-`chat_history.py` deserializes using evomaster's `AssistantMessage.model_validate()` which expects nested `ToolCall` format:
-```json
-{"id": "...", "type": "function", "function": {"name": "...", "arguments": "..."}}
-```
+1. **matmaster `AssistantStateHook`** (`matmaster/hooks/assistant_state.py`) — 使用 `matmaster.types.messages.AssistantMessage.model_dump(mode="json")`，产出扁平 `ToolCallData` 格式：
+   ```json
+   {"id": "...", "name": "...", "arguments": {...}}
+   ```
 
-Validation fails → `assistant_state` events are skipped → tool_calls lost from history → orphaned tool messages → LLM API rejects with 400 "Invalid role of message".
+2. **playground `stream_agent`** (`playground/mat_master/service/stream_agent.py:127`) — 使用 `evomaster.utils.types.AssistantMessage.model_dump()`，产出嵌套 `ToolCall` 格式：
+   ```json
+   {"id": "...", "type": "function", "function": {"name": "...", "arguments": "..."}}
+   ```
+
+`chat_history.py` 用 evomaster 的 `AssistantMessage.model_validate()` 反序列化，只兼容路径 2 的格式。路径 1 的数据验证失败 → `assistant_state` 事件被跳过 → tool_calls 从历史中丢失 → 产生孤儿 tool messages → LLM API 400 "Invalid role of message"。
+
+注：两种格式的 `role` 字段值均为字符串 `"assistant"`，Pydantic `model_validate` 会自动转为 enum，无需适配。matmaster 序列化数据无 `meta` 字段，evomaster model 会用默认值 `{}`，也无需特殊处理。
 
 ## Solution: Adapter Function
 
-Add `_adapt_tool_calls_format(raw: dict) -> dict` in `chat_history.py` that normalizes matmaster flat format to evomaster nested format before `model_validate()`.
+在 `chat_history.py` 中添加 `_adapt_tool_calls_format(raw: dict) -> dict`，在 `model_validate()` 之前将 matmaster 扁平格式转为 evomaster 嵌套格式。
 
 ### Adapter Logic
 
@@ -45,12 +49,18 @@ def _adapt_tool_calls_format(raw: dict) -> dict:
             adapted.append(tc)
         elif 'name' in tc and 'arguments' in tc:
             args = tc['arguments']
+            if isinstance(args, dict):
+                args_str = json.dumps(args, ensure_ascii=False)
+            elif isinstance(args, str):
+                args_str = args
+            else:
+                args_str = '{}'
             adapted.append({
                 'id': tc.get('id', ''),
                 'type': 'function',
                 'function': {
                     'name': tc['name'],
-                    'arguments': json.dumps(args) if isinstance(args, dict) else str(args),
+                    'arguments': args_str,
                 },
             })
         else:
@@ -76,14 +86,14 @@ msg = AssistantMessage.model_validate(
 
 - Minimal change: one new function + one line modified
 - No cross-module import changes
-- Backward compatible: handles both old evomaster-format and new matmaster-format data in DB
+- Backward compatible: handles both evomaster 嵌套格式和 matmaster 扁平格式（DB 中两种并存）
 - Isolated: only affects `assistant_state` deserialization path
 - Does not alter `AssistantStateHook` serialization behavior
 
 ## What This Does NOT Change
 
 - All other message construction in `chat_history.py` continues using evomaster types
-- `events_to_messages()` conversion pipeline unchanged
+- `events_to_messages()` conversion pipeline unchanged — 其输入格式（嵌套 ToolCall dict）不受影响
 - `AssistantStateHook` serialization unchanged
 - No schema migration needed for existing DB data
 
@@ -91,5 +101,7 @@ msg = AssistantMessage.model_validate(
 
 - Unit test: `_adapt_tool_calls_format` with matmaster flat input → evomaster nested output
 - Unit test: already-evomaster format input passes through unchanged
-- Unit test: edge cases (no tool_calls, empty list, None)
+- Unit test: edge cases (no tool_calls, empty list, None, arguments 为 None/str/dict)
 - Integration: verify `events_to_dialog_messages()` succeeds with matmaster-format `assistant_state` events
+- Update existing test `test_chat_history_avoids_duplicate_tool_calls_when_assistant_state_exists` to use matmaster flat format input, ensuring the fixed path is covered
+- End-to-end: verify `events_to_messages()` produces correct matmaster Message objects when upstream `assistant_state` events use flat format
