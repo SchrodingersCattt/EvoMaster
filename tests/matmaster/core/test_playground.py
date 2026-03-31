@@ -17,10 +17,10 @@ import yaml
 from matmaster.core.playground import Playground
 from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _write_config(tmp_path: Path, overrides: dict[str, Any] | None = None) -> Path:
     """Write a minimal YAML config and return its path.
@@ -59,6 +59,7 @@ def _write_config(tmp_path: Path, overrides: dict[str, Any] | None = None) -> Pa
 # ---------------------------------------------------------------------------
 # prepare() returns PlaygroundContext
 # ---------------------------------------------------------------------------
+
 
 class TestPrepare:
     def test_returns_playground_context(self, tmp_path: Path) -> None:
@@ -189,6 +190,7 @@ class TestPrepare:
 # cleanup() session ownership
 # ---------------------------------------------------------------------------
 
+
 class TestCleanup:
     def test_cleanup_closes_owned_session(self, tmp_path: Path) -> None:
         config_path = _write_config(tmp_path)
@@ -220,10 +222,12 @@ class TestCleanup:
         mock_session.config = MagicMock()
         mock_session.config.workspace_path = "/workspace"
 
-        ctx = pg.prepare({
-            "run_dir": str(run_dir),
-            "session_override": mock_session,
-        })
+        pg.prepare(
+            {
+                "run_dir": str(run_dir),
+                "session_override": mock_session,
+            }
+        )
 
         # Should not own injected session
         assert pg._owns_session is False
@@ -252,6 +256,7 @@ class TestCleanup:
 # Context immutability
 # ---------------------------------------------------------------------------
 
+
 class TestContextImmutability:
     def test_returned_context_is_frozen(self, tmp_path: Path) -> None:
         config_path = _write_config(tmp_path)
@@ -262,6 +267,7 @@ class TestContextImmutability:
         ctx = pg.prepare({"run_dir": str(run_dir)})
 
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             ctx.workdir = Path("/other")
         pg.cleanup()

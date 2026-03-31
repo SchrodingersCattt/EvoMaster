@@ -15,7 +15,6 @@ Custom rules applied:
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from validators.base import (
     SEVERITY_ERROR,
@@ -27,21 +26,30 @@ from validators.base import (
 )
 
 _KNOWN_CALCULATIONS = {
-    "scf", "nscf", "bands", "relax", "md", "vc-relax", "vc-md",
+    "scf",
+    "nscf",
+    "bands",
+    "relax",
+    "md",
+    "vc-relax",
+    "vc-md",
 }
 
 _KNOWN_SMEARING = {
-    "gaussian", "methfessel-paxton", "m-p", "marzari-vanderbilt",
-    "cold", "fermi-dirac", "f-d",
+    "gaussian",
+    "methfessel-paxton",
+    "m-p",
+    "marzari-vanderbilt",
+    "cold",
+    "fermi-dirac",
+    "f-d",
 }
 
 
 class QEValidator(BaseValidator):
     software_name = "qe"
 
-    def validate_text(
-        self, text: str, source: str = "<string>"
-    ) -> list[Diagnostic]:
+    def validate_text(self, text: str, source: str = "<string>") -> list[Diagnostic]:
         diags: list[Diagnostic] = []
 
         # Strategy 1: ASE parser
@@ -57,11 +65,10 @@ class QEValidator(BaseValidator):
     # Strategy 1: ASE
     # -----------------------------------------------------------------------
 
-    def _validate_with_ase(
-        self, text: str, source: str
-    ) -> Optional[list[Diagnostic]]:
+    def _validate_with_ase(self, text: str, source: str) -> list[Diagnostic] | None:
         try:
             import io
+
             from ase.io.espresso import read_espresso_in  # type: ignore[import]
         except ImportError:
             return None
@@ -258,12 +265,8 @@ class QEValidator(BaseValidator):
     def _check_occupations(self, text: str) -> list[Diagnostic]:
         """Warn if smearing is set without occupations='smearing', or vice versa."""
         diags: list[Diagnostic] = []
-        has_smearing_kw = bool(
-            re.search(r"\bsmearing\s*=", text, re.IGNORECASE)
-        )
-        has_degauss = bool(
-            re.search(r"\bdegauss\s*=", text, re.IGNORECASE)
-        )
+        has_smearing_kw = bool(re.search(r"\bsmearing\s*=", text, re.IGNORECASE))
+        has_degauss = bool(re.search(r"\bdegauss\s*=", text, re.IGNORECASE))
         m_occ = re.search(
             r"\boccupations\s*=\s*['\"]?(\S+?)['\"]?\s*[,\n]",
             text,

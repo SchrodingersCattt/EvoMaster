@@ -7,12 +7,11 @@ Tests updated to use inline stub guards that satisfy the Guard Protocol.
 from __future__ import annotations
 
 from pathlib import Path
-import pytest
 
 from matmaster.core.guard_pipeline import GuardPipeline
-from matmaster.types.messages import ToolCallData
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.guards import Guard, GuardContext, GuardResult
+from matmaster.types.messages import ToolCallData
 
 
 class _StubGuard:
@@ -47,7 +46,7 @@ class TestGuardProtocol:
 
 
 class TestGuardInjection:
-    def test_guards_injected_via_assemble(self) -> None:
+    async def test_guards_injected_via_assemble(self) -> None:
         """Exp.assemble() returns spec with empty guards (guard factory deferred)."""
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
@@ -59,7 +58,7 @@ class TestGuardInjection:
         )
         config = ExpConfig(name="direct", guards=["stub_guard"])
         exp = Exp(config)
-        spec = exp.assemble(ctx)
+        spec = await exp.assemble(ctx)
         # Guards are currently passed as strings; guard factory is deferred.
         assert spec.guards == []
 

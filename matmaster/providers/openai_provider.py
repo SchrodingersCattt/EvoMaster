@@ -1,22 +1,27 @@
 """Concrete LLMProvider implementation using the OpenAI Python SDK.
 
 Provides OpenAIProvider that satisfies the LLMProvider Protocol, wrapping
-the openai.OpenAI client for synchronous chat, retry-aware chat, and
-streaming calls. Retry strategy is handled explicitly in chat_with_retry()
-with exponential backoff, not delegated to SDK.
+the openai.AsyncOpenAI client for async chat and streaming calls.
+Client lifecycle is managed via async context manager: __aenter__ creates
+the AsyncOpenAI + httpx.AsyncClient, __aexit__ closes connections.
+Retry strategy is handled by Kernel._call_llm(), not by the provider.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import time
-from typing import Any, Iterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import openai
 
 from matmaster.types.llm_provider import LLMProvider  # noqa: F401
-from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
+from matmaster.types.messages import (
+    LLMResponse,
+    StreamChunk,
+    ToolCallData,
+    parse_tool_arguments,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +50,9 @@ def _extract_cached_tokens(usage: Any) -> int:
 class OpenAIProvider:
     """LLMProvider implementation backed by the OpenAI Python SDK.
 
-    Satisfies the LLMProvider Protocol. Retry strategy is handled explicitly
-    in chat_with_retry() with exponential backoff, not delegated to SDK.
+    Satisfies the LLMProvider Protocol. Uses async context manager for
+    client lifecycle: __init__ stores parameters only, __aenter__ creates
+    AsyncOpenAI client, __aexit__ closes connections.
     """
 
     def __init__(
@@ -65,6 +71,8 @@ class OpenAIProvider:
         extra_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self._model = model
+        self._api_key = api_key
+        self._base_url = base_url
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._timeout = timeout
@@ -73,14 +81,22 @@ class OpenAIProvider:
         self._max_retries = max_retries
         self._retry_delay = retry_delay
         self._extra_kwargs = extra_kwargs or {}
+        self._client: openai.AsyncOpenAI | None = None
 
+    async def __aenter__(self) -> OpenAIProvider:
         import httpx
 
-        _first_token_t = stream_timeout if stream_timeout is not None else timeout
-        _idle_t = stream_idle_timeout if stream_idle_timeout is not None else timeout
+        _first_token_t = (
+            self._stream_timeout if self._stream_timeout is not None else self._timeout
+        )
+        _idle_t = (
+            self._stream_idle_timeout
+            if self._stream_idle_timeout is not None
+            else self._timeout
+        )
         _read_t = float(max(_idle_t, _first_token_t) + 10)
 
-        http_client = httpx.Client(
+        http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(
                 connect=15.0,
                 read=_read_t,
@@ -88,14 +104,27 @@ class OpenAIProvider:
                 pool=15.0,
             )
         )
-
-        self._client = openai.OpenAI(
-            api_key=api_key,
-            base_url=base_url,
-            timeout=timeout,
-            max_retries=0,  # retry handled by chat_with_retry, not SDK
+        self._client = openai.AsyncOpenAI(
+            api_key=self._api_key,
+            base_url=self._base_url,
+            timeout=self._timeout,
+            max_retries=0,
             http_client=http_client,
         )
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore[type-arg]
+        if self._client is not None:
+            await self._client.close()
+            self._client = None
+
+    def _ensure_client(self) -> openai.AsyncOpenAI:
+        if self._client is None:
+            raise RuntimeError(
+                "OpenAIProvider must be used as async context manager: "
+                "'async with provider:'"
+            )
+        return self._client
 
     @property
     def stream_timeout(self) -> float | None:
@@ -113,12 +142,13 @@ class OpenAIProvider:
     def retry_delay(self) -> float:
         return self._retry_delay
 
-    def chat(
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
-        """Non-streaming chat completion."""
+        """Non-streaming async chat completion."""
+        client = self._ensure_client()
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
@@ -131,7 +161,7 @@ class OpenAIProvider:
         if self._extra_kwargs:
             kwargs.update(self._extra_kwargs)
 
-        response = self._client.chat.completions.create(**kwargs)
+        response = await client.chat.completions.create(**kwargs)
         choice = response.choices[0]
         message = choice.message
 
@@ -140,7 +170,7 @@ class OpenAIProvider:
         if message.tool_calls:
             tool_calls = []
             for tc in message.tool_calls:
-                args = self._parse_arguments(tc.function.arguments)
+                args = parse_tool_arguments(tc.function.arguments or "")
                 tool_calls.append(
                     ToolCallData(
                         id=tc.id,
@@ -168,74 +198,14 @@ class OpenAIProvider:
             usage=usage,
         )
 
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int | None = None,
-        retry_delay: float | None = None,
-    ) -> LLMResponse:
-        """Chat with explicit retry and exponential backoff.
-
-        Retries on transient errors (connection, timeout, rate limit, server error).
-        Raises immediately on non-retryable errors (auth, context length exceeded).
-        """
-        retries = max_retries if max_retries is not None else self._max_retries
-        delay = retry_delay if retry_delay is not None else self._retry_delay
-
-        last_error: Exception | None = None
-        for attempt in range(retries):
-            try:
-                return self.chat(messages, tools)
-            except (
-                openai.APIConnectionError,
-                openai.APITimeoutError,
-                openai.RateLimitError,
-                openai.InternalServerError,
-            ) as e:
-                last_error = e
-                logger.warning(
-                    "LLM call failed (attempt %d/%d): %s",
-                    attempt + 1,
-                    retries,
-                    e,
-                )
-                if attempt < retries - 1:
-                    backoff = delay * (2**attempt)
-                    time.sleep(backoff)
-            except (
-                openai.AuthenticationError,
-                openai.PermissionDeniedError,
-            ) as e:
-                logger.error("Non-retryable auth error: %s", e)
-                raise
-            except openai.BadRequestError as e:
-                err_str = str(e).lower()
-                if "context" in err_str and ("length" in err_str or "token" in err_str):
-                    logger.error("Non-retryable context length error: %s", e)
-                    raise
-                last_error = e
-                logger.warning(
-                    "LLM call failed (attempt %d/%d): %s",
-                    attempt + 1,
-                    retries,
-                    e,
-                )
-                if attempt < retries - 1:
-                    backoff = delay * (2**attempt)
-                    time.sleep(backoff)
-
-        raise RuntimeError(f"LLM call failed after {retries} attempts") from last_error
-
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
-        """Streaming chat completion, yields StreamChunk per delta.
+    ) -> AsyncIterator[StreamChunk]:
+        """Streaming async chat completion, yields StreamChunk per delta.
 
         Translates all SDK exceptions to LLMError so callers only need to
         catch one type. retryable=True for transient errors (timeout,
@@ -246,6 +216,7 @@ class OpenAIProvider:
 
         from matmaster.types.errors import LLMError
 
+        client = self._ensure_client()
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
@@ -266,10 +237,10 @@ class OpenAIProvider:
             kwargs["timeout"] = timeout
 
         try:
-            stream = self._client.chat.completions.create(**kwargs)
+            stream = await client.chat.completions.create(**kwargs)
             last_chunk_usage: dict[str, int] | None = None
 
-            for chunk in stream:
+            async for chunk in stream:
                 usage = getattr(chunk, "usage", None)
                 if (
                     isinstance(getattr(usage, "prompt_tokens", None), int)
@@ -315,30 +286,28 @@ class OpenAIProvider:
             if last_chunk_usage is not None:
                 yield StreamChunk(usage=last_chunk_usage)
 
-        except (
-            openai.APITimeoutError,
-            openai.APIConnectionError,
-            openai.RateLimitError,
-            openai.InternalServerError,
-        ) as exc:
-            raise LLMError(str(exc), retryable=True) from exc
+        except openai.APITimeoutError as exc:
+            raise LLMError(str(exc), retryable=True, error_category="timeout") from exc
+        except openai.APIConnectionError as exc:
+            raise LLMError(
+                str(exc), retryable=True, error_category="connection"
+            ) from exc
+        except openai.RateLimitError as exc:
+            raise LLMError(
+                str(exc), retryable=True, error_category="rate_limit"
+            ) from exc
+        except openai.InternalServerError as exc:
+            raise LLMError(str(exc), retryable=True, error_category="server") from exc
         except _httpx.ReadTimeout as exc:
-            raise LLMError(str(exc), retryable=True) from exc
+            raise LLMError(str(exc), retryable=True, error_category="timeout") from exc
         except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
-            raise LLMError(str(exc), retryable=False) from exc
+            raise LLMError(str(exc), retryable=False, error_category="auth") from exc
         except openai.BadRequestError as exc:
             err_str = str(exc).lower()
             if "context" in err_str and ("length" in err_str or "token" in err_str):
-                raise LLMError(str(exc), retryable=False) from exc
-            raise LLMError(str(exc), retryable=True) from exc
-
-    @staticmethod
-    def _parse_arguments(raw: str | None) -> dict[str, Any]:
-        """Parse JSON arguments from OpenAI tool call."""
-        if not raw:
-            return {}
-        try:
-            return json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
-            logger.warning("Failed to parse tool call arguments: %s", raw[:200])
-            return {"_raw": raw}
+                raise LLMError(
+                    str(exc), retryable=False, error_category="context_overflow"
+                ) from exc
+            raise LLMError(
+                str(exc), retryable=True, error_category="bad_request"
+            ) from exc

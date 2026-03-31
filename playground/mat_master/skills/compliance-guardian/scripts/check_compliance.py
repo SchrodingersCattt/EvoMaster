@@ -33,6 +33,7 @@ def _audit_check(allowed: bool, plan: str, command: str) -> None:
     _AUDIT_STDERR.write(line)
     _AUDIT_STDERR.flush()
 
+
 # === Hard rules: restricted software (local execution denied; input writing allowed) ===
 RESTRICTED_SOFTWARE = {
     "vasp": {
@@ -81,7 +82,11 @@ def check_hard_rules(plan: str, command: str) -> tuple[bool, str, str]:
     # 2) Dangerous commands
     for pattern in DANGEROUS_COMMAND_PATTERNS:
         if re.search(pattern, command):
-            return False, "System Security Risk", "The command contains potentially destructive or unsafe operations."
+            return (
+                False,
+                "System Security Risk",
+                "The command contains potentially destructive or unsafe operations.",
+            )
 
     return True, "", ""
 
@@ -94,19 +99,56 @@ def check_semantic_safety(plan: str) -> tuple[bool, str, str]:
     plan_lower = _normalize_for_match(plan)
 
     sensitive_keywords = [
-        "explosive", "detonation", "tnt", "rdx", "hmx", "cl-20", "petn", "energetic",
-        "drug", "synthesis of", "synthesize", "recipe", "formulation", "manufacture",
-        "make at home", "step-by-step synthesis", "preparation of", "how to make",
+        "explosive",
+        "detonation",
+        "tnt",
+        "rdx",
+        "hmx",
+        "cl-20",
+        "petn",
+        "energetic",
+        "drug",
+        "synthesis of",
+        "synthesize",
+        "recipe",
+        "formulation",
+        "manufacture",
+        "make at home",
+        "step-by-step synthesis",
+        "preparation of",
+        "how to make",
     ]
     allowed_intents = [
-        "calculate", "simulation", "compute", "dft", "md", "property", "mechanism",
-        "literature", "paper", "theory", "analysis", "crystal structure", "stability",
-        "detonation velocity", "band gap", "phonon", "elastic", "ab initio",
+        "calculate",
+        "simulation",
+        "compute",
+        "dft",
+        "md",
+        "property",
+        "mechanism",
+        "literature",
+        "paper",
+        "theory",
+        "analysis",
+        "crystal structure",
+        "stability",
+        "detonation velocity",
+        "band gap",
+        "phonon",
+        "elastic",
+        "ab initio",
     ]
     forbidden_intents = [
-        "synthesis recipe", "synthesis procedure", "how to synthesize",
-        "formulation ratio", "ingredient list", "manufacturing process",
-        "weaponiz", "improvised", "at home", "household chemicals",
+        "synthesis recipe",
+        "synthesis procedure",
+        "how to synthesize",
+        "formulation ratio",
+        "ingredient list",
+        "manufacturing process",
+        "weaponiz",
+        "improvised",
+        "at home",
+        "household chemicals",
         "find alternative credentials",
         "alternative credentials in the environment",
         "scan for api key",
@@ -121,9 +163,8 @@ def check_semantic_safety(plan: str) -> tuple[bool, str, str]:
     ]
 
     has_sensitive = any(k in plan_lower for k in sensitive_keywords)
-    has_forbidden = (
-        any(f in plan_lower for f in forbidden_intents)
-        or any(re.search(p, plan_lower) for p in forbidden_patterns)
+    has_forbidden = any(f in plan_lower for f in forbidden_intents) or any(
+        re.search(p, plan_lower) for p in forbidden_patterns
     )
     has_allowed = any(a in plan_lower for a in allowed_intents)
 
@@ -139,8 +180,17 @@ def check_semantic_safety(plan: str) -> tuple[bool, str, str]:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        _audit_denied("Invalid arguments", "Provide plan_description and intended_command.", "", "")
-        out = {"allowed": False, "reason": "Invalid arguments", "suggestion": "Provide plan_description and intended_command (or one JSON object)."}
+        _audit_denied(
+            "Invalid arguments",
+            "Provide plan_description and intended_command.",
+            "",
+            "",
+        )
+        out = {
+            "allowed": False,
+            "reason": "Invalid arguments",
+            "suggestion": "Provide plan_description and intended_command (or one JSON object).",
+        }
         print(json.dumps(out))
         sys.exit(1)
 
@@ -155,6 +205,7 @@ def main() -> None:
             command = obj.get("command", "") or ""
         except json.JSONDecodeError:
             import shlex
+
             try:
                 parts = shlex.split(arg)
                 if len(parts) > 1:
@@ -175,14 +226,18 @@ def main() -> None:
     allowed, reason, suggestion = check_hard_rules(plan, command)
     if not allowed:
         _audit_denied(reason, suggestion, plan, command)
-        print(json.dumps({"allowed": False, "reason": reason, "suggestion": suggestion}))
+        print(
+            json.dumps({"allowed": False, "reason": reason, "suggestion": suggestion})
+        )
         return
 
     # 2) Semantic safety
     allowed, reason, suggestion = check_semantic_safety(plan)
     if not allowed:
         _audit_denied(reason, suggestion, plan, command)
-        print(json.dumps({"allowed": False, "reason": reason, "suggestion": suggestion}))
+        print(
+            json.dumps({"allowed": False, "reason": reason, "suggestion": suggestion})
+        )
         return
 
     _audit_check(True, plan, command)

@@ -14,7 +14,6 @@ Custom rules:
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from validators.base import (
     SEVERITY_ERROR,
@@ -28,9 +27,13 @@ from validators.base import (
 # Known ixc values (ABINIT libxc notation)
 _KNOWN_IXC = {
     # Perdew-Burke-Ernzerhof
-    "11", "-101130",
+    "11",
+    "-101130",
     # LDA
-    "1", "2", "7", "8",
+    "1",
+    "2",
+    "7",
+    "8",
     # PBEsol
     "116133",
     # HSE06 via libxc
@@ -44,9 +47,7 @@ _CONV_KEYWORDS = {"toldfe", "tolwfr", "tolvrs", "toldff", "tolrff"}
 class ABINITValidator(BaseValidator):
     software_name = "abinit"
 
-    def validate_text(
-        self, text: str, source: str = "<string>"
-    ) -> list[Diagnostic]:
+    def validate_text(self, text: str, source: str = "<string>") -> list[Diagnostic]:
         diags: list[Diagnostic] = []
 
         # Strategy 1: pymatgen
@@ -64,13 +65,17 @@ class ABINITValidator(BaseValidator):
 
     def _validate_with_pymatgen(
         self, text: str, source: str
-    ) -> Optional[list[Diagnostic]]:
+    ) -> list[Diagnostic] | None:
         try:
-            from pymatgen.io.abinit.abiobjects import AbinitInput  # type: ignore[import]
+            from pymatgen.io.abinit.abiobjects import (
+                AbinitInput,  # type: ignore[import]
+            )
         except ImportError:
             try:
                 # Older pymatgen layout
-                from pymatgen.io.abinit.inputs import AbinitInput  # type: ignore[import]
+                from pymatgen.io.abinit.inputs import (
+                    AbinitInput,  # type: ignore[import]
+                )
             except ImportError:
                 return None
 
@@ -252,9 +257,7 @@ class ABINITValidator(BaseValidator):
                     severity=SEVERITY_ERROR,
                     line=line,
                     param="typat",
-                    message=(
-                        f"natom = {natom} but typat has {len(expanded)} entries."
-                    ),
+                    message=(f"natom = {natom} but typat has {len(expanded)} entries."),
                     suggestion="typat must contain exactly natom entries.",
                 )
             )

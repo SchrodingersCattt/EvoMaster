@@ -5,7 +5,8 @@ Not a test module: helpers only (see .pre-commit-config name-tests-test exclude)
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from matmaster.core.hooks import BaseHook, HookAction
 from matmaster.tools.tool_registry import ToolRegistry
@@ -42,7 +43,7 @@ class _CatchAllTool:
     def json_schema(self) -> dict[str, Any]:
         return {'type': 'object', 'properties': {}}
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         self.calls.append((self._name, arguments))
         return self._result
 
@@ -80,31 +81,28 @@ class StreamingProvider:
     def __init__(self, chunks: list[StreamChunk]) -> None:
         self._chunks = chunks
 
-    def chat(
+    async def __aenter__(self) -> StreamingProvider:
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        pass
+
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         return LLMResponse(content='not used', finish_reason='stop')
 
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-    ) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
-        yield from self._chunks
+    ) -> AsyncIterator[StreamChunk]:
+        for chunk in self._chunks:
+            yield chunk
 
 
 class ToolCallingProvider:
@@ -121,30 +119,26 @@ class ToolCallingProvider:
         self._final_content = final_content
         self._call_count = 0
 
-    def chat(
+    async def __aenter__(self) -> ToolCallingProvider:
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        pass
+
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         return LLMResponse(content='not used', finish_reason='stop')
 
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-    ) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
+    ) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count <= self._max_tool_turns:
             for tc in self._tool_calls:
@@ -186,7 +180,7 @@ class SkipHook(BaseHook):
     def __init__(self, skip_name: str) -> None:
         self._skip_name = skip_name
 
-    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         if tool_call.name == self._skip_name:
             return HookAction.SKIP
         return HookAction.CONTINUE
@@ -195,7 +189,7 @@ class SkipHook(BaseHook):
 class StopHook(BaseHook):
     """Hook that returns False from should_continue."""
 
-    def should_continue(self, messages: list[Message], turn: int) -> bool:
+    async def should_continue(self, messages: list[Message], turn: int) -> bool:
         return False
 
 
@@ -205,21 +199,21 @@ class RecordingHook(BaseHook):
     def __init__(self) -> None:
         self.calls: list[str] = []
 
-    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         self.calls.append('pre_tool_call')
         return HookAction.CONTINUE
 
-    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
+    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         self.calls.append('post_tool_call')
 
-    def pre_llm_call(self, messages: list[Message], turn: int) -> None:
+    async def pre_llm_call(self, messages: list[Message], turn: int) -> None:
         self.calls.append('pre_llm_call')
 
-    def should_continue(self, messages: list[Message], turn: int) -> bool:
+    async def should_continue(self, messages: list[Message], turn: int) -> bool:
         self.calls.append('should_continue')
         return True
 
-    def on_stream_chunk(self, chunk: StreamChunk) -> None:
+    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
         self.calls.append('on_stream_chunk')
 
 
@@ -229,7 +223,7 @@ class ChunkRecordingHook(BaseHook):
     def __init__(self) -> None:
         self.chunks: list[StreamChunk] = []
 
-    def on_stream_chunk(self, chunk: StreamChunk) -> None:
+    async def on_stream_chunk(self, chunk: StreamChunk) -> None:
         self.chunks.append(chunk)
 
 
@@ -239,7 +233,7 @@ class SegmentRecordingHook(BaseHook):
     def __init__(self) -> None:
         self.segments: list[tuple[str, str, str | None]] = []
 
-    def on_segment_complete(
+    async def on_segment_complete(
         self, segment_type: str, content: str, stream_id: str | None
     ) -> None:
         self.segments.append((segment_type, content, stream_id))
@@ -277,13 +271,26 @@ class ErrorThenSuccessProvider:
         self.max_retries = 3
         self.retry_delay = 0.0  # no sleep in tests
 
-    def chat(self, messages, tools=None):
+    async def __aenter__(self) -> ErrorThenSuccessProvider:
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        pass
+
+    async def chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> LLMResponse:
         return LLMResponse(content='not used', finish_reason='stop')
 
-    def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0):
-        return self.chat(messages, tools)
-
-    def chat_stream(self, messages, tools=None, *, timeout=None):
+    async def chat_stream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count <= self._fail_count:
             raise self._error

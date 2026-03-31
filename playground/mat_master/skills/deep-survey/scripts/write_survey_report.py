@@ -17,9 +17,19 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="Compile survey sections into a single Markdown report."
     )
-    ap.add_argument("--input", help="JSON file with collected findings (keys: summary, methodologies, state_of_art, gaps, references)")
-    ap.add_argument("--sections", help="Comma-separated paths to section Markdown files to concatenate")
-    ap.add_argument("--output", required=True, help="Output Markdown path (e.g. _tmp/surveys/survey_xyz.md)")
+    ap.add_argument(
+        "--input",
+        help="JSON file with collected findings (keys: summary, methodologies, state_of_art, gaps, references)",
+    )
+    ap.add_argument(
+        "--sections",
+        help="Comma-separated paths to section Markdown files to concatenate",
+    )
+    ap.add_argument(
+        "--output",
+        required=True,
+        help="Output Markdown path (e.g. _tmp/surveys/survey_xyz.md)",
+    )
     ap.add_argument("--topic", required=True, help="Report topic (used in title)")
     args = ap.parse_args()
 

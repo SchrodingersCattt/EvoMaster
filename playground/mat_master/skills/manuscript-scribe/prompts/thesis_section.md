@@ -1,6 +1,6 @@
 # manuscript-scribe: thesis_section profile
 
-**Profile-specific writing rules for `thesis_section`.**  
+**Profile-specific writing rules for `thesis_section`.**
 These supplement (do not replace) the shared rules in `SKILL.md`.
 
 ---

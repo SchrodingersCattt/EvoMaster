@@ -5,19 +5,19 @@ local implementation so that webpage fetching never depends on an external
 server connection.
 """
 
+import hashlib
 import json
 import logging
 import re
+import tempfile
+import threading
 import time as _time
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, ClassVar
 from urllib.parse import urlparse
-import hashlib
-import tempfile
-import threading
-from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
@@ -129,7 +129,9 @@ class _WebpageDiskCache:
         """Remove oldest entries if cache exceeds MAX_ENTRIES."""
         with self._evict_lock:
             try:
-                entries = sorted(self._dir.glob('*.json'), key=lambda p: p.stat().st_mtime)
+                entries = sorted(
+                    self._dir.glob('*.json'), key=lambda p: p.stat().st_mtime
+                )
             except Exception:
                 return
             excess = len(entries) - self.MAX_ENTRIES
@@ -234,8 +236,9 @@ def _fetch_webpage_content(
             soup = BeautifulSoup(raw, 'html.parser')
 
         # P0: noise tag removal
-        for tag in soup(['script', 'style', 'nav', 'footer',
-                          'aside', 'noscript', 'iframe']):
+        for tag in soup(
+            ['script', 'style', 'nav', 'footer', 'aside', 'noscript', 'iframe']
+        ):
             tag.decompose()
         # P0: noise class/id removal
         for tag in soup.find_all(attrs={'class': _NOISE_PATTERN}):
@@ -246,6 +249,7 @@ def _fetch_webpage_content(
         # P1-a: HTML → Markdown (with plain-text fallback)
         try:
             import markdownify as _md
+
             content = _md.markdownify(
                 str(soup),
                 heading_style="ATX",
@@ -257,7 +261,9 @@ def _fetch_webpage_content(
             if isinstance(exc, ImportError):
                 logger.warning('markdownify not available; falling back to plain text')
             else:
-                logger.warning('markdownify conversion failed, falling back to plain text: %s', exc)
+                logger.warning(
+                    'markdownify conversion failed, falling back to plain text: %s', exc
+                )
             lines = (line.strip() for line in soup.get_text().splitlines())
             chunks = (phrase.strip() for line in lines for phrase in line.split('  '))
             content = ' '.join(chunk for chunk in chunks if chunk)

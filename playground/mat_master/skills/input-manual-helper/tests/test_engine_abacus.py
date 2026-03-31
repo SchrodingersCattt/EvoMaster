@@ -26,14 +26,14 @@ _SKILL_DIR = Path(__file__).resolve().parent.parent
 if str(_SKILL_DIR) not in sys.path:
     sys.path.insert(0, str(_SKILL_DIR))
 
-from engine.renderer import RenderIntent
-from engine.schema import SchemaRegistry
-from engine.software.abacus import AbacusBackend
-
+from engine.renderer import RenderIntent  # noqa: E402
+from engine.schema import SchemaRegistry  # noqa: E402
+from engine.software.abacus import AbacusBackend  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _backend() -> AbacusBackend:
     return AbacusBackend()
@@ -47,7 +47,9 @@ def _schema() -> SchemaRegistry:
 
 def _render(task: str = "scf", **params) -> str:
     b = _backend()
-    intent = RenderIntent(software="abacus", task_type=task, structure_file=None, params=params)
+    intent = RenderIntent(
+        software="abacus", task_type=task, structure_file=None, params=params
+    )
     return b.render(intent)
 
 
@@ -89,6 +91,7 @@ def _get_value(text: str, key: str) -> str | None:
 # ---------------------------------------------------------------------------
 # Tests: parse
 # ---------------------------------------------------------------------------
+
 
 class TestParse:
     def test_parse_empty_returns_empty_params(self):
@@ -136,7 +139,9 @@ ntype 1
         text = "INPUT_PARAMETERS\n\nntype  1\necuwfc 50\n"
         b = _backend()
         doc = b.parse(text, "<test>")
-        all_params = {p.name: p.range.start_line for s in doc.sections for p in s.params}
+        all_params = {
+            p.name: p.range.start_line for s in doc.sections for p in s.params
+        }
         assert all_params["ntype"] == 3
         assert all_params["ecuwfc"] == 4
 
@@ -161,6 +166,7 @@ ntype 1
 # ---------------------------------------------------------------------------
 # Tests: render (INPUT file only)
 # ---------------------------------------------------------------------------
+
 
 class TestRender:
     def test_render_scf_has_input_parameters(self):
@@ -225,10 +231,13 @@ class TestRender:
 # Tests: render_all (multi-file dict)
 # ---------------------------------------------------------------------------
 
+
 class TestRenderAll:
     def test_render_all_keys(self):
         b = _backend()
-        intent = RenderIntent(software="abacus", task_type="scf", structure_file=None, params={})
+        intent = RenderIntent(
+            software="abacus", task_type="scf", structure_file=None, params={}
+        )
         files = b.render_all(intent)
         assert "INPUT" in files
         assert "STRU" in files
@@ -236,31 +245,41 @@ class TestRenderAll:
 
     def test_render_all_input_has_header(self):
         b = _backend()
-        intent = RenderIntent(software="abacus", task_type="scf", structure_file=None, params={})
+        intent = RenderIntent(
+            software="abacus", task_type="scf", structure_file=None, params={}
+        )
         files = b.render_all(intent)
         assert "INPUT_PARAMETERS" in files["INPUT"]
 
     def test_render_all_stru_has_atomic_species(self):
         b = _backend()
-        intent = RenderIntent(software="abacus", task_type="scf", structure_file=None, params={})
+        intent = RenderIntent(
+            software="abacus", task_type="scf", structure_file=None, params={}
+        )
         files = b.render_all(intent)
         assert "ATOMIC_SPECIES" in files["STRU"]
 
     def test_render_all_kpt_has_k_points(self):
         b = _backend()
-        intent = RenderIntent(software="abacus", task_type="scf", structure_file=None, params={})
+        intent = RenderIntent(
+            software="abacus", task_type="scf", structure_file=None, params={}
+        )
         files = b.render_all(intent)
         assert "K_POINTS" in files["KPT"]
 
     def test_render_all_band_uses_line_kpath(self):
         b = _backend()
-        intent = RenderIntent(software="abacus", task_type="band", structure_file=None, params={})
+        intent = RenderIntent(
+            software="abacus", task_type="band", structure_file=None, params={}
+        )
         files = b.render_all(intent)
         assert "Line" in files["KPT"]
 
     def test_render_all_scf_uses_gamma_kpt(self):
         b = _backend()
-        intent = RenderIntent(software="abacus", task_type="scf", structure_file=None, params={})
+        intent = RenderIntent(
+            software="abacus", task_type="scf", structure_file=None, params={}
+        )
         files = b.render_all(intent)
         assert "Gamma" in files["KPT"]
 
@@ -268,6 +287,7 @@ class TestRenderAll:
 # ---------------------------------------------------------------------------
 # Tests: get_diagnostics
 # ---------------------------------------------------------------------------
+
 
 class TestDiagnostics:
     def test_clean_input_no_errors(self):
@@ -290,43 +310,52 @@ smearing_sigma  0.015
         text = "INPUT_PARAMETERS\necutwfc  5\n"
         diags = _get_diags(text)
         errors = _errors(diags)
-        assert any("ecutwfc" in d.param for d in errors), \
-            "Expected ecutwfc error for value 5 Ry"
+        assert any(
+            "ecutwfc" in d.param for d in errors
+        ), "Expected ecutwfc error for value 5 Ry"
 
     def test_ecutwfc_low_warning(self):
         text = "INPUT_PARAMETERS\necutwfc  20\n"
         diags = _get_diags(text)
         warns = _warnings(diags)
-        assert any("ecutwfc" in d.param for d in warns), \
-            "Expected ecutwfc warning for value 20 Ry"
+        assert any(
+            "ecutwfc" in d.param for d in warns
+        ), "Expected ecutwfc warning for value 20 Ry"
 
     def test_unknown_parameter_warning(self):
         text = "INPUT_PARAMETERS\nfakeparam  999\n"
         diags = _get_diags(text)
         warns = _warnings(diags)
-        assert any("fakeparam" in d.param.lower() or "fakeparam" in d.message.lower()
-                   for d in warns), "Expected warning for unknown param 'fakeparam'"
+        assert any(
+            "fakeparam" in d.param.lower() or "fakeparam" in d.message.lower()
+            for d in warns
+        ), "Expected warning for unknown param 'fakeparam'"
 
     def test_relax_without_cal_force_error(self):
         text = "INPUT_PARAMETERS\ncalculation  relax\ncal_force  0\n"
         diags = _get_diags(text)
         errors = _errors(diags)
-        assert any("cal_force" in d.param for d in errors), \
-            "Expected error: relax requires cal_force=1"
+        assert any(
+            "cal_force" in d.param for d in errors
+        ), "Expected error: relax requires cal_force=1"
 
     def test_cell_relax_without_cal_stress_error(self):
-        text = "INPUT_PARAMETERS\ncalculation  cell-relax\ncal_force  1\ncal_stress  0\n"
+        text = (
+            "INPUT_PARAMETERS\ncalculation  cell-relax\ncal_force  1\ncal_stress  0\n"
+        )
         diags = _get_diags(text)
         errors = _errors(diags)
-        assert any("cal_stress" in d.param for d in errors), \
-            "Expected error: cell-relax requires cal_stress=1"
+        assert any(
+            "cal_stress" in d.param for d in errors
+        ), "Expected error: cell-relax requires cal_stress=1"
 
     def test_noncolin_without_nspin4_error(self):
         text = "INPUT_PARAMETERS\nnoncolin  1\nnspin  2\n"
         diags = _get_diags(text)
         errors = _errors(diags)
-        assert any("noncolin" in d.param for d in errors), \
-            "Expected error: noncolin=1 requires nspin=4"
+        assert any(
+            "noncolin" in d.param for d in errors
+        ), "Expected error: noncolin=1 requires nspin=4"
 
     def test_noncolin_with_nspin4_ok(self):
         text = "INPUT_PARAMETERS\nnoncolin  1\nnspin  4\n"
@@ -339,36 +368,41 @@ smearing_sigma  0.015
         text = "INPUT_PARAMETERS\nlda_plus_u  1\norbital_corr  2 -1\n"
         diags = _get_diags(text)
         errors = _errors(diags)
-        assert any("hubbard_u" in d.param for d in errors), \
-            "Expected error: lda_plus_u=1 requires hubbard_u"
+        assert any(
+            "hubbard_u" in d.param for d in errors
+        ), "Expected error: lda_plus_u=1 requires hubbard_u"
 
     def test_lda_plus_u_missing_orbital_corr_error(self):
         text = "INPUT_PARAMETERS\nlda_plus_u  1\nhubbard_u  4.0 0.0\n"
         diags = _get_diags(text)
         errors = _errors(diags)
-        assert any("orbital_corr" in d.param for d in errors), \
-            "Expected error: lda_plus_u=1 requires orbital_corr"
+        assert any(
+            "orbital_corr" in d.param for d in errors
+        ), "Expected error: lda_plus_u=1 requires orbital_corr"
 
     def test_invalid_mixing_beta_error(self):
         text = "INPUT_PARAMETERS\nmixing_beta  1.5\n"
         diags = _get_diags(text)
         errors = _errors(diags)
-        assert any("mixing_beta" in d.param for d in errors), \
-            "Expected error: mixing_beta=1.5 out of range"
+        assert any(
+            "mixing_beta" in d.param for d in errors
+        ), "Expected error: mixing_beta=1.5 out of range"
 
     def test_md_without_cal_force_error(self):
         text = "INPUT_PARAMETERS\ncalculation  md\ncal_force  0\n"
         diags = _get_diags(text)
         errors = _errors(diags)
-        assert any("cal_force" in d.param for d in errors), \
-            "Expected error: md requires cal_force=1"
+        assert any(
+            "cal_force" in d.param for d in errors
+        ), "Expected error: md requires cal_force=1"
 
     def test_nscf_band_missing_nbands_warning(self):
         text = "INPUT_PARAMETERS\ncalculation  nscf\nout_band  1\n"
         diags = _get_diags(text)
         warns = _warnings(diags)
-        assert any("nbands" in d.param for d in warns), \
-            "Expected warning: nscf + out_band should set nbands"
+        assert any(
+            "nbands" in d.param for d in warns
+        ), "Expected warning: nscf + out_band should set nbands"
 
     def test_render_then_diagnose_no_errors(self):
         """Rendered SCF input should pass diagnostics without errors."""
@@ -382,12 +416,15 @@ smearing_sigma  0.015
         text = _render("relax")
         diags = _get_diags(text)
         errors = _errors(diags)
-        assert errors == [], f"Render+diagnose relax errors: {[e.message for e in errors]}"
+        assert (
+            errors == []
+        ), f"Render+diagnose relax errors: {[e.message for e in errors]}"
 
 
 # ---------------------------------------------------------------------------
 # Tests: get_completions
 # ---------------------------------------------------------------------------
+
 
 class TestCompletions:
     def test_completions_returns_list(self):
@@ -409,16 +446,19 @@ class TestCompletions:
 # Tests: ABACUSValidator (regex-based)
 # ---------------------------------------------------------------------------
 
+
 class TestABACUSValidator:
     def _validator(self):
         from validators.abacus_validator import ABACUSValidator
+
         return ABACUSValidator()
 
     def test_missing_header_warns(self):
         v = self._validator()
         diags = v.validate_text("ntype  1\necutwfc  50\n")
-        assert any("INPUT_PARAMETERS" in d.message for d in diags), \
-            "Expected warning about missing INPUT_PARAMETERS header"
+        assert any(
+            "INPUT_PARAMETERS" in d.message for d in diags
+        ), "Expected warning about missing INPUT_PARAMETERS header"
 
     def test_clean_input_no_errors(self):
         v = self._validator()
@@ -437,33 +477,45 @@ orbital_dir  ./orbitals/
         v = self._validator()
         text = "INPUT_PARAMETERS\necutwfc  20\n"
         diags = v.validate_text(text)
-        warns = [d for d in diags if d.severity == "warning" and "ecutwfc" in (d.param or "")]
+        warns = [
+            d for d in diags if d.severity == "warning" and "ecutwfc" in (d.param or "")
+        ]
         assert warns, "Expected ecutwfc warning"
 
     def test_lcao_missing_orbital_dir_warning(self):
         v = self._validator()
         text = "INPUT_PARAMETERS\nbasis_type  lcao\n"
         diags = v.validate_text(text)
-        warns = [d for d in diags if d.severity == "warning" and "orbital_dir" in (d.param or "")]
+        warns = [
+            d
+            for d in diags
+            if d.severity == "warning" and "orbital_dir" in (d.param or "")
+        ]
         assert warns, "Expected orbital_dir warning for basis_type=lcao"
 
     def test_noncolin_missing_nspin4_error(self):
         v = self._validator()
         text = "INPUT_PARAMETERS\nnoncolin  1\nnspin  2\n"
         diags = v.validate_text(text)
-        errors = [d for d in diags if d.severity == "error" and "noncolin" in (d.param or "")]
+        errors = [
+            d for d in diags if d.severity == "error" and "noncolin" in (d.param or "")
+        ]
         assert errors, "Expected noncolin error"
 
     def test_md_large_dt_warning(self):
         v = self._validator()
         text = "INPUT_PARAMETERS\ncalculation  md\ncal_force  1\nmd_dt  5.0\n"
         diags = v.validate_text(text)
-        warns = [d for d in diags if d.severity == "warning" and "md_dt" in (d.param or "")]
+        warns = [
+            d for d in diags if d.severity == "warning" and "md_dt" in (d.param or "")
+        ]
         assert warns, "Expected md_dt warning for value > 3 fs"
 
     def test_valid_md_no_dt_warning(self):
         v = self._validator()
         text = "INPUT_PARAMETERS\ncalculation  md\ncal_force  1\nmd_dt  1.0\n"
         diags = v.validate_text(text)
-        dt_warns = [d for d in diags if d.severity == "warning" and "md_dt" in (d.param or "")]
+        dt_warns = [
+            d for d in diags if d.severity == "warning" and "md_dt" in (d.param or "")
+        ]
         assert dt_warns == [], "No md_dt warning expected for dt=1.0 fs"

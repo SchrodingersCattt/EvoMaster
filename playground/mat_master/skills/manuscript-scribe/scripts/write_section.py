@@ -26,21 +26,23 @@ from pathlib import Path
 
 # Allow importing sibling modules when script is run from any cwd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from section_utils import find_section as _find_section
+from section_utils import find_section as _find_section  # noqa: E402
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
-from longtask_runtime import (
+from longtask_runtime import (  # noqa: E402
     STATUS_COMPLETED,
     append_event,
     build_result,
     emit_result,
     init_or_load_state,
-    read_json as _read_state_json,
 )
+from longtask_runtime import read_json as _read_state_json  # noqa: E402
 
 try:
-    from format_profiles import get_profile as _get_profile, resolve_section as _resolve_section
+    from format_profiles import get_profile as _get_profile
+    from format_profiles import resolve_section as _resolve_section
 except ImportError:
-    _get_profile = None   # type: ignore[assignment]
+    _get_profile = None  # type: ignore[assignment]
     _resolve_section = None  # type: ignore[assignment]
 
 
@@ -89,19 +91,39 @@ def _default_state_path() -> Path:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Write or append to one section of a manuscript.")
-    ap.add_argument("--section", required=True, help="Section name (e.g. Methods, Introduction)")
-    ap.add_argument("--content_file", default=None, help="Path to file with raw notes or JSON")
-    ap.add_argument("--content", default=None, help="Inline content (paragraph or chunk)")
-    ap.add_argument("--append", action="store_true", help="Append to existing section body instead of replacing")
-    ap.add_argument("--tone", default="formal", choices=["formal", "neutral"], help="Writing tone")
-    ap.add_argument("--draft", default=None, help="Path to draft file (to update one section)")
-    ap.add_argument("--output", default=None, help="Write section to this file (e.g. sections/Introduction.md)")
+    ap = argparse.ArgumentParser(
+        description="Write or append to one section of a manuscript."
+    )
+    ap.add_argument(
+        "--section", required=True, help="Section name (e.g. Methods, Introduction)"
+    )
+    ap.add_argument(
+        "--content_file", default=None, help="Path to file with raw notes or JSON"
+    )
+    ap.add_argument(
+        "--content", default=None, help="Inline content (paragraph or chunk)"
+    )
+    ap.add_argument(
+        "--append",
+        action="store_true",
+        help="Append to existing section body instead of replacing",
+    )
+    ap.add_argument(
+        "--tone", default="formal", choices=["formal", "neutral"], help="Writing tone"
+    )
+    ap.add_argument(
+        "--draft", default=None, help="Path to draft file (to update one section)"
+    )
+    ap.add_argument(
+        "--output",
+        default=None,
+        help="Write section to this file (e.g. sections/Introduction.md)",
+    )
     ap.add_argument(
         "--profile",
         default=None,
         help="Format profile name (e.g. research_paper, computational_report). "
-             "Used for section-name validation and word-count minimums.",
+        "Used for section-name validation and word-count minimums.",
     )
     ap.add_argument(
         "--min_words",

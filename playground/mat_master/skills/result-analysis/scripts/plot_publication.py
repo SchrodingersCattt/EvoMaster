@@ -16,6 +16,7 @@ from pathlib import Path
 
 try:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
@@ -42,25 +43,27 @@ def _setup_style():
             plt.style.use("seaborn-paper")
         except OSError:
             pass
-    plt.rcParams.update({
-        "font.family": "sans-serif",
-        "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
-        "font.size": FONT_SIZE,
-        "axes.labelsize": FONT_SIZE,
-        "axes.titlesize": FONT_SIZE + 1,
-        "xtick.labelsize": FONT_SIZE - 1,
-        "ytick.labelsize": FONT_SIZE - 1,
-        "figure.dpi": DPI,
-        "savefig.dpi": DPI,
-        "savefig.bbox": "tight",
-    })
+    plt.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+            "font.size": FONT_SIZE,
+            "axes.labelsize": FONT_SIZE,
+            "axes.titlesize": FONT_SIZE + 1,
+            "xtick.labelsize": FONT_SIZE - 1,
+            "ytick.labelsize": FONT_SIZE - 1,
+            "figure.dpi": DPI,
+            "savefig.dpi": DPI,
+            "savefig.bbox": "tight",
+        }
+    )
 
 
 def plot_convergence(data_path: Path, output_path: Path) -> str:
     """Plot energy/force vs step from JSON. JSON should have lists: steps, energies, [forces]."""
     if plt is None:
         return "Error: matplotlib not installed"
-    with open(data_path, "r") as f:
+    with open(data_path) as f:
         data = json.load(f)
     steps = data.get("steps", data.get("step", []))
     energies = data.get("energies", data.get("energy", []))
@@ -92,7 +95,7 @@ def plot_eos(data_path: Path, output_path: Path) -> str:
     """Plot Energy vs Volume (EOS). JSON: volumes, energies."""
     if plt is None:
         return "Error: matplotlib not installed"
-    with open(data_path, "r") as f:
+    with open(data_path) as f:
         data = json.load(f)
     volumes = data.get("volumes", data.get("v", []))
     energies = data.get("energies", data.get("energy", data.get("e", [])))
@@ -111,8 +114,12 @@ def plot_eos(data_path: Path, output_path: Path) -> str:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Publication-quality plots from JSON (convergence, eos).")
-    ap.add_argument("--data", required=True, help="Path to JSON (e.g. convergence.json, eos.json)")
+    ap = argparse.ArgumentParser(
+        description="Publication-quality plots from JSON (convergence, eos)."
+    )
+    ap.add_argument(
+        "--data", required=True, help="Path to JSON (e.g. convergence.json, eos.json)"
+    )
     ap.add_argument("--plot_type", required=True, choices=["convergence", "eos"])
     ap.add_argument("--output", default="fig.png", help="Output figure path")
     args = ap.parse_args()

@@ -47,7 +47,7 @@ def _remote_list_dir(dir_path: str) -> list[dict]:
     )
     try:
         result = s.exec_bash(cmd)
-    except (RuntimeError, TimeoutError, OSError) as exc:
+    except (RuntimeError, OSError) as exc:
         raise HTTPException(status_code=502, detail=f"Remote session error: {exc}")
     entries = []
     for line in (result.get('stdout') or '').strip().splitlines():
@@ -70,7 +70,7 @@ def _remote_read_file(remote_path: str) -> bytes:
         raise HTTPException(status_code=500, detail='No session available')
     try:
         return s.download(remote_path)
-    except (RuntimeError, TimeoutError, OSError) as exc:
+    except (RuntimeError, OSError) as exc:
         raise HTTPException(status_code=502, detail=f"Remote session error: {exc}")
 
 
@@ -84,7 +84,7 @@ def _remote_write_file(remote_path: str, data: bytes) -> None:
         tmp_path = tmp.name
     try:
         s.upload(tmp_path, remote_path)
-    except (RuntimeError, TimeoutError, OSError) as exc:
+    except (RuntimeError, OSError) as exc:
         raise HTTPException(status_code=502, detail=f"Remote session error: {exc}")
     finally:
         Path(tmp_path).unlink(missing_ok=True)
@@ -96,7 +96,7 @@ def _remote_path_exists(remote_path: str) -> bool:
         return False
     try:
         return s.path_exists(remote_path)
-    except (RuntimeError, TimeoutError, OSError):
+    except (RuntimeError, OSError):
         return False
 
 
@@ -106,7 +106,7 @@ def _remote_is_dir(remote_path: str) -> bool:
         return False
     try:
         return s.is_directory(remote_path)
-    except (RuntimeError, TimeoutError, OSError):
+    except (RuntimeError, OSError):
         return False
 
 
@@ -116,7 +116,7 @@ def _remote_is_file(remote_path: str) -> bool:
         return False
     try:
         return s.is_file(remote_path)
-    except (RuntimeError, TimeoutError, OSError):
+    except (RuntimeError, OSError):
         return False
 
 
@@ -126,7 +126,7 @@ def _remote_rename(old_path: str, new_path: str) -> None:
         raise HTTPException(status_code=500, detail='No session available')
     try:
         result = s.exec_bash(f"mv '{old_path}' '{new_path}'")
-    except (RuntimeError, TimeoutError, OSError) as exc:
+    except (RuntimeError, OSError) as exc:
         raise HTTPException(status_code=502, detail=f"Remote session error: {exc}")
     if result.get('exit_code', -1) != 0:
         raise HTTPException(

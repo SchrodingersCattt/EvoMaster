@@ -247,10 +247,13 @@ def check_slab(
     return _maybe_add_lookup(out, lookup_path, formula, miller)
 
 
-def check_single(file_path: str, tasker_type: int,
-                  lookup_path: Path | None = None,
-                  formula: str | None = None,
-                  miller: str | None = None) -> dict:
+def check_single(
+    file_path: str,
+    tasker_type: int,
+    lookup_path: Path | None = None,
+    formula: str | None = None,
+    miller: str | None = None,
+) -> dict:
     """Check a single slab file. Returns result dict with 'file' key added."""
     path = Path(file_path)
 
@@ -291,7 +294,10 @@ def main() -> None:
         description='Check built slab against Tasker polar surface (layer symmetry / stoichiometry).'
     )
     ap.add_argument(
-        '--file', nargs='+', default=None, help='Path(s) to slab structure (POSCAR, CIF, etc.).'
+        '--file',
+        nargs='+',
+        default=None,
+        help='Path(s) to slab structure (POSCAR, CIF, etc.).',
     )
     ap.add_argument(
         '--tasker_type',
@@ -337,7 +343,7 @@ def main() -> None:
 
     # --batch mode: JSON config with independent params per entry
     if args.batch is not None:
-        with open(args.batch, 'r', encoding='utf-8') as f:
+        with open(args.batch, encoding='utf-8') as f:
             batch_configs = json.load(f)
 
         results = []
@@ -349,19 +355,28 @@ def main() -> None:
             lookup = _resolve_lookup(args.lookup, formula, miller)
 
             if tasker_type is None:
-                results.append({
-                    'file': file_path,
-                    'compliant': False,
-                    'tasker_type': None,
-                    'symmetric': False,
-                    'reason': '缺少 tasker_type 参数',
-                    'layer_summary': [],
-                    'n_layers': 0,
-                })
+                results.append(
+                    {
+                        'file': file_path,
+                        'compliant': False,
+                        'tasker_type': None,
+                        'symmetric': False,
+                        'reason': '缺少 tasker_type 参数',
+                        'layer_summary': [],
+                        'n_layers': 0,
+                    }
+                )
                 continue
 
-            results.append(check_single(file_path, tasker_type,
-                                        lookup_path=lookup, formula=formula, miller=miller))
+            results.append(
+                check_single(
+                    file_path,
+                    tasker_type,
+                    lookup_path=lookup,
+                    formula=formula,
+                    miller=miller,
+                )
+            )
 
         print(json.dumps(results, indent=2))
         any_non_compliant = any(not r.get('compliant') for r in results)
@@ -377,17 +392,28 @@ def main() -> None:
 
     if len(args.file) == 1:
         # Single-file mode (backward compatible: output single JSON object)
-        result = check_single(args.file[0], args.tasker_type,
-                              lookup_path=lookup_path, formula=args.formula, miller=args.miller)
+        result = check_single(
+            args.file[0],
+            args.tasker_type,
+            lookup_path=lookup_path,
+            formula=args.formula,
+            miller=args.miller,
+        )
         print(json.dumps(result, indent=2))
         sys.exit(0 if result.get('compliant') else 1)
     else:
         # Multi-file mode with shared params
         results = []
         for file_path in args.file:
-            results.append(check_single(file_path, args.tasker_type,
-                                        lookup_path=lookup_path, formula=args.formula,
-                                        miller=args.miller))
+            results.append(
+                check_single(
+                    file_path,
+                    args.tasker_type,
+                    lookup_path=lookup_path,
+                    formula=args.formula,
+                    miller=args.miller,
+                )
+            )
 
         print(json.dumps(results, indent=2))
         any_non_compliant = any(not r.get('compliant') for r in results)

@@ -17,11 +17,9 @@ from collections import deque
 from matmaster.types.guards import Guard, GuardContext, GuardResult, RecentCall
 from matmaster.types.messages import ToolCallData
 
-LOOP_WINDOW: int = 5
-"""Default sliding window size for loop detection."""
+LOOP_WINDOW: int = 5  # Default sliding window size for loop detection.
 
-LOOP_THRESHOLD: int = 2
-"""Default repeat count threshold to trigger loop detection."""
+LOOP_THRESHOLD: int = 2  # Default repeat count threshold to trigger loop detection.
 
 
 class LoopDetectionGuard:
@@ -53,7 +51,8 @@ class LoopDetectionGuard:
         count = sum(
             1
             for rc in window_calls
-            if self._fingerprint(rc.tool_name, rc.tool_args) == current_fp
+            if (rc.fingerprint or self._fingerprint(rc.tool_name, rc.tool_args))
+            == current_fp
         )
         if count >= self._threshold:
             return GuardResult(
@@ -113,5 +112,8 @@ class GuardPipeline:
                 tool_args=tool_call.arguments,
                 call_id=tool_call.id,
                 timestamp=time.monotonic(),
+                fingerprint=self._loop_guard._fingerprint(
+                    tool_call.name, tool_call.arguments
+                ),
             )
         )

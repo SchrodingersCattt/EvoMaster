@@ -1,278 +1,464 @@
-# Stack Research
+# Technology Stack: matmaster v2.0 Async Transformation
 
-**Domain:** Agent 框架内置工具套件 + SubAgent spawn + prompt/description 体系
-**Researched:** 2026-03-24
-**Confidence:** HIGH (基于已有代码库分析 + 成熟标准库)
+**Project:** matmaster-evo 协程改造
+**Researched:** 2026-03-26
+**Overall confidence:** HIGH
 
 ## Executive Summary
 
-v1.1 的三个新功能（内置 tool 套件、SubAgent spawn、prompt/description 体系）不需要引入任何新的外部依赖。所有能力都可以通过现有 Python 标准库 + 已有依赖（Pydantic v2, tomllib）实现。这是一个纯架构扩展，不是技术栈扩展。
+matmaster v2.0 的 async 改造不需要引入重型新依赖。Python 3.13 标准库的 asyncio 模块已提供全部所需原语（TaskGroup, asyncio.Queue, asyncio.Event, create_subprocess_exec）。OpenAI SDK 已内置 AsyncOpenAI + AsyncStream（当前安装的 openai 2.20.0 即支持，无需升级）。唯一需要新增的 dev 依赖是 pytest-asyncio，用于测试 async 代码。
 
-核心判断依据：
-1. 内置工具（Read/Write/Edit/Bash/Glob/Grep）的实际 I/O 操作全部委托给 BaseSession（session-dependent）或标准库（session-free），无需新库
-2. SubAgent spawn 是 Exp 层 tool_call -> 创建子 Exp/Kernel -> 返回 result 的编排模式，不需要并发框架（v1.1 SubAgent 是同步阻塞执行）
-3. Prompt/description 体系是 TOML 模板 + ContextBuilder 扩展，用已有的 tomllib + Pydantic 即可
-4. Jinja2 模板引擎是唯一值得讨论的候选新依赖，但结论是不引入
+核心判断：
+1. 所有 async 原语来自 Python 3.13 stdlib（asyncio.Queue, asyncio.Event, TaskGroup, create_subprocess_exec），零新运行时依赖
+2. OpenAI AsyncOpenAI 已在当前安装版本中可用（verified: `from openai import AsyncOpenAI` 成功），chat.completions.create 的 async streaming 返回 AsyncStream（同时是 AsyncIterator 和 async context manager）
+3. pytest-asyncio >= 1.0.0 是唯一新增的 dev 依赖，配置 `asyncio_mode = "auto"` 后所有 `async def test_*` 自动识别
+4. MessageBus 从 `queue.Queue` 改为 `asyncio.Queue`，无需第三方库（janus 仅在需要 sync/async 桥接时使用，但 v2.0 全链路 async 不需要）
+5. `threading.Event` 的 9 处使用全部替换为 `asyncio.Event`
+6. `time.sleep` 的 3 处使用全部替换为 `asyncio.sleep`
 
 ## Recommended Stack
 
-### 不引入新依赖 -- 完全使用现有技术
+### Core Runtime (No Changes)
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Python stdlib `pathlib` | 3.10+ | Glob/path 操作（session-free tools） | 标准库，已在 codebase 广泛使用，PurePosixPath 支持远程路径构造 |
-| Python stdlib `fnmatch` | 3.10+ | Glob pattern matching | 标准库，fnmatch.filter() 直接支持 glob 语义 |
-| Python stdlib `re` | 3.10+ | Grep 正则匹配 | 标准库，已在 EditorTool._str_replace() 使用 |
-| Python stdlib `subprocess` | 3.10+ | 本地 Bash 执行（DevShell session-free 场景） | 标准库，LocalSession 已用 |
-| Python stdlib `tomllib` | 3.11+ | TOML prompt 模板加载 | 3.11 内置，已用于 ExpConfig 加载（matmaster/config/loader.py） |
-| Pydantic v2 | >=2.0 | Tool params schema, ExpConfig 扩展, prompt 模板配置 | 已是核心依赖，BaseToolParams 模式验证 + model_json_schema() 生成 OpenAI function schema |
-| tiktoken | >=0.7.0 | Token 计数（tool description 长度控制、compaction） | 已是核心依赖 |
+| Technology | Current Version | Purpose | Status |
+|------------|----------------|---------|--------|
+| Python | 3.13.2 | Runtime | Unchanged -- asyncio.TaskGroup (3.11+), full async subprocess support |
+| Pydantic | 2.12.5 | Data models, frozen configs | Unchanged -- model_copy(), ConfigDict 与 async 无关 |
+| FastAPI | 0.128.8 | Web service layer | Unchanged -- src/ 层不在 v2.0 scope |
+| OpenAI SDK | 2.20.0 | LLM API client | Unchanged -- AsyncOpenAI 已可用，无需升级 |
+| httpx | 0.28.1 | HTTP client (OpenAI SDK 底层) | Unchanged -- httpx.AsyncClient 已可用于 AsyncOpenAI |
+| tiktoken | 0.7.0+ | Token estimation | Unchanged -- estimate_tokens() 是纯计算，不涉及 I/O |
 
-### Session-Dependent Tool 技术路径
+### New Dev Dependencies
 
-session-dependent tool（Read/Write/Edit/Bash）通过 BaseSession 接口操作远程环境，技术栈不变：
+| Technology | Version | Purpose | Why This One |
+|------------|---------|---------|--------------|
+| pytest-asyncio | >=1.0.0 | Async test runner | 唯一成熟的 pytest async 插件；auto mode 自动识别 async def test；与 pytest >=9.0.2 兼容 |
 
-| 操作 | BaseSession 方法 | 已验证可用 | 当前使用者 |
-|------|-----------------|-----------|-----------|
-| 执行 bash | `exec_bash(command, timeout)` | YES | evomaster BashTool |
-| 读文件 | `read_file(path)` / `download(path)` | YES | evomaster EditorTool |
-| 写文件 | `write_file(path, content)` / `upload()` | YES | evomaster EditorTool |
-| 路径检查 | `path_exists()` / `is_file()` / `is_directory()` | YES | evomaster EditorTool._validate_path() |
-| Glob 列举 | `exec_bash("find ... -name '*.py' | sort")` | YES | 通过 bash 组合实现 |
-| Grep 搜索 | `exec_bash("grep -rn 'pattern' ...")` | YES | 通过 bash 组合实现 |
+### Explicitly NOT Adding
 
-**结论：** session-dependent tool 无需扩展 BaseSession API，现有方法完全覆盖。
+| Library | Why Not | Use Instead |
+|---------|---------|-------------|
+| anyio | 项目只用 asyncio，不需要 Trio/curio 兼容层，引入 anyio 增加不必要的抽象 | 直接用 asyncio stdlib |
+| trio | Python stdlib asyncio 已是项目标准，Trio 的 structured concurrency 模型不兼容现有 FastAPI 栈 | asyncio.TaskGroup（Python 3.11+ 引入的 structured concurrency） |
+| aiofiles | 文件 I/O 操作委托给 BaseSession（远程执行），本地文件操作（config 加载等）是一次性同步读取，不值得 async 化 | 同步 pathlib（config 加载）+ asyncio.to_thread（必要时） |
+| janus | v2.0 全链路 async，MessageBus producer/consumer 都在 event loop 内，不需要 sync/async 桥接 | asyncio.Queue |
+| aiomysql / aioredis | src/ 服务层不在 v2.0 scope，数据库/Redis 连接保持现状 | 现有 pymysql + redis |
+| backoff / tenacity | 项目已有手动 retry 实现（3 处 time.sleep + exponential backoff），改为 asyncio.sleep 即可，不值得引入装饰器库 | 手动 async retry + asyncio.sleep |
 
-### Session-Free Tool 技术路径
+## Async Primitive Mapping (stdlib)
 
-session-free tool（Glob/Task/SubAgent）不依赖 evomaster session，直接在 matmaster 进程内执行：
+每个需要替换的同步原语及其 async 对应物：
 
-| Tool | 实现方式 | 依赖 |
-|------|---------|------|
-| Glob (local) | `pathlib.Path.glob()` + `fnmatch` | stdlib |
-| Grep (local) | `re` 正则 + 文件遍历 | stdlib |
-| Task/SubAgent | Exp 层编排（同步创建子 Kernel.run()） | matmaster 自身 |
+| Sync Primitive | Async Replacement | Location in Codebase | Notes |
+|---------------|-------------------|---------------------|-------|
+| `queue.Queue` | `asyncio.Queue` | `matmaster/core/bus.py` | emit() -> async emit(), get() -> async get(), get_nowait() 保留同名 |
+| `threading.Event` | `asyncio.Event` | agent.py, exp.py, spawn_tool.py, event_router.py, repl.py, runner.py, playground.py (9 处) | stop_event.is_set() 签名不变，stop_event.wait() 变 await |
+| `time.sleep(backoff)` | `await asyncio.sleep(backoff)` | openai_provider.py (2 处), agent.py (1 处) | retry backoff 从阻塞变非阻塞 |
+| `Iterator[StreamChunk]` (sync generator) | `AsyncIterator[StreamChunk]` (async generator) | LLMProvider.chat_stream, OpenAIProvider.chat_stream | yield -> async for, 消费端从 for chunk in 变 async for chunk in |
+| `for chunk in provider.chat_stream()` | `async for chunk in provider.chat_stream()` | agent.py _do_stream_llm() | OpenAI SDK stream 变 AsyncStream（已是 AsyncIterator） |
+| `subprocess.run()` | `asyncio.create_subprocess_exec()` | BashTool (间接通过 session) | session-dependent: session 层改造；session-free (DevShell): 直接用 create_subprocess_exec |
 
-## Key Architectural Decisions (影响技术选择)
+## Detailed Component Changes
 
-### Decision 1: matmaster 原生 BuiltinTool 基类，不继承 evomaster BaseTool
+### 1. LLMProvider Protocol -- Async 化
 
-**问题：** evomaster `BaseTool.execute(session, args_json)` 签名强制依赖 BaseSession + 返回 tuple[str, dict]。matmaster 的 session-free tool 不需要 session，且 matmaster Tool Protocol 的 execute 签名是 `execute(arguments: dict) -> str`。
-
-**方案：** 在 `matmaster/tools/` 下定义 `BuiltinTool` 基类，直接满足现有 `Tool` Protocol，无需 EvoToolAdapter 中间层。
-
+**Current** (sync):
 ```python
-# matmaster/tools/builtin_base.py -- 概念示意
-from typing import Any, ClassVar
-from pydantic import BaseModel
+@runtime_checkable
+class LLMProvider(Protocol):
+    def chat(self, messages, tools=None) -> LLMResponse: ...
+    def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0) -> LLMResponse: ...
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]: ...
+```
 
-class BuiltinTool:
-    """matmaster 原生内置工具基类。直接满足 Tool Protocol。"""
-    name: ClassVar[str]
-    params_class: ClassVar[type[BaseModel]]
+**Target** (async):
+```python
+@runtime_checkable
+class LLMProvider(Protocol):
+    async def chat(self, messages, tools=None) -> LLMResponse: ...
+    async def chat_with_retry(self, messages, tools=None, *, max_retries=3, retry_delay=1.0) -> LLMResponse: ...
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]: ...
+```
 
-    @property
-    def description(self) -> str:
-        return (self.params_class.__doc__ or "").strip()
+**Key point:** `chat_stream` 返回类型从 `Iterator[StreamChunk]` 变 `AsyncIterator[StreamChunk]`。方法本身可以是 `async def`（返回 async generator）或普通 `def`（返回 AsyncIterator 对象）。建议用 `async def` + `yield`（async generator），更自然。
 
-    @property
-    def json_schema(self) -> dict[str, Any]:
-        return self.params_class.model_json_schema()
+**runtime_checkable 与 async 方法：** `@runtime_checkable` Protocol 只检查方法名是否存在，不检查是否是 coroutine。这意味着 isinstance() 检查仍然有效，但 mypy 会在编译时检查 async 签名匹配。当前 codebase 中 `LLMProvider` 的 runtime_checkable 主要用于 AgentRuntimeSpec 的 arbitrary_types_allowed 场景，async 化后行为不变。
 
+### 2. OpenAIProvider -- AsyncOpenAI
+
+**Current** (sync):
+```python
+self._client = openai.OpenAI(api_key=..., http_client=httpx.Client(...))
+```
+
+**Target** (async):
+```python
+self._client = openai.AsyncOpenAI(api_key=..., http_client=httpx.AsyncClient(...))
+```
+
+**Verified availability** (Python 3.13.2, openai 2.20.0):
+- `from openai import AsyncOpenAI` -- available
+- `AsyncOpenAI.__init__` accepts `http_client: httpx.AsyncClient | None`
+- `openai.AsyncStream` -- is both AsyncIterator and async context manager
+
+**chat_stream async pattern:**
+```python
+async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
+    stream = await self._client.chat.completions.create(stream=True, **kwargs)
+    async for chunk in stream:
+        yield StreamChunk(...)
+```
+
+**Retry 替换:**
+```python
+# Before:
+time.sleep(backoff)
+# After:
+await asyncio.sleep(backoff)
+```
+
+### 3. AgentKernel.run() -- Async Execution Loop
+
+**Current:**
+```python
+def run(self, spec, task, history=None, stop_event: threading.Event | None = None) -> KernelRunResult:
+    while turn < spec.max_turns:
+        if stop_event and stop_event.is_set(): ...
+        response = self._call_llm(spec, messages)
+        tool_result = spec.tool_registry.execute(tc.name, tc.arguments)
+```
+
+**Target:**
+```python
+async def run(self, spec, task, history=None, stop_event: asyncio.Event | None = None) -> KernelRunResult:
+    while turn < spec.max_turns:
+        if stop_event and stop_event.is_set(): ...  # asyncio.Event.is_set() 签名相同
+        response = await self._call_llm(spec, messages)
+        tool_result = await spec.tool_registry.execute(tc.name, tc.arguments)
+```
+
+**Cancellation:** `asyncio.Event.is_set()` 是同步方法（不需要 await），与 `threading.Event.is_set()` 签名完全一致。差别仅在于 `event.wait()` 变成 `await event.wait()`。AgentKernel 的 cancel check 使用 `is_set()`，无需修改检查逻辑。
+
+### 4. MessageBus -- asyncio.Queue
+
+**Current** (`queue.Queue`, thread-safe):
+```python
+class MessageBus:
+    def __init__(self):
+        self._queue: queue.Queue[BusEvent] = queue.Queue()
+    def emit(self, event: BusEvent) -> None:
+        self._queue.put(event)
+    def get(self, timeout=None) -> BusEvent:
+        return self._queue.get(timeout=timeout)
+```
+
+**Target** (`asyncio.Queue`, coroutine-safe):
+```python
+class MessageBus:
+    def __init__(self):
+        self._queue: asyncio.Queue[BusEvent] = asyncio.Queue()
+    async def emit(self, event: BusEvent) -> None:
+        await self._queue.put(event)
+    async def get(self, timeout=None) -> BusEvent:
+        if timeout is not None:
+            return await asyncio.wait_for(self._queue.get(), timeout=timeout)
+        return await self._queue.get()
+    def get_nowait(self) -> BusEvent:
+        return self._queue.get_nowait()  # 同步方法，asyncio.Queue 也提供
+```
+
+**Note:** `asyncio.Queue.get_nowait()` 和 `asyncio.Queue.qsize()` 是同步方法，与 `queue.Queue` 签名一致。`empty` property 也保持不变。变化集中在 `put()` -> `await put()` 和 `get()` -> `await get()`。
+
+### 5. Hook Protocol -- Async 化
+
+**Current** (7 sync methods):
+```python
+class Hook(Protocol):
+    def pre_tool_call(self, tool_call: ToolCallData) -> HookAction: ...
+    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None: ...
+    def on_stream_chunk(self, chunk: StreamChunk) -> None: ...
+    # ... 4 more
+```
+
+**Target** (7 async methods):
+```python
+class Hook(Protocol):
+    async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction: ...
+    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None: ...
+    async def on_stream_chunk(self, chunk: StreamChunk) -> None: ...
+    # ... 4 more
+```
+
+**run_* helpers 变化：**
+```python
+# Before:
+def run_pre_tool_call(hooks, tool_call) -> HookAction:
+    for hook in hooks:
+        action = hook.pre_tool_call(tool_call)
+        if action == HookAction.SKIP:
+            return HookAction.SKIP
+    return HookAction.CONTINUE
+
+# After:
+async def run_pre_tool_call(hooks, tool_call) -> HookAction:
+    for hook in hooks:
+        action = await hook.pre_tool_call(tool_call)
+        if action == HookAction.SKIP:
+            return HookAction.SKIP
+    return HookAction.CONTINUE
+```
+
+**EventEmitterHook 影响：** emit 调用从同步变 async，内部 `self._bus.emit(event)` 变 `await self._bus.emit(event)`。所有 7 个 hook method 都需要变 async def。
+
+### 6. BuiltinTool -- Async execute
+
+**Current:**
+```python
+class BuiltinTool(ABC):
     def execute(self, arguments: dict[str, Any]) -> str:
-        raise NotImplementedError
+        return self._execute(arguments)
+
+    @abstractmethod
+    def _execute(self, arguments: dict[str, Any]) -> str: ...
 ```
 
-**session-dependent variant：** 在 `__init__` 中 bind session 实例，execute 内部使用 self._session。
+**Target:**
+```python
+class BuiltinTool(ABC):
+    async def execute(self, arguments: dict[str, Any]) -> str:
+        return await self._execute(arguments)
 
-**与 evomaster MonitorJobTool 的关系：** MonitorJobTool 保留为 evomaster 工具，继续通过 EvoToolAdapter 桥接注册。不迁移。
-
-### Decision 2: 不引入 Jinja2 模板引擎
-
-**候选理由：** system prompt 模板化管理可以用 Jinja2 的条件/循环语法。
-
-**不引入的理由：**
-1. ContextBuilder 已有分段组装机制（identity/mode_contract/skills/tools/memory/task），通过 `disabled_sections` 参数控制启用/禁用，覆盖 90% 的 prompt 变化需求
-2. Prompt 内部的变量替换（如 workspace 路径、exp 名称）用 Python `str.format_map()` 或 f-string 足够
-3. Jinja2 的条件/循环语法对 prompt 来说过于复杂，prompt 的结构变化应该通过 section 组合控制，而非模板内 if/for
-4. 引入模板引擎会让 prompt 调试变困难 -- 需要理解模板渲染上下文，与 TOML 文件中的原始 prompt 文本相比增加了间接层
-5. 当前 TOML 文件存 prompt 文本段 + Python 代码组装 = 已经足够灵活
-
-### Decision 3: SubAgent 同步执行，不引入 asyncio/concurrent.futures
-
-**理由：**
-1. v1.1 scope 是单 SubAgent spawn（一次 tool_call 触发一个子 agent），不是并行多 agent
-2. AgentKernel.run() 本身是同步阻塞的（用 threading.Event 做取消），SubAgent 自然也是同步
-3. SubAgent 作为 tool call 的一部分执行，`Tool.execute()` 是同步签名 `-> str`
-4. SubAgent 的 stop_event 可以共享父 agent 的 stop_event，实现级联取消
-5. 未来如果需要并行 SubAgent，可以在 v1.2+ 引入 asyncio，但 v1.1 同步足够
-
-### Decision 4: Tool description 从 Python docstring 迁移到 TOML 配置
-
-**问题：** evomaster 的 BaseTool 把 description 放在 `BaseToolParams.__doc__`（Python docstring）中。这让 prompt 工程和代码实现耦合，修改 tool description 需要改 Python 文件。
-
-**方案：** matmaster 原生 tool 的 description 定义在 TOML 配置中（`matmaster/exps/` 或独立的 `matmaster/prompts/` 目录），运行时加载。
-
-**实现路径：**
-- ExpConfig 扩展 `tool_descriptions: dict[str, str]` 字段（key=tool name, value=description override）
-- BuiltinTool 提供 `default_description` 属性（代码内 fallback）
-- Exp.build_runtime() 注册 tool 时，检查 config 中是否有 description override，有则使用 override
-
-**好处：**
-- Prompt 工程师可以独立调整 tool description 而不改代码
-- 不同 exp 可以给同一个 tool 不同的 description（如 mat_master vs minimal）
-- A/B 测试 description 效果时只需修改 TOML
-
-### Decision 5: 不使用 ripgrep (rg) binary 作为 Grep 后端
-
-**问题：** Claude Code 的 Grep 工具底层使用 ripgrep，性能优秀。matmaster 是否应该依赖 rg？
-
-**不使用的理由：**
-1. session-dependent 场景：远程 Docker/SSH 环境不能假设安装了 rg，必须用 POSIX grep
-2. session-free 场景（DevShell 本地）：可以用 rg 提升性能，但为了保持统一行为，用 Python re 模块
-3. 引入 rg binary 依赖会增加部署复杂度（需要在 Docker 镜像中安装）
-4. matmaster 的 Grep 使用频率远低于 Claude Code（科研 agent 不是 coding agent），grep 性能不是瓶颈
-
-## What NOT to Add
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| Jinja2 | Prompt 模板不需要条件/循环语法，增加调试复杂度 | `str.format_map()` + ContextBuilder 分段组装 |
-| asyncio | v1.1 SubAgent 是同步执行，现有 Kernel 是同步循环 | 直接同步调用子 Kernel.run() |
-| celery/dramatiq | SubAgent 不是后台任务，是同步 tool call 内执行 | 直接函数调用 |
-| langchain/llamaindex | 框架级依赖会破坏三层架构的清晰边界 | matmaster 自有 Tool Protocol + ToolRegistry |
-| pydantic-settings | ExpConfig 已用 Pydantic v2 + TOML 加载，不需要额外 settings 框架 | 现有 config/loader.py |
-| ripgrep binary | 不能假设远程环境有 rg，增加部署复杂度 | POSIX grep (session) / Python re (local) |
-| tree-sitter | 代码感知搜索是 nice-to-have，v1.1 Grep 只做正则文本搜索 | re 模块 + grep 命令 |
-| pytest-asyncio | v1.1 不引入 async，所有新代码保持同步 | 现有 pytest 足够 |
-
-## Integration Points (现有代码的具体扩展点)
-
-### 1. ToolRegistry -- 无需修改
-
-现有 `Tool` Protocol（name/description/json_schema/execute）和 `ToolRegistry`（register/execute/get_tool_definitions）完全满足需求。matmaster 原生 BuiltinTool 只需满足 Protocol 即可直接注册，source tag 用 `"builtin"` 区分。
-
-### 2. ExpConfig -- 需要扩展
-
-```toml
-# matmaster/exps/direct.toml -- 扩展后的结构
-name = "direct"
-mode = "direct"
-max_turns = 200
-guards = []
-
-developer_instructions = '''
-You are Mat Master, ...
-'''
-
-[tools]
-builtin = ["*"]
-mcp = "*"
-
-# 新增：tool description 覆盖（可选）
-[tools.descriptions]
-execute_bash = "在远程计算环境中执行 bash 命令..."
-str_replace_editor = "查看、创建和编辑远程文件..."
-
-# 新增：SubAgent 配置（可选）
-[subagent]
-enabled = true
-max_depth = 2         # 最大嵌套深度
-inherit_tools = true  # 子 agent 是否继承父 agent 的 tool 集
+    @abstractmethod
+    async def _execute(self, arguments: dict[str, Any]) -> str: ...
 ```
 
-对应的 Pydantic model 扩展：
+**BashTool 特殊处理：** 当前通过 `session.exec_bash()` 同步执行。v2.0 有两个选项：
+- session-dependent（生产）: 如果 BaseSession 不改为 async，用 `asyncio.to_thread(session.exec_bash, ...)` 包装
+- session-free (DevShell): 用 `asyncio.create_subprocess_exec()` 或 `asyncio.create_subprocess_shell()` 直接 async 执行
+
+**Subprocess async pattern:**
+```python
+async def _execute(self, arguments):
+    proc = await asyncio.create_subprocess_shell(
+        command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=str(self._workdir),
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(), timeout=timeout
+        )
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return "Error: command timed out"
+    return stdout.decode()
+```
+
+### 7. Tool Protocol -- Async execute
+
+**Current:**
+```python
+@runtime_checkable
+class Tool(Protocol):
+    def execute(self, arguments: dict[str, Any]) -> str | ToolResult | None: ...
+```
+
+**Target:**
+```python
+@runtime_checkable
+class Tool(Protocol):
+    async def execute(self, arguments: dict[str, Any]) -> str | ToolResult | None: ...
+```
+
+**ToolRegistry.execute 变化:**
+```python
+# Before:
+def execute(self, name, arguments) -> ToolResult:
+    return normalize_tool_result(tool.execute(arguments))
+
+# After:
+async def execute(self, name, arguments) -> ToolResult:
+    return normalize_tool_result(await tool.execute(arguments))
+```
+
+### 8. Guard Protocol -- 保持同步
+
+Guard 的 `evaluate()` 是纯计算（fingerprint 比对、turn 计数），不涉及 I/O。保持同步。
 
 ```python
-# matmaster/config/exp.py 扩展
-class SubAgentConfig(BaseModel):
-    enabled: bool = False
-    max_depth: int = 2
-    inherit_tools: bool = True
+# 保持不变
+class Guard(Protocol):
+    def evaluate(self, ctx: GuardContext) -> GuardResult: ...
 
-class ExpToolsConfig(BaseModel):
-    builtin: list[str] = Field(default_factory=lambda: ["*"])
-    mcp: str = "*"
-    descriptions: dict[str, str] = Field(default_factory=dict)  # 新增
-
-class ExpConfig(BaseModel):
-    # ... 现有字段 ...
-    subagent: SubAgentConfig = Field(default_factory=SubAgentConfig)  # 新增
+class GuardPipeline:
+    def evaluate(self, tool_call, current_turn, max_turns) -> GuardResult: ...
 ```
 
-### 3. Exp.build_runtime() -- 需要扩展 _init_builtin_tools()
+**Rationale:** async 化所有东西是过度工程。Guard 是 CPU-bound 纯逻辑，async 化没有收益，反而增加 await 开销。
 
-当前实现（exp.py:224-246）硬编码从 evomaster 导入 BashTool/EditorTool/MonitorJobTool 并通过 EvoToolAdapter 注册。需要：
+### 9. ContextCompactor -- Async 化
 
-1. **拆分注册路径：** matmaster 原生 tool（Read/Write/Edit/Bash/Glob/Grep）直接注册，evomaster 工具（MonitorJobTool）仍通过 adapter
-2. **Description 注入：** 注册前检查 `self._config.tools.descriptions` 是否有 override
-3. **SubAgent tool 注册：** 如果 `self._config.subagent.enabled`，创建 SubAgentTool 并注册。SubAgentTool 需要闭包/factory 绑定创建子 Exp 的逻辑
+内部调用 `self._summary_provider.chat()`，这个 LLM 调用是 I/O-bound，必须 async。
 
-### 4. ContextBuilder -- 需要扩展
+```python
+# Before:
+def _summarize(self, old_messages) -> str:
+    response = self._summary_provider.chat(api_messages)
+    return response.content
 
-- `_build_tools()` 目前只生成 `"- {name}: {description}"` 格式的列表，对于复杂 tool（如 SubAgent、Bash 安全规则）需要支持更丰富的工具使用指南
-- 新增 prompt template 加载机制：`developer_instructions` 字段支持引用外部文本文件（如 `@file:prompts/mat_master_v1.txt`），避免在 TOML 内嵌入大段文本
+# After:
+async def _summarize(self, old_messages) -> str:
+    response = await self._summary_provider.chat(api_messages)
+    return response.content
+```
 
-### 5. PlaygroundContext -- 无需修改
+`compact_if_needed()` 也需要变 async（因为内部调用 `_summarize`）。
 
-SubAgent 共享父 agent 的 PlaygroundContext（workdir, session, llm_provider）。context 本身 frozen=True，SubAgent 只读。不需要扩展字段。
+### 10. SubAgent Spawn -- Async 化
 
-## Stack Patterns by Tool Category
+**Current** (sync spawn_fn closure):
+```python
+def spawn_fn(exp_name, task, stop_event: threading.Event | None = None) -> str:
+    child_runtime = child_exp.build_runtime(ctx, bus=bus, ...)
+    run_result = child_runtime.kernel.run(child_runtime.spec, task, stop_event=stop_event)
+    return result.final_content
+```
 
-**Category A: Session-dependent tool（Bash/Read/Write/Edit）**
-- 实例化时 bind BaseSession（`__init__(self, session: BaseSession)`）
-- execute() 内部调用 session.exec_bash() / session.read_file() 等
-- 直接满足 Tool Protocol，无需 EvoToolAdapter
+**Target** (async spawn_fn):
+```python
+async def spawn_fn(exp_name, task, stop_event: asyncio.Event | None = None) -> str:
+    child_runtime = await child_exp.build_runtime(ctx, bus=bus, ...)
+    run_result = await child_runtime.kernel.run(child_runtime.spec, task, stop_event=stop_event)
+    return result.final_content
+```
 
-**Category B: Session-free tool（Glob local / Grep local）**
-- 不接收 session，直接用 pathlib/re/fnmatch 操作本地文件系统
-- 主要用于 DevShell 场景（无远程 session）
+**Structured concurrency (future v2.1):** 当前 SubAgent 是串行执行（一次只 spawn 一个），async 改造后可以用 `asyncio.TaskGroup` 实现并行 spawn，但这是 v2.0 out of scope。v2.0 只做 async 基础设施。
 
-**Category C: Hybrid tool（Glob/Grep 双模式）**
-- constructor 接收 optional session
-- 有 session 时委托 `session.exec_bash()` 在远程执行 find/grep 命令
-- 无 session 时用标准库本地执行
-- 行为一致性由 matmaster tool 封装层保证
+## Testing Configuration
 
-**Category D: Orchestration tool（SubAgent/Task）**
-- 不操作文件系统，而是编排子 agent 运行
-- 接收创建子 Exp 所需的 context（ExpConfig factory + PlaygroundContext）
-- execute() 内部创建子 Exp -> build_runtime -> kernel.run -> 返回结果字符串
-- stop_event 级联传递实现取消
+### pytest-asyncio Setup
 
-**Category E: Legacy evomaster tool（MonitorJobTool）**
-- 保持 evomaster BaseTool 继承链不变
-- 通过 EvoToolAdapter 桥接到 matmaster Tool Protocol
-- 不迁移，不改造
+**pyproject.toml 新增：**
+```toml
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.0.0",   # 新增
+]
 
-## Version Compatibility
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+```
 
-| Package | Current Version | Required Version | Notes |
-|---------|-----------------|------------------|-------|
-| Python | 3.13 | >=3.11 | tomllib 需要 3.11+，项目已用 3.13，无兼容问题 |
-| Pydantic | v2.x | >=2.0 | model_json_schema() 用于 tool params，ConfigDict(extra="ignore") 用于 TOML 前向兼容 |
-| OpenAI SDK | (已安装) | 不变 | SubAgent 复用现有 LLMProvider，不引入新调用模式 |
-| tiktoken | >=0.7.0 | 不变 | 不变 |
+**为什么选 auto mode：**
+- matmaster 只使用 asyncio（不用 Trio/curio），auto mode 是最简配置
+- 所有 `async def test_*` 自动被识别为 asyncio 测试，无需手动加 `@pytest.mark.asyncio`
+- 所有 async fixtures 自动被 pytest-asyncio 管理
+- auto mode 从 pytest-asyncio 0.25 开始是推荐模式（1.3.0 默认 strict，但显式配 auto 更简洁）
+
+**为什么不用 strict mode：**
+- strict mode 要求每个 async test 手动加 `@pytest.mark.asyncio`
+- 项目有 863 个测试，新增的 async test 会很多，手动标记增加样板代码
+- 项目不混用多个 async 框架，auto mode 不会产生歧义
+
+### Mock Pattern for Async Tests
+
+**Current MockLLMProvider** (tests/matmaster/core/conftest.py):
+```python
+class MockLLMProvider:
+    def chat(self, messages, tools=None) -> LLMResponse:
+        return LLMResponse(content="mock response", finish_reason="stop")
+    def chat_stream(self, messages, tools=None, *, timeout=None) -> Iterator[StreamChunk]:
+        yield StreamChunk(content="hello", finish_reason="stop")
+```
+
+**Target MockLLMProvider:**
+```python
+class MockLLMProvider:
+    async def chat(self, messages, tools=None) -> LLMResponse:
+        return LLMResponse(content="mock response", finish_reason="stop")
+    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
+        yield StreamChunk(content="hello", finish_reason="stop")
+```
+
+async generator（`async def` + `yield`）是最自然的 mock 方式。调用端用 `async for chunk in provider.chat_stream(...)` 消费。
+
+### Fixture Patterns
+
+```python
+import pytest
+import asyncio
+
+# asyncio_mode = "auto" 下，async fixture 自动被识别
+@pytest.fixture
+async def message_bus():
+    return MessageBus()
+
+@pytest.fixture
+async def stop_event():
+    return asyncio.Event()
+
+# Sync fixtures 不受影响，继续正常工作
+@pytest.fixture
+def mock_tool_call():
+    return ToolCallData(id="tc-1", name="test_tool", arguments={"key": "value"})
+```
+
+## Version Compatibility Matrix
+
+| Package | Current | Required for v2.0 | Action |
+|---------|---------|-------------------|--------|
+| Python | 3.13.2 | >=3.11 (TaskGroup) | No change |
+| openai | 2.20.0 | >=1.0.0 (AsyncOpenAI) | No change -- already satisfied |
+| httpx | 0.28.1 | >=0.23.0 (AsyncClient) | No change -- already satisfied |
+| pydantic | 2.12.5 | >=2.0 | No change |
+| pytest | 9.0.2 | >=8.0 (pytest-asyncio 1.x compat) | No change |
+| pytest-asyncio | (not installed) | >=1.0.0 | **NEW: add to dev deps** |
+| FastAPI | 0.128.8 | N/A (src/ not in scope) | No change |
+| redis | >=5.0.0 | N/A (src/ not in scope) | No change |
 
 ## Installation
 
 ```bash
-# 无新依赖需要安装
-# v1.1 完全使用现有依赖栈
-uv sync
+# Only one new dev dependency
+uv sync --extra dev
+
+# After adding pytest-asyncio to pyproject.toml:
+# [project.optional-dependencies]
+# dev = [
+#     "pre-commit>=4.5.1",
+#     "pytest>=9.0.2",
+#     "pytest-asyncio>=1.0.0",
+# ]
 ```
+
+## Integration with src/ Service Layer
+
+v2.0 scope 声明 src/ 不改造，但需要考虑接口兼容：
+
+**Current:** `src/services/agent_run_service.py` 通过 `Exp.run()` 同步调用 agent。Worker 在线程中执行。
+
+**v2.0 兼容策略:** Exp.run() 变 async 后，src/ 层调用入口需要 `asyncio.run()` 或 `loop.run_until_complete()` 包装。但这属于 src/ 层适配，不是 matmaster/ 层职责。
+
+**DevShell 兼容策略:** 项目已声明 DevShell async 改造延后，用 `asyncio.run(exp.run(...))` 包装 async 入口即可。
 
 ## Sources
 
-- 代码库分析：`matmaster/tools/tool_registry.py` -- Tool Protocol 定义（name/description/json_schema/execute 签名）
-- 代码库分析：`evomaster/agent/session/base.py` -- BaseSession API surface（exec_bash/read_file/write_file/path_exists/is_file/is_directory）
-- 代码库分析：`evomaster/agent/tools/builtin/` -- 现有 Bash/Editor/Finish/MonitorJob 实现模式和 description 位置
-- 代码库分析：`matmaster/tools/evomaster_tool_adapter.py` -- EvoToolAdapter 桥接模式
-- 代码库分析：`matmaster/core/exp.py` -- Exp.build_runtime() 的 _init_builtin_tools() 扩展点
-- 代码库分析：`matmaster/core/context_builder.py` -- ContextBuilder section 组装机制
-- 代码库分析：`matmaster/config/exp.py` -- ExpConfig/ExpToolsConfig 扩展结构
-- Python 标准库文档：pathlib.Path.glob(), fnmatch.filter(), re, tomllib -- HIGH confidence
+- **PyPI verified:** pytest-asyncio 1.3.0 (2025-11-10), supports Python 3.10-3.14 -- [pytest-asyncio PyPI](https://pypi.org/project/pytest-asyncio/)
+- **PyPI verified:** openai 2.20.0 (installed), AsyncOpenAI available -- `from openai import AsyncOpenAI` 本地验证通过
+- **PyPI verified:** httpx 0.28.1 (installed), AsyncClient available -- 本地验证通过
+- **Runtime verified:** `openai.AsyncStream` is both AsyncIterator and async context manager -- 本地代码检查确认
+- **Runtime verified:** Python 3.13.2, asyncio.TaskGroup, asyncio.Queue, asyncio.Event, create_subprocess_exec -- 全部本地验证可用
+- **Official docs:** [pytest-asyncio configuration](https://pytest-asyncio.readthedocs.io/en/stable/reference/configuration.html)
+- **Official docs:** [pytest-asyncio auto mode concepts](https://pytest-asyncio.readthedocs.io/en/stable/concepts.html)
+- **Official docs:** [Python 3.13 asyncio subprocess](https://docs.python.org/3/library/asyncio-subprocess.html)
+- **Official docs:** [Python 3.13 asyncio.Queue](https://docs.python.org/3/library/asyncio-queue.html)
+- **Official docs:** [Python 3.13 What's New -- TaskGroup improvements](https://docs.python.org/3/whatsnew/3.13.html)
 
 ---
-*Stack research for: matmaster v1.1 Agent 外围能力构建*
-*Researched: 2026-03-24*
+*Stack research for: matmaster v2.0 协程改造*
+*Researched: 2026-03-26*

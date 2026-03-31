@@ -8,10 +8,10 @@ import queue
 import threading
 import time
 import uuid
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import AsyncGenerator, Callable
 
 from src.dao.redis_dao import (
     CONFIRMATION_CANCEL_VALUE,
@@ -581,7 +581,7 @@ class ChatStreamService:
                                     payload = await asyncio.wait_for(
                                         redis_queue.get(), timeout=30.0
                                     )
-                                except asyncio.TimeoutError:
+                                except TimeoutError:
                                     yield self.sse_format(
                                         {
                                             'source': 'System',
@@ -757,7 +757,7 @@ class ChatStreamService:
         request_event_queue: asyncio.Queue,
         payload: dict,
     ) -> None:
-        """供 run_agent_sync 的 send_cb 使用：写入本连接队列并广播到订阅队列；有 Redis 时同时发布到 stream channel 供其它 pod 的 subscribe 流消费。"""
+        """供 run_agent 的 send_cb 使用：写入本连接队列并广播到订阅队列；有 Redis 时同时发布到 stream channel 供其它 pod 的 subscribe 流消费。"""
         request_event_queue.put_nowait(payload)
         self._queues.broadcast(session_id, payload)
         if REDIS_URL:
@@ -832,8 +832,52 @@ class ChatStreamService:
             loop.call_soon_threadsafe(_inject_confirmation_reply, content)
 
         ReplyQueueNotifyOnGet(ctx.reply_queue, _on_reply)
+        redis_queue = asyncio.Queue()
+        stop_event = threading.Event()
+        subscribe_ready = threading.Event()
+        channel = STREAM_CHANNEL_PREFIX + sid
+
+        def _redis_subscribe_loop() -> None:
+            client = get_redis_dao().create_client()
+            if not client:
+                subscribe_ready.set()
+                return
+            pubsub = client.pubsub()
+            try:
+                pubsub.subscribe(channel)
+                while not stop_event.is_set():
+                    msg = pubsub.get_message(timeout=1.0)
+                    if msg and msg.get('type') == 'subscribe':
+                        subscribe_ready.set()
+                        continue
+                    if msg and msg.get('type') == 'message':
+                        try:
+                            data = json.loads(msg['data'])
+                            loop.call_soon_threadsafe(redis_queue.put_nowait, data)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+            finally:
+                subscribe_ready.set()
+                try:
+                    pubsub.unsubscribe(channel)
+                    pubsub.close()
+                except Exception:
+                    pass
+
+        sub_thread = threading.Thread(
+            target=_redis_subscribe_loop,
+            name=f'send-stream-queue-{sid[:8]}',
+            daemon=True,
+        )
+        sub_thread.start()
 
         try:
+            if not await asyncio.to_thread(subscribe_ready.wait, 3.0):
+                logger.warning(
+                    'generate_send_stream: redis subscribe not ready before enqueue session_id=%s task_id=%s',
+                    sid,
+                    ctx.task_id,
+                )
             job = {
                 'session_id': sid,
                 'task_id': ctx.task_id,
@@ -897,50 +941,13 @@ class ChatStreamService:
                     }
                 )
                 return
-            redis_queue = asyncio.Queue()
-            stop_event = threading.Event()
-            channel = STREAM_CHANNEL_PREFIX + sid
-
-            def _redis_subscribe_loop(
-                _channel: str = channel,
-                _stop_ev: threading.Event = stop_event,
-                _ev_loop: asyncio.AbstractEventLoop = loop,
-                _queue: asyncio.Queue = redis_queue,
-            ) -> None:
-                client = get_redis_dao().create_client()
-                if not client:
-                    return
-                pubsub = client.pubsub()
-                try:
-                    pubsub.subscribe(_channel)
-                    while not _stop_ev.is_set():
-                        msg = pubsub.get_message(timeout=1.0)
-                        if msg and msg.get('type') == 'message':
-                            try:
-                                data = json.loads(msg['data'])
-                                _ev_loop.call_soon_threadsafe(_queue.put_nowait, data)
-                            except (json.JSONDecodeError, TypeError):
-                                pass
-                finally:
-                    try:
-                        pubsub.unsubscribe(_channel)
-                        pubsub.close()
-                    except Exception:
-                        pass
-
-            sub_thread = threading.Thread(
-                target=_redis_subscribe_loop,
-                name=f'send-stream-queue-{sid[:8]}',
-                daemon=True,
-            )
-            sub_thread.start()
             try:
                 while True:
                     try:
                         payload = await asyncio.wait_for(
                             redis_queue.get(), timeout=30.0
                         )
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         yield self.sse_format(
                             {
                                 'source': 'System',

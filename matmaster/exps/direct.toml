@@ -31,6 +31,8 @@ builtin = [
     "task_update",
     "task_complete",
     "spawn",
+    "web_search",
+    "web_fetch",
 ]
 mcp = "*"
 

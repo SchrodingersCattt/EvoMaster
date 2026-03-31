@@ -16,7 +16,7 @@ _SKILL_DIR = Path(__file__).resolve().parent.parent
 if str(_SKILL_DIR) not in sys.path:
     sys.path.insert(0, str(_SKILL_DIR))
 
-from engine.schema import SchemaRegistry
+from engine.schema import SchemaRegistry  # noqa: E402
 
 
 def _get_backend(software: str):
@@ -79,20 +79,24 @@ def main() -> None:
         description="Look up documentation for a calculation parameter."
     )
     parser.add_argument(
-        "--software", required=True,
+        "--software",
+        required=True,
         help="Software name: cp2k, orca, qe, abinit, lammps",
     )
     parser.add_argument(
-        "--param", required=True,
+        "--param",
+        required=True,
         help="Parameter name to look up (case-insensitive).",
     )
     parser.add_argument(
-        "--format", choices=["human", "json"], default="human",
+        "--format",
+        choices=["human", "json"],
+        default="human",
         help="Output format (default: human).",
     )
     args = parser.parse_args()
 
-    backend = _get_backend(args.software)
+    _get_backend(args.software)
     schema = SchemaRegistry()
     schema.load_software(args.software.lower())
 

@@ -13,10 +13,10 @@ from typing import Any
 
 _logger = logging.getLogger(__name__)
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.sse import sse_client
-from mcp.client.stdio import stdio_client
-from mcp.client.streamable_http import streamablehttp_client
+from mcp import ClientSession, StdioServerParameters  # noqa: E402
+from mcp.client.sse import sse_client  # noqa: E402
+from mcp.client.stdio import stdio_client  # noqa: E402
+from mcp.client.streamable_http import streamablehttp_client  # noqa: E402
 
 
 class MCPConnection(ABC):

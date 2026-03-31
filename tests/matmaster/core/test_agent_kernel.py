@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, Iterator
+from collections.abc import AsyncIterator
+from typing import Any
+
+import pytest
 
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.messages import (
@@ -33,7 +36,8 @@ from .agent_kernel_test_helpers import (
 class TestNaturalFinish:
     """LLM returns no tool_calls -> FinishEvent(reason='natural')."""
 
-    def test_natural_finish(self) -> None:
+    @pytest.mark.asyncio
+    async def test_natural_finish(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         provider = StreamingProvider(
@@ -44,13 +48,14 @@ class TestNaturalFinish:
         )
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test task')
+        result = await kernel.run(spec, 'test task')
 
         assert isinstance(result.result, KernelResult)
         assert result.result.reason == 'natural'
         assert result.result.final_content == 'Hello'
 
-    def test_natural_finish_messages(self) -> None:
+    @pytest.mark.asyncio
+    async def test_natural_finish_messages(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         provider = StreamingProvider(
@@ -61,7 +66,7 @@ class TestNaturalFinish:
         )
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test task')
+        result = await kernel.run(spec, 'test task')
 
         assert result.result.reason == 'natural'
 
@@ -69,14 +74,15 @@ class TestNaturalFinish:
 class TestMaxTurns:
     """LLM always returns tool_calls, max_turns reached."""
 
-    def test_max_turns(self) -> None:
+    @pytest.mark.asyncio
+    async def test_max_turns(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id='tc-1', name='some_tool', arguments={'x': 1})
         provider = ToolCallingProvider(tool_calls=[tc], max_tool_turns=999)
         spec = _make_spec(provider=provider, max_turns=2)
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test')
+        result = await kernel.run(spec, 'test')
 
         assert isinstance(result.result, KernelResult)
         assert result.result.reason == 'max_turns'
@@ -85,19 +91,21 @@ class TestMaxTurns:
 class TestExternalCancel:
     """stop_event.set() -> FinishEvent(reason='cancelled')."""
 
-    def test_cancel_before_run(self) -> None:
+    @pytest.mark.asyncio
+    async def test_cancel_before_run(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         stop_event = threading.Event()
         stop_event.set()
         spec = _make_spec()
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test', stop_event=stop_event)
+        result = await kernel.run(spec, 'test', stop_event=stop_event)
 
         assert isinstance(result.result, KernelResult)
         assert result.result.reason == 'cancelled'
 
-    def test_cancel_during_run(self) -> None:
+    @pytest.mark.asyncio
+    async def test_cancel_during_run(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         stop_event = threading.Event()
@@ -106,26 +114,26 @@ class TestExternalCancel:
             def __init__(self) -> None:
                 self._call_count = 0
 
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self) -> CancelAfterFirstTurnProvider:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                pass
+
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+            ) -> LLMResponse:
                 return LLMResponse(content='unused', finish_reason='stop')
 
-            def chat_with_retry(
+            async def chat_stream(
                 self,
-                messages: list,
-                tools: list | None = None,
-                *,
-                max_retries: int = 3,
-                retry_delay: float = 1.0,
-            ) -> LLMResponse:
-                return self.chat(messages, tools)
-
-            def chat_stream(
-                self,
-                messages: list,
-                tools: list | None = None,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
                 *,
                 timeout: float | None = None,
-            ) -> Iterator[StreamChunk]:
+            ) -> AsyncIterator[StreamChunk]:
                 self._call_count += 1
                 if self._call_count == 1:
                     yield StreamChunk(
@@ -145,32 +153,39 @@ class TestExternalCancel:
 
         spec = _make_spec(provider=CancelAfterFirstTurnProvider())
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test', stop_event=stop_event)
+        result = await kernel.run(spec, 'test', stop_event=stop_event)
 
         assert isinstance(result.result, KernelResult)
         assert result.result.reason == 'cancelled'
 
-    def test_cancel_mid_stream(self) -> None:
+    @pytest.mark.asyncio
+    async def test_cancel_mid_stream(self) -> None:
         """stop_event set during chat_stream -> cancelled before turn completes."""
         from matmaster.core.agent import AgentKernel
 
         stop_event = threading.Event()
 
         class ManyChunksProvider:
-            def chat(self, messages, tools=None):
+            async def __aenter__(self) -> ManyChunksProvider:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                pass
+
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+            ) -> LLMResponse:
                 return LLMResponse(content='unused', finish_reason='stop')
 
-            def chat_with_retry(
+            async def chat_stream(
                 self,
-                messages,
-                tools=None,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
                 *,
-                max_retries=3,
-                retry_delay=1.0,
-            ):
-                return self.chat(messages, tools)
-
-            def chat_stream(self, messages, tools=None, *, timeout=None):
+                timeout: float | None = None,
+            ) -> AsyncIterator[StreamChunk]:
                 for i in range(20):
                     if i == 8:
                         stop_event.set()
@@ -179,18 +194,24 @@ class TestExternalCancel:
 
         spec = _make_spec(provider=ManyChunksProvider())
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test', stop_event=stop_event)
+        result = await kernel.run(spec, 'test', stop_event=stop_event)
 
         assert isinstance(result.result, KernelResult)
         assert result.result.reason == 'cancelled'
         assert result.result.num_turns == 1
 
-    def test_cancel_between_serial_tools(self) -> None:
-        """stop_event set after first tool -> second tool not executed."""
+    @pytest.mark.asyncio
+    async def test_cancel_between_tool_turns(self) -> None:
+        """stop_event set during tool execution -> cancelled at next turn boundary.
+
+        With parallel tool execution, both approved tools in the same batch
+        run concurrently via asyncio.gather. The stop_event set during
+        execution is detected at the next turn's pre-loop check, not between
+        tools within the same batch.
+        """
         from matmaster.core.agent import AgentKernel
 
         stop_event = threading.Event()
-        second_calls = 0
 
         class StopAfterFirst:
             @property
@@ -205,7 +226,7 @@ class TestExternalCancel:
             def json_schema(self) -> dict[str, Any]:
                 return {'type': 'object', 'properties': {}}
 
-            def execute(self, arguments: dict[str, Any]) -> str:
+            async def execute(self, arguments: dict[str, Any]) -> str:
                 stop_event.set()
                 return 'done-first'
 
@@ -222,28 +243,32 @@ class TestExternalCancel:
             def json_schema(self) -> dict[str, Any]:
                 return {'type': 'object', 'properties': {}}
 
-            def execute(self, arguments: dict[str, Any]) -> str:
-                nonlocal second_calls
-                second_calls += 1
+            async def execute(self, arguments: dict[str, Any]) -> str:
                 return 'done-second'
 
         class TwoDistinctToolCallsProvider:
-            """Yields two tool calls with distinct stream indices (not ToolCallingProvider's index=0)."""
+            """Yields two tool calls with distinct stream indices."""
 
-            def chat(self, messages, tools=None):
+            async def __aenter__(self) -> TwoDistinctToolCallsProvider:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                pass
+
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+            ) -> LLMResponse:
                 return LLMResponse(content='unused', finish_reason='stop')
 
-            def chat_with_retry(
+            async def chat_stream(
                 self,
-                messages,
-                tools=None,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
                 *,
-                max_retries=3,
-                retry_delay=1.0,
-            ):
-                return self.chat(messages, tools)
-
-            def chat_stream(self, messages, tools=None, *, timeout=None):
+                timeout: float | None = None,
+            ) -> AsyncIterator[StreamChunk]:
                 yield StreamChunk(
                     tool_call_deltas=[
                         {
@@ -275,21 +300,22 @@ class TestExternalCancel:
             max_turns=5,
         )
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test', stop_event=stop_event)
+        result = await kernel.run(spec, 'test', stop_event=stop_event)
 
+        # Cancelled at next turn boundary after parallel tools complete
         assert result.result.reason == 'cancelled'
-        assert second_calls == 0
 
 
 class TestHookStopped:
     """should_continue returns False -> FinishEvent(reason='hook_stopped')."""
 
-    def test_hook_stopped(self) -> None:
+    @pytest.mark.asyncio
+    async def test_hook_stopped(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         spec = _make_spec(hooks=[StopHook()])
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test')
+        result = await kernel.run(spec, 'test')
 
         assert isinstance(result.result, KernelResult)
         assert result.result.reason == 'hook_stopped'
@@ -298,7 +324,8 @@ class TestHookStopped:
 class TestGuardBlocks:
     """Guard blocks tool call -> BLOCKED message, hooks NOT triggered."""
 
-    def test_guard_blocks(self) -> None:
+    @pytest.mark.asyncio
+    async def test_guard_blocks(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id='tc-1', name='bad_tool', arguments={})
@@ -315,7 +342,7 @@ class TestGuardBlocks:
             max_turns=5,
         )
         kernel = AgentKernel()
-        kernel.run(spec, 'test')
+        await kernel.run(spec, 'test')
 
         # Tool should NOT have been executed
         bad_tool = tools[0]
@@ -324,7 +351,8 @@ class TestGuardBlocks:
         assert 'pre_tool_call' not in recording.calls
         assert 'post_tool_call' not in recording.calls
 
-    def test_guard_block_triggers_hook(self) -> None:
+    @pytest.mark.asyncio
+    async def test_guard_block_triggers_hook(self) -> None:
         from matmaster.core.agent import AgentKernel
         from matmaster.core.hooks import BaseHook
         from matmaster.types.guards import GuardResult
@@ -333,7 +361,7 @@ class TestGuardBlocks:
             def __init__(self) -> None:
                 self.blocked: list[tuple[str, str | None]] = []
 
-            def on_guard_blocked(
+            async def on_guard_blocked(
                 self, tool_call: ToolCallData, result: GuardResult
             ) -> None:
                 self.blocked.append((tool_call.name, result.reason))
@@ -352,7 +380,7 @@ class TestGuardBlocks:
             max_turns=5,
         )
         kernel = AgentKernel()
-        kernel.run(spec, 'test')
+        await kernel.run(spec, 'test')
 
         assert len(recorder.blocked) == 1
         assert recorder.blocked[0] == ('bad_tool', 'no access')
@@ -361,7 +389,8 @@ class TestGuardBlocks:
 class TestHookSkip:
     """Hook SKIP -> tool NOT executed, ToolMessage with 'skipped by hook'."""
 
-    def test_hook_skip(self) -> None:
+    @pytest.mark.asyncio
+    async def test_hook_skip(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id='tc-1', name='skip_me', arguments={})
@@ -376,7 +405,7 @@ class TestHookSkip:
             max_turns=5,
         )
         kernel = AgentKernel()
-        kernel.run(spec, 'test')
+        await kernel.run(spec, 'test')
 
         # Tool should NOT have been executed
         skip_tool = tools[0]
@@ -386,7 +415,8 @@ class TestHookSkip:
 class TestStreamingAccumulation:
     """Provider yields chunks, kernel accumulates to LLMResponse."""
 
-    def test_streaming_accumulation(self) -> None:
+    @pytest.mark.asyncio
+    async def test_streaming_accumulation(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         chunk_hook = ChunkRecordingHook()
@@ -399,7 +429,7 @@ class TestStreamingAccumulation:
         )
         spec = _make_spec(provider=provider, hooks=[chunk_hook])
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test')
+        result = await kernel.run(spec, 'test')
 
         assert result.result.reason == 'natural'
         assert result.result.final_content == 'Hello'
@@ -417,7 +447,8 @@ class TestStreamingAccumulation:
 class TestFinishValidation:
     """Natural finish must validate terminal finish_reason before commit."""
 
-    def test_non_stop_finish_reason_does_not_commit_natural_finish(self) -> None:
+    @pytest.mark.asyncio
+    async def test_non_stop_finish_reason_does_not_commit_natural_finish(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         chunk_hook = ChunkRecordingHook()
@@ -429,7 +460,7 @@ class TestFinishValidation:
         )
         spec = _make_spec(provider=provider, hooks=[chunk_hook])
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test')
+        result = await kernel.run(spec, 'test')
 
         assert result.result.reason == 'invalid_finish'
         assert result.result.status == 'failed'
@@ -444,7 +475,8 @@ class TestFinishValidation:
 class TestToolCallDelta:
     """Provider yields tool_call_deltas, kernel accumulates to ToolCallData."""
 
-    def test_tool_call_delta(self) -> None:
+    @pytest.mark.asyncio
+    async def test_tool_call_delta(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         # Simulate streaming tool call deltas
@@ -461,36 +493,37 @@ class TestToolCallDelta:
             def __init__(self) -> None:
                 self._call_count = 0
 
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self) -> TwoPhaseProvider:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                pass
+
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+            ) -> LLMResponse:
                 return LLMResponse(content='unused', finish_reason='stop')
 
-            def chat_with_retry(
+            async def chat_stream(
                 self,
-                messages: list,
-                tools: list | None = None,
-                *,
-                max_retries: int = 3,
-                retry_delay: float = 1.0,
-            ) -> LLMResponse:
-                return self.chat(messages, tools)
-
-            def chat_stream(
-                self,
-                messages: list,
-                tools: list | None = None,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
                 *,
                 timeout: float | None = None,
-            ) -> Iterator[StreamChunk]:
+            ) -> AsyncIterator[StreamChunk]:
                 self._call_count += 1
                 if self._call_count == 1:
-                    yield from chunks
+                    for chunk in chunks:
+                        yield chunk
                 else:
                     yield StreamChunk(content='done', finish_reason='stop')
 
         tool_reg, tools = _make_tool_registry(['fn'])
         spec = _make_spec(provider=TwoPhaseProvider(), tool_registry=tool_reg)
         kernel = AgentKernel()
-        kernel.run(spec, 'test')
+        await kernel.run(spec, 'test')
 
         # Tool should have been called with parsed arguments
         fn_tool = tools[0]
@@ -499,10 +532,144 @@ class TestToolCallDelta:
         assert fn_tool.calls[0][1] == {'a': 1}
 
 
+class TestToolCallDeltaDuplicateName:
+    """Regression: proxy sends full name in multiple chunks must not concatenate."""
+
+    @pytest.mark.asyncio
+    async def test_duplicate_full_name_not_concatenated(self) -> None:
+        """LiteLLM proxy may repeat full tool name across chunks.
+
+        Before fix: 'use_skill' + 'use_skill' → 'use_skilluse_skill'
+        After fix:  second chunk overwrites, name stays 'use_skill'
+        """
+        from matmaster.core.agent import AgentKernel
+
+        chunks = [
+            StreamChunk(
+                tool_call_deltas=[
+                    {'index': 0, 'id': 'tc1', 'name': 'fn', 'arguments': '{"a":'}
+                ]
+            ),
+            # Proxy resends full name in a later chunk
+            StreamChunk(
+                tool_call_deltas=[{'index': 0, 'name': 'fn', 'arguments': '1}'}]
+            ),
+            StreamChunk(finish_reason='stop'),
+        ]
+
+        class TwoPhaseProvider:
+            def __init__(self) -> None:
+                self._call_count = 0
+
+            async def __aenter__(self) -> TwoPhaseProvider:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                pass
+
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+            ) -> LLMResponse:
+                return LLMResponse(content='unused', finish_reason='stop')
+
+            async def chat_stream(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+                *,
+                timeout: float | None = None,
+            ) -> AsyncIterator[StreamChunk]:
+                self._call_count += 1
+                if self._call_count == 1:
+                    for chunk in chunks:
+                        yield chunk
+                else:
+                    yield StreamChunk(content='done', finish_reason='stop')
+
+        tool_reg, tools = _make_tool_registry(['fn'])
+        spec = _make_spec(provider=TwoPhaseProvider(), tool_registry=tool_reg)
+        kernel = AgentKernel()
+        await kernel.run(spec, 'test')
+
+        fn_tool = tools[0]
+        assert len(fn_tool.calls) == 1
+        assert fn_tool.calls[0][0] == 'fn'  # NOT 'fnfn'
+        assert fn_tool.calls[0][1] == {'a': 1}
+
+    @pytest.mark.asyncio
+    async def test_different_name_on_same_index_uses_last(self) -> None:
+        """If proxy sends conflicting names on same index, keep last (not concat).
+
+        Before fix: 'list_dir' + 'read_file' → 'list_dirread_file'
+        After fix:  name = 'read_file' (last wins, at least a valid tool name)
+        """
+        from matmaster.core.agent import AgentKernel
+
+        chunks = [
+            StreamChunk(
+                tool_call_deltas=[
+                    {'index': 0, 'id': 'tc1', 'name': 'list_dir', 'arguments': '{}'}
+                ]
+            ),
+            # Bug in proxy: second tool call reuses index 0
+            StreamChunk(
+                tool_call_deltas=[{'index': 0, 'name': 'read_file', 'arguments': ''}]
+            ),
+            StreamChunk(finish_reason='stop'),
+        ]
+
+        class TwoPhaseProvider:
+            def __init__(self) -> None:
+                self._call_count = 0
+
+            async def __aenter__(self) -> TwoPhaseProvider:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                pass
+
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+            ) -> LLMResponse:
+                return LLMResponse(content='unused', finish_reason='stop')
+
+            async def chat_stream(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+                *,
+                timeout: float | None = None,
+            ) -> AsyncIterator[StreamChunk]:
+                self._call_count += 1
+                if self._call_count == 1:
+                    for chunk in chunks:
+                        yield chunk
+                else:
+                    yield StreamChunk(content='done', finish_reason='stop')
+
+        tool_reg, tools = _make_tool_registry(['list_dir', 'read_file'])
+        spec = _make_spec(provider=TwoPhaseProvider(), tool_registry=tool_reg)
+        kernel = AgentKernel()
+        await kernel.run(spec, 'test')
+
+        # Should execute with a valid tool name, not 'list_dirread_file'
+        all_calls = []
+        for t in tools:
+            all_calls.extend(t.calls)
+        assert len(all_calls) == 1
+        assert all_calls[0][0] in ('list_dir', 'read_file')
+        assert all_calls[0][0] != 'list_dirread_file'
+
+
 class TestFullCycle:
     """Turn 1: tool_call -> execute. Turn 2: natural finish."""
 
-    def test_full_cycle(self) -> None:
+    @pytest.mark.asyncio
+    async def test_full_cycle(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id='tc-1', name='my_tool', arguments={'key': 'val'})
@@ -518,7 +685,7 @@ class TestFullCycle:
             max_turns=10,
         )
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test')
+        result = await kernel.run(spec, 'test')
 
         assert result.result.reason == 'natural'
         assert result.result.final_content == 'final answer'
@@ -530,33 +697,34 @@ class TestFullCycle:
 class TestHistoryParameter:
     """AgentKernel.run() with history parameter."""
 
-    def test_history_inserts_between_system_and_user(self) -> None:
+    @pytest.mark.asyncio
+    async def test_history_inserts_between_system_and_user(self) -> None:
         """history messages are placed between SystemMessage and UserMessage(task)."""
         from matmaster.core.agent import AgentKernel
 
         captured_messages: list[list[dict[str, Any]]] = []
 
         class CapturingProvider:
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self) -> CapturingProvider:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                pass
+
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+            ) -> LLMResponse:
                 return LLMResponse(content='unused', finish_reason='stop')
 
-            def chat_with_retry(
+            async def chat_stream(
                 self,
-                messages: list,
-                tools: list | None = None,
-                *,
-                max_retries: int = 3,
-                retry_delay: float = 1.0,
-            ) -> LLMResponse:
-                return self.chat(messages, tools)
-
-            def chat_stream(
-                self,
-                messages: list,
-                tools: list | None = None,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
                 *,
                 timeout: float | None = None,
-            ) -> Iterator[StreamChunk]:
+            ) -> AsyncIterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content='ok', finish_reason='stop')
 
@@ -566,7 +734,7 @@ class TestHistoryParameter:
         ]
         spec = _make_spec(provider=CapturingProvider())
         kernel = AgentKernel()
-        result = kernel.run(spec, 'new question', history=history)
+        result = await kernel.run(spec, 'new question', history=history)
 
         assert result.result.reason == 'natural'
         # Check captured API messages structure
@@ -579,39 +747,40 @@ class TestHistoryParameter:
         assert msgs[3]['role'] == 'user'
         assert msgs[3]['content'] == 'new question'
 
-    def test_history_none_is_backward_compatible(self) -> None:
+    @pytest.mark.asyncio
+    async def test_history_none_is_backward_compatible(self) -> None:
         """history=None produces [SystemMessage, UserMessage(task)]."""
         from matmaster.core.agent import AgentKernel
 
         captured_messages: list[list[dict[str, Any]]] = []
 
         class CapturingProvider:
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self) -> CapturingProvider:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                pass
+
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+            ) -> LLMResponse:
                 return LLMResponse(content='unused', finish_reason='stop')
 
-            def chat_with_retry(
+            async def chat_stream(
                 self,
-                messages: list,
-                tools: list | None = None,
-                *,
-                max_retries: int = 3,
-                retry_delay: float = 1.0,
-            ) -> LLMResponse:
-                return self.chat(messages, tools)
-
-            def chat_stream(
-                self,
-                messages: list,
-                tools: list | None = None,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
                 *,
                 timeout: float | None = None,
-            ) -> Iterator[StreamChunk]:
+            ) -> AsyncIterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content='ok', finish_reason='stop')
 
         spec = _make_spec(provider=CapturingProvider())
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test task', history=None)
+        result = await kernel.run(spec, 'test task', history=None)
 
         assert result.result.reason == 'natural'
         msgs = captured_messages[0]
@@ -620,39 +789,40 @@ class TestHistoryParameter:
         assert msgs[1]['role'] == 'user'
         assert msgs[1]['content'] == 'test task'
 
-    def test_empty_history_is_backward_compatible(self) -> None:
+    @pytest.mark.asyncio
+    async def test_empty_history_is_backward_compatible(self) -> None:
         """history=[] produces [SystemMessage, UserMessage(task)]."""
         from matmaster.core.agent import AgentKernel
 
         captured_messages: list[list[dict[str, Any]]] = []
 
         class CapturingProvider:
-            def chat(self, messages: list, tools: list | None = None) -> LLMResponse:
+            async def __aenter__(self) -> CapturingProvider:
+                return self
+
+            async def __aexit__(self, *args: Any) -> None:
+                pass
+
+            async def chat(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
+            ) -> LLMResponse:
                 return LLMResponse(content='unused', finish_reason='stop')
 
-            def chat_with_retry(
+            async def chat_stream(
                 self,
-                messages: list,
-                tools: list | None = None,
-                *,
-                max_retries: int = 3,
-                retry_delay: float = 1.0,
-            ) -> LLMResponse:
-                return self.chat(messages, tools)
-
-            def chat_stream(
-                self,
-                messages: list,
-                tools: list | None = None,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]] | None = None,
                 *,
                 timeout: float | None = None,
-            ) -> Iterator[StreamChunk]:
+            ) -> AsyncIterator[StreamChunk]:
                 captured_messages.append(messages)
                 yield StreamChunk(content='ok', finish_reason='stop')
 
         spec = _make_spec(provider=CapturingProvider())
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test task', history=[])
+        result = await kernel.run(spec, 'test task', history=[])
 
         assert result.result.reason == 'natural'
         msgs = captured_messages[0]
@@ -665,7 +835,8 @@ class TestHistoryParameter:
 class TestExecutionOrder:
     """Recording hook tracks correct call order."""
 
-    def test_execution_order(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execution_order(self) -> None:
         from matmaster.core.agent import AgentKernel
 
         tc = ToolCallData(id='tc-1', name='tool', arguments={})
@@ -681,7 +852,7 @@ class TestExecutionOrder:
             max_turns=10,
         )
         kernel = AgentKernel()
-        kernel.run(spec, 'test')
+        await kernel.run(spec, 'test')
 
         # Turn 1: pre_llm_call -> should_continue -> on_stream_chunk(s) -> pre_tool_call -> post_tool_call
         # Turn 2: pre_llm_call -> should_continue -> on_stream_chunk(s) -> natural finish
@@ -700,7 +871,8 @@ class TestExecutionOrder:
 class TestKernelRunResultMessages:
     """kernel.run() returns KernelRunResult with message transcript."""
 
-    def test_natural_finish_returns_messages(self) -> None:
+    @pytest.mark.asyncio
+    async def test_natural_finish_returns_messages(self) -> None:
         from matmaster.core.agent import AgentKernel
         from matmaster.types.runtime import KernelRunResult
 
@@ -712,7 +884,7 @@ class TestKernelRunResultMessages:
         )
         spec = _make_spec(provider=provider)
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test task')
+        result = await kernel.run(spec, 'test task')
 
         assert isinstance(result, KernelRunResult)
         assert result.result.reason == 'natural'
@@ -723,7 +895,8 @@ class TestKernelRunResultMessages:
         assert isinstance(result.messages[2], AssistantMessage)
         assert result.messages[2].content == 'Hello'
 
-    def test_tool_cycle_returns_all_messages(self) -> None:
+    @pytest.mark.asyncio
+    async def test_tool_cycle_returns_all_messages(self) -> None:
         from matmaster.core.agent import AgentKernel
         from matmaster.types.runtime import KernelRunResult
 
@@ -734,7 +907,7 @@ class TestKernelRunResultMessages:
         tool_reg, _ = _make_tool_registry(['my_tool'], result='tool output')
         spec = _make_spec(provider=provider, tool_registry=tool_reg, max_turns=10)
         kernel = AgentKernel()
-        result = kernel.run(spec, 'test')
+        result = await kernel.run(spec, 'test')
 
         assert isinstance(result, KernelRunResult)
         assert result.result.reason == 'natural'

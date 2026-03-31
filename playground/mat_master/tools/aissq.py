@@ -34,8 +34,8 @@ from pathlib import Path
 from typing import Any, ClassVar, Optional
 
 import requests
-from requests.adapters import HTTPAdapter
 from pydantic import Field
+from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from evomaster.agent.tools.base import BaseTool, BaseToolParams
@@ -170,10 +170,7 @@ class AissqClient:
         """
         keyword_lower = keyword.lower()
         items = self.list_all_resources(resource_type)
-        return [
-            item for item in items
-            if keyword_lower in item.get("name", "").lower()
-        ]
+        return [item for item in items if keyword_lower in item.get("name", "").lower()]
 
     def find_by_name(self, name: str, resource_type: str) -> Optional[dict]:
         """Find a resource by exact name (client-side filtering).
@@ -191,9 +188,7 @@ class AissqClient:
                 return item
         return None
 
-    def get_detail(
-        self, resource_id: int, resource_type: str, name: str = ""
-    ) -> dict:
+    def get_detail(self, resource_id: int, resource_type: str, name: str = "") -> dict:
         """Get detailed information for a resource, including file download links.
 
         Uses the public GET /dpa/detail/{type} endpoint — no authentication required.
@@ -321,7 +316,6 @@ class AissqClient:
         """
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        last_exc = None
         for attempt in range(1, max_retries + 1):
             try:
                 resp = self.session.get(
@@ -332,9 +326,7 @@ class AissqClient:
                 )
                 resp.raise_for_status()
 
-                total_size = expected_size or int(
-                    resp.headers.get("Content-Length", 0)
-                )
+                total_size = expected_size or int(resp.headers.get("Content-Length", 0))
                 downloaded_bytes = 0
 
                 with open(output_path, "wb") as f:
@@ -353,7 +345,6 @@ class AissqClient:
                 return
 
             except (requests.RequestException, OSError) as exc:
-                last_exc = exc
                 if attempt < max_retries:
                     wait = 2 ** (attempt - 1)
                     _logger.warning(
@@ -481,9 +472,7 @@ class AissqSearchTool(BaseTool):
                         "name": item.get("name", ""),
                         "id": item.get("ID", ""),
                         "type": item.get("type", resource_type),
-                        "authors": AissqClient.format_authors(
-                            item.get("author", "")
-                        ),
+                        "authors": AissqClient.format_authors(item.get("author", "")),
                         "downloads": item.get("downloadCount", 0),
                         "views": item.get("viewCount", 0),
                         "modified": item.get("modifyDate", ""),
@@ -590,9 +579,7 @@ class AissqDownloadTool(BaseTool):
     ) -> None:
         """Download a single file directly on the remote using wget or curl."""
         remote_dir = str(Path(remote_path).parent)
-        res = session.exec_bash(
-            f"mkdir -p {shlex.quote(remote_dir)}", timeout=15
-        )
+        res = session.exec_bash(f"mkdir -p {shlex.quote(remote_dir)}", timeout=15)
         if res.get("exit_code", -1) != 0:
             raise AissqError(
                 f"mkdir -p failed for {remote_dir}: {res.get('stdout', '')}"
@@ -604,14 +591,9 @@ class AissqDownloadTool(BaseTool):
                 f"{shlex.quote(url)}"
             )
         else:  # curl
-            cmd = (
-                f"curl -fsSL -o {shlex.quote(remote_path)} "
-                f"{shlex.quote(url)}"
-            )
+            cmd = f"curl -fsSL -o {shlex.quote(remote_path)} " f"{shlex.quote(url)}"
 
-        self.logger.info(
-            "Remote download [%s]: %s -> %s", downloader, url, remote_path
-        )
+        self.logger.info("Remote download [%s]: %s -> %s", downloader, url, remote_path)
         # Large model files can be 40+ MB; allow up to 10 minutes.
         res = session.exec_bash(cmd, timeout=600)
         exit_code = res.get("exit_code", -1)
@@ -739,9 +721,7 @@ class AissqDownloadTool(BaseTool):
                         "aissq_download: no remote downloader available, aborting."
                     )
                     return json.dumps(result), {"result": result}
-                self.logger.info(
-                    "Download strategy: remote-direct via %s", downloader
-                )
+                self.logger.info("Download strategy: remote-direct via %s", downloader)
             else:
                 self.logger.info(
                     "Download strategy: local (LocalSession, workspace=%s)", ws
@@ -811,7 +791,11 @@ class AissqDownloadTool(BaseTool):
                     # SSH/Docker: download directly on remote
                     self.logger.info(
                         "Downloading [%d/%d]: %s (%s) via %s on remote",
-                        i + 1, len(files), file_name, _format_size(file_size), downloader,
+                        i + 1,
+                        len(files),
+                        file_name,
+                        _format_size(file_size),
+                        downloader,
                     )
                     self._remote_download_file(session, downloader, download_link, dest)
                 else:
@@ -853,7 +837,8 @@ class AissqDownloadTool(BaseTool):
                 }
                 self.logger.error(
                     "aissq_download: %d file(s) missing after download: %s",
-                    len(missing), missing,
+                    len(missing),
+                    missing,
                 )
                 return json.dumps(result), {"result": result}
 

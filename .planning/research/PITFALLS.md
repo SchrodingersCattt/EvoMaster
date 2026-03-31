@@ -1,302 +1,567 @@
-# Domain Pitfalls
+# Domain Pitfalls: Sync-to-Async Migration
 
-**Domain:** AI Agent Framework v1.1 -- Builtin Tool Suite, SubAgent Spawn, Prompt/Description System
-**Researched:** 2026-03-24
-**Confidence:** HIGH (based on codebase analysis of existing matmaster/ + evomaster/ patterns, existing SubAgent implementation in playground/, Claude Code tool design patterns)
+**Domain:** Python agent framework sync-to-async conversion (matmaster v2.0)
+**Researched:** 2026-03-26
+**Overall Confidence:** HIGH (based on codebase analysis + official Python docs + community patterns)
+
+---
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites or major issues.
+Mistakes that cause rewrites, deadlocks, or silent data corruption.
 
-### Pitfall 1: Session-Dependent Tool 的生命周期与 Tool Protocol 不匹配
+### Pitfall C1: runtime_checkable Protocol 不检查 async/sync 签名差异
 
-**What goes wrong:**
-当前 matmaster Tool Protocol (`tool_registry.py`) 定义了 `execute(arguments: dict) -> str` -- 一个无状态的纯函数签名。但 session-dependent tool (bash, editor, file ops) 本质上是有状态的：EditorTool 维护 `_file_history` 做 undo，BashTool 依赖 session 的 persistent shell state，两者都通过 EvoToolAdapter 绑定 session 引用。
+**What goes wrong:** 将 Hook Protocol 和 LLMProvider Protocol 的方法改为 `async def` 后，`isinstance()` 仍然对实现了同名 sync 方法的旧类返回 True。runtime_checkable 只检查方法名是否存在，不检查方法签名是否是 coroutine function。一个实现了 sync `def chat()` 的旧 Provider 会通过 `isinstance(obj, LLMProvider)` 检查，但在 kernel 中 `await obj.chat()` 时得到的不是 coroutine 而是直接返回值，await 一个非 awaitable 对象会抛出 TypeError。
 
-问题出在：如果新的 matmaster 原生 builtin tool 直接实现 Tool Protocol，它需要在某个地方持有 session 引用。两种常见错误路径：
-
-1. **在 `__init__` 时绑定 session** -- 导致 tool 实例与特定 session 耦合。当 session 重连或切换时（DockerSession 的容器可能被回收重建），tool 持有的是过期引用。当前 EvoToolAdapter 就有这个问题，但 v1 中 session 生命周期恰好覆盖整个 run，所以不显现。SubAgent spawn 会打破这个假设：子 agent 可能需要共享父的 session 但用不同的 tool 状态（比如独立的 undo history）。
-
-2. **在 `execute()` 时从全局获取 session** -- 引入隐式依赖，破坏可测试性。Tool Protocol 的设计意图是 execute 只接收 arguments，不依赖外部状态。
-
-**Why it happens:**
-EvoToolAdapter 的设计用 `__init__(tool, session)` 把 session 绑死在适配器上，在单 agent 单 run 的场景下完美工作。但 v1.1 引入 SubAgent 后，一个 Exp.run() 内会有多个 agent 执行，共享同一个 workspace 但可能需要独立的 tool 状态。
+**Why it happens:** Python 的 `@runtime_checkable` Protocol 设计上只做 structural 存在性检查（属性/方法名存在），不检查类型签名。这是 PEP 544 的明确设计决策。对于 matmaster 来说，当前有 6 个 `@runtime_checkable` Protocol（LLMProvider, Hook, Guard, EventHandler, ReplyQueueLike, WorkerRegistry）和大量 mock 实现（MockLLMProvider, CompleteLLMProvider 等），它们全部需要同步更新。
 
 **Consequences:**
-- SubAgent 的 EditorTool undo 历史污染父 agent 的历史
-- Session 重连后 tool 执行静默失败（持有已关闭的 session 引用）
-- 无法在不创建真实 session 的情况下单元测试 builtin tool
+- 所有 863 个测试中使用 sync mock 的测试会在 runtime 静默通过 isinstance 检查但在 await 时崩溃
+- 第三方或上游 evomaster 代码如果实现了旧 sync Protocol，在 isinstance 检查时不会报错，只在实际调用时才暴露
+- 错误消息 `TypeError: object LLMResponse can't be used in 'await' expression` 不直观，难以定位到 Protocol 不匹配
 
 **Prevention:**
-1. 引入 `ToolContext` 层：`execute(arguments, context: ToolContext) -> str`。ToolContext 包含 session handle、workdir、tool-scoped state store。每次 agent run 创建新的 ToolContext，SubAgent 创建独立的 ToolContext 但共享底层 session。
-2. 或者保持 Protocol 签名不变，但让 tool 内部通过 closure/factory 模式绑定 session。关键是 tool 实例必须区分 session 引用（共享）和 tool 状态（独立）。
-3. EditorTool 的 `_file_history` 必须按 agent-run 隔离，不能是 tool 实例级别的状态。用 ToolContext 的 state store 或者每次 run 创建新的 tool 实例。
+1. 在所有 Protocol 中 async 方法旁加 runtime validation helper：
+```python
+import inspect
 
-**Detection:**
-- SubAgent 执行 undo_edit 撤销了父 agent 的编辑
-- 测试中需要 mock 整个 session 才能测试一个简单的 tool
+def _validate_async_provider(obj: object) -> None:
+    """Verify all Protocol methods are actually coroutines, not sync functions."""
+    for method_name in ("chat", "chat_stream", "chat_with_retry"):
+        method = getattr(obj, method_name, None)
+        if method is not None and not inspect.iscoroutinefunction(method):
+            raise TypeError(
+                f"{type(obj).__name__}.{method_name} must be async, "
+                f"got sync function"
+            )
+```
+2. 在 Exp.build_runtime() 和 AgentKernel.__init__() 中加入 validation call
+3. 在 conftest.py 中加一个 session-scope fixture 或 autouse fixture 验证所有 mock 是否满足 async Protocol
+4. 考虑使用 ABC 而非 Protocol 来获得子类构造时的静态检查（但这破坏了 structural subtyping 的设计意图，权衡后建议保留 Protocol + runtime validation helper）
 
-**Phase to address:** Builtin Tool 设计阶段 -- Tool Protocol 是否需要 ToolContext 参数，必须在实现任何 builtin tool 之前决定。
+**Detection:** 搜索所有 `isinstance(xxx, LLMProvider)`, `isinstance(xxx, Hook)`, `isinstance(xxx, Guard)` 调用点，确保每个点之后都有 async validation。在 CI 中加一个测试专门验证所有已知 Provider/Hook 实现的方法是 coroutine function。
+
+**Confidence:** HIGH -- 直接由 Python typing 规范确认 (PEP 544)，且已在 codebase 中确认 6 个 runtime_checkable Protocol。
+
+**Phase mapping:** 最早阶段（Protocol 定义改造阶段）必须解决。
 
 ---
 
-### Pitfall 2: SubAgent Spawn 阻塞父 Agent 的执行循环
+### Pitfall C2: asyncio.run() 嵌套导致 RuntimeError
 
-**What goes wrong:**
-SubAgent 作为 tool_call 的结果返回，意味着在 AgentKernel 的执行循环中，`spec.tool_registry.execute("spawn_agent", args)` 会同步执行整个子 agent 的生命周期（assemble -> build_runtime -> kernel.run -> cleanup）。当前 kernel 的 tool 执行是串行的（agent.py 第 137-182 行 `for tc in response.tool_calls`），子 agent 可能运行数十个 turn，每个 turn 都有 LLM 调用。
+**What goes wrong:** 在已有 event loop 运行的环境中调用 `asyncio.run()` 会抛出 `RuntimeError: asyncio.run() cannot be called from a running event loop`。matmaster 有两个关键的嵌套场景：
 
-后果：
-1. 父 agent 的 stop_event 检查只在每个 turn 开始时执行（第 89-90 行），子 agent 运行期间父无法响应取消。
-2. SSE 流对前端来说会出现长时间无事件的"空白期"（子 agent 的事件通过哪个 bus 发送？）
-3. 如果子 agent 耗尽 max_turns 或出错，异常传播路径不清晰 -- tool execute 返回 error string 还是抛异常？当前 kernel 的异常处理（第 168-171 行）会捕获所有 Exception 并转为 error string，但子 agent 的"正常完成但结果不满意"不应该是 error。
+1. **DevShell REPL:** 当前 DevShell 计划用 `asyncio.run()` 包装调用 async matmaster（PROJECT.md 明确说了 DevShell async 改造延后，用 asyncio.run() wrapper）。但如果 REPL 本身在某个 async 上下文中运行（比如 IPython/Jupyter），就会嵌套失败。
+2. **src/ service layer:** `agent_run_service.py` 中的 `run_agent_sync()` 在 ThreadPoolExecutor 线程中同步执行 kernel。如果 matmaster/ 层变成 async，service 层需要在线程中运行 event loop 来调用 async matmaster -- 这需要在该线程中创建新的 event loop（可以，因为线程没有 running loop），但不能复用主线程的 event loop。
+3. **SubAgent spawn:** 当前 spawn_fn 是同步闭包。改为 async 后，如果 parent agent 已在 event loop 中运行，spawn_fn 作为 coroutine 可以直接 await -- 但如果有人在同步上下文中调用 spawn_fn 则会嵌套。
 
-**Why it happens:**
-现有的 `step_sub_agent.py` 中的 SubAgent 模式（playground/mat_master 中）是在 solver 层实现的，绕过了 kernel 的 tool 执行流程。v1.1 把 SubAgent spawn 做成 tool_call 触发，复用了 kernel 的执行路径，但 kernel 的 tool 执行模型假设 tool 是"快速返回"的操作（bash 命令、文件读写），不是"嵌套的 agent 运行"。
+**Why it happens:** Python 3.10+ 强制每线程最多一个运行中的 event loop。`asyncio.run()` 会创建新 loop 并运行直到 complete，但如果当前线程已有 running loop 则拒绝执行。
 
 **Consequences:**
-- 用户点击"停止"后子 agent 继续运行直到自然结束
-- 前端超时断开 SSE 连接（子 agent 运行期间无心跳）
-- Worker 的 session_run_owner TTL（7200s）可能在长子 agent 运行期间过期
+- DevShell 在 Jupyter/IPython 环境中完全无法使用
+- 如果 service 层错误地在 main thread（已有 FastAPI event loop）中直接调用 asyncio.run()，整个 API 服务崩溃
+- nest_asyncio 虽能绕过但会掩盖架构问题，不推荐在生产中使用
 
 **Prevention:**
-1. SubAgent spawn tool 必须转发父的 stop_event 到子 kernel。子 kernel 在每个 turn 检查同一个 stop_event，实现级联取消。
-2. 子 agent 的事件必须通过父的 MessageBus 发送，使用 source 标识区分。不能创建独立的 bus -- 否则前端收不到子 agent 的流式输出。
-3. 考虑子 agent 是否需要流式输出到前端。如果需要，spawn tool 不能阻塞等待完整结果，需要 yield 中间状态。如果不需要（子 agent 只返回最终结果），那 spawn tool 的 execute 就是同步阻塞的，但必须有超时保护和取消传播。
-4. Spawn tool 返回值格式设计：成功时返回子 agent 的 final_content；失败时返回结构化的错误信息（reason + partial result），不应该让 kernel 的 generic 异常处理把子 agent 的运行结果吞掉。
+1. **DevShell wrapper 明确使用 `asyncio.run()` 但只在 main thread 无 running loop 时调用：**
+```python
+def run_sync_wrapper(coro):
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    else:
+        # Already in async context -- cannot nest
+        raise RuntimeError(
+            "DevShell cannot run inside an existing event loop. "
+            "Use 'await runner.run_async(task)' directly."
+        )
+```
+2. **src/ service layer 保持 ThreadPoolExecutor 模式，在 worker 线程中用 `asyncio.run()`：**
+   - 每个 worker 线程天然没有 running loop，所以 `asyncio.run()` 安全
+   - 关键是不要在 FastAPI 的 event loop 线程中直接调用
+3. **SubAgent spawn 作为 async coroutine 直接 await，不需要 asyncio.run()：**
+   - 因为 parent kernel 已经是 async，spawn_fn 变成 async 后直接 `result = await spawn_fn(...)` 即可
 
-**Detection:**
-- 用户取消后子 agent 仍在消耗 LLM token
-- 前端 SSE 流出现 30 秒以上的空白（无 heartbeat）
-- 子 agent 的 tool 调用事件在父 agent 的事件流中缺失
+**Detection:** grep 所有 `asyncio.run(` 调用，确认每一个都在确定没有 running loop 的上下文中。
 
-**Phase to address:** SubAgent Spawn 机制设计阶段 -- 必须在 spawn tool 实现之前解决取消传播和事件路由问题。
+**Confidence:** HIGH -- Python 官方文档明确记录。
+
+**Phase mapping:** Integration boundary 阶段（src/ 层适配 + DevShell wrapper）。
 
 ---
 
-### Pitfall 3: Tool Description 设计不当导致 LLM 误用工具
+### Pitfall C3: 在 async 代码中调用阻塞 I/O，冻结 event loop
 
-**What goes wrong:**
-当前 EvoToolAdapter 的 description 来自 `tool.params_class.__doc__`（evomaster_tool_adapter.py 第 44 行），也就是 Pydantic model 的 docstring。BashToolParams 的 docstring 有 20+ 行详细说明（bash.py 第 31-52 行），包含 Markdown 格式的使用指南。EditorToolParams 更长，有 25+ 行包含 CRITICAL REQUIREMENTS。
+**What goes wrong:** 将 AgentKernel.run() 改为 async 后，如果内部仍然调用同步阻塞操作（file I/O, subprocess.run, time.sleep, sync HTTP），整个 event loop 被阻塞。matmaster 当前的阻塞点包括：
 
-三个常见错误：
+| 阻塞调用 | 位置 | 影响范围 |
+|---------|------|---------|
+| `session.exec_bash()` | BashTool._execute | 每次 bash 命令阻塞整个 loop |
+| `subprocess.run()` | evomaster session 内部 | bash 执行 |
+| `open().read()` / `Path.read_text()` | ReadTool, WriteTool, EditTool, GlobTool, GrepTool | 文件操作 |
+| `time.sleep(backoff)` | OpenAIProvider.chat_with_retry, AgentKernel._call_llm | LLM 重试 |
+| `self._client.chat.completions.create()` | OpenAIProvider.chat/chat_stream | 同步 OpenAI SDK |
+| `self._summary_provider.chat()` | ContextCompactor._summarize | 压缩用 LLM 调用 |
+| `json.loads(config_path.read_text())` | Exp._init_skill_tools | 配置加载 |
+| `connector.cleanup()` | LazyMCPConnector | MCP 清理 |
 
-1. **Description 过长** -- 每个 tool 的 description 都出现在每次 LLM 请求的 tools 参数中。10 个 tool 每个 500 token 的 description = 5000 token 的固定开销。对于 200 turn 的 agent run，这是 1M token 的纯 description 开销。当前系统只有 3 个 builtin tool，v1.1 扩展到 10+ 个时 token 成本显著上升。
-
-2. **Description 和 system prompt 内容重复** -- ContextBuilder 的 `_build_tools` section（context_builder.py 第 155-164 行）已经列出了每个 tool 的 name + description。如果 tool description 里写了使用指导，system prompt 里也写了使用指导，LLM 收到重复信息，浪费 context window 并可能产生矛盾指令。
-
-3. **Schema 设计歧义导致 LLM 生成错误参数** -- BashToolParams 的 `is_input` 是 `Literal['true', 'false']` 字符串类型而不是 bool（bash.py 第 59-62 行）。这种反直觉的类型选择会导致 LLM 生成 `{"is_input": true}`（JSON boolean）而不是 `{"is_input": "true"}`（JSON string），kernel 的 `_parse_arguments` 能解析但 Pydantic validation 会失败。
-
-**Why it happens:**
-EvoMaster 的 tool description 设计来自人写 prompt 的时代，为了给 LLM 足够上下文而写得很详细。但在 function calling 范式下，tool description 是 API schema 的一部分，每次请求都发送，需要精简。
+**Why it happens:** async/await 只是协作式并发，没有抢占。一个不 yield 的同步调用会 hold 住 event loop 线程，导致所有其他 coroutine（包括 SSE 流、timeout 检测、其他 agent 的执行）全部停滞。
 
 **Consequences:**
-- Token 成本随 tool 数量线性增长，200 turn run 可能多消耗 1M+ token
-- LLM 看到矛盾的使用指导（description vs system prompt），行为不可预测
-- 参数类型不符合 JSON 直觉（string "true" vs boolean true），触发 validation error
+- 如果多个 agent 共享一个 event loop（多 agent 编排的目标），一个 agent 的 bash 命令会冻结所有 agent
+- SSE 流心跳丢失，前端判定连接超时
+- stop_event（改为 asyncio.Event 后）无法被检测到，取消操作失效
+- 对单 agent 场景影响较小（因为 agent loop 本身是顺序执行的），但对未来多 agent 场景是致命的
 
 **Prevention:**
-1. Tool description 控制在 2-3 句话以内（<100 token），只描述 tool 做什么和什么时候用。详细的使用指导放在 system prompt 的 tools section 中（ContextBuilder 已有 tools section）。
-2. 建立 description 层级：`json_schema.description`（简短，每次发送）vs `system_prompt_guide`（详细，prompt 层面）。在 Tool Protocol 上新增 `usage_guide` 可选属性，ContextBuilder 读取它来构建 prompt 中的 tools section。
-3. 修正 schema 类型：`is_input` 应该是 `bool` 而不是 `Literal['true', 'false']`。所有新 builtin tool 的参数类型必须与 JSON 原生类型对齐。在 `json_schema` 属性中使用 `model_json_schema()` 后要删除 `title`、`default` 等 LLM 不需要的字段（当前 `_remove_unused_schema_info` 已做部分清理）。
-4. 建立 tool description review checklist：token count < 100、无 Markdown 格式（function description 不渲染 Markdown）、参数 description 精确描述类型和约束、必选 vs 可选标注清晰。
+1. **Phase 1 必须改的（高优先级）：**
+   - OpenAI SDK: `openai.OpenAI` -> `openai.AsyncOpenAI`，所有 API 调用变 async
+   - `time.sleep()` -> `await asyncio.sleep()`
+   - ContextCompactor._summarize: 改用 async LLM provider
+2. **Phase 2 改的（中优先级）：**
+   - BashTool: `subprocess.run` -> `asyncio.create_subprocess_exec`
+   - File I/O tools: 使用 `await asyncio.to_thread(Path.read_text, ...)` 或 aiofiles
+3. **可延后的（低优先级）：**
+   - 配置文件加载（一次性，启动时）
+   - MCP connector cleanup
+4. **Blocking detector for development:**
+```python
+import asyncio
+import time
 
-**Detection:**
-- 单次 LLM 请求的 tools 参数超过 3000 token
-- LLM 频繁生成错误类型的参数（看 kernel 的 `_parse_arguments` warning 日志）
-- Agent 在 tool 选择上犹豫不决（多次调用错误的 tool 再纠正）
+class BlockingDetector:
+    """Warn when event loop is blocked for too long."""
+    def __init__(self, threshold: float = 0.1):
+        self._threshold = threshold
 
-**Phase to address:** Tool Description/Schema 设计阶段 -- 在实现任何新 builtin tool 之前制定 description 规范。
+    async def monitor(self):
+        while True:
+            t0 = time.monotonic()
+            await asyncio.sleep(0)  # yield to loop
+            elapsed = time.monotonic() - t0
+            if elapsed > self._threshold:
+                logger.warning(
+                    "Event loop blocked for %.3fs (threshold=%.3fs)",
+                    elapsed, self._threshold
+                )
+```
+
+**Detection:** 使用 asyncio debug mode (`PYTHONASYNCIODEBUG=1`) 自动检测超过 100ms 的阻塞调用。或者在 CI 中 enable asyncio debug mode 运行测试。
+
+**Confidence:** HIGH -- asyncio 基础机制，官方文档明确警告。
+
+**Phase mapping:** 贯穿所有阶段，但 LLM 和 sleep 必须在第一阶段完成。
 
 ---
 
-### Pitfall 4: SubAgent 与父 Agent 的 Workspace 共享导致文件冲突
+### Pitfall C4: threading.Event vs asyncio.Event -- stop_event 跨线程问题
 
-**What goes wrong:**
-v1.1 的 SubAgent 设计要求子 agent 共享父的 workspace（PROJECT.md: "共享 workspace"）。这意味着父子 agent 操作同一目录下的文件。虽然当前设计是串行的（子 agent 在父的 tool_call 中同步运行），但以下场景仍然危险：
+**What goes wrong:** 当前 `AgentKernel.run()` 接受 `threading.Event` 作为 `stop_event`。改为 async 后如果换成 `asyncio.Event`，而 src/ service 层仍然在另一个线程中通过 `stop_event.set()` 来取消 agent -- `asyncio.Event` 不是线程安全的，跨线程 set() 行为未定义（可能丢失信号，可能引发 RuntimeError）。
 
-1. **子 agent 修改了父 agent 依赖的文件** -- 父 agent 在上一个 turn 读取了 `/workspace/config.yaml` 并计划在下一个 turn 修改它，但中间 spawn 的子 agent 也修改了同一个文件。父 agent 的 str_replace 因为 old_str 不匹配而失败。
-2. **子 agent 的 undo 历史与父混淆** -- EditorTool 的 `_file_history` 是按文件路径索引的。如果子 agent 编辑了 `/workspace/main.py` 两次，父 agent 之后对同一文件执行 undo_edit，会撤销子 agent 的修改而不是父自己的。
-3. **子 agent 在 workspace 中留下临时文件** -- 子 agent 执行完毕后不做清理，这些文件对父 agent 是可见的噪音。
+**Why it happens:** `asyncio.Event` 是为单线程 event loop 内的 coroutine 间通信设计的。它内部使用的条件变量机制依赖于 event loop 的调度，不支持跨线程操作。而 `threading.Event` 是内核级线程同步原语，天然线程安全。
 
-**Why it happens:**
-共享 workspace 是正确的设计选择（子 agent 需要访问父的工作成果），但文件操作的原子性和隔离性没有配套机制。当前的 SubAgentHandle（playground 中的旧实现）通过 `reset_context()` 做了对话上下文隔离，但完全没有处理文件系统层面的隔离。
+matmaster 的 stop_event 使用链：
+```
+src/services/agent_run_service.py (thread A)
+  -> stop_event.set()  # 来自 Redis 轮询或 API cancel 请求
+  -> AgentKernel.run() (thread B / event loop)
+     -> checks stop_event.is_set()
+     -> SpawnTool._stop_event (same context as kernel)
+```
 
 **Consequences:**
-- str_replace 操作因 old_str 不匹配而失败率上升
-- undo_edit 撤销错误的修改版本
-- workspace 中积累子 agent 的临时文件，影响父 agent 对工作区的理解
+- 取消信号丢失：agent 无法停止，用户按取消无反应
+- 竞态条件：偶发的 `RuntimeError` 在高并发时出现
+- 子 agent 级联取消失效
 
 **Prevention:**
-1. 每个 agent run（包括子 agent）创建独立的 EditorTool 实例。Tool 状态（_file_history）是 per-run 的，不是 per-tool-instance 的。这要求 SubAgent spawn 时创建独立的 ToolRegistry（共享 session 但独立 tool 实例）。
-2. SubAgent spawn tool 的参数中提供可选的 `sub_workdir`，子 agent 在 workspace 的子目录中工作。默认共享 workspace 根目录，但允许调用者指定隔离目录。
-3. 不做文件锁（太重）。接受"共享 workspace = 最终一致性"的模型。但在 SubAgent 返回时，spawn tool 的 result 中包含子 agent 修改的文件列表（从 tool_call 历史中提取），让父 agent 知道哪些文件被改变了。
+1. **保留 threading.Event 作为跨线程信号：** kernel async 代码中用 `stop_event.is_set()`（非阻塞，线程安全）来轮询检查。
+2. **不要替换为 asyncio.Event：** 在 async kernel 中，每次 loop iteration 开头检查 threading.Event：
+```python
+async def run(self, spec, task, *, stop_event=None):
+    while turn < spec.max_turns:
+        if stop_event and stop_event.is_set():  # threading.Event.is_set() is thread-safe
+            return self._finish(...)
+        # ... async loop body
+```
+3. **如果未来需要 async-native cancellation：** 使用 `asyncio.Task.cancel()` 机制，不用 Event。但这需要 src/ 层持有 task reference，更复杂。
 
-**Detection:**
-- str_replace 失败率在引入 SubAgent 后显著上升
-- undo_edit 产生预期外的文件内容
+**Detection:** grep `asyncio.Event` 确保没有被误用于跨线程场景。grep `threading.Event` 确认所有 is_set() 调用都在正确的线程模型中。
 
-**Phase to address:** SubAgent Spawn 阶段 -- tool 实例隔离策略必须与 spawn 机制一起设计。
+**Confidence:** HIGH -- Python asyncio 官方文档明确说明 asyncio sync primitives 不是线程安全的。
+
+**Phase mapping:** Kernel async 化阶段必须决策。
 
 ---
 
-### Pitfall 5: Prompt Template 管理与 ExpConfig 的耦合断裂
+### Pitfall C5: sync Generator -> async Generator 的 LLM streaming 生命周期问题
 
-**What goes wrong:**
-当前 ExpConfig 只有一个 `developer_instructions` 字符串字段（exp.py 第 39 行），Exp.build_runtime() 将它传给 ContextBuilder 作为 identity section。v1.1 需要更丰富的 prompt 管理：
+**What goes wrong:** 当前 `LLMProvider.chat_stream()` 返回 `Iterator[StreamChunk]`（sync generator）。改为 `AsyncIterator[StreamChunk]`（async generator）后，如果 iteration 被提前中断（exception, break, cancel），async generator 的 cleanup (finally block, aclose()) 行为和 sync generator 不同：
 
-1. 不同的 exp 定义需要不同的 system prompt 结构（比如 SubAgent 的 prompt 不需要 skills section，只需要 task-specific instruction）
-2. Tool 的 usage guide 需要从 exp 层注入到 prompt 中（哪些 tool 需要详细说明取决于 exp 配置的 tool 集合）
-3. SubAgent 的 prompt 需要包含父 agent 的部分上下文（当前任务描述）
+1. Sync generator: GC 会调用 `.close()` 触发 GeneratorExit，finally 块同步执行
+2. Async generator: GC 调用 finalizer schedule `aclose()` 到 event loop，但如果 loop 已关闭或在不同线程，finally 块可能永远不执行
 
-常见错误：在 ExpConfig 的 TOML 中硬编码完整的 system prompt 模板。这导致：
-- TOML 文件变成 2000+ 行的 prompt 存储（不是 config 文件该做的事）
-- Prompt 中引用 tool 名称，但 tool 注册顺序可能变化导致 prompt 与实际 tool 不一致
-- 多个 exp 之间 prompt 的公共部分（identity、mode_contract）重复维护
+**Why it happens:** Async generator finalization 依赖 event loop 存活。PEP 525 设计了 `sys.set_asyncgen_finalizer()` 和 `loop.shutdown_asyncgens()` 来处理，但这些机制脆弱且容易被遗忘。
 
-**Why it happens:**
-ContextBuilder 当前的 section 架构（identity -> mode_contract -> skills -> tools -> memory -> task）是固定顺序的硬编码。v1.1 需要更灵活的 prompt 组装，但如果不升级 ContextBuilder 就会把灵活性推到 TOML config 里，导致 config 承担了模板引擎的职责。
+matmaster 的 LLM streaming 路径：
+```python
+# 当前 (sync): AgentKernel._do_stream_llm
+for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs):
+    ...  # 如果这里抛异常，sync generator 的 finally 立即执行
+
+# 改后 (async):
+async for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs):
+    ...  # 如果这里抛异常，async generator 需要 aclose() 来触发 finally
+```
+
+OpenAI SDK 的 async stream 包含 httpx.AsyncClient 连接资源。如果 async generator 的 finally 不执行，HTTP 连接泄漏。
 
 **Consequences:**
-- TOML 文件不可维护（几千行 prompt 模板混在配置中）
-- Prompt 和实际 tool 集合不同步
-- SubAgent 的 prompt 构建逻辑散落在 spawn tool 和 ContextBuilder 之间
+- HTTP 连接泄漏，connection pool 耗尽
+- OpenAI SDK 的 response body 未消费完毕，触发 httpx 告警
+- 在 pytest 中表现为 ResourceWarning 或 test 结束时的 asyncio 错误
 
 **Prevention:**
-1. 将 prompt 模板从 TOML 分离到独立的 `.md` 或 `.txt` 文件。TOML 只引用模板路径。ExpConfig 新增 `prompt_template: str = ""` 字段指向模板文件，`developer_instructions` 保留作为模板中的变量。
-2. ContextBuilder 增加 section 开关和自定义 section 能力。ExpConfig 通过 `disabled_sections: list[str]` 和 `extra_sections: dict[str, str]` 控制 prompt 组装。ContextBuilder.build() 已有 `disabled_sections` 参数（context_builder.py 第 56 行），但 Exp 没有传递它。
-3. Tool usage guide 由 ContextBuilder 的 `_build_tools` 自动从 Tool Protocol 的 `usage_guide` 属性生成，不在 TOML 中手写。
-4. SubAgent 的 prompt 构建通过 spawn tool 在运行时组装：`task_context` 从父 agent 传入，其余 section 由子 Exp 的 ContextBuilder 生成。
+1. **在 _do_stream_llm 中使用 contextlib.aclosing：**
+```python
+from contextlib import aclosing
 
-**Detection:**
-- TOML 文件超过 100 行
-- 同一段 prompt 文本出现在多个 TOML 文件中
-- 修改 tool 集合后需要手动更新 prompt 中的 tool 说明
+async def _do_stream_llm(self, spec, messages, *, timeout=None):
+    async with aclosing(spec.llm_provider.chat_stream(...)) as stream:
+        async for chunk in stream:
+            ...
+```
+2. **OpenAIProvider.chat_stream 内部用 try/finally 确保 SDK stream 关闭：**
+```python
+async def chat_stream(self, messages, tools=None, *, timeout=None):
+    stream = await self._client.chat.completions.create(**kwargs)
+    try:
+        async for chunk in stream:
+            yield ...
+    finally:
+        await stream.close()  # 确保 httpx response 被关闭
+```
+3. **在 pytest 中 enable asyncio debug mode + 严格 ResourceWarning 检测：**
+```ini
+# pyproject.toml
+[tool.pytest.ini_options]
+filterwarnings = ["error::ResourceWarning"]
+```
 
-**Phase to address:** Prompt/Description 体系设计阶段 -- ContextBuilder 升级和模板分离必须在 SubAgent prompt 构建之前完成。
+**Detection:** 在 CI 中运行 `python -W error::ResourceWarning -m pytest`。在 asyncio debug mode 下运行测试检查未关闭的 async generator 警告。
+
+**Confidence:** HIGH -- PEP 525 明确记录 async generator finalization 机制。
+
+**Phase mapping:** LLMProvider async 化阶段，与 OpenAI SDK 迁移同步完成。
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 6: Session-Free Tool 与 Session-Dependent Tool 的注册混淆
+### Pitfall M1: 863 个 sync 测试的批量迁移策略错误
 
-**What goes wrong:**
-v1.1 区分 session-dependent tool（需要 BaseSession 操作远程环境）和 session-free tool（纯本地计算，如搜索、数学计算）。当前 Exp._init_builtin_tools()（exp.py 第 224-246 行）在 `ctx.session is None` 时跳过所有 builtin tool 的注册。如果 session-free tool 也放在 builtin tools 中，它们会被错误地跳过。
+**What goes wrong:** 把 863 个测试全部加 `async def` + `@pytest.mark.asyncio` 导致：
+- 所有 mock 需要同步更新为 async 版本
+- conftest.py 中的 fixture 需要 `@pytest_asyncio.fixture` 标记
+- event loop scope 配置不当导致测试间污染
+- 大量 coroutine was never awaited 告警淹没有用的错误信息
 
-反过来的错误也可能发生：session-free tool 被注册了，但它内部意外地调用了 session 方法（因为 tool context 中有 session 引用），在 session=None 的环境下崩溃。
+**Why it happens:** pytest-asyncio 1.0 (2025-05) 做了重大 API 变更，移除了 event_loop fixture。如果一次性迁移所有测试，很容易在配置和标记上出错。
 
 **Prevention:**
-1. 在 ExpConfig 的 tools.builtin 中明确区分 session-dependent 和 session-free tool 集合。不用 `["*"]` 通配所有 tool，改为 `session_tools = ["bash", "editor"]` 和 `free_tools = ["search", "think"]` 两个列表。
-2. 或者在 Tool Protocol 上新增 `requires_session: bool` 属性，ToolRegistry 在注册时自动过滤。Exp._init_builtin_tools 根据 ctx.session 是否存在来决定注册哪些 tool。
-3. Session-free tool 的 execute 实现中不应持有 session 引用。如果 Tool Protocol 增加了 ToolContext 参数，session-free tool 应该忽略 context.session。
+1. **分层迁移，不一次性全改：**
+   - Phase 1: matmaster/types/ 的纯数据类测试 -- 不需要 async，保持 sync
+   - Phase 2: matmaster/core/ 的 kernel/hook/guard 测试 -- 需要 async
+   - Phase 3: matmaster/tools/ 的 tool 测试 -- 按 tool 逐个迁移
+   - Phase 4: matmaster/integration/ 和 e2e 测试 -- 最后
+2. **pyproject.toml 配置：**
+```toml
+[tool.pytest.ini_options]
+asyncio_mode = "auto"  # 自动检测 async def test
+asyncio_default_fixture_loop_scope = "function"  # 每个测试独立 loop
+```
+3. **conftest.py 中所有 async fixture 使用 `@pytest_asyncio.fixture`（strict mode 下必需）**
+4. **MockLLMProvider 保持双版本过渡：**
+```python
+class MockLLMProvider:
+    """Async mock satisfying the async LLMProvider Protocol."""
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="mock response", finish_reason="stop")
 
-**Detection:**
-- DevShell 中（无远程 session）调用 search tool 报 AttributeError
-- ctx.session=None 时所有 builtin tool 都未注册（包括不需要 session 的）
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        yield StreamChunk(content="hello", finish_reason="stop")
+```
 
-**Phase to address:** Builtin Tool 分类设计阶段。
+**Detection:** 在 CI 中用 `pytest --co -q | wc -l` 确认测试数量没有下降。用 `-W error::RuntimeWarning` 捕获 coroutine was never awaited。
+
+**Confidence:** HIGH -- pytest-asyncio 文档和社区经验充分。
 
 ---
 
-### Pitfall 7: AgentRuntimeSpec frozen 与 SubAgent 的 tool_registry 动态性矛盾
+### Pitfall M2: MessageBus 从 queue.Queue 到 asyncio.Queue 的线程边界问题
 
-**What goes wrong:**
-AgentRuntimeSpec 是 `frozen=True` 的 Pydantic model（runtime.py 第 48 行）。Exp.build_runtime() 通过 `spec.model_copy(update={...})` 创建包含 ToolRegistry 的最终 spec。但 SubAgent spawn 时需要创建一个新的 spec（可能有不同的 tool 集合 -- 比如不给子 agent spawn tool 本身，防止无限递归）。
+**What goes wrong:** 当前 MessageBus 用 `queue.Queue`（线程安全同步队列）。如果改为 `asyncio.Queue`（非线程安全）：
+- EventRouter 在独立线程中消费 -- 无法用 asyncio.Queue
+- src/ service 层在 ThreadPoolExecutor 线程中创建 bus -- 跨线程 put 不安全
 
-如果 spawn tool 试图修改已有的 spec（比如移除 spawn tool 自身），frozen 会阻止。需要为子 agent 创建完整的新 spec，这意味着 spawn tool 需要访问 Exp 实例来调用 assemble + build_runtime。但 tool 的 execute 签名只接收 arguments dict，不知道 Exp 或 PlaygroundContext。
+但如果保持 `queue.Queue` 不改，async kernel 中 `bus.emit()` 的 sync `queue.put()` 在 async context 中是阻塞调用（虽然通常很快，但 maxsize>0 时可能阻塞）。
+
+**Why it happens:** queue.Queue 和 asyncio.Queue 服务于不同的并发模型，不能简单替换。matmaster 的 EventRouter 本身是基于线程的消费者模式，和 async kernel 的执行模型不匹配。
 
 **Prevention:**
-1. Spawn tool 不直接创建子 agent 的 spec。它通过一个预注入的 factory callable 来创建子 agent 的完整 runtime。这个 factory 在 Exp.build_runtime() 阶段构造，闭包捕获了 Exp、ctx 和 bus 引用。
-2. 防递归：spawn tool 的 factory 创建子 agent 时，子 agent 的 tool 集合通过 `excluded_tools` 参数排除 spawn tool 本身。或者在 ExpConfig 中为子 agent 定义独立的 tool 集合。
-3. 子 agent 的 max_turns 必须小于父 agent 的剩余 turns，防止子 agent 耗尽全局预算。这需要 spawn tool 知道父 kernel 的当前 turn 状态 -- 可以通过 ToolContext 或 factory 的闭包传递。
+1. **短期方案（v2.0 推荐）：保持 queue.Queue 不变。** 理由：
+   - bus.emit() 是 fire-and-forget，queue.put() 在无限队列下不阻塞
+   - EventRouter 线程消费模式不需要改动
+   - src/ 层兼容性不变
+   - 阻塞时间极短（microsecond 级），对 event loop 影响可忽略
+2. **中期方案（v2.1 多 agent 编排时）：引入 janus 双面队列：**
+```python
+import janus
 
-**Detection:**
-- 子 agent 调用 spawn tool 触发无限递归（agent 嵌套 agent 嵌套 agent...）
-- spawn tool 的 execute 中出现 Exp 或 PlaygroundContext 的直接 import（违反 tool 层不依赖 core 层的原则）
+class AsyncMessageBus:
+    def __init__(self):
+        self._queue = janus.Queue()
 
-**Phase to address:** SubAgent Spawn 机制设计阶段。
+    async def emit(self, event):
+        await self._queue.async_q.put(event)
+
+    def emit_sync(self, event):
+        self._queue.sync_q.put(event)
+
+    async def get(self, timeout=None):
+        return await asyncio.wait_for(self._queue.async_q.get(), timeout)
+
+    def get_sync(self, timeout=None):
+        return self._queue.sync_q.get(timeout=timeout)
+```
+3. **绝对不要做的事：** 直接把 queue.Queue 换成 asyncio.Queue 然后在 EventRouter 线程中调用 asyncio.Queue.get() -- 这会 RuntimeError。
+
+**Detection:** 确保 MessageBus 的 emit() 调用不会在 async context 中阻塞。在 asyncio debug mode 下运行如果 queue.put 阻塞超过阈值会有警告。
+
+**Confidence:** HIGH -- janus 是社区公认的跨线程/asyncio 通信方案。
 
 ---
 
-### Pitfall 8: ContextBuilder 的 tools section 与 function calling 的 tools 参数信息冗余
+### Pitfall M3: Exp 清理回调从 sync 变 async 的资源泄漏
 
-**What goes wrong:**
-当前 ContextBuilder._build_tools()（context_builder.py 第 155-164 行）在 system prompt 中列出每个 tool 的 `name: description`。但 LLM API 的 function calling 已经在 `tools` 参数中提供了完整的 tool name、description 和 schema。这造成双重信息：
+**What goes wrong:** 当前 `Exp._cleanup_callbacks` 是 `list[Callable[[], None]]`（sync callables）。如果某些清理操作需要 async（如关闭 AsyncOpenAI client、关闭 async MCP 连接），sync 的 `_run_cleanup_callbacks()` 无法 await 它们。
 
-1. System prompt 中的 tools section（每次 LLM 调用都发送的 system message 一部分）
-2. API 的 tools 参数（每次 LLM 调用都发送）
+直接在 sync 上下文中调用 async cleanup function 只会创建一个 coroutine 对象但不执行它，资源永远不被释放。
 
-对于 10 个 tool，这可能多出 1000+ token 的冗余。更糟的是，如果 system prompt 中的 tool 描述和 tools 参数中的 description 不一致（因为一个来自 ContextBuilder 的格式化，一个来自 Tool.description 属性），LLM 会收到矛盾信息。
+**Why it happens:** 清理回调的 sync/async 需要和注册侧保持一致。当 tool 和 provider 变成 async 后，它们的清理逻辑也可能需要 async。
+
+当前的清理调用链：
+```
+agent_run_service.py finally: exp._run_cleanup_callbacks()  # sync context
+DevShell repl.py finally: runtime.cleanup()  # sync context
+```
+
+**Consequences:**
+- AsyncOpenAI httpx.AsyncClient 未正确关闭，连接泄漏
+- MCP connector 的 async session 未关闭
+- pytest 中出现 Event loop is closed 或 unclosed resource 警告
 
 **Prevention:**
-1. ContextBuilder 的 tools section 不重复列出 tool description。改为只提供 tool usage strategy -- 什么时候用哪个 tool，tool 之间的配合模式。这是 function calling API 中 tools 参数无法表达的高层指导。
-2. 或者完全移除 ContextBuilder 的 tools section（`disabled_sections={"tools"}`），依赖 function calling API 的 tools 参数。只在需要额外使用指导时通过 tool 的 `usage_guide` 属性注入到 prompt 中。
-3. 如果保留 tools section，确保它的内容来自 Tool Protocol（而不是独立维护的文本），这样 tool 注册变更会自动反映在 prompt 中。
+1. **_cleanup_callbacks 支持 async：**
+```python
+async def _run_cleanup_callbacks(self) -> None:
+    for cb in self._cleanup_callbacks:
+        try:
+            result = cb()
+            if inspect.isawaitable(result):
+                await result
+        except Exception:
+            self.logger.warning(...)
+    self._cleanup_callbacks.clear()
+```
+2. **src/ service 层的调用侧也需要适配：**
+   - agent_run_service.py 在 worker 线程中可以 `asyncio.run(exp._run_cleanup_callbacks())`
+   - 或者在 worker 线程的 event loop 结束前统一 cleanup
+3. **注册时标记 callback 类型：** 不需要额外标记，用 `inspect.isawaitable()` 检查返回值即可兼容 sync 和 async callback。
 
-**Detection:**
-- System prompt 中列出的 tool 和 API tools 参数中的 tool 不一致
-- LLM 在选择 tool 时引用了 system prompt 中的描述而不是 tools 参数中的
+**Detection:** 在测试中 mock cleanup callback 并验证它被调用。对 async callback 确认 coroutine 被 await 而非仅被创建。
 
-**Phase to address:** Prompt/Description 体系设计阶段。
+**Confidence:** HIGH -- Python async/sync 混合的标准问题。
+
+---
+
+### Pitfall M4: OpenAI SDK 同步 Iterator 到 AsyncIterator 的断裂
+
+**What goes wrong:** 当前 `OpenAIProvider.chat_stream()` 使用 sync `openai.OpenAI` client，返回 `Iterator[StreamChunk]`。改为 `openai.AsyncOpenAI` 后，SDK 返回 `AsyncStream`（实现 `__aiter__` + `__anext__`），但 kernel 的消费代码如果还用 `for chunk in ...` 而非 `async for chunk in ...`，会得到 `TypeError: 'async_generator' object is not iterable`。
+
+**Why it happens:** 这是 sync-to-async migration 中最常见的遗漏。开发者改了 provider 但忘了改所有消费侧。matmaster 中消费 chat_stream 的位置有：
+1. `AgentKernel._do_stream_llm()` -- 主消费者，L266
+2. `ContextCompactor._summarize()` -- 使用 chat()（非 stream），但如果改为 stream 也需要
+3. 测试中的 `list(provider.chat_stream(...))` 模式 -- 需要改为 `[chunk async for chunk in ...]`
+
+**Prevention:**
+1. 改 Protocol 返回类型时，在 IDE 中全局搜索 `chat_stream` 的所有消费点
+2. 使用 `AsyncIterator[StreamChunk]` 类型标注，mypy 会在 `for` (而非 `async for`) 处报错
+3. 测试中用 helper：
+```python
+async def collect_stream(ait):
+    return [chunk async for chunk in ait]
+```
+
+**Detection:** mypy strict mode + `for xxx in async_gen` 会有 type error。`grep -rn 'for chunk in.*chat_stream'` 找遗漏。
+
+**Confidence:** HIGH -- 直接的类型系统问题。
+
+---
+
+### Pitfall M5: spawn_fn 从同步闭包变 async 的传播链断裂
+
+**What goes wrong:** 当前 `Exp._make_spawn_fn()` 返回一个同步闭包，SpawnTool._execute() 同步调用它。改为 async 后整个链条需要一致：
+
+```
+SpawnTool._execute()  -> 需要变 async
+  -> self._spawn_fn(exp_name, task, stop_event)  -> 需要 await
+    -> child_exp.build_runtime(...)  -> 如果 build_runtime 变 async，需要 await
+      -> child_runtime.kernel.run(...)  -> 需要 await
+```
+
+如果链条中有一环没改，就会出现：
+- `spawn_fn()` 返回 coroutine 但 SpawnTool 没 await -- 子 agent 不执行
+- SpawnTool._execute 是 async 但 BuiltinTool.execute 调用侧没 await -- 同上
+
+**Why it happens:** async 的传染性 -- async 函数要求其所有调用者也是 async，一直向上传播到 event loop 入口。漏掉链条中的任一环节就会断裂。
+
+**Prevention:**
+1. 先画出 spawn 的完整调用链，从 kernel -> tool_registry.execute -> SpawnTool._execute -> spawn_fn -> child Exp.run -> child kernel.run
+2. 从底层（child kernel.run）开始向上逐层改 async
+3. SpawnTool 和其他 BuiltinTool 的 _execute 统一改为 async
+4. ToolRegistry.execute 改为 `async def execute`
+5. AgentKernel 中 tool execution 改为 `tool_result = await spec.tool_registry.execute(...)`
+
+**Detection:** 搜索所有 `_execute(` 调用点和 `spawn_fn(` 调用点，确保每个都有 await。
+
+**Confidence:** HIGH -- async 传染性是基础知识，但在多层嵌套系统中极易遗漏。
+
+---
+
+### Pitfall M6: time.sleep() 在 retry 逻辑中冻结 event loop
+
+**What goes wrong:** 当前 retry 逻辑中直接使用 `time.sleep(backoff)`：
+- `AgentKernel._call_llm()` L233: `time.sleep(backoff)`
+- `OpenAIProvider.chat_with_retry()` L181/L204: `time.sleep(backoff)`
+
+改为 async 后如果遗漏这些 sleep 调用，event loop 被冻结。LLM retry backoff 一般是 1-8 秒，这会导致其他所有 coroutine 停滞 1-8 秒。
+
+**Why it happens:** `time.sleep()` 是 OS 级阻塞调用。在 async context 中必须用 `await asyncio.sleep()`。开发者容易在改 def -> async def 时遗漏函数体内的 `time.sleep`。
+
+**Prevention:**
+1. 全局搜索 `time.sleep` 并替换为 `await asyncio.sleep`
+2. 在 CI 中加 lint 规则检测 async 函数中使用 time.sleep（使用 ruff 自定义规则或 flake8-async 插件）
+3. retry 逻辑集中到一个 async retry decorator 中，避免分散在多处
+
+**Detection:** `grep -rn 'time.sleep' matmaster/` -- 改完后应该为 0 个结果。`flake8-async` 或 ruff 的 `ASYNC` 规则可以自动检测。
+
+**Confidence:** HIGH -- 最常见的 async migration 遗漏之一。
 
 ---
 
 ## Minor Pitfalls
 
-### Pitfall 9: Builtin Tool 命名与 EvoMaster Tool 命名冲突
+### Pitfall L1: async for 的 break 不触发 async generator aclose
 
-**What goes wrong:**
-新 matmaster 原生 builtin tool 和 EvoMaster 的 builtin tool 可能有相同功能但不同名称。当前 EvoMaster 的 bash tool 叫 `execute_bash`，editor 叫 `str_replace_editor`。如果新 matmaster 版本叫 `bash` 和 `editor`，那么在迁移期间两套 tool 共存时，LLM 看到两个功能相同但名称不同的 tool 会困惑。
+**What goes wrong:** 在 `async for chunk in stream: ... break` 的场景下，Python 会在 `break` 后自动对 async generator 调用 `aclose()`。但如果 consumer 代码捕获异常后没有正确退出 `async for` block，async generator 的 finally 可能不执行。
 
-反过来，如果新 tool 保持相同名称 `execute_bash`，ToolRegistry 的 override 机制（tool_registry.py 第 53-60 行）会静默覆盖旧 tool，但新 tool 的参数 schema 可能不同（比如 `is_input` 从 string 改为 bool），导致 LLM 生成的参数在新 tool 上 validation 失败。
-
-**Prevention:**
-1. 在 ToolRegistry 的 override warning 中包含 schema 差异检测。如果同名 tool 的 json_schema 不同，升级为 error 而不是 warning。
-2. 迁移期间不共存两套同功能 tool。一个 exp 要么用 EvoToolAdapter 包装的旧 tool，要么用新的 matmaster builtin tool，不混用。通过 ExpConfig 的 tools 配置控制。
-3. 新 builtin tool 的命名和参数 schema 尽量与 EvoMaster 保持一致（向后兼容），只在必要时改名（比如 `is_input: str` -> `is_input: bool` 这种类型修正需要改名或提供 compatibility parsing）。
-
-**Phase to address:** Builtin Tool 实现阶段。
+**Prevention:** 统一使用 `contextlib.aclosing` wrapper。在 _do_stream_llm 中确保异常路径正确退出。当前代码的 try/finally 模式是正确的，改为 async 时保持这个结构。
 
 ---
 
-### Pitfall 10: SubAgent Result 的 Token 膨胀
+### Pitfall L2: pytest-asyncio event_loop fixture 已在 1.0 中移除
 
-**What goes wrong:**
-SubAgent 的完整执行结果作为 tool_call result 返回给父 agent。如果子 agent 运行了 20 个 turn 产生了大量输出，spawn tool 的 result 可能有数千 token。这个 result 被追加到父 agent 的 messages 中（作为 ToolMessage），每个后续 LLM 调用都会发送它。
+**What goes wrong:** 如果测试代码（或 conftest.py）依赖了 `event_loop` fixture，升级到 pytest-asyncio 1.0+ 后会报 DeprecationWarning 或直接失败。
 
-对于 context compaction 来说，ToolMessage 的内容通常不会被压缩（compactor 压缩的是对话历史，不是单条 tool result）。一个膨胀的 spawn result 会长期占据 context window。
+**Prevention:** 检查所有 conftest.py 和测试文件中是否有 `event_loop` fixture 的引用。使用 `asyncio_default_fixture_loop_scope` 配置替代自定义 event_loop fixture。当前 matmaster 测试中没有发现 event_loop fixture 使用（好消息），但迁移时要确保新引入的 async fixture 不依赖它。
+
+---
+
+### Pitfall L3: asyncio.create_subprocess_exec 在 Windows 上需要 ProactorEventLoop
+
+**What goes wrong:** 如果未来有 Windows 开发环境需求，asyncio subprocess 只在 ProactorEventLoop 上工作（Python 3.8+ 的 Windows 默认是 ProactorEventLoop，但某些测试框架可能强制 SelectorEventLoop）。
+
+**Prevention:** 在 BashTool 测试中加 platform skip marker。matmaster 当前部署在 Linux，这个风险较低。
+
+---
+
+### Pitfall L4: async context manager 泄漏
+
+**What goes wrong:** 如果 OpenAIProvider 使用 `async with httpx.AsyncClient() as client:` 模式，但 provider 的生命周期比单次调用长（在 Exp.build_runtime 时创建，整个 run 过程共用），需要在 cleanup 时显式 `await client.aclose()`。
+
+**Prevention:** OpenAIProvider 的 httpx.AsyncClient 在 `__init__` 中创建，在 cleanup callback 中 `await client.aclose()`。或者改为 lazy initialization（首次调用时创建）。
+
+---
+
+### Pitfall L5: 忘记 await 的隐蔽表现
+
+**What goes wrong:** 忘记 await 一个 coroutine 不会立即报错 -- Python 只会在 GC 时产生 `RuntimeWarning: coroutine 'xxx' was never awaited`。在测试中这个警告容易被淹没。在生产中这意味着某个操作（如 hook 通知、event emit、cleanup）被静默跳过。
+
+具体的高风险点：
+- `run_pre_llm_call(hooks, messages, turn)` -- 如果 hook 方法变 async，run_* helpers 需要 await 每个 hook
+- `run_post_tool_call(hooks, tc, tool_result)` -- 同上
+- `bus.emit(event)` -- 如果 emit 变 async
+- `spec.compactor.compact_if_needed(...)` -- 如果变 async
 
 **Prevention:**
-1. Spawn tool 在返回前截断或摘要子 agent 的 result。设定最大 token 数（比如 2000 token），超过时用 LLM 摘要。
-2. 子 agent 的 final_content 就是 spawn tool 的 result，不包含完整的 tool 调用历史。子 agent 的详细执行过程通过 events 发送到 bus（用于前端展示和审计），但不放入父 agent 的 context。
-3. Spawn tool 的参数中提供 `result_format: Literal["full", "summary", "structured"]`，让 LLM 选择子 agent 结果的返回格式。
+1. 在 pyproject.toml 中将 RuntimeWarning 升级为 error：
+```toml
+[tool.pytest.ini_options]
+filterwarnings = ["error::RuntimeWarning"]
+```
+2. 使用 mypy strict mode -- missing await 会被 type checker 捕获
+3. 在 CI 中运行 `python -W error::RuntimeWarning` 确保无遗漏
+4. run_* hook helpers 改为 async，内部 await 每个 hook 调用
 
-**Phase to address:** SubAgent Spawn 实现阶段。
+**Detection:** `python -W error` 模式下运行测试。mypy 会在 `async def` 函数中对未 await 的 coroutine 报错。
 
 ---
 
 ## Phase-Specific Warnings
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Builtin Tool Protocol 设计 | Tool Protocol 签名是否增加 ToolContext 参数 -- 这是破坏性变更，影响所有现有 tool 和测试 | 先评估影响范围（当前只有 EvoToolAdapter 实现了 Tool Protocol），如果影响小就直接加；如果要保持兼容就用 optional parameter |
-| Session-Dependent Tool 实现 | 照搬 EvoMaster 的 BashTool/EditorTool 但忘记处理 session 异常（网络断开、容器重启） | 新 tool 的 execute 必须处理 session 不可用的情况，返回明确的 error message 而不是 traceback |
-| Session-Free Tool 实现 | 以为"不依赖 session"就可以随意实现，但没考虑工作目录和权限约束 | Session-free tool 仍然需要知道 workdir（从 PlaygroundContext.workdir 获取），它只是不通过 session 执行远程命令 |
-| SubAgent Spawn 机制 | 没有处理子 agent 的事件路由，前端看不到子 agent 的执行过程 | 子 agent 的 EventEmitterHook 使用父的 MessageBus + 带前缀的 source（如 `sub:step-1`） |
-| SubAgent 递归防护 | 只靠"不给子 agent spawn tool"防递归，但子 agent 可能通过 bash tool 调用 API 间接触发 | spawn 深度计数器在 ToolContext 中传递，超过阈值拒绝 spawn |
-| Prompt Template 管理 | 过度设计模板引擎（支持条件渲染、变量插值、继承） | 用 Python 的 string.Template 或简单的 f-string 就够了。不要引入 Jinja2 -- prompt 不是 HTML |
-| Tool Description 规范 | 每个 tool 开发者自己写 description，质量参差不齐 | 建立 description review checklist 和示例库，CI 检查 description token count |
-| ContextBuilder 升级 | 增加太多 section 导致 prompt 结构难以理解和调试 | 保持 6-8 个 section 的上限，新需求通过扩展已有 section 而不是增加新 section |
+| Phase Topic | Likely Pitfall | Mitigation | Priority |
+|-------------|---------------|------------|----------|
+| Protocol 定义改造 (Hook/Guard/LLMProvider) | C1: isinstance 不检查 async 签名 | 加 runtime coroutine validation helper | MUST |
+| AgentKernel async 化 | C3: 遗留阻塞调用, C4: stop_event 线程模型 | asyncio debug mode, 保持 threading.Event | MUST |
+| LLMProvider async 化 (AsyncOpenAI) | C5: async generator cleanup, M4: Iterator/AsyncIterator 断裂 | aclosing wrapper, 全量搜索消费点 | MUST |
+| BuiltinTool async 化 | C3: BashTool subprocess 阻塞, M5: spawn chain 断裂 | create_subprocess_exec, 画调用链逐层改 | HIGH |
+| Hook/Guard Protocol async 化 | L5: 忘记 await hook 调用 | run_* helpers 统一 async, mypy strict | HIGH |
+| MessageBus | M2: queue.Queue 跨线程 | v2.0 保持 queue.Queue 不变 | LOW (defer) |
+| 测试迁移 | M1: 批量 async 测试配置, L2: event_loop fixture | 分层迁移, asyncio_mode=auto | HIGH |
+| Exp 生命周期 async 化 | M3: cleanup callback async 兼容 | inspect.isawaitable 兼容层 | MEDIUM |
+| Integration boundary (src/ <-> matmaster/) | C2: asyncio.run 嵌套 | worker 线程用 asyncio.run, 不在 main loop 线程调用 | MUST |
+| Integration boundary (DevShell <-> matmaster/) | C2: asyncio.run 嵌套 | detect running loop, 拒绝嵌套 | MEDIUM |
+
+---
+
+## Recommended Migration Order (Based on Pitfall Dependencies)
+
+基于 pitfall 依赖关系推导的安全迁移顺序：
+
+1. **Protocol 定义 + runtime validation** -- C1 必须最先解决，否则后续所有测试的 mock 都有隐患
+2. **LLMProvider async 化 (AsyncOpenAI)** -- C5, M4 高影响，且是 kernel 的核心依赖
+3. **AgentKernel async 化** -- C3, C4，依赖 Protocol 和 LLM 已完成
+4. **BuiltinTool async 化** -- M5, C3 (BashTool)，依赖 kernel async
+5. **Hook/Guard async 化 + run_* helpers** -- L5，依赖 kernel 调用侧已 async
+6. **Exp 生命周期** -- M3，依赖上述全部
+7. **测试分层迁移** -- M1，贯穿所有阶段，每阶段迁移对应测试
+8. **Integration boundary 适配** -- C2, M2，最后处理，因为 src/ 层不在 scope 内
+
+---
 
 ## Sources
 
-- Codebase analysis: `matmaster/core/agent.py` (kernel execution loop), `matmaster/tools/tool_registry.py` (Tool Protocol), `matmaster/tools/evomaster_tool_adapter.py` (adapter pattern), `matmaster/core/exp.py` (assembly lifecycle), `matmaster/core/context_builder.py` (prompt construction), `matmaster/config/exp.py` (ExpConfig)
-- EvoMaster tool implementations: `evomaster/agent/tools/builtin/bash.py`, `evomaster/agent/tools/builtin/editor.py`, `evomaster/agent/tools/base.py` (BaseTool + ToolRegistry)
-- Session interface: `evomaster/agent/session/base.py` (BaseSession abstraction)
-- Existing SubAgent pattern: `playground/mat_master/core/solvers/step_sub_agent.py` (SubAgentHandle + StepSubAgentFactory)
-- Claude Code tool design: tool description brevity principles, session-dependent vs session-free tool split
-- OpenAI function calling documentation: tool description and parameter schema best practices
-
----
-*Pitfalls research for: MatMaster v1.1 (Builtin Tools + SubAgent Spawn + Prompt/Description)*
-*Researched: 2026-03-24*
+- [Python asyncio 官方文档 -- Developing with asyncio](https://docs.python.org/3/library/asyncio-dev.html)
+- [Python asyncio sync primitives -- not thread safe](https://docs.python.org/3/library/asyncio-sync.html)
+- [PEP 525 -- Asynchronous Generators](https://peps.python.org/pep-0525/)
+- [PEP 544 -- Protocols: Structural subtyping](https://peps.python.org/pep-0544/)
+- [BBC Cloudfit -- Mixing Sync and Async](https://bbc.github.io/cloudfit-public-docs/asyncio/asyncio-part-5.html)
+- [Erich Grunewald -- Gradually Migrating to asyncio](https://www.erichgrunewald.com/posts/gradually-migrating-python-code-to-asyncio/)
+- [pytest-asyncio 1.0 migration](https://thinhdanggroup.github.io/pytest-asyncio-v1-migrate/)
+- [janus -- thread-safe asyncio queue](https://github.com/aio-libs/janus)
+- [OpenAI Python SDK -- AsyncOpenAI](https://github.com/openai/openai-python)
+- [Python asyncio subprocess](https://docs.python.org/3/library/asyncio-subprocess.html)
+- [Nil Monfort -- The Two Bridges: Async and Sync in Python](https://nilmonfort.com/writing/2025/12/02/the-two-bridges-async-sync-python/)

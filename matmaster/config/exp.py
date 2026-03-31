@@ -9,9 +9,12 @@ Usage::
     cfg = load_exp_config("direct")
     exp = Exp(cfg)
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from matmaster.types.runtime import CompactionConfig
 
 
 class ExpToolsConfig(BaseModel):
@@ -49,6 +52,7 @@ class ExpConfig(BaseModel):
     guards: list[str] = Field(default_factory=list)
     tools: ExpToolsConfig = Field(default_factory=ExpToolsConfig)
     skills: ExpSkillsConfig = Field(default_factory=ExpSkillsConfig)
+    compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     system_prompt: str = ""
     developer_instructions: str = ""
 

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -75,8 +76,6 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
             pg=pg,
             skill_sync_spec=SkillSyncSpec(
                 project_skill_roots=['/tmp/proj_skills'],
-                local_user_skills_root=None,
-                remote_user_skills_root=None,
                 remote_project_root='/remote/proj',
             ),
             run_creds={
@@ -340,15 +339,6 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
     mock_pg.prepare.return_value = mock_pg_ctx
     mock_pg.config_path = Path('matmaster_config/config.yaml')
     mock_pg.session = None
-    mock_pg.config.model_dump.return_value = {
-        'mat_master': {
-            'skill_evolution': {
-                'local_user_skills_root': '~/.evomaster-skills',
-                'remote_user_skills_root': '/personal/.evomaster-skills',
-            }
-        }
-    }
-
     captured_spec: dict[str, Any] = {}
     mock_bohrium_result = _make_no_attach_bohrium_result()
 
@@ -374,8 +364,12 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
         ),
     ):
         mock_bohrium_svc = mock_bohrium_cls.return_value
-        mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
-        mock_bohrium_svc.setup.side_effect = tracked_setup
+
+        async def _async_tracked_setup(**kwargs: Any) -> MagicMock:
+            return tracked_setup(**kwargs)
+
+        mock_bohrium_svc.run_setup = AsyncMock(side_effect=_async_tracked_setup)
+        mock_bohrium_svc.run_cleanup = AsyncMock()
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
@@ -387,28 +381,27 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
 
         mock_use_quota.side_effect = _mock_use_quota
 
-        svc.run_agent_sync(
-            session_id='sess-spec-order',
-            user_prompt='prompt',
-            send_cb=MagicMock(),
-            loop=None,
-            stop_event=threading.Event(),
-            mode='direct',
-            reply_queue=None,
-            task_id='task-spec-order',
+        asyncio.run(
+            svc.run_agent(
+                session_id='sess-spec-order',
+                user_prompt='prompt',
+                send_cb=AsyncMock(),
+                stop_event=threading.Event(),
+                mode='direct',
+                reply_queue=None,
+                task_id='task-spec-order',
+            )
         )
 
     assert order.index('load_exp_config') < order.index('setup')
     spec = captured_spec.get('skill_sync_spec')
     assert spec is not None
     assert isinstance(spec, SkillSyncSpec)
-    assert spec.remote_project_root == '/personal/workspace/.evomaster'
+    assert spec.remote_project_root == '/share/.matmaster'
     assert spec.project_skill_roots
     assert spec.project_skill_roots[0].endswith(
         str(Path('playground/mat_master/skills'))
     )
-    assert spec.local_user_skills_root is not None
-    assert spec.remote_user_skills_root == '/personal/.evomaster-skills'
 
 
 @patch('matmaster.providers.llm_factory.build_provider')
@@ -461,10 +454,11 @@ def test_execution_binding_before_build_runtime(
     mock_run_evt.final_content = None
     mock_run_evt.source = 'MatMaster'
     mock_kernel_result.result.to_run_result_event.return_value = mock_run_evt
-    mock_runtime.kernel.run.return_value = mock_kernel_result
+    mock_runtime.kernel.run = AsyncMock(return_value=mock_kernel_result)
 
     mock_exp_inst = MagicMock()
-    mock_exp_inst.build_runtime.return_value = mock_runtime
+    mock_exp_inst.build_runtime = AsyncMock(return_value=mock_runtime)
+    mock_exp_inst._run_cleanup_callbacks = AsyncMock()
 
     with (
         patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
@@ -475,12 +469,8 @@ def test_execution_binding_before_build_runtime(
         patch('matmaster.core.exp.Exp', return_value=mock_exp_inst),
     ):
         mock_bohrium_svc = mock_bohrium_cls.return_value
-        mock_bohrium_svc.load_credentials.return_value = (
-            {'access_key': 'k', 'project_id': 1},
-            'u1',
-            'o1',
-        )
-        mock_bohrium_svc.setup.return_value = mock_bohrium_result
+        mock_bohrium_svc.run_setup = AsyncMock(return_value=mock_bohrium_result)
+        mock_bohrium_svc.run_cleanup = AsyncMock()
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
@@ -492,15 +482,16 @@ def test_execution_binding_before_build_runtime(
 
         mock_use_quota.side_effect = _mock_use_quota
 
-        svc.run_agent_sync(
-            session_id='sess-exec-bind',
-            user_prompt='prompt',
-            send_cb=MagicMock(),
-            loop=None,
-            stop_event=threading.Event(),
-            mode='direct',
-            reply_queue=None,
-            task_id='task-exec-bind',
+        asyncio.run(
+            svc.run_agent(
+                session_id='sess-exec-bind',
+                user_prompt='prompt',
+                send_cb=AsyncMock(),
+                stop_event=threading.Event(),
+                mode='direct',
+                reply_queue=None,
+                task_id='task-exec-bind',
+            )
         )
 
     pg_passed = mock_exp_inst.build_runtime.call_args[0][0]
@@ -524,8 +515,6 @@ def test_skill_sync_upload_exclude_set_does_not_exclude_skill_md(
     root.mkdir()
     spec = SkillSyncSpec(
         project_skill_roots=[str(root)],
-        local_user_skills_root=None,
-        remote_user_skills_root=None,
         remote_project_root='/remote/proj',
     )
     ssh = SSHSession()

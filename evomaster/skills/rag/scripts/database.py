@@ -159,7 +159,9 @@ def main():
 
     args = parser.parse_args()
 
-    builder = VectorDatabaseBuilder(output_dir=args.output_dir, model_name=args.model)
+    _builder = VectorDatabaseBuilder(  # noqa: F841
+        output_dir=args.output_dir, model_name=args.model
+    )
 
     if args.action == 'build':
         print('Building database...')
