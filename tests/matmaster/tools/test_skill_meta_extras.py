@@ -1,5 +1,4 @@
-from pathlib import Path
-from evomaster.skills.base import SkillMetaInfo, BaseSkill, Skill
+from evomaster.skills.base import Skill, SkillMetaInfo
 
 
 class TestSkillMetaInfoExtras:

@@ -13,7 +13,9 @@ def test_terminal_events_use_distinct_result_and_stream_names() -> None:
     assert run_result_cls is not None
     assert stream_closed_cls is not None
 
-    run_result = run_result_cls(source="MatMaster", status="completed", reason="natural")
+    run_result = run_result_cls(
+        source="MatMaster", status="completed", reason="natural"
+    )
     stream_closed = stream_closed_cls(source="System")
 
     assert run_result.type == "run_result"

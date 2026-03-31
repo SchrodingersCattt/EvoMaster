@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 from pathlib import Path
@@ -54,7 +55,9 @@ class DevRunner:
             cache_area=cache_area,
             session=session,
             llm_provider=llm_provider,
+            config_dir=None,
             llm_config=llm_config,
+            run_meta={"source": "devshell"},
         )
 
         # Exp config dict
@@ -78,11 +81,10 @@ class DevRunner:
 
     @staticmethod
     def _create_session(config: DevConfig, workdir: Path) -> Any:
-        """Create and open a session based on config."""
-        from evomaster.agent.session.local import LocalSession
+        """Create and open a local session."""
+        from matmaster.sessions.local import LocalSession
 
-        session = LocalSession()
-        session.config.workspace_path = str(workdir)
+        session = LocalSession(workspace_path=workdir)
         session.open()
         return session
 
@@ -99,6 +101,7 @@ class DevRunner:
             name=config.agent.name,
             max_turns=config.agent.max_turns,
             tools=ExpToolsConfig(builtin=config.tools.builtin),
+            compaction=config.compaction,
             developer_instructions=config.agent.identity or "",
             system_prompt=system_prompt,
         )
@@ -116,25 +119,27 @@ class DevRunner:
         Appends run messages to history for multi-turn accumulation.
         """
         exp = Exp(self._exp_config)
-        runtime = exp.build_runtime(self._pg_ctx, bus=bus)
 
-        # Inject DevStreamHook (same pattern as AgentRunService)
-        spec = runtime.spec.model_copy(
-            update={"hooks": [*runtime.spec.hooks, self._stream_hook]}
-        )
+        async def _run_once() -> KernelRunResult:
+            try:
+                runtime = await exp.build_runtime(self._pg_ctx, bus=bus)
+                # Inject DevStreamHook (same pattern as AgentRunService)
+                spec = runtime.spec.model_copy(
+                    update={"hooks": [*runtime.spec.hooks, self._stream_hook]}
+                )
+                return await runtime.kernel.run(
+                    spec, task, history=self.history, stop_event=stop_event
+                )
+            finally:
+                await exp._run_cleanup_callbacks()
 
-        try:
-            result = runtime.kernel.run(
-                spec, task, history=self.history, stop_event=stop_event
-            )
-            # Accumulate history for non-cancelled runs.
-            # Message layout: [System, *history, User(task), ...new_messages]
-            # We skip System + existing history + User to extract only new messages.
-            if result.result.status != "cancelled":
-                skip_count = 1 + len(self.history) + 1  # System + history + User
-                new_messages = result.messages[skip_count:]
-                self.history.append(UserMessage(content=task))
-                self.history.extend(new_messages)
-            return result
-        finally:
-            runtime.cleanup()
+        result = asyncio.run(_run_once())
+        # Accumulate history for non-cancelled runs.
+        # Message layout: [System, *history, User(task), ...new_messages]
+        # We skip System + existing history + User to extract only new messages.
+        if result.result.status != "cancelled":
+            skip_count = 1 + len(self.history) + 1  # System + history + User
+            new_messages = result.messages[skip_count:]
+            self.history.append(UserMessage(content=task))
+            self.history.extend(new_messages)
+        return result

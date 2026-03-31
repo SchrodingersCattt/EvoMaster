@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock
 
-from evomaster.skills.base import SkillRegistry
 from evomaster.agent.tools.skill import SkillTool
+from evomaster.skills.base import SkillRegistry
 
 
 class TestSkillToolCallback:
@@ -26,6 +25,7 @@ class TestSkillToolCallback:
 
         session = MagicMock()
         import json
+
         args = json.dumps({"skill_name": "test-skill", "action": "get_info"})
         tool.execute(session, args)
         assert hit_servers == ["mat_sg"]
@@ -38,6 +38,7 @@ class TestSkillToolCallback:
 
         session = MagicMock()
         import json
+
         args = json.dumps({"skill_name": "plain-skill", "action": "get_info"})
         tool.execute(session, args)
         assert hit_servers == []
@@ -49,6 +50,7 @@ class TestSkillToolCallback:
 
         session = MagicMock()
         import json
+
         args = json.dumps({"skill_name": "test-skill", "action": "get_info"})
         obs, info = tool.execute(session, args)
         assert "Skill body" in obs  # Still returns full_info

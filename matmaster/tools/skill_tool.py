@@ -9,11 +9,13 @@ Decoupled from evomaster: uses matmaster.skills.registry.Skill directly.
 
 from __future__ import annotations
 
+import asyncio
 import json as _json
 import logging
 import shlex
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from matmaster.skills.registry import Skill, SkillRegistry
@@ -90,7 +92,11 @@ class SkillTool:
 
     # -- Tool Protocol execute ----------------------------------------------
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
+        return await asyncio.to_thread(self._execute_sync, arguments)
+
+    def _execute_sync(self, arguments: dict[str, Any]) -> str:
+        """Synchronous execution body -- wrapped by execute() via to_thread."""
         try:
             skill_name = arguments['skill_name']
             action = arguments['action']
@@ -376,7 +382,7 @@ class SkillTool:
         if script_args and script_args.strip():
             try:
                 parts = shlex.split(script_args.strip())
-                cmd += ' ' + ' '.join(shlex.quote(p) for p in parts)
+                cmd += ' ' + shlex.join(parts)
             except ValueError:
                 cmd += ' ' + script_args.strip()
 

@@ -14,12 +14,14 @@ Key behavior:
 
 from __future__ import annotations
 
-import threading
+import asyncio
 import logging
+import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.events import BusEvent, ToolResultEvent
@@ -46,7 +48,9 @@ class WorkspaceHandler:
         archival_config: WorkspaceArchivalConfig | None,
         workspace_path: Path,
         upload_fn: Callable[..., Any] | None = None,
-        snapshot_fn: Callable[[Path], frozenset[tuple[str, float, int]] | None] | None = None,
+        snapshot_fn: (
+            Callable[[Path], frozenset[tuple[str, float, int]] | None] | None
+        ) = None,
         debounce_seconds: float = 2.0,
     ) -> None:
         self._session_id = session_id
@@ -70,7 +74,7 @@ class WorkspaceHandler:
             else None
         )
 
-    def handle(self, event: BusEvent) -> None:  # type: ignore[arg-type]
+    async def handle(self, event: BusEvent) -> None:
         """Process event -- only acts on ToolResultEvent.
 
         Mirrors the tool_result branch of event_callback in
@@ -96,7 +100,7 @@ class WorkspaceHandler:
 
         self._last_check_time = now
 
-        snapshot = self._get_snapshot()
+        snapshot = await asyncio.to_thread(self._get_snapshot)
         if snapshot == self._last_snapshot:
             logger.debug(
                 "WorkspaceHandler: skip (snapshot unchanged) session_id=%s",
@@ -140,11 +144,7 @@ class WorkspaceHandler:
     def _upload(self) -> None:
         """Queue workspace upload on a dedicated worker."""
         with self._close_lock:
-            if (
-                self._upload_fn is None
-                or self._upload_executor is None
-                or self._closed
-            ):
+            if self._upload_fn is None or self._upload_executor is None or self._closed:
                 return
             executor = self._upload_executor
 

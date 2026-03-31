@@ -55,7 +55,7 @@ class TestLazyMCPIntegration:
 
         return tmp_path
 
-    def test_full_flow_skill_triggers_schema_injection(self, tmp_path):
+    async def test_full_flow_skill_triggers_schema_injection(self, tmp_path):
         env = self._setup_env(tmp_path)
 
         cfg = ExpConfig.model_validate(
@@ -87,8 +87,8 @@ class TestLazyMCPIntegration:
         assert 'mat_sg_build_bulk' not in registry
 
         # Simulate skill trigger via use_skill tool
-        result = registry.execute(
-            'use_skill', {'skill_name': 'test-skill', 'action': 'get_info'}
+        result = await registry.execute(
+            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
         )
 
         # Verify use_skill returned successfully
@@ -104,7 +104,7 @@ class TestLazyMCPIntegration:
         assert isinstance(lazy, LazyMCPTool)
         assert lazy.name == 'mat_sg_build_bulk'
 
-    def test_multiple_skills_same_server_no_duplicate(self, tmp_path):
+    async def test_multiple_skills_same_server_no_duplicate(self, tmp_path):
         """Two skills mapping to same MCP server don't duplicate tools."""
         env = self._setup_env(tmp_path)
 
@@ -136,19 +136,19 @@ class TestLazyMCPIntegration:
         exp._init_skill_tools(ctx, registry)
 
         # Trigger first skill
-        registry.execute(
-            'use_skill', {'skill_name': 'test-skill', 'action': 'get_info'}
+        await registry.execute(
+            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
         )
-        assert 'mat_sg_build_bulk' in registry
+        assert "mat_sg_build_bulk" in registry
 
         # Trigger second skill — should NOT duplicate
-        registry.execute(
-            'use_skill', {'skill_name': 'second-skill', 'action': 'get_info'}
+        await registry.execute(
+            "use_skill", {"skill_name": "second-skill", "action": "get_info"}
         )
         # Still only one mat_sg_build_bulk
         assert 'mat_sg_build_bulk' in registry
 
-    def test_no_cache_warns_but_doesnt_crash(self, tmp_path):
+    async def test_no_cache_warns_but_doesnt_crash(self, tmp_path):
         """When cache is empty, skill trigger warns but doesn't crash."""
         # Skill pointing to uncached server
         skill_dir = tmp_path / 'skills' / 'uncached-skill'
@@ -189,18 +189,19 @@ class TestLazyMCPIntegration:
         exp._init_skill_tools(ctx, registry)
 
         # Trigger skill with uncached server
-        result = registry.execute(
-            'use_skill', {'skill_name': 'uncached-skill', 'action': 'get_info'}
+        result = await registry.execute(
+            "use_skill", {"skill_name": "uncached-skill", "action": "get_info"}
         )
-        assert result.status == 'success'
+        assert result.status == "success"
 
         # No tools injected (cache miss)
         assert 'unknown_server_' not in str(list(registry._tools.keys()))
 
+
 class TestExpMCPSelfLoad:
     """Verify Exp._init_skill_tools() self-loads mcp.yaml when no runtime config injected."""
 
-    def test_self_loads_mcp_yaml(self, tmp_path):
+    async def test_self_loads_mcp_yaml(self, tmp_path):
         """mcp.yaml is loaded from config_dir and passed to LazyMCPConnector."""
         # Create minimal mcp.yaml
         (tmp_path / 'mcp.yaml').write_text(
@@ -248,11 +249,11 @@ class TestExpMCPSelfLoad:
         assert 'use_skill' in registry
 
         # Trigger skill to verify lazy tools get injected
-        result = registry.execute(
-            'use_skill', {'skill_name': 'test-skill', 'action': 'get_info'}
+        result = await registry.execute(
+            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
         )
-        assert result.status == 'success', f"use_skill failed: {result.content}"
-        assert 'mat_sg_build_bulk' in registry
+        assert result.status == "success", f"use_skill failed: {result.content}"
+        assert "mat_sg_build_bulk" in registry
 
     def test_raises_when_mcp_yaml_missing(self, tmp_path):
         """When mcp.yaml does not exist, FileNotFoundError is raised."""

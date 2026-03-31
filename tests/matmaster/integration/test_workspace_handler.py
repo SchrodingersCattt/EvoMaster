@@ -11,20 +11,17 @@ Covers:
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-
+from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.events import (
     FinishEvent,
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from matmaster.integration.workspace_handler import WorkspaceHandler
 
 
 class TestWorkspaceHandler:
@@ -48,36 +45,32 @@ class TestWorkspaceHandler:
             debounce_seconds=debounce_seconds,
         )
 
-    def test_only_processes_tool_result(self) -> None:
+    async def test_only_processes_tool_result(self) -> None:
         """handle() only processes ToolResultEvent, ignores other types."""
         upload_fn = MagicMock()
         handler = self._make_handler(upload_fn=upload_fn)
 
         # These should all be ignored
-        handler.handle(FinishEvent(source="Agent", reason="done"))
-        handler.handle(ThoughtEvent(source="Agent", content="thinking"))
-        handler.handle(
-            ToolCallEvent(
-                source="Agent", call_id="c1", tool_name="bash", arguments={}
-            )
+        await handler.handle(FinishEvent(source="Agent", reason="done"))
+        await handler.handle(ThoughtEvent(source="Agent", content="thinking"))
+        await handler.handle(
+            ToolCallEvent(source="Agent", call_id="c1", tool_name="bash", arguments={})
         )
 
         upload_fn.assert_not_called()
 
-    def test_skips_when_ssh_attached(self) -> None:
+    async def test_skips_when_ssh_attached(self) -> None:
         """handle() skips when ssh_attached is True (remote workspace)."""
         upload_fn = MagicMock()
         handler = self._make_handler(ssh_attached=True, upload_fn=upload_fn)
 
-        handler.handle(
-            ToolResultEvent(
-                source="Agent", call_id="c1", tool_name="bash", result="ok"
-            )
+        await handler.handle(
+            ToolResultEvent(source="Agent", call_id="c1", tool_name="bash", result="ok")
         )
 
         upload_fn.assert_not_called()
 
-    def test_debounce_skips_rapid_calls(self) -> None:
+    async def test_debounce_skips_rapid_calls(self) -> None:
         """handle() skips when less than debounce_seconds since last check."""
         upload_fn = MagicMock()
         snapshot_fn = MagicMock(return_value=frozenset({("a.txt", 1.0, 100)}))
@@ -92,14 +85,14 @@ class TestWorkspaceHandler:
         )
 
         # First call should proceed (snapshot changes from None)
-        handler.handle(event)
+        await handler.handle(event)
         assert upload_fn.call_count == 1
 
         # Second call within debounce window should be skipped
-        handler.handle(event)
+        await handler.handle(event)
         assert upload_fn.call_count == 1  # still 1
 
-    def test_skips_when_snapshot_unchanged(self) -> None:
+    async def test_skips_when_snapshot_unchanged(self) -> None:
         """handle() calls _get_snapshot() and skips when snapshot unchanged."""
         upload_fn = MagicMock()
         snapshot = frozenset({("a.txt", 1.0, 100)})
@@ -115,14 +108,14 @@ class TestWorkspaceHandler:
         )
 
         # First call: snapshot changes from None -> snapshot
-        handler.handle(event)
+        await handler.handle(event)
         assert upload_fn.call_count == 1
 
         # Second call: snapshot same
-        handler.handle(event)
+        await handler.handle(event)
         assert upload_fn.call_count == 1  # unchanged, no upload
 
-    def test_uploads_when_snapshot_changes(self) -> None:
+    async def test_uploads_when_snapshot_changes(self) -> None:
         """handle() calls _upload() when snapshot has changed."""
         upload_fn = MagicMock()
         call_count = [0]
@@ -147,18 +140,18 @@ class TestWorkspaceHandler:
         )
 
         # First call: None -> snapshot[0], upload
-        handler.handle(event)
+        await handler.handle(event)
         assert upload_fn.call_count == 1
 
         # Second call: snapshot[0] -> snapshot[1], different, upload again
-        handler.handle(event)
+        await handler.handle(event)
         handler.close()
         assert upload_fn.call_count == 2
 
-    def test_handle_returns_before_slow_upload_finishes(
+    async def test_handle_returns_before_slow_upload_finishes(
         self, tmp_path: Path
     ) -> None:
-        """handle() should not block the router thread on slow uploads."""
+        """handle() should not block the caller on slow uploads."""
         workspace_path = tmp_path / "workspace"
         workspace_path.mkdir()
 
@@ -182,21 +175,19 @@ class TestWorkspaceHandler:
         event = ToolResultEvent(
             source="Agent", call_id="c1", tool_name="bash", result="ok"
         )
-        caller = threading.Thread(target=handler.handle, args=(event,), daemon=True)
-        caller.start()
+        await handler.handle(event)
         assert started.wait(timeout=1.0)
 
         try:
-            caller.join(timeout=0.2)
-            assert not caller.is_alive()
+            # handle() already returned (it's async and doesn't block)
+            pass
         finally:
             release.set()
-            caller.join(timeout=2.0)
             close = getattr(handler, "close", None)
             if callable(close):
                 close()
 
-    def test_close_waits_for_inflight_upload(self, tmp_path: Path) -> None:
+    async def test_close_waits_for_inflight_upload(self, tmp_path: Path) -> None:
         """close() waits for background uploads to finish."""
         workspace_path = tmp_path / "workspace"
         workspace_path.mkdir()
@@ -223,8 +214,7 @@ class TestWorkspaceHandler:
         event = ToolResultEvent(
             source="Agent", call_id="c1", tool_name="bash", result="ok"
         )
-        caller = threading.Thread(target=handler.handle, args=(event,), daemon=True)
-        caller.start()
+        await handler.handle(event)
         assert started.wait(timeout=1.0)
 
         close = getattr(handler, "close", None)
@@ -237,7 +227,6 @@ class TestWorkspaceHandler:
             assert closer.is_alive()
         finally:
             release.set()
-            caller.join(timeout=2.0)
             if closer is not None:
                 closer.join(timeout=2.0)
 

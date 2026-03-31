@@ -11,8 +11,8 @@ import logging
 from matmaster.core.bus import MessageBus
 from matmaster.core.hooks import BaseHook
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.messages import ToolCallData
 from matmaster.types.events import ToolResultEvent
+from matmaster.types.messages import ToolCallData
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ class OutputProcessorHook(BaseHook):
     Uses simple substring matching against tool_call.name to determine
     whether to emit events. Patterns are checked via 'in' operator
     (same logic as current auto_save_tool_output_patterns).
+
     """
 
     def __init__(
@@ -38,13 +39,13 @@ class OutputProcessorHook(BaseHook):
         self._summarize_patterns = summarize_patterns or []
         self._source = source
 
-    def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
+    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         """Check tool_call.name against patterns and emit events if matched."""
         tool_name = tool_call.name
         base_info = dict(result.info)
 
         if self._matches(tool_name, self._auto_save_patterns):
-            self._bus.emit(
+            await self._bus.emit(
                 ToolResultEvent(
                     source=self._source,
                     call_id=tool_call.id,
@@ -57,7 +58,7 @@ class OutputProcessorHook(BaseHook):
             return
 
         if self._matches(tool_name, self._summarize_patterns):
-            self._bus.emit(
+            await self._bus.emit(
                 ToolResultEvent(
                     source=self._source,
                     call_id=tool_call.id,

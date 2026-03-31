@@ -1,4 +1,5 @@
 """Integration tests for LLM factory: route resolution -> provider construction."""
+
 from __future__ import annotations
 
 import pytest
@@ -6,7 +7,6 @@ import pytest
 from matmaster.config.llm import (
     LLMConfig,
     LLMProfileConfig,
-    ResolvedLLMRoute,
     _infer_model_family,
 )
 from matmaster.providers.llm_factory import build_provider
@@ -73,39 +73,41 @@ class TestProfileBuildExtraKwargs:
 class TestEndToEndRouteToProvider:
     @pytest.fixture()
     def config(self) -> LLMConfig:
-        return LLMConfig.model_validate({
-            "profiles": {
-                "opus": {
-                    "provider": "openai",
-                    "model": "claude-opus-4-6",
-                    "model_family": "claude-4.6",
-                    "api_key": "test-key",
-                    "base_url": "https://test.example.com",
-                    "thinking_effort": "high",
-                    "reasoning_protocol": "anthropic_adaptive_thinking",
-                    "temperature_policy": "force_one_when_reasoning",
-                    "temperature": 0.7,
-                    "timeout": 300,
-                    "max_retries": 3,
+        return LLMConfig.model_validate(
+            {
+                "profiles": {
+                    "opus": {
+                        "provider": "openai",
+                        "model": "claude-opus-4-6",
+                        "model_family": "claude-4.6",
+                        "api_key": "test-key",
+                        "base_url": "https://test.example.com",
+                        "thinking_effort": "high",
+                        "reasoning_protocol": "anthropic_adaptive_thinking",
+                        "temperature_policy": "force_one_when_reasoning",
+                        "temperature": 0.7,
+                        "timeout": 300,
+                        "max_retries": 3,
+                    },
+                    "sonnet": {
+                        "provider": "openai",
+                        "model": "claude-sonnet-4-6",
+                        "model_family": "claude-4.6",
+                        "api_key": "test-key",
+                        "base_url": "https://test.example.com",
+                        "thinking_effort": "high",
+                        "reasoning_protocol": "anthropic_adaptive_thinking",
+                        "temperature_policy": "force_one_when_reasoning",
+                        "temperature": 0.7,
+                    },
                 },
-                "sonnet": {
-                    "provider": "openai",
-                    "model": "claude-sonnet-4-6",
-                    "model_family": "claude-4.6",
-                    "api_key": "test-key",
-                    "base_url": "https://test.example.com",
-                    "thinking_effort": "high",
-                    "reasoning_protocol": "anthropic_adaptive_thinking",
-                    "temperature_policy": "force_one_when_reasoning",
-                    "temperature": 0.7,
+                "routes": {
+                    "claude-opus-4-6": {"profile": "opus"},
+                    "claude-sonnet-4-6": {"profile": "sonnet"},
                 },
-            },
-            "routes": {
-                "claude-opus-4-6": {"profile": "opus"},
-                "claude-sonnet-4-6": {"profile": "sonnet"},
-            },
-            "default": "opus",
-        })
+                "default": "opus",
+            }
+        )
 
     def test_route_sonnet(self, config: LLMConfig) -> None:
         provider = build_provider(config, model_override="claude-sonnet-4-6")
@@ -131,11 +133,17 @@ class TestEndToEndRouteToProvider:
         assert provider._model == "claude-sonnet-4-6"
 
     def test_extra_kwargs_none_becomes_empty(self, config: LLMConfig) -> None:
-        cfg = LLMConfig.model_validate({
-            "profiles": {
-                "minimal": {"model": "custom", "api_key": "k", "provider": "openai"},
-            },
-            "default": "minimal",
-        })
+        cfg = LLMConfig.model_validate(
+            {
+                "profiles": {
+                    "minimal": {
+                        "model": "custom",
+                        "api_key": "k",
+                        "provider": "openai",
+                    },
+                },
+                "default": "minimal",
+            }
+        )
         provider = build_provider(cfg)
         assert provider._extra_kwargs == {}

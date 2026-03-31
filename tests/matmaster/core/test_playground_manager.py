@@ -5,17 +5,17 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import yaml
 
 from matmaster.core.playground import Playground, PlaygroundManager
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _write_config(tmp_path: Path, overrides: dict[str, Any] | None = None) -> Path:
     """Write a minimal YAML config and return its path."""
@@ -61,6 +61,7 @@ def _setup_project_root(tmp_path: Path) -> Path:
 # validate_startup()
 # ---------------------------------------------------------------------------
 
+
 class TestValidateStartup:
     def test_sets_init_done(self, tmp_path: Path) -> None:
         root = _setup_project_root(tmp_path)
@@ -103,6 +104,7 @@ class TestValidateStartup:
 # get_or_create()
 # ---------------------------------------------------------------------------
 
+
 class TestGetOrCreate:
     def test_creates_new_playground(self, tmp_path: Path) -> None:
         root = _setup_project_root(tmp_path)
@@ -138,7 +140,7 @@ class TestGetOrCreate:
         root = _setup_project_root(tmp_path)
         mgr = PlaygroundManager(root)
 
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="nonexistent_type"):
             mgr.get_or_create("session-1", playground_type="nonexistent_type")
 
     def test_thread_safety_different_sessions(self, tmp_path: Path) -> None:
@@ -193,6 +195,7 @@ class TestGetOrCreate:
 # ---------------------------------------------------------------------------
 # release()
 # ---------------------------------------------------------------------------
+
 
 class TestRelease:
     def test_removes_from_cache(self, tmp_path: Path) -> None:

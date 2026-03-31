@@ -217,3 +217,26 @@ class TestEventLogger:
         rec2 = json.loads(lines[1])
         assert rec1["run_id"] == "run-001"
         assert rec2["run_id"] == "run-002"
+
+    def test_thought_complete_snapshot(self, tmp_path: Path) -> None:
+        from matmaster.devshell.event_logger import EventLogger
+
+        log_file = tmp_path / "events.jsonl"
+        logger = EventLogger(log_file, run_id="run-001")
+
+        logger.log_event(
+            ThoughtEvent(
+                source="test",
+                content="full thought",
+                stream_state="complete",
+                stream_id="s1",
+            )
+        )
+        logger.close()
+
+        lines = log_file.read_text().strip().split("\n")
+        assert len(lines) == 1
+        rec = json.loads(lines[0])
+        assert rec["type"] == "thought"
+        assert rec["content"] == "full thought"
+        assert rec["complete"] is True

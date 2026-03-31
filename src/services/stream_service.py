@@ -8,10 +8,10 @@ import queue
 import threading
 import time
 import uuid
+from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import AsyncGenerator, Callable
 
 from src.dao.redis_dao import (
     CONFIRMATION_CANCEL_VALUE,
@@ -581,7 +581,7 @@ class ChatStreamService:
                                     payload = await asyncio.wait_for(
                                         redis_queue.get(), timeout=30.0
                                     )
-                                except asyncio.TimeoutError:
+                                except TimeoutError:
                                     yield self.sse_format(
                                         {
                                             'source': 'System',
@@ -757,7 +757,7 @@ class ChatStreamService:
         request_event_queue: asyncio.Queue,
         payload: dict,
     ) -> None:
-        """供 run_agent_sync 的 send_cb 使用：写入本连接队列并广播到订阅队列；有 Redis 时同时发布到 stream channel 供其它 pod 的 subscribe 流消费。"""
+        """供 run_agent 的 send_cb 使用：写入本连接队列并广播到订阅队列；有 Redis 时同时发布到 stream channel 供其它 pod 的 subscribe 流消费。"""
         request_event_queue.put_nowait(payload)
         self._queues.broadcast(session_id, payload)
         if REDIS_URL:
@@ -940,7 +940,7 @@ class ChatStreamService:
                         payload = await asyncio.wait_for(
                             redis_queue.get(), timeout=30.0
                         )
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         yield self.sse_format(
                             {
                                 'source': 'System',

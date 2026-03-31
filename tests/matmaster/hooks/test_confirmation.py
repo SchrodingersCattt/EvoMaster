@@ -1,84 +1,126 @@
-"""Tests for ConfirmationHook."""
+"""Async regression tests for ConfirmationHook."""
 
 from __future__ import annotations
 
-import queue
-from unittest.mock import MagicMock
+import asyncio
 
 import pytest
 
+from matmaster.core.bus import MessageBus
 from matmaster.core.hooks import HookAction
+from matmaster.types.events import ConfirmationRequestEvent
 from matmaster.types.messages import ToolCallData
 
 
+def _tool_call(name: str = "execute_bash") -> ToolCallData:
+    return ToolCallData(id=f"{name}-1", name=name, arguments={"command": "echo ok"})
+
+
+async def _immediate_reply(reply: str | None = "approved") -> str | None:
+    return reply
+
+
 class TestConfirmationHook:
-    """ConfirmationHook pre_tool_call behavior."""
+    """ConfirmationHook async get_reply behavior."""
 
-    def test_returns_continue_when_reply_queue_is_none(self) -> None:
-        """No reply_queue means no confirmation possible -- always CONTINUE."""
+    @pytest.mark.asyncio
+    async def test_non_gated_tool_continues_without_emitting(self) -> None:
         from matmaster.hooks.confirmation import ConfirmationHook
 
-        bus = MagicMock()
-        hook = ConfirmationHook(reply_queue=None, bus=bus)
-        tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        assert hook.pre_tool_call(tc) == HookAction.CONTINUE
-        bus.emit.assert_not_called()
-
-    def test_returns_continue_when_tool_not_in_confirm_tools(self) -> None:
-        """Tool not in confirm_tools set -- skip confirmation."""
-        from matmaster.hooks.confirmation import ConfirmationHook
-
-        bus = MagicMock()
-        reply_queue = MagicMock()
+        bus = MessageBus()
         hook = ConfirmationHook(
-            reply_queue=reply_queue,
             bus=bus,
-            confirm_tools={"dangerous_tool"},
+            confirm_tools={"execute_bash"},
+            get_reply=_immediate_reply,
         )
-        tc = ToolCallData(id="tc-1", name="safe_tool", arguments={})
-        assert hook.pre_tool_call(tc) == HookAction.CONTINUE
-        bus.emit.assert_not_called()
 
-    def test_emits_confirmation_request_and_blocks(self) -> None:
-        """Emits ConfirmationRequestEvent and blocks on reply_queue.get()."""
-        from matmaster.hooks.confirmation import ConfirmationHook
-        from matmaster.types.events import ConfirmationRequestEvent
-
-        bus = MagicMock()
-        reply_queue = MagicMock()
-        reply_queue.get.return_value = "yes"  # user approved
-        hook = ConfirmationHook(reply_queue=reply_queue, bus=bus, timeout_sec=10)
-        tc = ToolCallData(id="tc-1", name="bash", arguments={"cmd": "rm -rf /"})
-        result = hook.pre_tool_call(tc)
+        result = await hook.pre_tool_call(_tool_call("read_file"))
 
         assert result == HookAction.CONTINUE
-        bus.emit.assert_called_once()
-        emitted = bus.emit.call_args[0][0]
-        assert isinstance(emitted, ConfirmationRequestEvent)
-        reply_queue.get.assert_called_once_with(timeout=10)
+        assert bus.pending == 0
 
-    def test_returns_skip_when_user_cancels(self) -> None:
-        """reply_queue.get() returns None -> user cancelled -> SKIP."""
+    @pytest.mark.asyncio
+    async def test_approved_reply_continues(self) -> None:
         from matmaster.hooks.confirmation import ConfirmationHook
 
-        bus = MagicMock()
-        reply_queue = MagicMock()
-        reply_queue.get.return_value = None  # user cancelled
-        hook = ConfirmationHook(reply_queue=reply_queue, bus=bus)
-        tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        result = hook.pre_tool_call(tc)
+        bus = MessageBus()
+        hook = ConfirmationHook(
+            bus=bus,
+            get_reply=lambda: _immediate_reply("approved"),
+        )
+
+        result = await hook.pre_tool_call(_tool_call())
+
+        assert result == HookAction.CONTINUE
+
+    @pytest.mark.asyncio
+    async def test_none_reply_skips(self) -> None:
+        from matmaster.hooks.confirmation import ConfirmationHook
+
+        bus = MessageBus()
+        hook = ConfirmationHook(
+            bus=bus,
+            get_reply=lambda: _immediate_reply(None),
+        )
+
+        result = await hook.pre_tool_call(_tool_call())
 
         assert result == HookAction.SKIP
 
-    def test_returns_skip_on_queue_empty_timeout(self) -> None:
-        """reply_queue.get() raises queue.Empty -> timeout -> SKIP."""
+    @pytest.mark.asyncio
+    async def test_timeout_returns_skip(self) -> None:
         from matmaster.hooks.confirmation import ConfirmationHook
 
-        bus = MagicMock()
-        reply_queue = MagicMock()
-        reply_queue.get.side_effect = queue.Empty()
-        hook = ConfirmationHook(reply_queue=reply_queue, bus=bus)
-        tc = ToolCallData(id="tc-1", name="bash", arguments={})
-        result = hook.pre_tool_call(tc)
+        async def _hang_forever() -> str | None:
+            await asyncio.sleep(999)
+            return "never"
+
+        bus = MessageBus()
+        hook = ConfirmationHook(
+            bus=bus,
+            timeout_sec=0.05,
+            get_reply=_hang_forever,
+        )
+
+        result = await hook.pre_tool_call(_tool_call())
 
         assert result == HookAction.SKIP
+
+    @pytest.mark.asyncio
+    async def test_confirm_tools_filter_skips_get_reply(self) -> None:
+        from matmaster.hooks.confirmation import ConfirmationHook
+
+        called = False
+
+        async def _should_not_be_called() -> str | None:
+            nonlocal called
+            called = True
+            return "approved"
+
+        bus = MessageBus()
+        hook = ConfirmationHook(
+            bus=bus,
+            confirm_tools={"execute_bash"},
+            get_reply=_should_not_be_called,
+        )
+
+        result = await hook.pre_tool_call(_tool_call("read_file"))
+
+        assert result == HookAction.CONTINUE
+        assert not called
+
+    @pytest.mark.asyncio
+    async def test_emits_confirmation_request_event(self) -> None:
+        from matmaster.hooks.confirmation import ConfirmationHook
+
+        bus = MessageBus()
+        hook = ConfirmationHook(
+            bus=bus,
+            get_reply=lambda: _immediate_reply("approved"),
+        )
+
+        await hook.pre_tool_call(_tool_call())
+
+        event = await bus.get(timeout=0.1)
+        assert isinstance(event, ConfirmationRequestEvent)
+        assert event.question == "Confirm tool call: execute_bash?"

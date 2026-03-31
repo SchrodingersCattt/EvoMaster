@@ -11,6 +11,7 @@ normalizes the observation to a plain string.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -48,7 +49,11 @@ class EvoToolAdapter:
     def json_schema(self) -> dict[str, Any]:
         return self._tool.params_class.model_json_schema()
 
-    def execute(self, arguments: dict[str, Any]) -> ToolResult:
+    async def execute(self, arguments: dict[str, Any]) -> ToolResult:
+        return await asyncio.to_thread(self._execute_sync, arguments)
+
+    def _execute_sync(self, arguments: dict[str, Any]) -> ToolResult:
+        """Synchronous execution body -- wrapped by execute() via to_thread."""
         args_json = json.dumps(arguments, ensure_ascii=False)
         observation, info = self._tool.execute(self._session, args_json)
         content = (
