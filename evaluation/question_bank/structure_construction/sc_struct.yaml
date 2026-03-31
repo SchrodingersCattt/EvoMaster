@@ -5,9 +5,10 @@ questions:
 - id: SC_struct_001
   capability: structure_construction
   domain: struct
-  intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled lattice mismatch.
-  human_prompt_seed: '读取 `hetero_spec.json`，构建 graphene/h-BN 垂直范德华异质结。 要求：(1) 构建共度超胞使晶格失配 < 2%；(2) AB 堆叠，层间距 3.35 A； (3) z
-    方向加 15 A 真空层。输出 POSCAR 和 CIF，报告实际失配度和总原子数。
+  intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled
+    lattice mismatch.
+  human_prompt_seed: '读取 `hetero_spec.json`，构建 graphene/h-BN 垂直范德华异质结。 要求：(1) 构建共度超胞使晶格失配
+    < 2%；(2) AB 堆叠，层间距 3.35 A； (3) z 方向加 15 A 真空层。输出 POSCAR 和 CIF，报告实际失配度和总原子数。
 
     '
   tags:
@@ -19,9 +20,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools:
-  - mat_sg_build_surface_interface
-  optional_tools: []
   data_files:
   - key: hetero_spec
     path: data/SC_struct_001/hetero_spec.json
@@ -51,13 +49,15 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: required_fields
-    criterion: Output includes structure file, lattice mismatch percentage below 2%, total atom count, interlayer distance
-      near 3.35 A, AB stacking, and vacuum thickness near 15 A.
+    criterion: Output includes structure file, lattice mismatch percentage below 2%,
+      total atom count, interlayer distance near 3.35 A, AB stacking, and vacuum thickness
+      near 15 A.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer states the physical picture (lattice matching, AB stacking, interlayer spacing, vacuum, how mismatch
-      is defined) and ties it to the delivered POSCAR/CIF—not merely naming tools or MCP calls.
+    criterion: The answer states the physical picture (lattice matching, AB stacking,
+      interlayer spacing, vacuum, how mismatch is defined) and ties it to the delivered
+      POSCAR/CIF—not merely naming tools or MCP calls.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -65,23 +65,25 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: Heterostructure construction completes in a direct workflow without redundant structure rebuilds.
+    criterion: Heterostructure construction completes in a direct workflow without
+      redundant structure rebuilds.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_002
+- id: SC_struct_002_20260331
   capability: structure_construction
   domain: struct
-  intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular crystal CIF and verify molecule integrity
-    plus atom-count scaling.
+  intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular
+    crystal CIF and verify molecule integrity plus atom-count scaling.
   human_prompt_seed: '对以下通过 OSS URL 提供的 CIF 结构进行处理：
 
     - `surface_PUBMUU03.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/1774583701_surface_PUBMUU03.cif`
@@ -115,9 +117,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools:
-  - mat_sg_build_surface_slab
-  optional_tools: []
   data_files: []
   reference_answers:
   - key: unit_cell_atoms
@@ -134,10 +133,9 @@ questions:
     - atom_count_ratio_check
     - molecule_integrity_check
   - key: molcrys_slab_molecular_integrity
-    value:
-      unit_cell_atoms: 144
-      slab_atoms: 576
-      layers: 4
+    value: true
+    tool_name: mat_sg_build_surface_slab
+    tool_arg: molecule_intact
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -148,23 +146,25 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: total_atoms
-    criterion: Total atom count is correct (576 atoms for a 4-layer slab built directly from the 144-atom input unit cell).
+    criterion: Total atom count is correct (576 atoms for a 4-layer slab built directly
+      from the 144-atom input unit cell).
     axis: correctness
     verify: numerical_range
   - id: molcrys_slab_molecular_integrity
-    criterion: MolCrysKit graph-based molecular units in workspace CIFs show the slab scales by four molecular layers vs the
-      bulk-like unit without smaller fragmented molecules (no molecules cut by the slab cut).
+    criterion: The slab-builder tool observation reports `molecule_intact=true`, i.e.
+      no molecules are cut by the slab cut.
     axis: correctness
-    verify: molcrys_slab_molecular_integrity
+    verify: tool_observation_field
   - id: required_fields
-    criterion: Output includes structure file, unit-cell atom count, final atom count, an explicit 4x ratio check, and a molecule-integrity
-      narrative consistent with MolCrysKit / connectivity reasoning.
+    criterion: Output includes structure file, unit-cell atom count, final atom count,
+      an explicit 4x ratio check, and a molecule-integrity narrative consistent with
+      MolCrysKit / connectivity reasoning.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer states what physical picture is used (molecular connectivity, periodic boundaries, (110) plane vs
-      bulk, and how that supports or contradicts cutting molecules), citing the structures—not merely naming tools or MCP
-      calls.
+    criterion: The answer states what physical picture is used (molecular connectivity,
+      periodic boundaries, (110) plane vs bulk, and how that supports or contradicts
+      cutting molecules), citing the structures—not merely naming tools or MCP calls.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -172,24 +172,26 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: The (110) slab construction and integrity check complete without excessive exploratory calls.
+    criterion: The (110) slab construction and integrity check complete without excessive
+      exploratory calls.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_003
   capability: structure_construction
   domain: struct
   intent: Passivate dangling bonds on Si(100) surface slab bottom with hydrogen atoms.
-  human_prompt_seed: '读取 `hydrogen_cap_spec.json`，对 Si(100) slab 底部的悬挂键进行氢饱和。 要求：识别底部欠配位 Si 原子，添加 H 使其达到四配位。 Si-H 键长约 1.48
-    A。输出 POSCAR 并报告添加的 H 原子数。
+  human_prompt_seed: '读取 `hydrogen_cap_spec.json`，对 Si(100) slab 底部的悬挂键进行氢饱和。 要求：识别底部欠配位
+    Si 原子，添加 H 使其达到四配位。 Si-H 键长约 1.48 A。输出 POSCAR 并报告添加的 H 原子数。
 
     '
   tags:
@@ -200,9 +202,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools:
-  - mat_sg_build_surface_slab
-  optional_tools: []
   data_files:
   - key: hydrogen_cap_spec
     path: data/SC_struct_003/hydrogen_cap_spec.json
@@ -230,17 +229,19 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: passivation_quality
-    criterion: Bottom Si atoms passivated with H to achieve 4-coordination, with Si-H bond length ~1.48 A.
+    criterion: Bottom Si atoms passivated with H to achieve 4-coordination, with Si-H
+      bond length ~1.48 A.
     axis: correctness
     verify: llm_binary_judge
   - id: required_fields
-    criterion: Output includes structure file, number of added H atoms, representative Si-H bond length, and an explicit check
-      that bottom Si atoms reach four coordination.
+    criterion: Output includes structure file, number of added H atoms, representative
+      Si-H bond length, and an explicit check that bottom Si atoms reach four coordination.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer cites the structural physics (Si(100) facets, dangling bonds, target coordination, Si–H bond length)
-      and ties passivation checks to the delivered POSCAR—not only generic semiconductor chemistry recall or tool names.
+    criterion: The answer cites the structural physics (Si(100) facets, dangling bonds,
+      target coordination, Si–H bond length) and ties passivation checks to the delivered
+      POSCAR—not only generic semiconductor chemistry recall or tool names.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -248,23 +249,26 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: Passivation workflow completes in a direct pipeline without unnecessary intermediate structure rebuilds.
+    criterion: Passivation workflow completes in a direct pipeline without unnecessary
+      intermediate structure rebuilds.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_004
   capability: structure_construction
   domain: struct
   intent: Exfoliate a MoS2 monolayer from bulk 2H-MoS2 and verify the 2D structure.
-  human_prompt_seed: '读取 `twod_spec.json`，从体相 2H-MoS2 中剥离单层 MoS2。 添加 20 A z 方向真空层，验证化学计量比为 MoS2，层厚约 3.1 A。 输出 POSCAR。
+  human_prompt_seed: '读取 `twod_spec.json`，从体相 2H-MoS2 中剥离单层 MoS2。 添加 20 A z 方向真空层，验证化学计量比为
+    MoS2，层厚约 3.1 A。 输出 POSCAR。
 
     '
   tags:
@@ -275,9 +279,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools:
-  - mat_sg_build_surface_slab
-  optional_tools: []
   data_files:
   - key: twod_spec
     path: data/SC_struct_004/twod_spec.json
@@ -309,13 +310,14 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: required_fields
-    criterion: Output includes structure file, explicit MoS2 stoichiometry verification, layer thickness near 3.1 A, and vacuum
-      layer near 20 A.
+    criterion: Output includes structure file, explicit MoS2 stoichiometry verification,
+      layer thickness near 3.1 A, and vacuum layer near 20 A.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer explains how monolayer stoichiometry, in-plane extent, layer thickness, and vacuum are verified
-      from the delivered POSCAR/structure (geometric definitions), not asserted without structural basis or tool names alone.
+    criterion: The answer explains how monolayer stoichiometry, in-plane extent, layer
+      thickness, and vacuum are verified from the delivered POSCAR/structure (geometric
+      definitions), not asserted without structural basis or tool names alone.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -323,23 +325,25 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: Monolayer exfoliation and stoichiometry verification complete in a direct workflow.
+    criterion: Monolayer exfoliation and stoichiometry verification complete in a
+      direct workflow.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005
+- id: SC_struct_005_20260331
   capability: structure_construction
   domain: struct
-  intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and construct ordered replicas to assess
-    3D structure perception.
+  intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and
+    construct ordered replicas to assess 3D structure perception.
   human_prompt_seed: '对以下 5 个含无序占位的晶体结构逐一处理，所有输入都通过 OSS URL 提供：
 
     - `disorder_DAN-2.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_DAN-2.cif`
@@ -364,7 +368,8 @@ questions:
     (4) `ordered_output_archive`。
 
 
-    对 `disorder_DAN-2.cif` 的 ordered replica：`chemical_formula` 必须为**整数化学计量**（不得再出现类似 `H13.98` 这类分数占位形式的计数）。
+    对 `disorder_DAN-2.cif` 的 ordered replica：`chemical_formula` 必须为**整数化学计量**（不得再出现类似
+    `H13.98` 这类分数占位形式的计数）。
 
     最终答案按文件名逐项列出上述信息。
 
@@ -377,9 +382,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools:
-  - mat_sg_generate_ordered_replicas
-  optional_tools: []
   reference_answers:
   - key: structures_processed
     value: 5
@@ -407,17 +409,20 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: sc005_disorder_formulas
-    criterion: The answer includes the four reference formula strings for DAP-4, PAP-H4, PAP-M5, and TILPEN; for DAN-2 the
-      reported ordered-replica chemical_formula uses integer stoichiometry only (no fractional occupancies like 13.98 in counts).
+    criterion: The answer includes the four reference formula strings for DAP-4, PAP-H4,
+      PAP-M5, and TILPEN; for DAN-2 the reported ordered-replica chemical_formula
+      uses integer stoichiometry only (no fractional occupancies like 13.98 in counts).
     axis: correctness
     verify: sc005_disorder_formulas
   - id: required_fields
-    criterion: Each filename is paired with chemical_formula, is_disordered, ordered_replica_count, and ordered_output_archive.
+    criterion: Each filename is paired with chemical_formula, is_disordered, ordered_replica_count,
+      and ordered_output_archive.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer explains the physical/chemical basis for each structure (disorder/occupancy, connectivity, valence
-      or charge balance, and what changes when building an ordered replica), tied to the named CIFs and delivered outputs—not
+    criterion: The answer explains the physical/chemical basis for each structure
+      (disorder/occupancy, connectivity, valence or charge balance, and what changes
+      when building an ordered replica), tied to the named CIFs and delivered outputs—not
       only naming tools or restating task text.
     axis: grounding
     verify: llm_binary_judge
@@ -434,22 +439,24 @@ questions:
     axis: efficiency
     verify: token_budget
   - id: efficiency_judge
-    criterion: The agent handles the 5 structures one by one with minimal detours and without exploratory over-processing.
+    criterion: The agent handles the 5 structures one by one with minimal detours
+      and without exploratory over-processing.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
 - id: SC_struct_006
   capability: structure_construction
   domain: struct
-  intent: Add missing hydrogens to the monomethylammonium perchlorate crystal MEAPER while preserving perchlorate oxygens
-    and validating local tetrahedral geometry.
-  human_prompt_seed: '读取 `add-H_MEAPER.cif`，对高氯酸甲铵（MEAPER）晶体结构补氢，并导出为 `meaper_hydrogenated.cif`。 要求：只给甲铵部分的 C 和 N 补氢，且每个 C、N
-    都应补上 3 个 H； 高氯酸根的 O 不应加氢。 请输出补氢后的结构文件，并报告： (1) 最终化学式； (2) C 是否都变成 CH3； (3) N 是否都变成 NH3； (4) 高氯酸根 O 是否未被氢化； (5) 代表性的 H-C-H
-    / H-N-H 键角是否接近 109.48°（允许合理波动）。
+  intent: Add missing hydrogens to the monomethylammonium perchlorate crystal MEAPER
+    while preserving perchlorate oxygens and validating local tetrahedral geometry.
+  human_prompt_seed: '读取 `add-H_MEAPER.cif`，对高氯酸甲铵（MEAPER）晶体结构补氢，并导出为 `meaper_hydrogenated.cif`。
+    要求：只给甲铵部分的 C 和 N 补氢，且每个 C、N 都应补上 3 个 H； 高氯酸根的 O 不应加氢。 请输出补氢后的结构文件，并报告： (1) 最终化学式；
+    (2) C 是否都变成 CH3； (3) N 是否都变成 NH3； (4) 高氯酸根 O 是否未被氢化； (5) 代表性的 H-C-H / H-N-H 键角是否接近
+    109.48°（允许合理波动）。
 
     '
   tags:
@@ -461,9 +468,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools:
-  - mat_sg_add_hydrogens
-  optional_tools: []
   data_files:
   - key: meaper_cif
     path: data/SC_struct_006/add-H_MEAPER.cif
@@ -499,18 +503,20 @@ questions:
     axis: correctness
     verify: contains_all
   - id: hcn_angle_deg
-    criterion: The reported representative H-C-H or H-N-H bond angle is close to tetrahedral 109.48 degrees within a reasonable
-      tolerance.
+    criterion: The reported representative H-C-H or H-N-H bond angle is close to tetrahedral
+      109.48 degrees within a reasonable tolerance.
     axis: correctness
     verify: numerical_range
   - id: required_fields
-    criterion: Output includes structure file, final formula, explicit checks that C becomes CH3 and N becomes NH3, confirmation
-      that perchlorate O atoms are not hydrogenated, and bond-angle validation.
+    criterion: Output includes structure file, final formula, explicit checks that
+      C becomes CH3 and N becomes NH3, confirmation that perchlorate O atoms are not
+      hydrogenated, and bond-angle validation.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer states the chemical/geometry rationale (which atoms should receive H, tetrahedral CH3/NH3 targets,
-      perchlorate O must stay non-protic) and ties checks to `meaper_hydrogenated.cif` and the input CIF—not only procedural
+    criterion: The answer states the chemical/geometry rationale (which atoms should
+      receive H, tetrahedral CH3/NH3 targets, perchlorate O must stay non-protic)
+      and ties checks to `meaper_hydrogenated.cif` and the input CIF—not only procedural
       or tool-centric wording.
     axis: grounding
     verify: llm_binary_judge
@@ -519,26 +525,31 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: The hydrogenation and validation workflow completes directly without redundant exploratory steps.
+    criterion: The hydrogenation and validation workflow completes directly without
+      redundant exploratory steps.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_007
   capability: structure_construction
   domain: struct
-  intent: Build the nitroprusside anion and validate its coordination, bond lengths, and near-linear linkage geometry.
-  human_prompt_seed: 'Build the nitroprusside anion. Export as `nitroprusside.xyz`. In the final answer, explicitly report:
-    (1) whether `nitroprusside.xyz` exists; (2) the formula, written as `FeC5N6O`; (3) Fe coordination number; (4) the counts
-    of Fe-C bonds shorter than 2.0 A and Fe-N bonds shorter than 2.0 A; (5) one representative N-O bond length and Fe-N-O
-    angle; (6) one representative C-N bond length and Fe-C-N angle.
+  intent: Build the nitroprusside anion and validate its coordination, bond lengths,
+    and near-linear linkage geometry.
+  human_prompt_seed: 'Build the nitroprusside anion. Export as `nitroprusside.xyz`.
+    In the final answer, explicitly report: (1) whether `nitroprusside.xyz` exists;
+    (2) the formula, written as `FeC5N6O`; (3) Fe coordination number; (4) the counts
+    of Fe-C bonds shorter than 2.0 A and Fe-N bonds shorter than 2.0 A; (5) one representative
+    N-O bond length and Fe-N-O angle; (6) one representative C-N bond length and Fe-C-N
+    angle.
 
     '
   tags:
@@ -550,9 +561,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools:
-  - mat_sg_build_molecule_structures_from_smiles
-  optional_tools: []
   data_files: []
   reference_answers:
   - key: file_exists
@@ -621,7 +629,8 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: fe_no_angle_deg
-    criterion: A representative Fe-N-O angle is reported above 175 degrees and close to linear.
+    criterion: A representative Fe-N-O angle is reported above 175 degrees and close
+      to linear.
     axis: correctness
     verify: numerical_range
   - id: cn_bond_length_A
@@ -629,17 +638,19 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: fe_cn_angle_deg
-    criterion: A representative Fe-C-N angle is reported above 170 degrees and close to linear.
+    criterion: A representative Fe-C-N angle is reported above 170 degrees and close
+      to linear.
     axis: correctness
     verify: numerical_range
   - id: required_fields
-    criterion: The answer explicitly reports all required metrics and ties them to the generated nitroprusside structure.
+    criterion: The answer explicitly reports all required metrics and ties them to
+      the generated nitroprusside structure.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer names the coordination/bonding motifs (Fe–CN vs Fe–NO, linear nitrosyl, cyano linkages) and ties
-      counts, bond lengths, and angles to `nitroprusside.xyz`—not generic coordination-chemistry recall or MCP/tool names
-      alone.
+    criterion: The answer names the coordination/bonding motifs (Fe–CN vs Fe–NO, linear
+      nitrosyl, cyano linkages) and ties counts, bond lengths, and angles to `nitroprusside.xyz`—not
+      generic coordination-chemistry recall or MCP/tool names alone.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -647,28 +658,32 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: The nitroprusside construction and validation workflow completes directly without redundant trial-and-error.
+    criterion: The nitroprusside construction and validation workflow completes directly
+      without redundant trial-and-error.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_008
   capability: structure_construction
   domain: struct
-  intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry, geometry, coordination environments,
-    and post-relaxation force.
-  human_prompt_seed: 'Construct a computation-ready γ-Al2O3 bulk model. Export as `gamma_alumina.cif`. In the final answer,
-    explicitly report: (1) whether `gamma_alumina.cif` exists; (2) the Al:O ratio, which should be approximately 2:3 (±5%);
-    (3) the three cell angles, each close to 90 degrees (±2 degrees); (4) whether both tetrahedral and octahedral [AlO] environments
-    exist; (5) whether all interatomic distances are greater than 1.0 A; (6) the relaxed maximum force, which should be below
-    0.1 eV/A.
+  intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
+    geometry, coordination environments, and post-relaxation force.
+  human_prompt_seed: 'Construct a computation-ready γ-Al2O3 bulk model. Export as
+    `gamma_alumina.cif`. In the final answer, explicitly report: (1) whether `gamma_alumina.cif`
+    exists; (2) the Al:O ratio, which should be approximately 2:3 (±5%); (3) the three
+    cell angles, each close to 90 degrees (±2 degrees); (4) whether both tetrahedral
+    and octahedral [AlO] environments exist; (5) whether all interatomic distances
+    are greater than 1.0 A; (6) the relaxed maximum force, which should be below 0.1
+    eV/A.
 
     '
   tags:
@@ -680,11 +695,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools:
-  - mat_sg_build_bulk_structure_by_template
-  - mat_dpa_submit_optimize_structure
-  optional_tools:
-  - mat_sg_build_bulk_structure_by_wyckoff
   data_files: []
   reference_answers:
   - key: file_exists
@@ -743,14 +753,15 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: required_fields
-    criterion: The answer explicitly reports the Al:O ratio, all three cell angles, evidence for both tetrahedral and octahedral
-      AlO environments, a minimum-distance sanity check above 1.0 A, and a relaxed maximum-force check below 0.1 eV/A.
+    criterion: The answer explicitly reports the Al:O ratio, all three cell angles,
+      evidence for both tetrahedral and octahedral AlO environments, a minimum-distance
+      sanity check above 1.0 A, and a relaxed maximum-force check below 0.1 eV/A.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer links Al:O stoichiometry, cell angles, tetrahedral vs octahedral Al sites, minimum contact distances,
-      and post-relax forces to `gamma_alumina.cif` and the stated relaxation—not handbook gamma-alumina recall or tool names
-      alone.
+    criterion: The answer links Al:O stoichiometry, cell angles, tetrahedral vs octahedral
+      Al sites, minimum contact distances, and post-relax forces to `gamma_alumina.cif`
+      and the stated relaxation—not handbook gamma-alumina recall or tool names alone.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -758,26 +769,30 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: The gamma-alumina construction and relaxation workflow completes without redundant exploratory detours.
+    criterion: The gamma-alumina construction and relaxation workflow completes without
+      redundant exploratory detours.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_009
   capability: structure_construction
   domain: struct
-  intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce trilayers and oxygen termination.
-  human_prompt_seed: 'Build a CeO2(111) surface with three Ce-O-Ce tri-layers. Export as `ceo2_111_trilayer.cif`. In the final
-    answer, explicitly report: (1) whether `ceo2_111_trilayer.cif` exists; (2) the total layer count, which should be 9; (3)
-    whether the slab is symmetric; (4) whether the outermost surface layer is O-terminated; (5) the Ce:O stoichiometric ratio,
-    which should match CeO2.
+  intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce
+    trilayers and oxygen termination.
+  human_prompt_seed: 'Build a CeO2(111) surface with three Ce-O-Ce tri-layers. Export
+    as `ceo2_111_trilayer.cif`. In the final answer, explicitly report: (1) whether
+    `ceo2_111_trilayer.cif` exists; (2) the total layer count, which should be 9;
+    (3) whether the slab is symmetric; (4) whether the outermost surface layer is
+    O-terminated; (5) the Ce:O stoichiometric ratio, which should match CeO2.
 
     '
   tags:
@@ -789,9 +804,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools:
-  - mat_sg_build_surface_slab
-  optional_tools: []
   data_files: []
   reference_answers:
   - key: file_exists
@@ -827,13 +839,15 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: required_fields
-    criterion: The answer explicitly reports the 9-layer construction, symmetry check, oxygen-terminated outermost layer,
-      stoichiometric CeO2 ratio, and (111) surface orientation where relevant.
+    criterion: The answer explicitly reports the 9-layer construction, symmetry check,
+      oxygen-terminated outermost layer, stoichiometric CeO2 ratio, and (111) surface
+      orientation where relevant.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer explains slab polarity/symmetry, layer stacking for CeO2(111), O termination, and Ce:O stoichiometry
-      using `ceo2_111_trilayer.cif`—not textbook-only claims or naming MCP tools alone.
+    criterion: The answer explains slab polarity/symmetry, layer stacking for CeO2(111),
+      O termination, and Ce:O stoichiometry using `ceo2_111_trilayer.cif`—not textbook-only
+      claims or naming MCP tools alone.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -841,15 +855,17 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: The CeO2(111) slab construction and validation workflow completes without unnecessary exploratory calls.
+    criterion: The CeO2(111) slab construction and validation workflow completes without
+      unnecessary exploratory calls.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget

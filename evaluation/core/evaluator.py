@@ -374,6 +374,10 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return self._check_tool_args_match(tool_calls=tool_calls, ref=ref)
+        if item.verify == 'tool_observation_field':
+            if ref is None:
+                return False, 'missing reference answer'
+            return self._check_tool_observation_field(evidence=evidence, ref=ref)
 
         if item.verify == 'event_type_called':
             if ref is None:
@@ -584,6 +588,57 @@ class BinaryEvaluator:
         return (
             False,
             f'no call to {names} had {ref.tool_arg}={ref.value} (found: {actuals})',
+        )
+
+    def _check_tool_observation_field(
+        self, *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+    ) -> tuple[bool, str]:
+        if evidence is None:
+            return False, 'no EvidenceBundle provided'
+        if not ref.tool_name or not ref.tool_arg:
+            return (
+                False,
+                'tool_observation_field requires tool_name and tool_arg in reference',
+            )
+
+        matches = [tc for tc in evidence.tool_calls if tc.tool_name == ref.tool_name]
+        if not matches:
+            return False, f'tool {ref.tool_name!r} was never called'
+
+        for tc in matches:
+            raw = tc.observation_excerpt.strip()
+            if not raw:
+                continue
+            try:
+                parsed = self._parse_json(raw)
+            except Exception:
+                continue
+            if ref.tool_arg not in parsed:
+                continue
+
+            actual = parsed.get(ref.tool_arg)
+            expected = ref.value
+            if isinstance(expected, (int, float)) and ref.tolerance is not None:
+                try:
+                    hit = abs(float(actual) - float(expected)) <= float(ref.tolerance)
+                    return (
+                        hit,
+                        f'observation field {ref.tool_arg}={actual!r}, expected={expected!r}±{ref.tolerance}',
+                    )
+                except (TypeError, ValueError):
+                    return (
+                        False,
+                        f'observation field {ref.tool_arg}={actual!r} is not numeric-comparable to {expected!r}',
+                    )
+            hit = actual == expected
+            return (
+                hit,
+                f'observation field {ref.tool_arg}={actual!r}, expected={expected!r}',
+            )
+
+        return (
+            False,
+            f'field {ref.tool_arg!r} not found in observation excerpt for tool {ref.tool_name!r}',
         )
 
     @staticmethod

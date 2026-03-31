@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: mech
 questions:
-- id: WO_mech_001
+- id: WO_mech_001_20260331
   capability: workflow_orchestration
   domain: mech
   intent: Independently locate Al FCC structure, execute 5-point volume scan, fit EOS, report a0 and B0.
@@ -18,12 +18,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools:
-  - mat_struct_db_fetch_structures_from_db
-  - mat_dpa_submit_optimize_structure
-  optional_tools:
-  - mat_sg_build_bulk_structure_by_template
-  - mat_sg_build_bulk_structure_by_wyckoff
   data_files: []
   reference_answers:
   - key: used_db_fetch
@@ -47,6 +41,10 @@ questions:
     - a0
     - b0
     - failure_handling
+  - key: call_count_range
+    value:
+      min: 5
+      max: 12
   - key: duration_budget
     value: &id001
       max: 7200000
@@ -117,8 +115,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools: []
   data_files: []
   reference_answers:
   - key: detonation_velocity_m_s
