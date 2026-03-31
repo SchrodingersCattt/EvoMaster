@@ -2,7 +2,7 @@ version: v5
 capability: batch_processing
 domain: struct
 questions:
-- id: BP_struct_001
+- id: BP_struct_001_20260331
   capability: batch_processing
   domain: struct
   intent: Batch-construct Si(100) surface slabs with varying vacuum thickness while
@@ -11,7 +11,7 @@ questions:
   human_prompt_seed: '从 `surface_slab_params.json` 读取配置。 构造 5 个 Si(100) 表面 slab，改变真空厚度：10,
     15, 20, 25, 30 Å。 其他参数严格保持固定：Miller 指标 [1,0,0], 4 层 Si, 3x3 超胞。 输出 5 个 CIF 文件，每个文件名包含真空厚度。
 
-    关键考察点： 1. 真空厚度参数按顺序变化 2. 所有其他 mat_sg_build_surface_slab 参数保持恒定 3. 生成 5 个不同的输出文件
+    关键考察点： 1. 真空厚度参数按顺序变化 2. 所有其他构建参数保持恒定 3. 生成 5 个不同的输出文件
 
     '
   tags:
