@@ -16,7 +16,6 @@ ag-ui 协议（前后端约定）：
 - 统一流接口：POST /stream，要发消息就带 content，仅订阅就省略 body 或 content 为空。
 """
 
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.base.base_res import BaseResponse
