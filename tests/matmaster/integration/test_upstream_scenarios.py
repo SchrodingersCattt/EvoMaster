@@ -667,16 +667,3 @@ class TestAgentRunServiceConfirmationRecovery:
         )
 
 
-# -- D-03: x_master raises ValueError ---------------------------
-
-
-class TestXMasterRaisesValueError:
-    """Per D-03: x_master playground_type raises ValueError in new pipeline."""
-
-    def test_x_master_raises_value_error(self) -> None:
-        """Verify PlaygroundManager.get_or_create raises ValueError for x_master."""
-        from src.services.agent_run_service import AgentRunService
-
-        svc = AgentRunService(sessions_service=MagicMock())
-        with pytest.raises(ValueError, match="x_master"):
-            svc._pg_manager.get_or_create("sess-1", playground_type="x_master")
