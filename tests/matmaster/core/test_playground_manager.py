@@ -40,20 +40,10 @@ def _write_config(tmp_path: Path, overrides: dict[str, Any] | None = None) -> Pa
 
 
 def _setup_project_root(tmp_path: Path) -> Path:
-    """Create a fake project root with mat_master and minimal config dirs.
-
-    mat_master uses matmaster_config/ (flat layout);
-    minimal uses configs/minimal/ (nested layout).
-    """
-    # mat_master → matmaster_config/
+    """Create a fake project root with matmaster_config directory."""
     mm_dir = tmp_path / "matmaster_config"
     mm_dir.mkdir(parents=True)
     _write_config(mm_dir)
-
-    # minimal → configs/minimal/
-    min_dir = tmp_path / "configs" / "minimal"
-    min_dir.mkdir(parents=True)
-    _write_config(min_dir)
     return tmp_path
 
 
@@ -128,20 +118,6 @@ class TestGetOrCreate:
         pg1 = mgr.get_or_create("session-1")
         pg2 = mgr.get_or_create("session-2")
         assert pg1 is not pg2
-
-    def test_rejects_x_master(self, tmp_path: Path) -> None:
-        root = _setup_project_root(tmp_path)
-        mgr = PlaygroundManager(root)
-
-        with pytest.raises(ValueError, match="x_master"):
-            mgr.get_or_create("session-1", playground_type="x_master")
-
-    def test_invalid_playground_type_raises(self, tmp_path: Path) -> None:
-        root = _setup_project_root(tmp_path)
-        mgr = PlaygroundManager(root)
-
-        with pytest.raises(Exception, match="nonexistent_type"):
-            mgr.get_or_create("session-1", playground_type="nonexistent_type")
 
     def test_thread_safety_different_sessions(self, tmp_path: Path) -> None:
         root = _setup_project_root(tmp_path)

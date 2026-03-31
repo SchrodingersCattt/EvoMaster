@@ -58,6 +58,7 @@ class Playground(PlaygroundSessionMixin):
         self._prepare_run_meta: dict[str, Any] | None = None
         self._log_file_handler: logging.FileHandler | None = None
         self._log_file_stream = None
+        self._playground_block: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -182,29 +183,16 @@ class Playground(PlaygroundSessionMixin):
         return ws
 
     def _sync_workspace_to_session_config(self, workspace_path: Path) -> None:
-        """Synchronize workspace_path and working_dir on session config.
-
-        Both ``workspace_path`` and ``working_dir`` fields are updated to
-        prevent inconsistency between tool execution directory and file
-        tree directory.
-        """
+        """Synchronize workspace_path and working_dir on session config."""
         if self.session is None:
             return
         ws_str = str(workspace_path.absolute())
-
         cfg = self.session.config
-        if hasattr(cfg, 'workspace_path'):
-            # Pydantic model -- attempt direct setattr (SessionConfig is
-            # not frozen, so this works for Local/Docker/SSH configs).
-            try:
-                cfg.workspace_path = ws_str
-            except Exception:
-                pass
-        if hasattr(cfg, 'working_dir'):
-            try:
-                cfg.working_dir = ws_str
-            except Exception:
-                pass
+        try:
+            cfg.workspace_path = ws_str
+            cfg.working_dir = ws_str
+        except Exception as e:
+            self.logger.warning('Failed to sync workspace to session config: %s', e)
 
     def _setup_logging(self, run_meta: dict[str, Any]) -> None:
         """Set up a file logger under ``<run_dir>/logs/{task_id}.log``.
@@ -225,7 +213,6 @@ class Playground(PlaygroundSessionMixin):
         log_filename = f"{task_id}.log" if task_id else 'playground.log'
         log_file = logs_dir / log_filename
 
-        # Line-buffered file stream for real-time tail
         stream = open(log_file, 'a', buffering=1, encoding='utf-8')  # noqa: SIM115
         self._log_file_stream = stream
 
@@ -254,9 +241,11 @@ class Playground(PlaygroundSessionMixin):
 
     def _get_playground_block(self) -> dict[str, Any]:
         """Return the ``playground`` sub-dict from config, or ``{}``."""
-        raw = self.config.model_dump()
-        block = raw.get('playground', None)
-        return block if isinstance(block, dict) else {}
+        if self._playground_block is None:
+            raw = self.config.model_dump()
+            block = raw.get('playground', None)
+            self._playground_block = block if isinstance(block, dict) else {}
+        return self._playground_block
 
     def _build_archival_config(self) -> WorkspaceArchivalConfig | None:
         """Build ``WorkspaceArchivalConfig`` from the YAML playground block.
@@ -354,21 +343,16 @@ class PlaygroundManager:
         self._init_done = threading.Event()
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _config_dir_for(self, playground_type: str) -> Path:
-        """Return config directory for a playground type.
-
-        mat_master uses the flat matmaster_config/ layout;
-        other types (minimal, etc.) retain configs/{type}/.
-        """
-        if playground_type == "mat_master":
-            return self._project_root / "matmaster_config"
-        return self._project_root / "configs" / playground_type
+    @property
+    def _config_dir(self) -> Path:
+        """Return the matmaster_config directory."""
+        return self._project_root / "matmaster_config"
 
     def validate_startup(self) -> None:
         """Fail-fast startup validation. Idempotent: repeated calls are no-ops.
 
-        Checks config YAML existence (mat_master, minimal), agents key
-        presence, and emits evomaster deprecation warning.
+        Checks config YAML existence, agents key presence, and emits
+        evomaster deprecation warning.
         Does not cross-validate LLM config (that belongs to Exp layer).
         """
         if self._init_done.is_set():
@@ -377,11 +361,10 @@ class PlaygroundManager:
             if self._init_done.is_set():
                 return
 
-            for pg_type in ("mat_master", "minimal"):
-                config_path = self._config_dir_for(pg_type) / "config.yaml"
-                if not config_path.exists():
-                    self._logger.warning('Config not found: %s', config_path)
-                    continue
+            config_path = self._config_dir / "config.yaml"
+            if not config_path.exists():
+                self._logger.warning('Config not found: %s', config_path)
+            else:
                 with open(config_path, encoding='utf-8') as f:
                     cfg = yaml.safe_load(f)
                 if not isinstance(cfg, dict) or 'agents' not in cfg:
@@ -401,22 +384,12 @@ class PlaygroundManager:
             self._init_done.set()
             self._logger.info('Playground config validation complete.')
 
-    def get_or_create(
-        self, session_id: str, playground_type: str = 'mat_master'
-    ) -> Playground:
-        """Get or create a Playground instance (thread-safe).
-
-        Raises:
-            ValueError: If playground_type is ``"x_master"``.
-        """
-        if playground_type == 'x_master':
-            raise ValueError(
-                'x_master playground_type is not supported in the new pipeline'
-            )
+    def get_or_create(self, session_id: str) -> Playground:
+        """Get or create a Playground instance (thread-safe)."""
         with self._lock:
             if session_id in self._playgrounds:
                 return self._playgrounds[session_id]
-            config_path = self._config_dir_for(playground_type) / "config.yaml"
+            config_path = self._config_dir / "config.yaml"
             pg = Playground(config_path=config_path)
             self._playgrounds[session_id] = pg
             return pg
