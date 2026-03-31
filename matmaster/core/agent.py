@@ -261,12 +261,23 @@ class AgentKernel:
         max_retries = getattr(provider, "max_retries", 3)
         retry_delay = getattr(provider, "retry_delay", 1.0)
 
+        # Serialize once — messages don't change between retries
+        api_messages = [m.to_api_dict() for m in messages]
+        tool_defs = (
+            spec.tool_registry.get_tool_definitions()
+            if spec.tool_registry
+            and hasattr(spec.tool_registry, "get_tool_definitions")
+            else None
+        )
+
         attempt_records: list[dict[str, Any]] | None = None
         last_error: LLMError | None = None
         for attempt in range(max_retries):
             t0 = time.monotonic()
             try:
-                response = await self._do_stream_llm(spec, messages, timeout=current_timeout)
+                response = await self._do_stream_llm(
+                    spec, api_messages, tool_defs, timeout=current_timeout,
+                )
                 elapsed = time.monotonic() - t0
 
                 if (
@@ -365,24 +376,18 @@ class AgentKernel:
     async def _do_stream_llm(
         self,
         spec: AgentRuntimeSpec,
-        messages: list[Message],
+        api_messages: list[dict[str, Any]],
+        tool_defs: list[dict[str, Any]] | None,
         *,
         timeout: float | None = None,
     ) -> LLMResponse:
         """Call LLM via streaming, accumulate chunks into LLMResponse."""
-        api_messages = [m.to_api_dict() for m in messages]
-        tool_defs = (
-            spec.tool_registry.get_tool_definitions()
-            if spec.tool_registry
-            and hasattr(spec.tool_registry, "get_tool_definitions")
-            else None
-        )
 
         content_parts: list[str] = []
         reasoning_parts: list[str] = []
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
-        stream_id = f"turn-{len(messages)}"
+        stream_id = f"turn-{len(api_messages)}"
         usage: dict[str, int] = {}
         producing_reasoning = False
         producing_content = False
