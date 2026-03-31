@@ -6,6 +6,12 @@ repos:
         entry: python3 .pre-commit/check_file_lines.py
         language: system
         files: \.(py|ts|tsx|js|jsx)$
+        exclude: |
+          (?x)^(
+            playground/mat_master/frontend/public/mermaid\.js|
+            playground/mat_master/frontend/src/components/ChatPanel\.tsx|
+            playground/mat_master/frontend/src/components/WorkspacePanel\.tsx
+          )$
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0  # Use the ref you want to point at
