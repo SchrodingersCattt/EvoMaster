@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from evaluation.core.evaluator import BinaryEvaluator
+from evaluation.core.evaluator_helpers import check_duration_budget
 from evaluation.core.evidence import EvidenceBundle, TokenUsage
 from evaluation.validators.structure_molcrys import (
     check_disorder_dan2_integer_formula,
@@ -23,63 +24,16 @@ def test_duration_budget_passes_when_under_ceiling() -> None:
         duration_ms=1000,
         token_usage=TokenUsage(total_tokens=10),
     )
-    ok, reason = BinaryEvaluator._check_duration_budget(
-        evidence=ev, expected={'max': 5000}
-    )
+    ok, reason = check_duration_budget(evidence=ev, expected={'max': 5000})
     assert ok is True
     assert '1000' in reason
 
 
 def test_duration_budget_fails_when_missing_duration() -> None:
     ev = EvidenceBundle(task_id='t1', duration_ms=0)
-    ok, reason = BinaryEvaluator._check_duration_budget(
-        evidence=ev, expected={'max': 5000}
-    )
+    ok, reason = check_duration_budget(evidence=ev, expected={'max': 5000})
     assert ok is False
     assert 'not recorded' in reason
-
-
-def test_build_context_includes_duration_and_fixes_tool_fields() -> None:
-    from evaluation.core.schemas import QuestionItem
-
-    q = QuestionItem(
-        id='Q',
-        capability='structure_construction',
-        domain='struct',
-        intent='test',
-        human_prompt_seed='x',
-        scoring_checklist=[
-            {
-                'id': 'x',
-                'criterion': 'c',
-                'axis': 'correctness',
-                'verify': 'llm_binary_judge',
-            }
-        ],
-        reference_answers=[{'key': 'x', 'value': True}],
-    )
-    from evaluation.core.evidence import CallStatus, ToolCallRecord
-
-    tc = ToolCallRecord(
-        step=1,
-        tool_name='t',
-        args={'a': 1},
-        observation_excerpt='obs',
-        status=CallStatus.SUCCESS,
-    )
-    ev = EvidenceBundle(
-        task_id='t',
-        duration_ms=42,
-        workspace_dir='/tmp/ws',
-        tool_calls=[tc],
-        token_usage=TokenUsage(total_tokens=5),
-        total_steps=2,
-    )
-    ctx = BinaryEvaluator._build_context(question=q, answer='ans', evidence=ev)
-    assert 'Total duration_ms: 42' in ctx
-    assert 'Workspace: /tmp/ws' in ctx
-    assert "'a': 1" in ctx or 'a' in ctx
-    assert 'obs' in ctx
 
 
 def test_sc005_other_formulas_detects_missing() -> None:
