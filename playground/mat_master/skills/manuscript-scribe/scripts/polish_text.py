@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from section_utils import find_section
+from section_utils import find_section  # noqa: E402
 
 # Optional: for --use_llm
 try:
@@ -41,15 +41,32 @@ def llm_polish(text: str, section_name: str) -> str:
     if not text.strip():
         return text
     if OpenAI is None:
-        print("Warning: openai not installed; falling back to simple_polish.", flush=True)
+        print(
+            "Warning: openai not installed; falling back to simple_polish.", flush=True
+        )
         return simple_polish(text)
-    base_url = os.environ.get("LITELLM_PROXY_API_BASE") or os.environ.get("OPENAI_API_BASE") or None
-    api_key = os.environ.get("LITELLM_PROXY_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    base_url = (
+        os.environ.get("LITELLM_PROXY_API_BASE")
+        or os.environ.get("OPENAI_API_BASE")
+        or None
+    )
+    api_key = os.environ.get("LITELLM_PROXY_API_KEY") or os.environ.get(
+        "OPENAI_API_KEY"
+    )
     if not api_key:
-        print("Warning: no API key (LITELLM_PROXY_API_KEY / OPENAI_API_KEY); falling back to simple_polish.", flush=True)
+        print(
+            "Warning: no API key (LITELLM_PROXY_API_KEY / OPENAI_API_KEY); falling back to simple_polish.",
+            flush=True,
+        )
         return simple_polish(text)
-    model = os.environ.get("LITELLM_MODEL") or os.environ.get("OPENAI_MODEL") or "gpt-4o-mini"
-    client = OpenAI(api_key=api_key, base_url=base_url.rstrip("/") if base_url else None)
+    model = (
+        os.environ.get("LITELLM_MODEL")
+        or os.environ.get("OPENAI_MODEL")
+        or "gpt-4o-mini"
+    )
+    client = OpenAI(
+        api_key=api_key, base_url=base_url.rstrip("/") if base_url else None
+    )
     # Patent Claims only: skip De-AIGC passes (claims language is intentionally
     # formal/repetitive by convention). All other sections including Detailed Description
     # follow De-AIGC rules normally (see prompts/patent.md).
@@ -94,7 +111,10 @@ Rules:
     try:
         r = client.chat.completions.create(
             model=model,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
             temperature=0.3,
             max_tokens=4096,
         )
@@ -111,9 +131,17 @@ Rules:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Polish one section for academic English.")
     ap.add_argument("--file", required=True, help="Path to draft file")
-    ap.add_argument("--target_section", required=True, help="Section to polish (e.g. Introduction)")
-    ap.add_argument("--in_place", action="store_true", help="Overwrite file (default: true)")
-    ap.add_argument("--use_llm", action="store_true", help="Use LLM for point-by-point revision (needs API key in env)")
+    ap.add_argument(
+        "--target_section", required=True, help="Section to polish (e.g. Introduction)"
+    )
+    ap.add_argument(
+        "--in_place", action="store_true", help="Overwrite file (default: true)"
+    )
+    ap.add_argument(
+        "--use_llm",
+        action="store_true",
+        help="Use LLM for point-by-point revision (needs API key in env)",
+    )
     args = ap.parse_args()
 
     path = Path(args.file)
@@ -131,12 +159,17 @@ def main() -> None:
     lines = section_text.splitlines()
     header = lines[0] if lines else f"## {args.target_section}"
     body = "\n".join(lines[1:]) if len(lines) > 1 else ""
-    polished_body = llm_polish(body, args.target_section) if args.use_llm else simple_polish(body)
+    polished_body = (
+        llm_polish(body, args.target_section) if args.use_llm else simple_polish(body)
+    )
     new_section = f"{header}\n\n{polished_body}\n\n"
 
     new_content = content[:start] + new_section + content[end:].lstrip()
     path.write_text(new_content, encoding="utf-8")
-    print(f"Polished section {args.target_section} in {path} ({'LLM' if args.use_llm else 'regex'}).", flush=True)
+    print(
+        f"Polished section {args.target_section} in {path} ({'LLM' if args.use_llm else 'regex'}).",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

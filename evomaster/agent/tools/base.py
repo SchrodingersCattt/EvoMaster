@@ -28,7 +28,9 @@ class ToolError(Exception):
 class ToolParameterError(ToolError):
     """工具参数错误"""
 
-    def __init__(self, param_name: str, value: Any, hint: str = '', /) -> None:
+    def __init__(  # noqa: B042
+        self, param_name: str, value: Any, hint: str = '', /
+    ) -> None:
         self.param_name = param_name
         self.value = value
         message = f"Invalid parameter `{param_name}`: {value}"

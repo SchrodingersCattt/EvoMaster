@@ -125,7 +125,7 @@ test:
       cd /app &&
       python -V &&
       . .venv/bin/activate &&
-      uv add pytest-cov pytest-xdist pytest-timer &&
+      uv add pytest-cov pytest-xdist pytest-timer pytest-asyncio &&
       pytest -n 8 --cov=./ --cov-report term-missing --cov-report html:/app/htmlcov -sv
       "
     - docker cp ${CI_PROJECT_DIR}/tests/. testcov:/app/tests/

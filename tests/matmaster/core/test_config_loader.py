@@ -1,7 +1,11 @@
 """Tests for config_loader -- YAML config loading utility."""
+
 from __future__ import annotations
+
 from pathlib import Path
+
 import pytest
+
 from matmaster.core.config_loader import load_config
 
 
@@ -34,7 +38,9 @@ class TestLoadConfig:
         with pytest.raises(FileNotFoundError):
             load_config("/nonexistent/config.yaml")
 
-    def test_load_expands_user_home(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_load_expands_user_home(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """load_config expands ~ in paths."""
         yaml_content = "name: test\n"
         config_file = tmp_path / "config.yaml"

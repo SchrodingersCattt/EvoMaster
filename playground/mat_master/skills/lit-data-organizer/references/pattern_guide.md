@@ -26,20 +26,20 @@ PATTERNS = {
         'regex': [...],             # Regex patterns
         'abbreviations': {...},     # Abbr -> Full name mappings
     },
-    
+
     # Property identification
     'property': {
         'keywords': [...],
         'regex': [...],
         'synonyms': {...},          # Alternative names for same property
     },
-    
+
     # Value extraction (numbers + units)
     'value': {
         'number_pattern': r'...',   # Float/int pattern
         'unit_patterns': {...},     # Unit regex -> canonical unit
     },
-    
+
     # Filtering (inclusion/exclusion)
     'filters': {
         'include': [...],           # Patterns that indicate "keep this row"
@@ -177,15 +177,15 @@ def passes_exclusion_filter(text: str, filters: list) -> bool:
 def should_keep_row(quote_text: str, claim_text: str,
                     include_filters: list, exclude_filters: list) -> bool:
     combined = quote_text + ' ' + claim_text
-    
+
     # Check inclusion
     if not passes_inclusion_filter(combined, include_filters):
         return False
-    
+
     # Check exclusion
     if not passes_exclusion_filter(combined, exclude_filters):
         return False
-    
+
     return True
 ```
 

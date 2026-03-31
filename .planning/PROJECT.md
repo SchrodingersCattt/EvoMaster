@@ -15,7 +15,7 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 - ✓ PlaygroundContext/AgentRuntimeSpec/AgentEvent 类型化契约 — v1 (CONT-01~05)
 - ✓ MessageBus 同步事件队列 + SSEHandler 生产 SSE 路径 — v1 (EBUS-01~02)
 - ✓ AgentKernel 纯执行循环 + GuardPipeline + Hook API — v1 (KERN-01~04)
-- ✓ LLMProvider Protocol (chat + chat_with_retry + chat_stream) — v1 (LLMP-01)
+- ✓ LLMProvider Protocol (chat + chat_stream, async) — v1 (LLMP-01), async in Phase 12 (PROT-01)
 - ✓ Exp 装配层 (ToolRegistry + ContextBuilder + WorkerRegistry Protocol) — v1 (ASBL-01~06)
 - ✓ 统一 Playground + config YAML 驱动 + WorkspaceArchivalConfig — v1 (WKSP-01~04)
 - ✓ mat_master/minimal 端到端迁移 + E2E 测试 — v1 (MIGR-01~02)
@@ -31,9 +31,13 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 - ✓ Tool Description/Schema 精细化 + developer_instructions system prompt — v1.1 (PRMT-01~02)
 - ✓ SubAgent Spawn 机制 (SubAgentTool + spawn_fn 闭包 + 事件路由 + stop_event 级联) — v1.1 (SUBA-01~06, PRMT-03)
 
+- ✓ Hook 系统异步化 (5 个 Hook async 化 + ConfirmationHook asyncio.Future 重构 + _bridge_loop 桥接) — v2.0 Phase 15 (HOOK-01~03)
+- ✓ Exp 生命周期 async 化 (assemble/build_runtime/run/cleanup 全 async + async cleanup callback dispatch) — v2.0 Phase 18 (EXPL-01~03)
+- ✓ SubAgent spawn async 链路 (async spawn_fn 复用 Exp.run() + SpawnTool native async execute()) — v2.0 Phase 18 (EXPL-04)
+
 ### Active
 
-(v2.0 requirements to be defined — see Current Milestone below)
+See REQUIREMENTS.md for full v2.0 requirement list (35 items, 33 complete after Phase 19. Remaining: TOOL-02, HOOK-02).
 
 ## Current Milestone: v2.0 matmaster 协程改造
 
@@ -41,10 +45,10 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 
 **Target features:**
 - AgentKernel async 化 — run() → async generator，tool dispatch / LLM call / guard / hook 全部 await
-- LLMProvider Protocol async 化 — chat / chat_stream / chat_with_retry 改为 async 方法，OpenAIProvider 使用 AsyncOpenAI
+- LLMProvider Protocol async 化 — chat / chat_stream 改为 async 方法，OpenAIProvider 使用 AsyncOpenAI（chat_with_retry 已在 Phase 12 移除）
 - 全部 BuiltinTool async 化 — run() → async，BashTool 用 asyncio.create_subprocess_exec
 - Exp 生命周期 async 化 — assemble() / build_runtime() / run() 全部 async
-- Hook 和 Guard Protocol async 化 — 所有 hook/guard 的 Protocol 定义改为 async
+- Hook Protocol async 化 — 所有 hook 的 Protocol 定义改为 async（Guard 保持同步，Phase 12 决策）
 - MessageBus async 兼容 — 支持 asyncio.Queue 或类似异步原语
 - ContextCompactor async 化 — 内部 LLM 调用改 async
 - SubAgent spawn async 化 — spawn_fn 变 async，子 agent 作为协程执行
@@ -62,7 +66,7 @@ MatMaster 是基于 EvoMaster 二次开发的 AI Agent 框架，提供 playgroun
 
 ### Current State
 
-**Post-v1.1** (2026-03-26): v1.1 milestone 全部完成。完整 BuiltinTool 体系（12 tools）、SubAgent spawn 机制、Tool description/schema 精细化、developer_instructions system prompt。863 tests passed。当前全链路同步，准备进入 v2.0 async 改造。
+**Phase 24 complete** (2026-03-30): emit_nowait Tech Debt Cleanup。matmaster/ 内全部 12 处 emit_nowait() 迁移为 await bus.emit()，4 处 stale "sync kernel context" 注释清理，bus.py docstring 更新，stop_event 类型标注修复。v2.0 milestone 全部 13 个 phase 完成（35/35 requirements）。1195 tests passed。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI (not refactored), OpenAI SDK, tiktoken.
 
@@ -148,4 +152,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-26 after starting Milestone v2.0 (matmaster 协程改造)*
+*Last updated: 2026-03-30 after Phase 24 emit_nowait tech debt cleanup (v2.0 milestone final phase)*

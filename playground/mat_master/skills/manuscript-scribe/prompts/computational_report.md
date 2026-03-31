@@ -1,6 +1,6 @@
 # manuscript-scribe: computational_report profile
 
-**Profile-specific writing rules for `computational_report`.**  
+**Profile-specific writing rules for `computational_report`.**
 These supplement (do not replace) the shared rules in `SKILL.md`.
 
 ---

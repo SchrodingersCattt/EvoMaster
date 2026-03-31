@@ -3,8 +3,9 @@
 import logging
 import os
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, NamedTuple
+from typing import Any, NamedTuple
 
 from evomaster.agent.session.ssh import SSHSession, SSHSessionConfig
 from matmaster.integration.bohrium_setup import SkillSyncSpec
@@ -119,7 +120,7 @@ def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
                 ssh.close()
         except Exception as close_err:
             logger.warning(
-                'run_agent_sync: close Bohrium SSH session during cleanup failed: %s',
+                'run_agent: close Bohrium SSH session during cleanup failed: %s',
                 close_err,
             )
     if pg is not None:
@@ -142,17 +143,17 @@ def _sync_skills_to_ssh_session(
     skill_sync_spec: SkillSyncSpec | None,
     pg: Any,
 ) -> bool:
-    """Upload skill trees and set remote_project_root / user skill path fields on SSHSession.
+    """Upload project skill trees and set remote_project_root on SSHSession.
 
     Returns True if at least one directory was uploaded without error; False if
     skipped, nothing uploaded, or sync failed.
     """
     spec = skill_sync_spec
     if spec is None:
-        logger.debug('run_agent_sync: skill sync skipped (no SkillSyncSpec)')
+        logger.debug('run_agent: skill sync skipped (no SkillSyncSpec)')
         return False
     if not isinstance(ssh_session, SSHSession):
-        logger.debug('run_agent_sync: skill sync skipped (session is not SSHSession)')
+        logger.debug('run_agent: skill sync skipped (session is not SSHSession)')
         return False
     try:
         env = ssh_session._env
@@ -161,9 +162,7 @@ def _sync_skills_to_ssh_session(
         for local_root in spec.project_skill_roots:
             lp = Path(local_root)
             if not lp.is_dir():
-                logger.warning(
-                    'run_agent_sync: skill sync skip missing dir %s', local_root
-                )
+                logger.warning('run_agent: skill sync skip missing dir %s', local_root)
                 continue
             try:
                 rel = lp.resolve().relative_to(_PROJECT_ROOT.resolve())
@@ -172,32 +171,20 @@ def _sync_skills_to_ssh_session(
                 remote_dest = f"{spec.remote_project_root.rstrip('/')}/{lp.name}"
             _upload_directory(env, str(lp), remote_dest, exclude)
             synced_any = True
-        if spec.local_user_skills_root and spec.remote_user_skills_root:
-            lu = Path(spec.local_user_skills_root)
-            if lu.is_dir():
-                _upload_directory(
-                    env,
-                    str(lu),
-                    spec.remote_user_skills_root.rstrip('/'),
-                    exclude,
-                )
-                synced_any = True
         ssh_session.remote_project_root = spec.remote_project_root
-        ssh_session.remote_user_skills_root = spec.remote_user_skills_root
-        ssh_session.local_user_skills_root = spec.local_user_skills_root
         if synced_any:
             logger.info(
-                'run_agent_sync: skills synced to SSH, remote_project_root=%s',
+                'run_agent: skills synced to SSH, remote_project_root=%s',
                 spec.remote_project_root,
             )
         else:
             logger.warning(
-                'run_agent_sync: skill sync produced no uploads (empty or missing roots)'
+                'run_agent: skill sync produced no uploads (empty or missing roots)'
             )
         return synced_any
     except Exception as sync_err:
         logger.warning(
-            'run_agent_sync: sync skills to SSH failed: %s',
+            'run_agent: sync skills to SSH failed: %s',
             sync_err,
             exc_info=True,
         )
@@ -209,13 +196,13 @@ def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
         session = getattr(pg, 'session', None)
         if session is None or not hasattr(session, 'exec_bash'):
             logger.warning(
-                'run_agent_sync: clear_remote_proxy (%s) skipped: '
+                'run_agent: clear_remote_proxy (%s) skipped: '
                 'no session or no exec_bash',
                 phase,
             )
             return
         logger.info(
-            'run_agent_sync: clear_remote_proxy (%s) running (wgetrc/curlrc/pip.conf + env)',
+            'run_agent: clear_remote_proxy (%s) running (wgetrc/curlrc/pip.conf + env)',
             phase,
         )
         script = _clear_remote_proxy_shell()
@@ -229,20 +216,20 @@ def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
         out = (result.get('output') or result.get('stdout') or '').strip()
         if exit_code == 0:
             logger.info(
-                'run_agent_sync: clear_remote_proxy (%s) ok exit_code=0',
+                'run_agent: clear_remote_proxy (%s) ok exit_code=0',
                 phase,
             )
         else:
             tail = out[:500] + ('...' if len(out) > 500 else '')
             logger.warning(
-                'run_agent_sync: clear_remote_proxy (%s) non-zero exit_code=%s output=%r',
+                'run_agent: clear_remote_proxy (%s) non-zero exit_code=%s output=%r',
                 phase,
                 exit_code,
                 tail,
             )
     except Exception as clear_err:
         logger.warning(
-            'run_agent_sync: clear_remote_proxy (%s) failed: %s',
+            'run_agent: clear_remote_proxy (%s) failed: %s',
             phase,
             clear_err,
         )
@@ -347,11 +334,8 @@ def setup_bohrium_for_run(
     """Prepare Bohrium node and SSH session for the run when credentials exist."""
     if skill_sync_spec is not None:
         logger.debug(
-            'run_agent_sync: skill_sync_spec: project_skill_roots=%s local_user=%s '
-            'remote_user=%s remote_project_root=%s',
+            'run_agent: skill_sync_spec: project_skill_roots=%s remote_project_root=%s',
             len(skill_sync_spec.project_skill_roots),
-            bool(skill_sync_spec.local_user_skills_root),
-            bool(skill_sync_spec.remote_user_skills_root),
             skill_sync_spec.remote_project_root,
         )
 
@@ -373,7 +357,7 @@ def setup_bohrium_for_run(
         use_reuse_table = bool(user_id_for_ak and org_id)
         if not use_reuse_table and (user_id_for_ak or org_id):
             logger.info(
-                'run_agent_sync: skip reuse table (missing user_id or org_id); '
+                'run_agent: skip reuse table (missing user_id or org_id); '
                 'user_id=%s org_id=%r — 请确保请求带 X-User-Id 且上游带 X-Org-Id',
                 user_id_for_ak,
                 org_id or '(empty)',
@@ -394,7 +378,7 @@ def setup_bohrium_for_run(
                 )
                 if destroyed_node_ids:
                     logger.info(
-                        'run_agent_sync: destroyed untracked nodes user_id=%s org_id=%s '
+                        'run_agent: destroyed untracked nodes user_id=%s org_id=%s '
                         'name=%s node_ids=%s',
                         user_id_for_ak,
                         org_id,
@@ -403,7 +387,7 @@ def setup_bohrium_for_run(
                     )
             except Exception as cleanup_err:
                 logger.warning(
-                    'run_agent_sync: cleanup untracked nodes failed user_id=%s org_id=%s: %s',
+                    'run_agent: cleanup untracked nodes failed user_id=%s org_id=%s: %s',
                     user_id_for_ak,
                     org_id,
                     cleanup_err,
@@ -432,7 +416,7 @@ def setup_bohrium_for_run(
                 node_id = int(row['node_id'])
                 node_info = node_svc.get_node_info(access_key, node_id)
                 logger.info(
-                    'run_agent_sync: node image check (ready) node_id=%s '
+                    'run_agent: node image check (ready) node_id=%s '
                     'node_image_name=%s expected_image_name=%s',
                     node_id,
                     node_info.get('image_name') if node_info else None,
@@ -441,7 +425,7 @@ def setup_bohrium_for_run(
                 if node_info and node_info.get('ip'):
                     if _node_image_outdated(node_info.get('image_name')):
                         logger.info(
-                            'run_agent_sync: reuse skipped, node image outdated '
+                            'run_agent: reuse skipped, node image outdated '
                             'node_id=%s node_image_name=%s expected_image_name=%s, destroy and create new',
                             node_id,
                             node_info.get('image_name'),
@@ -462,7 +446,7 @@ def setup_bohrium_for_run(
                             )
                         except Exception as destroy_err:
                             logger.warning(
-                                'run_agent_sync: destroy outdated node_id=%s failed: %s',
+                                'run_agent: destroy outdated node_id=%s failed: %s',
                                 node_id,
                                 destroy_err,
                             )
@@ -472,14 +456,14 @@ def setup_bohrium_for_run(
                         node_ip = node_info.get('ip')
                         node_pwd = node_info.get('password')
                         logger.info(
-                            'run_agent_sync: reusing Bohrium node node_id=%s ip=%s',
+                            'run_agent: reusing Bohrium node node_id=%s ip=%s',
                             node_id,
                             node_ip,
                         )
                 else:
                     node_detail = node_svc.get_node_detail(access_key, node_id)
                     logger.info(
-                        'run_agent_sync: node image check (not ready) node_id=%s '
+                        'run_agent: node image check (not ready) node_id=%s '
                         'node_image_name=%s expected_image_name=%s',
                         node_id,
                         node_detail.get('image_name') if node_detail else None,
@@ -489,7 +473,7 @@ def setup_bohrium_for_run(
                         node_detail.get('image_name')
                     ):
                         logger.info(
-                            'run_agent_sync: node image outdated node_id=%s '
+                            'run_agent: node image outdated node_id=%s '
                             'node_image_name=%s expected_image_name=%s, destroy and create new',
                             node_id,
                             node_detail.get('image_name'),
@@ -510,7 +494,7 @@ def setup_bohrium_for_run(
                             )
                         except Exception as destroy_err:
                             logger.warning(
-                                'run_agent_sync: destroy outdated node_id=%s failed: %s',
+                                'run_agent: destroy outdated node_id=%s failed: %s',
                                 node_id,
                                 destroy_err,
                             )
@@ -533,13 +517,13 @@ def setup_bohrium_for_run(
                             node_ip = node_info.get('ip')
                             node_pwd = node_info.get('password')
                             logger.info(
-                                'run_agent_sync: restarted Bohrium node node_id=%s ip=%s',
+                                'run_agent: restarted Bohrium node node_id=%s ip=%s',
                                 node_id,
                                 node_ip,
                             )
                         except Exception as restart_err:
                             logger.warning(
-                                'run_agent_sync: restart node_id=%s failed, will create new: %s',
+                                'run_agent: restart node_id=%s failed, will create new: %s',
                                 node_id,
                                 restart_err,
                             )
@@ -572,7 +556,7 @@ def setup_bohrium_for_run(
                             node_id,
                         )
                         logger.info(
-                            'run_agent_sync: inserted node into evo_bohrium_nodes '
+                            'run_agent: inserted node into evo_bohrium_nodes '
                             'user_id=%s org_id=%s project_id=%s node_id=%s',
                             user_id_for_ak,
                             org_id,
@@ -581,7 +565,7 @@ def setup_bohrium_for_run(
                         )
                     except Exception as insert_err:
                         logger.warning(
-                            'run_agent_sync: insert_node failed (table missing?): %s',
+                            'run_agent: insert_node failed (table missing?): %s',
                             insert_err,
                             exc_info=True,
                         )
@@ -624,7 +608,7 @@ def setup_bohrium_for_run(
                     ssh_session=ssh_session,
                 )
                 logger.info(
-                    'run_agent_sync: SSH session attached to Bohrium node ip=%s workspace=%s',
+                    'run_agent: SSH session attached to Bohrium node ip=%s workspace=%s',
                     node_ip,
                     ssh_working_dir,
                 )
@@ -643,7 +627,7 @@ def setup_bohrium_for_run(
                         )
                 except Exception as sync_err:
                     logger.warning(
-                        'run_agent_sync: skills sync phase failed: %s',
+                        'run_agent: skills sync phase failed: %s',
                         sync_err,
                         exc_info=True,
                     )
@@ -677,7 +661,7 @@ def setup_bohrium_for_run(
     except Exception as e:
         reason = f'Bohrium 节点创建失败: {e}'
         logger.warning(
-            'run_agent_sync: auto create Bohrium node failed: %s',
+            'run_agent: auto create Bohrium node failed: %s',
             e,
             exc_info=True,
         )
@@ -740,12 +724,12 @@ def cleanup_bohrium_after_run(
                 user_id, org_id, int(project_id), int(node_id)
             )
             logger.info(
-                'run_agent_sync: updated last_used_at for node_id=%s (reuse table)',
+                'run_agent: updated last_used_at for node_id=%s (reuse table)',
                 node_id,
             )
         except Exception as e:
             logger.warning(
-                'run_agent_sync: update_last_used_at failed node_id=%s: %s',
+                'run_agent: update_last_used_at failed node_id=%s: %s',
                 node_id,
                 e,
             )
@@ -764,7 +748,7 @@ def cleanup_bohrium_after_run(
                 )
             except Exception as e:
                 logger.warning(
-                    'run_agent_sync: auto destroy Bohrium node node_id=%s failed: %s',
+                    'run_agent: auto destroy Bohrium node node_id=%s failed: %s',
                     node_id,
                     e,
                     exc_info=True,

@@ -1,335 +1,188 @@
-# Feature Landscape: v1.1 内置 Tool 套件 + SubAgent + Prompt 体系
+# Feature Landscape: Async Agent Framework Patterns
 
-**Domain:** AI Agent 内置工具套件与 SubAgent 生成机制
-**Researched:** 2026-03-24
-**Confidence:** HIGH (基于 Claude Code 系统提示分析 + OpenAI function calling 最佳实践 + 现有代码库分析)
-
-本次研究聚焦 v1.1 新增特性：matmaster 原生内置 tool 套件、SubAgent spawn 机制、prompt/description 精细化设计。不重复 v1 已完成的基础设施（AgentKernel、ToolRegistry、ContextBuilder 等），只关注在现有骨架上构建的新能力。
-
----
+**Domain:** Python async agent execution -- converting sync agent framework to async/await
+**Researched:** 2026-03-26
+**Scope:** How real-world agent frameworks (Pydantic AI, OpenAI Agents SDK, LangGraph, Microsoft Agent Framework, Google ADK) implement async execution loops, LLM providers, tool dispatch, hooks, event systems, and context compaction
 
 ## Table Stakes
 
-v1.1 必须交付的能力。缺失任何一项都意味着 agent 无法独立执行任务。
+Features every async agent framework implements. Missing any of these means the async conversion is incomplete or architecturally broken.
 
-### 1. 文件读取工具 (Read)
-
-| 维度 | 描述 |
-|------|------|
-| **Why Expected** | agent 理解代码/数据的基础操作。Claude Code 将 Read 作为最高频工具，所有分析/修改前置操作都依赖它 |
-| **Complexity** | LOW |
-| **Session 依赖** | YES -- 通过 `BaseSession.read_file()` / `BaseSession.download()` |
-| **参数设计** | `file_path` (必需, 绝对路径), `offset` (可选, 起始行号), `limit` (可选, 读取行数) |
-| **行为规范** | 默认读取前 2000 行; 输出 cat -n 格式带行号; 超长行截断; 二进制文件返回类型提示而非内容 |
-| **现有基础** | evomaster EditorTool 的 `view` 命令已有类似功能，但耦合在多命令工具中。需要拆分为独立 Read tool |
-| **关键设计点** | 与 Edit/Write 的 read-before-modify 协议: Read 记录已读文件集合，Write/Edit 拒绝操作未读文件 |
-
-### 2. 文件写入工具 (Write)
-
-| 维度 | 描述 |
-|------|------|
-| **Why Expected** | agent 创建新文件的基本能力。区别于 Edit（修改已有文件），Write 用于全新文件创建或完整覆盖 |
-| **Complexity** | LOW |
-| **Session 依赖** | YES -- 通过 `BaseSession.write_file()` |
-| **参数设计** | `file_path` (必需, 绝对路径), `content` (必需, 完整文件内容) |
-| **行为规范** | 覆盖已有文件; 对已有文件必须先 Read 才能 Write (防止盲写); 自动创建中间目录 |
-| **现有基础** | evomaster EditorTool 的 `create` 命令 |
-| **关键设计点** | Write 的 description 中应明确告知 LLM: 优先用 Edit 修改已有文件，Write 只用于新建或完整重写 |
-
-### 3. 文件编辑工具 (Edit)
-
-| 维度 | 描述 |
-|------|------|
-| **Why Expected** | agent 修改代码/配置的核心能力。str_replace 模式是 2025-2026 年 coding agent 的标准做法 (Claude Code, Aider, OpenHands 均采用) |
-| **Complexity** | MEDIUM |
-| **Session 依赖** | YES -- 通过 `BaseSession.read_file()` + `BaseSession.write_file()` |
-| **参数设计** | `file_path` (必需), `old_string` (必需, 要替换的精确文本), `new_string` (必需, 替换后文本) |
-| **行为规范** | old_string 必须在文件中唯一匹配; 匹配失败返回有意义的错误 (包括最近似匹配位置); 替换后返回上下文片段供 LLM 验证; 必须先 Read 才能 Edit |
-| **现有基础** | evomaster EditorTool 的 `str_replace` 命令。现有实现质量较高，包含 strip 重试、多匹配检测、undo 历史 |
-| **关键设计点** | 从 evomaster EditorTool 提取 str_replace 逻辑，去掉 view/create/insert/undo_edit 等附属命令(这些功能由 Read/Write 覆盖) |
-
-### 4. 命令执行工具 (Bash)
-
-| 维度 | 描述 |
-|------|------|
-| **Why Expected** | agent 与环境交互的通用后门。安装依赖、运行测试、编译代码、检查进程状态等操作都通过 Bash |
-| **Complexity** | LOW (适配已有 BashTool) |
-| **Session 依赖** | YES -- 通过 `BaseSession.exec_bash()` |
-| **参数设计** | `command` (必需), `timeout` (可选, 秒), `description` (可选, 5-10 词简述) |
-| **行为规范** | 持久 shell session (环境变量/工作目录保持); 输出截断 (建议 30000 字符上限); 危险命令拦截; 返回 exit_code + stdout + working_dir |
-| **现有基础** | evomaster BashTool 已有完整实现，包含危险命令检测、代理清除、超时处理 |
-| **关键设计点** | description 中应引导 LLM: 不要用 bash grep/find/cat，改用专用 Grep/Glob/Read 工具 |
-
-### 5. 文件搜索工具 (Glob)
-
-| 维度 | 描述 |
-|------|------|
-| **Why Expected** | agent 在大型项目中定位文件的高效手段。比 `find` 命令更快且结果按修改时间排序 |
-| **Complexity** | LOW |
-| **Session 依赖** | YES -- 通过 `BaseSession.exec_bash()` 执行 glob 展开 |
-| **参数设计** | `pattern` (必需, glob 模式如 `**/*.py`), `path` (可选, 搜索根目录, 默认 workspace) |
-| **行为规范** | 结果按修改时间排序 (最近修改优先); 支持 `*`, `**`, `?`, `{a,b}` 模式; 排除隐藏文件和常见忽略目录 (.git, __pycache__, node_modules) |
-| **现有基础** | 无直接对应。当前 agent 通过 bash `find` 命令实现，效率低且无排序 |
-| **关键设计点** | session-dependent 实现: 通过 exec_bash 执行 `find + stat + sort` 组合命令; session-free 实现 (本地 DevShell): 直接用 Python pathlib.glob |
-
-### 6. 内容搜索工具 (Grep)
-
-| 维度 | 描述 |
-|------|------|
-| **Why Expected** | agent 在文件内容中搜索模式的核心能力。比 bash grep 更结构化: 支持多种输出模式、上下文控制 |
-| **Complexity** | LOW-MEDIUM |
-| **Session 依赖** | YES -- 通过 `BaseSession.exec_bash()` 执行 grep/rg |
-| **参数设计** | `pattern` (必需, 正则表达式), `path` (可选, 搜索路径), `include` (可选, 文件过滤 glob), `output_mode` (可选, files_with_matches/content/count), `context_lines` (可选) |
-| **行为规范** | 默认返回匹配文件路径列表 (files_with_matches 模式); content 模式返回匹配行及上下文; 结果数量有上限防止 token 爆炸 |
-| **现有基础** | 无直接对应。当前 agent 通过 bash grep 实现 |
-| **关键设计点** | 远程环境可能没有 ripgrep，需要降级到 grep -rn; description 中应说明正则语法 |
-
-### 7. Tool Description / JSON Schema 精细化
-
-| 维度 | 描述 |
-|------|------|
-| **Why Expected** | tool description 的质量直接决定 LLM 调用工具的准确率。Gorilla 研究实证: description 精度与调用准确率强正相关 |
-| **Complexity** | MEDIUM (设计密集型，非代码密集型) |
-| **Session 依赖** | N/A |
-| **行为规范** | 每个 tool 的 description 必须包含: (1) 功能说明 (2) 何时使用 (3) 何时不使用 (4) 参数行为说明 (5) 返回格式说明 |
-| **现有基础** | evomaster 工具的 description 来自 Pydantic model docstring (BashToolParams/EditorToolParams)，质量中等 |
-| **关键设计点** | Claude Code 的实践: 将大量行为规范嵌入 description 本身而非 system prompt; 用 "CRITICAL"/"IMPORTANT" 标记关键规则; 用 "Best Practices" 列表引导 LLM 行为 |
-
----
+| Feature | Why Expected | Complexity | Sync Equivalent | Notes |
+|---------|--------------|------------|-----------------|-------|
+| Async kernel execution loop | Core of async conversion -- the `while turn < max_turns` loop must yield control at every I/O point | Medium | `AgentKernel.run()` returns `KernelRunResult` | Every framework: Pydantic AI graph loop, OpenAI SDK Runner.run(), LangGraph ainvoke. The loop itself is `async def run()` with `await` at LLM call and tool dispatch |
+| AsyncIterator[StreamChunk] for LLM streaming | LLM streaming is the longest I/O operation. `async for chunk in provider.chat_stream()` is the fundamental async pattern | Low | `Iterator[StreamChunk]` from `chat_stream()` | OpenAI SDK: `AsyncOpenAI.chat.completions.create(stream=True)` returns `AsyncStream`. All frameworks use `async for` over LLM streams |
+| Async LLM provider protocol | Provider.chat() and Provider.chat_stream() must be async methods | Low | `LLMProvider` Protocol with sync methods | Pydantic AI: all model calls are awaitable. OpenAI SDK: AsyncOpenAI is drop-in. Simple signature change: `async def chat()` + `async def chat_stream() -> AsyncIterator[StreamChunk]` |
+| Async tool execute() | Each tool's execute must be awaitable for non-blocking I/O (subprocess, HTTP, file I/O) | Medium | `Tool.execute()` returns `str \| ToolResult` | Pydantic AI: async functions run on event loop, sync functions offloaded to threads via `asyncio.to_thread()`. OpenAI SDK: sync tools run via `asyncio.to_thread()`. Both approaches viable |
+| asyncio.Event for cancellation | Replace `threading.Event` stop_event with `asyncio.Event`. Cancellation checks become `if stop_event.is_set()` (same API, async-native) | Low | `threading.Event` stop_event | asyncio.Event has same set/is_set/wait API. Additionally, asyncio provides native CancelledError at every await point. Using asyncio.Event is simpler and sufficient |
+| asyncio.Queue for MessageBus | Replace `queue.Queue` with `asyncio.Queue` for event transport between kernel and handlers | Low | `MessageBus` wrapping `queue.Queue` | Pure drop-in: `asyncio.Queue` has same put/get semantics, just async. If sync consumers remain (SSE handler in thread), use janus for dual-face queue |
+| Async hooks (all 7 hook points) | Hooks must be awaitable so hook implementations can do async I/O (e.g., EventEmitterHook emitting to async bus) | Medium | `Hook` Protocol with 7 sync methods | All frameworks: OpenAI SDK RunHooks has 7 async methods (on_agent_start, on_tool_start, etc.). Microsoft Agent Framework middleware is all async. Pattern: `async def pre_tool_call()` |
+| Async retry with asyncio.sleep | Replace `time.sleep(backoff)` with `await asyncio.sleep(backoff)` in retry logic. Without this, retries block the entire event loop | Low | `time.sleep()` in `_call_llm` and `chat_with_retry` | Every async framework uses `await asyncio.sleep()`. Critical: `time.sleep()` in async code blocks ALL coroutines on the same event loop |
+| Async context compaction | ContextCompactor._summarize() calls LLM synchronously. Must become `await self._summary_provider.chat()` | Low | `ContextCompactor.compact_if_needed()` calling sync `chat()` | Microsoft Agent Framework: CompactionStrategy is `async def __call__`. Google ADK: compaction runs asynchronously in background. matmaster compactor calls LLM -- that call MUST be async |
+| Async subprocess for BashTool | Replace `session.exec_bash()` (blocking subprocess) with `asyncio.create_subprocess_exec()` or `asyncio.to_thread()` wrapper | Medium | `session.exec_bash()` blocking call | Python stdlib: `asyncio.create_subprocess_exec()` is the async equivalent. But since session.exec_bash() is evomaster code (out of scope), wrap in `asyncio.to_thread()` instead |
+| Async Exp lifecycle | `assemble()`, `build_runtime()`, `run()` must be async. `run()` wraps async kernel.run() with async cleanup | Low-Med | `Exp.run()` calling sync `kernel.run()` | assemble() is pure data transform (could stay sync), but build_runtime() and run() involve I/O (MCP init, kernel execution). Make all three async for consistency |
+| Async cleanup callbacks | `_run_cleanup_callbacks()` must be async to support async resource cleanup (MCP connections, subprocess termination) | Low | Sync `Callable[[], None]` cleanup callbacks | Type changes to `Callable[[], Awaitable[None] \| None]`. Run sync callbacks via direct call, async ones via await. Microsoft Agent Framework: cleanup is async |
 
 ## Differentiators
 
-不是立即必须的，但能显著提升 agent 能力上限的特性。
+Features that set a well-designed async framework apart. Not strictly required for "async works", but significantly improve concurrency, debuggability, or future multi-agent capability.
 
-### 8. SubAgent Spawn 机制
-
-| 维度 | 描述 |
-|------|------|
-| **Value Proposition** | 允许 agent 将子任务委派给独立 agent 执行，实现探索/执行分离、并行研究、上下文隔离。Claude Code 的 Task tool 证明了这一模式的有效性 |
-| **Complexity** | HIGH |
-| **Session 依赖** | 间接 -- SubAgent 共享父 agent 的 workspace (同一 session) |
-| **实现机制** | LLM 发出 tool_call → SubAgent tool 接收 → 通过 Exp 创建子 AgentRuntimeSpec → 子 AgentKernel.run() → 结果作为 ToolMessage 返回 |
-| **参数设计** | `description` (必需, 3-5 词任务摘要), `prompt` (必需, 详细任务指令), `tools` (可选, 限制子 agent 可用工具), `max_turns` (可选) |
-| **行为规范** | 子 agent 独立上下文窗口; 无状态 (每次调用全新实例); 子 agent 不能 spawn 子子 agent (防止无限递归); 共享 workspace 但独立消息历史 |
-| **现有基础** | 无。但 Exp + AgentKernel 的分层设计天然支持: Exp 可以创建多个 AgentRuntimeSpec 实例 |
-| **关键设计点** | SubAgent 是一个注册在 ToolRegistry 中的 tool，其 execute() 内部创建子 Exp → assemble → kernel.run()。这保持了 kernel 的纯净性 -- kernel 不知道 SubAgent 的存在 |
-| **依赖** | 依赖 Read/Write/Edit/Bash/Glob/Grep 工具套件已就位 (子 agent 需要可用工具) |
-
-### 9. System Prompt 模板化管理
-
-| 维度 | 描述 |
-|------|------|
-| **Value Proposition** | 当前 ContextBuilder 的 section 内容硬编码或来自简单 config string。模板化允许: TOML 中定义 prompt 模板 → 运行时变量替换 → 组装为 system prompt |
-| **Complexity** | MEDIUM |
-| **现有基础** | ContextBuilder 已有 section 分区机制 (identity/mode_contract/skills/tools/memory/task)。ExpConfig 有 `developer_instructions` 字段 |
-| **关键设计点** | 扩展 ExpConfig 的 prompt 配置: 支持 Jinja2 或简单 `{variable}` 替换; 模板存储在 TOML 中或独立 .md 文件; 运行时注入 workdir、session_type、tool 列表等变量 |
-| **依赖** | 依赖 tool 套件完成 (ContextBuilder._build_tools 需要知道最终 tool 列表) |
-
-### 10. SubAgent 工具限制 (Tool Subset)
-
-| 维度 | 描述 |
-|------|------|
-| **Value Proposition** | 不同类型的子 agent 应该有不同的工具访问权限。探索型子 agent 只需 Read/Glob/Grep (只读); 执行型子 agent 需要全部工具 |
-| **Complexity** | LOW (在 SubAgent spawn 机制之上) |
-| **现有基础** | ToolRegistry 已支持 source-based 过滤 (`get_tools_by_source`)。可以扩展为 name-based 过滤 |
-| **关键设计点** | SubAgent tool 的 `tools` 参数接受工具名列表; spawn 时从父 registry 过滤创建子 registry |
-
-### 11. Read-Before-Modify 安全协议
-
-| 维度 | 描述 |
-|------|------|
-| **Value Proposition** | 防止 LLM 盲目覆盖文件。Claude Code 强制: Write/Edit 工具会拒绝操作当前 session 中未通过 Read 读取过的文件 |
-| **Complexity** | LOW |
-| **现有基础** | 无。evomaster EditorTool 没有这个限制 |
-| **关键设计点** | 在 tool 套件层维护 `_read_files: set[str]` 状态; Read 执行时记录路径; Write/Edit 执行前检查路径是否在集合中; 新建文件 (path 不存在) 豁免检查 |
-
----
+| Feature | Value Proposition | Complexity | Sync Equivalent | Notes |
+|---------|-------------------|------------|-----------------|-------|
+| Parallel tool dispatch (asyncio.gather) | When LLM returns N tool_calls, execute them concurrently instead of serially. 2-5x speedup for multi-tool turns | Medium | Serial `for tc in response.tool_calls` loop | **Pydantic AI default behavior**: `asyncio.gather(*[tool.execute(tc) for tc in tool_calls])`. OpenAI Agents SDK: tools run concurrently. LangGraph: parallel tool node. matmaster currently runs tool_calls serially. This is the single highest-value async optimization |
+| Sequential tool mode option | Some tools have side effects that require ordering (write-then-read). Need opt-out from parallel dispatch | Low | N/A (always serial today) | Pydantic AI: `sequential=True` per-tool flag, or `agent.parallel_tool_call_execution_mode('sequential')` context manager. Implement as a flag on Tool Protocol or on ToolRegistry |
+| Async generator kernel (yield events) | `async def run() -> AsyncGenerator[AgentEvent, None]` that yields events as they happen, instead of returning final result | High | Returns `KernelRunResult` at end | OpenAI SDK: `run_streamed()` returns stream of events. Pydantic AI: `run_stream()` + `iter()` for node-by-node iteration. This enables real-time SSE without MessageBus intermediary. BUT: major API change, consider for later |
+| Structured concurrency (TaskGroup) | Use `asyncio.TaskGroup` (Python 3.11+) for managing concurrent tool execution and subagent spawns. Guaranteed cleanup on exception | Medium | N/A | Python 3.11+ feature. Better than bare `asyncio.gather()` because exceptions in one task cancel siblings. matmaster targets Python 3.13, so TaskGroup is available |
+| Async subagent spawn as coroutine | `spawn_fn` becomes `async def` -- child agent runs as a coroutine in the same event loop instead of blocking the parent | Medium | Sync `spawn_fn()` blocking parent until child completes | OpenAI SDK: `asyncio.gather()` for parallel agent runs. Pydantic AI subagents: async spawn with sync/async auto-select. Key benefit: parent agent stays responsive while child runs, enables future parallel subagents |
+| Graceful cancellation with CancelledError | Beyond `stop_event.is_set()` checks, support `asyncio.Task.cancel()` which raises CancelledError at next await. Cleanup runs in finally blocks | Medium | Only `threading.Event` polling | asyncio native: `task.cancel()` injects CancelledError at the next `await`. Combined with try/finally cleanup, this is more robust than polling `stop_event`. OpenAI SDK streams require consuming before context exit for this reason |
+| Sync-to-async bridge for session I/O | Many BuiltinTools call `session.exec_bash()` or `session.file_read()` which are sync (evomaster session). Wrap in `asyncio.to_thread()` for non-blocking execution | Low | Direct sync calls | Pydantic AI pattern: sync tool functions automatically offloaded via `asyncio.to_thread()`. This is critical for matmaster because evomaster session methods are sync and rewriting them is out of scope (v2.0 constraint) |
+| Per-tool timeout with asyncio.wait_for | Wrap each `await tool.execute()` in `asyncio.wait_for(coro, timeout=N)`. Prevents single tool from blocking the entire loop forever | Low | No per-tool timeout | Standard asyncio pattern. Pydantic AI: tool-level timeout configuration. Easy to implement: `await asyncio.wait_for(tool.execute(args), timeout=tool.timeout)` |
+| Background compaction (non-blocking) | Run context compaction in a background task while the agent continues processing. Apply summary when ready on next turn | High | Blocking `compact_if_needed()` in kernel loop | Microsoft Agent Framework: compaction runs as middleware, potentially async. Google ADK: "Runner handles compaction in background." matmaster v2.0 scope probably too aggressive for this -- keep inline compaction but make the LLM call async |
 
 ## Anti-Features
 
-明确不在 v1.1 中构建的能力。
+Features to explicitly NOT build during this async conversion. Adding these would increase scope, introduce unnecessary complexity, or conflict with architecture constraints.
 
 | Anti-Feature | Why Avoid | What to Do Instead |
 |--------------|-----------|-------------------|
-| **MultiEdit (批量编辑)** | 增加 JSON schema 复杂度 (嵌套数组结构导致 LLM 调用出错率上升)。Claude Code 有 MultiEdit 但很少被 LLM 主动使用 | 让 LLM 多次调用 Edit tool。单次编辑的可靠性远高于批量编辑 |
-| **NotebookRead/NotebookEdit** | Jupyter notebook 是特殊格式，需要额外的 JSON cell 解析逻辑。当前科研场景中 notebook 不是主要交互方式 | 通过 Read 以文本形式读取 .ipynb (JSON 格式); 通过 Write 覆盖写入; 未来如有需求再单独实现 |
-| **WebFetch/WebSearch** | 远程环境 (Docker/SSH) 可能无外网访问; 引入 HTTP 客户端增加依赖; 不是科研 agent 的核心路径 | 科研信息检索通过 MCP tools 实现 (如 AISSQ 文献搜索); 通用 web 访问通过 Bash + curl |
-| **TodoRead/TodoWrite** | 任务追踪状态管理增加 tool 数量和 token 消耗; LLM 维护 TODO 列表的可靠性不高 | system prompt 中引导 LLM 自行管理执行计划; 通过 Write 工具写 plan 文件实现类似效果 |
-| **undo_edit 功能** | 增加状态管理复杂度 (file history stack); LLM 很少主动使用 undo; 通过重新 Edit 可以达到同样效果 | 如果编辑错误，LLM 应该再次 Read 文件并执行新的 Edit 来修正 |
-| **insert 行插入功能** | 行号定位容易出错 (LLM 对行号的记忆不可靠); str_replace 模式更稳健 | 统一使用 str_replace 模式。需要插入时，old_string 取插入点附近的上下文，new_string 包含上下文+新内容 |
-| **消除 evomaster session 依赖** | PROJECT.md 明确标记 out of scope。v1.1 的 session-dependent tools 仍通过 BaseSession 操作 | 保持 BaseSession 作为 tool 的环境接口; 未来 v2 再考虑直接 OS 操作路径 |
-| **前端 UI 改动** | v1.1 只涉及后端框架层 | 前端保持现状 |
-
----
+| Dual sync+async Protocol with runtime dispatch | Maintaining both `def chat()` and `async def chat()` on the same Protocol doubles the API surface and testing burden. Pydantic AI has `run_sync()` but internally everything is async | Make everything async. Provide `asyncio.run()` or `loop.run_until_complete()` wrappers at entry points (DevShell, tests). Pydantic AI's `run_sync()` is just `loop.run_until_complete(self.run())` |
+| Full async generator kernel return type | Changing `run()` from returning `KernelRunResult` to `AsyncGenerator[AgentEvent, None]` redesigns the kernel-consumer contract. MessageBus already decouples event delivery | Keep `async def run() -> KernelRunResult`. Events flow through async MessageBus as today. Async generator pattern is a future optimization (v3) |
+| Rewriting evomaster session to async | evomaster BaseSession.exec_bash(), file_read() etc. are deeply sync. Rewriting them is a separate project. Out of scope per v2.0 constraints | Use `asyncio.to_thread(session.exec_bash, ...)` to offload sync session calls to thread pool. This is what OpenAI Agents SDK does for sync function tools |
+| Actor-model concurrency (per-agent event loop) | Running each agent in its own event loop or process for isolation. Over-engineering for v2.0 scope | Single event loop, multiple coroutines. SubAgents are coroutines in the same loop. Isolation via TaskGroup if needed |
+| Thread pool for ALL tool execution | Blanket offloading all tools to ThreadPoolExecutor defeats the purpose of async. Only sync-bound tools need threads | Distinguish: tools with native async I/O run on event loop directly. Only tools wrapping sync session calls use `asyncio.to_thread()`. Pydantic AI: "always use async unless doing blocking I/O" |
+| Distributed event bus (Redis Pub/Sub) | The current MessageBus is in-process. Adding distributed transport is a separate concern from async conversion | Keep asyncio.Queue for in-process bus. The existing Redis-based worker coordination (src/ layer) stays unchanged per v2.0 scope |
+| async def for Guard.evaluate() | Guards are pure computation (fingerprint comparison, threshold check). No I/O involved. Making them async adds complexity with zero benefit | Keep `def evaluate()` synchronous. GuardPipeline.evaluate() stays sync, called from the async kernel via direct invocation (no await needed for CPU-only code) |
+| Hook short-circuit via async gather | Running all hooks in parallel with gather and short-circuiting on first SKIP. Hooks are sequential by nature (observation order matters, intercepting hooks must short-circuit) | Keep sequential `for hook in hooks: await hook.pre_tool_call()` pattern. Hooks are cheap; parallelizing them risks ordering bugs |
 
 ## Feature Dependencies
 
 ```
-[Tool Description 精细化 (7)]  ← 贯穿所有 tool 的设计
-    |
-    v
-[Read Tool (1)] ← 最基础的工具，其他工具的前置
-    |
-    +--enables--> [Write Tool (2)]  (read-before-write 协议)
-    |
-    +--enables--> [Edit Tool (3)]   (read-before-edit 协议)
-    |
-    +--independent--> [Bash Tool (4)]  (已有 evomaster 实现，仅适配)
-    |
-    +--independent--> [Glob Tool (5)]  (文件发现，无前置依赖)
-    |
-    +--independent--> [Grep Tool (6)]  (内容搜索，无前置依赖)
-
-[Read-Before-Modify 协议 (11)]
-    |
-    +--requires--> [Read (1)] + [Write (2)] + [Edit (3)] 共享状态
-
-[SubAgent Spawn (8)]
-    |
-    +--requires--> Tools 1-6 已就位 (子 agent 需要可用工具)
-    +--requires--> Exp 层装配能力 (创建子 AgentRuntimeSpec)
-    +--requires--> Tool Description 精细化 (子 agent 的 prompt 引导)
-    |
-    +--enhances--> [SubAgent 工具限制 (10)]  (在 spawn 之上的增量)
-
-[System Prompt 模板化 (9)]
-    |
-    +--requires--> Tool Description 精细化 (7) (工具信息是 prompt 的组成部分)
-    +--requires--> ContextBuilder 扩展 (已有基础)
-    +--enhances--> SubAgent Spawn (子 agent 可用不同 prompt 模板)
+AsyncOpenAI provider --> Async kernel loop (kernel awaits provider)
+Async tool execute   --> Async kernel loop (kernel awaits tool dispatch)
+asyncio.Queue bus    --> Async hooks (EventEmitterHook emits to async bus)
+asyncio.Event stop   --> Async kernel loop (cancellation checks)
+Async hooks          --> Async kernel loop (kernel awaits hooks)
+Async compactor      --> Async LLM provider (compactor awaits summary LLM call)
+Async Exp lifecycle  --> Async kernel + async tools + async hooks (Exp orchestrates all)
+Async subagent spawn --> Async Exp.run() (spawn_fn calls child Exp.run())
+Parallel tool dispatch --> Async tool execute (gather requires awaitable tools)
+Sync-to-async bridge --> Async tool execute (session calls wrapped in to_thread)
+Sequential tool mode --> Parallel tool dispatch (opt-out mechanism)
 ```
 
-### Dependency Notes
-
-- **Read 是所有文件操作工具的锚点**: Write/Edit 的 read-before-modify 协议依赖 Read 先执行
-- **Bash 独立于其他 tool**: 已有成熟实现，只需适配为 matmaster Tool Protocol
-- **Glob/Grep 独立开发**: 不依赖 Read/Write，可并行实现
-- **SubAgent 是最后构建的**: 需要所有基础 tool 就位后才有意义
-- **Tool Description 贯穿始终**: 不是独立阶段，而是每个 tool 实现时同步完成
-
----
+**Critical path (must be done in order):**
+1. Async LLM provider (AsyncOpenAI) -- no other async component works without this
+2. Async tool protocol + async kernel loop -- the core execution engine
+3. asyncio.Queue MessageBus + async hooks -- event delivery
+4. Async Exp lifecycle -- ties everything together
+5. Async subagent spawn -- depends on async Exp.run()
+6. Parallel tool dispatch -- optimization on top of working async kernel
 
 ## MVP Recommendation
 
-### Phase 1: 原生 Tool 套件 (核心六件套)
+### Phase 1: Core async infrastructure (must-have)
 
-优先实现:
-1. **Read** -- 所有操作的前置; 从 EditorTool.view 提取重构
-2. **Write** -- 文件创建; 从 EditorTool.create 提取重构
-3. **Edit** -- 文件修改; 从 EditorTool.str_replace 提取重构
-4. **Bash** -- 适配已有 BashTool 为 matmaster Tool Protocol (最低工作量)
-5. **Glob** -- 新实现，基于 exec_bash 或 Python pathlib
-6. **Grep** -- 新实现，基于 exec_bash (grep -rn 或 rg)
-7. **Read-Before-Modify 协议** -- 跨 Read/Write/Edit 的共享状态
+Prioritize these table-stakes features:
 
-**实现策略:** 所有 session-dependent tool 通过 BaseSession 接口操作。每个 tool 是独立类，满足 matmaster `Tool` Protocol (name, description, json_schema, execute)。不再经过 EvoToolAdapter -- 直接实现 Protocol。
+1. **Async LLM provider** -- Change `LLMProvider` Protocol to async methods. Implement `AsyncOpenAI` in `OpenAIProvider`. Change `chat_stream()` to return `AsyncIterator[StreamChunk]`. Replace `time.sleep()` with `await asyncio.sleep()` in retry logic.
 
-### Phase 2: Tool Description 精细化
+2. **Async tool protocol + builtin tools** -- Change `Tool.execute()` to `async def execute()`. For BashTool and other session-dependent tools, wrap sync session calls in `asyncio.to_thread()`. Pure-compute tools (TaskTools, GlobTool) can just be `async def` with no real await.
 
-同步于 Phase 1，但独立验证:
-- 每个 tool 的 description 按最佳实践重写
-- JSON Schema 精简 (去除冗余字段，显式标记 required)
-- ContextBuilder._build_tools 增强 (不仅列出名称，还包含使用提示)
-- ExpConfig 扩展 prompt 相关字段
+3. **Async kernel execution loop** -- Change `AgentKernel.run()` to `async def`. `await` the LLM call, `await` each tool dispatch, `await` each hook. Replace `threading.Event` with `asyncio.Event` for stop_event.
 
-### Phase 3: SubAgent Spawn
+4. **Async MessageBus + hooks** -- Replace `queue.Queue` with `asyncio.Queue`. Change all 7 Hook Protocol methods to `async def`. Update `EventEmitterHook` and `run_*` helper functions.
 
-在 Phase 1/2 完成后:
-- 实现 SubAgentTool (满足 Tool Protocol)
-- SubAgent 的 execute() 内部: 创建子 ExpConfig → Exp.assemble() → 子 kernel.run()
-- 工具限制: 子 registry 从父 registry 过滤
-- 防递归: 子 agent 的工具集不包含 SubAgentTool
+5. **Async context compactor** -- Change `compact_if_needed()` and `_summarize()` to async. The internal LLM call becomes `await self._summary_provider.chat()`.
 
-### Defer: System Prompt 模板化
+6. **Async Exp lifecycle** -- Change `assemble()`, `build_runtime()`, `run()` to async. Cleanup callbacks support async callables.
 
-- 当前 ExpConfig.developer_instructions 简单字符串足以支撑 v1.1
-- 模板化是 v1.2 的优化项，不阻塞当前功能
+### Phase 2: Differentiators (high-value optimization)
 
----
+Defer these until Phase 1 is stable and tested:
 
-## Tool Description 设计原则 (从 Claude Code 提炼)
+7. **Parallel tool dispatch** -- When `response.tool_calls` has N > 1 items, use `asyncio.gather()` or `asyncio.TaskGroup` to execute concurrently. Add `sequential` flag to Tool Protocol for opt-out.
 
-基于 Claude Code 系统提示和 OpenAI function calling 最佳实践的分析，总结以下原则:
+8. **Async subagent spawn** -- Change `spawn_fn` to `async def`. Child agent runs as coroutine in same event loop. Parent remains responsive.
 
-### 原则 1: Description 是行为规范而非功能说明
+9. **Per-tool timeout** -- Wrap tool execution in `asyncio.wait_for()`.
 
-**差的 description:**
-> "读取文件内容"
+### Defer: Not in v2.0
 
-**好的 description:**
-> "读取文件系统上的文件内容。默认读取前 2000 行。对于大文件，使用 offset 和 limit 参数读取特定部分。结果以 cat -n 格式返回 (带行号)。在修改文件之前必须先用此工具读取。"
+- Async generator kernel return type (v3 consideration)
+- Background compaction
+- Distributed event bus
+- Actor-model concurrency
 
-### 原则 2: 明确工具之间的分工
+## Patterns from Real Frameworks
 
-Claude Code 的 Bash tool description 中有这样的关键规则:
+### Pattern 1: Pydantic AI -- Async-First with Sync Wrapper
 
-> "IMPORTANT: Avoid using this tool to run find, grep, cat, head, tail, sed, awk commands. Instead use the appropriate dedicated tool."
+Pydantic AI's approach is the most instructive for matmaster:
+- Everything internal is async (`async def run()`, async tools, async model calls)
+- `run_sync()` is a thin wrapper: `loop.run_until_complete(self.run())`
+- Tools: async functions run on event loop; sync functions auto-offloaded via threads
+- Parallel tool execution is the DEFAULT, with opt-out to sequential
+- Graph-based execution: UserPromptNode -> ModelRequestNode -> CallToolsNode -> loop
 
-这条规则将 bash 从 "万能工具" 收窄为 "专用命令执行器"，迫使 LLM 使用更结构化的 Glob/Grep/Read 工具。
+**Relevance:** matmaster should follow this pattern exactly. Make kernel fully async, provide sync entry point via `asyncio.run()` for DevShell/tests.
 
-### 原则 3: 用结构化 Markdown 组织 description
+### Pattern 2: OpenAI Agents SDK -- Runner + Hooks + Streaming Events
 
-Claude Code 的工具 description 使用:
-- `###` 分区标题 (如 "### Command Execution", "### Best Practices")
-- 有序/无序列表
-- 加粗关键词
-- "CRITICAL"/"IMPORTANT" 标记
+- `Runner.run()` is async, `Runner.run_sync()` wraps it
+- `Runner.run_streamed()` returns streaming events via async iteration
+- RunHooks: 7 async lifecycle callbacks (on_agent_start, on_tool_start, on_llm_start, etc.)
+- Sync function tools execute via `asyncio.to_thread()` to avoid blocking event loop
+- max_turns limit with MaxTurnsExceeded exception
 
-这种结构比纯文本段落更利于 LLM 解析。
+**Relevance:** The hook design is nearly identical to matmaster's 7-hook system. Direct mapping: pre_tool_call -> on_tool_start, post_tool_call -> on_tool_end, etc. All hooks are async.
 
-### 原则 4: Schema 精简优先
+### Pattern 3: Microsoft Agent Framework -- Async Middleware + Compaction
 
-每个 tool definition 在每次 LLM 调用时都消耗 token。原则:
-- 只暴露 LLM 需要控制的参数
-- 内部实现细节不暴露为参数
-- 使用 `default` 值减少 LLM 决策负担
-- 显式标记 `required` 字段
+- Middleware pattern: `awrap_model_call()`, `awrap_tool_call()` as async wrappers
+- CompactionStrategy is an async Protocol: `async def __call__(self, messages) -> bool`
+- Pipeline compaction: chain strategies (tool_result -> summarization -> sliding_window -> truncation)
+- Compaction as context provider, runs before each LLM call
 
-### 原则 5: 错误返回要有指导性
+**Relevance:** matmaster's ContextCompactor is already similar (summary + sliding_window fallback). The key insight: CompactionStrategy is async because summarization calls LLM. matmaster just needs to make `compact_if_needed()` async.
 
-工具执行失败时的返回信息应该告诉 LLM 如何修正:
-- "Error: file not found at /workspace/foo.py. Use Glob to search for the file."
-- "Error: old_string not found in file. The closest match is at line 42."
-- "Error: multiple matches found at lines [12, 45, 78]. Include more context to make old_string unique."
+### Pattern 4: Thread-Safety Bridge (Janus Queue)
 
----
+For the transition period where `src/` service layer (FastAPI) consumes events from a sync context while the kernel runs async:
+- janus provides a dual-face queue: `sync_q` (put from thread) and `async_q` (get from coroutine)
+- Alternative: use `asyncio.Queue` directly if both producer and consumer are in same event loop
+- matmaster's current pattern: kernel in ThreadPoolExecutor emits to queue.Queue, SSEHandler consumes. After async conversion: kernel is coroutine, MessageBus is asyncio.Queue, SSEHandler awaits queue.get()
 
-## 现有实现复用评估
+**Relevance:** If src/ layer (agent_run_service.py) still wraps kernel execution in `run_in_executor()`, janus bridges the gap. If kernel runs as coroutine in FastAPI's async handler, pure asyncio.Queue suffices.
 
-| 现有组件 | 复用策略 | 复用度 |
-|----------|----------|--------|
-| **evomaster BashTool** | 提取核心逻辑 (命令执行 + 危险检测 + 输出格式化)，去掉 evomaster BaseTool 依赖，直接实现 matmaster Tool Protocol | 70% |
-| **evomaster EditorTool** | 拆分为 3 个独立 tool: Read (view 逻辑), Write (create 逻辑), Edit (str_replace 逻辑)。去掉 undo_edit/insert/view_range 等次要功能 | 60% |
-| **EvoToolAdapter** | 保留用于 MonitorJobTool 等科研特有 tool 的适配。新内置 tool 直接实现 Protocol，不经过 adapter | 保持现状 |
-| **ContextBuilder** | 扩展 _build_tools section; 增加 developer_instructions 模板替换能力 | 90% 复用 |
-| **ExpConfig** | 扩展 tools.builtin 配置 (从 `["*"]` 改为具名列表); 增加 SubAgent 相关配置 | 80% 复用 |
-| **Exp._init_builtin_tools()** | 重构: 从 "创建 evomaster 工具 + EvoToolAdapter 包装" 改为 "创建 matmaster 原生工具 + 直接注册" | 完全重写 |
+## Complexity Assessment
 
----
+| Feature | Lines Changed (est.) | Test Impact | Risk |
+|---------|---------------------|-------------|------|
+| Async LLM provider | ~100 (provider + protocol) | All provider tests need async | Low -- AsyncOpenAI is API-compatible |
+| Async tool protocol | ~200 (12 tools + base + protocol) | All tool tests need async | Low -- most tools just add async def |
+| Async kernel loop | ~150 (agent.py) | All kernel tests need async | Medium -- core control flow changes |
+| Async MessageBus | ~30 (bus.py) | Bus tests need async | Low -- drop-in replacement |
+| Async hooks | ~100 (hooks.py + protocol) | Hook tests need async | Medium -- 7 methods + run_* helpers |
+| Async compactor | ~50 (context_compactor.py) | Compactor tests need async | Low -- one LLM call to async |
+| Async Exp lifecycle | ~100 (exp.py) | Exp tests need async | Medium -- orchestration logic |
+| Async cleanup | ~30 (exp.py) | Cleanup tests need async | Low |
+| Async subagent spawn | ~50 (exp.py + spawn_tool.py) | Spawn tests need async | Medium -- async closure |
+| Parallel tool dispatch | ~80 (agent.py) | New tests for parallel behavior | Medium -- ordering, error handling |
+
+**Total estimated: ~900 lines of production code changes, plus test migration to async.**
 
 ## Sources
 
-### Claude Code 系统提示与工具实现
-- [Claude Code system prompts repository](https://github.com/Piebald-AI/claude-code-system-prompts) -- 18 builtin tool descriptions, sub agent prompts (HIGH confidence)
-- [Tools and system prompt of Claude Code (Gist)](https://gist.github.com/wong2/e0f34aac66caf890a332f7b6f9e2ba8f) -- full tool parameter schemas (HIGH confidence)
-- [Internal Claude Code tools implementation (Gist)](https://gist.github.com/bgauryy/0cdb9aa337d01ae5bd0c803943aa36bd) -- implementation details and behavioral rules (HIGH confidence)
-- [Claude Code SubAgent documentation](https://code.claude.com/docs/en/sub-agents) -- official subagent creation, lifecycle, tool access (HIGH confidence)
-
-### LLM Function Calling 最佳实践
-- [Gorilla: Tool Description Precision vs Invocation Accuracy](https://www.scalifiai.com/blog/function-calling-tool-call-best%20practices) -- empirical evidence for description quality (MEDIUM confidence)
-- [OpenAI Function Calling Guide](https://platform.openai.com/docs/guides/function-calling) -- strict mode, schema best practices (HIGH confidence)
-- [OpenAI Community: Prompting Best Practices for Tool Use](https://community.openai.com/t/prompting-best-practices-for-tool-use-function-calling/1123036) -- naming, description, schema patterns (MEDIUM confidence)
-- [Simon Willison: How coding agents work](https://simonwillison.net/guides/agentic-engineering-patterns/how-coding-agents-work/) -- tool design patterns for coding agents (HIGH confidence)
-
-### 现有代码库分析
-- `matmaster/tools/tool_registry.py` -- Tool Protocol 定义 (name, description, json_schema, execute)
-- `evomaster/agent/tools/builtin/bash.py` -- BashTool 实现 + BashToolParams description
-- `evomaster/agent/tools/builtin/editor.py` -- EditorTool 实现 (view/create/str_replace/insert/undo_edit)
-- `evomaster/agent/session/base.py` -- BaseSession 接口 (exec_bash, read_file, write_file, path_exists, is_file, is_directory)
-- `matmaster/tools/evomaster_tool_adapter.py` -- EvoToolAdapter 适配逻辑
-- `matmaster/core/exp.py` -- Exp._init_builtin_tools() 当前注册流程
-- `matmaster/core/context_builder.py` -- ContextBuilder section 组装逻辑
-
----
-*Feature research for: v1.1 内置 Tool 套件 + SubAgent + Prompt 体系*
-*Researched: 2026-03-24*
+- Pydantic AI agent execution: https://ai.pydantic.dev/agent/
+- Pydantic AI advanced tools (parallel execution): https://ai.pydantic.dev/tools-advanced/
+- OpenAI Agents SDK running agents: https://openai.github.io/openai-agents-python/running_agents/
+- OpenAI Agents SDK lifecycle hooks: https://openai.github.io/openai-agents-python/ref/lifecycle/
+- OpenAI Agents SDK streaming: https://openai.github.io/openai-agents-python/streaming/
+- OpenAI Python SDK async: https://github.com/openai/openai-python
+- Microsoft Agent Framework compaction: https://learn.microsoft.com/en-us/agent-framework/agents/conversations/compaction
+- Microsoft Agent Framework middleware: https://learn.microsoft.com/en-us/agent-framework/agents/middleware/
+- Google ADK context compaction: https://google.github.io/adk-docs/context/compaction/
+- Janus dual-face queue: https://github.com/aio-libs/janus
+- Python asyncio subprocess: https://docs.python.org/3/library/asyncio-subprocess.html
+- Python asyncio synchronization: https://docs.python.org/3/library/asyncio-sync.html
+- PEP 525 Asynchronous Generators: https://peps.python.org/pep-0525/

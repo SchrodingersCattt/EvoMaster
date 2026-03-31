@@ -36,4 +36,3 @@ Use the local wrapper under `playground/mat_master/skills/gromacs-system-prep/sc
 - Report the executed command, exit code, and generated output file paths.
 - maxwarn at least set as 3
 - DO NOT RUN mdrun locally!!!
-

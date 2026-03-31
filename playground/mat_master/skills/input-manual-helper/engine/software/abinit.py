@@ -81,45 +81,145 @@ _DEFAULT_SI_PSEUDO = '"Si_r.psp8"'
 # 多行值关键字（后面跟 natom/ntypat 行的数值）
 # ---------------------------------------------------------------------------
 # 这些关键字的值紧跟在关键字后的若干行中
-_MULTILINE_KEYWORDS: frozenset[str] = frozenset({
-    "rprim", "xred", "xcart", "kpt", "spinat",
-    "vel", "vel_orig", "acell",  # acell 通常单行，但可以多行
-    "red_dfield", "shiftk",
-})
+_MULTILINE_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "rprim",
+        "xred",
+        "xcart",
+        "kpt",
+        "spinat",
+        "vel",
+        "vel_orig",
+        "acell",  # acell 通常单行，但可以多行
+        "red_dfield",
+        "shiftk",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # 已知的 ABINIT 参数（用于 unknown-param 检查豁免列表）
 # ---------------------------------------------------------------------------
-_KNOWN_PARAMS: frozenset[str] = frozenset({
-    "ndtset", "ecut", "pawecutdg", "ixc", "acell", "rprim", "natom",
-    "ntypat", "typat", "znucl", "xred", "xcart", "kptopt", "ngkpt",
-    "shiftk", "nkpt", "kpt", "nstep", "toldfe", "tolvrs", "tolwfr",
-    "iscf", "prtwf", "prtden", "prtvol", "ppdirpath", "pseudos",
-    "ionmov", "ntime", "optcell", "dilatmx", "ecutsm", "npband",
-    "npfft", "npkpt", "nsppol", "nspinor", "nspden", "occopt",
-    "tsmear", "spinmagntarget", "charge", "tolmxf", "strfact",
-    "strtarget", "nbdbuf", "nband", "istwfk", "exchn2n3d",
-    "fftalg", "wfoptalg", "paral_kgb", "bandpp", "np_slk",
-    "nstep_restart", "chksymbreak", "chkprim", "symmorphi",
-    "getden", "getwfk", "irdden", "irdwfk", "kptbounds",
-    "ndivsm", "ndivk", "wtk", "occ", "fband",
-    "toldff", "strprecon", "vis", "dtion", "mdtemp",
-    "restartxf", "boxcutmin", "ngfft", "ngfftdg",
-    "useylm", "usepaw", "pawovlp", "pawnzlm", "pawxcdev",
-    "pawstgylm", "pawntheta", "pawnphi", "pawoptmix",
-    "macro_uj", "lpawu", "upawu", "jpawu",
-    "optdriver", "rfelfd", "rfphon", "rfatpol", "rfdir",
-    "nqpt", "qpt", "qptnrm",
-    "gwcalctyp", "symsigma", "icutcoul", "vcutgeo",
-    "ecutsigx", "ecuteps", "nkptgw",
-    "jdtset", "udtset", "irdvdw",
-    "adpimd", "adpimd_gamma", "pitransform",
-})
+_KNOWN_PARAMS: frozenset[str] = frozenset(
+    {
+        "ndtset",
+        "ecut",
+        "pawecutdg",
+        "ixc",
+        "acell",
+        "rprim",
+        "natom",
+        "ntypat",
+        "typat",
+        "znucl",
+        "xred",
+        "xcart",
+        "kptopt",
+        "ngkpt",
+        "shiftk",
+        "nkpt",
+        "kpt",
+        "nstep",
+        "toldfe",
+        "tolvrs",
+        "tolwfr",
+        "iscf",
+        "prtwf",
+        "prtden",
+        "prtvol",
+        "ppdirpath",
+        "pseudos",
+        "ionmov",
+        "ntime",
+        "optcell",
+        "dilatmx",
+        "ecutsm",
+        "npband",
+        "npfft",
+        "npkpt",
+        "nsppol",
+        "nspinor",
+        "nspden",
+        "occopt",
+        "tsmear",
+        "spinmagntarget",
+        "charge",
+        "tolmxf",
+        "strfact",
+        "strtarget",
+        "nbdbuf",
+        "nband",
+        "istwfk",
+        "exchn2n3d",
+        "fftalg",
+        "wfoptalg",
+        "paral_kgb",
+        "bandpp",
+        "np_slk",
+        "nstep_restart",
+        "chksymbreak",
+        "chkprim",
+        "symmorphi",
+        "getden",
+        "getwfk",
+        "irdden",
+        "irdwfk",
+        "kptbounds",
+        "ndivsm",
+        "ndivk",
+        "wtk",
+        "occ",
+        "fband",
+        "toldff",
+        "strprecon",
+        "vis",
+        "dtion",
+        "mdtemp",
+        "restartxf",
+        "boxcutmin",
+        "ngfft",
+        "ngfftdg",
+        "useylm",
+        "usepaw",
+        "pawovlp",
+        "pawnzlm",
+        "pawxcdev",
+        "pawstgylm",
+        "pawntheta",
+        "pawnphi",
+        "pawoptmix",
+        "macro_uj",
+        "lpawu",
+        "upawu",
+        "jpawu",
+        "optdriver",
+        "rfelfd",
+        "rfphon",
+        "rfatpol",
+        "rfdir",
+        "nqpt",
+        "qpt",
+        "qptnrm",
+        "gwcalctyp",
+        "symsigma",
+        "icutcoul",
+        "vcutgeo",
+        "ecutsigx",
+        "ecuteps",
+        "nkptgw",
+        "jdtset",
+        "udtset",
+        "irdvdw",
+        "adpimd",
+        "adpimd_gamma",
+        "pitransform",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
 # 解析器辅助函数
 # ---------------------------------------------------------------------------
+
 
 def _make_range(line: int, col_start: int, col_end: int) -> SourceRange:
     return SourceRange(
@@ -147,8 +247,9 @@ def _parse_abinit_value(raw: str) -> Any:
     """
     raw = raw.strip()
     # 带引号字符串
-    if (raw.startswith('"') and raw.endswith('"')) or \
-       (raw.startswith("'") and raw.endswith("'")):
+    if (raw.startswith('"') and raw.endswith('"')) or (
+        raw.startswith("'") and raw.endswith("'")
+    ):
         return raw[1:-1]
     # Fortran d/D 科学计数法 → Python float
     raw_norm = re.sub(r'[dD]', 'e', raw)
@@ -169,6 +270,7 @@ def _parse_abinit_value(raw: str) -> Any:
 # ---------------------------------------------------------------------------
 # ABINIT 后端
 # ---------------------------------------------------------------------------
+
 
 class ABINITBackend(SoftwareBackend):
     """ABINIT 输入文件后端。
@@ -241,7 +343,9 @@ class ABINITBackend(SoftwareBackend):
             while i < len(tokens):
                 next_tok, next_lineno = tokens[i]
                 # 若下一个 token 是关键字，则停止收集
-                if _is_keyword(next_tok) and _looks_like_keyword_not_value(next_tok, value_tokens):
+                if _is_keyword(next_tok) and _looks_like_keyword_not_value(
+                    next_tok, value_tokens
+                ):
                     break
                 value_tokens.append(next_tok)
                 value_end_line = next_lineno
@@ -276,7 +380,11 @@ class ABINITBackend(SoftwareBackend):
                     start_line=kw_start_line,
                     start_col=0,
                     end_line=value_end_line,
-                    end_col=len(lines[value_end_line - 1]) if value_end_line <= len(lines) else 0,
+                    end_col=(
+                        len(lines[value_end_line - 1])
+                        if value_end_line <= len(lines)
+                        else 0
+                    ),
                 ),
                 section_path="root",
             )
@@ -354,7 +462,9 @@ class ABINITBackend(SoftwareBackend):
         lines.append("# Run with: abinit run.abi")
         lines.append("# Pseudopotential (Bohrium image abinit:9.10):")
         lines.append("#   cp /opt/abinit-9.10.3/tests/Psps_for_tests/Si_r.psp8 .")
-        lines.append("# Note: ppdirpath is NOT a valid ABINIT v9 keyword; copy pseudos to workdir instead.")
+        lines.append(
+            "# Note: ppdirpath is NOT a valid ABINIT v9 keyword; copy pseudos to workdir instead."
+        )
         lines.append("")
 
         # ---- 数据集 ----
@@ -367,7 +477,9 @@ class ABINITBackend(SoftwareBackend):
         lines.append("")
 
         # ---- 结构 ----
-        lines.append("# --- Structure (Si diamond, primitive FCC cell, a=5.431 Ang) ---")
+        lines.append(
+            "# --- Structure (Si diamond, primitive FCC cell, a=5.431 Ang) ---"
+        )
         lines.append(f"acell  3*{_SI_ACELL_BOHR}")
         lines.append("rprim")
         for row in _SI_RPRIM:
@@ -505,35 +617,41 @@ class ABINITBackend(SoftwareBackend):
         if ecut is not None:
             p_ecut = present["ecut"]
             if ecut < 5:
-                diags.append(Diagnostic(
-                    severity="warning",
-                    message=f"ecut = {ecut} Ha 过小（< 5 Ha），计算结果不可靠",
-                    range=p_ecut.range,
-                    param="ecut",
-                    suggestion="NC 赝势通常 20-40 Ha；PAW 赝势通常 8-20 Ha",
-                    rule_id="ecut-too-small",
-                ))
+                diags.append(
+                    Diagnostic(
+                        severity="warning",
+                        message=f"ecut = {ecut} Ha 过小（< 5 Ha），计算结果不可靠",
+                        range=p_ecut.range,
+                        param="ecut",
+                        suggestion="NC 赝势通常 20-40 Ha；PAW 赝势通常 8-20 Ha",
+                        rule_id="ecut-too-small",
+                    )
+                )
             elif ecut > 100:
-                diags.append(Diagnostic(
-                    severity="info",
-                    message=f"ecut = {ecut} Ha 非常高（> 100 Ha），请确认是否必要",
-                    range=p_ecut.range,
-                    param="ecut",
-                    suggestion="通常 NC 赝势 ecut = 20-40 Ha 已足够精确",
-                    rule_id="ecut-very-high",
-                ))
+                diags.append(
+                    Diagnostic(
+                        severity="info",
+                        message=f"ecut = {ecut} Ha 非常高（> 100 Ha），请确认是否必要",
+                        range=p_ecut.range,
+                        param="ecut",
+                        suggestion="通常 NC 赝势 ecut = 20-40 Ha 已足够精确",
+                        rule_id="ecut-very-high",
+                    )
+                )
 
         # ---- 2. nstep < 1 ----
         nstep = _get_int("nstep")
         if nstep is not None and nstep < 1:
-            diags.append(Diagnostic(
-                severity="error",
-                message=f"nstep = {nstep} 不合法（必须 >= 1）",
-                range=present["nstep"].range,
-                param="nstep",
-                suggestion="设置 nstep >= 1，推荐 nstep = 50",
-                rule_id="nstep-invalid",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    message=f"nstep = {nstep} 不合法（必须 >= 1）",
+                    range=present["nstep"].range,
+                    param="nstep",
+                    suggestion="设置 nstep >= 1，推荐 nstep = 50",
+                    rule_id="nstep-invalid",
+                )
+            )
 
         # ---- 3. toldfe 和 tolvrs 同时设置 ----
         has_toldfe = "toldfe" in present
@@ -547,20 +665,22 @@ class ABINITBackend(SoftwareBackend):
                 if name in present:
                     first_tol = present[name]
                     break
-            diags.append(Diagnostic(
-                severity="warning",
-                message=(
-                    f"同时设置了多个 SCF 收敛判据（"
-                    f"{'toldfe ' if has_toldfe else ''}"
-                    f"{'tolvrs ' if has_tolvrs else ''}"
-                    f"{'tolwfr' if has_tolwfr else ''}）。"
-                    "ABINIT 只能使用其中一个。"
-                ),
-                range=first_tol.range if first_tol else None,
-                param="toldfe/tolvrs/tolwfr",
-                suggestion="只保留一个收敛判据：SCF 推荐 toldfe；PAW 推荐 tolvrs；NSCF 推荐 tolwfr",
-                rule_id="multiple-tol-criteria",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="warning",
+                    message=(
+                        f"同时设置了多个 SCF 收敛判据（"
+                        f"{'toldfe ' if has_toldfe else ''}"
+                        f"{'tolvrs ' if has_tolvrs else ''}"
+                        f"{'tolwfr' if has_tolwfr else ''}）。"
+                        "ABINIT 只能使用其中一个。"
+                    ),
+                    range=first_tol.range if first_tol else None,
+                    param="toldfe/tolvrs/tolwfr",
+                    suggestion="只保留一个收敛判据：SCF 推荐 toldfe；PAW 推荐 tolvrs；NSCF 推荐 tolwfr",
+                    rule_id="multiple-tol-criteria",
+                )
+            )
 
         # ---- 4. natom 与 xred/xcart 行数不匹配 ----
         natom = _get_int("natom")
@@ -584,34 +704,38 @@ class ABINITBackend(SoftwareBackend):
             for coord_name in ("xred", "xcart"):
                 n_rows = _count_coord_rows(coord_name)
                 if n_rows is not None and n_rows != natom:
-                    diags.append(Diagnostic(
-                        severity="error",
-                        message=(
-                            f"natom = {natom} 但 {coord_name} 包含 {n_rows} 个原子坐标，"
-                            "不匹配"
-                        ),
-                        range=present[coord_name].range,
-                        param=coord_name,
-                        suggestion=f"确保 {coord_name} 中有且仅有 {natom} × 3 个数值",
-                        rule_id="natom-coord-mismatch",
-                    ))
+                    diags.append(
+                        Diagnostic(
+                            severity="error",
+                            message=(
+                                f"natom = {natom} 但 {coord_name} 包含 {n_rows} 个原子坐标，"
+                                "不匹配"
+                            ),
+                            range=present[coord_name].range,
+                            param=coord_name,
+                            suggestion=f"确保 {coord_name} 中有且仅有 {natom} × 3 个数值",
+                            rule_id="natom-coord-mismatch",
+                        )
+                    )
 
         # ---- 5. ntypat 与 znucl 个数不匹配 ----
         ntypat = _get_int("ntypat")
         if ntypat is not None and "znucl" in present:
             znucl_len = _get_list_len("znucl")
             if znucl_len is not None and znucl_len != ntypat:
-                diags.append(Diagnostic(
-                    severity="error",
-                    message=(
-                        f"ntypat = {ntypat} 但 znucl 包含 {znucl_len} 个元素，"
-                        "不匹配"
-                    ),
-                    range=present["znucl"].range,
-                    param="znucl",
-                    suggestion=f"znucl 必须包含 {ntypat} 个原子序数",
-                    rule_id="ntypat-znucl-mismatch",
-                ))
+                diags.append(
+                    Diagnostic(
+                        severity="error",
+                        message=(
+                            f"ntypat = {ntypat} 但 znucl 包含 {znucl_len} 个元素，"
+                            "不匹配"
+                        ),
+                        range=present["znucl"].range,
+                        param="znucl",
+                        suggestion=f"znucl 必须包含 {ntypat} 个原子序数",
+                        rule_id="ntypat-znucl-mismatch",
+                    )
+                )
 
         # ---- 6. typat 中类型号超过 ntypat ----
         if ntypat is not None and "typat" in present:
@@ -634,31 +758,35 @@ class ABINITBackend(SoftwareBackend):
 
             for t in typat_vals:
                 if t > ntypat or t < 1:
-                    diags.append(Diagnostic(
-                        severity="error",
-                        message=(
-                            f"typat 包含类型号 {t}，但 ntypat = {ntypat}。"
-                            "类型号必须在 [1, ntypat] 范围内。"
-                        ),
-                        range=typat_param.range,
-                        param="typat",
-                        suggestion=f"typat 中的值必须在 1 到 {ntypat} 之间",
-                        rule_id="typat-out-of-range",
-                    ))
+                    diags.append(
+                        Diagnostic(
+                            severity="error",
+                            message=(
+                                f"typat 包含类型号 {t}，但 ntypat = {ntypat}。"
+                                "类型号必须在 [1, ntypat] 范围内。"
+                            ),
+                            range=typat_param.range,
+                            param="typat",
+                            suggestion=f"typat 中的值必须在 1 到 {ntypat} 之间",
+                            rule_id="typat-out-of-range",
+                        )
+                    )
                     break  # 只报一次
 
         # ---- 7. 缺少 pseudos ----
         if "pseudos" not in present:
-            diags.append(Diagnostic(
-                severity="error",
-                message="缺少 pseudos 参数，ABINIT 无法确定赝势文件",
-                suggestion=(
-                    '添加赝势参数，例如：\n'
-                    'ppdirpath "/opt/abinit/share/pseudo/"\n'
-                    'pseudos "Si.psp8"'
-                ),
-                rule_id="missing-pseudos",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    message="缺少 pseudos 参数，ABINIT 无法确定赝势文件",
+                    suggestion=(
+                        '添加赝势参数，例如：\n'
+                        'ppdirpath "/opt/abinit/share/pseudo/"\n'
+                        'pseudos "Si.psp8"'
+                    ),
+                    rule_id="missing-pseudos",
+                )
+            )
 
         # ---- 8. 缺少 ngkpt 且缺少 kpt ----
         kptopt_val = _get_int("kptopt")
@@ -666,12 +794,14 @@ class ABINITBackend(SoftwareBackend):
         has_kpt = "nkpt" in present or "kpt" in present
         # kptopt=0 时不需要 k 点（分子计算）
         if kptopt_val != 0 and not has_ngkpt and not has_kpt:
-            diags.append(Diagnostic(
-                severity="warning",
-                message="未设置 k 点（缺少 ngkpt 或 kpt），周期性体系计算可能不正确",
-                suggestion="添加 k 点设置，例如：\nkptopt 1\nngkpt 4 4 4\nshiftk 0.5 0.5 0.5",
-                rule_id="missing-kpoints",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="warning",
+                    message="未设置 k 点（缺少 ngkpt 或 kpt），周期性体系计算可能不正确",
+                    suggestion="添加 k 点设置，例如：\nkptopt 1\nngkpt 4 4 4\nshiftk 0.5 0.5 0.5",
+                    rule_id="missing-kpoints",
+                )
+            )
 
         # ---- 9. 枚举值检查 ----
         for param in doc.params:
@@ -682,14 +812,16 @@ class ABINITBackend(SoftwareBackend):
                 val_str = str(param.value)
                 enum_str = [str(e) for e in tag.enum_values]
                 if val_str not in enum_str:
-                    diags.append(Diagnostic(
-                        severity="warning",
-                        message=f"{param.name} = {param.value} 不是常见枚举值",
-                        range=param.range,
-                        param=param.name,
-                        suggestion=f"常见值: {', '.join(tag.enum_values)}",
-                        rule_id="unusual-enum-value",
-                    ))
+                    diags.append(
+                        Diagnostic(
+                            severity="warning",
+                            message=f"{param.name} = {param.value} 不是常见枚举值",
+                            range=param.range,
+                            param=param.name,
+                            suggestion=f"常见值: {', '.join(tag.enum_values)}",
+                            rule_id="unusual-enum-value",
+                        )
+                    )
 
         # ---- 10. 未知参数检查 ----
         for param in doc.params:
@@ -698,14 +830,16 @@ class ABINITBackend(SoftwareBackend):
             name_base = re.sub(r'\d+$', '', name_lower)
             tag = schema.get_tag("abinit", param.name)
             if tag is None and name_base not in _KNOWN_PARAMS:
-                diags.append(Diagnostic(
-                    severity="info",
-                    message=f"未知参数 '{param.name}'，不在 ABINIT Schema 中",
-                    range=param.range,
-                    param=param.name,
-                    suggestion="检查参数名拼写，或查阅 ABINIT 官方文档",
-                    rule_id="unknown-param",
-                ))
+                diags.append(
+                    Diagnostic(
+                        severity="info",
+                        message=f"未知参数 '{param.name}'，不在 ABINIT Schema 中",
+                        range=param.range,
+                        param=param.name,
+                        suggestion="检查参数名拼写，或查阅 ABINIT 官方文档",
+                        rule_id="unknown-param",
+                    )
+                )
 
         # ---- 11. 追加 parse_errors ----
         diags.extend(doc.parse_errors)
@@ -784,6 +918,7 @@ class ABINITBackend(SoftwareBackend):
 # 模块级工具函数
 # ---------------------------------------------------------------------------
 
+
 def _strip_comment(line: str) -> str:
     """去除行内注释（# 或 ! 开头或行内）。"""
     # 处理带引号字符串中的注释符（避免误删赝势路径中的字符）
@@ -835,7 +970,8 @@ def _ensure_quoted(s: Any) -> str:
     """确保字符串值带双引号（用于 ppdirpath 和 pseudos）。"""
     s_str = str(s)
     # 已经有引号
-    if (s_str.startswith('"') and s_str.endswith('"')) or \
-       (s_str.startswith("'") and s_str.endswith("'")):
+    if (s_str.startswith('"') and s_str.endswith('"')) or (
+        s_str.startswith("'") and s_str.endswith("'")
+    ):
         return s_str
     return f'"{s_str}"'

@@ -8,7 +8,6 @@ import pytest
 from playground.mat_master.core.solvers._research_planner_runtime import (
     ResearchPlannerRuntimeMixin,
 )
-from src.services.chat_history import ChatHistoryConverter
 from src.utils.chat_event_source import normalize_event_source
 
 

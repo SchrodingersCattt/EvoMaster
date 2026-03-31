@@ -1,7 +1,6 @@
 import json
 import logging
 from functools import lru_cache
-from typing import Dict, List, Optional
 
 from pymysql import Error
 
@@ -46,7 +45,7 @@ class ChatSessionsTable(BaseTable):
                 logger.info(f'创建会话成功: {session_id}')
                 return cursor.rowcount > 0
 
-    def get_session(self, session_id: str) -> Optional[Dict]:
+    def get_session(self, session_id: str) -> dict | None:
         """获取会话信息（含 user_id、org_id、project_id、status 等）。"""
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -67,8 +66,8 @@ class ChatSessionsTable(BaseTable):
     def set_session_bohrium(
         self,
         session_id: str,
-        org_id: Optional[str] = None,
-        project_id: Optional[int] = None,
+        org_id: str | None = None,
+        project_id: int | None = None,
     ) -> bool:
         """更新会话的 org_id、project_id（仅更新非 None 的字段）。"""
         try:
@@ -202,7 +201,7 @@ class ChatSessionsTable(BaseTable):
     def count_sessions_by_user(
         self,
         user_id: str,
-        project_id: Optional[int] = None,
+        project_id: int | None = None,
     ) -> int:
         """获取该用户的会话总数（用于分页，可按 project_id 过滤）。"""
         with self.get_connection() as conn:
@@ -222,10 +221,10 @@ class ChatSessionsTable(BaseTable):
     def list_sessions(
         self,
         user_id: str,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        project_id: Optional[int] = None,
-    ) -> List[Dict]:
+        limit: int | None = None,
+        offset: int | None = None,
+        project_id: int | None = None,
+    ) -> list[dict]:
         """获取会话列表，只返回该用户的会话，可按 project_id 过滤，包含第一条用户消息。"""
         limit = max(1, min(100, limit)) if limit is not None else 50
         offset = max(0, offset) if offset is not None else 0

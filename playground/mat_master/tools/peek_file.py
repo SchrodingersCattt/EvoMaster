@@ -2,12 +2,12 @@
 Core logic for reading/decoding FULL file content with automatic compression and encoding detection.
 Modified to output EVERYTHING without truncation.
 """
-import os
+
+import base64
 import gzip
 import json
-import base64
 from pathlib import Path, PurePosixPath
-from typing import Dict, Any, Tuple, ClassVar
+from typing import Any, ClassVar, Dict, Tuple
 
 from pydantic import Field
 
@@ -19,14 +19,25 @@ def decode_text_file(file_content: bytes) -> str:
     Decode bytes content to text using various encoding detection methods.
     """
     encodings = [
-        "utf-8", "utf-8-sig", "utf-16", "utf-16-le", "utf-16-be",
-        "utf-32", "utf-32-le", "utf-32-be", "gbk", "gb2312",
-        "iso-8859-1", "latin-1", "cp1252", "ascii",
+        "utf-8",
+        "utf-8-sig",
+        "utf-16",
+        "utf-16-le",
+        "utf-16-be",
+        "utf-32",
+        "utf-32-le",
+        "utf-32-be",
+        "gbk",
+        "gb2312",
+        "iso-8859-1",
+        "latin-1",
+        "cp1252",
+        "ascii",
     ]
     for encoding in encodings:
         try:
             return file_content.decode(encoding)
-        except (UnicodeDecodeError, UnicodeError):
+        except UnicodeError:
             continue
     return file_content.decode("utf-8", errors="ignore")
 
@@ -115,7 +126,9 @@ def analyze_binary_json_file(file_content: str) -> Tuple[str, Dict[str, Any]]:
 
     try:
         decompressed_content = gzip.decompress(
-            file_content.encode("latin-1") if isinstance(file_content, str) else file_content
+            file_content.encode("latin-1")
+            if isinstance(file_content, str)
+            else file_content
         )
         parsed_data = json.loads(decompressed_content.decode("utf-8"))
         decode_attempts.append(("Gzip decompression", "Success"))
@@ -124,9 +137,15 @@ def analyze_binary_json_file(file_content: str) -> Tuple[str, Dict[str, Any]]:
         decode_attempts.append(("Gzip decompression", "Failed"))
 
     try:
-        content_bytes = file_content.encode("utf-8") if isinstance(file_content, str) else file_content
+        content_bytes = (
+            file_content.encode("utf-8")
+            if isinstance(file_content, str)
+            else file_content
+        )
         hex_dump = content_bytes[:500].hex()
-        analysis_info = f"Unable to decode file as JSON. First 500 bytes as hex: {hex_dump}"
+        analysis_info = (
+            f"Unable to decode file as JSON. First 500 bytes as hex: {hex_dump}"
+        )
     except Exception as e:
         analysis_info = f"Unable to decode file or generate hex dump: {str(e)}"
 
@@ -136,11 +155,39 @@ def analyze_binary_json_file(file_content: str) -> Tuple[str, Dict[str, Any]]:
 def is_binary_content(file_content: str, sample_size: int = 1000) -> bool:
     """Check if the content is binary data."""
     binary_indicators = [
-        "\x00", "\x01", "\x02", "\x03", "\x04", "\x05", "\x06", "\x07", "\x08",
-        "\x0b", "\x0c", "\x0e", "\x0f", "\x10", "\x11", "\x12", "\x13", "\x14",
-        "\x15", "\x16", "\x17", "\x18", "\x19", "\x1a", "\x1b", "\x1c", "\x1d", "\x1e", "\x1f",
+        "\x00",
+        "\x01",
+        "\x02",
+        "\x03",
+        "\x04",
+        "\x05",
+        "\x06",
+        "\x07",
+        "\x08",
+        "\x0b",
+        "\x0c",
+        "\x0e",
+        "\x0f",
+        "\x10",
+        "\x11",
+        "\x12",
+        "\x13",
+        "\x14",
+        "\x15",
+        "\x16",
+        "\x17",
+        "\x18",
+        "\x19",
+        "\x1a",
+        "\x1b",
+        "\x1c",
+        "\x1d",
+        "\x1e",
+        "\x1f",
     ]
-    return any(indicator in file_content[:sample_size] for indicator in binary_indicators)
+    return any(
+        indicator in file_content[:sample_size] for indicator in binary_indicators
+    )
 
 
 def decode_bytes_content(content: bytes) -> Tuple[str, Dict[str, Any]]:
@@ -161,13 +208,22 @@ def decode_bytes_content(content: bytes) -> Tuple[str, Dict[str, Any]]:
 
     if content[:4] == b"\x28\xb5\x2f\xfd":
         metadata["compression_type"] = "zstandard"
-        return "[File is Zstandard (.zst) compressed. To decompress install: pip install zstandard]", metadata
+        return (
+            "[File is Zstandard (.zst) compressed. To decompress install: pip install zstandard]",
+            metadata,
+        )
     if len(content) >= 2 and content.startswith(b"\x1b\x78"):
         metadata["compression_type"] = "brotli"
-        return "[File is Brotli (.br) compressed. To decompress install: pip install brotli]", metadata
+        return (
+            "[File is Brotli (.br) compressed. To decompress install: pip install brotli]",
+            metadata,
+        )
     if len(content) >= 4 and content.startswith(b"\x04\x22\x4d\x18"):
         metadata["compression_type"] = "lz4"
-        return "[File is LZ4 compressed. To decompress install: pip install lz4]", metadata
+        return (
+            "[File is LZ4 compressed. To decompress install: pip install lz4]",
+            metadata,
+        )
     if content.startswith(b"\x1f\x8b\x08"):
         metadata["compression_type"] = "gzip"
         try:
@@ -182,7 +238,7 @@ def decode_bytes_content(content: bytes) -> Tuple[str, Dict[str, Any]]:
             decoded_content = content.decode(encoding)
             metadata["encoding"] = encoding
             break
-        except (UnicodeDecodeError, UnicodeError):
+        except UnicodeError:
             continue
     if decoded_content is None:
         decoded_content = content.decode("utf-8", errors="ignore")
@@ -319,7 +375,8 @@ class PeekFileTool(BaseTool):
                 except Exception as exc:
                     self.logger.warning(
                         "peek_file: session.download(%s) failed (%s), falling back to local read",
-                        file_path, exc,
+                        file_path,
+                        exc,
                     )
 
             if raw_bytes is not None:

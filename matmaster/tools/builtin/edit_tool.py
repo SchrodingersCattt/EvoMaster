@@ -72,9 +72,8 @@ class EditTool(BuiltinTool):
         new_str: str = arguments.get("new_str", "")
 
         # Read-Before-Modify check (D-02, D-03)
-        if (
-            self._tracker is not None
-            and not self._tracker.has_been_read(posixpath.normpath(file_path))
+        if self._tracker is not None and not self._tracker.has_been_read(
+            posixpath.normpath(file_path)
         ):
             return f"Error: file '{file_path}' must be read before modify"
 

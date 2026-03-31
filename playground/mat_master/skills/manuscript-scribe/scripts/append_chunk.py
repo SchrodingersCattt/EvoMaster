@@ -20,9 +20,15 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="Append a chunk to a file (e.g. temp file for search-summarize cycles)."
     )
-    ap.add_argument("--path", required=True, help="File to append to (e.g. _tmp/section_Introduction.md)")
+    ap.add_argument(
+        "--path",
+        required=True,
+        help="File to append to (e.g. _tmp/section_Introduction.md)",
+    )
     ap.add_argument("--content", default=None, help="Inline text to append")
-    ap.add_argument("--content_file", default=None, help="Path to file whose content to append")
+    ap.add_argument(
+        "--content_file", default=None, help="Path to file whose content to append"
+    )
     ap.add_argument(
         "--separator",
         default="\n\n",
@@ -39,7 +45,10 @@ def main() -> None:
         raw = (raw + "\n" + args.content).strip() if raw else args.content.strip()
 
     if not raw:
-        print("No content to append (provide --content or --content_file).", file=sys.stderr)
+        print(
+            "No content to append (provide --content or --content_file).",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     path = Path(args.path)

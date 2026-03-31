@@ -151,7 +151,7 @@ async def chat_stream(
     """ag-ui：统一流接口。会话已分享时可不鉴权；未分享时需登录且为会话所有者。
 
     第二轮无推送排查：后端日志看是否有 stream 409（会话占用）、generate_send_stream: start（已开流）、
-    run_agent_sync 报错；前端需消费本次 POST 的 response body（SSE）并合并到 UI，不能只依赖「订阅」连接。"""
+    run_agent 报错；前端需消费本次 POST 的 response body（SSE）并合并到 UI，不能只依赖「订阅」连接。"""
     sid = session_id.strip()
     has_content = req is not None and bool((req.content or '').strip())
     logger.info(
@@ -245,7 +245,7 @@ async def chat_stream(
         raise ConflictErrorResponse(
             msg='该会话已有任务在运行，请等待完成或先取消后再发新消息',
         )
-    # 给 agent 的 prompt：正文 + 附件 URL + 工作区路径；多轮历史由 run_agent_sync 通过 task.meta['dialog_history'] 注入
+    # 给 agent 的 prompt：正文 + 附件 URL + 工作区路径；多轮历史由 run_agent 通过 task.meta['dialog_history'] 注入
     base_prompt = (req.content or '').strip()
     if req.files:
         base_prompt += '\n\n[Attached files]\n' + '\n'.join(req.files)

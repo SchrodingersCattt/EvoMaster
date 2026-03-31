@@ -51,16 +51,14 @@ class Playground(PlaygroundSessionMixin):
         self.config_path = config_path
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        # Session state (agent 供 PlaygroundSessionMixin.attach_session 同步引用)
         self.session: BaseSession | None = None
         self.agent: Any = None
         self._owns_session: bool = False
-        # Bohrium detach 后 _setup_session 需恢复 workspace，对应最近一次 prepare()
+        # Needed by _setup_session to restore workspace after Bohrium detach
         self._prepare_run_meta: dict[str, Any] | None = None
-
-        # Logging state
         self._log_file_handler: logging.FileHandler | None = None
         self._log_file_stream = None
+        self._playground_block: dict[str, Any] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -81,11 +79,9 @@ class Playground(PlaygroundSessionMixin):
         Returns:
             Immutable ``PlaygroundContext`` snapshot.
         """
-        # 1. Workspace -- resolve path first (needed before session.open)
         workspace_path = self._resolve_workspace_path(run_meta)
         workspace_path.mkdir(parents=True, exist_ok=True)
 
-        # 2. Session -- reuse override or create from config
         session_override = run_meta.get('session_override')
         if session_override is not None:
             self.session = session_override
@@ -94,26 +90,21 @@ class Playground(PlaygroundSessionMixin):
             self.session = self._create_session_from_config()
             self._owns_session = True
 
-        # 3. Sync workspace onto session config BEFORE open() so that
-        #    session.open() / env.setup() uses the correct workspace path
-        #    instead of the default /workspace from SessionConfig.
+        # Sync before open() so session uses the correct workspace path
         self._sync_workspace_to_session_config(workspace_path)
 
         if self._owns_session and not self.session.is_open:
             self.session.open()
 
-        # 4. Cache area -- prefer playground.cache_dir from config
         cache_area = self._resolve_cache_area(workspace_path)
         cache_area.mkdir(parents=True, exist_ok=True)
 
-        # 5. Logging
         self._setup_logging(run_meta)
 
-        # 6. Determine session type string
         session_type = self._resolve_session_type()
 
-        # 7. Build and return frozen context
-        self._prepare_run_meta = dict(run_meta)
+        run_meta_copy = dict(run_meta)
+        self._prepare_run_meta = run_meta_copy
         return PlaygroundContext(
             workdir=workspace_path,
             session_type=session_type,
@@ -121,7 +112,7 @@ class Playground(PlaygroundSessionMixin):
             execution_workdir=str(workspace_path),
             env_vars=self._collect_env_vars(),
             archival=self._build_archival_config(),
-            run_meta=dict(run_meta),
+            run_meta=run_meta_copy,
             session=self.session,
             config_dir=self.config_path.parent,
         )
@@ -133,20 +124,8 @@ class Playground(PlaygroundSessionMixin):
         - Closes the session *only* when ``_owns_session`` is True.
         - Never touches MCP, skill, tool, or LLM resources.
         """
-        # Release log handler
-        if self._log_file_handler is not None:
-            root_logger = logging.getLogger()
-            root_logger.removeHandler(self._log_file_handler)
-            self._log_file_handler.close()
-            self._log_file_handler = None
-        if self._log_file_stream is not None:
-            try:
-                self._log_file_stream.close()
-            except Exception:
-                pass
-            self._log_file_stream = None
+        self._teardown_log_handler()
 
-        # Close session only if we own it
         if self._owns_session and self.session is not None:
             try:
                 self.session.close()
@@ -159,16 +138,12 @@ class Playground(PlaygroundSessionMixin):
 
     def _create_session_from_config(self) -> BaseSession:
         """Create a session instance based on ``config.session.type``."""
-        session_dict = self.config.session
-        session_type = 'local'
-        if isinstance(session_dict, dict):
-            session_type = session_dict.get('type', 'local')
+        raw = self.config.session
+        session_dict = raw if isinstance(raw, dict) else {}
+        session_type = session_dict.get('type', 'local')
 
         if session_type == 'local':
-            local_cfg_dict = (
-                session_dict.get('local', {}) if isinstance(session_dict, dict) else {}
-            )
-            cfg = LocalSessionConfig(**local_cfg_dict)
+            cfg = LocalSessionConfig(**session_dict.get('local', {}))
             return LocalSession(config=cfg)
 
         if session_type == 'docker':
@@ -177,19 +152,13 @@ class Playground(PlaygroundSessionMixin):
                 DockerSessionConfig,
             )
 
-            docker_cfg_dict = (
-                session_dict.get('docker', {}) if isinstance(session_dict, dict) else {}
-            )
-            cfg = DockerSessionConfig(**docker_cfg_dict)
+            cfg = DockerSessionConfig(**session_dict.get('docker', {}))
             return DockerSession(config=cfg)
 
         if session_type == 'ssh':
             from evomaster.agent.session.ssh import SSHSession, SSHSessionConfig
 
-            ssh_cfg_dict = (
-                session_dict.get('ssh', {}) if isinstance(session_dict, dict) else {}
-            )
-            cfg = SSHSessionConfig(**ssh_cfg_dict)
+            cfg = SSHSessionConfig(**session_dict.get('ssh', {}))
             return SSHSession(config=cfg)
 
         raise ValueError(f"Unsupported session type: {session_type!r}")
@@ -214,47 +183,23 @@ class Playground(PlaygroundSessionMixin):
         return ws
 
     def _sync_workspace_to_session_config(self, workspace_path: Path) -> None:
-        """Synchronize workspace_path and working_dir on session config.
-
-        Both ``workspace_path`` and ``working_dir`` fields are updated to
-        prevent inconsistency between tool execution directory and file
-        tree directory.
-        """
-        ws_str = str(workspace_path.absolute())
+        """Synchronize workspace_path and working_dir on session config."""
         if self.session is None:
             return
-
+        ws_str = str(workspace_path.absolute())
         cfg = self.session.config
-        if hasattr(cfg, 'workspace_path'):
-            # Pydantic model -- attempt direct setattr (SessionConfig is
-            # not frozen, so this works for Local/Docker/SSH configs).
-            try:
-                cfg.workspace_path = ws_str
-            except Exception:
-                pass
-        if hasattr(cfg, 'working_dir'):
-            try:
-                cfg.working_dir = ws_str
-            except Exception:
-                pass
+        try:
+            cfg.workspace_path = ws_str
+            cfg.working_dir = ws_str
+        except Exception as e:
+            self.logger.warning('Failed to sync workspace to session config: %s', e)
 
     def _setup_logging(self, run_meta: dict[str, Any]) -> None:
         """Set up a file logger under ``<run_dir>/logs/{task_id}.log``.
 
         If ``run_dir`` is not provided, logging setup is skipped.
         """
-        # Release previous handler if any
-        if self._log_file_handler is not None:
-            root_logger = logging.getLogger()
-            root_logger.removeHandler(self._log_file_handler)
-            self._log_file_handler.close()
-            self._log_file_handler = None
-        if self._log_file_stream is not None:
-            try:
-                self._log_file_stream.close()
-            except Exception:
-                pass
-            self._log_file_stream = None
+        self._teardown_log_handler()
 
         run_dir_raw = run_meta.get('run_dir')
         if run_dir_raw is None:
@@ -268,7 +213,6 @@ class Playground(PlaygroundSessionMixin):
         log_filename = f"{task_id}.log" if task_id else 'playground.log'
         log_file = logs_dir / log_filename
 
-        # Line-buffered file stream for real-time tail
         stream = open(log_file, 'a', buffering=1, encoding='utf-8')  # noqa: SIM115
         self._log_file_stream = stream
 
@@ -281,6 +225,28 @@ class Playground(PlaygroundSessionMixin):
         root_logger.addHandler(handler)
         self._log_file_handler = handler
 
+    def _teardown_log_handler(self) -> None:
+        """Remove and close the current log file handler and stream."""
+        if self._log_file_handler is not None:
+            root_logger = logging.getLogger()
+            root_logger.removeHandler(self._log_file_handler)
+            self._log_file_handler.close()
+            self._log_file_handler = None
+        if self._log_file_stream is not None:
+            try:
+                self._log_file_stream.close()
+            except Exception:
+                pass
+            self._log_file_stream = None
+
+    def _get_playground_block(self) -> dict[str, Any]:
+        """Return the ``playground`` sub-dict from config, or ``{}``."""
+        if self._playground_block is None:
+            raw = self.config.model_dump()
+            block = raw.get('playground', None)
+            self._playground_block = block if isinstance(block, dict) else {}
+        return self._playground_block
+
     def _build_archival_config(self) -> WorkspaceArchivalConfig | None:
         """Build ``WorkspaceArchivalConfig`` from the YAML playground block.
 
@@ -289,15 +255,9 @@ class Playground(PlaygroundSessionMixin):
         but ``enabled`` is ``False``, the config object is still returned
         so downstream code can inspect the archival settings.
         """
-        raw = self.config.model_dump()
-        playground_block = raw.get('playground', None)
-        if not isinstance(playground_block, dict):
-            return None
-
-        archival_block = playground_block.get('archival', None)
+        archival_block = self._get_playground_block().get('archival', None)
         if not isinstance(archival_block, dict):
             return None
-
         return WorkspaceArchivalConfig(**archival_block)
 
     def _resolve_cache_area(self, workspace_path: Path) -> Path:
@@ -309,23 +269,16 @@ class Playground(PlaygroundSessionMixin):
 
         Falls back to ``workspace_path / ".cache"`` when not configured.
         """
-        raw = self.config.model_dump()
-        playground_block = raw.get('playground', None)
-        if isinstance(playground_block, dict):
-            cache_dir = playground_block.get('cache_dir')
-            if cache_dir:
-                cache_path = Path(cache_dir)
-                if not cache_path.is_absolute():
-                    cache_path = workspace_path / cache_path
-                return cache_path
+        cache_dir = self._get_playground_block().get('cache_dir')
+        if cache_dir:
+            cache_path = Path(cache_dir)
+            if not cache_path.is_absolute():
+                cache_path = workspace_path / cache_path
+            return cache_path
         return workspace_path / '.cache'
 
     def _collect_env_vars(self) -> dict[str, str]:
-        """Collect environment variables to include in context.
-
-        Currently returns an empty dict; future phases may populate
-        from session env or config.
-        """
+        """Collect environment variables to include in context."""
         return {}
 
     def _resolve_session_type(self) -> str:
@@ -336,7 +289,7 @@ class Playground(PlaygroundSessionMixin):
         return 'local'
 
     def attach_session(self, session: BaseSession) -> None:
-        """挂接新 Session；从本地切到 SSH 时先关闭 LocalSession，避免句柄泄漏。"""
+        """Attach a new session; closes existing LocalSession to avoid handle leaks."""
         if (
             self.session is not None
             and self.session.is_open
@@ -351,10 +304,10 @@ class Playground(PlaygroundSessionMixin):
         self._owns_session = True
 
     def _setup_session(self) -> None:
-        """创建并打开 Session（Bohrium detach 后恢复本地/默认 session）。
+        """Create and open a session, restoring after Bohrium detach.
 
-        与 ``evomaster.core.playground.BasePlayground._setup_session`` 对齐，
-        供 ``cleanup_bohrium_after_run`` 在 ``detach_session()`` 之后调用。
+        Aligned with ``BasePlayground._setup_session``; called by
+        ``cleanup_bohrium_after_run`` after ``detach_session()``.
         """
         if self.session is not None:
             if not self.session.is_open:
@@ -374,13 +327,13 @@ class Playground(PlaygroundSessionMixin):
 
 
 class PlaygroundManager:
-    """Playground 实例的生命周期管理器。
+    """Lifecycle manager for Playground instances.
 
-    职责：创建、缓存、启动验证、销毁。
-    不涉及 Playground 内部的物理环境准备逻辑（workspace、session、logging）。
+    Handles creation, caching, startup validation, and teardown.
+    Does not touch Playground-internal environment prep (workspace, session, logging).
 
-    并发前置条件：调用方保证同一 session_id 不会并发执行
-    release() 和 get_or_create()。
+    Concurrency contract: callers must not concurrently call
+    release() and get_or_create() for the same session_id.
     """
 
     def __init__(self, project_root: Path) -> None:
@@ -390,25 +343,17 @@ class PlaygroundManager:
         self._init_done = threading.Event()
         self._logger = logging.getLogger(self.__class__.__name__)
 
-    def _config_dir_for(self, playground_type: str) -> Path:
-        """Return config directory for a playground type.
-
-        mat_master uses the flat matmaster_config/ layout;
-        other types (minimal, etc.) retain configs/{type}/.
-        """
-        if playground_type == "mat_master":
-            return self._project_root / "matmaster_config"
-        return self._project_root / "configs" / playground_type
+    @property
+    def _config_dir(self) -> Path:
+        """Return the matmaster_config directory."""
+        return self._project_root / "matmaster_config"
 
     def validate_startup(self) -> None:
-        """启动时快速失败验证。幂等：重复调用直接跳过。
+        """Fail-fast startup validation. Idempotent: repeated calls are no-ops.
 
-        检查内容：
-        - config YAML 文件存在性（mat_master、minimal）
-        - config 中 agents key 存在性
-        - evomaster 废弃警告
-
-        不检查：LLM 配置交叉校验（属于 Exp 层职责）。
+        Checks config YAML existence, agents key presence, and emits
+        evomaster deprecation warning.
+        Does not cross-validate LLM config (that belongs to Exp layer).
         """
         if self._init_done.is_set():
             return
@@ -416,17 +361,15 @@ class PlaygroundManager:
             if self._init_done.is_set():
                 return
 
-            for pg_type in ("mat_master", "minimal"):
-                config_path = self._config_dir_for(pg_type) / "config.yaml"
-                if not config_path.exists():
-                    self._logger.warning('Config not found: %s', config_path)
-                    continue
+            config_path = self._config_dir / "config.yaml"
+            if not config_path.exists():
+                self._logger.warning('Config not found: %s', config_path)
+            else:
                 with open(config_path, encoding='utf-8') as f:
                     cfg = yaml.safe_load(f)
                 if not isinstance(cfg, dict) or 'agents' not in cfg:
                     self._logger.warning("Config missing 'agents' key: %s", config_path)
 
-            # Deprecation warnings for old modules (per D-02)
             try:
                 import evomaster  # noqa: F401
 
@@ -441,28 +384,18 @@ class PlaygroundManager:
             self._init_done.set()
             self._logger.info('Playground config validation complete.')
 
-    def get_or_create(
-        self, session_id: str, playground_type: str = 'mat_master'
-    ) -> Playground:
-        """线程安全地获取或创建 Playground 实例。
-
-        Raises:
-            ValueError: playground_type == "x_master" 时拒绝。
-        """
-        if playground_type == 'x_master':
-            raise ValueError(
-                'x_master playground_type is not supported in the new pipeline'
-            )
+    def get_or_create(self, session_id: str) -> Playground:
+        """Get or create a Playground instance (thread-safe)."""
         with self._lock:
             if session_id in self._playgrounds:
                 return self._playgrounds[session_id]
-            config_path = self._config_dir_for(playground_type) / "config.yaml"
+            config_path = self._config_dir / "config.yaml"
             pg = Playground(config_path=config_path)
             self._playgrounds[session_id] = pg
             return pg
 
     def release(self, session_id: str) -> None:
-        """从缓存移除并调用 cleanup()。线程安全。"""
+        """Remove from cache and call cleanup(). Thread-safe."""
         with self._lock:
             pg = self._playgrounds.pop(session_id, None)
         if pg:

@@ -5,7 +5,7 @@ RenderIntent 描述"我想生成什么样的输入文件"，
 由上层 Agent/LLM 填写，传递给 SoftwareBackend.render() 使用。
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 

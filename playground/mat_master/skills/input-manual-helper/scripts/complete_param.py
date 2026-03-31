@@ -16,7 +16,7 @@ _SKILL_DIR = Path(__file__).resolve().parent.parent
 if str(_SKILL_DIR) not in sys.path:
     sys.path.insert(0, str(_SKILL_DIR))
 
-from engine.schema import SchemaRegistry
+from engine.schema import SchemaRegistry  # noqa: E402
 
 
 def _get_backend(software: str):
@@ -27,25 +27,25 @@ def _get_backend(software: str):
     from engine.software.lammps import LAMMPSBackend
     from engine.software.orca import ORCABackend
     from engine.software.qe import QEBackend
-    
-        backends = {
-            "cp2k": CP2KBackend,
-            "orca": ORCABackend,
-            "qe": QEBackend,
-            "quantum-espresso": QEBackend,
-            "abinit": ABINITBackend,
-            "lammps": LAMMPSBackend,
-            "abacus": AbacusBackend,
-        }
-        key = software.lower().strip()
-        if key not in backends:
-            supported = ", ".join(sorted(set(backends.keys())))
-            print(
-                f"Error: unsupported software '{software}'. Supported: {supported}",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        return backends[key]()
+
+    backends = {
+        "cp2k": CP2KBackend,
+        "orca": ORCABackend,
+        "qe": QEBackend,
+        "quantum-espresso": QEBackend,
+        "abinit": ABINITBackend,
+        "lammps": LAMMPSBackend,
+        "abacus": AbacusBackend,
+    }
+    key = software.lower().strip()
+    if key not in backends:
+        supported = ", ".join(sorted(set(backends.keys())))
+        print(
+            f"Error: unsupported software '{software}'. Supported: {supported}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    return backends[key]()
 
 
 def main() -> None:
@@ -53,23 +53,32 @@ def main() -> None:
         description="Provide parameter completion suggestions at a given cursor position."
     )
     parser.add_argument(
-        "--software", required=True,
+        "--software",
+        required=True,
         help="Software name: cp2k, orca, qe, abinit, lammps",
     )
     parser.add_argument(
-        "--input", required=True, metavar="FILE_OR_-",
+        "--input",
+        required=True,
+        metavar="FILE_OR_-",
         help="Input file path, or '-' to read from stdin.",
     )
     parser.add_argument(
-        "--line", required=True, type=int,
+        "--line",
+        required=True,
+        type=int,
         help="Cursor line number (1-based).",
     )
     parser.add_argument(
-        "--col", required=True, type=int,
+        "--col",
+        required=True,
+        type=int,
         help="Cursor column number (0-based).",
     )
     parser.add_argument(
-        "--format", choices=["human", "json"], default="human",
+        "--format",
+        choices=["human", "json"],
+        default="human",
         help="Output format (default: human).",
     )
     args = parser.parse_args()

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from matmaster.types.guards import Guard, GuardContext, GuardResult, RecentCall
 
-
 # ── RecentCall ──────────────────────────────────────────
 
 
@@ -66,9 +65,7 @@ class TestGuardResult:
         assert result.guidance is None
 
     def test_denied_with_reason_and_guidance(self) -> None:
-        result = GuardResult(
-            allowed=False, reason="blocked", guidance="stop repeating"
-        )
+        result = GuardResult(allowed=False, reason="blocked", guidance="stop repeating")
         assert result.allowed is False
         assert result.reason == "blocked"
         assert result.guidance == "stop repeating"
@@ -86,8 +83,6 @@ class _ValidGuard:
 
 class _InvalidGuard:
     """A class that does NOT satisfy the Guard protocol (missing evaluate)."""
-
-    pass
 
 
 class TestGuardProtocol:

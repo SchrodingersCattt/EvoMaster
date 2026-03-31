@@ -6,7 +6,7 @@ import sys
 import time
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 
 class LogContext:
@@ -118,7 +118,7 @@ class LoggingConfig:
     DEFAULT_JSON_FORMAT = False
 
     @classmethod
-    def get_main_app_config(cls) -> Dict[str, Any]:
+    def get_main_app_config(cls) -> dict[str, Any]:
         """Get logging configuration for main application."""
         return {
             'log_level': os.getenv('LOG_LEVEL', cls.DEFAULT_LOG_LEVEL),
@@ -134,7 +134,7 @@ class LoggingConfig:
         }
 
     @classmethod
-    def get_worker_config(cls) -> Dict[str, Any]:
+    def get_worker_config(cls) -> dict[str, Any]:
         """Get logging configuration for agent worker."""
         return {
             'log_level': os.getenv('LOG_LEVEL', cls.DEFAULT_LOG_LEVEL),
