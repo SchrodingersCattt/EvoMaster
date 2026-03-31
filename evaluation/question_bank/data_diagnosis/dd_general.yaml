@@ -17,8 +17,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools: []
   data_files:
   - key: case_bundle
     path: data/DD_general_001/case_bundle.json
@@ -80,8 +78,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools: []
   data_files:
   - key: case_bundle
     path: data/DD_general_002/case_bundle.json
@@ -141,8 +137,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools: []
   data_files:
   - key: case_bundle
     path: data/DD_general_003/case_bundle.json
@@ -204,8 +198,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools: []
   data_files:
   - key: case_bundle
     path: data/DD_general_004/case_bundle.json
@@ -267,8 +259,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools: []
   data_files: []
   reference_answers:
   - key: failure_classes_count

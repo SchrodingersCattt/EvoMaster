@@ -5,10 +5,11 @@ questions:
 - id: BP_struct_001
   capability: batch_processing
   domain: struct
-  intent: Batch-construct Si(100) surface slabs with varying vacuum thickness while keeping all other geometric parameters
-    (Miller index, layer count, supercell size) constant. Verify strict variable control.
-  human_prompt_seed: '从 `surface_slab_params.json` 读取配置。 构造 5 个 Si(100) 表面 slab，改变真空厚度：10, 15, 20, 25, 30 Å。 其他参数严格保持固定：Miller
-    指标 [1,0,0], 4 层 Si, 3x3 超胞。 输出 5 个 CIF 文件，每个文件名包含真空厚度。
+  intent: Batch-construct Si(100) surface slabs with varying vacuum thickness while
+    keeping all other geometric parameters (Miller index, layer count, supercell size)
+    constant. Verify strict variable control.
+  human_prompt_seed: '从 `surface_slab_params.json` 读取配置。 构造 5 个 Si(100) 表面 slab，改变真空厚度：10,
+    15, 20, 25, 30 Å。 其他参数严格保持固定：Miller 指标 [1,0,0], 4 层 Si, 3x3 超胞。 输出 5 个 CIF 文件，每个文件名包含真空厚度。
 
     关键考察点： 1. 真空厚度参数按顺序变化 2. 所有其他 mat_sg_build_surface_slab 参数保持恒定 3. 生成 5 个不同的输出文件
 
@@ -21,14 +22,12 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools:
-  - mat_sg_build_surface_slab
-  optional_tools: []
   data_files:
   - key: surface_slab_params
     path: data/BP_struct_001/surface_slab_params.json
     oss_url: ''
-    description: Surface slab batch configuration with locked geometry and varying vacuum.
+    description: Surface slab batch configuration with locked geometry and varying
+      vacuum.
   reference_answers:
   - key: vacuum_sweep_variable
     value:
@@ -66,54 +65,63 @@ questions:
       max: 50000
   scoring_checklist:
   - id: vacuum_sweep_variable
-    criterion: 'Vacuum thickness parameter varies across exactly 5 calls: 10, 15, 20, 25, 30 Å.'
+    criterion: 'Vacuum thickness parameter varies across exactly 5 calls: 10, 15,
+      20, 25, 30 Å.'
     axis: correctness
     verify: batch_single_variable_sweep
   - id: locked_miller_index
-    criterion: Miller index [1,0,0] remains constant across all 5 mat_sg_build_surface_slab calls.
+    criterion: Miller index [1,0,0] remains constant across all 5 mat_sg_build_surface_slab
+      calls.
     axis: correctness
     verify: batch_tool_args_constant
   - id: locked_layer_count
-    criterion: Number of layers parameter remains constant (value = 4) across all 5 calls.
+    criterion: Number of layers parameter remains constant (value = 4) across all
+      5 calls.
     axis: correctness
     verify: batch_tool_args_constant
   - id: output_files_generated
-    criterion: All 5 CIF/POSCAR files are generated and have distinct vacuum thickness indicators.
+    criterion: All 5 CIF/POSCAR files are generated and have distinct vacuum thickness
+      indicators.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_batch_consistency
-    criterion: The five outputs collectively reflect a single-parameter vacuum sweep with Miller index, layer count, and supercell
-      held fixed as specified.
+    criterion: The five outputs collectively reflect a single-parameter vacuum sweep
+      with Miller index, layer count, and supercell held fixed as specified.
     axis: grounding
     verify: llm_binary_judge
   - id: no_redundant_calls
-    criterion: No identical consecutive calls (tool_name + all args). Each call is parameterically different.
+    criterion: No identical consecutive calls (tool_name + all args). Each call is
+      parameterically different.
     axis: efficiency
     verify: no_retries
   - id: batch_efficiency
-    criterion: Batch construction completed without re-querying input data or recomputing unchanged geometries.
+    criterion: Batch construction completed without re-querying input data or recomputing
+      unchanged geometries.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: BP_struct_002
   capability: batch_processing
   domain: struct
-  intent: Generate VASP INCAR files for DOS calculation across 4 different structures. Enforce unified k-point density (~50
-    k-points/Ų despite different structure sizes) and identical electronic parameters across all structures.
+  intent: Generate VASP INCAR files for DOS calculation across 4 different structures.
+    Enforce unified k-point density (~50 k-points/Ų despite different structure sizes)
+    and identical electronic parameters across all structures.
   human_prompt_seed: '从 `dos_input_prep.json` 读取 4 种材料的 DOS 计算配置（Si, Cu, Al, Fe）。
 
-    对每种材料生成对应的 VASP INCAR 文件，要求： 1. k-point 密度统一为 ~50 points/Ų（虽然不同结构尺度不同，k 点网格数目不同） 2. ISMEAR=0, SIGMA=0.05, NEDOS=2000 在所有
-    4 个文件中完全相同 3. 其他电子学参数（LORBIT, NSW 等）一致
+    对每种材料生成对应的 VASP INCAR 文件，要求： 1. k-point 密度统一为 ~50 points/Ų（虽然不同结构尺度不同，k 点网格数目不同）
+    2. ISMEAR=0, SIGMA=0.05, NEDOS=2000 在所有 4 个文件中完全相同 3. 其他电子学参数（LORBIT, NSW 等）一致
 
-    关键考察点： 1. 理解 k-point 密度概念（不是k点个数） 2. 为不同大小的结构计算合适的 k 点网格 3. 确保非几何参数（ISMEAR 等）的一致性 4. 生成标准格式的 INCAR 文件
+    关键考察点： 1. 理解 k-point 密度概念（不是k点个数） 2. 为不同大小的结构计算合适的 k 点网格 3. 确保非几何参数（ISMEAR 等）的一致性
+    4. 生成标准格式的 INCAR 文件
 
     '
   tags:
@@ -124,14 +132,12 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools:
-  - execute_bash
   data_files:
   - key: dos_input_prep
     path: data/BP_struct_002/dos_input_prep.json
     oss_url: ''
-    description: DOS input preparation config for 4 structures with unified k-point density.
+    description: DOS input preparation config for 4 structures with unified k-point
+      density.
   reference_answers:
   - key: incar_files_count
     value: 4
@@ -161,8 +167,8 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: kpoint_density_unified
-    criterion: All 4 INCAR files follow unified k-point density strategy (~50 points/Ų), even though raw k-point counts differ
-      due to structure sizes.
+    criterion: All 4 INCAR files follow unified k-point density strategy (~50 points/Ų),
+      even though raw k-point counts differ due to structure sizes.
     axis: correctness
     verify: llm_binary_judge
   - id: electronic_parameters_identical
@@ -174,30 +180,36 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_config_used
-    criterion: Configuration values (ISMEAR, SIGMA, etc.) match the provided manifest exactly.
+    criterion: Configuration values (ISMEAR, SIGMA, etc.) match the provided manifest
+      exactly.
     axis: grounding
     verify: llm_binary_judge
   - id: no_manual_kpoint_tuning
-    criterion: Agent computed k-point grids systematically (e.g., using density formula), not by trial-and-error.
+    criterion: Agent computed k-point grids systematically (e.g., using density formula),
+      not by trial-and-error.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: BP_struct_003
   capability: batch_processing
   domain: struct
-  intent: Run a convergence test by performing 5 single-point energy calculations for Al with varying ENCUT (280, 300, 320,
-    340, 360 eV). All other parameters (k-mesh, ISMEAR, SIGMA, potcar) must remain strictly constant.
-  human_prompt_seed: '从 `convergence_encut.json` 读取收敛测试配置。 对铝（Al）结构执行 5 个单点能量计算，ENCUT 分别为：280, 300, 320, 340, 360 eV。
+  intent: Run a convergence test by performing 5 single-point energy calculations
+    for Al with varying ENCUT (280, 300, 320, 340, 360 eV). All other parameters (k-mesh,
+    ISMEAR, SIGMA, potcar) must remain strictly constant.
+  human_prompt_seed: '从 `convergence_encut.json` 读取收敛测试配置。 对铝（Al）结构执行 5 个单点能量计算，ENCUT
+    分别为：280, 300, 320, 340, 360 eV。
 
-    严格要求： 1. k-point 网格在所有 5 个计算中固定为 8x8x8 2. ISMEAR=1, SIGMA=0.1 在所有计算中相同 3. NSW=0（不做离子弛豫） 4. 其他 VASP 参数保持不变
+    严格要求： 1. k-point 网格在所有 5 个计算中固定为 8x8x8 2. ISMEAR=1, SIGMA=0.1 在所有计算中相同 3. NSW=0（不做离子弛豫）
+    4. 其他 VASP 参数保持不变
 
     输出： 1. 5 个 OUTCAR 文件或能量日志 2. 能量随 ENCUT 的收敛曲线（可绘图或表格）
 
@@ -212,9 +224,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools:
-  - mat_dpa_submit_optimize_structure
   data_files:
   - key: convergence_encut
     path: data/BP_struct_003/convergence_encut.json
@@ -254,7 +263,8 @@ questions:
     value: *id002
   scoring_checklist:
   - id: encut_sweep_parameter
-    criterion: 'ENCUT varies across exactly 5 calculations: 280, 300, 320, 340, 360 eV in order.'
+    criterion: 'ENCUT varies across exactly 5 calculations: 280, 300, 320, 340, 360
+      eV in order.'
     axis: correctness
     verify: batch_single_variable_sweep
   - id: kpoint_mesh_constant
@@ -262,43 +272,50 @@ questions:
     axis: correctness
     verify: batch_tool_args_constant
   - id: electronic_params_frozen
-    criterion: ISMEAR and SIGMA parameters are identical (ISMEAR=1, SIGMA=0.1) across all 5 runs.
+    criterion: ISMEAR and SIGMA parameters are identical (ISMEAR=1, SIGMA=0.1) across
+      all 5 runs.
     axis: correctness
     verify: batch_tool_args_constant
   - id: energy_outputs_available
-    criterion: All 5 calculations produce readable energy values (from OUTCAR or log file).
+    criterion: All 5 calculations produce readable energy values (from OUTCAR or log
+      file).
     axis: correctness
     verify: llm_binary_judge
   - id: convergence_trend
-    criterion: Energy values show convergence trend with increasing ENCUT (monotonic or plateau behavior expected).
+    criterion: Energy values show convergence trend with increasing ENCUT (monotonic
+      or plateau behavior expected).
     axis: correctness
     verify: llm_binary_judge
   - id: convergence_test_proper
-    criterion: 'Calculations follow proper convergence test protocol: same structure, same solver, only cutoff varies.'
+    criterion: 'Calculations follow proper convergence test protocol: same structure,
+      same solver, only cutoff varies.'
     axis: grounding
     verify: llm_binary_judge
   - id: no_redundant_setup
-    criterion: No duplicate or wasted calculation steps; each ENCUT value appears exactly once.
+    criterion: No duplicate or wasted calculation steps; each ENCUT value appears
+      exactly once.
     axis: efficiency
     verify: no_retries
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: BP_struct_004
   capability: batch_processing
   domain: struct
-  intent: Perform batch post-processing of band structures for 3 materials (Si, Ge, GaAs) with unified analysis parameters.
-    Extract band gaps and band edge positions using identical k-paths, energy windows, and plot specifications across all
-    materials.
+  intent: Perform batch post-processing of band structures for 3 materials (Si, Ge,
+    GaAs) with unified analysis parameters. Extract band gaps and band edge positions
+    using identical k-paths, energy windows, and plot specifications across all materials.
   human_prompt_seed: '从 `postprocessing_bandstr.json` 读取 3 种材料（Si, Ge, GaAs）的带结构后处理配置。
 
-    对每种材料执行相同的分析流程： 1. k-path 固定为 M-Gamma-K，每段 50 个 k 点 2. 能量窗口统一为 [-5, 5] eV 3. 费米面参考点：VBM（价带最大值） 4. 所有绘图使用相同样式和范围
+    对每种材料执行相同的分析流程： 1. k-path 固定为 M-Gamma-K，每段 50 个 k 点 2. 能量窗口统一为 [-5, 5] eV 3. 费米面参考点：VBM（价带最大值）
+    4. 所有绘图使用相同样式和范围
 
     输出要求： 1. 3 个带结构 PNG 图 2. 3 个数据表（CSV 格式） 3. 带隙值和边界位置汇总表
 
@@ -313,9 +330,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools:
-  - execute_bash
   data_files:
   - key: postprocessing_bandstr
     path: data/BP_struct_004/postprocessing_bandstr.json
@@ -368,45 +382,51 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: fermi_reference_unified
-    criterion: All 3 analyses use VBM (valence band maximum) as the Fermi level reference point.
+    criterion: All 3 analyses use VBM (valence band maximum) as the Fermi level reference
+      point.
     axis: correctness
     verify: llm_binary_judge
   - id: output_format_consistent
-    criterion: All 3 analyses produce both PNG plot and CSV data table in consistent format.
+    criterion: All 3 analyses produce both PNG plot and CSV data table in consistent
+      format.
     axis: correctness
     verify: llm_binary_judge
   - id: bandgap_extracted
-    criterion: 'Band gap values extracted for all 3 materials and fall within expected range (Si: 1.0–1.2 eV, Ge: 0.6–0.8
-      eV, GaAs: 1.3–1.5 eV).'
+    criterion: 'Band gap values extracted for all 3 materials and fall within expected
+      range (Si: 1.0–1.2 eV, Ge: 0.6–0.8 eV, GaAs: 1.3–1.5 eV).'
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_analysis_correct
-    criterion: Analysis methodology (k-path, window, reference) matches the provided configuration exactly.
+    criterion: Analysis methodology (k-path, window, reference) matches the provided
+      configuration exactly.
     axis: grounding
     verify: llm_binary_judge
   - id: analysis_workflow_streamlined
-    criterion: All 3 materials analyzed using a single unified script or workflow template (no per-material ad-hoc tweaks).
+    criterion: All 3 materials analyzed using a single unified script or workflow
+      template (no per-material ad-hoc tweaks).
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: BP_struct_005
   capability: batch_processing
   domain: struct
-  intent: Demonstrate controlled failure recovery for 5 structures with geometry issues. Repair only geometry-related parameters
-    (structure, symmetry, lattice) while keeping all calculation settings (k-points, ISMEAR, SIGMA, ENCUT) frozen across all
-    repairs.
-  human_prompt_seed: "从 `failure_recovery.json` 读取 5 个结构（TiO2, ZnO, MgO, Al2O3, SiO2）的失败恢复场景。 每个结构的初始计算因几何问题失败。\n修复策略： 1.\
-    \ 仅修复结构问题（原子位置、晶胞、对称性） 2. 严格冻结所有计算参数：\n   - k-point mesh: 6x6x6（不变）\n   - ISMEAR=1, SIGMA=0.1（不变）\n   - ENCUT=520 eV（不变）\n\
-    \   - 其他求解器参数（ALGO, NSW）不变\n3. 对每个结构应用合适的几何修复步骤\n输出要求： 1. 5 个结构都收敛 2. 所有使用相同的冻结参数集 3. 明确标记出修复步骤\n关键考察点： 1. 只修改了几何/结构参数\
-    \ 2. 没有不必要地重新调整电子学设置 3. 修复步骤和冻结参数的对应关系清晰\n"
+  intent: Demonstrate controlled failure recovery for 5 structures with geometry issues.
+    Repair only geometry-related parameters (structure, symmetry, lattice) while keeping
+    all calculation settings (k-points, ISMEAR, SIGMA, ENCUT) frozen across all repairs.
+  human_prompt_seed: "从 `failure_recovery.json` 读取 5 个结构（TiO2, ZnO, MgO, Al2O3, SiO2）的失败恢复场景。\
+    \ 每个结构的初始计算因几何问题失败。\n修复策略： 1. 仅修复结构问题（原子位置、晶胞、对称性） 2. 严格冻结所有计算参数：\n   - k-point\
+    \ mesh: 6x6x6（不变）\n   - ISMEAR=1, SIGMA=0.1（不变）\n   - ENCUT=520 eV（不变）\n   - 其他求解器参数（ALGO,\
+    \ NSW）不变\n3. 对每个结构应用合适的几何修复步骤\n输出要求： 1. 5 个结构都收敛 2. 所有使用相同的冻结参数集 3. 明确标记出修复步骤\n\
+    关键考察点： 1. 只修改了几何/结构参数 2. 没有不必要地重新调整电子学设置 3. 修复步骤和冻结参数的对应关系清晰\n"
   tags:
   - batch_operation
   - failure_recovery
@@ -415,10 +435,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools:
-  - mat_sg_build_bulk_structure_by_template
-  - mat_dpa_submit_optimize_structure
   data_files:
   - key: failure_recovery
     path: data/BP_struct_005/failure_recovery.json
@@ -460,45 +476,52 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: kpoint_mesh_frozen
-    criterion: All 5 recovered calculations use identical k-point mesh 6x6x6 (not modified during repair).
+    criterion: All 5 recovered calculations use identical k-point mesh 6x6x6 (not
+      modified during repair).
     axis: correctness
     verify: batch_tool_args_constant
   - id: electronic_params_frozen
-    criterion: Electronic parameters (ISMEAR=1, SIGMA=0.1, ENCUT=520) remain unchanged across all 5 recovery steps.
+    criterion: Electronic parameters (ISMEAR=1, SIGMA=0.1, ENCUT=520) remain unchanged
+      across all 5 recovery steps.
     axis: correctness
     verify: batch_tool_args_constant
   - id: geometry_repairs_isolated
-    criterion: Only geometry-related parameters (structure, lattice, symmetry) were modified between failure and recovery;
-      calculation settings unchanged.
+    criterion: Only geometry-related parameters (structure, lattice, symmetry) were
+      modified between failure and recovery; calculation settings unchanged.
     axis: correctness
     verify: llm_binary_judge
   - id: no_parameter_thrashing
-    criterion: No unnecessary re-tuning of k-points, smearing, or cutoff during recovery steps.
+    criterion: No unnecessary re-tuning of k-points, smearing, or cutoff during recovery
+      steps.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_frozen_params
-    criterion: Frozen parameters match the configuration file exactly (k-point mesh, ISMEAR, SIGMA, ENCUT values).
+    criterion: Frozen parameters match the configuration file exactly (k-point mesh,
+      ISMEAR, SIGMA, ENCUT values).
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_repair_causes
-    criterion: Each repair step correctly addresses the specific failure cause (e.g., symmetry fix for symmetry issue, geometry
-      for close atoms).
+    criterion: Each repair step correctly addresses the specific failure cause (e.g.,
+      symmetry fix for symmetry issue, geometry for close atoms).
     axis: grounding
     verify: llm_binary_judge
   - id: no_redundant_recovery
-    criterion: Recovery completed in minimal steps; no re-attempts of the same repair type.
+    criterion: Recovery completed in minimal steps; no re-attempts of the same repair
+      type.
     axis: efficiency
     verify: no_retries
   - id: batch_recovery_efficiency
-    criterion: All 5 materials recovered using a unified recovery workflow (not separate ad-hoc fixes per material).
+    criterion: All 5 materials recovered using a unified recovery workflow (not separate
+      ad-hoc fixes per material).
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable
-      per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
