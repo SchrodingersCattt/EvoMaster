@@ -57,7 +57,7 @@ _DIALOG_HISTORY_MAX_EVENTS = int(
 
 _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
-_CONFIRM_TOOLS: frozenset[str] = frozenset({'execute_bash'})
+_CONFIRM_TOOLS: frozenset[str] = frozenset({})
 
 
 def _build_workspace_upload_fn(
