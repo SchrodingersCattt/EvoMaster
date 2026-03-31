@@ -4,7 +4,7 @@ domain: "struct"
 
 questions:
   # ============================================================
-  # WO_struct_001 ← L2_Q02 (MgO(100)表面能)
+  # WO_struct_001 (MgO(100)表面能)
   # ============================================================
   - id: "WO_struct_001"
     capability: "workflow_orchestration"
@@ -26,10 +26,6 @@ questions:
       - "mat_sg_build_bulk_structure_by_wyckoff"
     data_files: []
     reference_answers:
-      - key: "used_slab_builder"
-        value: "mat_sg_build_surface_slab"
-      - key: "used_dpa_optimizer"
-        value: "mat_dpa_submit_optimize_structure"
       - key: "surface_energy_J_m2"
         value: 1.25
         tolerance: 0.35
@@ -46,21 +42,13 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
-      - id: "used_slab_builder"
-        criterion: "Used MCP slab builder (mat_sg_build_surface_slab) for MgO(100) surface construction."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "used_dpa_optimizer"
-        criterion: "Used DPA optimizer (mat_dpa_submit_optimize_structure) for bulk and slab relaxation."
-        axis: "grounding"
-        verify: "tool_called"
       - id: "grounding_source"
-        criterion: "Surface energy is computed from MCP-calculated energies; formula inputs are explicitly traced to tool outputs."
+        criterion: "Surface energy is computed from stated bulk and slab total energies and area; formula inputs are traceable in the report rather than asserted without energy provenance."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
       - id: "no_retries"
-        criterion: "Slab builder and optimizer are not called repeatedly with identical parameters."
+        criterion: "Slab construction and relaxation are not repeated with identical parameters."
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"
@@ -69,7 +57,7 @@ questions:
         verify: "llm_binary_judge"
 
   # ============================================================
-  # WO_struct_002 ← L2_Q04 (MgO O空位形成能)
+  # WO_struct_002 (MgO O空位形成能)
   # ============================================================
   - id: "WO_struct_002"
     capability: "workflow_orchestration"
@@ -91,10 +79,6 @@ questions:
       - "mat_sg_build_bulk_structure_by_wyckoff"
     data_files: []
     reference_answers:
-      - key: "used_defect_builder"
-        value: "mat_sg_make_defect_structure"
-      - key: "used_dpa_optimizer"
-        value: "mat_dpa_submit_optimize_structure"
       - key: "formation_energy_eV"
         value: 7.5
         tolerance: 1.5
@@ -111,21 +95,13 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       # --- grounding ---
-      - id: "used_defect_builder"
-        criterion: "Used MCP defect structure builder (mat_sg_make_defect_structure) to create O vacancy supercell."
-        axis: "grounding"
-        verify: "tool_called"
-      - id: "used_dpa_optimizer"
-        criterion: "Used DPA optimizer (mat_dpa_submit_optimize_structure) for perfect and defective cell relaxation."
-        axis: "grounding"
-        verify: "tool_called"
       - id: "grounding_source"
-        criterion: "Formation energy is computed from MCP-calculated total energies; chemical potential is explicitly defined."
+        criterion: "Formation energy is computed from stated perfect and defective total energies with an explicit chemical potential; numbers are tied to the reported structures rather than invented."
         axis: "grounding"
         verify: "llm_binary_judge"
       # --- efficiency ---
       - id: "no_retries"
-        criterion: "Defect builder and optimizer are not called with repeated identical parameters."
+        criterion: "Defect construction and relaxation are not repeated with identical parameters."
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"

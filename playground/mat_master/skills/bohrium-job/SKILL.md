@@ -10,6 +10,16 @@ Submit an input directory to Bohrium HPC. There are two entry paths:
 - **Normal path**: call `input-manual-helper` first to generate the input files, then pass the resulting `output_dir` here.
 - **User-provided file path**: if the user has already supplied a complete, ready-to-run input file, **skip `input-manual-helper`** and pass the directory containing that file directly as `--input-dir`.
 
+### OpenAPI target: sandbox vs standard HPC (environment only)
+
+Submission and polling use the **same** process environment variable (not a script argument the Agent passes):
+
+- **`BOHRIUM_USE_SANDBOX`**: `1` = use sandbox OpenAPI paths (`/openapi/v1/sandbox/job/...`); **`0`** or unset = use standard HPC paths (`/openapi/v1/job/create`, `/openapi/v2/job/add`, `GET /openapi/v1/job/{id}`).
+
+**Default is standard HPC** when the variable is unset. Set `BOHRIUM_USE_SANDBOX=1` only when you need the sandbox API.
+
+The submit JSON includes **`use_sandbox`** (boolean) so logs can confirm which mode ran. Submit and poll must share the same setting or the job will not be visible on the wrong API.
+
 ## Workflow
 
 1. **Confirm input directory** — Either get the `output_dir` returned by `input-manual-helper`, or identify the directory that already contains the user-provided input file. List its contents to confirm the main input filename needed for `--cmd`.
@@ -25,7 +35,7 @@ Submit an input directory to Bohrium HPC. There are two entry paths:
      [--software <software>]
    ```
    The script: packages and uploads input dir → three-step job create/upload/add.
-   stdout JSON: `{"success": true, "job_id": ..., "bohr_job_id": ..., "status": "Submitted"}`.
+   stdout JSON: `{"success": true, "job_id": ..., "bohr_job_id": ..., "status": "Submitted", "use_sandbox": false}` by default (`use_sandbox` reflects env `BOHRIUM_USE_SANDBOX`: default off; `1` → `true`).
 
   **Log filename convention (MUST):** the run command in `--cmd` must redirect stdout/stderr to a file named exactly `log` (for example: `> log 2>&1`). Do not rename it to custom names like `caffeine.out`.
 
@@ -43,7 +53,7 @@ Submit an input directory to Bohrium HPC. There are two entry paths:
   >
   > ⚠️ **Do NOT reduce `--max-polls` below 2880** unless the user explicitly requests a shorter timeout. HPC jobs can take many hours; underestimating will cause poll timeout before the job finishes. When in doubt, keep the default (`--max-polls 2880`, `script_timeout 86400`).
 
-   The script: polls `/openapi/v1/job/{id}` until terminal status; downloads `out.zip` via `resultUrl` and extracts (for both `Finished` and `Failed`); reads `log_tail` from the local `log` file in the extracted directory.
+   The script: polls job detail until terminal status (sandbox vs standard `GET` path follows the same `BOHRIUM_USE_SANDBOX` rule as submit); downloads `out.zip` via `resultUrl` and extracts (for both `Finished` and `Failed`); reads `log_tail` from the local `log` file in the extracted directory.
    stdout JSON (success): `{"success": true, "job_id": ..., "status": "Finished", "result_dir": "...", "files": [...], "log_tail": "..."}`.
    stdout JSON (failed): `{"success": false, "job_id": ..., "status": "Failed", "result_dir": "...", "files": [...], "log_tail": "<error from log file>", "error": "..."}`.
 
@@ -170,17 +180,19 @@ Use the `skuEnName` value as the `--machine` argument to `submit_job.py`.
 
 | Item | Value |
 |------|-------|
-| Image | `registry.dp.tech/dptech/abacus:3.7.5` |
+| Image | `registry.dp.tech/dptech/abacus:LTSv3.10.1` |
 | Machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
-| Command | `OMP_NUM_THREADS=4 mpirun -np 8 abacus > log 2>&1` |
+| Command | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |
 
+> Pure MPI: `OMP_NUM_THREADS=1`, and `-np` = **half the CPU core count** of the chosen machine (here 32 → 16). If you use another `--machine`, set `-np` to `floor(cores / 2)` accordingly.
+>
 > ABACUS input files are prepared via the **input-manual-helper** skill:
 > ```bash
 > uv run python scripts/render_input.py --software abacus --task scf --output INPUT
 > uv run python scripts/diagnose_input.py --software abacus --input INPUT
 > ```
 > Place `INPUT`, `STRU`, `KPT`, pseudopotential files (`.upf`), and orbital files (`.orb`) in one directory before submitting.
-> Pseudopotentials: download from <https://github.com/deepmodeling/abacus-develop/tree/develop/tests/PP_ORB> or use `sg` tools to find SG15-type norm-conserving pseudopotentials.
+> Pseudopotentials: download from AIS Square ABACUS-APNS-PPORBs-v1 at <https://www.aissquare.com/datasets/detail?pageType=datasets&name=ABACUS-APNS-PPORBs-v1&id=326>. GitHub PP_ORB remains a fallback source: <https://github.com/deepmodeling/abacus-develop/tree/develop/tests/PP_ORB>.
 > Orbital files for LCAO: download from the ABACUS orbital repository at <http://abacus.deepmodeling.com/orbitals/> or use `list_images.py --keyword abacus-pp` to locate pre-bundled images.
 > For GPU-accelerated ABACUS runs, use `--machine "c8_m60_1 * NVIDIA 4090"` and set `basis_type pw` or the GPU-enabled image variant. Run `list_images.py --keyword abacus` to see all available versions.
 > If the image version changes, always run `list_images.py --keyword abacus` to find the current address before submitting.
@@ -341,7 +353,7 @@ python list_machines.py [--type cpu|gpu] [--keyword <name>] [--max-results 50]
 ## Rules
 
 1. **Prepare gate**: If the user has already provided a complete, ready-to-run input file, skip `input-manual-helper` and submit directly. Otherwise, always call `input-manual-helper` first for CP2K / QE / ABINIT / LAMMPS / ORCA — do not hand-write input files here.
-2. **Input files land in `oss_downloaded_files/`**, not in the `output_dir` you passed to `prepare_*`. Always `dir oss_downloaded_files` (Windows) or `ls oss_downloaded_files` to confirm the actual filename before constructing `--cmd`.
+2. **Input files land in `oss_downloaded_files/`**, not in the local staging path used during input generation. Always `dir oss_downloaded_files` (Windows) or `ls oss_downloaded_files` to confirm the actual filename before constructing `--cmd`.
 3. **Match MPI `-np` count** in `--cmd` to the machine's core count (e.g. 32 for `c32_m128_cpu`).
 4. **Check `"success": true`** in JSON output before proceeding to the next step.
 5. Run `submit_job.py` first, then pass the returned `job_id` into `poll_job.py`. **Never call the built-in `monitor_job` tool** — always use `use_skill bohrium-job run_script poll_job.py`.

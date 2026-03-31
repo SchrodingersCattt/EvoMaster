@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +66,19 @@ class LocalEnv(BaseEnv):
 
         self._is_ready = True
         self.logger.info('Local environment setup complete')
+
+    def _remote_path(self, remote_path: str) -> Path:
+        """Resolve ``remote_path`` under workspace when it is relative.
+
+        Relative paths are joined with ``session_config.workspace_path`` so
+        read/write/list behave like the shell cwd (``local_exec``), not the
+        Python process cwd (often the repo root when using ``uv run``).
+        """
+        p = Path(remote_path)
+        if p.is_absolute():
+            return p
+        ws = Path(self.config.session_config.workspace_path)
+        return (ws / p).resolve()
 
     def teardown(self) -> None:
         """清理本地环境资源"""
@@ -153,13 +168,13 @@ class LocalEnv(BaseEnv):
 
             if not source_path.exists():
                 self.logger.warning(
-                    f"源目录不存在，跳过软链接: {source_dir} (解析后: {source_path})"
+                    f'源目录不存在，跳过软链接: {source_dir} (解析后: {source_path})'
                 )
                 continue
 
             if not source_path.is_dir():
                 self.logger.warning(
-                    f"源路径不是目录，跳过软链接: {source_dir} (解析后: {source_path})"
+                    f'源路径不是目录，跳过软链接: {source_dir} (解析后: {source_path})'
                 )
                 continue
 
@@ -170,11 +185,11 @@ class LocalEnv(BaseEnv):
             if target_path.exists() or target_path.is_symlink():
                 if target_path.is_symlink():
                     target_path.unlink()
-                    self.logger.debug(f"删除已存在的软链接: {target_path}")
+                    self.logger.debug(f'删除已存在的软链接: {target_path}')
                 else:
                     # 如果是目录，需要递归删除
                     shutil.rmtree(target_path)
-                    self.logger.debug(f"删除已存在的目录: {target_path}")
+                    self.logger.debug(f'删除已存在的目录: {target_path}')
 
             # 确保目标路径的父目录存在
             target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -184,7 +199,7 @@ class LocalEnv(BaseEnv):
 
             # 将源目录下的所有内容链接到目标目录
             self._link_directory_contents(source_path, target_path)
-            self.logger.info(f"创建软链接: {source_dir} 下的内容 -> {target_path}")
+            self.logger.info(f'创建软链接: {source_dir} 下的内容 -> {target_path}')
 
     def _link_directory_contents(self, source_dir: Path, target_dir: Path) -> None:
         """将源目录下的所有内容链接到目标目录
@@ -199,15 +214,15 @@ class LocalEnv(BaseEnv):
 
             # 如果目标已存在，跳过
             if target_item.exists() or target_item.is_symlink():
-                self.logger.debug(f"目标已存在，跳过: {target_item}")
+                self.logger.debug(f'目标已存在，跳过: {target_item}')
                 continue
 
             try:
                 os.symlink(source_item, target_item)
-                self.logger.debug(f"创建软链接: {source_item} -> {target_item}")
+                self.logger.debug(f'创建软链接: {source_item} -> {target_item}')
             except OSError as e:
                 self.logger.warning(
-                    f"创建软链接失败: {source_item} -> {target_item}, 错误: {e}"
+                    f'创建软链接失败: {source_item} -> {target_item}, 错误: {e}'
                 )
 
     def local_exec(
@@ -215,6 +230,7 @@ class LocalEnv(BaseEnv):
         command: str,
         timeout: int | None = None,
         workdir: str | None = None,
+        stop_event: Any | None = None,
     ) -> dict[str, Any]:
         """在本地执行命令
 
@@ -265,41 +281,71 @@ class LocalEnv(BaseEnv):
         if cpu_devices is not None and sys.platform != 'win32':
             if isinstance(cpu_devices, str):
                 # CPU 范围字符串，如 "0-15"
-                cpu_prefix = f"taskset -c {cpu_devices} "
+                cpu_prefix = f'taskset -c {cpu_devices} '
             elif isinstance(cpu_devices, list):
                 # CPU 列表，如 [0, 1, 2, 3]
                 cpu_list_str = ','.join(str(cpu) for cpu in cpu_devices)
-                cpu_prefix = f"taskset -c {cpu_list_str} "
-            self.logger.debug(f"Using CPU prefix: {cpu_prefix}")
+                cpu_prefix = f'taskset -c {cpu_list_str} '
+            self.logger.debug(f'Using CPU prefix: {cpu_prefix}')
 
         # 组合命令
-        final_command = f"{cpu_prefix}{command}" if cpu_prefix else command
+        final_command = f'{cpu_prefix}{command}' if cpu_prefix else command
 
         try:
-            result = subprocess.run(
+            process = subprocess.Popen(
                 final_command,
                 shell=True,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding='utf-8',
                 errors='replace',
-                timeout=timeout,
                 cwd=cwd,
                 env=env,
+                start_new_session=(sys.platform != 'win32'),
             )
-            return {
-                'stdout': result.stdout or '',
-                'stderr': result.stderr or '',
-                'exit_code': result.returncode,
-                'output': (result.stdout or '') + (result.stderr or ''),
-            }
-        except subprocess.TimeoutExpired:
-            return {
-                'stdout': '',
-                'stderr': f"Command timed out after {timeout}s",
-                'exit_code': -1,
-                'output': f"Command timed out after {timeout}s",
-            }
+            deadline = time.time() + timeout
+            while True:
+                if stop_event is not None and getattr(stop_event, 'is_set', None):
+                    if stop_event.is_set():
+                        self._terminate_process(process)
+                        stdout, stderr = process.communicate(timeout=5)
+                        stderr = (stderr or '').strip()
+                        cancel_note = 'Command cancelled by stop request.'
+                        stderr = (
+                            f'{stderr}\n{cancel_note}'.strip()
+                            if stderr
+                            else cancel_note
+                        )
+                        return {
+                            'stdout': stdout or '',
+                            'stderr': stderr,
+                            'exit_code': 130,
+                            'output': (stdout or '') + stderr,
+                        }
+                if process.poll() is not None:
+                    stdout, stderr = process.communicate()
+                    return {
+                        'stdout': stdout or '',
+                        'stderr': stderr or '',
+                        'exit_code': process.returncode,
+                        'output': (stdout or '') + (stderr or ''),
+                    }
+                if time.time() >= deadline:
+                    self._terminate_process(process)
+                    stdout, stderr = process.communicate(timeout=5)
+                    timeout_msg = f'Command timed out after {timeout}s'
+                    stderr = (stderr or '').strip()
+                    stderr = (
+                        f'{stderr}\n{timeout_msg}'.strip() if stderr else timeout_msg
+                    )
+                    return {
+                        'stdout': stdout or '',
+                        'stderr': stderr,
+                        'exit_code': -1,
+                        'output': (stdout or '') + stderr,
+                    }
+                time.sleep(0.2)
         except Exception as e:
             return {
                 'stdout': '',
@@ -307,6 +353,26 @@ class LocalEnv(BaseEnv):
                 'exit_code': -1,
                 'output': str(e),
             }
+
+    def _terminate_process(self, process: subprocess.Popen[str]) -> None:
+        """Terminate a local command and its children best-effort."""
+        try:
+            if sys.platform != 'win32':
+                os.killpg(process.pid, signal.SIGTERM)
+            else:
+                process.terminate()
+            process.wait(timeout=3)
+            return
+        except Exception:
+            pass
+
+        try:
+            if sys.platform != 'win32':
+                os.killpg(process.pid, signal.SIGKILL)
+            else:
+                process.kill()
+        except Exception:
+            pass
 
     def upload_file(self, local_path: str, remote_path: str) -> None:
         """上传文件到本地环境
@@ -319,20 +385,20 @@ class LocalEnv(BaseEnv):
             raise RuntimeError('Environment not ready')
 
         local_file = Path(local_path)
-        remote_file = Path(remote_path)
+        remote_file = self._remote_path(remote_path)
 
         if not local_file.exists():
-            raise FileNotFoundError(f"Local file not found: {local_path}")
+            raise FileNotFoundError(f'Local file not found: {local_path}')
 
         # 创建远程目录
         remote_file.parent.mkdir(parents=True, exist_ok=True)
 
         if local_file.is_file():
             shutil.copy2(local_file, remote_file)
-            self.logger.debug(f"Uploaded file {local_path} to {remote_path}")
+            self.logger.debug(f'Uploaded file {local_path} to {remote_path}')
         elif local_file.is_dir():
             shutil.copytree(local_file, remote_file, dirs_exist_ok=True)
-            self.logger.debug(f"Uploaded directory {local_path} to {remote_path}")
+            self.logger.debug(f'Uploaded directory {local_path} to {remote_path}')
 
     def download_file(self, remote_path: str, timeout: int | None = None) -> bytes:
         """从本地环境下载文件
@@ -347,13 +413,13 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        remote_file = Path(remote_path)
+        remote_file = self._remote_path(remote_path)
 
         if not remote_file.exists():
-            raise FileNotFoundError(f"Remote file not found: {remote_path}")
+            raise FileNotFoundError(f'Remote file not found: {remote_path}')
 
         if not remote_file.is_file():
-            raise IsADirectoryError(f"Remote path is not a file: {remote_path}")
+            raise IsADirectoryError(f'Remote path is not a file: {remote_path}')
 
         with open(remote_file, 'rb') as f:
             return f.read()
@@ -371,13 +437,13 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        remote_file = Path(remote_path)
+        remote_file = self._remote_path(remote_path)
 
         if not remote_file.exists():
-            raise FileNotFoundError(f"Remote file not found: {remote_path}")
+            raise FileNotFoundError(f'Remote file not found: {remote_path}')
 
         if not remote_file.is_file():
-            raise IsADirectoryError(f"Remote path is not a file: {remote_path}")
+            raise IsADirectoryError(f'Remote path is not a file: {remote_path}')
 
         with open(remote_file, encoding=encoding) as f:
             return f.read()
@@ -395,7 +461,7 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        remote_file = Path(remote_path)
+        remote_file = self._remote_path(remote_path)
 
         # 确保目录存在
         remote_file.parent.mkdir(parents=True, exist_ok=True)
@@ -416,7 +482,7 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        return os.path.exists(remote_path)
+        return self._remote_path(remote_path).exists()
 
     def is_file(self, remote_path: str) -> bool:
         """检查远程路径是否是文件
@@ -430,7 +496,8 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        return os.path.isfile(remote_path)
+        p = self._remote_path(remote_path)
+        return p.is_file()
 
     def is_directory(self, remote_path: str) -> bool:
         """检查远程路径是否是目录
@@ -444,4 +511,5 @@ class LocalEnv(BaseEnv):
         if not self._is_ready:
             raise RuntimeError('Environment not ready')
 
-        return os.path.isdir(remote_path)
+        p = self._remote_path(remote_path)
+        return p.is_dir()

@@ -1,15 +1,22 @@
 """Schemas for MATTER v5 evaluation workflows.
 
-v5 changes (vs v4):
+Current v5 schema changes:
 - Rubric class REMOVED — binary scoring needs no rubric
-- ScoringCheckItem: weight field REMOVED, dimension renamed to axis
+- ScoringCheckItem: optional weight field added (default 1.0), dimension renamed to axis
 - New literals: CapabilityLiteral, DomainLiteral, AxisLiteral
 - QuestionItem: added capability/domain/required_tools/optional_tools; removed level/rubric_id/touchpoints/repeat_override
 - New CriterionResult model (per-criterion pass/fail + reason)
-- EvalRunRecord: replaces float scores with pass counts + criteria_results dict
-- EvaluationSummary: pass-rate oriented with AxisPassRates
-- QuestionBank: no longer requires rubric field; supports v5 format
-- Backward-compat: v4 YAML shim lives in runner.py (_convert_v4_to_v5)
+- EvalRunRecord: binary pass counts + weighted scores (axis_weights from config applied)
+- EvaluationSummary: pass-rate oriented with AxisPassRates + weighted equivalents
+- QuestionBank: no longer requires rubric field
+- EvalConfig: added axis_weights for weighted aggregation
+
+Scoring model:
+- LLM / deterministic verifiers produce binary (pass/fail) verdicts per checklist item
+- Each checklist item has optional weight (default 1.0)
+- Axis score = Σ(pass_i * weight_i) / Σ(weight_i) for items in that axis
+- Overall score = Σ(axis_weight_a * axis_score_a) / Σ(active_axis_weight_a)
+- Raw pass counts preserved for backward compatibility and debugging
 """
 
 from datetime import datetime, timezone
@@ -24,32 +31,24 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 ModeLiteral = Literal['direct', 'planner']
 
 VerifyLiteral = Literal[
-    # ---- legacy deterministic checks ----
     'exact_match',
     'numerical_range',
     'contains_all',
-    'llm_judge',            # legacy; kept for backward compat with old YAML
     'tool_called',
     'tool_args_match',
-    # ---- evidence-native deterministic checks ----
-    'event_type_called',    # EventRecord with matching event_type exists
-    'source_type_used',     # EventRecord with matching source_type exists
-    'call_count_range',     # total tool_call count is within [min, max]
-    'no_retries',           # no consecutive identical tool calls
-    'artifact_exists',      # ArtifactRecord with matching path/type exists
-    'token_budget',         # total_tokens within budget
-    # ---- v5 LLM judge (single binary verdict) ----
-    'llm_binary_judge',     # LLM returns {"pass": true/false, "reason": "..."}
-    # ---- v4 legacy LLM judges (accepted in shim, mapped to llm_binary_judge) ----
-    'llm_judge_grounding',
-    'llm_judge_efficiency',
+    'event_type_called',
+    'source_type_used',
+    'call_count_range',
+    'no_retries',
+    'artifact_exists',
+    'token_budget',
+    'llm_binary_judge',
+    'batch_single_variable_sweep',
+    'batch_tool_args_constant',
+    'batch_consistent_calls',
 ]
 
-# v5: axis replaces v4 dimension; values renamed accuracy→correctness
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
-
-# v4 backward-compat alias (dimension field still accepted in shim)
-DimensionLiteral = Literal['accuracy', 'grounding', 'efficiency']
 
 CapabilityLiteral = Literal[
     'knowledge_recall',
@@ -119,12 +118,11 @@ class ReferenceAnswer(BaseModel):
 
 
 class ScoringCheckItem(BaseModel):
-    """One verifiable scoring criterion (v5: binary, no weight).
+    """One verifiable scoring criterion (v5: binary with optional weight).
 
-    v4 → v5 changes:
-    - ``weight`` field REMOVED — every criterion counts as exactly 1 point.
-    - ``dimension`` renamed to ``axis``; values: correctness/grounding/efficiency
-      (accuracy is the v4 name; the shim in runner.py translates it).
+    Every criterion produces a pass/fail verdict and is attached to one scoring
+    axis: correctness, grounding, or efficiency.
+    Weights are applied during aggregation; default weight is 1.0 if not specified.
     """
 
     id: str
@@ -132,13 +130,18 @@ class ScoringCheckItem(BaseModel):
     axis: AxisLiteral = Field(
         default='correctness',
         description=(
-            "Which scoring axis this criterion belongs to: "
+            'Which scoring axis this criterion belongs to: '
             "'correctness' (is the answer right?), "
             "'grounding' (did it use the right tools/sources?), "
             "'efficiency' (was the process efficient?)."
         ),
     )
     verify: VerifyLiteral
+    weight: float = Field(
+        default=1.0,
+        ge=0.0,
+        description='Optional weight for this criterion in axis/overall score calculation. Default 1.0.',
+    )
 
 
 class CriterionResult(BaseModel):
@@ -147,8 +150,8 @@ class CriterionResult(BaseModel):
     criterion_id: str
     axis: AxisLiteral
     passed: bool
-    reason: str = ''          # one-sentence evidence / explanation
-    verify_method: str = ''   # which verifier produced this result
+    reason: str = ''  # one-sentence evidence / explanation
+    verify_method: str = ''  # which verifier produced this result
 
 
 # ---------------------------------------------------------------------------
@@ -159,10 +162,7 @@ class CriterionResult(BaseModel):
 class QuestionItem(BaseModel):
     """Single MATTER v5 question entry.
 
-    v4 → v5 changes:
-    - Added: capability, domain, required_tools, optional_tools
-    - Removed: level, rubric_id, touchpoints, repeat_override
-    - scoring_checklist items now use axis (not dimension), no weight field
+    Required structure for one runnable question in the v5 bank format.
     """
 
     id: str
@@ -198,7 +198,9 @@ class QuestionItem(BaseModel):
     @model_validator(mode='after')
     def _validate_scoring_contract(self) -> 'QuestionItem':
         if not self.scoring_checklist:
-            raise ValueError('question must include at least one scoring_checklist entry')
+            raise ValueError(
+                'question must include at least one scoring_checklist entry'
+            )
         # For deterministic check types that need a reference answer, verify it exists.
         ref_keys = {item.key for item in self.reference_answers}
         _needs_ref = {
@@ -207,12 +209,15 @@ class QuestionItem(BaseModel):
             'contains_all',
             'tool_called',
             'tool_args_match',
+            'batch_single_variable_sweep',
+            'batch_tool_args_constant',
+            'batch_consistent_calls',
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:
                 raise ValueError(
                     f"scoring_checklist item '{item.id}' (verify={item.verify}) "
-                    "requires a matching reference_answers entry with the same key"
+                    'requires a matching reference_answers entry with the same key'
                 )
         # Safety questions (capability='safety_refusal') may skip reference_answers
         if self.capability != 'safety_refusal' and not self.reference_answers:
@@ -226,15 +231,11 @@ class QuestionItem(BaseModel):
 
 
 class QuestionBank(BaseModel):
-    """Question bank file model (v5 format).
-
-    v4 ``version: 'v2'`` files are converted by the runner's shim before
-    reaching this model, so this model always sees v5-shaped data.
-    """
+    """Question bank file model (v5 format)."""
 
     version: str = 'v5'
-    capability: CapabilityLiteral | None = None   # optional top-level hint
-    domain: DomainLiteral | None = None           # optional top-level hint
+    capability: CapabilityLiteral | None = None  # optional top-level hint
+    domain: DomainLiteral | None = None  # optional top-level hint
     questions: list[QuestionItem]
 
     @model_validator(mode='after')
@@ -275,11 +276,18 @@ class EvalConfig(BaseModel):
     mat_config_path: str = 'configs/mat_master/config.yaml'
     simulator_llm: LLMRuntimeConfig | None = None
     evaluator_llm: LLMRuntimeConfig | None = None
-    # v5: filter by capability instead of level
     include_capabilities: list[str] | None = None
     include_question_ids: list[str] | None = None
-    # v4 backward-compat filter (still accepted, ignored in v5 question banks)
-    include_levels: list[str] | None = None
+
+    # Axis weights for aggregation (default 1.0 each, normalized during calculation)
+    axis_weights: dict[AxisLiteral, float] = Field(
+        default_factory=lambda: {
+            'correctness': 1.0,
+            'grounding': 1.0,
+            'efficiency': 1.0,
+        },
+        description='Relative weights for correctness, grounding, efficiency axes. Will be normalized.',
+    )
 
     @field_validator('k')
     @classmethod
@@ -324,18 +332,11 @@ class TokenUsageRecord(BaseModel):
 
 
 class EvalRunRecord(BaseModel):
-    """Atomic run record (v5): one question, one mode, one repeat.
-
-    v4 → v5 changes:
-    - Replaced band_score/accuracy_score/grounding_score/efficiency_score/
-      strict_final/analysis_final with binary pass counts + criteria_results.
-    - Added capability, domain fields mirroring the question.
-    - Removed touchpoints, deductions, confidence fields.
-    """
+    """Atomic run record: one question, one mode, one repeat."""
 
     question_id: str
-    capability: str = ''     # mirrors QuestionItem.capability
-    domain: str = ''         # mirrors QuestionItem.domain
+    capability: str = ''  # mirrors QuestionItem.capability
+    domain: str = ''  # mirrors QuestionItem.domain
     mode: ModeLiteral
     repeat_idx: int
     prompt: str
@@ -356,6 +357,12 @@ class EvalRunRecord(BaseModel):
     efficiency_passed: int = 0
     efficiency_total: int = 0
 
+    # v5+: weighted scores (axis_weights from config applied)
+    correctness_weighted_score: float = 0.0
+    grounding_weighted_score: float = 0.0
+    efficiency_weighted_score: float = 0.0
+    overall_weighted_score: float = 0.0
+
     # Meta
     model_name: str | None = None
     token_usage: TokenUsageRecord = Field(default_factory=TokenUsageRecord)
@@ -375,7 +382,7 @@ class EvalRunRecord(BaseModel):
 class AxisPassRates(BaseModel):
     """Pass counts for each axis within a group."""
 
-    correctness: tuple[int, int] = (0, 0)   # (passed, total)
+    correctness: tuple[int, int] = (0, 0)  # (passed, total)
     grounding: tuple[int, int] = (0, 0)
     efficiency: tuple[int, int] = (0, 0)
     overall: tuple[int, int] = (0, 0)
@@ -388,8 +395,8 @@ class AxisPassRates(BaseModel):
     def fmt(self, axis: str = 'overall') -> str:
         pair = getattr(self, axis, self.overall)
         passed, total = pair
-        pct = f"{100 * passed / total:.1f}%" if total > 0 else "—"
-        return f"{passed}/{total} ({pct})"
+        pct = f'{100 * passed / total:.1f}%' if total > 0 else '—'
+        return f'{passed}/{total} ({pct})'
 
 
 class QuestionPassRate(BaseModel):
@@ -410,18 +417,29 @@ class ToolContribution(BaseModel):
     """How much a single tool contributed across all questions."""
 
     tool_name: str
-    questions_requiring: int = 0   # questions where this tool is in required_tools
-    criteria_delta: int = 0        # additional criteria passed when this tool is present
+    questions_requiring: int = 0  # questions where this tool is in required_tools
+    criteria_delta: int = 0  # additional criteria passed when this tool is present
     accepted: bool = False
 
 
 class EvaluationSummary(BaseModel):
-    """Aggregated result object (v5): pass-rate oriented."""
+    """Aggregated result object (v5+): both raw pass-rates and weighted scores.
+
+    Raw pass-rate fields (backward compatible):
+    - total_criteria, total_passed, pass_rate
+    - by_capability/domain/question/mode/model: AxisPassRates with integer tuples
+
+    Weighted score fields (new):
+    - weighted_pass_rate, weighted_by_* (computed using axis_weights from config)
+    """
 
     total_runs: int
     total_criteria: int = 0
     total_passed: int = 0
     pass_rate: float = 0.0
+
+    # Weighted equivalents (v5+)
+    weighted_pass_rate: float = 0.0
 
     by_capability: dict[str, AxisPassRates] = Field(default_factory=dict)
     by_domain: dict[str, AxisPassRates] = Field(default_factory=dict)
@@ -433,7 +451,7 @@ class EvaluationSummary(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# HumanSimulator schemas (unchanged from v4)
+# HumanSimulator schemas
 # ---------------------------------------------------------------------------
 
 
@@ -479,7 +497,7 @@ class TaskSpec(BaseModel):
             'space_group': self.space_group or '?',
             'mp_id': self.mp_id or '?',
             'expected_keys': ', '.join(
-                f"{e.key} ({e.unit})" if e.unit else e.key for e in self.expected
+                f'{e.key} ({e.unit})' if e.unit else e.key for e in self.expected
             ),
         }
 

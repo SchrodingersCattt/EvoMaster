@@ -7,7 +7,8 @@ _finish() which produces a KernelResult.
 Termination conditions:
 - natural: LLM returns no tool_calls
 - max_turns: turn counter reaches spec.max_turns
-- cancelled: stop_event is set externally
+- cancelled: stop_event is set (checked each turn, during stream chunks, retry
+  backoff, and between serial tool_calls)
 - hook_stopped: should_continue hook returns False
 """
 
@@ -24,7 +25,8 @@ from matmaster.tools.tool_result import ToolResult
 from matmaster.types.errors import LLMError
 
 if TYPE_CHECKING:
-    from matmaster.types.runtime import AgentRuntimeSpec, KernelResult, KernelRunResult
+    from matmaster.types.runtime import AgentRuntimeSpec, KernelRunResult
+
 from matmaster.core.hooks import (
     HookAction,
     run_guard_blocked,
@@ -48,6 +50,15 @@ from matmaster.types.messages import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 流式输出中每隔 N 个 chunk 检查一次 stop_event（避免每 chunk 打 Redis EXISTS）
+_STOP_CHECK_EVERY_N_STREAM_CHUNKS = 8
+# 重试退避时切片 sleep 的步长（秒），便于尽快响应停止
+_STOP_RETRY_SLEEP_SLICE_SEC = 0.25
+
+
+class _KernelStopRequested(Exception):
+    """Internal: stop_event became set during LLM stream or retry backoff."""
 
 
 class _ToolOutcome(NamedTuple):
@@ -125,7 +136,14 @@ class AgentKernel:
         while turn < spec.max_turns:
             # External cancel check (before each turn)
             if stop_event and stop_event.is_set():
-                return self._finish(spec, messages, "cancelled", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)
+                return self._finish(
+                    spec,
+                    messages,
+                    'cancelled',
+                    num_turns=turn,
+                    stop_reason=last_stop_reason,
+                    usage=total_usage,
+                )
 
             turn += 1
 
@@ -134,14 +152,31 @@ class AgentKernel:
 
             # should_continue hook (intercepting, short-circuit)
             if not await run_should_continue(spec.hooks, messages, turn):
-                return self._finish(spec, messages, "hook_stopped", num_turns=turn - 1, stop_reason=last_stop_reason, usage=total_usage)
+                return self._finish(
+                    spec,
+                    messages,
+                    'hook_stopped',
+                    num_turns=turn - 1,
+                    stop_reason=last_stop_reason,
+                    usage=total_usage,
+                )
 
             # Context compaction check
             if spec.compactor:
                 await spec.compactor.compact_if_needed(messages, turn_usage, turn)
 
             # LLM call (streaming by default)
-            response = await self._call_llm(spec, messages)
+            try:
+                response = await self._call_llm(spec, messages, stop_event=stop_event)
+            except _KernelStopRequested:
+                return self._finish(
+                    spec,
+                    messages,
+                    'cancelled',
+                    num_turns=turn,
+                    stop_reason=last_stop_reason,
+                    usage=total_usage,
+                )
             turn_usage = response.usage
             self._accumulate_usage(total_usage, response.usage)
             last_stop_reason = response.finish_reason
@@ -151,7 +186,14 @@ class AgentKernel:
             # Natural finish: no tool_calls
             if not response.tool_calls:
                 if not self._is_valid_natural_finish(response):
-                    return self._finish(spec, messages, "invalid_finish", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)
+                    return self._finish(
+                        spec,
+                        messages,
+                        'invalid_finish',
+                        num_turns=turn,
+                        stop_reason=last_stop_reason,
+                        usage=total_usage,
+                    )
                 messages.append(
                     AssistantMessage(
                         content=response.content,
@@ -161,7 +203,7 @@ class AgentKernel:
                 return self._finish(
                     spec,
                     messages,
-                    "natural",
+                    'natural',
                     final_content=response.content,
                     num_turns=turn,
                     stop_reason=response.finish_reason,
@@ -182,12 +224,21 @@ class AgentKernel:
             approved_indices: list[int] = []
 
             for i, tc in enumerate(response.tool_calls):
+                if stop_event and stop_event.is_set():
+                    return self._finish(
+                        spec,
+                        messages,
+                        'cancelled',
+                        num_turns=turn,
+                        stop_reason=last_stop_reason,
+                        usage=total_usage,
+                    )
                 guard_result = guard_pipeline.evaluate(tc, turn, spec.max_turns)
                 if not guard_result.allowed:
                     await run_guard_blocked(spec.hooks, tc, guard_result)
-                    blocked_content = f"BLOCKED: {guard_result.reason}"
+                    blocked_content = f'BLOCKED: {guard_result.reason}'
                     if guard_result.guidance:
-                        blocked_content += f"\n{guard_result.guidance}"
+                        blocked_content += f'\n{guard_result.guidance}'
                     outcomes.append(_ToolOutcome(
                         tc=tc,
                         tool_msg=ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content=blocked_content),
@@ -200,7 +251,7 @@ class AgentKernel:
                 if action == HookAction.SKIP:
                     outcomes.append(_ToolOutcome(
                         tc=tc,
-                        tool_msg=ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content="Tool call skipped by hook."),
+                        tool_msg=ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content='Tool call skipped by hook.'),
                         tool_result=None,
                         needs_post_hook=False,
                     ))
@@ -217,7 +268,7 @@ class AgentKernel:
                     try:
                         return await spec.tool_registry.execute(tc.name, tc.arguments)
                     except Exception as e:
-                        logger.exception("Tool execution failed: %s", tc.name)
+                        logger.exception('Tool execution failed: %s', tc.name)
                         return ToolResult.from_error(tc.name, e)
 
                 results = await asyncio.gather(
@@ -246,37 +297,49 @@ class AgentKernel:
                     await run_post_tool_call(spec.hooks, tc, tool_result)
 
         # max_turns exhausted
-        return self._finish(spec, messages, "max_turns", num_turns=turn, stop_reason=last_stop_reason, usage=total_usage)
+        return self._finish(
+            spec,
+            messages,
+            'max_turns',
+            num_turns=turn,
+            stop_reason=last_stop_reason,
+            usage=total_usage,
+        )
 
     async def _call_llm(
         self,
         spec: AgentRuntimeSpec,
         messages: list[Message],
+        *,
+        stop_event: threading.Event | None = None,
     ) -> LLMResponse:
         """Call LLM with timeout-doubling retry on transient errors."""
         provider = spec.llm_provider
-        current_timeout = getattr(provider, "stream_timeout", None) or getattr(
-            provider, "_timeout", 300.0
+        current_timeout = getattr(provider, 'stream_timeout', None) or getattr(
+            provider, '_timeout', 300.0
         )
-        max_retries = getattr(provider, "max_retries", 3)
-        retry_delay = getattr(provider, "retry_delay", 1.0)
+        max_retries = getattr(provider, 'max_retries', 3)
+        retry_delay = getattr(provider, 'retry_delay', 1.0)
 
         # Serialize once — messages don't change between retries
         api_messages = [m.to_api_dict() for m in messages]
         tool_defs = (
             spec.tool_registry.get_tool_definitions()
             if spec.tool_registry
-            and hasattr(spec.tool_registry, "get_tool_definitions")
+            and hasattr(spec.tool_registry, 'get_tool_definitions')
             else None
         )
 
         attempt_records: list[dict[str, Any]] | None = None
         last_error: LLMError | None = None
         for attempt in range(max_retries):
+            if stop_event and stop_event.is_set():
+                raise _KernelStopRequested()
             t0 = time.monotonic()
             try:
                 response = await self._do_stream_llm(
                     spec, api_messages, tool_defs, timeout=current_timeout,
+                    stop_event=stop_event,
                 )
                 elapsed = time.monotonic() - t0
 
@@ -304,7 +367,7 @@ class AgentKernel:
                         max_retries,
                         elapsed,
                     )
-                    await asyncio.sleep(backoff)
+                    await self._sleep_backoff_with_stop_async(backoff, stop_event)
                     continue
 
                 # Last attempt still incomplete — return degraded
@@ -350,7 +413,7 @@ class AgentKernel:
                 )
                 current_timeout = next_timeout
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(backoff)
+                    await self._sleep_backoff_with_stop_async(backoff, stop_event)
 
         # Retries exhausted
         if last_error is not None:
@@ -373,6 +436,25 @@ class AgentKernel:
             attempts=attempt_records or [],
         ) from last_error
 
+    @staticmethod
+    async def _sleep_backoff_with_stop_async(
+        seconds: float, stop_event: threading.Event | None,
+    ) -> None:
+        """Async sleep for *seconds*, but wake early if stop_event is set."""
+        if seconds <= 0:
+            return
+        if not stop_event:
+            await asyncio.sleep(seconds)
+            return
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            if stop_event.is_set():
+                raise _KernelStopRequested()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(_STOP_RETRY_SLEEP_SLICE_SEC, remaining))
+
     async def _do_stream_llm(
         self,
         spec: AgentRuntimeSpec,
@@ -380,6 +462,7 @@ class AgentKernel:
         tool_defs: list[dict[str, Any]] | None,
         *,
         timeout: float | None = None,
+        stop_event: threading.Event | None = None,
     ) -> LLMResponse:
         """Call LLM via streaming, accumulate chunks into LLMResponse."""
 
@@ -387,24 +470,36 @@ class AgentKernel:
         reasoning_parts: list[str] = []
         tool_calls_acc: dict[int, dict[str, str]] = {}
         finish_reason: str | None = None
-        stream_id = f"turn-{len(api_messages)}"
+        stream_id = f'turn-{len(api_messages)}'
         usage: dict[str, int] = {}
         producing_reasoning = False
         producing_content = False
 
         await run_on_stream_chunk(
             spec.hooks,
-            StreamChunk(stream_state="start", stream_id=stream_id),
+            StreamChunk(stream_state='start', stream_id=stream_id),
         )
+        stream_cancelled = False
+        chunk_idx = 0
         try:
-            async for chunk in spec.llm_provider.chat_stream(api_messages, tool_defs, timeout=timeout):
+            async for chunk in spec.llm_provider.chat_stream(
+                api_messages, tool_defs, timeout=timeout
+            ):
+                if (
+                    stop_event
+                    and chunk_idx % _STOP_CHECK_EVERY_N_STREAM_CHUNKS == 0
+                    and stop_event.is_set()
+                ):
+                    stream_cancelled = True
+                    break
+                chunk_idx += 1
                 if chunk.content or chunk.reasoning_content:
                     await run_on_stream_chunk(
                         spec.hooks,
                         chunk.model_copy(
                             update={
-                                "stream_state": "streaming",
-                                "stream_id": stream_id,
+                                'stream_state': 'streaming',
+                                'stream_id': stream_id,
                             }
                         ),
                     )
@@ -417,8 +512,8 @@ class AgentKernel:
                     if producing_reasoning:
                         await run_on_segment_complete(
                             spec.hooks,
-                            "thought",
-                            "".join(reasoning_parts),
+                            'thought',
+                            ''.join(reasoning_parts),
                             stream_id,
                         )
                         producing_reasoning = False
@@ -433,66 +528,69 @@ class AgentKernel:
                     if producing_reasoning:
                         await run_on_segment_complete(
                             spec.hooks,
-                            "thought",
-                            "".join(reasoning_parts),
+                            'thought',
+                            ''.join(reasoning_parts),
                             stream_id,
                         )
                         producing_reasoning = False
                     if producing_content:
                         await run_on_segment_complete(
                             spec.hooks,
-                            "response",
-                            "".join(content_parts),
+                            'response',
+                            ''.join(content_parts),
                             stream_id,
                         )
                         producing_content = False
                     for delta in chunk.tool_call_deltas:
-                        idx = delta.get("index", 0)
+                        idx = delta.get('index', 0)
                         if idx not in tool_calls_acc:
                             tool_calls_acc[idx] = {
-                                "id": "",
-                                "name": "",
-                                "arguments": "",
+                                'id': '',
+                                'name': '',
+                                'arguments': '',
                             }
-                        if delta.get("id"):
-                            tool_calls_acc[idx]["id"] = delta["id"]
-                        if delta.get("name"):
-                            tool_calls_acc[idx]["name"] += delta["name"]
-                        if delta.get("arguments"):
-                            tool_calls_acc[idx]["arguments"] += delta["arguments"]
+                        if delta.get('id'):
+                            tool_calls_acc[idx]['id'] = delta['id']
+                        if delta.get('name'):
+                            tool_calls_acc[idx]['name'] += delta['name']
+                        if delta.get('arguments'):
+                            tool_calls_acc[idx]['arguments'] += delta['arguments']
         finally:
             if producing_reasoning:
                 await run_on_segment_complete(
                     spec.hooks,
-                    "thought",
-                    "".join(reasoning_parts),
+                    'thought',
+                    ''.join(reasoning_parts),
                     stream_id,
                 )
             if producing_content:
                 await run_on_segment_complete(
                     spec.hooks,
-                    "response",
-                    "".join(content_parts),
+                    'response',
+                    ''.join(content_parts),
                     stream_id,
                 )
             await run_on_stream_chunk(
                 spec.hooks,
-                StreamChunk(stream_state="end", stream_id=stream_id),
+                StreamChunk(stream_state='end', stream_id=stream_id),
             )
+
+        if stream_cancelled:
+            raise _KernelStopRequested()
 
         # Assemble tool_calls from accumulated deltas
         tool_calls: list[ToolCallData] | None = None
         if tool_calls_acc:
             tool_calls = []
             for _, v in sorted(tool_calls_acc.items()):
-                args = parse_tool_arguments(v["arguments"])
+                args = parse_tool_arguments(v['arguments'])
                 tool_calls.append(
-                    ToolCallData(id=v["id"], name=v["name"], arguments=args)
+                    ToolCallData(id=v['id'], name=v['name'], arguments=args)
                 )
 
         return LLMResponse(
-            content="".join(content_parts) or None,
-            reasoning_content="".join(reasoning_parts) or None,
+            content=''.join(content_parts) or None,
+            reasoning_content=''.join(reasoning_parts) or None,
             tool_calls=tool_calls,
             finish_reason=finish_reason,
             usage=usage,
@@ -501,7 +599,7 @@ class AgentKernel:
     @staticmethod
     def _is_valid_natural_finish(response: LLMResponse) -> bool:
         """Only commit a natural finish when the stream terminates cleanly."""
-        return not response.tool_calls and response.finish_reason == "stop"
+        return not response.tool_calls and response.finish_reason == 'stop'
 
     @staticmethod
     def _is_incomplete_response(response: LLMResponse) -> bool:
@@ -534,13 +632,16 @@ class AgentKernel:
         usage: dict[str, int] | None = None,
     ) -> KernelRunResult:
         """Unified exit path -- all termination goes through here."""
-        if reason == "cancelled":
-            status = "cancelled"
-        elif reason == "invalid_finish":
-            status = "failed"
+        if reason == 'cancelled':
+            status = 'cancelled'
+        elif reason == 'invalid_finish':
+            status = 'failed'
         else:
-            status = "completed"
-        from matmaster.types.runtime import KernelResult, KernelRunResult  # lazy to avoid circular
+            status = 'completed'
+        from matmaster.types.runtime import (  # lazy to avoid circular
+            KernelResult,
+            KernelRunResult,
+        )
 
         result = KernelResult(
             status=status,

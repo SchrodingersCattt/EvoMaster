@@ -17,31 +17,31 @@ from .base import BuiltinTool
 class GrepTool(BuiltinTool):
     """Search file content by regex pattern within the workspace."""
 
-    name: ClassVar[str] = "grep"
+    name: ClassVar[str] = 'grep'
     description: ClassVar[str] = (
-        "Search file content for a regex pattern within the workspace.\n\n"
-        "Usage:\n"
-        "- ALWAYS use grep for content search. NEVER use grep/rg via execute_bash.\n"
+        'Search file content for a regex pattern within the workspace.\n\n'
+        'Usage:\n'
+        '- ALWAYS use grep for content search. NEVER use grep/rg via execute_bash.\n'
         "- Supports regex syntax (e.g. 'import os', 'def foo.*:').\n"
         "- Use include to filter by file type (e.g. '*.py')."
     )
     json_schema: ClassVar[dict[str, Any]] = {
-        "type": "object",
-        "properties": {
-            "pattern": {
-                "type": "string",
-                "description": "Regex pattern to search for in file content.",
+        'type': 'object',
+        'properties': {
+            'pattern': {
+                'type': 'string',
+                'description': 'Regex pattern to search for in file content.',
             },
-            "path": {
-                "type": "string",
-                "description": "Directory to search in. Defaults to workspace root.",
+            'path': {
+                'type': 'string',
+                'description': 'Directory to search in. Defaults to workspace root.',
             },
-            "include": {
-                "type": "string",
-                "description": "File glob filter (e.g. '*.py') to restrict search scope.",
+            'include': {
+                'type': 'string',
+                'description': "File glob filter (e.g. '*.py') to restrict search scope.",
             },
         },
-        "required": ["pattern"],
+        'required': ['pattern'],
     }
 
     def _resolve_safe_path(self, user_path: str) -> str:
@@ -50,13 +50,13 @@ class GrepTool(BuiltinTool):
         Path traversal attempts (../, absolute paths outside workdir) are
         silently resolved back to workdir root.
         """
-        workdir = str(self._workdir) if self._workdir else "/workspace"
+        workdir = str(self._workdir) if self._workdir else '/workspace'
 
-        if not user_path or user_path == ".":
+        if not user_path or user_path == '.':
             return workdir
 
         # Absolute path: normalize and check containment
-        if user_path.startswith("/"):
+        if user_path.startswith('/'):
             normalized = posixpath.normpath(user_path)
             if normalized.startswith(workdir):
                 return normalized
@@ -74,18 +74,23 @@ class GrepTool(BuiltinTool):
     def _execute(self, arguments: dict[str, Any]) -> str:
         session = self._require_session()
 
-        pattern: str = arguments["pattern"]
-        path: str = arguments.get("path", ".") or "."
-        include: str = arguments.get("include", "") or ""
+        pattern: str = arguments['pattern']
+        path: str = arguments.get('path', '.') or '.'
+        include: str = arguments.get('include', '') or ''
         safe_path = self._resolve_safe_path(path)
 
-        include_flag = f' --include="{include}"' if include else ""
+        include_flag = f' --include="{include}"' if include else ''
         command = (
             f'grep -rn{include_flag} "{pattern}" "{safe_path}" 2>/dev/null | head -200'
         )
-        result = session.exec_bash(command=command, timeout=30, is_input=False)
+        result = session.exec_bash(
+            command=command,
+            timeout=30,
+            is_input=False,
+            stop_event=self._stop_event_for_exec(),
+        )
 
-        output = result.get("output", "") or result.get("stdout", "")
+        output = result.get('output', '') or result.get('stdout', '')
 
         if not output.strip():
             return f"No matches for pattern '{pattern}' in {safe_path}"

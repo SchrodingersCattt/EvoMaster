@@ -35,14 +35,10 @@ class BashTool(BuiltinTool):
     name: ClassVar[str] = 'execute_bash'
     description: ClassVar[str] = (
         'Execute a bash command in the session shell.\n\n'
-        'IMPORTANT: Avoid using this tool to run cat, head, tail, sed, awk, find, ls, grep, rg, echo. '
-        'Use dedicated tools instead:\n'
-        '- read_file (NOT cat/head/tail)\n'
-        '- edit_file (NOT sed/awk)\n'
-        '- write_file (NOT echo/heredoc)\n'
-        '- glob (NOT find/ls)\n'
-        '- grep (NOT grep/rg)\n\n'
-        'Bohrium: /share not /workspace.'
+        'Do not use bash for: cat/head/tail/sed/awk/find/ls/grep/rg/echo. '
+        'Use read_file, edit_file, write_file, glob, grep instead.\n\n'
+        'Paths: local/devshell cwd is the task workspace; do not assume /share exists. '
+        'Bohrium SSH: shared storage is usually /share, not /workspace.'
     )
     json_schema: ClassVar[dict[str, Any]] = {
         'type': 'object',
@@ -51,7 +47,8 @@ class BashTool(BuiltinTool):
                 'type': 'string',
                 'description': (
                     'The bash command to execute. Prefer dedicated tools for file operations. '
-                    'On Bohrium remote shared storage is typically /share (not /workspace).'
+                    'Local: cwd is the workspace (relative paths OK). '
+                    'Bohrium SSH only: shared storage is often /share (not /workspace).'
                 ),
             },
             'is_input': {
@@ -160,7 +157,7 @@ class BashTool(BuiltinTool):
         # Block dangerous commands
         is_dangerous, reason = is_dangerous_bash_command(command)
         if is_dangerous:
-            return f"Blocked: {reason}"
+            return f'Blocked: {reason}'
 
         # Inject proxy clear prefix for non-input commands on non-Windows
         if not is_input and command and sys.platform != 'win32':
@@ -170,6 +167,7 @@ class BashTool(BuiltinTool):
             command=command,
             timeout=timeout,
             is_input=is_input,
+            stop_event=self._stop_event_for_exec(),
         )
 
         output = result.get('output', '') or result.get('stdout', '')
@@ -178,8 +176,8 @@ class BashTool(BuiltinTool):
 
         obs = output
         if working_dir:
-            obs += f"\n[Current working directory: {working_dir}]"
+            obs += f'\n[Current working directory: {working_dir}]'
         if exit_code != -1:
-            obs += f"\n[Command finished with exit code {exit_code}]"
+            obs += f'\n[Command finished with exit code {exit_code}]'
 
         return obs

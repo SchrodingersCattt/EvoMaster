@@ -11,7 +11,7 @@ import json
 import threading
 from pathlib import Path
 from typing import Any, AsyncIterator, Iterator
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
@@ -315,7 +315,8 @@ class TestMatMasterRunAgentE2E:
             }
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
-            mock_bohrium_svc.setup.return_value = mock_bohrium_result
+            mock_bohrium_svc.run_setup = AsyncMock(return_value=mock_bohrium_result)
+            mock_bohrium_svc.run_cleanup = AsyncMock()
 
             # Configure events_table mock -- returned by get_chat_events_table()
             mock_events_table = MagicMock()
@@ -335,7 +336,7 @@ class TestMatMasterRunAgentE2E:
             # Track SSE sends
             sse_payloads = []
 
-            def mock_send_cb(payload):
+            async def mock_send_cb(payload):
                 sse_payloads.append(payload)
 
             # Execute
@@ -432,7 +433,8 @@ class TestMatMasterRunAgentE2E:
             }
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
-            mock_bohrium_svc.setup.return_value = mock_bohrium_result
+            mock_bohrium_svc.run_setup = AsyncMock(return_value=mock_bohrium_result)
+            mock_bohrium_svc.run_cleanup = AsyncMock()
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = raw_events
@@ -449,7 +451,7 @@ class TestMatMasterRunAgentE2E:
             asyncio.run(svc.run_agent(
                 session_id='sess-1',
                 user_prompt='new question',
-                send_cb=MagicMock(),
+                send_cb=AsyncMock(),
                 stop_event=threading.Event(),
                 mode='direct',
                 reply_queue=None,
@@ -508,7 +510,7 @@ class TestMatMasterRunAgentE2E:
         ):
             sse_payloads: list[dict[str, Any]] = []
 
-            def mock_send_cb(payload: dict[str, Any]) -> None:
+            async def mock_send_cb(payload: dict[str, Any]) -> None:
                 sse_payloads.append(payload)
 
             result = asyncio.run(svc.run_agent(
@@ -582,8 +584,16 @@ class TestMatMasterRunAgentE2E:
                 "execution_workdir": None,
                 "session_type": None,
             }
-            mock_bohrium_svc = mock_bohrium_cls.return_value
-            mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
+            # Capture the bus from BohriumSetupService constructor
+            captured_bus = [None]
+            real_mock_svc = MagicMock()
+            real_mock_svc.load_credentials.return_value = ({}, None, 'org-1')
+
+            def _capture_init(sessions_svc, bus):
+                captured_bus[0] = bus
+                return real_mock_svc
+
+            mock_bohrium_cls.side_effect = _capture_init
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
@@ -601,24 +611,30 @@ class TestMatMasterRunAgentE2E:
             bohrium_seen_by_sse = threading.Event()
             setup_state: dict[str, bool] = {}
 
-            def mock_send_cb(payload: dict[str, Any]) -> None:
+            async def mock_send_cb(payload: dict[str, Any]) -> None:
                 sse_payloads.append(payload)
                 if payload.get('type') == 'bohrium_node':
                     bohrium_seen_by_sse.set()
 
-            def _mock_setup(**kwargs):
-                kwargs['event_callback'](
+            async def _mock_setup(**kwargs):
+                from matmaster.types.events import BohriumNodeEvent
+                bus = captured_bus[0]
+                bus.emit_nowait(BohriumNodeEvent(
                     source='BohriumSetup',
-                    event_type='node_ready',
-                    content='node is ready',
-                    stage='setup',
-                )
+                    payload={
+                        'type': 'node_ready',
+                        'content': 'node is ready',
+                        'stage': 'setup',
+                    },
+                ))
+                await asyncio.sleep(0)  # yield to let router dispatch
                 setup_state['saw_bohrium_event_before_return'] = (
                     bohrium_seen_by_sse.wait(timeout=1.0)
                 )
                 return mock_bohrium_result
 
-            mock_bohrium_svc.setup.side_effect = _mock_setup
+            real_mock_svc.run_setup = _mock_setup
+            real_mock_svc.run_cleanup = AsyncMock()
 
             asyncio.run(svc.run_agent(
                 session_id='sess-bohrium-event',
@@ -678,21 +694,31 @@ class TestMatMasterRunAgentE2E:
             patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
             patch('src.services.agent_run_service.use_quota') as mock_use_quota,
         ):
-            mock_bohrium_svc = mock_bohrium_cls.return_value
-            mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
+            captured_bus = [None]
+            real_mock_svc = MagicMock()
+            real_mock_svc.load_credentials.return_value = ({}, None, 'org-1')
 
-            def _mock_setup(**kwargs):
-                cb = kwargs['event_callback']
-                cb('System', 'error', reason)
-                cb(
-                    'System',
-                    'stream_closed',
-                    'Bohrium 节点创建失败，会话已结束.',
-                    elapsed_ms=10,
-                )
+            def _capture_init(sessions_svc, bus):
+                captured_bus[0] = bus
+                return real_mock_svc
+
+            mock_bohrium_cls.side_effect = _capture_init
+
+            async def _mock_setup(**kwargs):
+                from matmaster.types.events import ErrorEvent, StreamClosedEvent
+                bus = captured_bus[0]
+                bus.emit_nowait(ErrorEvent(source='System', message=reason))
+                bus.emit_nowait(StreamClosedEvent(
+                    source='System',
+                    content='Bohrium 节点创建失败，会话已结束.',
+                    task_completed=False,
+                    end_reason='error',
+                    treat_as_failure=True,
+                ))
                 return BohriumSetupResult(False, ((False, reason), 10))
 
-            mock_bohrium_svc.setup.side_effect = _mock_setup
+            real_mock_svc.run_setup = _mock_setup
+            real_mock_svc.run_cleanup = AsyncMock()
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
@@ -708,7 +734,7 @@ class TestMatMasterRunAgentE2E:
 
             sse_payloads: list[dict[str, Any]] = []
 
-            def mock_send_cb(payload: dict[str, Any]) -> None:
+            async def mock_send_cb(payload: dict[str, Any]) -> None:
                 sse_payloads.append(payload)
 
             asyncio.run(svc.run_agent(
@@ -777,7 +803,8 @@ class TestMatMasterRunAgentE2E:
         ):
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
-            mock_bohrium_svc.setup.side_effect = RuntimeError('bohrium setup failed')
+            mock_bohrium_svc.run_setup = AsyncMock(side_effect=RuntimeError('bohrium setup failed'))
+            mock_bohrium_svc.run_cleanup = AsyncMock()
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
@@ -793,7 +820,7 @@ class TestMatMasterRunAgentE2E:
 
             sse_payloads: list[dict[str, Any]] = []
 
-            def mock_send_cb(payload: dict[str, Any]) -> None:
+            async def mock_send_cb(payload: dict[str, Any]) -> None:
                 sse_payloads.append(payload)
 
             asyncio.run(svc.run_agent(

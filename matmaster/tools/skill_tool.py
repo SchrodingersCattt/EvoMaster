@@ -42,12 +42,12 @@ class SkillTool:
 
     @property
     def name(self) -> str:
-        return "use_skill"
+        return 'use_skill'
 
     @property
     def description(self) -> str:
         return (
-            "Use a skill by name. Three actions: "
+            'Use a skill by name. Three actions: '
             "'get_info' retrieves full skill documentation, "
             "'get_reference' fetches a specific reference file, "
             "'run_script' executes a script from the skill."
@@ -56,37 +56,37 @@ class SkillTool:
     @property
     def json_schema(self) -> dict[str, Any]:
         return {
-            "type": "object",
-            "properties": {
-                "skill_name": {
-                    "type": "string",
-                    "description": "Skill name in kebab-case (e.g. deep-survey)",
+            'type': 'object',
+            'properties': {
+                'skill_name': {
+                    'type': 'string',
+                    'description': 'Skill name in kebab-case (e.g. deep-survey)',
                 },
-                "action": {
-                    "type": "string",
-                    "enum": ["get_info", "get_reference", "run_script"],
-                    "description": (
-                        "Action to perform: get_info, get_reference, or run_script"
+                'action': {
+                    'type': 'string',
+                    'enum': ['get_info', 'get_reference', 'run_script'],
+                    'description': (
+                        'Action to perform: get_info, get_reference, or run_script'
                     ),
                 },
-                "reference_name": {
-                    "type": "string",
-                    "description": "Reference file name (required for get_reference)",
+                'reference_name': {
+                    'type': 'string',
+                    'description': 'Reference file name (required for get_reference)',
                 },
-                "script_name": {
-                    "type": "string",
-                    "description": "Script file name (required for run_script unless skill has exactly one script)",
+                'script_name': {
+                    'type': 'string',
+                    'description': 'Script file name (required for run_script unless skill has exactly one script)',
                 },
-                "script_args": {
-                    "type": "string",
-                    "description": "Space-separated script arguments (optional for run_script)",
+                'script_args': {
+                    'type': 'string',
+                    'description': 'Space-separated script arguments (optional for run_script)',
                 },
-                "script_timeout": {
-                    "type": "integer",
-                    "description": "Script execution timeout in seconds (optional for run_script)",
+                'script_timeout': {
+                    'type': 'integer',
+                    'description': 'Script execution timeout in seconds (optional for run_script)',
                 },
             },
-            "required": ["skill_name", "action"],
+            'required': ['skill_name', 'action'],
         }
 
     # -- Tool Protocol execute ----------------------------------------------
@@ -97,38 +97,38 @@ class SkillTool:
     def _execute_sync(self, arguments: dict[str, Any]) -> str:
         """Synchronous execution body -- wrapped by execute() via to_thread."""
         try:
-            skill_name = arguments["skill_name"]
-            action = arguments["action"]
+            skill_name = arguments['skill_name']
+            action = arguments['action']
 
             skill = self._registry.get_skill(skill_name)
             if skill is None:
                 return f"Error: Skill '{skill_name}' not found"
 
             logger.info(
-                "Skill hit: skill_name=%s action=%s ref=%s script=%s",
+                'Skill hit: skill_name=%s action=%s ref=%s script=%s',
                 skill_name,
                 action,
-                arguments.get("reference_name", "-"),
-                arguments.get("script_name", "-"),
+                arguments.get('reference_name', '-'),
+                arguments.get('script_name', '-'),
             )
 
-            if action == "get_info":
+            if action == 'get_info':
                 return self._get_info(skill)
-            elif action == "get_reference":
-                return self._get_reference(skill, arguments.get("reference_name"))
-            elif action == "run_script":
+            elif action == 'get_reference':
+                return self._get_reference(skill, arguments.get('reference_name'))
+            elif action == 'run_script':
                 return self._run_script(
                     skill,
-                    arguments.get("script_name"),
-                    arguments.get("script_args"),
-                    arguments.get("script_timeout"),
+                    arguments.get('script_name'),
+                    arguments.get('script_args'),
+                    arguments.get('script_timeout'),
                 )
             else:
                 return f"Error: Unknown action '{action}'"
 
         except Exception as e:
-            logger.error("Skill tool execution failed: %s", e, exc_info=True)
-            return f"Error: {e}"
+            logger.error('Skill tool execution failed: %s', e, exc_info=True)
+            return f'Error: {e}'
 
     # -- get_info -----------------------------------------------------------
 
@@ -136,22 +136,22 @@ class SkillTool:
         full_info = skill.get_full_info()
 
         # Trigger callback for lazy MCP schema injection
-        mcp_server = skill.meta_info.extras.get("mcp_server")
+        mcp_server = skill.meta_info.extras.get('mcp_server')
         if mcp_server and self._on_skill_hit:
             self._on_skill_hit(mcp_server)
 
         # Cascade: if skill declares depends_on, also trigger for each dep
-        depends_on = skill.meta_info.extras.get("depends_on")
+        depends_on = skill.meta_info.extras.get('depends_on')
         if depends_on and self._on_skill_hit:
-            dep_names = [d.strip() for d in depends_on.split(",") if d.strip()]
+            dep_names = [d.strip() for d in depends_on.split(',') if d.strip()]
             for dep_name in dep_names:
                 dep_skill = self._registry.get_skill(dep_name)
                 if dep_skill is not None:
-                    dep_mcp = dep_skill.meta_info.extras.get("mcp_server")
+                    dep_mcp = dep_skill.meta_info.extras.get('mcp_server')
                     if dep_mcp:
                         self._on_skill_hit(dep_mcp)
 
-        return f"# Skill: {skill.meta_info.name}\n\n{full_info}"
+        return f'# Skill: {skill.meta_info.name}\n\n{full_info}'
 
     # -- get_reference ------------------------------------------------------
 
@@ -161,7 +161,7 @@ class SkillTool:
 
         try:
             content = skill.get_reference(reference_name)
-            observation = f"# Reference: {reference_name}\n\n{content}"
+            observation = f'# Reference: {reference_name}\n\n{content}'
 
             co_hint = self._get_co_template_hint(skill, reference_name)
             if co_hint:
@@ -172,9 +172,9 @@ class SkillTool:
         except FileNotFoundError as e:
             full_info = skill.get_full_info()
             return (
-                f"Error: {e}\n\n"
-                f"Fallback to skill info:\n\n"
-                f"# Skill: {skill.meta_info.name}\n\n{full_info}"
+                f'Error: {e}\n\n'
+                f'Fallback to skill info:\n\n'
+                f'# Skill: {skill.meta_info.name}\n\n{full_info}'
             )
 
     def _get_co_template_hint(
@@ -185,9 +185,9 @@ class SkillTool:
         """Check for co-template hints and return a formatted reminder."""
         hints_path: Path | None = None
         for candidate in (
-            skill.skill_path / "references" / "_co_templates.json",
-            skill.skill_path / "reference" / "_co_templates.json",
-            skill.skill_path / "_co_templates.json",
+            skill.skill_path / 'references' / '_co_templates.json',
+            skill.skill_path / 'reference' / '_co_templates.json',
+            skill.skill_path / '_co_templates.json',
         ):
             if candidate.exists():
                 hints_path = candidate
@@ -197,7 +197,7 @@ class SkillTool:
             return None
 
         try:
-            hints = _json.loads(hints_path.read_text(encoding="utf-8"))
+            hints = _json.loads(hints_path.read_text(encoding='utf-8'))
         except Exception:
             return None
 
@@ -205,31 +205,31 @@ class SkillTool:
         if not entry:
             return None
 
-        hint_text = entry.get("hint", "")
-        related = entry.get("related", [])
+        hint_text = entry.get('hint', '')
+        related = entry.get('related', [])
         if not hint_text and not related:
             return None
 
         lines = [
-            "",
-            "",
-            "=" * 72,
-            ">>> IMPORTANT — CO-TEMPLATE REMINDER <<<",
+            '',
+            '',
+            '=' * 72,
+            '>>> IMPORTANT — CO-TEMPLATE REMINDER <<<',
         ]
         if hint_text:
             lines.append(hint_text)
         if related:
             lines.append(
-                "Related templates you should ALSO fetch (use get_reference for each):"
+                'Related templates you should ALSO fetch (use get_reference for each):'
             )
             for r in related:
-                lines.append(f"  - {r}")
+                lines.append(f'  - {r}')
         lines.append(
-            "Do NOT skip fetching related templates. Do NOT try to manually "
-            "construct these sections by querying the manual."
+            'Do NOT skip fetching related templates. Do NOT try to manually '
+            'construct these sections by querying the manual.'
         )
-        lines.append("=" * 72)
-        return "\n".join(lines)
+        lines.append('=' * 72)
+        return '\n'.join(lines)
 
     # -- run_script ---------------------------------------------------------
 
@@ -246,7 +246,7 @@ class SkillTool:
             if len(scripts) == 1:
                 script_name = scripts[0].name
             else:
-                available = ", ".join(s.name for s in scripts) if scripts else "(none)"
+                available = ', '.join(s.name for s in scripts) if scripts else '(none)'
                 return (
                     f"Error: script_name is required for action='run_script'. "
                     f"Skill '{skill.meta_info.name}' has scripts: {available}."
@@ -255,7 +255,7 @@ class SkillTool:
         # Resolve script path
         script_path = skill.get_script_path(script_name)
         if script_path is None:
-            available_scripts = ", ".join(s.name for s in skill.available_scripts)
+            available_scripts = ', '.join(s.name for s in skill.available_scripts)
             return (
                 f"Error: Script '{script_name}' not found in skill "
                 f"'{skill.meta_info.name}'. Available scripts: {available_scripts}"
@@ -264,42 +264,50 @@ class SkillTool:
 
         project_root = self._find_project_root(skill)
         cmd = self._build_command(
-            script_path, project_root, script_args, self._session,
+            script_path,
+            project_root,
+            script_args,
+            self._session,
         )
 
         from matmaster.tools.script_env import inject as inject_env
 
         cmd = inject_env(cmd, self._session)
 
-        result = self._session.exec_bash(cmd, timeout=script_timeout)
+        stop_event = getattr(self, '_stop_event', None) or getattr(
+            self._session, '_stop_event', None
+        )
+        result = self._session.exec_bash(
+            cmd, timeout=script_timeout, stop_event=stop_event
+        )
 
-        stdout = result.get("stdout", "")
-        stderr = result.get("stderr", "")
-        exit_code = result.get("exit_code", 0)
+        stdout = result.get('stdout', '')
+        stderr = result.get('stderr', '')
+        exit_code = result.get('exit_code', 0)
 
-        output = f"Script output:\n{stdout}"
+        output = f'Script output:\n{stdout}'
         if stderr:
-            output += f"\n\nStderr:\n{stderr}"
+            output += f'\n\nStderr:\n{stderr}'
         if exit_code != 0:
-            output += f"\n\nExit code: {exit_code}"
+            output += f'\n\nExit code: {exit_code}'
 
         # Auto-inject per-mode prompt
-        prompts_dir = skill.skill_path / "prompts"
+        prompts_dir = skill.skill_path / 'prompts'
         if prompts_dir.exists() and script_args:
             try:
                 tokens = shlex.split(script_args.strip())
             except ValueError:
                 tokens = script_args.strip().split()
             for token in tokens:
-                candidate = prompts_dir / f"{token}.md"
+                candidate = prompts_dir / f'{token}.md'
                 if candidate.exists():
                     try:
-                        prompt_content = candidate.read_text(encoding="utf-8")
+                        prompt_content = candidate.read_text(encoding='utf-8')
                         output += (
                             f"\n\n{'=' * 60}\n"
-                            f"MANDATORY WORKFLOW (auto-loaded: prompts/{token}.md):\n"
+                            f'MANDATORY WORKFLOW (auto-loaded: prompts/{token}.md):\n'
                             f"{'=' * 60}\n\n"
-                            f"{prompt_content}"
+                            f'{prompt_content}'
                         )
                     except Exception:
                         pass
@@ -315,7 +323,7 @@ class SkillTool:
         try:
             path = skill.skill_path
             for parent in (path,) + tuple(path.parents):
-                if (parent / "matmaster").is_dir():
+                if (parent / 'matmaster').is_dir():
                     return parent.resolve()
         except Exception:
             pass
@@ -333,7 +341,7 @@ class SkillTool:
         Supports local and remote sessions. If session.remote_project_root is
         set and project_root exists, remaps paths to remote POSIX paths.
         """
-        remote_root = getattr(session, "remote_project_root", None)
+        remote_root = getattr(session, 'remote_project_root', None)
 
         if remote_root is not None and project_root is not None:
             # Remote execution: remap paths
@@ -344,37 +352,37 @@ class SkillTool:
             remote_script = str(PurePosixPath(remote_root) / rel)
 
             suffix = script_path.suffix
-            if suffix == ".py":
+            if suffix == '.py':
                 cmd = (
-                    f"PYTHONPATH={shlex.quote(remote_root)} "
-                    f"python {shlex.quote(remote_script)}"
+                    f'PYTHONPATH={shlex.quote(remote_root)} '
+                    f'python {shlex.quote(remote_script)}'
                 )
-            elif suffix == ".sh":
-                cmd = f"bash {shlex.quote(remote_script)}"
-            elif suffix == ".js":
-                cmd = f"node {shlex.quote(remote_script)}"
+            elif suffix == '.sh':
+                cmd = f'bash {shlex.quote(remote_script)}'
+            elif suffix == '.js':
+                cmd = f'node {shlex.quote(remote_script)}'
             else:
                 return f"echo 'Error: Unsupported script type: {suffix}'"
         else:
             # Local execution
             suffix = script_path.suffix
-            if suffix == ".py":
-                py_prefix = ""
+            if suffix == '.py':
+                py_prefix = ''
                 if project_root is not None:
-                    py_prefix = f"PYTHONPATH={shlex.quote(str(project_root))} "
-                cmd = f"{py_prefix}python {shlex.quote(str(script_path))}"
-            elif suffix == ".sh":
-                cmd = f"bash {shlex.quote(str(script_path))}"
-            elif suffix == ".js":
-                cmd = f"node {shlex.quote(str(script_path))}"
+                    py_prefix = f'PYTHONPATH={shlex.quote(str(project_root))} '
+                cmd = f'{py_prefix}python {shlex.quote(str(script_path))}'
+            elif suffix == '.sh':
+                cmd = f'bash {shlex.quote(str(script_path))}'
+            elif suffix == '.js':
+                cmd = f'node {shlex.quote(str(script_path))}'
             else:
                 return f"echo 'Error: Unsupported script type: {suffix}'"
 
         if script_args and script_args.strip():
             try:
                 parts = shlex.split(script_args.strip())
-                cmd += " " + " ".join(shlex.quote(p) for p in parts)
+                cmd += ' ' + ' '.join(shlex.quote(p) for p in parts)
             except ValueError:
-                cmd += " " + script_args.strip()
+                cmd += ' ' + script_args.strip()
 
         return cmd

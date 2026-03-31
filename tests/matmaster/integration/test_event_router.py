@@ -14,33 +14,26 @@ import json
 import threading
 import time
 from typing import Any
-from unittest.mock import MagicMock, AsyncMock, patch
-
-import pytest
+from unittest.mock import AsyncMock, MagicMock
 
 from matmaster.core.bus import MessageBus
+from matmaster.integration.event_router import EventRouter
+from matmaster.integration.persistence_handler import PersistenceHandler
+from matmaster.integration.sse_handler import SSEHandler
 from matmaster.types.events import (
     AssistantStateEvent,
     BohriumNodeEvent,
-    CancelledEvent,
     ConfirmationRequestEvent,
-    ConfirmationTimeoutEvent,
     ErrorEvent,
-    ExpRunEvent,
     McpConnectEvent,
     McpServerStatusEvent,
     ResponseEvent,
     RunResultEvent,
-    SkillHitEvent,
     StreamClosedEvent,
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from matmaster.integration.event_router import EventHandler, EventRouter
-from matmaster.integration.persistence_handler import PersistenceHandler
-from matmaster.integration.sse_handler import SSEHandler
-
 
 # ── EventRouter Tests ────────────────────────────────────
 
@@ -61,14 +54,14 @@ class TestEventRouter:
         await router.start()
 
         event = ToolCallEvent(
-            source="Agent", call_id="c1", tool_name="bash", arguments={"cmd": "ls"}
+            source='Agent', call_id='c1', tool_name='bash', arguments={'cmd': 'ls'}
         )
         bus.emit_nowait(event)
         await asyncio.sleep(0.3)  # allow background thread to consume
 
         await router.stop()
         assert len(received) == 1
-        assert received[0].call_id == "c1"
+        assert received[0].call_id == 'c1'
 
     async def test_router_stop_drains_remaining_events(self) -> None:
         """stop() drains remaining events from bus before shutdown."""
@@ -86,9 +79,9 @@ class TestEventRouter:
         for i in range(5):
             bus.emit_nowait(
                 ToolCallEvent(
-                    source="Agent",
+                    source='Agent',
                     call_id=f"c{i}",
-                    tool_name="bash",
+                    tool_name='bash',
                     arguments={},
                 )
             )
@@ -130,7 +123,7 @@ class TestEventRouter:
         await router.stop()
 
         assert len(received) == 1
-        assert received[0].type == "run_result"
+        assert received[0].type == 'run_result'
 
     async def test_router_stop_waits_for_handler_close(self) -> None:
         """stop() should call handler.close() and wait for it."""
@@ -166,15 +159,15 @@ class TestEventRouter:
         class InitialHandler:
             async def handle(self, event: Any) -> None:
                 initial_received.append(event.reason)
-                if event.reason == "before-registration":
+                if event.reason == 'before-registration':
                     first_event_processed.set()
-                if event.reason == "after-registration":
+                if event.reason == 'after-registration':
                     second_event_processed.set()
 
         class LateHandler:
             async def handle(self, event: Any) -> None:
                 late_received.append(event.reason)
-                if event.reason == "after-registration":
+                if event.reason == 'after-registration':
                     second_event_processed.set()
 
         router = EventRouter(bus, [InitialHandler()])
@@ -190,8 +183,8 @@ class TestEventRouter:
 
         await router.stop()
 
-        assert initial_received == ["before-registration", "after-registration"]
-        assert late_received == ["after-registration"]
+        assert initial_received == ['before-registration', 'after-registration']
+        assert late_received == ['after-registration']
 
     async def test_add_handler_during_dispatch_skips_in_flight_event_and_receives_next_event(
         self,
@@ -225,7 +218,7 @@ class TestEventRouter:
         await router._dispatch(RunResultEvent(source="Agent", reason="current"))
         await router._dispatch(RunResultEvent(source="Agent", reason="next"))
 
-        assert late_received == ["next"]
+        assert late_received == ['next']
 
 
 # ── PersistenceHandler Tests ────────────────────────────
@@ -238,9 +231,9 @@ class TestPersistenceHandler:
         events_table = MagicMock()
         handler = PersistenceHandler(
             events_table=events_table,
-            session_id="sess1",
-            task_id="task1",
-            invocation_id="inv1",
+            session_id='sess1',
+            task_id='task1',
+            invocation_id='inv1',
         )
         return handler, events_table
 
@@ -249,19 +242,19 @@ class TestPersistenceHandler:
         handler, events_table = self._make_handler()
 
         event = ToolCallEvent(
-            source="Agent", call_id="c1", tool_name="bash", arguments={"cmd": "ls"}
+            source='Agent', call_id='c1', tool_name='bash', arguments={'cmd': 'ls'}
         )
         await handler.handle(event)
 
         events_table.add_event.assert_called_once()
         args = events_table.add_event.call_args
-        assert args[0][0] == "sess1"  # session_id
-        assert args[0][1] == "Agent"  # source
-        assert args[0][2] == "tool_call"  # type
+        assert args[0][0] == 'sess1'  # session_id
+        assert args[0][1] == 'Agent'  # source
+        assert args[0][2] == 'tool_call'  # type
         kwargs = args.kwargs or {}
-        assert kwargs.get("task_id") == "task1"
-        assert kwargs.get("invocation_id") == "inv1"
-        assert kwargs.get("spawn_id") is None
+        assert kwargs.get('task_id') == 'task1'
+        assert kwargs.get('invocation_id') == 'inv1'
+        assert kwargs.get('spawn_id') is None
 
     async def test_persists_tool_result_and_run_result(self) -> None:
         """handle() persists tool_result and run_result events."""
@@ -282,19 +275,22 @@ class TestPersistenceHandler:
 
         await handler.handle(StreamClosedEvent(source="System"))
 
-        events_table.add_event.assert_not_called()
+        events_table.add_event.assert_called_once()
+        args = events_table.add_event.call_args[0]
+        assert args[1] == 'System'
+        assert args[2] == 'stream_closed'
 
     async def test_skips_log_line(self) -> None:
         """handle() skips events with type 'log_line'."""
         handler, events_table = self._make_handler()
         # log_line is not in BusEvent union -- simulate by checking _should_persist
         # We test the internal method directly since log_line isn't a BusEvent type
-        assert handler._should_persist_type("log_line") is False
+        assert handler._should_persist_type('log_line') is False
 
     async def test_skips_llm_token(self) -> None:
         """handle() skips events with type 'llm_token'."""
         handler, events_table = self._make_handler()
-        assert handler._should_persist_type("llm_token") is False
+        assert handler._should_persist_type('llm_token') is False
 
     async def test_skips_streaming_thought(self) -> None:
         """handle() skips ThoughtEvent with stream_state in (start, streaming, end)."""
@@ -338,19 +334,19 @@ class TestPersistenceHandler:
 
         await handler.handle(
             ToolCallEvent(
-                source="Agent",
-                call_id="c1",
-                tool_name="bash",
-                arguments={"cmd": "ls"},
+                source='Agent',
+                call_id='c1',
+                tool_name='bash',
+                arguments={'cmd': 'ls'},
             )
         )
 
         args = events_table.add_event.call_args[0]
         assert args[3] == {
-            "id": "c1",
-            "call_id": "c1",
-            "name": "bash",
-            "args": {"cmd": "ls"},
+            'id': 'c1',
+            'call_id': 'c1',
+            'name': 'bash',
+            'args': {'cmd': 'ls'},
         }
 
     async def test_tool_result_persists_public_shape(self) -> None:
@@ -358,22 +354,22 @@ class TestPersistenceHandler:
 
         await handler.handle(
             ToolResultEvent(
-                source="Agent",
-                call_id="c1",
-                tool_name="bash",
-                result="file.txt",
-                info={"auto_save": True},
+                source='Agent',
+                call_id='c1',
+                tool_name='bash',
+                result='file.txt',
+                info={'auto_save': True},
             )
         )
 
         args = events_table.add_event.call_args[0]
         assert args[3] == {
-            "id": "c1",
-            "call_id": "c1",
-            "name": "bash",
-            "result": "file.txt",
-            "status": "success",
-            "info": {"auto_save": True},
+            'id': 'c1',
+            'call_id': 'c1',
+            'name': 'bash',
+            'result': 'file.txt',
+            'status': 'success',
+            'info': {'auto_save': True},
         }
 
     async def test_run_result_persists_content_status_reason(self) -> None:
@@ -381,18 +377,18 @@ class TestPersistenceHandler:
 
         await handler.handle(
             RunResultEvent(
-                source="Agent",
-                status="completed",
-                reason="natural",
-                final_content="here are your files",
+                source='Agent',
+                status='completed',
+                reason='natural',
+                final_content='here are your files',
             )
         )
 
         args = events_table.add_event.call_args[0]
         assert args[3] == {
-            "content": "here are your files",
-            "status": "completed",
-            "reason": "natural",
+            'content': 'here are your files',
+            'status': 'completed',
+            'reason': 'natural',
         }
 
     async def test_assistant_state_persists_state_dict(self) -> None:
@@ -409,26 +405,26 @@ class TestPersistenceHandler:
 
         await handler.handle(
             BohriumNodeEvent(
-                source="BohriumSetup",
+                source='BohriumSetup',
                 payload={
-                    "type": "setup_ready",
-                    "content": {
-                        "status": "ready",
-                        "message": "Node ready",
-                        "node_id": 1,
+                    'type': 'setup_ready',
+                    'content': {
+                        'status': 'ready',
+                        'message': 'Node ready',
+                        'node_id': 1,
                     },
-                    "phase": "ssh",
+                    'phase': 'ssh',
                 },
             )
         )
 
         args = events_table.add_event.call_args[0]
         assert args[3] == {
-            "status": "ready",
-            "message": "Node ready",
-            "node_id": 1,
-            "event_type": "setup_ready",
-            "phase": "ssh",
+            'status': 'ready',
+            'message': 'Node ready',
+            'node_id': 1,
+            'event_type': 'setup_ready',
+            'phase': 'ssh',
         }
 
     async def test_persists_spawn_id_kwarg_for_subagent_events(self) -> None:
@@ -437,17 +433,17 @@ class TestPersistenceHandler:
 
         await handler.handle(
             ToolCallEvent(
-                source="MatMaster:explore",
-                call_id="c1",
-                tool_name="read",
-                arguments={"path": "x"},
-                spawn_id="a1b2c3d4e5f67890",
+                source='MatMaster:explore',
+                call_id='c1',
+                tool_name='read',
+                arguments={'path': 'x'},
+                spawn_id='a1b2c3d4e5f67890',
             )
         )
 
         events_table.add_event.assert_called_once()
         kwargs = events_table.add_event.call_args.kwargs
-        assert kwargs.get("spawn_id") == "a1b2c3d4e5f67890"
+        assert kwargs.get('spawn_id') == 'a1b2c3d4e5f67890'
 
 
 # ── SSEHandler Tests ────────────────────────────────────
@@ -472,10 +468,10 @@ class TestSSEHandler:
 
         send_cb.assert_called_once()
         payload = send_cb.call_args[0][0]
-        assert payload["type"] == "run_result"
-        assert payload["source"] == "MatMaster"
-        assert payload["session_id"] == "sess1"
-        assert payload.get("spawn_id") is None
+        assert payload['type'] == 'run_result'
+        assert payload['source'] == 'MatMaster'
+        assert payload['session_id'] == 'sess1'
+        assert payload.get('spawn_id') is None
 
     async def test_sse_payload_includes_spawn_id_at_top_level(self) -> None:
         """Live SSE payloads expose spawn_id next to session_id/task_id for subagent events."""
@@ -491,17 +487,17 @@ class TestSSEHandler:
 
         await handler.handle(
             ToolCallEvent(
-                source="MatMaster:explore",
-                call_id="c1",
-                tool_name="bash",
-                arguments={"cmd": "ls"},
-                spawn_id="feedfacecafe0001",
+                source='MatMaster:explore',
+                call_id='c1',
+                tool_name='bash',
+                arguments={'cmd': 'ls'},
+                spawn_id='feedfacecafe0001',
             )
         )
 
         payload = send_cb.call_args[0][0]
-        assert payload.get("spawn_id") == "feedfacecafe0001"
-        assert isinstance(payload.get("content"), dict)
+        assert payload.get('spawn_id') == 'feedfacecafe0001'
+        assert isinstance(payload.get('content'), dict)
 
     async def test_sends_json_safe_payload(self) -> None:
         """handle() emits payloads that are safe for SSE/Redis JSON encoding."""
@@ -519,7 +515,7 @@ class TestSSEHandler:
 
         payload = send_cb.call_args[0][0]
         json.dumps(payload, ensure_ascii=False)
-        assert isinstance(payload["timestamp"], str)
+        assert isinstance(payload['timestamp'], str)
 
     async def test_tool_call_payload_matches_frontend_contract(self) -> None:
         """tool_call payload exposes nested content expected by the frontend."""
@@ -535,20 +531,20 @@ class TestSSEHandler:
 
         await handler.handle(
             ToolCallEvent(
-                source="Agent",
-                call_id="call-1",
-                tool_name="bash",
-                arguments={"cmd": "ls"},
+                source='Agent',
+                call_id='call-1',
+                tool_name='bash',
+                arguments={'cmd': 'ls'},
             )
         )
 
         payload = send_cb.call_args[0][0]
-        assert payload["source"] == "MatMaster"
-        assert payload["content"] == {
-            "id": "call-1",
-            "call_id": "call-1",
-            "name": "bash",
-            "args": {"cmd": "ls"},
+        assert payload['source'] == 'MatMaster'
+        assert payload['content'] == {
+            'id': 'call-1',
+            'call_id': 'call-1',
+            'name': 'bash',
+            'args': {'cmd': 'ls'},
         }
 
     async def test_tool_result_payload_matches_frontend_contract(self) -> None:
@@ -565,22 +561,22 @@ class TestSSEHandler:
 
         await handler.handle(
             ToolResultEvent(
-                source="Agent",
-                call_id="call-1",
-                tool_name="bash",
-                result={"status": "success", "stdout": "ok"},
-                info={"auto_save": True},
+                source='Agent',
+                call_id='call-1',
+                tool_name='bash',
+                result={'status': 'success', 'stdout': 'ok'},
+                info={'auto_save': True},
             )
         )
 
         payload = send_cb.call_args[0][0]
-        assert payload["content"] == {
-            "id": "call-1",
-            "call_id": "call-1",
-            "name": "bash",
-            "result": {"status": "success", "stdout": "ok"},
-            "status": "success",
-            "info": {"auto_save": True},
+        assert payload['content'] == {
+            'id': 'call-1',
+            'call_id': 'call-1',
+            'name': 'bash',
+            'result': {'status': 'success', 'stdout': 'ok'},
+            'status': 'success',
+            'info': {'auto_save': True},
         }
 
     async def test_confirmation_request_payload_matches_frontend_contract(self) -> None:
@@ -597,24 +593,24 @@ class TestSSEHandler:
 
         await handler.handle(
             ConfirmationRequestEvent(
-                source="MatMaster",
-                question="Proceed?",
-                mode="timeout",
+                source='MatMaster',
+                question='Proceed?',
+                mode='timeout',
                 timeout_seconds=20,
-                actions=["yes", "no"],
-                context="ctx",
-                origin="planner",
+                actions=['yes', 'no'],
+                context='ctx',
+                origin='planner',
             )
         )
 
         payload = send_cb.call_args[0][0]
-        assert payload["content"] == {
-            "question": "Proceed?",
-            "mode": "timeout",
-            "timeout_seconds": 20,
-            "context": "ctx",
-            "actions": ["yes", "no"],
-            "origin": "planner",
+        assert payload['content'] == {
+            'question': 'Proceed?',
+            'mode': 'timeout',
+            'timeout_seconds': 20,
+            'context': 'ctx',
+            'actions': ['yes', 'no'],
+            'origin': 'planner',
         }
 
     async def test_error_payload_exposes_message_via_content(self) -> None:
@@ -632,7 +628,7 @@ class TestSSEHandler:
         await handler.handle(ErrorEvent(source="System", message="boom", traceback="tb"))
 
         payload = send_cb.call_args[0][0]
-        assert payload["content"] == {"message": "boom", "traceback": "tb"}
+        assert payload['content'] == {'message': 'boom', 'traceback': 'tb'}
 
     async def test_bohrium_node_payload_flattens_wrapped_content(self) -> None:
         """bohrium_node payload unwraps nested node status into content."""
@@ -648,27 +644,27 @@ class TestSSEHandler:
 
         await handler.handle(
             BohriumNodeEvent(
-                source="BohriumSetup",
+                source='BohriumSetup',
                 payload={
-                    "type": "setup_ready",
-                    "content": {
-                        "status": "ready",
-                        "message": "Node ready",
-                        "node_id": 1,
+                    'type': 'setup_ready',
+                    'content': {
+                        'status': 'ready',
+                        'message': 'Node ready',
+                        'node_id': 1,
                     },
-                    "phase": "ssh",
+                    'phase': 'ssh',
                 },
             )
         )
 
         payload = send_cb.call_args[0][0]
-        assert payload["source"] == "MatMaster"
-        assert payload["content"] == {
-            "status": "ready",
-            "message": "Node ready",
-            "node_id": 1,
-            "event_type": "setup_ready",
-            "phase": "ssh",
+        assert payload['source'] == 'MatMaster'
+        assert payload['content'] == {
+            'status': 'ready',
+            'message': 'Node ready',
+            'node_id': 1,
+            'event_type': 'setup_ready',
+            'phase': 'ssh',
         }
 
     async def test_mcp_server_status_payload_uses_content_object(self) -> None:
@@ -685,28 +681,28 @@ class TestSSEHandler:
 
         await handler.handle(
             McpServerStatusEvent(
-                source="System",
-                server_name="code-server",
-                transport="sse",
-                phase="retrying",
+                source='System',
+                server_name='code-server',
+                transport='sse',
+                phase='retrying',
                 detail={
-                    "message": "retrying",
-                    "attempt": 2,
-                    "max_attempts": 3,
-                    "error": "timeout",
+                    'message': 'retrying',
+                    'attempt': 2,
+                    'max_attempts': 3,
+                    'error': 'timeout',
                 },
             )
         )
 
         payload = send_cb.call_args[0][0]
-        assert payload["content"] == {
-            "server_name": "code-server",
-            "transport": "sse",
-            "phase": "retrying",
-            "message": "retrying",
-            "attempt": 2,
-            "max_attempts": 3,
-            "error": "timeout",
+        assert payload['content'] == {
+            'server_name': 'code-server',
+            'transport': 'sse',
+            'phase': 'retrying',
+            'message': 'retrying',
+            'attempt': 2,
+            'max_attempts': 3,
+            'error': 'timeout',
         }
 
     async def test_mcp_connect_payload_uses_content_object(self) -> None:
@@ -723,19 +719,19 @@ class TestSSEHandler:
 
         await handler.handle(
             McpConnectEvent(
-                source="System",
-                phase="ready",
-                message="connected",
+                source='System',
+                phase='ready',
+                message='connected',
                 elapsed_ms=123,
             )
         )
 
         payload = send_cb.call_args[0][0]
-        assert payload["content"] == {
-            "phase": "ready",
-            "message": "connected",
-            "elapsed_ms": 123,
-            "error": None,
+        assert payload['content'] == {
+            'phase': 'ready',
+            'message': 'connected',
+            'elapsed_ms': 123,
+            'error': None,
         }
 
     async def test_sends_stream_closed_event(self) -> None:
@@ -747,22 +743,22 @@ class TestSSEHandler:
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
-            mode="direct",
+            mode='direct',
         )
 
         await handler.handle(
             StreamClosedEvent(
-                source="System",
+                source='System',
                 task_completed=True,
-                end_reason="natural",
+                end_reason='natural',
             )
         )
 
         send_cb.assert_called_once()
         payload = send_cb.call_args[0][0]
-        assert payload["type"] == "stream_closed"
-        assert payload["source"] == "System"
-        assert payload["task_completed"] is True
+        assert payload['type'] == 'stream_closed'
+        assert payload['source'] == 'System'
+        assert payload['task_completed'] is True
 
     async def test_sse_handler_sends_response_payload(self) -> None:
         send_cb = AsyncMock()
@@ -772,16 +768,16 @@ class TestSSEHandler:
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
-            mode="direct",
+            mode='direct',
         )
 
         await handler.handle(ResponseEvent(source="Agent", content="hello"))
 
         send_cb.assert_called_once()
         payload = send_cb.call_args[0][0]
-        assert payload["type"] == "response"
-        assert payload["source"] == "MatMaster"
-        assert payload["content"] == "hello"
+        assert payload['type'] == 'response'
+        assert payload['source'] == 'MatMaster'
+        assert payload['content'] == 'hello'
 
     async def test_skips_assistant_state(self) -> None:
         """handle() skips AssistantStateEvent."""
@@ -792,7 +788,7 @@ class TestSSEHandler:
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
-            mode="direct",
+            mode='direct',
         )
 
         await handler.handle(AssistantStateEvent(source="Agent", state={"role": "assistant"}))
@@ -808,7 +804,7 @@ class TestSSEHandler:
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
-            mode="planner",
+            mode='planner',
         )
 
         for state in ("start", "streaming", "end"):
@@ -829,7 +825,7 @@ class TestSSEHandler:
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
-            mode="direct",
+            mode='direct',
         )
 
         await handler.handle(
@@ -847,7 +843,7 @@ class TestSSEHandler:
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
-            mode="direct",
+            mode='direct',
         )
 
         await handler.handle(

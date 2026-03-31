@@ -143,6 +143,13 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
             'task_id': 'task-0',
         },
         {
+            'source': 'System',
+            'type': 'stream_closed',
+            'content': '',
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
             'source': 'User',
             'type': 'query',
             'content': 'new question',
@@ -158,7 +165,7 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
         deploy_state_service=MagicMock(),
     )
 
-    async def _collect_first_four_frames() -> list[dict]:
+    async def _collect_first_five_frames() -> list[dict]:
         ctx = SendStreamContext(
             task_id='task-1',
             invocation_id='inv-1',
@@ -182,19 +189,28 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
                 _decode_sse_payload(await gen.__anext__()),
                 _decode_sse_payload(await gen.__anext__()),
                 _decode_sse_payload(await gen.__anext__()),
+                _decode_sse_payload(await gen.__anext__()),
             ]
         finally:
             await gen.aclose()
 
-    frames = asyncio.run(_collect_first_four_frames())
+    frames = asyncio.run(_collect_first_five_frames())
 
+    assert [frame['type'] for frame in frames] == [
+        'status',
+        'query',
+        'run_result',
+        'stream_closed',
+        'query',
+    ]
     assert [frame['content'] for frame in frames[1:]] == [
         'old question',
         'old answer',
+        '',
         'new question',
     ]
-    assert frames[3]['type'] == 'query'
-    assert frames[3]['mode'] == 'direct'
+    assert frames[4]['type'] == 'query'
+    assert frames[4]['mode'] == 'direct'
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
 
@@ -453,7 +469,11 @@ def test_generate_send_stream_replay_prefers_response_over_run_result():
         {
             'source': 'MatMaster',
             'type': 'run_result',
-            'content': {'content': 'old answer', 'status': 'completed', 'reason': 'natural'},
+            'content': {
+                'content': 'old answer',
+                'status': 'completed',
+                'reason': 'natural',
+            },
             'session_id': 'sess-1',
             'task_id': 'task-0',
         },
@@ -495,7 +515,12 @@ def test_generate_send_stream_replay_prefers_response_over_run_result():
 
     frames = asyncio.run(_collect_first_four_frames())
 
-    assert [frame['type'] for frame in frames] == ['status', 'query', 'response', 'query']
+    assert [frame['type'] for frame in frames] == [
+        'status',
+        'query',
+        'response',
+        'query',
+    ]
     assert frames[2]['content'] == 'old answer'
     assert frames[3]['content'] == 'new question'
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
@@ -579,7 +604,11 @@ def test_generate_subscribe_stream_replay_prefers_response_over_run_result():
         {
             'source': 'MatMaster',
             'type': 'run_result',
-            'content': {'content': 'old answer', 'status': 'completed', 'reason': 'natural'},
+            'content': {
+                'content': 'old answer',
+                'status': 'completed',
+                'reason': 'natural',
+            },
             'session_id': 'sess-1',
             'task_id': 'task-0',
         },

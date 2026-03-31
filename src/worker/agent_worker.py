@@ -19,7 +19,7 @@ from src.services.stream_service import RedisReplyQueue
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.build_info import get_build_version
-from src.utils.constant import CURRENT_ENV
+from src.utils.constant import SERVICE_ENV
 from src.utils.feishu_notifier import (
     CARD_TEMPLATE_BLUE,
     CARD_TEMPLATE_GREEN,
@@ -50,7 +50,7 @@ def _session_url(session_id: str) -> str:
     sid = (session_id or '').strip()
     if not sid:
         return '-'
-    env = (CURRENT_ENV or '').strip().lower()
+    env = (SERVICE_ENV or '').strip().lower()
     suffix = '' if not env or env == 'prod' else f'.{env}'
     return f'https://matmaster{suffix}.bohrium.com/matmaster/chat-evo/{sid}'
 

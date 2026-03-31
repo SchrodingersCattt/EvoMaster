@@ -62,4 +62,4 @@ build-backend = "hatchling.build"
 asyncio_mode = "auto"
 
 [tool.hatch.build.targets.wheel]
-packages = ["evomaster", "playground", "matmaster"]
+packages = ["evomaster", "playground", "matmaster", "utils"]

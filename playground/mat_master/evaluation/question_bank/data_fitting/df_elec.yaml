@@ -4,7 +4,7 @@ domain: "elec"
 
 questions:
   # ============================================================
-  # DF_elec_001 ← L1_Q10 (band_edges带隙判断)
+  # DF_elec_001 (band_edges带隙判断)
   # ============================================================
   - id: "DF_elec_001"
     capability: "property_prediction"
@@ -17,7 +17,7 @@ questions:
     optional_tools: []
     data_files:
       - key: "band_data"
-        path: "data/L1_Q06/band_edges.json"
+        path: "data/DF_elec_001/band_edges.json"
         oss_url: ""
         description: "Band-edge summary data."
     reference_answers:

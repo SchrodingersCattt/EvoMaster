@@ -364,8 +364,12 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
         ),
     ):
         mock_bohrium_svc = mock_bohrium_cls.return_value
-        mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
-        mock_bohrium_svc.setup.side_effect = tracked_setup
+
+        async def _async_tracked_setup(**kwargs: Any) -> MagicMock:
+            return tracked_setup(**kwargs)
+
+        mock_bohrium_svc.run_setup = AsyncMock(side_effect=_async_tracked_setup)
+        mock_bohrium_svc.run_cleanup = AsyncMock()
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
@@ -380,7 +384,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
         asyncio.run(svc.run_agent(
             session_id='sess-spec-order',
             user_prompt='prompt',
-            send_cb=MagicMock(),
+            send_cb=AsyncMock(),
             stop_event=threading.Event(),
             mode='direct',
             reply_queue=None,
@@ -463,12 +467,8 @@ def test_execution_binding_before_build_runtime(
         patch('matmaster.core.exp.Exp', return_value=mock_exp_inst),
     ):
         mock_bohrium_svc = mock_bohrium_cls.return_value
-        mock_bohrium_svc.load_credentials.return_value = (
-            {'access_key': 'k', 'project_id': 1},
-            'u1',
-            'o1',
-        )
-        mock_bohrium_svc.setup.return_value = mock_bohrium_result
+        mock_bohrium_svc.run_setup = AsyncMock(return_value=mock_bohrium_result)
+        mock_bohrium_svc.run_cleanup = AsyncMock()
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
@@ -483,7 +483,7 @@ def test_execution_binding_before_build_runtime(
         asyncio.run(svc.run_agent(
             session_id='sess-exec-bind',
             user_prompt='prompt',
-            send_cb=MagicMock(),
+            send_cb=AsyncMock(),
             stop_event=threading.Event(),
             mode='direct',
             reply_queue=None,

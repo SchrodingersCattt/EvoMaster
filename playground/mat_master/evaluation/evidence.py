@@ -2,8 +2,8 @@
 
 This module defines the standardised evidence format (EvidenceBundle) and the
 EvidenceExtractor that converts a raw trajectory JSON file into an
-EvidenceBundle.  The evaluator only depends on EvidenceBundle – it has no
-knowledge of runtime internals, tool names, or trajectory schema details.
+EvidenceBundle. The evaluator only depends on EvidenceBundle and does not
+require any runtime-specific mapping file by default.
 
 Design principles
 -----------------
@@ -14,9 +14,10 @@ Design principles
 * ``EvidenceBundle`` – single input to the evaluator
 * ``EvidenceExtractor`` – converts trajectory JSON → EvidenceBundle
 
-Path convention
----------------
-``evidence_mapping.yaml`` lives next to this file (``evaluation/``).
+Runtime decoupling
+------------------
+`EvidenceExtractor` does not assume any default tool-name mapping. Runtime-
+specific compatibility mappings can be injected by callers via `mapping_path`.
 """
 
 from __future__ import annotations
@@ -44,36 +45,36 @@ class EventType(str, Enum):
     in ``evidence_mapping.yaml``.
     """
 
-    STRUCTURE_RETRIEVAL = "structure_retrieval"
-    STRUCTURE_CONSTRUCTION = "structure_construction"
-    CALCULATION_EXECUTION = "calculation_execution"
-    SCRIPT_EXECUTION = "script_execution"
-    FILE_EDITING = "file_editing"
-    VALIDATION = "validation"
-    DATA_ANALYSIS = "data_analysis"
-    OTHER = "other"
+    STRUCTURE_RETRIEVAL = 'structure_retrieval'
+    STRUCTURE_CONSTRUCTION = 'structure_construction'
+    CALCULATION_EXECUTION = 'calculation_execution'
+    SCRIPT_EXECUTION = 'script_execution'
+    FILE_EDITING = 'file_editing'
+    VALIDATION = 'validation'
+    DATA_ANALYSIS = 'data_analysis'
+    OTHER = 'other'
 
 
 class SourceType(str, Enum):
     """Constraint-source type; records *where* a result came from."""
 
-    DATABASE = "database"
-    SCIENTIFIC_LIBRARY = "scientific_library"
-    MCP_TOOL = "mcp_tool"
-    BASH_SCRIPT = "bash_script"
-    MODEL_ONLY = "model_only"
-    UNKNOWN = "unknown"
+    DATABASE = 'database'
+    SCIENTIFIC_LIBRARY = 'scientific_library'
+    MCP_TOOL = 'mcp_tool'
+    BASH_SCRIPT = 'bash_script'
+    MODEL_ONLY = 'model_only'
+    UNKNOWN = 'unknown'
 
 
 class CallStatus(str, Enum):
     """Fine-grained tool-call outcome (replaces ``success: bool``)."""
 
-    SUCCESS = "success"
-    EMPTY = "empty"          # call succeeded but returned no data
-    FAILED = "failed"        # tool raised an error
-    TIMEOUT = "timeout"      # call timed out
-    BLOCKED = "blocked"      # blocked by ToolGuard
-    INTERRUPTED = "interrupted"  # cancelled by user / system
+    SUCCESS = 'success'
+    EMPTY = 'empty'  # call succeeded but returned no data
+    FAILED = 'failed'  # tool raised an error
+    TIMEOUT = 'timeout'  # call timed out
+    BLOCKED = 'blocked'  # blocked by ToolGuard
+    INTERRUPTED = 'interrupted'  # cancelled by user / system
 
 
 # ---------------------------------------------------------------------------
@@ -89,11 +90,11 @@ class EventRecord(BaseModel):
     specific tool name.
     """
 
-    step: int = Field(description="Step index in the trajectory (1-based)")
-    event_type: EventType = Field(description="Abstract event category")
-    source_type: SourceType = Field(description="Where the result came from")
-    succeeded: bool = Field(description="Whether the underlying call succeeded")
-    detail: str = Field(default="", description="Short human-readable note")
+    step: int = Field(description='Step index in the trajectory (1-based)')
+    event_type: EventType = Field(description='Abstract event category')
+    source_type: SourceType = Field(description='Where the result came from')
+    succeeded: bool = Field(description='Whether the underlying call succeeded')
+    detail: str = Field(default='', description='Short human-readable note')
 
 
 class ToolCallRecord(BaseModel):
@@ -103,29 +104,29 @@ class ToolCallRecord(BaseModel):
     judge to assess grounding and efficiency without access to the live runtime.
     """
 
-    step: int = Field(description="Step index (1-based)")
+    step: int = Field(description='Step index (1-based)')
     call_index: int = Field(
         default=0,
-        description="Index within the step (a single step can issue multiple calls)",
+        description='Index within the step (a single step can issue multiple calls)',
     )
-    tool_name: str = Field(description="Name of the tool that was called")
+    tool_name: str = Field(description='Name of the tool that was called')
     tool_description: str = Field(
-        default="",
-        description="Description from ToolSpec (may be empty for legacy trajectories)",
+        default='',
+        description='Description from ToolSpec (may be empty for legacy trajectories)',
     )
     args: dict[str, Any] = Field(
         default_factory=dict,
-        description="Parsed tool arguments (JSON-decoded)",
+        description='Parsed tool arguments (JSON-decoded)',
     )
     status: CallStatus = Field(
         default=CallStatus.SUCCESS,
-        description="Fine-grained call outcome",
+        description='Fine-grained call outcome',
     )
     observation_excerpt: str = Field(
-        default="",
+        default='',
         description=(
-            "First 500 chars of the tool observation, verbatim (no LLM summarisation). "
-            "Used by the judge to assess whether the agent consumed the result."
+            'First 500 chars of the tool observation, verbatim (no LLM summarisation). '
+            'Used by the judge to assess whether the agent consumed the result.'
         ),
     )
 
@@ -133,9 +134,9 @@ class ToolCallRecord(BaseModel):
 class ArtifactRecord(BaseModel):
     """An output file or data artefact produced during the run."""
 
-    path: str = Field(description="Relative path inside the workspace")
+    path: str = Field(description='Relative path inside the workspace')
     artifact_type: str = Field(
-        default="unknown",
+        default='unknown',
         description="E.g. 'cif', 'csv', 'json', 'log', 'plot'",
     )
     size_bytes: int | None = Field(default=None)
@@ -150,9 +151,9 @@ class TokenUsage(BaseModel):
 
     def add(self, other: dict[str, int]) -> None:
         """Accumulate a per-step usage dict in-place."""
-        self.prompt_tokens += other.get("prompt_tokens", 0)
-        self.completion_tokens += other.get("completion_tokens", 0)
-        self.total_tokens += other.get("total_tokens", 0)
+        self.prompt_tokens += other.get('prompt_tokens', 0)
+        self.completion_tokens += other.get('completion_tokens', 0)
+        self.total_tokens += other.get('total_tokens', 0)
 
 
 class EvidenceBundle(BaseModel):
@@ -162,39 +163,39 @@ class EvidenceBundle(BaseModel):
     on the trajectory schema or any runtime detail.
     """
 
-    task_id: str = Field(description="Task / question ID")
+    task_id: str = Field(description='Task / question ID')
     final_answer: str = Field(
-        default="",
-        description="Final answer text produced by the agent",
+        default='',
+        description='Final answer text produced by the agent',
     )
     events: list[EventRecord] = Field(
         default_factory=list,
-        description="Abstract event log (rule-based checks)",
+        description='Abstract event log (rule-based checks)',
     )
     tool_calls: list[ToolCallRecord] = Field(
         default_factory=list,
-        description="Raw tool-call log (LLM judge / human review)",
+        description='Raw tool-call log (LLM judge / human review)',
     )
     artifacts: list[ArtifactRecord] = Field(
         default_factory=list,
-        description="Output files / artefacts",
+        description='Output files / artefacts',
     )
     model_name: str | None = Field(
         default=None,
-        description="Base model name used during the run (from LLM config or API response)",
+        description='Base model name used during the run (from LLM config or API response)',
     )
     token_usage: TokenUsage = Field(
         default_factory=TokenUsage,
-        description="Aggregated token usage for the whole run",
+        description='Aggregated token usage for the whole run',
     )
-    total_steps: int = Field(default=0, description="Total number of agent steps")
+    total_steps: int = Field(default=0, description='Total number of agent steps')
     run_status: str = Field(
-        default="unknown",
+        default='unknown',
         description="Terminal run status ('completed', 'failed', etc.)",
     )
     meta: dict[str, Any] = Field(
         default_factory=dict,
-        description="Arbitrary extra metadata from the trajectory",
+        description='Arbitrary extra metadata from the trajectory',
     )
 
 
@@ -202,18 +203,21 @@ class EvidenceBundle(BaseModel):
 # Evidence Extractor
 # ---------------------------------------------------------------------------
 
-_DEFAULT_MAPPING_PATH = Path(__file__).parent / "evidence_mapping.yaml"
 _OBSERVATION_EXCERPT_LEN = 500
 
 
 class EvidenceExtractor:
     """Convert a trajectory JSON file into an :class:`EvidenceBundle`.
 
+    This class accepts an optional ``mapping_path`` that determines how tool
+    calls are classified into EventTypes. When ``mapping_path`` is omitted, the
+    extractor stays runtime-agnostic and simply skips tool-name classification.
+
     Parameters
     ----------
     mapping_path:
-        Path to ``evidence_mapping.yaml``.  Defaults to the file next to this
-        module.
+        Optional path to an evidence mapping YAML file (tool → event type
+        mappings). When omitted, no runtime-specific event mapping is loaded.
     agent_name_filter:
         If set, only process trajectory entries whose ``agent_name`` matches.
         Useful in multi-agent runs (planner + solver).
@@ -224,10 +228,11 @@ class EvidenceExtractor:
         mapping_path: Path | str | None = None,
         agent_name_filter: str | None = None,
     ) -> None:
-        self._mapping_path = Path(mapping_path) if mapping_path else _DEFAULT_MAPPING_PATH
+        self._mapping_path = Path(mapping_path) if mapping_path else None
         self._agent_name_filter = agent_name_filter
         self._mapping: list[dict[str, Any]] = []
-        self._load_mapping()
+        if self._mapping_path is not None:
+            self._load_mapping()
 
     # ------------------------------------------------------------------
     # Public API
@@ -236,8 +241,8 @@ class EvidenceExtractor:
     def extract(
         self,
         trajectory_path: Path | str,
-        task_id: str = "",
-        final_answer: str = "",
+        task_id: str = '',
+        final_answer: str = '',
     ) -> EvidenceBundle:
         """Extract an :class:`EvidenceBundle` from a trajectory JSON file.
 
@@ -252,13 +257,15 @@ class EvidenceExtractor:
         """
         traj_path = Path(trajectory_path)
         if not traj_path.exists():
-            logger.warning("Trajectory file not found: %s", traj_path)
+            logger.warning('Trajectory file not found: %s', traj_path)
             return EvidenceBundle(task_id=task_id, final_answer=final_answer)
 
         try:
-            raw: list[dict[str, Any]] = json.loads(traj_path.read_text(encoding="utf-8"))
+            raw: list[dict[str, Any]] = json.loads(
+                traj_path.read_text(encoding='utf-8')
+            )
         except (json.JSONDecodeError, OSError) as exc:
-            logger.warning("Failed to read trajectory %s: %s", traj_path, exc)
+            logger.warning('Failed to read trajectory %s: %s', traj_path, exc)
             return EvidenceBundle(task_id=task_id, final_answer=final_answer)
 
         return self._build_bundle(raw, task_id=task_id, final_answer=final_answer)
@@ -268,18 +275,21 @@ class EvidenceExtractor:
     # ------------------------------------------------------------------
 
     def _load_mapping(self) -> None:
+        if self._mapping_path is None:
+            self._mapping = []
+            return
         if not self._mapping_path.exists():
             logger.warning(
-                "evidence_mapping.yaml not found at %s; event classification will be empty",
+                'evidence_mapping.yaml not found at %s; event classification will be empty',
                 self._mapping_path,
             )
             self._mapping = []
             return
         try:
-            data = yaml.safe_load(self._mapping_path.read_text(encoding="utf-8"))
-            self._mapping = data.get("mappings", []) if isinstance(data, dict) else []
+            data = yaml.safe_load(self._mapping_path.read_text(encoding='utf-8'))
+            self._mapping = data.get('mappings', []) if isinstance(data, dict) else []
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Failed to load evidence_mapping.yaml: %s", exc)
+            logger.warning('Failed to load evidence_mapping.yaml: %s', exc)
             self._mapping = []
 
     def _build_bundle(
@@ -290,8 +300,8 @@ class EvidenceExtractor:
     ) -> EvidenceBundle:
         # Determine task_id from first entry if not provided
         if not task_id and raw:
-            traj = raw[0].get("trajectory", {})
-            task_id = traj.get("task_id", "")
+            traj = raw[0].get('trajectory', {})
+            task_id = traj.get('task_id', '')
 
         # Build tool-description map from dialogs
         tool_desc_map = self._build_tool_description_map(raw)
@@ -306,57 +316,55 @@ class EvidenceExtractor:
         tool_calls: list[ToolCallRecord] = []
 
         total_steps = 0
-        run_status = "unknown"
+        run_status = 'unknown'
 
         for entry in raw:
-            traj = entry.get("trajectory", {})
-            agent_name = traj.get("agent_name", "")
+            traj = entry.get('trajectory', {})
+            agent_name = traj.get('agent_name', '')
             if self._agent_name_filter and agent_name != self._agent_name_filter:
                 continue
 
-            run_status = entry.get("status", run_status)
+            run_status = entry.get('status', run_status)
 
-            for step_dict in traj.get("steps", []):
-                step_id = step_dict.get("step_id", 0)
+            for step_dict in traj.get('steps', []):
+                step_id = step_dict.get('step_id', 0)
                 total_steps = max(total_steps, step_id)
 
                 # Accumulate token usage
-                asst_msg = step_dict.get("assistant_message", {})
-                meta = asst_msg.get("meta", {}) if isinstance(asst_msg, dict) else {}
-                usage = meta.get("usage", {})
+                asst_msg = step_dict.get('assistant_message', {})
+                meta = asst_msg.get('meta', {}) if isinstance(asst_msg, dict) else {}
+                usage = meta.get('usage', {})
                 if isinstance(usage, dict) and usage:
                     token_usage.add(usage)
 
                 # Collect tool responses indexed by call_id
-                tool_responses = step_dict.get("tool_responses", [])
+                tool_responses = step_dict.get('tool_responses', [])
                 resp_by_id: dict[str, dict[str, Any]] = {}
                 for tr in tool_responses:
                     if isinstance(tr, dict):
-                        cid = tr.get("tool_call_id", "")
+                        cid = tr.get('tool_call_id', '')
                         if cid:
                             resp_by_id[cid] = tr
 
                 # Process tool calls
                 raw_tool_calls = (
-                    asst_msg.get("tool_calls", [])
-                    if isinstance(asst_msg, dict)
-                    else []
+                    asst_msg.get('tool_calls', []) if isinstance(asst_msg, dict) else []
                 ) or []
 
                 for call_idx, tc in enumerate(raw_tool_calls):
                     if not isinstance(tc, dict):
                         continue
-                    func = tc.get("function", {})
-                    tool_name = func.get("name", "")
+                    func = tc.get('function', {})
+                    tool_name = func.get('name', '')
                     if not tool_name:
                         continue
 
                     # Parse arguments
-                    raw_args = func.get("arguments", "{}")
+                    raw_args = func.get('arguments', '{}')
                     args = self._parse_args(raw_args)
 
                     # Determine call status
-                    call_id = tc.get("id", "")
+                    call_id = tc.get('id', '')
                     resp = resp_by_id.get(call_id, {})
                     status = self._parse_call_status(resp)
 
@@ -364,7 +372,7 @@ class EvidenceExtractor:
                     observation_excerpt = self._make_excerpt(resp)
 
                     # Look up tool description
-                    tool_description = tool_desc_map.get(tool_name, "")
+                    tool_description = tool_desc_map.get(tool_name, '')
 
                     tcr = ToolCallRecord(
                         step=step_id,
@@ -398,9 +406,7 @@ class EvidenceExtractor:
             run_status=run_status,
         )
 
-    def _build_tool_description_map(
-        self, raw: list[dict[str, Any]]
-    ) -> dict[str, str]:
+    def _build_tool_description_map(self, raw: list[dict[str, Any]]) -> dict[str, str]:
         """Build tool_name → description map from the dialogs in the trajectory.
 
         The first entry's ``dialogs[0].tools`` list contains ToolSpec objects
@@ -409,16 +415,16 @@ class EvidenceExtractor:
         desc_map: dict[str, str] = {}
         if not raw:
             return desc_map
-        traj = raw[0].get("trajectory", {})
-        for dialog in traj.get("dialogs", []):
+        traj = raw[0].get('trajectory', {})
+        for dialog in traj.get('dialogs', []):
             if not isinstance(dialog, dict):
                 continue
-            for tool_spec in dialog.get("tools", []):
+            for tool_spec in dialog.get('tools', []):
                 if not isinstance(tool_spec, dict):
                     continue
-                func = tool_spec.get("function", {})
-                name = func.get("name", "")
-                desc = func.get("description", "")
+                func = tool_spec.get('function', {})
+                name = func.get('name', '')
+                desc = func.get('description', '')
                 if name:
                     desc_map[name] = desc
         return desc_map
@@ -426,17 +432,17 @@ class EvidenceExtractor:
     def _extract_model_name(self, raw: list[dict[str, Any]]) -> str | None:
         """Extract model name from the first step's assistant_message meta."""
         for entry in raw:
-            traj = entry.get("trajectory", {})
+            traj = entry.get('trajectory', {})
             # Check top-level meta first (if populated by Phase 0 fix)
-            meta = traj.get("meta", {})
-            if isinstance(meta, dict) and meta.get("model_name"):
-                return str(meta["model_name"])
+            meta = traj.get('meta', {})
+            if isinstance(meta, dict) and meta.get('model_name'):
+                return str(meta['model_name'])
             # Fall back to first step's assistant_message.meta
-            for step in traj.get("steps", []):
-                asst = step.get("assistant_message", {})
+            for step in traj.get('steps', []):
+                asst = step.get('assistant_message', {})
                 if isinstance(asst, dict):
-                    ameta = asst.get("meta", {})
-                    model = ameta.get("model")
+                    ameta = asst.get('meta', {})
+                    model = ameta.get('model')
                     if model:
                         return str(model)
         return None
@@ -459,13 +465,13 @@ class EvidenceExtractor:
         if not response:
             return CallStatus.SUCCESS  # no response recorded → assume success
 
-        content = response.get("content", "")
-        meta_info = (response.get("meta") or {}).get("info", {})
+        content = response.get('content', '')
+        meta_info = (response.get('meta') or {}).get('info', {})
 
         # Explicit success field in meta.info
         if isinstance(meta_info, dict):
-            if "success" in meta_info:
-                if not meta_info["success"]:
+            if 'success' in meta_info:
+                if not meta_info['success']:
                     return CallStatus.FAILED
                 # check for empty success
                 if not content or (isinstance(content, str) and not content.strip()):
@@ -475,25 +481,32 @@ class EvidenceExtractor:
         # Detect guard-blocked calls
         if isinstance(content, str):
             lower = content.lower()
-            if "blocked" in lower or "loop detected" in lower or "guard" in lower:
+            if 'blocked' in lower or 'loop detected' in lower or 'guard' in lower:
                 return CallStatus.BLOCKED
-            if "timeout" in lower or "timed out" in lower:
+            if 'timeout' in lower or 'timed out' in lower:
                 return CallStatus.TIMEOUT
-            if "interrupted" in lower or "cancelled" in lower:
+            if 'interrupted' in lower or 'cancelled' in lower:
                 return CallStatus.INTERRUPTED
             # Try JSON status field
             try:
                 parsed = json.loads(content)
                 if isinstance(parsed, dict):
-                    status_str = str(parsed.get("status", "")).lower()
-                    if status_str == "success":
-                        result = parsed.get("result", parsed.get("data", parsed.get("content")))
-                        if result is None or result == "" or result == [] or result == {}:
+                    status_str = str(parsed.get('status', '')).lower()
+                    if status_str == 'success':
+                        result = parsed.get(
+                            'result', parsed.get('data', parsed.get('content'))
+                        )
+                        if (
+                            result is None
+                            or result == ''
+                            or result == []
+                            or result == {}
+                        ):
                             return CallStatus.EMPTY
                         return CallStatus.SUCCESS
-                    elif status_str in ("error", "failed", "failure"):
+                    elif status_str in ('error', 'failed', 'failure'):
                         return CallStatus.FAILED
-                    elif status_str == "timeout":
+                    elif status_str == 'timeout':
                         return CallStatus.TIMEOUT
             except (json.JSONDecodeError, ValueError):
                 pass
@@ -506,8 +519,8 @@ class EvidenceExtractor:
     def _make_excerpt(self, response: dict[str, Any]) -> str:
         """Return first ``_OBSERVATION_EXCERPT_LEN`` chars of observation (verbatim)."""
         if not response:
-            return ""
-        content = response.get("content", "")
+            return ''
+        content = response.get('content', '')
         if not isinstance(content, str):
             try:
                 content = json.dumps(content, ensure_ascii=False)
@@ -529,24 +542,24 @@ class EvidenceExtractor:
         """
         for rule in self._mapping:
             # Pattern match: prefix or exact
-            pattern: str = rule.get("pattern", "")
+            pattern: str = rule.get('pattern', '')
             if not self._name_matches(tool_name, pattern):
                 continue
 
             # Optional arg-condition check
-            when: dict[str, str] = rule.get("when_args_contains", {})
+            when: dict[str, str] = rule.get('when_args_contains', {})
             if when and not self._args_match(args, when):
                 continue
 
-            event_type = EventType(rule.get("event_type", EventType.OTHER.value))
-            source_type = SourceType(rule.get("source_type", SourceType.UNKNOWN.value))
+            event_type = EventType(rule.get('event_type', EventType.OTHER.value))
+            source_type = SourceType(rule.get('source_type', SourceType.UNKNOWN.value))
 
             return EventRecord(
                 step=step,
                 event_type=event_type,
                 source_type=source_type,
                 succeeded=status == CallStatus.SUCCESS,
-                detail=rule.get("detail", tool_name),
+                detail=rule.get('detail', tool_name),
             )
         return None
 
@@ -559,11 +572,11 @@ class EvidenceExtractor:
         - prefix match ending with ``*``: ``mat_struct_db_*``
         - substring match wrapping with ``*``: ``*fetch*``
         """
-        if pattern.endswith("*") and pattern.startswith("*"):
+        if pattern.endswith('*') and pattern.startswith('*'):
             return pattern[1:-1] in tool_name
-        if pattern.endswith("*"):
+        if pattern.endswith('*'):
             return tool_name.startswith(pattern[:-1])
-        if pattern.startswith("*"):
+        if pattern.startswith('*'):
             return tool_name.endswith(pattern[1:])
         return tool_name == pattern
 
@@ -574,7 +587,7 @@ class EvidenceExtractor:
         Each condition is ``{arg_key: substring_to_find_in_value}``.
         """
         for key, substring in when.items():
-            val = args.get(key, "")
+            val = args.get(key, '')
             if substring not in str(val):
                 return False
         return True

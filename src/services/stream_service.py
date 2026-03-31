@@ -34,7 +34,7 @@ from src.services.sessions_service import ChatSessionsService, get_sessions_serv
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.chat_event_source import normalize_event_source
-from src.utils.constant import AG_UI_EVENT, CURRENT_ENV, REDIS_URL
+from src.utils.constant import AG_UI_EVENT, REDIS_URL, SERVICE_ENV
 from src.utils.feishu_notifier import (
     CARD_TEMPLATE_ORANGE,
     format_llm_model_for_notify,
@@ -854,7 +854,7 @@ class ChatStreamService:
                 session_user_id = self._sessions_service.get_session_user_id(sid)
                 user_info = UserService.get_user_info_for_display(session_user_id)
                 user_info_display = f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
-                env = (CURRENT_ENV or '').strip().lower()
+                env = (SERVICE_ENV or '').strip().lower()
                 session_url = f"https://matmaster{'' if not env or env == 'prod' else f'.{env}'}.bohrium.com/matmaster/chat-evo/{sid}"
                 queue_len = get_redis_dao().llen_agent_run_queue()
                 active_count = get_worker_registry_service().count_active_runs()
