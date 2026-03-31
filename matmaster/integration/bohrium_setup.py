@@ -12,6 +12,7 @@ The wrapper provides:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -152,4 +153,120 @@ class BohriumSetupService:
             event_callback=event_callback,
             pg_for_run=pg_for_run,
             ssh_attached=ssh_attached,
+        )
+
+    # ── High-level async entry point ─────────────────────
+
+    def _make_event_bridge(
+        self,
+        loop: asyncio.AbstractEventLoop,
+    ) -> Callable[..., None]:
+        """Create a thread-safe callback that bridges bohrium events into the bus.
+
+        Runs from executor thread, uses call_soon_threadsafe to emit safely.
+        Requires self._bus to be set.
+        """
+        from matmaster.types.events import (
+            BohriumNodeEvent,
+            ErrorEvent,
+            StreamClosedEvent,
+        )
+
+        bus = self._bus
+        assert bus is not None  # noqa: S101 -- caller guarantees
+
+        def _cb(source: Any, event_type: str, content: Any, **extra: Any) -> None:
+            def _do_emit() -> None:
+                try:
+                    if event_type == 'error':
+                        msg = content if isinstance(content, str) else str(content)
+                        bus.emit_nowait(ErrorEvent(source=str(source), message=msg))
+                        bus.emit_nowait(
+                            StreamClosedEvent(
+                                source=str(source),
+                                end_reason='error',
+                                task_completed=False,
+                                treat_as_failure=True,
+                            )
+                        )
+                        return
+                    if event_type == 'stream_closed':
+                        body = '' if content is None else str(content)
+                        bus.emit_nowait(
+                            StreamClosedEvent(
+                                source=str(source),
+                                content=body,
+                                task_completed=False,
+                                end_reason='error',
+                                treat_as_failure=True,
+                            )
+                        )
+                        return
+                    bus.emit_nowait(
+                        BohriumNodeEvent(
+                            source=str(source),
+                            payload={
+                                'type': event_type,
+                                'content': content,
+                                **extra,
+                            },
+                        )
+                    )
+                except Exception:
+                    logger.debug('bohrium event bridge error type=%s', event_type)
+            loop.call_soon_threadsafe(_do_emit)
+
+        return _cb
+
+    async def run_setup(
+        self,
+        *,
+        session_id: str,
+        playground: Any,
+        skill_sync_spec: SkillSyncSpec | None,
+        run_started_at: float,
+    ) -> BohriumSetupResult:
+        """High-level async entry: credentials + event bridge + setup in executor.
+
+        Encapsulates the full bohrium setup orchestration that was previously
+        scattered in agent_run_service.
+        """
+        run_creds, user_id_for_ak, org_id = self.load_credentials(session_id)
+
+        loop = asyncio.get_running_loop()
+        event_cb = self._make_event_bridge(loop)
+
+        return await loop.run_in_executor(
+            None,
+            lambda: self.setup(
+                session_id=session_id,
+                pg=playground,
+                skill_sync_spec=skill_sync_spec,
+                run_creds=run_creds,
+                user_id_for_ak=user_id_for_ak,
+                org_id=org_id,
+                event_callback=event_cb,
+                run_started_at=run_started_at,
+            ),
+        )
+
+    async def run_cleanup(
+        self,
+        *,
+        session_id: str,
+        pg_for_run: Any,
+        ssh_attached: bool,
+    ) -> None:
+        """High-level async cleanup: event bridge + cleanup in executor."""
+        loop = asyncio.get_running_loop()
+        event_cb = self._make_event_bridge(loop)
+
+        await loop.run_in_executor(
+            None,
+            lambda: self.cleanup(
+                session_id=session_id,
+                event_callback=event_cb,
+                pg_for_run=pg_for_run,
+                ssh_attached=ssh_attached,
+            ),
         )

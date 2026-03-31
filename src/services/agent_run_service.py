@@ -34,7 +34,6 @@ from matmaster.integration import (
 from matmaster.integration.bohrium_setup import BohriumSetupService, derive_skill_sync_spec
 from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.events import (
-    BohriumNodeEvent,
     CancelledEvent,
     ErrorEvent,
     ResponseEvent,
@@ -105,6 +104,35 @@ class StopEventLike(Protocol):
     """
 
     def is_set(self) -> bool: ...
+
+
+def _build_service_hooks(
+    bus: MessageBus,
+    spec_hooks: list[Any],
+    *,
+    mode: str,
+    reply_queue: ReplyQueueLike | None,
+) -> list[Any]:
+    """Assemble service-layer hooks (observer + confirmation).
+
+    spec_hooks: hooks from runtime.spec (Exp-layer extension point).
+    """
+    observer_hooks = [
+        OutputProcessorHook(bus),
+        SkillHitHook(bus),
+        AssistantStateHook(bus),
+    ]
+    merged = [*spec_hooks, *observer_hooks]
+    if mode == 'direct' and reply_queue is not None and _CONFIRM_TOOLS:
+        from matmaster.hooks.confirmation import ConfirmationHook
+
+        confirmation_hook = ConfirmationHook(
+            bus=bus,
+            confirm_tools=set(_CONFIRM_TOOLS),
+            get_reply=lambda: _poll_reply_queue(reply_queue),
+        )
+        merged = [confirmation_hook, *spec_hooks, *observer_hooks]
+    return merged
 
 
 async def _poll_reply_queue(
@@ -189,7 +217,6 @@ class AgentRunService:
         bohrium_svc = None
         ssh_attached = False
         playground = None
-        _ev_loop = None
         try:
             # -- Stage 1: Playground --
             self.init_playground_sync()
@@ -244,71 +271,11 @@ class AgentRunService:
 
             # -- Stage 3: Bohrium credentials + SSH --
             bohrium_svc = BohriumSetupService(self._sessions_service, bus)
-            run_creds, user_id_for_ak, org_id = bohrium_svc.load_credentials(session_id)
-
-            # Build a lightweight event_callback bridge for bohrium (legacy API).
-            # error / stream_closed must be top-level bus events so SSE/Redis see
-            # type=error|stream_closed (not nested under bohrium_node).
-            _ev_loop = asyncio.get_running_loop()
-
-            def _bohrium_event_cb(source, event_type, content, **extra):
-                """Bridge bohrium events into the MessageBus.
-
-                Runs from executor thread (via run_in_executor), so must use
-                call_soon_threadsafe to safely emit into asyncio.Queue.
-                """
-                def _do_emit():
-                    try:
-                        if event_type == 'error':
-                            msg = content if isinstance(content, str) else str(content)
-                            bus.emit_nowait(ErrorEvent(source=str(source), message=msg))
-                            bus.emit_nowait(
-                                StreamClosedEvent(
-                                    source=str(source),
-                                    end_reason='error',
-                                    task_completed=False,
-                                    treat_as_failure=True,
-                                )
-                            )
-                            return
-                        if event_type == 'stream_closed':
-                            body = '' if content is None else str(content)
-                            bus.emit_nowait(
-                                StreamClosedEvent(
-                                    source=str(source),
-                                    content=body,
-                                    task_completed=False,
-                                    end_reason='error',
-                                    treat_as_failure=True,
-                                )
-                            )
-                            return
-                        bus.emit_nowait(
-                            BohriumNodeEvent(
-                                source=str(source),
-                                payload={
-                                    'type': event_type,
-                                    'content': content,
-                                    **extra,
-                                },
-                            )
-                        )
-                    except Exception:
-                        logger.debug('bohrium event bridge error type=%s', event_type)
-                _ev_loop.call_soon_threadsafe(_do_emit)
-
-            bohrium_result = await _ev_loop.run_in_executor(
-                None,
-                lambda: bohrium_svc.setup(
-                    session_id=session_id,
-                    pg=playground,
-                    skill_sync_spec=skill_sync_spec,
-                    run_creds=run_creds,
-                    user_id_for_ak=user_id_for_ak,
-                    org_id=org_id,
-                    event_callback=_bohrium_event_cb,
-                    run_started_at=run_started_at,
-                ),
+            bohrium_result = await bohrium_svc.run_setup(
+                session_id=session_id,
+                playground=playground,
+                skill_sync_spec=skill_sync_spec,
+                run_started_at=run_started_at,
             )
             ssh_attached = bohrium_result.ssh_attached
             if bohrium_result.abort_result is not None:
@@ -318,12 +285,12 @@ class AgentRunService:
             bohrium_meta.pop('execution_session', None)
             pg_ctx = pg_ctx.with_bohrium(bohrium_meta)
             if bohrium_result.execution_session is not None:
-                ew = bohrium_result.execution_workdir or ''
-                st = bohrium_result.session_type or 'ssh'
+                execution_workdir = bohrium_result.execution_workdir or ''
+                session_type = bohrium_result.session_type or 'ssh'
                 pg_ctx = pg_ctx.with_execution(
                     session=bohrium_result.execution_session,
-                    session_type=st,
-                    execution_workdir=ew,
+                    session_type=session_type,
+                    execution_workdir=execution_workdir,
                 )
             # Workspace handling depends on the finalized Bohrium/archival context.
             router.add_handler(
@@ -372,22 +339,9 @@ class AgentRunService:
                 skills=pg_ctx.run_meta.get('skill_config'),
             )
 
-            observer_hooks = [
-                OutputProcessorHook(bus),
-                SkillHitHook(bus),
-                AssistantStateHook(bus),
-            ]
-            merged_hooks = [*runtime.spec.hooks, *observer_hooks]
-            if mode == 'direct' and reply_queue is not None and _CONFIRM_TOOLS:
-                from matmaster.hooks.confirmation import ConfirmationHook
-
-                confirmation_hook = ConfirmationHook(
-                    bus=bus,
-                    confirm_tools=set(_CONFIRM_TOOLS),
-                    get_reply=lambda: _poll_reply_queue(reply_queue),
-                )
-                merged_hooks = [confirmation_hook, *runtime.spec.hooks, *observer_hooks]
-
+            merged_hooks = _build_service_hooks(
+                bus, runtime.spec.hooks, mode=mode, reply_queue=reply_queue,
+            )
             spec = runtime.spec.model_copy(update={'hooks': merged_hooks})
 
             # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)
@@ -479,17 +433,13 @@ class AgentRunService:
                 elapsed,
             )
             # Cleanup order matters:
-            # 1. Bohrium FIRST -- cleanup can still emit events via _bohrium_event_cb
-            if bohrium_svc and _ev_loop:
+            # 1. Bohrium FIRST -- cleanup can still emit events via event bridge
+            if bohrium_svc:
                 try:
-                    await _ev_loop.run_in_executor(
-                        None,
-                        lambda: bohrium_svc.cleanup(
-                            session_id=session_id,
-                            event_callback=_bohrium_event_cb,
-                            pg_for_run=playground,
-                            ssh_attached=ssh_attached,
-                        ),
+                    await bohrium_svc.run_cleanup(
+                        session_id=session_id,
+                        pg_for_run=playground,
+                        ssh_attached=ssh_attached,
                     )
                 except Exception:
                     logger.warning('Bohrium cleanup error', exc_info=True)
