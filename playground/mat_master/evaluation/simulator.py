@@ -4,12 +4,6 @@
 paper ``Path``, or free-text ``str``) and returns a unified
 ``SimulatedTask`` containing the prompt, expected values, and data-file
 references the runner needs.
-
-v5 changes (vs v4):
-- spec_to_question() uses capability/domain instead of level/rubric_id
-- ScoringCheckItem no longer has weight field; uses axis instead of dimension
-- TouchpointBands and rubric_id references removed from spec_to_question()
-- Prompt verbosity controlled by difficulty setting (unchanged)
 """
 
 import json
@@ -314,18 +308,18 @@ class HumanSimulator:
         if template:
             return template.format(**spec.template_vars())
         keys = ', '.join(e.key for e in spec.expected)
-        return f"计算 {spec.formula} 的 {spec.calc_type}。输出: {keys}。"
+        return f'计算 {spec.formula} 的 {spec.calc_type}。输出: {keys}。'
 
     def _discover_data_files(self, spec: TaskSpec) -> list[DataFileRef]:
         files: list[DataFileRef] = []
         if self._papers_dir and spec.paper_id:
-            matches = sorted(self._papers_dir.glob(f"{spec.paper_id}_*.pdf"))
+            matches = sorted(self._papers_dir.glob(f'{spec.paper_id}_*.pdf'))
             if matches:
                 files.append(
                     DataFileRef(
                         key='paper',
                         path=str(matches[0]),
-                        description=f"Paper {spec.paper_id}",
+                        description=f'Paper {spec.paper_id}',
                     )
                 )
         if spec.cif_path:
@@ -333,7 +327,7 @@ class HumanSimulator:
                 DataFileRef(
                     key='structure',
                     path=spec.cif_path,
-                    description=f"Structure file for {spec.formula}",
+                    description=f'Structure file for {spec.formula}',
                 )
             )
         return files
@@ -343,9 +337,9 @@ class HumanSimulator:
     # ------------------------------------------------------------------
 
     def _from_paper(self, pdf_path: Path, hint: str) -> SimulatedTask:
-        prompt = f"请阅读工作目录中的论文 {pdf_path.name}，"
+        prompt = f'请阅读工作目录中的论文 {pdf_path.name}，'
         if hint:
-            prompt += f"复现其中关于 {hint} 的核心计算结果。"
+            prompt += f'复现其中关于 {hint} 的核心计算结果。'
         else:
             prompt += '识别并复现其中 1-2 个最核心的可计算结果。'
         prompt += '\n输出每个结果的数值和单位。'
@@ -371,8 +365,8 @@ class HumanSimulator:
                 SystemMessage(content=_REWRITE_SYSTEM_PROMPT),
                 UserMessage(
                     content=(
-                        f"Question intent:\n{question.intent}\n\n"
-                        f"Seed prompt:\n{question.human_prompt_seed}\n\n"
+                        f'Question intent:\n{question.intent}\n\n'
+                        f'Seed prompt:\n{question.human_prompt_seed}\n\n'
                         'Return JSON only.'
                     )
                 ),
@@ -388,18 +382,11 @@ class HumanSimulator:
             return question.human_prompt_seed
 
     # ------------------------------------------------------------------
-    # TaskSpec → QuestionItem (v5 format)
+    # TaskSpec → QuestionItem
     # ------------------------------------------------------------------
 
     def spec_to_question(self, spec: TaskSpec) -> QuestionItem:
-        """Build a v5 ``QuestionItem`` from a ``TaskSpec``.
-
-        v5 changes vs v4:
-        - Uses capability='workflow_orchestration', domain='general'
-          instead of level='L3', rubric_id
-        - ScoringCheckItem uses axis='correctness' (no weight field)
-        - No TouchpointBands
-        """
+        """Build a ``QuestionItem`` from a ``TaskSpec``."""
         prompt = self._generate_prompt(spec)
         data_files = self._discover_data_files(spec)
 
@@ -413,23 +400,23 @@ class HumanSimulator:
         checklist: list[ScoringCheckItem] = [
             ScoringCheckItem(
                 id=e.key,
-                criterion=f"{e.key} is within tolerance of the reference value.",
+                criterion=f'{e.key} is within tolerance of the reference value.',
                 axis='correctness',
                 verify='numerical_range',
             )
             for e in spec.expected
         ]
 
-        tags = [f"calc_{spec.calc_type}", f"paper_{spec.paper_id}"]
+        tags = [f'calc_{spec.calc_type}', f'paper_{spec.paper_id}']
         tags.extend(spec.tags)
 
         return QuestionItem(
-            id=f"LIT_{spec.id}",
+            id=f'LIT_{spec.id}',
             capability='workflow_orchestration',
             domain='general',
             intent=(
-                f"Reproduce {spec.calc_type} calculation for {spec.formula} "
-                f"from paper {spec.paper_id}."
+                f'Reproduce {spec.calc_type} calculation for {spec.formula} '
+                f'from paper {spec.paper_id}.'
             ),
             human_prompt_seed=prompt,
             tags=tags,
@@ -471,5 +458,5 @@ def _parse_json_payload(text: str) -> dict[str, Any]:
     start = stripped.find('{')
     end = stripped.rfind('}')
     if start >= 0 and end > start:
-        return json.loads(stripped[start: end + 1])
+        return json.loads(stripped[start : end + 1])
     raise ValueError('No JSON object found in simulator output')

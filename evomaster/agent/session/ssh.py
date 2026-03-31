@@ -100,6 +100,7 @@ class SSHSession(BaseSession):
         command: str,
         timeout: int | None = None,
         is_input: bool = False,
+        stop_event: Any | None = None,
     ) -> dict[str, Any]:
         """通过 tmux 执行 bash 命令（持久环境，状态保持）。"""
         if not self._is_open:
@@ -131,7 +132,7 @@ class SSHSession(BaseSession):
                     pass
                 else:
                     self._env.tmux_send_keys(command, enter=True)
-            except (RuntimeError, TimeoutError, OSError) as exc:
+            except (RuntimeError, OSError) as exc:
                 return {
                     'stdout': f'[SSH error sending input: {exc}]',
                     'stderr': str(exc),
@@ -149,7 +150,7 @@ class SSHSession(BaseSession):
             if command != '':
                 try:
                     self._env.tmux_send_keys(command, enter=True)
-                except (RuntimeError, TimeoutError, OSError) as exc:
+                except (RuntimeError, OSError) as exc:
                     return {
                         'stdout': f'[SSH error sending command: {exc}]',
                         'stderr': str(exc),
@@ -163,12 +164,28 @@ class SSHSession(BaseSession):
         self._prev_command_status = 'timeout'
         _consecutive_failures = 0
         _MAX_CONSECUTIVE_FAILURES = 5
+        interrupted = False
+        interrupt_wait_until = 0.0
 
         while time.time() - start_time < timeout:
+            if (
+                stop_event is not None
+                and getattr(stop_event, 'is_set', None)
+                and stop_event.is_set()
+                and self._prev_command_status != 'completed'
+                and not interrupted
+            ):
+                try:
+                    self._env.tmux_send_keys('C-c', enter=False)
+                    interrupted = True
+                    interrupt_wait_until = time.time() + 5.0
+                except (RuntimeError, OSError) as exc:
+                    self.logger.warning('failed to send C-c to tmux: %s', exc)
+
             try:
                 logs = self._env.get_tmux_logs()
                 _consecutive_failures = 0
-            except (TimeoutError, OSError, RuntimeError) as exc:
+            except (OSError, RuntimeError) as exc:
                 _consecutive_failures += 1
                 self.logger.warning(
                     'get_tmux_logs failed (%d/%d): %s',
@@ -189,6 +206,9 @@ class SSHSession(BaseSession):
 
             if ps1_count > self._last_ps1_count:
                 self._prev_command_status = 'completed'
+                break
+
+            if interrupted and time.time() >= interrupt_wait_until:
                 break
 
             time.sleep(poll_interval)
@@ -237,8 +257,11 @@ class SSHSession(BaseSession):
         }
 
         if self._prev_command_status == 'timeout':
-            result['stdout'] += f"\n[Command timed out after {timeout}s]"
+            result['stdout'] += f'\n[Command timed out after {timeout}s]'
             result['exit_code'] = -1
+        elif interrupted and result.get('exit_code') == -1:
+            result['stderr'] = 'Command cancelled by stop request.'
+            result['exit_code'] = 130
 
         return result
 

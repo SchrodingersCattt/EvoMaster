@@ -1,7 +1,7 @@
 """Tests for DevConfig model and loading."""
+
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -12,7 +12,6 @@ class TestDevConfig:
         from matmaster.devshell.config import DevConfig
 
         cfg = DevConfig()
-        assert cfg.llm.model == "gpt-4o"
         assert cfg.agent.max_turns == 20
         assert cfg.session.type == "local"
         assert cfg.tools.builtin == ["*"]
@@ -21,13 +20,18 @@ class TestDevConfig:
         from matmaster.devshell.config import DevConfig
 
         data = {
-            "llm": {"model": "gpt-3.5-turbo", "api_key": "sk-test"},
             "agent": {"max_turns": 5},
         }
         cfg = DevConfig.model_validate(data)
-        assert cfg.llm.model == "gpt-3.5-turbo"
-        assert cfg.llm.api_key == "sk-test"
         assert cfg.agent.max_turns == 5
+
+    def test_extra_keys_ignored(self) -> None:
+        from matmaster.devshell.config import DevConfig
+
+        cfg = DevConfig.model_validate(
+            {"llm": {"model": "x"}, "agent": {"max_turns": 3}}
+        )
+        assert cfg.agent.max_turns == 3
 
     def test_identity_optional(self) -> None:
         from matmaster.devshell.config import DevConfig
@@ -44,9 +48,6 @@ class TestLoadDevConfig:
         from matmaster.devshell.config import load_dev_config
 
         yaml_content = """
-llm:
-  model: gpt-4o-mini
-  api_key: sk-yaml
 agent:
   max_turns: 10
   identity: "Test bot"
@@ -54,23 +55,23 @@ agent:
         config_file = tmp_path / "dev.yaml"
         config_file.write_text(yaml_content)
         cfg = load_dev_config(config_file)
-        assert cfg.llm.model == "gpt-4o-mini"
-        assert cfg.llm.api_key == "sk-yaml"
         assert cfg.agent.max_turns == 10
         assert cfg.agent.identity == "Test bot"
 
-    def test_env_var_expansion(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_env_var_expansion(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from matmaster.devshell.config import load_dev_config
 
-        monkeypatch.setenv("TEST_API_KEY", "sk-from-env")
+        monkeypatch.setenv("TEST_IDENTITY", "from-env")
         yaml_content = """
-llm:
-  api_key: ${TEST_API_KEY}
+agent:
+  identity: ${TEST_IDENTITY}
 """
         config_file = tmp_path / "dev.yaml"
         config_file.write_text(yaml_content)
         cfg = load_dev_config(config_file)
-        assert cfg.llm.api_key == "sk-from-env"
+        assert cfg.agent.identity == "from-env"
 
     def test_file_not_found(self) -> None:
         from matmaster.devshell.config import load_dev_config
@@ -82,7 +83,6 @@ llm:
         from matmaster.devshell.config import DevConfig
 
         cfg = DevConfig()
-        assert cfg.llm.api_key == ""
         assert cfg.agent.name == "general"
 
 

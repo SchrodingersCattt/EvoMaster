@@ -11,8 +11,9 @@ from __future__ import annotations
 import asyncio
 import threading
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any, AsyncIterator
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -76,6 +77,13 @@ class _ErrorLLM:
         yield  # make it an async generator
 
 
+def _async_collect(payloads: list) -> Callable:
+    """Return an async send_cb that appends payloads to a list."""
+    async def _cb(payload: Any) -> None:
+        payloads.append(payload)
+    return _cb
+
+
 def _make_ctx(tmp_path: Path) -> PlaygroundContext:
     return PlaygroundContext(
         workdir=tmp_path / 'workspace',
@@ -106,7 +114,15 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
     return svc, mock_pg
 
 
-def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None, send_cb=None):
+def _run_with_quota_mock(
+    svc,
+    mock_pg,
+    use_quota_mock,
+    stop_event=None,
+    send_cb=None,
+    *,
+    return_result: bool = False,
+):
     """Run agent with standard patches and return whether use_quota was called."""
     with (
         patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
@@ -136,6 +152,8 @@ def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None, send_cb=
         mock_bohrium_svc = mock_bohrium_cls.return_value
         mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
         mock_bohrium_svc.setup.return_value = mock_bohrium_result
+        mock_bohrium_svc.run_setup = AsyncMock(return_value=mock_bohrium_result)
+        mock_bohrium_svc.run_cleanup = AsyncMock()
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
@@ -144,16 +162,18 @@ def _run_with_quota_mock(svc, mock_pg, use_quota_mock, stop_event=None, send_cb=
         mock_redis = MagicMock()
         mock_redis_fn.return_value = mock_redis
 
-        asyncio.run(svc.run_agent(
+        result = asyncio.run(svc.run_agent(
             session_id='sess-q',
             user_prompt='quota test',
-            send_cb=send_cb or MagicMock(),
+            send_cb=send_cb or AsyncMock(),
             stop_event=stop_event or threading.Event(),
             mode='direct',
             reply_queue=None,
             task_id='task-q',
         ))
 
+    if return_result:
+        return result
     return use_quota_mock.called
 
 
@@ -191,7 +211,7 @@ class TestQuotaDeductedOnSuccess:
             svc,
             mock_pg,
             use_quota_mock,
-            send_cb=lambda payload: payloads.append(payload),
+            send_cb=_async_collect(payloads),
         )
 
         run_result_payload = next(
@@ -236,7 +256,7 @@ class TestQuotaDeductedOnSuccess:
             svc,
             mock_pg,
             use_quota_mock,
-            send_cb=lambda payload: payloads.append(payload),
+            send_cb=_async_collect(payloads),
         )
 
         response_payload = next(
@@ -298,7 +318,7 @@ class TestQuotaNotDeductedOnCancel:
             mock_pg,
             use_quota_mock,
             stop_event=stop_event,
-            send_cb=lambda payload: payloads.append(payload),
+            send_cb=_async_collect(payloads),
         )
 
         assert any(payload.get('type') == 'cancelled' for payload in payloads)
@@ -311,6 +331,32 @@ class TestQuotaNotDeductedOnCancel:
         assert stream_closed_payload['end_reason'] == 'cancelled'
         payload_types = [payload.get('type') for payload in payloads]
         assert payload_types.index('cancelled') < payload_types.index('stream_closed')
+
+    def test_cancelled_run_returns_failure_result(self, tmp_path: Path) -> None:
+        """Verify cancelled runs return a failure result for Worker notifications."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _SuccessLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+
+        stop_event = threading.Event()
+        stop_event.set()
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        result = _run_with_quota_mock(
+            svc,
+            mock_pg,
+            use_quota_mock,
+            stop_event=stop_event,
+            return_result=True,
+        )
+
+        assert isinstance(result, tuple)
+        assert result[0] == (False, 'cancelled')
+        assert isinstance(result[1], int)
+        assert result[1] >= 0
 
 
 class TestQuotaNotDeductedOnError:
@@ -344,7 +390,7 @@ class TestQuotaNotDeductedOnError:
             svc,
             mock_pg,
             use_quota_mock,
-            send_cb=lambda payload: payloads.append(payload),
+            send_cb=_async_collect(payloads),
         )
 
         assert any(payload.get('type') == 'error' for payload in payloads)
@@ -358,6 +404,29 @@ class TestQuotaNotDeductedOnError:
         assert stream_closed_payload['treat_as_failure'] is True
         payload_types = [payload.get('type') for payload in payloads]
         assert payload_types.index('error') < payload_types.index('stream_closed')
+
+    def test_error_run_returns_failure_result(self, tmp_path: Path) -> None:
+        """Verify exception paths return failure so Worker won't notify success."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _ErrorLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        result = _run_with_quota_mock(
+            svc,
+            mock_pg,
+            use_quota_mock,
+            return_result=True,
+        )
+
+        assert isinstance(result, tuple)
+        assert result[0][0] is False
+        assert 'LLM error' in result[0][1]
+        assert isinstance(result[1], int)
+        assert result[1] >= 0
 
     def test_quota_not_deducted_on_invalid_finish(self, tmp_path: Path) -> None:
         """Verify use_quota NOT called when run_result validation fails."""
@@ -387,7 +456,7 @@ class TestQuotaNotDeductedOnError:
             svc,
             mock_pg,
             use_quota_mock,
-            send_cb=lambda payload: payloads.append(payload),
+            send_cb=_async_collect(payloads),
         )
 
         run_result_payload = next(
@@ -407,6 +476,28 @@ class TestQuotaNotDeductedOnError:
         assert stream_closed_payload['treat_as_failure'] is True
         payload_types = [payload.get('type') for payload in payloads]
         assert payload_types.index('run_result') < payload_types.index('stream_closed')
+
+    def test_invalid_finish_returns_failure_result(self, tmp_path: Path) -> None:
+        """Verify failed finish states return failure for Worker status updates."""
+        pg_ctx = _make_ctx(tmp_path)
+        mock_llm = _InvalidFinishLLM()
+        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+
+        async def mock_use_quota(uid):
+            pass
+
+        use_quota_mock = MagicMock(side_effect=mock_use_quota)
+        result = _run_with_quota_mock(
+            svc,
+            mock_pg,
+            use_quota_mock,
+            return_result=True,
+        )
+
+        assert isinstance(result, tuple)
+        assert result[0] == (False, 'invalid_finish')
+        assert isinstance(result[1], int)
+        assert result[1] >= 0
 
 
 class TestQuotaDeduction:

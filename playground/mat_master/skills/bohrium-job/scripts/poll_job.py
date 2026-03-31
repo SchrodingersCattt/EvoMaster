@@ -1,4 +1,8 @@
-"""poll_job.py - monitor a Bohrium job by job_id and download results."""
+"""poll_job.py - monitor a Bohrium job by job_id and download results.
+
+Uses GET /openapi/v1/sandbox/job/{id} when ``BOHRIUM_USE_SANDBOX=1``, else
+``GET /openapi/v1/job/{id}`` (default when unset). Same env rule as submit_job.py.
+"""
 
 import argparse
 import json
@@ -23,9 +27,24 @@ try:
 
     OPENAPI_BASE = BOHRIUM_OPENAPI_HOST
 except ImportError:
-    OPENAPI_BASE = os.environ.get('BOHRIUM_BASE_URL', 'https://open.bohrium.com').rstrip('/')
+    OPENAPI_BASE = os.environ.get(
+        'BOHRIUM_BASE_URL', 'https://open.bohrium.com'
+    ).rstrip('/')
 
 _HEADER = {'accessKey': ACCESS_KEY}
+
+
+def _use_sandbox() -> bool:
+    """True only when BOHRIUM_USE_SANDBOX is ``1`` (default when unset: standard HPC)."""
+    return os.environ.get('BOHRIUM_USE_SANDBOX', '0').strip() == '1'
+
+
+def _job_detail_path(job_id: int | str) -> str:
+    if _use_sandbox():
+        return f'/openapi/v1/sandbox/job/{job_id}'
+    return f'/openapi/v1/job/{job_id}'
+
+
 _STATUS_MAP = {
     0: 'Pending',
     1: 'Running',
@@ -50,15 +69,15 @@ def _get(path: str, timeout: int = 30) -> dict:
     return response.json()
 
 
-def _get_job_detail(job_id: int) -> dict:
-    response = _get(f"/openapi/v1/job/{job_id}")
+def _get_job_detail(job_id: int | str) -> dict:
+    response = _get(_job_detail_path(job_id))
     return response.get('data', {})
 
 
 def poll_until_done(
-    job_id: int, max_polls: int, interval: int
+    job_id: int | str, max_polls: int, interval: int
 ) -> tuple[str, int]:
-    """Poll /openapi/v1/job/{job_id} until terminal status.
+    """Poll job detail until terminal status (path depends on BOHRIUM_USE_SANDBOX).
 
     Returns a tuple ``(status, polls_done)`` where *polls_done* is the number
     of poll iterations actually executed.  When the budget exhausts while the
@@ -132,7 +151,7 @@ def read_log_from_dir(extract_dir: Path, max_chars: int = 4000) -> str:
     return '(no log file found in result directory)'
 
 
-def download_and_extract(job_id: int, result_dir: Path) -> tuple[list[str], str]:
+def download_and_extract(job_id: int | str, result_dir: Path) -> tuple[list[str], str]:
     """Download out.zip from resultUrl and extract to local directory."""
     result_dir.mkdir(parents=True, exist_ok=True)
 
@@ -161,9 +180,21 @@ def download_and_extract(job_id: int, result_dir: Path) -> tuple[list[str], str]
     return names, str(extract_dir.resolve())
 
 
+def _parse_job_id_arg(value: str) -> int | str:
+    """Follows BOHRIUM_USE_SANDBOX: sandbox → UUID string; standard → int."""
+    s = value.strip()
+    if _use_sandbox():
+        return s
+    return int(s)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description='Monitor Bohrium job by job_id')
-    parser.add_argument('--job-id', type=int, required=True, help='Bohrium job id')
+    parser.add_argument(
+        '--job-id',
+        required=True,
+        help='Job id: integer (default HPC); UUID string when BOHRIUM_USE_SANDBOX=1',
+    )
     parser.add_argument(
         '--max-polls',
         type=int,
@@ -199,7 +230,7 @@ def main() -> None:
     if args.timeout_minutes is not None:
         max_polls = max(1, int(args.timeout_minutes * 60 / args.poll_interval))
 
-    job_id = int(args.job_id)
+    job_id = _parse_job_id_arg(args.job_id)
     start_time = time.time()
     status, polls_done = poll_until_done(job_id, max_polls, args.poll_interval)
     elapsed_seconds = time.time() - start_time

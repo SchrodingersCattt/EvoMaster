@@ -520,7 +520,7 @@ class TestAgentRunServiceConfirmationRecovery:
         mock_pg, _ = self._make_playground(tmp_path)
         payloads: list[dict[str, Any]] = []
 
-        def send_cb(payload: dict[str, Any]) -> None:
+        async def send_cb(payload: dict[str, Any]) -> None:
             payloads.append(payload)
 
         async def _fake_build_runtime(self, pg_ctx, bus=None, skills=None):
@@ -568,7 +568,8 @@ class TestAgentRunServiceConfirmationRecovery:
         ):
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
-            mock_bohrium_svc.setup.return_value = mock_bohrium_result
+            mock_bohrium_svc.run_setup = AsyncMock(return_value=mock_bohrium_result)
+            mock_bohrium_svc.run_cleanup = AsyncMock()
 
             responder = threading.Thread(target=reply_fn, daemon=True)
             responder.start()

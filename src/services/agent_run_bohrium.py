@@ -23,10 +23,13 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def _clear_remote_proxy_shell() -> str:
-    """Bash snippet for root on Bohrium SSH nodes: wget/curl/git + env.
+    """Bash snippet for root on Bohrium SSH nodes: wget/curl/git/pip + env.
 
     GNU wget only accepts ``use_proxy = on|off``; ``use_proxy = no`` is invalid and
     leaves /etc/wgetrc proxy (e.g. ga.dp.tech:8118) in effect.
+
+    Pip reads ``~/.pip/pip.conf`` / ``/etc/pip.conf`` ``[global] proxy=`` independently
+    of shell env; strip those lines so ``pip install`` does not force ga.dp.tech.
     """
     return (
         'rm -f /root/speedUp.sh /speedUp.sh; '
@@ -45,6 +48,12 @@ def _clear_remote_proxy_shell() -> str:
         '> /root/.curlrc; '
         'git config --global --unset-all http.proxy 2>/dev/null; true; '
         'git config --global --unset-all https.proxy 2>/dev/null; true; '
+        '[ -f /root/.pip/pip.conf ] && sed -i '
+        "'/^[[:space:]]*proxy[[:space:]]*=/d' "
+        '/root/.pip/pip.conf 2>/dev/null; true; '
+        '[ -f /etc/pip.conf ] && sed -i '
+        "'/^[[:space:]]*proxy[[:space:]]*=/d' "
+        '/etc/pip.conf 2>/dev/null; true; '
         'export http_proxy= https_proxy= HTTP_PROXY= HTTPS_PROXY= ALL_PROXY= '
         'NO_PROXY= no_proxy= ftp_proxy= FTP_PROXY=; '
         'unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY '
@@ -194,7 +203,7 @@ def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
             )
             return
         logger.info(
-            'run_agent: clear_remote_proxy (%s) running (wgetrc/curlrc + env)',
+            'run_agent: clear_remote_proxy (%s) running (wgetrc/curlrc/pip.conf + env)',
             phase,
         )
         script = _clear_remote_proxy_shell()

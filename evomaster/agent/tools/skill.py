@@ -61,8 +61,11 @@ class SkillTool(BaseTool):
     name: ClassVar[str] = 'use_skill'
     params_class: ClassVar[type[BaseToolParams]] = SkillToolParams
 
-    def __init__(self, skill_registry: SkillRegistry,
-                 on_skill_hit: Callable[[str], None] | None = None):
+    def __init__(
+        self,
+        skill_registry: SkillRegistry,
+        on_skill_hit: Callable[[str], None] | None = None,
+    ):
         """初始化 SkillTool
 
         Args:
@@ -134,8 +137,8 @@ class SkillTool(BaseTool):
                 )
 
         except Exception as e:
-            self.logger.error(f"Skill tool execution failed: {e}", exc_info=True)
-            return f"Error: {str(e)}", {'error': str(e)}
+            self.logger.error(f'Skill tool execution failed: {e}', exc_info=True)
+            return f'Error: {str(e)}', {'error': str(e)}
 
     @staticmethod
     def _get_skill_project_root(skill: Skill | Path | str) -> Path | None:
@@ -167,12 +170,12 @@ class SkillTool(BaseTool):
         full_info = skill.get_full_info()
 
         # Trigger callback for lazy MCP schema injection
-        mcp_server = skill.meta_info.extras.get("mcp_server")
+        mcp_server = skill.meta_info.extras.get('mcp_server')
         if mcp_server and self._on_skill_hit:
             self._on_skill_hit(mcp_server)
 
         return (
-            f"# Skill: {skill.meta_info.name}\n\n{full_info}",
+            f'# Skill: {skill.meta_info.name}\n\n{full_info}',
             {'action': 'get_info', 'skill_name': skill.meta_info.name},
         )
 
@@ -196,7 +199,7 @@ class SkillTool(BaseTool):
 
         try:
             reference_content = skill.get_reference(reference_name)
-            observation = f"# Reference: {reference_name}\n\n{reference_content}"
+            observation = f'# Reference: {reference_name}\n\n{reference_content}'
 
             # Append co-template hints if available
             co_hint = self._get_co_template_hint(skill, reference_name)
@@ -217,7 +220,7 @@ class SkillTool(BaseTool):
             # the agent can still proceed instead of stalling.
             full_info = skill.get_full_info()
             return (
-                f"Error: {str(e)}\n\nFallback to skill info:\n\n# Skill: {skill.meta_info.name}\n\n{full_info}",
+                f'Error: {str(e)}\n\nFallback to skill info:\n\n# Skill: {skill.meta_info.name}\n\n{full_info}',
                 {
                     'action': 'get_reference',
                     'skill_name': skill.meta_info.name,
@@ -282,7 +285,7 @@ class SkillTool(BaseTool):
                 'Related templates you should ALSO fetch (use get_reference for each):'
             )
             for r in related:
-                lines.append(f"  - {r}")
+                lines.append(f'  - {r}')
         lines.append(
             'Do NOT skip fetching related templates. Do NOT try to manually '
             'construct these sections by querying the manual.'
@@ -328,7 +331,7 @@ class SkillTool(BaseTool):
             available_scripts = ', '.join([s.name for s in skill.available_scripts])
             return (
                 f"Error: Script '{script_name}' not found in skill '{skill.meta_info.name}'. "
-                f"Available scripts: {available_scripts}",
+                f'Available scripts: {available_scripts}',
                 {'error': 'script_not_found'},
             )
         # 转换为绝对路径
@@ -377,14 +380,14 @@ class SkillTool(BaseTool):
 
             # Build the inner command (interpreter + script path, no credentials).
             if suffix == '.py':
-                inner_cmd = f"PYTHONPATH={shlex.quote(pythonpath_remote)} python {shlex.quote(remote_script)}"
+                inner_cmd = f'PYTHONPATH={shlex.quote(pythonpath_remote)} python {shlex.quote(remote_script)}'
             elif suffix == '.sh':
-                inner_cmd = f"bash {shlex.quote(remote_script)}"
+                inner_cmd = f'bash {shlex.quote(remote_script)}'
             elif suffix == '.js':
-                inner_cmd = f"node {shlex.quote(remote_script)}"
+                inner_cmd = f'node {shlex.quote(remote_script)}'
             else:
                 return (
-                    f"Error: Unsupported script type: {suffix}",
+                    f'Error: Unsupported script type: {suffix}',
                     {'error': 'unsupported_script_type'},
                 )
 
@@ -402,10 +405,10 @@ class SkillTool(BaseTool):
                 # session.write_file() uses paramiko SFTP directly — the AK goes
                 # Python memory → SFTP → remote file, bypassing the shell entirely.
                 # Source: session._bohrium_credentials (same as MCP / monitor_job).
-                env_file = f"/tmp/.skill_remote_env_{uuid.uuid4().hex[:8]}"
+                env_file = f'/tmp/.skill_remote_env_{uuid.uuid4().hex[:8]}'
                 env_content = (
                     '\n'.join(
-                        f"export {k}={shlex.quote(v)}"
+                        f'export {k}={shlex.quote(v)}'
                         for k, v in remote_skill_env.items()
                     )
                     + '\n'
@@ -415,8 +418,8 @@ class SkillTool(BaseTool):
                 # (don't leak into the parent tmux shell). Exit code is preserved
                 # via explicit `exit $_r` before the subshell terminates.
                 cmd = (
-                    f"( . {shlex.quote(env_file)}; {inner_cmd};"
-                    f" _r=$?; rm -f {shlex.quote(env_file)}; exit $_r )"
+                    f'( . {shlex.quote(env_file)}; {inner_cmd};'
+                    f' _r=$?; rm -f {shlex.quote(env_file)}; exit $_r )'
                 )
             else:
                 cmd = inner_cmd
@@ -436,15 +439,15 @@ class SkillTool(BaseTool):
                 else:
                     py_prefix = ''
                     if project_root is not None:
-                        py_prefix = f"PYTHONPATH={shlex.quote(str(project_root))} "
-                    cmd = f"{py_prefix}python {shlex.quote(str(script_path))}"
+                        py_prefix = f'PYTHONPATH={shlex.quote(str(project_root))} '
+                    cmd = f'{py_prefix}python {shlex.quote(str(script_path))}'
             elif script_path.suffix == '.sh':
-                cmd = f"bash {script_path}"
+                cmd = f'bash {script_path}'
             elif script_path.suffix == '.js':
-                cmd = f"node {script_path}"
+                cmd = f'node {script_path}'
             else:
                 return (
-                    f"Error: Unsupported script type: {script_path.suffix}",
+                    f'Error: Unsupported script type: {script_path.suffix}',
                     {'error': 'unsupported_script_type'},
                 )
 
@@ -462,16 +465,23 @@ class SkillTool(BaseTool):
 
         # 使用 session 的 bash 工具执行脚本
         try:
-            result = session.exec_bash(cmd, timeout=script_timeout)
+            stop_event = getattr(self, '_stop_event', None) or getattr(
+                session, '_stop_event', None
+            )
+            result = session.exec_bash(
+                cmd,
+                timeout=script_timeout,
+                stop_event=stop_event,
+            )
             stdout = result.get('stdout', '')
             stderr = result.get('stderr', '')
             exit_code = result.get('exit_code', 0)
 
-            output = f"Script output:\n{stdout}"
+            output = f'Script output:\n{stdout}'
             if stderr:
-                output += f"\n\nStderr:\n{stderr}"
+                output += f'\n\nStderr:\n{stderr}'
             if exit_code != 0:
-                output += f"\n\nExit code: {exit_code}"
+                output += f'\n\nExit code: {exit_code}'
 
             # Auto-inject per-mode prompt: scan script_args tokens and append the
             # first prompts/<token>.md that exists. No config file needed — the
@@ -483,15 +493,15 @@ class SkillTool(BaseTool):
                 except ValueError:
                     tokens = script_args.strip().split()
                 for token in tokens:
-                    candidate = prompts_dir / f"{token}.md"
+                    candidate = prompts_dir / f'{token}.md'
                     if candidate.exists():
                         try:
                             prompt_content = candidate.read_text(encoding='utf-8')
                             output += (
                                 f"\n\n{'=' * 60}\n"
-                                f"MANDATORY WORKFLOW (auto-loaded: prompts/{token}.md):\n"
+                                f'MANDATORY WORKFLOW (auto-loaded: prompts/{token}.md):\n'
                                 f"{'=' * 60}\n\n"
-                                f"{prompt_content}"
+                                f'{prompt_content}'
                             )
                         except Exception:
                             pass
@@ -509,6 +519,6 @@ class SkillTool(BaseTool):
             )
         except Exception as e:
             return (
-                f"Error executing script: {str(e)}",
+                f'Error executing script: {str(e)}',
                 {'error': 'script_execution_failed'},
             )

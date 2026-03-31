@@ -1,21 +1,20 @@
 """REPL loop for mm-devshell."""
+
 from __future__ import annotations
 
 import asyncio
 import os
 import signal
-import sys
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from matmaster.core.bus import MessageBus
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.event_logger import EventLogger
 from matmaster.devshell.runner import DevRunner
-from matmaster.core.bus import MessageBus
-
 
 BUILTIN_COMMANDS = {"help", "config", "tools", "clear", "history", "verbose"}
 
@@ -44,12 +43,17 @@ def parse_command(text: str) -> tuple[str, str] | None:
 
 
 def format_banner(
-    config: DevConfig, workdir: str, log_dir: str
+    config: DevConfig,
+    workdir: str,
+    log_dir: str,
+    *,
+    llm_model: str,
+    llm_profile: str,
 ) -> str:
     """Format the startup banner."""
     return (
         f"MatMaster Dev Shell v0.1\n"
-        f"Model: {config.llm.model} | Session: {config.session.type} | "
+        f"LLM: {llm_model} (profile={llm_profile}) | Session: {config.session.type} | "
         f"Tools: builtin\n"
         f"Workdir: {workdir} | Logs: {log_dir}\n"
         f"Type /help for commands, Ctrl+C to cancel current run, Ctrl+D to exit."
@@ -70,7 +74,18 @@ def run_repl(
     log_file = log_dir / f"events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
     event_logger = EventLogger(log_file, run_id="run-000")
 
-    print(format_banner(config, str(runner._workdir), str(log_dir)))
+    rr = runner._resolved_route
+    llm_model = getattr(rr, "model", "?") if rr is not None else "?"
+    llm_profile = getattr(rr, "profile_key", "?") if rr is not None else "?"
+    print(
+        format_banner(
+            config,
+            str(runner._workdir),
+            str(log_dir),
+            llm_model=str(llm_model),
+            llm_profile=str(llm_profile),
+        )
+    )
     print()
 
     while True:
@@ -93,7 +108,7 @@ def run_repl(
             if cmd == "help":
                 print(HELP_TEXT)
             elif cmd == "config":
-                _show_config(config)
+                _show_config(config, runner)
             elif cmd == "tools":
                 _show_tools(runner)
             elif cmd == "clear":
@@ -118,8 +133,13 @@ def run_repl(
 
         original_handler = signal.getsignal(signal.SIGINT)
 
-        def _sigint_handler(signum: int, frame: Any) -> None:
-            stop_event.set()
+        def _sigint_handler(
+            signum: int,
+            frame: Any,
+            *,
+            ev: threading.Event = stop_event,
+        ) -> None:
+            ev.set()
             print("\n\nCancelling...")
 
         signal.signal(signal.SIGINT, _sigint_handler)
@@ -128,12 +148,18 @@ def run_repl(
             result_holder: list[Any] = []
             error_holder: list[Exception] = []
 
-            def _worker() -> None:
+            def _worker(
+                task: str = user_input,
+                ev: threading.Event = stop_event,
+                b: MessageBus = bus,
+                rh: list[Any] = result_holder,
+                eh: list[Exception] = error_holder,
+            ) -> None:
                 try:
-                    result = runner.run(user_input, stop_event=stop_event, bus=bus)
-                    result_holder.append(result)
+                    result = runner.run(task, stop_event=ev, bus=b)
+                    rh.append(result)
                 except Exception as e:
-                    error_holder.append(e)
+                    eh.append(e)
 
             worker = threading.Thread(target=_worker, daemon=True)
             worker.start()
@@ -168,12 +194,16 @@ def run_repl(
     event_logger.close()
 
 
-def _show_config(config: DevConfig) -> None:
+def _show_config(config: DevConfig, runner: DevRunner) -> None:
     """Display current configuration."""
-    print(f"LLM: model={config.llm.model}, base_url={config.llm.base_url}")
-    print(
-        f"Agent: name={config.agent.name}, max_turns={config.agent.max_turns}"
-    )
+    rr = runner._resolved_route
+    if rr is not None and runner._llm_config is not None:
+        prof = runner._llm_config.get_profile(rr.profile_key)
+        bu = (prof.base_url or "").strip()
+        print(f"LLM: model={rr.model} profile={rr.profile_key} base_url={bu}")
+    else:
+        print("LLM: (unavailable)")
+    print(f"Agent: name={config.agent.name}, max_turns={config.agent.max_turns}")
     print(f"Session: type={config.session.type}")
     print(f"Tools: builtin={config.tools.builtin}")
     if config.agent.identity:

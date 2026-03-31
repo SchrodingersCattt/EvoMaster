@@ -3,7 +3,7 @@ param(
   [string]$MatConfig = "configs/mat_master/config.yaml",
   [string]$OutputDir = "runs/mat_master_eval",
   [string]$RunLabel = "mat_master_eval",
-  [string[]]$Levels = @(),
+  [string[]]$Capabilities = @(),
   [string[]]$Questions = @(),
   [int]$K = 0,
   [string[]]$Modes = @(),
@@ -33,7 +33,7 @@ $pyArgs = @(
 if ($K -gt 0) { $pyArgs += @("--k", "$K") }
 if ($Modes.Count -gt 0) { $pyArgs += @("--modes") + $Modes }
 if ($UseSeedPrompt) { $pyArgs += "--use-seed-prompt" }
-if ($Levels.Count -gt 0) { $pyArgs += @("--levels") + $Levels }
+if ($Capabilities.Count -gt 0) { $pyArgs += @("--capabilities") + $Capabilities }
 if ($Questions.Count -gt 0) { $pyArgs += @("--questions") + $Questions }
 
 Write-Host "Starting evaluation..."

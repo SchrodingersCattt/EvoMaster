@@ -13,19 +13,19 @@ from .base import BuiltinTool
 class ListDirTool(BuiltinTool):
     """List directory contents via session shell."""
 
-    name: ClassVar[str] = "list_dir"
+    name: ClassVar[str] = 'list_dir'
     description: ClassVar[str] = (
-        "List files and directories at the specified path (ls -la format).\n\n"
-        "Usage:\n"
-        "- Use for quick directory overview before navigating the workspace.\n"
-        "- Returns file permissions, sizes, and timestamps."
+        'List files and directories at the specified path (ls -la format).\n\n'
+        'Usage:\n'
+        '- Use for quick directory overview before navigating the workspace.\n'
+        '- Returns file permissions, sizes, and timestamps.'
     )
     json_schema: ClassVar[dict[str, Any]] = {
-        "type": "object",
-        "properties": {
-            "path": {
-                "type": "string",
-                "description": "Directory path to list contents of. Defaults to current directory.",
+        'type': 'object',
+        'properties': {
+            'path': {
+                'type': 'string',
+                'description': 'Directory path to list contents of. Defaults to current directory.',
             },
         },
     }
@@ -33,16 +33,17 @@ class ListDirTool(BuiltinTool):
     def _execute(self, arguments: dict[str, Any]) -> str:
         session = self._require_session()
 
-        path = arguments.get("path", ".") or "."
+        path = arguments.get('path', '.') or '.'
 
         result = session.exec_bash(
             command=f'ls -la "{path}"',
             timeout=10,
             is_input=False,
+            stop_event=self._stop_event_for_exec(),
         )
 
-        output = result.get("output", "")
-        exit_code = result.get("exit_code", -1)
+        output = result.get('output', '')
+        exit_code = result.get('exit_code', -1)
 
         if exit_code != 0:
             return f"Error listing directory '{path}': {output}"

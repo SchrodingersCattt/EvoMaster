@@ -1,12 +1,16 @@
-"""DevConfig model and YAML loading for mm-devshell."""
+"""DevConfig model and YAML loading for mm-devshell.
+
+LLM 连接由 ``matmaster_config/llm_config.yaml`` + ``build_provider`` 解析（与线上一致），
+不在此文件中配置 api_key / base_url / model。
+"""
+
 from __future__ import annotations
 
 import os
 import re
 from pathlib import Path
-from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from matmaster.types.runtime import CompactionConfig
 
@@ -39,6 +43,7 @@ class LLMConfig(BaseModel):
     retry_delay: float = 1.0
 
 
+
 class AgentConfig(BaseModel):
     """Agent behavior settings."""
 
@@ -61,13 +66,15 @@ class ToolsConfig(BaseModel):
 
 
 class DevConfig(BaseModel):
-    """Top-level devshell configuration."""
+    """Top-level devshell configuration (agent / session / tools only)."""
 
-    llm: LLMConfig = Field(default_factory=LLMConfig)
+    model_config = ConfigDict(extra="ignore")
+
     agent: AgentConfig = Field(default_factory=AgentConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
 
 
 def load_dev_config(path: Path) -> DevConfig:

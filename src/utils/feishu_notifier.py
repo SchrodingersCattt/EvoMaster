@@ -1,5 +1,5 @@
 """飞书群机器人通知：任务进入排队、Worker 开始/完成时发群消息。发送失败仅打 log，不抛异常。
-环境从 constant.CURRENT_ENV 取，会带在消息前缀中。支持纯文本与 interactive 卡片两种格式。
+环境从 constant.SERVICE_ENV 取，会带在消息前缀中。支持纯文本与 interactive 卡片两种格式。
 对 502/503/504 等瞬时错误做有限次重试。"""
 
 import json
@@ -9,7 +9,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from src.utils.constant import CURRENT_ENV
+from src.utils.constant import SERVICE_ENV
 
 logger = logging.getLogger(__name__)
 
@@ -27,21 +27,21 @@ CARD_TEMPLATE_RED = 'red'
 def format_llm_model_for_notify(llm: str | None, model: str | None) -> str:
     """拼接本轮 LLM 配置块与模型名，供飞书卡片「模型」行展示。"""
     m = (model or '').strip()
-    l = (llm or '').strip()
-    if m and l:
-        return f'{m}（{l}）'
+    llm_s = (llm or '').strip()
+    if m and llm_s:
+        return f'{m}（{llm_s}）'
     if m:
         return m
-    if l:
-        return f'LLM: {l}'
+    if llm_s:
+        return f'LLM: {llm_s}'
     return '默认'
 
 
 def _env_prefix() -> str:
     """消息前缀，含环境时如 [MatMaster-uat]，未配置时为 [MatMaster]。"""
-    if not (CURRENT_ENV or '').strip():
+    if not (SERVICE_ENV or '').strip():
         return '[MatMaster] '
-    return f'[MatMaster-{(CURRENT_ENV or "").strip().lower()}] '
+    return f'[MatMaster-{(SERVICE_ENV or "").strip().lower()}] '
 
 
 # 502/503/504 等瞬时错误重试：最多重试次数、每次间隔（秒）
