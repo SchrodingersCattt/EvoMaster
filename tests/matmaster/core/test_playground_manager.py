@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-import pytest
 import yaml
 
 from matmaster.core.playground import Playground, PlaygroundManager
