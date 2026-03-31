@@ -6,7 +6,8 @@
   before_script:
     - mkdir -p .ci-bin && ln -sf "$(command -v python3)" .ci-bin/python && export PATH="$CI_PROJECT_DIR/.ci-bin:$PATH"
     - export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple PIP_TRUSTED_HOST=mirrors.tuna.tsinghua.edu.cn PIP_CACHE_DIR="${CI_PROJECT_DIR}/.cache/pip"
-    - mkdir -p "${PIP_CACHE_DIR}"
+    - export PRE_COMMIT_HOME="${CI_PROJECT_DIR}/.cache/pre-commit"
+    - mkdir -p "${PIP_CACHE_DIR}" "${PRE_COMMIT_HOME}"
     - python3 -m pip install --user pre-commit
     - export PATH="$HOME/.local/bin:$PATH"
   script:
