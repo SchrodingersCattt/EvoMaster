@@ -137,7 +137,6 @@ class AgentKernel:
             # External cancel check (before each turn)
             if stop_event and stop_event.is_set():
                 return self._finish(
-                    spec,
                     messages,
                     'cancelled',
                     num_turns=turn,
@@ -153,7 +152,6 @@ class AgentKernel:
             # should_continue hook (intercepting, short-circuit)
             if not await run_should_continue(spec.hooks, messages, turn):
                 return self._finish(
-                    spec,
                     messages,
                     'hook_stopped',
                     num_turns=turn - 1,
@@ -170,7 +168,6 @@ class AgentKernel:
                 response = await self._call_llm(spec, messages, stop_event=stop_event)
             except _KernelStopRequested:
                 return self._finish(
-                    spec,
                     messages,
                     'cancelled',
                     num_turns=turn,
@@ -187,7 +184,6 @@ class AgentKernel:
             if not response.tool_calls:
                 if not self._is_valid_natural_finish(response):
                     return self._finish(
-                        spec,
                         messages,
                         'invalid_finish',
                         num_turns=turn,
@@ -201,7 +197,6 @@ class AgentKernel:
                     )
                 )
                 return self._finish(
-                    spec,
                     messages,
                     'natural',
                     final_content=response.content,
@@ -226,7 +221,6 @@ class AgentKernel:
             for _i, tc in enumerate(response.tool_calls):
                 if stop_event and stop_event.is_set():
                     return self._finish(
-                        spec,
                         messages,
                         'cancelled',
                         num_turns=turn,
@@ -318,7 +312,6 @@ class AgentKernel:
 
         # max_turns exhausted
         return self._finish(
-            spec,
             messages,
             'max_turns',
             num_turns=turn,
@@ -675,7 +668,6 @@ class AgentKernel:
 
     @staticmethod
     def _finish(
-        spec: AgentRuntimeSpec,
         messages: list[Message],
         reason: str,
         final_content: str | None = None,
