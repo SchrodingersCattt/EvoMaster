@@ -570,6 +570,10 @@ class TestAgentRunServiceConfirmationRecovery:
                 return_value=provider,
             ),
             patch.object(Exp, "build_runtime", _fake_build_runtime),
+            patch(
+                "src.services.agent_run_service._CONFIRM_TOOLS",
+                frozenset({"execute_bash"}),
+            ),
         ):
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
