@@ -3,7 +3,7 @@
 See ``docs/apifox-evaluation-openapi.json`` in matmaster-tools-server for the contract:
 ``EvalIngestRequest`` with ``run_id``, ``run_kind`` (baseline | iteration), ``items`` (≥1).
 When ``run_kind`` is ``baseline``, matmaster-tools-server **requires** ``baseline_channel`` on the
-request body: ``claude_code`` or ``cursor`` (see ``EvalIngestRequest`` in
+request body: ``claude_code`` or ``cursor`` or ``codex`` (see ``EvalIngestRequest`` in
 ``matmaster-tools-server/src/models/evaluation.py``). For ``iteration``, omit it (null).
 Each ``EvalItemIn`` requires ``question_id``; ``model`` / ``num_turns`` / ``score``
 (optional) / ``result_oss_url`` on the item top level. 题干（question_text）由独立的
@@ -53,8 +53,8 @@ logger = logging.getLogger(__name__)
 EVAL_ITEM_TEXT_FIELD_MAX_LEN = 16384
 EVAL_ITEM_QUESTION_TEXT_MAX_LEN = 4_194_304
 # Align with matmaster-tools-server ``EvalIngestRequest.baseline_channel`` Literal.
-EvalBaselineChannel = Literal["claude_code", "cursor"]
-_EVAL_BASELINE_CHANNELS: frozenset[str] = frozenset({"claude_code", "cursor"})
+EvalBaselineChannel = Literal["claude_code", "cursor", "codex"]
+_EVAL_BASELINE_CHANNELS: frozenset[str] = frozenset({"claude_code", "cursor", "codex"})
 
 # Direct tools-server path (not the gateway ``/bohrapi/v1/matmaster-tools-server/...`` prefix).
 EVAL_INGEST_API_PATH = "/api/v1/evaluation/ingest"
@@ -70,7 +70,7 @@ QUESTION_CATALOG_SYNC_URL: str | None = (
 def normalize_baseline_channel(
     value: Any, *, default: EvalBaselineChannel = "claude_code"
 ) -> EvalBaselineChannel:
-    """Coerce to ``claude_code`` | ``cursor``; unknown values log a warning and use *default*."""
+    """Coerce to a known baseline channel; unknown values log a warning and use *default*."""
     if default not in _EVAL_BASELINE_CHANNELS:
         default = "claude_code"
     if value is None:

@@ -5,7 +5,7 @@ Expects a run directory created with::
 
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --prepare-cc-baseline ...
 
-``baseline_channel`` on ingest (``claude_code`` | ``cursor``) comes from ``manifest.json`` or
+``baseline_channel`` on ingest (``claude_code`` | ``cursor`` | ``codex``) comes from ``manifest.json`` or
 ``--baseline-channel``.
 
 Each task workspace must contain:
@@ -144,7 +144,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--baseline-channel",
-        choices=("claude_code", "cursor"),
+        choices=("claude_code", "cursor", "codex"),
         default=None,
         help=(
             "EvalIngestRequest.baseline_channel (tools-server; required for run_kind=baseline). "

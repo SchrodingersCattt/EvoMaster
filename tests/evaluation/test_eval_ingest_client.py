@@ -25,6 +25,7 @@ from evaluation.eval_ingest_client import (
 def test_normalize_baseline_channel() -> None:
     assert normalize_baseline_channel(None) == "claude_code"
     assert normalize_baseline_channel("cursor") == "cursor"
+    assert normalize_baseline_channel("codex") == "codex"
     assert normalize_baseline_channel("  claude_code  ") == "claude_code"
 
 
