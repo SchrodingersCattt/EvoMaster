@@ -199,28 +199,30 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_003
+- id: BP_struct_003_20260331
   capability: batch_processing
   domain: struct
-  intent: Run a convergence test by performing 5 single-point energy calculations
-    for Al with varying ENCUT (280, 300, 320, 340, 360 eV). All other parameters (k-mesh,
-    ISMEAR, SIGMA, potcar) must remain strictly constant.
-  human_prompt_seed: '从 `convergence_encut.json` 读取收敛测试配置。 对铝（Al）结构执行 5 个单点能量计算，ENCUT
-    分别为：280, 300, 320, 340, 360 eV。
+  intent: Generate 5 VASP INCAR input files for Al ENCUT convergence test (280, 300,
+    320, 340, 360 eV). All other parameters (k-mesh, ISMEAR, SIGMA, NSW) must remain
+    strictly constant across the 5 files. Focus is on correct input preparation and
+    variable control, not on submitting or running calculations.
+  human_prompt_seed: '从 `convergence_encut.json` 读取收敛测试配置。为铝（Al）的 ENCUT 收敛测试生成
+    5 个 VASP INCAR 输入文件，ENCUT 分别为：280, 300, 320, 340, 360 eV。
 
-    严格要求： 1. k-point 网格在所有 5 个计算中固定为 8x8x8 2. ISMEAR=1, SIGMA=0.1 在所有计算中相同 3. NSW=0（不做离子弛豫）
-    4. 其他 VASP 参数保持不变
+    严格要求： 1. k-point 网格在所有 5 个 INCAR 中固定为 8x8x8 2. ISMEAR=1, SIGMA=0.1 在所有
+    INCAR 中完全相同 3. NSW=0（单点计算设定） 4. 除 ENCUT 外，其他所有 VASP 参数在 5 个文件中保持一致
 
-    输出： 1. 5 个 OUTCAR 文件或能量日志 2. 能量随 ENCUT 的收敛曲线（可绘图或表格）
+    输出 5 个 INCAR 文件，文件名包含 ENCUT 值（如 INCAR_ENCUT280）。不需要提交计算，只需生成正确的输入文件。
 
-    关键考察点： 1. ENCUT 按预定顺序系统变化 2. 所有非扫描参数冻结 3. 能量输出清晰可用于收敛分析
+    关键考察点： 1. ENCUT 在 5 个文件中按顺序变化，且为唯一变量 2. 所有非扫描参数在 5 个文件中完全一致 3. INCAR 格式正确、参数无遗漏
 
     '
   tags:
   - batch_operation
   - convergence_test
   - encut_sweep
-  - parameter_scan
+  - input_generation
+  - single_variable
   mode_scope:
   - direct
   - planner
@@ -228,74 +230,63 @@ questions:
   - key: convergence_encut
     path: data/BP_struct_003/convergence_encut.json
     oss_url: ''
-    description: ENCUT convergence test configuration.
+    description: ENCUT convergence test configuration for Al.
   reference_answers:
-  - key: encut_sweep_parameter
-    value:
-      tool_name: VASP
-      sweep_param: ENCUT
-      expected_values:
-      - 280
-      - 300
-      - 320
-      - 340
-      - 360
+  - key: incar_files_count
+    value: 5
+    tolerance: 0.0
+  - key: encut_sweep_values
+    value: 280, 300, 320, 340, 360
   - key: kpoint_mesh_constant
-    value:
-      locked_params: k-point mesh
-      expected_value: 8 8 8
+    value: 8 8 8
   - key: electronic_params_frozen
     value:
       ISMEAR: 1
       SIGMA: 0.1
-  - key: energy_outputs_available
-    value: 5 energy values extracted
-  - key: convergence_trend
-    value: Energy shows convergence pattern
-  - key: convergence_test_proper
-    value: Convergence test protocol followed
-  - key: no_redundant_setup
-    value: 5
-    tolerance: 0.0
+      NSW: 0
+  - key: incar_format_valid
+    value: VASP INCAR key=value format
+  - key: single_variable_control
+    value: Only ENCUT differs across the 5 files
+  - key: grounding_config_used
+    value: Parameters from convergence_encut.json
   - key: duration_budget
     value: *id001
   - key: token_budget_total
     value: *id002
   scoring_checklist:
-  - id: encut_sweep_parameter
-    criterion: 'ENCUT varies across exactly 5 calculations: 280, 300, 320, 340, 360
-      eV in order.'
+  - id: incar_files_count
+    criterion: Exactly 5 INCAR files are generated, one per ENCUT value.
     axis: correctness
-    verify: batch_single_variable_sweep
+    verify: numerical_range
+  - id: encut_sweep_values
+    criterion: 'The 5 INCAR files contain ENCUT values 280, 300, 320, 340, 360 eV
+      respectively, and ENCUT is the only parameter that differs across files.'
+    axis: correctness
+    verify: llm_binary_judge
   - id: kpoint_mesh_constant
-    criterion: K-point mesh 8x8x8 remains constant across all 5 calculations.
+    criterion: K-point mesh specification (8x8x8) is identical in all 5 INCAR files.
     axis: correctness
-    verify: batch_tool_args_constant
+    verify: llm_binary_judge
   - id: electronic_params_frozen
-    criterion: ISMEAR and SIGMA parameters are identical (ISMEAR=1, SIGMA=0.1) across
-      all 5 runs.
-    axis: correctness
-    verify: batch_tool_args_constant
-  - id: energy_outputs_available
-    criterion: All 5 calculations produce readable energy values (from OUTCAR or log
-      file).
+    criterion: ISMEAR=1, SIGMA=0.1, NSW=0 are identical across all 5 INCAR files.
     axis: correctness
     verify: llm_binary_judge
-  - id: convergence_trend
-    criterion: Energy values show convergence trend with increasing ENCUT (monotonic
-      or plateau behavior expected).
+  - id: incar_format_valid
+    criterion: All 5 files follow valid VASP INCAR key=value syntax with no missing
+      required parameters.
     axis: correctness
     verify: llm_binary_judge
-  - id: convergence_test_proper
-    criterion: 'Calculations follow proper convergence test protocol: same structure,
-      same solver, only cutoff varies.'
+  - id: single_variable_control
+    criterion: Comparing any two of the 5 INCAR files, the only line that differs
+      is the ENCUT value. All other lines are byte-identical.
     axis: grounding
     verify: llm_binary_judge
-  - id: no_redundant_setup
-    criterion: No duplicate or wasted calculation steps; each ENCUT value appears
-      exactly once.
-    axis: efficiency
-    verify: no_retries
+  - id: grounding_config_used
+    criterion: Parameter values (k-mesh, ISMEAR, SIGMA, NSW, ENCUT list) match the
+      provided convergence_encut.json configuration exactly.
+    axis: grounding
+    verify: llm_binary_judge
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
       a generous benchmark ceiling (tunable per deployment).
@@ -416,22 +407,47 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: BP_struct_005
+- id: BP_struct_005_20260331
   capability: batch_processing
   domain: struct
-  intent: Demonstrate controlled failure recovery for 5 structures with geometry issues.
-    Repair only geometry-related parameters (structure, symmetry, lattice) while keeping
-    all calculation settings (k-points, ISMEAR, SIGMA, ENCUT) frozen across all repairs.
-  human_prompt_seed: "从 `failure_recovery.json` 读取 5 个结构（TiO2, ZnO, MgO, Al2O3, SiO2）的失败恢复场景。\
-    \ 每个结构的初始计算因几何问题失败。\n修复策略： 1. 仅修复结构问题（原子位置、晶胞、对称性） 2. 严格冻结所有计算参数：\n   - k-point\
-    \ mesh: 6x6x6（不变）\n   - ISMEAR=1, SIGMA=0.1（不变）\n   - ENCUT=520 eV（不变）\n   - 其他求解器参数（ALGO,\
-    \ NSW）不变\n3. 对每个结构应用合适的几何修复步骤\n输出要求： 1. 5 个结构都收敛 2. 所有使用相同的冻结参数集 3. 明确标记出修复步骤\n\
-    关键考察点： 1. 只修改了几何/结构参数 2. 没有不必要地重新调整电子学设置 3. 修复步骤和冻结参数的对应关系清晰\n"
+  intent: Generate corrected VASP input files for 5 structures whose initial geometry
+    caused calculation failures. For each structure, fix only the geometry (atomic
+    positions, cell, symmetry) while keeping all calculation parameters (k-points,
+    ISMEAR, SIGMA, ENCUT) strictly frozen. Focus is on correct input-file preparation
+    and parameter isolation, not on submitting or running calculations.
+  human_prompt_seed: '从 `failure_recovery.json` 读取 5 个结构（TiO2, ZnO, MgO, Al2O3,
+    SiO2）的失败恢复场景。每个结构的初始计算因几何问题失败（如原子重叠、晶胞畸变、对称性错误等）。
+
+    请为每个结构生成修正后的 VASP 输入文件（POSCAR + INCAR），修复策略：
+
+    1. 仅修复结构文件（POSCAR）中的几何问题（原子位置、晶胞参数、对称性）
+
+    2. 严格冻结所有 INCAR 中的计算参数：
+       - KPOINTS: 6x6x6（不变）
+       - ISMEAR=1, SIGMA=0.1（不变）
+       - ENCUT=520 eV（不变）
+       - 其他求解器参数（ALGO, NSW 等）不变
+
+    3. 对每个结构说明修复了什么几何问题
+
+    输出要求：
+
+    1. 5 组修正后的输入文件（POSCAR + INCAR）
+
+    2. 所有 INCAR 使用相同的冻结参数集
+
+    3. 明确标记每个结构的几何修复内容
+
+    不需要提交计算，只需生成正确的修正输入文件。
+
+    关键考察点： 1. 只修改了几何/结构文件 2. 没有不必要地调整计算参数 3. 修复内容与失败原因对应
+
+    '
   tags:
   - batch_operation
   - failure_recovery
   - parameter_isolation
-  - robust_workflow
+  - input_generation
   mode_scope:
   - direct
   - planner
@@ -439,81 +455,66 @@ questions:
   - key: failure_recovery
     path: data/BP_struct_005/failure_recovery.json
     oss_url: ''
-    description: Batch failure recovery configuration with frozen calculation parameters.
+    description: Batch failure recovery scenarios with frozen calculation parameters.
   reference_answers:
-  - key: materials_recovered
+  - key: input_file_sets_count
     value: 5
     tolerance: 0.0
   - key: kpoint_mesh_frozen
-    value:
-      locked_params: k-point mesh
-      expected_value: 6 6 6
+    value: 6 6 6
   - key: electronic_params_frozen
     value:
       ISMEAR: 1
       SIGMA: 0.1
       ENCUT: 520
   - key: geometry_repairs_isolated
-    value: Only geometry parameters modified
+    value: Only POSCAR/structure files modified, INCAR unchanged
   - key: no_parameter_thrashing
-    value: No re-tuning of electronic settings
+    value: No re-tuning of electronic settings in any INCAR
   - key: grounding_frozen_params
     value: Frozen parameters from failure_recovery.json
   - key: grounding_repair_causes
-    value: Repair steps address specific failures
-  - key: no_redundant_recovery
-    value: 5
-    tolerance: 0.0
-  - key: batch_recovery_efficiency
-    value: Unified recovery workflow
+    value: Each geometry fix addresses the specific failure cause
   - key: duration_budget
     value: *id001
   - key: token_budget_total
     value: *id002
   scoring_checklist:
-  - id: materials_recovered
-    criterion: All 5 materials successfully converged after recovery.
+  - id: input_file_sets_count
+    criterion: Exactly 5 sets of corrected input files are generated (one POSCAR +
+      INCAR per material).
     axis: correctness
     verify: numerical_range
   - id: kpoint_mesh_frozen
-    criterion: All 5 recovered calculations use identical k-point mesh 6x6x6 (not
-      modified during repair).
+    criterion: All 5 INCAR files specify identical k-point mesh (6x6x6), unchanged
+      from the original configuration.
     axis: correctness
-    verify: batch_tool_args_constant
+    verify: llm_binary_judge
   - id: electronic_params_frozen
-    criterion: Electronic parameters (ISMEAR=1, SIGMA=0.1, ENCUT=520) remain unchanged
-      across all 5 recovery steps.
+    criterion: ISMEAR=1, SIGMA=0.1, ENCUT=520 are identical across all 5 INCAR files
+      and match the original frozen values.
     axis: correctness
-    verify: batch_tool_args_constant
+    verify: llm_binary_judge
   - id: geometry_repairs_isolated
-    criterion: Only geometry-related parameters (structure, lattice, symmetry) were
-      modified between failure and recovery; calculation settings unchanged.
+    criterion: Only the POSCAR / structure files were modified to fix geometry issues;
+      all INCAR calculation settings remain unchanged from the originals.
     axis: correctness
     verify: llm_binary_judge
   - id: no_parameter_thrashing
-    criterion: No unnecessary re-tuning of k-points, smearing, or cutoff during recovery
-      steps.
+    criterion: No unnecessary re-tuning of k-points, smearing, cutoff, or solver
+      algorithm in any of the 5 INCAR files.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_frozen_params
-    criterion: Frozen parameters match the configuration file exactly (k-point mesh,
-      ISMEAR, SIGMA, ENCUT values).
+    criterion: Frozen parameters (k-mesh, ISMEAR, SIGMA, ENCUT) match the
+      failure_recovery.json configuration exactly.
     axis: grounding
     verify: llm_binary_judge
   - id: grounding_repair_causes
-    criterion: Each repair step correctly addresses the specific failure cause (e.g.,
-      symmetry fix for symmetry issue, geometry for close atoms).
+    criterion: Each geometry fix correctly addresses the specific failure cause
+      described in the configuration (e.g., fixing overlapping atoms, correcting
+      cell distortion, resolving symmetry errors).
     axis: grounding
-    verify: llm_binary_judge
-  - id: no_redundant_recovery
-    criterion: Recovery completed in minimal steps; no re-attempts of the same repair
-      type.
-    axis: efficiency
-    verify: no_retries
-  - id: batch_recovery_efficiency
-    criterion: All 5 materials recovered using a unified recovery workflow (not separate
-      ad-hoc fixes per material).
-    axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
