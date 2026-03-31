@@ -3,6 +3,8 @@
 import asyncio
 import json
 import os
+import queue
+import threading
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -524,6 +526,130 @@ def test_generate_send_stream_replay_prefers_response_over_run_result():
     assert frames[2]['content'] == 'old answer'
     assert frames[3]['content'] == 'new question'
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
+
+
+def test_generate_send_stream_subscribes_before_enqueue():
+    from src.services.stream_service import ChatStreamService, SendStreamContext
+
+    sessions_service = MagicMock()
+    sessions_service.get_session_status_payload.return_value = {
+        'source': 'System',
+        'type': 'status',
+        'content': '',
+        'session_id': 'sess-1',
+    }
+    sessions_service.get_session_user_id.return_value = 'user-1'
+    events_service = MagicMock()
+    events_service.get_session_events.return_value = []
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        agent_run_service=MagicMock(),
+        deploy_state_service=MagicMock(),
+    )
+
+    subscribe_ready = threading.Event()
+    published = queue.Queue()
+    call_order: list[str] = []
+
+    class _FakePubSub:
+        def subscribe(self, _channel: str) -> None:
+            return None
+
+        def get_message(self, timeout: float = 1.0):
+            if not subscribe_ready.is_set():
+                subscribe_ready.set()
+                call_order.append('subscribe')
+                return {'type': 'subscribe', 'data': 1}
+            try:
+                return published.get(timeout=timeout)
+            except queue.Empty:
+                return None
+
+        def unsubscribe(self, _channel: str) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    class _FakeClient:
+        def pubsub(self) -> _FakePubSub:
+            return _FakePubSub()
+
+    fake_redis = MagicMock()
+    fake_redis.create_client.return_value = _FakeClient()
+    fake_redis.set_session_run_queued.return_value = True
+    fake_redis.llen_agent_run_queue.return_value = 0
+
+    def _lpush_agent_run_job(_job: dict) -> bool:
+        call_order.append('lpush')
+        assert subscribe_ready.is_set()
+        published.put(
+            {
+                'type': 'message',
+                'data': json.dumps(
+                    {
+                        'source': 'System',
+                        'type': 'stream_closed',
+                        'content': '',
+                        'session_id': 'sess-1',
+                        'invocation_id': 'inv-1',
+                    }
+                ),
+            }
+        )
+        return True
+
+    fake_redis.lpush_agent_run_job.side_effect = _lpush_agent_run_job
+
+    async def _collect_frames() -> list[dict]:
+        ctx = SendStreamContext(
+            task_id='task-1',
+            invocation_id='inv-1',
+            mode='direct',
+            user_msg={
+                'source': 'User',
+                'type': 'query',
+                'content': 'new question',
+                'mode': 'direct',
+                'session_id': 'sess-1',
+                'task_id': 'task-1',
+                'invocation_id': 'inv-1',
+            },
+            request_event_queue=asyncio.Queue(),
+            reply_queue=MagicMock(),
+        )
+        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        try:
+            return [
+                _decode_sse_payload(await gen.__anext__()),
+                _decode_sse_payload(await gen.__anext__()),
+                _decode_sse_payload(await gen.__anext__()),
+            ]
+        finally:
+            await gen.aclose()
+
+    with (
+        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
+        patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
+        patch('src.services.stream_service.notify_post_async'),
+        patch(
+            'src.services.stream_service.UserService.get_user_info_for_display',
+            return_value={
+                'user_id': 'user-1',
+                'nickname': 'Tester',
+                'email': 'tester@example.com',
+            },
+        ),
+        patch(
+            'src.services.stream_service.get_worker_registry_service',
+            return_value=MagicMock(count_active_runs=MagicMock(return_value=0)),
+        ),
+    ):
+        frames = asyncio.run(_collect_frames())
+
+    assert [frame['type'] for frame in frames] == ['status', 'query', 'stream_closed']
+    assert call_order[:2] == ['subscribe', 'lpush']
 
 
 def test_generate_subscribe_stream_normalizes_replayed_history_source():
