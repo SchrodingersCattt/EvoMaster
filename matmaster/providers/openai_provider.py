@@ -9,14 +9,13 @@ Retry strategy is handled by Kernel._call_llm(), not by the provider.
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, AsyncIterator
 
 import openai
 
 from matmaster.types.llm_provider import LLMProvider  # noqa: F401
-from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
+from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData, parse_tool_arguments
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +145,7 @@ class OpenAIProvider:
         if message.tool_calls:
             tool_calls = []
             for tc in message.tool_calls:
-                args = self._parse_arguments(tc.function.arguments)
+                args = parse_tool_arguments(tc.function.arguments or "")
                 tool_calls.append(
                     ToolCallData(
                         id=tc.id,
@@ -273,13 +272,3 @@ class OpenAIProvider:
                 raise LLMError(str(exc), retryable=False, error_category="context_overflow") from exc
             raise LLMError(str(exc), retryable=True, error_category="bad_request") from exc
 
-    @staticmethod
-    def _parse_arguments(raw: str | None) -> dict[str, Any]:
-        """Parse JSON arguments from OpenAI tool call."""
-        if not raw:
-            return {}
-        try:
-            return json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
-            logger.warning("Failed to parse tool call arguments: %s", raw[:200])
-            return {"_raw": raw}

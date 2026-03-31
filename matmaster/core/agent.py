@@ -14,7 +14,6 @@ Termination conditions:
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import threading
 import time
@@ -45,6 +44,7 @@ from matmaster.types.messages import (
     ToolCallData,
     ToolMessage,
     UserMessage,
+    parse_tool_arguments,
 )
 
 logger = logging.getLogger(__name__)
@@ -118,7 +118,7 @@ class AgentKernel:
         turn = 0
         if spec.compactor:
             spec.compactor.update_message_count(len(messages))
-        last_usage: dict[str, int] = {}
+        turn_usage: dict[str, int] = {}
         total_usage: dict[str, int] = {}
         last_stop_reason: str | None = None
 
@@ -138,11 +138,11 @@ class AgentKernel:
 
             # Context compaction check
             if spec.compactor:
-                await spec.compactor.compact_if_needed(messages, last_usage, turn)
+                await spec.compactor.compact_if_needed(messages, turn_usage, turn)
 
             # LLM call (streaming by default)
             response = await self._call_llm(spec, messages)
-            last_usage = response.usage
+            turn_usage = response.usage
             self._accumulate_usage(total_usage, response.usage)
             last_stop_reason = response.finish_reason
             if spec.compactor:
@@ -177,7 +177,7 @@ class AgentKernel:
                 )
             )
 
-            # -- Phase 1: Serial guard + pre_hook gate (D-06) --
+            # Phase 1: Serial — guard denials and hook skips must resolve before execution to avoid wasted work
             outcomes: list[_ToolOutcome] = []
             approved_indices: list[int] = []
 
@@ -209,7 +209,7 @@ class AgentKernel:
                 approved_indices.append(len(outcomes))
                 outcomes.append(_ToolOutcome(tc=tc, tool_msg=None, tool_result=None, needs_post_hook=True))
 
-            # -- Phase 2: Parallel execution (D-04, D-05) --
+            # Phase 2: Parallel — approved tools are independent, concurrent execution reduces latency
             if approved_indices:
                 approved_tcs = [outcomes[idx][0] for idx in approved_indices]
 
@@ -218,10 +218,7 @@ class AgentKernel:
                         return await spec.tool_registry.execute(tc.name, tc.arguments)
                     except Exception as e:
                         logger.exception("Tool execution failed: %s", tc.name)
-                        return ToolResult(
-                            status="error",
-                            content=f"Error executing tool '{tc.name}': {type(e).__name__}: {e}",
-                        )
+                        return ToolResult.from_error(tc.name, e)
 
                 results = await asyncio.gather(
                     *[_execute_tool(tc) for tc in approved_tcs],
@@ -232,10 +229,7 @@ class AgentKernel:
                     tc = outcomes[outcome_idx].tc
                     raw = results[result_idx]
                     if isinstance(raw, BaseException):
-                        tool_result = ToolResult(
-                            status="error",
-                            content=f"Error executing tool '{tc.name}': {type(raw).__name__}: {raw}",
-                        )
+                        tool_result = ToolResult.from_error(tc.name, raw)
                     else:
                         tool_result = raw
                     outcomes[outcome_idx] = _ToolOutcome(
@@ -245,7 +239,7 @@ class AgentKernel:
                         needs_post_hook=True,
                     )
 
-            # -- Phase 3: Append messages + post hooks in original order --
+            # Phase 3: Append in original order — LLM expects tool results to match request order
             for tc, tool_msg, tool_result, needs_post_hook in outcomes:
                 messages.append(tool_msg)
                 if needs_post_hook and tool_result is not None:
@@ -267,7 +261,7 @@ class AgentKernel:
         max_retries = getattr(provider, "max_retries", 3)
         retry_delay = getattr(provider, "retry_delay", 1.0)
 
-        attempt_records: list[dict[str, Any]] = []
+        attempt_records: list[dict[str, Any]] | None = None
         last_error: LLMError | None = None
         for attempt in range(max_retries):
             t0 = time.monotonic()
@@ -280,6 +274,8 @@ class AgentKernel:
                     and attempt < max_retries - 1
                 ):
                     backoff = retry_delay * (2**attempt)
+                    if attempt_records is None:
+                        attempt_records = []
                     attempt_records.append({
                         "attempt": attempt + 1,
                         "error_type": "IncompleteResponse",
@@ -316,6 +312,8 @@ class AgentKernel:
                 last_error = e
                 next_timeout = current_timeout * 2
                 backoff = retry_delay * (2**attempt) if attempt < max_retries - 1 else 0.0
+                if attempt_records is None:
+                    attempt_records = []
                 attempt_records.append({
                     "attempt": attempt + 1,
                     "error_type": type(e.__cause__).__name__ if e.__cause__ else type(e).__name__,
@@ -361,7 +359,7 @@ class AgentKernel:
             msg,
             retryable=False,
             error_category=category,
-            attempts=attempt_records,
+            attempts=attempt_records or [],
         ) from last_error
 
     async def _do_stream_llm(
@@ -482,7 +480,7 @@ class AgentKernel:
         if tool_calls_acc:
             tool_calls = []
             for _, v in sorted(tool_calls_acc.items()):
-                args = self._parse_arguments(v["arguments"])
+                args = parse_tool_arguments(v["arguments"])
                 tool_calls.append(
                     ToolCallData(id=v["id"], name=v["name"], arguments=args)
                 )
@@ -494,17 +492,6 @@ class AgentKernel:
             finish_reason=finish_reason,
             usage=usage,
         )
-
-    @staticmethod
-    def _parse_arguments(raw: str) -> dict[str, Any]:
-        """Parse JSON arguments string from streaming accumulation."""
-        if not raw:
-            return {}
-        try:
-            return json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
-            logger.warning("Failed to parse tool call arguments: %s", raw[:200])
-            return {"_raw": raw}
 
     @staticmethod
     def _is_valid_natural_finish(response: LLMResponse) -> bool:
