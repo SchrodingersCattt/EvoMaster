@@ -11,6 +11,7 @@ Pure async handler -- send_cb is always awaited.
 
 from __future__ import annotations
 
+import inspect
 import logging
 from collections.abc import Callable, Coroutine
 from typing import Any
@@ -60,7 +61,9 @@ class SSEHandler:
             invocation_id=self._invocation_id,
             spawn_id=getattr(event, 'spawn_id', None),
         )
-        await self._send_cb(payload)
+        result = self._send_cb(payload)
+        if inspect.isawaitable(result):
+            await result
 
     def _should_skip(self, event: BusEvent) -> bool:
         """Check if event should be skipped for SSE push.
