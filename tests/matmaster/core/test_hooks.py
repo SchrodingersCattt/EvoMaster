@@ -2,19 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-from unittest.mock import MagicMock
-
 import pytest
 
 from matmaster.core.bus import MessageBus
-from matmaster.tools.tool_result import ToolResult
-from matmaster.types.events import (
-    ResponseEvent,
-    ThoughtEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-)
 from matmaster.core.hooks import (
     BaseHook,
     EventEmitterHook,
@@ -28,16 +18,21 @@ from matmaster.core.hooks import (
     run_pre_tool_call,
     run_should_continue,
 )
+from matmaster.tools.tool_result import ToolResult
+from matmaster.types.events import (
+    ResponseEvent,
+    ThoughtEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
 from matmaster.types.guards import GuardResult
 from matmaster.types.messages import (
-    AssistantMessage,
     Message,
     StreamChunk,
     SystemMessage,
     ToolCallData,
     UserMessage,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────
 
@@ -84,7 +79,9 @@ class TestHookProtocol:
         self, sample_tool_call: ToolCallData
     ) -> None:
         hook = BaseHook()
-        result = await hook.post_tool_call(sample_tool_call, ToolResult(content="result"))
+        result = await hook.post_tool_call(
+            sample_tool_call, ToolResult(content="result")
+        )
         assert result is None
 
     async def test_base_hook_pre_llm_call_default(
@@ -176,7 +173,9 @@ class TrackingStopHook(TrackingHook):
 
 
 class TestHookShortCircuit:
-    async def test_pre_tool_call_skip_first(self, sample_tool_call: ToolCallData) -> None:
+    async def test_pre_tool_call_skip_first(
+        self, sample_tool_call: ToolCallData
+    ) -> None:
         """First hook skips -> second hook not called."""
         skip_hook = TrackingSkipHook()
         continue_hook = TrackingHook()
@@ -185,7 +184,9 @@ class TestHookShortCircuit:
         assert skip_hook.pre_tool_call_called is True
         assert continue_hook.pre_tool_call_called is False
 
-    async def test_pre_tool_call_skip_second(self, sample_tool_call: ToolCallData) -> None:
+    async def test_pre_tool_call_skip_second(
+        self, sample_tool_call: ToolCallData
+    ) -> None:
         """First continues, second skips -> returns SKIP."""
         continue_hook = TrackingHook()
         skip_hook = TrackingSkipHook()
@@ -194,7 +195,9 @@ class TestHookShortCircuit:
         assert continue_hook.pre_tool_call_called is True
         assert skip_hook.pre_tool_call_called is True
 
-    async def test_pre_tool_call_all_continue(self, sample_tool_call: ToolCallData) -> None:
+    async def test_pre_tool_call_all_continue(
+        self, sample_tool_call: ToolCallData
+    ) -> None:
         """All hooks continue -> returns CONTINUE."""
         h1 = TrackingHook()
         h2 = TrackingHook()
@@ -207,16 +210,22 @@ class TestHookShortCircuit:
         """First hook returns False -> second not called."""
         stop_hook = TrackingStopHook()
         continue_hook = TrackingHook()
-        result = await run_should_continue([stop_hook, continue_hook], sample_messages, 1)
+        result = await run_should_continue(
+            [stop_hook, continue_hook], sample_messages, 1
+        )
         assert result is False
         assert stop_hook.should_continue_called is True
         assert continue_hook.should_continue_called is False
 
-    async def test_post_tool_call_calls_all(self, sample_tool_call: ToolCallData) -> None:
+    async def test_post_tool_call_calls_all(
+        self, sample_tool_call: ToolCallData
+    ) -> None:
         """Observation hook -- both hooks called (no short-circuit)."""
         h1 = TrackingHook()
         h2 = TrackingHook()
-        await run_post_tool_call([h1, h2], sample_tool_call, ToolResult(content="result"))
+        await run_post_tool_call(
+            [h1, h2], sample_tool_call, ToolResult(content="result")
+        )
         assert h1.post_tool_call_called is True
         assert h2.post_tool_call_called is True
 
@@ -366,7 +375,9 @@ class TestEventEmitterHookSpawnId:
         assert thought.spawn_id == self._SPAWN
         assert response.spawn_id == self._SPAWN
 
-    async def test_on_segment_complete_thought_and_response_carry_spawn_id(self) -> None:
+    async def test_on_segment_complete_thought_and_response_carry_spawn_id(
+        self,
+    ) -> None:
         bus = MessageBus()
         hook = EventEmitterHook(bus, "agent-1", spawn_id=self._SPAWN)
         await hook.on_segment_complete("thought", "t", "sid1")
@@ -396,7 +407,9 @@ class TestRunGuardBlocked:
             def __init__(self) -> None:
                 self.calls: list[tuple[str, str | None]] = []
 
-            async def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
+            async def on_guard_blocked(
+                self, tool_call: ToolCallData, result: GuardResult
+            ) -> None:
                 self.calls.append((tool_call.name, result.reason))
 
         h1 = RecordingGuardHook()

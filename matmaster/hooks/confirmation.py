@@ -40,7 +40,10 @@ class ConfirmationHook(BaseHook):
     async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         """Wait asynchronously for user confirmation before running a tool."""
 
-        if self._confirm_tools is not None and tool_call.name not in self._confirm_tools:
+        if (
+            self._confirm_tools is not None
+            and tool_call.name not in self._confirm_tools
+        ):
             return HookAction.CONTINUE
 
         await self._bus.emit(

@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from matmaster.types.messages import LLMResponse, StreamChunk
-from matmaster.types.runtime import CompactionConfig
 from matmaster.types.messages import (
     AssistantMessage,
+    LLMResponse,
+    StreamChunk,
     SystemMessage,
     ToolCallData,
     ToolMessage,
     UserMessage,
 )
+from matmaster.types.runtime import CompactionConfig
 
 
 class TestEstimateTokens:
@@ -356,9 +357,21 @@ class TestToolTruncationFallback:
                     for i in range(3)
                 ],
             ),
-            ToolMessage(content="big result " + "A" * 2000, tool_call_id="tc-0", tool_name="bash"),
-            ToolMessage(content="big result " + "B" * 2000, tool_call_id="tc-1", tool_name="bash"),
-            ToolMessage(content="big result " + "C" * 2000, tool_call_id="tc-2", tool_name="bash"),
+            ToolMessage(
+                content="big result " + "A" * 2000,
+                tool_call_id="tc-0",
+                tool_name="bash",
+            ),
+            ToolMessage(
+                content="big result " + "B" * 2000,
+                tool_call_id="tc-1",
+                tool_name="bash",
+            ),
+            ToolMessage(
+                content="big result " + "C" * 2000,
+                tool_call_id="tc-2",
+                tool_name="bash",
+            ),
         ]
 
         compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
@@ -374,7 +387,8 @@ class TestToolTruncationFallback:
 
         # At least one ToolMessage should have been truncated
         truncated_msgs = [
-            m for m in msgs
+            m
+            for m in msgs
             if isinstance(m, ToolMessage) and "truncated" in (m.content or "")
         ]
         assert len(truncated_msgs) > 0
@@ -443,7 +457,9 @@ class TestToolTruncationFallback:
         assert len(result_content) < len(original_content)
 
 
-@pytest.mark.skip(reason="E2E test deferred to Phase 17-18 per D-08: requires Kernel async化")
+@pytest.mark.skip(
+    reason="E2E test deferred to Phase 17-18 per D-08: requires Kernel async化"
+)
 class TestEndToEndCompaction:
     """Full kernel loop with compaction enabled."""
 

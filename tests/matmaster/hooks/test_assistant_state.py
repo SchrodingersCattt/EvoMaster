@@ -62,7 +62,9 @@ class TestAssistantStateHook:
         bus.emit.assert_called_once()
         emitted = bus.emit.call_args[0][0]
         assert isinstance(emitted, AssistantStateEvent)
-        assert emitted.state["reasoning_content"] == "Need to inspect the workspace first."
+        assert (
+            emitted.state["reasoning_content"] == "Need to inspect the workspace first."
+        )
 
     async def test_does_nothing_when_no_assistant_message(self) -> None:
         """pre_llm_call does nothing on first turn (no AssistantMessage)."""

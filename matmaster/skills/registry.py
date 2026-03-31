@@ -65,9 +65,7 @@ class Skill:
 
         fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
         if not fm_match:
-            raise ValueError(
-                f"Invalid SKILL.md: no frontmatter in {skill_md}"
-            )
+            raise ValueError(f"Invalid SKILL.md: no frontmatter in {skill_md}")
 
         known_keys = {"name", "description"}
         data: dict[str, str] = {}
@@ -190,7 +188,9 @@ class SkillRegistry:
                 try:
                     skill = Skill(skill_dir)
                 except Exception:
-                    logger.error("Failed to load skill from %s", skill_dir, exc_info=True)
+                    logger.error(
+                        "Failed to load skill from %s", skill_dir, exc_info=True
+                    )
                     continue
 
                 if name_filter is not None and skill.meta_info.name not in name_filter:

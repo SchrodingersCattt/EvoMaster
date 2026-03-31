@@ -3,6 +3,7 @@
 LazyMCPTool satisfies the matmaster Tool Protocol using cached schemas.
 On first execute(), it connects to the MCP server via LazyMCPConnector.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -60,11 +61,14 @@ class LazyMCPTool:
         if self._real_tool is None:
             self._real_tool = await asyncio.to_thread(
                 self._connector.connect_and_get_tool,
-                self._server_name, self._remote_tool_name,
+                self._server_name,
+                self._remote_tool_name,
             )
         args_json = json.dumps(arguments, ensure_ascii=False)
         observation, info = await asyncio.to_thread(
-            self._real_tool.execute, self._connector.session, args_json,
+            self._real_tool.execute,
+            self._connector.session,
+            args_json,
         )
         content = (
             observation
@@ -111,7 +115,9 @@ def configure_mcp_manager(
                 mcp_config
             )
         except ImportError:
-            logger.warning("evomaster.adaptors.calculation not available, skipping path_adaptor")
+            logger.warning(
+                "evomaster.adaptors.calculation not available, skipping path_adaptor"
+            )
 
         executors = mcp_config.get("calculation_executors") or {}
         manager.sync_tools_by_server = {
@@ -186,9 +192,7 @@ class LazyMCPConnector:
             )
             fut.result(timeout=60)
 
-        return manager.tools_by_server[server_name][
-            f"{server_name}_{remote_tool_name}"
-        ]
+        return manager.tools_by_server[server_name][f"{server_name}_{remote_tool_name}"]
 
     def cleanup(self) -> None:
         if self._manager and self._loop and not self._loop.is_closed():

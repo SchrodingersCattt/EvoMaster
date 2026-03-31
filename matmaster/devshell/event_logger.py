@@ -1,4 +1,5 @@
 """EventLogger -- JSONL event persistence for devshell."""
+
 from __future__ import annotations
 
 import json
@@ -8,7 +9,6 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from matmaster.types.events import (
-    AssistantStateEvent,
     RunResultEvent,
     ThoughtEvent,
     ToolCallEvent,
@@ -85,25 +85,31 @@ class EventLogger:
             parts = self._thought_buffer.pop(sid, [])
             content = "".join(parts)
             if content:
-                self._write_record({
-                    "type": "thought",
-                    "content": content,
-                })
+                self._write_record(
+                    {
+                        "type": "thought",
+                        "content": content,
+                    }
+                )
         elif event.stream_state == "complete":
             # Segment snapshot from on_segment_complete
             if event.content:
-                self._write_record({
-                    "type": "thought",
-                    "content": event.content,
-                    "complete": True,
-                })
+                self._write_record(
+                    {
+                        "type": "thought",
+                        "content": event.content,
+                        "complete": True,
+                    }
+                )
         else:
             # Non-streaming thought (stream_state is None)
             if event.content:
-                self._write_record({
-                    "type": "thought",
-                    "content": event.content,
-                })
+                self._write_record(
+                    {
+                        "type": "thought",
+                        "content": event.content,
+                    }
+                )
 
     def _event_to_record(self, event: Any) -> dict[str, Any] | None:
         if isinstance(event, ToolCallEvent):

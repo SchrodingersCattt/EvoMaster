@@ -55,9 +55,7 @@ class TestGrepToolExecution:
         tool = GrepTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "import os", "include": "*.py"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert '--include="*.py"' in command
 
     async def test_default_path(self, mock_session: MagicMock) -> None:
@@ -65,9 +63,7 @@ class TestGrepToolExecution:
         tool = GrepTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "import os"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert '"/workspace"' in command
 
     async def test_relative_path(self, mock_session: MagicMock) -> None:
@@ -75,19 +71,17 @@ class TestGrepToolExecution:
         tool = GrepTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "import os", "path": "src"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert '"/workspace/src"' in command
 
-    async def test_grep_command_has_head_truncation(self, mock_session: MagicMock) -> None:
+    async def test_grep_command_has_head_truncation(
+        self, mock_session: MagicMock
+    ) -> None:
         """Verify output is truncated via head -200."""
         tool = GrepTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "import os"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert "head -200" in command
 
     async def test_grep_uses_rn_flags(self, mock_session: MagicMock) -> None:
@@ -95,9 +89,7 @@ class TestGrepToolExecution:
         tool = GrepTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "import os"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert "grep -rn" in command
 
 
@@ -109,9 +101,7 @@ class TestGrepToolPathSafety:
         tool = GrepTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "import os", "path": "../../etc"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert '"/workspace"' in command
         assert "/etc" not in command
 
@@ -120,9 +110,7 @@ class TestGrepToolPathSafety:
         tool = GrepTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "import os", "path": "/etc"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert '"/workspace"' in command
         assert "/etc" not in command
 

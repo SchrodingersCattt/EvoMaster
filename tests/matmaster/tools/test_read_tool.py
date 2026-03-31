@@ -15,10 +15,10 @@ from matmaster.tools.builtin.read_tool import (
 from matmaster.tools.builtin.read_tracker import ReadTracker
 from matmaster.tools.tool_registry import Tool
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def mock_session() -> MagicMock:
@@ -37,6 +37,7 @@ def _make_content(n_lines: int) -> str:
 # ---------------------------------------------------------------------------
 # Basic protocol
 # ---------------------------------------------------------------------------
+
 
 class TestReadToolBasic:
     """ReadTool properties and protocol."""
@@ -65,6 +66,7 @@ class TestReadToolBasic:
 # Full-read mode (no offset/limit)
 # ---------------------------------------------------------------------------
 
+
 class TestFullRead:
     """Full-read mode: no offset/limit provided."""
 
@@ -90,7 +92,9 @@ class TestFullRead:
         # Does NOT contain lines beyond preview
         assert f"line{PREVIEW_LINES + 1}" not in result
 
-    async def test_tracker_marked_on_within_limit(self, mock_session: MagicMock) -> None:
+    async def test_tracker_marked_on_within_limit(
+        self, mock_session: MagicMock
+    ) -> None:
         tracker = ReadTracker()
         tool = ReadTool(session=mock_session, tracker=tracker)
         await tool.execute({"file_path": "/workspace/a.py"})
@@ -130,12 +134,15 @@ class TestFullRead:
 # Ranged-read mode (offset and/or limit)
 # ---------------------------------------------------------------------------
 
+
 class TestRangedRead:
     """Ranged-read mode: offset and/or limit provided."""
 
     async def test_read_with_offset_and_limit(self, mock_session: MagicMock) -> None:
         tool = ReadTool(session=mock_session)
-        result = await tool.execute({"file_path": "/workspace/a.py", "offset": 2, "limit": 2})
+        result = await tool.execute(
+            {"file_path": "/workspace/a.py", "offset": 2, "limit": 2}
+        )
         assert "     2\tline2" in result
         assert "     3\tline3" in result
         assert "line1" not in result
@@ -161,11 +168,13 @@ class TestRangedRead:
         session.is_file.return_value = True
         session.read_file.return_value = _make_content(MAX_READ_LINES + 500)
         tool = ReadTool(session=session)
-        result = await tool.execute({
-            "file_path": "/workspace/big.py",
-            "offset": 1,
-            "limit": MAX_READ_LINES + 500,
-        })
+        result = await tool.execute(
+            {
+                "file_path": "/workspace/big.py",
+                "offset": 1,
+                "limit": MAX_READ_LINES + 500,
+            }
+        )
         # Should return content (not error) but with truncation notice
         assert "cat -n" in result
         assert "     1\tline1" in result
@@ -193,6 +202,7 @@ class TestRangedRead:
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
+
 
 class TestValidation:
     """Parameter validation."""
@@ -237,6 +247,7 @@ class TestValidation:
 # Character limit fallback
 # ---------------------------------------------------------------------------
 
+
 class TestCharLimit:
     """MAX_READ_CHARS fallback guard."""
 
@@ -259,6 +270,8 @@ class TestCharLimit:
         session.read_file.return_value = "\n".join([huge_line] * 10)
         tracker = ReadTracker()
         tool = ReadTool(session=session, tracker=tracker)
-        result = await tool.execute({"file_path": "/workspace/huge.json", "offset": 1, "limit": 10})
+        result = await tool.execute(
+            {"file_path": "/workspace/huge.json", "offset": 1, "limit": 10}
+        )
         assert "[Output truncated" in result
         assert tracker.has_been_read("/workspace/huge.json") is False

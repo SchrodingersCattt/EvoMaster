@@ -64,9 +64,7 @@ class TestSpawnFnLifecycle:
     async def test_spawn_fn_cleanup_called(self) -> None:
         """Child cleanup is called via Exp.run() (internally in try/finally)."""
         ctx = _make_ctx()
-        mock_kr = KernelResult(
-            status="completed", reason="natural", final_content="ok"
-        )
+        mock_kr = KernelResult(status="completed", reason="natural", final_content="ok")
         mock_cleanup = AsyncMock()
 
         with (
@@ -89,7 +87,9 @@ class TestSpawnFnLifecycle:
         with (
             patch("matmaster.config.loader.load_exp_config") as mock_load,
             patch.object(
-                Exp, "run", new_callable=AsyncMock,
+                Exp,
+                "run",
+                new_callable=AsyncMock,
                 side_effect=RuntimeError("kernel crashed"),
             ),
         ):
@@ -101,13 +101,13 @@ class TestSpawnFnLifecycle:
     async def test_spawn_fn_shared_context(self) -> None:
         """spawn_fn passes parent ctx to child Exp.run() (SUBA-03)."""
         ctx = _make_ctx()
-        mock_kr = KernelResult(
-            status="completed", reason="natural", final_content="ok"
-        )
+        mock_kr = KernelResult(status="completed", reason="natural", final_content="ok")
 
         with (
             patch("matmaster.config.loader.load_exp_config") as mock_load,
-            patch.object(Exp, "run", new_callable=AsyncMock, return_value=mock_kr) as mock_run,
+            patch.object(
+                Exp, "run", new_callable=AsyncMock, return_value=mock_kr
+            ) as mock_run,
         ):
             mock_load.return_value = ExpConfig(name="explore")
             spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
@@ -120,13 +120,13 @@ class TestSpawnFnLifecycle:
     async def test_spawn_fn_source_prefix(self) -> None:
         """spawn_fn passes source_override='MatMaster:{exp_name}' to child Exp.run() (D-02)."""
         ctx = _make_ctx()
-        mock_kr = KernelResult(
-            status="completed", reason="natural", final_content="ok"
-        )
+        mock_kr = KernelResult(status="completed", reason="natural", final_content="ok")
 
         with (
             patch("matmaster.config.loader.load_exp_config") as mock_load,
-            patch.object(Exp, "run", new_callable=AsyncMock, return_value=mock_kr) as mock_run,
+            patch.object(
+                Exp, "run", new_callable=AsyncMock, return_value=mock_kr
+            ) as mock_run,
         ):
             mock_load.return_value = ExpConfig(name="explore")
             spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
@@ -139,14 +139,14 @@ class TestSpawnFnLifecycle:
     async def test_spawn_fn_passes_fresh_child_spawn_id_to_run(self) -> None:
         """Each spawn generates uuid.uuid4().hex[:16] and passes it to child Exp.run()."""
         ctx = _make_ctx()
-        mock_kr = KernelResult(
-            status="completed", reason="natural", final_content="ok"
-        )
+        mock_kr = KernelResult(status="completed", reason="natural", final_content="ok")
         hex16 = re.compile(r"^[0-9a-f]{16}$")
 
         with (
             patch("matmaster.config.loader.load_exp_config") as mock_load,
-            patch.object(Exp, "run", new_callable=AsyncMock, return_value=mock_kr) as mock_run,
+            patch.object(
+                Exp, "run", new_callable=AsyncMock, return_value=mock_kr
+            ) as mock_run,
         ):
             mock_load.return_value = ExpConfig(name="explore")
             spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
@@ -160,7 +160,9 @@ class TestSpawnFnLifecycle:
 
         with (
             patch("matmaster.config.loader.load_exp_config") as mock_load,
-            patch.object(Exp, "run", new_callable=AsyncMock, return_value=mock_kr) as mock_run,
+            patch.object(
+                Exp, "run", new_callable=AsyncMock, return_value=mock_kr
+            ) as mock_run,
         ):
             mock_load.return_value = ExpConfig(name="explore")
             spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")
@@ -179,13 +181,13 @@ class TestStopEventPropagation:
         """stop_event passed to spawn_fn reaches child Exp.run()."""
         ctx = _make_ctx()
         stop_event = threading.Event()
-        mock_kr = KernelResult(
-            status="completed", reason="natural", final_content="ok"
-        )
+        mock_kr = KernelResult(status="completed", reason="natural", final_content="ok")
 
         with (
             patch("matmaster.config.loader.load_exp_config") as mock_load,
-            patch.object(Exp, "run", new_callable=AsyncMock, return_value=mock_kr) as mock_run,
+            patch.object(
+                Exp, "run", new_callable=AsyncMock, return_value=mock_kr
+            ) as mock_run,
         ):
             mock_load.return_value = ExpConfig(name="explore")
             spawn_fn = Exp._make_spawn_fn(ctx, bus=None, source_prefix="MatMaster")

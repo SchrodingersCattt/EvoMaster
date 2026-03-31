@@ -127,7 +127,9 @@ class Exp:
             )
             if result.status == "completed" and result.final_content:
                 return result.final_content
-            return f"SubAgent finished with status={result.status}, reason={result.reason}"
+            return (
+                f"SubAgent finished with status={result.status}, reason={result.reason}"
+            )
 
         return spawn_fn
 
@@ -283,8 +285,11 @@ class Exp:
         """
         try:
             runtime = await self.build_runtime(
-                ctx, bus=bus, skills=skills,
-                source_override=source_override, spawn_id=spawn_id,
+                ctx,
+                bus=bus,
+                skills=skills,
+                source_override=source_override,
+                spawn_id=spawn_id,
             )
             if ctx.session is not None:
                 ctx.session._stop_event = stop_event
@@ -489,4 +494,3 @@ class Exp:
         registry.register(skill_tool, source='skill')
 
         self._skill_registry = skill_registry
-

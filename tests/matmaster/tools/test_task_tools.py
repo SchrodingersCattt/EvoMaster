@@ -9,18 +9,15 @@ import json
 import threading
 from pathlib import Path
 
-import pytest
-
-from matmaster.tools.builtin.task._store import TaskStore
 from matmaster.tools.builtin.task import (
-    TaskCreateTool,
     TaskCompleteTool,
+    TaskCreateTool,
     TaskGetTool,
     TaskListTool,
     TaskUpdateTool,
 )
+from matmaster.tools.builtin.task._store import TaskStore
 from matmaster.tools.tool_registry import Tool
-
 
 # ---------------------------------------------------------------------------
 # TaskStore tests
@@ -106,7 +103,9 @@ class TestTaskCreateTool:
 
     async def test_task_create(self, tmp_path: Path) -> None:
         tool = TaskCreateTool(workdir=tmp_path)
-        result = await tool.execute({"description": "New task", "tasks": ["Sub A", "Sub B"]})
+        result = await tool.execute(
+            {"description": "New task", "tasks": ["Sub A", "Sub B"]}
+        )
         parsed = json.loads(result)
         assert parsed["description"] == "New task"
         assert parsed["status"] == "open"
@@ -137,7 +136,9 @@ class TestTaskGetTool:
     async def test_task_get_existing(self, tmp_path: Path) -> None:
         # Create a task first
         create_tool = TaskCreateTool(workdir=tmp_path)
-        create_result = json.loads(await create_tool.execute({"description": "Find me", "tasks": ["Sub"]}))
+        create_result = json.loads(
+            await create_tool.execute({"description": "Find me", "tasks": ["Sub"]})
+        )
         task_id = create_result["id"]
 
         tool = TaskGetTool(workdir=tmp_path)
@@ -208,26 +209,36 @@ class TestTaskUpdateTool:
 
     async def test_task_update_subtask_status(self, tmp_path: Path) -> None:
         create_tool = TaskCreateTool(workdir=tmp_path)
-        created = json.loads(await create_tool.execute({"description": "Original", "tasks": ["Step 1", "Step 2"]}))
+        created = json.loads(
+            await create_tool.execute(
+                {"description": "Original", "tasks": ["Step 1", "Step 2"]}
+            )
+        )
 
         tool = TaskUpdateTool(workdir=tmp_path)
-        result = await tool.execute({
-            "task_id": created["id"],
-            "subtask_index": 0,
-            "status": "in_progress",
-        })
+        result = await tool.execute(
+            {
+                "task_id": created["id"],
+                "subtask_index": 0,
+                "status": "in_progress",
+            }
+        )
         parsed = json.loads(result)
         assert parsed["subtasks"][0]["status"] == "in_progress"
         assert parsed["status"] == "in_progress"
 
     async def test_task_update_nonexistent(self, tmp_path: Path) -> None:
         tool = TaskUpdateTool(workdir=tmp_path)
-        result = await tool.execute({"task_id": "nope", "subtask_index": 0, "status": "in_progress"})
+        result = await tool.execute(
+            {"task_id": "nope", "subtask_index": 0, "status": "in_progress"}
+        )
         assert "not found" in result.lower()
 
     async def test_workdir_none(self) -> None:
         tool = TaskUpdateTool(workdir=None)
-        result = await tool.execute({"task_id": "abc", "subtask_index": 0, "status": "open"})
+        result = await tool.execute(
+            {"task_id": "abc", "subtask_index": 0, "status": "open"}
+        )
         assert "Error" in result
 
 
@@ -247,7 +258,11 @@ class TestTaskCompleteTool:
 
     async def test_task_complete_subtask(self, tmp_path: Path) -> None:
         create_tool = TaskCreateTool(workdir=tmp_path)
-        created = json.loads(await create_tool.execute({"description": "Complete me", "tasks": ["Only step"]}))
+        created = json.loads(
+            await create_tool.execute(
+                {"description": "Complete me", "tasks": ["Only step"]}
+            )
+        )
 
         tool = TaskCompleteTool(workdir=tmp_path)
         result = await tool.execute({"task_id": created["id"], "subtask_index": 0})

@@ -53,7 +53,8 @@ class LoopDetectionGuard:
         count = sum(
             1
             for rc in window_calls
-            if (rc.fingerprint or self._fingerprint(rc.tool_name, rc.tool_args)) == current_fp
+            if (rc.fingerprint or self._fingerprint(rc.tool_name, rc.tool_args))
+            == current_fp
         )
         if count >= self._threshold:
             return GuardResult(

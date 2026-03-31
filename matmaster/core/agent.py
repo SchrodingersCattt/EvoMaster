@@ -223,7 +223,7 @@ class AgentKernel:
             outcomes: list[_ToolOutcome] = []
             approved_indices: list[int] = []
 
-            for i, tc in enumerate(response.tool_calls):
+            for _i, tc in enumerate(response.tool_calls):
                 if stop_event and stop_event.is_set():
                     return self._finish(
                         spec,
@@ -239,26 +239,42 @@ class AgentKernel:
                     blocked_content = f'BLOCKED: {guard_result.reason}'
                     if guard_result.guidance:
                         blocked_content += f'\n{guard_result.guidance}'
-                    outcomes.append(_ToolOutcome(
-                        tc=tc,
-                        tool_msg=ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content=blocked_content),
-                        tool_result=None,
-                        needs_post_hook=False,
-                    ))
+                    outcomes.append(
+                        _ToolOutcome(
+                            tc=tc,
+                            tool_msg=ToolMessage(
+                                tool_call_id=tc.id,
+                                tool_name=tc.name,
+                                content=blocked_content,
+                            ),
+                            tool_result=None,
+                            needs_post_hook=False,
+                        )
+                    )
                     continue
 
                 action = await run_pre_tool_call(spec.hooks, tc)
                 if action == HookAction.SKIP:
-                    outcomes.append(_ToolOutcome(
-                        tc=tc,
-                        tool_msg=ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content='Tool call skipped by hook.'),
-                        tool_result=None,
-                        needs_post_hook=False,
-                    ))
+                    outcomes.append(
+                        _ToolOutcome(
+                            tc=tc,
+                            tool_msg=ToolMessage(
+                                tool_call_id=tc.id,
+                                tool_name=tc.name,
+                                content='Tool call skipped by hook.',
+                            ),
+                            tool_result=None,
+                            needs_post_hook=False,
+                        )
+                    )
                     continue
 
                 approved_indices.append(len(outcomes))
-                outcomes.append(_ToolOutcome(tc=tc, tool_msg=None, tool_result=None, needs_post_hook=True))
+                outcomes.append(
+                    _ToolOutcome(
+                        tc=tc, tool_msg=None, tool_result=None, needs_post_hook=True
+                    )
+                )
 
             # Phase 2: Parallel — approved tools are independent, concurrent execution reduces latency
             if approved_indices:
@@ -285,7 +301,11 @@ class AgentKernel:
                         tool_result = raw
                     outcomes[outcome_idx] = _ToolOutcome(
                         tc=tc,
-                        tool_msg=ToolMessage(tool_call_id=tc.id, tool_name=tc.name, content=tool_result.content),
+                        tool_msg=ToolMessage(
+                            tool_call_id=tc.id,
+                            tool_name=tc.name,
+                            content=tool_result.content,
+                        ),
                         tool_result=tool_result,
                         needs_post_hook=True,
                     )
@@ -338,28 +358,30 @@ class AgentKernel:
             t0 = time.monotonic()
             try:
                 response = await self._do_stream_llm(
-                    spec, api_messages, tool_defs, timeout=current_timeout,
+                    spec,
+                    api_messages,
+                    tool_defs,
+                    timeout=current_timeout,
                     stop_event=stop_event,
                 )
                 elapsed = time.monotonic() - t0
 
-                if (
-                    self._is_incomplete_response(response)
-                    and attempt < max_retries - 1
-                ):
+                if self._is_incomplete_response(response) and attempt < max_retries - 1:
                     backoff = retry_delay * (2**attempt)
                     if attempt_records is None:
                         attempt_records = []
-                    attempt_records.append({
-                        "attempt": attempt + 1,
-                        "error_type": "IncompleteResponse",
-                        "error_category": "incomplete_response",
-                        "error_message": "reasoning-only response without content",
-                        "timeout_used": current_timeout,
-                        "elapsed_seconds": round(elapsed, 2),
-                        "retryable": True,
-                        "backoff_seconds": backoff,
-                    })
+                    attempt_records.append(
+                        {
+                            "attempt": attempt + 1,
+                            "error_type": "IncompleteResponse",
+                            "error_category": "incomplete_response",
+                            "error_message": "reasoning-only response without content",
+                            "timeout_used": current_timeout,
+                            "elapsed_seconds": round(elapsed, 2),
+                            "retryable": True,
+                            "backoff_seconds": backoff,
+                        }
+                    )
                     logger.warning(
                         "LLM returned reasoning without content "
                         "(attempt %d/%d, elapsed=%.1fs), retrying.",
@@ -385,20 +407,28 @@ class AgentKernel:
                     raise
                 last_error = e
                 next_timeout = current_timeout * 2
-                backoff = retry_delay * (2**attempt) if attempt < max_retries - 1 else 0.0
+                backoff = (
+                    retry_delay * (2**attempt) if attempt < max_retries - 1 else 0.0
+                )
                 if attempt_records is None:
                     attempt_records = []
-                attempt_records.append({
-                    "attempt": attempt + 1,
-                    "error_type": type(e.__cause__).__name__ if e.__cause__ else type(e).__name__,
-                    "error_category": getattr(e, "error_category", None),
-                    "error_message": str(e),
-                    "timeout_used": current_timeout,
-                    "elapsed_seconds": round(elapsed, 2),
-                    "retryable": e.retryable,
-                    "next_timeout": next_timeout,
-                    "backoff_seconds": backoff,
-                })
+                attempt_records.append(
+                    {
+                        "attempt": attempt + 1,
+                        "error_type": (
+                            type(e.__cause__).__name__
+                            if e.__cause__
+                            else type(e).__name__
+                        ),
+                        "error_category": getattr(e, "error_category", None),
+                        "error_message": str(e),
+                        "timeout_used": current_timeout,
+                        "elapsed_seconds": round(elapsed, 2),
+                        "retryable": e.retryable,
+                        "next_timeout": next_timeout,
+                        "backoff_seconds": backoff,
+                    }
+                )
                 logger.warning(
                     "LLM call failed (attempt %d/%d) [%s]: %s "
                     "(timeout=%.0fs, elapsed=%.1fs, backoff=%.1fs, next_timeout=%.0fs)",
@@ -438,7 +468,8 @@ class AgentKernel:
 
     @staticmethod
     async def _sleep_backoff_with_stop_async(
-        seconds: float, stop_event: threading.Event | None,
+        seconds: float,
+        stop_event: threading.Event | None,
     ) -> None:
         """Async sleep for *seconds*, but wake early if stop_event is set."""
         if seconds <= 0:

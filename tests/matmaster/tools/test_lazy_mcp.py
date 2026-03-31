@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from matmaster.tools.tool_result import ToolResult
-from matmaster.tools.tool_registry import Tool
 from matmaster.tools.lazy_mcp import LazyMCPTool, configure_mcp_manager
+from matmaster.tools.tool_registry import Tool
+from matmaster.tools.tool_result import ToolResult
 
 
 class FakeConnector:
@@ -65,7 +64,7 @@ class TestLazyMCPToolExecution:
             input_schema={},
             connector=connector,
         )
-        result = await tool.execute({"param": "value"})
+        await tool.execute({"param": "value"})
         assert len(connector.connect_calls) == 1
         assert connector.connect_calls[0] == ("mat_sg", "build_bulk")
         connector._fake_tool.execute.assert_called_once()
@@ -91,8 +90,12 @@ class TestLazyMCPToolExecution:
         connector = FakeConnector()
         connector._fake_tool.execute.return_value = ("hello world", {})
         tool = LazyMCPTool(
-            server_name="s", tool_name="s_t", remote_tool_name="t",
-            description="", input_schema={}, connector=connector,
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
         )
         result = await tool.execute({})
         assert isinstance(result, ToolResult)
@@ -104,8 +107,12 @@ class TestLazyMCPToolExecution:
         connector = FakeConnector()
         connector._fake_tool.execute.return_value = ({"key": "val"}, {})
         tool = LazyMCPTool(
-            server_name="s", tool_name="s_t", remote_tool_name="t",
-            description="", input_schema={}, connector=connector,
+            server_name="s",
+            tool_name="s_t",
+            remote_tool_name="t",
+            description="",
+            input_schema={},
+            connector=connector,
         )
         result = await tool.execute({})
         assert json.loads(result.content) == {"key": "val"}
@@ -182,7 +189,9 @@ class TestConfigureMCPManager:
             },
         }
         configure_mcp_manager(manager, config)
-        assert "build_bulk_structure_by_wyckoff" in manager.sync_tools_by_server["mat_sg"]
+        assert (
+            "build_bulk_structure_by_wyckoff" in manager.sync_tools_by_server["mat_sg"]
+        )
 
     def test_sync_tools_not_set_without_calculation(self):
         """Without path_adaptor=calculation, sync_tools_by_server stays empty."""
@@ -204,7 +213,10 @@ class TestConfigureMCPManager:
             }
         }
         configure_mcp_manager(manager, config)
-        assert manager.tool_include_only["mat_sn"] == ["web-search", "search-papers-enhanced"]
+        assert manager.tool_include_only["mat_sn"] == [
+            "web-search",
+            "search-papers-enhanced",
+        ]
         assert manager.tool_include_only["bad_entry"] == []
 
     def test_empty_config_noop(self):
@@ -215,20 +227,23 @@ class TestConfigureMCPManager:
         assert manager.tool_include_only == {}
 
 
-from unittest.mock import AsyncMock, patch, MagicMock
-
 try:
     from matmaster.tools.lazy_mcp import LazyMCPConnector
+
     _has_lazy_mcp_connector = True
 except ImportError:
     _has_lazy_mcp_connector = False
 
 
-@pytest.mark.skipif(not _has_lazy_mcp_connector, reason="LazyMCPConnector not yet implemented")
+@pytest.mark.skipif(
+    not _has_lazy_mcp_connector, reason="LazyMCPConnector not yet implemented"
+)
 class TestLazyMCPConnector:
     def test_init_state(self):
         connector = LazyMCPConnector(
-            mcp_server_config={"mat_sg": {"transport": "http", "url": "http://localhost"}},
+            mcp_server_config={
+                "mat_sg": {"transport": "http", "url": "http://localhost"}
+            },
             mcp_config={},
         )
         assert connector._manager is None

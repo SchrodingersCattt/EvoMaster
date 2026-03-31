@@ -12,9 +12,8 @@ from typing import Any
 import pytest
 
 from matmaster.core.context_builder import ContextBuilder
-from matmaster.tools.tool_registry import Tool, ToolRegistry
+from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
-
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -96,9 +95,7 @@ def test_build_with_identity_only(
     assert "# System" not in result
 
 
-def test_section_order_fixed(
-    builder: ContextBuilder, ctx: PlaygroundContext
-) -> None:
+def test_section_order_fixed(builder: ContextBuilder, ctx: PlaygroundContext) -> None:
     """All sections enabled -- fixed order system_prompt < identity < skills
     < tools < memory < task."""
     reg = ToolRegistry()
@@ -160,7 +157,8 @@ def test_strip_trailing_newlines(
 ) -> None:
     """TOML multi-line strings may have trailing newlines -- stripped."""
     result = builder.build(
-        ctx, tool_registry,
+        ctx,
+        tool_registry,
         system_prompt="\nBase prompt\n",
         identity="\nMat Master\n",
     )
@@ -217,9 +215,7 @@ def test_skills_section_from_registry(
 ) -> None:
     """Mock skill_registry with get_meta_info_context() -- output contains
     skill descriptions."""
-    result = builder.build(
-        ctx, tool_registry, skill_registry=MockSkillRegistry()
-    )
+    result = builder.build(ctx, tool_registry, skill_registry=MockSkillRegistry())
     assert "# Skills" in result
     assert "Skill A: does X" in result
     assert "Skill B: does Y" in result

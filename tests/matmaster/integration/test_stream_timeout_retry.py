@@ -6,7 +6,7 @@ from typing import Any, AsyncIterator
 
 from matmaster.core.agent import AgentKernel
 from matmaster.types.errors import LLMError
-from matmaster.types.messages import LLMResponse, StreamChunk, UserMessage
+from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.runtime import AgentRuntimeSpec
 
 

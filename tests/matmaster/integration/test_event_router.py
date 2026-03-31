@@ -148,7 +148,9 @@ class TestEventRouter:
         assert closed.is_set()
         assert elapsed >= 0.2
 
-    async def test_add_handler_post_registration_only_receives_future_events(self) -> None:
+    async def test_add_handler_post_registration_only_receives_future_events(
+        self,
+    ) -> None:
         """A handler added after start only receives events emitted after registration."""
         bus = MessageBus()
         initial_received: list[str] = []
@@ -261,9 +263,7 @@ class TestPersistenceHandler:
         handler, events_table = self._make_handler()
 
         await handler.handle(
-            ToolResultEvent(
-                source="Agent", call_id="c1", tool_name="bash", result="ok"
-            )
+            ToolResultEvent(source="Agent", call_id="c1", tool_name="bash", result="ok")
         )
         await handler.handle(RunResultEvent(source="Agent", reason="done"))
 
@@ -457,7 +457,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
@@ -478,7 +477,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
@@ -504,7 +502,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
@@ -522,7 +519,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
@@ -552,7 +548,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
@@ -584,7 +579,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
@@ -618,14 +612,15 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
             mode="direct",
         )
 
-        await handler.handle(ErrorEvent(source="System", message="boom", traceback="tb"))
+        await handler.handle(
+            ErrorEvent(source="System", message="boom", traceback="tb")
+        )
 
         payload = send_cb.call_args[0][0]
         assert payload['content'] == {'message': 'boom', 'traceback': 'tb'}
@@ -635,7 +630,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
@@ -672,7 +666,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
@@ -710,7 +703,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id="inv1",
@@ -739,7 +731,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
@@ -764,7 +755,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
@@ -784,14 +774,15 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
             mode='direct',
         )
 
-        await handler.handle(AssistantStateEvent(source="Agent", state={"role": "assistant"}))
+        await handler.handle(
+            AssistantStateEvent(source="Agent", state={"role": "assistant"})
+        )
 
         send_cb.assert_not_called()
 
@@ -800,7 +791,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
@@ -809,9 +799,7 @@ class TestSSEHandler:
 
         for state in ("start", "streaming", "end"):
             await handler.handle(
-                ThoughtEvent(
-                    source="Planner", content="planning", stream_state=state
-                )
+                ThoughtEvent(source="Planner", content="planning", stream_state=state)
             )
 
         send_cb.assert_not_called()
@@ -821,7 +809,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
@@ -839,7 +826,6 @@ class TestSSEHandler:
         send_cb = AsyncMock()
         handler = SSEHandler(
             send_cb=send_cb,
-
             session_id="sess1",
             task_id="task1",
             invocation_id=None,
@@ -847,10 +833,14 @@ class TestSSEHandler:
         )
 
         await handler.handle(
-            ThoughtEvent(source="Agent", content="full thought", stream_state="complete")
+            ThoughtEvent(
+                source="Agent", content="full thought", stream_state="complete"
+            )
         )
         await handler.handle(
-            ResponseEvent(source="Agent", content="full answer", stream_state="complete")
+            ResponseEvent(
+                source="Agent", content="full answer", stream_state="complete"
+            )
         )
 
         send_cb.assert_not_called()

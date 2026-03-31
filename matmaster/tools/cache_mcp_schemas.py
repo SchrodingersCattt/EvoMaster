@@ -8,6 +8,7 @@ Usage:
     uv run python -m matmaster.tools.cache_mcp_schemas
     uv run python -m matmaster.tools.cache_mcp_schemas --config-dir matmaster_config
 """
+
 from __future__ import annotations
 
 import argparse
@@ -90,11 +91,13 @@ async def generate_cache(config_dir: Path, output_dir: Path) -> None:
         schemas = []
         for tool in tools.values():
             spec = tool.get_tool_spec()
-            schemas.append({
-                "name": tool._remote_tool_name or spec.function.name,
-                "description": spec.function.description,
-                "input_schema": spec.function.parameters,
-            })
+            schemas.append(
+                {
+                    "name": tool._remote_tool_name or spec.function.name,
+                    "description": spec.function.description,
+                    "input_schema": spec.function.parameters,
+                }
+            )
         out_path = output_dir / f"{server_name}.json"
         out_path.write_text(json.dumps(schemas, indent=2, ensure_ascii=False))
         logger.info("Wrote %d tools to %s", len(schemas), out_path)

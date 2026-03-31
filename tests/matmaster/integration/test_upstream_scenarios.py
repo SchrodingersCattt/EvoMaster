@@ -13,39 +13,35 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, AsyncIterator
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from matmaster.config.exp import ExpConfig
-from matmaster.core.exp import Exp
-from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
+from matmaster.core.bus import MessageBus
+from matmaster.core.exp import Exp
 from matmaster.core.hooks import BaseHook, HookAction
-from matmaster.tools.tool_registry import ToolRegistry
-from matmaster.types.messages import (
-    LLMResponse,
-    Message,
-    StreamChunk,
-    ToolCallData,
-)
 from matmaster.integration.bohrium_setup import BohriumSetupService, SkillSyncSpec
-from src.services.agent_run_bohrium import BohriumSetupResult
-from matmaster.integration.event_router import EventRouter
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
-from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
+from matmaster.tools.tool_registry import ToolRegistry
+from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import (
     AssistantStateEvent,
-    ConfirmationRequestEvent,
     FinishEvent,
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-
+from matmaster.types.messages import (
+    LLMResponse,
+    StreamChunk,
+    ToolCallData,
+)
+from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
+from src.services.agent_run_bohrium import BohriumSetupResult
 
 # -- Mock helpers ------------------------------------------------
 
@@ -175,7 +171,9 @@ class TestRunInterruptedDetection:
 class TestWorkspaceUpload:
     """Verify WorkspaceHandler upload behavior."""
 
-    async def test_workspace_upload_triggered_on_tool_result(self, tmp_path: Path) -> None:
+    async def test_workspace_upload_triggered_on_tool_result(
+        self, tmp_path: Path
+    ) -> None:
         """Verify WorkspaceHandler triggers upload when workspace files change."""
         workspace_path = tmp_path / "workspace"
         workspace_path.mkdir()
@@ -201,17 +199,19 @@ class TestWorkspaceUpload:
         )
 
         # First event: sets initial snapshot
-        await handler.handle(ToolResultEvent(
-            source="agent", call_id="c1", tool_name="bash", result="ok"
-        ))
+        await handler.handle(
+            ToolResultEvent(source="agent", call_id="c1", tool_name="bash", result="ok")
+        )
         # Second event: snapshot changed -> upload triggered
-        await handler.handle(ToolResultEvent(
-            source="agent", call_id="c2", tool_name="bash", result="ok"
-        ))
+        await handler.handle(
+            ToolResultEvent(source="agent", call_id="c2", tool_name="bash", result="ok")
+        )
 
         assert upload_fn.called
 
-    async def test_workspace_upload_skipped_when_ssh_attached(self, tmp_path: Path) -> None:
+    async def test_workspace_upload_skipped_when_ssh_attached(
+        self, tmp_path: Path
+    ) -> None:
         """Verify WorkspaceHandler skips upload in SSH mode."""
         workspace_path = tmp_path / "workspace"
         workspace_path.mkdir()
@@ -228,9 +228,9 @@ class TestWorkspaceUpload:
             debounce_seconds=0,
         )
 
-        await handler.handle(ToolResultEvent(
-            source="agent", call_id="c1", tool_name="bash", result="ok"
-        ))
+        await handler.handle(
+            ToolResultEvent(source="agent", call_id="c1", tool_name="bash", result="ok")
+        )
 
         assert not upload_fn.called
 
@@ -249,9 +249,7 @@ class TestBohriumSetupLifecycle:
 
         # Patch the lazy-imported functions
         with (
-            patch(
-                "src.services.agent_run_bohrium.setup_bohrium_for_run"
-            ) as mock_setup,
+            patch("src.services.agent_run_bohrium.setup_bohrium_for_run") as mock_setup,
             patch(
                 "src.services.agent_run_bohrium.cleanup_bohrium_after_run"
             ) as mock_cleanup,
@@ -313,12 +311,16 @@ class TestEventRouterPersistence:
         )
 
         # These should be persisted (non-streaming)
-        await handler.handle(ToolCallEvent(
-            source="agent", call_id="c1", tool_name="bash", arguments={"cmd": "ls"}
-        ))
-        await handler.handle(ToolResultEvent(
-            source="agent", call_id="c1", tool_name="bash", result="output"
-        ))
+        await handler.handle(
+            ToolCallEvent(
+                source="agent", call_id="c1", tool_name="bash", arguments={"cmd": "ls"}
+            )
+        )
+        await handler.handle(
+            ToolResultEvent(
+                source="agent", call_id="c1", tool_name="bash", result="output"
+            )
+        )
         await handler.handle(FinishEvent(source="agent", reason="natural"))
 
         assert mock_events_table.add_event.call_count == 3
@@ -339,21 +341,21 @@ class TestEventRouterPersistence:
         )
 
         # assistant_state: NEVER pushed
-        await handler.handle(AssistantStateEvent(
-            source="agent", state={"content": "hi"}
-        ))
+        await handler.handle(
+            AssistantStateEvent(source="agent", state={"content": "hi"})
+        )
         # streaming thought: pushed in direct mode
-        await handler.handle(ThoughtEvent(
-            source="agent", content="hello", stream_state="start"
-        ))
+        await handler.handle(
+            ThoughtEvent(source="agent", content="hello", stream_state="start")
+        )
         # non-streaming thought: NOT pushed in direct mode
-        await handler.handle(ThoughtEvent(
-            source="agent", content="complete thought", stream_state=None
-        ))
+        await handler.handle(
+            ThoughtEvent(source="agent", content="complete thought", stream_state=None)
+        )
         # tool_call: pushed
-        await handler.handle(ToolCallEvent(
-            source="agent", call_id="c1", tool_name="bash", arguments={}
-        ))
+        await handler.handle(
+            ToolCallEvent(source="agent", call_id="c1", tool_name="bash", arguments={})
+        )
 
         event_types = [p.get("type") for p in payloads]
         assert "assistant_state" not in event_types
@@ -490,9 +492,7 @@ def _make_confirmation_runtime(
 class TestAgentRunServiceConfirmationRecovery:
     """QUAL-04: service-layer confirmation recovery under Worker + Redis semantics."""
 
-    def _make_playground(
-        self, tmp_path: Path
-    ) -> tuple[MagicMock, PlaygroundContext]:
+    def _make_playground(self, tmp_path: Path) -> tuple[MagicMock, PlaygroundContext]:
         mock_pg = MagicMock()
         mock_pg_ctx = _make_ctx(tmp_path)
         mock_pg.prepare.return_value = mock_pg_ctx
@@ -507,7 +507,12 @@ class TestAgentRunServiceConfirmationRecovery:
         *,
         reply_queue: _RedisCompatibleReplyQueue,
         reply_fn,
-    ) -> tuple[tuple[bool | tuple[bool, str], int], list[dict[str, Any]], _RecordingAsyncTool, _RecordingRuntimeHook]:
+    ) -> tuple[
+        tuple[bool | tuple[bool, str], int],
+        list[dict[str, Any]],
+        _RecordingAsyncTool,
+        _RecordingRuntimeHook,
+    ]:
         from src.services.agent_run_service import AgentRunService
 
         svc = AgentRunService(sessions_service=MagicMock())
@@ -573,15 +578,17 @@ class TestAgentRunServiceConfirmationRecovery:
 
             responder = threading.Thread(target=reply_fn, daemon=True)
             responder.start()
-            result = asyncio.run(svc.run_agent(
-                session_id="sess-confirmation",
-                user_prompt="run command",
-                send_cb=send_cb,
-                stop_event=threading.Event(),
-                mode="direct",
-                reply_queue=reply_queue,
-                task_id="task-confirmation",
-            ))
+            result = asyncio.run(
+                svc.run_agent(
+                    session_id="sess-confirmation",
+                    user_prompt="run command",
+                    send_cb=send_cb,
+                    stop_event=threading.Event(),
+                    mode="direct",
+                    reply_queue=reply_queue,
+                    task_id="task-confirmation",
+                )
+            )
             responder.join(timeout=2.0)
 
         return result, payloads, tool, runtime_hook
@@ -647,7 +654,9 @@ class TestAgentRunServiceConfirmationRecovery:
         assert len(tool.calls) == 1
         assert runtime_hook.pre_tool_call_count == 1
         confirmation_events = [
-            payload for payload in payloads if payload.get("type") == "confirmation_request"
+            payload
+            for payload in payloads
+            if payload.get("type") == "confirmation_request"
         ]
         assert len(confirmation_events) == 1
         assert not any(
@@ -673,7 +682,9 @@ class TestAgentRunServiceConfirmationRecovery:
         assert len(tool.calls) == 0
         assert runtime_hook.pre_tool_call_count == 0
         confirmation_events = [
-            payload for payload in payloads if payload.get("type") == "confirmation_request"
+            payload
+            for payload in payloads
+            if payload.get("type") == "confirmation_request"
         ]
         assert len(confirmation_events) == 1
         assert not any(

@@ -94,11 +94,7 @@ class ToolRegistry:
 
     def get_tools_by_source(self, source: str) -> list[Tool]:
         """Return tools registered under the given source label."""
-        return [
-            self._tools[name]
-            for name, s in self._sources.items()
-            if s == source
-        ]
+        return [self._tools[name] for name, s in self._sources.items() if s == source]
 
     @property
     def all_tools(self) -> list[Tool]:

@@ -16,13 +16,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.core.hooks import Hook
+from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.events import RunResultEvent
 from matmaster.types.messages import Message
-from .llm_provider import LLMProvider
 
 from .guards import Guard
+from .llm_provider import LLMProvider
 
 
 class CompactionConfig(BaseModel):

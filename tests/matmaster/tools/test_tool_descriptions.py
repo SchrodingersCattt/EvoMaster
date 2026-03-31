@@ -74,9 +74,7 @@ def test_bash_routes_all_dedicated_tools():
     """BashTool.description mentions all 5 dedicated tool routing targets."""
     desc = BashTool.description
     for target in ["read_file", "write_file", "edit_file", "glob", "grep"]:
-        assert target in desc, (
-            f"BashTool.description missing routing target '{target}'"
-        )
+        assert target in desc, f"BashTool.description missing routing target '{target}'"
 
 
 def test_dedicated_tools_have_routing_declaration():
@@ -84,9 +82,9 @@ def test_dedicated_tools_have_routing_declaration():
     dedicated_tools = [GrepTool, GlobTool, ReadTool, WriteTool, EditTool]
     for tool_cls in dedicated_tools:
         desc = tool_cls.description
-        assert "ALWAYS" in desc or "NEVER" in desc, (
-            f"{tool_cls.__name__}.description lacks ALWAYS/NEVER routing declaration"
-        )
+        assert (
+            "ALWAYS" in desc or "NEVER" in desc
+        ), f"{tool_cls.__name__}.description lacks ALWAYS/NEVER routing declaration"
 
 
 def test_routing_consistency():

@@ -12,8 +12,8 @@ import logging
 
 from matmaster.core.bus import MessageBus
 from matmaster.core.hooks import BaseHook
-from matmaster.types.messages import AssistantMessage, Message
 from matmaster.types.events import AssistantStateEvent
+from matmaster.types.messages import AssistantMessage, Message
 
 logger = logging.getLogger(__name__)
 

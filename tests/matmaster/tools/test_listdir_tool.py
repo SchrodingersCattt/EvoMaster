@@ -59,7 +59,9 @@ class TestListDirToolExecution:
         tool = ListDirTool(session=mock_session)
         await tool.execute({})
         call_kwargs = mock_session.exec_bash.call_args
-        command_sent = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
+        command_sent = call_kwargs.kwargs.get(
+            "command", call_kwargs[1].get("command", "")
+        )
         assert '"."' in command_sent or "'.'" in command_sent
 
     async def test_session_not_injected_returns_error(self) -> None:

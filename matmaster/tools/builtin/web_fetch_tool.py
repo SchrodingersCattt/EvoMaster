@@ -110,9 +110,7 @@ class _WebpageDiskCache:
                 fd.close()
             Path(fd.name).replace(target)
         except Exception:
-            logger.warning(
-                "Failed to write cache entry for %s", url, exc_info=True
-            )
+            logger.warning("Failed to write cache entry for %s", url, exc_info=True)
             return
         self._maybe_evict()
 
@@ -148,8 +146,7 @@ def _extract_content(
     Dispatches by content_type: HTML -> markdown, PDF -> PyMuPDF, else raw.
     """
     is_pdf = "application/pdf" in content_type or (
-        "application/octet-stream" in content_type
-        and raw_bytes[:5] == b"%PDF-"
+        "application/octet-stream" in content_type and raw_bytes[:5] == b"%PDF-"
     )
 
     if is_pdf and raw_bytes:
@@ -185,11 +182,7 @@ def _extract_content(
             content = re.sub(r"\n{3,}", "\n\n", content)
         except Exception:
             lines = (line.strip() for line in soup.get_text().splitlines())
-            chunks = (
-                phrase.strip()
-                for line in lines
-                for phrase in line.split("  ")
-            )
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
             content = " ".join(chunk for chunk in chunks if chunk)
     else:
         content = text
@@ -229,9 +222,7 @@ def _fetch_single_url(
             response.raise_for_status()
 
         content_type = response.headers.get("content-type", "").lower()
-        content = _extract_content(
-            response.text, content_type, response.content
-        )
+        content = _extract_content(response.text, content_type, response.content)
 
         if cache is not None:
             cache.put(url, content)
@@ -259,9 +250,7 @@ class WebFetchTool(BuiltinTool):
             "url": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": (
-                    "List of URLs to fetch and extract text from."
-                ),
+                "description": ("List of URLs to fetch and extract text from."),
             },
         },
         "required": ["url"],
@@ -278,9 +267,7 @@ class WebFetchTool(BuiltinTool):
         if isinstance(urls, str):
             urls = [urls]
         if not urls:
-            return ToolResult(
-                status="error", content="Error: url list is empty."
-            )
+            return ToolResult(status="error", content="Error: url list is empty.")
 
         if len(urls) == 1:
             return self._fetch_one(urls[0])
@@ -296,10 +283,7 @@ class WebFetchTool(BuiltinTool):
         results: dict[str, Any] = {}
         any_success = False
         with ThreadPoolExecutor(max_workers=min(len(urls), 8)) as pool:
-            futures = {
-                pool.submit(_fetch_single_url, u, self._cache): u
-                for u in urls
-            }
+            futures = {pool.submit(_fetch_single_url, u, self._cache): u for u in urls}
             for future in as_completed(futures):
                 url, content, error = future.result()
                 if error:

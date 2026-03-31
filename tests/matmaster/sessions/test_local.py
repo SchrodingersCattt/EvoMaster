@@ -1,4 +1,5 @@
 """Tests for matmaster.sessions.local.LocalSession."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -33,7 +34,10 @@ class TestLocalSessionExecBash:
         session = LocalSession(workspace_path=tmp_path)
         result = session.exec_bash("sleep 10", timeout=1)
         assert result["exit_code"] != 0
-        assert "timeout" in result["stderr"].lower() or "timeout" in result["output"].lower()
+        assert (
+            "timeout" in result["stderr"].lower()
+            or "timeout" in result["output"].lower()
+        )
 
     def test_is_input_returns_error(self, tmp_path: Path) -> None:
         session = LocalSession(workspace_path=tmp_path)

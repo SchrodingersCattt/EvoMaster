@@ -78,9 +78,7 @@ class TestBuildProvider:
 
     def test_custom_default_key(self, llm_config: LLMConfig) -> None:
         """default_profile_key overrides config default."""
-        provider = build_provider(
-            llm_config, default_profile_key="sonnet"
-        )
+        provider = build_provider(llm_config, default_profile_key="sonnet")
         assert provider._model == "claude-sonnet-4-6"
 
     def test_model_override_precedence(self, llm_config: LLMConfig) -> None:

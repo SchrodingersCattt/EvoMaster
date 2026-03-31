@@ -245,12 +245,17 @@ class TestExpRun:
             kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
         )
 
-        with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime) as mock_br:
+        with patch.object(
+            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
+        ) as mock_br:
             result = await exp.run(ctx, "do something")
 
         mock_br.assert_called_once_with(
-            ctx, bus=None, skills=None,
-            source_override=None, spawn_id=None,
+            ctx,
+            bus=None,
+            skills=None,
+            source_override=None,
+            spawn_id=None,
         )
         mock_kernel.run.assert_called_once_with(
             mock_spec, 'do something', history=None, stop_event=None
@@ -267,19 +272,26 @@ class TestExpRun:
         mock_kr = KernelResult(status='completed', reason='natural')
 
         mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(return_value=KernelRunResult(result=mock_kr, messages=[]))
+        mock_kernel.run = AsyncMock(
+            return_value=KernelRunResult(result=mock_kr, messages=[])
+        )
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(
             kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
         )
 
-        with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime) as mock_br:
+        with patch.object(
+            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
+        ) as mock_br:
             await exp.run(ctx, "task", bus=bus)
 
         mock_br.assert_called_once_with(
-            ctx, bus=bus, skills=None,
-            source_override=None, spawn_id=None,
+            ctx,
+            bus=bus,
+            skills=None,
+            source_override=None,
+            spawn_id=None,
         )
 
     async def test_run_forwards_history_and_stop_event(self) -> None:
@@ -293,14 +305,18 @@ class TestExpRun:
         history = [MagicMock()]
 
         mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(return_value=KernelRunResult(result=mock_kr, messages=[]))
+        mock_kernel.run = AsyncMock(
+            return_value=KernelRunResult(result=mock_kr, messages=[])
+        )
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(
             kernel=mock_kernel, spec=mock_spec, cleanup=mock_cleanup
         )
 
-        with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime):
+        with patch.object(
+            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
+        ):
             await exp.run(ctx, "task", history=history, stop_event=stop)
 
         mock_kernel.run.assert_called_once_with(
@@ -321,7 +337,9 @@ class TestExpCleanup:
         mock_kr = KernelResult(status='completed', reason='natural')
 
         mock_kernel = MagicMock()
-        mock_kernel.run = AsyncMock(return_value=KernelRunResult(result=mock_kr, messages=[]))
+        mock_kernel.run = AsyncMock(
+            return_value=KernelRunResult(result=mock_kr, messages=[])
+        )
         mock_spec = MagicMock(spec=AgentRuntimeSpec)
         mock_cleanup = MagicMock()
         mock_runtime = AgentRuntime(
@@ -332,7 +350,9 @@ class TestExpCleanup:
         cleanup_cb = MagicMock()
         exp._register_cleanup(cleanup_cb)
 
-        with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime):
+        with patch.object(
+            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
+        ):
             await exp.run(ctx, "task")
 
         cleanup_cb.assert_called_once()
@@ -354,7 +374,9 @@ class TestExpCleanup:
         cleanup_cb = MagicMock()
         exp._register_cleanup(cleanup_cb)
 
-        with patch.object(exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime):
+        with patch.object(
+            exp, "build_runtime", new_callable=AsyncMock, return_value=mock_runtime
+        ):
             with pytest.raises(RuntimeError, match="kernel exploded"):
                 await exp.run(ctx, "task")
 
@@ -392,11 +414,13 @@ class TestIdentityOverride:
     """Identity from config is forwarded to ContextBuilder.build()."""
 
     async def test_identity_from_config(self) -> None:
-        exp = Exp(ExpConfig(
-            name="test",
-            developer_instructions="I am a materials scientist.",
-            tools=ExpToolsConfig(builtin=[]),
-        ))
+        exp = Exp(
+            ExpConfig(
+                name="test",
+                developer_instructions="I am a materials scientist.",
+                tools=ExpToolsConfig(builtin=[]),
+            )
+        )
         ctx = _make_ctx(with_llm=True)
         runtime = await exp.build_runtime(ctx)
 
@@ -420,22 +444,26 @@ class TestSystemPromptOverride:
     """system_prompt from config is forwarded to ContextBuilder.build()."""
 
     async def test_system_prompt_from_config(self) -> None:
-        exp = Exp(ExpConfig(
-            name="test",
-            system_prompt="Base persona text.",
-            tools=ExpToolsConfig(builtin=[]),
-        ))
+        exp = Exp(
+            ExpConfig(
+                name="test",
+                system_prompt="Base persona text.",
+                tools=ExpToolsConfig(builtin=[]),
+            )
+        )
         ctx = _make_ctx(with_llm=True)
         runtime = await exp.build_runtime(ctx)
 
         assert 'Base persona text.' in runtime.spec.system_prompt
 
     async def test_empty_system_prompt_skips_section(self) -> None:
-        exp = Exp(ExpConfig(
-            name="test",
-            system_prompt="",
-            tools=ExpToolsConfig(builtin=[]),
-        ))
+        exp = Exp(
+            ExpConfig(
+                name="test",
+                system_prompt="",
+                tools=ExpToolsConfig(builtin=[]),
+            )
+        )
         ctx = _make_ctx(with_llm=True)
         runtime = await exp.build_runtime(ctx)
 
@@ -566,7 +594,9 @@ class TestExpBuiltinTools:
 
         # If _init_builtin_tools ran, native tools should be in the registry
         native = runtime.spec.tool_registry.get_tools_by_source("builtin")
-        assert len(native) == 14  # All native tools registered regardless of config list
+        assert (
+            len(native) == 14
+        )  # All native tools registered regardless of config list
 
     async def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
         """Empty builtin list skips _init_builtin_tools entirely."""

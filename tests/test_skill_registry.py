@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixtures: build a temporary skill tree on disk
 # ---------------------------------------------------------------------------
@@ -178,9 +177,7 @@ class TestSkill:
         assert skill.get_script_path("run.py").name == "run.py"
         assert skill.get_script_path("nonexistent.py") is None
 
-    def test_get_reference_in_references_dir(
-        self, skill_tree: dict[str, Path]
-    ) -> None:
+    def test_get_reference_in_references_dir(self, skill_tree: dict[str, Path]) -> None:
         """get_reference finds a file in the references/ subdirectory."""
         from matmaster.skills.registry import Skill
 
@@ -209,9 +206,7 @@ class TestSkill:
         content = skill.get_reference("greeting.md")
         assert content == "Hello from _common"
 
-    def test_get_reference_not_found_raises(
-        self, skill_tree: dict[str, Path]
-    ) -> None:
+    def test_get_reference_not_found_raises(self, skill_tree: dict[str, Path]) -> None:
         """get_reference raises FileNotFoundError when no candidate exists."""
         from matmaster.skills.registry import Skill
 
@@ -257,9 +252,7 @@ class TestSkillRegistry:
         assert skill is not None
         assert skill.meta_info.description == "A skill in a nested subdirectory"
 
-    def test_skips_underscore_prefixed_dirs(
-        self, skill_tree: dict[str, Path]
-    ) -> None:
+    def test_skips_underscore_prefixed_dirs(self, skill_tree: dict[str, Path]) -> None:
         """Directories starting with _ (like _common, _internal) are skipped."""
         from matmaster.skills.registry import SkillRegistry
 
@@ -288,9 +281,7 @@ class TestSkillRegistry:
         assert "parent" in names
         assert "bogus" not in names
 
-    def test_later_root_overrides_earlier(
-        self, skill_tree: dict[str, Path]
-    ) -> None:
+    def test_later_root_overrides_earlier(self, skill_tree: dict[str, Path]) -> None:
         """When the same skill name appears in multiple roots, later root wins."""
         from matmaster.skills.registry import SkillRegistry
 

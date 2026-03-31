@@ -187,6 +187,7 @@ class TestShowTools:
     def test_show_tools_uses_all_tools(self) -> None:
         """Verify _show_tools accesses registry.all_tools, not registry.tools."""
         from unittest.mock import AsyncMock, MagicMock, patch
+
         from matmaster.devshell.repl import _show_tools
 
         mock_runner = MagicMock()
@@ -213,6 +214,7 @@ class TestShowTools:
 class TestDevStreamHookSegment:
     async def test_on_segment_complete_thought_verbose(self) -> None:
         import io
+
         from matmaster.devshell.stream_hook import DevStreamHook
 
         out = io.StringIO()
@@ -222,6 +224,7 @@ class TestDevStreamHookSegment:
 
     async def test_on_segment_complete_thought_non_verbose(self) -> None:
         import io
+
         from matmaster.devshell.stream_hook import DevStreamHook
 
         out = io.StringIO()
@@ -231,6 +234,7 @@ class TestDevStreamHookSegment:
 
     async def test_on_segment_complete_response_silent(self) -> None:
         import io
+
         from matmaster.devshell.stream_hook import DevStreamHook
 
         out = io.StringIO()

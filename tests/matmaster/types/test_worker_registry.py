@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from matmaster.types.worker_registry import WorkerRegistry
 
-
 # ---------------------------------------------------------------------------
 # Test helpers
 # ---------------------------------------------------------------------------

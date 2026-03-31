@@ -7,15 +7,12 @@ Verifies that:
 4. EventEmitterHook with prefixed source emits events with correct source
 """
 
-import pytest
-
 from matmaster.core.bus import MessageBus
 from matmaster.core.hooks import EventEmitterHook
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.types.messages import ToolCallData
 from src.services.chat_history import _is_matmaster_source
 from src.utils.chat_event_source import normalize_event_source
-
 
 # ── normalize_event_source tests ──────────────────────
 

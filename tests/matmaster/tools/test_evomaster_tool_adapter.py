@@ -6,13 +6,10 @@ import json
 from typing import Any, ClassVar
 from unittest.mock import MagicMock
 
-import pytest
-
 from pydantic import Field
 
 from evomaster.agent.tools.base import BaseTool, BaseToolParams
 from matmaster.tools.tool_result import ToolResult
-
 
 # ---------- Fakes for EvoMaster side ----------
 
@@ -157,7 +154,9 @@ class TestEvoToolAdapter:
         assert result.status == "success"
         assert result.info == {"saved_path": "/tmp/out.txt"}
 
-    async def test_adapter_error_prefixed_observation_is_error_without_info_key(self) -> None:
+    async def test_adapter_error_prefixed_observation_is_error_without_info_key(
+        self,
+    ) -> None:
         from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 
         tool = _FakeTool(observation="Error: remote failure")

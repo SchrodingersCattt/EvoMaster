@@ -1,22 +1,21 @@
 """Tests for webpage.py: noise filtering, markdownify conversion, post-cleaning."""
 
 import json
-import re
 import time
-
-import pytest
 
 from playground.mat_master.tools.webpage import (
     ExtractWebpageTool,
-    _WebpageDiskCache,
     _fetch_webpage_content,
+    _WebpageDiskCache,
 )
 
 
 class _FakeResponse:
     """Minimal requests.Response stub for testing HTML parsing."""
 
-    def __init__(self, text: str, content_type: str = 'text/html', status_code: int = 200):
+    def __init__(
+        self, text: str, content_type: str = 'text/html', status_code: int = 200
+    ):
         self.text = text
         self.content = text.encode()
         self.status_code = status_code
@@ -32,7 +31,15 @@ def _fetch_html(html: str, monkeypatch) -> str:
     fake = _FakeResponse(html)
     monkeypatch.setattr(
         'playground.mat_master.tools.webpage.requests.Session',
-        lambda: type('S', (), {'get': lambda self, *a, **kw: fake, '__enter__': lambda s: s, '__exit__': lambda *a: None})(),
+        lambda: type(
+            'S',
+            (),
+            {
+                'get': lambda self, *a, **kw: fake,
+                '__enter__': lambda s: s,
+                '__exit__': lambda *a: None,
+            },
+        )(),
     )
     return _fetch_webpage_content('https://example.com/test')
 
@@ -63,7 +70,9 @@ class TestNoiseFiltering:
         assert 'Accept cookies' not in result
 
     def test_removes_sidebar_id(self, monkeypatch):
-        html = '<html><body><div id="sidebar-nav">Links</div><p>Article</p></body></html>'
+        html = (
+            '<html><body><div id="sidebar-nav">Links</div><p>Article</p></body></html>'
+        )
         result = _fetch_html(html, monkeypatch)
         assert 'Article' in result
         assert 'Links' not in result
@@ -79,7 +88,9 @@ class TestMarkdownConversion:
     """P1-a: HTML to Markdown via markdownify with fallback."""
 
     def test_headings_preserved_as_atx(self, monkeypatch):
-        html = '<html><body><h1>Title</h1><h2>Section</h2><p>Paragraph</p></body></html>'
+        html = (
+            '<html><body><h1>Title</h1><h2>Section</h2><p>Paragraph</p></body></html>'
+        )
         result = _fetch_html(html, monkeypatch)
         assert '# Title' in result
         assert '## Section' in result
@@ -106,8 +117,11 @@ class TestMarkdownConversion:
     def test_markdownify_failure_falls_back_to_plain_text(self, monkeypatch):
         """If markdownify raises, fall back to get_text()."""
         import markdownify as md
+
         original = md.markdownify
-        monkeypatch.setattr(md, 'markdownify', lambda *a, **kw: (_ for _ in ()).throw(ValueError('bad')))
+        monkeypatch.setattr(
+            md, 'markdownify', lambda *a, **kw: (_ for _ in ()).throw(ValueError('bad'))
+        )
         html = '<html><body><h1>Title</h1><p>Content</p></body></html>'
         result = _fetch_html(html, monkeypatch)
         assert 'Title' in result
@@ -207,16 +221,22 @@ class TestMarkdownifyCircuitBreaker:
 
     def test_markdownify_exception_no_circuit_breaker(self, monkeypatch):
         from unittest.mock import Mock
+
         import markdownify as md
+
         monkeypatch.setattr(md, 'markdownify', Mock(side_effect=ValueError('bad HTML')))
         fake = _FakeResponse('<html><body><p>Hello World</p></body></html>')
         monkeypatch.setattr(
             'playground.mat_master.tools.webpage.requests.Session',
-            lambda: type('S', (), {
-                'get': lambda self, *a, **kw: fake,
-                '__enter__': lambda s: s,
-                '__exit__': lambda *a: None,
-            })(),
+            lambda: type(
+                'S',
+                (),
+                {
+                    'get': lambda self, *a, **kw: fake,
+                    '__enter__': lambda s: s,
+                    '__exit__': lambda *a: None,
+                },
+            )(),
         )
         tool = ExtractWebpageTool()
         result, info = tool.execute(
@@ -224,8 +244,7 @@ class TestMarkdownifyCircuitBreaker:
         )
         parsed = json.loads(result)
         content_found = any(
-            isinstance(v, dict) and 'content' in v
-            for v in parsed.values()
+            isinstance(v, dict) and 'content' in v for v in parsed.values()
         )
         assert content_found, f"Expected content in result, got: {parsed}"
         assert len(tool._domain_circuit.open_circuits) == 0

@@ -1,4 +1,5 @@
 """Validate cleaned config.yaml loads through EvoMasterConfig without errors."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,8 +29,17 @@ class TestCleanedConfigYaml:
         assert cleaned_config["agents"]["general"]["llm"] == "opus"
 
     def test_no_dead_sections(self, cleaned_config):
-        dead = {"llm", "mat_master", "llm_output", "logging", "skills",
-                "project_root", "results_dir", "debug", "mcp"}
+        dead = {
+            "llm",
+            "mat_master",
+            "llm_output",
+            "logging",
+            "skills",
+            "project_root",
+            "results_dir",
+            "debug",
+            "mcp",
+        }
         present_dead = dead & set(cleaned_config.keys())
         assert present_dead == set(), f"Dead sections still present: {present_dead}"
 
@@ -54,23 +64,27 @@ class TestCleanedConfigYaml:
 class TestConfigDirRouting:
     def test_mat_master_routes_to_matmaster_config(self, tmp_path):
         from matmaster.core.playground import PlaygroundManager
+
         mgr = PlaygroundManager(tmp_path)
         assert mgr._config_dir_for("mat_master") == tmp_path / "matmaster_config"
 
     def test_minimal_routes_to_configs(self, tmp_path):
         from matmaster.core.playground import PlaygroundManager
+
         mgr = PlaygroundManager(tmp_path)
         assert mgr._config_dir_for("minimal") == tmp_path / "configs" / "minimal"
 
     def test_unknown_routes_to_configs(self, tmp_path):
         from matmaster.core.playground import PlaygroundManager
+
         mgr = PlaygroundManager(tmp_path)
         assert mgr._config_dir_for("other") == tmp_path / "configs" / "other"
 
     def test_get_or_create_uses_matmaster_config_dir(self, tmp_path):
         """Verify get_or_create() actually uses _config_dir_for(), not hardcoded path."""
-        from matmaster.core.playground import PlaygroundManager
         from unittest.mock import patch
+
+        from matmaster.core.playground import PlaygroundManager
 
         mgr = PlaygroundManager(tmp_path)
         # Create matmaster_config/config.yaml so Playground.__init__ can load it

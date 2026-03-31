@@ -4,6 +4,7 @@ Replaces evomaster.agent.session.local.LocalSession with a minimal
 implementation satisfying the 5-method interface used by builtin tools:
 exec_bash, read_file, write_file, path_exists, is_file.
 """
+
 from __future__ import annotations
 
 import subprocess

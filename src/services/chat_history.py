@@ -4,8 +4,6 @@ import json
 import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from evomaster.utils.types import (
     AssistantMessage,
     ToolCall,
@@ -13,6 +11,8 @@ from evomaster.utils.types import (
     UserMessage,
 )
 from src.utils.chat_event_source import normalize_event_source
+
+logger = logging.getLogger(__name__)
 
 
 def _is_matmaster_source(source: str) -> bool:
@@ -403,7 +403,9 @@ class ChatHistoryConverter:
                     continue
                 assistant_reasoning = cls._assistant_reasoning_content(raw_content)
                 if pending_reasoning and not assistant_reasoning:
-                    msg = msg.model_copy(update={'reasoning_content': pending_reasoning})
+                    msg = msg.model_copy(
+                        update={'reasoning_content': pending_reasoning}
+                    )
                 if (
                     last_assistant_text_idx is not None
                     and last_assistant_text_idx == len(out) - 1
@@ -497,12 +499,10 @@ class ChatHistoryConverter:
         Reuses events_to_dialog_messages() logic, then converts each dict
         to the corresponding matmaster.types.messages Message subclass.
         """
-        from matmaster.types.messages import (
-            AssistantMessage as MMAssistantMessage,
-            ToolCallData as MMToolCallData,
-            ToolMessage as MMToolMessage,
-            UserMessage as MMUserMessage,
-        )
+        from matmaster.types.messages import AssistantMessage as MMAssistantMessage
+        from matmaster.types.messages import ToolCallData as MMToolCallData
+        from matmaster.types.messages import ToolMessage as MMToolMessage
+        from matmaster.types.messages import UserMessage as MMUserMessage
 
         dialog_dicts = cls.events_to_dialog_messages(events)
         messages = []

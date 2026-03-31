@@ -15,8 +15,7 @@ import yaml
 from dotenv import load_dotenv
 
 if TYPE_CHECKING:
-    from matmaster.devshell.config import DevConfig
-    from matmaster.providers.openai_provider import OpenAIProvider
+    pass
 
 
 def _project_root() -> Path:
@@ -219,7 +218,10 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     from matmaster.devshell.stream_hook import DevStreamHook
 
     # Suppress stream output in headless+json mode
-    if getattr(args, "prompt", None) is not None or getattr(args, "prompt_file", None) is not None:
+    if (
+        getattr(args, "prompt", None) is not None
+        or getattr(args, "prompt_file", None) is not None
+    ):
         stream_hook = DevStreamHook(verbose=args.verbose)
     else:
         stream_hook = DevStreamHook(verbose=args.verbose)

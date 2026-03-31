@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
-from typing import Any, AsyncIterator, Iterator
+from typing import Any, AsyncIterator
 
 import pytest
 from pydantic import ValidationError
 
+from matmaster.core.hooks import BaseHook, Hook
+from matmaster.tools.tool_registry import ToolRegistry
+from matmaster.types.events import RunResultEvent
 from matmaster.types.guards import Guard, GuardContext, GuardResult
+from matmaster.types.llm_provider import LLMProvider
+from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.runtime import (
     AgentRuntime,
     AgentRuntimeSpec,
@@ -16,12 +21,6 @@ from matmaster.types.runtime import (
     KernelResult,
     KernelRunResult,
 )
-from matmaster.types.events import RunResultEvent
-from matmaster.core.hooks import BaseHook, Hook
-from matmaster.types.llm_provider import LLMProvider
-from matmaster.types.messages import LLMResponse, StreamChunk
-from matmaster.tools.tool_registry import ToolRegistry
-
 
 # ── Test helpers ───────────────────────────────────────
 
@@ -102,7 +101,7 @@ class TestCompactionConfigUpdate:
 
     def test_frozen(self) -> None:
         cfg = CompactionConfig()
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="frozen"):
             cfg.enabled = True
 
 
@@ -228,7 +227,7 @@ class TestAgentRuntimeSpecCompactor:
 
     def test_compactor_frozen_reference(self) -> None:
         spec = AgentRuntimeSpec()
-        with pytest.raises(Exception):
+        with pytest.raises(Exception, match="frozen"):
             spec.compactor = "new"
 
 
@@ -329,7 +328,7 @@ class TestKernelRunResult:
         assert result.messages == []
 
     def test_messages_preserved(self) -> None:
-        from matmaster.types.messages import UserMessage, AssistantMessage
+        from matmaster.types.messages import AssistantMessage, UserMessage
 
         kr = KernelResult(status="completed", reason="natural")
         msgs = [UserMessage(content="hi"), AssistantMessage(content="hello")]

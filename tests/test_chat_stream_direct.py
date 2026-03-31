@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 import uuid
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
 # 测试中屏蔽 DB：任何真实 BaseTable 触发的连接直接报错（应通过 get_*_table mock 避免走到这里）
 _DB_DISABLED_ERROR = RuntimeError('DB disabled in test (use mock tables only)')

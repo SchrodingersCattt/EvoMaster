@@ -1,4 +1,5 @@
 """DevStreamHook -- real-time terminal output for devshell REPL."""
+
 from __future__ import annotations
 
 import json
@@ -55,7 +56,9 @@ class DevStreamHook(BaseHook):
         self._out.write(f"\n{prefix} {display}\n\n")
         self._out.flush()
 
-    async def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
+    async def on_guard_blocked(
+        self, tool_call: ToolCallData, result: GuardResult
+    ) -> None:
         self._out.write(f"\n\U0001f6e1\ufe0f guard_blocked: {result.reason}\n\n")
         self._out.flush()
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -58,10 +57,12 @@ class TestBashToolExecution:
 
     async def test_is_input_true_no_proxy_prefix(self, mock_session: MagicMock) -> None:
         tool = BashTool(session=mock_session)
-        result = await tool.execute({"command": "some input", "is_input": "true"})
+        await tool.execute({"command": "some input", "is_input": "true"})
         # The command sent to session should NOT have proxy clear prefix
         call_kwargs = mock_session.exec_bash.call_args
-        command_sent = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
+        command_sent = call_kwargs.kwargs.get(
+            "command", call_kwargs[1].get("command", "")
+        )
         assert "http_proxy" not in command_sent
 
     async def test_session_not_injected_returns_error(self) -> None:

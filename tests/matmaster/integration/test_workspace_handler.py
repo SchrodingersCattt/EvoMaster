@@ -11,20 +11,17 @@ Covers:
 from __future__ import annotations
 
 import threading
-import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-
+from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.events import (
     FinishEvent,
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
 )
-from matmaster.integration.workspace_handler import WorkspaceHandler
 
 
 class TestWorkspaceHandler:
@@ -57,9 +54,7 @@ class TestWorkspaceHandler:
         await handler.handle(FinishEvent(source="Agent", reason="done"))
         await handler.handle(ThoughtEvent(source="Agent", content="thinking"))
         await handler.handle(
-            ToolCallEvent(
-                source="Agent", call_id="c1", tool_name="bash", arguments={}
-            )
+            ToolCallEvent(source="Agent", call_id="c1", tool_name="bash", arguments={})
         )
 
         upload_fn.assert_not_called()
@@ -70,9 +65,7 @@ class TestWorkspaceHandler:
         handler = self._make_handler(ssh_attached=True, upload_fn=upload_fn)
 
         await handler.handle(
-            ToolResultEvent(
-                source="Agent", call_id="c1", tool_name="bash", result="ok"
-            )
+            ToolResultEvent(source="Agent", call_id="c1", tool_name="bash", result="ok")
         )
 
         upload_fn.assert_not_called()

@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import json
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from matmaster.tools.builtin.web_search_tool import (
-    SEARCH_API_ENDPOINT,
     WebSearchTool,
     _normalize_results,
     _resolve_api_key,

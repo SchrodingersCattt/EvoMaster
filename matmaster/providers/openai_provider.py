@@ -15,7 +15,12 @@ from typing import Any, AsyncIterator
 import openai
 
 from matmaster.types.llm_provider import LLMProvider  # noqa: F401
-from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData, parse_tool_arguments
+from matmaster.types.messages import (
+    LLMResponse,
+    StreamChunk,
+    ToolCallData,
+    parse_tool_arguments,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +65,7 @@ class OpenAIProvider:
         import httpx
 
         _first_token_t = (
-            self._stream_timeout
-            if self._stream_timeout is not None
-            else self._timeout
+            self._stream_timeout if self._stream_timeout is not None else self._timeout
         )
         _idle_t = (
             self._stream_idle_timeout
@@ -184,8 +187,9 @@ class OpenAIProvider:
         connection, rate-limit, server); retryable=False for permanent errors
         (auth, context-length exceeded).
         """
-        from matmaster.types.errors import LLMError
         import httpx as _httpx
+
+        from matmaster.types.errors import LLMError
 
         client = self._ensure_client()
         kwargs: dict[str, Any] = {
@@ -257,9 +261,13 @@ class OpenAIProvider:
         except openai.APITimeoutError as exc:
             raise LLMError(str(exc), retryable=True, error_category="timeout") from exc
         except openai.APIConnectionError as exc:
-            raise LLMError(str(exc), retryable=True, error_category="connection") from exc
+            raise LLMError(
+                str(exc), retryable=True, error_category="connection"
+            ) from exc
         except openai.RateLimitError as exc:
-            raise LLMError(str(exc), retryable=True, error_category="rate_limit") from exc
+            raise LLMError(
+                str(exc), retryable=True, error_category="rate_limit"
+            ) from exc
         except openai.InternalServerError as exc:
             raise LLMError(str(exc), retryable=True, error_category="server") from exc
         except _httpx.ReadTimeout as exc:
@@ -269,6 +277,9 @@ class OpenAIProvider:
         except openai.BadRequestError as exc:
             err_str = str(exc).lower()
             if "context" in err_str and ("length" in err_str or "token" in err_str):
-                raise LLMError(str(exc), retryable=False, error_category="context_overflow") from exc
-            raise LLMError(str(exc), retryable=True, error_category="bad_request") from exc
-
+                raise LLMError(
+                    str(exc), retryable=False, error_category="context_overflow"
+                ) from exc
+            raise LLMError(
+                str(exc), retryable=True, error_category="bad_request"
+            ) from exc
