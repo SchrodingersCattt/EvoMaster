@@ -6,6 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
+
 # Default backend port: 8000 on Windows (avoid WinError 10013), 50001 elsewhere
 def _default_backend_port() -> int:
     if sys.platform in ("win32", "cygwin") or __import__("os").environ.get("MSYSTEM"):
@@ -20,7 +21,9 @@ def main() -> int:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    run_parser = subparsers.add_parser("run", help="Start backend and frontend with work_dir as run root")
+    run_parser = subparsers.add_parser(
+        "run", help="Start backend and frontend with work_dir as run root"
+    )
     run_parser.add_argument(
         "work_dir",
         type=str,
@@ -51,9 +54,12 @@ def main() -> int:
         return 0
 
     work_dir = Path(args.work_dir).expanduser().resolve()
-    backend_port = args.backend_port if args.backend_port is not None else _default_backend_port()
+    backend_port = (
+        args.backend_port if args.backend_port is not None else _default_backend_port()
+    )
 
     from playground.mat_master.cli.launcher import run as launcher_run
+
     return launcher_run(
         work_dir,
         backend_port=backend_port,

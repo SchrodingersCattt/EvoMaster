@@ -1,10 +1,12 @@
 """临时验证脚本 — 验证 ORCA 后端全链路"""
+
 import sys
+
 sys.path.insert(0, '.')
 
-from engine.software.orca import ORCABackend
-from engine.renderer import RenderIntent
-from engine.schema import SchemaRegistry
+from engine.renderer import RenderIntent  # noqa: E402
+from engine.schema import SchemaRegistry  # noqa: E402
+from engine.software.orca import ORCABackend  # noqa: E402
 
 out = []
 
@@ -24,7 +26,9 @@ out.append('---')
 
 # Parse
 doc = backend.parse(text)
-out.append(f'Parsed: {len(doc.params)} params, {len(doc.sections)} sections, {len(doc.parse_errors)} errors')
+out.append(
+    f'Parsed: {len(doc.params)} params, {len(doc.sections)} sections, {len(doc.parse_errors)} errors'
+)
 
 # Diagnostics
 diags = backend.get_diagnostics(doc, reg)
@@ -40,8 +44,10 @@ if completions:
 
 # Render opt
 intent2 = RenderIntent(
-    software='orca', task_type='opt', structure_file=None,
-    params={'functional': 'PBE0', 'basis': 'def2-TZVP'}
+    software='orca',
+    task_type='opt',
+    structure_file=None,
+    params={'functional': 'PBE0', 'basis': 'def2-TZVP'},
 )
 text2 = backend.render(intent2)
 out.append('--- Rendered ORCA opt input ---')
@@ -50,7 +56,9 @@ out.append('---')
 
 # Parse opt
 doc2 = backend.parse(text2)
-out.append(f'Parsed opt: {len(doc2.params)} params, {len(doc2.sections)} sections, {len(doc2.parse_errors)} errors')
+out.append(
+    f'Parsed opt: {len(doc2.params)} params, {len(doc2.sections)} sections, {len(doc2.parse_errors)} errors'
+)
 diags2 = backend.get_diagnostics(doc2, reg)
 out.append(f'Diagnostics opt: {len(diags2)} items')
 for d in diags2:
@@ -58,8 +66,10 @@ for d in diags2:
 
 # Render tddft
 intent3 = RenderIntent(
-    software='orca', task_type='tddft', structure_file=None,
-    params={'functional': 'B3LYP', 'basis': 'def2-TZVP'}
+    software='orca',
+    task_type='tddft',
+    structure_file=None,
+    params={'functional': 'B3LYP', 'basis': 'def2-TZVP'},
 )
 text3 = backend.render(intent3)
 out.append('--- Rendered ORCA tddft input ---')

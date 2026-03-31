@@ -11,10 +11,8 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
 
 # ---------------------------------------------------------------------------
 # Severity constants
@@ -46,7 +44,7 @@ class Diagnostic:
     message: str
     line: int = 0
     param: str = ""
-    suggestion: Optional[str] = None
+    suggestion: str | None = None
 
     def to_dict(self) -> dict:
         d: dict = {
@@ -102,9 +100,7 @@ class BaseValidator(ABC):
         return self.validate_text(text, source=str(path))
 
     @abstractmethod
-    def validate_text(
-        self, text: str, source: str = "<string>"
-    ) -> list[Diagnostic]:
+    def validate_text(self, text: str, source: str = "<string>") -> list[Diagnostic]:
         """Validate input given as a string.
 
         Args:
@@ -180,7 +176,7 @@ class ValidatorRegistry:
         key = software.strip().lower()
         return self._ALIASES.get(key, key)
 
-    def get_validator(self, software: str) -> Optional[BaseValidator]:
+    def get_validator(self, software: str) -> BaseValidator | None:
         """Return the validator for *software*, or None if unsupported.
 
         The validator module is imported on first use.
@@ -222,9 +218,7 @@ class _ImportErrorValidator(BaseValidator):
         self.software_name = software_name
         self._error = error
 
-    def validate_text(
-        self, text: str, source: str = "<string>"
-    ) -> list[Diagnostic]:
+    def validate_text(self, text: str, source: str = "<string>") -> list[Diagnostic]:
         return [
             Diagnostic(
                 severity=SEVERITY_ERROR,

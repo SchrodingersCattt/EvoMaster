@@ -14,8 +14,6 @@ In all cases, custom physical-range rules are applied on top.
 from __future__ import annotations
 
 import re
-from pathlib import Path
-from typing import Optional
 
 from validators.base import (
     SEVERITY_ERROR,
@@ -34,9 +32,7 @@ class CP2KValidator(BaseValidator):
     # Public entry point
     # -----------------------------------------------------------------------
 
-    def validate_text(
-        self, text: str, source: str = "<string>"
-    ) -> list[Diagnostic]:
+    def validate_text(self, text: str, source: str = "<string>") -> list[Diagnostic]:
         diags: list[Diagnostic] = []
 
         # --- Try cp2k-input-tools first ---
@@ -63,7 +59,7 @@ class CP2KValidator(BaseValidator):
 
     def _validate_with_cp2k_input_tools(
         self, text: str, source: str
-    ) -> Optional[list[Diagnostic]]:
+    ) -> list[Diagnostic] | None:
         """Return diagnostics from cp2k-input-tools, or None if unavailable."""
         try:
             from cp2k_input_tools.parser import CP2KInputParser  # type: ignore[import]
@@ -119,7 +115,7 @@ class CP2KValidator(BaseValidator):
 
     def _validate_with_pymatgen(
         self, text: str, source: str
-    ) -> Optional[list[Diagnostic]]:
+    ) -> list[Diagnostic] | None:
         """Return diagnostics from pymatgen.io.cp2k, or None if unavailable."""
         try:
             from pymatgen.io.cp2k.inputs import Cp2kInput  # type: ignore[import]
@@ -216,7 +212,9 @@ class CP2KValidator(BaseValidator):
     def _check_cutoff(self, text: str) -> list[Diagnostic]:
         """Warn if CUTOFF is outside typical range [200, 1200] Ry."""
         diags: list[Diagnostic] = []
-        m = re.search(r"^\s*CUTOFF\s+(\d+(?:\.\d*)?)", text, re.MULTILINE | re.IGNORECASE)
+        m = re.search(
+            r"^\s*CUTOFF\s+(\d+(?:\.\d*)?)", text, re.MULTILINE | re.IGNORECASE
+        )
         if not m:
             return diags
         try:
@@ -419,9 +417,7 @@ class CP2KValidator(BaseValidator):
         # Rule 4: RUN_TYPE BAND without &BAND_STRUCTURE section
         if run_type_m and run_type_m.group(1).upper() == "BAND":
             has_band_structure = bool(
-                re.search(
-                    r"^\s*&BAND_STRUCTURE\b", text, re.MULTILINE | re.IGNORECASE
-                )
+                re.search(r"^\s*&BAND_STRUCTURE\b", text, re.MULTILINE | re.IGNORECASE)
             )
             if not has_band_structure:
                 line = find_line(text, r"^\s*RUN_TYPE\s+BAND")

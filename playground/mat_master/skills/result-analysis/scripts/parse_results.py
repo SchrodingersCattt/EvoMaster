@@ -19,9 +19,14 @@ from pathlib import Path
 
 def parse_lammps(filepath: Path) -> dict:
     """Parse LAMMPS log for potential energy, temperature, pressure (when present)."""
-    out = {"potential_energy": None, "temperature": None, "pressure": None, "step": None}
+    out = {
+        "potential_energy": None,
+        "temperature": None,
+        "pressure": None,
+        "step": None,
+    }
     try:
-        with open(filepath, "r", errors="ignore") as f:
+        with open(filepath, errors="ignore") as f:
             for line in f:
                 # Skip header lines
                 if "Step" in line and "PotEng" in line:
@@ -54,8 +59,15 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="Parse open-source calculation output to JSON (LAMMPS supported; commercial codes not supported)."
     )
-    ap.add_argument("--file", required=True, help="Path to LAMMPS log or other supported output")
-    ap.add_argument("--type", required=True, choices=["lammps"], help="Software type (open-source only)")
+    ap.add_argument(
+        "--file", required=True, help="Path to LAMMPS log or other supported output"
+    )
+    ap.add_argument(
+        "--type",
+        required=True,
+        choices=["lammps"],
+        help="Software type (open-source only)",
+    )
     args = ap.parse_args()
     path = Path(args.file)
     if not path.exists():

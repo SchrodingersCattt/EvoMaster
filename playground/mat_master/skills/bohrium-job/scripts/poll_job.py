@@ -64,7 +64,12 @@ _MAX_FAILURE_CONFIRMS = 3
 _MAX_UNKNOWN_COUNT = 3
 
 
-def _get(path: str, timeout: int = 30, headers: dict | None = None, base_url: str | None = None) -> dict:
+def _get(
+    path: str,
+    timeout: int = 30,
+    headers: dict | None = None,
+    base_url: str | None = None,
+) -> dict:
     response = requests.get(
         f"{(base_url or OPENAPI_BASE).rstrip('/')}{path}",
         headers=headers or _HEADER,
@@ -302,8 +307,8 @@ def _sandbox_download_and_extract(
 
     if result_url:
         try:
-            root_host, root_token, _object_path, root_prefix = _sandbox_parse_result_url(
-                result_url
+            root_host, root_token, _object_path, root_prefix = (
+                _sandbox_parse_result_url(result_url)
             )
             objects = _sandbox_iterate_objects(root_host, root_token, root_prefix)
             files = [
@@ -339,7 +344,9 @@ def _sandbox_download_and_extract(
             )
             if log_object:
                 try:
-                    _sandbox_download_object(root_host, root_token, log_object, extract_dir / 'log')
+                    _sandbox_download_object(
+                        root_host, root_token, log_object, extract_dir / 'log'
+                    )
                     log_downloaded = True
                 except Exception as log_exc:
                     errors.append(f'log fallback download failed: {log_exc}')

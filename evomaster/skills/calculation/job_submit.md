@@ -7,7 +7,7 @@ Rules for calling Mat MCP calculation tools (mat_sg, mat_dpa, mat_doc) to avoid 
 ### Chaining URL from previous tool (correct)
 
 ```text
-Step 1: mat_sg_build_bulk_structure_by_template(...) 
+Step 1: mat_sg_build_bulk_structure_by_template(...)
   → returns structure_paths: "https://bohrium.oss-xxx/evomaster/calculation/123_Fe_bcc.cif"
 
 Step 2: mat_dpa_optimize_structure(input_structure="https://bohrium.oss-xxx/evomaster/calculation/123_Fe_bcc.cif", ...)

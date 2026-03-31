@@ -44,7 +44,7 @@ _EXT_TO_FMT: dict[str, str] = {
     ".cif": "cif",
     ".vasp": "vasp/poscar",
     ".lmp": "lammps/lmp",
-    ".data": "lammps/lmp",       # common LAMMPS data file extension
+    ".data": "lammps/lmp",  # common LAMMPS data file extension
     ".dump": "lammps/dump",
     ".lammpstrj": "lammps/dump",
     ".xyz": "xyz",
@@ -82,7 +82,8 @@ def _guess_fmt(filepath: str) -> str | None:
 # CIF loading: dpdata has no native CIF reader -> use pymatgen / ASE first
 # ---------------------------------------------------------------------------
 
-def _load_cif(filepath: str) -> "dpdata.System":
+
+def _load_cif(filepath: str) -> "dpdata.System":  # noqa: F821
     """Read CIF via pymatgen Structure or ASE Atoms, then wrap into dpdata.System.
 
     CIF files may contain symmetry operations, partial occupancies, etc.
@@ -119,8 +120,9 @@ def _load_cif(filepath: str) -> "dpdata.System":
 # LAMMPS atom_style-aware writing
 # ---------------------------------------------------------------------------
 
+
 def _write_lammps_lmp(
-    system: "dpdata.System",
+    system: "dpdata.System",  # noqa: F821
     output: str,
     frame_idx: int = 0,
     atom_style: str = "atomic",
@@ -145,7 +147,7 @@ def _write_lammps_lmp(
 
 
 def _write_lammps_via_ase(
-    system: "dpdata.System",
+    system: "dpdata.System",  # noqa: F821
     output: str,
     frame_idx: int,
     atom_style: str,
@@ -196,6 +198,7 @@ def _write_lammps_via_ase(
 # ---------------------------------------------------------------------------
 # Main conversion logic
 # ---------------------------------------------------------------------------
+
 
 def convert(
     input_path: str,
@@ -295,9 +298,13 @@ def convert(
     try:
         if output_fmt in {"lammps/lmp", "lmp"}:
             out_style = atom_style or "atomic"
-            _write_lammps_lmp(system, output_path,
-                              frame_idx=frame_idx, atom_style=out_style,
-                              type_map=type_map)
+            _write_lammps_lmp(
+                system,
+                output_path,
+                frame_idx=frame_idx,
+                atom_style=out_style,
+                type_map=type_map,
+            )
         else:
             try:
                 system.to(output_fmt, output_path, frame_idx=frame_idx)
@@ -329,7 +336,8 @@ def convert(
 # CLI
 # ---------------------------------------------------------------------------
 
-SUPPORTED_FORMATS_HELP = textwrap.dedent("""\
+SUPPORTED_FORMATS_HELP = textwrap.dedent(
+    """\
     Commonly used format strings:
       vasp/poscar   - VASP POSCAR / CONTCAR
       lammps/lmp    - LAMMPS data file  (requires --type-map; see --atom-style)
@@ -351,7 +359,8 @@ SUPPORTED_FORMATS_HELP = textwrap.dedent("""\
         Use "full" for molecular systems (ID mol-ID type charge x y z).
         If the source .lmp was written with atom_style full but you omit
         --atom-style full, the columns will be MISPARSED silently.
-""")
+"""
+)
 
 
 def main() -> None:
@@ -363,15 +372,19 @@ def main() -> None:
     ap.add_argument("--input", required=True, help="Input structure file path")
     ap.add_argument("--output", required=True, help="Output file path")
     ap.add_argument(
-        "--input-fmt", default=None,
+        "--input-fmt",
+        default=None,
         help="dpdata format string for input (auto-detected from filename if omitted)",
     )
     ap.add_argument(
-        "--output-fmt", default=None,
+        "--output-fmt",
+        default=None,
         help="dpdata format string for output (auto-detected from filename if omitted)",
     )
     ap.add_argument(
-        "--type-map", nargs="+", default=None,
+        "--type-map",
+        nargs="+",
+        default=None,
         help=(
             "Element ordering for LAMMPS types, e.g. --type-map O H "
             "(type 1=O, type 2=H).  REQUIRED for lammps/lmp and lammps/dump."

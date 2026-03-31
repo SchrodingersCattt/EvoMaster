@@ -120,7 +120,9 @@ class SkillEvolutionExp(BaseExp):
                     compile(source, str(py_file), 'exec')
                 except SyntaxError as exc:
                     self.logger.error(
-                        '[Evo] SyntaxError in generated script %s: %s', py_file.name, exc
+                        '[Evo] SyntaxError in generated script %s: %s',
+                        py_file.name,
+                        exc,
                     )
                     return {
                         'status': 'failed',

@@ -23,7 +23,7 @@ _SKILL_DIR = Path(__file__).resolve().parent.parent
 if str(_SKILL_DIR) not in sys.path:
     sys.path.insert(0, str(_SKILL_DIR))
 
-from validators.base import (
+from validators.base import (  # noqa: E402
     SEVERITY_ERROR,
     SEVERITY_INFO,
     SEVERITY_WARNING,
@@ -392,9 +392,12 @@ class TestValidateInputScript:
             [
                 sys.executable,
                 str(script),
-                "--input_file", str(input_file),
-                "--software", software,
-                "--json_out", str(json_out),
+                "--input_file",
+                str(input_file),
+                "--software",
+                software,
+                "--json_out",
+                str(json_out),
             ],
             capture_output=True,
             text=True,
@@ -434,9 +437,12 @@ class TestValidateInputScript:
             [
                 sys.executable,
                 str(script),
-                "--input_file", str(tmpl),
-                "--software", "cp2k",
-                "--json_out", str(json_out),
+                "--input_file",
+                str(tmpl),
+                "--software",
+                "cp2k",
+                "--json_out",
+                str(json_out),
             ],
             capture_output=True,
             text=True,
@@ -470,7 +476,9 @@ class TestCP2KPhysicsCompatibility:
         return any(d.rule_id == rule_id for d in diags if d.rule_id)
 
     def _errors_for(self, diags, rule_id: str):
-        return [d for d in diags if d.rule_id == rule_id and d.severity == SEVERITY_ERROR]
+        return [
+            d for d in diags if d.rule_id == rule_id and d.severity == SEVERITY_ERROR
+        ]
 
     # ── Rule 1: OT + KPOINTS ────────────────────────────────────────────────
 
@@ -496,10 +504,11 @@ class TestCP2KPhysicsCompatibility:
 &END FORCE_EVAL
 """
         diags = self._diags(text)
-        errors = [d for d in diags if d.severity == SEVERITY_ERROR and "OT" in (d.param or "")]
-        assert errors, (
-            "Expected an error for OT + KPOINTS combination, got: "
-            + str([(d.severity, d.param, d.message[:60]) for d in diags])
+        errors = [
+            d for d in diags if d.severity == SEVERITY_ERROR and "OT" in (d.param or "")
+        ]
+        assert errors, "Expected an error for OT + KPOINTS combination, got: " + str(
+            [(d.severity, d.param, d.message[:60]) for d in diags]
         )
 
     def test_ot_without_kpoints_no_ot_error(self):
@@ -521,11 +530,15 @@ class TestCP2KPhysicsCompatibility:
 """
         diags = self._diags(text)
         ot_errors = [
-            d for d in diags
-            if d.severity == SEVERITY_ERROR and "OT" in (d.param or "")
+            d
+            for d in diags
+            if d.severity == SEVERITY_ERROR
+            and "OT" in (d.param or "")
             and "KPOINTS" in d.message
         ]
-        assert not ot_errors, f"No OT+KPOINTS error expected without KPOINTS: {ot_errors}"
+        assert (
+            not ot_errors
+        ), f"No OT+KPOINTS error expected without KPOINTS: {ot_errors}"
 
     def test_kpoints_without_ot_no_ot_error(self):
         """KPOINTS without OT must NOT produce the OT+KPOINTS error."""
@@ -549,7 +562,8 @@ class TestCP2KPhysicsCompatibility:
 """
         diags = self._diags(text)
         ot_kpts_errors = [
-            d for d in diags
+            d
+            for d in diags
             if d.severity == SEVERITY_ERROR
             and "OT" in (d.param or "")
             and "kpoint" in d.message.lower()
@@ -582,10 +596,11 @@ class TestCP2KPhysicsCompatibility:
 &END FORCE_EVAL
 """
         diags = self._diags(text)
-        errors = [d for d in diags if d.severity == SEVERITY_ERROR and "HF" in (d.param or "")]
-        assert errors, (
-            "Expected error for HFX + KPOINTS without RI, got: "
-            + str([(d.severity, d.param, d.message[:60]) for d in diags])
+        errors = [
+            d for d in diags if d.severity == SEVERITY_ERROR and "HF" in (d.param or "")
+        ]
+        assert errors, "Expected error for HFX + KPOINTS without RI, got: " + str(
+            [(d.severity, d.param, d.message[:60]) for d in diags]
         )
 
     def test_hfx_kpoints_with_ri_no_error(self):
@@ -616,7 +631,8 @@ class TestCP2KPhysicsCompatibility:
 """
         diags = self._diags(text)
         ri_errors = [
-            d for d in diags
+            d
+            for d in diags
             if d.severity == SEVERITY_ERROR
             and "HF" in (d.param or "")
             and "RI" in d.message
@@ -640,12 +656,13 @@ class TestCP2KPhysicsCompatibility:
 """
         diags = self._diags(text)
         warnings = [
-            d for d in diags
-            if d.severity == SEVERITY_WARNING and "STRESS_TENSOR" in (d.param or "").upper()
+            d
+            for d in diags
+            if d.severity == SEVERITY_WARNING
+            and "STRESS_TENSOR" in (d.param or "").upper()
         ]
-        assert warnings, (
-            "Expected STRESS_TENSOR warning for CELL_OPT, got: "
-            + str([(d.severity, d.param, d.message[:60]) for d in diags])
+        assert warnings, "Expected STRESS_TENSOR warning for CELL_OPT, got: " + str(
+            [(d.severity, d.param, d.message[:60]) for d in diags]
         )
 
     def test_cell_opt_with_stress_tensor_no_warning(self):
@@ -664,7 +681,8 @@ class TestCP2KPhysicsCompatibility:
 """
         diags = self._diags(text)
         st_warnings = [
-            d for d in diags
+            d
+            for d in diags
             if d.severity == SEVERITY_WARNING
             and "STRESS_TENSOR" in (d.param or "").upper()
         ]
@@ -687,13 +705,14 @@ class TestCP2KPhysicsCompatibility:
 """
         diags = self._diags(text)
         warnings = [
-            d for d in diags
-            if d.severity == SEVERITY_WARNING
-            and "RUN_TYPE" in (d.param or "").upper()
+            d
+            for d in diags
+            if d.severity == SEVERITY_WARNING and "RUN_TYPE" in (d.param or "").upper()
         ]
-        assert warnings, (
-            "Expected warning for BAND without BAND_STRUCTURE section, got: "
-            + str([(d.severity, d.param, d.message[:60]) for d in diags])
+        assert (
+            warnings
+        ), "Expected warning for BAND without BAND_STRUCTURE section, got: " + str(
+            [(d.severity, d.param, d.message[:60]) for d in diags]
         )
 
     def test_band_with_band_structure_no_warning(self):
@@ -722,7 +741,8 @@ class TestCP2KPhysicsCompatibility:
 """
         diags = self._diags(text)
         band_warnings = [
-            d for d in diags
+            d
+            for d in diags
             if d.severity == SEVERITY_WARNING
             and "RUN_TYPE" in (d.param or "").upper()
             and "BAND_STRUCTURE" in d.message.upper()
