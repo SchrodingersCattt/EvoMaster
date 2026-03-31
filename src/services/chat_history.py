@@ -74,14 +74,16 @@ def _adapt_tool_calls_format(raw: dict) -> dict:
                 args_str = args
             else:
                 args_str = '{}'
-            adapted.append({
-                'id': tc.get('id', ''),
-                'type': 'function',
-                'function': {
-                    'name': tc['name'],
-                    'arguments': args_str,
-                },
-            })
+            adapted.append(
+                {
+                    'id': tc.get('id', ''),
+                    'type': 'function',
+                    'function': {
+                        'name': tc['name'],
+                        'arguments': args_str,
+                    },
+                }
+            )
         else:
             adapted.append(tc)
     return {**raw, 'tool_calls': adapted}
@@ -428,9 +430,7 @@ class ChatHistoryConverter:
                 raw_content = ev.get('content')
                 try:
                     msg = AssistantMessage.model_validate(
-                        _adapt_tool_calls_format(raw_content)
-                        if raw_content
-                        else {}
+                        _adapt_tool_calls_format(raw_content) if raw_content else {}
                     )
                 except Exception as e:
                     logger.warning(
