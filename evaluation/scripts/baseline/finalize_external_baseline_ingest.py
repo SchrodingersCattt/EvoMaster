@@ -305,9 +305,9 @@ def main() -> int:
                     file=sys.stderr,
                 )
 
-            result_oss_url: str | None = None
+            artifact: dict[str, Any] | None = None
             if not args.no_eval_ingest:
-                result_oss_url = upload_eval_task_artifacts_to_oss(run_dir, task_id)
+                artifact = upload_eval_task_artifacts_to_oss(run_dir, task_id)
 
             ingest_item = build_ingest_item(
                 question_id=qid,
@@ -317,7 +317,7 @@ def main() -> int:
                 devshell_exit_code=rc,
                 summary=summary if isinstance(summary, dict) else {},
                 duration_ms=duration_ms,
-                result_oss_url=result_oss_url,
+                artifact=artifact,
                 eval_tooling=eval_tooling,
             )
             ingest_item["model"] = _model_tag_cc_baseline(ingest_item.get("model"))
@@ -411,8 +411,8 @@ def main() -> int:
                 row["eval_ingest_pending_path"] = str(pend_path)
                 row["eval_ingest_ok"] = None
                 row["eval_ingest_message"] = "pending_score"
-                if result_oss_url:
-                    row["eval_ingest_result_oss_url"] = result_oss_url
+                if artifact:
+                    row["eval_ingest_artifact"] = artifact
                 print(
                     f"  [ingest-pending] {task_id} -> {pend_path.name}", file=sys.stderr
                 )
@@ -430,8 +430,8 @@ def main() -> int:
                 )
                 row["eval_ingest_ok"] = ok
                 row["eval_ingest_message"] = msg
-                if result_oss_url:
-                    row["eval_ingest_result_oss_url"] = result_oss_url
+                if artifact:
+                    row["eval_ingest_artifact"] = artifact
                 if ok:
                     print(f"  [ingest] {task_id} ok ({msg})", file=sys.stderr)
                 else:
@@ -440,8 +440,8 @@ def main() -> int:
             else:
                 row["eval_ingest_ok"] = None
                 row["eval_ingest_message"] = "no_ingest_url"
-                if result_oss_url:
-                    row["eval_ingest_result_oss_url"] = result_oss_url
+                if artifact:
+                    row["eval_ingest_artifact"] = artifact
 
             raw_f.write(json.dumps(row, ensure_ascii=False) + "\n")
             n_written += 1
