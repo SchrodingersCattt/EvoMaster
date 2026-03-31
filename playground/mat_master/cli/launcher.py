@@ -95,7 +95,7 @@ def _release_port(port: int) -> None:
                 print(f"  -> Released port {port}", flush=True)
                 return
             print(f"  -> Port {port} was free", flush=True)
-    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+    except (subprocess.TimeoutExpired, Exception):
         print(f"  -> Port {port} (could not check/release)", flush=True)
 
 

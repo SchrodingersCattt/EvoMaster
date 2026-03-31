@@ -108,7 +108,7 @@ class LLMResponse(BaseModel):
 class LLMConfigurationError(RuntimeError):
     """LLM 配置/能力约束错误，适合直接反馈给配置维护者。"""
 
-    def __init__(
+    def __init__(  # noqa: B042
         self,
         *,
         category: str,

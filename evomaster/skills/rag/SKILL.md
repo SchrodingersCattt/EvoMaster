@@ -114,7 +114,7 @@ Supported embedding models:
 - **sentence-transformers/all-MiniLM-L6-v2**: Faster, smaller (384 dimensions)
 - Any HuggingFace transformer model compatible with AutoModel
 
-**Important**: 
+**Important**:
 - When using a local model path, ensure the model directory contains `config.json`, `model.safetensors`, and tokenizer files.
 - When using `text-embedding-3-large`, ensure you use the correct vectorstore directory matching the dimension used during indexing.
 
@@ -197,7 +197,7 @@ Default model: `evomaster/skills/rag/local_models/all-mpnet-base-v2` (768 dims)
 
 Choose embedding model based on your needs:
 
-- **Default (local)**: `evomaster/skills/rag/local_models/all-mpnet-base-v2` (768 dims) 
+- **Default (local)**: `evomaster/skills/rag/local_models/all-mpnet-base-v2` (768 dims)
   - Fast, no download needed
   - Used with `node_vectorstore/` (768 dims)
 - **High accuracy (OpenAI)**: `text-embedding-3-large` with configurable dimensions (512, 768, 1024, 2048, 3072)

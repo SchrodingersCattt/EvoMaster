@@ -232,10 +232,10 @@ class RAGSearcher:
             query_emb = query_emb.reshape(1, -1)
 
         # FAISS 搜索
-        D, I = self.index.search(query_emb.astype('float32'), top_k)
+        distances, indices = self.index.search(query_emb.astype('float32'), top_k)
 
         results = []
-        for dist, idx in zip(D[0], I[0]):
+        for dist, idx in zip(distances[0], indices[0]):
             if idx < 0 or idx >= len(self.node_ids):
                 continue
 

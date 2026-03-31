@@ -1,49 +1,49 @@
 {
   "mcpServers": {
-    "mat_sg": {
+    "mat_compdart": {
+      "headers": {},
       "transport": "http",
-      "url": "http://qpus1389933.bohrium.tech:50003/mcp",
-      "headers": {}
-    },
-    "mat_sn": {
-      "transport": "sse",
-      "url": "http://bohrium-mcp-internal.dp.tech:11003/sse",
-      "headers": {}
+      "url": "http://pfmx1355864.bohrium.tech:50002/mcp"
     },
     "mat_doc": {
+      "headers": {},
       "transport": "http",
-      "url": "http://pfmx1355864.bohrium.tech:50005/mcp",
-      "headers": {}
+      "url": "http://pfmx1355864.bohrium.tech:50005/mcp"
     },
     "mat_dpa": {
+      "headers": {},
       "transport": "http",
-      "url": "http://qpus1389933.bohrium.tech:50001/mcp",
-      "headers": {}
-    },
-    "mat_compdart": {
-      "transport": "http",
-      "url": "http://pfmx1355864.bohrium.tech:50002/mcp",
-      "headers": {}
-    },
-    "mat_struct_db": {
-      "transport": "http",
-      "url": "http://chvz1424099.bohrium.tech:50001/mcp",
-      "headers": {}
-    },
-    "mat_nmr": {
-      "transport": "sse",
-      "url": "http://aubn1408899.bohrium.tech:50001/sse",
-      "headers": {}
-    },
-    "mat_xrd": {
-      "transport": "sse",
-      "url": "https://f0f037ca00652ac8d5509652c91f1332.appspace.bohrium.com/sse?token=cfb9892682874677953eed08e92b45fe",
-      "headers": {}
+      "url": "http://qpus1389933.bohrium.tech:50001/mcp"
     },
     "mat_electron_microscope": {
+      "headers": {},
       "transport": "sse",
-      "url": "http://root@pkfz1410356.bohrium.tech:50002/sse",
-      "headers": {}
+      "url": "http://root@pkfz1410356.bohrium.tech:50002/sse"
+    },
+    "mat_nmr": {
+      "headers": {},
+      "transport": "sse",
+      "url": "http://aubn1408899.bohrium.tech:50001/sse"
+    },
+    "mat_sg": {
+      "headers": {},
+      "transport": "http",
+      "url": "http://qpus1389933.bohrium.tech:50003/mcp"
+    },
+    "mat_sn": {
+      "headers": {},
+      "transport": "sse",
+      "url": "http://bohrium-mcp-internal.dp.tech:11003/sse"
+    },
+    "mat_struct_db": {
+      "headers": {},
+      "transport": "http",
+      "url": "http://chvz1424099.bohrium.tech:50001/mcp"
+    },
+    "mat_xrd": {
+      "headers": {},
+      "transport": "sse",
+      "url": "https://f0f037ca00652ac8d5509652c91f1332.appspace.bohrium.com/sse?token=cfb9892682874677953eed08e92b45fe"
     }
   }
 }

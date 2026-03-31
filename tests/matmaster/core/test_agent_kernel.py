@@ -615,9 +615,7 @@ class TestToolCallDeltaDuplicateName:
             ),
             # Bug in proxy: second tool call reuses index 0
             StreamChunk(
-                tool_call_deltas=[
-                    {'index': 0, 'name': 'read_file', 'arguments': ''}
-                ]
+                tool_call_deltas=[{'index': 0, 'name': 'read_file', 'arguments': ''}]
             ),
             StreamChunk(finish_reason='stop'),
         ]

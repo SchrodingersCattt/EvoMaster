@@ -29,7 +29,6 @@ Validation rules applied:
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from validators.base import (
     SEVERITY_ERROR,
@@ -46,50 +45,117 @@ from validators.base import (
 
 _KNOWN_FUNCTIONALS = {
     # GGA
-    "pbe", "blyp", "bp86", "pw91", "revpbe", "rpbe",
+    "pbe",
+    "blyp",
+    "bp86",
+    "pw91",
+    "revpbe",
+    "rpbe",
     # meta-GGA
-    "tpss", "m06l", "r2scan",
+    "tpss",
+    "m06l",
+    "r2scan",
     # hybrid
-    "b3lyp", "pbe0", "bhlyp", "tpssh", "m06", "m06-2x",
-    "b97-3c", "r2scan-3c", "b97-d3", "cam-b3lyp",
+    "b3lyp",
+    "pbe0",
+    "bhlyp",
+    "tpssh",
+    "m06",
+    "m06-2x",
+    "b97-3c",
+    "r2scan-3c",
+    "b97-d3",
+    "cam-b3lyp",
     # range-separated
-    "wb97x-d3", "wb97x-d", "wb97x", "lc-blyp",
+    "wb97x-d3",
+    "wb97x-d",
+    "wb97x",
+    "lc-blyp",
     # double hybrid
-    "b2plyp", "b2gp-plyp", "dlpno-ccsd", "dlpno-ccsd(t)",
+    "b2plyp",
+    "b2gp-plyp",
+    "dlpno-ccsd",
+    "dlpno-ccsd(t)",
     # WF
-    "hf", "mp2", "ccsd", "ccsd(t)", "casscf", "nevpt2",
+    "hf",
+    "mp2",
+    "ccsd",
+    "ccsd(t)",
+    "casscf",
+    "nevpt2",
     # DFT keywords that may appear on ! line
     "dft",
 }
 
 _KNOWN_BASIS = {
     # def2 family
-    "def2-sv(p)", "def2-svp", "def2-tzvp", "def2-tzvpp",
-    "def2-qzvp", "def2-qzvpp",
+    "def2-sv(p)",
+    "def2-svp",
+    "def2-tzvp",
+    "def2-tzvpp",
+    "def2-qzvp",
+    "def2-qzvpp",
     # Pople
-    "sto-3g", "3-21g", "6-31g", "6-31g*", "6-31g**",
-    "6-311g", "6-311g*", "6-311g**", "6-311+g**",
+    "sto-3g",
+    "3-21g",
+    "6-31g",
+    "6-31g*",
+    "6-31g**",
+    "6-311g",
+    "6-311g*",
+    "6-311g**",
+    "6-311+g**",
     # Dunning
-    "cc-pvdz", "cc-pvtz", "cc-pvqz", "aug-cc-pvdz",
-    "aug-cc-pvtz", "aug-cc-pvqz",
+    "cc-pvdz",
+    "cc-pvtz",
+    "cc-pvqz",
+    "aug-cc-pvdz",
+    "aug-cc-pvtz",
+    "aug-cc-pvqz",
     # relativistic / ECPs
-    "def2-tzvp-pp", "sk-mcdhf-rsc",
+    "def2-tzvp-pp",
+    "sk-mcdhf-rsc",
     # misc
     "zora-def2-tzvp",
 }
 
 # Tokens on the ! line that indicate calculation type (not functional/basis)
 _CALC_TYPE_TOKENS = {
-    "opt", "freq", "numfreq", "md", "goat",
-    "sp", "engrad", "grad",
-    "tddft", "stddft", "cis",
-    "neb", "neb-ts", "irc",
-    "rijcosx", "rijk", "ri-c", "rimp2",
-    "tightscf", "loosescf", "normalscf", "verytightscf",
-    "largeprint", "miniprint", "noautostart", "nopop",
-    "slowconv", "veryslowconv",
-    "d3", "d3bj", "d4",
-    "moread", "patom", "uks", "rks",
+    "opt",
+    "freq",
+    "numfreq",
+    "md",
+    "goat",
+    "sp",
+    "engrad",
+    "grad",
+    "tddft",
+    "stddft",
+    "cis",
+    "neb",
+    "neb-ts",
+    "irc",
+    "rijcosx",
+    "rijk",
+    "ri-c",
+    "rimp2",
+    "tightscf",
+    "loosescf",
+    "normalscf",
+    "verytightscf",
+    "largeprint",
+    "miniprint",
+    "noautostart",
+    "nopop",
+    "slowconv",
+    "veryslowconv",
+    "d3",
+    "d3bj",
+    "d4",
+    "moread",
+    "patom",
+    "uks",
+    "rks",
     "xyzfile",
 }
 
@@ -97,9 +163,7 @@ _CALC_TYPE_TOKENS = {
 class ORCAValidator(BaseValidator):
     software_name = "orca"
 
-    def validate_text(
-        self, text: str, source: str = "<string>"
-    ) -> list[Diagnostic]:
+    def validate_text(self, text: str, source: str = "<string>") -> list[Diagnostic]:
         diags: list[Diagnostic] = []
 
         parsed = _ORCAParser(text)
@@ -117,9 +181,7 @@ class ORCAValidator(BaseValidator):
     # Individual checks
     # -----------------------------------------------------------------------
 
-    def _check_coord_block(
-        self, parsed: "_ORCAParser", text: str
-    ) -> list[Diagnostic]:
+    def _check_coord_block(self, parsed: _ORCAParser, text: str) -> list[Diagnostic]:
         if parsed.coord_block is None:
             return [
                 Diagnostic(
@@ -132,9 +194,7 @@ class ORCAValidator(BaseValidator):
             ]
         return []
 
-    def _check_maxcore(
-        self, parsed: "_ORCAParser", text: str
-    ) -> list[Diagnostic]:
+    def _check_maxcore(self, parsed: _ORCAParser, text: str) -> list[Diagnostic]:
         val = parsed.maxcore
         if val is None:
             return [
@@ -175,9 +235,7 @@ class ORCAValidator(BaseValidator):
             )
         ]
 
-    def _check_nprocs(
-        self, parsed: "_ORCAParser", text: str
-    ) -> list[Diagnostic]:
+    def _check_nprocs(self, parsed: _ORCAParser, text: str) -> list[Diagnostic]:
         val = parsed.nprocs
         if val is None:
             return []
@@ -210,9 +268,7 @@ class ORCAValidator(BaseValidator):
             )
         ]
 
-    def _check_functional(
-        self, parsed: "_ORCAParser", text: str
-    ) -> list[Diagnostic]:
+    def _check_functional(self, parsed: _ORCAParser, text: str) -> list[Diagnostic]:
         func = parsed.functional
         if func is None:
             return [
@@ -234,9 +290,7 @@ class ORCAValidator(BaseValidator):
             )
         ]
 
-    def _check_basis(
-        self, parsed: "_ORCAParser", text: str
-    ) -> list[Diagnostic]:
+    def _check_basis(self, parsed: _ORCAParser, text: str) -> list[Diagnostic]:
         basis = parsed.basis
         if basis is None:
             # Some methods (e.g. semi-empirical) don't need explicit basis
@@ -251,9 +305,7 @@ class ORCAValidator(BaseValidator):
             )
         ]
 
-    def _check_charge_mult(
-        self, parsed: "_ORCAParser", text: str
-    ) -> list[Diagnostic]:
+    def _check_charge_mult(self, parsed: _ORCAParser, text: str) -> list[Diagnostic]:
         cb = parsed.coord_block
         if cb is None:
             return []
@@ -306,11 +358,11 @@ class _ORCAParser:
         self.text = text
         self.keyword_tokens: list[str] = []
         self.blocks: dict[str, str] = {}  # blockname → body text
-        self.coord_block: Optional[dict] = None
-        self.maxcore: Optional[int] = None
-        self.nprocs: Optional[int] = None
-        self.functional: Optional[str] = None
-        self.basis: Optional[str] = None
+        self.coord_block: dict | None = None
+        self.maxcore: int | None = None
+        self.nprocs: int | None = None
+        self.functional: str | None = None
+        self.basis: str | None = None
         self._parse()
 
     def _parse(self) -> None:
@@ -367,15 +419,11 @@ class _ORCAParser:
 
                 # Extract nprocs from %pal block
                 if block_name == "pal":
-                    m_np = re.search(
-                        r"\bnprocs\s+(\d+)", body, re.IGNORECASE
-                    )
+                    m_np = re.search(r"\bnprocs\s+(\d+)", body, re.IGNORECASE)
                     if m_np:
                         self.nprocs = int(m_np.group(1))
                     # Also handle: %pal nprocs 8 end (already captured in rest)
-                    m_np2 = re.search(
-                        r"\bnprocs\s+(\d+)", rest, re.IGNORECASE
-                    )
+                    m_np2 = re.search(r"\bnprocs\s+(\d+)", rest, re.IGNORECASE)
                     if m_np2:
                         self.nprocs = int(m_np2.group(1))
                 continue
@@ -403,9 +451,9 @@ class _ORCAParser:
 
     def _extract_functional_basis(
         self,
-    ) -> tuple[Optional[str], Optional[str]]:
-        functional: Optional[str] = None
-        basis: Optional[str] = None
+    ) -> tuple[str | None, str | None]:
+        functional: str | None = None
+        basis: str | None = None
 
         for tok in self.keyword_tokens:
             if tok in _CALC_TYPE_TOKENS:
@@ -414,7 +462,11 @@ class _ORCAParser:
                 functional = tok
             elif tok in _KNOWN_BASIS or "/" in tok:
                 basis = tok
-            elif tok.startswith("def2") or tok.startswith("cc-p") or tok.startswith("aug-"):
+            elif (
+                tok.startswith("def2")
+                or tok.startswith("cc-p")
+                or tok.startswith("aug-")
+            ):
                 basis = tok
 
         # Second pass: if no match yet, first non-calc-type token is probably functional

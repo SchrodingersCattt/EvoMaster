@@ -27,10 +27,13 @@ from engine.software.base import SoftwareBackend
 # 缺失时优雅降级：跳过 Schema 级别校验，仅保留手写规则
 # ---------------------------------------------------------------------------
 try:
-    from cp2k_input_tools.parser import CP2KInputParser as _CP2KInputParser  # type: ignore[import]
-    from cp2k_input_tools.parser_errors import (  # type: ignore[import]
-        CP2KInputParserError as _CP2KInputParserError,
+    from cp2k_input_tools.parser import (
+        CP2KInputParser as _CP2KInputParser,  # type: ignore[import]
     )
+    from cp2k_input_tools.parser_errors import (
+        CP2KInputParserError as _CP2KInputParserError,  # type: ignore[import]
+    )
+
     _HAS_CP2K_TOOLS = True
 except ImportError:
     _HAS_CP2K_TOOLS = False
@@ -76,38 +79,81 @@ _DEFAULTS: dict[str, Any] = {
 # 已知参数所属 section（用于 diagnostics unknown-param 检查豁免）
 _KNOWN_SECTION_KEYWORDS: set[str] = {
     # &GLOBAL
-    "PROJECT", "RUN_TYPE", "PRINT_LEVEL", "WALLTIME", "SEED", "PREFERRED_DIAG_LIBRARY",
+    "PROJECT",
+    "RUN_TYPE",
+    "PRINT_LEVEL",
+    "WALLTIME",
+    "SEED",
+    "PREFERRED_DIAG_LIBRARY",
     # &FORCE_EVAL
     "METHOD",
     # &FORCE_EVAL/&DFT
-    "BASIS_SET_FILE_NAME", "POTENTIAL_FILE_NAME", "CHARGE", "MULTIPLICITY", "UKS",
+    "BASIS_SET_FILE_NAME",
+    "POTENTIAL_FILE_NAME",
+    "CHARGE",
+    "MULTIPLICITY",
+    "UKS",
     # &FORCE_EVAL/&DFT/&MGRID
-    "CUTOFF", "REL_CUTOFF", "NGRIDS",
+    "CUTOFF",
+    "REL_CUTOFF",
+    "NGRIDS",
     # &FORCE_EVAL/&DFT/&QS
-    "EPS_DEFAULT", "EPS_FILTER_MATRIX", "EXTRAPOLATION",
+    "EPS_DEFAULT",
+    "EPS_FILTER_MATRIX",
+    "EXTRAPOLATION",
     # &FORCE_EVAL/&DFT/&SCF
-    "SCF_GUESS", "EPS_SCF", "MAX_SCF", "MAX_DIIS", "ADDED_MOS",
-    "EPS_SCF_HISTORY", "MAX_SCF_HISTORY",
+    "SCF_GUESS",
+    "EPS_SCF",
+    "MAX_SCF",
+    "MAX_DIIS",
+    "ADDED_MOS",
+    "EPS_SCF_HISTORY",
+    "MAX_SCF_HISTORY",
     # &FORCE_EVAL/&DFT/&SCF/&MIXING
-    "ALPHA", "NBUFFER",
+    "ALPHA",
+    "NBUFFER",
     # &FORCE_EVAL/&DFT/&SCF/&SMEAR
     "ELECTRONIC_TEMPERATURE",
     # &FORCE_EVAL/&DFT/&XC/&XC_FUNCTIONAL
-    "PBE", "LDA", "BLYP", "PBE0", "B3LYP",
+    "PBE",
+    "LDA",
+    "BLYP",
+    "PBE0",
+    "B3LYP",
     # &FORCE_EVAL/&DFT/&KPOINTS
-    "SCHEME", "SYMMETRY", "WAVEFUNCTIONS",
+    "SCHEME",
+    "SYMMETRY",
+    "WAVEFUNCTIONS",
     # &FORCE_EVAL/&SUBSYS/&CELL
-    "ABC", "ALPHA_BETA_GAMMA", "A", "B", "C", "PERIODIC",
+    "ABC",
+    "ALPHA_BETA_GAMMA",
+    "A",
+    "B",
+    "C",
+    "PERIODIC",
     # &FORCE_EVAL/&SUBSYS/&COORD
     "UNIT",
     # &FORCE_EVAL/&SUBSYS/&KIND
-    "BASIS_SET", "POTENTIAL", "ELEMENT", "MASS",
+    "BASIS_SET",
+    "POTENTIAL",
+    "ELEMENT",
+    "MASS",
     # &MOTION/&GEO_OPT
-    "OPTIMIZER", "MAX_ITER", "MAX_FORCE", "RMS_FORCE", "MAX_DR", "RMS_DR",
+    "OPTIMIZER",
+    "MAX_ITER",
+    "MAX_FORCE",
+    "RMS_FORCE",
+    "MAX_DR",
+    "RMS_DR",
     # &MOTION/&MD
-    "ENSEMBLE", "STEPS", "TIMESTEP", "TEMPERATURE", "COMVEL_TOL",
+    "ENSEMBLE",
+    "STEPS",
+    "TIMESTEP",
+    "TEMPERATURE",
+    "COMVEL_TOL",
     # &PRINT
-    "FILENAME", "LOG_PRINT_KEY",
+    "FILENAME",
+    "LOG_PRINT_KEY",
 }
 
 # &COORD section 内的行是原子坐标（元素名 x y z），不应被当作 keyword 校验
@@ -123,6 +169,7 @@ _METHOD_QS_SECTION = "&FORCE_EVAL/&DFT/&QS"
 # ---------------------------------------------------------------------------
 # 解析器辅助
 # ---------------------------------------------------------------------------
+
 
 def _parse_value(raw: str) -> Any:
     """尝试将字符串转换为 Python 原生类型。"""
@@ -158,6 +205,7 @@ def _make_range(line: int, col_start: int, col_end: int) -> SourceRange:
 # ---------------------------------------------------------------------------
 # CP2K 后端
 # ---------------------------------------------------------------------------
+
 
 class CP2KBackend(SoftwareBackend):
     """CP2K 输入文件后端。
@@ -195,7 +243,9 @@ class CP2KBackend(SoftwareBackend):
         flat_params: list[ParsedParam] = []
 
         _re_section_start = re.compile(r"^&([A-Za-z_][A-Za-z0-9_]*)(.*)$")
-        _re_section_end = re.compile(r"^&END\s*([A-Za-z_][A-Za-z0-9_]*)?", re.IGNORECASE)
+        _re_section_end = re.compile(
+            r"^&END\s*([A-Za-z_][A-Za-z0-9_]*)?", re.IGNORECASE
+        )
         _re_keyword = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s+(.*)", re.DOTALL)
 
         for lineno, raw_line in enumerate(lines, start=1):
@@ -222,7 +272,7 @@ class CP2KBackend(SoftwareBackend):
                     doc.parse_errors.append(
                         Diagnostic(
                             severity="error",
-                            message=f"意外的 &END（无匹配的 &SECTION）",
+                            message="意外的 &END（无匹配的 &SECTION）",
                             range=_make_range(lineno, 0, len(raw_line)),
                             rule_id="unexpected-end",
                         )
@@ -314,9 +364,7 @@ class CP2KBackend(SoftwareBackend):
             run_type = "ENERGY"
 
         # 结构数据
-        cell_lines, coord_lines, kind_lines = self._build_structure(
-            intent, p
-        )
+        cell_lines, coord_lines, kind_lines = self._build_structure(intent, p)
 
         # CUTOFF 等数值参数
         cutoff = p.get("CUTOFF", 300)
@@ -412,8 +460,12 @@ class CP2KBackend(SoftwareBackend):
 
         # &SUBSYS
         lines += ["  &SUBSYS"]
-        lines += ["    &CELL"] + [f"      {l}" for l in cell_lines] + ["    &END CELL"]
-        lines += ["    &COORD"] + [f"      {l}" for l in coord_lines] + ["    &END COORD"]
+        lines += (
+            ["    &CELL"] + [f"      {ln}" for ln in cell_lines] + ["    &END CELL"]
+        )
+        lines += (
+            ["    &COORD"] + [f"      {ln}" for ln in coord_lines] + ["    &END COORD"]
+        )
         for kl in kind_lines:
             lines += ["    &KIND " + kl[0]]
             for kline in kl[1]:
@@ -542,8 +594,7 @@ class CP2KBackend(SoftwareBackend):
             "PERIODIC XYZ",
         ]
         coord_lines = [
-            f"{elem}  {x:.6f}  {y:.6f}  {z:.6f}"
-            for elem, x, y, z in _SI_COORDS
+            f"{elem}  {x:.6f}  {y:.6f}  {z:.6f}" for elem, x, y, z in _SI_COORDS
         ]
         si_basis = _str(p.get("SI_BASIS_SET", "DZVP-MOLOPT-SR-GTH"))
         si_potential = _str(p.get("SI_POTENTIAL", "GTH-PBE-q4"))
@@ -585,7 +636,11 @@ class CP2KBackend(SoftwareBackend):
             # 而 schema 的 METHOD tag 来自 &QS；section 不匹配则跳过枚举校验
             if name_up == "METHOD" and tag is not None:
                 tag_sec_leaf = (tag.section or "").upper().split("/")[-1]
-                param_sec_leaf = param.section_path.upper().split("/")[-1] if param.section_path else ""
+                param_sec_leaf = (
+                    param.section_path.upper().split("/")[-1]
+                    if param.section_path
+                    else ""
+                )
                 if tag_sec_leaf and param_sec_leaf != tag_sec_leaf:
                     continue
 
@@ -650,9 +705,7 @@ class CP2KBackend(SoftwareBackend):
                     diags.append(
                         Diagnostic(
                             severity="error",
-                            message=(
-                                f"{param.name} = '{param.value}' 不是合法枚举值"
-                            ),
+                            message=(f"{param.name} = '{param.value}' 不是合法枚举值"),
                             range=param.range,
                             param=param.name,
                             suggestion=f"合法值: {', '.join(tag.enum_values)}",
@@ -663,7 +716,10 @@ class CP2KBackend(SoftwareBackend):
         # 3b. 依赖检查：hybrid functional → 需要 &HF section
         hybrid_keywords = {"PBE0", "B3LYP", "HSE06"}
         for param in doc.params:
-            if param.name.upper() in hybrid_keywords and param.value not in (False, None):
+            if param.name.upper() in hybrid_keywords and param.value not in (
+                False,
+                None,
+            ):
                 hf_sec = doc.get_section("&FORCE_EVAL/&DFT/&XC/&HF")
                 if hf_sec is None:
                     diags.append(
@@ -682,7 +738,10 @@ class CP2KBackend(SoftwareBackend):
 
         # 4. 缺失建议参数（info 级别）
         suggested_present = {
-            "CUTOFF": ("CUTOFF 未设置，将使用 CP2K 默认值（通常较小），建议明确设置（如 300 Ry）", "info"),
+            "CUTOFF": (
+                "CUTOFF 未设置，将使用 CP2K 默认值（通常较小），建议明确设置（如 300 Ry）",
+                "info",
+            ),
             "EPS_SCF": ("EPS_SCF 未设置，建议明确指定收敛阈值", "info"),
         }
         for kw, (msg, sev) in suggested_present.items():
@@ -718,9 +777,7 @@ class CP2KBackend(SoftwareBackend):
     # _check_physics_compatibility  (物理兼容性规则)
     # ------------------------------------------------------------------
 
-    def _check_physics_compatibility(
-        self, doc: DocumentModel
-    ) -> list[Diagnostic]:
+    def _check_physics_compatibility(self, doc: DocumentModel) -> list[Diagnostic]:
         """检查 CP2K 输入中跨 section 的物理兼容性约束。
 
         规则（按严重程度排序）：
@@ -742,7 +799,7 @@ class CP2KBackend(SoftwareBackend):
            计算不会报错但也不会输出能带数据。
         """
         diags: list[Diagnostic] = []
-        raw_upper = doc.raw_text.upper()
+        doc.raw_text.upper()
 
         # ── 辅助：检测某 section 路径是否存在 ──────────────────────────────
         def _has_section(*paths: str) -> bool:
@@ -777,7 +834,9 @@ class CP2KBackend(SoftwareBackend):
         )
         if has_ot and has_kpoints:
             # 找到 &OT section 的起始行以便精确定位
-            ot_sec = doc.get_section("&FORCE_EVAL/&DFT/&SCF/&OT") or doc.get_section("&DFT/&SCF/&OT")
+            ot_sec = doc.get_section("&FORCE_EVAL/&DFT/&SCF/&OT") or doc.get_section(
+                "&DFT/&SCF/&OT"
+            )
             rng = ot_sec.range if ot_sec is not None else None
             diags.append(
                 Diagnostic(
@@ -808,9 +867,8 @@ class CP2KBackend(SoftwareBackend):
             "&FORCE_EVAL/&DFT/&XC/&HF/&SCREENING",  # 旧版 RI_HFX 写法
         )
         if has_hfx and has_kpoints and not has_ri_hfx:
-            hf_sec = (
-                doc.get_section("&FORCE_EVAL/&DFT/&XC/&HF")
-                or doc.get_section("&DFT/&XC/&HF")
+            hf_sec = doc.get_section("&FORCE_EVAL/&DFT/&XC/&HF") or doc.get_section(
+                "&DFT/&XC/&HF"
             )
             rng = hf_sec.range if hf_sec is not None else None
             diags.append(
@@ -851,7 +909,12 @@ class CP2KBackend(SoftwareBackend):
             stress_val = _param_value_upper("&FORCE_EVAL/&DFT", "STRESS_TENSOR")
             if stress_val is None:
                 stress_val = _param_value_upper("&DFT", "STRESS_TENSOR")
-            valid_stress = {"ANALYTICAL", "NUMERICAL", "DIAGONAL_ANALYTICAL", "DIAGONAL_NUMERICAL"}
+            valid_stress = {
+                "ANALYTICAL",
+                "NUMERICAL",
+                "DIAGONAL_ANALYTICAL",
+                "DIAGONAL_NUMERICAL",
+            }
             if stress_val is None or stress_val not in valid_stress:
                 diags.append(
                     Diagnostic(
@@ -1039,20 +1102,21 @@ class CP2KBackend(SoftwareBackend):
 # 工具函数
 # ---------------------------------------------------------------------------
 
+
 def _str(val: Any) -> str:
     return str(val) if val is not None else ""
 
 
 # 常见元素的默认 basis/potential 映射（GTH-PBE 系列）
 _ELEMENT_BASIS_MAP: dict[str, tuple[str, str]] = {
-    "H":  ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q1"),
-    "C":  ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q4"),
-    "N":  ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q5"),
-    "O":  ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q6"),
-    "F":  ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q7"),
+    "H": ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q1"),
+    "C": ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q4"),
+    "N": ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q5"),
+    "O": ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q6"),
+    "F": ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q7"),
     "Si": ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q4"),
-    "P":  ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q5"),
-    "S":  ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q6"),
+    "P": ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q5"),
+    "S": ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q6"),
     "Cl": ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q7"),
     "Fe": ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q16"),
     "Cu": ("DZVP-MOLOPT-SR-GTH", "GTH-PBE-q11"),
@@ -1069,9 +1133,7 @@ _DEFAULT_BASIS = "DZVP-MOLOPT-SR-GTH"
 _DEFAULT_POTENTIAL_PREFIX = "GTH-PBE"
 
 
-def _default_basis_potential(
-    element: str, p: dict[str, Any]
-) -> tuple[str, str]:
+def _default_basis_potential(element: str, p: dict[str, Any]) -> tuple[str, str]:
     """返回元素对应的默认 basis set 和 pseudopotential 名称。"""
     if element in _ELEMENT_BASIS_MAP:
         return _ELEMENT_BASIS_MAP[element]

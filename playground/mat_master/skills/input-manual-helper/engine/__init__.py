@@ -15,16 +15,16 @@ Python 包路径导入，应在 input-manual-helper/ 目录下用相对 import
 或将该目录加入 sys.path 后使用。
 """
 
-from engine.schema import ParamTag, SchemaRegistry
+from engine.completion import CompletionItem
+from engine.diagnostics import Diagnostic
 from engine.document import (
-    SourceRange,
+    DocumentModel,
     ParsedParam,
     ParsedSection,
-    DocumentModel,
+    SourceRange,
 )
-from engine.diagnostics import Diagnostic
-from engine.completion import CompletionItem
 from engine.renderer import RenderIntent
+from engine.schema import ParamTag, SchemaRegistry
 
 __all__ = [
     "ParamTag",

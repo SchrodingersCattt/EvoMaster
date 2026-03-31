@@ -1,6 +1,6 @@
 # manuscript-scribe: review profile
 
-**Profile-specific writing rules for `review`.**  
+**Profile-specific writing rules for `review`.**
 These supplement (do not replace) the shared rules in `SKILL.md`.
 
 ---

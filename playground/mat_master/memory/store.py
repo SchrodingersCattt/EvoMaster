@@ -43,7 +43,9 @@ def _format_tool_result_summary(
     if isinstance(tool_response, str):
         result_str = tool_response[:MAX_STORED_RESULT_CHARS]
     elif isinstance(tool_response, dict):
-        result_str = json.dumps(tool_response, ensure_ascii=False)[:MAX_STORED_RESULT_CHARS]
+        result_str = json.dumps(tool_response, ensure_ascii=False)[
+            :MAX_STORED_RESULT_CHARS
+        ]
     else:
         result_str = str(tool_response)[:MAX_STORED_RESULT_CHARS]
     return f"Tool {tool_name} | args: {args_str} | result: {result_str}"
@@ -72,4 +74,8 @@ async def store_tool_result_in_memory(
         metadata={"tool": tool_name, "source": "tool_result"},
         base_url=base_url,
     )
-    logger.info("store_tool_result_in_memory session_id=%s tool=%s stored", session_id, tool_name)
+    logger.info(
+        "store_tool_result_in_memory session_id=%s tool=%s stored",
+        session_id,
+        tool_name,
+    )

@@ -7,7 +7,7 @@ SchemaRegistry : 加载并管理所有软件的参数 Schema。
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -81,7 +81,9 @@ class ParamTag:
 
         if self.valid_range is not None:
             lo, hi = self.valid_range
-            range_str = f"[{lo if lo is not None else '-∞'}, {hi if hi is not None else '+∞'}]"
+            range_str = (
+                f"[{lo if lo is not None else '-∞'}, {hi if hi is not None else '+∞'}]"
+            )
             lines.append(f"- **合法范围**: {range_str}")
 
         if self.enum_values:
@@ -197,9 +199,7 @@ class SchemaRegistry:
                 results.append(tag)
         return results
 
-    def list_tags(
-        self, software: str, category: str | None = None
-    ) -> list[ParamTag]:
+    def list_tags(self, software: str, category: str | None = None) -> list[ParamTag]:
         """列出指定软件（及可选分类）的所有 ParamTag，按名称排序。"""
         self._ensure_loaded(software)
         tags = list(self._registry.get(software, {}).values())

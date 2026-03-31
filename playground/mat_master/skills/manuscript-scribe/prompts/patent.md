@@ -1,6 +1,6 @@
 # manuscript-scribe: patent profile
 
-**Profile-specific writing rules for `patent`.**  
+**Profile-specific writing rules for `patent`.**
 These supplement (do not replace) the shared rules in `SKILL.md`.
 
 ---

@@ -40,7 +40,7 @@ class BaseLLM(ABC):
         self._logged_message_count = 0
         self._setup()
 
-    def _setup(self) -> None:
+    def _setup(self) -> None:  # noqa: B027
         """初始化设置，由子类实现"""
 
     @abstractmethod

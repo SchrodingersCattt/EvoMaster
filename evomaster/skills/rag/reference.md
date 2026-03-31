@@ -314,22 +314,22 @@ use_skill(
 
 ### Common Issues
 
-1. **FileNotFoundError**: 
+1. **FileNotFoundError**:
    - Check that all required files exist in vec_dir
    - Ensure paths are relative to project root (starting with `evomaster/`) or absolute
    - Script automatically resolves paths relative to project root
 
-2. **CUDA out of memory**: 
+2. **CUDA out of memory**:
    - Scripts default to CPU mode
    - If using GPU, reduce batch_size or use CPU mode
 
-3. **Poor retrieval quality**: 
+3. **Poor retrieval quality**:
    - Check embedding model quality
    - Adjust distance thresholds
    - Verify data quality in nodes_data.json
    - Ensure using the correct vectorstore directory matching your model's dimension
 
-4. **Slow search**: 
+4. **Slow search**:
    - Use smaller embedding models
    - Use local models instead of downloading from HuggingFace
    - Optimize FAISS index type

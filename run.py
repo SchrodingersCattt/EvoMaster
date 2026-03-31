@@ -25,7 +25,10 @@ project_root = Path(__file__).parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from evomaster.core import get_playground_class, list_registered_playgrounds
+from evomaster.core import (  # noqa: E402
+    get_playground_class,
+    list_registered_playgrounds,
+)
 
 
 def parse_args():

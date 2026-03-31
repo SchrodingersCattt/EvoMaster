@@ -1,6 +1,6 @@
 # manuscript-scribe: research_paper profile
 
-**Profile-specific writing rules for `research_paper`.**  
+**Profile-specific writing rules for `research_paper`.**
 These supplement (do not replace) the shared rules in `SKILL.md`.
 
 ---

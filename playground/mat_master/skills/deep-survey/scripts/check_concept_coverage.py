@@ -17,7 +17,7 @@ from pathlib import Path
 _script_dir = Path(__file__).resolve().parent
 if str(_script_dir) not in sys.path:
     sys.path.insert(0, str(_script_dir))
-from survey_contract import check_concept_coverage_workspace
+from survey_contract import check_concept_coverage_workspace  # noqa: E402
 
 
 def main() -> None:

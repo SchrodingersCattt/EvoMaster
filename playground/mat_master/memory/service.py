@@ -58,7 +58,10 @@ async def memory_write(
             ) as r:
                 r.raise_for_status()
     except Exception as e:
-        logger.warning("memory_write failed: %s (memory service unavailable; agent continues without persisting this write)", e)
+        logger.warning(
+            "memory_write failed: %s (memory service unavailable; agent continues without persisting this write)",
+            e,
+        )
 
 
 async def memory_retrieve(
@@ -98,7 +101,8 @@ async def memory_retrieve(
         ]
     except Exception as e:
         logger.warning(
-            "memory_retrieve failed: %s (memory service unavailable; agent continues without session memory)", e
+            "memory_retrieve failed: %s (memory service unavailable; agent continues without session memory)",
+            e,
         )
         return []
 
@@ -223,7 +227,9 @@ class _MemSaveToolParams(BaseToolParams):
 
     name: ClassVar[str] = "mem_save"
 
-    text: str = Field(description="The text or insight to save (e.g. key finding, parameter, plan step).")
+    text: str = Field(
+        description="The text or insight to save (e.g. key finding, parameter, plan step)."
+    )
     metadata_note: Optional[str] = Field(
         default=None,
         description="Optional short note or tag for this entry (e.g. 'structure_choice', 'convergence').",
@@ -267,7 +273,9 @@ class _MemRecallToolParams(BaseToolParams):
         default=None,
         description="Optional search phrase; if omitted, returns the most recent entries.",
     )
-    limit: int = Field(default=10, description="Maximum number of snippets to return (default 10).")
+    limit: int = Field(
+        default=10, description="Maximum number of snippets to return (default 10)."
+    )
 
 
 class _MemRecallTool(BaseTool):

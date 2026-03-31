@@ -12,10 +12,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / '_common'))
-from build_lit_table_dedup import annotate_conflicts, deduplicate_rows
-from build_lit_table_export import write_output
-from build_lit_table_ingest import ingest_and_cache_normalized_rows
-from build_lit_table_io import (
+from build_lit_table_dedup import annotate_conflicts, deduplicate_rows  # noqa: E402
+from build_lit_table_export import write_output  # noqa: E402
+from build_lit_table_ingest import ingest_and_cache_normalized_rows  # noqa: E402
+from build_lit_table_io import (  # noqa: E402
     auto_discover_tool_outputs,
     load_rows,
     load_schema,
@@ -23,8 +23,8 @@ from build_lit_table_io import (
     rows_file_for,
     save_rows,
 )
-from build_lit_table_survey import is_survey_input_from_metadata
-from longtask_runtime import (
+from build_lit_table_survey import is_survey_input_from_metadata  # noqa: E402
+from longtask_runtime import (  # noqa: E402
     STATUS_COMPLETED,
     STATUS_FATAL_ERROR,
     STATUS_RETRYABLE_ERROR,

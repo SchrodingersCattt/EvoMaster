@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / '_common'))
-from longtask_runtime import (
+from longtask_runtime import (  # noqa: E402
     STATUS_COMPLETED,
     STATUS_FATAL_ERROR,
     STATUS_RUNNING,

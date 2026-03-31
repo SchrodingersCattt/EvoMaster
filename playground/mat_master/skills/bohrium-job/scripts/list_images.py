@@ -31,7 +31,9 @@ try:
 
     OPENAPI_BASE = BOHRIUM_OPENAPI_HOST
 except ImportError:
-    OPENAPI_BASE = os.environ.get('BOHRIUM_BASE_URL', 'https://open.bohrium.com').rstrip('/')
+    OPENAPI_BASE = os.environ.get(
+        'BOHRIUM_BASE_URL', 'https://open.bohrium.com'
+    ).rstrip('/')
 
 _HEADER = {'accessKey': ACCESS_KEY, 'Accept': 'application/json'}
 

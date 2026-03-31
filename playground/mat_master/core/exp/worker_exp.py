@@ -12,5 +12,3 @@ class WorkerExp(BaseExp):
     Same semantics as BaseExp.run(): create TaskInstance, agent.run(task),
     return trajectory/status/steps. Used by DirectSolver when route is default.
     """
-
-    pass

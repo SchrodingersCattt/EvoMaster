@@ -21,14 +21,58 @@ import numpy as np
 
 # Covalent radii (Å) - common elements
 COVALENT_RADII = {
-    "H": 0.31, "He": 0.28, "Li": 1.28, "Be": 0.96, "B": 0.84, "C": 0.76, "N": 0.71,
-    "O": 0.66, "F": 0.57, "Ne": 0.58, "Na": 1.66, "Mg": 1.41, "Al": 1.21, "Si": 1.11,
-    "P": 1.07, "S": 1.05, "Cl": 1.02, "Ar": 1.06, "K": 1.96, "Ca": 1.76, "Sc": 1.70,
-    "Ti": 1.60, "V": 1.53, "Cr": 1.39, "Mn": 1.39, "Fe": 1.32, "Co": 1.26, "Ni": 1.24,
-    "Cu": 1.32, "Zn": 1.22, "Ga": 1.22, "Ge": 1.20, "As": 1.19, "Se": 1.20, "Br": 1.20,
-    "Kr": 1.16, "Rb": 2.10, "Sr": 1.95, "Y": 1.90, "Zr": 1.75, "Nb": 1.64, "Mo": 1.54,
-    "Ag": 1.45, "Cd": 1.44, "In": 1.42, "Sn": 1.39, "Sb": 1.39, "Te": 1.38, "I": 1.39,
-    "Au": 1.36, "Pb": 1.46, "Bi": 1.48,
+    "H": 0.31,
+    "He": 0.28,
+    "Li": 1.28,
+    "Be": 0.96,
+    "B": 0.84,
+    "C": 0.76,
+    "N": 0.71,
+    "O": 0.66,
+    "F": 0.57,
+    "Ne": 0.58,
+    "Na": 1.66,
+    "Mg": 1.41,
+    "Al": 1.21,
+    "Si": 1.11,
+    "P": 1.07,
+    "S": 1.05,
+    "Cl": 1.02,
+    "Ar": 1.06,
+    "K": 1.96,
+    "Ca": 1.76,
+    "Sc": 1.70,
+    "Ti": 1.60,
+    "V": 1.53,
+    "Cr": 1.39,
+    "Mn": 1.39,
+    "Fe": 1.32,
+    "Co": 1.26,
+    "Ni": 1.24,
+    "Cu": 1.32,
+    "Zn": 1.22,
+    "Ga": 1.22,
+    "Ge": 1.20,
+    "As": 1.19,
+    "Se": 1.20,
+    "Br": 1.20,
+    "Kr": 1.16,
+    "Rb": 2.10,
+    "Sr": 1.95,
+    "Y": 1.90,
+    "Zr": 1.75,
+    "Nb": 1.64,
+    "Mo": 1.54,
+    "Ag": 1.45,
+    "Cd": 1.44,
+    "In": 1.42,
+    "Sn": 1.39,
+    "Sb": 1.39,
+    "Te": 1.38,
+    "I": 1.39,
+    "Au": 1.36,
+    "Pb": 1.46,
+    "Bi": 1.48,
 }
 
 _MAX_RADIUS = max(COVALENT_RADII.values())
@@ -90,7 +134,7 @@ def _sanity_molecule(mol) -> tuple[bool, list[str]]:
     if n < 2:
         return True, []
     diff = coords[:, None, :] - coords[None, :, :]
-    dists = np.sqrt(np.sum(diff ** 2, axis=-1))
+    dists = np.sqrt(np.sum(diff**2, axis=-1))
     np.fill_diagonal(dists, np.inf)
     min_dist = dists.min()
     if min_dist < 0.5:
@@ -99,21 +143,39 @@ def _sanity_molecule(mol) -> tuple[bool, list[str]]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Assess structure: dimensionality, sanity, formula.")
+    ap = argparse.ArgumentParser(
+        description="Assess structure: dimensionality, sanity, formula."
+    )
     ap.add_argument("--file", required=True, help="Path to CIF, POSCAR, XYZ, etc.")
     args = ap.parse_args()
     path = Path(args.file)
 
     if not path.exists():
-        print(json.dumps({"is_valid": False, "dimensionality": "Unknown", "formula": "",
-                          "warnings": [f"File not found: {path}"]}))
+        print(
+            json.dumps(
+                {
+                    "is_valid": False,
+                    "dimensionality": "Unknown",
+                    "formula": "",
+                    "warnings": [f"File not found: {path}"],
+                }
+            )
+        )
         sys.exit(1)
 
     try:
         obj, kind = _load_structure(path)
     except Exception as e:
-        print(json.dumps({"is_valid": False, "dimensionality": "Unknown", "formula": "",
-                          "warnings": [f"Failed to load structure: {e}"]}))
+        print(
+            json.dumps(
+                {
+                    "is_valid": False,
+                    "dimensionality": "Unknown",
+                    "formula": "",
+                    "warnings": [f"Failed to load structure: {e}"],
+                }
+            )
+        )
         sys.exit(1)
 
     if kind == "molecule":
@@ -125,12 +187,16 @@ def main() -> None:
         dim, dim_warns = _dimensionality(obj)
         sane, sane_warns = _sanity_periodic(obj)
 
-    print(json.dumps({
-        "is_valid": sane,
-        "dimensionality": dim,
-        "formula": formula,
-        "warnings": dim_warns + sane_warns,
-    }))
+    print(
+        json.dumps(
+            {
+                "is_valid": sane,
+                "dimensionality": dim,
+                "formula": formula,
+                "warnings": dim_warns + sane_warns,
+            }
+        )
+    )
 
 
 if __name__ == "__main__":
