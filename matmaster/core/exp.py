@@ -164,7 +164,7 @@ class Exp:
         if builtin_cfg and ctx.session is not None:
             self._init_builtin_tools(ctx, registry)
 
-        # 2. Skills/MCP: runtime-injected (must be before system prompt)
+        # 2. Skills: runtime-injected (must be before system prompt)
         if skills or self._config.skills.enabled:
             self._init_skill_tools(ctx, registry, skills_config=skills)
         # 3. System prompt via ContextBuilder
@@ -186,7 +186,6 @@ class Exp:
             hooks.append(emitter_hook)
 
         # 4b. SpawnTool: register with spawn_fn if "spawn" in config
-        builtin_cfg = self._config.tools.builtin
         if ("spawn" in builtin_cfg or builtin_cfg == ["*"]) and ctx.session is not None:
             from matmaster.config.loader import list_available_exps
             from matmaster.tools.builtin.spawn_tool import SpawnTool
@@ -276,7 +275,6 @@ class Exp:
         history: list[Message] | None = None,
         stop_event: threading.Event | None = None,
         skills: dict[str, Any] | None = None,
-        mcp: dict[str, Any] | None = None,
         source_override: str | None = None,
         spawn_id: str | None = None,
     ) -> KernelResult:
@@ -287,7 +285,7 @@ class Exp:
         """
         try:
             runtime = await self.build_runtime(
-                ctx, bus=bus, skills=skills, mcp=mcp,
+                ctx, bus=bus, skills=skills,
                 source_override=source_override, spawn_id=spawn_id,
             )
             # Inject stop_event into SpawnTool for cancel propagation (SUBA-05)

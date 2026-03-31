@@ -237,7 +237,7 @@ class TestExpRun:
             result = await exp.run(ctx, "do something")
 
         mock_br.assert_called_once_with(
-            ctx, bus=None, skills=None, mcp=None,
+            ctx, bus=None, skills=None,
             source_override=None, spawn_id=None,
         )
         mock_kernel.run.assert_called_once_with(
@@ -264,7 +264,7 @@ class TestExpRun:
             await exp.run(ctx, "task", bus=bus)
 
         mock_br.assert_called_once_with(
-            ctx, bus=bus, skills=None, mcp=None,
+            ctx, bus=bus, skills=None,
             source_override=None, spawn_id=None,
         )
 
