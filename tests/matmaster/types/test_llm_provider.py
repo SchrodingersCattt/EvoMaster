@@ -1,50 +1,46 @@
-"""Tests for matmaster.types.llm_provider -- LLMProvider Protocol."""
+"""Tests for matmaster.types.llm_provider -- LLMProvider Protocol (async)."""
 
 from __future__ import annotations
 
-from typing import Any, Iterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from matmaster.types.llm_provider import LLMProvider
-from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
-
+from matmaster.types.messages import LLMResponse, StreamChunk
 
 # ── Mock implementations ──────────────────────────────
 
 
 class CompleteLLMProvider:
-    """Mock that satisfies the LLMProvider Protocol."""
+    """Mock that satisfies the async LLMProvider Protocol."""
 
-    def chat(
+    async def __aenter__(self) -> CompleteLLMProvider:
+        return self
+
+    async def __aexit__(self, *exc: Any) -> None:
+        pass
+
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
         return LLMResponse(content="response", finish_reason="stop")
 
-    def chat_with_retry(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-    ) -> LLMResponse:
-        return self.chat(messages, tools)
-
-    def chat_stream(
+    async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
+    ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(content="hello", finish_reason="stop")
 
 
 class IncompleteLLMProvider:
     """Mock missing chat_stream -- should NOT satisfy Protocol."""
 
-    def chat(
+    async def chat(
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
@@ -65,97 +61,50 @@ class TestLLMProviderProtocol:
         assert not isinstance(provider, LLMProvider)
 
 
-# ── Functional tests ─────────────────────────────────
+# ── Functional tests (async) ─────────────────────────
 
 
 class TestLLMProviderUsage:
-    def test_chat_returns_llm_response(self) -> None:
+    async def test_chat_returns_llm_response(self) -> None:
         provider = CompleteLLMProvider()
-        result = provider.chat([{"role": "user", "content": "hello"}])
+        result = await provider.chat([{"role": "user", "content": "hello"}])
         assert isinstance(result, LLMResponse)
         assert result.content == "response"
         assert result.finish_reason == "stop"
 
-    def test_chat_stream_returns_iterator(self) -> None:
+    async def test_chat_stream_returns_async_iterator(self) -> None:
         provider = CompleteLLMProvider()
-        chunks = list(provider.chat_stream([{"role": "user", "content": "hello"}]))
+        chunks = []
+        async for chunk in provider.chat_stream([{"role": "user", "content": "hello"}]):
+            chunks.append(chunk)
         assert len(chunks) == 1
         assert isinstance(chunks[0], StreamChunk)
         assert chunks[0].content == "hello"
         assert chunks[0].finish_reason == "stop"
 
-    def test_chat_with_tools(self) -> None:
+    async def test_chat_with_tools(self) -> None:
         provider = CompleteLLMProvider()
         tools = [{"type": "function", "function": {"name": "test", "parameters": {}}}]
-        result = provider.chat(
+        result = await provider.chat(
             [{"role": "user", "content": "use tool"}],
             tools=tools,
         )
         assert isinstance(result, LLMResponse)
 
 
-# ── chat_with_retry Protocol tests ──────────────────
+class TestMockProviderConforms:
+    def test_mock_provider_from_conftest_satisfies_protocol(self) -> None:
+        """MockAsyncLLMProvider from root conftest satisfies Protocol."""
+        from tests.conftest import MockAsyncLLMProvider
 
-
-class MissingRetryProvider:
-    """Mock with chat() + chat_stream() but NO chat_with_retry -- should fail Protocol."""
-
-    def chat(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-    ) -> LLMResponse:
-        return LLMResponse(content="response")
-
-    def chat_stream(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-        *,
-        timeout: float | None = None,
-    ) -> Iterator[StreamChunk]:
-        yield StreamChunk(content="hello", finish_reason="stop")
-
-
-class TestChatWithRetryProtocol:
-    def test_protocol_requires_chat_with_retry(self) -> None:
-        """A class with chat + chat_stream but no chat_with_retry must fail isinstance."""
-        provider = MissingRetryProvider()
-        assert not isinstance(provider, LLMProvider)
-
-    def test_chat_with_retry_returns_llm_response(self) -> None:
-        """CompleteLLMProvider.chat_with_retry returns LLMResponse."""
-        provider = CompleteLLMProvider()
-        result = provider.chat_with_retry([{"role": "user", "content": "hello"}])
-        assert isinstance(result, LLMResponse)
-        assert result.content == "response"
-
-    def test_chat_with_retry_with_tools(self) -> None:
-        """chat_with_retry accepts optional tools parameter."""
-        provider = CompleteLLMProvider()
-        tools = [{"type": "function", "function": {"name": "test", "parameters": {}}}]
-        result = provider.chat_with_retry(
-            [{"role": "user", "content": "use tool"}],
-            tools=tools,
-        )
-        assert isinstance(result, LLMResponse)
-
-    def test_incomplete_still_fails(self) -> None:
-        """IncompleteLLMProvider (missing chat_stream + chat_with_retry) still fails."""
-        provider = IncompleteLLMProvider()
-        assert not isinstance(provider, LLMProvider)
-
-    def test_mock_provider_conforms(self) -> None:
-        """MockLLMProvider from conftest satisfies Protocol with chat_with_retry."""
-        from tests.matmaster.core.conftest import MockLLMProvider
-
-        provider = MockLLMProvider()
+        provider = MockAsyncLLMProvider()
         assert isinstance(provider, LLMProvider)
 
 
 def test_chat_stream_accepts_timeout_kwarg() -> None:
     """Protocol allows optional timeout keyword argument."""
     import inspect
+
     from matmaster.types.llm_provider import LLMProvider
 
     sig = inspect.signature(LLMProvider.chat_stream)

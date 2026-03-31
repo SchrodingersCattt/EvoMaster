@@ -340,4 +340,3 @@ Phase 4 最稳妥的实现方式不是大规模改现有 web service，而是先
 - `src/services/agent_run_service.py` 到 Phase 5 再切到新主路径
 
 这样可以把 Playground 边界修正、config 兼容性验证、Exp 资源所有权迁移分成 3 个可执行计划，既满足当前 roadmap，也不给后续 Phase 5 埋新的循环依赖和生命周期混乱。
-

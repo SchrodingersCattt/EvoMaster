@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
-import queue
 import signal
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -165,9 +166,10 @@ def run_repl(
 
             while worker.is_alive():
                 try:
-                    event = bus.get(timeout=0.1)
+                    event = bus.get_nowait()
                     event_logger.log_event(event)
-                except queue.Empty:
+                except asyncio.QueueEmpty:
+                    time.sleep(0.1)
                     continue
 
             # Drain remaining events
@@ -175,7 +177,7 @@ def run_repl(
                 try:
                     event = bus.get_nowait()
                     event_logger.log_event(event)
-                except queue.Empty:
+                except asyncio.QueueEmpty:
                     break
 
             worker.join()
@@ -210,21 +212,25 @@ def _show_config(config: DevConfig, runner: DevRunner) -> None:
 
 def _show_tools(runner: DevRunner) -> None:
     """List registered tools."""
+    import asyncio
+
     from matmaster.core.exp import Exp
 
     exp = Exp(runner._exp_config)
-    runtime = exp.build_runtime(runner._pg_ctx)
+    _loop = asyncio.new_event_loop()
     try:
+        runtime = _loop.run_until_complete(exp.build_runtime(runner._pg_ctx))
         registry = runtime.spec.tool_registry
-        if registry and registry.tools:
-            for tool in registry.tools:
+        if registry and registry.all_tools:
+            for tool in registry.all_tools:
                 desc = getattr(tool, "description", "")
                 name = getattr(tool, "name", str(tool))
                 print(f"  - {name}: {desc}")
         else:
             print("  No tools registered.")
     finally:
-        runtime.cleanup()
+        _loop.run_until_complete(exp._run_cleanup_callbacks())
+        _loop.close()
 
 
 def _show_history(runner: DevRunner) -> None:

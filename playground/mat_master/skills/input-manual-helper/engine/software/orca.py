@@ -38,9 +38,9 @@ from engine.software.base import SoftwareBackend
 # 内建 H2O 结构（实验值，单位 Å）
 # ---------------------------------------------------------------------------
 _H2O_COORDS = [
-    ("O",  0.000000,  0.000000,  0.117300),
-    ("H",  0.000000,  0.757200, -0.469200),
-    ("H",  0.000000, -0.757200, -0.469200),
+    ("O", 0.000000, 0.000000, 0.117300),
+    ("H", 0.000000, 0.757200, -0.469200),
+    ("H", 0.000000, -0.757200, -0.469200),
 ]
 
 # ---------------------------------------------------------------------------
@@ -55,42 +55,99 @@ _DEFAULTS: dict[str, Any] = {
 }
 
 # keyword line 中已知的 functionals（用于 diagnostics 判断）
-_FUNCTIONALS: frozenset[str] = frozenset({
-    "B3LYP", "PBE", "PBE0", "R2SCAN", "WB97X-D3",
-    "HF", "DLPNO-CCSD(T)", "DLPNO-CCSD(T1)",
-    "BLYP", "BP86", "TPSS", "M06", "M06-2X",
-    "CAM-B3LYP", "LC-BLYP", "WB97X", "WB97X-D",
-    "MP2", "CCSD", "CCSD(T)",
-})
+_FUNCTIONALS: frozenset[str] = frozenset(
+    {
+        "B3LYP",
+        "PBE",
+        "PBE0",
+        "R2SCAN",
+        "WB97X-D3",
+        "HF",
+        "DLPNO-CCSD(T)",
+        "DLPNO-CCSD(T1)",
+        "BLYP",
+        "BP86",
+        "TPSS",
+        "M06",
+        "M06-2X",
+        "CAM-B3LYP",
+        "LC-BLYP",
+        "WB97X",
+        "WB97X-D",
+        "MP2",
+        "CCSD",
+        "CCSD(T)",
+    }
+)
 
 # keyword line 中已知的 basis sets（用于 diagnostics 判断）
-_BASIS_SETS: frozenset[str] = frozenset({
-    "DEF2-SVP", "DEF2-TZVP", "DEF2-TZVPP", "DEF2-QZVPP",
-    "CC-PVDZ", "CC-PVTZ", "CC-PVQZ",
-    "AUG-CC-PVDZ", "AUG-CC-PVTZ", "AUG-CC-PVQZ",
-    "STO-3G", "3-21G", "6-31G", "6-31G*", "6-31G**",
-    "6-311G", "6-311G*", "6-311G**",
-    "MA-DEF2-SVP", "MA-DEF2-TZVP",
-    "DEF2-SVP/C", "DEF2-TZVP/C",
-})
+_BASIS_SETS: frozenset[str] = frozenset(
+    {
+        "DEF2-SVP",
+        "DEF2-TZVP",
+        "DEF2-TZVPP",
+        "DEF2-QZVPP",
+        "CC-PVDZ",
+        "CC-PVTZ",
+        "CC-PVQZ",
+        "AUG-CC-PVDZ",
+        "AUG-CC-PVTZ",
+        "AUG-CC-PVQZ",
+        "STO-3G",
+        "3-21G",
+        "6-31G",
+        "6-31G*",
+        "6-31G**",
+        "6-311G",
+        "6-311G*",
+        "6-311G**",
+        "MA-DEF2-SVP",
+        "MA-DEF2-TZVP",
+        "DEF2-SVP/C",
+        "DEF2-TZVP/C",
+    }
+)
 
 # keyword line 中已知的 SCF 收敛关键词
-_SCF_CONV_KEYWORDS: frozenset[str] = frozenset({
-    "LOOSESCF", "NORMALSCF", "TIGHTSCF", "VERYTIGHTSCF",
-})
+_SCF_CONV_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "LOOSESCF",
+        "NORMALSCF",
+        "TIGHTSCF",
+        "VERYTIGHTSCF",
+    }
+)
 
 # keyword line 中已知的近似关键词
-_APPROX_KEYWORDS: frozenset[str] = frozenset({
-    "RIJCOSX", "RI-JK", "RI", "NORI", "AUTOAUX",
-    "RIJONX", "NORIJCOSX",
-})
+_APPROX_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "RIJCOSX",
+        "RI-JK",
+        "RI",
+        "NORI",
+        "AUTOAUX",
+        "RIJONX",
+        "NORIJCOSX",
+    }
+)
 
 # keyword line 中已知的任务关键词
-_TASK_KEYWORDS: frozenset[str] = frozenset({
-    "OPT", "FREQ", "OPTFREQ", "NEB", "IRC",
-    "SP", "ENERGY", "ENGRAD", "NUMFREQ",
-    "MD", "NEB-TS", "GOAT",
-})
+_TASK_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "OPT",
+        "FREQ",
+        "OPTFREQ",
+        "NEB",
+        "IRC",
+        "SP",
+        "ENERGY",
+        "ENGRAD",
+        "NUMFREQ",
+        "MD",
+        "NEB-TS",
+        "GOAT",
+    }
+)
 
 # 所有在 keyword line 中合法的关键词（大写）
 _ALL_KW_LINE_KEYWORDS: frozenset[str] = (
@@ -101,6 +158,7 @@ _ALL_KW_LINE_KEYWORDS: frozenset[str] = (
 # ---------------------------------------------------------------------------
 # 解析器辅助
 # ---------------------------------------------------------------------------
+
 
 def _parse_value(raw: str) -> Any:
     """尝试将字符串转换为 Python 原生类型。"""
@@ -132,6 +190,7 @@ def _make_range(line: int, col_start: int, col_end: int) -> SourceRange:
 # ---------------------------------------------------------------------------
 # ORCA 后端
 # ---------------------------------------------------------------------------
+
 
 class ORCABackend(SoftwareBackend):
     """ORCA 输入文件后端。
@@ -167,17 +226,16 @@ class ORCABackend(SoftwareBackend):
         top_sections: list[ParsedSection] = []
 
         # 解析状态
-        in_block: ParsedSection | None = None       # 当前 % block（多行）
-        in_coord: ParsedSection | None = None       # 当前 * coord block
-        coord_ended = False
+        in_block: ParsedSection | None = None  # 当前 % block（多行）
+        in_coord: ParsedSection | None = None  # 当前 * coord block
 
         # 正则
-        _re_kw_line   = re.compile(r"^\s*!(.*)")
+        _re_kw_line = re.compile(r"^\s*!(.*)")
         _re_block_open = re.compile(r"^\s*%(\w+)\s*(.*)", re.IGNORECASE)
         _re_coord_open = re.compile(r"^\s*\*\s*(\w+)\s+(.*)", re.IGNORECASE)
         _re_coord_close = re.compile(r"^\s*\*\s*$")
-        _re_block_end  = re.compile(r"^\s*end\s*$", re.IGNORECASE)
-        _re_kv         = re.compile(r"^\s*(\w+)\s+(.*\S)\s*$")
+        _re_block_end = re.compile(r"^\s*end\s*$", re.IGNORECASE)
+        _re_kv = re.compile(r"^\s*(\w+)\s+(.*\S)\s*$")
 
         for lineno, raw_line in enumerate(lines, start=1):
             # 去掉行末注释（# 开头，但 ! 在 ORCA 中是关键字行标志，不是注释）
@@ -281,7 +339,7 @@ class ORCABackend(SoftwareBackend):
                 )
 
                 # 检查是否是简单赋值（%maxcore 4000）：rest 是单个值，无 end
-                rest_upper = rest.upper()
+                rest.upper()
                 rest_tokens = rest.split()
 
                 if not rest:
@@ -354,7 +412,9 @@ class ORCABackend(SoftwareBackend):
             # ----------------------------------------------------------------
             m_coord = _re_coord_open.match(stripped)
             if m_coord:
-                coord_type = m_coord.group(1).lower()   # "xyz", "int", "gzmt"
+                _coord_type = m_coord.group(  # noqa: F841
+                    1
+                ).lower()  # "xyz", "int", "gzmt"
                 rest = m_coord.group(2).strip()
                 # 解析 charge 和 mult
                 parts = rest.split()
@@ -457,12 +517,12 @@ class ORCABackend(SoftwareBackend):
             p[k.lower()] = v
 
         functional = str(p.get("functional", "B3LYP"))
-        basis      = str(p.get("basis", "def2-SVP"))
-        scf_conv   = str(p.get("scf_conv", "tightSCF"))
-        maxcore    = int(p.get("maxcore", 4000))
-        nprocs     = int(p.get("nprocs", 4))
-        charge     = intent.charge
-        mult       = intent.spin_multiplicity
+        basis = str(p.get("basis", "def2-SVP"))
+        scf_conv = str(p.get("scf_conv", "tightSCF"))
+        maxcore = int(p.get("maxcore", 4000))
+        nprocs = int(p.get("nprocs", 4))
+        charge = intent.charge
+        mult = intent.spin_multiplicity
 
         task = (intent.task_type or "scf").lower()
 
@@ -557,7 +617,9 @@ class ORCABackend(SoftwareBackend):
 
             atoms = read(path)
             result = []
-            for symbol, (x, y, z) in zip(atoms.get_chemical_symbols(), atoms.get_positions()):
+            for symbol, (x, y, z) in zip(
+                atoms.get_chemical_symbols(), atoms.get_positions()
+            ):
                 result.append(f"{symbol}   {x:.6f}   {y:.6f}   {z:.6f}")
             return result
         except Exception:  # noqa: BLE001
@@ -565,10 +627,7 @@ class ORCABackend(SoftwareBackend):
 
     def _builtin_h2o_coords(self) -> list[str]:
         """返回内建 H2O 结构的坐标行（单位 Å）。"""
-        return [
-            f"{sym}   {x:.6f}   {y:.6f}   {z:.6f}"
-            for sym, x, y, z in _H2O_COORDS
-        ]
+        return [f"{sym}   {x:.6f}   {y:.6f}   {z:.6f}" for sym, x, y, z in _H2O_COORDS]
 
     # ------------------------------------------------------------------
     # get_diagnostics
@@ -603,23 +662,27 @@ class ORCABackend(SoftwareBackend):
             try:
                 val = int(float(str(maxcore_param.value)))
                 if val < 100:
-                    diags.append(Diagnostic(
-                        severity="warning",
-                        message=f"%maxcore {val} 过小（< 100 MB），ORCA 可能无法正常运行",
-                        range=maxcore_param.range,
-                        param="maxcore",
-                        suggestion="建议 %maxcore >= 1000（MB）",
-                        rule_id="maxcore-too-small",
-                    ))
+                    diags.append(
+                        Diagnostic(
+                            severity="warning",
+                            message=f"%maxcore {val} 过小（< 100 MB），ORCA 可能无法正常运行",
+                            range=maxcore_param.range,
+                            param="maxcore",
+                            suggestion="建议 %maxcore >= 1000（MB）",
+                            rule_id="maxcore-too-small",
+                        )
+                    )
                 elif val > 64000:
-                    diags.append(Diagnostic(
-                        severity="warning",
-                        message=f"%maxcore {val} 超出典型限制（> 64000 MB）",
-                        range=maxcore_param.range,
-                        param="maxcore",
-                        suggestion="请确认节点内存充足",
-                        rule_id="maxcore-too-large",
-                    ))
+                    diags.append(
+                        Diagnostic(
+                            severity="warning",
+                            message=f"%maxcore {val} 超出典型限制（> 64000 MB）",
+                            range=maxcore_param.range,
+                            param="maxcore",
+                            suggestion="请确认节点内存充足",
+                            rule_id="maxcore-too-large",
+                        )
+                    )
             except (ValueError, TypeError):
                 pass
 
@@ -629,14 +692,16 @@ class ORCABackend(SoftwareBackend):
             try:
                 val = int(float(str(nprocs_param.value)))
                 if val < 1:
-                    diags.append(Diagnostic(
-                        severity="error",
-                        message=f"%pal nprocs {val} 无效（必须 >= 1）",
-                        range=nprocs_param.range,
-                        param="nprocs",
-                        suggestion="设置 nprocs >= 1",
-                        rule_id="nprocs-invalid",
-                    ))
+                    diags.append(
+                        Diagnostic(
+                            severity="error",
+                            message=f"%pal nprocs {val} 无效（必须 >= 1）",
+                            range=nprocs_param.range,
+                            param="nprocs",
+                            suggestion="设置 nprocs >= 1",
+                            rule_id="nprocs-invalid",
+                        )
+                    )
             except (ValueError, TypeError):
                 pass
 
@@ -644,51 +709,59 @@ class ORCABackend(SoftwareBackend):
         has_functional = bool(kw_tokens_upper & _FUNCTIONALS)
         if not has_functional:
             kw_sec = self._find_keyword_line_section(doc)
-            diags.append(Diagnostic(
-                severity="warning",
-                message="keyword line（! 行）中未指定泛函（functional）",
-                range=kw_sec.range if kw_sec else None,
-                param="functional",
-                suggestion="在 ! 行添加泛函，如 B3LYP、PBE0",
-                rule_id="missing-functional",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="warning",
+                    message="keyword line（! 行）中未指定泛函（functional）",
+                    range=kw_sec.range if kw_sec else None,
+                    param="functional",
+                    suggestion="在 ! 行添加泛函，如 B3LYP、PBE0",
+                    rule_id="missing-functional",
+                )
+            )
 
         # 4. keyword line 中无 basis set → warning
         has_basis = bool(kw_tokens_upper & _BASIS_SETS)
         if not has_basis:
             kw_sec = self._find_keyword_line_section(doc)
-            diags.append(Diagnostic(
-                severity="warning",
-                message="keyword line（! 行）中未指定基组（basis set）",
-                range=kw_sec.range if kw_sec else None,
-                param="basis",
-                suggestion="在 ! 行添加基组，如 def2-SVP、def2-TZVP",
-                rule_id="missing-basis",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="warning",
+                    message="keyword line（! 行）中未指定基组（basis set）",
+                    range=kw_sec.range if kw_sec else None,
+                    param="basis",
+                    suggestion="在 ! 行添加基组，如 def2-SVP、def2-TZVP",
+                    rule_id="missing-basis",
+                )
+            )
 
         # 5. 坐标块缺失 → error
         coord_sec = doc.get_section("coord_block")
         if coord_sec is None:
-            diags.append(Diagnostic(
-                severity="error",
-                message="缺少坐标块（* xyz charge mult ... *）",
-                suggestion="添加分子坐标块，例如：\n* xyz 0 1\nO 0.0 0.0 0.117\n...\n*",
-                rule_id="missing-coord-block",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="error",
+                    message="缺少坐标块（* xyz charge mult ... *）",
+                    suggestion="添加分子坐标块，例如：\n* xyz 0 1\nO 0.0 0.0 0.117\n...\n*",
+                    rule_id="missing-coord-block",
+                )
+            )
 
         # 6. DLPNO-CCSD(T) 无 tightSCF → info 建议
         has_dlpno = bool(kw_tokens_upper & {"DLPNO-CCSD(T)", "DLPNO-CCSD(T1)"})
         has_tight = bool(kw_tokens_upper & {"TIGHTSCF", "VERYTIGHTSCF"})
         if has_dlpno and not has_tight:
             kw_sec = self._find_keyword_line_section(doc)
-            diags.append(Diagnostic(
-                severity="info",
-                message="使用 DLPNO-CCSD(T) 时建议同时指定 tightSCF 以确保精度",
-                range=kw_sec.range if kw_sec else None,
-                param="tightSCF",
-                suggestion="在 ! 行添加 tightSCF",
-                rule_id="dlpno-needs-tightscf",
-            ))
+            diags.append(
+                Diagnostic(
+                    severity="info",
+                    message="使用 DLPNO-CCSD(T) 时建议同时指定 tightSCF 以确保精度",
+                    range=kw_sec.range if kw_sec else None,
+                    param="tightSCF",
+                    suggestion="在 ! 行添加 tightSCF",
+                    rule_id="dlpno-needs-tightscf",
+                )
+            )
 
         # 7. 追加解析阶段错误
         diags.extend(doc.parse_errors)
@@ -708,9 +781,7 @@ class ORCABackend(SoftwareBackend):
                         return param
         return None
 
-    def _find_keyword_line_section(
-        self, doc: DocumentModel
-    ) -> ParsedSection | None:
+    def _find_keyword_line_section(self, doc: DocumentModel) -> ParsedSection | None:
         """返回第一个 keyword_line section。"""
         for sec in doc.sections:
             if sec.name == "keyword_line":
@@ -742,53 +813,61 @@ class ORCABackend(SoftwareBackend):
             # 补全 keyword line 中可用的关键词
             for tag in all_tags:
                 if tag.section == "keyword_line":
-                    items.append(CompletionItem(
-                        label=tag.name,
-                        detail=tag.to_completion_detail(),
-                        documentation=tag.to_markdown(),
-                        insert_text=tag.name,
-                        category=tag.category,
-                        sort_priority=0,
-                    ))
+                    items.append(
+                        CompletionItem(
+                            label=tag.name,
+                            detail=tag.to_completion_detail(),
+                            documentation=tag.to_markdown(),
+                            insert_text=tag.name,
+                            category=tag.category,
+                            sort_priority=0,
+                        )
+                    )
         elif context.startswith("%"):
             # 在 % block 内，补全该 block 的参数
             block_name = context  # e.g. "%scf"
             for tag in all_tags:
                 if tag.section and tag.section.lower() == block_name.lower():
-                    items.append(CompletionItem(
-                        label=tag.name,
-                        detail=tag.to_completion_detail(),
-                        documentation=tag.to_markdown(),
-                        insert_text=(
-                            f"{tag.name} {tag.default}"
-                            if tag.default is not None
-                            else tag.name
-                        ),
-                        category=tag.category,
-                        sort_priority=0,
-                    ))
+                    items.append(
+                        CompletionItem(
+                            label=tag.name,
+                            detail=tag.to_completion_detail(),
+                            documentation=tag.to_markdown(),
+                            insert_text=(
+                                f"{tag.name} {tag.default}"
+                                if tag.default is not None
+                                else tag.name
+                            ),
+                            category=tag.category,
+                            sort_priority=0,
+                        )
+                    )
             # 若该 block 无专属参数，退回到全部
             if not items:
                 for tag in all_tags:
-                    items.append(CompletionItem(
+                    items.append(
+                        CompletionItem(
+                            label=tag.name,
+                            detail=tag.to_completion_detail(),
+                            documentation=tag.to_markdown(),
+                            insert_text=tag.name,
+                            category=tag.category,
+                            sort_priority=10,
+                        )
+                    )
+        else:
+            # 默认：返回所有 schema 参数
+            for tag in all_tags:
+                items.append(
+                    CompletionItem(
                         label=tag.name,
                         detail=tag.to_completion_detail(),
                         documentation=tag.to_markdown(),
                         insert_text=tag.name,
                         category=tag.category,
                         sort_priority=10,
-                    ))
-        else:
-            # 默认：返回所有 schema 参数
-            for tag in all_tags:
-                items.append(CompletionItem(
-                    label=tag.name,
-                    detail=tag.to_completion_detail(),
-                    documentation=tag.to_markdown(),
-                    insert_text=tag.name,
-                    category=tag.category,
-                    sort_priority=10,
-                ))
+                    )
+                )
 
         items.sort(key=lambda x: (x.sort_priority, x.label.lower()))
         return items

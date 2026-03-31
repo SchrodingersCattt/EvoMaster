@@ -25,8 +25,12 @@ from pathlib import Path
 # Allow importing format_profiles when script is run from any cwd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "_common"))
-from format_profiles import FORMAT_PROFILES, all_profiles_summary, get_profile
-from longtask_runtime import now_iso, write_json
+from format_profiles import (  # noqa: E402
+    FORMAT_PROFILES,
+    all_profiles_summary,
+    get_profile,
+)
+from longtask_runtime import now_iso, write_json  # noqa: E402
 
 
 def _build_outline(title: str, profile: dict) -> str:
@@ -87,14 +91,20 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description="Initialize a manuscript draft with outline from a format profile."
     )
-    ap.add_argument("--title", default=None, help="Paper or grant title (required unless --list_formats)")
+    ap.add_argument(
+        "--title",
+        default=None,
+        help="Paper or grant title (required unless --list_formats)",
+    )
     ap.add_argument(
         "--template",
         default="research_paper",
         choices=list(FORMAT_PROFILES),
         help=f"Format profile (choices: {', '.join(sorted(FORMAT_PROFILES))})",
     )
-    ap.add_argument("--output", default=None, help="Output path (default: draft_manuscript.md)")
+    ap.add_argument(
+        "--output", default=None, help="Output path (default: draft_manuscript.md)"
+    )
     ap.add_argument(
         "--sections_dir",
         default=None,
@@ -115,7 +125,9 @@ def main() -> None:
 
     # ── Title is required for actual initialization ────────────────────
     if not args.title:
-        print("Error: --title is required (unless using --list_formats).", file=sys.stderr)
+        print(
+            "Error: --title is required (unless using --list_formats).", file=sys.stderr
+        )
         sys.exit(1)
 
     profile = get_profile(args.template)
@@ -156,15 +168,18 @@ def main() -> None:
     # Persist profile to state.json so downstream write_section / assemble_manuscript
     # can auto-detect it without requiring --profile on every call.
     state_path = Path("_tmp/manuscript/state.json")
-    write_json(state_path, {
-        "task_type": "manuscript",
-        "created_at": now_iso(),
-        "updated_at": now_iso(),
-        "stage": "init_manuscript",
-        "profile": args.template,
-        "draft": str(out_path),
-        "attempts": 1,
-    })
+    write_json(
+        state_path,
+        {
+            "task_type": "manuscript",
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+            "stage": "init_manuscript",
+            "profile": args.template,
+            "draft": str(out_path),
+            "attempts": 1,
+        },
+    )
     print(f"Profile '{args.template}' persisted to {state_path}.")
 
 

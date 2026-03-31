@@ -1,4 +1,5 @@
 """Shared helpers for section parsing in manuscript-scribe scripts."""
+
 import re
 
 
@@ -7,7 +8,7 @@ def find_section(content: str, section: str, include_text: bool = True):
     pattern = rf"^##\s+{re.escape(section)}\s*$"
     for i, line in enumerate(content.splitlines()):
         if re.match(pattern, line.strip(), re.IGNORECASE):
-            start = sum(len(l) + 1 for l in content.splitlines()[:i])
+            start = sum(len(line) + 1 for line in content.splitlines()[:i])
             rest = content[start:]
             match = re.search(r"\n##\s+", rest)
             end = start + (match.start() if match else len(rest))

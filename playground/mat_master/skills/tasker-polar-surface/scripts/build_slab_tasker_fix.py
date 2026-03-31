@@ -316,7 +316,12 @@ def process_single(params: dict) -> dict:
     tile_min_y = params.get("tile_min_y")
     quiet = params.get("quiet", False)
 
-    result = {"input": input_path, "output": output_path, "success": False, "error": None}
+    result = {
+        "input": input_path,
+        "output": output_path,
+        "success": False,
+        "error": None,
+    }
 
     try:
         bulk = read(input_path)
@@ -378,20 +383,30 @@ def _auto_output_path(input_path: str, output_dir: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description="生成满足 Tasker 条件的非极性 slab")
 
-    parser.add_argument("-i", "--input", nargs="+", default=["POSCAR"], help="输入结构文件（支持多个）")
+    parser.add_argument(
+        "-i", "--input", nargs="+", default=["POSCAR"], help="输入结构文件（支持多个）"
+    )
     parser.add_argument(
         "-m", "--miller", nargs=3, type=int, default=None, help="Miller 指数 (h k l)"
     )
     parser.add_argument("-o", "--output", default=None, help="输出文件名（单文件模式）")
-    parser.add_argument("--output-dir", default=None, help="批量模式输出目录（自动命名为 {stem}_slab{ext}）")
+    parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="批量模式输出目录（自动命名为 {stem}_slab{ext}）",
+    )
 
-    parser.add_argument("--batch", default=None, help="批量配置 JSON 文件（每条可有独立参数）")
+    parser.add_argument(
+        "--batch", default=None, help="批量配置 JSON 文件（每条可有独立参数）"
+    )
 
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument("-L", "--repeat-layers", type=int, help="重复层数")
     mode_group.add_argument("-T", "--thickness", type=float, help="目标厚度（Å）")
 
-    parser.add_argument("-v", "--vacuum", type=float, default=15.0, help="真空层厚度（Å）")
+    parser.add_argument(
+        "-v", "--vacuum", type=float, default=15.0, help="真空层厚度（Å）"
+    )
     parser.add_argument(
         "--charge", default=None, help="电荷映射（格式：'Cu:1.0,O:-2.0' 或 JSON）"
     )
@@ -400,8 +415,12 @@ def main():
     )
 
     tile_group = parser.add_mutually_exclusive_group()
-    tile_group.add_argument("--tile-min-x", type=float, default=None, help="x方向最小尺寸（Å）")
-    tile_group.add_argument("--tile-min-y", type=float, default=None, help="y方向最小尺寸（Å）")
+    tile_group.add_argument(
+        "--tile-min-x", type=float, default=None, help="x方向最小尺寸（Å）"
+    )
+    tile_group.add_argument(
+        "--tile-min-y", type=float, default=None, help="y方向最小尺寸（Å）"
+    )
     tile_group.add_argument(
         "--tile-repeat",
         nargs=3,
@@ -417,7 +436,7 @@ def main():
 
     # --batch mode: read JSON config, each entry has independent params
     if args.batch is not None:
-        with open(args.batch, "r", encoding="utf-8") as f:
+        with open(args.batch, encoding="utf-8") as f:
             batch_configs = json.load(f)
 
         results = []
@@ -431,20 +450,34 @@ def main():
                 "vacuum": entry.get("vacuum", args.vacuum),
                 "charge": entry.get("charge", args.charge),
                 "layer_tol": entry.get("layer_tol", args.layer_tol),
-                "tile_repeat": entry.get("tile_repeat", list(args.tile_repeat) if args.tile_repeat else None),
+                "tile_repeat": entry.get(
+                    "tile_repeat", list(args.tile_repeat) if args.tile_repeat else None
+                ),
                 "tile_min_x": entry.get("tile_min_x", args.tile_min_x),
                 "tile_min_y": entry.get("tile_min_y", args.tile_min_y),
                 "quiet": entry.get("quiet", args.quiet),
             }
             if params["miller"] is None:
                 print(f"[ERROR] {entry['input']}: 缺少 miller 参数")
-                results.append({"input": entry["input"], "output": params["output"],
-                                "success": False, "error": "缺少 miller 参数"})
+                results.append(
+                    {
+                        "input": entry["input"],
+                        "output": params["output"],
+                        "success": False,
+                        "error": "缺少 miller 参数",
+                    }
+                )
                 continue
             if params["repeat_layers"] is None and params["thickness"] is None:
                 print(f"[ERROR] {entry['input']}: 必须指定 repeat_layers 或 thickness")
-                results.append({"input": entry["input"], "output": params["output"],
-                                "success": False, "error": "必须指定 repeat_layers 或 thickness"})
+                results.append(
+                    {
+                        "input": entry["input"],
+                        "output": params["output"],
+                        "success": False,
+                        "error": "必须指定 repeat_layers 或 thickness",
+                    }
+                )
                 continue
             results.append(process_single(params))
 

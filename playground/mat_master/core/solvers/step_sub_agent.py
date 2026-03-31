@@ -76,9 +76,7 @@ class SubAgentHandle:
         #    tries to reset.  We bootstrap it here from _get_system_prompt().
         if getattr(self._agent, '_initial_system_prompt', None) is None:
             self._agent._initial_system_prompt = self._agent._get_system_prompt()
-            logger.info(
-                '[SubAgent] Bootstrapped _initial_system_prompt (was None)'
-            )
+            logger.info('[SubAgent] Bootstrapped _initial_system_prompt (was None)')
 
         # 2. Reset the agent's dialog to initial system prompt only.
         self._agent.reset_context()
@@ -92,7 +90,8 @@ class SubAgentHandle:
                 dialog.tools = [
                     spec
                     for spec in dialog.tools
-                    if getattr(getattr(spec, 'function', None), 'name', '') not in self._excluded_tools
+                    if getattr(getattr(spec, 'function', None), 'name', '')
+                    not in self._excluded_tools
                 ]
                 removed = original_count - len(dialog.tools)
                 if removed:
@@ -184,7 +183,8 @@ class StepSubAgentFactory:
         self._step_turn_budget = step_turn_budget
         self._original_max_turns = original_max_turns
         self._excluded_tools: frozenset[str] = (
-            frozenset(excluded_tools) if excluded_tools is not None
+            frozenset(excluded_tools)
+            if excluded_tools is not None
             else _DEFAULT_EXCLUDED_TOOLS
         )
         logger.info(

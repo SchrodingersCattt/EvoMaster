@@ -11,6 +11,7 @@ from src.utils.chat_event_source import normalize_event_source
 
 from ..core.agent import MatMasterAgent
 
+
 class StreamingMatMasterAgent(MatMasterAgent):
     """
     MatMasterAgent that reports state in real time via event_callback.

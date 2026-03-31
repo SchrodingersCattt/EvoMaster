@@ -1,4 +1,5 @@
 """Tests for LLM config: profile methods, route schema, and resolve_route."""
+
 from __future__ import annotations
 
 import pytest
@@ -171,11 +172,13 @@ class TestResolveProfile:
 
     @pytest.fixture()
     def llm_config(self) -> LLMConfig:
-        return LLMConfig.model_validate({
-            "opus": {"model": "claude-opus-4-6", "temperature": 0.7},
-            "sonnet": {"model": "claude-sonnet-4-6", "temperature": 0.5},
-            "default": "opus",
-        })
+        return LLMConfig.model_validate(
+            {
+                "opus": {"model": "claude-opus-4-6", "temperature": 0.7},
+                "sonnet": {"model": "claude-sonnet-4-6", "temperature": 0.5},
+                "default": "opus",
+            }
+        )
 
     def test_no_override_uses_default(self, llm_config: LLMConfig) -> None:
         key, profile = llm_config.resolve_profile()
@@ -227,17 +230,19 @@ class TestLLMConfigWithRoutes:
 
     @pytest.fixture()
     def cfg(self) -> LLMConfig:
-        return LLMConfig.model_validate({
-            "profiles": {
-                "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                "sonnet": {"provider": "openai", "model": "claude-sonnet-4-6"},
-            },
-            "routes": {
-                "claude-opus-4-6": {"profile": "opus"},
-                "claude-sonnet-4-6": {"profile": "sonnet"},
-            },
-            "default": "opus",
-        })
+        return LLMConfig.model_validate(
+            {
+                "profiles": {
+                    "opus": {"provider": "openai", "model": "claude-opus-4-6"},
+                    "sonnet": {"provider": "openai", "model": "claude-sonnet-4-6"},
+                },
+                "routes": {
+                    "claude-opus-4-6": {"profile": "opus"},
+                    "claude-sonnet-4-6": {"profile": "sonnet"},
+                },
+                "default": "opus",
+            }
+        )
 
     def test_routes_parsed(self, cfg: LLMConfig) -> None:
         assert len(cfg.routes) == 2
@@ -281,12 +286,16 @@ class TestLLMConfigWithRoutes:
         assert r.profile_key == "sonnet"
         assert r.model == "claude-sonnet-4-6"
 
-    def test_resolve_route_model_override_takes_precedence(self, cfg: LLMConfig) -> None:
+    def test_resolve_route_model_override_takes_precedence(
+        self, cfg: LLMConfig
+    ) -> None:
         r = cfg.resolve_route(model_override="claude-sonnet-4-6", llm_override="opus")
         assert r.route_key == "claude-sonnet-4-6"
         assert r.profile_key == "sonnet"
 
-    def test_resolve_route_route_without_model_uses_profile_model(self, cfg: LLMConfig) -> None:
+    def test_resolve_route_route_without_model_uses_profile_model(
+        self, cfg: LLMConfig
+    ) -> None:
         r = cfg.resolve_route(model_override="claude-opus-4-6")
         assert r.model == "claude-opus-4-6"
 
@@ -295,17 +304,19 @@ class TestSonnetRouteRegression:
     """Regression: claude-sonnet-4-6 must resolve without error."""
 
     def test_sonnet_route_resolves(self) -> None:
-        cfg = LLMConfig.model_validate({
-            "profiles": {
-                "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                "sonnet": {"provider": "openai", "model": "claude-sonnet-4-6"},
-            },
-            "routes": {
-                "claude-opus-4-6": {"profile": "opus"},
-                "claude-sonnet-4-6": {"profile": "sonnet"},
-            },
-            "default": "opus",
-        })
+        cfg = LLMConfig.model_validate(
+            {
+                "profiles": {
+                    "opus": {"provider": "openai", "model": "claude-opus-4-6"},
+                    "sonnet": {"provider": "openai", "model": "claude-sonnet-4-6"},
+                },
+                "routes": {
+                    "claude-opus-4-6": {"profile": "opus"},
+                    "claude-sonnet-4-6": {"profile": "sonnet"},
+                },
+                "default": "opus",
+            }
+        )
         r = cfg.resolve_route(model_override="claude-sonnet-4-6")
         assert r == ResolvedLLMRoute(
             route_key="claude-sonnet-4-6",
@@ -320,44 +331,54 @@ class TestLLMConfigValidation:
 
     def test_route_references_nonexistent_profile(self) -> None:
         with pytest.raises(ValueError, match="route.*references profile.*ghost"):
-            LLMConfig.model_validate({
-                "profiles": {"opus": {"model": "m1"}},
-                "routes": {"r1": {"profile": "ghost"}},
-                "default": "opus",
-            })
+            LLMConfig.model_validate(
+                {
+                    "profiles": {"opus": {"model": "m1"}},
+                    "routes": {"r1": {"profile": "ghost"}},
+                    "default": "opus",
+                }
+            )
 
     def test_default_references_nonexistent_profile(self) -> None:
         with pytest.raises(ValueError, match="default profile.*missing"):
-            LLMConfig.model_validate({
-                "profiles": {"opus": {"model": "m1"}},
-                "default": "missing",
-            })
+            LLMConfig.model_validate(
+                {
+                    "profiles": {"opus": {"model": "m1"}},
+                    "default": "missing",
+                }
+            )
 
 
 class TestLLMConfigLegacyCompat:
     """Legacy flat format still works with new route features."""
 
     def test_legacy_flat_format(self) -> None:
-        cfg = LLMConfig.model_validate({
-            "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-            "default": "opus",
-        })
+        cfg = LLMConfig.model_validate(
+            {
+                "opus": {"provider": "openai", "model": "claude-opus-4-6"},
+                "default": "opus",
+            }
+        )
         assert "opus" in cfg.profiles
         assert cfg.routes == {}
 
     def test_legacy_resolve_route_default(self) -> None:
-        cfg = LLMConfig.model_validate({
-            "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-            "default": "opus",
-        })
+        cfg = LLMConfig.model_validate(
+            {
+                "opus": {"provider": "openai", "model": "claude-opus-4-6"},
+                "default": "opus",
+            }
+        )
         r = cfg.resolve_route()
         assert r.profile_key == "opus"
         assert r.model == "claude-opus-4-6"
 
     def test_legacy_resolve_route_model_override_raises(self) -> None:
-        cfg = LLMConfig.model_validate({
-            "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-            "default": "opus",
-        })
+        cfg = LLMConfig.model_validate(
+            {
+                "opus": {"provider": "openai", "model": "claude-opus-4-6"},
+                "default": "opus",
+            }
+        )
         with pytest.raises(KeyError, match="Unknown LLM route key"):
             cfg.resolve_route(model_override="claude-opus-4-6")

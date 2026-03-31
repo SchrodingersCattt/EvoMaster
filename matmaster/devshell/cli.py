@@ -10,10 +10,13 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from dotenv import load_dotenv
+
+if TYPE_CHECKING:
+    pass
 
 
 def _project_root() -> Path:
@@ -65,15 +68,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         type=Path,
         default=None,
-        help="Optional devshell YAML (agent/session/tools only; LLM 来自 matmaster_config/llm_config.yaml)",
+        help="Optional devshell YAML (agent/session/tools only; LLM comes from matmaster_config/llm_config.yaml)",
     )
     common.add_argument(
         "--model",
         type=str,
         default=None,
         help=(
-            "LLM route key，与 matmaster_config/llm_config.yaml 中 routes 一致 "
-            "(例: claude-sonnet-4-6)；省略则使用 config.yaml 里 agents.general.llm 或 llm_config 的 default"
+            "LLM route key, matching routes in matmaster_config/llm_config.yaml "
+            "(e.g. claude-sonnet-4-6); omit to use config.yaml agents.general.llm or llm_config default"
         ),
     )
     common.add_argument(
@@ -91,7 +94,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="mm-devshell",
-        description="MatMaster DevShell — matmaster agent (REPL or single run).",
+        description="MatMaster DevShell -- matmaster agent (REPL or single run).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
@@ -181,6 +184,15 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
+    # Load .env files (same as main app in src/utils/constant.py)
+    import os
+
+    from dotenv import find_dotenv, load_dotenv
+
+    load_dotenv()
+    current_env = os.getenv("SERVICE_ENV", "test")
+    load_dotenv(find_dotenv(f".env.{current_env}"))
+
     from matmaster.devshell.config import DevConfig, load_dev_config
 
     if args.config:
@@ -206,7 +218,15 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     from matmaster.devshell.runner import DevRunner
     from matmaster.devshell.stream_hook import DevStreamHook
 
-    stream_hook = DevStreamHook(verbose=args.verbose)
+    # Suppress stream output in headless+json mode
+    if (
+        getattr(args, "prompt", None) is not None
+        or getattr(args, "prompt_file", None) is not None
+    ):
+        stream_hook = DevStreamHook(verbose=args.verbose)
+    else:
+        stream_hook = DevStreamHook(verbose=args.verbose)
+
     runner = DevRunner(
         config=config,
         workdir=args.workdir,

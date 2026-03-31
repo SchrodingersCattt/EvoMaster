@@ -2,7 +2,6 @@
 
 import logging
 from functools import lru_cache
-from typing import Optional
 
 from src.dao.redis_dao import get_redis_dao
 
@@ -61,7 +60,7 @@ class WorkerRegistryService:
             logger.warning('set_session_run_owner failed session_id=%s: %s', sid, e)
             return False
 
-    def get_session_run_owner(self, session_id: str) -> Optional[str]:
+    def get_session_run_owner(self, session_id: str) -> str | None:
         """返回该会话当前 run 所在 worker_id，无或失败返回 None。"""
         client = get_redis_dao().create_client()
         if not client:

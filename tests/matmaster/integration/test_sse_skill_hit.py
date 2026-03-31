@@ -14,7 +14,6 @@ class TestSSEHandlerSkillHit:
 
         handler = SSEHandler(
             send_cb=lambda x: None,
-            loop=None,
             session_id="s-1",
             task_id="t-1",
             invocation_id=None,

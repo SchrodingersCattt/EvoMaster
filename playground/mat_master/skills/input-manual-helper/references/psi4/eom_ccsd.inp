@@ -6,11 +6,11 @@ H      0.00000000    0.75545000   -0.47116000
 H      0.00000000   -0.75545000   -0.47116000
 symmetry c1
 }
- 
+
 set {
   basis cc-pVTZ
   freeze_core true
   ROOTS_PER_IRREP [3]
 }
- 
+
 energy('eom-ccsd')

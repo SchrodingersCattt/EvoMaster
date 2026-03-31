@@ -44,7 +44,7 @@ def check_concept_coverage_from_contract(
     cards = data.get('evidence_cards') or []
     if not isinstance(cards, list):
         return True, 'no evidence cards'
-    text_pool = ' '.join(
+    _text_pool = ' '.join(  # noqa: F841
         (c.get('claim') or '') + ' ' + (c.get('source_title') or '')
         for c in cards
         if isinstance(c, dict)

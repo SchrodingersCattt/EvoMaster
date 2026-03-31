@@ -35,11 +35,8 @@ def test_chat_history_avoids_duplicate_tool_calls_when_assistant_state_exists():
                 'tool_calls': [
                     {
                         'id': 'call_1',
-                        'type': 'function',
-                        'function': {
-                            'name': 'execute_bash',
-                            'arguments': '{"command":"pwd"}',
-                        },
+                        'name': 'execute_bash',
+                        'arguments': {'command': 'pwd'},
                     }
                 ],
             },
@@ -69,6 +66,106 @@ def test_chat_history_avoids_duplicate_tool_calls_when_assistant_state_exists():
     assert len(msgs) == 2
     assert msgs[0]['tool_calls'][0]['id'] == 'call_1'
     assert msgs[1]['tool_call_id'] == 'call_1'
+
+
+def test_chat_history_handles_matmaster_flat_tool_calls_in_assistant_state():
+    """assistant_state with matmaster flat ToolCallData format is accepted."""
+    events = [
+        {'source': 'MatMaster', 'type': 'thought', 'content': 'reasoning'},
+        {
+            'source': 'MatMaster',
+            'type': 'assistant_state',
+            'content': {
+                'role': 'assistant',
+                'content': '',
+                'reasoning_content': 'reasoning',
+                'tool_calls': [
+                    {
+                        'id': 'call_1',
+                        'name': 'execute_bash',
+                        'arguments': {'command': 'pwd'},
+                    }
+                ],
+            },
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'tool_call',
+            'content': {
+                'id': 'call_1',
+                'name': 'execute_bash',
+                'args': {'command': 'pwd'},
+            },
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'tool_result',
+            'content': {
+                'id': 'call_1',
+                'name': 'execute_bash',
+                'result': {'message': 'ok'},
+            },
+        },
+    ]
+
+    msgs = ChatHistoryConverter.events_to_dialog_messages(events)
+
+    assert len(msgs) == 2
+    assert msgs[0]['role'] == 'assistant'
+    assert msgs[0]['tool_calls'][0]['id'] == 'call_1'
+    assert msgs[0]['tool_calls'][0]['function']['name'] == 'execute_bash'
+    assert msgs[1]['role'] == 'tool'
+    assert msgs[1]['tool_call_id'] == 'call_1'
+
+
+def test_events_to_messages_with_matmaster_flat_tool_calls():
+    """events_to_messages() produces correct matmaster Message objects from flat tool_calls."""
+    events = [
+        {'source': 'MatMaster', 'type': 'thought', 'content': 'reasoning'},
+        {
+            'source': 'MatMaster',
+            'type': 'assistant_state',
+            'content': {
+                'role': 'assistant',
+                'content': '',
+                'tool_calls': [
+                    {
+                        'id': 'call_1',
+                        'name': 'execute_bash',
+                        'arguments': {'command': 'pwd'},
+                    }
+                ],
+            },
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'tool_call',
+            'content': {
+                'id': 'call_1',
+                'name': 'execute_bash',
+                'args': {'command': 'pwd'},
+            },
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'tool_result',
+            'content': {
+                'id': 'call_1',
+                'name': 'execute_bash',
+                'result': '/home/user',
+            },
+        },
+    ]
+
+    msgs = ChatHistoryConverter.events_to_messages(events)
+
+    assert len(msgs) == 2
+    assistant_msg = msgs[0]
+    assert assistant_msg.tool_calls is not None
+    assert assistant_msg.tool_calls[0].id == 'call_1'
+    assert assistant_msg.tool_calls[0].name == 'execute_bash'
+    assert assistant_msg.tool_calls[0].arguments == {'command': 'pwd'}
+    assert msgs[1].tool_call_id == 'call_1'
 
 
 def test_streaming_agent_emits_private_assistant_state_event():

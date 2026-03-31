@@ -16,6 +16,7 @@ kernel raises.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import threading
 import uuid
@@ -30,12 +31,7 @@ from matmaster.core.hooks import EventEmitterHook
 from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.runtime import (
-    AgentRuntime,
-    AgentRuntimeSpec,
-    CompactionConfig,
-    KernelResult,
-)
+from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
 
 if TYPE_CHECKING:
     from matmaster.types.messages import Message
@@ -54,7 +50,8 @@ class Exp:
 
     def __init__(self, config: ExpConfig) -> None:
         self._config = config
-        self._cleanup_callbacks: list[Callable[[], None]] = []
+        self._cleanup_callbacks: list[Callable[[], Any]] = []
+        self._skill_registry: Any = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
     # ── Properties ───────────────────────────────────────
@@ -66,19 +63,26 @@ class Exp:
 
     # ── Cleanup infrastructure ───────────────────────────
 
-    def _register_cleanup(self, callback: Callable[[], None]) -> None:
+    def _register_cleanup(self, callback: Callable[[], Any]) -> None:
         """Register a cleanup callback to run after kernel execution."""
         self._cleanup_callbacks.append(callback)
 
-    def _run_cleanup_callbacks(self) -> None:
+    async def _run_cleanup_callbacks(self) -> None:
         """Execute all registered cleanup callbacks then clear the list.
 
         Each callback runs independently; exceptions are logged but do not
-        prevent subsequent callbacks from executing.
+        prevent subsequent callbacks from executing.  Supports both sync and
+        async callbacks: uses ``iscoroutinefunction`` first, falls back to
+        ``isawaitable`` on the result for wrapped/partial callables.
         """
         for cb in self._cleanup_callbacks:
             try:
-                cb()
+                if inspect.iscoroutinefunction(cb):
+                    await cb()
+                else:
+                    result = cb()
+                    if inspect.isawaitable(result):
+                        await result
             except Exception:
                 self.logger.warning(
                     'Cleanup callback %s raised, continuing with remaining callbacks',
@@ -94,14 +98,15 @@ class Exp:
         ctx: PlaygroundContext,
         bus: MessageBus | None,
         source_prefix: str,
-    ) -> Callable[[str, str, threading.Event | None], str]:
-        """Create spawn_fn closure capturing parent runtime context.
+    ) -> Any:
+        """Create async spawn_fn closure capturing parent runtime context.
 
-        The returned callable creates a child Exp from exp_name, runs it with
-        the parent's PlaygroundContext and MessageBus, and returns the result.
+        The returned async callable creates a child Exp from exp_name,
+        runs it via child_exp.run() with the parent's PlaygroundContext
+        and MessageBus, and returns the result.
         """
 
-        def spawn_fn(
+        async def spawn_fn(
             exp_name: str,
             task: str,
             stop_event: threading.Event | None = None,
@@ -112,51 +117,47 @@ class Exp:
             child_exp = Exp(child_config)
             child_source = f'{source_prefix}:{exp_name}'
             child_spawn_id = uuid.uuid4().hex[:16]
-            child_runtime = child_exp.build_runtime(
+            result = await child_exp.run(
                 ctx,
+                task,
                 bus=bus,
+                stop_event=stop_event,
                 source_override=child_source,
                 spawn_id=child_spawn_id,
             )
-            try:
-                run_result = child_runtime.kernel.run(
-                    child_runtime.spec, task, stop_event=stop_event
-                )
-                result = run_result.result
-                if result.status == 'completed' and result.final_content:
-                    return result.final_content
-                return f'SubAgent finished with status={result.status}, reason={result.reason}'
-            finally:
-                child_runtime.cleanup()
+            if result.status == "completed" and result.final_content:
+                return result.final_content
+            return (
+                f"SubAgent finished with status={result.status}, reason={result.reason}"
+            )
 
         return spawn_fn
 
     # ── Phase 1: assemble ────────────────────────────────
 
-    def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
+    async def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
         """Data transform: config + ctx -> AgentRuntimeSpec."""
         return AgentRuntimeSpec(
             llm_provider=ctx.llm_provider,
             max_turns=self._config.max_turns,
             guards=[],  # Guard instantiation deferred to build_runtime
-            compaction=CompactionConfig(),
+            compaction=self._config.compaction,
             meta={},
         )
 
     # ── Phase 2: build_runtime ───────────────────────────
 
-    def build_runtime(
+    async def build_runtime(
         self,
         ctx: PlaygroundContext,
         *,
         bus: MessageBus | None = None,
         skills: dict[str, Any] | None = None,
-        mcp: dict[str, Any] | None = None,
         source_override: str | None = None,
         spawn_id: str | None = None,
     ) -> AgentRuntime:
         """Resource creation: assemble -> tools -> prompt -> kernel."""
-        spec = self.assemble(ctx)
+        spec = await self.assemble(ctx)
 
         # 1. Register ALL tools before building system prompt
         registry = ToolRegistry()
@@ -164,12 +165,9 @@ class Exp:
         if builtin_cfg and ctx.session is not None:
             self._init_builtin_tools(ctx, registry, builtin_cfg)
 
-        # 2. Skills/MCP: runtime-injected (must be before system prompt)
+        # 2. Skills: runtime-injected (must be before system prompt)
         if skills or self._config.skills.enabled:
             self._init_skill_tools(ctx, registry, skills_config=skills)
-        if mcp:
-            self._init_mcp_tools(ctx, registry, mcp)
-
         # 3. System prompt via ContextBuilder
         builder = ContextBuilder()
         system_prompt = builder.build(
@@ -177,7 +175,7 @@ class Exp:
             registry,
             system_prompt=self._config.system_prompt,
             identity=self._config.developer_instructions,
-            skill_registry=getattr(self, '_skill_registry', None),
+            skill_registry=self._skill_registry,
         )
 
         # 4. Hooks
@@ -188,8 +186,7 @@ class Exp:
             hooks.append(emitter_hook)
 
         # 4b. SpawnTool: register with spawn_fn if "spawn" in config
-        builtin_cfg = self._config.tools.builtin
-        if ('spawn' in builtin_cfg or builtin_cfg == ['*']) and ctx.session is not None:
+        if ("spawn" in builtin_cfg or builtin_cfg == ["*"]) and ctx.session is not None:
             from matmaster.config.loader import list_available_exps
             from matmaster.tools.builtin.spawn_tool import SpawnTool
 
@@ -269,7 +266,7 @@ class Exp:
 
     # ── Phase 3: run ─────────────────────────────────────
 
-    def run(
+    async def run(
         self,
         ctx: PlaygroundContext,
         task: str,
@@ -278,25 +275,36 @@ class Exp:
         history: list[Message] | None = None,
         stop_event: threading.Event | None = None,
         skills: dict[str, Any] | None = None,
-        mcp: dict[str, Any] | None = None,
+        source_override: str | None = None,
+        spawn_id: str | None = None,
     ) -> KernelResult:
-        """build_runtime -> kernel.run -> cleanup."""
-        runtime = self.build_runtime(ctx, bus=bus, skills=skills, mcp=mcp)
-        if ctx.session is not None:
-            ctx.session._stop_event = stop_event
+        """build_runtime -> kernel.run -> cleanup.
 
-        # Inject stop_event into tools for cancel propagation.
-        tool_registry = getattr(runtime.spec, 'tool_registry', None)
-        if stop_event is not None and tool_registry is not None:
-            for tool in tool_registry.all_tools:
-                tool._stop_event = stop_event
+        try/finally starts before build_runtime so that partial build
+        failures (callbacks already registered) still trigger cleanup.
+        """
         try:
-            result = runtime.kernel.run(
+            runtime = await self.build_runtime(
+                ctx,
+                bus=bus,
+                skills=skills,
+                source_override=source_override,
+                spawn_id=spawn_id,
+            )
+            if ctx.session is not None:
+                ctx.session._stop_event = stop_event
+
+            # Inject stop_event into tools for cancel propagation.
+            tool_registry = getattr(runtime.spec, "tool_registry", None)
+            if stop_event is not None and tool_registry is not None:
+                for tool in tool_registry.all_tools:
+                    tool._stop_event = stop_event
+            result = await runtime.kernel.run(
                 runtime.spec, task, history=history, stop_event=stop_event
             )
             return result.result
         finally:
-            runtime.cleanup()
+            await self._run_cleanup_callbacks()
 
     # ── Capability initialization helpers ────────────────
 
@@ -312,10 +320,10 @@ class Exp:
         (original behaviour).  Otherwise only tools whose ``name`` appears
         in the list are registered, cutting prompt-token overhead.
 
-        Native tools (12): BashTool, ListDirTool, ReadTool, WriteTool, EditTool,
-        GlobTool, GrepTool, TaskCreate/Get/List/Update/Complete.
-        Evo adapters (2): MonitorJobTool and web-search (retained from legacy
-        MatMaster playground for literature/web retrieval continuity).
+        Native tools (14): BashTool, ListDirTool, ReadTool, WriteTool, EditTool,
+        GlobTool, GrepTool, TaskCreate/Get/List/Update/Complete,
+        WebSearchTool, WebFetchTool.
+        Evo adapter (1): MonitorJobTool (science-specific, retained).
         """
         if ctx.session is None:
             self.logger.warning(
@@ -343,6 +351,8 @@ class Exp:
             TaskGetTool,
             TaskListTool,
             TaskUpdateTool,
+            WebFetchTool,
+            WebSearchTool,
             WriteTool,
         )
 
@@ -365,6 +375,9 @@ class Exp:
             TaskListTool(workdir=ctx.workdir),
             TaskUpdateTool(workdir=ctx.workdir),
             TaskCompleteTool(workdir=ctx.workdir),
+            # Web tools: control-plane HTTP, no session dependency
+            WebSearchTool(),
+            WebFetchTool(workdir=ctx.workdir),
         ]
         registered_native: list[Any] = []
         for tool in native_tools:
@@ -506,11 +519,3 @@ class Exp:
         registry.register(skill_tool, source='skill')
 
         self._skill_registry = skill_registry
-
-    def _init_mcp_tools(
-        self,
-        ctx: PlaygroundContext,
-        registry: ToolRegistry,
-        config: dict[str, Any] | None = None,
-    ) -> None:
-        """Initialize MCP tools (stub -- factory mechanism refined later)."""

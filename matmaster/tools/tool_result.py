@@ -14,6 +14,14 @@ class ToolResult(BaseModel):
     content: str = ""
     info: dict[str, Any] = Field(default_factory=dict)
 
+    @classmethod
+    def from_error(cls, tool_name: str, error: BaseException) -> ToolResult:
+        """Create an error result from a failed tool execution."""
+        return cls(
+            status="error",
+            content=f"Error executing tool '{tool_name}': {type(error).__name__}: {error}",
+        )
+
 
 def normalize_tool_result(raw: str | ToolResult | None) -> ToolResult:
     """Convert legacy tool return values into ToolResult."""
