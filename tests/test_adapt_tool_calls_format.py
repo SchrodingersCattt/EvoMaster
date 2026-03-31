@@ -83,9 +83,7 @@ class TestAdaptToolCallsFormat:
         raw = {
             'role': 'assistant',
             'content': '',
-            'tool_calls': [
-                {'id': 'call_1', 'name': 'bash', 'arguments': None}
-            ],
+            'tool_calls': [{'id': 'call_1', 'name': 'bash', 'arguments': None}],
         }
         result = _adapt_tool_calls_format(raw)
         assert result['tool_calls'][0]['function']['arguments'] == '{}'
@@ -137,9 +135,7 @@ class TestAdaptToolCallsFormat:
             'role': 'assistant',
             'content': 'text',
             'reasoning_content': 'think',
-            'tool_calls': [
-                {'id': 'c1', 'name': 'x', 'arguments': {}}
-            ],
+            'tool_calls': [{'id': 'c1', 'name': 'x', 'arguments': {}}],
         }
         result = _adapt_tool_calls_format(raw)
         assert result['role'] == 'assistant'
