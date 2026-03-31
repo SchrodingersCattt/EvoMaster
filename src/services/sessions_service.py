@@ -1,7 +1,6 @@
 import logging
 import threading
 from functools import lru_cache
-from typing import Optional
 
 from src.dao.chat_sessions_table import ChatSessionsTable, get_chat_sessions_table
 from src.dao.redis_dao import get_redis_dao
@@ -19,7 +18,7 @@ class RedisStopSubscriber:
     """Redis 停止订阅：在独立线程中监听 channel。run 仅在 Worker 上，停止由 Worker 轮询 Redis stop key 处理，API 收到消息无需动作，仅保留订阅以维持连接。"""
 
     def __init__(self) -> None:
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._started = False
         self._lock = threading.Lock()
 
@@ -217,7 +216,7 @@ class ChatSessionsService:
             out['last_task_id'] = last_task_id
         return out
 
-    def get_session(self, session_id: str) -> Optional[dict]:
+    def get_session(self, session_id: str) -> dict | None:
         """获取会话完整信息（含 org_id、project_id，用于 run_creds）。"""
         return self.table.get_session(session_id)
 
@@ -232,8 +231,8 @@ class ChatSessionsService:
     def set_session_bohrium(
         self,
         session_id: str,
-        org_id: Optional[str] = None,
-        project_id: Optional[int] = None,
+        org_id: str | None = None,
+        project_id: int | None = None,
     ) -> bool:
         """更新会话的 org_id、project_id，以库为准。"""
         return self.table.set_session_bohrium(

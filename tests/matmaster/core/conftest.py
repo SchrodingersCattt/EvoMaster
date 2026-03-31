@@ -5,7 +5,8 @@ Provides mock objects and builders for kernel test suites.
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 

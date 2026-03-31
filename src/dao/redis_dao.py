@@ -5,7 +5,7 @@
 import json
 import logging
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Any
 
 import redis
 
@@ -57,9 +57,9 @@ class RedisDao:
     """Redis 访问：发布与创建连接。未配置 REDIS_URL 时各方法返回 None/False。"""
 
     def __init__(self) -> None:
-        self._publish_client: Optional[Any] = None
+        self._publish_client: Any | None = None
 
-    def get_publish_client(self) -> Optional[Any]:
+    def get_publish_client(self) -> Any | None:
         """进程内单例，用于 publish。"""
         if not REDIS_URL:
             return None
@@ -67,7 +67,7 @@ class RedisDao:
             self._publish_client = self._make_client()
         return self._publish_client
 
-    def create_client(self) -> Optional[Any]:
+    def create_client(self) -> Any | None:
         """每次新建连接（供订阅线程等独立连接使用）。"""
         return self._make_client()
 
@@ -98,7 +98,7 @@ class RedisDao:
             return False
 
     @staticmethod
-    def _make_client() -> Optional[Any]:
+    def _make_client() -> Any | None:
         if not REDIS_URL:
             return None
         try:
@@ -165,7 +165,7 @@ class RedisDao:
             )
             return False
 
-    def get_confirmation_run_context(self, session_id: str) -> Optional[dict]:
+    def get_confirmation_run_context(self, session_id: str) -> dict | None:
         """读取当前 run 的 task_id / invocation_id，无或失败返回 None。"""
         client = self.create_client()
         if not client:
@@ -217,9 +217,7 @@ class RedisDao:
                 e,
             )
 
-    def blpop_confirmation_reply(
-        self, session_id: str, timeout_sec: int
-    ) -> Optional[str]:
+    def blpop_confirmation_reply(self, session_id: str, timeout_sec: int) -> str | None:
         """从该会话回复列表左侧阻塞弹出一条。超时返回 None；否则返回字符串（可能为取消占位）。"""
         client = self.create_client()
         if not client:
@@ -253,7 +251,7 @@ class RedisDao:
             logger.warning('Redis LPUSH agent_run_job failed: %s', e)
             return False
 
-    def blpop_agent_run_job(self, timeout_sec: int = 30) -> Optional[dict]:
+    def blpop_agent_run_job(self, timeout_sec: int = 30) -> dict | None:
         """阻塞取出一条 run 任务。超时返回 None；否则返回解析后的 dict。"""
         client = self.create_client()
         if not client:

@@ -191,7 +191,7 @@ class LLMConfig(BaseModel):
         return {"profiles": profiles, "default": default}
 
     @model_validator(mode="after")
-    def _validate_internal_references(self) -> "LLMConfig":
+    def _validate_internal_references(self) -> LLMConfig:
         """Fail-fast: verify all internal references are valid."""
         if self.default not in self.profiles:
             raise ValueError(

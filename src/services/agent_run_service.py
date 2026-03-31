@@ -11,10 +11,11 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 from queue import Empty
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from matmaster.core.bus import MessageBus
 from matmaster.core.playground import PlaygroundManager

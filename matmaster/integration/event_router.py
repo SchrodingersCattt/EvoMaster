@@ -93,7 +93,7 @@ class EventRouter:
             try:
                 event = await self._bus.get(timeout=0.1)
                 await self._dispatch(event)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 continue
 
     async def _dispatch(self, event: BusEvent) -> None:

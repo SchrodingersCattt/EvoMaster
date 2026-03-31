@@ -7,8 +7,9 @@ All external dependencies mocked per D-10.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator
+from typing import Any
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel

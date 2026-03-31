@@ -3,8 +3,9 @@
 import logging
 import os
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, NamedTuple
+from typing import Any, NamedTuple
 
 from evomaster.agent.session.ssh import SSHSession, SSHSessionConfig
 from matmaster.integration.bohrium_setup import SkillSyncSpec

@@ -57,7 +57,7 @@ class ConfirmationHook(BaseHook):
 
         try:
             reply = await asyncio.wait_for(self._get_reply(), timeout=self._timeout_sec)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.info("Confirmation timed out for tool %s", tool_call.name)
             return HookAction.SKIP
 

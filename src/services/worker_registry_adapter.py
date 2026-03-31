@@ -26,7 +26,7 @@ class WorkerRegistryServiceAdapter:
     - Service: delete_session_run_owner(session_id) -> None
     """
 
-    def __init__(self, service: "WorkerRegistryService") -> None:
+    def __init__(self, service: WorkerRegistryService) -> None:
         self._service = service
 
     def set_session_run_owner(self, session_id: str, worker_id: str) -> bool:
