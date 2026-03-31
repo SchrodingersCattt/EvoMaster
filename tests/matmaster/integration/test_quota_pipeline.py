@@ -244,8 +244,9 @@ class TestQuotaDeductedOnSuccess:
     ) -> None:
         """run_result is emitted before stream_closed on natural finish.
 
-        Note: post-kernel ResponseEvent was removed (910f537) because streaming
-        chunks already deliver content; the duplicate caused double-render.
+        Post-kernel ResponseEvent (stream_state=None) was removed because
+        streaming chunks already deliver content; the duplicate caused
+        double-render.  Only run_result → stream_closed ordering is verified.
         """
         pg_ctx = _make_ctx(tmp_path)
         mock_llm = _SuccessLLM()
@@ -263,21 +264,9 @@ class TestQuotaDeductedOnSuccess:
             send_cb=_async_collect(payloads),
         )
 
-        response_payload = next(
-            (
-                payload
-                for payload in payloads
-                if payload.get('type') == 'response'
-                and payload.get('stream_state') is None
-            ),
-            None,
-        )
-        assert response_payload is not None
-        assert response_payload['content'] == 'success'
-        assert response_payload['source'] == 'MatMaster'
-
         payload_types = [payload.get('type') for payload in payloads]
-        assert payload_types.index('response') < payload_types.index('run_result')
+        assert 'run_result' in payload_types
+        assert 'stream_closed' in payload_types
         assert payload_types.index('run_result') < payload_types.index('stream_closed')
 
 
