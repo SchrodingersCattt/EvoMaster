@@ -122,9 +122,7 @@ def _coord_from_pymatgen(struct: Any) -> list[str]:
     return lines
 
 
-def _kind_from_pymatgen(
-    struct: Any, p: dict[str, Any]
-) -> list[tuple[str, list[str]]]:
+def _kind_from_pymatgen(struct: Any, p: dict[str, Any]) -> list[tuple[str, list[str]]]:
     elements = sorted({str(site.specie.symbol) for site in struct})
     result: list[tuple[str, list[str]]] = []
     for elem in elements:
@@ -163,9 +161,7 @@ def _builtin_si_structure(
         f"C  {a3[0]:.6f}  {a3[1]:.6f}  {a3[2]:.6f}",
         "PERIODIC XYZ",
     ]
-    coord_lines = [
-        f"{elem}  {x:.6f}  {y:.6f}  {z:.6f}" for elem, x, y, z in _SI_COORDS
-    ]
+    coord_lines = [f"{elem}  {x:.6f}  {y:.6f}  {z:.6f}" for elem, x, y, z in _SI_COORDS]
     si_basis = _str(p.get("SI_BASIS_SET", "DZVP-MOLOPT-SR-GTH"))
     si_potential = _str(p.get("SI_POTENTIAL", "GTH-PBE-q4"))
     kind_lines: list[tuple[str, list[str]]] = [
@@ -327,12 +323,8 @@ def render_cp2k_input(intent: RenderIntent) -> str:
 
     # &SUBSYS
     lines += ["  &SUBSYS"]
-    lines += (
-        ["    &CELL"] + [f"      {ln}" for ln in cell_lines] + ["    &END CELL"]
-    )
-    lines += (
-        ["    &COORD"] + [f"      {ln}" for ln in coord_lines] + ["    &END COORD"]
-    )
+    lines += ["    &CELL"] + [f"      {ln}" for ln in cell_lines] + ["    &END CELL"]
+    lines += ["    &COORD"] + [f"      {ln}" for ln in coord_lines] + ["    &END COORD"]
     for kl in kind_lines:
         lines += ["    &KIND " + kl[0]]
         for kline in kl[1]:
