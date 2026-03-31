@@ -32,10 +32,14 @@ def _make_cache(tmp_path: Path) -> Path:
 def _make_mcp_yaml(tmp_path: Path) -> None:
     import yaml
 
-    (tmp_path / "mcp.yaml").write_text(yaml.dump({
-        "path_adaptor": "calculation",
-        "calculation_servers": ["mat_sg"],
-    }))
+    (tmp_path / "mcp.yaml").write_text(
+        yaml.dump(
+            {
+                "path_adaptor": "calculation",
+                "calculation_servers": ["mat_sg"],
+            }
+        )
+    )
 
 
 class TestExpInitSkillTools:
@@ -44,17 +48,19 @@ class TestExpInitSkillTools:
         cache_dir = _make_cache(tmp_path)
         _make_mcp_yaml(tmp_path)
 
-        cfg = ExpConfig.model_validate({
-            "name": "test",
-            "skills": {
-                "enabled": True,
-                "skills_root": str(skills_root),
-                "cache_dir": str(cache_dir),
-                "config_dir": str(tmp_path),
-                "mcp_config_file": "mcp_config.json",
-                "mcp_runtime_file": "mcp.yaml",
-            },
-        })
+        cfg = ExpConfig.model_validate(
+            {
+                "name": "test",
+                "skills": {
+                    "enabled": True,
+                    "skills_root": str(skills_root),
+                    "cache_dir": str(cache_dir),
+                    "config_dir": str(tmp_path),
+                    "mcp_config_file": "mcp_config.json",
+                    "mcp_runtime_file": "mcp.yaml",
+                },
+            }
+        )
         exp = Exp(cfg)
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
@@ -66,10 +72,12 @@ class TestExpInitSkillTools:
         assert "use_skill" in registry
 
     def test_skill_tools_skipped_when_disabled(self, tmp_path):
-        cfg = ExpConfig.model_validate({
-            "name": "test",
-            "skills": {"enabled": False},
-        })
+        cfg = ExpConfig.model_validate(
+            {
+                "name": "test",
+                "skills": {"enabled": False},
+            }
+        )
         exp = Exp(cfg)
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
@@ -85,17 +93,19 @@ class TestExpInitSkillTools:
         _make_mcp_yaml(tmp_path)
         (tmp_path / "mcp_config.json").write_text('{"mcpServers": {}}')
 
-        cfg = ExpConfig.model_validate({
-            "name": "test",
-            "skills": {
-                "enabled": True,
-                "skills_root": str(skills_root),
-                "cache_dir": str(cache_dir),
-                "config_dir": str(tmp_path),
-                "mcp_config_file": "mcp_config.json",
-                "mcp_runtime_file": "mcp.yaml",
-            },
-        })
+        cfg = ExpConfig.model_validate(
+            {
+                "name": "test",
+                "skills": {
+                    "enabled": True,
+                    "skills_root": str(skills_root),
+                    "cache_dir": str(cache_dir),
+                    "config_dir": str(tmp_path),
+                    "mcp_config_file": "mcp_config.json",
+                    "mcp_runtime_file": "mcp.yaml",
+                },
+            }
+        )
         exp = Exp(cfg)
         registry = ToolRegistry()
         ctx = MagicMock(spec=PlaygroundContext)
@@ -116,5 +126,6 @@ class TestExpInitSkillTools:
         assert "mat_sg_build_bulk" in registry
 
         from matmaster.tools.lazy_mcp import LazyMCPTool
+
         lazy = registry._tools["mat_sg_build_bulk"]
         assert isinstance(lazy, LazyMCPTool)

@@ -87,7 +87,9 @@ class TestLazyMCPIntegration:
         assert 'mat_sg_build_bulk' not in registry
 
         # Simulate skill trigger via use_skill tool
-        result = await registry.execute("use_skill", {"skill_name": "test-skill", "action": "get_info"})
+        result = await registry.execute(
+            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
+        )
 
         # Verify use_skill returned successfully
         assert result.status == 'success', f"use_skill failed: {result.content}"
@@ -134,11 +136,15 @@ class TestLazyMCPIntegration:
         exp._init_skill_tools(ctx, registry)
 
         # Trigger first skill
-        await registry.execute("use_skill", {"skill_name": "test-skill", "action": "get_info"})
+        await registry.execute(
+            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
+        )
         assert "mat_sg_build_bulk" in registry
 
         # Trigger second skill — should NOT duplicate
-        await registry.execute("use_skill", {"skill_name": "second-skill", "action": "get_info"})
+        await registry.execute(
+            "use_skill", {"skill_name": "second-skill", "action": "get_info"}
+        )
         # Still only one mat_sg_build_bulk
         assert 'mat_sg_build_bulk' in registry
 
@@ -183,11 +189,14 @@ class TestLazyMCPIntegration:
         exp._init_skill_tools(ctx, registry)
 
         # Trigger skill with uncached server
-        result = await registry.execute("use_skill", {"skill_name": "uncached-skill", "action": "get_info"})
+        result = await registry.execute(
+            "use_skill", {"skill_name": "uncached-skill", "action": "get_info"}
+        )
         assert result.status == "success"
 
         # No tools injected (cache miss)
         assert 'unknown_server_' not in str(list(registry._tools.keys()))
+
 
 class TestExpMCPSelfLoad:
     """Verify Exp._init_skill_tools() self-loads mcp.yaml when no runtime config injected."""
@@ -240,7 +249,9 @@ class TestExpMCPSelfLoad:
         assert 'use_skill' in registry
 
         # Trigger skill to verify lazy tools get injected
-        result = await registry.execute("use_skill", {"skill_name": "test-skill", "action": "get_info"})
+        result = await registry.execute(
+            "use_skill", {"skill_name": "test-skill", "action": "get_info"}
+        )
         assert result.status == "success", f"use_skill failed: {result.content}"
         assert "mat_sg_build_bulk" in registry
 

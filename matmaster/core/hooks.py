@@ -55,7 +55,9 @@ class Hook(Protocol):
 
     async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction: ...
 
-    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None: ...
+    async def post_tool_call(
+        self, tool_call: ToolCallData, result: ToolResult
+    ) -> None: ...
 
     async def pre_llm_call(self, messages: list[Message], turn: int) -> None: ...
 
@@ -67,7 +69,9 @@ class Hook(Protocol):
         self, segment_type: str, content: str, stream_id: str | None
     ) -> None: ...
 
-    async def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None: ...
+    async def on_guard_blocked(
+        self, tool_call: ToolCallData, result: GuardResult
+    ) -> None: ...
 
 
 class BaseHook:
@@ -98,7 +102,9 @@ class BaseHook:
     ) -> None:
         """Default: no-op observation."""
 
-    async def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
+    async def on_guard_blocked(
+        self, tool_call: ToolCallData, result: GuardResult
+    ) -> None:
         """Default: no-op observation."""
 
 
@@ -274,5 +280,7 @@ class EventEmitterHook(BaseHook):
                 )
             )
 
-    async def on_guard_blocked(self, tool_call: ToolCallData, result: GuardResult) -> None:
+    async def on_guard_blocked(
+        self, tool_call: ToolCallData, result: GuardResult
+    ) -> None:
         """Guard blocks are not emitted to the bus by default."""

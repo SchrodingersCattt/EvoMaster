@@ -48,7 +48,9 @@ def derive_skill_sync_spec(
 
     raw_value = skills.skills_root
     if isinstance(raw_value, list):
-        relative_paths = [entry.strip() for entry in raw_value if entry and entry.strip()]
+        relative_paths = [
+            entry.strip() for entry in raw_value if entry and entry.strip()
+        ]
     else:
         stripped = (raw_value or "").strip()
         relative_paths = [stripped] if stripped else []
@@ -58,7 +60,11 @@ def derive_skill_sync_spec(
     resolved_roots: list[str] = []
     for rel_path in relative_paths:
         path = Path(rel_path)
-        resolved = path.resolve() if path.is_absolute() else (project_root / rel_path).resolve()
+        resolved = (
+            path.resolve()
+            if path.is_absolute()
+            else (project_root / rel_path).resolve()
+        )
         if resolved.is_dir():
             resolved_roots.append(str(resolved))
     if not resolved_roots:
@@ -85,7 +91,9 @@ class BohriumSetupService:
         self._sessions_service = sessions_service
         self._bus = bus
 
-    def load_credentials(self, session_id: str) -> tuple[dict[str, Any], str | None, str]:
+    def load_credentials(
+        self, session_id: str
+    ) -> tuple[dict[str, Any], str | None, str]:
         """Load run credentials from session store.
 
         Delegates to agent_run_bohrium.load_run_credentials().
@@ -214,6 +222,7 @@ class BohriumSetupService:
                     )
                 except Exception:
                     logger.debug('bohrium event bridge error type=%s', event_type)
+
             loop.call_soon_threadsafe(_do_emit)
 
         return _cb

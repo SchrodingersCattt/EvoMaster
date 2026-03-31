@@ -5,13 +5,11 @@ from __future__ import annotations
 from typing import Any, AsyncIterator
 
 from matmaster.core.hooks import Hook, HookAction
-from matmaster.tools.tool_result import ToolResult
+from matmaster.tools.tool_registry import Tool
 from matmaster.types.guards import Guard, GuardContext, GuardResult
 from matmaster.types.llm_provider import LLMProvider
-from matmaster.types.messages import LLMResponse, Message, StreamChunk, ToolCallData
-from matmaster.tools.tool_registry import Tool
+from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
 from matmaster.validation import validate_async_protocol
-
 
 # -- Sync mocks (deliberately wrong for async Protocol) --
 
@@ -171,9 +169,7 @@ class TestValidateAsyncProtocol:
 
     def test_passes_async_llm_provider_coroutine_only(self) -> None:
         """Async LLMProvider with coroutine-only chat_stream also passes."""
-        errors = validate_async_protocol(
-            AsyncLLMProviderCoroutineOnly(), LLMProvider
-        )
+        errors = validate_async_protocol(AsyncLLMProviderCoroutineOnly(), LLMProvider)
         assert errors == [], f"Expected no errors, got: {errors}"
 
     def test_detects_sync_mismatch_on_tool(self) -> None:
@@ -224,12 +220,12 @@ class TestAsyncGeneratorDetection:
 
         provider = AsyncLLMProviderOK()
         # Verify our test mock is actually an async generator
-        assert inspect.isasyncgenfunction(provider.chat_stream), (
-            "Test setup: chat_stream should be async generator"
-        )
-        assert not inspect.iscoroutinefunction(provider.chat_stream), (
-            "Test setup: async generator should NOT be iscoroutinefunction"
-        )
+        assert inspect.isasyncgenfunction(
+            provider.chat_stream
+        ), "Test setup: chat_stream should be async generator"
+        assert not inspect.iscoroutinefunction(
+            provider.chat_stream
+        ), "Test setup: async generator should NOT be iscoroutinefunction"
         # But validation should still pass
         errors = validate_async_protocol(provider, LLMProvider)
         assert errors == [], f"Async generator should be accepted as async: {errors}"

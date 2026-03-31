@@ -84,7 +84,9 @@ class LLMProfileConfig(BaseModel):
 
     # Reasoning
     thinking_effort: str | None = None
-    reasoning_protocol: str | None = None  # "anthropic_adaptive_thinking" | "openai_reasoning_effort"
+    reasoning_protocol: str | None = (
+        None  # "anthropic_adaptive_thinking" | "openai_reasoning_effort"
+    )
     fallback_group: str | None = None
 
     # Temperature
@@ -208,7 +210,9 @@ class LLMConfig(BaseModel):
         """Return profile by key, falling back to self.default."""
         k = key or self.default
         if k not in self.profiles:
-            raise KeyError(f"LLM profile '{k}' not found, available: {list(self.profiles)}")
+            raise KeyError(
+                f"LLM profile '{k}' not found, available: {list(self.profiles)}"
+            )
         return self.profiles[k]
 
     def resolve_route(

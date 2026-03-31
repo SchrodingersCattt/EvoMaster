@@ -8,16 +8,15 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, AsyncIterator, Iterator
-
+from typing import Any, AsyncIterator
 
 from matmaster.config.exp import ExpConfig
-from matmaster.core.exp import Exp
-from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
-from matmaster.types.messages import StreamChunk, LLMResponse
+from matmaster.core.bus import MessageBus
+from matmaster.core.exp import Exp
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import ResponseEvent
+from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.runtime import KernelResult
 
 
@@ -33,7 +32,9 @@ class MinimalMockLLMProvider:
     async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="minimal response", finish_reason="stop")
 
-    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
+    async def chat_stream(
+        self, messages, tools=None, *, timeout=None
+    ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(content="minimal response", finish_reason="stop")
 
 

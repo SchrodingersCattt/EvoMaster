@@ -27,9 +27,7 @@ def _resolve_api_key() -> str:
     return ""
 
 
-def _normalize_results(
-    payload: dict[str, Any], top_k: int
-) -> list[dict[str, str]]:
+def _normalize_results(payload: dict[str, Any], top_k: int) -> list[dict[str, str]]:
     """Extract organic results into [{title, link, snippet}]."""
     organic = payload.get("organic_results", [])
     if not isinstance(organic, list):
@@ -92,9 +90,7 @@ class WebSearchTool(BuiltinTool):
     def _execute(self, arguments: dict[str, Any]) -> ToolResult:
         query = (arguments.get("query") or "").strip()
         if not query:
-            return ToolResult(
-                status="error", content="Error: query is required."
-            )
+            return ToolResult(status="error", content="Error: query is required.")
 
         api_key = _resolve_api_key()
         if not api_key:

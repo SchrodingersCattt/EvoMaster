@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -41,7 +42,6 @@ class LLMConfig(BaseModel):
     stream_idle_timeout: float | None = None
     max_retries: int = 3
     retry_delay: float = 1.0
-
 
 
 class AgentConfig(BaseModel):

@@ -6,8 +6,6 @@ types Message types (UserMessage, AssistantMessage, ToolMessage).
 
 from __future__ import annotations
 
-import pytest
-
 from matmaster.types.messages import (
     AssistantMessage,
     ToolCallData,
@@ -174,18 +172,18 @@ class TestEventsToMessagesPreservesOrder:
         result = ChatHistoryConverter.events_to_messages(events)
 
         expected_types = [
-            UserMessage,       # first question
+            UserMessage,  # first question
             AssistantMessage,  # tool_calls
-            ToolMessage,       # tool result
+            ToolMessage,  # tool result
             AssistantMessage,  # run_result answer 1
-            UserMessage,       # second question
+            UserMessage,  # second question
             AssistantMessage,  # run_result answer 2
         ]
         assert len(result) == len(expected_types)
         for msg, expected_type in zip(result, expected_types):
-            assert isinstance(msg, expected_type), (
-                f"Expected {expected_type.__name__}, got {type(msg).__name__}"
-            )
+            assert isinstance(
+                msg, expected_type
+            ), f"Expected {expected_type.__name__}, got {type(msg).__name__}"
 
     def test_legacy_finish_events_still_map_to_assistant_messages(self):
         events = [
@@ -262,7 +260,9 @@ class TestEventsToMessagesPersistenceRoundTrip:
             tool_name="bash",
             arguments={"cmd": "ls"},
         )
-        persisted = _public_content_for_event("tool_call", event.model_dump(mode="json"))
+        persisted = _public_content_for_event(
+            "tool_call", event.model_dump(mode="json")
+        )
         db_event = {"source": "MatMaster", "type": "tool_call", "content": persisted}
 
         result = ChatHistoryConverter.events_to_messages(
@@ -286,7 +286,9 @@ class TestEventsToMessagesPersistenceRoundTrip:
             tool_name="bash",
             result="file.txt",
         )
-        persisted = _public_content_for_event("tool_result", event.model_dump(mode="json"))
+        persisted = _public_content_for_event(
+            "tool_result", event.model_dump(mode="json")
+        )
         db_event = {"source": "MatMaster", "type": "tool_result", "content": persisted}
 
         result = ChatHistoryConverter.events_to_messages(
@@ -308,7 +310,9 @@ class TestEventsToMessagesPersistenceRoundTrip:
             reason="natural",
             final_content="here are your files",
         )
-        persisted = _public_content_for_event("run_result", event.model_dump(mode="json"))
+        persisted = _public_content_for_event(
+            "run_result", event.model_dump(mode="json")
+        )
         db_event = {"source": "MatMaster", "type": "run_result", "content": persisted}
 
         result = ChatHistoryConverter.events_to_messages(

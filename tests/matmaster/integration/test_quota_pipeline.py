@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -79,8 +79,10 @@ class _ErrorLLM:
 
 def _async_collect(payloads: list) -> Callable:
     """Return an async send_cb that appends payloads to a list."""
+
     async def _cb(payload: Any) -> None:
         payloads.append(payload)
+
     return _cb
 
 
@@ -162,15 +164,17 @@ def _run_with_quota_mock(
         mock_redis = MagicMock()
         mock_redis_fn.return_value = mock_redis
 
-        result = asyncio.run(svc.run_agent(
-            session_id='sess-q',
-            user_prompt='quota test',
-            send_cb=send_cb or AsyncMock(),
-            stop_event=stop_event or threading.Event(),
-            mode='direct',
-            reply_queue=None,
-            task_id='task-q',
-        ))
+        result = asyncio.run(
+            svc.run_agent(
+                session_id='sess-q',
+                user_prompt='quota test',
+                send_cb=send_cb or AsyncMock(),
+                stop_event=stop_event or threading.Event(),
+                mode='direct',
+                reply_queue=None,
+                task_id='task-q',
+            )
+        )
 
     if return_result:
         return result

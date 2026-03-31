@@ -1,12 +1,12 @@
 """Tests for DevStreamHook terminal output formatting."""
+
 from __future__ import annotations
 
 import io
-from typing import Any
 
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.messages import StreamChunk, ToolCallData
 from matmaster.types.guards import GuardResult
+from matmaster.types.messages import StreamChunk, ToolCallData
 
 
 class TestDevStreamHook:

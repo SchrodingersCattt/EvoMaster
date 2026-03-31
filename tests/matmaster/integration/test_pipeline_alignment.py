@@ -9,20 +9,14 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, AsyncIterator, Iterator
+from typing import Any, AsyncIterator
 
 from matmaster.config.exp import ExpConfig
-from matmaster.core.exp import Exp
-from matmaster.core.bus import MessageBus
 from matmaster.core.agent import AgentKernel
-from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.core.bus import MessageBus
+from matmaster.core.exp import Exp
 from matmaster.types.context import PlaygroundContext
-from matmaster.types.events import (
-    FinishEvent,
-    ThoughtEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-)
+from matmaster.types.messages import LLMResponse, StreamChunk
 
 
 class _ToolCallThenFinishLLM:
@@ -40,7 +34,9 @@ class _ToolCallThenFinishLLM:
     async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content="done", finish_reason="stop")
 
-    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
+    async def chat_stream(
+        self, messages, tools=None, *, timeout=None
+    ) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
             # Emit a reasoning chunk first so EventEmitterHook produces ThoughtEvent
@@ -134,12 +130,16 @@ class TestEventSequenceAlignment:
         # thought (stream from first turn) -> tool_call -> tool_result -> thought (second turn)
         # FinishEvent is returned by kernel.run(), not emitted to bus
         assert "thought" in event_types, f"Missing thought event, got: {event_types}"
-        assert "tool_call" in event_types, f"Missing tool_call event, got: {event_types}"
-        assert "tool_result" in event_types, f"Missing tool_result event, got: {event_types}"
+        assert (
+            "tool_call" in event_types
+        ), f"Missing tool_call event, got: {event_types}"
+        assert (
+            "tool_result" in event_types
+        ), f"Missing tool_result event, got: {event_types}"
 
         # Verify order: tool_call must come before tool_result
         tc_idx = event_types.index("tool_call")
         tr_idx = event_types.index("tool_result")
-        assert tc_idx < tr_idx, (
-            f"tool_call (idx={tc_idx}) should precede tool_result (idx={tr_idx})"
-        )
+        assert (
+            tc_idx < tr_idx
+        ), f"tool_call (idx={tc_idx}) should precede tool_result (idx={tr_idx})"

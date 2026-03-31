@@ -10,7 +10,11 @@ class TestReplayFilterSkillHit:
         """_should_emit_event_to_sse returns False for skill_hit events."""
         from src.services.stream_service import _should_emit_event_to_sse
 
-        event = {"type": "skill_hit", "source": "MatMaster", "content": {"skill_name": "bohrium-job"}}
+        event = {
+            "type": "skill_hit",
+            "source": "MatMaster",
+            "content": {"skill_name": "bohrium-job"},
+        }
         assert _should_emit_event_to_sse(event) is False
 
     def test_still_emits_tool_call(self) -> None:

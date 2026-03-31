@@ -381,15 +381,17 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
 
         mock_use_quota.side_effect = _mock_use_quota
 
-        asyncio.run(svc.run_agent(
-            session_id='sess-spec-order',
-            user_prompt='prompt',
-            send_cb=AsyncMock(),
-            stop_event=threading.Event(),
-            mode='direct',
-            reply_queue=None,
-            task_id='task-spec-order',
-        ))
+        asyncio.run(
+            svc.run_agent(
+                session_id='sess-spec-order',
+                user_prompt='prompt',
+                send_cb=AsyncMock(),
+                stop_event=threading.Event(),
+                mode='direct',
+                reply_queue=None,
+                task_id='task-spec-order',
+            )
+        )
 
     assert order.index('load_exp_config') < order.index('setup')
     spec = captured_spec.get('skill_sync_spec')
@@ -480,15 +482,17 @@ def test_execution_binding_before_build_runtime(
 
         mock_use_quota.side_effect = _mock_use_quota
 
-        asyncio.run(svc.run_agent(
-            session_id='sess-exec-bind',
-            user_prompt='prompt',
-            send_cb=AsyncMock(),
-            stop_event=threading.Event(),
-            mode='direct',
-            reply_queue=None,
-            task_id='task-exec-bind',
-        ))
+        asyncio.run(
+            svc.run_agent(
+                session_id='sess-exec-bind',
+                user_prompt='prompt',
+                send_cb=AsyncMock(),
+                stop_event=threading.Event(),
+                mode='direct',
+                reply_queue=None,
+                task_id='task-exec-bind',
+            )
+        )
 
     pg_passed = mock_exp_inst.build_runtime.call_args[0][0]
     assert pg_passed.session is mock_exec

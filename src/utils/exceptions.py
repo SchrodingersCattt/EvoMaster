@@ -1,7 +1,8 @@
 class BaseErrorResponse(Exception):
-    def __init__(
+    def __init__(  # noqa: B042
         self, *, http_status: int = 400, code: int = 400, msg: str = 'error', data=None
     ):
+        super().__init__(msg)
         self.http_status = http_status
         self.code = code
         self.msg = msg

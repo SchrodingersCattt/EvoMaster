@@ -112,7 +112,9 @@ class BashTool(BuiltinTool):
         wd = str(self._workdir) if self._workdir else None
 
         proc = await asyncio.create_subprocess_exec(
-            "bash", "-c", command,
+            "bash",
+            "-c",
+            command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=wd,

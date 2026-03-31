@@ -5,8 +5,7 @@ from __future__ import annotations
 from typing import Any, AsyncIterator
 
 from matmaster.types.llm_provider import LLMProvider
-from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
-
+from matmaster.types.messages import LLMResponse, StreamChunk
 
 # ── Mock implementations ──────────────────────────────
 
@@ -75,9 +74,7 @@ class TestLLMProviderUsage:
     async def test_chat_stream_returns_async_iterator(self) -> None:
         provider = CompleteLLMProvider()
         chunks = []
-        async for chunk in provider.chat_stream(
-            [{"role": "user", "content": "hello"}]
-        ):
+        async for chunk in provider.chat_stream([{"role": "user", "content": "hello"}]):
             chunks.append(chunk)
         assert len(chunks) == 1
         assert isinstance(chunks[0], StreamChunk)
@@ -86,9 +83,7 @@ class TestLLMProviderUsage:
 
     async def test_chat_with_tools(self) -> None:
         provider = CompleteLLMProvider()
-        tools = [
-            {"type": "function", "function": {"name": "test", "parameters": {}}}
-        ]
+        tools = [{"type": "function", "function": {"name": "test", "parameters": {}}}]
         result = await provider.chat(
             [{"role": "user", "content": "use tool"}],
             tools=tools,
@@ -108,6 +103,7 @@ class TestMockProviderConforms:
 def test_chat_stream_accepts_timeout_kwarg() -> None:
     """Protocol allows optional timeout keyword argument."""
     import inspect
+
     from matmaster.types.llm_provider import LLMProvider
 
     sig = inspect.signature(LLMProvider.chat_stream)

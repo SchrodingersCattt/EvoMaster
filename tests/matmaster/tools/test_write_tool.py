@@ -39,7 +39,9 @@ class TestWriteToolExecution:
         mock_session.path_exists.return_value = False
         tracker = ReadTracker()
         tool = WriteTool(session=mock_session, tracker=tracker)
-        result = await tool.execute({"file_path": "/workspace/new.py", "content": "hello"})
+        result = await tool.execute(
+            {"file_path": "/workspace/new.py", "content": "hello"}
+        )
         assert "File written successfully" in result
         mock_session.write_file.assert_called_once_with("/workspace/new.py", "hello")
 
@@ -49,7 +51,9 @@ class TestWriteToolExecution:
         tracker = ReadTracker()
         tracker.mark_read("/workspace/exist.py")
         tool = WriteTool(session=mock_session, tracker=tracker)
-        result = await tool.execute({"file_path": "/workspace/exist.py", "content": "updated"})
+        result = await tool.execute(
+            {"file_path": "/workspace/exist.py", "content": "updated"}
+        )
         assert "File written successfully" in result
         mock_session.write_file.assert_called_once()
 
@@ -58,7 +62,9 @@ class TestWriteToolExecution:
         mock_session.path_exists.return_value = True
         tracker = ReadTracker()
         tool = WriteTool(session=mock_session, tracker=tracker)
-        result = await tool.execute({"file_path": "/workspace/exist.py", "content": "bad"})
+        result = await tool.execute(
+            {"file_path": "/workspace/exist.py", "content": "bad"}
+        )
         assert "must be read before modify" in result
         mock_session.write_file.assert_not_called()
 
@@ -66,7 +72,9 @@ class TestWriteToolExecution:
         """No tracker -- writes without enforcement."""
         mock_session.path_exists.return_value = True
         tool = WriteTool(session=mock_session, tracker=None)
-        result = await tool.execute({"file_path": "/workspace/exist.py", "content": "anything"})
+        result = await tool.execute(
+            {"file_path": "/workspace/exist.py", "content": "anything"}
+        )
         assert "File written successfully" in result
         mock_session.write_file.assert_called_once()
 
@@ -88,5 +96,7 @@ class TestWriteToolExecution:
         """Verify success message contains file path."""
         mock_session.path_exists.return_value = False
         tool = WriteTool(session=mock_session, tracker=ReadTracker())
-        result = await tool.execute({"file_path": "/workspace/new.txt", "content": "data"})
+        result = await tool.execute(
+            {"file_path": "/workspace/new.txt", "content": "data"}
+        )
         assert result == "File written successfully to: /workspace/new.txt"

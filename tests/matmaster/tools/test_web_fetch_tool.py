@@ -3,24 +3,20 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from matmaster.tools.builtin.web_fetch_tool import (
-    BROWSER_HEADERS,
-    WebFetchTool,
-    _WebpageDiskCache,
-    _fetch_single_url,
-    _extract_content,
     _MAX_CONTENT_LENGTH,
+    WebFetchTool,
+    _extract_content,
+    _fetch_single_url,
+    _WebpageDiskCache,
 )
 from matmaster.tools.tool_registry import Tool
 from matmaster.tools.tool_result import ToolResult
-
 
 # ── Cache tests ──────────────────────────────────────────
 
@@ -109,9 +105,7 @@ class TestExtractContent:
 
     def test_octet_stream_non_pdf_is_not_treated_as_pdf(self) -> None:
         """application/octet-stream without PDF magic bytes -> plain text."""
-        content = _extract_content(
-            "plain data", "application/octet-stream", b"not-pdf"
-        )
+        content = _extract_content("plain data", "application/octet-stream", b"not-pdf")
         assert content == "plain data"
 
 
@@ -122,9 +116,7 @@ class TestFetchSingleUrl:
     """_fetch_single_url with mocked httpx."""
 
     @patch("matmaster.tools.builtin.web_fetch_tool.httpx")
-    def test_403_retry_with_alternate_ua(
-        self, mock_httpx: MagicMock
-    ) -> None:
+    def test_403_retry_with_alternate_ua(self, mock_httpx: MagicMock) -> None:
         first_response = MagicMock()
         first_response.status_code = 403
         second_response = MagicMock()
@@ -174,9 +166,7 @@ class TestWebFetchToolExecution:
     """WebFetchTool._execute with mocked HTTP."""
 
     @patch("matmaster.tools.builtin.web_fetch_tool._fetch_single_url")
-    async def test_single_url(
-        self, mock_fetch: MagicMock, tmp_path: Path
-    ) -> None:
+    async def test_single_url(self, mock_fetch: MagicMock, tmp_path: Path) -> None:
         mock_fetch.return_value = ("http://a.com", "Page content", None)
         tool = WebFetchTool(workdir=tmp_path)
         result = await tool.execute({"url": ["http://a.com"]})
@@ -185,9 +175,7 @@ class TestWebFetchToolExecution:
         assert "Page content" in result.content
 
     @patch("matmaster.tools.builtin.web_fetch_tool._fetch_single_url")
-    async def test_multi_url(
-        self, mock_fetch: MagicMock, tmp_path: Path
-    ) -> None:
+    async def test_multi_url(self, mock_fetch: MagicMock, tmp_path: Path) -> None:
         mock_fetch.side_effect = [
             ("http://a.com", "Content A", None),
             ("http://b.com", "Content B", None),

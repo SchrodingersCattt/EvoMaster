@@ -6,9 +6,6 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -34,7 +31,9 @@ def _make_skill(
     return d
 
 
-def _make_script(skill_dir: Path, script_name: str, content: str = "print('ok')") -> Path:
+def _make_script(
+    skill_dir: Path, script_name: str, content: str = "print('ok')"
+) -> Path:
     scripts_dir = skill_dir / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     script_path = scripts_dir / script_name
@@ -42,7 +41,9 @@ def _make_script(skill_dir: Path, script_name: str, content: str = "print('ok')"
     return script_path
 
 
-def _make_reference(skill_dir: Path, ref_name: str, content: str = "ref content") -> Path:
+def _make_reference(
+    skill_dir: Path, ref_name: str, content: str = "ref content"
+) -> Path:
     ref_dir = skill_dir / "references"
     ref_dir.mkdir(parents=True, exist_ok=True)
     ref_path = ref_dir / ref_name
@@ -80,7 +81,9 @@ class TestGetInfo:
         assert "# Skill: calc" in result
         assert "Body" in result
 
-    async def test_depends_on_cascades_to_multiple_servers(self, tmp_path: Path) -> None:
+    async def test_depends_on_cascades_to_multiple_servers(
+        self, tmp_path: Path
+    ) -> None:
         """get_info with depends_on triggers on_skill_hit for each dependency's mcp_server."""
         from matmaster.skills.registry import SkillRegistry
         from matmaster.tools.skill_tool import SkillTool
@@ -128,14 +131,18 @@ class TestGetReference:
         registry = SkillRegistry(tmp_path)
         tool = SkillTool(registry, _mock_session())
 
-        result = await tool.execute({
-            "skill_name": "calc",
-            "action": "get_reference",
-            "reference_name": "api.md",
-        })
+        result = await tool.execute(
+            {
+                "skill_name": "calc",
+                "action": "get_reference",
+                "reference_name": "api.md",
+            }
+        )
         assert "API docs here" in result
 
-    async def test_missing_reference_falls_back_to_full_info(self, tmp_path: Path) -> None:
+    async def test_missing_reference_falls_back_to_full_info(
+        self, tmp_path: Path
+    ) -> None:
         """get_reference falls back to full skill info when reference not found."""
         from matmaster.skills.registry import SkillRegistry
         from matmaster.tools.skill_tool import SkillTool
@@ -144,11 +151,13 @@ class TestGetReference:
         registry = SkillRegistry(tmp_path)
         tool = SkillTool(registry, _mock_session())
 
-        result = await tool.execute({
-            "skill_name": "calc",
-            "action": "get_reference",
-            "reference_name": "nonexistent.md",
-        })
+        result = await tool.execute(
+            {
+                "skill_name": "calc",
+                "action": "get_reference",
+                "reference_name": "nonexistent.md",
+            }
+        )
         assert "Fallback to skill info" in result
         assert "Full calc info here" in result
 
@@ -172,11 +181,13 @@ class TestGetReference:
         registry = SkillRegistry(tmp_path)
         tool = SkillTool(registry, _mock_session())
 
-        result = await tool.execute({
-            "skill_name": "calc",
-            "action": "get_reference",
-            "reference_name": "base.md",
-        })
+        result = await tool.execute(
+            {
+                "skill_name": "calc",
+                "action": "get_reference",
+                "reference_name": "base.md",
+            }
+        )
         assert "CO-TEMPLATE REMINDER" in result
         assert "header.md" in result
         assert "footer.md" in result
@@ -202,11 +213,13 @@ class TestRunScript:
         session = _mock_session()
         tool = SkillTool(registry, session)
 
-        result = await tool.execute({
-            "skill_name": "calc",
-            "action": "run_script",
-            "script_name": "run.py",
-        })
+        result = await tool.execute(
+            {
+                "skill_name": "calc",
+                "action": "run_script",
+                "script_name": "run.py",
+            }
+        )
         session.exec_bash.assert_called_once()
         cmd = session.exec_bash.call_args[0][0]
         assert "run.py" in cmd
@@ -223,10 +236,12 @@ class TestRunScript:
         session = _mock_session()
         tool = SkillTool(registry, session)
 
-        result = await tool.execute({
-            "skill_name": "single",
-            "action": "run_script",
-        })
+        result = await tool.execute(
+            {
+                "skill_name": "single",
+                "action": "run_script",
+            }
+        )
         session.exec_bash.assert_called_once()
         cmd = session.exec_bash.call_args[0][0]
         assert "only.py" in cmd
@@ -243,18 +258,22 @@ class TestRunScript:
         # Create prompts directory with a mode-specific prompt
         prompts_dir = skill_dir / "prompts"
         prompts_dir.mkdir(parents=True, exist_ok=True)
-        (prompts_dir / "deep.md").write_text("Deep mode workflow instructions", encoding="utf-8")
+        (prompts_dir / "deep.md").write_text(
+            "Deep mode workflow instructions", encoding="utf-8"
+        )
 
         registry = SkillRegistry(tmp_path)
         session = _mock_session()
         tool = SkillTool(registry, session)
 
-        result = await tool.execute({
-            "skill_name": "survey",
-            "action": "run_script",
-            "script_name": "run.py",
-            "script_args": "deep --verbose",
-        })
+        result = await tool.execute(
+            {
+                "skill_name": "survey",
+                "action": "run_script",
+                "script_name": "run.py",
+                "script_args": "deep --verbose",
+            }
+        )
         assert "MANDATORY WORKFLOW" in result
         assert "Deep mode workflow instructions" in result
 
@@ -273,11 +292,13 @@ class TestRunScript:
         }
         tool = SkillTool(registry, session)
 
-        await tool.execute({
-            "skill_name": "calc",
-            "action": "run_script",
-            "script_name": "run.py",
-        })
+        await tool.execute(
+            {
+                "skill_name": "calc",
+                "action": "run_script",
+                "script_name": "run.py",
+            }
+        )
 
         # write_file should have been called with credential content
         session.write_file.assert_called_once()
@@ -313,11 +334,13 @@ class TestErrorHandling:
         session.exec_bash.side_effect = RuntimeError("connection lost")
         tool = SkillTool(registry, session)
 
-        result = await tool.execute({
-            "skill_name": "calc",
-            "action": "run_script",
-            "script_name": "run.py",
-        })
+        result = await tool.execute(
+            {
+                "skill_name": "calc",
+                "action": "run_script",
+                "script_name": "run.py",
+            }
+        )
         assert "Error" in result
         assert "connection lost" in result
 
@@ -330,7 +353,9 @@ class TestErrorHandling:
 class TestDependsOnMultiRoot:
     """Tests for depends_on cascading across skill roots."""
 
-    async def test_workflow_skill_cascades_to_lazymcp_skills(self, tmp_path: Path) -> None:
+    async def test_workflow_skill_cascades_to_lazymcp_skills(
+        self, tmp_path: Path
+    ) -> None:
         """Workflow skill with depends_on cascades to skills in different roots."""
         from matmaster.skills.registry import SkillRegistry
         from matmaster.tools.skill_tool import SkillTool
@@ -404,5 +429,9 @@ class TestToolProtocol:
         props = schema["properties"]
         assert "skill_name" in props
         assert "action" in props
-        assert set(props["action"]["enum"]) == {"get_info", "get_reference", "run_script"}
+        assert set(props["action"]["enum"]) == {
+            "get_info",
+            "get_reference",
+            "run_script",
+        }
         assert set(schema["required"]) == {"skill_name", "action"}

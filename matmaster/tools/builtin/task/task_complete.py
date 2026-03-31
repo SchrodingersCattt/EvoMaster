@@ -40,7 +40,8 @@ class TaskCompleteTool(BuiltinTool):
             return "Error: workdir not available for task tracking"
         store = TaskStore(self._workdir)
         task = store.complete_subtask(
-            arguments["task_id"], arguments["subtask_index"],
+            arguments["task_id"],
+            arguments["subtask_index"],
         )
         if task is None:
             return (

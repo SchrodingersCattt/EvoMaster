@@ -55,9 +55,7 @@ class TestGlobToolExecution:
         tool = GlobTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "*.py"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert '"/workspace"' in command
 
     async def test_relative_path(self, mock_session: MagicMock) -> None:
@@ -65,19 +63,17 @@ class TestGlobToolExecution:
         tool = GlobTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "*.py", "path": "src"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert '"/workspace/src"' in command
 
-    async def test_find_command_has_head_truncation(self, mock_session: MagicMock) -> None:
+    async def test_find_command_has_head_truncation(
+        self, mock_session: MagicMock
+    ) -> None:
         """Verify output is truncated via head -200."""
         tool = GlobTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "*.py"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert "head -200" in command
 
 
@@ -89,9 +85,7 @@ class TestGlobToolPathSafety:
         tool = GlobTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "*.py", "path": "../../etc"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert '"/workspace"' in command
         assert "/etc" not in command
 
@@ -100,9 +94,7 @@ class TestGlobToolPathSafety:
         tool = GlobTool(session=mock_session, workdir=Path("/workspace"))
         await tool.execute({"pattern": "*.py", "path": "/etc"})
         call_kwargs = mock_session.exec_bash.call_args
-        command = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
+        command = call_kwargs.kwargs.get("command", call_kwargs[1].get("command", ""))
         assert '"/workspace"' in command
         assert "/etc" not in command
 

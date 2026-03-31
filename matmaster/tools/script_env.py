@@ -16,12 +16,15 @@ logger = logging.getLogger(__name__)
 # -- declarative credential mapping ----------------------------------------
 
 _CREDENTIAL_SOURCES: list[tuple[str, dict[str, str]]] = [
-    ("_bohrium_credentials", {
-        "access_key":  "BOHRIUM_ACCESS_KEY",
-        "project_id":  "BOHRIUM_PROJECT_ID",
-        "user_id":     "BOHRIUM_USER_ID",
-        "user_no":     "BOHRIUM_USER_NO",
-    }),
+    (
+        "_bohrium_credentials",
+        {
+            "access_key": "BOHRIUM_ACCESS_KEY",
+            "project_id": "BOHRIUM_PROJECT_ID",
+            "user_id": "BOHRIUM_USER_ID",
+            "user_no": "BOHRIUM_USER_NO",
+        },
+    ),
 ]
 
 _INT_VALIDATED: set[str] = {"project_id"}
@@ -87,9 +90,9 @@ def inject(cmd: str, session: Any) -> str:
 def _via_file(cmd: str, env: dict[str, str], session: Any) -> str:
     """Write env to remote temp file, source in subshell."""
     path = f"/tmp/.mm_env_{uuid.uuid4().hex[:12]}"
-    content = "\n".join(
-        f"export {k}={shlex.quote(v)}" for k, v in sorted(env.items())
-    ) + "\n"
+    content = (
+        "\n".join(f"export {k}={shlex.quote(v)}" for k, v in sorted(env.items())) + "\n"
+    )
     session.write_file(path, content)
     session.exec_bash(f"chmod 600 {shlex.quote(path)}")
     return (
@@ -100,7 +103,5 @@ def _via_file(cmd: str, env: dict[str, str], session: Any) -> str:
 
 def _inline(cmd: str, env: dict[str, str]) -> str:
     """Prefix command with env assignments (fallback)."""
-    prefix = " ".join(
-        f"{k}={shlex.quote(v)}" for k, v in sorted(env.items())
-    )
+    prefix = " ".join(f"{k}={shlex.quote(v)}" for k, v in sorted(env.items()))
     return f"{prefix} {cmd}"

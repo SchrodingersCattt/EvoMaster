@@ -1,4 +1,5 @@
 """Tests for EventLogger JSONL persistence."""
+
 from __future__ import annotations
 
 import json
@@ -6,10 +7,10 @@ from pathlib import Path
 
 from matmaster.types.events import (
     AssistantStateEvent,
+    RunResultEvent,
     ThoughtEvent,
     ToolCallEvent,
     ToolResultEvent,
-    RunResultEvent,
 )
 
 
@@ -20,14 +21,22 @@ class TestEventLogger:
         log_file = tmp_path / "events.jsonl"
         logger = EventLogger(log_file, run_id="run-001")
 
-        logger.log_event(ToolCallEvent(
-            source="test", call_id="tc-1", tool_name="bash",
-            arguments={"command": "ls"},
-        ))
-        logger.log_event(ToolResultEvent(
-            source="test", call_id="tc-1", tool_name="bash",
-            result="file1.py",
-        ))
+        logger.log_event(
+            ToolCallEvent(
+                source="test",
+                call_id="tc-1",
+                tool_name="bash",
+                arguments={"command": "ls"},
+            )
+        )
+        logger.log_event(
+            ToolResultEvent(
+                source="test",
+                call_id="tc-1",
+                tool_name="bash",
+                result="file1.py",
+            )
+        )
         logger.close()
 
         lines = log_file.read_text().strip().split("\n")
@@ -48,10 +57,24 @@ class TestEventLogger:
         log_file = tmp_path / "events.jsonl"
         logger = EventLogger(log_file, run_id="run-001")
 
-        logger.log_event(ThoughtEvent(source="test", content="", stream_state="start", stream_id="s1"))
-        logger.log_event(ThoughtEvent(source="test", content="Hel", stream_state="streaming", stream_id="s1"))
-        logger.log_event(ThoughtEvent(source="test", content="lo", stream_state="streaming", stream_id="s1"))
-        logger.log_event(ThoughtEvent(source="test", content="", stream_state="end", stream_id="s1"))
+        logger.log_event(
+            ThoughtEvent(
+                source="test", content="", stream_state="start", stream_id="s1"
+            )
+        )
+        logger.log_event(
+            ThoughtEvent(
+                source="test", content="Hel", stream_state="streaming", stream_id="s1"
+            )
+        )
+        logger.log_event(
+            ThoughtEvent(
+                source="test", content="lo", stream_state="streaming", stream_id="s1"
+            )
+        )
+        logger.log_event(
+            ThoughtEvent(source="test", content="", stream_state="end", stream_id="s1")
+        )
         logger.close()
 
         lines = log_file.read_text().strip().split("\n")
@@ -77,9 +100,13 @@ class TestEventLogger:
         log_file = tmp_path / "events.jsonl"
         logger = EventLogger(log_file, run_id="run-002")
 
-        logger.log_event(RunResultEvent(
-            source="test", status="completed", reason="done",
-        ))
+        logger.log_event(
+            RunResultEvent(
+                source="test",
+                status="completed",
+                reason="done",
+            )
+        )
         logger.close()
 
         lines = log_file.read_text().strip().split("\n")
@@ -110,15 +137,23 @@ class TestEventLogger:
         log_file = tmp_path / "events.jsonl"
         logger = EventLogger(log_file, run_id="run-001")
 
-        logger.log_event(ToolCallEvent(
-            source="test", call_id="tc-1", tool_name="bash",
-            arguments={"command": "ls"},
-        ))
+        logger.log_event(
+            ToolCallEvent(
+                source="test",
+                call_id="tc-1",
+                tool_name="bash",
+                arguments={"command": "ls"},
+            )
+        )
         logger.set_run_id("run-002")
-        logger.log_event(ToolCallEvent(
-            source="test", call_id="tc-2", tool_name="bash",
-            arguments={"command": "pwd"},
-        ))
+        logger.log_event(
+            ToolCallEvent(
+                source="test",
+                call_id="tc-2",
+                tool_name="bash",
+                arguments={"command": "pwd"},
+            )
+        )
         logger.close()
 
         lines = log_file.read_text().strip().split("\n")
@@ -133,9 +168,14 @@ class TestEventLogger:
         log_file = tmp_path / "events.jsonl"
         logger = EventLogger(log_file, run_id="run-001")
 
-        logger.log_event(ThoughtEvent(
-            source="test", content="full thought", stream_state="complete", stream_id="s1",
-        ))
+        logger.log_event(
+            ThoughtEvent(
+                source="test",
+                content="full thought",
+                stream_state="complete",
+                stream_id="s1",
+            )
+        )
         logger.close()
 
         lines = log_file.read_text().strip().split("\n")

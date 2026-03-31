@@ -15,10 +15,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import openai
 import pytest
 
-from matmaster.types.llm_provider import LLMProvider
 from matmaster.providers.openai_provider import OpenAIProvider
 from matmaster.types.errors import LLMError
-from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
+from matmaster.types.llm_provider import LLMProvider
+from matmaster.types.messages import LLMResponse, StreamChunk
 
 
 async def _async_iter(items):
@@ -85,9 +85,7 @@ class TestConstruction:
 
     def test_max_retries_stored(self) -> None:
         """max_retries stored as _max_retries."""
-        provider = OpenAIProvider(
-            model="gpt-4o-mini", api_key="sk-test", max_retries=5
-        )
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test", max_retries=5)
         assert provider._max_retries == 5
 
     def test_retry_delay_stored(self) -> None:
@@ -120,9 +118,7 @@ class TestStreamTimeoutConstruction:
         assert provider.stream_idle_timeout is None
 
     def test_max_retries_property(self) -> None:
-        provider = OpenAIProvider(
-            model="gpt-4o-mini", api_key="sk-test", max_retries=5
-        )
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test", max_retries=5)
         assert provider.max_retries == 5
 
     def test_retry_delay_property(self) -> None:
@@ -140,7 +136,9 @@ class TestStreamTimeoutConstruction:
             stream_timeout=120.0,
             stream_idle_timeout=60.0,
         )
-        with patch("matmaster.providers.openai_provider.openai.AsyncOpenAI") as mock_cls:
+        with patch(
+            "matmaster.providers.openai_provider.openai.AsyncOpenAI"
+        ) as mock_cls:
             mock_client = AsyncMock()
             mock_cls.return_value = mock_client
             async with provider:
@@ -160,7 +158,9 @@ class TestStreamTimeoutConstruction:
             api_key="sk-test",
             timeout=300.0,
         )
-        with patch("matmaster.providers.openai_provider.openai.AsyncOpenAI") as mock_cls:
+        with patch(
+            "matmaster.providers.openai_provider.openai.AsyncOpenAI"
+        ) as mock_cls:
             mock_client = AsyncMock()
             mock_cls.return_value = mock_client
             async with provider:
@@ -282,14 +282,17 @@ class TestChatStreamContent:
     async def test_chat_stream_reasoning_content(self) -> None:
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _async_iter([
-            _make_stream_chunk(reasoning_content="thinking..."),
-            _make_stream_chunk(content="answer", finish_reason="stop"),
-        ])
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                _make_stream_chunk(reasoning_content="thinking..."),
+                _make_stream_chunk(content="answer", finish_reason="stop"),
+            ]
+        )
         provider._client = mock_client
-        chunks = [chunk async for chunk in provider.chat_stream(
-            [{"role": "user", "content": "Hi"}]
-        )]
+        chunks = [
+            chunk
+            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+        ]
 
         assert len(chunks) == 2
         assert chunks[0].reasoning_content == "thinking..."
@@ -299,15 +302,18 @@ class TestChatStreamContent:
     async def test_chat_stream_content(self) -> None:
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _async_iter([
-            _make_stream_chunk(content="He"),
-            _make_stream_chunk(content="llo"),
-            _make_stream_chunk(finish_reason="stop"),
-        ])
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                _make_stream_chunk(content="He"),
+                _make_stream_chunk(content="llo"),
+                _make_stream_chunk(finish_reason="stop"),
+            ]
+        )
         provider._client = mock_client
-        chunks = [chunk async for chunk in provider.chat_stream(
-            [{"role": "user", "content": "Hi"}]
-        )]
+        chunks = [
+            chunk
+            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+        ]
 
         assert len(chunks) == 3
         assert chunks[0].content == "He"
@@ -324,14 +330,17 @@ class TestChatStreamContent:
 
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _async_iter([
-            _make_stream_chunk(tool_calls=[tc_delta]),
-            _make_stream_chunk(finish_reason="stop"),
-        ])
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                _make_stream_chunk(tool_calls=[tc_delta]),
+                _make_stream_chunk(finish_reason="stop"),
+            ]
+        )
         provider._client = mock_client
-        chunks = [chunk async for chunk in provider.chat_stream(
-            [{"role": "user", "content": "Hi"}]
-        )]
+        chunks = [
+            chunk
+            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+        ]
 
         assert chunks[0].tool_call_deltas is not None
         assert len(chunks[0].tool_call_deltas) == 1
@@ -347,14 +356,17 @@ class TestChatStreamContent:
 
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _async_iter([
-            empty_chunk,
-            _make_stream_chunk(content="ok", finish_reason="stop"),
-        ])
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                empty_chunk,
+                _make_stream_chunk(content="ok", finish_reason="stop"),
+            ]
+        )
         provider._client = mock_client
-        chunks = [chunk async for chunk in provider.chat_stream(
-            [{"role": "user", "content": "Hi"}]
-        )]
+        chunks = [
+            chunk
+            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+        ]
 
         assert len(chunks) == 1
         assert chunks[0].content == "ok"
@@ -362,9 +374,11 @@ class TestChatStreamContent:
     async def test_chat_stream_returns_async_iterator(self) -> None:
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _async_iter([
-            _make_stream_chunk(content="ok", finish_reason="stop"),
-        ])
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                _make_stream_chunk(content="ok", finish_reason="stop"),
+            ]
+        )
         provider._client = mock_client
         result = provider.chat_stream([{"role": "user", "content": "Hi"}])
 
@@ -379,14 +393,13 @@ class TestChatStreamUsage:
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter([])
         provider._client = mock_client
-        _ = [chunk async for chunk in provider.chat_stream(
-            [{"role": "user", "content": "hi"}]
-        )]
+        _ = [
+            chunk
+            async for chunk in provider.chat_stream([{"role": "user", "content": "hi"}])
+        ]
 
         call_kwargs = mock_client.chat.completions.create.call_args
-        assert call_kwargs.kwargs.get("stream_options") == {
-            "include_usage": True
-        }
+        assert call_kwargs.kwargs.get("stream_options") == {"include_usage": True}
 
     async def test_usage_emitted_as_final_chunk(self) -> None:
         usage = MagicMock()
@@ -400,14 +413,17 @@ class TestChatStreamUsage:
 
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _async_iter([
-            _make_stream_chunk(content="answer", finish_reason="stop"),
-            usage_only_chunk,
-        ])
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                _make_stream_chunk(content="answer", finish_reason="stop"),
+                usage_only_chunk,
+            ]
+        )
         provider._client = mock_client
-        chunks = [chunk async for chunk in provider.chat_stream(
-            [{"role": "user", "content": "Hi"}]
-        )]
+        chunks = [
+            chunk
+            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+        ]
 
         assert len(chunks) == 2
         assert chunks[1].usage == {
@@ -474,8 +490,7 @@ class TestErrorHandling:
 
         call_kwargs = mock_client.chat.completions.create.call_args
         assert call_kwargs.kwargs.get("tools") == tools or (
-            len(call_kwargs.args) == 0
-            and "tools" in call_kwargs.kwargs
+            len(call_kwargs.args) == 0 and "tools" in call_kwargs.kwargs
         )
 
 
@@ -491,119 +506,128 @@ class TestChatStreamExceptionTranslation:
 
     async def test_timeout_raises_retryable_llm_error(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.APITimeoutError(request=MagicMock())
+        mock_client.chat.completions.create.side_effect = openai.APITimeoutError(
+            request=MagicMock()
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            ]
         assert exc_info.value.retryable is True
         assert exc_info.value.__cause__ is not None
 
     async def test_connection_error_raises_retryable(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.APIConnectionError(request=MagicMock())
+        mock_client.chat.completions.create.side_effect = openai.APIConnectionError(
+            request=MagicMock()
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            ]
         assert exc_info.value.retryable is True
 
     async def test_rate_limit_raises_retryable(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.RateLimitError(
-                response=MagicMock(status_code=429, headers={}),
-                body=None, message="rate limited",
-            )
+        mock_client.chat.completions.create.side_effect = openai.RateLimitError(
+            response=MagicMock(status_code=429, headers={}),
+            body=None,
+            message="rate limited",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            ]
         assert exc_info.value.retryable is True
 
     async def test_internal_server_error_raises_retryable(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.InternalServerError(
-                response=MagicMock(status_code=500, headers={}),
-                body=None, message="server error",
-            )
+        mock_client.chat.completions.create.side_effect = openai.InternalServerError(
+            response=MagicMock(status_code=500, headers={}),
+            body=None,
+            message="server error",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            ]
         assert exc_info.value.retryable is True
 
     async def test_auth_error_raises_non_retryable(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.AuthenticationError(
-                response=MagicMock(status_code=401, headers={}),
-                body=None, message="invalid key",
-            )
+        mock_client.chat.completions.create.side_effect = openai.AuthenticationError(
+            response=MagicMock(status_code=401, headers={}),
+            body=None,
+            message="invalid key",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            ]
         assert exc_info.value.retryable is False
 
     async def test_context_length_raises_non_retryable(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.BadRequestError(
-                response=MagicMock(status_code=400, headers={}),
-                body=None, message="context length exceeded",
-            )
+        mock_client.chat.completions.create.side_effect = openai.BadRequestError(
+            response=MagicMock(status_code=400, headers={}),
+            body=None,
+            message="context length exceeded",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            ]
         assert exc_info.value.retryable is False
 
     async def test_generic_bad_request_raises_retryable(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.BadRequestError(
-                response=MagicMock(status_code=400, headers={}),
-                body=None, message="something went wrong",
-            )
+        mock_client.chat.completions.create.side_effect = openai.BadRequestError(
+            response=MagicMock(status_code=400, headers={}),
+            body=None,
+            message="something went wrong",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            ]
         assert exc_info.value.retryable is True
 
     async def test_httpx_read_timeout_raises_retryable(self) -> None:
         provider, mock_client = self._make_provider()
         import httpx
+
         mock_client.chat.completions.create.side_effect = httpx.ReadTimeout(
             "read timed out"
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "Hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            ]
         assert exc_info.value.retryable is True
 
     async def test_chat_stream_accepts_timeout_override(self) -> None:
         """timeout kwarg is forwarded to SDK create call."""
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.return_value = _async_iter([
-            _make_stream_chunk(content="ok", finish_reason="stop"),
-        ])
-        _ = [c async for c in provider.chat_stream(
-            [{"role": "user", "content": "Hi"}],
-            timeout=600.0,
-        )]
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                _make_stream_chunk(content="ok", finish_reason="stop"),
+            ]
+        )
+        _ = [
+            c
+            async for c in provider.chat_stream(
+                [{"role": "user", "content": "Hi"}],
+                timeout=600.0,
+            )
+        ]
         call_kwargs = mock_client.chat.completions.create.call_args.kwargs
         assert call_kwargs.get("timeout") == 600.0
 
@@ -615,7 +639,9 @@ class TestAsyncContextManager:
     async def test_aenter_creates_client(self) -> None:
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         assert provider._client is None
-        with patch("matmaster.providers.openai_provider.openai.AsyncOpenAI") as mock_cls:
+        with patch(
+            "matmaster.providers.openai_provider.openai.AsyncOpenAI"
+        ) as mock_cls:
             mock_client = AsyncMock()
             mock_cls.return_value = mock_client
             async with provider:
@@ -624,7 +650,9 @@ class TestAsyncContextManager:
 
     async def test_aexit_closes_client(self) -> None:
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        with patch("matmaster.providers.openai_provider.openai.AsyncOpenAI") as mock_cls:
+        with patch(
+            "matmaster.providers.openai_provider.openai.AsyncOpenAI"
+        ) as mock_cls:
             mock_client = AsyncMock()
             mock_cls.return_value = mock_client
             async with provider:
@@ -644,8 +672,8 @@ class TestAsyncContextManager:
                 pass
 
     async def test_validate_async_protocol(self) -> None:
-        from matmaster.validation import validate_async_protocol
         from matmaster.types.llm_provider import LLMProvider
+        from matmaster.validation import validate_async_protocol
 
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         errors = validate_async_protocol(provider, LLMProvider)
@@ -666,98 +694,98 @@ class TestChatStreamErrorCategory:
 
     async def test_timeout_category(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.APITimeoutError(request=MagicMock())
+        mock_client.chat.completions.create.side_effect = openai.APITimeoutError(
+            request=MagicMock()
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+            ]
         assert exc_info.value.error_category == "timeout"
         assert exc_info.value.retryable is True
 
     async def test_connection_category(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.APIConnectionError(request=MagicMock())
+        mock_client.chat.completions.create.side_effect = openai.APIConnectionError(
+            request=MagicMock()
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+            ]
         assert exc_info.value.error_category == "connection"
 
     async def test_rate_limit_category(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.RateLimitError(
-                response=MagicMock(status_code=429, headers={}),
-                body=None, message="rate limited",
-            )
+        mock_client.chat.completions.create.side_effect = openai.RateLimitError(
+            response=MagicMock(status_code=429, headers={}),
+            body=None,
+            message="rate limited",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+            ]
         assert exc_info.value.error_category == "rate_limit"
 
     async def test_server_category(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.InternalServerError(
-                response=MagicMock(status_code=500, headers={}),
-                body=None, message="server error",
-            )
+        mock_client.chat.completions.create.side_effect = openai.InternalServerError(
+            response=MagicMock(status_code=500, headers={}),
+            body=None,
+            message="server error",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+            ]
         assert exc_info.value.error_category == "server"
 
     async def test_auth_category(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.AuthenticationError(
-                response=MagicMock(status_code=401, headers={}),
-                body=None, message="invalid key",
-            )
+        mock_client.chat.completions.create.side_effect = openai.AuthenticationError(
+            response=MagicMock(status_code=401, headers={}),
+            body=None,
+            message="invalid key",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+            ]
         assert exc_info.value.error_category == "auth"
         assert exc_info.value.retryable is False
 
     async def test_context_overflow_category(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.BadRequestError(
-                response=MagicMock(status_code=400, headers={}),
-                body=None,
-                message="This model's maximum context length is 8192 tokens",
-            )
+        mock_client.chat.completions.create.side_effect = openai.BadRequestError(
+            response=MagicMock(status_code=400, headers={}),
+            body=None,
+            message="This model's maximum context length is 8192 tokens",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+            ]
         assert exc_info.value.error_category == "context_overflow"
         assert exc_info.value.retryable is False
 
     async def test_bad_request_category(self) -> None:
         provider, mock_client = self._make_provider()
-        mock_client.chat.completions.create.side_effect = (
-            openai.BadRequestError(
-                response=MagicMock(status_code=400, headers={}),
-                body=None,
-                message="invalid parameter",
-            )
+        mock_client.chat.completions.create.side_effect = openai.BadRequestError(
+            response=MagicMock(status_code=400, headers={}),
+            body=None,
+            message="invalid parameter",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [c async for c in provider.chat_stream(
-                [{"role": "user", "content": "hi"}]
-            )]
+            _ = [
+                c
+                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+            ]
         assert exc_info.value.error_category == "bad_request"
         assert exc_info.value.retryable is True

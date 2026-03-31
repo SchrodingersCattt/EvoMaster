@@ -47,11 +47,13 @@ class TestEditToolExecution:
     ) -> None:
         """Single match replaces and returns snippet with new text."""
         tool = EditTool(session=mock_session, tracker=tracker_marked)
-        result = await tool.execute({
-            "file_path": "/workspace/test.py",
-            "old_str": "bbb",
-            "new_str": "xxx",
-        })
+        result = await tool.execute(
+            {
+                "file_path": "/workspace/test.py",
+                "old_str": "bbb",
+                "new_str": "xxx",
+            }
+        )
         assert "has been edited" in result
         assert "xxx" in result
         mock_session.write_file.assert_called_once()
@@ -64,11 +66,13 @@ class TestEditToolExecution:
     ) -> None:
         """No match returns error about old_str not found."""
         tool = EditTool(session=mock_session, tracker=tracker_marked)
-        result = await tool.execute({
-            "file_path": "/workspace/test.py",
-            "old_str": "zzz",
-            "new_str": "yyy",
-        })
+        result = await tool.execute(
+            {
+                "file_path": "/workspace/test.py",
+                "old_str": "zzz",
+                "new_str": "yyy",
+            }
+        )
         assert "did not appear verbatim" in result
         mock_session.write_file.assert_not_called()
 
@@ -78,11 +82,13 @@ class TestEditToolExecution:
         """Multiple matches returns error with line numbers."""
         mock_session.read_file.return_value = "hello world\nfoo bar\nhello world\n"
         tool = EditTool(session=mock_session, tracker=tracker_marked)
-        result = await tool.execute({
-            "file_path": "/workspace/test.py",
-            "old_str": "hello world",
-            "new_str": "goodbye",
-        })
+        result = await tool.execute(
+            {
+                "file_path": "/workspace/test.py",
+                "old_str": "hello world",
+                "new_str": "goodbye",
+            }
+        )
         assert "Multiple occurrences" in result
         # Line numbers should be present
         assert "1" in result
@@ -94,11 +100,13 @@ class TestEditToolExecution:
     ) -> None:
         """old_str == new_str returns error about no-op."""
         tool = EditTool(session=mock_session, tracker=tracker_marked)
-        result = await tool.execute({
-            "file_path": "/workspace/test.py",
-            "old_str": "bbb",
-            "new_str": "bbb",
-        })
+        result = await tool.execute(
+            {
+                "file_path": "/workspace/test.py",
+                "old_str": "bbb",
+                "new_str": "bbb",
+            }
+        )
         assert "must be different" in result
         mock_session.write_file.assert_not_called()
 
@@ -107,11 +115,13 @@ class TestEditToolExecution:
     ) -> None:
         """old_str with extra whitespace falls back to stripped version."""
         tool = EditTool(session=mock_session, tracker=tracker_marked)
-        result = await tool.execute({
-            "file_path": "/workspace/test.py",
-            "old_str": "  bbb  ",
-            "new_str": "xxx",
-        })
+        result = await tool.execute(
+            {
+                "file_path": "/workspace/test.py",
+                "old_str": "  bbb  ",
+                "new_str": "xxx",
+            }
+        )
         assert "has been edited" in result
         written = mock_session.write_file.call_args[0][1]
         assert "xxx" in written
@@ -120,32 +130,38 @@ class TestEditToolExecution:
         """Without prior read -- returns Read-Before-Modify error."""
         tracker = ReadTracker()  # Not pre-marked
         tool = EditTool(session=mock_session, tracker=tracker)
-        result = await tool.execute({
-            "file_path": "/workspace/test.py",
-            "old_str": "bbb",
-            "new_str": "xxx",
-        })
+        result = await tool.execute(
+            {
+                "file_path": "/workspace/test.py",
+                "old_str": "bbb",
+                "new_str": "xxx",
+            }
+        )
         assert "must be read before modify" in result
         mock_session.write_file.assert_not_called()
 
     async def test_no_tracker(self, mock_session: MagicMock) -> None:
         """No tracker -- edits without Read-Before-Modify check."""
         tool = EditTool(session=mock_session, tracker=None)
-        result = await tool.execute({
-            "file_path": "/workspace/test.py",
-            "old_str": "bbb",
-            "new_str": "xxx",
-        })
+        result = await tool.execute(
+            {
+                "file_path": "/workspace/test.py",
+                "old_str": "bbb",
+                "new_str": "xxx",
+            }
+        )
         assert "has been edited" in result
         mock_session.write_file.assert_called_once()
 
     async def test_no_session_raises(self) -> None:
         tool = EditTool()
-        result = await tool.execute({
-            "file_path": "/workspace/test.py",
-            "old_str": "bbb",
-            "new_str": "xxx",
-        })
+        result = await tool.execute(
+            {
+                "file_path": "/workspace/test.py",
+                "old_str": "bbb",
+                "new_str": "xxx",
+            }
+        )
         assert "Error:" in result
         assert "session" in result.lower()
 
@@ -153,11 +169,13 @@ class TestEditToolExecution:
         """Verify exact D-03 error string for Read-Before-Modify violation."""
         tracker = ReadTracker()
         tool = EditTool(session=mock_session, tracker=tracker)
-        result = await tool.execute({
-            "file_path": "/workspace/test.py",
-            "old_str": "bbb",
-            "new_str": "xxx",
-        })
+        result = await tool.execute(
+            {
+                "file_path": "/workspace/test.py",
+                "old_str": "bbb",
+                "new_str": "xxx",
+            }
+        )
         assert result == "Error: file '/workspace/test.py' must be read before modify"
 
     async def test_snippet_includes_context_lines(
@@ -168,11 +186,13 @@ class TestEditToolExecution:
             "line1\nline2\nline3\nline4\ntarget\nline6\nline7\nline8\nline9\nline10"
         )
         tool = EditTool(session=mock_session, tracker=tracker_marked)
-        result = await tool.execute({
-            "file_path": "/workspace/test.py",
-            "old_str": "target",
-            "new_str": "replaced",
-        })
+        result = await tool.execute(
+            {
+                "file_path": "/workspace/test.py",
+                "old_str": "target",
+                "new_str": "replaced",
+            }
+        )
         assert "replaced" in result
         # Snippet should include context lines around the replacement
         assert "cat -n" in result

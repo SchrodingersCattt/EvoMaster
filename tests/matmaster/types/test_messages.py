@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -16,7 +14,6 @@ from matmaster.types.messages import (
     ToolMessage,
     UserMessage,
 )
-
 
 # ── Role enum ──────────────────────────────────────────
 

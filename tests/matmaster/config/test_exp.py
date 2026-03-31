@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-from pydantic import ValidationError
-
 from matmaster.config.exp import ExpConfig, ExpSkillsConfig, ExpToolsConfig
 
 
@@ -59,7 +56,9 @@ class TestExpConfig:
         assert cfg.compaction.enabled is True
         assert cfg.compaction.context_window_tokens == 64000
         # mcp is still ignored
-        assert not hasattr(cfg, "mcp") or not isinstance(getattr(cfg, "mcp", None), dict)
+        assert not hasattr(cfg, "mcp") or not isinstance(
+            getattr(cfg, "mcp", None), dict
+        )
 
     def test_system_prompt_default(self):
         cfg = ExpConfig()

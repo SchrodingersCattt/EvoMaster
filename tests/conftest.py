@@ -91,9 +91,7 @@ class MockAsyncHook:
     async def pre_tool_call(self, tool_call: ToolCallData) -> HookAction:
         return HookAction.CONTINUE
 
-    async def post_tool_call(
-        self, tool_call: ToolCallData, result: ToolResult
-    ) -> None:
+    async def post_tool_call(self, tool_call: ToolCallData, result: ToolResult) -> None:
         pass
 
     async def pre_llm_call(self, messages: list[Message], turn: int) -> None:

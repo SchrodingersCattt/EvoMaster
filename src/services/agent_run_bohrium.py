@@ -161,9 +161,7 @@ def _sync_skills_to_ssh_session(
         for local_root in spec.project_skill_roots:
             lp = Path(local_root)
             if not lp.is_dir():
-                logger.warning(
-                    'run_agent: skill sync skip missing dir %s', local_root
-                )
+                logger.warning('run_agent: skill sync skip missing dir %s', local_root)
                 continue
             try:
                 rel = lp.resolve().relative_to(_PROJECT_ROOT.resolve())

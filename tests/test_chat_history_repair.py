@@ -32,15 +32,19 @@ def test_repair_total_missing():
     """All tool_results missing — should synthesize all."""
     messages = [
         {'role': 'user', 'content': 'hello'},
-        _assistant_with_tool_calls([
-            _tool_call('c1', 'bash'),
-            _tool_call('c2', 'read'),
-            _tool_call('c3', 'glob'),
-        ]),
+        _assistant_with_tool_calls(
+            [
+                _tool_call('c1', 'bash'),
+                _tool_call('c2', 'read'),
+                _tool_call('c3', 'glob'),
+            ]
+        ),
     ]
     result = ChatHistoryConverter._repair_incomplete_tool_turns(messages)
     assert len(result) == 5
-    for i, (call_id, name) in enumerate([('c1', 'bash'), ('c2', 'read'), ('c3', 'glob')]):
+    for i, (call_id, name) in enumerate(
+        [('c1', 'bash'), ('c2', 'read'), ('c3', 'glob')]
+    ):
         tm = result[2 + i]
         assert tm['role'] == 'tool'
         assert tm['tool_call_id'] == call_id
@@ -52,11 +56,13 @@ def test_repair_partial_missing():
     """2 of 3 tool_calls have results — should synthesize only the missing one."""
     messages = [
         {'role': 'user', 'content': 'hello'},
-        _assistant_with_tool_calls([
-            _tool_call('c1', 'bash'),
-            _tool_call('c2', 'read'),
-            _tool_call('c3', 'glob'),
-        ]),
+        _assistant_with_tool_calls(
+            [
+                _tool_call('c1', 'bash'),
+                _tool_call('c2', 'read'),
+                _tool_call('c3', 'glob'),
+            ]
+        ),
         _tool_message('c1', 'bash', 'output1'),
         _tool_message('c2', 'read', 'output2'),
     ]
@@ -74,15 +80,19 @@ def test_repair_noop_when_complete():
     """All tool_calls have matching results — no change."""
     messages = [
         {'role': 'user', 'content': 'hello'},
-        _assistant_with_tool_calls([
-            _tool_call('c1', 'bash'),
-            _tool_call('c2', 'read'),
-        ]),
+        _assistant_with_tool_calls(
+            [
+                _tool_call('c1', 'bash'),
+                _tool_call('c2', 'read'),
+            ]
+        ),
         _tool_message('c1', 'bash', 'ok1'),
         _tool_message('c2', 'read', 'ok2'),
-        _assistant_with_tool_calls([
-            _tool_call('c3', 'glob'),
-        ]),
+        _assistant_with_tool_calls(
+            [
+                _tool_call('c3', 'glob'),
+            ]
+        ),
         _tool_message('c3', 'glob', 'ok3'),
     ]
     result = ChatHistoryConverter._repair_incomplete_tool_turns(messages)
@@ -103,16 +113,20 @@ def test_repair_multiple_incomplete_turns():
     """Two separate incomplete tool turns — both should be repaired."""
     messages = [
         {'role': 'user', 'content': 'q1'},
-        _assistant_with_tool_calls([
-            _tool_call('c1', 'bash'),
-            _tool_call('c2', 'read'),
-        ]),
+        _assistant_with_tool_calls(
+            [
+                _tool_call('c1', 'bash'),
+                _tool_call('c2', 'read'),
+            ]
+        ),
         _tool_message('c1', 'bash', 'ok'),
         # c2 missing
         {'role': 'user', 'content': 'q2'},
-        _assistant_with_tool_calls([
-            _tool_call('c3', 'glob'),
-        ]),
+        _assistant_with_tool_calls(
+            [
+                _tool_call('c3', 'glob'),
+            ]
+        ),
         # c3 missing
     ]
     result = ChatHistoryConverter._repair_incomplete_tool_turns(messages)
@@ -128,10 +142,12 @@ def test_repair_deduplicates_tool_call_ids():
     """Duplicate IDs in tool_calls — should only synthesize one."""
     messages = [
         {'role': 'user', 'content': 'hello'},
-        _assistant_with_tool_calls([
-            _tool_call('c1', 'bash'),
-            _tool_call('c1', 'bash'),
-        ]),
+        _assistant_with_tool_calls(
+            [
+                _tool_call('c1', 'bash'),
+                _tool_call('c1', 'bash'),
+            ]
+        ),
     ]
     result = ChatHistoryConverter._repair_incomplete_tool_turns(messages)
     synthetic = [m for m in result if m['role'] == 'tool']
@@ -143,11 +159,13 @@ def test_repair_preserves_tool_call_order():
     """Synthetic messages follow the order in tool_calls."""
     messages = [
         {'role': 'user', 'content': 'hello'},
-        _assistant_with_tool_calls([
-            _tool_call('c1', 'bash'),
-            _tool_call('c2', 'read'),
-            _tool_call('c3', 'glob'),
-        ]),
+        _assistant_with_tool_calls(
+            [
+                _tool_call('c1', 'bash'),
+                _tool_call('c2', 'read'),
+                _tool_call('c3', 'glob'),
+            ]
+        ),
         _tool_message('c2', 'read', 'ok'),
     ]
     result = ChatHistoryConverter._repair_incomplete_tool_turns(messages)

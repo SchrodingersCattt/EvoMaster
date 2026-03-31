@@ -11,9 +11,7 @@ Tests cover:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, Mock
-
-import pytest
+from unittest.mock import AsyncMock
 
 
 class TestSpawnToolExecute:

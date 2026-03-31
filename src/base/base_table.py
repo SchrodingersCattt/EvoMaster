@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-class BaseTable(ABC):
+class BaseTable(ABC):  # noqa: B024
     """
     数据库表的基类
 

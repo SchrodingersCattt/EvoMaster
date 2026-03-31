@@ -9,15 +9,13 @@ import asyncio
 import gc
 import logging
 import os
-import queue
-from queue import Empty
 import time
 import uuid
 from functools import lru_cache
 from pathlib import Path
+from queue import Empty
 from typing import Any, Callable, Protocol, runtime_checkable
 
-from matmaster.config.exp import ExpConfig
 from matmaster.core.bus import MessageBus
 from matmaster.core.playground import PlaygroundManager
 from matmaster.hooks import (
@@ -31,7 +29,10 @@ from matmaster.integration import (
     SSEHandler,
     WorkspaceHandler,
 )
-from matmaster.integration.bohrium_setup import BohriumSetupService, derive_skill_sync_spec
+from matmaster.integration.bohrium_setup import (
+    BohriumSetupService,
+    derive_skill_sync_spec,
+)
 from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.events import (
     CancelledEvent,
@@ -267,7 +268,9 @@ class AgentRunService:
             from matmaster.config.loader import load_exp_config
 
             exp_config = load_exp_config(exp_name)
-            skill_sync_spec = derive_skill_sync_spec(exp_config, project_root=_project_root)
+            skill_sync_spec = derive_skill_sync_spec(
+                exp_config, project_root=_project_root
+            )
 
             # -- Stage 3: Bohrium credentials + SSH --
             bohrium_svc = BohriumSetupService(self._sessions_service, bus)
@@ -340,7 +343,10 @@ class AgentRunService:
             )
 
             merged_hooks = _build_service_hooks(
-                bus, runtime.spec.hooks, mode=mode, reply_queue=reply_queue,
+                bus,
+                runtime.spec.hooks,
+                mode=mode,
+                reply_queue=reply_queue,
             )
             spec = runtime.spec.model_copy(update={'hooks': merged_hooks})
 
@@ -446,9 +452,7 @@ class AgentRunService:
             # 2. Exp cleanup (with timeout to prevent worker hangs)
             if exp is not None:
                 try:
-                    await asyncio.wait_for(
-                        exp._run_cleanup_callbacks(), timeout=30
-                    )
+                    await asyncio.wait_for(exp._run_cleanup_callbacks(), timeout=30)
                 except Exception:
                     logger.warning('Exp cleanup failed', exc_info=True)
             # 3. Router LAST -- drains any final events from bohrium/exp cleanup

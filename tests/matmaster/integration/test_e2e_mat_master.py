@@ -10,7 +10,7 @@ import asyncio
 import json
 import threading
 from pathlib import Path
-from typing import Any, AsyncIterator, Iterator
+from typing import Any, AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from matmaster.config.exp import ExpConfig
@@ -23,7 +23,6 @@ from matmaster.types.events import (
     ToolCallEvent,
     ToolResultEvent,
 )
-from matmaster.types.runtime import AgentRuntimeSpec, KernelResult
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -31,6 +30,7 @@ from matmaster.types.messages import (
     StreamChunk,
     UserMessage,
 )
+from matmaster.types.runtime import KernelResult
 
 # ── Mock LLM provider ────────────────────────────────
 
@@ -56,7 +56,11 @@ class MockLLMProvider:
         return LLMResponse(content=self._content, finish_reason='stop')
 
     async def chat_stream(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, *, timeout: float | None = None
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        *,
+        timeout: float | None = None,
     ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(
             content=self._content,
@@ -85,7 +89,9 @@ class MockLLMProviderWithToolCall:
     async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='done', finish_reason='stop')
 
-    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
+    async def chat_stream(
+        self, messages, tools=None, *, timeout=None
+    ) -> AsyncIterator[StreamChunk]:
         self._call_count += 1
         if self._call_count == 1:
             # First turn: tool call
@@ -120,7 +126,9 @@ class MockLLMProviderCapturingMessages:
     async def chat(self, messages, tools=None) -> LLMResponse:
         return LLMResponse(content='ok', finish_reason='stop')
 
-    async def chat_stream(self, messages, tools=None, *, timeout=None) -> AsyncIterator[StreamChunk]:
+    async def chat_stream(
+        self, messages, tools=None, *, timeout=None
+    ) -> AsyncIterator[StreamChunk]:
         self.captured_messages.append(list(messages))
         yield StreamChunk(content='Acknowledged history.', finish_reason='stop')
 
@@ -340,15 +348,17 @@ class TestMatMasterRunAgentE2E:
                 sse_payloads.append(payload)
 
             # Execute
-            asyncio.run(svc.run_agent(
-                session_id='sess-1',
-                user_prompt='test prompt',
-                send_cb=mock_send_cb,
-                stop_event=threading.Event(),
-                mode='direct',
-                reply_queue=None,
-                task_id='task-1',
-            ))
+            asyncio.run(
+                svc.run_agent(
+                    session_id='sess-1',
+                    user_prompt='test prompt',
+                    send_cb=mock_send_cb,
+                    stop_event=threading.Event(),
+                    mode='direct',
+                    reply_queue=None,
+                    task_id='task-1',
+                )
+            )
 
             # Verify: pipeline completed successfully -- use_quota called (success path)
             # use_quota is the strongest signal that kernel.run() returned a
@@ -448,15 +458,17 @@ class TestMatMasterRunAgentE2E:
 
             mock_use_quota.side_effect = _mock_use_quota
 
-            asyncio.run(svc.run_agent(
-                session_id='sess-1',
-                user_prompt='new question',
-                send_cb=AsyncMock(),
-                stop_event=threading.Event(),
-                mode='direct',
-                reply_queue=None,
-                task_id=current_task_id,
-            ))
+            asyncio.run(
+                svc.run_agent(
+                    session_id='sess-1',
+                    user_prompt='new question',
+                    send_cb=AsyncMock(),
+                    stop_event=threading.Event(),
+                    mode='direct',
+                    reply_queue=None,
+                    task_id=current_task_id,
+                )
+            )
 
         assert len(mock_llm.captured_messages) == 1
         llm_messages = mock_llm.captured_messages[0]
@@ -513,15 +525,17 @@ class TestMatMasterRunAgentE2E:
             async def mock_send_cb(payload: dict[str, Any]) -> None:
                 sse_payloads.append(payload)
 
-            result = asyncio.run(svc.run_agent(
-                session_id='sess-events-table-error',
-                user_prompt='test prompt',
-                send_cb=mock_send_cb,
-                stop_event=threading.Event(),
-                mode='direct',
-                reply_queue=None,
-                task_id='task-events-table-error',
-            ))
+            result = asyncio.run(
+                svc.run_agent(
+                    session_id='sess-events-table-error',
+                    user_prompt='test prompt',
+                    send_cb=mock_send_cb,
+                    stop_event=threading.Event(),
+                    mode='direct',
+                    reply_queue=None,
+                    task_id='task-events-table-error',
+                )
+            )
 
         assert result == ((False, 'pre_router_setup_failed'), 0)
         mock_router_cls.assert_not_called()
@@ -618,15 +632,18 @@ class TestMatMasterRunAgentE2E:
 
             async def _mock_setup(**kwargs):
                 from matmaster.types.events import BohriumNodeEvent
+
                 bus = captured_bus[0]
-                bus.emit_nowait(BohriumNodeEvent(
-                    source='BohriumSetup',
-                    payload={
-                        'type': 'node_ready',
-                        'content': 'node is ready',
-                        'stage': 'setup',
-                    },
-                ))
+                bus.emit_nowait(
+                    BohriumNodeEvent(
+                        source='BohriumSetup',
+                        payload={
+                            'type': 'node_ready',
+                            'content': 'node is ready',
+                            'stage': 'setup',
+                        },
+                    )
+                )
                 await asyncio.sleep(0)  # yield to let router dispatch
                 setup_state['saw_bohrium_event_before_return'] = (
                     bohrium_seen_by_sse.wait(timeout=1.0)
@@ -636,15 +653,17 @@ class TestMatMasterRunAgentE2E:
             real_mock_svc.run_setup = _mock_setup
             real_mock_svc.run_cleanup = AsyncMock()
 
-            asyncio.run(svc.run_agent(
-                session_id='sess-bohrium-event',
-                user_prompt='test prompt',
-                send_cb=mock_send_cb,
-                stop_event=threading.Event(),
-                mode='direct',
-                reply_queue=None,
-                task_id='task-bohrium-event',
-            ))
+            asyncio.run(
+                svc.run_agent(
+                    session_id='sess-bohrium-event',
+                    user_prompt='test prompt',
+                    send_cb=mock_send_cb,
+                    stop_event=threading.Event(),
+                    mode='direct',
+                    reply_queue=None,
+                    task_id='task-bohrium-event',
+                )
+            )
 
         assert setup_state['saw_bohrium_event_before_return'] is True
         bohrium_payload = next(
@@ -706,15 +725,18 @@ class TestMatMasterRunAgentE2E:
 
             async def _mock_setup(**kwargs):
                 from matmaster.types.events import ErrorEvent, StreamClosedEvent
+
                 bus = captured_bus[0]
                 bus.emit_nowait(ErrorEvent(source='System', message=reason))
-                bus.emit_nowait(StreamClosedEvent(
-                    source='System',
-                    content='Bohrium 节点创建失败，会话已结束.',
-                    task_completed=False,
-                    end_reason='error',
-                    treat_as_failure=True,
-                ))
+                bus.emit_nowait(
+                    StreamClosedEvent(
+                        source='System',
+                        content='Bohrium 节点创建失败，会话已结束.',
+                        task_completed=False,
+                        end_reason='error',
+                        treat_as_failure=True,
+                    )
+                )
                 return BohriumSetupResult(False, ((False, reason), 10))
 
             real_mock_svc.run_setup = _mock_setup
@@ -737,15 +759,17 @@ class TestMatMasterRunAgentE2E:
             async def mock_send_cb(payload: dict[str, Any]) -> None:
                 sse_payloads.append(payload)
 
-            asyncio.run(svc.run_agent(
-                session_id='sess-bohrium-abort',
-                user_prompt='test prompt',
-                send_cb=mock_send_cb,
-                stop_event=threading.Event(),
-                mode='direct',
-                reply_queue=None,
-                task_id='task-bohrium-abort',
-            ))
+            asyncio.run(
+                svc.run_agent(
+                    session_id='sess-bohrium-abort',
+                    user_prompt='test prompt',
+                    send_cb=mock_send_cb,
+                    stop_event=threading.Event(),
+                    mode='direct',
+                    reply_queue=None,
+                    task_id='task-bohrium-abort',
+                )
+            )
 
         err = next((p for p in sse_payloads if p.get('type') == 'error'), None)
         closed = next(
@@ -803,7 +827,9 @@ class TestMatMasterRunAgentE2E:
         ):
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
-            mock_bohrium_svc.run_setup = AsyncMock(side_effect=RuntimeError('bohrium setup failed'))
+            mock_bohrium_svc.run_setup = AsyncMock(
+                side_effect=RuntimeError('bohrium setup failed')
+            )
             mock_bohrium_svc.run_cleanup = AsyncMock()
 
             mock_events_table = MagicMock()
@@ -823,15 +849,17 @@ class TestMatMasterRunAgentE2E:
             async def mock_send_cb(payload: dict[str, Any]) -> None:
                 sse_payloads.append(payload)
 
-            asyncio.run(svc.run_agent(
-                session_id='sess-bohrium-error',
-                user_prompt='test prompt',
-                send_cb=mock_send_cb,
-                stop_event=threading.Event(),
-                mode='direct',
-                reply_queue=None,
-                task_id='task-bohrium-error',
-            ))
+            asyncio.run(
+                svc.run_agent(
+                    session_id='sess-bohrium-error',
+                    user_prompt='test prompt',
+                    send_cb=mock_send_cb,
+                    stop_event=threading.Event(),
+                    mode='direct',
+                    reply_queue=None,
+                    task_id='task-bohrium-error',
+                )
+            )
 
         error_payload = next(
             (payload for payload in sse_payloads if payload.get('type') == 'error'),

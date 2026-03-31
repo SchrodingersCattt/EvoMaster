@@ -296,9 +296,7 @@ class TestRealAPICompaction:
         _print_result("Compaction Trigger Test", kr, compactor, elapsed)
 
         assert kr.status == "completed", f"got {kr.status}: {kr.reason}"
-        assert kr.num_turns >= 3, (
-            f"应至少 3 轮（逐个调用工具），实际 {kr.num_turns} 轮"
-        )
+        assert kr.num_turns >= 3, f"应至少 3 轮（逐个调用工具），实际 {kr.num_turns} 轮"
 
         # ── 压缩触发 ──
         assert compactor._compaction_count > 0, (
@@ -311,12 +309,16 @@ class TestRealAPICompaction:
         compaction_events = [e for e in events if isinstance(e, ContextCompactionEvent)]
         print(f"  Compaction events: {len(compaction_events)}")
         for i, evt in enumerate(compaction_events):
-            print(f"    #{i+1}: strategy={evt.payload['strategy']}, "
-                  f"trigger_tokens={evt.payload['trigger_tokens']}, "
-                  f"retained_turns={evt.payload['retained_turns']}")
+            print(
+                f"    #{i+1}: strategy={evt.payload['strategy']}, "
+                f"trigger_tokens={evt.payload['trigger_tokens']}, "
+                f"retained_turns={evt.payload['retained_turns']}"
+            )
 
         assert len(compaction_events) > 0
-        summary_events = [e for e in compaction_events if e.payload["strategy"] == "summary"]
+        summary_events = [
+            e for e in compaction_events if e.payload["strategy"] == "summary"
+        ]
         assert len(summary_events) > 0, (
             f"Expected at least one summary compaction, got strategies: "
             f"{[e.payload['strategy'] for e in compaction_events]}"
@@ -326,8 +328,10 @@ class TestRealAPICompaction:
         msgs = result.messages
         assert isinstance(msgs[0], SystemMessage)
         compacted = [
-            m for m in msgs
-            if isinstance(m, SystemMessage) and "[Compacted Context]" in (m.content or "")
+            m
+            for m in msgs
+            if isinstance(m, SystemMessage)
+            and "[Compacted Context]" in (m.content or "")
         ]
         print(f"  [Compacted Context] messages: {len(compacted)}")
         if compacted:
@@ -390,4 +394,4 @@ class TestRealAPICompaction:
         if compactor._compaction_count > 0:
             print(f"  [OK] Compaction triggered {compactor._compaction_count} time(s)")
         else:
-            print(f"  [WARN] No compaction despite sequential calls")
+            print("  [WARN] No compaction despite sequential calls")

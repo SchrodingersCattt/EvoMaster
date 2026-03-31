@@ -199,7 +199,6 @@ class ReplyQueueNotifyOnGet:
         return result
 
 
-
 class StreamQueueManager:
     """流式接口的队列管理：SSE 订阅队列的注册/注销与广播；当前 run 的确认回复队列（confirmation_request 共用）。"""
 

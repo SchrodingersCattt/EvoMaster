@@ -20,7 +20,11 @@ import asyncio
 import pytest
 
 from matmaster.core.bus import MessageBus
-from matmaster.core.context_compactor import ContextCompactor, estimate_tokens, parse_turns
+from matmaster.core.context_compactor import (
+    ContextCompactor,
+    estimate_tokens,
+    parse_turns,
+)
 from matmaster.types.events import ContextCompactionEvent
 from matmaster.types.messages import (
     AssistantMessage,
@@ -32,7 +36,6 @@ from matmaster.types.messages import (
     UserMessage,
 )
 from matmaster.types.runtime import CompactionConfig
-
 
 # ── Fixtures ──────────────────────────────────────────────
 
@@ -134,9 +137,7 @@ class TestDefaultDevshellPath:
             )
             spec = await exp.assemble(ctx)
 
-        assert spec.compaction.enabled is False, (
-            "默认 CompactionConfig 应为 disabled"
-        )
+        assert spec.compaction.enabled is False, "默认 CompactionConfig 应为 disabled"
         assert spec.compactor is None, "assemble 阶段不应创建 compactor 实例"
 
     async def test_compactor_skips_when_disabled(self) -> None:
@@ -249,11 +250,19 @@ class TestCooldown:
         assert provider.call_count == 1
 
         # 重建长对话模拟继续积累
-        msgs.extend([
-            AssistantMessage(content="more work " + "z" * 500,
-                             tool_calls=[ToolCallData(id="tc-extra", name="bash", arguments={})]),
-            ToolMessage(content="extra result " + "e" * 500, tool_call_id="tc-extra", tool_name="bash"),
-        ])
+        msgs.extend(
+            [
+                AssistantMessage(
+                    content="more work " + "z" * 500,
+                    tool_calls=[ToolCallData(id="tc-extra", name="bash", arguments={})],
+                ),
+                ToolMessage(
+                    content="extra result " + "e" * 500,
+                    tool_call_id="tc-extra",
+                    tool_name="bash",
+                ),
+            ]
+        )
         compactor.update_message_count(len(msgs))
 
         # turn=5 (> 3+1) 冷却期结束，可再次触发
@@ -417,7 +426,9 @@ class TestMultipleCompactions:
             msgs.append(
                 AssistantMessage(
                     content=f"new-turn-{i} " + "n" * 500,
-                    tool_calls=[ToolCallData(id=f"tc-new-{i}", name="bash", arguments={})],
+                    tool_calls=[
+                        ToolCallData(id=f"tc-new-{i}", name="bash", arguments={})
+                    ],
                 )
             )
             msgs.append(
@@ -490,7 +501,9 @@ class TestRetainedTurnsSelection:
         turns = parse_turns(msgs)
         selected, count = compactor._select_recent_turns(turns)
         # 受 budget_40 限制，不可能保留全部 20 个 turn
-        assert count < len(turns), f"budget 约束应限制保留数，实际保留 {count}/{len(turns)}"
+        assert count < len(
+            turns
+        ), f"budget 约束应限制保留数，实际保留 {count}/{len(turns)}"
         assert count >= 3, "最低仍应保留 3 个"
 
 
@@ -522,12 +535,21 @@ class TestToolTruncationFallback:
                     for i in range(3)
                 ],
             ),
-            ToolMessage(content="HEAD_A " + "a" * 2000 + " TAIL_A",
-                        tool_call_id="tc-0", tool_name="bash"),
-            ToolMessage(content="HEAD_B " + "b" * 2000 + " TAIL_B",
-                        tool_call_id="tc-1", tool_name="bash"),
-            ToolMessage(content="HEAD_C " + "c" * 2000 + " TAIL_C",
-                        tool_call_id="tc-2", tool_name="bash"),
+            ToolMessage(
+                content="HEAD_A " + "a" * 2000 + " TAIL_A",
+                tool_call_id="tc-0",
+                tool_name="bash",
+            ),
+            ToolMessage(
+                content="HEAD_B " + "b" * 2000 + " TAIL_B",
+                tool_call_id="tc-1",
+                tool_name="bash",
+            ),
+            ToolMessage(
+                content="HEAD_C " + "c" * 2000 + " TAIL_C",
+                tool_call_id="tc-2",
+                tool_name="bash",
+            ),
         ]
 
         compactor = ContextCompactor(config=config, summary_provider=provider, bus=bus)
@@ -541,7 +563,11 @@ class TestToolTruncationFallback:
         assert compactor._compaction_count == 1
 
         # 至少 1 个 ToolMessage 被截断
-        truncated = [m for m in msgs if isinstance(m, ToolMessage) and "truncated" in (m.content or "")]
+        truncated = [
+            m
+            for m in msgs
+            if isinstance(m, ToolMessage) and "truncated" in (m.content or "")
+        ]
         assert len(truncated) > 0, "应至少截断 1 个大 tool result"
 
         # 截断后保留 head + tail
@@ -563,9 +589,12 @@ class TestToolTruncationFallback:
         msgs = [
             SystemMessage(content="sys"),
             UserMessage(content="task"),
-            AssistantMessage(content="",
-                             tool_calls=[ToolCallData(id="tc-0", name="t", arguments={})]),
-            ToolMessage(content="big " + "x" * 2000, tool_call_id="tc-0", tool_name="t"),
+            AssistantMessage(
+                content="", tool_calls=[ToolCallData(id="tc-0", name="t", arguments={})]
+            ),
+            ToolMessage(
+                content="big " + "x" * 2000, tool_call_id="tc-0", tool_name="t"
+            ),
         ]
 
         compactor = ContextCompactor(config=config, summary_provider=provider)
@@ -580,7 +609,9 @@ class TestToolTruncationFallback:
 # ── Test 11: Kernel 集成端到端 ───────────────────────────
 
 
-@pytest.mark.skip(reason="Kernel integration deferred to Phase 17-18 per D-08: requires Kernel async化")
+@pytest.mark.skip(
+    reason="Kernel integration deferred to Phase 17-18 per D-08: requires Kernel async化"
+)
 class TestKernelIntegration:
     """完整 kernel loop 中压缩触发且结果正确。"""
 

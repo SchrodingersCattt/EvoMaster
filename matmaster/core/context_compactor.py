@@ -316,7 +316,9 @@ class ContextCompactor:
         tool_indices.sort(key=lambda x: x[1], reverse=True)
 
         truncated = 0
-        tokens_to_shed = int(estimated_tokens - threshold * 0.8)  # target 80% of threshold
+        tokens_to_shed = int(
+            estimated_tokens - threshold * 0.8
+        )  # target 80% of threshold
 
         for idx, toks in tool_indices:
             if tokens_to_shed <= 0:

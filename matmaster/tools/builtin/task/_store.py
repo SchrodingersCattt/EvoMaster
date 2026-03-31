@@ -65,9 +65,7 @@ class TaskStore:
                 "id": task_id,
                 "description": description,
                 "status": "open",
-                "subtasks": [
-                    {"description": s, "status": "open"} for s in subtasks
-                ],
+                "subtasks": [{"description": s, "status": "open"} for s in subtasks],
                 "created_at": now,
                 "updated_at": now,
             }

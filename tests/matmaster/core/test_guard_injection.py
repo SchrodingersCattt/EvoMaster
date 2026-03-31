@@ -7,12 +7,11 @@ Tests updated to use inline stub guards that satisfy the Guard Protocol.
 from __future__ import annotations
 
 from pathlib import Path
-import pytest
 
 from matmaster.core.guard_pipeline import GuardPipeline
-from matmaster.types.messages import ToolCallData
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.guards import Guard, GuardContext, GuardResult
+from matmaster.types.messages import ToolCallData
 
 
 class _StubGuard:

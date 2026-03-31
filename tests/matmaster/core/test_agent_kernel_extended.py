@@ -148,7 +148,9 @@ class TestCompactorIntegration:
         class SpyCompactor:
             _last_llm_message_count = 0
 
-            async def compact_if_needed(self, messages: Any, last_usage: Any, turn: int) -> None:
+            async def compact_if_needed(
+                self, messages: Any, last_usage: Any, turn: int
+            ) -> None:
                 call_log.append((len(messages), turn))
 
             def update_message_count(self, count: int) -> None:
@@ -178,7 +180,9 @@ class TestCompactorIntegration:
         class UsageSpyCompactor:
             _last_llm_message_count = 0
 
-            async def compact_if_needed(self, messages: Any, last_usage: Any, turn: int) -> None:
+            async def compact_if_needed(
+                self, messages: Any, last_usage: Any, turn: int
+            ) -> None:
                 usage_log.append(dict(last_usage))
 
             def update_message_count(self, count: int) -> None:
