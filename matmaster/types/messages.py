@@ -9,10 +9,13 @@ OpenAI-compatible dict format via to_api_dict().
 from __future__ import annotations
 
 import json
+import logging
 from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 
 class Role(str, Enum):
@@ -34,6 +37,21 @@ class ToolCallData(BaseModel):
     id: str
     name: str
     arguments: dict[str, Any]
+
+
+def parse_tool_arguments(raw: str) -> dict[str, Any]:
+    """Parse JSON arguments string from streaming tool call accumulation.
+
+    Used at the provider boundary (AgentKernel streaming, OpenAI provider)
+    to convert raw JSON strings into dict arguments for ToolCallData.
+    """
+    if not raw:
+        return {}
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        logger.warning("Failed to parse tool call arguments: %s", raw[:200])
+        return {"_raw": raw}
 
 
 class Message(BaseModel):
