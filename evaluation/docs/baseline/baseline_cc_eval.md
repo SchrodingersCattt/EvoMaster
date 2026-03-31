@@ -255,7 +255,7 @@ uv run python evaluation/scripts/baseline/finalize_external_baseline_ingest.py -
 
 - 先阅读 `evaluation/docs/devshell/devshell_claude_code_eval.md` **第 3 节**，按其中公式用 `scoring_checklist` 的 `weight` 计算 **0–100 的整数**。
 - 题目定义在 `evaluation/question_bank/` 下，按 `item.question_id`（与 YAML 中 `id` 一致）找到对应 YAML，读取 `scoring_checklist`。
-- 证据来源：**RUN_DIR/raw_runs.jsonl** 中对应 `task_id` 的行、**RUN_DIR/workspaces/任务目录名/** 内文件；若 pending JSON 的 `item` 中含 `result_oss_url`，可下载该 zip 辅助核对。
+- 证据来源：**RUN_DIR/raw_runs.jsonl** 中对应 `task_id` 的行、**RUN_DIR/workspaces/任务目录名/** 内文件；若 pending JSON 的 `item` 中含 `artifact`，可结合 `bundle_object_key` / `files_prefix` 对应的 OSS 产物辅助核对。
 
 对每个 **RUN_DIR/pending_ingest/*.json** 执行一次（在仓库根），将 `PENDING_FILE` 换成该文件的**绝对路径**，将 `SCORE_INT` 换成你算出的整数，将字符串参数换成你的判词：
 
@@ -373,7 +373,7 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 > **客观性（必读）**：每条 checklist 的通过/部分通过/未通过，**主证据**须来自 **题目 YAML、该任务 `workspaces/<task_id>/_devshell_prompt.txt` 要求的交付物、以及 workspace 内真实文件内容**（结构类须实际打开 POSCAR/CIF 等核对格式与题设，不能只看存在性）。**`raw_runs.jsonl` 中该行 JSON 里的 `devshell_summary` / `final_content`、以及 `_devshell_summary.json`，仅作过程与状态参考**；**禁止**仅凭执行者自述或摘要文字给 checklist 判「通过」。若自述与文件或题设矛盾，**以文件与题设为准**，并在 `score-reason` 中写明矛盾点。
 > 对 **RUN_DIR/pending_ingest/** 下**每一个**扩展名为 `.json` 的文件 `F`（含完整文件名，例如 `SC_struct_007_direct_r0.json`）：
 > 1. 打开 `F`，读取 `item.question_id`，在 `evaluation/question_bank/` 中找到对应 YAML，读取 `scoring_checklist`；并阅读 **RUN_DIR/workspaces/（task_id）/_devshell_prompt.txt**，列出须交付的文件与约束。
-> 2. **先**逐项核对 **RUN_DIR/workspaces/（同上 task_id）/** 下实际产物是否满足上一步与 YAML；**再**对照 **RUN_DIR/raw_runs.jsonl** 同行中的 `devshell_exit_code`、摘要等（摘要不能替代对产物的核对）。若 `F` 内 `item` 含 `result_oss_url`，可按需辅助取证。
+> 2. **先**逐项核对 **RUN_DIR/workspaces/（同上 task_id）/** 下实际产物是否满足上一步与 YAML；**再**对照 **RUN_DIR/raw_runs.jsonl** 同行中的 `devshell_exit_code`、摘要等（摘要不能替代对产物的核对）。若 `F` 内 `item` 含 `artifact`，可按需结合其中的 `bundle_object_key` / `files_prefix` 辅助取证。
 > 3. 构造本条任务的 **PENDING_ABS**：`"$RUN_DIR/pending_ingest/$F文件名"`（`RUN_DIR` 无尾斜杠；`F` 含 `.json`）。示例：RUN_DIR=`/a/b/results/baseline_cc_struct_20260328_120000`，F=`SC_struct_007_direct_r0.json` → PENDING_ABS=`/a/b/results/baseline_cc_struct_20260328_120000/pending_ingest/SC_struct_007_direct_r0.json`。
 > 4. 在仓库根执行**一次**上报。`--pending` 的引号内填**第 3 步整条 PENDING_ABS**；`--score` 后填本题算出的 **0–100 整数**（下面用 `73` 仅作格式示例，每题替换为真实分数）；`--score-reason` 与 `--suggestion` 各用一对双引号包住判词全文（判词内尽量避免未转义的双引号）。
 > `cd "$(git rev-parse --show-toplevel)"`

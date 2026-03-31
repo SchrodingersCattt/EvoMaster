@@ -15,11 +15,12 @@ labels: tool names from ``tool_call``, ``response``, ``run_result``; ``tool_resu
 Optional **per-task ingest** to matmaster-tools-server (after each devshell run).
 POST URL is fixed: ``MATMASTER_TOOLS_SERVER`` + ``/api/v1/evaluation/ingest`` (see ``evaluation.eval_ingest_client``).
 Each item includes ``score`` (explicit from summary or 100/0 pass-fail proxy) and, when OSS env is set,
-``result_oss_url`` for a zip of **that task only**: ``workspaces/<task_id>/`` and ``logs/<task_id>/`` under
-the shared ``devshell_eval_*`` run folder. Upload is always attempted when ingest is enabled (no skip flag).
+top-level ``artifact`` for **that task only**: bundle download + manifest + file tree for
+``workspaces/<task_id>/`` and ``logs/<task_id>/`` under the shared ``devshell_eval_*`` run folder.
+Upload is always attempted when ingest is enabled (no skip flag).
 
 ``raw_runs.jsonl`` rows record ``duration_ms`` and, when ingest is on, ``eval_ingest_*`` fields
-(including ``eval_ingest_result_oss_url`` after a successful OSS upload).
+(including ``eval_ingest_artifact`` after a successful OSS upload).
 
 With ``--eval-ingest-pending-only``, no POST is sent; each task writes ``pending_ingest/<task_id>.json``
 (ingest payload without ``score``). After judging, pass
@@ -596,7 +597,7 @@ def main() -> int:
         ingest_status: dict[str, Any] | None = None
         ingest_failed_local = False
         if ingest_url:
-            result_oss_url = upload_eval_task_artifacts_to_oss(run_dir, task_id)
+            artifact = upload_eval_task_artifacts_to_oss(run_dir, task_id)
             events_tl = load_devshell_events_timeline(run_dir / "logs" / task_id)
             ingest_item = build_ingest_item(
                 question_id=question.id,
@@ -606,7 +607,7 @@ def main() -> int:
                 devshell_exit_code=rc,
                 summary=summary if isinstance(summary, dict) else {},
                 duration_ms=duration_ms,
-                result_oss_url=result_oss_url,
+                artifact=artifact,
                 eval_tooling=eval_tooling_snapshot,
                 events_timeline=events_tl,
             )
@@ -635,8 +636,8 @@ def main() -> int:
                 row["eval_ingest_pending_path"] = str(pend_path)
                 row["eval_ingest_ok"] = None
                 row["eval_ingest_message"] = "pending_score"
-                if result_oss_url:
-                    row["eval_ingest_result_oss_url"] = result_oss_url
+                if artifact:
+                    row["eval_ingest_artifact"] = artifact
                 ingest_status = {
                     "kind": "pending",
                     "path": str(pend_path),
@@ -654,8 +655,8 @@ def main() -> int:
                 )
                 row["eval_ingest_ok"] = ok
                 row["eval_ingest_message"] = msg
-                if result_oss_url:
-                    row["eval_ingest_result_oss_url"] = result_oss_url
+                if artifact:
+                    row["eval_ingest_artifact"] = artifact
                 ingest_status = {
                     "kind": "posted",
                     "ok": ok,

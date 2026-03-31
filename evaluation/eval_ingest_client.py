@@ -6,21 +6,24 @@ When ``run_kind`` is ``baseline``, matmaster-tools-server **requires** ``baselin
 request body: ``claude_code`` or ``cursor`` or ``codex`` (see ``EvalIngestRequest`` in
 ``matmaster-tools-server/src/models/evaluation.py``). For ``iteration``, omit it (null).
 Each ``EvalItemIn`` requires ``question_id``; ``model`` / ``num_turns`` / ``score``
-(optional) / ``result_oss_url`` on the item top level. 题干（question_text）由独立的
-题库同步接口维护，ingest 不再写入。For **immediate** ingest,
-:func:`build_ingest_item` sets ``score`` from the devshell summary when present, else a
-100/0 pass-fail proxy. Human ``score`` / ``score_reason`` / ``suggestion`` for **pending**
-ingest are passed by CLI and validated by
-:func:`normalize_pending_item_for_submission`（``score_reason`` / ``suggestion`` 最长 16384）.
-For deferred ingest, ``run_devshell_eval.py --eval-ingest-pending-only`` writes
-``pending_ingest/*.json`` with ``item`` **without** ``score`` (and without human
-``score_reason`` / ``suggestion``). After judging, Claude Code passes
-``--score`` / ``--score-reason`` / ``--suggestion`` to
-``evaluation/scripts/eval_ingest_submit_pending.py --pending <path>`` before POST.
-``result_oss_url`` is set after zipping **only the current task** under that run:
-``workspaces/<task_id>`` and ``logs/<task_id>`` (see :func:`upload_eval_task_artifacts_to_oss`).
-The parent ``devshell_eval_*`` folder is shared by all tasks in the batch; it is not uploaded whole.
-``extra`` is stored as opaque JSON. Optional ``eval_tooling`` (from
+(optional) on the item top level. 题干（question_text）由独立的题库同步接口维护，
+ingest 不再写入。When task outputs exist, this client adds top-level ``artifact``
+(``bundle_object_key`` / ``manifest_object_key`` / ``files_prefix``) so tools-server
+can serve file tree / preview / bundle download from the new artifact APIs. For
+**immediate** ingest, :func:`build_ingest_item` sets ``score`` from the devshell
+summary when present, else a 100/0 pass-fail proxy. Human ``score`` /
+``score_reason`` / ``suggestion`` for **pending** ingest are passed by CLI and
+validated by :func:`normalize_pending_item_for_submission`
+（``score_reason`` / ``suggestion`` 最长 16384）. For deferred ingest,
+``run_devshell_eval.py --eval-ingest-pending-only`` writes ``pending_ingest/*.json``
+with ``item`` **without** ``score`` (and without human ``score_reason`` /
+``suggestion``). After judging, Claude Code passes ``--score`` / ``--score-reason`` /
+``--suggestion`` to ``evaluation/scripts/eval_ingest_submit_pending.py --pending <path>``
+before POST. Artifact upload only includes the current task under that run:
+``workspaces/<task_id>`` and ``logs/<task_id>`` (see
+:func:`upload_eval_task_artifacts_to_oss`). The parent ``devshell_eval_*`` folder is
+shared by all tasks in the batch; it is not uploaded whole. ``extra`` is stored as
+opaque JSON. Optional ``eval_tooling`` (from
 :func:`matmaster.eval_tooling_snapshot.snapshot_devshell_eval_tooling`) records builtin /
 skill / MCP server config for batch analysis. Optional ``events_timeline`` (from
 :func:`load_devshell_events_timeline`) is a short list of step labels in order, e.g.
@@ -36,9 +39,11 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import mimetypes
 import os
 import subprocess
 import tempfile
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Any, Literal
@@ -222,69 +227,153 @@ def eval_run_zip_should_skip_arcname(arcname: str) -> bool:
     return False
 
 
+def _sanitize_oss_segment(value: str, *, fallback: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return fallback
+    safe = "".join(ch if ch.isalnum() or ch in ("-", "_", ".") else "_" for ch in raw)
+    safe = safe.strip("._")
+    return safe[:120] or fallback
+
+
+def _guess_artifact_mime_type(path: str) -> str | None:
+    mime_type, _ = mimetypes.guess_type(path, strict=False)
+    return mime_type
+
+
+def _guess_artifact_preview_type(path: str, mime_type: str | None) -> str:
+    lower = path.lower()
+    if mime_type == "application/pdf" or lower.endswith(".pdf"):
+        return "pdf"
+    if mime_type and mime_type.startswith("image/"):
+        return "image"
+    if lower.endswith((".json", ".jsonl")):
+        return "json"
+    if mime_type and mime_type.startswith("text/"):
+        return "text"
+    if lower.endswith(
+        (
+            ".txt",
+            ".log",
+            ".md",
+            ".csv",
+            ".tsv",
+            ".yaml",
+            ".yml",
+            ".xml",
+            ".html",
+            ".cif",
+            ".vasp",
+            ".poscar",
+            ".out",
+            ".err",
+            ".py",
+            ".sh",
+        )
+    ):
+        return "text"
+    return "binary"
+
+
+def _collect_eval_task_files(root: Path, task_id: str) -> list[tuple[Path, str]]:
+    files: list[tuple[Path, str]] = []
+    for base in (root / "workspaces" / task_id, root / "logs" / task_id):
+        if not base.is_dir():
+            continue
+        for path in base.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                rel = path.relative_to(root).as_posix()
+            except ValueError:
+                continue
+            if eval_run_zip_should_skip_arcname(rel):
+                continue
+            files.append((path, rel))
+    return files
+
+
 def upload_eval_task_artifacts_to_oss(
     run_dir: Path,
     task_id: str,
     *,
     oss_prefix: str = "matmaster/evaluation",
-) -> str | None:
-    """Zip **only one task** under a devshell batch run dir, upload to OSS.
+) -> dict[str, Any] | None:
+    """Upload one task's bundle + file tree + manifest for tools-server artifacts.
 
     A run root like ``results/devshell_eval_*`` holds **all** questions; each task has
     ``workspaces/<task_id>/`` and ``logs/<task_id>/``. This packs just those two
-    subtrees (paths inside the zip look like ``workspaces/<task_id>/...`` and
-    ``logs/<task_id>/...``). Skips ``__pycache__``, ``*.pyc`` / ``*.pyo``,
-    ``.DS_Store``.
+    subtrees and uploads:
 
-    Returns public HTTPS URL, or ``None`` if nothing to pack, OSS env is missing,
-    or upload fails. Configure ``OSS_*`` like calculation MCP.
+    - ``bundle.zip`` for full download
+    - ``manifest.json`` for tree listing metadata
+    - ``files/...`` for file preview/download by relative path
+
+    Returns the top-level ``artifact`` payload expected by tools-server, or
+    ``None`` if nothing to pack, OSS env is missing, or upload fails.
     """
     root = Path(run_dir).resolve()
     if not root.is_dir():
         return None
 
-    safe_tid = task_id.replace("/", "_").replace("\\", "_")[:200] or "task"
-    subroots = [
-        root / "workspaces" / task_id,
-        root / "logs" / task_id,
-    ]
-
-    files: list[tuple[Path, str]] = []
-    for base in subroots:
-        if not base.is_dir():
-            continue
-        for p in base.rglob("*"):
-            if not p.is_file():
-                continue
-            try:
-                rel = p.relative_to(root).as_posix()
-            except ValueError:
-                continue
-            if eval_run_zip_should_skip_arcname(rel):
-                continue
-            files.append((p, rel))
-
+    files = _collect_eval_task_files(root, task_id)
     if not files:
         return None
 
-    run_name = root.name.replace("/", "_").replace("\\", "_")[:120] or "eval_run"
-    zip_name = f"{run_name}_{safe_tid}_task.zip"
+    safe_run = _sanitize_oss_segment(root.name, fallback="eval_run")
+    safe_tid = _sanitize_oss_segment(task_id, fallback="task")
+    artifact_root = "/".join(
+        [
+            oss_prefix.strip().strip("/"),
+            safe_run,
+            safe_tid,
+            uuid.uuid4().hex,
+        ]
+    )
+    bundle_object_key = f"{artifact_root}/bundle.zip"
+    manifest_object_key = f"{artifact_root}/manifest.json"
+    files_prefix = f"{artifact_root}/files"
     fd, tmp = tempfile.mkstemp(suffix=".zip", prefix="eval_ingest_")
     os.close(fd)
     tmp_path = Path(tmp)
     try:
-        with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for fs_path, arcname in sorted(files, key=lambda t: t[1]):
-                zf.write(fs_path, arcname=arcname)
-        from evomaster.adaptors.calculation.oss_io import upload_file_to_oss
+        from utils.oss_io import upload_bytes_to_oss, upload_file_to_oss_with_key
 
-        url = upload_file_to_oss(
-            tmp_path,
-            tmp_path.parent,
-            oss_prefix=oss_prefix,
-            object_basename=zip_name,
+        with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for fs_path, arcname in sorted(files, key=lambda item: item[1]):
+                zf.write(fs_path, arcname=arcname)
+
+        upload_file_to_oss_with_key(tmp_path, bundle_object_key)
+
+        manifest_entries: list[dict[str, Any]] = []
+        for fs_path, rel_path in sorted(files, key=lambda item: item[1]):
+            upload_file_to_oss_with_key(fs_path, f"{files_prefix}/{rel_path}")
+            mime_type = _guess_artifact_mime_type(rel_path)
+            manifest_entries.append(
+                {
+                    "path": rel_path,
+                    "size": fs_path.stat().st_size,
+                    "mime_type": mime_type,
+                    "preview_type": _guess_artifact_preview_type(rel_path, mime_type),
+                }
+            )
+
+        manifest_payload = {
+            "schema": "matmaster_eval_artifact_manifest_v1",
+            "task_id": task_id,
+            "entries": manifest_entries,
+        }
+        upload_bytes_to_oss(
+            (json.dumps(manifest_payload, ensure_ascii=False, indent=2) + "\n").encode(
+                "utf-8"
+            ),
+            manifest_object_key,
         )
-        return url[:2048] if url else None
+        return {
+            "bundle_object_key": bundle_object_key,
+            "manifest_object_key": manifest_object_key,
+            "files_prefix": files_prefix,
+        }
     except (OSError, RuntimeError, ValueError, ImportError) as e:
         logger.warning("eval ingest OSS task artifacts upload failed: %s", e)
         return None
@@ -373,7 +462,7 @@ def build_ingest_item(
     devshell_exit_code: int,
     summary: dict[str, Any] | None,
     duration_ms: int | None,
-    result_oss_url: str | None = None,
+    artifact: dict[str, Any] | None = None,
     eval_tooling: dict[str, Any] | None = None,
     events_timeline: list[str] | None = None,
 ) -> dict[str, Any]:
@@ -438,8 +527,8 @@ def build_ingest_item(
         summary if isinstance(summary, dict) else None,
         devshell_exit_code,
     )
-    if result_oss_url and str(result_oss_url).strip():
-        item["result_oss_url"] = str(result_oss_url).strip()[:2048]
+    if isinstance(artifact, dict) and artifact:
+        item["artifact"] = dict(artifact)
     return item
 
 

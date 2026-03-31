@@ -33,6 +33,11 @@ def test_submit_pending_main_posts_score_from_cli_when_missing_in_file(
         "item": {
             "question_id": "Q1",
             "extra": {},
+            "artifact": {
+                "bundle_object_key": "matmaster/evaluation/run/task/bundle.zip",
+                "manifest_object_key": "matmaster/evaluation/run/task/manifest.json",
+                "files_prefix": "matmaster/evaluation/run/task/files",
+            },
         },
     }
     p = tmp_path / "SC_x_direct_r0.json"
@@ -65,6 +70,7 @@ def test_submit_pending_main_posts_score_from_cli_when_missing_in_file(
     assert body["items"][0]["question_id"] == "Q1"
     assert body["items"][0]["score"] == 71.5
     assert body["items"][0]["extra"] == {}
+    assert body["items"][0]["artifact"]["bundle_object_key"].endswith("bundle.zip")
     assert "baseline_channel" not in body
 
 
