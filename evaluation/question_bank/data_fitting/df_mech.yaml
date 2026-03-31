@@ -14,8 +14,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools: []
   data_files:
   - key: ev_table
     path: data/DF_mech_001/ev_curve.json
@@ -87,8 +85,6 @@ questions:
   mode_scope:
   - direct
   - planner
-  required_tools: []
-  optional_tools: []
   data_files:
   - key: msst_data
     path: data/DF_mech_002/msst_hugoniot.json
