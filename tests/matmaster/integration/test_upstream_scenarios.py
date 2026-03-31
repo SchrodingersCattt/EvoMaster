@@ -638,56 +638,29 @@ class TestAgentRunServiceConfirmationRecovery:
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(_poll_reply_queue(reply_queue), timeout=0.1)
 
-    def test_run_agent_approval_executes_gated_tool(self, tmp_path: Path) -> None:
+    def test_run_agent_executes_tool_without_confirmation(self, tmp_path: Path) -> None:
+        """With _CONFIRM_TOOLS empty, tools execute directly without confirmation gate."""
         reply_queue = _RedisCompatibleReplyQueue()
 
-        def approve() -> None:
-            time.sleep(0.05)
-            reply_queue.put_content("approved")
+        def noop() -> None:
+            pass
 
         result, payloads, tool, runtime_hook = self._run_with_runtime(
             tmp_path,
             reply_queue=reply_queue,
-            reply_fn=approve,
+            reply_fn=noop,
         )
 
         assert result[0] is True
         assert len(tool.calls) == 1
         assert runtime_hook.pre_tool_call_count == 1
+        # No confirmation events when _CONFIRM_TOOLS is empty
         confirmation_events = [
             payload
             for payload in payloads
             if payload.get("type") == "confirmation_request"
         ]
-        assert len(confirmation_events) == 1
-        assert not any(
-            payload.get("type") == "error"
-            and "AttributeError" in str(payload.get("message"))
-            for payload in payloads
-        )
-
-    def test_run_agent_cancel_skips_gated_tool(self, tmp_path: Path) -> None:
-        reply_queue = _RedisCompatibleReplyQueue()
-
-        def cancel() -> None:
-            time.sleep(0.05)
-            reply_queue.put_cancel()
-
-        result, payloads, tool, runtime_hook = self._run_with_runtime(
-            tmp_path,
-            reply_queue=reply_queue,
-            reply_fn=cancel,
-        )
-
-        assert result[0] is True
-        assert len(tool.calls) == 0
-        assert runtime_hook.pre_tool_call_count == 0
-        confirmation_events = [
-            payload
-            for payload in payloads
-            if payload.get("type") == "confirmation_request"
-        ]
-        assert len(confirmation_events) == 1
+        assert len(confirmation_events) == 0
         assert not any(
             payload.get("type") == "error"
             and "AttributeError" in str(payload.get("message"))

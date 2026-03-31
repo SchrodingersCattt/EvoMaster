@@ -579,8 +579,8 @@ class TestExpBuiltinTools:
         exp._init_builtin_tools(ctx, registry, ['*'])
         assert len(registry) == 0
 
-    async def test_explicit_builtin_config_triggers_init(self, tmp_path: Path) -> None:
-        """Non-empty explicit tool list (not wildcard) still triggers _init_builtin_tools."""
+    async def test_explicit_builtin_config_filters_tools(self, tmp_path: Path) -> None:
+        """Non-empty explicit tool list registers only the requested tools."""
         exp = Exp(
             ExpConfig(
                 name='test',
@@ -592,11 +592,9 @@ class TestExpBuiltinTools:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        # If _init_builtin_tools ran, native tools should be in the registry
-        native = runtime.spec.tool_registry.get_tools_by_source("builtin")
-        assert (
-            len(native) == 14
-        )  # All native tools registered regardless of config list
+        native = runtime.spec.tool_registry.get_tools_by_source('builtin')
+        registered_names = {t.name for t in native}
+        assert registered_names == {'execute_bash', 'read_file'}
 
     async def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
         """Empty builtin list skips _init_builtin_tools entirely."""
