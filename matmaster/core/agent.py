@@ -582,7 +582,7 @@ class AgentKernel:
                         if delta.get('id'):
                             tool_calls_acc[idx]['id'] = delta['id']
                         if delta.get('name'):
-                            tool_calls_acc[idx]['name'] += delta['name']
+                            tool_calls_acc[idx]['name'] = delta['name']
                         if delta.get('arguments'):
                             tool_calls_acc[idx]['arguments'] += delta['arguments']
         finally:
