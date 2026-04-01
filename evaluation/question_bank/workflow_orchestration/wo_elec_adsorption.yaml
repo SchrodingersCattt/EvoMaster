@@ -4,9 +4,9 @@ domain: "elec"
 
 questions:
   # ============================================================
-  # WO_elec_008 — CO吸附能计算（Mock版）
+  # WO_elec_005_20260401 — CO吸附能计算（Mock版）
   # ============================================================
-  - id: "WO_elec_008"
+  - id: "WO_elec_005_20260401"
     capability: "workflow_orchestration"
     domain: "elec"
     intent: "Compute CO adsorption energy on Ag(001): build slab, place molecule, use mock energies, calculate E_ads."

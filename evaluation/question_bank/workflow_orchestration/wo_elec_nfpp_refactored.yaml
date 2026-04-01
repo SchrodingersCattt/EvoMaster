@@ -4,9 +4,9 @@ domain: "elec"
 
 questions:
   # ============================================================
-  # WO_elec_006 — NFPP掺杂形成能计算（Mock版）
+  # WO_elec_003_20260401 — NFPP掺杂形成能计算（Mock版）
   # ============================================================
-  - id: "WO_elec_006"
+  - id: "WO_elec_003_20260401"
     capability: "workflow_orchestration"
     domain: "elec"
     intent: "Compute doping formation energy of NFPP: retrieve structure, build doped supercell, use mock energies, calculate formation energy."
@@ -74,9 +74,9 @@ questions:
         verify: "token_budget"
 
   # ============================================================
-  # WO_elec_007 — NFPP平均嵌钠电压计算（Mock版）
+  # WO_elec_004_20260401 — NFPP平均嵌钠电压计算（Mock版）
   # ============================================================
-  - id: "WO_elec_007"
+  - id: "WO_elec_004_20260401"
     capability: "workflow_orchestration"
     domain: "elec"
     intent: "Compute average Na intercalation voltage of NFPP using mock energies."
