@@ -38,7 +38,6 @@ class ListDirTool(BuiltinTool):
         result = session.exec_bash(
             command=f'ls -la "{path}"',
             timeout=10,
-            is_input=False,
             stop_event=self._stop_event_for_exec(),
         )
 
