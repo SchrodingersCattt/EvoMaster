@@ -144,7 +144,7 @@ class Playground:
                 self.logger.warning('Error closing session', exc_info=True)
 
     # ------------------------------------------------------------------
-    # Session management (inlined from PlaygroundSessionMixin)
+    # Session management (inlined from evomaster mixin)
     # ------------------------------------------------------------------
 
     def attach_session(self, session: Session) -> None:

@@ -69,17 +69,20 @@ class TestConfigDirRouting:
         assert mgr._config_dir == tmp_path / "matmaster_config"
 
     def test_get_or_create_uses_matmaster_config_dir(self, tmp_path):
-        """Verify get_or_create() uses matmaster_config/ path."""
-        from unittest.mock import patch
+        """Verify get_or_create() reads config from matmaster_config/."""
+        import yaml
 
-        from matmaster.core.playground import PlaygroundManager
+        from matmaster.core.playground import Playground, PlaygroundManager
 
         mgr = PlaygroundManager(tmp_path)
         cfg_dir = tmp_path / "matmaster_config"
         cfg_dir.mkdir()
-        with patch("matmaster.core.playground.Playground") as mock_pg:
-            mock_pg.return_value = mock_pg
-            mgr.get_or_create("test-session")
-            call_args = mock_pg.call_args
-            config_path = call_args.kwargs.get("config_path") or call_args[0][0]
-            assert "matmaster_config" in str(config_path)
+        # Write a minimal config to parse
+        (cfg_dir / "config.yaml").write_text(
+            yaml.dump({"session": {"type": "local", "local": {"timeout": 42}}})
+        )
+        pg = mgr.get_or_create("test-session")
+        assert isinstance(pg, Playground)
+        assert pg._session_type == "local"
+        # Session config comes from the YAML file we wrote
+        assert pg._session_config.get("timeout") == 42
