@@ -32,6 +32,10 @@ skill / MCP server config for batch analysis. Optional ``events_timeline`` (from
 
 Ingest POST URL is ``MATMASTER_TOOLS_SERVER`` + ``EVAL_INGEST_API_PATH``（在 **首次 import**
 本模块时按 ``utils.env`` 解析；与配额等共用同一 host）。见 ``EVAL_INGEST_URL``。
+
+评测相关 POST 须带服务密钥：环境变量 ``MATMASTER_TOOLS_EVALUATION_BEARER`` 会设置
+``Authorization: Bearer …``（与 tools-server Nacos ``evaluation.service_api_keys`` 一致）。
+未配置时对接已加权限的 tools-server 将返回 401。
 """
 
 from __future__ import annotations
@@ -532,13 +536,22 @@ def build_ingest_item(
     return item
 
 
+def matmaster_evaluation_request_headers() -> dict[str, str]:
+    """Build HTTP headers for matmaster-tools-server evaluation routes."""
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+    bearer = utils.env.MATMASTER_TOOLS_EVALUATION_BEARER
+    if bearer:
+        headers["Authorization"] = f"Bearer {bearer}"
+    return headers
+
+
 def post_eval_ingest(
     url: str,
     body: dict[str, Any],
     *,
     timeout: float = 30.0,
 ) -> tuple[bool, str]:
-    headers: dict[str, str] = {"Content-Type": "application/json"}
+    headers = matmaster_evaluation_request_headers()
 
     try:
         with httpx.Client(timeout=timeout) as client:
@@ -593,7 +606,7 @@ def post_question_catalog_sync(
         body_items.append({"question_id": qid, "question_text": qtext})
 
     body = {"items": body_items}
-    headers: dict[str, str] = {"Content-Type": "application/json"}
+    headers = matmaster_evaluation_request_headers()
 
     try:
         with httpx.Client(timeout=timeout) as client:
