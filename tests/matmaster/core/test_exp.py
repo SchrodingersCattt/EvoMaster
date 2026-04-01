@@ -12,6 +12,7 @@ from matmaster.core.exp import Exp
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import ToolCallData
+from matmaster.types.session import Session
 from matmaster.types.runtime import (
     AgentRuntime,
     AgentRuntimeSpec,
@@ -482,7 +483,7 @@ class TestExpBuiltinTools:
             workdir=tmp_path,
             session_type='local',
             cache_area=tmp_path / 'cache',
-            session=MagicMock(),
+            session=MagicMock(spec=Session),
             llm_provider=MockLLMProvider(),
         )
 
@@ -630,7 +631,7 @@ class TestExecutionWorkdirBinding:
             execution_workdir=str(execution),
             session_type='local',
             cache_area=tmp_path / 'cache',
-            session=MagicMock(),
+            session=MagicMock(spec=Session),
             llm_provider=MockLLMProvider(),
         )
 
