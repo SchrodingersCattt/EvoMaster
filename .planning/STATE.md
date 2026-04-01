@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
 status: executing
-stopped_at: Phase 27 context gathered
-last_updated: "2026-04-01T10:06:21.995Z"
+stopped_at: Completed 27-02-PLAN.md
+last_updated: "2026-04-01T11:01:59.264Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 19
   completed_phases: 15
-  total_plans: 29
-  completed_plans: 29
+  total_plans: 32
+  completed_plans: 30
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 25 — session-playground
+**Current focus:** Phase 27 — mcp-calculation
 
 ## Current Position
 
-Phase: 26
-Plan: Not started
+Phase: 27 (mcp-calculation) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
 Last activity: 2026-04-01
 
@@ -55,6 +55,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 25-session-playground]: PlaygroundManager._load_raw_config returns raw dict (not Pydantic model) to avoid EvoMasterConfig coupling
 - [Phase 25-session-playground]: Docker session branch removed; only local and ssh supported
 - [Phase 25-session-playground]: agent_run_service reads matmaster_config/ directly instead of via playground.config
+- [Phase 27-mcp-calculation]: evomaster.env imports changed to evomaster.env.bohrium to avoid triggering full load chain
+- [Phase 27-mcp-calculation]: BaseSession TYPE_CHECKING import removed; session param uses Any + duck-typing for cross-package compatibility
 
 ### Pending Todos
 
@@ -67,6 +69,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T10:06:21.986Z
-Stopped at: Phase 27 context gathered
-Resume file: .planning/phases/27-mcp-calculation/27-CONTEXT.md
+Last session: 2026-04-01T11:01:59.261Z
+Stopped at: Completed 27-02-PLAN.md
+Resume file: None

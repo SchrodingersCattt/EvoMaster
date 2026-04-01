@@ -319,7 +319,7 @@ Plans:
 
 Plans:
 - [ ] 27-01-PLAN.md — MCP Connection 搬入 + 精简版 MCPToolManager
-- [ ] 27-02-PLAN.md — Calculation adaptors 搬入（env_config + oss_io + job_service + path_adaptor）
+- [x] 27-02-PLAN.md — Calculation adaptors 搬入（env_config + oss_io + job_service + path_adaptor）
 - [ ] 27-03-PLAN.md — LazyMCPTool 直连重写 + 全量 import 路径切换 + 测试适配
 
 ### Phase 28: src 反向依赖反转与 Consumer 迁移
@@ -405,7 +405,7 @@ Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底�
 | 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete | 2026-03-29 |
 | 25. Session 与 Playground 原生化 | v2.1 | 2/3 | Complete    | 2026-04-01 |
 | 26. Tool 内化与遗留工具收归 | v2.1 | 2/3 | Complete    | 2026-04-01 |
-| 27. MCP 与 Calculation 原生链路 | v2.1 | 0/TBD | Not started | - |
+| 27. MCP 与 Calculation 原生链路 | v2.1 | 1/3 | In Progress|  |
 | 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 0/TBD | Not started | - |
 | 29. 主执行路径切换 | v2.1 | 0/TBD | Not started | - |
 | 30. 解耦审计与独立性证明 | v2.1 | 0/TBD | Not started | - |
