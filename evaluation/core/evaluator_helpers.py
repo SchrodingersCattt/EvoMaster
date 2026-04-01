@@ -9,6 +9,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
+from evaluation.validators.structure_general import (
+    check_atom_count,
+    check_bond_angle,
+    check_bond_count,
+    check_bond_length,
+    check_cell_param,
+    check_coordination_number,
+    check_formula,
+    check_layer_count,
+    check_stoichiometry_ratio,
+)
 from evaluation.validators.structure_molcrys import (
     check_disorder_dan2_integer_formula,
     check_sc005_other_formulas_in_answer,
@@ -211,3 +222,170 @@ def check_sc005_disorder_formulas(*, answer: str) -> tuple[bool, str]:
     if not ok:
         return ok, reason
     return check_disorder_dan2_integer_formula(answer)
+
+
+# ---------------------------------------------------------------------------
+# struct_file_* helpers — bridge evaluator dispatch → structure_general validators
+# ---------------------------------------------------------------------------
+
+
+def _get_workspace(evidence: EvidenceBundle | None) -> tuple[str | None, str | None]:
+    """Extract workspace_dir from evidence, return (dir, error_msg)."""
+    if evidence is None:
+        return None, 'no EvidenceBundle provided'
+    if not evidence.workspace_dir:
+        return None, 'missing workspace_dir on evidence'
+    return evidence.workspace_dir, None
+
+
+def _cfg(ref: ReferenceAnswer) -> dict[str, Any]:
+    return ref.value if isinstance(ref.value, dict) else {}
+
+
+def check_struct_file_atom_count(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_atom_count(
+        ws,
+        filename=cfg.get('filename', '*.cif'),
+        expected=int(cfg.get('expected', 0)),
+        tolerance=float(cfg.get('tolerance', 0)),
+    )
+
+
+def check_struct_file_formula(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_formula(
+        ws,
+        filename=cfg.get('filename', '*.cif'),
+        formula=str(cfg.get('formula', '')),
+    )
+
+
+def check_struct_file_bond_count(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_bond_count(
+        ws,
+        filename=cfg.get('filename', '*.cif'),
+        element_a=str(cfg.get('element_a', '')),
+        element_b=str(cfg.get('element_b', '')),
+        cutoff_A=float(cfg.get('cutoff_A', 2.0)),
+        expected_count=int(cfg.get('expected_count', 0)),
+        tolerance=float(cfg.get('tolerance', 0)),
+    )
+
+
+def check_struct_file_bond_length(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_bond_length(
+        ws,
+        filename=cfg.get('filename', '*.cif'),
+        element_a=str(cfg.get('element_a', '')),
+        element_b=str(cfg.get('element_b', '')),
+        cutoff_A=float(cfg.get('cutoff_A', 3.0)),
+        expected=float(cfg.get('expected', 0)),
+        tolerance=float(cfg.get('tolerance', 0)),
+    )
+
+
+def check_struct_file_bond_angle(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_bond_angle(
+        ws,
+        filename=cfg.get('filename', '*.cif'),
+        triplet=list(cfg.get('triplet', [])),
+        expected_deg=float(cfg.get('expected_deg', 0)),
+        tolerance_deg=float(cfg.get('tolerance_deg', 5.0)),
+        cutoff_A=float(cfg.get('cutoff_A', 3.0)),
+    )
+
+
+def check_struct_file_cell_param(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_cell_param(
+        ws,
+        filename=cfg.get('filename', '*.cif'),
+        param=str(cfg.get('param', 'alpha')),
+        expected=float(cfg.get('expected', 0)),
+        tolerance=float(cfg.get('tolerance', 0)),
+    )
+
+
+def check_struct_file_stoichiometry_ratio(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_stoichiometry_ratio(
+        ws,
+        filename=cfg.get('filename', '*.cif'),
+        element_a=str(cfg.get('element_a', '')),
+        element_b=str(cfg.get('element_b', '')),
+        expected_ratio=float(cfg.get('expected_ratio', 0)),
+        tolerance=float(cfg.get('tolerance', 0)),
+    )
+
+
+def check_struct_file_coordination(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_coordination_number(
+        ws,
+        filename=cfg.get('filename', '*.cif'),
+        center_element=str(cfg.get('center_element', '')),
+        expected=int(cfg.get('expected', 0)),
+        tolerance=float(cfg.get('tolerance', 0)),
+        cutoff_A=float(cfg.get('cutoff_A', 2.5)),
+    )
+
+
+def check_struct_file_layer_count(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_layer_count(
+        ws,
+        filename=cfg.get('filename', '*.cif'),
+        expected=int(cfg.get('expected', 0)),
+        tolerance=float(cfg.get('tolerance', 0)),
+        axis=str(cfg.get('axis', 'z')),
+        gap_threshold_A=float(cfg.get('gap_threshold_A', 1.0)),
+    )

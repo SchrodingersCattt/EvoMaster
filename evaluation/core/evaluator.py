@@ -22,6 +22,15 @@ from .evaluator_helpers import (
     check_duration_budget,
     check_molcrys_slab_integrity,
     check_sc005_disorder_formulas,
+    check_struct_file_atom_count,
+    check_struct_file_bond_angle,
+    check_struct_file_bond_count,
+    check_struct_file_bond_length,
+    check_struct_file_cell_param,
+    check_struct_file_coordination,
+    check_struct_file_formula,
+    check_struct_file_layer_count,
+    check_struct_file_stoichiometry_ratio,
     check_token_budget,
 )
 from .evaluator_prompts import BINARY_JUDGE_SYSTEM_PROMPT as _BINARY_JUDGE_SYSTEM_PROMPT
@@ -413,6 +422,23 @@ class BinaryEvaluator:
             if ref is None:
                 return False, 'missing reference answer'
             return check_sc005_disorder_formulas(answer=answer)
+
+        # --- struct_file_* programmatic structure checks ---
+        _STRUCT_FILE_DISPATCH = {
+            'struct_file_atom_count': check_struct_file_atom_count,
+            'struct_file_formula': check_struct_file_formula,
+            'struct_file_bond_count': check_struct_file_bond_count,
+            'struct_file_bond_length': check_struct_file_bond_length,
+            'struct_file_bond_angle': check_struct_file_bond_angle,
+            'struct_file_cell_param': check_struct_file_cell_param,
+            'struct_file_stoichiometry_ratio': check_struct_file_stoichiometry_ratio,
+            'struct_file_coordination': check_struct_file_coordination,
+            'struct_file_layer_count': check_struct_file_layer_count,
+        }
+        if item.verify in _STRUCT_FILE_DISPATCH:
+            if ref is None:
+                return False, 'missing reference answer'
+            return _STRUCT_FILE_DISPATCH[item.verify](evidence=evidence, ref=ref)
 
         if item.verify == 'llm_binary_judge':
             return self.judge_binary(

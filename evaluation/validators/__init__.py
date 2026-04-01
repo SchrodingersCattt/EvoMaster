@@ -1,5 +1,16 @@
 """Deterministic validators for MATTER evaluation (optional heavy deps)."""
 
+from .structure_general import (
+    check_atom_count,
+    check_bond_angle,
+    check_bond_count,
+    check_bond_length,
+    check_cell_param,
+    check_coordination_number,
+    check_formula,
+    check_layer_count,
+    check_stoichiometry_ratio,
+)
 from .structure_molcrys import (
     check_disorder_dan2_integer_formula,
     check_sc005_other_formulas_in_answer,
@@ -7,6 +18,17 @@ from .structure_molcrys import (
 )
 
 __all__ = [
+    # structure_general (pymatgen-backed)
+    'check_atom_count',
+    'check_bond_angle',
+    'check_bond_count',
+    'check_bond_length',
+    'check_cell_param',
+    'check_coordination_number',
+    'check_formula',
+    'check_layer_count',
+    'check_stoichiometry_ratio',
+    # structure_molcrys (MolCrysKit-backed)
     'check_disorder_dan2_integer_formula',
     'check_sc005_other_formulas_in_answer',
     'verify_molecular_slab_layer_scaling',
