@@ -351,7 +351,7 @@ Plans:
 
 Plans:
 - [x] 29-01-PLAN.md -- workspace_resolver 迁移 + bash_tool/monitor_job evomaster import 清理 + 测试更新
-- [ ] 29-02-PLAN.md -- playground/evaluation/run.py 删除 + 技能归档 + 配置修正 + pyproject 清理
+- [x] 29-02-PLAN.md -- playground/evaluation/run.py 删除 + 技能归档 + 配置修正 + pyproject 清理
 
 ### Phase 30: 解耦审计与独立性证明
 **Goal**: 用 import audit、隔离测试和迁移文档证明 matmaster 可脱离 evomaster/playground/src 独立运行，并为 v2.2 清理留出清晰后手
@@ -407,5 +407,5 @@ Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底�
 | 26. Tool 内化与遗留工具收归 | v2.1 | 2/3 | Complete    | 2026-04-01 |
 | 27. MCP 与 Calculation 原生链路 | v2.1 | 3/3 | Complete    | 2026-04-01 |
 | 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 3/3 | Complete    | 2026-04-01 |
-| 29. 主执行路径切换 | v2.1 | 1/2 | In Progress|  |
+| 29. 主执行路径切换 | v2.1 | 2/2 | Complete   | 2026-04-01 |
 | 30. 解耦审计与独立性证明 | v2.1 | 0/TBD | Not started | - |

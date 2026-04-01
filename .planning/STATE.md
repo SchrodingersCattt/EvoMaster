@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
 status: executing
-stopped_at: Completed 29-01-PLAN.md
-last_updated: "2026-04-01T16:15:35Z"
+stopped_at: Completed 29-02-PLAN.md
+last_updated: "2026-04-01T16:24:57.790Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 19
-  completed_phases: 17
+  completed_phases: 18
   total_plans: 37
-  completed_plans: 36
+  completed_plans: 37
   percent: 97
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 29 of 30 (main-execution-path)
-Plan: 1 of 2 in current phase (Plan 01 complete)
-Status: Executing
-Last activity: 2026-04-01 — Completed 29-01 workspace_resolver migration + evomaster import elimination
+Plan: 2 of 2 in current phase (Plan 01 complete)
+Status: Ready to execute
+Last activity: 2026-04-01
 
 Progress: [==================..] 97%
 
@@ -43,6 +43,7 @@ Progress: [==================..] 97%
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | 29-01 | workspace_resolver + imports | 5min | 2 | 6 |
+| Phase 29-02 Plegacy-deletion-config-migration | 4min | 2 tasks | 384 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Progress: [==================..] 97%
 - [Phase 28]: Hoisted agent_run_bohrium function imports to file-level in agent_run_service.py (src->src is valid forward dependency)
 - [Phase 29-01]: Used openai.OpenAI sync client in monitor_job/_llm.py instead of wrapping async OpenAIProvider
 - [Phase 29-01]: Placed workspace_resolver in matmaster/integration/ alongside bohrium_setup/bohrium_env
+- [Phase 29-02]: Removed stale playground frontend lib .gitignore exception during cleanup
+- [Phase 29-02]: Session working_dir standardized to ./workspace at project root for both config files
 
 ### Pending Todos
 
@@ -84,6 +87,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T16:15:35Z
-Stopped at: Completed 29-01-PLAN.md
-Resume file: .planning/phases/29-main-execution-path/29-01-SUMMARY.md
+Last session: 2026-04-01T16:24:57.787Z
+Stopped at: Completed 29-02-PLAN.md
+Resume file: None
