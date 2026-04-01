@@ -20,15 +20,26 @@ class LocalSession:
     Return format for exec_bash matches evomaster LocalSession exactly.
     """
 
-    def __init__(self, workspace_path: Path, *, timeout: int = 300) -> None:
+    def __init__(
+        self, workspace_path: Path | str, *, timeout: int = 300, encoding: str = "utf-8"
+    ) -> None:
         self._workspace_path = Path(workspace_path)
         self._timeout = timeout
+        self._encoding = encoding
+        self._is_open: bool = False
+
+    @property
+    def is_open(self) -> bool:
+        """Whether the session has been opened."""
+        return self._is_open
 
     def open(self) -> None:
-        """No-op for local sessions."""
+        """Mark session as open."""
+        self._is_open = True
 
     def close(self) -> None:
-        """No-op for local sessions."""
+        """Mark session as closed."""
+        self._is_open = False
 
     def exec_bash(
         self,
