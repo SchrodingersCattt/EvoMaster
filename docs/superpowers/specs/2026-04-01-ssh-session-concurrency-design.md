@@ -1,0 +1,188 @@
+# SSHSession 并发改造设计
+
+## 问题
+
+SSHSession 存在两层串行化瓶颈，导致 Kernel 的并行工具调用在 SSH 场景下完全退化：
+
+1. **tmux 单会话** — `_prev_command_status` 硬性拒绝并发命令。前一个命令未完成时，后续 `exec_bash` 调用直接返回错误。
+2. **SFTP 全局锁** — 单 `_sftp_lock` (`threading.Lock`) 串行化所有文件 I/O（read_file、write_file、path_exists、is_file、upload_file）。
+3. **跨瓶颈耦合** — `exec_bash` 的 0.5s 轮询通过 SFTP 读取 tmux log，与文件操作争同一把锁。长文件传输会延迟命令完成检测。
+
+结果：`asyncio.gather` 派发的多个工具调用在 SSH 场景下退化为串行执行。
+
+## 目标
+
+- 解除长时间命令对后续 shell 操作的阻塞
+- 使 Kernel 同轮并行工具调用真正并发执行
+- 保留命令取消能力（stop_event → 终止远程进程）
+
+## 设计决策
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| Shell 状态持久性 | 放弃 | Bohrium/MonitorJob 不依赖；每条命令自行 `cd <workdir> &&` 前缀 |
+| is_input 交互 | 移除 | Agent 命令应为非交互式；保留取消能力即可 |
+| Session Protocol | 允许演进 | 仅移除 `is_input` 参数 |
+| 架构拆分 | 不做 | Session 内部改造足够；exec_command 走 SSH channel 不碰 SFTP，锁竞争自然消失 |
+
+## 方案：exec_command 多通道 + SFTP 池
+
+### 1. Session Protocol 变更
+
+`exec_bash` 签名移除 `is_input` 参数：
+
+```python
+# 之前
+def exec_bash(self, command: str, timeout: int | None = None,
+              is_input: bool = False,
+              stop_event: threading.Event | Any | None = None) -> dict: ...
+
+# 之后
+def exec_bash(self, command: str, timeout: int | None = None,
+              stop_event: threading.Event | Any | None = None) -> dict: ...
+```
+
+返回值不变：`{stdout, stderr, exit_code, working_dir, output}`
+
+### 2. SSHSession 命令执行——exec_command 替代 tmux
+
+每次 `exec_bash` 调用开一个独立的 paramiko SSH channel：
+
+```python
+def exec_bash(self, command, timeout=None, stop_event=None):
+    self._ensure_connected()
+    channel = self._transport.open_session()
+    channel.exec_command(f"cd {shlex.quote(self._workdir)} && {command}")
+    # channel.recv() 流式读 stdout
+    # channel.recv_stderr() 流式读 stderr
+    # channel.recv_exit_status() 获取 exit_code
+```
+
+**CWD 管理**：`self._workdir` 在 session 生命周期内固定（来自 `SSHSessionConfig.working_dir`），每条命令通过 `cd <workdir> && <command>` 前缀设置工作目录。
+
+**取消机制**：后台线程监听 `stop_event`，触发时 `channel.close()` 关闭 channel，远程进程收到 SIGHUP：
+
+```python
+def _watch_stop(self, channel, stop_event):
+    while not channel.exit_status_ready():
+        if stop_event.is_set():
+            channel.close()
+            return
+        time.sleep(0.5)
+```
+
+**并发能力**：删除 `_prev_command_status` 状态机，每次调用独立 channel，天然并发。
+
+**删除的组件**：
+- `_setup_tmux()` / `_tmux_send_keys()` / `_get_tmux_logs()` — tmux 机制
+- `_prev_command_status` / `_last_ps1_count` — 状态机
+- `PS1_PATTERN` / `BashMetadata` — PS1 marker 解析
+- `ssh_bash_noninteractive()` — exec_command 本身即非交互式
+
+### 3. SFTP 连接池——替代单实例 + 全局锁
+
+```python
+class SFTPPool:
+    def __init__(self, transport: paramiko.Transport, max_size: int = 4):
+        self._transport = transport
+        self._max_size = max_size
+        self._pool: collections.deque[paramiko.SFTPClient] = deque()
+        self._created: int = 0
+        self._semaphore = threading.Semaphore(max_size)
+        self._lock = threading.Lock()  # 仅保护 _pool 和 _created
+
+    def acquire(self) -> paramiko.SFTPClient:
+        self._semaphore.acquire()
+        with self._lock:
+            if self._pool:
+                return self._pool.popleft()
+            self._created += 1
+        return self._transport.open_sftp_client()
+
+    def release(self, sftp: paramiko.SFTPClient) -> None:
+        with self._lock:
+            self._pool.append(sftp)
+        self._semaphore.release()
+
+    def close_all(self) -> None:
+        with self._lock:
+            while self._pool:
+                self._pool.popleft().close()
+            self._created = 0
+```
+
+**设计要点**：
+- `max_size=4`：SSH2 单 transport 并发 channel 软限制约 10，4 个 SFTP channel 覆盖典型并行度并留余量给 exec_command
+- 懒创建：按需打开 SFTP channel，用完归还
+- `_lock` 作用域极小：仅保护 deque 操作，不在 I/O 期间持锁
+
+**Session 文件方法改造**（以 read_file 为例）：
+
+```python
+def read_file(self, path, encoding="utf-8"):
+    sftp = self._sftp_pool.acquire()
+    try:
+        with sftp.open(path, "r") as f:
+            raw = f.read()
+        return raw.decode(encoding) if isinstance(raw, bytes) else raw
+    finally:
+        self._sftp_pool.release(sftp)
+```
+
+**重连处理**：`_ensure_connected()` 检测 transport 断开时，重建 SSH 连接后调用 `_sftp_pool.close_all()`，后续操作触发懒创建。
+
+**删除的组件**：
+- `self._sftp` — 单 SFTP 实例
+- `self._sftp_lock` — 全局锁
+
+### 4. BashTool 适配
+
+- `json_schema` 删除 `is_input` 字段
+- `_execute` 移除 `is_input` 参数传递
+- 双路径逻辑不变（LocalSession → `asyncio.create_subprocess_exec`，其他 → `asyncio.to_thread`）
+
+### 5. MonitorJobTool 迁移修复（顺带）
+
+evomaster 时代的 duck-type 检查 `session._env` 在原生 SSHSession 上永远为 False，导致 SFTP 推送和远程日志读取为死代码。
+
+修复：将 `session._env` 检查改为检测原生接口：
+
+```python
+# 之前
+is_ssh = hasattr(session, '_env') and hasattr(getattr(session, '_env', None), 'upload_file')
+
+# 之后
+is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_file', None))
+```
+
+涉及文件：
+- `_lifecycle.py:88`
+- `_download.py:218`
+- `_tool.py:129`
+- `_logs.py:285`
+
+`_sftp_push_directory` 内部从 `session._env.upload_file()` 改为 `session.upload_file()`。
+
+## 变更范围
+
+| 文件 | 变更类型 |
+|---|---|
+| `matmaster/types/session.py` | Protocol 签名：`exec_bash` 移除 `is_input` |
+| `matmaster/sessions/ssh.py` | 重写核心：tmux → exec_command，单 SFTP → SFTPPool |
+| `matmaster/sessions/local.py` | 小改：`exec_bash` 移除 `is_input` |
+| `matmaster/tools/builtin/execute_bash.py` | 小改：schema 删 `is_input`，移除传递 |
+| `matmaster/tools/builtin/monitor_job/_lifecycle.py` | 修复：`session._env` → `session.upload_file` |
+| `matmaster/tools/builtin/monitor_job/_download.py` | 修复：同上 |
+| `matmaster/tools/builtin/monitor_job/_tool.py` | 修复：同上 |
+| `matmaster/tools/builtin/monitor_job/_logs.py` | 修复：同上 |
+
+## 不变部分
+
+- Session Protocol 除 `is_input` 外的所有签名
+- SessionConfig / LocalSessionConfig / SSHSessionConfig
+- PlaygroundContext / Playground / PlaygroundManager
+- Exp / AgentKernel / ToolRegistry
+- EventRouter / MessageBus / SSEHandler
+- BohriumSetupService / agent_run_bohrium.py（`ssh_exec()` 和 `upload_directory_tarball()` 保留为非 Protocol 公共方法，内部改用 exec_command / SFTPPool）
+- ReadTool / WriteTool / EditTool / GlobTool / GrepTool / ListDirTool
+- SpawnTool（子 agent 共享父 session，改造后并发安全）
