@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
-status: executing
-stopped_at: Completed 28-02-PLAN.md
-last_updated: "2026-04-01T12:54:14.056Z"
+status: verifying
+stopped_at: Completed 28-03-PLAN.md
+last_updated: "2026-04-01T13:04:05.968Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 19
-  completed_phases: 16
+  completed_phases: 17
   total_plans: 35
-  completed_plans: 34
+  completed_plans: 35
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 
 Phase: 28 (src-consumer) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-01
 
 Progress: [░░░░░░░░░░] 0%
@@ -63,6 +63,9 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 28-src-consumer]: BohriumSetupResult duplicated as NamedTuple in matmaster to break src reverse dependency
 - [Phase 28-src-consumer]: Import audit xfail strategy for pre-migration tests (strict=False)
 - [Phase 28]: BohriumSetupService: callback injection with 4 callables replaces sessions_service injection; consumer uses functools.partial for binding
+- [Phase 28]: Reversed _adapt_tool_calls_format direction: legacy evomaster nested -> matmaster flat (backward-compatible with historical DB data)
+- [Phase 28]: Simplified events_to_messages: removed second format conversion layer, both code paths now use matmaster types natively
+- [Phase 28]: Hoisted agent_run_bohrium function imports to file-level in agent_run_service.py (src->src is valid forward dependency)
 
 ### Pending Todos
 
@@ -75,6 +78,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T12:54:14.051Z
-Stopped at: Completed 28-02-PLAN.md
+Last session: 2026-04-01T13:04:05.963Z
+Stopped at: Completed 28-03-PLAN.md
 Resume file: None
