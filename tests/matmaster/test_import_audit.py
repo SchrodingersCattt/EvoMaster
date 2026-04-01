@@ -138,10 +138,6 @@ class TestNoSrcImportsInMatmaster:
     Excludes TYPE_CHECKING blocks (forward references are acceptable).
     """
 
-    @pytest.mark.xfail(
-        reason="Phase 28 Plan 02 will migrate remaining src imports",
-        strict=False,
-    )
     def test_no_src_imports_anywhere(self):
         project_root = Path(__file__).parent.parent.parent
         violations = []
@@ -201,10 +197,6 @@ class TestNoEvomasterEnvBohriumImportsAnywhere:
     Excludes TYPE_CHECKING blocks.
     """
 
-    @pytest.mark.xfail(
-        reason="Phase 28 Plan 02 will migrate remaining evomaster.env.bohrium imports",
-        strict=False,
-    )
     def test_no_evomaster_env_bohrium_imports(self):
         project_root = Path(__file__).parent.parent.parent
         violations = []
