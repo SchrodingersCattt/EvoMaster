@@ -69,12 +69,23 @@ paramiko 的 SSH channel 有 64KB 窗口限制。如果先等 `exit_status_ready
 ```python
 stdout_chunks = []
 stderr_chunks = []
+deadline = time.monotonic() + timeout if timeout else None
 while not channel.exit_status_ready():
     if channel.recv_ready():
         stdout_chunks.append(channel.recv(65536))
     if channel.recv_stderr_ready():
         stderr_chunks.append(channel.recv_stderr(65536))
+    # 超时检查
+    if deadline and time.monotonic() >= deadline:
+        channel.close()
+        return {"stdout": ..., "stderr": f"Command timed out after {timeout}s",
+                "exit_code": -1, "working_dir": self._workdir, "output": ...}
     # stop_event 检查（见取消机制）
+    is_set = getattr(stop_event, 'is_set', None)
+    if callable(is_set) and is_set():
+        channel.close()
+        return {"stdout": ..., "stderr": "Command cancelled.",
+                "exit_code": 130, "working_dir": self._workdir, "output": ...}
     time.sleep(0.05)
 # drain 剩余数据
 while channel.recv_ready():
@@ -84,19 +95,13 @@ while channel.recv_stderr_ready():
 exit_code = channel.recv_exit_status()
 ```
 
-**取消机制**：在上述读取循环内直接检查 `stop_event`，无需单独的 watcher 线程：
+**超时机制**：基于 `time.monotonic()` 的 deadline 计时。超时时 `channel.close()` 关闭 channel，返回 `exit_code=-1` 和超时提示。所有调用方（BashTool、GrepTool、GlobTool、ListDirTool）依赖 timeout 防止 worker 被长命令永久占住，此路径必须可靠。
 
-```python
-# 在 while not channel.exit_status_ready() 循环内
-is_set = getattr(stop_event, 'is_set', None)
-if callable(is_set) and is_set():
-    channel.close()  # 远程进程收到 SIGHUP
-    return {"stdout": ..., "stderr": "Command cancelled.", "exit_code": 130, ...}
-```
+**取消机制**：在同一读取循环内检查 `stop_event`，无需单独的 watcher 线程。
 
 `stop_event` 兼容性：使用 `getattr(stop_event, 'is_set', None)` 检查，与现有代码模式一致（参见 `_lifecycle.py:104`）。
 
-`channel.close()` 后 `recv_exit_status()` 返回 -1（paramiko 约定），代码路径需处理此情况返回 `exit_code=130`（SIGINT 惯例）。
+`channel.close()` 后 `recv_exit_status()` 返回 -1（paramiko 约定），代码路径需处理此情况返回 `exit_code=130`（取消）或 `exit_code=-1`（超时）。
 
 **SIGHUP 局限性说明**：`channel.close()` 导致远程进程收到 SIGHUP，但部分 HPC 程序（LAMMPS、ABACUS）可能忽略 SIGHUP。如果实践中发现取消不可靠，后续可增强为通过独立 channel 发送 `kill -TERM`。当前阶段 SIGHUP 足够覆盖常见场景。
 
@@ -180,17 +185,28 @@ def read_file(self, path, encoding="utf-8"):
         self._sftp_pool.release(sftp)
 ```
 
-**重连处理**：`_ensure_connected()` 检测 transport 断开时，重建 SSH 连接后调用 `_sftp_pool.close_all()`，并用新 transport 重新初始化池。后续操作触发懒创建。
+**重连处理**：`_ensure_connected()` 检测 transport 断开时，重建 SSH 连接后调用 `_sftp_pool.close_all()`，并用新 transport 重新初始化池。后续操作触发懒创建。并发开启后 `_ensure_connected()` 需要 session 级锁保护（`self._connect_lock: threading.Lock`），防止多线程同时检测断连时竞争重连导致双重连接和旧 transport 句柄泄漏。
 
 **删除的组件**：
 - `self._sftp` — 单 SFTP 实例
 - `self._sftp_lock` — 全局锁
 
-### 4. BashTool 适配
+### 4. BashTool 及相关工具适配
 
+**BashTool** (`bash_tool.py`)：
 - `json_schema` 删除 `is_input` 字段
-- `_execute` 移除 `is_input` 参数传递
+- `_execute` 中移除 `is_input` 解析和传递逻辑（涉及两处：LocalSession 路径和通用路径）
 - 双路径逻辑不变（LocalSession → `asyncio.create_subprocess_exec`，其他 → `asyncio.to_thread`）
+
+**其他传递 `is_input=False` 的工具**——移除关键字参数：
+- `grep_tool.py:89` — `session.exec_bash(..., is_input=False, ...)` → 删除 `is_input=False`
+- `glob_tool.py:82` — 同上
+- `listdir_tool.py:41` — 同上
+
+**测试文件**：
+- `tests/matmaster/sessions/test_local.py:43-45` — 删除 `test_is_input_returns_error` 测试
+- `tests/matmaster/tools/test_bash_tool.py:58-60, 141-149` — 删除 is_input 相关测试
+- `tests/matmaster/types/test_session_protocol.py:44` — Protocol 一致性 mock 移除 `is_input` 参数
 
 ### 5. MonitorJobTool 迁移修复（顺带）
 
@@ -216,20 +232,26 @@ is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_f
 
 - `_download.py` `_sftp_push_directory`：`session._env.upload_file()` → `session.upload_file()`
 - `_logs.py` `_read_log_tail_remote`（line 256）：`session._env.read_file_content(log_path)` → `session.read_file(log_path)`
-- `_logs.py` `_find_log_file_remote`（line 291）：`session._env.ssh_exec(...)` → `session.ssh_exec(...)`（原生 SSHSession 有此公共方法）
+- `_logs.py` `_find_log_file_remote`（line 291）：`session._env.ssh_exec(...)` → `session.ssh_exec(...)`（原生 SSHSession 有此公共方法）。注意返回值适配：`ssh_exec()` 返回 `dict[str, Any]`（含 `stdout`/`stderr`/`exit_code`），而当前代码第 295 行对结果直接调用 `.strip()`。需改为 `result.get('stdout', '').strip()`
 
 ## 变更范围
 
 | 文件 | 变更类型 |
 |---|---|
 | `matmaster/types/session.py` | Protocol 签名：`exec_bash` 移除 `is_input` |
-| `matmaster/sessions/ssh.py` | 重写核心：tmux → exec_command，单 SFTP → SFTPPool |
+| `matmaster/sessions/ssh.py` | 重写核心：tmux → exec_command，单 SFTP → SFTPPool，`_ensure_connected` 加锁 |
 | `matmaster/sessions/local.py` | 小改：`exec_bash` 移除 `is_input` |
-| `matmaster/tools/builtin/bash_tool.py` | 小改：schema 删 `is_input`，移除传递 |
+| `matmaster/tools/builtin/bash_tool.py` | schema 删 `is_input`，移除解析和传递逻辑 |
+| `matmaster/tools/builtin/grep_tool.py` | 移除 `is_input=False` 关键字参数 |
+| `matmaster/tools/builtin/glob_tool.py` | 移除 `is_input=False` 关键字参数 |
+| `matmaster/tools/builtin/listdir_tool.py` | 移除 `is_input=False` 关键字参数 |
 | `matmaster/tools/builtin/monitor_job/_lifecycle.py` | 修复：is_ssh 检测 |
 | `matmaster/tools/builtin/monitor_job/_download.py` | 修复：is_ssh 检测 + `_sftp_push_directory` 内部调用 |
 | `matmaster/tools/builtin/monitor_job/_tool.py` | 修复：is_ssh 检测 |
-| `matmaster/tools/builtin/monitor_job/_logs.py` | 修复：is_ssh 检测 + `_read_log_tail_remote` + `_find_log_file_remote` 内部调用 |
+| `matmaster/tools/builtin/monitor_job/_logs.py` | 修复：is_ssh 检测 + 内部调用 + `ssh_exec` 返回值适配 |
+| `tests/matmaster/sessions/test_local.py` | 删除 `test_is_input_returns_error` |
+| `tests/matmaster/tools/test_bash_tool.py` | 删除 is_input 相关测试 |
+| `tests/matmaster/types/test_session_protocol.py` | Protocol mock 移除 `is_input` |
 
 ## 不变部分
 
@@ -239,7 +261,7 @@ is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_f
 - Exp / AgentKernel / ToolRegistry
 - EventRouter / MessageBus / SSEHandler
 - BohriumSetupService / agent_run_bohrium.py（`ssh_exec()` 和 `upload_directory_tarball()` 保留为非 Protocol 公共方法，内部改用 exec_command / SFTPPool）
-- ReadTool / WriteTool / EditTool / GlobTool / GrepTool / ListDirTool
+- ReadTool / WriteTool / EditTool（工具逻辑不变，通过 session 接口透明获得并发能力）
 - SpawnTool（子 agent 共享父 session，改造后并发安全）
 
 ## 已知遗留问题（不在本次范围）
