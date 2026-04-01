@@ -1,13 +1,13 @@
-"""Gap 8 (27-03-01 / ALL): Broader import audit across all matmaster/ files.
+"""Import audit for matmaster/ package isolation.
 
 Behavioral contract:
 - No matmaster/ file has a top-level (col_offset == 0) import from:
     * evomaster.agent.tools.mcp
     * evomaster.adaptors.calculation
-- The exceptions (function-level lazy imports) are:
-    * path_adaptor.py: evomaster.env.bohrium (lazy per D-08)
-    * job_service.py: evomaster.env.bohrium (lazy per D-06)
-- These bohrium imports must NOT be at col_offset == 0 (must be inside function bodies).
+- No matmaster/ file imports from src.* (any level, excluding TYPE_CHECKING)
+- No matmaster/ file imports from evomaster.agent.session.* (any level, excluding TYPE_CHECKING)
+- No matmaster/ file imports from evomaster.env.bohrium (any level, excluding TYPE_CHECKING)
+  (Phase 28 migrates all bohrium imports to matmaster.integration.bohrium_env)
 
 Scope: All .py files under matmaster/ excluding tests.
 """
@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+
+import pytest
 
 
 def _find_matmaster_py_files() -> list[Path]:
@@ -37,6 +39,53 @@ def _find_top_level_imports_matching(source: str, module_prefix: str) -> list[as
         and node.module.startswith(module_prefix)
         and node.col_offset == 0
     ]
+
+
+def _is_inside_type_checking(node: ast.ImportFrom, tree: ast.Module) -> bool:
+    """Check whether an ImportFrom node lives inside an ``if TYPE_CHECKING:`` block.
+
+    Walks all top-level ``If`` nodes whose test is ``TYPE_CHECKING`` (Name or Attribute)
+    and checks whether *node* falls within any such block's line range.
+    """
+    for top_node in ast.walk(tree):
+        if not isinstance(top_node, ast.If):
+            continue
+        test = top_node.test
+        is_tc = (
+            (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING")
+            or (isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING")
+        )
+        if not is_tc:
+            continue
+        # node is inside this if-block if its line falls within body or orelse
+        block_start = top_node.lineno
+        block_end = top_node.end_lineno or top_node.lineno
+        if block_start <= node.lineno <= block_end:
+            return True
+    return False
+
+
+def _find_all_imports_matching(
+    source: str, module_prefix: str, *, exclude_type_checking: bool = True
+) -> list[tuple[ast.ImportFrom, str]]:
+    """Find ALL ImportFrom nodes matching module_prefix (any nesting level).
+
+    Returns (node, relative_path_placeholder) tuples. When *exclude_type_checking*
+    is True, imports inside ``if TYPE_CHECKING:`` blocks are skipped.
+    """
+    tree = ast.parse(source)
+    results = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if node.module is None:
+            continue
+        if not (node.module.startswith(module_prefix) or node.module == module_prefix.rstrip(".")):
+            continue
+        if exclude_type_checking and _is_inside_type_checking(node, tree):
+            continue
+        results.append(node)
+    return results
 
 
 class TestNoTopLevelEvomasterMCPImports:
@@ -83,48 +132,98 @@ class TestNoTopLevelEvomasterCalculationImports:
         )
 
 
-class TestBohrimLazyImportsAreNotTopLevel:
-    """evomaster.env.bohrium imports must appear only inside function bodies (not at module top level)."""
+class TestNoSrcImportsInMatmaster:
+    """No matmaster file may import from src (neither top-level nor lazy).
 
-    def test_no_top_level_evomaster_env_bohrium_imports(self):
+    Excludes TYPE_CHECKING blocks (forward references are acceptable).
+    """
+
+    @pytest.mark.xfail(
+        reason="Phase 28 Plan 02 will migrate remaining src imports",
+        strict=False,
+    )
+    def test_no_src_imports_anywhere(self):
+        project_root = Path(__file__).parent.parent.parent
         violations = []
         for py_file in _find_matmaster_py_files():
             try:
                 source = py_file.read_text(encoding="utf-8")
             except OSError:
                 continue
-            hits = _find_top_level_imports_matching(source, "evomaster.env.bohrium")
+            hits = _find_all_imports_matching(source, "src.", exclude_type_checking=True)
             for node in hits:
+                rel = py_file.relative_to(project_root)
                 violations.append(
-                    f"{py_file.relative_to(Path(__file__).parent.parent.parent.parent)}:"
-                    f"L{node.lineno}: from {node.module} import ..."
+                    f"{rel}:L{node.lineno}: from {node.module} import ..."
                 )
         assert violations == [], (
-            "Found top-level 'from evomaster.env.bohrium' imports in matmaster/. "
-            "These must be function-level lazy imports (per D-08):\n"
+            "Found non-TYPE_CHECKING 'from src.*' imports in matmaster/:\n"
             + "\n".join(violations)
         )
 
 
-class TestExpectedLazyBohrimImportsExist:
-    """Verify the expected lazy bohrium imports are present in the correct files (sanity check)."""
+class TestNoEvomasterSessionImportsInMatmaster:
+    """No matmaster file may import from evomaster.agent.session.
 
-    def test_path_adaptor_has_bohrium_lazy_import(self):
-        # __file__ = .../matmaster-evo/tests/matmaster/test_import_audit.py
-        # parent.parent.parent = .../matmaster-evo/
-        path_adaptor = Path(__file__).parent.parent.parent / "matmaster" / "adaptors" / "calculation" / "path_adaptor.py"
-        assert path_adaptor.exists(), "path_adaptor.py not found"
-        source = path_adaptor.read_text(encoding="utf-8")
-        assert "evomaster.env.bohrium" in source, (
-            "path_adaptor.py should have lazy imports from evomaster.env.bohrium"
+    Excludes TYPE_CHECKING blocks.
+    """
+
+    @pytest.mark.xfail(
+        reason="bash_tool.py still has evomaster.agent.session.local lazy import; future phase will migrate",
+        strict=False,
+    )
+    def test_no_evomaster_session_imports(self):
+        project_root = Path(__file__).parent.parent.parent
+        violations = []
+        for py_file in _find_matmaster_py_files():
+            try:
+                source = py_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            hits = _find_all_imports_matching(
+                source, "evomaster.agent.session", exclude_type_checking=True
+            )
+            for node in hits:
+                rel = py_file.relative_to(project_root)
+                violations.append(
+                    f"{rel}:L{node.lineno}: from {node.module} import ..."
+                )
+        assert violations == [], (
+            "Found non-TYPE_CHECKING 'from evomaster.agent.session.*' imports in matmaster/:\n"
+            + "\n".join(violations)
         )
 
-    def test_job_service_has_bohrium_lazy_import(self):
-        job_service = Path(__file__).parent.parent.parent / "matmaster" / "adaptors" / "calculation" / "job_service.py"
-        assert job_service.exists(), "job_service.py not found"
-        source = job_service.read_text(encoding="utf-8")
-        assert "evomaster.env.bohrium" in source, (
-            "job_service.py should have lazy imports from evomaster.env.bohrium"
+
+class TestNoEvomasterEnvBohriumImportsAnywhere:
+    """No matmaster file may import from evomaster.env.bohrium (any level).
+
+    Phase 28 migrates all such imports to matmaster.integration.bohrium_env.
+    Excludes TYPE_CHECKING blocks.
+    """
+
+    @pytest.mark.xfail(
+        reason="Phase 28 Plan 02 will migrate remaining evomaster.env.bohrium imports",
+        strict=False,
+    )
+    def test_no_evomaster_env_bohrium_imports(self):
+        project_root = Path(__file__).parent.parent.parent
+        violations = []
+        for py_file in _find_matmaster_py_files():
+            try:
+                source = py_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            hits = _find_all_imports_matching(
+                source, "evomaster.env.bohrium", exclude_type_checking=True
+            )
+            for node in hits:
+                rel = py_file.relative_to(project_root)
+                violations.append(
+                    f"{rel}:L{node.lineno}: from {node.module} import ..."
+                )
+        assert violations == [], (
+            "Found non-TYPE_CHECKING 'from evomaster.env.bohrium' imports in matmaster/:\n"
+            + "\n".join(violations)
         )
 
 
