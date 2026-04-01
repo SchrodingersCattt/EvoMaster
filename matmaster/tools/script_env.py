@@ -55,12 +55,9 @@ def _collect(session: Any) -> dict[str, str]:
                     continue
             env[env_name] = s
     if env.get("BOHRIUM_ACCESS_KEY") and "BOHRIUM_BASE_URL" not in env:
-        try:
-            from src.utils.constant import BOHRIUM_OPENAPI_HOST
+        from matmaster.integration.bohrium_env import BOHRIUM_OPENAPI_HOST
 
-            env["BOHRIUM_BASE_URL"] = BOHRIUM_OPENAPI_HOST
-        except ImportError:
-            env["BOHRIUM_BASE_URL"] = "https://open.bohrium.com"
+        env["BOHRIUM_BASE_URL"] = BOHRIUM_OPENAPI_HOST
     return env
 
 

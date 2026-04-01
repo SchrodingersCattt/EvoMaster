@@ -518,7 +518,7 @@ class CalculationPathAdaptor:
         Bohrium executor injection is done via lazy import to avoid
         top-level evomaster dependency (per D-08).
         """
-        from evomaster.env.bohrium import inject_bohrium_executor
+        from matmaster.integration.bohrium_env import inject_bohrium_executor
 
         server_cfg = self.calculation_executors.get(server_name)
         if not server_cfg:
@@ -635,7 +635,7 @@ class CalculationPathAdaptor:
         fetched via SFTP and uploaded to OSS without touching the local filesystem.
         """
         # Lazy import: avoid top-level evomaster dependency (per D-08)
-        from evomaster.env.bohrium import get_bohrium_storage_config
+        from matmaster.integration.bohrium_env import get_bohrium_storage_config
 
         out = dict(args)
         remote_name = tool_name

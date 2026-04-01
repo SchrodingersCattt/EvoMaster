@@ -295,7 +295,27 @@ class AgentRunService:
             )
 
             # -- Stage 3: Bohrium credentials + SSH --
-            bohrium_svc = BohriumSetupService(self._sessions_service, bus)
+            from functools import partial
+
+            from src.services.agent_run_bohrium import (
+                apply_run_credentials_to_session,
+                cleanup_bohrium_after_run,
+                load_run_credentials,
+                setup_bohrium_for_run,
+            )
+
+            bohrium_svc = BohriumSetupService(
+                load_credentials_fn=partial(
+                    load_run_credentials, self._sessions_service
+                ),
+                apply_credentials_fn=apply_run_credentials_to_session,
+                setup_fn=setup_bohrium_for_run,
+                cleanup_fn=partial(
+                    cleanup_bohrium_after_run,
+                    sessions_service=self._sessions_service,
+                ),
+                bus=bus,
+            )
             bohrium_result = await bohrium_svc.run_setup(
                 session_id=session_id,
                 playground=playground,

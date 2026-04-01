@@ -1,13 +1,13 @@
-"""BohriumSetupService -- thin wrapper around agent_run_bohrium functions.
+"""BohriumSetupService -- callback-injected wrapper for Bohrium lifecycle.
 
-Wraps the 4 top-level functions in src/services/agent_run_bohrium.py
-into a two-phase setup/cleanup API for use by the new service pipeline.
+Provides a two-phase setup/cleanup API for Bohrium node lifecycle.
+All external logic is injected via 4 callables at construction time,
+eliminating the reverse dependency on src.services.agent_run_bohrium.
 
-This is a thin delegation layer -- all logic remains in agent_run_bohrium.py.
 The wrapper provides:
 1. A class-based API instead of module-level functions
 2. Optional MessageBus for progress event emission
-3. Clean constructor injection of sessions_service
+3. Dependency-inverted constructor (4 callables instead of sessions_service)
 """
 
 from __future__ import annotations
@@ -18,12 +18,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from matmaster.integration.bohrium_env import BohriumSetupResult
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from matmaster.config.exp import ExpConfig
     from matmaster.core.bus import MessageBus
-    from src.services.agent_run_bohrium import BohriumSetupResult
 
 logger = logging.getLogger(__name__)
 
@@ -77,18 +78,26 @@ def derive_skill_sync_spec(
 
 
 class BohriumSetupService:
-    """Thin wrapper around agent_run_bohrium.py functions.
+    """Callback-injected wrapper for Bohrium node lifecycle.
 
     Provides setup/cleanup two-phase API for Bohrium node lifecycle.
-    Delegates all logic to existing module-level functions.
+    All external logic is injected via 4 callables -- no direct import
+    from the upstream agent_run_bohrium module.
     """
 
     def __init__(
         self,
-        sessions_service: Any,
+        *,
+        load_credentials_fn: Callable[[str], tuple[dict[str, Any], str | None, str]],
+        apply_credentials_fn: Callable[[Any, dict[str, Any]], None],
+        setup_fn: Callable[..., BohriumSetupResult],
+        cleanup_fn: Callable[..., None],
         bus: MessageBus | None = None,
     ) -> None:
-        self._sessions_service = sessions_service
+        self._load_credentials = load_credentials_fn
+        self._apply_credentials = apply_credentials_fn
+        self._setup = setup_fn
+        self._cleanup = cleanup_fn
         self._bus = bus
 
     def load_credentials(
@@ -96,20 +105,16 @@ class BohriumSetupService:
     ) -> tuple[dict[str, Any], str | None, str]:
         """Load run credentials from session store.
 
-        Delegates to agent_run_bohrium.load_run_credentials().
+        Delegates to the injected load_credentials_fn callable.
         """
-        from src.services.agent_run_bohrium import load_run_credentials
-
-        return load_run_credentials(self._sessions_service, session_id)
+        return self._load_credentials(session_id)
 
     def apply_credentials(self, session: Any, run_creds: dict[str, Any]) -> None:
         """Attach transient Bohrium credentials to active session.
 
-        Delegates to agent_run_bohrium.apply_run_credentials_to_session().
+        Delegates to the injected apply_credentials_fn callable.
         """
-        from src.services.agent_run_bohrium import apply_run_credentials_to_session
-
-        apply_run_credentials_to_session(session, run_creds)
+        self._apply_credentials(session, run_creds)
 
     def setup(
         self,
@@ -125,12 +130,10 @@ class BohriumSetupService:
     ) -> BohriumSetupResult:
         """Prepare Bohrium node and SSH session for the run.
 
-        Delegates to agent_run_bohrium.setup_bohrium_for_run().
-        Returns BohriumSetupResult including execution binding fields (Task 2+).
+        Delegates to the injected setup_fn callable.
+        Returns BohriumSetupResult including execution binding fields.
         """
-        from src.services.agent_run_bohrium import setup_bohrium_for_run
-
-        return setup_bohrium_for_run(
+        return self._setup(
             session_id=session_id,
             pg=pg,
             skill_sync_spec=skill_sync_spec,
@@ -151,13 +154,10 @@ class BohriumSetupService:
     ) -> None:
         """Restore session state and cleanup Bohrium node.
 
-        Delegates to agent_run_bohrium.cleanup_bohrium_after_run().
+        Delegates to the injected cleanup_fn callable.
         """
-        from src.services.agent_run_bohrium import cleanup_bohrium_after_run
-
-        cleanup_bohrium_after_run(
+        self._cleanup(
             session_id=session_id,
-            sessions_service=self._sessions_service,
             event_callback=event_callback,
             pg_for_run=pg_for_run,
             ssh_attached=ssh_attached,
