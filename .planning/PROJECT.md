@@ -37,29 +37,32 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 
 ### Active
 
-- [ ] `matmaster/` 运行时路径不再直接 import `evomaster`
+- [ ] `matmaster/` 运行时路径不再直接 import `evomaster`、`playground` 或 `src`
 - [ ] `session / playground / config / tool / MCP` 边界提供 matmaster 原生实现
+- [ ] `matmaster/ → src/` 反向依赖消除（bohrium_setup + script_env），改为依赖反转
+- [ ] `matmaster/ → playground/` 依赖消除（web_search_tool），收归 matmaster 原生或 skill 机制
 - [ ] `src/` 与本地 Web 主执行路径切换到 matmaster 原生入口或受控兼容层
 - [ ] `calculation / Bohrium / skills / MCP` 能力在解耦后保持现有行为
-- [ ] 通过解耦审计与测试门禁证明 matmaster 可脱离 evomaster 独立运行
+- [ ] 通过解耦审计与测试门禁证明 matmaster 可脱离 evomaster / playground / src 独立运行
 
-## Current Milestone: v2.1 matmaster/ 与 evomaster/ 彻底解耦
+## Current Milestone: v2.1 matmaster/ 完全独立化
 
-**Goal:** 让 `matmaster/` 成为不依赖 `evomaster/` 运行时导入的独立内核，同时保持当前 API/worker、本地 Web 调试链路以及 Bohrium/calculation 能力可迁移、可验证。
+**Goal:** 让 `matmaster/` 运行时路径不再 import `evomaster/`、`playground/` 或 `src/`，成为可独立运行、测试与发布的核心包。
 
 **Target features:**
-- Session / Playground / Config 原生化：以 `matmaster` 自有抽象替代 `evomaster` 的 session、ConfigManager 和 Playground mixin 依赖
-- Tool / MCP / Calculation 运行时脱钩：移除 `EvoToolAdapter`、`evomaster.agent.tools.mcp.*`、`evomaster.adaptors.calculation` 等对 `matmaster` 运行时的硬依赖
-- Messages / LLM / ToolCall 类型边界收口：为 `src/` 与本地 Web 主路径提供 matmaster 原生消息与兼容适配
-- 主执行路径迁移：API/worker 与本地 Web 初始化逻辑改用 matmaster 原生入口，不再依赖 `evomaster.core.get_playground_class`
-- 解耦质量门禁：增加 import audit、独立测试与迁移文档，证明在不安装 `evomaster` 的环境中 `matmaster` 仍可工作
+- evomaster/ 解耦（~15 imports, 8 files）：session/config/playground 原生化、builtin tool helper 内化、MCP/calculation 链路收回、EvoToolAdapter 消除
+- playground/ 解耦（1 import）：`exp.py` 中 `get_web_search_tool` 收归 matmaster 或通过 skill/tool 注册机制替代
+- src/ 反向依赖消除（6 imports, 2 files）：`bohrium_setup.py` 的 5 个 service 函数和 `script_env.py` 的常量引用改为依赖反转
+- 主执行路径迁移：API/worker 与本地 Web 初始化逻辑改用 matmaster 原生入口
+- 质量门禁：import audit + 独立测试证明 matmaster 可脱离上述三者独立运行
 
 ### Out of Scope
 
 - 新产品能力或前端交互改版 — 本里程碑聚焦架构解耦，不扩展用户可见功能面
 - `playground/mat_master/core/` 历史 solver 体系的全面重写 — 仅处理阻塞 matmaster 独立运行的依赖点
 - `bohr-agent-sdk` 服务端协议调整 — 继续兼容当前 executor / storage / OSS 契约
-- 仓库内所有历史 `evomaster` 引用一次性清零 — 非 matmaster 主执行路径的遗留引用可通过兼容层分阶段迁移
+- `src/` 对 `matmaster/` 的正向依赖清理 — 应用层调核心层是正确方向，不在本次范围
+- `playground/ → src/` 和 `playground/ → matmaster/` 的依赖 — 本里程碑只关注 matmaster 的出向依赖
 
 ## Context
 
@@ -81,20 +84,21 @@ Architecture (current):
 - `matmaster/devshell/` — DevConfig, DevRunner, DevStreamHook, EventLogger, REPL, CLI
 - `matmaster/skills/` — registry 与 lazymcp skill roots
 
-### Decoupling Inventory (2026-04-01)
+### Decoupling Inventory (2026-04-01, revised)
 
-当前确认的 `matmaster -> evomaster` 运行时耦合主要集中在以下边界：
+`matmaster/` 的三方向出向依赖全景：
 
-1. **Playground / Session / Config**
-   `matmaster/core/playground.py` 仍直接依赖 `BaseSession`、`LocalSessionConfig`、`ConfigManager`、`PlaygroundSessionMixin`，并在 docker / ssh session 分支中继续导入 `evomaster.agent.session.*`。
-2. **Tool / MCP / Calculation**
-   `matmaster/core/exp.py` 仍通过 `EvoToolAdapter` 挂载 `MonitorJobTool` 与旧 WebSearchTool；`matmaster/tools/lazy_mcp.py`、`cache_mcp_schemas.py`、`eval_tooling_snapshot.py` 仍依赖 `evomaster.agent.tools.mcp.*` 与 `evomaster.adaptors.calculation.*`。
-3. **Builtin Helper 复用**
-   `matmaster/tools/builtin/bash_tool.py` 与 `edit_tool.py` 仍复用 `evomaster` 的安全检查和编辑辅助逻辑。
-4. **主执行路径消费者**
-   `src/services/chat_history.py`、`src/services/agent_run_bohrium.py` 与 `playground/mat_master/service/server/*` 等主路径仍依赖 `evomaster` 的 message types、session 与 playground 入口。
-5. **测试与兼容层**
-   `tests/matmaster/` 里仍有若干测试以 `evomaster` 类型或 session 作为 fixture，尚未形成 matmaster 可独立运行的门禁。
+**A. matmaster/ → evomaster/（~15 imports, 8 files）**
+1. **Playground / Session / Config** — `core/playground.py` 依赖 BaseSession、LocalSessionConfig、ConfigManager、PlaygroundSessionMixin 及 docker/ssh session
+2. **Tool / MCP / Calculation** — `core/exp.py` 通过 EvoToolAdapter 挂 MonitorJobTool；`tools/lazy_mcp.py`、`cache_mcp_schemas.py`、`eval_tooling_snapshot.py` 依赖 evomaster MCP manager 与 calculation adaptor
+3. **Builtin Helper** — `tools/builtin/bash_tool.py` 与 `edit_tool.py` 复用 evomaster 安全检查和编辑辅助
+
+**B. matmaster/ → playground/（1 import）**
+4. **Web Search Tool** — `core/exp.py:396` lazy import `playground.mat_master.tools.web_search.get_web_search_tool`
+
+**C. matmaster/ → src/（6 imports, 2 files）**
+5. **Bohrium Setup 反向依赖** — `integration/bohrium_setup.py` 有 5 个 lazy import 从 `src.services.agent_run_bohrium` 拉函数（load_run_credentials、apply_run_credentials_to_session、setup_bohrium_for_run、cleanup_bohrium_after_run、BohriumSetupResult）
+6. **Script Env 常量** — `tools/script_env.py:59` lazy import `src.utils.constant.BOHRIUM_OPENAPI_HOST`
 
 ### Post-v1 Changes (untracked by GSD)
 
@@ -117,18 +121,18 @@ v1 之后在 GSD 体系外进行的 6 个主要特性开发：
 
 ## Constraints
 
-- **兼容边界**: 允许在 `src/`、本地 Web 与历史 playground 路径保留受控兼容层，但 `matmaster/` 运行时不得继续直接依赖 `evomaster`
+- **依赖方向**: `matmaster/` 运行时不得 import `evomaster`、`playground` 或 `src`；反向（src → matmaster）是正确的应用层→核心层方向
 - **执行主路径**: API/worker 与 `playground/mat_master/service/server/` 需要保持可运行，不能因解耦中途失去主验证路径
 - **Bohrium / Calculation**: 必须兼容当前 `bohr-agent-sdk` executor / storage / OSS 契约，不引入协议破坏
 - **Phase 编号**: 沿用现有 `.planning/phases/` 历史，v2.1 从 Phase 25 继续，避免与已有 24 个 phase 目录冲突
-- **质量门禁**: 必须建立 import audit 与独立测试，证明在不安装 `evomaster` 的环境中 `matmaster` 仍可导入和执行核心路径
+- **质量门禁**: 必须建立 import audit 与独立测试，证明在不安装 `evomaster` / 不存在 `playground` / `src` 的环境中 `matmaster` 仍可导入和执行核心路径
 - **技术栈**: 保持 Python 与现有依赖栈，不在本里程碑引入大型框架替换
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| v2.1 聚焦 `matmaster/` 独立化而非新增功能 | 用户目标是彻底解耦，先收口架构边界才能继续演进多 agent 能力 | — Pending |
+| v2.1 扩展为三方向完全独立化 | 用户目标是 matmaster 不依赖 evomaster/playground/src，一个里程碑收口 | — Pending |
 | 本轮 phase 从 25 连续编号 | `.planning/phases/` 已存在 24 个目录，且当前无安全 archive target 支持 reset | ✓ Good |
 | 本轮默认跳过外部 research | 这是 brownfield 内部解耦，已有代码耦合清单比外部生态调研更关键 | ✓ Good |
 | 采用方案 B（新 kernel + 适配层） | 平衡重构收益与迁移成本，保留心智模型 | ✓ Good |
@@ -170,4 +174,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after v2.1 milestone initialization for matmaster/ decoupling*
+*Last updated: 2026-04-01 after v2.1 scope expansion to full independence (evomaster + playground + src)*
