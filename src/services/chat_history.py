@@ -4,9 +4,9 @@ import json
 import logging
 from typing import Any
 
-from evomaster.utils.types import (
+from matmaster.types.messages import (
     AssistantMessage,
-    ToolCall,
+    ToolCallData,
     ToolMessage,
     UserMessage,
 )
@@ -49,12 +49,13 @@ def _summarize_assistant_state_content_for_log(raw: Any) -> str:
 
 
 def _adapt_tool_calls_format(raw: dict) -> dict:
-    """Adapt matmaster flat ToolCallData format to evomaster nested ToolCall format.
+    """Adapt legacy evomaster nested ToolCall format to matmaster flat ToolCallData format.
 
-    matmaster serializes tool_calls as: {"id", "name", "arguments": dict}
-    evomaster expects:               {"id", "type", "function": {"name", "arguments": str}}
+    evomaster serializes: {"id", "type", "function": {"name", "arguments": str}}
+    matmaster expects:    {"id", "name", "arguments": dict}
 
-    If a tool_call already has a 'function' key, it is left as-is (already evomaster format).
+    If a tool_call already has 'name' at top level (matmaster format), leave as-is
+    (ensuring arguments is a dict).
     """
     tcs = raw.get('tool_calls')
     if not tcs or not isinstance(tcs, list):
@@ -64,26 +65,33 @@ def _adapt_tool_calls_format(raw: dict) -> dict:
         if not isinstance(tc, dict):
             adapted.append(tc)
             continue
-        if 'function' in tc:
-            adapted.append(tc)
-        elif 'name' in tc and 'arguments' in tc:
+        if 'name' in tc and 'arguments' in tc and 'function' not in tc:
+            # Already matmaster flat format -- ensure arguments is dict
             args = tc['arguments']
-            if isinstance(args, dict):
-                args_str = json.dumps(args, ensure_ascii=False)
-            elif isinstance(args, str):
-                args_str = args
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except (json.JSONDecodeError, ValueError):
+                    args = {}
+            adapted.append({**tc, 'arguments': args})
+        elif 'function' in tc:
+            # Legacy evomaster nested format -> convert to flat
+            func = tc['function']
+            args_raw = func.get('arguments', '{}')
+            if isinstance(args_raw, str):
+                try:
+                    args = json.loads(args_raw)
+                except (json.JSONDecodeError, ValueError):
+                    args = {}
+            elif isinstance(args_raw, dict):
+                args = args_raw
             else:
-                args_str = '{}'
-            adapted.append(
-                {
-                    'id': tc.get('id', ''),
-                    'type': 'function',
-                    'function': {
-                        'name': tc['name'],
-                        'arguments': args_str,
-                    },
-                }
-            )
+                args = {}
+            adapted.append({
+                'id': tc.get('id', ''),
+                'name': func.get('name', ''),
+                'arguments': args,
+            })
         else:
             adapted.append(tc)
     return {**raw, 'tool_calls': adapted}
@@ -124,9 +132,9 @@ class ChatHistoryConverter:
                 tcs = m.get('tool_calls') or []
                 ids: list[str] = []
                 for tc in tcs:
-                    fn = (tc or {}).get('function') or {}
+                    tc_name = (tc or {}).get('name', '?')
                     tid = (tc or {}).get('id') or ''
-                    ids.append(f"{fn.get('name', '?')}:{tid[:24]}")
+                    ids.append(f"{tc_name}:{tid[:24]}")
                 parts.append(f"{i}:A(tc={len(tcs)} {','.join(ids) or '-'})")
             elif role == 'tool':
                 parts.append(f"{i}:T(id={str(m.get('tool_call_id', ''))[:32]})")
@@ -260,23 +268,24 @@ class ChatHistoryConverter:
 
     @staticmethod
     def _tool_call_from_event(ev: dict) -> dict | None:
-        """从 type=tool_call 的事件 content 构建 ToolCall 的序列化 dict。"""
+        """从 type=tool_call 的事件 content 构建 ToolCallData 的序列化 dict（matmaster flat 格式）。"""
         c = ev.get('content')
         if not isinstance(c, dict):
             return None
         call_id = c.get('id') or ''
         name = c.get('name') or ''
         args = c.get('args')
-        if isinstance(args, dict):
-            args_str = json.dumps(args, ensure_ascii=False)
-        elif isinstance(args, str):
-            args_str = args
-        else:
-            args_str = json.dumps(args) if args is not None else '{}'
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except (json.JSONDecodeError, ValueError):
+                args = {}
+        elif not isinstance(args, dict):
+            args = {}
         return {
             'id': call_id,
-            'type': 'function',
-            'function': {'name': name, 'arguments': args_str},
+            'name': name,
+            'arguments': args,
         }
 
     @staticmethod
@@ -317,7 +326,7 @@ class ChatHistoryConverter:
             ordered_tc: list[tuple[str, str]] = []  # (id, name)
             for tc in tc_list:
                 tc_id = tc.get('id', '')
-                tc_name = (tc.get('function') or {}).get('name', '')
+                tc_name = tc.get('name', '')
                 if tc_id and tc_id not in seen_ids:
                     seen_ids.add(tc_id)
                     ordered_tc.append((tc_id, tc_name))
@@ -339,7 +348,7 @@ class ChatHistoryConverter:
                     out.append(
                         ToolMessage(
                             tool_call_id=tc_id,
-                            name=tc_name,
+                            tool_name=tc_name,
                             content=f"Tool '{tc_name}' execution was interrupted. Result is unknown.",
                         ).model_dump()
                     )
@@ -373,7 +382,7 @@ class ChatHistoryConverter:
                 return
             msg = AssistantMessage(
                 content='',
-                tool_calls=[ToolCall.model_validate(tc) for tc in pending_tool_calls],
+                tool_calls=[ToolCallData.model_validate(tc) for tc in pending_tool_calls],
             )
             out.append(msg.model_dump())
             pending_tool_calls.clear()
@@ -479,7 +488,7 @@ class ChatHistoryConverter:
                     out.append(
                         ToolMessage(
                             tool_call_id=call_id,
-                            name=name,
+                            tool_name=name,
                             content=content,
                         ).model_dump()
                     )
@@ -541,51 +550,36 @@ class ChatHistoryConverter:
 
         Reuses events_to_dialog_messages() logic, then converts each dict
         to the corresponding matmaster.types.messages Message subclass.
+        Since events_to_dialog_messages now outputs matmaster-native flat
+        format, the conversion is straightforward model_validate.
         """
-        from matmaster.types.messages import AssistantMessage as MMAssistantMessage
-        from matmaster.types.messages import ToolCallData as MMToolCallData
-        from matmaster.types.messages import ToolMessage as MMToolMessage
-        from matmaster.types.messages import UserMessage as MMUserMessage
-
         dialog_dicts = cls.events_to_dialog_messages(events)
         messages = []
         for d in dialog_dicts:
             role = d.get("role")
             if role == "user":
-                messages.append(MMUserMessage(content=d.get("content", "")))
+                messages.append(UserMessage(content=d.get("content", "")))
             elif role == "assistant":
                 msg_kwargs: dict = {"content": d.get("content")}
                 reasoning_content = d.get("reasoning_content")
-                if reasoning_content is None and isinstance(d.get("meta"), dict):
-                    reasoning_content = d["meta"].get("reasoning_content")
                 if reasoning_content is not None:
                     msg_kwargs["reasoning_content"] = reasoning_content
                 if d.get("tool_calls"):
-                    import json as _json
-
-                    tcs = []
-                    for tc in d["tool_calls"]:
-                        func = tc.get("function", {})
-                        args_str = func.get("arguments", "{}")
-                        tcs.append(
-                            MMToolCallData(
-                                id=tc.get("id", ""),
-                                name=func.get("name", ""),
-                                arguments=(
-                                    _json.loads(args_str)
-                                    if isinstance(args_str, str)
-                                    else args_str
-                                ),
-                            )
+                    msg_kwargs["tool_calls"] = [
+                        ToolCallData(
+                            id=tc.get("id", ""),
+                            name=tc.get("name", ""),
+                            arguments=tc.get("arguments", {}),
                         )
-                    msg_kwargs["tool_calls"] = tcs
-                messages.append(MMAssistantMessage(**msg_kwargs))
+                        for tc in d["tool_calls"]
+                    ]
+                messages.append(AssistantMessage(**msg_kwargs))
             elif role == "tool":
                 messages.append(
-                    MMToolMessage(
+                    ToolMessage(
                         content=d.get("content", ""),
                         tool_call_id=d.get("tool_call_id", ""),
-                        tool_name=d.get("name", ""),
+                        tool_name=d.get("tool_name", ""),
                     )
                 )
         return messages
