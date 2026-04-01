@@ -106,6 +106,35 @@ def upload_file_to_oss(
     return url
 
 
+def upload_bytes_to_oss(
+    data: bytes,
+    oss_key: str,
+) -> str:
+    """将二进制内容上传到指定 OSS object key，返回公网 URL。"""
+    key = str(oss_key or '').strip().lstrip('/')
+    if not key:
+        raise ValueError('oss_key 不能为空')
+
+    bucket, endpoint, bucket_name = _get_bucket()
+    bucket.put_object(key, data)
+    url = _oss_key_to_url(bucket_name, endpoint, key)
+    logger.debug('OSS 上传字节流 -> %s', url)
+    return url
+
+
+def upload_file_to_oss_with_key(
+    local_path: Path | str,
+    oss_key: str,
+) -> str:
+    """将本地文件上传到指定 OSS object key，返回公网 URL。"""
+    path = Path(local_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"不是文件或不存在: {path}")
+
+    with path.open('rb') as f:
+        return upload_bytes_to_oss(f.read(), oss_key)
+
+
 def upload_dir_to_oss(
     local_dir: Path | str,
     key_prefix: str = 'evomaster/calculation',
