@@ -33,8 +33,8 @@
 
 ### Consumer & 主执行路径
 
-- [ ] **CONS-01**: API/worker 主执行路径可以通过 matmaster 原生入口初始化 playground / exp / agent，而不是 `evomaster.core.get_playground_class`
-- [ ] **CONS-02**: 本地 Web 调试后端可以通过 matmaster 原生入口初始化 playground，并保持当前启动、会话恢复与流式输出行为
+- [x] **CONS-01**: API/worker 主执行路径可以通过 matmaster 原生入口初始化 playground / exp / agent，而不是 `evomaster.core.get_playground_class`
+- [x] **CONS-02**: 本地 Web 调试后端可以通过 matmaster 原生入口初始化 playground，并保持当前启动、会话恢复与流式输出行为
 - [x] **CONS-03**: `src/services/chat_history.py` 等对话历史构建链路可以消费 matmaster 原生 message / tool_call 数据结构，不依赖 `evomaster.utils.types`
 - [x] **CONS-04**: `src/services/agent_run_bohrium.py` 等 session-sensitive 服务路径可以切换到 matmaster session abstraction 或显式 compat layer，避免直接依赖 evomaster session class
 
@@ -86,8 +86,8 @@
 | INVR-02 | Phase 28 | Complete |
 | CONS-03 | Phase 28 | Complete |
 | CONS-04 | Phase 28 | Complete |
-| CONS-01 | Phase 29 | Pending |
-| CONS-02 | Phase 29 | Pending |
+| CONS-01 | Phase 29 | Complete |
+| CONS-02 | Phase 29 | Complete |
 | QUAL-06 | Phase 30 | Pending |
 | QUAL-07 | Phase 30 | Pending |
 | QUAL-08 | Phase 30 | Pending |

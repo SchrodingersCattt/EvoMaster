@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
-status: verifying
-stopped_at: Phase 29 context gathered
-last_updated: "2026-04-01T13:37:14.580Z"
+status: executing
+stopped_at: Completed 29-01-PLAN.md
+last_updated: "2026-04-01T16:15:35Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 19
   completed_phases: 17
-  total_plans: 35
-  completed_plans: 35
-  percent: 0
+  total_plans: 37
+  completed_plans: 36
+  percent: 97
 ---
 
 # Project State
@@ -21,24 +21,28 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 28 — src-consumer
+**Current focus:** Phase 29 — main-execution-path
 
 ## Current Position
 
-Phase: 29
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-01
+Phase: 29 of 30 (main-execution-path)
+Plan: 1 of 2 in current phase (Plan 01 complete)
+Status: Executing
+Last activity: 2026-04-01 — Completed 29-01 workspace_resolver migration + evomaster import elimination
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [==================..] 97%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0 in v2.1
-- Average duration: -
-- Total execution time: 0h
+- Total plans completed: 13 in v2.1 (Phases 25-29)
+- Average duration: ~15min
+- Total execution time: ~3h
+
+| Phase | Plan | Duration | Tasks | Files |
+|-------|------|----------|-------|-------|
+| 29-01 | workspace_resolver + imports | 5min | 2 | 6 |
 
 ## Accumulated Context
 
@@ -66,6 +70,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 28]: Reversed _adapt_tool_calls_format direction: legacy evomaster nested -> matmaster flat (backward-compatible with historical DB data)
 - [Phase 28]: Simplified events_to_messages: removed second format conversion layer, both code paths now use matmaster types natively
 - [Phase 28]: Hoisted agent_run_bohrium function imports to file-level in agent_run_service.py (src->src is valid forward dependency)
+- [Phase 29-01]: Used openai.OpenAI sync client in monitor_job/_llm.py instead of wrapping async OpenAIProvider
+- [Phase 29-01]: Placed workspace_resolver in matmaster/integration/ alongside bohrium_setup/bohrium_env
 
 ### Pending Todos
 
@@ -78,6 +84,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T13:37:14.570Z
-Stopped at: Phase 29 context gathered
-Resume file: .planning/phases/29-main-execution-path/29-CONTEXT.md
+Last session: 2026-04-01T16:15:35Z
+Stopped at: Completed 29-01-PLAN.md
+Resume file: .planning/phases/29-main-execution-path/29-01-SUMMARY.md
