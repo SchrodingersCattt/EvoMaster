@@ -91,7 +91,6 @@ class Session(Protocol):
         self,
         command: str,
         timeout: int | None = None,
-        is_input: bool = False,
         stop_event: threading.Event | Any | None = None,
     ) -> dict[str, Any]:
         """Execute a bash command and return result dict."""
