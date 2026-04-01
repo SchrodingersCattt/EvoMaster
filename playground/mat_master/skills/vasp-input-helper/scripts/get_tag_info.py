@@ -14,7 +14,13 @@ def main():
     parser.add_argument("--tags", "-t", required=True, help="Comma-separated tag names")
     args = parser.parse_args()
 
-    index_path = Path(__file__).resolve().parent.parent / "data" / "vasp_wiki" / "knowledge" / "tags_index.json"
+    index_path = (
+        Path(__file__).resolve().parent.parent
+        / "data"
+        / "vasp_wiki"
+        / "knowledge"
+        / "tags_index.json"
+    )
     with open(index_path) as f:
         db = json.load(f)
 
@@ -25,7 +31,15 @@ def main():
         info = db.get(tag)
         if info:
             print(f"## {tag}")
-            for key in ["default", "values", "type", "unit", "category", "brief", "notes"]:
+            for key in [
+                "default",
+                "values",
+                "type",
+                "unit",
+                "category",
+                "brief",
+                "notes",
+            ]:
                 if key in info:
                     val = info[key]
                     if isinstance(val, list):

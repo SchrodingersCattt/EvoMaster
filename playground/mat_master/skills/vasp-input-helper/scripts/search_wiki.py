@@ -6,16 +6,22 @@ Usage:
 """
 
 import argparse
-import json
 import re
 import sys
 from pathlib import Path
 
 _WIKI_DIR = Path(__file__).resolve().parent.parent / "data" / "vasp_wiki" / "pages"
-_KNOWLEDGE_DIR = Path(__file__).resolve().parent.parent / "data" / "vasp_wiki" / "knowledge"
+_KNOWLEDGE_DIR = (
+    Path(__file__).resolve().parent.parent / "data" / "vasp_wiki" / "knowledge"
+)
 
 sys.path.insert(0, str(_KNOWLEDGE_DIR))
-from wiki_index import build_index, fuzzy_title_matches, get_category_members, lookup_page
+from wiki_index import (  # noqa: E402
+    build_index,
+    fuzzy_title_matches,
+    get_category_members,
+    lookup_page,
+)
 
 
 def read_page(fpath: Path, max_chars: int = 3000) -> tuple[str, str, str, list[str]]:
@@ -33,7 +39,11 @@ def read_page(fpath: Path, max_chars: int = 3000) -> tuple[str, str, str, list[s
         body = body[:max_chars] + "\n... [truncated]"
 
     related: list[str] = []
-    m = re.search(r"Related tags and articles\n(.+?)(?:\n(?:Examples|Retrieved|$))", content, re.DOTALL)
+    m = re.search(
+        r"Related tags and articles\n(.+?)(?:\n(?:Examples|Retrieved|$))",
+        content,
+        re.DOTALL,
+    )
     if m:
         for item in re.split(r"[,\n]", m.group(1)):
             item = re.split(r"\s*[—–\-]\s", item.strip())[0].strip()
@@ -112,7 +122,7 @@ def main():
         return
 
     # Strategy 4: fulltext
-    keywords = [kw.lower() for kw in re.split(r'\s+', query) if len(kw) >= 2]
+    keywords = [kw.lower() for kw in re.split(r"\s+", query) if len(kw) >= 2]
     if not keywords:
         print(f"No results for '{query}'.")
         return

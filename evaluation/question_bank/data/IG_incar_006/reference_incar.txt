@@ -27,4 +27,4 @@ INCAR created by Atomic Simulation Environment
  KPAR = 1
  ISYM = 2
  LASPH = .TRUE.
- MAGMOM = 10*1.0000 
+ MAGMOM = 10*1.0000

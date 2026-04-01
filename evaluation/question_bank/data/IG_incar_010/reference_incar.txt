@@ -24,29 +24,29 @@ MAGMOM =  0 0 2.2 0 0 2.2 0 0 2.2 0 0 2.2 0 0 2.2 0 0 2.2 0 0 2.2 0 0 2.2 0 0 2.
 
 #= Ionic Relaxation Settings =#
 NSW = 0 # maximum of ionic steps
-IBRION = 2 # 0: MD, 1: RMM-DIIS, 2:CG, 3: dampled MD 
+IBRION = 2 # 0: MD, 1: RMM-DIIS, 2:CG, 3: dampled MD
 ISIF = 3 # 2:calculate stress tensor, 3: relax all (atoms, cell parameters)
-POTIM = 0.5 # IBRION=0: POTIM=timestep in fs, IBRION=1,2,3: scaling constant for forces 
+POTIM = 0.5 # IBRION=0: POTIM=timestep in fs, IBRION=1,2,3: scaling constant for forces
 
 #= Electronic Relxation Settings =#
 ENCUT = 520 # cutoff energy in eV
 NELM = 60 # max. number of SCF steps
-NELMIN = 2 # 
+NELMIN = 2 #
 LREAL = .FALSE. # False: projection done in reciprocal space
 EDIFF = 0.0001 # SCF loop is stopped when EDIFF is reached between two SCF steps for TOTEN and bands
-#EDIFFG = 0.001 # ionic relaxation is stopped when EDIFFG is reached between two relaxation steps. Default: EDIFFG=10*EDIFF. EDIFFG<0: Stop when all forces are below |EDIFFG|. EDIFFG=0: STop when NELM is reached. 
-ALGO = N 
+#EDIFFG = 0.001 # ionic relaxation is stopped when EDIFFG is reached between two relaxation steps. Default: EDIFFG=10*EDIFF. EDIFFG<0: Stop when all forces are below |EDIFFG|. EDIFFG=0: STop when NELM is reached.
+ALGO = N
 #ALGO = Damped ; TIME = 0.4 # use for hybrid calculation
 
 #= Write flags =#
 LCHARG = .TRUE. # write charge density files
-LWAVE = .FALSE. # write orbital file 
+LWAVE = .FALSE. # write orbital file
 LVTOT = .FALSE. # write local potential
 
 #= DOS =#
 NBANDS = 98
 ISMEAR = 0 #-1: Fermi smearing, 0: Gaussian, 1...N: Paxton-Methfessel order N, -5: tetrahedron-method+Blöchl corrections
-SIGMA = 0.025 
+SIGMA = 0.025
 
 #= Uncategorized/OQMD codes =#
 PSTRESS = 0 # add stress to stress tensor and V*PSTRESS to energy
@@ -65,7 +65,7 @@ LMAXMIX = 4 ! for d elements increase LMAXMIX to 4, f: LMAXMIX = 6
 ICHARG = 11 ! non selfconsistent run, read CHGCAR
 #SAXIS =  x y z
 NBANDS = 98
-GGA_COMPAT = .FALSE. 
+GGA_COMPAT = .FALSE.
 LPLANE = .TRUE.
 LSCALU = .FALSE.
 NSIM = 4

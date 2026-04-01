@@ -7,7 +7,6 @@ Builds once on first import, then provides O(1) lookups:
   - all_titles:  sorted list for fuzzy matching
 """
 
-import os
 import re
 from pathlib import Path
 
@@ -38,7 +37,11 @@ def _extract_title(content: str) -> str:
 
 def _extract_related(content: str) -> list[str]:
     """Extract 'Related tags and articles' section."""
-    m = re.search(r"Related tags and articles\n(.+?)(?:\n(?:Examples|Retrieved|$))", content, re.DOTALL)
+    m = re.search(
+        r"Related tags and articles\n(.+?)(?:\n(?:Examples|Retrieved|$))",
+        content,
+        re.DOTALL,
+    )
     if not m:
         return []
     block = m.group(1)
@@ -49,7 +52,12 @@ def _extract_related(content: str) -> list[str]:
         item = item.strip().strip(",").strip()
         # Remove wiki cruft like "— theory background"
         item = re.split(r"\s*[—–\-]\s", item)[0].strip()
-        if item and len(item) > 1 and not item.startswith("Retrieved") and not item.startswith("Examples"):
+        if (
+            item
+            and len(item) > 1
+            and not item.startswith("Retrieved")
+            and not item.startswith("Examples")
+        ):
             cleaned.append(item)
     return cleaned
 
@@ -79,7 +87,9 @@ def build_index():
 
         # Category membership
         if fname_key.startswith("category ") or fname_key.startswith("category:"):
-            cat_name = fname_key.replace("category ", "").replace("category:", "").strip()
+            cat_name = (
+                fname_key.replace("category ", "").replace("category:", "").strip()
+            )
             if cat_name not in pages_by_category:
                 pages_by_category[cat_name] = []
             # Parse member pages from category content (lines that look like page titles)

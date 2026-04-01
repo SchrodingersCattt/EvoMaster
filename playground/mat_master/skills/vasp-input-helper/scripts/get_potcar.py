@@ -12,11 +12,19 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description="VASP POTCAR recommendation")
-    parser.add_argument("--elements", "-e", required=True, help="Comma-separated elements")
+    parser.add_argument(
+        "--elements", "-e", required=True, help="Comma-separated elements"
+    )
     parser.add_argument("--for-gw", action="store_true", help="Use GW pseudopotentials")
     args = parser.parse_args()
 
-    potcar_path = Path(__file__).resolve().parent.parent / "data" / "vasp_wiki" / "knowledge" / "potcar_recommend.json"
+    potcar_path = (
+        Path(__file__).resolve().parent.parent
+        / "data"
+        / "vasp_wiki"
+        / "knowledge"
+        / "potcar_recommend.json"
+    )
     with open(potcar_path) as f:
         db = json.load(f)
 
@@ -34,7 +42,11 @@ def main():
             print(f"  {elem}: NOT FOUND — check element symbol")
             continue
 
-        pot_name = rec.get("gw", rec.get("default", elem)) if args.for_gw else rec.get("default", elem)
+        pot_name = (
+            rec.get("gw", rec.get("default", elem))
+            if args.for_gw
+            else rec.get("default", elem)
+        )
         enmax = rec.get("enmax", 0)
         max_enmax = max(max_enmax, enmax)
         potcar_order.append(pot_name)
@@ -50,7 +62,7 @@ def main():
 
     print(f"\n  Max ENMAX = {max_enmax} eV")
     print(f"  Suggested ENCUT (1.3x) = {int(1.3 * max_enmax)} eV")
-    print(f"\nPOTCAR command:")
+    print("\nPOTCAR command:")
     cat_parts = " \\\n    ".join(f"$VASP_PP_PATH/PBE/{p}/POTCAR" for p in potcar_order)
     print(f"  cat {cat_parts} > POTCAR")
 

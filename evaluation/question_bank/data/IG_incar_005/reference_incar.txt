@@ -32,4 +32,4 @@ INCAR created by Atomic Simulation Environment
  LDAUL = -1 -1 2 -1
  LDAUU = 0.000 0.000 4.380 0.000
  LDAUJ = 0.000 0.000 0.000 0.000
- MAGMOM = 12*1.0000 
+ MAGMOM = 12*1.0000

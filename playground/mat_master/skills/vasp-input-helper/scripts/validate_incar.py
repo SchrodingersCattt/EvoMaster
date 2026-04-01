@@ -9,18 +9,26 @@ import argparse
 import sys
 from pathlib import Path
 
-_KNOWLEDGE_DIR = Path(__file__).resolve().parent.parent / "data" / "vasp_wiki" / "knowledge"
+_KNOWLEDGE_DIR = (
+    Path(__file__).resolve().parent.parent / "data" / "vasp_wiki" / "knowledge"
+)
 sys.path.insert(0, str(_KNOWLEDGE_DIR))
-from validator import parse_incar, validate_incar
+from validator import parse_incar, validate_incar  # noqa: E402
 
 
 def main():
     parser = argparse.ArgumentParser(description="Validate VASP INCAR")
     parser.add_argument("--input-file", "-f", required=True, help="Path to INCAR file")
-    parser.add_argument("--task-type", "-t", default="scf",
-                        help="scf, relax, band, dos, md, hybrid, gw, phonon, neb, optical")
+    parser.add_argument(
+        "--task-type",
+        "-t",
+        default="scf",
+        help="scf, relax, band, dos, md, hybrid, gw, phonon, neb, optical",
+    )
     parser.add_argument("--is-metal", action="store_true", help="System is metallic")
-    parser.add_argument("--enmax", type=float, default=0.0, help="Max ENMAX from POTCAR (eV)")
+    parser.add_argument(
+        "--enmax", type=float, default=0.0, help="Max ENMAX from POTCAR (eV)"
+    )
     args = parser.parse_args()
 
     incar_path = Path(args.input_file)
