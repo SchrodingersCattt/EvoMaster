@@ -50,11 +50,12 @@ stages:
   \"gitlab_url\":\"$CI_PIPELINE_URL\",
   \"deploy_name\":\"${DEVOPS_DEPLOY_NAME:-$CI_JOB_NAME}\"}""" ${devops} > result.json
 
-# lint 独立阶段：在 docker-build 之后（实现见 ci/pre-commit-job.yml）
+# lint 独立阶段：在 docker-build 之后，复用构建镜像内预装的 pre-commit 环境（见 ci/pre-commit-job.yml）
 pre-commit:
-  extends: .pre-commit-base
+  extends: .pre-commit-with-built-image
   needs:
-    - docker-build
+    - job: docker-build
+      artifacts: true
   rules:
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_TAG'
       when: on_success
