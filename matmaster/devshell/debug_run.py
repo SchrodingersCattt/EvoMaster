@@ -44,16 +44,26 @@ def main(prompt: str | None = None) -> None:
     WORKDIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    # LLM provider (reuse cli logic)
-    import argparse
+    # LLM provider (same logic as cli._bootstrap_runner)
+    from matmaster.config.loader import load_llm_config
+    from matmaster.devshell.cli import _load_agents_general_llm, _project_root
+    from matmaster.providers.llm_factory import build_provider
 
-    fake_args = argparse.Namespace(
-        llm_config=LLM_CONFIG,
-        model=MODEL_OVERRIDE,
+    root = _project_root()
+    llm_yaml = LLM_CONFIG or (root / "matmaster_config" / "llm_config.yaml")
+    main_yaml = root / "matmaster_config" / "config.yaml"
+
+    llm_config = load_llm_config(llm_yaml)
+    agent_default_llm = _load_agents_general_llm(main_yaml)
+    llm_provider = build_provider(
+        llm_config,
+        model_override=MODEL_OVERRIDE,
+        default_profile_key=agent_default_llm,
     )
-    from matmaster.devshell.cli import _build_llm_provider
-
-    llm_provider = _build_llm_provider(fake_args, config)
+    resolved = llm_config.resolve_route(
+        model_override=MODEL_OVERRIDE,
+        default_key=agent_default_llm,
+    )
 
     # Runner
     from matmaster.core.bus import MessageBus
@@ -65,6 +75,8 @@ def main(prompt: str | None = None) -> None:
         config=config,
         workdir=WORKDIR,
         llm_provider=llm_provider,
+        llm_config=llm_config,
+        resolved_route=resolved,
         stream_hook=stream_hook,
     )
 

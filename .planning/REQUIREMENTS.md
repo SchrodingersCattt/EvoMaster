@@ -1,151 +1,102 @@
-# Requirements: MatMaster v2.0 协程改造
+# Requirements: MatMaster v2.1 完全独立化
 
-**Defined:** 2026-03-26
+**Defined:** 2026-04-01
 **Core Value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-
-## v2.0 Requirements
-
-将 matmaster 框架从同步架构全链路改造为 async/await，为多 agent 编排做准备。
-
-### Protocol 层
-
-- [x] **PROT-01**: LLMProvider Protocol 的 chat() 和 chat_stream() 方法改为 async def，移除 chat_with_retry()（重试逻辑已在 Kernel._call_llm() 中）
-- [x] **PROT-02**: Tool Protocol 的 run() 方法改为 async def，BuiltinTool ABC 的 execute() 改为 async def
-- [x] **PROT-03**: Hook Protocol 全部 7 个方法改为 async def（on_agent_start, on_turn_start, on_tool_start, on_tool_end, on_turn_end, on_agent_end, on_guard_blocked）
-- [x] **PROT-04**: Guard Protocol 的 evaluate() 保持同步（明确决策：纯计算无 I/O，async 增加开销无收益）
-- [x] **PROT-05**: 为 async Protocol 添加 runtime validation helper，解决 runtime_checkable 不区分 sync/async 签名的问题
-
-### LLM Provider
-
-- [x] **LLMP-01**: OpenAIProvider 使用 AsyncOpenAI client，chat() 和 chat_stream() 实现为 async
-- [x] **LLMP-02**: chat_stream() 使用 AsyncStream 作为 async iterator，正确处理 async context manager 生命周期
-- [x] **LLMP-03**: provider 实例的创建和清理支持 async（__aenter__/__aexit__ 或显式 close）
-
-### Tool 系统
-
-- [x] **TOOL-01**: 12 个 BuiltinTool 的 execute() 全部改为 async def
-- [x] **TOOL-02**: BashTool 使用 asyncio.create_subprocess_exec 替代 subprocess.run
-- [x] **TOOL-03**: 文件操作类 Tool（Read/Write/Edit/Glob/Grep）使用 asyncio.to_thread 包装同步文件 I/O
-- [x] **TOOL-04**: session-dependent tool 的 evomaster session 调用使用 asyncio.to_thread 桥接
-- [x] **TOOL-05**: SubAgentTool 的 spawn_fn 改为 async callable
-- [x] **TOOL-06**: 并行 Tool Dispatch — 同一轮多个 tool_call 使用 asyncio.gather 并行执行
-
-### Hook 系统
-
-- [x] **HOOK-01**: 5 个具体 Hook 实现（OutputProcessorHook, EventEmitterHook, ConfirmationHook, HistoryHook, DirectHook）全部改为 async
-- [x] **HOOK-02**: ConfirmationHook 的 reply queue 机制适配 async（queue.Queue → asyncio 兼容方案）
-- [x] **HOOK-03**: EventEmitterHook 适配 async MessageBus
-
-### 核心引擎
-
-- [x] **KERN-01**: AgentKernel.run() 改为 async generator（async def run() -> AsyncGenerator[AgentEvent, None]）
-- [x] **KERN-02**: Kernel 内部 LLM 调用改为 await（_call_llm, _call_llm_stream）
-- [x] **KERN-03**: Kernel 内部 tool dispatch 改为 await，支持并行执行
-- [x] **KERN-04**: ContextCompactor 内部 LLM 调用改为 async
-- [x] **KERN-05**: stop_event 保留 threading.Event（跨线程安全，is_set() 同步检查不变）
-- [x] **KERN-06**: time.sleep 替换为 asyncio.sleep（retry backoff 等场景）
-
-### 基础设施
-
-- [x] **INFR-01**: MessageBus 内部队列从 queue.Queue 改为 asyncio.Queue
-- [x] **INFR-02**: EventRouter 适配 async MessageBus（drain 逻辑改为 async）
-- [x] **INFR-03**: SSEHandler 和 PersistenceHandler 适配 async 事件消费
-
-### Exp 生命周期
-
-- [x] **EXPL-01**: Exp.assemble() 改为 async def（MCP 初始化未来可能涉及网络 I/O）
-- [x] **EXPL-02**: Exp.build_runtime() 改为 async def
-- [x] **EXPL-03**: Exp.run() 改为 async def，内部 await kernel.run() 的 async generator
-- [x] **EXPL-04**: SubAgent spawn 完整 async 链路（async spawn_fn → async Exp.run() → async kernel）
-
-### 服务层桥接
-
-- [x] **BRDG-01**: src/ 服务层（agent_run_service）通过 asyncio.run() 或 new_event_loop 桥接 async matmaster
-- [x] **BRDG-02**: stop_event 跨线程传播机制适配（service 线程 → matmaster event loop）
-
-### 测试基础设施
-
-- [x] **TEST-01**: 配置 pytest-asyncio（asyncio_mode="auto"），建立 async 测试基础设施
-- [x] **TEST-02**: 现有测试随实现阶段同步迁移为 async（不设独立测试迁移阶段）
-- [x] **TEST-03**: 迁移后全部测试通过，无回归
 
 ## v2.1 Requirements
 
-延后到下一个里程碑。已记录但不在当前路线图中。
+让 `matmaster/` 运行时路径不再 import `evomaster/`、`playground/` 或 `src/`，成为可独立运行、测试与发布的核心包。
 
-### 多 Agent 编排
+### Playground & Session
 
-- **ORCH-01**: 编排器层设计（多 agent 并发调度）
-- **ORCH-02**: Agent 间通信机制（async 消息传递）
-- **ORCH-03**: janus 双面队列替代 asyncio.Queue（跨线程 async/sync 桥接）
+- [ ] **PLAY-01**: 开发者可以在不安装 `evomaster` 的环境中创建并使用 `matmaster.sessions.local.LocalSession`，供 builtin tools 执行本地命令与文件操作
+- [ ] **PLAY-02**: 开发者可以通过 `matmaster` 原生 session factory 创建 local / docker / ssh session，而 `matmaster.core.playground.Playground` 不再直接 import `evomaster.agent.session.*`
+- [ ] **PLAY-03**: 开发者可以通过 `matmaster.core.playground.Playground` 加载主配置、准备 workspace、logging 和 session，而不依赖 `evomaster.config.ConfigManager` 或 `PlaygroundSessionMixin`
 
-### DevShell
+### Tool 内化
 
-- **DSHL-01**: DevShell 改为 async REPL
-- **DSHL-02**: DevShell async 入口与 matmaster async 核心直接集成
+- [ ] **TOOL-07**: 开发者可以在 `matmaster.tools` 中注册并执行遗留 builtin 能力，而不需要 `EvoToolAdapter`
+- [ ] **TOOL-08**: 开发者可以在 `matmaster.tools.builtin` 中使用原生 bash safety 与 edit helper，不再导入 `evomaster.agent.tools.builtin.*`
+- [ ] **TOOL-09**: `MonitorJobTool` 通过 matmaster 原生注册或 skill 机制提供，`exp.py` 不再 lazy import `evomaster.agent.tools.builtin.monitor_job`
+- [ ] **TOOL-10**: `web_search_tool` 通过 matmaster 原生实现或 skill 注册提供，`exp.py` 不再 import `playground.mat_master.tools.web_search`
 
-### evomaster Session
+### MCP & Calculation
 
-- **EVOS-01**: evomaster session 创建 async wrapper 消除 asyncio.to_thread 调用
+- [ ] **MCP-01**: 开发者可以通过 `matmaster.tools.lazy_mcp` 连接 MCP server、缓存 schema 并执行 tool，而不依赖 `evomaster.agent.tools.mcp.*`
+- [ ] **CALC-01**: 开发者可以在 `matmaster` 侧解析 calculation runtime config、path adaptor 与 schema cache，而不直接导入 `evomaster.adaptors.calculation.*`
+- [ ] **CALC-02**: 解耦后 Bohrium / calculation tool 的 executor、storage、OSS 上传与远端路径适配行为保持与当前协议兼容
+
+### src 反向依赖反转
+
+- [ ] **INVR-01**: `matmaster/integration/bohrium_setup.py` 不再 lazy import `src.services.agent_run_bohrium` 的 5 个函数，改为回调注入或将逻辑移入 matmaster 侧
+- [ ] **INVR-02**: `matmaster/tools/script_env.py` 不再 lazy import `src.utils.constant.BOHRIUM_OPENAPI_HOST`，改为配置注入或 matmaster 侧常量
+
+### Consumer & 主执行路径
+
+- [ ] **CONS-01**: API/worker 主执行路径可以通过 matmaster 原生入口初始化 playground / exp / agent，而不是 `evomaster.core.get_playground_class`
+- [ ] **CONS-02**: 本地 Web 调试后端可以通过 matmaster 原生入口初始化 playground，并保持当前启动、会话恢复与流式输出行为
+- [ ] **CONS-03**: `src/services/chat_history.py` 等对话历史构建链路可以消费 matmaster 原生 message / tool_call 数据结构，不依赖 `evomaster.utils.types`
+- [ ] **CONS-04**: `src/services/agent_run_bohrium.py` 等 session-sensitive 服务路径可以切换到 matmaster session abstraction 或显式 compat layer，避免直接依赖 evomaster session class
+
+### Quality & Migration
+
+- [ ] **QUAL-06**: 仓库提供 import audit 或等价测试，验证 `matmaster/` 运行时模块不再直接 import `evomaster`、`playground` 或 `src`
+- [ ] **QUAL-07**: 在不安装 `evomaster` 的受控测试环境中，`tests/matmaster/` 的核心测试集可以通过，证明 matmaster 可独立运行
+- [ ] **QUAL-08**: 仓库提供一份解耦迁移文档，明确保留 compat layer、剩余遗留路径与后续清理顺序
+
+## v2.2 Requirements
+
+延后到后续里程碑。已记录但不在当前路线图中。
+
+### 历史路径清理
+
+- **LEGY-01**: `playground/mat_master/core/` 历史 solver / tool / registry 路径全部迁移到 matmaster 原生 API
+- **LEGY-02**: 仓库非主执行路径中的剩余 `evomaster` import 清理完毕，命名与目录边界统一
+
+### 发布与治理
+
+- **PKG-01**: `matmaster` 具备独立打包与安装方案，`evomaster` 成为可选兼容依赖或独立仓库
+- **HIST-01**: `.planning/MILESTONES.md` 与 milestones archive 完整补齐 v1.1 / v2.0 历史记录
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| 多 agent 编排层 | v2.0 只做 async 基础设施，编排层 v2.1 设计 |
-| src/ Web Service 层重构 | 保持现状，仅做最小桥接 |
-| DevShell async 化 | 延后，asyncio.run() 包装即可 |
-| 前端 UI 改动 | 本次只涉及后端框架层 |
-| evomaster session async 化 | 上游依赖，用 to_thread 桥接 |
-| Trio/anyio 引入 | 坚持 asyncio 标准库 |
-| 双 Protocol（sync+async 并存） | 研究结论：anti-pattern，维护成本高 |
+| 新产品能力或前端交互改版 | 本里程碑聚焦架构解耦，不扩展用户可见功能 |
+| `playground/mat_master/core/` 历史 solver 体系全面重写 | 仅处理阻塞 matmaster 独立运行的依赖点 |
+| `bohr-agent-sdk` 服务端协议调整 | 必须保持现有 executor / storage / OSS 契约兼容 |
+| `src/` 对 `matmaster/` 的正向依赖清理 | 应用层调核心层是正确方向，不在本次范围 |
+| `playground/ → src/` 和 `playground/ → matmaster/` 的依赖 | 本里程碑只关注 matmaster 的出向依赖 |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROT-01 | Phase 12 | Complete |
-| PROT-02 | Phase 12 | Complete |
-| PROT-03 | Phase 12 | Complete |
-| PROT-04 | Phase 12 | Complete |
-| PROT-05 | Phase 12 | Complete |
-| LLMP-01 | Phase 13 | Complete |
-| LLMP-02 | Phase 13 | Complete |
-| LLMP-03 | Phase 13 | Complete |
-| TOOL-01 | Phase 14 | Complete |
-| TOOL-02 | Phase 21 | Complete |
-| TOOL-03 | Phase 14 | Complete |
-| TOOL-04 | Phase 14 | Complete |
-| TOOL-05 | Phase 18 | Complete |
-| TOOL-06 | Phase 19 | Complete |
-| HOOK-01 | Phase 15 | Complete |
-| HOOK-02 | Phase 20 | Complete |
-| HOOK-03 | Phase 15 | Complete |
-| KERN-01 | Phase 17 | Complete |
-| KERN-02 | Phase 17 | Complete |
-| KERN-03 | Phase 17 | Complete |
-| KERN-04 | Phase 13 | Complete |
-| KERN-05 | Phase 17 | Complete |
-| KERN-06 | Phase 17 | Complete |
-| INFR-01 | Phase 16 | Complete |
-| INFR-02 | Phase 16 | Complete |
-| INFR-03 | Phase 16 | Complete |
-| EXPL-01 | Phase 18 | Complete |
-| EXPL-02 | Phase 18 | Complete |
-| EXPL-03 | Phase 18 | Complete |
-| EXPL-04 | Phase 18 | Complete |
-| BRDG-01 | Phase 19 | Complete |
-| BRDG-02 | Phase 19 | Complete |
-| TEST-01 | Phase 12 | Complete |
-| TEST-02 | Phase 17 | Complete |
-| TEST-03 | Phase 17 | Complete |
+| PLAY-01 | Phase 25 | Pending |
+| PLAY-02 | Phase 25 | Pending |
+| PLAY-03 | Phase 25 | Pending |
+| TOOL-07 | Phase 26 | Pending |
+| TOOL-08 | Phase 26 | Pending |
+| TOOL-09 | Phase 26 | Pending |
+| TOOL-10 | Phase 26 | Pending |
+| MCP-01 | Phase 27 | Pending |
+| CALC-01 | Phase 27 | Pending |
+| CALC-02 | Phase 27 | Pending |
+| INVR-01 | Phase 28 | Pending |
+| INVR-02 | Phase 28 | Pending |
+| CONS-03 | Phase 28 | Pending |
+| CONS-04 | Phase 28 | Pending |
+| CONS-01 | Phase 29 | Pending |
+| CONS-02 | Phase 29 | Pending |
+| QUAL-06 | Phase 30 | Pending |
+| QUAL-07 | Phase 30 | Pending |
+| QUAL-08 | Phase 30 | Pending |
 
 **Coverage:**
-- v2.0 requirements: 35 total
-- Mapped to phases: 35
+- v2.1 requirements: 19 total
+- Mapped to phases: 19
 - Unmapped: 0
-- Complete: 35
 
 ---
-*Requirements defined: 2026-03-26*
-*Last updated: 2026-03-30 after Phase 20 confirmation recovery alignment on Phase 21 base*
+*Requirements defined: 2026-04-01*
+*Last updated: 2026-04-01 after roadmap creation*

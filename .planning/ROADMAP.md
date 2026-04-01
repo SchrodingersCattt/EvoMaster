@@ -1,23 +1,24 @@
-# Roadmap: MatMaster Framework Refactoring (v2)
+# Roadmap: MatMaster Framework Evolution
 
 ## Milestones
 
-- ✅ **v1 MatMaster Framework Refactoring** -- Phases 1-7 (shipped 2026-03-22)
-- ✅ **v1.1 Agent 外围能力构建** -- Phases 8-11 (shipped 2026-03-25)
-- 🚧 **v2.0 matmaster 协程改造** -- Phases 12-24 (in progress)
+- ✅ **v1 MatMaster Framework Refactoring** - Phases 1-7 (shipped 2026-03-22)
+- ✅ **v1.1 Agent 外围能力构建** - Phases 8-11 (shipped 2026-03-25)
+- ✅ **v2.0 matmaster 协程改造** - Phases 12-24 (shipped 2026-03-30)
+- 🚧 **v2.1 matmaster/ 完全独立化** - Phases 25-30 (active 2026-04-01)
 
 ## Phases
 
 <details>
 <summary>✅ v1 MatMaster Framework Refactoring (Phases 1-7) -- SHIPPED 2026-03-22</summary>
 
-- [x] Phase 1: Foundation Contracts (2/2 plans) -- completed 2026-03-21
-- [x] Phase 2: Agent Kernel (3/3 plans) -- completed 2026-03-22
-- [x] Phase 3: Exp Assembly Layer (4/4 plans) -- completed 2026-03-22
-- [x] Phase 4: Playground Layer (3/3 plans) -- completed 2026-03-22
-- [x] Phase 5: Integration and Quality (5/5 plans) -- completed 2026-03-22
-- [x] Phase 6: Service Layer Wiring (2/2 plans) -- completed 2026-03-22
-- [x] Phase 7: Cleanup and Traceability (2/2 plans) -- completed 2026-03-22
+- [x] Phase 1: Foundation Contracts (2/2 plans) - completed 2026-03-21
+- [x] Phase 2: Agent Kernel (3/3 plans) - completed 2026-03-22
+- [x] Phase 3: Exp Assembly Layer (4/4 plans) - completed 2026-03-22
+- [x] Phase 4: Playground Layer (3/3 plans) - completed 2026-03-22
+- [x] Phase 5: Integration and Quality (5/5 plans) - completed 2026-03-22
+- [x] Phase 6: Service Layer Wiring (2/2 plans) - completed 2026-03-22
+- [x] Phase 7: Cleanup and Traceability (2/2 plans) - completed 2026-03-22
 
 Full details: milestones/v1-ROADMAP.md
 
@@ -26,32 +27,47 @@ Full details: milestones/v1-ROADMAP.md
 <details>
 <summary>✅ v1.1 Agent 外围能力构建 (Phases 8-11) -- SHIPPED 2026-03-25</summary>
 
-- [x] Phase 8: BuiltinTool 基础设施与核心 Tools (3/3 plans) -- completed 2026-03-24
-- [x] Phase 9: 文件操作 Tools (3/3 plans) -- completed 2026-03-25
-- [x] Phase 10: Tool Description 与 System Prompt 设计 (2/2 plans) -- completed 2026-03-25
-- [x] Phase 11: SubAgent Spawn 机制 (3/3 plans) -- completed 2026-03-25
+- [x] Phase 8: BuiltinTool 基础设施与核心 Tools (3/3 plans) - completed 2026-03-24
+- [x] Phase 9: 文件操作 Tools (3/3 plans) - completed 2026-03-25
+- [x] Phase 10: Tool Description 与 System Prompt 设计 (2/2 plans) - completed 2026-03-25
+- [x] Phase 11: SubAgent Spawn 机制 (3/3 plans) - completed 2026-03-25
 
 </details>
 
-### 🚧 v2.0 matmaster 协程改造 (In Progress — Phases 12-24)
+<details>
+<summary>✅ v2.0 matmaster 协程改造 (Phases 12-24) -- SHIPPED 2026-03-30</summary>
 
-**Milestone Goal:** 将 matmaster 框架从同步架构全链路改造为 async/await，为多 agent 编排做准备。自底向上分层迁移：叶节点 I/O (Provider/Tool) -> 中间层 (Hook/Bus/Router) -> 核心引擎 (Kernel/Exp) -> 服务层桥接。
+- [x] Phase 12: Protocol 层 + 测试基础设施 - completed 2026-03-26
+- [x] Phase 13: LLM Provider 异步实现 - completed 2026-03-27
+- [x] Phase 14: Tool 系统异步化 - completed 2026-03-27
+- [x] Phase 15: Hook 系统异步化 - completed 2026-03-27
+- [x] Phase 16: MessageBus + EventRouter 异步化 - completed 2026-03-28
+- [x] Phase 17: AgentKernel 异步化 - completed 2026-03-28
+- [x] Phase 18: Exp 生命周期异步化 - completed 2026-03-29
+- [x] Phase 19: 服务层桥接 + 并行 Tool Dispatch - completed 2026-03-29
+- [x] Phase 20: Confirmation Flow Recovery - completed 2026-03-30
+- [x] Phase 21: Async Leaf I/O Cleanup - completed 2026-03-29
+- [x] Phase 22: Audit Metadata Backfill - completed 2026-03-29
+- [x] Phase 23: Verification + Nyquist Closure - completed 2026-03-30
+- [x] Phase 24: emit_nowait Tech Debt Cleanup - completed 2026-03-29
 
-- [x] **Phase 12: Protocol 层 + 测试基础设施** - 将所有 Protocol 签名改为 async，建立 pytest-asyncio 基础设施和 async validation helper (completed 2026-03-26)
-- [x] **Phase 13: LLM Provider 异步实现** - OpenAIProvider 改用 AsyncOpenAI，chat/chat_stream 实现为 async (completed 2026-03-27)
-- [x] **Phase 14: Tool 系统异步化** - 12 个 BuiltinTool + ToolRegistry 全部 async，session 调用用 asyncio.to_thread 桥接 (completed 2026-03-27)
-- [x] **Phase 15: Hook 系统异步化** - 5 个 Hook 实现和 run_* helper 全部 async，ConfirmationHook reply queue 适配 (completed 2026-03-27)
-- [x] **Phase 16: MessageBus + EventRouter 异步化** - MessageBus 改用 asyncio.Queue，EventRouter 改为 asyncio.Task (completed 2026-03-28)
-- [x] **Phase 17: AgentKernel 异步化** - Kernel.run() 改为 async，收敛所有异步依赖，ContextCompactor async 化 (completed 2026-03-28)
-- [x] **Phase 18: Exp 生命周期异步化** - assemble/build_runtime/run 全部 async，SubAgent spawn 完整 async 链路 (completed 2026-03-29)
-- [x] **Phase 19: 服务层桥接 + 并行 Tool Dispatch** - src/ 层 asyncio.run() 桥接 + 多 tool_call 并行执行优化 (completed 2026-03-29)
-- [x] **Phase 20: Confirmation Flow Recovery** - 恢复 Future-based confirmation hook 全链路，修复 adapter/interface regression，重新打通 confirmation flow (completed 2026-03-30)
-- [x] **Phase 21: Async Leaf I/O Cleanup** - 完成 BashTool 原生 async subprocess 路径，并移除 provider 遗留孤儿接口 (completed 2026-03-29)
-- [x] **Phase 22: Audit Metadata Backfill** - 回填 audit 所需 planning 元数据，确保 v2.0 re-audit 可追踪 (completed 2026-03-29)
-- [x] **Phase 23: Verification + Nyquist Closure** - 创建 Phase 20 VERIFICATION.md 关闭 HOOK-02 验证缺口，修复 Phase 20/21/22 Nyquist 合规 (completed 2026-03-30)
-- [x] **Phase 24: emit_nowait Tech Debt Cleanup** - EventEmitterHook emit_nowait() 升级为 await bus.emit()，修复过期注释和类型标注 (completed 2026-03-29)
+</details>
+
+### 🚧 v2.1 matmaster/ 完全独立化 (Active -- Phases 25-30)
+
+**Milestone Goal:** 让 `matmaster/` 运行时路径不再 import `evomaster/`、`playground/` 或 `src/`，成为可独立运行、测试与发布的核心包。三方向解耦：evomaster (~15 imports, 8 files)、playground (1 import)、src (6 imports, 2 files)。
+
+- [ ] **Phase 25: Session 与 Playground 原生化** - 切断 session/config/playground 对 evomaster 的运行时硬依赖，建立 matmaster 自有环境准备入口
+- [ ] **Phase 26: Tool 内化与遗留工具收归** - 移除 EvoToolAdapter、内化 builtin helper、收归 MonitorJobTool 与 web_search_tool，让全部 tool 在 matmaster 原生运行
+- [ ] **Phase 27: MCP 与 Calculation 原生链路** - 将 lazy_mcp、schema cache 与 calculation path adaptor 收回 matmaster 侧，保持 Bohrium 协议兼容
+- [ ] **Phase 28: src 反向依赖反转与 Consumer 迁移** - 消除 bohrium_setup/script_env 对 src 的反向依赖，同时迁移 src 消费者到 matmaster 原生数据结构
+- [ ] **Phase 29: 主执行路径切换** - API/worker 与本地 Web 调试后端改走 matmaster 原生入口，保持主路径持续可运行
+- [ ] **Phase 30: 解耦审计与独立性证明** - 用 import audit、隔离测试与迁移文档证明 matmaster 可脱离 evomaster/playground/src 独立运行
 
 ## Phase Details
+
+<details>
+<summary>✅ v2.0 Phase Details (Phases 12-24) -- collapsed for readability</summary>
 
 ### Phase 12: Protocol 层 + 测试基础设施
 **Goal**: 所有 async Protocol 合约明确定义，pytest-asyncio 基础设施就绪，async mock 可用于后续阶段测试
@@ -90,7 +106,7 @@ Plans:
 **Requirements**: TOOL-01, TOOL-02, TOOL-03, TOOL-04, TOOL-05
 **Success Criteria** (what must be TRUE):
   1. 12 个 BuiltinTool 的 execute() 均可通过 await 调用，返回正确结果
-  2. BashTool 使用 asyncio.create_subprocess_exec（session-free 模式）或 asyncio.to_thread (session-dependent 模式)执行命令
+  2. BashTool 使用 asyncio.create_subprocess_exec（session-free 模式）或 asyncio.to_thread (session-dependent 模式) 执行命令
   3. 文件操作类 Tool (Read/Write/Edit/Glob/Grep) 的 session 调用通过 asyncio.to_thread 包装，不阻塞 event loop
   4. SubAgentTool 的 spawn_fn 参数类型为 async callable，_execute 通过 await spawn_fn(...) 调用
   5. 所有 tool 测试通过 pytest-asyncio 运行
@@ -240,27 +256,96 @@ Plans:
 - [x] 23-01-PLAN.md -- Create/update VERIFICATION.md + VALIDATION.md for Phases 20/21/22, update milestone audit
 
 ### Phase 24: emit_nowait Tech Debt Cleanup
-**Goal**: 将 matmaster/ 包内全部 12 处 emit_nowait() 升级为 await bus.emit()，清理过期注释、更新 bus docstring 和 stop_event 类型标注
+**Goal**: 将 `matmaster/` 包内全部 12 处 emit_nowait() 升级为 await bus.emit()，清理过期注释、更新 bus docstring 和 stop_event 类型标注
 **Depends on**: Phase 23
 **Requirements**: HOOK-03 (integration tech debt closure)
 **Gap Closure**: Closes emit_nowait integration gap and minor tech debt items
 **Success Criteria** (what must be TRUE):
-  1. matmaster/ 内全部 emit_nowait() 调用替换为 await bus.emit()
-  2. 4 处引用 "sync kernel context" 的过期注释已删除
-  3. bus.py docstring 更新为 emit() 是主路径
-  4. agent_run_service.py 中 stop_event 类型标注从 Any 改为 threading.Event
+  1. `matmaster/` 内全部 emit_nowait() 调用替换为 await bus.emit()
+  2. 4 处引用 sync kernel context 的过期注释已删除
+  3. `bus.py` docstring 更新为 emit() 是主路径
+  4. `agent_run_service.py` 中 stop_event 类型标注从 Any 改为 threading.Event
   5. 全量测试通过，无回归
 **Plans**: 1 plan
 
 Plans:
 - [x] 24-01-PLAN.md -- Migrate 12 emit_nowait to await bus.emit() + stale comment cleanup + bus docstring + stop_event type + test assertion updates
 
+</details>
+
+### Phase 25: Session 与 Playground 原生化
+**Goal**: matmaster 具备自有的 session 抽象、config 加载与 playground 环境准备能力，切断对 evomaster session/config/mixin 的运行时依赖
+**Depends on**: Phase 24
+**Requirements**: PLAY-01, PLAY-02, PLAY-03
+**Success Criteria** (what must be TRUE):
+  1. 开发者在不安装 evomaster 的环境中可以直接创建并使用 matmaster.sessions.local.LocalSession，供 builtin tools 执行本地命令与文件操作
+  2. matmaster 原生 session factory 可以创建 local、docker、ssh session，而 matmaster.core.playground.Playground 运行时不再导入 evomaster.agent.session 下的任何模块
+  3. matmaster.core.playground.Playground 可以独立完成主配置加载、workspace 准备、logging 初始化与 session 装配，不再依赖 evomaster.config.ConfigManager 或 PlaygroundSessionMixin
+  4. 现有依赖 session 的 builtin tools (BashTool, ReadTool 等) 可以通过 matmaster 原生 session 正常执行文件和命令操作
+**Plans**: TBD
+
+### Phase 26: Tool 内化与遗留工具收归
+**Goal**: 全部 tool 能力在 matmaster.tools 原生运行，消除 EvoToolAdapter、evomaster builtin helper 依赖、MonitorJobTool 和 web_search_tool 的外部导入
+**Depends on**: Phase 25
+**Requirements**: TOOL-07, TOOL-08, TOOL-09, TOOL-10
+**Success Criteria** (what must be TRUE):
+  1. 开发者可以在 matmaster.tools 中直接注册并执行遗留 builtin 能力，EvoToolAdapter 从 tool 注册链路中移除
+  2. matmaster.tools.builtin 中的 bash safety 检查与 edit helper 由 matmaster 原生实现提供，不再导入 evomaster.agent.tools.builtin 下的任何模块
+  3. MonitorJobTool 通过 matmaster 原生注册或 skill 机制提供，exp.py 不再 lazy import evomaster.agent.tools.builtin.monitor_job
+  4. web_search_tool 通过 matmaster 原生实现或 skill 注册提供，exp.py 不再 import playground.mat_master.tools.web_search（消除 matmaster -> playground 依赖）
+  5. 在仅安装 matmaster 的环境中加载全部 builtin tools 和 exp 注册的 tools 时，不会触发任何 evomaster 或 playground 运行时导入
+**Plans**: TBD
+
+### Phase 27: MCP 与 Calculation 原生链路
+**Goal**: MCP 连接、schema cache 与 calculation path adaptor 全部收回 matmaster 侧，同时维持 Bohrium executor/storage/OSS 协议兼容
+**Depends on**: Phase 25, Phase 26
+**Requirements**: MCP-01, CALC-01, CALC-02
+**Success Criteria** (what must be TRUE):
+  1. matmaster.tools.lazy_mcp 可以独立连接 MCP server、缓存 schema 并执行 tool，不依赖 evomaster.agent.tools.mcp 下的 manager 或 connector
+  2. matmaster 侧可以原生解析 calculation runtime config、path adaptor 与 schema cache，正确识别 path 输入并构造 executor、storage 参数
+  3. Bohrium / calculation tool 在 submit 或 run 场景下继续生成与当前协议兼容的 executor、storage、OSS 上传与远端路径适配行为，不引入协议破坏
+  4. cache_mcp_schemas.py 和 eval_tooling_snapshot.py 不再 import evomaster MCP manager 或 calculation adaptor
+**Plans**: TBD
+
+### Phase 28: src 反向依赖反转与 Consumer 迁移
+**Goal**: 消除 matmaster 对 src 的反向依赖（bohrium_setup + script_env），同时迁移 src 消费者到 matmaster 原生数据结构与 session 抽象
+**Depends on**: Phase 25
+**Requirements**: INVR-01, INVR-02, CONS-03, CONS-04
+**Success Criteria** (what must be TRUE):
+  1. matmaster/integration/bohrium_setup.py 不再 lazy import src.services.agent_run_bohrium 的 5 个函数，改为通过回调注入或将逻辑移入 matmaster 侧
+  2. matmaster/tools/script_env.py 不再 lazy import src.utils.constant.BOHRIUM_OPENAPI_HOST，改为配置注入或 matmaster 侧常量
+  3. src/services/chat_history.py 等对话历史构建链路可以直接消费 matmaster 原生 message / tool_call 数据结构，保持当前历史恢复行为
+  4. src/services/agent_run_bohrium.py 等 session-sensitive 服务路径可以切换到 matmaster session abstraction 或显式 compat layer，避免直接依赖 evomaster session class
+**Plans**: TBD
+
+### Phase 29: 主执行路径切换
+**Goal**: API/worker 与本地 Web 调试后端切换到 matmaster 原生入口，不再依赖 evomaster.core.get_playground_class，且主路径持续可运行
+**Depends on**: Phase 27, Phase 28
+**Requirements**: CONS-01, CONS-02
+**Success Criteria** (what must be TRUE):
+  1. API/worker 主执行路径通过 matmaster 原生入口初始化 playground、exp 与 agent，保持消息发送、run 执行与事件推送主流程可用
+  2. 本地 Web 调试后端通过 matmaster 原生入口初始化 playground，保持启动、会话恢复与流式输出行为
+  3. 主执行路径中不再出现 evomaster.core.get_playground_class 或等价的 evomaster 入口调用
+**Plans**: TBD
+
+### Phase 30: 解耦审计与独立性证明
+**Goal**: 用 import audit、隔离测试和迁移文档证明 matmaster 可脱离 evomaster/playground/src 独立运行，并为 v2.2 清理留出清晰后手
+**Depends on**: Phase 29
+**Requirements**: QUAL-06, QUAL-07, QUAL-08
+**Success Criteria** (what must be TRUE):
+  1. 仓库提供 import audit 或等价测试，能够明确证明 matmaster/ 运行时模块不再直接 import evomaster、playground 或 src
+  2. 在不安装 evomaster 的受控测试环境中，tests/matmaster/ 的核心测试集可以通过，证明 matmaster 可独立运行
+  3. 仓库提供一份解耦迁移文档，明确记录保留的 compat layer、剩余遗留路径与后续清理顺序
+  4. 全量测试通过，无回归（1195+ tests pass 作为基线）
+
+**Plans**: TBD
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 12 -> 13 -> 14 -> 15 -> 16 -> 17 -> 18 -> 19 -> 20 -> 21 -> 22 -> 23 -> 24
+历史 phases 已完成到 Phase 24。v2.1 执行顺序为 25 -> 26 -> 27 -> 28 -> 29 -> 30。
 
-Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12），但建议按顺序执行以控制变更范围。Phase 15 同理。Phase 17 是收敛点，必须等 13-16 全部完成。Gap closure 阶段中，Phase 20 和 Phase 21 可分别收敛代码 gap，Phase 22 最后统一回填 audit 元数据。Phase 23 关闭验证/Nyquist 缺口，Phase 24 清理最后的 tech debt。
+Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底座。Phase 26 在此之上内化全部 tool 能力（含 playground/ 依赖的 web_search_tool），消除 matmaster -> evomaster 和 matmaster -> playground 的 tool 层依赖。Phase 27 收回 MCP/calculation 高风险链路，依赖 Phase 25 (session) 和 Phase 26 (tool 注册)。Phase 28 合并处理 src 反向依赖反转与 consumer 迁移，因为 bohrium_setup 同时涉及两个方向。Phase 29 在基础设施和消费者就绪后切换主入口。Phase 30 最后用 import audit、隔离测试与迁移文档做证据收口。
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -278,13 +363,19 @@ Note: Phase 13 和 Phase 14 依赖关系上可以并行（都只依赖 Phase 12�
 | 12. Protocol 层 + 测试基础设施 | v2.0 | 2/2 | Complete | 2026-03-26 |
 | 13. LLM Provider 异步实现 | v2.0 | 2/2 | Complete | 2026-03-27 |
 | 14. Tool 系统异步化 | v2.0 | 2/2 | Complete | 2026-03-27 |
-| 15. Hook 系统异步化 | v2.0 | 3/3 | Complete    | 2026-03-27 |
-| 16. MessageBus + EventRouter 异步化 | v2.0 | 2/2 | Complete    | 2026-03-28 |
-| 17. AgentKernel 异步化 | v2.0 | 2/2 | Complete    | 2026-03-28 |
-| 18. Exp 生命周期异步化 | v2.0 | 2/2 | Complete    | 2026-03-29 |
-| 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 2/2 | Complete    | 2026-03-29 |
+| 15. Hook 系统异步化 | v2.0 | 3/3 | Complete | 2026-03-27 |
+| 16. MessageBus + EventRouter 异步化 | v2.0 | 2/2 | Complete | 2026-03-28 |
+| 17. AgentKernel 异步化 | v2.0 | 2/2 | Complete | 2026-03-28 |
+| 18. Exp 生命周期异步化 | v2.0 | 2/2 | Complete | 2026-03-29 |
+| 19. 服务层桥接 + 并行 Tool Dispatch | v2.0 | 2/2 | Complete | 2026-03-29 |
 | 20. Confirmation Flow Recovery | v2.0 | 2/2 | Complete | 2026-03-30 |
-| 21. Async Leaf I/O Cleanup | v2.0 | 1/1 | Complete    | 2026-03-29 |
-| 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete    | 2026-03-29 |
-| 23. Verification + Nyquist Closure | v2.0 | 1/1 | Complete    | 2026-03-29 |
-| 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete    | 2026-03-29 |
+| 21. Async Leaf I/O Cleanup | v2.0 | 1/1 | Complete | 2026-03-29 |
+| 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete | 2026-03-29 |
+| 23. Verification + Nyquist Closure | v2.0 | 1/1 | Complete | 2026-03-30 |
+| 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete | 2026-03-29 |
+| 25. Session 与 Playground 原生化 | v2.1 | 0/TBD | Not started | - |
+| 26. Tool 内化与遗留工具收归 | v2.1 | 0/TBD | Not started | - |
+| 27. MCP 与 Calculation 原生链路 | v2.1 | 0/TBD | Not started | - |
+| 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 0/TBD | Not started | - |
+| 29. 主执行路径切换 | v2.1 | 0/TBD | Not started | - |
+| 30. 解耦审计与独立性证明 | v2.1 | 0/TBD | Not started | - |
