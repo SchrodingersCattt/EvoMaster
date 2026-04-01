@@ -332,6 +332,10 @@ def test_build_ingest_item_parse_error_summary() -> None:
 
 
 @patch("evaluation.eval_ingest_client.httpx.Client")
+@patch(
+    "evaluation.eval_ingest_client.utils.env.MATMASTER_TOOLS_EVALUATION_BEARER",
+    None,
+)
 def test_post_eval_ingest_success(mock_client_cls: MagicMock) -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -351,6 +355,35 @@ def test_post_eval_ingest_success(mock_client_cls: MagicMock) -> None:
     call_kw = mock_client.post.call_args
     assert call_kw[0][0] == "http://example/ingest"
     assert call_kw[1]["headers"] == {"Content-Type": "application/json"}
+
+
+@patch("evaluation.eval_ingest_client.httpx.Client")
+@patch(
+    "evaluation.eval_ingest_client.utils.env.MATMASTER_TOOLS_EVALUATION_BEARER",
+    "svc-token",
+)
+def test_post_eval_ingest_sends_tools_server_auth_headers(
+    mock_client_cls: MagicMock,
+) -> None:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"code": 0, "msg": "success", "data": {}}
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.__exit__.return_value = None
+    mock_client.post.return_value = mock_resp
+    mock_client_cls.return_value = mock_client
+
+    ok, msg = post_eval_ingest(
+        "http://example/ingest",
+        {"run_id": "r1", "items": [{"question_id": "q"}]},
+    )
+    assert ok
+    call_kw = mock_client.post.call_args
+    assert call_kw[1]["headers"] == {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer svc-token",
+    }
 
 
 @patch("evaluation.eval_ingest_client.httpx.Client")
@@ -397,6 +430,10 @@ def test_post_question_catalog_sync_rejects_missing_text(
 
 
 @patch("evaluation.eval_ingest_client.httpx.Client")
+@patch(
+    "evaluation.eval_ingest_client.utils.env.MATMASTER_TOOLS_EVALUATION_BEARER",
+    None,
+)
 def test_post_eval_ingest_business_error(mock_client_cls: MagicMock) -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 200
