@@ -8,6 +8,7 @@ exec_bash, read_file, write_file, path_exists, is_file.
 from __future__ import annotations
 
 import subprocess
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -34,10 +35,13 @@ class LocalSession:
         command: str,
         timeout: int | None = None,
         is_input: bool = False,
+        stop_event: threading.Event | Any | None = None,
     ) -> dict[str, Any]:
         """Execute a bash command via subprocess.
 
         Returns dict with: stdout, stderr, exit_code, working_dir, output.
+        ``stop_event`` is accepted for interface compatibility with evomaster
+        BaseSession but has no effect on subprocess.run execution.
         """
         if is_input:
             return {

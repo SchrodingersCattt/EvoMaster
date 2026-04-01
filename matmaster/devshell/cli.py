@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
-import queue
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -266,16 +267,17 @@ def _run_with_event_log(runner: Any, prompt: str, log_dir: Path) -> tuple[Any, P
 
     while worker.is_alive():
         try:
-            event = bus.get(timeout=0.1)
+            event = bus.get_nowait()
             event_logger.log_event(event)
-        except queue.Empty:
+        except asyncio.QueueEmpty:
+            time.sleep(0.1)
             continue
 
     while True:
         try:
             event = bus.get_nowait()
             event_logger.log_event(event)
-        except queue.Empty:
+        except asyncio.QueueEmpty:
             break
 
     worker.join()

@@ -363,7 +363,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--baseline-channel",
-        choices=("claude_code", "cursor"),
+        choices=("claude_code", "cursor", "codex"),
         default=None,
         help=(
             "If set with --finalize, pass to finalize as EvalIngestRequest.baseline_channel "

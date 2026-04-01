@@ -13,7 +13,7 @@
 
 This POSTs ``{ run_id, run_kind, baseline_channel?, items: [item] }`` to ``ingest_url``.
 For ``run_kind`` ``baseline``, the server requires ``baseline_channel`` (``claude_code`` or
-``cursor``); pending JSON from external-baseline finalize includes it.
+``cursor`` or ``codex``); pending JSON from external-baseline finalize includes it.
 CLI score fields are the only source of ``score`` / ``score_reason`` / ``suggestion``.
 Field names match ``matmaster-tools-server`` ``EvalItemIn``: optional ``question_text``
 (stem; long text truncated client-side to server max), ``score_reason`` / ``suggestion``

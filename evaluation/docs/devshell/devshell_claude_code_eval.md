@@ -79,7 +79,7 @@ uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --
 
 ## 4. 判分后上报 matmaster-tools-server（延迟入库）
 
-适用：第 1 节使用了 `--eval-ingest-pending-only`，且环境已配置 `MATMASTER_TOOLS_SERVER`（及 OSS 相关变量，以便 `result_oss_url` 等字段完整）。
+适用：第 1 节使用了 `--eval-ingest-pending-only`，且环境已配置 `MATMASTER_TOOLS_SERVER`（及 OSS 相关变量，以便 `item.artifact` 字段完整）。
 
 1. 确认 `Run directory`（即 `results/devshell_eval_*`）。每个任务的 pending 文件路径为：
    `pending_ingest/<task_id>.json`（`task_id` 与 `raw_runs.jsonl` 中该行的 `task_id` 相同，例如 `SC_struct_007_direct_r0`）。也可从 `raw_runs.jsonl` 里读 `eval_ingest_pending_path`（若存在）。
@@ -202,7 +202,7 @@ uv run python evaluation/scripts/eval_ingest_submit_pending.py \
 **结构生成类（`structure_construction`）：批量全量（或 `--limit`）+ 判分 + 延迟入库**
 
 > 按 `evaluation/docs/devshell/devshell_claude_code_eval.md`：在仓库根执行
-> `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 2 --capabilities structure_construction --eval-ingest-pending-only`
+> `uv run python evaluation/scripts/devshell/run_devshell_eval.py --modes direct --jobs 4 --capabilities structure_construction --eval-ingest-pending-only`
 > （若只需子集可加 `--limit N`；不传则跑**全部**结构生成类 direct 任务。）记下 `Run directory`，按第 2、3 节**逐题**判分、`百分制得分` 与第 4 节上报，最后可给 **宏平均** 与共性改进点。
 
 **结构生成类：仅本地不落库（前 N 题）**
