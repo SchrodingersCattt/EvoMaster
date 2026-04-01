@@ -44,3 +44,19 @@ def test_matmaster_tools_server_env_override() -> None:
     with patch.dict(os.environ, base, clear=True):
         m = _reload_utils_env()
         assert m.MATMASTER_TOOLS_SERVER == "https://custom.example"
+
+
+def test_evaluation_bearer_env_optional() -> None:
+    base = dict(os.environ)
+    base.pop("MATMASTER_TOOLS_EVALUATION_BEARER", None)
+    base["SERVICE_ENV"] = "test"
+    with patch.dict(os.environ, base, clear=True):
+        m = _reload_utils_env()
+        assert m.MATMASTER_TOOLS_EVALUATION_BEARER is None
+
+    base2 = dict(os.environ)
+    base2["SERVICE_ENV"] = "test"
+    base2["MATMASTER_TOOLS_EVALUATION_BEARER"] = " k1 "
+    with patch.dict(os.environ, base2, clear=True):
+        m2 = _reload_utils_env()
+        assert m2.MATMASTER_TOOLS_EVALUATION_BEARER == "k1"
