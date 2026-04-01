@@ -174,18 +174,29 @@ class SFTPPool:
 
 **Session 文件方法改造**（以 read_file 为例）：
 
+文件方法必须先捕获 pool 的局部引用，然后成对 acquire/release 在同一个 pool 实例上操作。这是为了防止重连期间 `self._sftp_pool` 被替换为新池，导致旧 transport 的 SFTP client 被错误归还到新池：
+
 ```python
 def read_file(self, path, encoding="utf-8"):
-    sftp = self._sftp_pool.acquire()
+    self._ensure_connected()
+    pool = self._sftp_pool  # 局部引用，保证 acquire/release 在同一个池实例
+    sftp = pool.acquire()
     try:
         with sftp.open(path, "r") as f:
             raw = f.read()
         return raw.decode(encoding) if isinstance(raw, bytes) else raw
     finally:
-        self._sftp_pool.release(sftp)
+        pool.release(sftp)  # 归还到同一个池，不受重连替换影响
 ```
 
-**重连处理**：`_ensure_connected()` 检测 transport 断开时，重建 SSH 连接后调用 `_sftp_pool.close_all()`，并用新 transport 重新初始化池。后续操作触发懒创建。并发开启后 `_ensure_connected()` 需要 session 级锁保护（`self._connect_lock: threading.Lock`），防止多线程同时检测断连时竞争重连导致双重连接和旧 transport 句柄泄漏。
+**重连处理与世代隔离**：`_ensure_connected()` 检测 transport 断开时：
+1. 获取 `self._connect_lock`（session 级锁，防止多线程竞争重连）
+2. 二次检查 transport 是否已被其他线程恢复（double-check pattern）
+3. 重建 SSH 连接
+4. 对旧池调用 `close_all()`（清理残留连接）
+5. 创建新 `SFTPPool(new_transport)` 赋值给 `self._sftp_pool`
+
+由于文件方法持有旧池的局部引用，正在进行中的操作会在旧池上完成 release（旧池归还后无人再 acquire，连接自然废弃）。新的操作通过 `self._sftp_pool` 获取新池引用，拿到新 transport 上的连接。两代池互不干扰。
 
 **删除的组件**：
 - `self._sftp` — 单 SFTP 实例
