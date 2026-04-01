@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
 status: planning
-stopped_at: Phase 26 context gathered
-last_updated: "2026-04-01T07:48:02.952Z"
+stopped_at: Phase 25 context gathered
+last_updated: "2026-04-01T07:57:10.783Z"
 last_activity: 2026-04-01 — v2.1 roadmap created (6 phases, 19 requirements mapped)
 progress:
   total_phases: 19
@@ -60,6 +60,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T07:48:02.947Z
-Stopped at: Phase 26 context gathered
-Resume file: .planning/phases/26-tool/26-CONTEXT.md
+Last session: 2026-04-01T07:57:10.777Z
+Stopped at: Phase 25 context gathered
+Resume file: .planning/phases/25-session-playground/25-CONTEXT.md
