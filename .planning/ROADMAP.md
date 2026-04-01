@@ -318,9 +318,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — Session Protocol + LocalSession 升级 + tmux 辅助模块
-- [ ] 25-02-PLAN.md — SSHSession 原生实现（内联 SSHEnv）
-- [ ] 25-03-PLAN.md — Playground 参数化改造 + PlaygroundManager YAML 解析 + Mixin 内联
+- [ ] 27-01-PLAN.md — MCP Connection 搬入 + 精简版 MCPToolManager
+- [ ] 27-02-PLAN.md — Calculation adaptors 搬入（env_config + oss_io + job_service + path_adaptor）
+- [ ] 27-03-PLAN.md — LazyMCPTool 直连重写 + 全量 import 路径切换 + 测试适配
 
 ### Phase 28: src 反向依赖反转与 Consumer 迁移
 **Goal**: 消除 matmaster 对 src 的反向依赖（bohrium_setup + script_env），同时迁移 src 消费者到 matmaster 原生数据结构与 session 抽象
