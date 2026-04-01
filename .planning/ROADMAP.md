@@ -403,7 +403,7 @@ Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底�
 | 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete | 2026-03-29 |
 | 23. Verification + Nyquist Closure | v2.0 | 1/1 | Complete | 2026-03-30 |
 | 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete | 2026-03-29 |
-| 25. Session 与 Playground 原生化 | v2.1 | 2/3 | In Progress|  |
+| 25. Session 与 Playground 原生化 | v2.1 | 2/3 | Complete    | 2026-04-01 |
 | 26. Tool 内化与遗留工具收归 | v2.1 | 2/3 | Complete    | 2026-04-01 |
 | 27. MCP 与 Calculation 原生链路 | v2.1 | 0/TBD | Not started | - |
 | 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 0/TBD | Not started | - |
