@@ -73,9 +73,10 @@ class BashTool(BuiltinTool):
         when session is evomaster LocalSession, avoiding thread-pool overhead.
         For all other sessions, delegates to the base class async path (to_thread).
         """
-        from evomaster.agent.session.local import LocalSession as _MatmasterLocal
+        from evomaster.agent.session.local import LocalSession as _EvoLocal
+        from matmaster.sessions.local import LocalSession as _MatLocal
 
-        if isinstance(self._session, _MatmasterLocal):
+        if isinstance(self._session, (_EvoLocal, _MatLocal)):
             try:
                 return await self._execute_async(arguments)
             except Exception as e:

@@ -679,6 +679,30 @@ class TestAsyncContextManager:
         errors = validate_async_protocol(provider, LLMProvider)
         assert errors == [], f"Protocol validation errors: {errors}"
 
+    async def test_reentrant_context_manager(self) -> None:
+        """Nested async-with on same provider must not close client early.
+
+        Reproduces the spawn bug: parent enters provider, child enters the
+        same provider, child exits -> client must stay alive for parent.
+        """
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        with patch(
+            "matmaster.providers.openai_provider.openai.AsyncOpenAI"
+        ) as mock_cls:
+            mock_client = AsyncMock()
+            mock_cls.return_value = mock_client
+
+            async with provider:  # parent enters
+                assert provider._client is mock_client
+                async with provider:  # child enters (reentrant)
+                    assert provider._client is mock_client
+                # child exits -- client must still be alive
+                assert provider._client is mock_client
+                mock_client.close.assert_not_awaited()
+            # parent exits -- now client should be closed
+            mock_client.close.assert_awaited_once()
+            assert provider._client is None
+
 
 # -- chat_stream() error_category ------------------------------------------
 
