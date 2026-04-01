@@ -57,7 +57,7 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "grounding_source"
-        criterion: "NFPP structure retrieved from database; mock energies used as specified; chemical potentials explicitly defined."
+        criterion: "NFPP structure uses correct Pna2₁ lattice parameters; mock energies used as specified; chemical potentials explicitly defined."
         axis: "grounding"
         verify: "llm_binary_judge"
       - id: "efficiency_judge"

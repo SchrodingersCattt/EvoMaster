@@ -9,7 +9,7 @@ questions:
   - id: "SC_elec_003"
     capability: "structure_construction"
     domain: "elec"
-    intent: "Retrieve NFPP structure from database and build Al-doped supercell by substituting P with Al."
+    intent: "Build NFPP Al-doped supercell by substituting P with Al."
     human_prompt_seed: |
       构建NFPP的Al掺杂超胞：
       1. 获取NFPP（Na₂FePO₄F）结构（空间群Pna2₁）；
