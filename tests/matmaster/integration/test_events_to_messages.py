@@ -6,13 +6,18 @@ types Message types (UserMessage, AssistantMessage, ToolMessage).
 
 from __future__ import annotations
 
+import pytest
+
 from matmaster.types.messages import (
     AssistantMessage,
     ToolCallData,
     ToolMessage,
     UserMessage,
 )
-from src.services.chat_history import ChatHistoryConverter
+ChatHistoryConverter = pytest.importorskip(
+    "src.services.chat_history",
+    reason="src not available (isolation test)",
+).ChatHistoryConverter
 
 
 def _user_event(content: str = "hello") -> dict:

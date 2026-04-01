@@ -5,11 +5,11 @@ import sys
 import threading
 import time
 
-from evomaster.agent.session.local import LocalSession, LocalSessionConfig
+from matmaster.sessions.local import LocalSession
 
 
 def test_local_session_exec_bash_honors_stop_event(tmp_path) -> None:
-    session = LocalSession(LocalSessionConfig(workspace_path=str(tmp_path), timeout=15))
+    session = LocalSession(str(tmp_path), timeout=15)
     session.open()
     stop_event = threading.Event()
     timer = threading.Timer(0.5, stop_event.set)

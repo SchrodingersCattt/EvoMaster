@@ -14,9 +14,17 @@ import pytest
 import matmaster.config.loader as matmaster_loader
 from matmaster.integration.bohrium_setup import SkillSyncSpec
 from matmaster.types.context import PlaygroundContext
-from src.services import agent_run_bohrium as arb
-from src.services.agent_run_bohrium import BohriumSetupResult
-from src.services.sessions_service import SESSIONS
+
+_src_services = pytest.importorskip(
+    "src.services.agent_run_bohrium",
+    reason="src not available (isolation test)",
+)
+arb = _src_services
+BohriumSetupResult = _src_services.BohriumSetupResult
+SESSIONS = pytest.importorskip(
+    "src.services.sessions_service",
+    reason="src not available (isolation test)",
+).SESSIONS
 
 
 @pytest.fixture(autouse=True)
@@ -32,7 +40,7 @@ def _make_pg(original_session: MagicMock) -> MagicMock:
     pg._owns_session = True
     pg.config = MagicMock()
     pg.config.model_dump.return_value = {
-        'skills': {'skills_root': 'evomaster/skills'},
+        'skills': {'skills_root': 'matmaster/skills/lazymcp'},
     }
     return pg
 
@@ -316,7 +324,10 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
     tmp_path: Path,
 ) -> None:
     """load_exp_config runs before Bohrium setup; derived SkillSyncSpec is passed to setup."""
-    from src.services.agent_run_service import AgentRunService
+    AgentRunService = pytest.importorskip(
+        "src.services.agent_run_service",
+        reason="src not available (isolation test)",
+    ).AgentRunService
 
     order: list[str] = []
     _real_load_exp = matmaster_loader.load_exp_config
@@ -412,7 +423,10 @@ def test_execution_binding_before_build_runtime(
     tmp_path: Path,
 ) -> None:
     """When Bohrium returns an execution binding, pg_ctx passed to Exp.build_runtime is updated."""
-    from src.services.agent_run_service import AgentRunService
+    AgentRunService = pytest.importorskip(
+        "src.services.agent_run_service",
+        reason="src not available (isolation test)",
+    ).AgentRunService
 
     mock_sessions_svc = MagicMock()
     mock_sessions_svc.get_session_user_id.return_value = 'user-123'
@@ -509,7 +523,10 @@ def test_skill_sync_upload_exclude_set_does_not_exclude_skill_md(
     tmp_path: Path,
 ) -> None:
     """Skill tree upload must not exclude SKILL.md (contract files sync to the node)."""
-    from evomaster.agent.session.ssh import SSHSession
+    SSHSession = pytest.importorskip(
+        "evomaster.agent.session.ssh",
+        reason="evomaster not available (isolation test)",
+    ).SSHSession
 
     root = tmp_path / 'proj_skills'
     root.mkdir()

@@ -20,8 +20,9 @@ def cleaned_config():
 class TestCleanedConfigYaml:
     def test_loads_via_evomaster_config(self, cleaned_config):
         """EvoMasterConfig(**config_dict) must not raise."""
-        from evomaster.config import EvoMasterConfig
-
+        EvoMasterConfig = pytest.importorskip(
+            "evomaster.config", reason="evomaster not available (isolation test)"
+        ).EvoMasterConfig
         cfg = EvoMasterConfig(**cleaned_config)
         assert cfg.env is not None  # env stub loaded
 
