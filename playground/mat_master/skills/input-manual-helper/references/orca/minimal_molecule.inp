@@ -1,7 +1,0 @@
-! ORCA minimal molecule template. Fallback when user provides no input_file.
-! Coordinates are placeholder; prepare_orca_job overwrites them.
-%maxcore 1000
-%pal nprocs 32 end
-* xyz 0 1
-X  0.0  0.0  0.0
-*
