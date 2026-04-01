@@ -32,7 +32,14 @@ ENV PATH="/app/.venv/bin:$PATH" \
 # 先 pre-commit 再全量 COPY，业务代码变更不使 hook 层失效
 COPY .pre-commit-config.yaml .pre-commit /app/
 
-RUN mkdir -p /app/.cache/pre-commit && pre-commit install-hooks
+# install-hooks 要求 cwd 为 git 仓库；上下文通常无 .git。用空提交占位，勿 git add -A（会含 .venv）
+RUN git init && \
+    git config user.email "docker@build" && \
+    git config user.name "docker" && \
+    git commit --allow-empty -m "pre-commit bootstrap" --no-verify && \
+    mkdir -p /app/.cache/pre-commit && \
+    pre-commit install-hooks && \
+    rm -rf .git
 
 COPY . /app/
 
