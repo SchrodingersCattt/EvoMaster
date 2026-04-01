@@ -7,6 +7,7 @@ from .structure_general import (
     check_bond_length,
     check_cell_param,
     check_coordination_number,
+    check_file_count,
     check_formula,
     check_layer_count,
     check_stoichiometry_ratio,
@@ -18,13 +19,14 @@ from .structure_molcrys import (
 )
 
 __all__ = [
-    # structure_general (pymatgen-backed)
+    # structure_general (pymatgen-backed + file-system)
     'check_atom_count',
     'check_bond_angle',
     'check_bond_count',
     'check_bond_length',
     'check_cell_param',
     'check_coordination_number',
+    'check_file_count',
     'check_formula',
     'check_layer_count',
     'check_stoichiometry_ratio',

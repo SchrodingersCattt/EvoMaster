@@ -60,6 +60,8 @@ VerifyLiteral = Literal[
     'struct_file_stoichiometry_ratio',
     'struct_file_coordination',
     'struct_file_layer_count',
+    # file-system check (no pymatgen needed)
+    'struct_file_count',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']

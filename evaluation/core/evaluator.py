@@ -28,6 +28,7 @@ from .evaluator_helpers import (
     check_struct_file_bond_length,
     check_struct_file_cell_param,
     check_struct_file_coordination,
+    check_struct_file_count,
     check_struct_file_formula,
     check_struct_file_layer_count,
     check_struct_file_stoichiometry_ratio,
@@ -434,6 +435,7 @@ class BinaryEvaluator:
             'struct_file_stoichiometry_ratio': check_struct_file_stoichiometry_ratio,
             'struct_file_coordination': check_struct_file_coordination,
             'struct_file_layer_count': check_struct_file_layer_count,
+            'struct_file_count': check_struct_file_count,
         }
         if item.verify in _STRUCT_FILE_DISPATCH:
             if ref is None:

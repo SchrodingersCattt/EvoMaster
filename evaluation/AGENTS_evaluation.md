@@ -137,6 +137,7 @@ evaluation/question_bank/
 | `struct_file_stoichiometry_ratio` | `{"filename": str, "element_a": str, "element_b": str, "expected_ratio": float, "tolerance": float}` | 验证 count(A)/count(B) 比值 |
 | `struct_file_coordination` | `{"filename": str, "center_element": str, "expected": int, "tolerance": float, "cutoff_A": float}` | 统计中心元素的配位数均值并校验 |
 | `struct_file_layer_count` | `{"filename": str, "expected": int, "tolerance": float, "axis": str, "gap_threshold_A": float}` | 沿指定轴用间距聚类统计原子层数 |
+| `struct_file_count` | `{"pattern": str, "expected": int, "tolerance": int}` | 统计 workspace 中匹配 glob 的文件数（无需 pymatgen） |
 
 ### 不需要对应 `reference_answers` 条目
 
