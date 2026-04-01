@@ -1,0 +1,71 @@
+version: "v5"
+capability: "workflow_orchestration"
+domain: "elec"
+
+questions:
+  # ============================================================
+  # WO_elec_008 — CO吸附能计算（Mock版）
+  # ============================================================
+  - id: "WO_elec_008"
+    capability: "workflow_orchestration"
+    domain: "elec"
+    intent: "Compute CO adsorption energy on Ag(001): build slab, place molecule, use mock energies, calculate E_ads."
+    human_prompt_seed: |
+      计算CO在Ag(001)表面的吸附能：
+      1. 从数据库获取Ag FCC体相结构，切出(001)表面slab（4层，15 Å真空，3×3扩胞）；
+      2. 构建气相CO分子；
+      3. 在slab顶层ontop位点放置CO分子（C端朝下，初始距离~2.0 Å）构建吸附结构；
+      4. 使用以下mock能量值（模拟DPA弛豫结果）：
+         - E_slab = -108.45 eV
+         - E_CO = -12.85 eV
+         - E_adsorbed = -121.50 eV
+      5. 按公式 E_ads = E(adsorbed) - E(slab) - E(CO) 计算吸附能；
+      6. 输出吸附能(eV)及三个结构的能量值。
+    tags: ["co2rr", "adsorption_energy", "workflow", "catalysis"]
+    mode_scope: ["direct", "planner"]
+    required_tools:
+      - "mat_struct_db_fetch_structures_from_db"
+      - "mat_sg_build_surface_slab"
+      - "mat_sg_build_molecule_structures_from_smiles"
+    optional_tools: []
+    data_files: []
+    reference_answers:
+      - key: "adsorption_energy_eV"
+        value: -0.2
+        tolerance: 0.5
+      - key: "required_fields"
+        value:
+          - "E_slab"
+          - "E_molecule"
+          - "E_adsorbed"
+          - "E_ads"
+          - "adsorption_site"
+      - key: "duration_budget"
+        value: {max: 7200000}
+      - key: "token_budget_total"
+        value: {max: 50000}
+    scoring_checklist:
+      - id: "adsorption_energy_eV"
+        criterion: "Adsorption energy is computed correctly from mock energies (~-0.2 eV)."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Report includes bare slab energy, isolated molecule energy, adsorbed system energy, and adsorption energy."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "grounding_source"
+        criterion: "Adsorption energy computed with specified mock energies; structures built via MCP tools."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      - id: "efficiency_judge"
+        criterion: "Adsorption energy workflow (build slab → build molecule → place adsorbate → compute with mock values) completes without redundant steps."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+      - id: "duration_budget"
+        criterion: "Wall-clock run duration does not exceed benchmark ceiling."
+        axis: "efficiency"
+        verify: "duration_budget"
+      - id: "token_budget_total"
+        criterion: "Total token usage stays within benchmark ceiling."
+        axis: "efficiency"
+        verify: "token_budget"
