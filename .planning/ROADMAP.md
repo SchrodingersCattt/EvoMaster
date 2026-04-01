@@ -347,12 +347,11 @@ Plans:
   1. API/worker 主执行路径通过 matmaster 原生入口初始化 playground、exp 与 agent，保持消息发送、run 执行与事件推送主流程可用
   2. 本地 Web 调试后端通过 matmaster 原生入口初始化 playground，保持启动、会话恢复与流式输出行为
   3. 主执行路径中不再出现 evomaster.core.get_playground_class 或等价的 evomaster 入口调用
-**Plans**: 3 plans
+**Plans**: 2 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — Session Protocol + LocalSession 升级 + tmux 辅助模块
-- [ ] 25-02-PLAN.md — SSHSession 原生实现（内联 SSHEnv）
-- [ ] 25-03-PLAN.md — Playground 参数化改造 + PlaygroundManager YAML 解析 + Mixin 内联
+- [ ] 29-01-PLAN.md -- workspace_resolver 迁移 + bash_tool/monitor_job evomaster import 清理 + 测试更新
+- [ ] 29-02-PLAN.md -- playground/evaluation/run.py 删除 + 技能归档 + 配置修正 + pyproject 清理
 
 ### Phase 30: 解耦审计与独立性证明
 **Goal**: 用 import audit、隔离测试和迁移文档证明 matmaster 可脱离 evomaster/playground/src 独立运行，并为 v2.2 清理留出清晰后手
