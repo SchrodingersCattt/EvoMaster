@@ -70,12 +70,36 @@ docker-build-mr-main:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
 
-# 合并到 main：MR 目标分支为 main，或 push 到 main（lint 依赖 docker-build-mr-main，见 ci/pre-commit-job.yml）
+# 合并到 main：MR 目标分支为 main，或 push 到 main（lint 依赖 docker-build-mr-main）
+# 此处不写 extends，与 ci/pre-commit-job.yml 中 .pre-commit-with-built-image 保持脚本一致，避免 CI Lint 合并 before_script 报错
 pre-commit:
-  extends: .pre-commit-with-built-image
+  stage: lint
+  image: $REGISTRY/public/ubuntu:gitlab-docker
+  variables:
+    DOCKER_HOST: tcp://docker-build-service:32375
   needs:
     - job: docker-build-mr-main
       artifacts: true
+  before_script:
+    - |
+      cat > /root/.docker/config.json <<EOF
+      {
+      "auths": {
+        "registry.dp.tech": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        },
+        "dp-harbor-registry.cn-zhangjiakou.cr.aliyuncs.com": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        }
+      }
+      }
+      EOF
+    - test -n "${DYNAMIC_IMAGE:-}" || (echo "pre-commit: 缺少 DYNAMIC_IMAGE（需 docker-build-mr-main 产出 build.env）" && exit 1)
+    - docker pull "${DYNAMIC_IMAGE}"
+  script:
+    - bash "${CI_PROJECT_DIR}/ci/run_pre_commit_in_docker.sh" "${DYNAMIC_IMAGE}"
+  tags:
+    - k8s-runner-ack
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
