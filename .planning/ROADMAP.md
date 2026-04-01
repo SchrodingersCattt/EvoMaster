@@ -334,9 +334,10 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — Session Protocol + LocalSession 升级 + tmux 辅助模块
-- [ ] 25-02-PLAN.md — SSHSession 原生实现（内联 SSHEnv）
-- [ ] 25-03-PLAN.md — Playground 参数化改造 + PlaygroundManager YAML 解析 + Mixin 内联
+- [ ] 28-01-PLAN.md -- Bohrium 纯函数搬迁 + 常量定义 + import audit 扩展
+- [ ] 28-02-PLAN.md -- bohrium_setup 回调注入改造 + script_env/path_adaptor/job_service import 切换
+- [ ] 28-03-PLAN.md -- chat_history 消息类型迁移 + agent_run_bohrium SSHSession 切换 + agent_run_service 回调适配
+
 
 ### Phase 29: 主执行路径切换
 **Goal**: API/worker 与本地 Web 调试后端切换到 matmaster 原生入口，不再依赖 evomaster.core.get_playground_class，且主路径持续可运行
