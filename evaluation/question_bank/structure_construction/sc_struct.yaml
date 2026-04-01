@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: struct
 questions:
-- id: SC_struct_001
+- id: SC_struct_001_20260401
   capability: structure_construction
   domain: struct
   intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled
@@ -29,6 +29,18 @@ questions:
   - key: mismatch_percent
     value: 1.6
     tolerance: 1.0
+  - key: hetero_formula
+    value:
+      filename: '*.cif'
+      formula: B2C2N2
+  - key: interlayer_distance_A
+    value:
+      filename: '*.cif'
+      element_a: C
+      element_b: B
+      cutoff_A: 5.0
+      expected: 3.35
+      tolerance: 0.3
   - key: required_fields
     value:
     - structure_file
@@ -48,6 +60,15 @@ questions:
     criterion: Lattice mismatch is below 2%.
     axis: correctness
     verify: numerical_range
+  - id: hetero_formula
+    criterion: The output CIF has the expected graphene/h-BN supercell formula (equal
+      C, B, N counts) verified by reading the structure file.
+    axis: correctness
+    verify: struct_file_formula
+  - id: interlayer_distance_A
+    criterion: The mean C-B interlayer distance read from the output CIF is near 3.35 A.
+    axis: correctness
+    verify: struct_file_bond_length
   - id: required_fields
     criterion: Output includes structure file, lattice mismatch percentage below 2%,
       total atom count, interlayer distance near 3.35 A, AB stacking, and vacuum thickness
@@ -79,7 +100,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_002_20260331
+- id: SC_struct_002_20260401
   capability: structure_construction
   domain: struct
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular
@@ -102,7 +123,7 @@ questions:
 
     (3) 最终 slab 的原子总数；
 
-    (4) 是否满足“最终原子数 = 单胞原子数的 4 倍”。
+    (4) 是否满足"最终原子数 = 单胞原子数的 4 倍"。
 
 
     输出结构文件，并给出上述核查结论。
@@ -120,11 +141,15 @@ questions:
   data_files: []
   reference_answers:
   - key: unit_cell_atoms
-    value: 144
-    tolerance: 0.0
+    value:
+      filename: '*PUBMUU03*'
+      expected: 144
+      tolerance: 0
   - key: total_atoms
-    value: 576
-    tolerance: 0.0
+    value:
+      filename: '*.cif'
+      expected: 576
+      tolerance: 0
   - key: required_fields
     value:
     - structure_file
@@ -142,14 +167,13 @@ questions:
     value: *id002
   scoring_checklist:
   - id: unit_cell_atoms
-    criterion: The input unit cell atom count is reported correctly (144 atoms).
+    criterion: The input unit cell atom count read from the downloaded CIF is 144 atoms.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_atom_count
   - id: total_atoms
-    criterion: Total atom count is correct (576 atoms for a 4-layer slab built directly
-      from the 144-atom input unit cell).
+    criterion: Total atom count read from the output slab CIF is 576 atoms (4 × 144).
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_atom_count
   - id: molcrys_slab_molecular_integrity
     criterion: The slab-builder tool observation reports `molecule_intact=true`, i.e.
       no molecules are cut by the slab cut.
@@ -351,7 +375,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260331
+- id: SC_struct_005_20260401
   capability: structure_construction
   domain: struct
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and
@@ -396,8 +420,10 @@ questions:
   - planner
   reference_answers:
   - key: structures_processed
-    value: 5
-    tolerance: 0.0
+    value:
+      pattern: 'ordered_*'
+      expected: 5
+      tolerance: 0
   - key: sc005_disorder_formulas
     value: {}
   - key: required_fields
@@ -417,9 +443,10 @@ questions:
     value: *id001
   scoring_checklist:
   - id: structures_processed
-    criterion: All 5 disordered structures are processed.
+    criterion: All 5 disordered structures are processed (verified by counting ordered-replica
+      output files in workspace).
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_count
   - id: sc005_disorder_formulas
     criterion: The answer includes the four reference formula strings for DAP-4, PAP-H4,
       PAP-M5, and TILPEN; for DAN-2 the reported ordered-replica chemical_formula

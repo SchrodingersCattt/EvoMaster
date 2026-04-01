@@ -542,3 +542,35 @@ def check_layer_count(
         f'{fpath.name}: {n_layers} layers along {axis} (gap_threshold={gap_threshold_A} Å), '
         f'expected={expected}±{tolerance}',
     )
+
+
+# ---------------------------------------------------------------------------
+# File-count check (no pymatgen needed)
+# ---------------------------------------------------------------------------
+
+
+def check_file_count(
+    workspace_dir: str | Path,
+    *,
+    pattern: str,
+    expected: int,
+    tolerance: int = 0,
+) -> tuple[bool, str]:
+    """Count files matching *pattern* (fnmatch glob) inside *workspace_dir*.
+
+    Useful for verifying that the agent produced the expected number of output
+    structure files (e.g. 5 ordered-replica CIFs).
+    """
+    root = Path(workspace_dir)
+    if not root.is_dir():
+        return False, f'workspace {root} does not exist or is not a directory'
+
+    hits = [
+        p for p in root.iterdir() if p.is_file() and fnmatch.fnmatch(p.name, pattern)
+    ]
+    n = len(hits)
+    ok = abs(n - expected) <= tolerance
+    return (
+        ok,
+        f'{n} file(s) matching {pattern!r} in workspace (expected={expected}±{tolerance})',
+    )

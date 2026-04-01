@@ -16,6 +16,7 @@ from evaluation.validators.structure_general import (
     check_bond_length,
     check_cell_param,
     check_coordination_number,
+    check_file_count,
     check_formula,
     check_layer_count,
     check_stoichiometry_ratio,
@@ -388,4 +389,19 @@ def check_struct_file_layer_count(
         tolerance=float(cfg.get('tolerance', 0)),
         axis=str(cfg.get('axis', 'z')),
         gap_threshold_A=float(cfg.get('gap_threshold_A', 1.0)),
+    )
+
+
+def check_struct_file_count(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_file_count(
+        ws,
+        pattern=cfg.get('pattern', '*.cif'),
+        expected=int(cfg.get('expected', 0)),
+        tolerance=int(cfg.get('tolerance', 0)),
     )
