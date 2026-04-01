@@ -1,12 +1,11 @@
 """BashTool -- execute bash commands via session.
 
-Bash safety detection inlined (originally from evomaster).
-Mirrors the evomaster BashTool behavior (proxy clear)
-but satisfies the matmaster Tool Protocol directly.
+Bash safety detection inlined from legacy code.
+Satisfies the matmaster Tool Protocol directly.
 
 Dual-path execute:
 - matmaster LocalSession -> native asyncio.create_subprocess_exec
-- evomaster / other sessions -> sync session.exec_bash (via base class)
+- other sessions -> sync session.exec_bash (via base class)
 """
 
 from __future__ import annotations
@@ -18,7 +17,7 @@ from typing import Any, ClassVar
 
 from .base import BuiltinTool
 
-# ---- Bash Safety (inlined from evomaster.agent.tools.builtin.bash_safety) ----
+# ---- Bash Safety (inlined) ----
 _BLOCKED_FIRST_TOKENS = frozenset({'env', 'set', 'printenv'})
 
 _DANGEROUS_COMMAND_PATTERNS = [
@@ -120,16 +119,10 @@ class BashTool(BuiltinTool):
     }
 
     async def execute(self, arguments: dict[str, Any]) -> str:
-        """Dual-path execute: native async for LocalSession, sync fallback otherwise.
-
-        Overrides BuiltinTool.execute() to use asyncio.create_subprocess_exec
-        when session is evomaster LocalSession, avoiding thread-pool overhead.
-        For all other sessions, delegates to the base class async path (to_thread).
-        """
-        from evomaster.agent.session.local import LocalSession as _EvoLocal
+        """Dual-path execute: native async for matmaster LocalSession, sync fallback otherwise."""
         from matmaster.sessions.local import LocalSession as _MatLocal
 
-        if isinstance(self._session, (_EvoLocal, _MatLocal)):
+        if isinstance(self._session, _MatLocal):
             try:
                 return await self._execute_async(arguments)
             except Exception as e:

@@ -62,23 +62,24 @@ def _load_test_injected_log(bohr_job_id: str | None) -> tuple[str | None, str | 
 
 
 @lru_cache(maxsize=4)
-def _get_llm_by_alias(alias: str | None = None):
-    # Lazy import: evomaster.config and evomaster.utils (not triggered at module load time)
-    from evomaster.config import ConfigManager
-    from evomaster.utils import LLMConfig, create_llm
+def _get_llm_client(alias: str | None = None):
+    """Build a sync OpenAI client from matmaster LLM config.
 
-    config_mgr = ConfigManager(
-        config_dir=REPO_ROOT / 'configs' / 'mat_master',
-        config_file='config.yaml',
+    Returns (client, model_name) tuple.
+    """
+    from matmaster.config.loader import load_llm_config
+
+    llm_config = load_llm_config(REPO_ROOT / 'matmaster_config' / 'llm_config.yaml')
+    profile_key = alias or llm_config.default
+    profile = llm_config.get_profile(profile_key)
+
+    import openai
+    client = openai.OpenAI(
+        api_key=profile.api_key,
+        base_url=profile.base_url,
+        timeout=profile.timeout,
     )
-    cfg = config_mgr.load()
-    llm_section = cfg.llm if isinstance(cfg.llm, dict) else {}
-    llm_alias = (alias or llm_section.get('default') or 'opus').strip()
-    llm_raw = llm_section.get(llm_alias)
-    if not isinstance(llm_raw, dict):
-        raise RuntimeError(f'LLM alias not found in config: {llm_alias}')
-    llm_cfg = LLMConfig.model_validate(llm_raw)
-    return create_llm(llm_cfg)
+    return client, profile.model
 
 
 def _extract_json_object(raw: str) -> str | None:
@@ -187,20 +188,20 @@ def _call_llm_decision(
     llm_alias: str | None = None,
     timeout_seconds: int = _DEFAULT_MONITOR_LLM_TIMEOUT_SECONDS,
 ) -> dict[str, Any]:
-    llm = _get_llm_by_alias(llm_alias)
+    client, model = _get_llm_client(llm_alias)
     user_payload = json.dumps(snapshot, ensure_ascii=False)
     intent_text = (task_intent or '').strip() or '未指定（通用监控）'
     system_prompt = _MONITOR_LLM_DECISION_PROMPT.format(task_intent=intent_text)
-    response = llm._call(
+    response = client.chat.completions.create(
+        model=model,
         messages=[
             {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': user_payload},
         ],
-        tools=None,
-        timeout=timeout_seconds,
         temperature=0.0,
+        timeout=timeout_seconds,
     )
-    return _parse_llm_decision(response.content)
+    return _parse_llm_decision(response.choices[0].message.content)
 
 
 def _terminate_job_if_needed(
