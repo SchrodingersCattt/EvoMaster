@@ -539,7 +539,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_007
+- id: SC_struct_007_20260401
   capability: structure_construction
   domain: struct
   intent: Build the nitroprusside anion and validate its coordination, bond lengths,
@@ -580,7 +580,7 @@ questions:
     value: 1.2
     tolerance: 0.1
   - key: fe_no_angle_deg
-    value: 178.0
+    value: 180.0
     tolerance: 3.0
   - key: cn_bond_length_A
     value: 1.16
@@ -629,7 +629,7 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: fe_no_angle_deg
-    criterion: A representative Fe-N-O angle is reported above 175 degrees and close
+    criterion: A representative Fe-N-O angle is reported above 177 degrees and close
       to linear.
     axis: correctness
     verify: numerical_range
