@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
 status: executing
-stopped_at: Completed 30-02-PLAN.md
-last_updated: "2026-04-01T17:49:55.299Z"
-last_activity: 2026-04-02 -- Plan 02 completed (evomaster deletion + config cleanup)
+stopped_at: Completed 30-03-PLAN.md
+last_updated: "2026-04-01T17:58:16.445Z"
+last_activity: 2026-04-01
 progress:
   total_phases: 19
-  completed_phases: 18
+  completed_phases: 19
   total_plans: 40
-  completed_plans: 39
+  completed_plans: 40
   percent: 98
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 30 (decoupling-audit) -- EXECUTING
-Plan: 2 of 3
-Status: Executing Phase 30
-Last activity: 2026-04-02 -- Plan 02 completed (evomaster deletion + config cleanup)
+Plan: 3 of 3
+Status: Ready to execute
+Last activity: 2026-04-01
 
 Progress: [===================.] 98%
 
@@ -45,6 +45,7 @@ Progress: [===================.] 98%
 | 29-01 | workspace_resolver + imports | 5min | 2 | 6 |
 | Phase 29-02 Plegacy-deletion-config-migration | 4min | 2 tasks | 384 files |
 | Phase 30-02 Pevomaster-deletion-config | 9min | 2 tasks | 120 files |
+| Phase 30 P03 | 3min | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Progress: [===================.] 98%
 - [Phase 29-02]: Session working_dir standardized to ./workspace at project root for both config files
 - [Phase 30-02]: Import audit KNOWN_VIOLATIONS cleaned from 24 to 1 -- 23 stale entries resolved in prior phases
 - [Phase 30-02]: config.yaml user skill paths (~/.evomaster-skills) kept as-is -- filesystem names not package imports, deferred to v2.2
+- [Phase 30]: v2.1 migration doc uses actual test data (1276 passed, 5 skipped) per D-11, no hardcoded baselines
+- [Phase 30]: v2.2 cleanup ordered P1-P5: config unification > history cleanup > path normalization > packaging > archive disposal
 
 ### Pending Todos
 
@@ -90,6 +93,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T17:49:55.296Z
-Stopped at: Completed 30-02-PLAN.md
+Last session: 2026-04-01T17:58:16.442Z
+Stopped at: Completed 30-03-PLAN.md
 Resume file: None
