@@ -378,4 +378,4 @@ Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底�
 | 27. MCP 与 Calculation 原生链路 | v2.1 | 0/TBD | Not started | - |
 | 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 0/TBD | Not started | - |
 | 29. 主执行路径切换 | v2.1 | 0/TBD | Not started | - |
-| 30. 解耦审计与独立性证明 | v2.1 | 0/TBD | Not started | - |
+| 30. 解耦审计与独立性证明 | v2.1 | 1/3 | In progress | - |
