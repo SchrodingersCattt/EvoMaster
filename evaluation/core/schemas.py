@@ -50,6 +50,20 @@ VerifyLiteral = Literal[
     'batch_single_variable_sweep',
     'batch_tool_args_constant',
     'batch_consistent_calls',
+    # pymatgen-backed structure-file checks
+    'struct_file_atom_count',
+    'struct_file_formula',
+    'struct_file_bond_count',
+    'struct_file_bond_length',
+    'struct_file_bond_angle',
+    'struct_file_cell_param',
+    'struct_file_stoichiometry_ratio',
+    'struct_file_coordination',
+    'struct_file_layer_count',
+    # file-system check (no pymatgen needed)
+    'struct_file_count',
+    # surface termination check
+    'struct_file_surface_termination',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
