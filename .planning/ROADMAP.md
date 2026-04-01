@@ -5,7 +5,7 @@
 - ✅ **v1 MatMaster Framework Refactoring** - Phases 1-7 (shipped 2026-03-22)
 - ✅ **v1.1 Agent 外围能力构建** - Phases 8-11 (shipped 2026-03-25)
 - ✅ **v2.0 matmaster 协程改造** - Phases 12-24 (shipped 2026-03-30)
-- 🚧 **v2.1 matmaster/ 与 evomaster/ 彻底解耦** - Phases 25-30 (active 2026-04-01)
+- 🚧 **v2.1 matmaster/ 完全独立化** - Phases 25-30 (active 2026-04-01)
 
 ## Phases
 
@@ -53,18 +53,21 @@ Full details: milestones/v1-ROADMAP.md
 
 </details>
 
-### 🚧 v2.1 matmaster/ 与 evomaster/ 彻底解耦 (Active — Phases 25-30)
+### 🚧 v2.1 matmaster/ 完全独立化 (Active -- Phases 25-30)
 
-**Milestone Goal:** 让 `matmaster/` 成为不依赖 `evomaster/` 运行时导入的独立内核，同时保持 API/worker、本地 Web 调试以及 Bohrium/calculation 主路径可运行、可迁移、可验证。
+**Milestone Goal:** 让 `matmaster/` 运行时路径不再 import `evomaster/`、`playground/` 或 `src/`，成为可独立运行、测试与发布的核心包。三方向解耦：evomaster (~15 imports, 8 files)、playground (1 import)、src (6 imports, 2 files)。
 
-- [ ] **Phase 25: Session 与 Playground 原生化** - 先切断 `session/config/playground` 对 `evomaster` 的运行时硬依赖，建立 matmaster 自有环境准备入口
-- [ ] **Phase 26: Builtin Tool 运行时脱钩** - 移除 `EvoToolAdapter` 与 builtin helper 复用耦合，让遗留 builtin 能力在 `matmaster.tools` 原生执行
-- [ ] **Phase 27: MCP 与 Calculation 原生链路** - 将 `lazy_mcp`、schema cache 与 calculation path adaptor 收回 matmaster 侧，同时保持 Bohrium 协议兼容
-- [ ] **Phase 28: Consumer 类型与 Session 兼容层** - 迁移 `src/` 消费者到 matmaster 原生 message/tool_call/session 边界，收口 compat layer
-- [ ] **Phase 29: 主执行路径切换** - 让 API/worker 与本地 Web 调试后端改走 matmaster 原生入口，并保持当前可运行主路径
-- [ ] **Phase 30: 解耦审计与迁移收口** - 用 import audit、独立测试与迁移文档证明 matmaster 已可脱离 evomaster 独立运行
+- [ ] **Phase 25: Session 与 Playground 原生化** - 切断 session/config/playground 对 evomaster 的运行时硬依赖，建立 matmaster 自有环境准备入口
+- [ ] **Phase 26: Tool 内化与遗留工具收归** - 移除 EvoToolAdapter、内化 builtin helper、收归 MonitorJobTool 与 web_search_tool，让全部 tool 在 matmaster 原生运行
+- [ ] **Phase 27: MCP 与 Calculation 原生链路** - 将 lazy_mcp、schema cache 与 calculation path adaptor 收回 matmaster 侧，保持 Bohrium 协议兼容
+- [ ] **Phase 28: src 反向依赖反转与 Consumer 迁移** - 消除 bohrium_setup/script_env 对 src 的反向依赖，同时迁移 src 消费者到 matmaster 原生数据结构
+- [ ] **Phase 29: 主执行路径切换** - API/worker 与本地 Web 调试后端改走 matmaster 原生入口，保持主路径持续可运行
+- [ ] **Phase 30: 解耦审计与独立性证明** - 用 import audit、隔离测试与迁移文档证明 matmaster 可脱离 evomaster/playground/src 独立运行
 
 ## Phase Details
+
+<details>
+<summary>✅ v2.0 Phase Details (Phases 12-24) -- collapsed for readability</summary>
 
 ### Phase 12: Protocol 层 + 测试基础设施
 **Goal**: 所有 async Protocol 合约明确定义，pytest-asyncio 基础设施就绪，async mock 可用于后续阶段测试
@@ -268,72 +271,81 @@ Plans:
 Plans:
 - [x] 24-01-PLAN.md -- Migrate 12 emit_nowait to await bus.emit() + stale comment cleanup + bus docstring + stop_event type + test assertion updates
 
+</details>
+
 ### Phase 25: Session 与 Playground 原生化
-**Goal**: `matmaster` 先具备自有的 session、config 与 playground 环境准备能力，为后续 tool 和 consumer 迁移提供稳定底座
+**Goal**: matmaster 具备自有的 session 抽象、config 加载与 playground 环境准备能力，切断对 evomaster session/config/mixin 的运行时依赖
 **Depends on**: Phase 24
 **Requirements**: PLAY-01, PLAY-02, PLAY-03
 **Success Criteria** (what must be TRUE):
-  1. 开发者在不安装 `evomaster` 的环境中可以直接创建并使用 `matmaster.sessions.local.LocalSession`，供 builtin tools 执行本地命令与文件操作
-  2. `matmaster` 原生 session factory 可以创建 local、docker、ssh session，而 `matmaster.core.playground.Playground` 运行时不再导入 `evomaster.agent.session.*`
-  3. `matmaster.core.playground.Playground` 可以独立完成主配置加载、workspace 准备、logging 初始化与 session 装配，不再依赖 `evomaster.config.ConfigManager` 或 `PlaygroundSessionMixin`
+  1. 开发者在不安装 evomaster 的环境中可以直接创建并使用 matmaster.sessions.local.LocalSession，供 builtin tools 执行本地命令与文件操作
+  2. matmaster 原生 session factory 可以创建 local、docker、ssh session，而 matmaster.core.playground.Playground 运行时不再导入 evomaster.agent.session 下的任何模块
+  3. matmaster.core.playground.Playground 可以独立完成主配置加载、workspace 准备、logging 初始化与 session 装配，不再依赖 evomaster.config.ConfigManager 或 PlaygroundSessionMixin
+  4. 现有依赖 session 的 builtin tools (BashTool, ReadTool 等) 可以通过 matmaster 原生 session 正常执行文件和命令操作
 **Plans**: TBD
 
-### Phase 26: Builtin Tool 运行时脱钩
-**Goal**: 让遗留 builtin 能力完全通过 `matmaster.tools` 原生注册与执行，不再依赖 `EvoToolAdapter` 或 `evomaster` builtin helper
+### Phase 26: Tool 内化与遗留工具收归
+**Goal**: 全部 tool 能力在 matmaster.tools 原生运行，消除 EvoToolAdapter、evomaster builtin helper 依赖、MonitorJobTool 和 web_search_tool 的外部导入
 **Depends on**: Phase 25
-**Requirements**: TOOL-07, TOOL-08
+**Requirements**: TOOL-07, TOOL-08, TOOL-09, TOOL-10
 **Success Criteria** (what must be TRUE):
-  1. 开发者可以在 `matmaster.tools` 中直接注册并执行遗留 builtin 能力，而不需要 `EvoToolAdapter`
-  2. `matmaster.tools.builtin` 中的 bash safety 与 edit helper 由 matmaster 原生实现提供，并保持当前安全约束和编辑行为
-  3. 在仅安装 `matmaster` 的环境中加载 builtin tools 时，不会触发 `evomaster.agent.tools.builtin.*` 的运行时导入
+  1. 开发者可以在 matmaster.tools 中直接注册并执行遗留 builtin 能力，EvoToolAdapter 从 tool 注册链路中移除
+  2. matmaster.tools.builtin 中的 bash safety 检查与 edit helper 由 matmaster 原生实现提供，不再导入 evomaster.agent.tools.builtin 下的任何模块
+  3. MonitorJobTool 通过 matmaster 原生注册或 skill 机制提供，exp.py 不再 lazy import evomaster.agent.tools.builtin.monitor_job
+  4. web_search_tool 通过 matmaster 原生实现或 skill 注册提供，exp.py 不再 import playground.mat_master.tools.web_search（消除 matmaster -> playground 依赖）
+  5. 在仅安装 matmaster 的环境中加载全部 builtin tools 和 exp 注册的 tools 时，不会触发任何 evomaster 或 playground 运行时导入
 **Plans**: TBD
 
 ### Phase 27: MCP 与 Calculation 原生链路
-**Goal**: 将 MCP 连接、schema cache、calculation path adaptor 与 Bohrium 运行时配置全部收回 matmaster 侧，同时维持现有协议兼容
+**Goal**: MCP 连接、schema cache 与 calculation path adaptor 全部收回 matmaster 侧，同时维持 Bohrium executor/storage/OSS 协议兼容
 **Depends on**: Phase 25, Phase 26
 **Requirements**: MCP-01, CALC-01, CALC-02
 **Success Criteria** (what must be TRUE):
-  1. 开发者可以通过 `matmaster.tools.lazy_mcp` 连接 MCP server、缓存 schema 并执行 tool，而不依赖 `evomaster.agent.tools.mcp.*`
-  2. `matmaster` 侧可以原生解析 calculation runtime config、path adaptor 与 schema cache，正确识别 path 输入并构造 executor、storage 参数
-  3. Bohrium / calculation tool 在 submit 或 run 场景下继续生成与当前协议兼容的 executor、storage、OSS 上传与远端路径适配行为
+  1. matmaster.tools.lazy_mcp 可以独立连接 MCP server、缓存 schema 并执行 tool，不依赖 evomaster.agent.tools.mcp 下的 manager 或 connector
+  2. matmaster 侧可以原生解析 calculation runtime config、path adaptor 与 schema cache，正确识别 path 输入并构造 executor、storage 参数
+  3. Bohrium / calculation tool 在 submit 或 run 场景下继续生成与当前协议兼容的 executor、storage、OSS 上传与远端路径适配行为，不引入协议破坏
+  4. cache_mcp_schemas.py 和 eval_tooling_snapshot.py 不再 import evomaster MCP manager 或 calculation adaptor
 **Plans**: TBD
 
-### Phase 28: Consumer 类型与 Session 兼容层
-**Goal**: 让 `src/` 消费者改用 matmaster 原生 message、tool_call 与 session abstraction，同时把遗留 evomaster 依赖压缩到受控 compat 边界
+### Phase 28: src 反向依赖反转与 Consumer 迁移
+**Goal**: 消除 matmaster 对 src 的反向依赖（bohrium_setup + script_env），同时迁移 src 消费者到 matmaster 原生数据结构与 session 抽象
 **Depends on**: Phase 25
-**Requirements**: CONS-03, CONS-04
+**Requirements**: INVR-01, INVR-02, CONS-03, CONS-04
 **Success Criteria** (what must be TRUE):
-  1. `src/services/chat_history.py` 等对话历史构建链路可以直接消费 matmaster 原生 message / tool_call 数据结构，并保持当前历史恢复行为
-  2. `src/services/agent_run_bohrium.py` 等 session-sensitive 服务路径可以切换到 matmaster session abstraction 或显式 compat layer，避免直接依赖 evomaster session class
-  3. 旧 evomaster 类型只出现在受控边界适配层，不再泄漏到 `src/` 主业务逻辑中
+  1. matmaster/integration/bohrium_setup.py 不再 lazy import src.services.agent_run_bohrium 的 5 个函数，改为通过回调注入或将逻辑移入 matmaster 侧
+  2. matmaster/tools/script_env.py 不再 lazy import src.utils.constant.BOHRIUM_OPENAPI_HOST，改为配置注入或 matmaster 侧常量
+  3. src/services/chat_history.py 等对话历史构建链路可以直接消费 matmaster 原生 message / tool_call 数据结构，保持当前历史恢复行为
+  4. src/services/agent_run_bohrium.py 等 session-sensitive 服务路径可以切换到 matmaster session abstraction 或显式 compat layer，避免直接依赖 evomaster session class
 **Plans**: TBD
 
 ### Phase 29: 主执行路径切换
-**Goal**: 将 API/worker 与本地 Web 调试后端切换到 matmaster 原生入口，同时保持当前主执行路径持续可运行
+**Goal**: API/worker 与本地 Web 调试后端切换到 matmaster 原生入口，不再依赖 evomaster.core.get_playground_class，且主路径持续可运行
 **Depends on**: Phase 27, Phase 28
 **Requirements**: CONS-01, CONS-02
 **Success Criteria** (what must be TRUE):
-  1. API/worker 主执行路径可以通过 matmaster 原生入口初始化 playground、exp 与 agent，并保持当前消息发送、run 执行与事件推送主流程可用
-  2. 本地 Web 调试后端可以通过 matmaster 原生入口初始化 playground，并保持当前启动、会话恢复与流式输出行为
-  3. 主执行路径迁移完成后，不再依赖 `evomaster.core.get_playground_class`，且仓库仍保留可验证的 runnable main paths
+  1. API/worker 主执行路径通过 matmaster 原生入口初始化 playground、exp 与 agent，保持消息发送、run 执行与事件推送主流程可用
+  2. 本地 Web 调试后端通过 matmaster 原生入口初始化 playground，保持启动、会话恢复与流式输出行为
+  3. 主执行路径中不再出现 evomaster.core.get_playground_class 或等价的 evomaster 入口调用
 **Plans**: TBD
 
-### Phase 30: 解耦审计与迁移收口
-**Goal**: 用 import audit、独立测试和迁移文档证明 `matmaster` 已可脱离 `evomaster` 独立运行，并为 v2.2 清理留出清晰后手
+### Phase 30: 解耦审计与独立性证明
+**Goal**: 用 import audit、隔离测试和迁移文档证明 matmaster 可脱离 evomaster/playground/src 独立运行，并为 v2.2 清理留出清晰后手
 **Depends on**: Phase 29
 **Requirements**: QUAL-06, QUAL-07, QUAL-08
 **Success Criteria** (what must be TRUE):
-  1. 仓库提供 import audit 或等价测试，能够明确证明 `matmaster/` 运行时模块不再直接 import `evomaster`
-  2. 在不安装 `evomaster` 的受控测试环境中，`tests/matmaster/` 的核心测试集可以通过，证明 `matmaster` 可独立运行
+  1. 仓库提供 import audit 或等价测试，能够明确证明 matmaster/ 运行时模块不再直接 import evomaster、playground 或 src
+  2. 在不安装 evomaster 的受控测试环境中，tests/matmaster/ 的核心测试集可以通过，证明 matmaster 可独立运行
   3. 仓库提供一份解耦迁移文档，明确记录保留的 compat layer、剩余遗留路径与后续清理顺序
+  4. 全量测试通过，无回归（1195+ tests pass 作为基线）
+
 **Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-历史 phases 已完成到 Phase 24。当前 v2.1 的建议执行顺序为 25 -> 26 -> 27 -> 28 -> 29 -> 30。
+历史 phases 已完成到 Phase 24。v2.1 执行顺序为 25 -> 26 -> 27 -> 28 -> 29 -> 30。
 
-说明：Phase 25 先切断环境准备层耦合，避免后续所有迁移继续建立在旧 session/config 之上。Phase 26 与 Phase 27 拆开执行，是为了把 builtin tool 脱钩与 MCP/calculation 高风险链路分开收敛。Phase 28 先把 `src/` 的类型与 session compat boundary 收口，再由 Phase 29 切换 API/worker 与本地 Web 主入口，降低一次性切换主路径的风险。Phase 30 最后用 import audit、独立测试与迁移文档做证据收口。
+Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底座。Phase 26 在此之上内化全部 tool 能力（含 playground/ 依赖的 web_search_tool），消除 matmaster -> evomaster 和 matmaster -> playground 的 tool 层依赖。Phase 27 收回 MCP/calculation 高风险链路，依赖 Phase 25 (session) 和 Phase 26 (tool 注册)。Phase 28 合并处理 src 反向依赖反转与 consumer 迁移，因为 bohrium_setup 同时涉及两个方向。Phase 29 在基础设施和消费者就绪后切换主入口。Phase 30 最后用 import audit、隔离测试与迁移文档做证据收口。
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -362,8 +374,8 @@ Plans:
 | 23. Verification + Nyquist Closure | v2.0 | 1/1 | Complete | 2026-03-30 |
 | 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete | 2026-03-29 |
 | 25. Session 与 Playground 原生化 | v2.1 | 0/TBD | Not started | - |
-| 26. Builtin Tool 运行时脱钩 | v2.1 | 0/TBD | Not started | - |
+| 26. Tool 内化与遗留工具收归 | v2.1 | 0/TBD | Not started | - |
 | 27. MCP 与 Calculation 原生链路 | v2.1 | 0/TBD | Not started | - |
-| 28. Consumer 类型与 Session 兼容层 | v2.1 | 0/TBD | Not started | - |
+| 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 0/TBD | Not started | - |
 | 29. 主执行路径切换 | v2.1 | 0/TBD | Not started | - |
-| 30. 解耦审计与迁移收口 | v2.1 | 0/TBD | Not started | - |
+| 30. 解耦审计与独立性证明 | v2.1 | 0/TBD | Not started | - |

@@ -70,17 +70,33 @@
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (to be filled by roadmapper) | | |
+| PLAY-01 | Phase 25 | Pending |
+| PLAY-02 | Phase 25 | Pending |
+| PLAY-03 | Phase 25 | Pending |
+| TOOL-07 | Phase 26 | Pending |
+| TOOL-08 | Phase 26 | Pending |
+| TOOL-09 | Phase 26 | Pending |
+| TOOL-10 | Phase 26 | Pending |
+| MCP-01 | Phase 27 | Pending |
+| CALC-01 | Phase 27 | Pending |
+| CALC-02 | Phase 27 | Pending |
+| INVR-01 | Phase 28 | Pending |
+| INVR-02 | Phase 28 | Pending |
+| CONS-03 | Phase 28 | Pending |
+| CONS-04 | Phase 28 | Pending |
+| CONS-01 | Phase 29 | Pending |
+| CONS-02 | Phase 29 | Pending |
+| QUAL-06 | Phase 30 | Pending |
+| QUAL-07 | Phase 30 | Pending |
+| QUAL-08 | Phase 30 | Pending |
 
 **Coverage:**
 - v2.1 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-01*
-*Last updated: 2026-04-01 after v2.1 scope expansion*
+*Last updated: 2026-04-01 after roadmap creation*
