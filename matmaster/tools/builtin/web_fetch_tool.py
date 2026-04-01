@@ -17,6 +17,7 @@ import time as _time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, ClassVar
+from urllib.parse import quote, unquote, urlparse, urlunparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -197,11 +198,25 @@ def _extract_content(
 # ── Single URL fetch ─────────────────────────────────────
 
 
+def _normalize_url(url: str) -> str:
+    """Normalize URL path encoding for compatibility with strict object stores.
+
+    Decodes then re-encodes the path so that characters like commas,
+    parentheses, and plus signs are percent-encoded.  The round-trip
+    (unquote -> quote) is idempotent for already-encoded URLs.
+    """
+    parsed = urlparse(url)
+    encoded_path = quote(unquote(parsed.path), safe='/')
+    return urlunparse(parsed._replace(path=encoded_path))
+
+
 def _fetch_single_url(
     url: str,
     cache: _WebpageDiskCache | None = None,
 ) -> tuple[str, str | None, str | None]:
     """Fetch one URL. Returns (url, content_or_None, error_or_None)."""
+    url = _normalize_url(url)
+
     # Check cache
     if cache is not None:
         cached = cache.get(url)
