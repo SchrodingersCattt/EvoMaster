@@ -1,7 +1,7 @@
 """BashTool -- execute bash commands via session.
 
 Bash safety detection inlined (originally from evomaster).
-Mirrors the evomaster BashTool behavior (proxy clear, is_input mode)
+Mirrors the evomaster BashTool behavior (proxy clear)
 but satisfies the matmaster Tool Protocol directly.
 
 Dual-path execute:
@@ -110,12 +110,6 @@ class BashTool(BuiltinTool):
                     'Bohrium SSH only: shared storage is often /share (not /workspace).'
                 ),
             },
-            'is_input': {
-                'type': 'string',
-                'enum': ['true', 'false'],
-                'description': 'If true, the command is input to a running process.',
-                'default': 'false',
-            },
             'timeout': {
                 'type': 'number',
                 'description': 'Hard timeout in seconds. Use -1 for no limit.',
@@ -151,22 +145,16 @@ class BashTool(BuiltinTool):
         eliminating thread-pool overhead for local command execution.
         """
         command: str = arguments.get('command', '').strip()
-        is_input_str: str = arguments.get('is_input', 'false')
-        is_input = is_input_str == 'true'
         timeout_val = arguments.get('timeout', -1)
         timeout = int(timeout_val) if timeout_val and float(timeout_val) > 0 else None
-
-        # Interactive input not supported in local session
-        if is_input:
-            return "Interactive input is not supported in local session."
 
         # Block dangerous commands
         is_dangerous, reason = is_dangerous_bash_command(command)
         if is_dangerous:
             return f"Blocked: {reason}"
 
-        # Inject proxy clear prefix for non-input commands on non-Windows
-        if not is_input and command and sys.platform != 'win32':
+        # Inject proxy clear prefix on non-Windows
+        if command and sys.platform != 'win32':
             command = _PROXY_CLEAR_PREFIX + command
 
         wd = str(self._workdir) if self._workdir else None
@@ -211,8 +199,6 @@ class BashTool(BuiltinTool):
         session = self._require_session()
 
         command: str = arguments.get('command', '').strip()
-        is_input_str: str = arguments.get('is_input', 'false')
-        is_input = is_input_str == 'true'
         timeout_val = arguments.get('timeout', -1)
         timeout = int(timeout_val) if timeout_val and float(timeout_val) > 0 else None
 
@@ -221,14 +207,13 @@ class BashTool(BuiltinTool):
         if is_dangerous:
             return f'Blocked: {reason}'
 
-        # Inject proxy clear prefix for non-input commands on non-Windows
-        if not is_input and command and sys.platform != 'win32':
+        # Inject proxy clear prefix on non-Windows
+        if command and sys.platform != 'win32':
             command = _PROXY_CLEAR_PREFIX + command
 
         result = session.exec_bash(
             command=command,
             timeout=timeout,
-            is_input=is_input,
             stop_event=self._stop_event_for_exec(),
         )
 

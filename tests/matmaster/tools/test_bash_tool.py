@@ -55,16 +55,6 @@ class TestBashToolExecution:
         assert "Blocked:" in result
         mock_session.exec_bash.assert_not_called()
 
-    async def test_is_input_true_no_proxy_prefix(self, mock_session: MagicMock) -> None:
-        tool = BashTool(session=mock_session)
-        await tool.execute({"command": "some input", "is_input": "true"})
-        # The command sent to session should NOT have proxy clear prefix
-        call_kwargs = mock_session.exec_bash.call_args
-        command_sent = call_kwargs.kwargs.get(
-            "command", call_kwargs[1].get("command", "")
-        )
-        assert "http_proxy" not in command_sent
-
     async def test_session_not_injected_returns_error(self) -> None:
         tool = BashTool()
         result = await tool.execute({"command": "echo hello"})
@@ -136,19 +126,6 @@ class TestBashToolAsyncSubprocess:
             result = await tool.execute({"command": "env"})
 
         assert "Blocked:" in result
-        mock_create.assert_not_called()
-
-    async def test_is_input(self) -> None:
-        """Async path: is_input returns not-supported message."""
-        tool = self._make_tool_with_local_session()
-
-        with patch(
-            "matmaster.tools.builtin.bash_tool.asyncio.create_subprocess_exec",
-            new_callable=AsyncMock,
-        ) as mock_create:
-            result = await tool.execute({"command": "x", "is_input": "true"})
-
-        assert "Interactive input is not supported" in result
         mock_create.assert_not_called()
 
     async def test_session_dependent_fallback(self) -> None:
