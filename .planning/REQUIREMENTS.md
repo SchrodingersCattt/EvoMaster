@@ -41,7 +41,7 @@
 ### Quality & Migration
 
 - [ ] **QUAL-06**: 仓库提供 import audit 或等价测试，验证 `matmaster/` 运行时模块不再直接 import `evomaster`、`playground` 或 `src`
-- [ ] **QUAL-07**: 在不安装 `evomaster` 的受控测试环境中，`tests/matmaster/` 的核心测试集可以通过，证明 matmaster 可独立运行
+- [x] **QUAL-07**: 在不安装 `evomaster` 的受控测试环境中，`tests/matmaster/` 的核心测试集可以通过，证明 matmaster 可独立运行
 - [ ] **QUAL-08**: 仓库提供一份解耦迁移文档，明确保留 compat layer、剩余遗留路径与后续清理顺序
 
 ## v2.2 Requirements
@@ -89,7 +89,7 @@
 | CONS-01 | Phase 29 | Complete |
 | CONS-02 | Phase 29 | Complete |
 | QUAL-06 | Phase 30 | Pending |
-| QUAL-07 | Phase 30 | Pending |
+| QUAL-07 | Phase 30 | Complete |
 | QUAL-08 | Phase 30 | Pending |
 
 **Coverage:**

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
 status: executing
-stopped_at: Phase 30 context gathered
-last_updated: "2026-04-01T16:56:03.884Z"
-last_activity: 2026-04-01
+stopped_at: Completed 30-02-PLAN.md
+last_updated: "2026-04-01T17:49:55.299Z"
+last_activity: 2026-04-02 -- Plan 02 completed (evomaster deletion + config cleanup)
 progress:
   total_phases: 19
   completed_phases: 18
-  total_plans: 37
-  completed_plans: 37
-  percent: 97
+  total_plans: 40
+  completed_plans: 39
+  percent: 98
 ---
 
 # Project State
@@ -25,12 +25,12 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 
 ## Current Position
 
-Phase: 30 of 30 (解耦审计与独立性证明)
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-01
+Phase: 30 (decoupling-audit) -- EXECUTING
+Plan: 2 of 3
+Status: Executing Phase 30
+Last activity: 2026-04-02 -- Plan 02 completed (evomaster deletion + config cleanup)
 
-Progress: [==================..] 97%
+Progress: [===================.] 98%
 
 ## Performance Metrics
 
@@ -44,6 +44,7 @@ Progress: [==================..] 97%
 |-------|------|----------|-------|-------|
 | 29-01 | workspace_resolver + imports | 5min | 2 | 6 |
 | Phase 29-02 Plegacy-deletion-config-migration | 4min | 2 tasks | 384 files |
+| Phase 30-02 Pevomaster-deletion-config | 9min | 2 tasks | 120 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Progress: [==================..] 97%
 - [Phase 29-01]: Placed workspace_resolver in matmaster/integration/ alongside bohrium_setup/bohrium_env
 - [Phase 29-02]: Removed stale playground frontend lib .gitignore exception during cleanup
 - [Phase 29-02]: Session working_dir standardized to ./workspace at project root for both config files
+- [Phase 30-02]: Import audit KNOWN_VIOLATIONS cleaned from 24 to 1 -- 23 stale entries resolved in prior phases
+- [Phase 30-02]: config.yaml user skill paths (~/.evomaster-skills) kept as-is -- filesystem names not package imports, deferred to v2.2
 
 ### Pending Todos
 
@@ -87,6 +90,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T16:56:03.876Z
-Stopped at: Phase 30 context gathered
-Resume file: .planning/phases/30-decoupling-audit/30-CONTEXT.md
+Last session: 2026-04-01T17:49:55.296Z
+Stopped at: Completed 30-02-PLAN.md
+Resume file: None
