@@ -4,9 +4,9 @@ domain: "elec"
 
 questions:
   # ============================================================
-  # SC_elec_003 — NFPP Al掺杂超胞构建
+  # SC_elec_003_20260401 — NFPP Al掺杂超胞构建
   # ============================================================
-  - id: "SC_elec_003"
+  - id: "SC_elec_003_20260401"
     capability: "structure_construction"
     domain: "elec"
     intent: "Build NFPP Al-doped supercell by substituting P with Al."
