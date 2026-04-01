@@ -1,61 +1,36 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: matmaster 协程改造
-status: completed
-stopped_at: Completed 24-01-PLAN.md
-last_updated: "2026-03-29T19:32:39.404Z"
-last_activity: 2026-03-29
+milestone: v2.1
+milestone_name: matmaster/ 与 evomaster/ 彻底解耦
+status: defining_requirements
+stopped_at: Milestone initialization
+last_updated: "2026-04-01T14:20:07+0800"
+last_activity: 2026-04-01
 progress:
-  total_phases: 13
-  completed_phases: 13
-  total_plans: 23
-  completed_plans: 23
-  percent: 92
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-03-26)
+See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 24 — emit_nowait Tech Debt Cleanup
+**Current focus:** Milestone v2.1 requirements definition for matmaster decoupling
 
 ## Current Position
 
-Phase: 24
-Plan: Not started
-Status: Phase 23 complete, Phase 24 pending
-Last activity: 2026-03-29
+Phase: Not started (defining requirements)
+Plan: -
+Status: Defining requirements
+Last activity: 2026-04-01 — Milestone v2.1 started
 
-Progress: [█████████░] 92% (12/13 phases, 22/22 plans)
-
-## Performance Metrics
-
-**Velocity:**
-
-- Total plans completed: 7
-- Average duration: ~9min/plan
-- Total execution time: ~61 min
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 12 Protocol | 2/2 | ~26min | ~13min |
-| 13 LLM Provider | 2/2 | ~20min | ~10min |
-| 14 Tool | 2/2 | ~10min | ~5min |
-| 15 Hook | 3/3 | ~36min | ~12min |
-| Phase 17-agentkernel P01 | 9min | 2 tasks | 2 files |
-| Phase 17-agentkernel P02 | 23min | 2 tasks | 13 files |
-| Phase 18-exp P01 | 12min | 2 tasks | 12 files |
-| Phase 18-exp P02 | 10min | 2 tasks | 7 files |
-| Phase 19-tool-dispatch P01 | 7min | 2 tasks | 2 files |
-| Phase 22-audit-metadata-backfill P01 | 2min | 2 tasks | 5 files |
-| Phase 23-verification-nyquist-closure P01 | 8min | 2 tasks | 6 files |
-| Phase 24-emit-nowait-tech-debt P01 | 7min | 2 tasks | 10 files |
+Progress: [░░░░░░░░░░] 0% (0/0 phases, 0/0 plans)
 
 ## Accumulated Context
 
@@ -64,6 +39,9 @@ Progress: [█████████░] 92% (12/13 phases, 22/22 plans)
 Decisions logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [v2.1 init]: 新里程碑聚焦 `matmaster/` 对 `evomaster/` 的彻底运行时解耦
+- [v2.1 init]: 默认跳过外部 research，直接以本仓库耦合清单驱动 requirements
+- [v2.1 init]: phase 编号从 25 连续编号，不重置
 - [v2.0 init]: 全链路 async 改造，自底向上分层迁移
 - [v2.0 init]: Guard Protocol 保持同步（纯计算无 I/O）
 - [v2.0 init]: stop_event 保留 threading.Event（跨线程安全）
@@ -113,12 +91,12 @@ None.
 
 ### Blockers/Concerns
 
-- tests/test_streaming_thought_protocol.py collection error (1 test file broken, from v1)
-- skills/mcp build_runtime stubs still need service layer factory injection (from v1)
-- ConfirmationHook 跨线程 reply queue 机制已在 Phase 15-02 重构为 asyncio.Future + atomic swap (RESOLVED)
+- `.planning/MILESTONES.md` 尚未完整记录 v1.1 / v2.0 历史，当前版本连续性主要依赖 PROJECT/ROADMAP/STATE
+- `tests/test_streaming_thought_protocol.py` collection error 仍存在，需要纳入本里程碑统一质量门禁
+- `skills/mcp` build_runtime stubs 仍需要 service 层 factory 注入，这一问题与本次 MCP 解耦边界直接相关
 
 ## Session Continuity
 
-Last session: 2026-03-29T19:24:14.146Z
-Stopped at: Completed 24-01-PLAN.md
+Last session: 2026-04-01T14:20:07+0800
+Stopped at: Milestone initialization
 Resume file: None
