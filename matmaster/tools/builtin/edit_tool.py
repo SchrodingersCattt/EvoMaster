@@ -3,6 +3,7 @@
 Performs exact string replacement with unique-match enforcement.
 Enforces Read-Before-Modify protocol (D-02) via ReadTracker.
 No insert/undo_edit commands (D-01: str_replace only).
+Editor helpers inlined (originally from evomaster).
 
 Strip retry: if old_str not found verbatim but old_str.strip() matches
 uniquely, the stripped version is used automatically.
@@ -14,13 +15,29 @@ import posixpath
 import re
 from typing import Any, ClassVar
 
-from evomaster.agent.tools.builtin.editor import (
-    MAX_OUTPUT_SIZE,
-    SNIPPET_LINES,
-    maybe_truncate,
+from .base import BuiltinTool
+
+# ---- Editor helpers (inlined from evomaster.agent.tools.builtin.editor) ----
+SNIPPET_LINES = 4
+MAX_OUTPUT_SIZE = 16000
+_TEXT_FILE_TRUNCATED_NOTICE = (
+    '<response clipped><NOTE>Due to the max output limit, only part of this file has been shown to you. '
+    'You should retry this tool after you have searched inside the file with `grep -n` in order to find '
+    'the line numbers of what you are looking for.</NOTE>'
 )
 
-from .base import BuiltinTool
+
+def maybe_truncate(
+    content: str,
+    max_size: int = MAX_OUTPUT_SIZE,
+    notice: str = _TEXT_FILE_TRUNCATED_NOTICE,
+) -> str:
+    """Truncate content in the middle if it exceeds max_size."""
+    if len(content) <= max_size:
+        return content
+    half = max_size // 2
+    return content[:half] + '\n' + notice + '\n' + content[-half:]
+# ---- End Editor helpers ----
 from .read_tracker import ReadTracker
 
 
