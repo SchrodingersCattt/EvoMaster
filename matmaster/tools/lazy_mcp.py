@@ -1,7 +1,8 @@
 """Lazy MCP tool loading -- placeholder tools + on-demand connector.
 
 LazyMCPTool satisfies the matmaster Tool Protocol using cached schemas.
-On first execute(), it connects to the MCP server via LazyMCPConnector.
+On first execute(), it connects to the MCP server via LazyMCPConnector,
+then calls MCPConnection.call_tool directly (no MCPTool intermediate layer).
 """
 
 from __future__ import annotations
@@ -10,15 +11,11 @@ import asyncio
 import json
 import logging
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from matmaster.tools.tool_result import ToolResult
 
 logger = logging.getLogger(__name__)
-
-if TYPE_CHECKING:
-    from evomaster.agent.tools.mcp.mcp import MCPTool
-    from evomaster.agent.tools.mcp.mcp_manager import MCPToolManager
 
 
 class LazyMCPTool:
@@ -26,6 +23,9 @@ class LazyMCPTool:
 
     Implements matmaster Tool Protocol (name, description, json_schema, execute).
     Can be registered directly into ToolRegistry.
+
+    On first execute(), obtains an MCPConnection from LazyMCPConnector and
+    calls MCPConnection.call_tool directly -- no MCPTool intermediate layer.
     """
 
     def __init__(
@@ -43,7 +43,8 @@ class LazyMCPTool:
         self._server_name = server_name
         self._remote_tool_name = remote_tool_name
         self._connector = connector
-        self._real_tool: MCPTool | None = None
+        self._connection: Any | None = None
+        self._path_adaptor: Any | None = None
 
     @property
     def name(self) -> str:
@@ -58,30 +59,63 @@ class LazyMCPTool:
         return self._input_schema
 
     async def execute(self, arguments: dict[str, Any]) -> ToolResult:
-        if self._real_tool is None:
-            self._real_tool = await asyncio.to_thread(
-                self._connector.connect_and_get_tool,
-                self._server_name,
-                self._remote_tool_name,
+        if self._connection is None:
+            conn_info = await self._connector.ensure_connection(self._server_name)
+            self._connection = conn_info["connection"]
+            self._path_adaptor = conn_info.get("path_adaptor")
+
+        # path_adaptor resolve (if configured for this server)
+        resolved_args = arguments
+        if self._path_adaptor:
+            try:
+                resolved_args = self._path_adaptor.resolve_args(
+                    workspace_path=self._connector.workspace_path,
+                    args=arguments,
+                    tool_name=self._name,
+                    server_name=self._server_name,
+                    tool_description=self._description,
+                    input_schema=self._input_schema,
+                )
+            except Exception as e:
+                logger.warning("path_adaptor resolve_args failed: %s", e)
+
+        try:
+            result_content = await self._connection.call_tool(
+                self._remote_tool_name, resolved_args
             )
-        args_json = json.dumps(arguments, ensure_ascii=False)
-        observation, info = await asyncio.to_thread(
-            self._real_tool.execute,
-            self._connector.session,
-            args_json,
-        )
-        content = (
-            observation
-            if isinstance(observation, str)
-            else json.dumps(observation, ensure_ascii=False, default=str)
-        )
-        info_dict = info if isinstance(info, dict) else {}
-        status = (
-            "error"
-            if "error" in info_dict or content.lstrip().startswith("Error:")
-            else "success"
-        )
-        return ToolResult(status=status, content=content, info=info_dict)
+            content = self._format_result(result_content)
+            return ToolResult(status="success", content=content)
+        except RuntimeError as e:
+            # MCPConnection.call_tool raises RuntimeError on isError=True
+            return ToolResult(status="error", content=str(e))
+
+    def _format_result(self, result_content: list) -> str:
+        """Format MCPConnection.call_tool result content list to string.
+
+        Handles MCP SDK content items (TextContent with .text attribute,
+        or plain dict with 'text' key).
+        """
+        parts: list[str] = []
+        for item in result_content:
+            if hasattr(item, 'text'):
+                parts.append(item.text)
+            elif isinstance(item, dict) and 'text' in item:
+                parts.append(item['text'])
+            else:
+                parts.append(str(item))
+
+        if not parts:
+            return ''
+        if len(parts) == 1:
+            text = parts[0].strip()
+            if text.startswith('{') or text.startswith('['):
+                try:
+                    parsed = json.loads(text)
+                    return json.dumps(parsed, ensure_ascii=False, default=str)
+                except json.JSONDecodeError:
+                    return text
+            return text
+        return '\n'.join(parts)
 
 
 def configure_mcp_manager(
@@ -109,14 +143,14 @@ def configure_mcp_manager(
         elif all_server_names:
             manager.path_adaptor_servers = set(all_server_names)
         try:
-            from evomaster.adaptors.calculation import get_calculation_path_adaptor
+            from matmaster.adaptors.calculation import get_calculation_path_adaptor
 
             manager.path_adaptor_factory = lambda: get_calculation_path_adaptor(
                 mcp_config
             )
         except ImportError:
             logger.warning(
-                "evomaster.adaptors.calculation not available, skipping path_adaptor"
+                "matmaster.adaptors.calculation not available, skipping path_adaptor"
             )
 
         executors = mcp_config.get("calculation_executors") or {}
@@ -139,6 +173,7 @@ class LazyMCPConnector:
 
     Creates a background asyncio event loop thread on first connect.
     Applies domain-specific config via configure_mcp_manager().
+    Returns MCPConnection instances directly (not MCPTool).
     """
 
     def __init__(
@@ -146,13 +181,15 @@ class LazyMCPConnector:
         mcp_server_config: dict,
         mcp_config: dict,
         session: Any = None,
+        workspace_path: str = "",
     ) -> None:
         self._server_config = mcp_server_config
         self._mcp_config = mcp_config
-        self._manager: MCPToolManager | None = None
+        self._manager: Any | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._loop_thread: threading.Thread | None = None
         self.session = session
+        self.workspace_path = workspace_path
 
     def _ensure_loop(self) -> asyncio.AbstractEventLoop:
         if self._loop is not None and not self._loop.is_closed():
@@ -167,7 +204,7 @@ class LazyMCPConnector:
     def _ensure_manager(self) -> Any:
         if self._manager is not None:
             return self._manager
-        from evomaster.agent.tools.mcp.mcp_manager import MCPToolManager
+        from matmaster.mcp.manager import MCPToolManager
 
         loop = self._ensure_loop()
         self._manager = MCPToolManager()
@@ -179,7 +216,44 @@ class LazyMCPConnector:
         )
         return self._manager
 
+    async def ensure_connection(self, server_name: str) -> dict[str, Any]:
+        """Ensure MCP server is connected and return connection info.
+
+        Returns a dict with:
+            - "connection": MCPConnection instance for call_tool
+            - "path_adaptor": CalculationPathAdaptor or None
+
+        Connects on first call for a given server_name, reuses after.
+        """
+        manager = self._ensure_manager()
+
+        if server_name not in manager.connections:
+            server_cfg = self._server_config.get(server_name)
+            if not server_cfg:
+                raise ValueError(f"MCP server '{server_name}' not in config")
+            fut = asyncio.run_coroutine_threadsafe(
+                manager.add_server(name=server_name, **server_cfg),
+                manager.loop,
+            )
+            fut.result(timeout=60)
+
+        conn = manager.connections[server_name]
+
+        # Check if this server needs a path_adaptor
+        path_adaptor = None
+        if (
+            manager.path_adaptor_factory
+            and server_name in manager.path_adaptor_servers
+        ):
+            path_adaptor = manager.path_adaptor_factory()
+
+        return {"connection": conn, "path_adaptor": path_adaptor}
+
     def connect_and_get_tool(self, server_name: str, remote_tool_name: str) -> Any:
+        """Legacy sync method -- kept for backward compatibility.
+
+        Prefer ensure_connection() for the new async direct-call path.
+        """
         manager = self._ensure_manager()
 
         if server_name not in manager.connections:
