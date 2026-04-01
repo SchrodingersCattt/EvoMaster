@@ -82,8 +82,13 @@ class OpenAIProvider:
         self._retry_delay = retry_delay
         self._extra_kwargs = extra_kwargs or {}
         self._client: openai.AsyncOpenAI | None = None
+        self._enter_count: int = 0
 
     async def __aenter__(self) -> OpenAIProvider:
+        self._enter_count += 1
+        if self._client is not None:
+            return self
+
         import httpx
 
         _first_token_t = (
@@ -114,6 +119,9 @@ class OpenAIProvider:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:  # type: ignore[type-arg]
+        self._enter_count -= 1
+        if self._enter_count > 0:
+            return
         if self._client is not None:
             await self._client.close()
             self._client = None
