@@ -318,9 +318,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 27-01-PLAN.md — MCP Connection 搬入 + 精简版 MCPToolManager
+- [x] 27-01-PLAN.md — MCP Connection 搬入 + 精简版 MCPToolManager
 - [x] 27-02-PLAN.md — Calculation adaptors 搬入（env_config + oss_io + job_service + path_adaptor）
-- [ ] 27-03-PLAN.md — LazyMCPTool 直连重写 + 全量 import 路径切换 + 测试适配
+- [x] 27-03-PLAN.md — LazyMCPTool 直连重写 + 全量 import 路径切换 + 测试适配
 
 ### Phase 28: src 反向依赖反转与 Consumer 迁移
 **Goal**: 消除 matmaster 对 src 的反向依赖（bohrium_setup + script_env），同时迁移 src 消费者到 matmaster 原生数据结构与 session 抽象
@@ -405,7 +405,7 @@ Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底�
 | 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete | 2026-03-29 |
 | 25. Session 与 Playground 原生化 | v2.1 | 2/3 | Complete    | 2026-04-01 |
 | 26. Tool 内化与遗留工具收归 | v2.1 | 2/3 | Complete    | 2026-04-01 |
-| 27. MCP 与 Calculation 原生链路 | v2.1 | 1/3 | In Progress|  |
+| 27. MCP 与 Calculation 原生链路 | v2.1 | 3/3 | Complete   | 2026-04-01 |
 | 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 0/TBD | Not started | - |
 | 29. 主执行路径切换 | v2.1 | 0/TBD | Not started | - |
 | 30. 解耦审计与独立性证明 | v2.1 | 0/TBD | Not started | - |

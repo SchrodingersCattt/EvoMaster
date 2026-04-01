@@ -22,7 +22,7 @@
 
 ### MCP & Calculation
 
-- [ ] **MCP-01**: 开发者可以通过 `matmaster.tools.lazy_mcp` 连接 MCP server、缓存 schema 并执行 tool，而不依赖 `evomaster.agent.tools.mcp.*`
+- [x] **MCP-01**: 开发者可以通过 `matmaster.tools.lazy_mcp` 连接 MCP server、缓存 schema 并执行 tool，而不依赖 `evomaster.agent.tools.mcp.*`
 - [x] **CALC-01**: 开发者可以在 `matmaster` 侧解析 calculation runtime config、path adaptor 与 schema cache，而不直接导入 `evomaster.adaptors.calculation.*`
 - [x] **CALC-02**: 解耦后 Bohrium / calculation tool 的 executor、storage、OSS 上传与远端路径适配行为保持与当前协议兼容
 
@@ -79,7 +79,7 @@
 | TOOL-08 | Phase 26 | Pending |
 | TOOL-09 | Phase 26 | Complete |
 | TOOL-10 | Phase 26 | Pending |
-| MCP-01 | Phase 27 | Pending |
+| MCP-01 | Phase 27 | Complete |
 | CALC-01 | Phase 27 | Complete |
 | CALC-02 | Phase 27 | Complete |
 | INVR-01 | Phase 28 | Pending |

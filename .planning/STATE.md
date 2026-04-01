@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
 status: executing
-stopped_at: Completed 27-02-PLAN.md
-last_updated: "2026-04-01T11:01:59.264Z"
+stopped_at: Completed 27-03-PLAN.md
+last_updated: "2026-04-01T11:14:07.489Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 19
-  completed_phases: 15
+  completed_phases: 16
   total_plans: 32
-  completed_plans: 30
+  completed_plans: 32
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 27 (mcp-calculation) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-01
 
@@ -57,6 +57,8 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 25-session-playground]: agent_run_service reads matmaster_config/ directly instead of via playground.config
 - [Phase 27-mcp-calculation]: evomaster.env imports changed to evomaster.env.bohrium to avoid triggering full load chain
 - [Phase 27-mcp-calculation]: BaseSession TYPE_CHECKING import removed; session param uses Any + duck-typing for cross-package compatibility
+- [Phase 27]: LazyMCPTool.execute calls MCPConnection.call_tool directly, eliminating MCPTool intermediate and asyncio.to_thread
+- [Phase 27]: cache_mcp_schemas adapted to dict-based tools_by_server from MCPToolManager
 
 ### Pending Todos
 
@@ -69,6 +71,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T11:01:59.261Z
-Stopped at: Completed 27-02-PLAN.md
+Last session: 2026-04-01T11:14:07.485Z
+Stopped at: Completed 27-03-PLAN.md
 Resume file: None
