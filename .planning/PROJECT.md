@@ -68,7 +68,7 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 
 ### Current State
 
-**As of 2026-04-01:** Phase 25 完成，matmaster session/playground 原生化：Session Protocol（8 方法）+ SessionConfig 三级配置、SSHSession 原生实现（直接持有 paramiko，477 行）、Playground 参数化构造（零 evomaster import）、PlaygroundManager YAML 解析模式、agent_run_service 直接读 matmaster_config/。Phase 26 也已完成，matmaster.tools 完全原生化。
+**As of 2026-04-01:** Phase 25 完成，matmaster session/playground 原生化。Phase 26 完成，matmaster.tools 完全原生化。Phase 27 完成，MCP 与 Calculation 原生链路收回 matmaster 侧：`matmaster/mcp/` 包（MCPConnection + MCPToolManager 精简版）、`matmaster/adaptors/calculation/` 包（4 模块迁移）、LazyMCPTool 直连 MCPConnection.call_tool、全部 evomaster MCP/calculation import 切换完毕。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 
@@ -90,7 +90,7 @@ Architecture (current):
 
 **A. matmaster/ → evomaster/（~15 imports, 8 files）**
 1. **Playground / Session / Config** — `core/playground.py` 依赖 BaseSession、LocalSessionConfig、ConfigManager、PlaygroundSessionMixin 及 docker/ssh session
-2. **Tool / MCP / Calculation** — `core/exp.py` 通过 EvoToolAdapter 挂 MonitorJobTool；`tools/lazy_mcp.py`、`cache_mcp_schemas.py`、`eval_tooling_snapshot.py` 依赖 evomaster MCP manager 与 calculation adaptor
+2. ~~**Tool / MCP / Calculation** — `tools/lazy_mcp.py`、`cache_mcp_schemas.py`、`eval_tooling_snapshot.py` 依赖 evomaster MCP manager 与 calculation adaptor~~ — Resolved in Phase 27; `core/exp.py` 的 EvoToolAdapter 仍待 Phase 28+
 3. **Builtin Helper** — `tools/builtin/bash_tool.py` 与 `edit_tool.py` 复用 evomaster 安全检查和编辑辅助
 
 **B. matmaster/ → playground/（1 import）**
@@ -115,7 +115,7 @@ v1 之后在 GSD 体系外进行的 6 个主要特性开发：
 
 - `matmaster/core/playground.py` 仍是最大 runtime 耦合点，session / config / mixin 三类依赖未抽离
 - `matmaster/core/exp.py` 仍挂着 `EvoToolAdapter` 与 `MonitorJobTool`，tool 注册链路并未完全原生化
-- `matmaster/tools/lazy_mcp.py` 与 calculation path adaptor 仍建立在 `evomaster` MCP manager/adaptor 之上
+- ~~`matmaster/tools/lazy_mcp.py` 与 calculation path adaptor 仍建立在 `evomaster` MCP manager/adaptor 之上~~ — Resolved in Phase 27
 - `src/services/chat_history.py` 和本地 Web 初始化路径仍以 `evomaster` 类型与入口为事实标准
 - `tests/test_streaming_thought_protocol.py` 仍有收集失败问题，需要在解耦期纳入统一质量门禁
 
@@ -174,4 +174,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after Phase 26 completion (tool internalization)*
+*Last updated: 2026-04-01 after Phase 27 completion (MCP/calculation native linkage)*
