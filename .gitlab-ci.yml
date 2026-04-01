@@ -94,7 +94,8 @@ pre-commit:
       }
       }
       EOF
-    - test -n "${DYNAMIC_IMAGE:-}" || (echo "pre-commit: 缺少 DYNAMIC_IMAGE（需 docker-build-mr-main 产出 build.env）" && exit 1)
+    - |
+      test -n "${DYNAMIC_IMAGE:-}" || (echo "pre-commit: 缺少 DYNAMIC_IMAGE（需 docker-build-mr-main 产出 build.env）" && exit 1)
     - docker pull "${DYNAMIC_IMAGE}"
   script:
     - bash "${CI_PROJECT_DIR}/ci/run_pre_commit_in_docker.sh" "${DYNAMIC_IMAGE}"
