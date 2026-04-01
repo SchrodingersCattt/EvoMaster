@@ -1,0 +1,142 @@
+version: "v5"
+capability: "workflow_orchestration"
+domain: "elec"
+
+questions:
+  # ============================================================
+  # WO_elec_006 — NFPP掺杂形成能计算（Mock版）
+  # ============================================================
+  - id: "WO_elec_006"
+    capability: "workflow_orchestration"
+    domain: "elec"
+    intent: "Compute doping formation energy of NFPP: retrieve structure, build doped supercell, use mock energies, calculate formation energy."
+    human_prompt_seed: |
+      计算NFPP的Al掺杂形成能：
+      1. 从数据库检索NFPP结构（空间群Pna2₁），构建2×1×1超胞作为pristine结构；
+      2. 在P位（PO₄孤立磷酸根位点）用Al替换一个P原子，构建掺杂超胞；
+      3. 使用以下mock能量值（模拟DPA弛豫结果）：
+         - E_pristine = -689.605 eV
+         - E_doped = -687.057 eV
+         - μ_P（红磷参考态）= -5.41 eV/atom
+         - μ_Al（金属Al参考态）= -3.75 eV/atom
+      4. 按公式 E_f = E(doped) - E(pristine) + μ_P - μ_Al 计算形成能；
+      5. 计算体积变化率（掺杂后体积约1313.17 Å³，原始约1316.68 Å³）；
+      6. 输出掺杂形成能(eV)、体积变化率(%)。
+    tags: ["nfpp", "doping", "formation_energy", "workflow", "battery"]
+    mode_scope: ["direct", "planner"]
+    required_tools:
+      - "mat_struct_db_fetch_structures_from_db"
+    optional_tools: []
+    data_files: []
+    reference_answers:
+      - key: "formation_energy_eV"
+        value: 0.88
+        tolerance: 0.5
+      - key: "volume_change_percent"
+        value: -0.27
+        tolerance: 0.5
+      - key: "required_fields"
+        value:
+          - "E_pristine"
+          - "E_doped"
+          - "chemical_potentials"
+          - "formation_energy"
+          - "volume_change"
+      - key: "duration_budget"
+        value: {max: 7200000}
+      - key: "token_budget_total"
+        value: {max: 50000}
+    scoring_checklist:
+      - id: "formation_energy_eV"
+        criterion: "Doping formation energy is computed correctly from mock energies (~0.88 eV)."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "volume_change_percent"
+        criterion: "Volume change is computed correctly (~-0.27%)."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Report includes pristine/doped energies, chemical potentials, formation energy, and volume change."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "grounding_source"
+        criterion: "NFPP structure retrieved from database; mock energies used as specified; chemical potentials explicitly defined."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      - id: "efficiency_judge"
+        criterion: "Workflow (fetch → build supercell → dope → compute E_f with mock values) completes without redundant steps."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+      - id: "duration_budget"
+        criterion: "Wall-clock run duration does not exceed benchmark ceiling."
+        axis: "efficiency"
+        verify: "duration_budget"
+      - id: "token_budget_total"
+        criterion: "Total token usage stays within benchmark ceiling."
+        axis: "efficiency"
+        verify: "token_budget"
+
+  # ============================================================
+  # WO_elec_007 — NFPP平均嵌钠电压计算（Mock版）
+  # ============================================================
+  - id: "WO_elec_007"
+    capability: "workflow_orchestration"
+    domain: "elec"
+    intent: "Compute average Na intercalation voltage of NFPP using mock energies."
+    human_prompt_seed: |
+      计算NFPP的平均嵌钠电压：
+      1. 从数据库检索NFPP结构，构建2×2×1超胞；
+      2. 构建含钠态（完整Na填充，Na16Fe8P8O32F8）和完全脱钠态（移除所有Na，Fe8P8O32F8）；
+      3. 使用以下mock能量值（模拟DPA弛豫结果）：
+         - E_sodiated = -2758.42 eV
+         - E_desodiated = -2704.18 eV
+         - μ_Na（BCC Na金属）= -1.31 eV/atom
+         - n = 16（转移的Na离子数）
+      4. 按公式 V = -[E(sodiated) - E(desodiated) - n·μ_Na] / n 计算平均电压；
+      5. 输出平均电压(V vs Na/Na⁺)、n值、各能量值。
+    tags: ["nfpp", "voltage", "intercalation", "battery", "workflow"]
+    mode_scope: ["direct", "planner"]
+    required_tools:
+      - "mat_struct_db_fetch_structures_from_db"
+    optional_tools: []
+    data_files: []
+    reference_answers:
+      - key: "avg_voltage_V"
+        value: 3.4
+        tolerance: 0.5
+      - key: "required_fields"
+        value:
+          - "E_sodiated"
+          - "E_desodiated"
+          - "mu_Na"
+          - "voltage"
+          - "voltage_formula"
+      - key: "duration_budget"
+        value: {max: 7200000}
+      - key: "token_budget_total"
+        value: {max: 50000}
+    scoring_checklist:
+      - id: "avg_voltage_V"
+        criterion: "Average voltage is computed correctly from mock energies (~3.4 V)."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Report includes sodiated/desodiated energies, Na chemical potential, voltage formula, and computed voltage."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "grounding_source"
+        criterion: "Voltage is computed with explicitly defined mock energies and chemical potential."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      - id: "efficiency_judge"
+        criterion: "Voltage workflow (fetch → build 2 states → compute with mock values) completes linearly."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+      - id: "duration_budget"
+        criterion: "Wall-clock run duration does not exceed benchmark ceiling."
+        axis: "efficiency"
+        verify: "duration_budget"
+      - id: "token_budget_total"
+        criterion: "Total token usage stays within benchmark ceiling."
+        axis: "efficiency"
+        verify: "token_budget"

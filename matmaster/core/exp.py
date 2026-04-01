@@ -28,7 +28,6 @@ from matmaster.config.exp import ExpConfig
 from matmaster.core.bus import MessageBus
 from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.hooks import EventEmitterHook
-from matmaster.tools.evomaster_tool_adapter import EvoToolAdapter
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
@@ -323,7 +322,7 @@ class Exp:
         Native tools (14): BashTool, ListDirTool, ReadTool, WriteTool, EditTool,
         GlobTool, GrepTool, TaskCreate/Get/List/Update/Complete,
         WebSearchTool, WebFetchTool.
-        Evo adapter (1): MonitorJobTool (science-specific, retained).
+        Additional (1): MonitorJobTool (science-specific, native BuiltinTool).
         """
         if ctx.session is None:
             self.logger.warning(
@@ -390,26 +389,22 @@ class Exp:
         if any(t.name in _TRACKER_NAMES for t in registered_native):
             self._register_cleanup(tracker.clear)
 
-        # 2. Evo adapter tools (source="builtin_evo")
-        #    Retain legacy science-specific tools that have not been ported natively.
-        from evomaster.agent.tools.builtin.monitor_job import MonitorJobTool
-        from playground.mat_master.tools.web_search import get_web_search_tool
+        # 2. Additional builtin tools (science-specific, per D-10)
+        from matmaster.tools.builtin.monitor_job import MonitorJobTool
 
-        evo_tools = [
-            MonitorJobTool(),
-            get_web_search_tool(),
+        additional_builtins = [
+            MonitorJobTool(session=ctx.session, workdir=exec_wd),
         ]
-        registered_evo: list[Any] = []
-        for tool in evo_tools:
-            adapted = EvoToolAdapter(tool, ctx.session)
-            if _want(adapted.name):
-                registry.register(adapted, source='builtin_evo')
-                registered_evo.append(adapted)
+        registered_additional: list[Any] = []
+        for tool in additional_builtins:
+            if _want(tool.name):
+                registry.register(tool, source='builtin')
+                registered_additional.append(tool)
 
         self.logger.debug(
-            'Registered %d native + %d evo-adapted builtin tools (cfg=%s)',
+            'Registered %d native + %d additional builtin tools (cfg=%s)',
             len(registered_native),
-            len(registered_evo),
+            len(registered_additional),
             builtin_cfg,
         )
 

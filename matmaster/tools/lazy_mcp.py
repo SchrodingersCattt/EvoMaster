@@ -25,7 +25,7 @@ class LazyMCPTool:
     """Placeholder MCP tool -- holds cached schema, connects on first execute.
 
     Implements matmaster Tool Protocol (name, description, json_schema, execute).
-    Can be registered directly into ToolRegistry without EvoToolAdapter.
+    Can be registered directly into ToolRegistry.
     """
 
     def __init__(

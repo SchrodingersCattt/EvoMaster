@@ -474,7 +474,7 @@ class TestSystemPromptOverride:
 
 
 class TestExpBuiltinTools:
-    """_init_builtin_tools dual-source registration: 12 native + 1 evo adapter."""
+    """_init_builtin_tools native registration: 15 builtin tools (no evo adapter)."""
 
     def _make_ctx_with_session(self, tmp_path: Path) -> PlaygroundContext:
         """Create PlaygroundContext with a mock session for builtin tool tests."""
@@ -495,10 +495,10 @@ class TestExpBuiltinTools:
         return exp, registry
 
     def test_native_tools_count(self, tmp_path: Path) -> None:
-        """14 native tools registered with source='builtin'."""
+        """15 native tools registered with source='builtin' (includes MonitorJobTool)."""
         _, registry = self._build_registry(tmp_path)
         native = registry.get_tools_by_source("builtin")
-        assert len(native) == 14
+        assert len(native) == 15
 
     def test_native_tool_names(self, tmp_path: Path) -> None:
         """All 12 expected native tool names are present in registry."""
@@ -520,36 +520,35 @@ class TestExpBuiltinTools:
         for name in expected_native:
             assert name in registry, f"Expected tool '{name}' not found in registry"
 
-    def test_evo_adapted_tools_count(self, tmp_path: Path) -> None:
-        """2 evo adapter tools are registered with source='builtin_evo'."""
+    def test_no_evo_adapted_tools(self, tmp_path: Path) -> None:
+        """No evo adapter tools remain (EvoToolAdapter eliminated)."""
         _, registry = self._build_registry(tmp_path)
         evo = registry.get_tools_by_source('builtin_evo')
-        assert len(evo) == 2
+        assert len(evo) == 0
 
     def test_editor_tool_removed(self, tmp_path: Path) -> None:
         """str_replace_editor (EditorTool) is NOT in the registry."""
         _, registry = self._build_registry(tmp_path)
         assert 'str_replace_editor' not in registry
 
-    def test_monitor_job_retained(self, tmp_path: Path) -> None:
-        """MonitorJobTool is still registered with source='builtin_evo'."""
+    def test_monitor_job_is_native_builtin(self, tmp_path: Path) -> None:
+        """MonitorJobTool is registered as native builtin (source='builtin')."""
         _, registry = self._build_registry(tmp_path)
-        evo = registry.get_tools_by_source('builtin_evo')
-        evo_names = {t.name for t in evo}
-        assert 'monitor_job' in evo_names
-        assert 'web-search' in evo_names
+        native = registry.get_tools_by_source('builtin')
+        native_names = {t.name for t in native}
+        assert 'monitor_job' in native_names
 
     def test_total_count(self, tmp_path: Path) -> None:
-        """Total tools = 14 native + 2 evo adapters = 16."""
+        """Total tools = 15 native builtin (no evo adapters)."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 16
+        assert len(registry) == 15
 
-    def test_web_search_retained(self, tmp_path: Path) -> None:
-        """Legacy web-search is registered in the new Exp runtime."""
+    def test_web_search_is_native_builtin(self, tmp_path: Path) -> None:
+        """WebSearchTool is registered as native builtin (not evo adapter)."""
         _, registry = self._build_registry(tmp_path)
-        evo = registry.get_tools_by_source('builtin_evo')
-        evo_names = {t.name for t in evo}
-        assert 'web-search' in evo_names
+        native = registry.get_tools_by_source('builtin')
+        native_names = {t.name for t in native}
+        assert 'web_search' in native_names
 
     def test_read_tracker_cleanup_registered(self, tmp_path: Path) -> None:
         """ReadTracker.clear is registered as a cleanup callback after _init_builtin_tools."""
