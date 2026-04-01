@@ -60,7 +60,7 @@ def _get_access_key(access_key: str | None = None) -> str:
     if access_key:
         return access_key.strip()
     try:
-        from evomaster.env.bohrium import get_bohrium_credentials
+        from matmaster.integration.bohrium_env import get_bohrium_credentials
 
         cred = get_bohrium_credentials()
         ak = cred.get('access_key', '')
