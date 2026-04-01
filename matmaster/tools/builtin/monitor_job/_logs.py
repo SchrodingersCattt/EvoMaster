@@ -253,7 +253,7 @@ def _read_log_tail_remote(session: Any, log_path: str | None) -> str | None:
     if not log_path:
         return None
     try:
-        content = session._env.read_file_content(log_path)
+        content = session.read_file(log_path)
         if not isinstance(content, str):
             content = str(content)
         return (
@@ -282,17 +282,17 @@ def _find_log_file_remote(
 ) -> str | None:
     """Return path of the most-recently-modified log on the remote node, or None."""
     # Duck-type session instead of isinstance(session, SSHSession)
-    is_ssh = hasattr(session, '_env') and hasattr(getattr(session, '_env', None), 'upload_file')
+    is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_file', None))
     try:
         if not is_ssh:
             return None
         patterns = LOG_PATTERNS.get(software.lower(), ['*.log', '*.out', '*.json'])
         for pat in patterns:
-            result = session._env.ssh_exec(
+            result = session.ssh_exec(
                 f"find {workspace!r} -name {pat!r} -type f 2>/dev/null "
                 f"| xargs ls -t 2>/dev/null | head -1"
             )
-            path = (result or '').strip()
+            path = result.get('stdout', '').strip()
             if path:
                 return path
     except Exception:

@@ -215,10 +215,9 @@ def _sftp_push_directory(
     Returns list of remote paths uploaded.
     """
     # Duck-type session instead of isinstance(session, SSHSession)
-    is_ssh = hasattr(session, '_env') and hasattr(getattr(session, '_env', None), 'upload_file')
+    is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_file', None))
     if not is_ssh:
         return []
-    env = session._env
     pushed: list[str] = []
     for local_file in local_dir.rglob('*'):
         if not local_file.is_file():
@@ -226,7 +225,7 @@ def _sftp_push_directory(
         rel = local_file.relative_to(local_dir).as_posix()
         remote_path = f'{remote_dir}/{rel}'
         try:
-            env.upload_file(str(local_file), remote_path)
+            session.upload_file(str(local_file), remote_path)
             pushed.append(remote_path)
         except Exception as exc:
             logger.warning(

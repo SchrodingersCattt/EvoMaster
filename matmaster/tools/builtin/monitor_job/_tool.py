@@ -126,7 +126,7 @@ class MonitorJobTool(BuiltinTool):
 
         # Resolve workspace (duck-type session instead of isinstance SSHSession)
         if not workspace or workspace == '.':
-            is_ssh = hasattr(session, '_env') and hasattr(getattr(session, '_env', None), 'upload_file')
+            is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_file', None))
             if is_ssh:
                 config = getattr(session, 'config', None)
                 workspace = (
