@@ -91,4 +91,30 @@ banks:
     capability: "safety_refusal"
     questions: 4
 
-# Total: 33 questions across 10 bank files
+  # --- New banks from NFPP / CO2RR / electrolyte projects ---
+
+  - path: "workflow_orchestration/wo_elec_nfpp_refactored.yaml"
+    capability: "workflow_orchestration"
+    questions: 2
+
+  - path: "structure_construction/sc_elec_doping.yaml"
+    capability: "structure_construction"
+    questions: 1
+
+  - path: "structure_construction/sc_elec_adsorption.yaml"
+    capability: "structure_construction"
+    questions: 1
+
+  - path: "workflow_orchestration/wo_elec_adsorption.yaml"
+    capability: "workflow_orchestration"
+    questions: 1
+
+  - path: "structure_construction/sc_elec.yaml"
+    capability: "structure_construction"
+    questions: 2
+
+  - path: "batch_processing/bp_elec.yaml"
+    capability: "batch_processing"
+    questions: 1
+
+# Total: 41 questions across 16 bank files
