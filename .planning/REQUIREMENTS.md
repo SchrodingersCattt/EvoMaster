@@ -63,13 +63,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| To be filled during roadmap creation | — | Pending |
+| PLAY-01 | Phase 25 | Pending |
+| PLAY-02 | Phase 25 | Pending |
+| PLAY-03 | Phase 25 | Pending |
+| TOOL-07 | Phase 26 | Pending |
+| TOOL-08 | Phase 26 | Pending |
+| MCP-01 | Phase 27 | Pending |
+| CALC-01 | Phase 27 | Pending |
+| CALC-02 | Phase 27 | Pending |
+| CONS-03 | Phase 28 | Pending |
+| CONS-04 | Phase 28 | Pending |
+| CONS-01 | Phase 29 | Pending |
+| CONS-02 | Phase 29 | Pending |
+| QUAL-06 | Phase 30 | Pending |
+| QUAL-07 | Phase 30 | Pending |
+| QUAL-08 | Phase 30 | Pending |
 
 **Coverage:**
 - v2.1 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 ⚠️
+- Mapped to phases: 15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-01*
-*Last updated: 2026-04-01 after initial v2.1 definition*
+*Last updated: 2026-04-01 after v2.1 roadmap creation*
