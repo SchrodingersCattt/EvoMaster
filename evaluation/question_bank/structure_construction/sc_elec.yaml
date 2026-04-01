@@ -12,7 +12,7 @@ questions:
     intent: "Build ZnO(001) surface slab with a single Au atom adsorbed at a bridge site for single-atom catalyst modeling."
     human_prompt_seed: |
       构建用于 CO2 电还原的 ZnO 载体单原子 Au 催化剂模型：
-      1. 从数据库获取 ZnO 纤锌矿结构；
+      1. 获取 ZnO 纤锌矿结构（空间群 P6₃mc，a=3.250 Å，c=5.207 Å）；
       2. 切出 (001) 表面 slab（至少 3 层，15 Å 真空，2×2 扩胞）；
       3. 在表面两个 O 原子之间的 bridge 位点放置一个 Au 原子（距表面 ~2.0 Å）；
       4. 输出结构文件，并报告：
@@ -22,10 +22,6 @@ questions:
          - slab 层数和真空厚度
     tags: ["co2rr", "single_atom_catalyst", "ZnO", "gold", "slab"]
     mode_scope: ["direct", "planner"]
-    required_tools:
-      - "mat_sg_build_surface_slab"
-    optional_tools:
-      - "mat_struct_db_fetch_structures_from_db"
     data_files: []
     reference_answers:
       - key: "required_fields"
@@ -50,7 +46,7 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "grounding_source"
-        criterion: "ZnO structure originates from database retrieval; slab is built using MCP surface slab tool; Au placement uses explicit coordinates, not hallucinated."
+        criterion: "The answer states the physical basis for the ZnO wurtzite structure (lattice parameters, space group), slab construction parameters (layers, vacuum, supercell), and Au bridge-site placement geometry—not merely naming tools or MCP calls."
         axis: "grounding"
         verify: "llm_binary_judge"
       - id: "no_retries"
@@ -79,7 +75,7 @@ questions:
     intent: "Build an alloy surface slab from a given binary alloy structure for electrocatalysis modeling."
     human_prompt_seed: |
       构建 ZnPd 合金表面 slab 用于催化研究：
-      1. 从数据库检索 ZnPd 合金结构（B2 型，CsCl 结构，空间群 Pm-3m）；
+      1. 获取 ZnPd 合金结构（B2 型，CsCl 结构，空间群 Pm-3m）；
       2. 切出 (011) 表面 slab（3 层，15 Å 真空，2×1 扩胞）；
       3. 输出结构文件（CIF 或 POSCAR）；
       4. 报告：
@@ -89,10 +85,6 @@ questions:
          - 晶胞参数 (a, b, c)
     tags: ["alloy", "slab", "ZnPd", "binary", "catalysis"]
     mode_scope: ["direct", "planner"]
-    required_tools:
-      - "mat_sg_build_surface_slab"
-    optional_tools:
-      - "mat_struct_db_fetch_structures_from_db"
     data_files: []
     reference_answers:
       - key: "required_fields"
@@ -117,11 +109,11 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "grounding_source"
-        criterion: "ZnPd structure comes from the database; slab construction uses MCP tool with correct Miller index and expansion parameters."
+        criterion: "The answer states the physical basis for the ZnPd B2 structure (space group, lattice constant), slab orientation (011), layer count, vacuum, and supercell expansion—not merely naming tools or MCP calls."
         axis: "grounding"
         verify: "llm_binary_judge"
       - id: "no_retries"
-        criterion: "No repeated identical database fetch or slab construction calls."
+        criterion: "No repeated identical structure retrieval or slab construction calls."
         axis: "efficiency"
         verify: "no_retries"
       - id: "efficiency_judge"
