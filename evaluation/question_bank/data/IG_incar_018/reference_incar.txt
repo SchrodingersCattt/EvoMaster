@@ -26,4 +26,4 @@ INCAR created by Atomic Simulation Environment
  NELM = 200
  NSW = 0
  NCORE = 12
- MAGMOM = 6*1.0000 
+ MAGMOM = 6*1.0000

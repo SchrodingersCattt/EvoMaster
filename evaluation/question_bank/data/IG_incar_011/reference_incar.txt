@@ -25,4 +25,4 @@ INCAR created by Atomic Simulation Environment
  IBRION = -1
  NPAR = 2
  NSIM = 1
- MAGMOM = 5*1.0000 
+ MAGMOM = 5*1.0000

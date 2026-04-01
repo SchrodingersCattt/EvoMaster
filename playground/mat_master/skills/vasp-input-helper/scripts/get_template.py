@@ -12,12 +12,28 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(description="VASP task template")
-    parser.add_argument("--task-type", "-t", required=True,
-                        help="scf, relax, band_structure, dos, md, hybrid, phonon, gw, optical, neb")
+    parser.add_argument(
+        "--task-type",
+        "-t",
+        required=True,
+        help="scf, relax, band_structure, dos, md, hybrid, phonon, gw, optical, neb",
+    )
     args = parser.parse_args()
 
-    templates_dir = Path(__file__).resolve().parent.parent / "data" / "vasp_wiki" / "knowledge" / "task_templates"
-    potcar_path = Path(__file__).resolve().parent.parent / "data" / "vasp_wiki" / "knowledge" / "potcar_recommend.json"
+    templates_dir = (
+        Path(__file__).resolve().parent.parent
+        / "data"
+        / "vasp_wiki"
+        / "knowledge"
+        / "task_templates"
+    )
+    potcar_path = (
+        Path(__file__).resolve().parent.parent
+        / "data"
+        / "vasp_wiki"
+        / "knowledge"
+        / "potcar_recommend.json"
+    )
 
     task_type = args.task_type.strip().lower()
     template_path = templates_dir / f"{task_type}.json"

@@ -1,65 +1,79 @@
 {
-  "task_type": "band_structure",
-  "description": "Electronic band structure calculation along high-symmetry k-paths",
-  "use_cases": ["band gap", "band dispersion", "electronic structure visualization"],
-
-  "workflow": "TWO-STEP process: 1) SCF on uniform k-mesh → 2) non-SCF on k-path",
-
-  "step1_scf": {
-    "description": "Standard SCF to get converged charge density",
-    "incar": {
-      "EDIFF": 1e-6,
-      "ISMEAR": "1 for metals, 0 for semiconductors",
-      "SIGMA": "0.1-0.2 for metals, 0.05 for semiconductors",
-      "LWAVE": false,
-      "LCHARG": true,
-      "ALGO": "Fast",
-      "PREC": "Accurate"
+    "alternative_method": {
+        "description": "KPOINTS_OPT method (VASP 6.2+): both meshes in single run",
+        "incar_additions": {
+            "LKPOINTS_OPT": ".TRUE."
+        },
+        "note": "Provide KPOINTS for SCF mesh and KPOINTS_OPT for k-path"
     },
-    "kpoints": "uniform Gamma-centered mesh (well converged)"
-  },
-
-  "step2_band": {
-    "description": "Non-SCF calculation reading charge density, on k-path",
-    "incar": {
-      "ICHARG": {"value": 11, "note": "read CHGCAR and keep fixed"},
-      "ISMEAR": {"value": 0, "note": "Gaussian, tetrahedron NOT for k-path"},
-      "SIGMA": 0.05,
-      "LORBIT": {"value": 11, "note": "for projected band structure"},
-      "NBANDS": {"rule": "increase 50-100% above default for sufficient empty bands"},
-      "LWAVE": false,
-      "LCHARG": false,
-      "NEDOS": 2001,
-      "ALGO": "Fast",
-      "PREC": "Accurate"
+    "conditional": {
+        "hybrid_functional_band": {
+            "ALGO": "All",
+            "LHFCALC": ".TRUE.",
+            "LKPOINTS_OPT": ".TRUE.",
+            "note": "Cannot use ICHARG=11 for hybrids. Use KPOINTS_OPT method or a zero-weight k-point approach."
+        },
+        "soc_band": {
+            "LNONCOLLINEAR": ".TRUE.",
+            "LSORBIT": ".TRUE.",
+            "NBANDS": "must be even, typically 2x non-SOC value"
+        }
     },
-    "kpoints": {
-      "format": "line-mode",
-      "example": "k-points along high symmetry lines\n20\nLine-mode\nreciprocal\n0.0 0.0 0.0  ! GAMMA\n0.5 0.0 0.5  ! X\n\n0.5 0.0 0.5  ! X\n0.5 0.25 0.75 ! W",
-      "note": "Use SeeK-path or pymatgen to determine high-symmetry path for your space group"
+    "description": "Electronic band structure calculation along high-symmetry k-paths",
+    "step1_scf": {
+        "description": "Standard SCF to get converged charge density",
+        "incar": {
+            "ALGO": "Fast",
+            "EDIFF": 1e-06,
+            "ISMEAR": "1 for metals, 0 for semiconductors",
+            "LCHARG": true,
+            "LWAVE": false,
+            "PREC": "Accurate",
+            "SIGMA": "0.1-0.2 for metals, 0.05 for semiconductors"
+        },
+        "kpoints": "uniform Gamma-centered mesh (well converged)"
     },
-    "files_from_step1": ["CHGCAR", "POSCAR (or CONTCAR)", "POTCAR"]
-  },
-
-  "alternative_method": {
-    "description": "KPOINTS_OPT method (VASP 6.2+): both meshes in single run",
-    "incar_additions": {
-      "LKPOINTS_OPT": ".TRUE."
+    "step2_band": {
+        "description": "Non-SCF calculation reading charge density, on k-path",
+        "files_from_step1": [
+            "CHGCAR",
+            "POSCAR (or CONTCAR)",
+            "POTCAR"
+        ],
+        "incar": {
+            "ALGO": "Fast",
+            "ICHARG": {
+                "note": "read CHGCAR and keep fixed",
+                "value": 11
+            },
+            "ISMEAR": {
+                "note": "Gaussian, tetrahedron NOT for k-path",
+                "value": 0
+            },
+            "LCHARG": false,
+            "LORBIT": {
+                "note": "for projected band structure",
+                "value": 11
+            },
+            "LWAVE": false,
+            "NBANDS": {
+                "rule": "increase 50-100% above default for sufficient empty bands"
+            },
+            "NEDOS": 2001,
+            "PREC": "Accurate",
+            "SIGMA": 0.05
+        },
+        "kpoints": {
+            "example": "k-points along high symmetry lines\n20\nLine-mode\nreciprocal\n0.0 0.0 0.0  ! GAMMA\n0.5 0.0 0.5  ! X\n\n0.5 0.0 0.5  ! X\n0.5 0.25 0.75 ! W",
+            "format": "line-mode",
+            "note": "Use SeeK-path or pymatgen to determine high-symmetry path for your space group"
+        }
     },
-    "note": "Provide KPOINTS for SCF mesh and KPOINTS_OPT for k-path"
-  },
-
-  "conditional": {
-    "hybrid_functional_band": {
-      "note": "Cannot use ICHARG=11 for hybrids. Use KPOINTS_OPT method or a zero-weight k-point approach.",
-      "LHFCALC": ".TRUE.",
-      "ALGO": "All",
-      "LKPOINTS_OPT": ".TRUE."
-    },
-    "soc_band": {
-      "LSORBIT": ".TRUE.",
-      "LNONCOLLINEAR": ".TRUE.",
-      "NBANDS": "must be even, typically 2x non-SOC value"
-    }
-  }
+    "task_type": "band_structure",
+    "use_cases": [
+        "band gap",
+        "band dispersion",
+        "electronic structure visualization"
+    ],
+    "workflow": "TWO-STEP process: 1) SCF on uniform k-mesh → 2) non-SCF on k-path"
 }

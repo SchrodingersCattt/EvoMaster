@@ -9,7 +9,6 @@ Usage:
 
 import json
 import os
-from typing import Any
 
 KNOWLEDGE_DIR = os.path.dirname(__file__)
 
@@ -133,9 +132,7 @@ def validate_incar(
 
     # C007: NPAR and NCORE both set
     if "NPAR" in tags and "NCORE" in tags:
-        warnings.append(
-            "Both NPAR and NCORE are set. Use only NCORE (preferred)."
-        )
+        warnings.append("Both NPAR and NCORE are set. Use only NCORE (preferred).")
 
     # ── Dependency checks ──
 
@@ -152,9 +149,7 @@ def validate_incar(
 
     # D005: Meta-GGA requires LASPH
     if "METAGGA" in tags and not _is_true(_get(tags, "LASPH")):
-        errors.append(
-            f"METAGGA={_get(tags, 'METAGGA')} requires LASPH=.TRUE."
-        )
+        errors.append(f"METAGGA={_get(tags, 'METAGGA')} requires LASPH=.TRUE.")
 
     # D007: LOPTICS needs NBANDS
     if _is_true(_get(tags, "LOPTICS")) and "NBANDS" not in tags:
@@ -212,7 +207,9 @@ def validate_incar(
         if "TEBEG" not in tags:
             warnings.append("MD task but TEBEG not set (temperature defaults to 0 K).")
         if nsw < 100:
-            warnings.append(f"MD with NSW={nsw} is very short. Typically need 1000+ steps.")
+            warnings.append(
+                f"MD with NSW={nsw} is very short. Typically need 1000+ steps."
+            )
         if ismear == -5:
             errors.append("ISMEAR=-5 is forbidden for MD. Use ISMEAR=0 or 1.")
         if "ISYM" not in tags or _as_int(_get(tags, "ISYM"), 2) != 0:
@@ -248,7 +245,9 @@ def validate_incar(
 
     if task_type == "gw":
         if "NBANDS" not in tags:
-            warnings.append("GW calculations need many empty bands. Set NBANDS explicitly.")
+            warnings.append(
+                "GW calculations need many empty bands. Set NBANDS explicitly."
+            )
         if "ENCUTGW" not in tags:
             warnings.append("ENCUTGW not set for GW. Converge this parameter.")
 
@@ -256,6 +255,7 @@ def validate_incar(
 
 
 # ── Convenience: validate INCAR file from path ──
+
 
 def validate_incar_file(
     incar_path: str,
