@@ -65,8 +65,6 @@ evaluation/question_bank/
 | `human_prompt_seed` | **必填** | — | 直接发给 Agent 的用户 prompt（中英文皆可） |
 | `tags` | 可选 | `[]` | 标签，目前未被代码消费（开发者归类用） |
 | `mode_scope` | 可选 | `["direct", "planner"]` | 决定该题跑哪些 mode；不能为空 |
-| `required_tools` | 可选 | `[]` | 该题必需的 MCP 工具名（工具白名单声明） |
-| `optional_tools` | 可选 | `[]` | 可选增强工具，目前未被代码消费 |
 | `data_files` | 可选 | `[]` | 输入数据文件引用；Runner 会复制到 Agent workspace |
 | `reference_answers` | **条件必填** | `[]` | 非 `safety_refusal` 题必须至少 1 条；`safety_refusal` 可为空 |
 | `scoring_checklist` | **必填** | — | 至少 1 条评分项 |
@@ -156,8 +154,7 @@ evaluation/question_bank/
 | `capability` | ❌ | `--capabilities` 过滤；safety 路由；聚合 + 报告 |
 | `domain` | ❌ | 聚合 + 报告 |
 | `mode_scope` | ❌ | 决定跑哪些 mode |
-| `required_tools` | ❌ | 工具白名单声明 |
-| `tags` / `optional_tools` | ❌ | 目前未被代码消费（预留） |
+| `tags` | ❌ | 目前未被代码消费（预留） |
 | `reference_answers` | ❌ | Evaluator 的标准答案查找表 |
 | `scoring_checklist` | ❌ | Evaluator 逐条执行判分 |
 
@@ -210,6 +207,14 @@ scoring_checklist:
     axis: efficiency
     verify: token_budget
 ```
+
+### 6. 评分与工具名称解耦
+
+`human_prompt_seed`（直接发给 Agent 的 prompt）**禁止包含内部工具名称**（如 `mat_sg_build_surface_slab`、`mat_dpa_submit_optimize_structure` 等 MCP tool identifier）。Agent 应自行根据任务描述选择合适的工具，而不是被 prompt 直接提示。
+
+- `reference_answers` 中的 `tool_name` / `tool_arg` 字段、`scoring_checklist.criterion` 中引用工具名均为**内部评分逻辑**，不发给 Agent，允许使用工具名。
+- `intent` 中可以使用通用术语（如"表面构建工具"、"结构优化器"），但同样不应包含具体 MCP tool identifier。
+- 新增或修改题目时，需检查 `human_prompt_seed` 中是否意外泄漏了工具名；审查方式：在所有 YAML 的 `human_prompt_seed` 文本中搜索 `mat_sg_`、`mat_dpa_`、`mat_struct_db_` 等前缀。
 
 ---
 
