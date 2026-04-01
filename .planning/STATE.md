@@ -51,6 +51,10 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 26-tool]: Lazy import strategy for evomaster.adaptors.calculation: function-level import defers module load
 - [Phase 26-tool]: Duck-typing via hasattr replaces isinstance(SSHSession) for cross-package session detection
 - [Phase 25-session-playground]: Merged SSHSession + SSHEnv into single class directly holding paramiko.SSHClient (no Env intermediate)
+- [Phase 25-session-playground]: Playground parameterized constructor (5 keyword-only params) replaces config_path-based construction
+- [Phase 25-session-playground]: PlaygroundManager._load_raw_config returns raw dict (not Pydantic model) to avoid EvoMasterConfig coupling
+- [Phase 25-session-playground]: Docker session branch removed; only local and ssh supported
+- [Phase 25-session-playground]: agent_run_service reads matmaster_config/ directly instead of via playground.config
 
 ### Pending Todos
 
@@ -63,6 +67,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T09:20:22.288Z
-Stopped at: Completed 25-02-PLAN.md
+Last session: 2026-04-01T09:34:24Z
+Stopped at: Completed 25-03-PLAN.md
 Resume file: None
