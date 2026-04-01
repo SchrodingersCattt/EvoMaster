@@ -68,7 +68,7 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 
 ### Current State
 
-**As of 2026-04-01:** Phase 26 已完成，matmaster.tools 完全原生化：bash_safety/editor helper 内联、MonitorJobTool 迁移为 BuiltinTool 子类、EvoToolAdapter 删除。exp.py 工具注册不再经过 evomaster adapter。v2.1 里程碑目标是 matmaster 完全独立于 evomaster。
+**As of 2026-04-01:** Phase 25 完成，matmaster session/playground 原生化：Session Protocol（8 方法）+ SessionConfig 三级配置、SSHSession 原生实现（直接持有 paramiko，477 行）、Playground 参数化构造（零 evomaster import）、PlaygroundManager YAML 解析模式、agent_run_service 直接读 matmaster_config/。Phase 26 也已完成，matmaster.tools 完全原生化。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 
