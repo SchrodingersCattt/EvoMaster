@@ -101,6 +101,7 @@ class DevRunner:
             name=config.agent.name,
             max_turns=config.agent.max_turns,
             tools=ExpToolsConfig(builtin=config.tools.builtin),
+            skills=config.skills,
             compaction=config.compaction,
             developer_instructions=config.agent.identity or "",
             system_prompt=system_prompt,

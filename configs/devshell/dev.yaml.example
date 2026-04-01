@@ -19,3 +19,12 @@ session:
 tools:
   builtin:
     - "*"
+
+# Skill / lazy MCP support (default: disabled)
+# skills:
+#   enabled: true
+#   skills_root:
+#     - "matmaster/skills/lazymcp"
+#   cache_dir: "matmaster/cache"
+#   config_dir: "matmaster_config"
+#   mcp_config_file: "mcp_config.json"

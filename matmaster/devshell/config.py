@@ -13,6 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from matmaster.config.exp import ExpSkillsConfig
 from matmaster.types.runtime import CompactionConfig
 
 _ENV_PATTERN = re.compile(r"\$\{([^}]+)\}")
@@ -73,6 +74,7 @@ class DevConfig(BaseModel):
     agent: AgentConfig = Field(default_factory=AgentConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    skills: ExpSkillsConfig = Field(default_factory=ExpSkillsConfig)
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
 
