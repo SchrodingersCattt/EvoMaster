@@ -22,7 +22,7 @@ echo "[isolation] Hidden evomaster/ and src/"
 
 # Run tests/matmaster/ full suite (D-02: no subset filtering)
 echo "[isolation] Running tests/matmaster/ full suite ..."
-uv run python -m pytest tests/matmaster/ -x -q --tb=short 2>&1
+uv run --extra dev python -m pytest tests/matmaster/ -x -q --tb=short 2>&1
 
 echo "[isolation] All tests passed with evomaster/ and src/ hidden"
 # cleanup triggered by trap on EXIT

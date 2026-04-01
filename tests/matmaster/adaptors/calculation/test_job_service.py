@@ -146,14 +146,27 @@ class TestJobServiceImportStructure:
             "Only function-level lazy imports allowed (per D-06)."
         )
 
-    def test_evomaster_imports_are_function_level_only(self):
-        """evomaster.env.bohrium imports must appear only inside function bodies."""
+    def test_no_evomaster_imports_remain(self):
+        """job_service.py should have no evomaster imports (fully migrated to matmaster)."""
         import matmaster.adaptors.calculation.job_service as mod
         source = inspect.getsource(mod)
-        # There should still be evomaster references (lazy imports in function bodies)
-        # Specifically evomaster.env.bohrium
-        assert "evomaster.env.bohrium" in source, (
-            "job_service.py should have lazy imports from evomaster.env.bohrium in function bodies"
+        tree = ast.parse(source)
+        evo_imports = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.Import, ast.ImportFrom))
+            and any(
+                "evomaster" in (alias.name or "")
+                for alias in getattr(node, "names", [])
+            )
+            or (
+                isinstance(node, ast.ImportFrom)
+                and node.module is not None
+                and "evomaster" in node.module
+            )
+        ]
+        assert evo_imports == [], (
+            "job_service.py should have no evomaster imports -- fully migrated to matmaster native"
         )
 
     def test_module_import_does_not_trigger_evomaster_load(self):

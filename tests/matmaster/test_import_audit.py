@@ -103,34 +103,12 @@ class TestPhase30FullIsolation:
 
     FORBIDDEN_PREFIXES = ["evomaster", "playground", "src."]
 
-    # Pre-existing violations as of Phase 30 Plan 01.
+    # Pre-existing violations as of Phase 30 Plan 02.
     # Format: "relative/path.py:L<lineno>"
     # Remove entries as subsequent plans resolve them.
+    # 23 violations resolved since Plan 01 (exp.py, playground.py, tools/, integration/).
     KNOWN_VIOLATIONS: frozenset[str] = frozenset({
         "matmaster/core/__init__.py:L12",
-        "matmaster/core/exp.py:L395",
-        "matmaster/core/exp.py:L396",
-        "matmaster/core/exp.py:L471",
-        "matmaster/core/playground.py:L26",
-        "matmaster/core/playground.py:L27",
-        "matmaster/core/playground.py:L28",
-        "matmaster/core/playground.py:L29",
-        "matmaster/core/playground.py:L150",
-        "matmaster/core/playground.py:L159",
-        "matmaster/eval_tooling_snapshot.py:L99",
-        "matmaster/integration/bohrium_setup.py:L101",
-        "matmaster/integration/bohrium_setup.py:L110",
-        "matmaster/integration/bohrium_setup.py:L131",
-        "matmaster/integration/bohrium_setup.py:L156",
-        "matmaster/tools/__init__.py:L7",
-        "matmaster/tools/builtin/bash_tool.py:L18",
-        "matmaster/tools/builtin/bash_tool.py:L76",
-        "matmaster/tools/builtin/edit_tool.py:L17",
-        "matmaster/tools/cache_mcp_schemas.py:L43",
-        "matmaster/tools/cache_mcp_schemas.py:L63",
-        "matmaster/tools/lazy_mcp.py:L112",
-        "matmaster/tools/lazy_mcp.py:L170",
-        "matmaster/tools/script_env.py:L59",
     })
 
     def test_no_forbidden_imports_in_matmaster(self):
@@ -175,7 +153,7 @@ class TestPhase30FullIsolation:
 
     def test_known_violations_count(self):
         """Track the total known violations count -- this number should decrease over time."""
-        assert len(self.KNOWN_VIOLATIONS) == 24, (
-            f"Expected 24 known violations, got {len(self.KNOWN_VIOLATIONS)}. "
+        assert len(self.KNOWN_VIOLATIONS) == 1, (
+            f"Expected 1 known violation, got {len(self.KNOWN_VIOLATIONS)}. "
             "Update this count as violations are resolved."
         )
