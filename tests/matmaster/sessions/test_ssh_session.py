@@ -40,11 +40,12 @@ def mock_paramiko():
         mock_transport.is_active.return_value = True
         mock_client.get_transport.return_value = mock_transport
 
-        # SFTP mock
+        # SFTP mock (from transport.open_sftp_client for SFTPPool)
         mock_sftp = MagicMock()
-        mock_client.open_sftp.return_value = mock_sftp
+        mock_sftp.stat.return_value = MagicMock()  # health check on release
+        mock_transport.open_sftp_client.return_value = mock_sftp
 
-        # SFTP file mock for _get_tmux_logs (reads log file via context manager)
+        # SFTP file mock for file operations (reads via context manager)
         mock_sftp_file = MagicMock()
         mock_sftp_file.__enter__ = MagicMock(return_value=mock_sftp_file)
         mock_sftp_file.__exit__ = MagicMock(return_value=False)
@@ -105,12 +106,11 @@ class TestSSHSessionLifecycle:
 
         session.close()
         assert session.is_open is False
-        mock_paramiko["sftp"].close.assert_called()
         mock_paramiko["client"].close.assert_called()
 
 
 class TestSSHSessionFileOps:
-    """File operations via mocked SFTP."""
+    """File operations via mocked SFTP (through SFTPPool)."""
 
     def _make_open_session(self, ssh_config, mock_paramiko):
         from matmaster.sessions.ssh import SSHSession
@@ -229,3 +229,97 @@ class TestSSHSessionNotOpen:
         session = SSHSession(ssh_config)
         with pytest.raises(RuntimeError, match="not open"):
             session.is_file("/remote/file")
+
+
+class TestSSHSessionExecBash:
+    """Tests for the new exec_command-based exec_bash."""
+
+    def test_simple_command(self, ssh_config, mock_paramiko):
+        """exec_bash returns stdout, exit_code from channel."""
+        from matmaster.sessions.ssh import SSHSession
+
+        session = SSHSession(ssh_config)
+        session.open()
+
+        channel = MagicMock()
+        recv_calls = [b"hello\n", b""]
+        channel.recv_ready.side_effect = [True, False, False]
+        channel.recv.side_effect = recv_calls
+        channel.recv_stderr_ready.return_value = False
+        channel.exit_status_ready.side_effect = [False, True]
+        channel.recv_exit_status.return_value = 0
+        mock_paramiko["transport"].open_session.return_value = channel
+
+        result = session.exec_bash("echo hello")
+        assert result["exit_code"] == 0
+        assert "hello" in result["stdout"]
+
+    def test_timeout_returns_minus_one(self, ssh_config, mock_paramiko):
+        """exec_bash returns exit_code=-1 on timeout."""
+        from matmaster.sessions.ssh import SSHSession
+
+        session = SSHSession(ssh_config)
+        session.open()
+
+        channel = MagicMock()
+        channel.exit_status_ready.return_value = False
+        channel.recv_ready.return_value = False
+        channel.recv_stderr_ready.return_value = False
+        mock_paramiko["transport"].open_session.return_value = channel
+
+        result = session.exec_bash("sleep 999", timeout=0)
+        assert result["exit_code"] == -1
+        assert (
+            "timed out" in result["stderr"].lower()
+            or "timed out" in result["stdout"].lower()
+        )
+
+    def test_stop_event_cancels(self, ssh_config, mock_paramiko):
+        """exec_bash returns exit_code=130 when stop_event is set."""
+        import threading
+
+        from matmaster.sessions.ssh import SSHSession
+
+        session = SSHSession(ssh_config)
+        session.open()
+
+        channel = MagicMock()
+        channel.exit_status_ready.return_value = False
+        channel.recv_ready.return_value = False
+        channel.recv_stderr_ready.return_value = False
+        mock_paramiko["transport"].open_session.return_value = channel
+
+        stop = threading.Event()
+        stop.set()
+        result = session.exec_bash("sleep 999", stop_event=stop)
+        assert result["exit_code"] == 130
+
+    def test_concurrent_exec_bash(self, ssh_config, mock_paramiko):
+        """Multiple exec_bash calls run concurrently (no _prev_command_status block)."""
+        import concurrent.futures
+
+        from matmaster.sessions.ssh import SSHSession
+
+        session = SSHSession(ssh_config)
+        session.open()
+
+        def make_channel():
+            ch = MagicMock()
+            ch.recv_ready.side_effect = [True, False, False]
+            ch.recv.side_effect = [b"ok\n", b""]
+            ch.recv_stderr_ready.return_value = False
+            ch.exit_status_ready.side_effect = [False, True]
+            ch.recv_exit_status.return_value = 0
+            return ch
+
+        mock_paramiko["transport"].open_session.side_effect = [
+            make_channel(),
+            make_channel(),
+        ]
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
+            f1 = ex.submit(session.exec_bash, "cmd1")
+            f2 = ex.submit(session.exec_bash, "cmd2")
+            r1, r2 = f1.result(timeout=5), f2.result(timeout=5)
+        assert r1["exit_code"] == 0
+        assert r2["exit_code"] == 0
