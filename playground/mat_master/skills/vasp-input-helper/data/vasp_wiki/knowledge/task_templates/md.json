@@ -1,128 +1,128 @@
 {
-    "description": "Ab initio molecular dynamics simulation",
-    "incar": {
-        "recommended": {
-            "ALGO": "Fast",
-            "ISYM": {
-                "note": "turn off symmetry for MD",
-                "value": 0
-            },
-            "LCHARG": false,
-            "LREAL": "Auto",
-            "LWAVE": false,
-            "NBLOCK": {
-                "note": "write XDATCAR every 10 steps",
-                "value": 10
-            },
-            "NWRITE": {
-                "note": "reduce OUTCAR verbosity",
-                "value": 0
-            },
-            "PREC": "Normal"
+  "description": "Ab initio molecular dynamics simulation",
+  "incar": {
+    "recommended": {
+      "ALGO": "Fast",
+      "ISYM": {
+        "note": "turn off symmetry for MD",
+        "value": 0
+      },
+      "LCHARG": false,
+      "LREAL": "Auto",
+      "LWAVE": false,
+      "NBLOCK": {
+        "note": "write XDATCAR every 10 steps",
+        "value": 10
+      },
+      "NWRITE": {
+        "note": "reduce OUTCAR verbosity",
+        "value": 0
+      },
+      "PREC": "Normal"
+    },
+    "required": {
+      "EDIFF": {
+        "note": "slightly looser than static, but test convergence",
+        "value": 1e-05
+      },
+      "IBRION": {
+        "note": "molecular dynamics",
+        "value": 0
+      },
+      "ISIF": {
+        "note": "2 for NVT/NVE (fixed cell). 3 for NpT.",
+        "value": 2
+      },
+      "ISMEAR": {
+        "note": "Gaussian smearing. NEVER use -5 (tetrahedron) for MD!",
+        "value": 0
+      },
+      "MDALGO": {
+        "rule": "0=standard(use SMASS), 2=Nosé-Hoover, 3=Langevin. See thermostat choice."
+      },
+      "NSW": {
+        "rule": "number of MD steps, typically 1000-100000 depending on timescale"
+      },
+      "POTIM": {
+        "note": "timestep, typically 1-2 fs. Reduce for light elements (H: 0.5 fs)",
+        "unit": "fs",
+        "value": 1.0
+      },
+      "SIGMA": {
+        "rule": "0.05-0.2, check that T*S << total energy per atom"
+      },
+      "TEBEG": {
+        "rule": "target temperature in K"
+      },
+      "TEEND": {
+        "rule": "end temperature (=TEBEG for NVT)"
+      }
+    },
+    "thermostat_options": {
+      "npt": {
+        "ISIF": 3,
+        "LANGEVIN_GAMMA": "per species",
+        "LANGEVIN_GAMMA_L": {
+          "note": "lattice friction",
+          "value": 10
         },
-        "required": {
-            "EDIFF": {
-                "note": "slightly looser than static, but test convergence",
-                "value": 1e-05
-            },
-            "IBRION": {
-                "note": "molecular dynamics",
-                "value": 0
-            },
-            "ISIF": {
-                "note": "2 for NVT/NVE (fixed cell). 3 for NpT.",
-                "value": 2
-            },
-            "ISMEAR": {
-                "note": "Gaussian smearing. NEVER use -5 (tetrahedron) for MD!",
-                "value": 0
-            },
-            "MDALGO": {
-                "rule": "0=standard(use SMASS), 2=Nosé-Hoover, 3=Langevin. See thermostat choice."
-            },
-            "NSW": {
-                "rule": "number of MD steps, typically 1000-100000 depending on timescale"
-            },
-            "POTIM": {
-                "note": "timestep, typically 1-2 fs. Reduce for light elements (H: 0.5 fs)",
-                "unit": "fs",
-                "value": 1.0
-            },
-            "SIGMA": {
-                "rule": "0.05-0.2, check that T*S << total energy per atom"
-            },
-            "TEBEG": {
-                "rule": "target temperature in K"
-            },
-            "TEEND": {
-                "rule": "end temperature (=TEBEG for NVT)"
-            }
+        "MDALGO": 3,
+        "PMASS": {
+          "rule": "fictitious lattice mass, ~100-1000"
         },
-        "thermostat_options": {
-            "npt": {
-                "ISIF": 3,
-                "LANGEVIN_GAMMA": "per species",
-                "LANGEVIN_GAMMA_L": {
-                    "note": "lattice friction",
-                    "value": 10
-                },
-                "MDALGO": 3,
-                "PMASS": {
-                    "rule": "fictitious lattice mass, ~100-1000"
-                },
-                "PSTRESS": {
-                    "rule": "target pressure in kB (0 for ambient)"
-                }
-            },
-            "nve": {
-                "MDALGO": 0,
-                "SMASS": -3,
-                "note": "microcanonical, constant E. Good for checking energy conservation."
-            },
-            "nvt_andersen": {
-                "ANDERSEN_PROB": {
-                    "value": 0.05
-                },
-                "MDALGO": 1,
-                "note": "simple but decorrelates velocities"
-            },
-            "nvt_langevin": {
-                "LANGEVIN_GAMMA": {
-                    "rule": "friction per species in ps^-1, e.g., 10 10"
-                },
-                "LANGEVIN_GAMMA_L": {
-                    "note": ">0 for lattice friction in NpT",
-                    "value": 0
-                },
-                "MDALGO": 3,
-                "note": "good for rapid thermalization"
-            },
-            "nvt_nose_hoover": {
-                "MDALGO": 2,
-                "SMASS": {
-                    "rule": "2-3 typically, controls coupling strength"
-                },
-                "note": "good for equilibrium sampling"
-            }
+        "PSTRESS": {
+          "rule": "target pressure in kB (0 for ambient)"
         }
-    },
-    "kpoints": {
-        "note": "Balance accuracy vs. cost per step",
-        "rule": "Can use fewer k-points than static (Gamma-only for large supercells >=64 atoms)"
-    },
-    "task_type": "md",
-    "use_cases": [
-        "thermal properties",
-        "phase transitions",
-        "liquid structures",
-        "diffusion",
-        "reaction dynamics"
-    ],
-    "workflow_notes": [
-        "Start from relaxed structure",
-        "Equilibration: run initial MD (few hundred steps) and discard",
-        "Production: collect data from equilibrated trajectory",
-        "For properties: use XDATCAR for trajectory analysis",
-        "Consider MLFF (ML_LMLFF=.TRUE.) for long timescales"
-    ]
+      },
+      "nve": {
+        "MDALGO": 0,
+        "SMASS": -3,
+        "note": "microcanonical, constant E. Good for checking energy conservation."
+      },
+      "nvt_andersen": {
+        "ANDERSEN_PROB": {
+          "value": 0.05
+        },
+        "MDALGO": 1,
+        "note": "simple but decorrelates velocities"
+      },
+      "nvt_langevin": {
+        "LANGEVIN_GAMMA": {
+          "rule": "friction per species in ps^-1, e.g., 10 10"
+        },
+        "LANGEVIN_GAMMA_L": {
+          "note": ">0 for lattice friction in NpT",
+          "value": 0
+        },
+        "MDALGO": 3,
+        "note": "good for rapid thermalization"
+      },
+      "nvt_nose_hoover": {
+        "MDALGO": 2,
+        "SMASS": {
+          "rule": "2-3 typically, controls coupling strength"
+        },
+        "note": "good for equilibrium sampling"
+      }
+    }
+  },
+  "kpoints": {
+    "note": "Balance accuracy vs. cost per step",
+    "rule": "Can use fewer k-points than static (Gamma-only for large supercells >=64 atoms)"
+  },
+  "task_type": "md",
+  "use_cases": [
+    "thermal properties",
+    "phase transitions",
+    "liquid structures",
+    "diffusion",
+    "reaction dynamics"
+  ],
+  "workflow_notes": [
+    "Start from relaxed structure",
+    "Equilibration: run initial MD (few hundred steps) and discard",
+    "Production: collect data from equilibrated trajectory",
+    "For properties: use XDATCAR for trajectory analysis",
+    "Consider MLFF (ML_LMLFF=.TRUE.) for long timescales"
+  ]
 }

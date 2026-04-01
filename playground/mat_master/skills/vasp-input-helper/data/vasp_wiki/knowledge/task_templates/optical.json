@@ -1,52 +1,52 @@
 {
-    "description": "Optical properties and frequency-dependent dielectric function",
-    "kpoints": {
-        "rule": "Dense Gamma-centered mesh for well-resolved spectra"
+  "description": "Optical properties and frequency-dependent dielectric function",
+  "kpoints": {
+    "rule": "Dense Gamma-centered mesh for well-resolved spectra"
+  },
+  "notes": [
+    "Independent-particle approximation (no excitonic effects)",
+    "For excitonic effects use BSE (Bethe-Salpeter equation)",
+    "Scissor operator can be applied post-processing to correct band gap"
+  ],
+  "output_files": {
+    "OUTCAR": "contains dielectric function",
+    "vaspout.h5": "HDF5 output (VASP 6)"
+  },
+  "step1_scf": {
+    "incar": {
+      "ALGO": "Fast",
+      "EDIFF": 1e-06,
+      "LCHARG": true,
+      "LWAVE": true,
+      "PREC": "Accurate"
+    }
+  },
+  "step2_optics": {
+    "incar": {
+      "ALGO": "Exact",
+      "CSHIFT": {
+        "note": "broadening in eV",
+        "value": 0.1
+      },
+      "EDIFF": 1e-06,
+      "ISMEAR": 0,
+      "LOPTICS": ".TRUE.",
+      "LWAVE": false,
+      "NBANDS": {
+        "rule": "2-3x default, need many empty bands for good spectra"
+      },
+      "NEDOS": 2000,
+      "NELM": 1,
+      "SIGMA": 0.05
     },
-    "notes": [
-        "Independent-particle approximation (no excitonic effects)",
-        "For excitonic effects use BSE (Bethe-Salpeter equation)",
-        "Scissor operator can be applied post-processing to correct band gap"
-    ],
-    "output_files": {
-        "OUTCAR": "contains dielectric function",
-        "vaspout.h5": "HDF5 output (VASP 6)"
-    },
-    "step1_scf": {
-        "incar": {
-            "ALGO": "Fast",
-            "EDIFF": 1e-06,
-            "LCHARG": true,
-            "LWAVE": true,
-            "PREC": "Accurate"
-        }
-    },
-    "step2_optics": {
-        "incar": {
-            "ALGO": "Exact",
-            "CSHIFT": {
-                "note": "broadening in eV",
-                "value": 0.1
-            },
-            "EDIFF": 1e-06,
-            "ISMEAR": 0,
-            "LOPTICS": ".TRUE.",
-            "LWAVE": false,
-            "NBANDS": {
-                "rule": "2-3x default, need many empty bands for good spectra"
-            },
-            "NEDOS": 2000,
-            "NELM": 1,
-            "SIGMA": 0.05
-        },
-        "note": "Reads WAVECAR from step 1"
-    },
-    "task_type": "optical",
-    "use_cases": [
-        "absorption spectra",
-        "reflectivity",
-        "refractive index",
-        "dielectric constant"
-    ],
-    "workflow": "TWO-STEP: 1) SCF → 2) LOPTICS calculation with many empty bands"
+    "note": "Reads WAVECAR from step 1"
+  },
+  "task_type": "optical",
+  "use_cases": [
+    "absorption spectra",
+    "reflectivity",
+    "refractive index",
+    "dielectric constant"
+  ],
+  "workflow": "TWO-STEP: 1) SCF → 2) LOPTICS calculation with many empty bands"
 }

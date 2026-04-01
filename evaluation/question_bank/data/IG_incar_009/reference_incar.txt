@@ -28,4 +28,3 @@ AGGAC = 0.0000
 NSW =         1
 IBRION = 8
 #ISIF   = 3
-

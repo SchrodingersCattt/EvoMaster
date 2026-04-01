@@ -42,4 +42,3 @@ LREAL    = Auto         #no real space projection
 ISTART   = 1            #read in WAVECAR if available
 LWAVE    = .TRUE.       #write out WAVECAR
 LCHARG   = .FALSE.      #no CHG and CHGCAR files
-
