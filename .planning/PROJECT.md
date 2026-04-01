@@ -69,7 +69,7 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 
 ### Current State
 
-**As of 2026-04-01:** Phase 25 完成，matmaster session/playground 原生化。Phase 26 完成，matmaster.tools 完全原生化。Phase 27 完成，MCP 与 Calculation 原生链路收回 matmaster 侧。Phase 28 完成，src 反向依赖反转与 Consumer 迁移：`matmaster/integration/bohrium_env.py` 纯模块承接 Bohrium 函数/常量，BohriumSetupService 重构为回调注入模式，4 个 matmaster 文件 evomaster import 全部切换，3 个 src 消费者迁移到 matmaster 原生消息类型和 SSHSession。
+**As of 2026-04-02:** v2.1 里程碑全部完成（Phases 25-30）。Phase 30 完成解耦审计与独立性证明：evomaster/ 目录已物理删除（113 文件，26,359 行），import audit 确认 matmaster/ 零外部运行时导入，隔离测试通过（1276 passed），迁移文档 `docs/decoupling-migration-v2.1.md` 记录了完整解耦过程和 v2.2 清理方向。matmaster 包现已完全独立于 evomaster。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 
@@ -176,4 +176,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after Phase 28 completion (src reverse dependency inversion & consumer migration)*
+*Last updated: 2026-04-02 after Phase 30 completion (v2.1 milestone complete — decoupling audit & independence proof)*
