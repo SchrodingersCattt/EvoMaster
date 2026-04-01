@@ -334,7 +334,7 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 28-01-PLAN.md -- Bohrium 纯函数搬迁 + 常量定义 + import audit 扩展
+- [x] 28-01-PLAN.md -- Bohrium 纯函数搬迁 + 常量定义 + import audit 扩展
 - [ ] 28-02-PLAN.md -- bohrium_setup 回调注入改造 + script_env/path_adaptor/job_service import 切换
 - [ ] 28-03-PLAN.md -- chat_history 消息类型迁移 + agent_run_bohrium SSHSession 切换 + agent_run_service 回调适配
 
@@ -407,6 +407,6 @@ Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底�
 | 25. Session 与 Playground 原生化 | v2.1 | 2/3 | Complete    | 2026-04-01 |
 | 26. Tool 内化与遗留工具收归 | v2.1 | 2/3 | Complete    | 2026-04-01 |
 | 27. MCP 与 Calculation 原生链路 | v2.1 | 3/3 | Complete    | 2026-04-01 |
-| 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 0/TBD | Not started | - |
+| 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 1/3 | In Progress|  |
 | 29. 主执行路径切换 | v2.1 | 0/TBD | Not started | - |
 | 30. 解耦审计与独立性证明 | v2.1 | 0/TBD | Not started | - |

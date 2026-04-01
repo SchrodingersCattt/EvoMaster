@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
 status: executing
-stopped_at: Phase 28 context gathered
-last_updated: "2026-04-01T11:39:38.850Z"
+stopped_at: Completed 28-01-PLAN.md
+last_updated: "2026-04-01T12:43:13.981Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 19
   completed_phases: 16
-  total_plans: 32
-  completed_plans: 32
+  total_plans: 35
+  completed_plans: 33
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** Phase 27 — mcp-calculation
+**Current focus:** Phase 28 — src-consumer
 
 ## Current Position
 
-Phase: 28
-Plan: Not started
+Phase: 28 (src-consumer) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
 Last activity: 2026-04-01
 
@@ -59,6 +59,9 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 27-mcp-calculation]: BaseSession TYPE_CHECKING import removed; session param uses Any + duck-typing for cross-package compatibility
 - [Phase 27]: LazyMCPTool.execute calls MCPConnection.call_tool directly, eliminating MCPTool intermediate and asyncio.to_thread
 - [Phase 27]: cache_mcp_schemas adapted to dict-based tools_by_server from MCPToolManager
+- [Phase 28-src-consumer]: Simplified BOHRIUM_OPENAPI_HOST to single os.getenv with static default (no URL_PART logic)
+- [Phase 28-src-consumer]: BohriumSetupResult duplicated as NamedTuple in matmaster to break src reverse dependency
+- [Phase 28-src-consumer]: Import audit xfail strategy for pre-migration tests (strict=False)
 
 ### Pending Todos
 
@@ -71,6 +74,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T11:39:38.842Z
-Stopped at: Phase 28 context gathered
-Resume file: .planning/phases/28-src-consumer/28-CONTEXT.md
+Last session: 2026-04-01T12:43:13.976Z
+Stopped at: Completed 28-01-PLAN.md
+Resume file: None

@@ -28,8 +28,8 @@
 
 ### src 反向依赖反转
 
-- [ ] **INVR-01**: `matmaster/integration/bohrium_setup.py` 不再 lazy import `src.services.agent_run_bohrium` 的 5 个函数，改为回调注入或将逻辑移入 matmaster 侧
-- [ ] **INVR-02**: `matmaster/tools/script_env.py` 不再 lazy import `src.utils.constant.BOHRIUM_OPENAPI_HOST`，改为配置注入或 matmaster 侧常量
+- [x] **INVR-01**: `matmaster/integration/bohrium_setup.py` 不再 lazy import `src.services.agent_run_bohrium` 的 5 个函数，改为回调注入或将逻辑移入 matmaster 侧
+- [x] **INVR-02**: `matmaster/tools/script_env.py` 不再 lazy import `src.utils.constant.BOHRIUM_OPENAPI_HOST`，改为配置注入或 matmaster 侧常量
 
 ### Consumer & 主执行路径
 
@@ -82,8 +82,8 @@
 | MCP-01 | Phase 27 | Complete |
 | CALC-01 | Phase 27 | Complete |
 | CALC-02 | Phase 27 | Complete |
-| INVR-01 | Phase 28 | Pending |
-| INVR-02 | Phase 28 | Pending |
+| INVR-01 | Phase 28 | Complete |
+| INVR-02 | Phase 28 | Complete |
 | CONS-03 | Phase 28 | Pending |
 | CONS-04 | Phase 28 | Pending |
 | CONS-01 | Phase 29 | Pending |
