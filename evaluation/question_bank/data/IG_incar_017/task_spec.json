@@ -1,0 +1,14 @@
+{
+  "task": "bse_precursor_relax",
+  "formula": "Al",
+  "description": "为 Al 金属生成结构优化计算的 VASP INCAR，作为后续 BSE(Bethe-Salpeter Equation)光学计算的前驱步骤。",
+  "material_context": "Al 是简单金属(FCC)。BSE 前驱步骤需要先进行高精度结构优化(IBRION=1, ISIF=3)，PREC=Accurate 确保后续 GW/BSE 计算的可靠性。ISMEAR=1(Methfessel-Paxton)适合金属。",
+  "critical_params": {
+    "IBRION": 1,
+    "ISIF": 3,
+    "NSW": 1,
+    "ISMEAR": 1,
+    "PREC": "Accurate",
+    "EDIFF": 1e-06
+  }
+}
