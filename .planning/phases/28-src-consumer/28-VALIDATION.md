@@ -1,10 +1,11 @@
 ---
 phase: 28
 slug: src-consumer
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: audited
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-01
+audited: 2026-04-01
 ---
 
 # Phase 28 — Validation Strategy
@@ -38,10 +39,12 @@ created: 2026-04-01
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 28-01-01 | 01 | 1 | INVR-01 | unit (AST audit) | `uv run pytest tests/matmaster/test_import_audit.py -x -q` | Update needed (W0) | ⬜ pending |
-| 28-01-02 | 01 | 1 | INVR-02 | unit (AST audit) | `uv run pytest tests/matmaster/test_import_audit.py -x -q` | Update needed (W0) | ⬜ pending |
-| 28-02-01 | 02 | 2 | CONS-03 | unit (import audit + behavior) | `uv run pytest tests/matmaster/integration/test_events_to_messages.py -x -q` | ✅ exists (17 tests baseline) | ⬜ pending |
-| 28-02-02 | 02 | 2 | CONS-04 | unit (import audit) | `uv run pytest tests/matmaster/test_import_audit.py -x -q` | Update needed (W0) | ⬜ pending |
+| 28-01-01 | 01 | 1 | INVR-01 | unit (AST audit) | `uv run pytest tests/matmaster/test_import_audit.py -x -q` | ✅ exists | ✅ green |
+| 28-01-02 | 01 | 1 | INVR-02 | unit (AST audit + bohrium_env) | `uv run pytest tests/matmaster/test_import_audit.py tests/matmaster/test_bohrium_env.py -x -q` | ✅ exists | ✅ green |
+| 28-02-01 | 02 | 2 | INVR-01, INVR-02 | unit (callback injection) | `uv run pytest tests/matmaster/test_bohrium_setup_injection.py -x -q` | ✅ exists (6 tests) | ✅ green |
+| 28-02-02 | 02 | 2 | INVR-01, INVR-02 | unit (import audit strict) | `uv run pytest tests/matmaster/test_import_audit.py -x -q` | ✅ exists | ✅ green |
+| 28-03-01 | 03 | 3 | CONS-03 | unit (behavior + format) | `uv run pytest tests/matmaster/integration/test_events_to_messages.py tests/test_chat_history_reasoning_state.py tests/test_chat_history_repair.py -x -q` | ✅ exists (31 tests) | ✅ green |
+| 28-03-02 | 03 | 3 | CONS-04 | unit (import audit) | `uv run pytest tests/matmaster/test_import_audit.py -x -q` | ✅ exists | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,10 +52,10 @@ created: 2026-04-01
 
 ## Wave 0 Requirements
 
-- [ ] `tests/matmaster/test_import_audit.py` — 更新规则：(1) 删除 `TestExpectedLazyBohrimImportsExist`（bohrium lazy imports 将不存在）；(2) 新增检测 matmaster/ 无 src lazy import 的规则；(3) 新增检测 matmaster/ 无 evomaster.agent.session lazy import 的规则
-- [ ] `tests/matmaster/integration/test_events_to_messages.py` — 已存在 17 个测试，baseline 全部 pass。迁移后行为应保持一致
-- [ ] 新测试：bohrium_setup 回调注入 unit test（mock callable，验证不触发 src import）
-- [ ] 新测试：model_dump 输出格式断言（确认 tool_calls 使用 matmaster 扁平格式）
+- [x] `tests/matmaster/test_import_audit.py` — 删除 `TestExpectedLazyBohrimImportsExist`，新增 `TestNoSrcImportsInMatmaster`、`TestNoEvomasterSessionImportsInMatmaster`、`TestNoEvomasterEnvBohriumImportsAnywhere`
+- [x] `tests/matmaster/integration/test_events_to_messages.py` — 17 个 baseline 测试全部 pass
+- [x] `tests/matmaster/test_bohrium_setup_injection.py` — 回调注入 unit test（6 tests）
+- [x] `tests/test_chat_history_reasoning_state.py` + `tests/test_chat_history_repair.py` — model_dump 输出格式断言，matmaster flat tool_calls 格式验证（审计修复：5 个测试从 evomaster 格式更新为 matmaster 格式）
 
 ---
 
@@ -64,13 +67,31 @@ created: 2026-04-01
 
 ---
 
+## Validation Audit 2026-04-01
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 5 |
+| Resolved | 5 |
+| Escalated | 0 |
+
+**Root cause:** Root-level test files (`tests/test_chat_history_reasoning_state.py`, `tests/test_chat_history_repair.py`) were not included in Phase 28 test suite and their expectations were stale after chat_history.py migrated from evomaster to matmaster message types.
+
+**Fixes applied:**
+- `reasoning_content` assertion: `meta.reasoning_content` → top-level field
+- `tool_calls` format: nested `function.name` → flat `name`
+- `_tool_call()` helper: evomaster nested → matmaster flat format
+- `ToolMessage` content: dict → str
+
+---
+
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 15s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 15s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-04-01
