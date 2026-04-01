@@ -282,7 +282,12 @@ Plans:
   2. matmaster 原生 session factory 可以创建 local、docker、ssh session，而 matmaster.core.playground.Playground 运行时不再导入 evomaster.agent.session 下的任何模块
   3. matmaster.core.playground.Playground 可以独立完成主配置加载、workspace 准备、logging 初始化与 session 装配，不再依赖 evomaster.config.ConfigManager 或 PlaygroundSessionMixin
   4. 现有依赖 session 的 builtin tools (BashTool, ReadTool 等) 可以通过 matmaster 原生 session 正常执行文件和命令操作
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Session Protocol + LocalSession 升级 + tmux 辅助模块
+- [ ] 25-02-PLAN.md — SSHSession 原生实现（内联 SSHEnv）
+- [ ] 25-03-PLAN.md — Playground 参数化改造 + PlaygroundManager YAML 解析 + Mixin 内联
 
 ### Phase 26: Tool 内化与遗留工具收归
 **Goal**: 全部 tool 能力在 matmaster.tools 原生运行，消除 EvoToolAdapter、evomaster builtin helper 依赖、MonitorJobTool 和 web_search_tool 的外部导入
@@ -294,7 +299,12 @@ Plans:
   3. MonitorJobTool 通过 matmaster 原生注册或 skill 机制提供，exp.py 不再 lazy import evomaster.agent.tools.builtin.monitor_job
   4. web_search_tool 通过 matmaster 原生实现或 skill 注册提供，exp.py 不再 import playground.mat_master.tools.web_search（消除 matmaster -> playground 依赖）
   5. 在仅安装 matmaster 的环境中加载全部 builtin tools 和 exp 注册的 tools 时，不会触发任何 evomaster 或 playground 运行时导入
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Session Protocol + LocalSession 升级 + tmux 辅助模块
+- [ ] 25-02-PLAN.md — SSHSession 原生实现（内联 SSHEnv）
+- [ ] 25-03-PLAN.md — Playground 参数化改造 + PlaygroundManager YAML 解析 + Mixin 内联
 
 ### Phase 27: MCP 与 Calculation 原生链路
 **Goal**: MCP 连接、schema cache 与 calculation path adaptor 全部收回 matmaster 侧，同时维持 Bohrium executor/storage/OSS 协议兼容
@@ -305,7 +315,12 @@ Plans:
   2. matmaster 侧可以原生解析 calculation runtime config、path adaptor 与 schema cache，正确识别 path 输入并构造 executor、storage 参数
   3. Bohrium / calculation tool 在 submit 或 run 场景下继续生成与当前协议兼容的 executor、storage、OSS 上传与远端路径适配行为，不引入协议破坏
   4. cache_mcp_schemas.py 和 eval_tooling_snapshot.py 不再 import evomaster MCP manager 或 calculation adaptor
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Session Protocol + LocalSession 升级 + tmux 辅助模块
+- [ ] 25-02-PLAN.md — SSHSession 原生实现（内联 SSHEnv）
+- [ ] 25-03-PLAN.md — Playground 参数化改造 + PlaygroundManager YAML 解析 + Mixin 内联
 
 ### Phase 28: src 反向依赖反转与 Consumer 迁移
 **Goal**: 消除 matmaster 对 src 的反向依赖（bohrium_setup + script_env），同时迁移 src 消费者到 matmaster 原生数据结构与 session 抽象
@@ -316,7 +331,12 @@ Plans:
   2. matmaster/tools/script_env.py 不再 lazy import src.utils.constant.BOHRIUM_OPENAPI_HOST，改为配置注入或 matmaster 侧常量
   3. src/services/chat_history.py 等对话历史构建链路可以直接消费 matmaster 原生 message / tool_call 数据结构，保持当前历史恢复行为
   4. src/services/agent_run_bohrium.py 等 session-sensitive 服务路径可以切换到 matmaster session abstraction 或显式 compat layer，避免直接依赖 evomaster session class
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Session Protocol + LocalSession 升级 + tmux 辅助模块
+- [ ] 25-02-PLAN.md — SSHSession 原生实现（内联 SSHEnv）
+- [ ] 25-03-PLAN.md — Playground 参数化改造 + PlaygroundManager YAML 解析 + Mixin 内联
 
 ### Phase 29: 主执行路径切换
 **Goal**: API/worker 与本地 Web 调试后端切换到 matmaster 原生入口，不再依赖 evomaster.core.get_playground_class，且主路径持续可运行
@@ -326,7 +346,12 @@ Plans:
   1. API/worker 主执行路径通过 matmaster 原生入口初始化 playground、exp 与 agent，保持消息发送、run 执行与事件推送主流程可用
   2. 本地 Web 调试后端通过 matmaster 原生入口初始化 playground，保持启动、会话恢复与流式输出行为
   3. 主执行路径中不再出现 evomaster.core.get_playground_class 或等价的 evomaster 入口调用
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Session Protocol + LocalSession 升级 + tmux 辅助模块
+- [ ] 25-02-PLAN.md — SSHSession 原生实现（内联 SSHEnv）
+- [ ] 25-03-PLAN.md — Playground 参数化改造 + PlaygroundManager YAML 解析 + Mixin 内联
 
 ### Phase 30: 解耦审计与独立性证明
 **Goal**: 用 import audit、隔离测试和迁移文档证明 matmaster 可脱离 evomaster/playground/src 独立运行，并为 v2.2 清理留出清晰后手
@@ -338,7 +363,12 @@ Plans:
   3. 仓库提供一份解耦迁移文档，明确记录保留的 compat layer、剩余遗留路径与后续清理顺序
   4. 全量测试通过，无回归（1195+ tests pass 作为基线）
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Session Protocol + LocalSession 升级 + tmux 辅助模块
+- [ ] 25-02-PLAN.md — SSHSession 原生实现（内联 SSHEnv）
+- [ ] 25-03-PLAN.md — Playground 参数化改造 + PlaygroundManager YAML 解析 + Mixin 内联
 
 ## Progress
 
@@ -373,7 +403,7 @@ Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底�
 | 22. Audit Metadata Backfill | v2.0 | 1/1 | Complete | 2026-03-29 |
 | 23. Verification + Nyquist Closure | v2.0 | 1/1 | Complete | 2026-03-30 |
 | 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete | 2026-03-29 |
-| 25. Session 与 Playground 原生化 | v2.1 | 0/TBD | Not started | - |
+| 25. Session 与 Playground 原生化 | v2.1 | 0/3 | Planning | - |
 | 26. Tool 内化与遗留工具收归 | v2.1 | 0/TBD | Not started | - |
 | 27. MCP 与 Calculation 原生链路 | v2.1 | 0/TBD | Not started | - |
 | 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 0/TBD | Not started | - |
