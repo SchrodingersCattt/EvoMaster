@@ -40,6 +40,7 @@ from .messages import (
     UserMessage,
 )
 from .runtime import AgentRuntimeSpec, CompactionConfig
+from .session import LocalSessionConfig, Session, SessionConfig, SSHSessionConfig
 from .worker_registry import WorkerRegistry
 
 __all__ = [
@@ -89,6 +90,11 @@ __all__ = [
     # runtime
     "AgentRuntimeSpec",
     "CompactionConfig",
+    # session
+    "Session",
+    "SessionConfig",
+    "LocalSessionConfig",
+    "SSHSessionConfig",
     # worker registry
     "WorkerRegistry",
 ]
