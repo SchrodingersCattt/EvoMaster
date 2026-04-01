@@ -128,6 +128,15 @@ evaluation/question_bank/
 | `duration_budget` | `{"max": int}`（毫秒） | 运行时间预算 |
 | `molcrys_slab_molecular_integrity` | `{"unit_cell_atoms": int, "slab_atoms": int, "layers": int}` | 分子晶体 slab 完整性 |
 | `sc005_disorder_formulas` | `dict` | 无序结构化学式 |
+| `struct_file_atom_count` | `{"filename": str, "expected": int, "tolerance": float}` | 用 pymatgen 读结构文件验证总原子数 |
+| `struct_file_formula` | `{"filename": str, "formula": str}` | 用 pymatgen 读结构文件验证化学式（reduced composition 比较） |
+| `struct_file_bond_count` | `{"filename": str, "element_a": str, "element_b": str, "cutoff_A": float, "expected_count": int, "tolerance": float}` | 统计元素对间短于 cutoff 的键数 |
+| `struct_file_bond_length` | `{"filename": str, "element_a": str, "element_b": str, "cutoff_A": float, "expected": float, "tolerance": float}` | 计算元素对间键长均值并校验 |
+| `struct_file_bond_angle` | `{"filename": str, "triplet": [A, B, C], "expected_deg": float, "tolerance_deg": float, "cutoff_A": float}` | 计算 A-B-C 键角均值（B 为顶点）并校验 |
+| `struct_file_cell_param` | `{"filename": str, "param": "a"\|"b"\|"c"\|"alpha"\|"beta"\|"gamma", "expected": float, "tolerance": float}` | 读晶格参数并校验 |
+| `struct_file_stoichiometry_ratio` | `{"filename": str, "element_a": str, "element_b": str, "expected_ratio": float, "tolerance": float}` | 验证 count(A)/count(B) 比值 |
+| `struct_file_coordination` | `{"filename": str, "center_element": str, "expected": int, "tolerance": float, "cutoff_A": float}` | 统计中心元素的配位数均值并校验 |
+| `struct_file_layer_count` | `{"filename": str, "expected": int, "tolerance": float, "axis": str, "gap_threshold_A": float}` | 沿指定轴用间距聚类统计原子层数 |
 
 ### 不需要对应 `reference_answers` 条目
 
