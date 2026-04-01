@@ -17,8 +17,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 
 def _find_matmaster_py_files() -> list[Path]:
     """Return all .py files under matmaster/ package directory."""
@@ -164,10 +162,6 @@ class TestNoEvomasterSessionImportsInMatmaster:
     Excludes TYPE_CHECKING blocks.
     """
 
-    @pytest.mark.xfail(
-        reason="bash_tool.py still has evomaster.agent.session.local lazy import; future phase will migrate",
-        strict=False,
-    )
     def test_no_evomaster_session_imports(self):
         project_root = Path(__file__).parent.parent.parent
         violations = []
@@ -215,6 +209,64 @@ class TestNoEvomasterEnvBohriumImportsAnywhere:
                 )
         assert violations == [], (
             "Found non-TYPE_CHECKING 'from evomaster.env.bohrium' imports in matmaster/:\n"
+            + "\n".join(violations)
+        )
+
+
+class TestNoEvomasterConfigImportsInMatmaster:
+    """No matmaster file may import from evomaster.config (any level).
+
+    Phase 29 replaces monitor_job/_llm.py ConfigManager with matmaster native config.
+    Excludes TYPE_CHECKING blocks.
+    """
+
+    def test_no_evomaster_config_imports(self):
+        project_root = Path(__file__).parent.parent.parent
+        violations = []
+        for py_file in _find_matmaster_py_files():
+            try:
+                source = py_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            hits = _find_all_imports_matching(
+                source, "evomaster.config", exclude_type_checking=True
+            )
+            for node in hits:
+                rel = py_file.relative_to(project_root)
+                violations.append(
+                    f"{rel}:L{node.lineno}: from {node.module} import ..."
+                )
+        assert violations == [], (
+            "Found non-TYPE_CHECKING 'from evomaster.config' imports in matmaster/:\n"
+            + "\n".join(violations)
+        )
+
+
+class TestNoEvomasterUtilsImportsInMatmaster:
+    """No matmaster file may import from evomaster.utils (any level).
+
+    Phase 29 replaces monitor_job/_llm.py create_llm/LLMConfig with matmaster native config.
+    Excludes TYPE_CHECKING blocks.
+    """
+
+    def test_no_evomaster_utils_imports(self):
+        project_root = Path(__file__).parent.parent.parent
+        violations = []
+        for py_file in _find_matmaster_py_files():
+            try:
+                source = py_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            hits = _find_all_imports_matching(
+                source, "evomaster.utils", exclude_type_checking=True
+            )
+            for node in hits:
+                rel = py_file.relative_to(project_root)
+                violations.append(
+                    f"{rel}:L{node.lineno}: from {node.module} import ..."
+                )
+        assert violations == [], (
+            "Found non-TYPE_CHECKING 'from evomaster.utils' imports in matmaster/:\n"
             + "\n".join(violations)
         )
 
@@ -269,8 +321,8 @@ class TestTargetFilesMigratedToMatmaster:
 
     def test_monitor_job_llm_no_evomaster(self):
         source = self._read_file("matmaster/tools/builtin/monitor_job/_llm.py")
-        assert "from evomaster.adaptors.calculation" not in source, (
-            "_llm.py still imports from evomaster.adaptors.calculation"
+        assert "from evomaster" not in source, (
+            "_llm.py still imports from evomaster"
         )
 
     def test_monitor_job_logs_no_evomaster(self):
