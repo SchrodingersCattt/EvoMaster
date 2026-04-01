@@ -1,5 +1,36 @@
 # pre-commit（lint）共用模板：父 .gitlab-ci.yml 与子 ci/api-deploy.yml、ci/worker-deploy.yml 各自定义同名 job，
 # extends 本模板并只写 needs（子流水线在 docker-build 后）与 rules。
+#
+# .pre-commit-base：无 docker-build 的主流水线（如 MR → main）使用 Runner 直跑 + GitLab cache。
+# .pre-commit-with-built-image：子流水线在 docker-build 之后，拉取镜像并在容器内挂载 CI_PROJECT_DIR，
+#   复用 Dockerfile 内 pre-commit install-hooks（见 Dockerfile 中 PRE_COMMIT_HOME）。
+
+.pre-commit-with-built-image:
+  stage: lint
+  image: $REGISTRY/public/ubuntu:gitlab-docker
+  variables:
+    DOCKER_HOST: tcp://docker-build-service:32375
+  before_script:
+    - |
+      cat > /root/.docker/config.json <<EOF
+      {
+      "auths": {
+        "registry.dp.tech": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        },
+        "dp-harbor-registry.cn-zhangjiakou.cr.aliyuncs.com": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        }
+      }
+      }
+      EOF
+    - test -n "${DYNAMIC_IMAGE:-}" || (echo "pre-commit: 缺少 DYNAMIC_IMAGE（需 needs docker-build 且产出 build.env）" && exit 1)
+    - docker pull "${DYNAMIC_IMAGE}"
+  script:
+    - bash "${CI_PROJECT_DIR}/ci/run_pre_commit_in_docker.sh" "${DYNAMIC_IMAGE}"
+  tags:
+    - k8s-runner-ack
+
 .pre-commit-base:
   stage: lint
   image: $REGISTRY/public/ubuntu:gitlab-0.0.2

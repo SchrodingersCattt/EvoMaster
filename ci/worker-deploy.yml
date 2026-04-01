@@ -54,11 +54,12 @@ stages:
   \"gitlab_url\":\"$CI_PIPELINE_URL\",
   \"deploy_name\":\"${DEVOPS_DEPLOY_NAME:-$CI_JOB_NAME}\"}""" ${devops} > result.json
 
-# lint 独立阶段：在 docker-build 之后（实现见 ci/pre-commit-job.yml）
+# lint 独立阶段：在 docker-build 之后，复用构建镜像内预装的 pre-commit 环境（见 ci/pre-commit-job.yml）
 pre-commit:
-  extends: .pre-commit-base
+  extends: .pre-commit-with-built-image
   needs:
-    - docker-build
+    - job: docker-build
+      artifacts: true
   rules:
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_TAG'
       when: on_success
@@ -86,12 +87,16 @@ docker-build:
     - >-
       docker buildx build --progress=plain -f ${CI_PROJECT_DIR}/Dockerfile --target worker -t ${DOCKER_IMAGE} --cache-to type=inline,mode=max . --push
     - docker run --rm ${DOCKER_IMAGE} python -c "import src.worker.agent_worker"
+    - echo "DYNAMIC_IMAGE=${DOCKER_IMAGE}" >> ${CI_PROJECT_DIR}/build.env
   retry: 2
   tags:
     - k8s-runner-ack
   cache:
     paths:
       - /cache
+  artifacts:
+    reports:
+      dotenv: ${CI_PROJECT_DIR}/build.env
   rules:
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/ || $CI_COMMIT_TAG'
       when: on_success

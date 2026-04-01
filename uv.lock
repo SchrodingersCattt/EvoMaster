@@ -1890,6 +1890,7 @@ dependencies = [
     { name = "openai" },
     { name = "oss2" },
     { name = "paramiko" },
+    { name = "pre-commit" },
     { name = "pydantic" },
     { name = "pymupdf" },
     { name = "pymysql" },
@@ -1915,7 +1916,6 @@ calculation = [
     { name = "pymatgen" },
 ]
 dev = [
-    { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -1941,7 +1941,7 @@ requires-dist = [
     { name = "openai" },
     { name = "oss2" },
     { name = "paramiko", specifier = ">=4.0.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.5.1" },
+    { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "pydantic" },
     { name = "pymatgen", marker = "extra == 'calculation'", specifier = ">=2024.1" },
     { name = "pymupdf" },
