@@ -371,7 +371,7 @@ mcp:
 # ============================================
 skills:
   enabled: true
-  skills_root: evomaster/skills
+  skills_root: matmaster/skills/lazymcp
 
 # ============================================
 # Session 配置

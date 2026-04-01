@@ -62,7 +62,7 @@ build-backend = "hatchling.build"
 asyncio_mode = "auto"
 
 [tool.hatch.build.targets.wheel]
-packages = ["evomaster", "matmaster", "utils"]
+packages = ["matmaster", "utils"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

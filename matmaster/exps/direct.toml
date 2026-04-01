@@ -38,7 +38,7 @@ mcp = "*"
 
 [skills]
 enabled = true
-skills_root = ["playground/mat_master/skills", "matmaster/skills/lazymcp"]
+skills_root = ["matmaster/skills/lazymcp"]
 cache_dir = "matmaster/cache"
 config_dir = "matmaster_config"
 mcp_config_file = "mcp_config.json"
