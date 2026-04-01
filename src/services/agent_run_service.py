@@ -58,6 +58,28 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
 _CONFIRM_TOOLS: frozenset[str] = frozenset({})
 
+_MATMASTER_CONFIG_DIR = _project_root / 'matmaster_config'
+
+
+def _get_agent_default_llm() -> str | None:
+    """Read agents.general.llm from matmaster_config/config.yaml.
+
+    Returns None if the file or key is missing.
+    """
+    config_path = _MATMASTER_CONFIG_DIR / 'config.yaml'
+    if not config_path.exists():
+        return None
+    import yaml
+
+    with open(config_path, encoding='utf-8') as f:
+        raw = yaml.safe_load(f) or {}
+    agents = raw.get('agents')
+    if isinstance(agents, dict):
+        general = agents.get('general', {})
+        if isinstance(general, dict):
+            return general.get('llm')
+    return None
+
 
 def _build_workspace_upload_fn(
     archival_config: WorkspaceArchivalConfig | None,
@@ -313,15 +335,10 @@ class AgentRunService:
             from matmaster.providers.llm_factory import build_provider
 
             llm_config = load_llm_config(
-                playground.config_path.parent / 'llm_config.yaml'
+                _project_root / 'matmaster_config' / 'llm_config.yaml'
             )
 
-            agents = getattr(playground.config, 'agents', None)
-            agent_default_llm = None
-            if isinstance(agents, dict):
-                general = agents.get('general', {})
-                if isinstance(general, dict):
-                    agent_default_llm = general.get('llm')
+            agent_default_llm = _get_agent_default_llm()
 
             pg_ctx = pg_ctx.model_copy(
                 update={
