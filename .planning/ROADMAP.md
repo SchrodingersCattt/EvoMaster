@@ -302,9 +302,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — Session Protocol + LocalSession 升级 + tmux 辅助模块
-- [ ] 25-02-PLAN.md — SSHSession 原生实现（内联 SSHEnv）
-- [ ] 25-03-PLAN.md — Playground 参数化改造 + PlaygroundManager YAML 解析 + Mixin 内联
+- [ ] 26-01-PLAN.md — Helper 内化（bash_safety + editor 内联）+ web_search 名称修正
+- [ ] 26-02-PLAN.md — MonitorJobTool 搬入 matmaster 并改继承 BuiltinTool
+- [ ] 26-03-PLAN.md — EvoToolAdapter 清理 + exp.py 原生注册切换 + 回归测试
 
 ### Phase 27: MCP 与 Calculation 原生链路
 **Goal**: MCP 连接、schema cache 与 calculation path adaptor 全部收回 matmaster 侧，同时维持 Bohrium executor/storage/OSS 协议兼容
