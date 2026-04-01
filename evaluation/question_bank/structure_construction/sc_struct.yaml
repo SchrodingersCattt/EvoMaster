@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: struct
 questions:
-- id: SC_struct_001
+- id: SC_struct_001_20260401
   capability: structure_construction
   domain: struct
   intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled
@@ -29,6 +29,18 @@ questions:
   - key: mismatch_percent
     value: 1.6
     tolerance: 1.0
+  - key: hetero_formula
+    value:
+      filename: '*.cif'
+      formula: B2C2N2
+  - key: interlayer_distance_A
+    value:
+      filename: '*.cif'
+      element_a: C
+      element_b: B
+      cutoff_A: 5.0
+      expected: 3.35
+      tolerance: 0.3
   - key: required_fields
     value:
     - structure_file
@@ -48,6 +60,15 @@ questions:
     criterion: Lattice mismatch is below 2%.
     axis: correctness
     verify: numerical_range
+  - id: hetero_formula
+    criterion: The output CIF has the expected graphene/h-BN supercell formula (equal
+      C, B, N counts) verified by reading the structure file.
+    axis: correctness
+    verify: struct_file_formula
+  - id: interlayer_distance_A
+    criterion: The mean C-B interlayer distance read from the output CIF is near 3.35 A.
+    axis: correctness
+    verify: struct_file_bond_length
   - id: required_fields
     criterion: Output includes structure file, lattice mismatch percentage below 2%,
       total atom count, interlayer distance near 3.35 A, AB stacking, and vacuum thickness
@@ -79,7 +100,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_002_20260331
+- id: SC_struct_002_20260401
   capability: structure_construction
   domain: struct
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular
@@ -102,7 +123,7 @@ questions:
 
     (3) 最终 slab 的原子总数；
 
-    (4) 是否满足“最终原子数 = 单胞原子数的 4 倍”。
+    (4) 是否满足"最终原子数 = 单胞原子数的 4 倍"。
 
 
     输出结构文件，并给出上述核查结论。
@@ -120,11 +141,15 @@ questions:
   data_files: []
   reference_answers:
   - key: unit_cell_atoms
-    value: 144
-    tolerance: 0.0
+    value:
+      filename: '*PUBMUU03*'
+      expected: 144
+      tolerance: 0
   - key: total_atoms
-    value: 576
-    tolerance: 0.0
+    value:
+      filename: '*.cif'
+      expected: 576
+      tolerance: 0
   - key: required_fields
     value:
     - structure_file
@@ -142,14 +167,13 @@ questions:
     value: *id002
   scoring_checklist:
   - id: unit_cell_atoms
-    criterion: The input unit cell atom count is reported correctly (144 atoms).
+    criterion: The input unit cell atom count read from the downloaded CIF is 144 atoms.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_atom_count
   - id: total_atoms
-    criterion: Total atom count is correct (576 atoms for a 4-layer slab built directly
-      from the 144-atom input unit cell).
+    criterion: Total atom count read from the output slab CIF is 576 atoms (4 × 144).
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_atom_count
   - id: molcrys_slab_molecular_integrity
     criterion: The slab-builder tool observation reports `molecule_intact=true`, i.e.
       no molecules are cut by the slab cut.
@@ -186,7 +210,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_003
+- id: SC_struct_003_20260401b
   capability: structure_construction
   domain: struct
   intent: Passivate dangling bonds on Si(100) surface slab bottom with hydrogen atoms.
@@ -209,10 +233,30 @@ questions:
     description: Specification for Si(100) surface hydrogen passivation.
   reference_answers:
   - key: si_h_bond_length_A
-    value: 1.48
-    tolerance: 0.15
-  - key: passivation_quality
-    value: H atoms added to satisfy 4-coordination on bottom Si atoms
+    value:
+      filename: '*POSCAR*'
+      element_a: Si
+      element_b: H
+      cutoff_A: 2.0
+      expected: 1.48
+      tolerance: 0.15
+  - key: si_coordination
+    value:
+      filename: '*POSCAR*'
+      center_element: Si
+      expected: 4
+      tolerance: 0
+      cutoff_A: 2.6
+  - key: si_si_h_angle_deg
+    value:
+      filename: '*POSCAR*'
+      triplet:
+      - Si
+      - Si
+      - H
+      expected_deg: 109.47
+      tolerance_deg: 8.0
+      cutoff_A: 2.6
   - key: required_fields
     value:
     - structure_file
@@ -225,14 +269,20 @@ questions:
     value: *id002
   scoring_checklist:
   - id: si_h_bond_length_A
-    criterion: A representative Si-H bond length is reported near 1.48 A.
+    criterion: A representative Si-H bond length in the POSCAR output is near 1.48 A.
     axis: correctness
-    verify: numerical_range
-  - id: passivation_quality
-    criterion: Bottom Si atoms passivated with H to achieve 4-coordination, with Si-H
-      bond length ~1.48 A.
+    verify: struct_file_bond_length
+  - id: si_coordination
+    criterion: The mean coordination number of Si atoms in the POSCAR (cutoff 2.6 A)
+      is 4, confirming that bottom dangling bonds are fully saturated.
     axis: correctness
-    verify: llm_binary_judge
+    verify: struct_file_coordination
+  - id: si_si_h_angle_deg
+    criterion: The mean Si-Si-H angle read from the POSCAR is close to tetrahedral
+      109.47 degrees (tolerance 8 degrees), confirming that passivating H atoms sit
+      at tetrahedral positions around the surface Si atoms.
+    axis: correctness
+    verify: struct_file_bond_angle
   - id: required_fields
     criterion: Output includes structure file, number of added H atoms, representative
       Si-H bond length, and an explicit check that bottom Si atoms reach four coordination.
@@ -263,7 +313,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_004
+- id: SC_struct_004_20260401
   capability: structure_construction
   domain: struct
   intent: Exfoliate a MoS2 monolayer from bulk 2H-MoS2 and verify the 2D structure.
@@ -286,10 +336,17 @@ questions:
     description: Specification for MoS2 monolayer exfoliation.
   reference_answers:
   - key: stoichiometry_formula
-    value: MoS2
+    value:
+      filename: '*POSCAR*'
+      formula: MoS2
   - key: layer_thickness_A
-    value: 3.1
-    tolerance: 0.6
+    value:
+      filename: '*POSCAR*'
+      element_a: Mo
+      element_b: S
+      cutoff_A: 3.0
+      expected: 3.1
+      tolerance: 0.6
   - key: required_fields
     value:
     - structure_file
@@ -302,13 +359,13 @@ questions:
     value: *id002
   scoring_checklist:
   - id: stoichiometry_formula
-    criterion: The reported stoichiometry is MoS2.
+    criterion: The output structure file has MoS2 stoichiometry (verified by reading the file).
     axis: correctness
-    verify: contains_all
+    verify: struct_file_formula
   - id: layer_thickness_A
-    criterion: The reported monolayer thickness is close to 3.1 A.
+    criterion: The Mo-S bond length read from the output POSCAR is representative of the ~3.1 A monolayer thickness.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_bond_length
   - id: required_fields
     criterion: Output includes structure file, explicit MoS2 stoichiometry verification,
       layer thickness near 3.1 A, and vacuum layer near 20 A.
@@ -339,7 +396,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260331
+- id: SC_struct_005_20260401
   capability: structure_construction
   domain: struct
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and
@@ -384,8 +441,10 @@ questions:
   - planner
   reference_answers:
   - key: structures_processed
-    value: 5
-    tolerance: 0.0
+    value:
+      pattern: 'ordered_*'
+      expected: 5
+      tolerance: 0
   - key: sc005_disorder_formulas
     value: {}
   - key: required_fields
@@ -405,9 +464,10 @@ questions:
     value: *id001
   scoring_checklist:
   - id: structures_processed
-    criterion: All 5 disordered structures are processed.
+    criterion: All 5 disordered structures are processed (verified by counting ordered-replica
+      output files in workspace).
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_count
   - id: sc005_disorder_formulas
     criterion: The answer includes the four reference formula strings for DAP-4, PAP-H4,
       PAP-M5, and TILPEN; for DAN-2 the reported ordered-replica chemical_formula
@@ -448,7 +508,7 @@ questions:
       a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-- id: SC_struct_006
+- id: SC_struct_006_20260401
   capability: structure_construction
   domain: struct
   intent: Add missing hydrogens to the monomethylammonium perchlorate crystal MEAPER
@@ -477,7 +537,9 @@ questions:
   - key: file_exists
     value: meaper_hydrogenated.cif
   - key: target_formula
-    value: C8H48Cl8N8O32
+    value:
+      filename: meaper_hydrogenated.cif
+      formula: C8H48Cl8N8O32
   - key: required_fields
     value:
     - structure_file
@@ -487,8 +549,15 @@ questions:
     - oxygen_not_hydrogenated
     - bond_angle_check
   - key: hcn_angle_deg
-    value: 109.48
-    tolerance: 8.0
+    value:
+      filename: meaper_hydrogenated.cif
+      triplet:
+      - H
+      - C
+      - H
+      expected_deg: 109.48
+      tolerance_deg: 8.0
+      cutoff_A: 1.5
   - key: duration_budget
     value: *id001
   - key: token_budget_total
@@ -499,14 +568,14 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: target_formula
-    criterion: The final reported chemical formula is correct after hydrogenation.
+    criterion: The chemical formula read from meaper_hydrogenated.cif matches C8H48Cl8N8O32.
     axis: correctness
-    verify: contains_all
+    verify: struct_file_formula
   - id: hcn_angle_deg
-    criterion: The reported representative H-C-H or H-N-H bond angle is close to tetrahedral
+    criterion: The mean H-C-H angle computed from meaper_hydrogenated.cif is close to tetrahedral
       109.48 degrees within a reasonable tolerance.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_bond_angle
   - id: required_fields
     criterion: Output includes structure file, final formula, explicit checks that
       C becomes CH3 and N becomes NH3, confirmation that perchlorate O atoms are not
@@ -539,7 +608,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_007
+- id: SC_struct_007_20260401
   capability: structure_construction
   domain: struct
   intent: Build the nitroprusside anion and validate its coordination, bond lengths,
@@ -568,26 +637,64 @@ questions:
   - key: target_formula
     value: FeC5N6O
   - key: fe_coordination
-    value: 6
-    tolerance: 0.0
+    value:
+      filename: nitroprusside.xyz
+      center_element: Fe
+      expected: 6
+      tolerance: 0
+      cutoff_A: 2.5
   - key: fe_c_bond_count
-    value: 5
-    tolerance: 0.0
+    value:
+      filename: nitroprusside.xyz
+      element_a: Fe
+      element_b: C
+      cutoff_A: 2.0
+      expected_count: 5
+      tolerance: 0
   - key: fe_n_bond_count
-    value: 1
-    tolerance: 0.0
+    value:
+      filename: nitroprusside.xyz
+      element_a: Fe
+      element_b: N
+      cutoff_A: 2.0
+      expected_count: 1
+      tolerance: 0
   - key: no_bond_length_A
-    value: 1.2
-    tolerance: 0.1
+    value:
+      filename: nitroprusside.xyz
+      element_a: 'N'
+      element_b: 'O'
+      cutoff_A: 1.5
+      expected: 1.2
+      tolerance: 0.1
   - key: fe_no_angle_deg
-    value: 178.0
-    tolerance: 3.0
+    value:
+      filename: nitroprusside.xyz
+      triplet:
+      - Fe
+      - 'N'
+      - 'O'
+      expected_deg: 180.0
+      tolerance_deg: 3.0
+      cutoff_A: 2.5
   - key: cn_bond_length_A
-    value: 1.16
-    tolerance: 0.08
+    value:
+      filename: nitroprusside.xyz
+      element_a: C
+      element_b: 'N'
+      cutoff_A: 1.5
+      expected: 1.16
+      tolerance: 0.08
   - key: fe_cn_angle_deg
-    value: 175.0
-    tolerance: 5.0
+    value:
+      filename: nitroprusside.xyz
+      triplet:
+      - Fe
+      - C
+      - 'N'
+      expected_deg: 175.0
+      tolerance_deg: 5.0
+      cutoff_A: 2.5
   - key: required_fields
     value:
     - file_exists
@@ -613,35 +720,33 @@ questions:
     axis: correctness
     verify: contains_all
   - id: fe_coordination
-    criterion: The reported Fe coordination number is 6.
+    criterion: The Fe coordination number computed from nitroprusside.xyz is 6.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_coordination
   - id: fe_c_bond_count
-    criterion: The reported count of Fe-C bonds shorter than 2.0 A is 5.
+    criterion: The count of Fe-C bonds shorter than 2.0 A in nitroprusside.xyz is 5.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_bond_count
   - id: fe_n_bond_count
-    criterion: The reported count of Fe-N bonds shorter than 2.0 A is 1.
+    criterion: The count of Fe-N bonds shorter than 2.0 A in nitroprusside.xyz is 1.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_bond_count
   - id: no_bond_length_A
-    criterion: A representative N-O bond length is reported below 1.3 A.
+    criterion: The mean N-O bond length read from nitroprusside.xyz is below 1.3 A.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_bond_length
   - id: fe_no_angle_deg
-    criterion: A representative Fe-N-O angle is reported above 175 degrees and close
-      to linear.
+    criterion: The mean Fe-N-O angle computed from nitroprusside.xyz is close to linear (≥177°).
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_bond_angle
   - id: cn_bond_length_A
-    criterion: A representative C-N bond length is reported below 1.2 A.
+    criterion: The mean C-N bond length read from nitroprusside.xyz is below 1.2 A.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_bond_length
   - id: fe_cn_angle_deg
-    criterion: A representative Fe-C-N angle is reported above 170 degrees and close
-      to linear.
+    criterion: The mean Fe-C-N angle computed from nitroprusside.xyz is close to linear (≥170°).
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_bond_angle
   - id: required_fields
     criterion: The answer explicitly reports all required metrics and ties them to
       the generated nitroprusside structure.
@@ -672,7 +777,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008
+- id: SC_struct_008_20260401
   capability: structure_construction
   domain: struct
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
@@ -700,17 +805,30 @@ questions:
   - key: file_exists
     value: gamma_alumina.cif
   - key: al_o_ratio
-    value: 0.6667
-    tolerance: 0.0334
+    value:
+      filename: gamma_alumina.cif
+      element_a: Al
+      element_b: O
+      expected_ratio: 0.6667
+      tolerance: 0.0334
   - key: alpha_deg
-    value: 90.0
-    tolerance: 2.0
+    value:
+      filename: gamma_alumina.cif
+      param: alpha
+      expected: 90.0
+      tolerance: 2.0
   - key: beta_deg
-    value: 90.0
-    tolerance: 2.0
+    value:
+      filename: gamma_alumina.cif
+      param: beta
+      expected: 90.0
+      tolerance: 2.0
   - key: gamma_deg
-    value: 90.0
-    tolerance: 2.0
+    value:
+      filename: gamma_alumina.cif
+      param: gamma
+      expected: 90.0
+      tolerance: 2.0
   - key: max_force_eV_A
     value: 0.05
     tolerance: 0.05
@@ -733,21 +851,21 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: al_o_ratio
-    criterion: The reported Al:O ratio is approximately 2:3 within 5 percent.
+    criterion: The Al:O stoichiometry ratio read from gamma_alumina.cif is approximately 2:3 within 5%.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_stoichiometry_ratio
   - id: alpha_deg
-    criterion: The reported alpha angle is close to 90 degrees.
+    criterion: The alpha cell angle read from gamma_alumina.cif is close to 90 degrees.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_cell_param
   - id: beta_deg
-    criterion: The reported beta angle is close to 90 degrees.
+    criterion: The beta cell angle read from gamma_alumina.cif is close to 90 degrees.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_cell_param
   - id: gamma_deg
-    criterion: The reported gamma angle is close to 90 degrees.
+    criterion: The gamma cell angle read from gamma_alumina.cif is close to 90 degrees.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_cell_param
   - id: max_force_eV_A
     criterion: The reported relaxed maximum force is below 0.1 eV/A.
     axis: correctness
@@ -783,7 +901,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009
+- id: SC_struct_009_20260401b
   capability: structure_construction
   domain: struct
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce
@@ -809,11 +927,26 @@ questions:
   - key: file_exists
     value: ceo2_111_trilayer.cif
   - key: slab_layers
-    value: 9
-    tolerance: 0.0
+    value:
+      filename: ceo2_111_trilayer.cif
+      expected: 9
+      tolerance: 0
+      axis: z
+      gap_threshold_A: 0.8
   - key: ce_o_ratio
-    value: 0.5
-    tolerance: 0.05
+    value:
+      filename: ceo2_111_trilayer.cif
+      element_a: Ce
+      element_b: O
+      expected_ratio: 0.5
+      tolerance: 0.05
+  - key: o_termination
+    value:
+      filename: ceo2_111_trilayer.cif
+      element: O
+      axis: z
+      side: both
+      layer_tol_A: 0.5
   - key: required_fields
     value:
     - file_exists
@@ -831,13 +964,19 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: slab_layers
-    criterion: The reported total layer count is 9.
+    criterion: The layer count along z computed from ceo2_111_trilayer.cif is 9.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_layer_count
   - id: ce_o_ratio
-    criterion: The reported Ce:O ratio is consistent with CeO2 stoichiometry.
+    criterion: The Ce:O ratio read from ceo2_111_trilayer.cif is consistent with CeO2 stoichiometry.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_stoichiometry_ratio
+  - id: o_termination
+    criterion: Both the top and bottom outermost atomic layers of ceo2_111_trilayer.cif
+      are O-terminated (verified by reading the file and checking the outermost z-layer
+      element is O).
+    axis: correctness
+    verify: struct_file_surface_termination
   - id: required_fields
     criterion: The answer explicitly reports the 9-layer construction, symmetry check,
       oxygen-terminated outermost layer, stoichiometric CeO2 ratio, and (111) surface

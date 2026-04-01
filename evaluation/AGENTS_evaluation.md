@@ -65,8 +65,6 @@ evaluation/question_bank/
 | `human_prompt_seed` | **必填** | — | 直接发给 Agent 的用户 prompt（中英文皆可） |
 | `tags` | 可选 | `[]` | 标签，目前未被代码消费（开发者归类用） |
 | `mode_scope` | 可选 | `["direct", "planner"]` | 决定该题跑哪些 mode；不能为空 |
-| `required_tools` | 可选 | `[]` | 该题必需的 MCP 工具名（工具白名单声明） |
-| `optional_tools` | 可选 | `[]` | 可选增强工具，目前未被代码消费 |
 | `data_files` | 可选 | `[]` | 输入数据文件引用；Runner 会复制到 Agent workspace |
 | `reference_answers` | **条件必填** | `[]` | 非 `safety_refusal` 题必须至少 1 条；`safety_refusal` 可为空 |
 | `scoring_checklist` | **必填** | — | 至少 1 条评分项 |
@@ -130,6 +128,17 @@ evaluation/question_bank/
 | `duration_budget` | `{"max": int}`（毫秒） | 运行时间预算 |
 | `molcrys_slab_molecular_integrity` | `{"unit_cell_atoms": int, "slab_atoms": int, "layers": int}` | 分子晶体 slab 完整性 |
 | `sc005_disorder_formulas` | `dict` | 无序结构化学式 |
+| `struct_file_atom_count` | `{"filename": str, "expected": int, "tolerance": float}` | 用 pymatgen 读结构文件验证总原子数 |
+| `struct_file_formula` | `{"filename": str, "formula": str}` | 用 pymatgen 读结构文件验证化学式（reduced composition 比较） |
+| `struct_file_bond_count` | `{"filename": str, "element_a": str, "element_b": str, "cutoff_A": float, "expected_count": int, "tolerance": float}` | 统计元素对间短于 cutoff 的键数 |
+| `struct_file_bond_length` | `{"filename": str, "element_a": str, "element_b": str, "cutoff_A": float, "expected": float, "tolerance": float}` | 计算元素对间键长均值并校验 |
+| `struct_file_bond_angle` | `{"filename": str, "triplet": [A, B, C], "expected_deg": float, "tolerance_deg": float, "cutoff_A": float}` | 计算 A-B-C 键角均值（B 为顶点）并校验 |
+| `struct_file_cell_param` | `{"filename": str, "param": "a"\|"b"\|"c"\|"alpha"\|"beta"\|"gamma", "expected": float, "tolerance": float}` | 读晶格参数并校验 |
+| `struct_file_stoichiometry_ratio` | `{"filename": str, "element_a": str, "element_b": str, "expected_ratio": float, "tolerance": float}` | 验证 count(A)/count(B) 比值 |
+| `struct_file_coordination` | `{"filename": str, "center_element": str, "expected": int, "tolerance": float, "cutoff_A": float}` | 统计中心元素的配位数均值并校验 |
+| `struct_file_layer_count` | `{"filename": str, "expected": int, "tolerance": float, "axis": str, "gap_threshold_A": float}` | 沿指定轴用间距聚类统计原子层数 |
+| `struct_file_count` | `{"pattern": str, "expected": int, "tolerance": int}` | 统计 workspace 中匹配 glob 的文件数（无需 pymatgen） |
+| `struct_file_surface_termination` | `{"filename": str, "element": str, "axis": "x"\|"y"\|"z", "side": "top"\|"bottom"\|"both", "layer_tol_A": float}` | 检查 slab 最外层（top/bottom/both）是否由指定元素构成；用于验证 O-terminated 或其他特定终止面（如 CeO2(111) 的 O 终止）|
 
 ### 不需要对应 `reference_answers` 条目
 
@@ -156,8 +165,7 @@ evaluation/question_bank/
 | `capability` | ❌ | `--capabilities` 过滤；safety 路由；聚合 + 报告 |
 | `domain` | ❌ | 聚合 + 报告 |
 | `mode_scope` | ❌ | 决定跑哪些 mode |
-| `required_tools` | ❌ | 工具白名单声明 |
-| `tags` / `optional_tools` | ❌ | 目前未被代码消费（预留） |
+| `tags` | ❌ | 目前未被代码消费（预留） |
 | `reference_answers` | ❌ | Evaluator 的标准答案查找表 |
 | `scoring_checklist` | ❌ | Evaluator 逐条执行判分 |
 
@@ -210,6 +218,14 @@ scoring_checklist:
     axis: efficiency
     verify: token_budget
 ```
+
+### 6. 评分与工具名称解耦
+
+`human_prompt_seed`（直接发给 Agent 的 prompt）**禁止包含内部工具名称**（如 `mat_sg_build_surface_slab`、`mat_dpa_submit_optimize_structure` 等 MCP tool identifier）。Agent 应自行根据任务描述选择合适的工具，而不是被 prompt 直接提示。
+
+- `reference_answers` 中的 `tool_name` / `tool_arg` 字段、`scoring_checklist.criterion` 中引用工具名均为**内部评分逻辑**，不发给 Agent，允许使用工具名。
+- `intent` 中可以使用通用术语（如"表面构建工具"、"结构优化器"），但同样不应包含具体 MCP tool identifier。
+- 新增或修改题目时，需检查 `human_prompt_seed` 中是否意外泄漏了工具名；审查方式：在所有 YAML 的 `human_prompt_seed` 文本中搜索 `mat_sg_`、`mat_dpa_`、`mat_struct_db_` 等前缀。
 
 ---
 
