@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from evomaster.agent.session.local import LocalSession
+from matmaster.sessions.local import LocalSession
 from matmaster.tools.builtin.bash_tool import BashTool
 from matmaster.tools.tool_registry import Tool
 
@@ -81,8 +81,8 @@ class TestBashToolAsyncSubprocess:
     """BashTool async subprocess path for matmaster LocalSession."""
 
     def _make_tool_with_local_session(self) -> BashTool:
-        """Create BashTool with a real evomaster LocalSession instance."""
-        session = LocalSession()
+        """Create BashTool with a matmaster LocalSession instance."""
+        session = LocalSession(Path("/tmp"))
         return BashTool(session=session, workdir=Path("/tmp"))
 
     async def test_normal_command(self) -> None:

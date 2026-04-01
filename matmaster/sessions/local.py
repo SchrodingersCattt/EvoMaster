@@ -40,8 +40,8 @@ class LocalSession:
         """Execute a bash command via subprocess.
 
         Returns dict with: stdout, stderr, exit_code, working_dir, output.
-        ``stop_event`` is accepted for interface compatibility with evomaster
-        BaseSession but has no effect on subprocess.run execution.
+        When ``stop_event`` is set during execution, the subprocess is killed
+        and exit_code 130 is returned (matching evomaster BaseSession contract).
         """
         if is_input:
             return {
@@ -53,6 +53,10 @@ class LocalSession:
             }
 
         effective_timeout = timeout or self._timeout
+
+        if stop_event is not None:
+            return self._exec_bash_with_stop(command, effective_timeout, stop_event)
+
         try:
             proc = subprocess.run(
                 ["bash", "-c", command],
@@ -76,6 +80,56 @@ class LocalSession:
                 "working_dir": str(self._workspace_path),
                 "output": f"Command timeout after {effective_timeout}s",
             }
+
+    def _exec_bash_with_stop(
+        self,
+        command: str,
+        timeout: int,
+        stop_event: threading.Event,
+    ) -> dict[str, Any]:
+        """Execute with stop_event polling -- kill subprocess when stop is requested."""
+        proc = subprocess.Popen(
+            ["bash", "-c", command],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            cwd=str(self._workspace_path),
+            text=True,
+        )
+        poll_interval = 0.1
+        elapsed = 0.0
+        while proc.poll() is None:
+            if stop_event.is_set():
+                proc.kill()
+                proc.wait()
+                return {
+                    "stdout": "",
+                    "stderr": "Cancelled by stop request",
+                    "exit_code": 130,
+                    "working_dir": str(self._workspace_path),
+                    "output": "Cancelled by stop request",
+                }
+            stop_event.wait(poll_interval)
+            elapsed += poll_interval
+            if elapsed >= timeout:
+                proc.kill()
+                proc.wait()
+                return {
+                    "stdout": "",
+                    "stderr": f"Command timeout after {timeout}s",
+                    "exit_code": 124,
+                    "working_dir": str(self._workspace_path),
+                    "output": f"Command timeout after {timeout}s",
+                }
+
+        stdout = proc.stdout.read() if proc.stdout else ""
+        stderr = proc.stderr.read() if proc.stderr else ""
+        return {
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": proc.returncode,
+            "working_dir": str(self._workspace_path),
+            "output": stdout or stderr,
+        }
 
     def read_file(self, path: str, encoding: str = "utf-8") -> str:
         """Read file content."""

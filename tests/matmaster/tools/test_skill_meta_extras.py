@@ -1,4 +1,4 @@
-from evomaster.skills.base import Skill, SkillMetaInfo
+from matmaster.skills.registry import Skill, SkillMetaInfo
 
 
 class TestSkillMetaInfoExtras:

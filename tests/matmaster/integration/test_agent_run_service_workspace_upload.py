@@ -3,8 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from matmaster.types.context import WorkspaceArchivalConfig
-from src.services.agent_run_service import _build_workspace_upload_fn
+
+_build_workspace_upload_fn = pytest.importorskip(
+    "src.services.agent_run_service",
+    reason="src not available (isolation test)",
+)._build_workspace_upload_fn
 
 
 def test_build_workspace_upload_fn_uses_session_level_prefix() -> None:

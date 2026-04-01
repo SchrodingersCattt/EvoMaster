@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
 from matmaster.core.bus import MessageBus
@@ -278,7 +280,10 @@ class TestMatMasterRunAgentE2E:
         self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
         """E2E: run_agent() with mock LLM provider injected."""
-        from src.services.agent_run_service import AgentRunService
+        AgentRunService = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        ).AgentRunService
 
         mock_sessions_svc = MagicMock()
         mock_sessions_svc.get_session_user_id.return_value = 'user-123'
@@ -379,7 +384,10 @@ class TestMatMasterRunAgentE2E:
         self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
         """Current task query should not be replayed into history for the LLM."""
-        from src.services.agent_run_service import AgentRunService
+        AgentRunService = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        ).AgentRunService
 
         mock_sessions_svc = MagicMock()
         mock_sessions_svc.get_session_user_id.return_value = 'user-123'
@@ -491,7 +499,10 @@ class TestMatMasterRunAgentE2E:
         self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
         """Regression: events table failure exits before router bootstrap."""
-        from src.services.agent_run_service import AgentRunService
+        AgentRunService = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        ).AgentRunService
 
         mock_sessions_svc = MagicMock()
         mock_sessions_svc.get_session_user_id.return_value = 'user-123'
@@ -558,7 +569,10 @@ class TestMatMasterRunAgentE2E:
         self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
         """Bohrium setup events must reach SSE before setup() returns."""
-        from src.services.agent_run_service import AgentRunService
+        AgentRunService = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        ).AgentRunService
 
         mock_sessions_svc = MagicMock()
         mock_sessions_svc.get_session_user_id.return_value = 'user-123'
@@ -685,8 +699,14 @@ class TestMatMasterRunAgentE2E:
         self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
         """When setup aborts, error/stream_closed must be top-level SSE types (not bohrium_node)."""
-        from src.services.agent_run_bohrium import BohriumSetupResult
-        from src.services.agent_run_service import AgentRunService
+        BohriumSetupResult = pytest.importorskip(
+            "src.services.agent_run_bohrium",
+            reason="src not available (isolation test)",
+        ).BohriumSetupResult
+        AgentRunService = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        ).AgentRunService
 
         mock_sessions_svc = MagicMock()
         mock_sessions_svc.get_session_user_id.return_value = 'user-123'
@@ -798,7 +818,10 @@ class TestMatMasterRunAgentE2E:
         self, mock_build_provider, mock_load_config, tmp_path: Path
     ) -> None:
         """Bohrium-stage exceptions should surface through SSE error payloads."""
-        from src.services.agent_run_service import AgentRunService
+        AgentRunService = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        ).AgentRunService
 
         mock_sessions_svc = MagicMock()
         mock_sessions_svc.get_session_user_id.return_value = 'user-123'

@@ -41,7 +41,10 @@ from matmaster.types.messages import (
     ToolCallData,
 )
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec, KernelResult
-from src.services.agent_run_bohrium import BohriumSetupResult
+BohriumSetupResult = pytest.importorskip(
+    "src.services.agent_run_bohrium",
+    reason="src not available (isolation test)",
+).BohriumSetupResult
 
 # -- Mock helpers ------------------------------------------------
 
@@ -513,7 +516,10 @@ class TestAgentRunServiceConfirmationRecovery:
         _RecordingAsyncTool,
         _RecordingRuntimeHook,
     ]:
-        from src.services.agent_run_service import AgentRunService
+        AgentRunService = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        ).AgentRunService
 
         svc = AgentRunService(sessions_service=MagicMock())
         svc._sessions_service.get_session_user_id.return_value = None
@@ -595,7 +601,10 @@ class TestAgentRunServiceConfirmationRecovery:
 
     @pytest.mark.asyncio
     async def test_poll_reply_queue_uses_integer_second_timeout(self) -> None:
-        from src.services.agent_run_service import _poll_reply_queue
+        _poll_reply_queue = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        )._poll_reply_queue
 
         reply_queue = _RedisCompatibleReplyQueue()
         reply_queue.put_content("approved")
@@ -607,7 +616,10 @@ class TestAgentRunServiceConfirmationRecovery:
 
     @pytest.mark.asyncio
     async def test_poll_reply_queue_cancel_returns_none(self) -> None:
-        from src.services.agent_run_service import _poll_reply_queue
+        _poll_reply_queue = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        )._poll_reply_queue
 
         reply_queue = _RedisCompatibleReplyQueue()
         reply_queue.put_cancel()
@@ -618,7 +630,10 @@ class TestAgentRunServiceConfirmationRecovery:
 
     @pytest.mark.asyncio
     async def test_poll_reply_queue_retries_on_empty(self) -> None:
-        from src.services.agent_run_service import _poll_reply_queue
+        _poll_reply_queue = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        )._poll_reply_queue
 
         reply_queue = _RedisCompatibleReplyQueue()
         threading.Timer(0.05, reply_queue.put_content, args=("delayed",)).start()
@@ -630,7 +645,10 @@ class TestAgentRunServiceConfirmationRecovery:
 
     @pytest.mark.asyncio
     async def test_poll_reply_queue_timeout_via_wait_for(self) -> None:
-        from src.services.agent_run_service import _poll_reply_queue
+        _poll_reply_queue = pytest.importorskip(
+            "src.services.agent_run_service",
+            reason="src not available (isolation test)",
+        )._poll_reply_queue
 
         reply_queue = _RedisCompatibleReplyQueue()
 

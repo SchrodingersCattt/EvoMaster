@@ -13,6 +13,8 @@ import threading
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 from typing import Any
+
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from matmaster.types.context import PlaygroundContext
@@ -97,7 +99,10 @@ def _make_ctx(tmp_path: Path) -> PlaygroundContext:
 
 def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
     """Build an AgentRunService with standard mocks applied."""
-    from src.services.agent_run_service import AgentRunService
+    AgentRunService = pytest.importorskip(
+        "src.services.agent_run_service",
+        reason="src not available (isolation test)",
+    ).AgentRunService
 
     if mock_sessions_svc is None:
         mock_sessions_svc = MagicMock()
