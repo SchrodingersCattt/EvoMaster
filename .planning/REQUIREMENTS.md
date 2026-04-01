@@ -10,7 +10,7 @@
 ### Playground & Session
 
 - [ ] **PLAY-01**: 开发者可以在不安装 `evomaster` 的环境中创建并使用 `matmaster.sessions.local.LocalSession`，供 builtin tools 执行本地命令与文件操作
-- [ ] **PLAY-02**: 开发者可以通过 `matmaster` 原生 session factory 创建 local / docker / ssh session，而 `matmaster.core.playground.Playground` 不再直接 import `evomaster.agent.session.*`
+- [x] **PLAY-02**: 开发者可以通过 `matmaster` 原生 session factory 创建 local / docker / ssh session，而 `matmaster.core.playground.Playground` 不再直接 import `evomaster.agent.session.*`
 - [ ] **PLAY-03**: 开发者可以通过 `matmaster.core.playground.Playground` 加载主配置、准备 workspace、logging 和 session，而不依赖 `evomaster.config.ConfigManager` 或 `PlaygroundSessionMixin`
 
 ### Tool 内化
@@ -73,7 +73,7 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PLAY-01 | Phase 25 | Pending |
-| PLAY-02 | Phase 25 | Pending |
+| PLAY-02 | Phase 25 | Complete |
 | PLAY-03 | Phase 25 | Pending |
 | TOOL-07 | Phase 26 | Pending |
 | TOOL-08 | Phase 26 | Pending |
