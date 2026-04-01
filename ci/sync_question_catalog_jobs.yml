@@ -1,5 +1,6 @@
 # 分支 sync-question-catalog：build → sync（与 ci/api-deploy.yml 同源 docker-build / test 用法）。
 # docker-build 不写 DevOps *curl。需 REGISTRY_USERNAME、REGISTRY_PASSWORD、MATMASTER_TOOLS_SERVER。
+# sync-question-catalog 需把 MATMASTER_TOOLS_EVALUATION_BEARER 传入容器（与 ingest 同源），否则 tools-server 返回「无凭证」。
 
 docker-build:
   stage: build
@@ -78,6 +79,7 @@ sync-question-catalog:
       docker create --name qcat-sync \
         -e MATMASTER_TOOLS_SERVER \
         -e SERVICE_ENV \
+        -e MATMASTER_TOOLS_EVALUATION_BEARER \
         ${DYNAMIC_IMAGE} \
         sh -c "cd /app && . .venv/bin/activate && python evaluation/scripts/sync_question_catalog_to_tools_server.py"
     - docker start -a qcat-sync
