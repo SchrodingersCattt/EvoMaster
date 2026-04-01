@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from evomaster.agent.session.ssh import SSHSession, SSHSessionConfig
+from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
 from matmaster.integration.bohrium_setup import SkillSyncSpec
 from playground.mat_master.core.workspace_resolver import (
     get_remote_session_workspace_root,
@@ -156,7 +156,6 @@ def _sync_skills_to_ssh_session(
         logger.debug('run_agent: skill sync skipped (session is not SSHSession)')
         return False
     try:
-        env = ssh_session._env
         exclude = set(_SKILL_SYNC_EXCLUDE)
         synced_any = False
         for local_root in spec.project_skill_roots:
@@ -169,7 +168,7 @@ def _sync_skills_to_ssh_session(
                 remote_dest = f"{spec.remote_project_root.rstrip('/')}/{rel.as_posix()}"
             except ValueError:
                 remote_dest = f"{spec.remote_project_root.rstrip('/')}/{lp.name}"
-            _upload_directory(env, str(lp), remote_dest, exclude)
+            _upload_directory(ssh_session, str(lp), remote_dest, exclude)
             synced_any = True
         ssh_session.remote_project_root = spec.remote_project_root
         if synced_any:

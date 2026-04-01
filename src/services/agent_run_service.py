@@ -12,7 +12,7 @@ import os
 import time
 import uuid
 from collections.abc import Callable
-from functools import lru_cache
+from functools import lru_cache, partial
 from pathlib import Path
 from queue import Empty
 from typing import Any, Protocol, runtime_checkable
@@ -42,6 +42,12 @@ from matmaster.types.events import (
 )
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
+from src.services.agent_run_bohrium import (
+    apply_run_credentials_to_session,
+    cleanup_bohrium_after_run,
+    load_run_credentials,
+    setup_bohrium_for_run,
+)
 from src.services.chat_history import ChatHistoryConverter
 from src.services.quota_service import use_quota
 from src.services.sessions_service import get_sessions_service
@@ -295,15 +301,6 @@ class AgentRunService:
             )
 
             # -- Stage 3: Bohrium credentials + SSH --
-            from functools import partial
-
-            from src.services.agent_run_bohrium import (
-                apply_run_credentials_to_session,
-                cleanup_bohrium_after_run,
-                load_run_credentials,
-                setup_bohrium_for_run,
-            )
-
             bohrium_svc = BohriumSetupService(
                 load_credentials_fn=partial(
                     load_run_credentials, self._sessions_service
