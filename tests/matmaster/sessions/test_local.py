@@ -40,12 +40,6 @@ class TestLocalSessionExecBash:
             or "timeout" in result["output"].lower()
         )
 
-    def test_is_input_returns_error(self, tmp_path: Path) -> None:
-        session = LocalSession(workspace_path=tmp_path)
-        result = session.exec_bash("echo hi", is_input=True)
-        assert result["exit_code"] == 1
-        assert "not supported" in result["stderr"].lower()
-
     def test_cwd_is_workspace(self, tmp_path: Path) -> None:
         session = LocalSession(workspace_path=tmp_path)
         result = session.exec_bash("pwd")

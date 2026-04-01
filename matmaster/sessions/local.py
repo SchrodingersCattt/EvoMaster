@@ -45,7 +45,6 @@ class LocalSession:
         self,
         command: str,
         timeout: int | None = None,
-        is_input: bool = False,
         stop_event: threading.Event | Any | None = None,
     ) -> dict[str, Any]:
         """Execute a bash command via subprocess.
@@ -54,15 +53,6 @@ class LocalSession:
         ``stop_event`` is accepted for interface compatibility with evomaster
         BaseSession but has no effect on subprocess.run execution.
         """
-        if is_input:
-            return {
-                "stdout": "",
-                "stderr": "Interactive input is not supported in local session.",
-                "exit_code": 1,
-                "working_dir": str(self._workspace_path),
-                "output": "Interactive input is not supported in local session.",
-            }
-
         effective_timeout = timeout or self._timeout
         try:
             proc = subprocess.run(
