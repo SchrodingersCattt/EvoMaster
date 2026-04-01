@@ -211,8 +211,8 @@ def _terminate_job_if_needed(
     if not bohr_job_id:
         return {'attempted': False, 'success': False, 'reason': 'bohr_job_id_missing'}
     try:
-        # Lazy import: evomaster.adaptors.calculation (not triggered at module load time)
-        from evomaster.adaptors.calculation.job_service import terminate_job
+        # Lazy import: matmaster.adaptors.calculation (not triggered at module load time)
+        from matmaster.adaptors.calculation.job_service import terminate_job
 
         success, detail = terminate_job(bohr_job_id=bohr_job_id, access_key=access_key)
         return {'attempted': True, 'success': bool(success), 'detail': detail}

@@ -77,8 +77,8 @@ def _run_lifecycle(
     max_polls_per_call: int | None = None,
     stop_event: Any = None,
 ) -> dict[str, Any]:
-    # Lazy import: evomaster.adaptors.calculation (not triggered at module load time)
-    from evomaster.adaptors.calculation.job_service import (
+    # Lazy import: matmaster.adaptors.calculation (not triggered at module load time)
+    from matmaster.adaptors.calculation.job_service import (
         download_job_file,
         get_job_results,
         query_job_status,

@@ -30,8 +30,8 @@ def _find_log_files_from_job(
     access_key: str | None = None,
 ) -> list[str]:
     """Use iterate_job_files to recursively list job files and match log files by LOG_PATTERNS."""
-    # Lazy import: evomaster.adaptors.calculation (not triggered at module load time)
-    from evomaster.adaptors.calculation.job_service import iterate_job_files
+    # Lazy import: matmaster.adaptors.calculation (not triggered at module load time)
+    from matmaster.adaptors.calculation.job_service import iterate_job_files
 
     patterns = LOG_PATTERNS.get(software.lower(), ['*.log', '*.out', '*.json'])
     logger.info(
@@ -102,8 +102,8 @@ def run_monitor_decision_once(
     enable_llm_decision: bool = True,
     status_override: str | None = None,
 ) -> dict[str, Any]:
-    # Lazy import: evomaster.adaptors.calculation (not triggered at module load time)
-    from evomaster.adaptors.calculation.job_service import (
+    # Lazy import: matmaster.adaptors.calculation (not triggered at module load time)
+    from matmaster.adaptors.calculation.job_service import (
         download_job_file,
         query_job_status,
     )

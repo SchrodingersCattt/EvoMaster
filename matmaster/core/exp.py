@@ -463,7 +463,7 @@ class Exp:
 
         if mcp_config.get('path_adaptor') == 'calculation':
             try:
-                from evomaster.adaptors.calculation import resolve_mcp_config_path
+                from matmaster.adaptors.calculation import resolve_mcp_config_path
 
                 config_path = resolve_mcp_config_path(config_path)
             except ImportError:
