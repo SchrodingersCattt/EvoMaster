@@ -545,6 +545,89 @@ def check_layer_count(
 
 
 # ---------------------------------------------------------------------------
+# 10. Surface termination — check outermost layer element along an axis
+# ---------------------------------------------------------------------------
+
+
+def check_surface_termination(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    element: str,
+    axis: str = 'z',
+    side: str = 'top',
+    layer_tol_A: float = 0.5,
+) -> tuple[bool, str]:
+    """Verify that the outermost atomic layer of a slab is of the given element.
+
+    Parameters
+    ----------
+    filename : str
+        Glob pattern or exact name of the slab structure file.
+    element : str
+        Element symbol expected at the outermost layer (e.g. ``'O'``).
+    axis : str
+        Slab stacking axis: ``'x'``, ``'y'``, or ``'z'``.
+    side : str
+        Which surface to check: ``'top'`` (maximum coord), ``'bottom'``
+        (minimum coord), or ``'both'``.
+    layer_tol_A : float
+        Thickness tolerance in Å used to define the outermost layer.
+        Atoms within *layer_tol_A* of the extremal atom are considered
+        part of the outermost layer.
+    """
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f'no file matching {filename!r} in {root}'
+    try:
+        struct = _load_structure(fpath)
+    except Exception as exc:
+        return False, f'could not parse {fpath.name}: {exc}'
+    if isinstance(struct, Molecule):
+        return False, f'{fpath.name} is a molecule, not a periodic structure'
+
+    axis_map = {'x': 0, 'y': 1, 'z': 2}
+    if axis.lower() not in axis_map:
+        return False, f'axis must be x/y/z, got {axis!r}'
+    ax = axis_map[axis.lower()]
+
+    sites = struct.sites
+    coords = np.array([s.coords[ax] for s in sites])
+    elements = [s.species_string for s in sites]
+
+    def _check_side(extreme_coord: float) -> tuple[bool, str]:
+        mask = np.abs(coords - extreme_coord) <= layer_tol_A
+        layer_elems = [elements[i] for i in range(len(sites)) if mask[i]]
+        if not layer_elems:
+            return False, f'{fpath.name}: outermost layer is empty (tol={layer_tol_A} Å)'
+        unique = sorted(set(layer_elems))
+        has_elem = element in layer_elems
+        return (
+            has_elem,
+            f'{fpath.name}: outermost {axis}-layer ({extreme_coord:.3f} Å) elements: '
+            f'{unique}, expected {element!r}',
+        )
+
+    sides_to_check = []
+    if side in ('top', 'both'):
+        sides_to_check.append(float(np.max(coords)))
+    if side in ('bottom', 'both'):
+        sides_to_check.append(float(np.min(coords)))
+    if not sides_to_check:
+        return False, f"side must be 'top', 'bottom', or 'both', got {side!r}"
+
+    results = [_check_side(c) for c in sides_to_check]
+    failed = [(ok, msg) for ok, msg in results if not ok]
+    if failed:
+        return failed[0]
+    msgs = '; '.join(msg for _, msg in results)
+    return True, msgs
+
+
+# ---------------------------------------------------------------------------
 # File-count check (no pymatgen needed)
 # ---------------------------------------------------------------------------
 

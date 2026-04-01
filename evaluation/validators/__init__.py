@@ -11,6 +11,7 @@ from .structure_general import (
     check_formula,
     check_layer_count,
     check_stoichiometry_ratio,
+    check_surface_termination,
 )
 from .structure_molcrys import (
     check_disorder_dan2_integer_formula,
@@ -30,6 +31,7 @@ __all__ = [
     'check_formula',
     'check_layer_count',
     'check_stoichiometry_ratio',
+    'check_surface_termination',
     # structure_molcrys (MolCrysKit-backed)
     'check_disorder_dan2_integer_formula',
     'check_sc005_other_formulas_in_answer',

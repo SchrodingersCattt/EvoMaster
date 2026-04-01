@@ -20,6 +20,7 @@ from evaluation.validators.structure_general import (
     check_formula,
     check_layer_count,
     check_stoichiometry_ratio,
+    check_surface_termination,
 )
 from evaluation.validators.structure_molcrys import (
     check_disorder_dan2_integer_formula,
@@ -404,4 +405,21 @@ def check_struct_file_count(
         pattern=cfg.get('pattern', '*.cif'),
         expected=int(cfg.get('expected', 0)),
         tolerance=int(cfg.get('tolerance', 0)),
+    )
+
+
+def check_struct_file_surface_termination(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_surface_termination(
+        ws,
+        filename=cfg.get('filename', '*.cif'),
+        element=str(cfg.get('element', '')),
+        axis=str(cfg.get('axis', 'z')),
+        side=str(cfg.get('side', 'top')),
+        layer_tol_A=float(cfg.get('layer_tol_A', 0.5)),
     )
