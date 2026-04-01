@@ -22,3 +22,8 @@ MATMASTER_TOOLS_SERVER = os.getenv(
     "MATMASTER_TOOLS_SERVER",
     f"https://matmaster-tools-server{URL_PART}.bohrium.com",
 )
+
+# 调用 matmaster-tools-server 评测接口（ingest、question-catalog 等）时的鉴权，与
+# ``require_evaluation_access`` 中的服务密钥分支对齐（Nacos evaluation.service_api_keys）。
+_eval_bearer = os.getenv("MATMASTER_TOOLS_EVALUATION_BEARER", "").strip()
+MATMASTER_TOOLS_EVALUATION_BEARER: str | None = _eval_bearer or None

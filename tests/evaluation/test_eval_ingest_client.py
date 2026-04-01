@@ -19,12 +19,14 @@ from evaluation.eval_ingest_client import (
     post_question_catalog_sync,
     prompt_sha256,
     score_for_eval_ingest,
+    upload_eval_task_artifacts_to_oss,
 )
 
 
 def test_normalize_baseline_channel() -> None:
     assert normalize_baseline_channel(None) == "claude_code"
     assert normalize_baseline_channel("cursor") == "cursor"
+    assert normalize_baseline_channel("codex") == "codex"
     assert normalize_baseline_channel("  claude_code  ") == "claude_code"
 
 
@@ -128,7 +130,7 @@ def test_build_ingest_item_explicit_score_overrides_exit() -> None:
     assert item["score"] == 65.0
 
 
-def test_build_ingest_item_result_oss_url() -> None:
+def test_build_ingest_item_artifact() -> None:
     item = build_ingest_item(
         question_id="Q1",
         task_id="Q1_direct_r0",
@@ -137,9 +139,17 @@ def test_build_ingest_item_result_oss_url() -> None:
         devshell_exit_code=0,
         summary={},
         duration_ms=None,
-        result_oss_url="https://bucket.oss.example.com/prefix/u/f.zip",
+        artifact={
+            "bundle_object_key": "matmaster/evaluation/run/task/bundle.zip",
+            "manifest_object_key": "matmaster/evaluation/run/task/manifest.json",
+            "files_prefix": "matmaster/evaluation/run/task/files",
+        },
     )
-    assert item["result_oss_url"].startswith("https://")
+    assert item["artifact"] == {
+        "bundle_object_key": "matmaster/evaluation/run/task/bundle.zip",
+        "manifest_object_key": "matmaster/evaluation/run/task/manifest.json",
+        "files_prefix": "matmaster/evaluation/run/task/files",
+    }
 
 
 def test_build_ingest_item_eval_tooling_in_extra() -> None:
@@ -221,6 +231,46 @@ def test_load_devshell_events_timeline_missing_returns_none(tmp_path: Path) -> N
     assert load_devshell_events_timeline(empty) is None
 
 
+def test_upload_eval_task_artifacts_to_oss_returns_artifact_payload(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "devshell_eval_x"
+    task_id = "Q1_direct_r0"
+    ws = run_dir / "workspaces" / task_id
+    log_dir = run_dir / "logs" / task_id
+    ws.mkdir(parents=True)
+    log_dir.mkdir(parents=True)
+    (ws / "answer.txt").write_text("ok\n", encoding="utf-8")
+    (log_dir / "events_1.jsonl").write_text(
+        '{"type":"run_result","status":"completed"}\n',
+        encoding="utf-8",
+    )
+
+    uploaded_keys: list[str] = []
+
+    def _fake_upload_file(local_path: Path | str, oss_key: str) -> str:
+        uploaded_keys.append(str(oss_key))
+        return f"https://oss.example.com/{oss_key}"
+
+    def _fake_upload_bytes(data: bytes, oss_key: str) -> str:
+        uploaded_keys.append(str(oss_key))
+        return f"https://oss.example.com/{oss_key}"
+
+    with patch(
+        "utils.oss_io.upload_file_to_oss_with_key", side_effect=_fake_upload_file
+    ):
+        with patch("utils.oss_io.upload_bytes_to_oss", side_effect=_fake_upload_bytes):
+            artifact = upload_eval_task_artifacts_to_oss(run_dir, task_id)
+
+    assert artifact is not None
+    assert artifact["bundle_object_key"].endswith("/bundle.zip")
+    assert artifact["manifest_object_key"].endswith("/manifest.json")
+    assert artifact["files_prefix"].endswith("/files")
+    assert any(key.endswith("/bundle.zip") for key in uploaded_keys)
+    assert any(key.endswith("/manifest.json") for key in uploaded_keys)
+    assert any("/files/workspaces/" in key for key in uploaded_keys)
+
+
 def test_clip_ingest_text_field() -> None:
     assert clip_ingest_text_field(None) is None
     assert clip_ingest_text_field("  \n") is None
@@ -233,6 +283,11 @@ def test_normalize_pending_item_for_submission() -> None:
         {
             "question_id": "Q1",
             "score": 80,
+            "artifact": {
+                "bundle_object_key": "matmaster/evaluation/run/task/bundle.zip",
+                "manifest_object_key": "matmaster/evaluation/run/task/manifest.json",
+                "files_prefix": "matmaster/evaluation/run/task/files",
+            },
             "score_reason": "  依据 checklist ",
             "suggestion": "",
         }
@@ -240,6 +295,7 @@ def test_normalize_pending_item_for_submission() -> None:
     assert err is None
     assert out is not None
     assert out["score"] == 80.0
+    assert out["artifact"]["files_prefix"] == "matmaster/evaluation/run/task/files"
     assert out["score_reason"] == "依据 checklist"
     assert "suggestion" not in out
 
@@ -276,6 +332,10 @@ def test_build_ingest_item_parse_error_summary() -> None:
 
 
 @patch("evaluation.eval_ingest_client.httpx.Client")
+@patch(
+    "evaluation.eval_ingest_client.utils.env.MATMASTER_TOOLS_EVALUATION_BEARER",
+    None,
+)
 def test_post_eval_ingest_success(mock_client_cls: MagicMock) -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 200
@@ -295,6 +355,35 @@ def test_post_eval_ingest_success(mock_client_cls: MagicMock) -> None:
     call_kw = mock_client.post.call_args
     assert call_kw[0][0] == "http://example/ingest"
     assert call_kw[1]["headers"] == {"Content-Type": "application/json"}
+
+
+@patch("evaluation.eval_ingest_client.httpx.Client")
+@patch(
+    "evaluation.eval_ingest_client.utils.env.MATMASTER_TOOLS_EVALUATION_BEARER",
+    "svc-token",
+)
+def test_post_eval_ingest_sends_tools_server_auth_headers(
+    mock_client_cls: MagicMock,
+) -> None:
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"code": 0, "msg": "success", "data": {}}
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.__exit__.return_value = None
+    mock_client.post.return_value = mock_resp
+    mock_client_cls.return_value = mock_client
+
+    ok, msg = post_eval_ingest(
+        "http://example/ingest",
+        {"run_id": "r1", "items": [{"question_id": "q"}]},
+    )
+    assert ok
+    call_kw = mock_client.post.call_args
+    assert call_kw[1]["headers"] == {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer svc-token",
+    }
 
 
 @patch("evaluation.eval_ingest_client.httpx.Client")
@@ -341,6 +430,10 @@ def test_post_question_catalog_sync_rejects_missing_text(
 
 
 @patch("evaluation.eval_ingest_client.httpx.Client")
+@patch(
+    "evaluation.eval_ingest_client.utils.env.MATMASTER_TOOLS_EVALUATION_BEARER",
+    None,
+)
 def test_post_eval_ingest_business_error(mock_client_cls: MagicMock) -> None:
     mock_resp = MagicMock()
     mock_resp.status_code = 200

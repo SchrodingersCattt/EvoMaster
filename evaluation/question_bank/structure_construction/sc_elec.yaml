@@ -1,0 +1,138 @@
+version: "v5"
+capability: "structure_construction"
+domain: "elec"
+
+questions:
+  # ============================================================
+  # SC_elec_001 — ZnO 载体单原子催化剂建模
+  # ============================================================
+  - id: "SC_elec_001"
+    capability: "structure_construction"
+    domain: "elec"
+    intent: "Build ZnO(001) surface slab with a single Au atom adsorbed at a bridge site for single-atom catalyst modeling."
+    human_prompt_seed: |
+      构建用于 CO2 电还原的 ZnO 载体单原子 Au 催化剂模型：
+      1. 从数据库获取 ZnO 纤锌矿结构；
+      2. 切出 (001) 表面 slab（至少 3 层，15 Å 真空，2×2 扩胞）；
+      3. 在表面两个 O 原子之间的 bridge 位点放置一个 Au 原子（距表面 ~2.0 Å）；
+      4. 输出结构文件，并报告：
+         - 超胞总原子数
+         - Au 原子的分数坐标
+         - Au 与最近邻 O 的距离
+         - slab 层数和真空厚度
+    tags: ["co2rr", "single_atom_catalyst", "ZnO", "gold", "slab"]
+    mode_scope: ["direct", "planner"]
+    required_tools:
+      - "mat_sg_build_surface_slab"
+    optional_tools:
+      - "mat_struct_db_fetch_structures_from_db"
+    data_files: []
+    reference_answers:
+      - key: "required_fields"
+        value:
+          - "structure_file"
+          - "total_atoms"
+          - "Au_coordinate"
+          - "Au_O_distance"
+          - "slab_layers"
+          - "vacuum_thickness"
+      - key: "duration_budget"
+        value: {max: 7200000}
+      - key: "token_budget_total"
+        value: {max: 50000}
+    scoring_checklist:
+      - id: "required_fields"
+        criterion: "Output includes a structure file, total atom count, Au fractional coordinate, nearest Au-O distance, slab layer count, and vacuum thickness."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "structure_validity"
+        criterion: "The ZnO slab has at least 3 layers, vacuum ≥ 15 Å, Au is placed between two surface O atoms at a physically reasonable distance (1.5–3.0 Å), and the supercell is at least 2×2."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "grounding_source"
+        criterion: "ZnO structure originates from database retrieval; slab is built using MCP surface slab tool; Au placement uses explicit coordinates, not hallucinated."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      - id: "no_retries"
+        criterion: "No repeated identical slab construction calls."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "efficiency_judge"
+        criterion: "Single-atom catalyst model is built in a direct workflow (fetch ZnO → build slab → add Au → report) without unnecessary rebuilds."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+      - id: "duration_budget"
+        criterion: "Wall-clock run duration does not exceed benchmark ceiling."
+        axis: "efficiency"
+        verify: "duration_budget"
+      - id: "token_budget_total"
+        criterion: "Total token usage stays within benchmark ceiling."
+        axis: "efficiency"
+        verify: "token_budget"
+
+  # ============================================================
+  # SC_elec_002 — 合金 slab 建模
+  # ============================================================
+  - id: "SC_elec_002"
+    capability: "structure_construction"
+    domain: "elec"
+    intent: "Build an alloy surface slab from a given binary alloy structure for electrocatalysis modeling."
+    human_prompt_seed: |
+      构建 ZnPd 合金表面 slab 用于催化研究：
+      1. 从数据库检索 ZnPd 合金结构（B2 型，CsCl 结构，空间群 Pm-3m）；
+      2. 切出 (011) 表面 slab（3 层，15 Å 真空，2×1 扩胞）；
+      3. 输出结构文件（CIF 或 POSCAR）；
+      4. 报告：
+         - slab 总原子数和 Zn:Pd 原子比
+         - 表面暴露的原子种类
+         - 各层原子组成
+         - 晶胞参数 (a, b, c)
+    tags: ["alloy", "slab", "ZnPd", "binary", "catalysis"]
+    mode_scope: ["direct", "planner"]
+    required_tools:
+      - "mat_sg_build_surface_slab"
+    optional_tools:
+      - "mat_struct_db_fetch_structures_from_db"
+    data_files: []
+    reference_answers:
+      - key: "required_fields"
+        value:
+          - "structure_file"
+          - "total_atoms"
+          - "Zn_Pd_ratio"
+          - "surface_atoms"
+          - "layer_composition"
+          - "lattice_parameters"
+      - key: "duration_budget"
+        value: {max: 7200000}
+      - key: "token_budget_total"
+        value: {max: 50000}
+    scoring_checklist:
+      - id: "required_fields"
+        criterion: "Output includes structure file, total atom count, Zn:Pd ratio, surface-exposed atom species, per-layer composition, and lattice parameters."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "structure_validity"
+        criterion: "The slab has 3 layers, (011) orientation, vacuum ≥ 15 Å, 2×1 supercell, and preserves the Zn:Pd stoichiometry of the bulk."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "grounding_source"
+        criterion: "ZnPd structure comes from the database; slab construction uses MCP tool with correct Miller index and expansion parameters."
+        axis: "grounding"
+        verify: "llm_binary_judge"
+      - id: "no_retries"
+        criterion: "No repeated identical database fetch or slab construction calls."
+        axis: "efficiency"
+        verify: "no_retries"
+      - id: "efficiency_judge"
+        criterion: "Alloy slab is built in a direct workflow without redundant intermediate steps."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+      - id: "duration_budget"
+        criterion: "Wall-clock run duration does not exceed benchmark ceiling."
+        axis: "efficiency"
+        verify: "duration_budget"
+      - id: "token_budget_total"
+        criterion: "Total token usage stays within benchmark ceiling."
+        axis: "efficiency"
+        verify: "token_budget"
