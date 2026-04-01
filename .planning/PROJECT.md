@@ -34,12 +34,13 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 - ✓ Exp 生命周期 async 化 (assemble/build_runtime/run/cleanup 全 async + async cleanup callback dispatch) — v2.0 Phase 18 (EXPL-01~03)
 - ✓ SubAgent spawn async 链路 (async spawn_fn 复用 Exp.run() + SpawnTool native async execute()) — v2.0 Phase 18 (EXPL-04)
 - ✓ v2.0 async 基础设施闭环（Bus/Router、Tool Dispatch、Confirmation Flow、emit_nowait 技术债收口）— v2.0 Phase 16-24
+- ✓ `matmaster/ → src/` 反向依赖消除：bohrium_env.py 纯模块 + BohriumSetupService 回调注入 + script_env/path_adaptor/job_service import 切换 — v2.1 Phase 28 (INVR-01, INVR-02)
+- ✓ `src/` 消费者迁移到 matmaster 原生数据结构：chat_history.py 消息类型、agent_run_bohrium.py SSHSession、agent_run_service.py 回调绑定 — v2.1 Phase 28 (CONS-03, CONS-04)
 
 ### Active
 
 - [ ] `matmaster/` 运行时路径不再直接 import `evomaster`、`playground` 或 `src`
 - [ ] `session / playground / config / tool / MCP` 边界提供 matmaster 原生实现
-- [ ] `matmaster/ → src/` 反向依赖消除（bohrium_setup + script_env），改为依赖反转
 - [ ] `matmaster/ → playground/` 依赖消除（web_search_tool），收归 matmaster 原生或 skill 机制
 - [ ] `src/` 与本地 Web 主执行路径切换到 matmaster 原生入口或受控兼容层
 - [ ] `calculation / Bohrium / skills / MCP` 能力在解耦后保持现有行为
@@ -68,7 +69,7 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 
 ### Current State
 
-**As of 2026-04-01:** Phase 25 完成，matmaster session/playground 原生化。Phase 26 完成，matmaster.tools 完全原生化。Phase 27 完成，MCP 与 Calculation 原生链路收回 matmaster 侧：`matmaster/mcp/` 包（MCPConnection + MCPToolManager 精简版）、`matmaster/adaptors/calculation/` 包（4 模块迁移）、LazyMCPTool 直连 MCPConnection.call_tool、全部 evomaster MCP/calculation import 切换完毕。
+**As of 2026-04-01:** Phase 25 完成，matmaster session/playground 原生化。Phase 26 完成，matmaster.tools 完全原生化。Phase 27 完成，MCP 与 Calculation 原生链路收回 matmaster 侧。Phase 28 完成，src 反向依赖反转与 Consumer 迁移：`matmaster/integration/bohrium_env.py` 纯模块承接 Bohrium 函数/常量，BohriumSetupService 重构为回调注入模式，4 个 matmaster 文件 evomaster import 全部切换，3 个 src 消费者迁移到 matmaster 原生消息类型和 SSHSession。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 
@@ -96,9 +97,9 @@ Architecture (current):
 **B. matmaster/ → playground/（1 import）**
 4. **Web Search Tool** — `core/exp.py:396` lazy import `playground.mat_master.tools.web_search.get_web_search_tool`
 
-**C. matmaster/ → src/（6 imports, 2 files）**
-5. **Bohrium Setup 反向依赖** — `integration/bohrium_setup.py` 有 5 个 lazy import 从 `src.services.agent_run_bohrium` 拉函数（load_run_credentials、apply_run_credentials_to_session、setup_bohrium_for_run、cleanup_bohrium_after_run、BohriumSetupResult）
-6. **Script Env 常量** — `tools/script_env.py:59` lazy import `src.utils.constant.BOHRIUM_OPENAPI_HOST`
+~~**C. matmaster/ → src/（6 imports, 2 files）**~~
+5. ~~**Bohrium Setup 反向依赖**~~ — Resolved in Phase 28; `bohrium_env.py` 纯模块 + 回调注入
+6. ~~**Script Env 常量**~~ — Resolved in Phase 28; `BOHRIUM_OPENAPI_HOST` 从 `bohrium_env` 导入
 
 ### Post-v1 Changes (untracked by GSD)
 
@@ -116,7 +117,8 @@ v1 之后在 GSD 体系外进行的 6 个主要特性开发：
 - `matmaster/core/playground.py` 仍是最大 runtime 耦合点，session / config / mixin 三类依赖未抽离
 - `matmaster/core/exp.py` 仍挂着 `EvoToolAdapter` 与 `MonitorJobTool`，tool 注册链路并未完全原生化
 - ~~`matmaster/tools/lazy_mcp.py` 与 calculation path adaptor 仍建立在 `evomaster` MCP manager/adaptor 之上~~ — Resolved in Phase 27
-- `src/services/chat_history.py` 和本地 Web 初始化路径仍以 `evomaster` 类型与入口为事实标准
+- ~~`src/services/chat_history.py` 仍以 `evomaster` 类型为事实标准~~ — Resolved in Phase 28; 已迁移到 matmaster 消息类型
+- 本地 Web 初始化路径仍以 `evomaster` 入口为事实标准
 - `tests/test_streaming_thought_protocol.py` 仍有收集失败问题，需要在解耦期纳入统一质量门禁
 
 ## Constraints
@@ -174,4 +176,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after Phase 27 completion (MCP/calculation native linkage)*
+*Last updated: 2026-04-01 after Phase 28 completion (src reverse dependency inversion & consumer migration)*
