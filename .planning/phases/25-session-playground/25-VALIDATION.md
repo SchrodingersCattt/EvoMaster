@@ -2,9 +2,10 @@
 phase: 25
 slug: session-playground
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-01
+updated: 2026-04-01
 ---
 
 # Phase 25 — Validation Strategy
@@ -19,7 +20,7 @@ created: 2026-04-01
 |----------|-------|
 | **Framework** | pytest 7.x |
 | **Config file** | pyproject.toml `[tool.pytest.ini_options]` |
-| **Quick run command** | `uv run pytest tests/matmaster/sessions/ -x -q` |
+| **Quick run command** | `uv run pytest tests/matmaster/sessions/ tests/matmaster/types/test_session_protocol.py -x -q` |
 | **Full suite command** | `uv run pytest tests/ -x -q` |
 | **Estimated runtime** | ~30 seconds |
 
@@ -36,27 +37,29 @@ created: 2026-04-01
 
 ## Per-Task Verification Map
 
-| Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 25-01-01 | 01 | 1 | PLAY-01 | unit | `uv run pytest tests/matmaster/sessions/test_local_session.py -x` | ❌ W0 | ⬜ pending |
-| 25-01-02 | 01 | 1 | PLAY-01 | unit | `uv run pytest tests/matmaster/sessions/test_session_protocol.py -x` | ❌ W0 | ⬜ pending |
-| 25-02-01 | 02 | 1 | PLAY-02 | unit | `uv run pytest tests/matmaster/sessions/test_session_factory.py -x` | ❌ W0 | ⬜ pending |
-| 25-02-02 | 02 | 1 | PLAY-02 | unit | `uv run pytest tests/matmaster/sessions/test_docker_session.py -x` | ❌ W0 | ⬜ pending |
-| 25-02-03 | 02 | 1 | PLAY-02 | unit | `uv run pytest tests/matmaster/sessions/test_ssh_session.py -x` | ❌ W0 | ⬜ pending |
-| 25-03-01 | 03 | 2 | PLAY-03 | integration | `uv run pytest tests/matmaster/core/test_playground_native.py -x` | ❌ W0 | ⬜ pending |
-| 25-03-02 | 03 | 2 | PLAY-03 | integration | `uv run pytest tests/matmaster/tools/test_tools_native_session.py -x` | ❌ W0 | ⬜ pending |
+| Task ID | Plan | Wave | Requirement | Test Type | Automated Command | Status |
+|---------|------|------|-------------|-----------|-------------------|--------|
+| 25-01-01 | 01 | 1 | PLAY-01 | unit | `uv run pytest tests/matmaster/types/test_session_protocol.py -x` | pending |
+| 25-01-02 | 01 | 1 | PLAY-01 | unit | `uv run pytest tests/matmaster/sessions/test_local.py -x` | pending |
+| 25-02-01 | 02 | 2 | PLAY-02 | unit | `uv run python -c "from matmaster.sessions.ssh import SSHSession; print('OK')"` | pending |
+| 25-02-02 | 02 | 2 | PLAY-02 | unit | `uv run pytest tests/matmaster/sessions/test_ssh_session.py -x` | pending |
+| 25-03-01 | 03 | 3 | PLAY-02, PLAY-03 | integration | `uv run python -c "from matmaster.core.playground import Playground; pg = Playground(session_type='local', session_config={'workspace_path': '/tmp'}); assert pg._session_type == 'local'; print('OK')"` | pending |
+| 25-03-02 | 03 | 3 | PLAY-03 | integration | `uv run pytest tests/matmaster/core/test_playground_no_evomaster.py -x` | pending |
+| 25-03-03 | 03 | 3 | PLAY-03 | integration | `uv run pytest tests/matmaster/core/test_playground.py tests/matmaster/core/test_playground_manager.py tests/matmaster/core/test_playground_config_paths.py -x` | pending |
+| 25-03-04 | 03 | 3 | PLAY-03 | integration | `uv run python -c "from src.services.agent_run_service import AgentRunService; print('OK')"` | pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: pending / green / red / flaky*
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `tests/matmaster/sessions/` — directory structure for session tests
-- [ ] `tests/matmaster/sessions/test_local_session.py` — stubs for PLAY-01
-- [ ] `tests/matmaster/sessions/test_session_protocol.py` — protocol compliance tests
-- [ ] `tests/matmaster/sessions/test_session_factory.py` — factory tests for PLAY-02
-- [ ] `tests/matmaster/sessions/conftest.py` — shared fixtures (temp dirs, mock configs)
+All test files are created by their respective plan tasks (TDD pattern: tests are written as part of the task). No separate Wave 0 scaffolding needed.
+
+- Plan 01 Task 1 creates `tests/matmaster/types/test_session_protocol.py`
+- Plan 01 Task 2 extends `tests/matmaster/sessions/test_local.py` (existing file)
+- Plan 02 Task 2 creates `tests/matmaster/sessions/test_ssh_session.py`
+- Plan 03 Task 2 creates `tests/matmaster/core/test_playground_no_evomaster.py` and updates existing playground tests
 
 ---
 
@@ -64,18 +67,17 @@ created: 2026-04-01
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| SSH session connects to Bohrium | PLAY-02 | Requires live SSH credentials | Start devshell, create SSHSession with test host, run `session.execute("echo ok")` |
-| Docker session container lifecycle | PLAY-02 | Requires Docker daemon | Run `uv run pytest tests/matmaster/sessions/test_docker_session.py` with Docker running |
+| SSH session connects to Bohrium | PLAY-02 | Requires live SSH credentials | Start devshell, create SSHSession with test host, run `session.exec_bash("echo ok")` |
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify commands
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 test files created by task actions (TDD)
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** pending execution
