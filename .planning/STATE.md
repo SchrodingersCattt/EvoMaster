@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
-status: planning
-stopped_at: Phase 25 context gathered
-last_updated: "2026-04-01T07:57:10.783Z"
-last_activity: 2026-04-01 — v2.1 roadmap created (6 phases, 19 requirements mapped)
+status: executing
+stopped_at: Completed 26-02-PLAN.md
+last_updated: "2026-04-01T08:50:35.505Z"
+last_activity: 2026-04-01
 progress:
   total_phases: 19
   completed_phases: 13
-  total_plans: 23
-  completed_plans: 23
+  total_plans: 29
+  completed_plans: 25
   percent: 0
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** v2.1 Phase 25 Session 与 Playground 原生化
+**Current focus:** Phase 26 — tool
 
 ## Current Position
 
-Phase: 25 of 30 (Session 与 Playground 原生化)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-04-01 — v2.1 roadmap created (6 phases, 19 requirements mapped)
+Phase: 26 (tool) — EXECUTING
+Plan: 3 of 3
+Status: Ready to execute
+Last activity: 2026-04-01
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -48,6 +48,8 @@ Progress: [░░░░░░░░░░] 0%
 - [v2.1 redefine] Phase 编号延续既有历史，从 Phase 25 开始，不重置
 - [v2.1 roadmap] INVR + CONS 合并为 Phase 28，因 bohrium_setup 同时涉及 src 反向依赖和 consumer 迁移
 - [v2.1 roadmap] TOOL-09/TOOL-10 合入 Phase 26，与 TOOL-07/TOOL-08 一起完成全部 tool 内化
+- [Phase 26-tool]: Lazy import strategy for evomaster.adaptors.calculation: function-level import defers module load
+- [Phase 26-tool]: Duck-typing via hasattr replaces isinstance(SSHSession) for cross-package session detection
 
 ### Pending Todos
 
@@ -60,6 +62,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T07:57:10.777Z
-Stopped at: Phase 25 context gathered
-Resume file: .planning/phases/25-session-playground/25-CONTEXT.md
+Last session: 2026-04-01T08:50:35.499Z
+Stopped at: Completed 26-02-PLAN.md
+Resume file: None

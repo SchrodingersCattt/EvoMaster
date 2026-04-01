@@ -302,8 +302,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 26-01-PLAN.md — Helper 内化（bash_safety + editor 内联）+ web_search 名称修正
-- [ ] 26-02-PLAN.md — MonitorJobTool 搬入 matmaster 并改继承 BuiltinTool
+- [x] 26-01-PLAN.md — Helper 内化（bash_safety + editor 内联）+ web_search 名称修正
+- [x] 26-02-PLAN.md — MonitorJobTool 搬入 matmaster 并改继承 BuiltinTool
 - [ ] 26-03-PLAN.md — EvoToolAdapter 清理 + exp.py 原生注册切换 + 回归测试
 
 ### Phase 27: MCP 与 Calculation 原生链路
@@ -404,7 +404,7 @@ Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底�
 | 23. Verification + Nyquist Closure | v2.0 | 1/1 | Complete | 2026-03-30 |
 | 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete | 2026-03-29 |
 | 25. Session 与 Playground 原生化 | v2.1 | 0/3 | Planning | - |
-| 26. Tool 内化与遗留工具收归 | v2.1 | 0/TBD | Not started | - |
+| 26. Tool 内化与遗留工具收归 | v2.1 | 2/3 | In Progress|  |
 | 27. MCP 与 Calculation 原生链路 | v2.1 | 0/TBD | Not started | - |
 | 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 0/TBD | Not started | - |
 | 29. 主执行路径切换 | v2.1 | 0/TBD | Not started | - |

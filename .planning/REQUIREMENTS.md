@@ -17,7 +17,7 @@
 
 - [ ] **TOOL-07**: 开发者可以在 `matmaster.tools` 中注册并执行遗留 builtin 能力，而不需要 `EvoToolAdapter`
 - [ ] **TOOL-08**: 开发者可以在 `matmaster.tools.builtin` 中使用原生 bash safety 与 edit helper，不再导入 `evomaster.agent.tools.builtin.*`
-- [ ] **TOOL-09**: `MonitorJobTool` 通过 matmaster 原生注册或 skill 机制提供，`exp.py` 不再 lazy import `evomaster.agent.tools.builtin.monitor_job`
+- [x] **TOOL-09**: `MonitorJobTool` 通过 matmaster 原生注册或 skill 机制提供，`exp.py` 不再 lazy import `evomaster.agent.tools.builtin.monitor_job`
 - [ ] **TOOL-10**: `web_search_tool` 通过 matmaster 原生实现或 skill 注册提供，`exp.py` 不再 import `playground.mat_master.tools.web_search`
 
 ### MCP & Calculation
@@ -77,7 +77,7 @@
 | PLAY-03 | Phase 25 | Pending |
 | TOOL-07 | Phase 26 | Pending |
 | TOOL-08 | Phase 26 | Pending |
-| TOOL-09 | Phase 26 | Pending |
+| TOOL-09 | Phase 26 | Complete |
 | TOOL-10 | Phase 26 | Pending |
 | MCP-01 | Phase 27 | Pending |
 | CALC-01 | Phase 27 | Pending |
