@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
 status: executing
-stopped_at: Completed 28-01-PLAN.md
-last_updated: "2026-04-01T12:43:13.981Z"
+stopped_at: Completed 28-02-PLAN.md
+last_updated: "2026-04-01T12:54:14.056Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 19
   completed_phases: 16
   total_plans: 35
-  completed_plans: 33
+  completed_plans: 34
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 28 (src-consumer) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-01
 
@@ -62,6 +62,7 @@ Progress: [░░░░░░░░░░] 0%
 - [Phase 28-src-consumer]: Simplified BOHRIUM_OPENAPI_HOST to single os.getenv with static default (no URL_PART logic)
 - [Phase 28-src-consumer]: BohriumSetupResult duplicated as NamedTuple in matmaster to break src reverse dependency
 - [Phase 28-src-consumer]: Import audit xfail strategy for pre-migration tests (strict=False)
+- [Phase 28]: BohriumSetupService: callback injection with 4 callables replaces sessions_service injection; consumer uses functools.partial for binding
 
 ### Pending Todos
 
@@ -74,6 +75,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T12:43:13.976Z
-Stopped at: Completed 28-01-PLAN.md
+Last session: 2026-04-01T12:54:14.051Z
+Stopped at: Completed 28-02-PLAN.md
 Resume file: None
