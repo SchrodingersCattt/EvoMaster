@@ -8,8 +8,8 @@ variables:
   CHECK: main
 
 stages:
-  - lint
   - build
+  - lint
   - sync-question-catalog
   - build-remote-image
   - trigger
@@ -25,9 +25,57 @@ include:
   - local: "ci/pre-commit-job.yml"
   - local: "ci/sync_question_catalog_jobs.yml"
 
-# 合并到 main：MR 目标分支为 main，或 push 到 main（实现见 ci/pre-commit-job.yml）
+# 合并到 main：先 build 镜像再跑 pre-commit（与子流水线一致，复用镜像内 hook；不与 sync-question-catalog 的 docker-build 同名）
+docker-build-mr-main:
+  stage: build
+  image: $REGISTRY/public/ubuntu:gitlab-docker
+  variables:
+    DOCKER_HOST: tcp://docker-build-service:32375
+  before_script:
+    - |
+      DOCKER_TAG="ci${CI_PIPELINE_ID}"
+      DOCKER_IMAGE="${REGISTRY}/flow/matmaster-evo:${DOCKER_TAG}"
+      export DOCKER_TAG DOCKER_IMAGE
+  script:
+    - git pull origin "${CI_COMMIT_BRANCH}" || true
+    - echo "$DOCKER_IMAGE"
+    - git rev-parse HEAD > ${CI_PROJECT_DIR}/.build-version
+    - |
+      cat > /root/.docker/config.json <<EOF
+      {
+      "auths": {
+        "registry.dp.tech": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        },
+        "dp-harbor-registry.cn-zhangjiakou.cr.aliyuncs.com": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        }
+      }
+      }
+      EOF
+    - >-
+      docker buildx build --progress=plain -f ${CI_PROJECT_DIR}/Dockerfile -t ${DOCKER_IMAGE} --cache-to type=inline,mode=max . --push
+    - docker run --rm ${DOCKER_IMAGE} ls -la /app
+    - echo "DYNAMIC_IMAGE=${DOCKER_IMAGE}" >> ${CI_PROJECT_DIR}/build.env
+  retry: 2
+  tags:
+    - k8s-runner-ack
+  cache:
+    paths:
+      - /cache
+  artifacts:
+    reports:
+      dotenv: ${CI_PROJECT_DIR}/build.env
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
+    - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
+
+# 合并到 main：MR 目标分支为 main，或 push 到 main（lint 依赖 docker-build-mr-main，见 ci/pre-commit-job.yml）
 pre-commit:
-  extends: .pre-commit-base
+  extends: .pre-commit-with-built-image
+  needs:
+    - job: docker-build-mr-main
+      artifacts: true
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"'
     - if: '$CI_COMMIT_BRANCH == "main" && $CI_PIPELINE_SOURCE == "push"'
