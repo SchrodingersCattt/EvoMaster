@@ -4,6 +4,9 @@ from src.services.chat_history import ChatHistoryConverter
 
 
 def test_chat_history_prefers_assistant_state_when_present():
+    # Use matmaster native format: reasoning_content is a top-level field,
+    # not nested under 'meta'. The old evomaster 'meta.reasoning_content'
+    # format is not propagated by the current matmaster implementation.
     events = [
         {
             'source': 'MatMaster',
@@ -11,7 +14,7 @@ def test_chat_history_prefers_assistant_state_when_present():
             'content': {
                 'role': 'assistant',
                 'content': '',
-                'meta': {'reasoning_content': 'r'},
+                'reasoning_content': 'r',
                 'tool_calls': [],
             },
         }
@@ -19,7 +22,8 @@ def test_chat_history_prefers_assistant_state_when_present():
 
     msgs = ChatHistoryConverter.events_to_dialog_messages(events)
 
-    assert msgs[0]['meta']['reasoning_content'] == 'r'
+    # matmaster AssistantMessage.model_dump() exposes reasoning_content as a top-level field
+    assert msgs[0]['reasoning_content'] == 'r'
 
 
 def test_chat_history_avoids_duplicate_tool_calls_when_assistant_state_exists():
@@ -56,7 +60,8 @@ def test_chat_history_avoids_duplicate_tool_calls_when_assistant_state_exists():
             'content': {
                 'id': 'call_1',
                 'name': 'execute_bash',
-                'result': {'message': 'ok'},
+                # matmaster ToolMessage.content must be str, not dict
+                'result': 'ok',
             },
         },
     ]
@@ -103,7 +108,8 @@ def test_chat_history_handles_matmaster_flat_tool_calls_in_assistant_state():
             'content': {
                 'id': 'call_1',
                 'name': 'execute_bash',
-                'result': {'message': 'ok'},
+                # matmaster ToolMessage.content must be str, not dict
+                'result': 'ok',
             },
         },
     ]
@@ -113,7 +119,8 @@ def test_chat_history_handles_matmaster_flat_tool_calls_in_assistant_state():
     assert len(msgs) == 2
     assert msgs[0]['role'] == 'assistant'
     assert msgs[0]['tool_calls'][0]['id'] == 'call_1'
-    assert msgs[0]['tool_calls'][0]['function']['name'] == 'execute_bash'
+    # matmaster flat format: 'name' is top-level, no nested 'function' wrapper
+    assert msgs[0]['tool_calls'][0]['name'] == 'execute_bash'
     assert msgs[1]['role'] == 'tool'
     assert msgs[1]['tool_call_id'] == 'call_1'
 
