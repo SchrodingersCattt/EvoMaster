@@ -52,7 +52,6 @@ calculation = [
 ]
 
 [project.scripts]
-matmaster = "playground.mat_master.cli.matmaster_cli:main"
 mm-devshell = "matmaster.devshell.cli:main"
 
 [build-system]
@@ -63,7 +62,7 @@ build-backend = "hatchling.build"
 asyncio_mode = "auto"
 
 [tool.hatch.build.targets.wheel]
-packages = ["evomaster", "evaluation", "playground", "matmaster", "utils"]
+packages = ["evomaster", "matmaster", "utils"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

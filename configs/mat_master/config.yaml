@@ -232,7 +232,7 @@ mat_master:
     poll_interval_seconds: 60
   # 技能进化能力配置（被 SkillEvolutionExp 使用）
   skill_evolution:
-    dynamic_skills_root: "playground/mat_master/skills/dynamic"
+    dynamic_skills_root: "workspace/skills/dynamic"
     # 用户永久 skill 库（跨 session 保留）
     # local_user_skills_root: 本机加载路径，~ 会被展开；remote 会同步到 remote_user_skills_root
     local_user_skills_root: "~/.evomaster-skills"
@@ -380,7 +380,7 @@ session:
   type: "local"
 
   local:
-    working_dir: "./playground/mat_master/workspace"
+    working_dir: "./workspace"
     timeout: 60
     gpu_devices: null
     cpu_devices: null
@@ -395,7 +395,7 @@ session:
     cpu_limit: 16.0
     gpu_devices: "0"
     network_mode: "host"
-    volumes: {"./playground/mat_master/workspace": "/workspace"}
+    volumes: {"./workspace": "/workspace"}
     env_vars: {}
     auto_remove: false
     timeout: 300

@@ -28,7 +28,7 @@ env:
 session:
   type: "local"
   local:
-    working_dir: "./playground/mat_master/workspace"
+    working_dir: "./workspace"
     timeout: 60
     gpu_devices: null
     cpu_devices: null
@@ -42,7 +42,7 @@ session:
     cpu_limit: 16.0
     gpu_devices: "0"
     network_mode: "host"
-    volumes: {"./playground/mat_master/workspace": "/workspace"}
+    volumes: {"./workspace": "/workspace"}
     env_vars: {}
     auto_remove: false
     timeout: 300
