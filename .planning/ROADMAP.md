@@ -58,7 +58,7 @@ Full details: milestones/v1-ROADMAP.md
 **Milestone Goal:** 让 `matmaster/` 运行时路径不再 import `evomaster/`、`playground/` 或 `src/`，成为可独立运行、测试与发布的核心包。三方向解耦：evomaster (~15 imports, 8 files)、playground (1 import)、src (6 imports, 2 files)。
 
 - [ ] **Phase 25: Session 与 Playground 原生化** - 切断 session/config/playground 对 evomaster 的运行时硬依赖，建立 matmaster 自有环境准备入口
-- [ ] **Phase 26: Tool 内化与遗留工具收归** - 移除 EvoToolAdapter、内化 builtin helper、收归 MonitorJobTool 与 web_search_tool，让全部 tool 在 matmaster 原生运行
+- [x] **Phase 26: Tool 内化与遗留工具收归** - 移除 EvoToolAdapter、内化 builtin helper、收归 MonitorJobTool 与 web_search_tool，让全部 tool 在 matmaster 原生运行
 - [ ] **Phase 27: MCP 与 Calculation 原生链路** - 将 lazy_mcp、schema cache 与 calculation path adaptor 收回 matmaster 侧，保持 Bohrium 协议兼容
 - [ ] **Phase 28: src 反向依赖反转与 Consumer 迁移** - 消除 bohrium_setup/script_env 对 src 的反向依赖，同时迁移 src 消费者到 matmaster 原生数据结构
 - [ ] **Phase 29: 主执行路径切换** - API/worker 与本地 Web 调试后端改走 matmaster 原生入口，保持主路径持续可运行
@@ -374,7 +374,7 @@ Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底�
 | 23. Verification + Nyquist Closure | v2.0 | 1/1 | Complete | 2026-03-30 |
 | 24. emit_nowait Tech Debt Cleanup | v2.0 | 1/1 | Complete | 2026-03-29 |
 | 25. Session 与 Playground 原生化 | v2.1 | 0/TBD | Not started | - |
-| 26. Tool 内化与遗留工具收归 | v2.1 | 0/TBD | Not started | - |
+| 26. Tool 内化与遗留工具收归 | v2.1 | 3/3 | Complete | 2026-04-01 |
 | 27. MCP 与 Calculation 原生链路 | v2.1 | 0/TBD | Not started | - |
 | 28. src 反向依赖反转与 Consumer 迁移 | v2.1 | 0/TBD | Not started | - |
 | 29. 主执行路径切换 | v2.1 | 0/TBD | Not started | - |
