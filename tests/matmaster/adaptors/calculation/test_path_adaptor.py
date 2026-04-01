@@ -192,11 +192,11 @@ class TestNoTopLevelEvoMasterInPathAdaptor:
         )
 
     def test_function_level_bohrium_imports_exist(self):
-        """Lazy bohrium imports in function bodies are expected per D-08."""
+        """Bohrium imports come from matmaster.integration.bohrium_env (Phase 28 migration)."""
         import matmaster.adaptors.calculation.path_adaptor as mod
         source = inspect.getsource(mod)
-        assert "evomaster.env.bohrium" in source, (
-            "Expected function-level lazy imports from evomaster.env.bohrium in path_adaptor.py"
+        assert "matmaster.integration.bohrium_env" in source, (
+            "Expected imports from matmaster.integration.bohrium_env in path_adaptor.py"
         )
 
     def test_relative_oss_io_import_used(self):
