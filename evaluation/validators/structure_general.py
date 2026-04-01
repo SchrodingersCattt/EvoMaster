@@ -602,7 +602,10 @@ def check_surface_termination(
         mask = np.abs(coords - extreme_coord) <= layer_tol_A
         layer_elems = [elements[i] for i in range(len(sites)) if mask[i]]
         if not layer_elems:
-            return False, f'{fpath.name}: outermost layer is empty (tol={layer_tol_A} Å)'
+            return (
+                False,
+                f'{fpath.name}: outermost layer is empty (tol={layer_tol_A} Å)',
+            )
         unique = sorted(set(layer_elems))
         has_elem = element in layer_elems
         return (
