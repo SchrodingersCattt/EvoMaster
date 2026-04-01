@@ -51,25 +51,54 @@ def exec_bash(self, command: str, timeout: int | None = None,
 ```python
 def exec_bash(self, command, timeout=None, stop_event=None):
     self._ensure_connected()
-    channel = self._transport.open_session()
-    channel.exec_command(f"cd {shlex.quote(self._workdir)} && {command}")
-    # channel.recv() 流式读 stdout
-    # channel.recv_stderr() 流式读 stderr
-    # channel.recv_exit_status() 获取 exit_code
+    transport = self._client.get_transport()
+    channel = transport.open_session()
+    wrapped = f"bash -l -c {shlex.quote(f'cd {shlex.quote(self._workdir)} && {command}')}"
+    channel.exec_command(wrapped)
+    # 流式读取（见下方输出捕获）
 ```
 
 **CWD 管理**：`self._workdir` 在 session 生命周期内固定（来自 `SSHSessionConfig.working_dir`），每条命令通过 `cd <workdir> && <command>` 前缀设置工作目录。
 
-**取消机制**：后台线程监听 `stop_event`，触发时 `channel.close()` 关闭 channel，远程进程收到 SIGHUP：
+**Shell 环境**：命令通过 `bash -l -c "..."` 执行（login shell），确保 `/etc/profile` 和 `/etc/profile.d/` 被加载。HPC 容器镜像的关键环境变量（PATH、LD_LIBRARY_PATH、模块系统）依赖这些初始化脚本。
+
+**输出捕获——流式读取避免 buffer 死锁**：
+
+paramiko 的 SSH channel 有 64KB 窗口限制。如果先等 `exit_status_ready()` 再读 stdout，长输出命令会因 buffer 满而死锁。必须在等待退出状态的同时持续消费 buffer：
 
 ```python
-def _watch_stop(self, channel, stop_event):
-    while not channel.exit_status_ready():
-        if stop_event.is_set():
-            channel.close()
-            return
-        time.sleep(0.5)
+stdout_chunks = []
+stderr_chunks = []
+while not channel.exit_status_ready():
+    if channel.recv_ready():
+        stdout_chunks.append(channel.recv(65536))
+    if channel.recv_stderr_ready():
+        stderr_chunks.append(channel.recv_stderr(65536))
+    # stop_event 检查（见取消机制）
+    time.sleep(0.05)
+# drain 剩余数据
+while channel.recv_ready():
+    stdout_chunks.append(channel.recv(65536))
+while channel.recv_stderr_ready():
+    stderr_chunks.append(channel.recv_stderr(65536))
+exit_code = channel.recv_exit_status()
 ```
+
+**取消机制**：在上述读取循环内直接检查 `stop_event`，无需单独的 watcher 线程：
+
+```python
+# 在 while not channel.exit_status_ready() 循环内
+is_set = getattr(stop_event, 'is_set', None)
+if callable(is_set) and is_set():
+    channel.close()  # 远程进程收到 SIGHUP
+    return {"stdout": ..., "stderr": "Command cancelled.", "exit_code": 130, ...}
+```
+
+`stop_event` 兼容性：使用 `getattr(stop_event, 'is_set', None)` 检查，与现有代码模式一致（参见 `_lifecycle.py:104`）。
+
+`channel.close()` 后 `recv_exit_status()` 返回 -1（paramiko 约定），代码路径需处理此情况返回 `exit_code=130`（SIGINT 惯例）。
+
+**SIGHUP 局限性说明**：`channel.close()` 导致远程进程收到 SIGHUP，但部分 HPC 程序（LAMMPS、ABACUS）可能忽略 SIGHUP。如果实践中发现取消不可靠，后续可增强为通过独立 channel 发送 `kill -TERM`。当前阶段 SIGHUP 足够覆盖常见场景。
 
 **并发能力**：删除 `_prev_command_status` 状态机，每次调用独立 channel，天然并发。
 
@@ -87,7 +116,7 @@ class SFTPPool:
         self._transport = transport
         self._max_size = max_size
         self._pool: collections.deque[paramiko.SFTPClient] = deque()
-        self._created: int = 0
+        self._created: int = 0  # 诊断/日志用途，不参与调度决策
         self._semaphore = threading.Semaphore(max_size)
         self._lock = threading.Lock()  # 仅保护 _pool 和 _created
 
@@ -97,9 +126,25 @@ class SFTPPool:
             if self._pool:
                 return self._pool.popleft()
             self._created += 1
-        return self._transport.open_sftp_client()
+        try:
+            return self._transport.open_sftp_client()
+        except Exception:
+            self._semaphore.release()  # 创建失败时归还槽位，防止泄漏
+            raise
 
     def release(self, sftp: paramiko.SFTPClient) -> None:
+        # 检查连接是否存活；已断开的不放回池
+        try:
+            sftp.stat('.')
+        except Exception:
+            try:
+                sftp.close()
+            except Exception:
+                pass
+            with self._lock:
+                self._created -= 1
+            self._semaphore.release()
+            return
         with self._lock:
             self._pool.append(sftp)
         self._semaphore.release()
@@ -107,7 +152,10 @@ class SFTPPool:
     def close_all(self) -> None:
         with self._lock:
             while self._pool:
-                self._pool.popleft().close()
+                try:
+                    self._pool.popleft().close()
+                except Exception:
+                    pass
             self._created = 0
 ```
 
@@ -115,6 +163,9 @@ class SFTPPool:
 - `max_size=4`：SSH2 单 transport 并发 channel 软限制约 10，4 个 SFTP channel 覆盖典型并行度并留余量给 exec_command
 - 懒创建：按需打开 SFTP channel，用完归还
 - `_lock` 作用域极小：仅保护 deque 操作，不在 I/O 期间持锁
+- 创建失败安全：`open_sftp_client()` 异常时 `semaphore.release()` 防止槽位泄漏
+- 归还时健康检查：`sftp.stat('.')` 验证连接存活，已断开的直接关闭丢弃
+- `_created` 计数仅用于诊断日志，不参与池调度决策
 
 **Session 文件方法改造**（以 read_file 为例）：
 
@@ -129,7 +180,7 @@ def read_file(self, path, encoding="utf-8"):
         self._sftp_pool.release(sftp)
 ```
 
-**重连处理**：`_ensure_connected()` 检测 transport 断开时，重建 SSH 连接后调用 `_sftp_pool.close_all()`，后续操作触发懒创建。
+**重连处理**：`_ensure_connected()` 检测 transport 断开时，重建 SSH 连接后调用 `_sftp_pool.close_all()`，并用新 transport 重新初始化池。后续操作触发懒创建。
 
 **删除的组件**：
 - `self._sftp` — 单 SFTP 实例
@@ -145,7 +196,7 @@ def read_file(self, path, encoding="utf-8"):
 
 evomaster 时代的 duck-type 检查 `session._env` 在原生 SSHSession 上永远为 False，导致 SFTP 推送和远程日志读取为死代码。
 
-修复：将 `session._env` 检查改为检测原生接口：
+**is_ssh 检测修复**——将 `session._env` 检查改为检测原生接口：
 
 ```python
 # 之前
@@ -155,13 +206,17 @@ is_ssh = hasattr(session, '_env') and hasattr(getattr(session, '_env', None), 'u
 is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_file', None))
 ```
 
-涉及文件：
+涉及位置（4 处 is_ssh 判断）：
 - `_lifecycle.py:88`
 - `_download.py:218`
 - `_tool.py:129`
 - `_logs.py:285`
 
-`_sftp_push_directory` 内部从 `session._env.upload_file()` 改为 `session.upload_file()`。
+**内部调用修复**——is_ssh 检测修复后，后续使用 `session._env.xxx` 的代码也必须同步改为原生接口：
+
+- `_download.py` `_sftp_push_directory`：`session._env.upload_file()` → `session.upload_file()`
+- `_logs.py` `_read_log_tail_remote`（line 256）：`session._env.read_file_content(log_path)` → `session.read_file(log_path)`
+- `_logs.py` `_find_log_file_remote`（line 291）：`session._env.ssh_exec(...)` → `session.ssh_exec(...)`（原生 SSHSession 有此公共方法）
 
 ## 变更范围
 
@@ -170,11 +225,11 @@ is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_f
 | `matmaster/types/session.py` | Protocol 签名：`exec_bash` 移除 `is_input` |
 | `matmaster/sessions/ssh.py` | 重写核心：tmux → exec_command，单 SFTP → SFTPPool |
 | `matmaster/sessions/local.py` | 小改：`exec_bash` 移除 `is_input` |
-| `matmaster/tools/builtin/execute_bash.py` | 小改：schema 删 `is_input`，移除传递 |
-| `matmaster/tools/builtin/monitor_job/_lifecycle.py` | 修复：`session._env` → `session.upload_file` |
-| `matmaster/tools/builtin/monitor_job/_download.py` | 修复：同上 |
-| `matmaster/tools/builtin/monitor_job/_tool.py` | 修复：同上 |
-| `matmaster/tools/builtin/monitor_job/_logs.py` | 修复：同上 |
+| `matmaster/tools/builtin/bash_tool.py` | 小改：schema 删 `is_input`，移除传递 |
+| `matmaster/tools/builtin/monitor_job/_lifecycle.py` | 修复：is_ssh 检测 |
+| `matmaster/tools/builtin/monitor_job/_download.py` | 修复：is_ssh 检测 + `_sftp_push_directory` 内部调用 |
+| `matmaster/tools/builtin/monitor_job/_tool.py` | 修复：is_ssh 检测 |
+| `matmaster/tools/builtin/monitor_job/_logs.py` | 修复：is_ssh 检测 + `_read_log_tail_remote` + `_find_log_file_remote` 内部调用 |
 
 ## 不变部分
 
@@ -186,3 +241,7 @@ is_ssh = hasattr(session, 'upload_file') and callable(getattr(session, 'upload_f
 - BohriumSetupService / agent_run_bohrium.py（`ssh_exec()` 和 `upload_directory_tarball()` 保留为非 Protocol 公共方法，内部改用 exec_command / SFTPPool）
 - ReadTool / WriteTool / EditTool / GlobTool / GrepTool / ListDirTool
 - SpawnTool（子 agent 共享父 session，改造后并发安全）
+
+## 已知遗留问题（不在本次范围）
+
+- `agent_run_bohrium.py` 的 `_sync_skills_to_ssh_session` 使用 `isinstance(ssh_session, SSHSession)` 检查 evomaster 的 SSHSession 类型，对原生 SSHSession 会返回 False 导致 skill 同步跳过。这是 evomaster 迁移的预存问题，需单独修复。
