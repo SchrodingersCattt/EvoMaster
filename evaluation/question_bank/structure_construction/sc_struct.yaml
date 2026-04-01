@@ -210,7 +210,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_003_20260401
+- id: SC_struct_003_20260401b
   capability: structure_construction
   domain: struct
   intent: Passivate dangling bonds on Si(100) surface slab bottom with hydrogen atoms.
@@ -240,8 +240,23 @@ questions:
       cutoff_A: 2.0
       expected: 1.48
       tolerance: 0.15
-  - key: passivation_quality
-    value: H atoms added to satisfy 4-coordination on bottom Si atoms
+  - key: si_coordination
+    value:
+      filename: '*POSCAR*'
+      center_element: Si
+      expected: 4
+      tolerance: 0
+      cutoff_A: 2.6
+  - key: si_si_h_angle_deg
+    value:
+      filename: '*POSCAR*'
+      triplet:
+      - Si
+      - Si
+      - H
+      expected_deg: 109.47
+      tolerance_deg: 8.0
+      cutoff_A: 2.6
   - key: required_fields
     value:
     - structure_file
@@ -257,11 +272,17 @@ questions:
     criterion: A representative Si-H bond length in the POSCAR output is near 1.48 A.
     axis: correctness
     verify: struct_file_bond_length
-  - id: passivation_quality
-    criterion: Bottom Si atoms passivated with H to achieve 4-coordination, with Si-H
-      bond length ~1.48 A.
+  - id: si_coordination
+    criterion: The mean coordination number of Si atoms in the POSCAR (cutoff 2.6 A)
+      is 4, confirming that bottom dangling bonds are fully saturated.
     axis: correctness
-    verify: llm_binary_judge
+    verify: struct_file_coordination
+  - id: si_si_h_angle_deg
+    criterion: The mean Si-Si-H angle read from the POSCAR is close to tetrahedral
+      109.47 degrees (tolerance 8 degrees), confirming that passivating H atoms sit
+      at tetrahedral positions around the surface Si atoms.
+    axis: correctness
+    verify: struct_file_bond_angle
   - id: required_fields
     criterion: Output includes structure file, number of added H atoms, representative
       Si-H bond length, and an explicit check that bottom Si atoms reach four coordination.
@@ -880,7 +901,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260401
+- id: SC_struct_009_20260401b
   capability: structure_construction
   domain: struct
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce
@@ -919,6 +940,13 @@ questions:
       element_b: O
       expected_ratio: 0.5
       tolerance: 0.05
+  - key: o_termination
+    value:
+      filename: ceo2_111_trilayer.cif
+      element: O
+      axis: z
+      side: both
+      layer_tol_A: 0.5
   - key: required_fields
     value:
     - file_exists
@@ -943,6 +971,12 @@ questions:
     criterion: The Ce:O ratio read from ceo2_111_trilayer.cif is consistent with CeO2 stoichiometry.
     axis: correctness
     verify: struct_file_stoichiometry_ratio
+  - id: o_termination
+    criterion: Both the top and bottom outermost atomic layers of ceo2_111_trilayer.cif
+      are O-terminated (verified by reading the file and checking the outermost z-layer
+      element is O).
+    axis: correctness
+    verify: struct_file_surface_termination
   - id: required_fields
     criterion: The answer explicitly reports the 9-layer construction, symmetry check,
       oxygen-terminated outermost layer, stoichiometric CeO2 ratio, and (111) surface

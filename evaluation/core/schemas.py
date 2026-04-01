@@ -62,6 +62,8 @@ VerifyLiteral = Literal[
     'struct_file_layer_count',
     # file-system check (no pymatgen needed)
     'struct_file_count',
+    # surface termination check
+    'struct_file_surface_termination',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
