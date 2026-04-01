@@ -4,20 +4,14 @@ FROM registry.dp.tech/public/python:3.13-slim AS builder
 RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
     sed -i 's|https://deb.debian.org|https://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources
 
-# 安装 weasyprint 系统依赖、curl/wget 等，及 jemalloc（LD_PRELOAD 后更积极向 OS 归还空闲内存，RSS 更易回落）
+# git：镜像内 pre-commit install-hooks；curl/wget/unzip：容器内排障与脚本常用；libjemalloc2：start.sh 可选 LD_PRELOAD
+# （当前 pyproject 未包含 weasyprint，故不装 Pango/Cairo/字体；若以后 HTML→PDF 再补依赖）
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpango-1.0-0 \
-    libpangoft2-1.0-0 \
-    libharfbuzz0b \
-    libpangocairo-1.0-0 \
-    libffi-dev \
-    shared-mime-info \
-    fontconfig \
     curl \
-    wget \
-    unzip \
     git \
     libjemalloc2 \
+    unzip \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # 配置 pip 使用国内源
@@ -51,12 +45,10 @@ ENV PATH="/app/.venv/bin:$PATH"
 # 复制其余项目文件
 COPY . /app/
 
-# 将字体文件复制到系统字体目录并刷新字体缓存
-RUN mkdir -p /usr/share/fonts/truetype/noto && \
-    cp /app/fonts/NotoSansCJK-*.ttc /usr/share/fonts/truetype/noto/ && \
-    chmod 644 /usr/share/fonts/truetype/noto/*.ttc && \
-    fc-cache -fv && \
-    fc-list | grep -i "noto.*cjk" || echo "Warning: Font may not be registered"
+# CI：在镜像内预建 pre-commit hook 环境，lint job 通过 docker run + 挂载仓库复用，减少 job 内访问 GitHub
+RUN mkdir -p /app/.cache/pre-commit && \
+    PRE_COMMIT_HOME=/app/.cache/pre-commit pre-commit install-hooks
+ENV PRE_COMMIT_HOME=/app/.cache/pre-commit
 
 # 暴露端口
 EXPOSE 80
