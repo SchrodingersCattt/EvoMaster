@@ -10,21 +10,21 @@
 ### Playground & Session
 
 - [ ] **PLAY-01**: 开发者可以在不安装 `evomaster` 的环境中创建并使用 `matmaster.sessions.local.LocalSession`，供 builtin tools 执行本地命令与文件操作
-- [ ] **PLAY-02**: 开发者可以通过 `matmaster` 原生 session factory 创建 local / docker / ssh session，而 `matmaster.core.playground.Playground` 不再直接 import `evomaster.agent.session.*`
+- [x] **PLAY-02**: 开发者可以通过 `matmaster` 原生 session factory 创建 local / docker / ssh session，而 `matmaster.core.playground.Playground` 不再直接 import `evomaster.agent.session.*`
 - [ ] **PLAY-03**: 开发者可以通过 `matmaster.core.playground.Playground` 加载主配置、准备 workspace、logging 和 session，而不依赖 `evomaster.config.ConfigManager` 或 `PlaygroundSessionMixin`
 
 ### Tool 内化
 
 - [ ] **TOOL-07**: 开发者可以在 `matmaster.tools` 中注册并执行遗留 builtin 能力，而不需要 `EvoToolAdapter`
 - [ ] **TOOL-08**: 开发者可以在 `matmaster.tools.builtin` 中使用原生 bash safety 与 edit helper，不再导入 `evomaster.agent.tools.builtin.*`
-- [ ] **TOOL-09**: `MonitorJobTool` 通过 matmaster 原生注册或 skill 机制提供，`exp.py` 不再 lazy import `evomaster.agent.tools.builtin.monitor_job`
+- [x] **TOOL-09**: `MonitorJobTool` 通过 matmaster 原生注册或 skill 机制提供，`exp.py` 不再 lazy import `evomaster.agent.tools.builtin.monitor_job`
 - [ ] **TOOL-10**: `web_search_tool` 通过 matmaster 原生实现或 skill 注册提供，`exp.py` 不再 import `playground.mat_master.tools.web_search`
 
 ### MCP & Calculation
 
 - [ ] **MCP-01**: 开发者可以通过 `matmaster.tools.lazy_mcp` 连接 MCP server、缓存 schema 并执行 tool，而不依赖 `evomaster.agent.tools.mcp.*`
-- [ ] **CALC-01**: 开发者可以在 `matmaster` 侧解析 calculation runtime config、path adaptor 与 schema cache，而不直接导入 `evomaster.adaptors.calculation.*`
-- [ ] **CALC-02**: 解耦后 Bohrium / calculation tool 的 executor、storage、OSS 上传与远端路径适配行为保持与当前协议兼容
+- [x] **CALC-01**: 开发者可以在 `matmaster` 侧解析 calculation runtime config、path adaptor 与 schema cache，而不直接导入 `evomaster.adaptors.calculation.*`
+- [x] **CALC-02**: 解耦后 Bohrium / calculation tool 的 executor、storage、OSS 上传与远端路径适配行为保持与当前协议兼容
 
 ### src 反向依赖反转
 
@@ -73,15 +73,15 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PLAY-01 | Phase 25 | Pending |
-| PLAY-02 | Phase 25 | Pending |
+| PLAY-02 | Phase 25 | Complete |
 | PLAY-03 | Phase 25 | Pending |
 | TOOL-07 | Phase 26 | Pending |
 | TOOL-08 | Phase 26 | Pending |
-| TOOL-09 | Phase 26 | Pending |
+| TOOL-09 | Phase 26 | Complete |
 | TOOL-10 | Phase 26 | Pending |
 | MCP-01 | Phase 27 | Pending |
-| CALC-01 | Phase 27 | Pending |
-| CALC-02 | Phase 27 | Pending |
+| CALC-01 | Phase 27 | Complete |
+| CALC-02 | Phase 27 | Complete |
 | INVR-01 | Phase 28 | Pending |
 | INVR-02 | Phase 28 | Pending |
 | CONS-03 | Phase 28 | Pending |

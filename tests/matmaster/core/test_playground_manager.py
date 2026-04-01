@@ -10,39 +10,34 @@ from unittest.mock import patch
 import yaml
 
 from matmaster.core.playground import Playground, PlaygroundManager
+from matmaster.types.context import WorkspaceArchivalConfig
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def _write_config(tmp_path: Path, overrides: dict[str, Any] | None = None) -> Path:
-    """Write a minimal YAML config and return its path."""
+def _write_config(cfg_dir: Path, overrides: dict[str, Any] | None = None) -> Path:
+    """Write a minimal YAML config and return the config.yaml path."""
     config: dict[str, Any] = {
         "session": {
             "type": "local",
             "local": {"workspace_path": "/tmp/ws", "timeout": 30},
         },
-        "logging": {"level": "INFO"},
-        "env": {
-            "cluster": {"debug_pool": {"type": "cpu"}, "train_pool": {"type": "cpu"}},
-            "docker": {},
-            "scheduler": {},
-        },
         "agents": {"general": {"llm": "default"}},
     }
     if overrides:
         config.update(overrides)
-    config_path = tmp_path / "config.yaml"
+    config_path = cfg_dir / "config.yaml"
     config_path.write_text(yaml.dump(config, default_flow_style=False))
     return config_path
 
 
-def _setup_project_root(tmp_path: Path) -> Path:
+def _setup_project_root(tmp_path: Path, overrides: dict[str, Any] | None = None) -> Path:
     """Create a fake project root with matmaster_config directory."""
     mm_dir = tmp_path / "matmaster_config"
     mm_dir.mkdir(parents=True)
-    _write_config(mm_dir)
+    _write_config(mm_dir, overrides)
     return tmp_path
 
 
@@ -81,12 +76,24 @@ class TestValidateStartup:
         root = tmp_path / "root"
         cfg_dir = root / "matmaster_config"
         cfg_dir.mkdir(parents=True)
-        # Config without agents key
         (cfg_dir / "config.yaml").write_text(yaml.dump({"session": {"type": "local"}}))
         mgr = PlaygroundManager(root)
 
         mgr.validate_startup()
         assert mgr._init_done.is_set()
+
+    def test_no_evomaster_deprecation_warning(self, tmp_path: Path) -> None:
+        """validate_startup no longer imports or warns about evomaster."""
+        root = _setup_project_root(tmp_path)
+        mgr = PlaygroundManager(root)
+
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            mgr.validate_startup()
+            evo_warnings = [x for x in w if "evomaster" in str(x.message).lower()]
+            assert evo_warnings == [], f"Unexpected evomaster warnings: {evo_warnings}"
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +108,15 @@ class TestGetOrCreate:
 
         pg = mgr.get_or_create("session-1")
         assert isinstance(pg, Playground)
+
+    def test_parameterized_construction(self, tmp_path: Path) -> None:
+        """Playground created by manager has params from YAML config."""
+        root = _setup_project_root(tmp_path)
+        mgr = PlaygroundManager(root)
+
+        pg = mgr.get_or_create("session-1")
+        assert pg._session_type == "local"
+        assert isinstance(pg._session_config, dict)
 
     def test_returns_cached_playground(self, tmp_path: Path) -> None:
         root = _setup_project_root(tmp_path)
@@ -117,6 +133,58 @@ class TestGetOrCreate:
         pg1 = mgr.get_or_create("session-1")
         pg2 = mgr.get_or_create("session-2")
         assert pg1 is not pg2
+
+    def test_archival_from_config(self, tmp_path: Path) -> None:
+        root = _setup_project_root(
+            tmp_path,
+            overrides={
+                "playground": {
+                    "archival": {
+                        "enabled": True,
+                        "oss_bucket": "test-bucket",
+                        "oss_prefix": "prefix/",
+                    }
+                }
+            },
+        )
+        mgr = PlaygroundManager(root)
+
+        pg = mgr.get_or_create("session-1")
+        assert pg._archival is not None
+        assert isinstance(pg._archival, WorkspaceArchivalConfig)
+        assert pg._archival.enabled is True
+        assert pg._archival.oss_bucket == "test-bucket"
+
+    def test_cache_dir_from_config(self, tmp_path: Path) -> None:
+        root = _setup_project_root(
+            tmp_path,
+            overrides={"playground": {"cache_dir": ".cache/test"}},
+        )
+        mgr = PlaygroundManager(root)
+
+        pg = mgr.get_or_create("session-1")
+        assert pg._cache_dir == ".cache/test"
+
+    def test_workspace_base_from_config(self, tmp_path: Path) -> None:
+        root = _setup_project_root(
+            tmp_path,
+            overrides={"workspace": "./my_workspace"},
+        )
+        mgr = PlaygroundManager(root)
+
+        pg = mgr.get_or_create("session-1")
+        assert pg._workspace_base == "./my_workspace"
+
+    def test_missing_config_uses_defaults(self, tmp_path: Path) -> None:
+        root = tmp_path / "no_config"
+        root.mkdir()
+        (root / "matmaster_config").mkdir()
+        # No config.yaml
+        mgr = PlaygroundManager(root)
+
+        pg = mgr.get_or_create("session-1")
+        assert pg._session_type == "local"
+        assert pg._session_config == {}
 
     def test_thread_safety_different_sessions(self, tmp_path: Path) -> None:
         root = _setup_project_root(tmp_path)
@@ -168,6 +236,47 @@ class TestGetOrCreate:
 
 
 # ---------------------------------------------------------------------------
+# _load_raw_config / _build_archival
+# ---------------------------------------------------------------------------
+
+
+class TestHelpers:
+    def test_load_raw_config_returns_dict(self, tmp_path: Path) -> None:
+        root = _setup_project_root(tmp_path)
+        mgr = PlaygroundManager(root)
+
+        raw = mgr._load_raw_config()
+        assert isinstance(raw, dict)
+        assert "session" in raw
+
+    def test_load_raw_config_missing_file(self, tmp_path: Path) -> None:
+        root = tmp_path / "empty"
+        root.mkdir()
+        (root / "matmaster_config").mkdir()
+        mgr = PlaygroundManager(root)
+
+        raw = mgr._load_raw_config()
+        assert raw == {}
+
+    def test_build_archival_with_block(self, tmp_path: Path) -> None:
+        root = _setup_project_root(tmp_path)
+        mgr = PlaygroundManager(root)
+
+        archival = mgr._build_archival(
+            {"archival": {"enabled": True, "oss_bucket": "b"}}
+        )
+        assert archival is not None
+        assert archival.enabled is True
+
+    def test_build_archival_without_block(self, tmp_path: Path) -> None:
+        root = _setup_project_root(tmp_path)
+        mgr = PlaygroundManager(root)
+
+        archival = mgr._build_archival({})
+        assert archival is None
+
+
+# ---------------------------------------------------------------------------
 # release()
 # ---------------------------------------------------------------------------
 
@@ -180,7 +289,6 @@ class TestRelease:
         pg1 = mgr.get_or_create("session-1")
         mgr.release("session-1")
 
-        # Next get_or_create should create a new instance
         pg2 = mgr.get_or_create("session-1")
         assert isinstance(pg2, Playground)
         assert pg1 is not pg2
@@ -198,5 +306,4 @@ class TestRelease:
         root = _setup_project_root(tmp_path)
         mgr = PlaygroundManager(root)
 
-        # Should not raise
         mgr.release("nonexistent")

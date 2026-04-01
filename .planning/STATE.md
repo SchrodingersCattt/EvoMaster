@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: matmaster/ 完全独立化
-status: ready_to_plan
-stopped_at: Roadmap created, ready to plan Phase 25
-last_updated: "2026-04-01T17:00:00+0800"
+status: executing
+stopped_at: Completed 27-02-PLAN.md
+last_updated: "2026-04-01T11:01:59.264Z"
 last_activity: 2026-04-01
 progress:
-  total_phases: 6
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_phases: 19
+  completed_phases: 15
+  total_plans: 32
+  completed_plans: 30
   percent: 0
 ---
 
@@ -21,20 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** 三层抽象（playground->exp->agent）必须具有清晰、稳定、可测试的职责边界
-**Current focus:** v2.1 Phase 25 Session 与 Playground 原生化
+**Current focus:** Phase 27 — mcp-calculation
 
 ## Current Position
 
-Phase: 25 of 30 (Session 与 Playground 原生化)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-04-01 — v2.1 roadmap created (6 phases, 19 requirements mapped)
+Phase: 27 (mcp-calculation) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-04-01
 
 Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0 in v2.1
 - Average duration: -
 - Total execution time: 0h
@@ -47,6 +48,15 @@ Progress: [░░░░░░░░░░] 0%
 - [v2.1 redefine] Phase 编号延续既有历史，从 Phase 25 开始，不重置
 - [v2.1 roadmap] INVR + CONS 合并为 Phase 28，因 bohrium_setup 同时涉及 src 反向依赖和 consumer 迁移
 - [v2.1 roadmap] TOOL-09/TOOL-10 合入 Phase 26，与 TOOL-07/TOOL-08 一起完成全部 tool 内化
+- [Phase 26-tool]: Lazy import strategy for evomaster.adaptors.calculation: function-level import defers module load
+- [Phase 26-tool]: Duck-typing via hasattr replaces isinstance(SSHSession) for cross-package session detection
+- [Phase 25-session-playground]: Merged SSHSession + SSHEnv into single class directly holding paramiko.SSHClient (no Env intermediate)
+- [Phase 25-session-playground]: Playground parameterized constructor (5 keyword-only params) replaces config_path-based construction
+- [Phase 25-session-playground]: PlaygroundManager._load_raw_config returns raw dict (not Pydantic model) to avoid EvoMasterConfig coupling
+- [Phase 25-session-playground]: Docker session branch removed; only local and ssh supported
+- [Phase 25-session-playground]: agent_run_service reads matmaster_config/ directly instead of via playground.config
+- [Phase 27-mcp-calculation]: evomaster.env imports changed to evomaster.env.bohrium to avoid triggering full load chain
+- [Phase 27-mcp-calculation]: BaseSession TYPE_CHECKING import removed; session param uses Any + duck-typing for cross-package compatibility
 
 ### Pending Todos
 
@@ -59,6 +69,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-01T17:00:00+0800
-Stopped at: Roadmap created, next step is /gsd:plan-phase 25
+Last session: 2026-04-01T11:01:59.261Z
+Stopped at: Completed 27-02-PLAN.md
 Resume file: None

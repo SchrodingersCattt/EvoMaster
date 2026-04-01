@@ -68,7 +68,7 @@ MatMaster 是面向科研场景的 AI Agent 框架内核，围绕 `playground ->
 
 ### Current State
 
-**As of 2026-04-01:** v2.0 的 Phase 24 已完成，`matmaster/` 的 async 基础设施、Hook/Exp 生命周期、tool dispatch 与 confirmation flow 已打通；本轮开始切换到 `v2.1`，目标是把 `matmaster/` 从 `evomaster/` 运行时依赖中彻底抽离出来。v2.0 结束时全量测试记录为 1195 通过。
+**As of 2026-04-01:** Phase 25 完成，matmaster session/playground 原生化：Session Protocol（8 方法）+ SessionConfig 三级配置、SSHSession 原生实现（直接持有 paramiko，477 行）、Playground 参数化构造（零 evomaster import）、PlaygroundManager YAML 解析模式、agent_run_service 直接读 matmaster_config/。Phase 26 也已完成，matmaster.tools 完全原生化。
 
 Tech stack: Python 3.13, Pydantic v2, FastAPI, OpenAI SDK, tiktoken.
 
@@ -174,4 +174,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after v2.1 scope expansion to full independence (evomaster + playground + src)*
+*Last updated: 2026-04-01 after Phase 26 completion (tool internalization)*

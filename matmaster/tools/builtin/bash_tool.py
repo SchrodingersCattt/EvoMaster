@@ -1,6 +1,6 @@
 """BashTool -- execute bash commands via session.
 
-Reuses evomaster bash_safety for dangerous command detection.
+Bash safety detection inlined (originally from evomaster).
 Mirrors the evomaster BashTool behavior (proxy clear, is_input mode)
 but satisfies the matmaster Tool Protocol directly.
 
@@ -12,12 +12,71 @@ Dual-path execute:
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 from typing import Any, ClassVar
 
-from evomaster.agent.tools.builtin.bash_safety import is_dangerous_bash_command
-
 from .base import BuiltinTool
+
+# ---- Bash Safety (inlined from evomaster.agent.tools.builtin.bash_safety) ----
+_BLOCKED_FIRST_TOKENS = frozenset({'env', 'set', 'printenv'})
+
+_DANGEROUS_COMMAND_PATTERNS = [
+    r'rm\s+-rf\s+/',
+    r'rm\s+-rf\s+/\*',
+    r'rm\s+-rf\s+\.',
+    r'rm\s+-rf\s+\.\.',
+    r':\s*\(\s*\)\s*\{\s*[^}]*\|\s*:.*\}',
+    r'mkfs\.?\s',
+    r'dd\s+if=.*of=/dev',
+    r'\bchmod\s+[0-7]{3,4}\s+/',
+    r'>\s*/dev/sd',
+    r'ssh\s+.*\s+root@',
+]
+_COMPILED_PATTERNS = [re.compile(p, re.IGNORECASE) for p in _DANGEROUS_COMMAND_PATTERNS]
+
+_DANGEROUS_PYTHON_CONTENT_PATTERNS = [
+    (r'\bos\.environ\b', 'reads environment variables (os.environ)'),
+    (r'\bos\.getenv\b', 'reads environment variables (os.getenv)'),
+    (r'/proc/self/environ', 'reads /proc/self/environ directly'),
+    (r'subprocess[^#\n]*\benv\b', "runs 'env' via subprocess"),
+    (r'glob\s*\(.*?\.env', 'scans for .env files'),
+    (r"open\s*\(\s*['\"]\.env", 'reads .env file directly'),
+    (r'(AK|SK|KEY|TOKEN|SECRET|CREDENTIAL|BEARER|ACCESS).{0,40}environ',
+     'searches environment for credential-like keys'),
+    (r'environ.{0,40}(AK|SK|KEY|TOKEN|SECRET|CREDENTIAL|BEARER|ACCESS)',
+     'filters environment variables for credentials'),
+]
+_PYTHON_CONTENT_COMPILED = [
+    (re.compile(p, re.IGNORECASE), msg) for p, msg in _DANGEROUS_PYTHON_CONTENT_PATTERNS
+]
+
+
+def is_dangerous_python_content(content: str) -> tuple[bool, str]:
+    """Scan Python source code for dangerous patterns (env dump, credential hunting)."""
+    if not content or not isinstance(content, str):
+        return False, ''
+    for pat, msg in _PYTHON_CONTENT_COMPILED:
+        if pat.search(content):
+            return True, msg
+    return False, ''
+
+
+def is_dangerous_bash_command(command: str) -> tuple[bool, str]:
+    """Check if a bash command is dangerous and must not be executed."""
+    if not command or not isinstance(command, str):
+        return False, ''
+    raw = command.strip()
+    if not raw:
+        return False, ''
+    first_token = raw.split(None, 1)[0].lower() if raw else ''
+    if first_token in _BLOCKED_FIRST_TOKENS:
+        return True, f"'{first_token}' is not allowed (blocked for security)."
+    for pat in _COMPILED_PATTERNS:
+        if pat.search(command):
+            return True, 'The command contains potentially destructive or unsafe operations.'
+    return False, ''
+# ---- End Bash Safety ----
 
 # Proxy clear prefix -- injected before each new command to prevent
 # platform-injected proxies from blocking curl/wget/git on remote nodes.
