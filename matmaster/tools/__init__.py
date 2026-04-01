@@ -1,14 +1,12 @@
-"""matmaster.tools -- Tool registration and adaptation.
+"""matmaster.tools -- Tool registration and execution.
 
-Provides ToolRegistry for unified tool management and EvoToolAdapter
-for bridging EvoMaster BaseTool to the matmaster Tool Protocol.
+Provides ToolRegistry for unified tool management. All tools satisfy
+the Tool Protocol (name/description/json_schema/execute).
 """
 
-from .evomaster_tool_adapter import EvoToolAdapter
 from .tool_registry import Tool, ToolRegistry
 
 __all__ = [
-    "EvoToolAdapter",
     "Tool",
     "ToolRegistry",
 ]
