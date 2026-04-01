@@ -1,0 +1,107 @@
+version: "v5"
+capability: "batch_processing"
+domain: "elec"
+
+questions:
+  # ============================================================
+  # BP_elec_001 — 多金属表面批量吸附能计算（Mock版）
+  # ============================================================
+  - id: "BP_elec_001"
+    capability: "batch_processing"
+    domain: "elec"
+    intent: "Batch-compute H adsorption energy on 3 different metal (001) surfaces using mock energies to test batch workflow efficiency."
+    human_prompt_seed: |
+      批量计算 H 原子在 Cu(001)、Ag(001)、Au(001) 三种金属表面的吸附能，用于 HER 活性对比：
+
+      对每种金属执行相同流程：
+      1. 从数据库获取 FCC 体相结构；
+      2. 切 (001) 面 slab（4 层，15 Å 真空，2×2 扩胞）；
+      3. 在 ontop 位点放置 H 原子（距表面 1.5 Å）；
+      4. 使用以下mock能量值（模拟DPA弛豫结果）：
+
+         | 金属 | E_slab (eV) | E_slab+H (eV) |
+         |------|-------------|---------------|
+         | Cu   | -95.20      | -96.72        |
+         | Ag   | -108.45     | -110.08       |
+         | Au   | -125.30     | -126.85       |
+
+         H₂ 参考能量：E_H₂ = -31.80 eV（只计算一次，三种金属共用）
+
+      5. 计算 E_ads = E(slab+H) - E(slab) - 0.5×E(H₂)；
+
+      关键要求：
+      - 三种金属的 slab 参数完全一致（同样层数、真空、扩胞）
+      - H₂ 参考能量只使用一次，三种金属共用
+      - 输出三种金属的吸附能对比表，并按 |ΔG_H| 排序评价 HER 活性
+
+      预期结果：
+      - Cu: E_ads ≈ -0.62 eV
+      - Ag: E_ads ≈ -0.73 eV
+      - Au: E_ads ≈ -0.65 eV
+    tags: ["batch", "her", "adsorption", "metal_screening", "catalysis"]
+    mode_scope: ["direct", "planner"]
+    required_tools:
+      - "mat_sg_build_surface_slab"
+      - "mat_struct_db_fetch_structures_from_db"
+    optional_tools: []
+    data_files: []
+    reference_answers:
+      - key: "E_ads_Cu"
+        value: -0.62
+        tolerance: 0.2
+      - key: "E_ads_Ag"
+        value: -0.73
+        tolerance: 0.2
+      - key: "E_ads_Au"
+        value: -0.65
+        tolerance: 0.2
+      - key: "required_fields"
+        value:
+          - "E_ads_Cu"
+          - "E_ads_Ag"
+          - "E_ads_Au"
+          - "H2_reference"
+          - "activity_ranking"
+      - key: "batch_efficiency"
+        value: "H2 reference computed once, shared across 3 metals"
+      - key: "duration_budget"
+        value: {max: 7200000}
+      - key: "token_budget_total"
+        value: {max: 80000}
+    scoring_checklist:
+      - id: "E_ads_Cu"
+        criterion: "Cu adsorption energy is computed correctly from mock energies (~-0.62 eV)."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "E_ads_Ag"
+        criterion: "Ag adsorption energy is computed correctly from mock energies (~-0.73 eV)."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "E_ads_Au"
+        criterion: "Au adsorption energy is computed correctly from mock energies (~-0.65 eV)."
+        axis: "correctness"
+        verify: "numerical_range"
+      - id: "required_fields"
+        criterion: "Report includes adsorption energy for all three metals, H₂ reference energy, and HER activity ranking."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "consistent_slab_params"
+        criterion: "All three metal slabs use identical structural parameters: 4 layers, 15 Å vacuum, 2×2 supercell, (001) surface."
+        axis: "correctness"
+        verify: "llm_binary_judge"
+      - id: "batch_efficiency"
+        criterion: "H₂ reference energy is used only once and shared for all three metals."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+      - id: "efficiency_judge"
+        criterion: "Batch workflow is organized efficiently without redundant steps."
+        axis: "efficiency"
+        verify: "llm_binary_judge"
+      - id: "duration_budget"
+        criterion: "Wall-clock run duration does not exceed benchmark ceiling."
+        axis: "efficiency"
+        verify: "duration_budget"
+      - id: "token_budget_total"
+        criterion: "Total token usage stays within benchmark ceiling."
+        axis: "efficiency"
+        verify: "token_budget"
