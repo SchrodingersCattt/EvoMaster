@@ -34,7 +34,7 @@ _BUILTIN_WHEN_STAR: list[str] = [
     "task_update",
     "task_complete",
     "monitor_job",
-    "web-search",
+    "web_search",
 ]
 
 
