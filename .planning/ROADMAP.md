@@ -53,16 +53,17 @@ Full details: milestones/v1-ROADMAP.md
 
 </details>
 
-### 🚧 v2.1 matmaster/ 完全独立化 (Active -- Phases 25-30)
+### 🚧 v2.1 matmaster/ 完全独立化 (Active -- Phases 25-31)
 
 **Milestone Goal:** 让 `matmaster/` 运行时路径不再 import `evomaster/`、`playground/` 或 `src/`，成为可独立运行、测试与发布的核心包。三方向解耦：evomaster (~15 imports, 8 files)、playground (1 import)、src (6 imports, 2 files)。
 
-- [ ] **Phase 25: Session 与 Playground 原生化** - 切断 session/config/playground 对 evomaster 的运行时硬依赖，建立 matmaster 自有环境准备入口
-- [ ] **Phase 26: Tool 内化与遗留工具收归** - 移除 EvoToolAdapter、内化 builtin helper、收归 MonitorJobTool 与 web_search_tool，让全部 tool 在 matmaster 原生运行
-- [ ] **Phase 27: MCP 与 Calculation 原生链路** - 将 lazy_mcp、schema cache 与 calculation path adaptor 收回 matmaster 侧，保持 Bohrium 协议兼容
-- [ ] **Phase 28: src 反向依赖反转与 Consumer 迁移** - 消除 bohrium_setup/script_env 对 src 的反向依赖，同时迁移 src 消费者到 matmaster 原生数据结构
-- [ ] **Phase 29: 主执行路径切换** - API/worker 与本地 Web 调试后端改走 matmaster 原生入口，保持主路径持续可运行
-- [ ] **Phase 30: 解耦审计与独立性证明** - 用 import audit、隔离测试与迁移文档证明 matmaster 可脱离 evomaster/playground/src 独立运行
+- [x] **Phase 25: Session 与 Playground 原生化** - 切断 session/config/playground 对 evomaster 的运行时硬依赖，建立 matmaster 自有环境准备入口
+- [x] **Phase 26: Tool 内化与遗留工具收归** - 移除 EvoToolAdapter、内化 builtin helper、收归 MonitorJobTool 与 web_search_tool，让全部 tool 在 matmaster 原生运行
+- [x] **Phase 27: MCP 与 Calculation 原生链路** - 将 lazy_mcp、schema cache 与 calculation path adaptor 收回 matmaster 侧，保持 Bohrium 协议兼容
+- [x] **Phase 28: src 反向依赖反转与 Consumer 迁移** - 消除 bohrium_setup/script_env 对 src 的反向依赖，同时迁移 src 消费者到 matmaster 原生数据结构
+- [x] **Phase 29: 主执行路径切换** - API/worker 与本地 Web 调试后端改走 matmaster 原生入口，保持主路径持续可运行
+- [x] **Phase 30: 解耦审计与独立性证明** - 用 import audit、隔离测试与迁移文档证明 matmaster 可脱离 evomaster/playground/src 独立运行
+- [ ] **Phase 31: Tech Debt Cleanup — 测试修复与文档同步** - 修复 32 个预存在测试失败、更新隔离脚本、同步 REQUIREMENTS.md 文档状态
 
 ## Phase Details
 
@@ -370,10 +371,21 @@ Plans:
 - [x] 30-02-PLAN.md -- 隔离测试运行 + evomaster 技能归档 + evomaster/ 删除 + 配置更新
 - [x] 30-03-PLAN.md -- v2.1 解耦迁移文档
 
+### Phase 31: Tech Debt Cleanup — 测试修复与文档同步
+**Goal**: 修复 v2.1 解耦过程中产生的 32 个预存在测试失败，更新隔离测试脚本，同步 REQUIREMENTS.md 文档状态
+**Depends on**: Phase 30
+**Requirements**: (tech debt closure — no new requirements)
+**Gap Closure**: Closes tech debt from v2.1-MILESTONE-AUDIT.md
+**Success Criteria** (what must be TRUE):
+  1. 32 个预存在测试失败全部修复（MagicMock session → Session mock，BohriumSetupService 签名更新）
+  2. `scripts/test_matmaster_isolation.sh` 在 evomaster 已删除状态下正常运行
+  3. REQUIREMENTS.md 中所有已满足需求的复选框更新为 `[x]`
+  4. `job_service.py` docstring 中旧 evomaster 路径引用已清理
+
 ## Progress
 
 **Execution Order:**
-历史 phases 已完成到 Phase 24。v2.1 执行顺序为 25 -> 26 -> 27 -> 28 -> 29 -> 30。
+历史 phases 已完成到 Phase 24。v2.1 执行顺序为 25 -> 26 -> 27 -> 28 -> 29 -> 30 -> 31。
 
 Phase 25 先切断环境准备层耦合，为后续所有迁移建立稳定底座。Phase 26 在此之上内化全部 tool 能力（含 playground/ 依赖的 web_search_tool），消除 matmaster -> evomaster 和 matmaster -> playground 的 tool 层依赖。Phase 27 收回 MCP/calculation 高风险链路，依赖 Phase 25 (session) 和 Phase 26 (tool 注册)。Phase 28 合并处理 src 反向依赖反转与 consumer 迁移，因为 bohrium_setup 同时涉及两个方向。Phase 29 在基础设施和消费者就绪后切换主入口。Phase 30 最后用 import audit、隔离测试与迁移文档做证据收口。
 

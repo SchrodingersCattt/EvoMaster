@@ -9,16 +9,16 @@
 
 ### Playground & Session
 
-- [ ] **PLAY-01**: 开发者可以在不安装 `evomaster` 的环境中创建并使用 `matmaster.sessions.local.LocalSession`，供 builtin tools 执行本地命令与文件操作
+- [x] **PLAY-01**: 开发者可以在不安装 `evomaster` 的环境中创建并使用 `matmaster.sessions.local.LocalSession`，供 builtin tools 执行本地命令与文件操作
 - [x] **PLAY-02**: 开发者可以通过 `matmaster` 原生 session factory 创建 local / docker / ssh session，而 `matmaster.core.playground.Playground` 不再直接 import `evomaster.agent.session.*`
-- [ ] **PLAY-03**: 开发者可以通过 `matmaster.core.playground.Playground` 加载主配置、准备 workspace、logging 和 session，而不依赖 `evomaster.config.ConfigManager` 或 `PlaygroundSessionMixin`
+- [x] **PLAY-03**: 开发者可以通过 `matmaster.core.playground.Playground` 加载主配置、准备 workspace、logging 和 session，而不依赖 `evomaster.config.ConfigManager` 或 `PlaygroundSessionMixin`
 
 ### Tool 内化
 
-- [ ] **TOOL-07**: 开发者可以在 `matmaster.tools` 中注册并执行遗留 builtin 能力，而不需要 `EvoToolAdapter`
-- [ ] **TOOL-08**: 开发者可以在 `matmaster.tools.builtin` 中使用原生 bash safety 与 edit helper，不再导入 `evomaster.agent.tools.builtin.*`
+- [x] **TOOL-07**: 开发者可以在 `matmaster.tools` 中注册并执行遗留 builtin 能力，而不需要 `EvoToolAdapter`
+- [x] **TOOL-08**: 开发者可以在 `matmaster.tools.builtin` 中使用原生 bash safety 与 edit helper，不再导入 `evomaster.agent.tools.builtin.*`
 - [x] **TOOL-09**: `MonitorJobTool` 通过 matmaster 原生注册或 skill 机制提供，`exp.py` 不再 lazy import `evomaster.agent.tools.builtin.monitor_job`
-- [ ] **TOOL-10**: `web_search_tool` 通过 matmaster 原生实现或 skill 注册提供，`exp.py` 不再 import `playground.mat_master.tools.web_search`
+- [x] **TOOL-10**: `web_search_tool` 通过 matmaster 原生实现或 skill 注册提供，`exp.py` 不再 import `playground.mat_master.tools.web_search`
 
 ### MCP & Calculation
 
@@ -40,7 +40,7 @@
 
 ### Quality & Migration
 
-- [ ] **QUAL-06**: 仓库提供 import audit 或等价测试，验证 `matmaster/` 运行时模块不再直接 import `evomaster`、`playground` 或 `src`
+- [x] **QUAL-06**: 仓库提供 import audit 或等价测试，验证 `matmaster/` 运行时模块不再直接 import `evomaster`、`playground` 或 `src`
 - [x] **QUAL-07**: 在不安装 `evomaster` 的受控测试环境中，`tests/matmaster/` 的核心测试集可以通过，证明 matmaster 可独立运行
 - [x] **QUAL-08**: 仓库提供一份解耦迁移文档，明确保留 compat layer、剩余遗留路径与后续清理顺序
 
@@ -72,13 +72,13 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PLAY-01 | Phase 25 | Pending |
+| PLAY-01 | Phase 25 | Complete |
 | PLAY-02 | Phase 25 | Complete |
-| PLAY-03 | Phase 25 | Pending |
-| TOOL-07 | Phase 26 | Pending |
-| TOOL-08 | Phase 26 | Pending |
+| PLAY-03 | Phase 25 | Complete |
+| TOOL-07 | Phase 26 | Complete |
+| TOOL-08 | Phase 26 | Complete |
 | TOOL-09 | Phase 26 | Complete |
-| TOOL-10 | Phase 26 | Pending |
+| TOOL-10 | Phase 26 | Complete |
 | MCP-01 | Phase 27 | Complete |
 | CALC-01 | Phase 27 | Complete |
 | CALC-02 | Phase 27 | Complete |
@@ -88,7 +88,7 @@
 | CONS-04 | Phase 28 | Complete |
 | CONS-01 | Phase 29 | Complete |
 | CONS-02 | Phase 29 | Complete |
-| QUAL-06 | Phase 30 | Pending |
+| QUAL-06 | Phase 30 | Complete |
 | QUAL-07 | Phase 30 | Complete |
 | QUAL-08 | Phase 30 | Complete |
 
@@ -99,4 +99,4 @@
 
 ---
 *Requirements defined: 2026-04-01*
-*Last updated: 2026-04-01 after roadmap creation*
+*Last updated: 2026-04-02 after milestone audit — all 19 requirements confirmed complete*
