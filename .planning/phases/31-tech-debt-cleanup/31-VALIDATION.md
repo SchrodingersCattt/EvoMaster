@@ -2,7 +2,7 @@
 phase: 31
 slug: tech-debt-cleanup
 status: draft
-nyquist_compliant: false
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-04-02
 ---
@@ -38,14 +38,13 @@ created: 2026-04-02
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 31-01-01 | 01 | 1 | SC-1 (Session mock) | unit | `uv run --extra dev python -m pytest tests/matmaster/ -x -q --tb=short -k "session"` | ✅ | ⬜ pending |
-| 31-01-02 | 01 | 1 | SC-1 (BohriumSetupService) | unit | `uv run --extra dev python -m pytest tests/matmaster/ -x -q --tb=short -k "bohrium"` | ✅ | ⬜ pending |
-| 31-01-03 | 01 | 1 | SC-1 (LLMProvider mock) | unit | `uv run --extra dev python -m pytest tests/matmaster/ -x -q --tb=short -k "compactor"` | ✅ | ⬜ pending |
-| 31-02-01 | 02 | 1 | SC-2 (isolation script) | smoke | `bash scripts/test_matmaster_isolation.sh` | ✅ | ⬜ pending |
-| 31-03-01 | 03 | 2 | SC-3 (REQUIREMENTS.md) | manual | Inspect REQUIREMENTS.md | ✅ | ⬜ pending |
-| 31-03-02 | 03 | 2 | SC-4 (docstring cleanup) | manual | `grep evomaster matmaster/adaptors/calculation/job_service.py` | ✅ | ⬜ pending |
+| 31-01-01 | 01 | 1 | SC-1 (Session mock) | unit | `uv run --extra dev python -m pytest tests/matmaster/ -x -q --tb=short -k "session"` | yes | pending |
+| 31-01-02 | 01 | 1 | SC-1 (BohriumSetupService) | unit | `uv run --extra dev python -m pytest tests/matmaster/ -x -q --tb=short -k "bohrium"` | yes | pending |
+| 31-02-01 | 02 | 2 | SC-2 (isolation script) | smoke | `bash scripts/test_matmaster_isolation.sh` | yes | pending |
+| 31-02-02 | 02 | 2 | SC-3 (REQUIREMENTS.md) | automated | `test "$(grep -c '^\- \[ \]' .planning/REQUIREMENTS.md)" = "0"` | yes | pending |
+| 31-02-03 | 02 | 2 | SC-4 (docstring + comment cleanup) | automated | `! grep -q evomaster matmaster/adaptors/calculation/job_service.py && ! grep -q 'evomaster mixin' matmaster/core/playground.py` | yes | pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: pending / green / red / flaky*
 
 ---
 
@@ -59,18 +58,17 @@ Existing infrastructure covers all phase requirements. No new tests needed, only
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| REQUIREMENTS.md checkboxes all [x] | SC-3 | Document inspection | `grep -c '^\- \[ \]' .planning/REQUIREMENTS.md` should return 0 |
-| job_service.py no evomaster refs | SC-4 | Docstring inspection | `grep -c evomaster matmaster/adaptors/calculation/job_service.py` should return 0 |
+| (none) | | All verifications have automated commands | |
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved
