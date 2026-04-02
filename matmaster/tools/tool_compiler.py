@@ -1,0 +1,89 @@
+"""ToolCompiler -- compile Tool definitions into ToolInstance bindings."""
+
+from __future__ import annotations
+
+from matmaster.tools.tool_registry import Tool
+from matmaster.types.tool_spec import ResourceClaim, ToolBinding, ToolInstance, ToolSpec
+from matmaster.types.topology import RuntimeTopology, ToolPlane
+
+BUILTIN_CLAIMS: dict[str, tuple[ResourceClaim, ...]] = {
+    "execute_bash": (ResourceClaim(resource_id="session", mode="exclusive"),),
+    "list_dir": (ResourceClaim(resource_id="session", mode="exclusive"),),
+    "glob": (ResourceClaim(resource_id="session", mode="exclusive"),),
+    "grep": (ResourceClaim(resource_id="session", mode="exclusive"),),
+    "read_file": (ResourceClaim(resource_id="workspace", mode="shared_read"),),
+    "write_file": (ResourceClaim(resource_id="workspace", mode="exclusive"),),
+    "edit_file": (ResourceClaim(resource_id="workspace", mode="exclusive"),),
+    "task_create": (ResourceClaim(resource_id="task-store", mode="exclusive"),),
+    "task_get": (ResourceClaim(resource_id="task-store", mode="shared_read"),),
+    "task_list": (ResourceClaim(resource_id="task-store", mode="shared_read"),),
+    "task_update": (ResourceClaim(resource_id="task-store", mode="exclusive"),),
+    "task_complete": (ResourceClaim(resource_id="task-store", mode="exclusive"),),
+    "mm_web_search": (ResourceClaim(resource_id="web", mode="counted", limit=3),),
+    "web_fetch": (ResourceClaim(resource_id="web", mode="counted", limit=3),),
+    "spawn": (ResourceClaim(resource_id="spawn", mode="counted", limit=2),),
+    "monitor_job": (
+        ResourceClaim(resource_id="workspace", mode="exclusive"),
+        ResourceClaim(resource_id="artifact-sync", mode="exclusive"),
+    ),
+}
+
+BUILTIN_META: dict[str, tuple[ToolPlane, str, bool]] = {
+    "execute_bash": (ToolPlane.SESSION_SHELL, "local_mutation", False),
+    "list_dir": (ToolPlane.SESSION_SHELL, "pure_read", False),
+    "glob": (ToolPlane.SESSION_SHELL, "pure_read", False),
+    "grep": (ToolPlane.SESSION_SHELL, "pure_read", False),
+    "read_file": (ToolPlane.SESSION_FS, "pure_read", True),
+    "write_file": (ToolPlane.SESSION_FS, "local_mutation", False),
+    "edit_file": (ToolPlane.SESSION_FS, "local_mutation", False),
+    "task_create": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
+    "task_get": (ToolPlane.CONTROL_PLANE, "pure_read", True),
+    "task_list": (ToolPlane.CONTROL_PLANE, "pure_read", True),
+    "task_update": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
+    "task_complete": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
+    "mm_web_search": (ToolPlane.EXTERNAL_SERVICE, "external_write", False),
+    "web_fetch": (ToolPlane.EXTERNAL_SERVICE, "external_write", False),
+    "spawn": (ToolPlane.CONTROL_PLANE, "local_mutation", False),
+    "monitor_job": (ToolPlane.SESSION_FS, "external_write", False),
+}
+
+
+class ToolCompiler:
+    """Compile a Tool plus topology metadata into a ToolInstance."""
+
+    def compile(
+        self,
+        tool: Tool,
+        topology: RuntimeTopology,
+        *,
+        source: str = "unknown",
+    ) -> ToolInstance:
+        """Compile a tool into its bound runtime representation.
+
+        The current builtin rules are topology-independent, but the topology is
+        part of the API so future compilers can specialize bindings by session.
+        """
+        _ = topology
+        claims = BUILTIN_CLAIMS.get(tool.name, ())
+        plane, effect_level, fast_path = BUILTIN_META.get(
+            tool.name,
+            (ToolPlane.CONTROL_PLANE, "local_mutation", False),
+        )
+        spec = ToolSpec(
+            tool_name=tool.name,
+            description=tool.description,
+            args_schema=tool.json_schema,
+            source=source,
+            effect_level=effect_level,
+            fast_path_eligible=fast_path,
+        )
+        binding = ToolBinding(
+            binding_key=f"{plane.value}:{tool.name}",
+            plane=plane,
+            resource_claims=claims,
+        )
+        return ToolInstance(
+            tool_spec=spec,
+            tool_binding=binding,
+            tool_executor=tool.execute,
+        )
