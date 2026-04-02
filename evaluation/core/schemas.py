@@ -76,6 +76,7 @@ CapabilityLiteral = Literal[
     'data_diagnosis',
     'batch_processing',
     'safety_refusal',
+    'input_generation',
 ]
 
 DomainLiteral = Literal[
@@ -86,6 +87,7 @@ DomainLiteral = Literal[
     'kinetic',
     'optical',
     'general',
+    'incar',
 ]
 
 

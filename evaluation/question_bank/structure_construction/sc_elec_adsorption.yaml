@@ -4,25 +4,20 @@ domain: "elec"
 
 questions:
   # ============================================================
-  # SC_elec_004 — Ag(001)表面CO吸附结构构建
+  # SC_elec_004_20260401 — Ag(001)表面CO吸附结构构建
   # ============================================================
-  - id: "SC_elec_004"
+  - id: "SC_elec_004_20260401"
     capability: "structure_construction"
     domain: "elec"
     intent: "Build Ag(001) surface slab and place CO molecule at ontop site for adsorption calculation."
     human_prompt_seed: |
       构建CO在Ag(001)表面的吸附结构：
-      1. 从数据库获取Ag FCC体相结构；
+      1. 获取Ag FCC体相结构（空间群Fm-3m，a=4.086 Å）；
       2. 切出(001)表面slab（4层，15 Å真空，3×3扩胞）；
       3. 在slab顶层ontop位点放置CO分子（C端朝下，初始距离~2.0 Å）；
       4. 输出三个结构文件：bare_slab.vasp, CO_molecule.vasp, adsorbed_system.vasp。
     tags: ["co2rr", "adsorption", "slab", "molecule_placement", "silver"]
     mode_scope: ["direct", "planner"]
-    required_tools:
-      - "mat_sg_build_surface_slab"
-      - "mat_sg_build_molecule_structures_from_smiles"
-    optional_tools:
-      - "mat_struct_db_fetch_structures_from_db"
     data_files: []
     reference_answers:
       - key: "slab_layers"
@@ -54,7 +49,7 @@ questions:
         axis: "correctness"
         verify: "llm_binary_judge"
       - id: "grounding_source"
-        criterion: "Ag structure originates from database; slab built using MCP tool; CO placed with explicit coordinates."
+        criterion: "Ag bulk structure uses correct FCC lattice constant; slab is built with proper crystallographic orientation and parameters; CO placement uses physically motivated coordinates—not merely naming tools."
         axis: "grounding"
         verify: "llm_binary_judge"
       - id: "no_retries"
