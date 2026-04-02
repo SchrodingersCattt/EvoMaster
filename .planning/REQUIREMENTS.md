@@ -35,7 +35,7 @@
 - [x] **TRUN-01**: 定义 `ToolRunner` Protocol（`@runtime_checkable`），接口为 `execute_batch(tool_calls, ctx, on_result) -> list[(ToolCallData, ToolResult)]`
 - [x] **TRUN-02**: 实现 `InlineToolRunner` 作为 Phase 1 过渡，包装当前 agent.py 的 guard → pre_hook → execute → post_hook 逻辑
 - [ ] **TRUN-03**: 实现完整 `ToolRunner`，执行链为 ToolCatalog 查找 → StructuralValidation → RunStateGuard → CapabilityPolicy → fast path 判定 → ToolScheduler → executor → 释放
-- [ ] **TRUN-04**: 实现 `ToolScheduler`，基于 ResourceClaim 调度（exclusive 互斥 / shared_read 并发 / counted 信号量），支持 fast path 跳过
+- [x] **TRUN-04**: 实现 `ToolScheduler`，基于 ResourceClaim 调度（exclusive 互斥 / shared_read 并发 / counted 信号量），支持 fast path 跳过
 - [x] **TRUN-05**: Kernel 通过 `spec.tool_runner` 获取 ToolRunner，Phase 1 回退到 InlineToolRunner
 
 ### 三层约束模型
@@ -147,7 +147,7 @@
 | TRUN-01 | Phase 32 | Complete |
 | TRUN-02 | Phase 32 | Complete |
 | TRUN-03 | Phase 33 | Pending |
-| TRUN-04 | Phase 33 | Pending |
+| TRUN-04 | Phase 33 | Complete |
 | TRUN-05 | Phase 32 | Complete |
 | TCON-01 | Phase 33 | Complete |
 | TCON-02 | Phase 32 | Complete |
